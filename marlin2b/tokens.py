@@ -37,7 +37,9 @@ msgs = [{"role": "user", "content": [{"type": "video", "video": a.video}, {"type
 
 def run(label, **kw):
     try:
-        inp = p.apply_chat_template(msgs, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True, **kw)
+        # transformers 5.x: per-modality kwargs go through videos_kwargs, not **kwargs
+        vk = kw.pop("video_kwargs", None)
+        inp = p.apply_chat_template(msgs, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True, videos_kwargs=vk, **kw) if vk else p.apply_chat_template(msgs, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True)
         thw = inp.get("video_grid_thw")
         thw = thw.tolist() if thw is not None else None
         toks = sum(t * h * w for t, h, w in thw) // (vp.merge_size ** 2) if thw else None

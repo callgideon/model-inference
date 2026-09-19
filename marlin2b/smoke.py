@@ -22,10 +22,8 @@ ap.add_argument("--weights", default=os.environ.get("WEIGHTS", "/opt/dlami/nvme/
 ap.add_argument("--find", metavar="EVENT")
 ap.add_argument("--prompt")
 ap.add_argument("--max-tokens", type=int, default=2048)
-# Marlin's training-time video budget (model card): 2 fps, 4-240 frames, 200,704 px/frame.
-# vLLM's Qwen3.5 processor does not apply these by default; pass them per request.
-ap.add_argument("--mm-kwargs", default=os.environ.get("MM_KWARGS", '{"fps": 2.0, "min_frames": 4, "max_frames": 240, "size": {"shortest_edge": 65536, "longest_edge": 200704}, "cap_pixels_per_frame": true}'),
-                help="JSON for vLLM mm_processor_kwargs; '' to send none")
+ap.add_argument("--mm-kwargs", default=os.environ.get("MM_KWARGS", "auto"),
+                help="vLLM mm_processor_kwargs as JSON; 'auto' (default) reproduces Marlin's training video budget from the clip duration; '' sends none (processor default, ~6x more tokens)")
 a = ap.parse_args()
 
 
@@ -50,6 +48,26 @@ def canonical_prompt(weights, mode, event=None):
     return text.format(event=event) if event and "{" in text else text
 
 
+def training_budget_kwargs(video_path, fps=2.0, min_frames=4, max_frames=240, px_per_frame=200704):
+    """mm_processor_kwargs that reproduce Marlin's training-time video budget.
+    transformers' Qwen3VL video processor treats size.longest_edge as the pixel
+    budget for the WHOLE sampled clip, not per frame, so scale it by the number
+    of frames it will sample (fps x duration, clamped). Measured on vLLM nightly
+    2026-09-19: a 10 s clip -> 20 frames -> grid [10,28,28] -> 1,960 video tokens,
+    versus 11,960 with the processor default (marlin2b/results/notes.md)."""
+    try:
+        import av
+        with av.open(video_path) as c:
+            duration = float(c.duration) / av.time_base if c.duration else float(c.streams.video[0].duration * c.streams.video[0].time_base)
+    except Exception as e:  # no av or unreadable container: fall back to the 240-frame cap
+        print(f"warning: could not read duration ({e}); assuming max frames", file=sys.stderr)
+        duration = max_frames / fps
+    frames = int(min(max_frames, max(min_frames, round(duration * fps))))
+    frames += frames % 2  # temporal patch of 2
+    return {"fps": fps, "min_frames": min_frames, "max_frames": max_frames,
+            "size": {"shortest_edge": 4096, "longest_edge": frames * px_per_frame}}
+
+
 mode = "find" if a.find else "caption"
 prompt = a.prompt or canonical_prompt(a.weights, mode, a.find)
 
@@ -59,6 +77,7 @@ else:
     mime = mimetypes.guess_type(a.video)[0] or "video/mp4"
     url = f"data:{mime};base64," + base64.b64encode(open(a.video, "rb").read()).decode()
 
+mm_kwargs = None if not a.mm_kwargs else (training_budget_kwargs(a.video) if a.mm_kwargs == "auto" and not a.video.startswith(("http://", "https://")) else json.loads(a.mm_kwargs) if a.mm_kwargs != "auto" else None)
 client = OpenAI(base_url=a.base_url, api_key="none")
 t0 = time.time()
 first = None
@@ -70,7 +89,7 @@ stream = client.chat.completions.create(
     temperature=0,
     stream=True,
     stream_options={"include_usage": True},
-    extra_body={"mm_processor_kwargs": json.loads(a.mm_kwargs)} if a.mm_kwargs else {},
+    extra_body={"mm_processor_kwargs": mm_kwargs} if mm_kwargs else {},
 )
 usage = None
 for chunk in stream:
@@ -86,7 +105,7 @@ text = re.sub(r"^\s*<think>.*?(</think>|$)", "", "".join(out), count=1, flags=re
 print(text)
 n_out = usage.completion_tokens if usage else len(out)
 print(json.dumps({
-    "mode": mode, "mm_kwargs": bool(a.mm_kwargs), "ttft_s": round((first or t0) - t0, 3), "wall_s": round(dt, 3),
+    "mode": mode, "mm_kwargs": mm_kwargs, "ttft_s": round((first or t0) - t0, 3), "wall_s": round(dt, 3),
     "prompt_tokens": usage.prompt_tokens if usage else None, "completion_tokens": n_out,
     "decode_tok_s": round(n_out / max(dt - ((first or t0) - t0), 1e-6), 1),
 }), file=sys.stderr)
