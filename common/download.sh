@@ -34,10 +34,14 @@ EOF
 
 # Checked up front rather than 400GB in: a disk-full failure halfway through is
 # indistinguishable from a network failure and wastes the whole transfer.
-need=$(( SIZE_GB + 20 ))
-avail=$(df -BG --output=avail "$DEST" 2>/dev/null | tail -1 | tr -dc '0-9')
-if [ "${avail:-0}" -lt "$need" ]; then
-  echo "FATAL: need ~${need}GB free at $DEST, have ${avail:-0}GB" >&2
+#
+# Compared in BYTES on purpose. SIZE_GB is decimal GB (what Hugging Face and
+# model cards quote) while `df -BG` reports GiB despite the "G" label — mixing
+# them silently over-demands ~7%, enough to refuse a disk that actually fits.
+need_b=$(( (SIZE_GB + 20) * 1000000000 ))
+avail_b=$(df -B1 --output=avail "$DEST" 2>/dev/null | tail -1 | tr -dc '0-9')
+if [ "${avail_b:-0}" -lt "$need_b" ]; then
+  echo "FATAL: need ~$(( need_b / 1000000000 ))GB free at $DEST, have $(( ${avail_b:-0} / 1000000000 ))GB" >&2
   exit 1
 fi
 

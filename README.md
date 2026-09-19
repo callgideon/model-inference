@@ -49,5 +49,7 @@ instance-store NVMe on a p6 node. Override it anywhere that path is wrong.
 - `S3_DIR` in `model.env` intentionally differs from the directory name. The S3
   mirror was populated before these names existed; changing it means moving
   objects, not editing a string.
-- `kimik3` is ~1.4TB. It fits one 8×B300 node (2304GB HBM) only because the
-  checkpoint is natively MXFP4 — do not assume an FP8 variant will.
+- `kimik3` is ~1.4TB (1,561GB on disk). It fits one 8×B300 node only because the
+  checkpoint is natively MXFP4 — do not assume an FP8 variant will. Note the
+  node has ~2,144GB usable (268GB/GPU on HGX/DGX B300 and AWS p6-b300), not
+  8×288GB = 2304GB; 288GB/GPU is the GB300 NVL72 figure. See `research/`.
