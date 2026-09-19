@@ -48,16 +48,22 @@ Parity between the two is the first thing to check on a new engine version.
 Model defaults: 2 fps, 4–240 frames, 200,704 px/frame (~448×448). Each pair
 of frames is one temporal patch of 196 tokens, so a 2-minute clip is ~23.5K
 prompt tokens; `serve.sh` sets `--max-model-len 32768` for that reason.
-Whether vLLM's Qwen3.5 processor applies the same fps/pixel defaults as the
-custom code is **⚠️ to be verified** by comparing `prompt_tokens` from
-`smoke.py` against the frame count `reference.py` produces.
+Neither vLLM nor the vendor helper applies that budget by default on
+transformers 5.17 (both spend ~12K tokens on a 10 s clip); `smoke.py` and
+`bench.py` pass `--mm-kwargs auto`, which sets `size.longest_edge` to
+frames × 200,704 and reproduces the training grid — see
+[`results/notes.md`](results/notes.md).
 
 ## Results
 
 `results/` holds `bench.jsonl` rows (one per `bench.py` run) and notes. Fill in
 the table below from measurements, not estimates:
 
-| GPU | engine | concurrency | prompt tok | TTFT p50 | TPOT p50 | out tok/s | notes |
-|---|---|---|---|---|---|---|---|
-| L40S | vLLM nightly | 1 | | | | | |
-| L40S | vLLM nightly | 8 | | | | | |
+| GPU | engine | clip | concurrency | prompt tok | TTFT p50 | TPOT p50 | clips/s | out tok/s |
+|---|---|---|---|---|---|---|---|---|
+| L40S | vLLM nightly 2026-09-19 | sample-10s (1080p, 5.5 MB) | 1 | 2,061 | 0.77 s | 6 ms | 0.50 | 100 |
+| L40S | vLLM nightly 2026-09-19 | sample-10s (1080p, 5.5 MB) | 8 | 2,061 | 3.35 s | 8 ms | 1.57 | 310 |
+| L40S | vLLM nightly 2026-09-19 | sample-10s, processor default | 8 | 12,221 | 3.70 s | 8 ms | 1.47 | 290 |
+| L40S | vLLM nightly 2026-09-19 | Big Buck Bunny (360p, 1 MB) | 8 | 1,928 | 0.66 s | 7 ms | 3.58 | 760 |
+
+Measured 2026-09-19; details and caveats in [`results/notes.md`](results/notes.md).
