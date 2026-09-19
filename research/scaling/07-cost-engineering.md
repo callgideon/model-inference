@@ -71,14 +71,15 @@ Three consequences, and they are the shape of the entire cost problem:
    notebooks and dev clusters, **not** a dedicated inference fleet — but it sets the
    prior for what an unmanaged GPU estate does.
 
-### 1.2 The four ways to buy a GPU-hour
+### 1.2 The five ways to buy a GPU-hour
 
-| Mode | What you pay for | `U` you are exposed to | Cost floor | Cost ceiling |
-|---|---|---|---|---|
-| **Own** (colo or on-prem) | 8,760 h/GPU/year regardless of load | 100 % yours | Lowest $/GPU-hr if `U` is high | Stranded capital if `U` is low; 3-year lock |
-| **Rent bare metal, committed** (`res1y`) | Contract hours | 100 % yours | 0.70–0.85× on-demand on H200/RTX PRO 6000 | **Not a discount everywhere** — see below |
-| **Rent bare metal, on-demand** | Hours you hold the node | 100 % yours | Flexible | 2.0–2.3× the owned rate |
-| **Buy tokens from an API** | Tokens only | **Zero** — the vendor eats it | You never pay for idle | You pay the vendor's margin and accept their SLO |
+| Mode | What you pay for | `U` you are exposed to | Interruption notice | Cost floor | Cost ceiling |
+|---|---|---|---|---|---|
+| **Own** (colo or on-prem) | 8,760 h/GPU/year regardless of load | 100 % yours | none — you own it | Lowest $/GPU-hr if `U` is high | Stranded capital if `U` is low; 3-year lock |
+| **Rent bare metal, committed** (`res1y`) | Contract hours | 100 % yours | none for the contract term | 0.70–0.85× on-demand on H200/RTX PRO 6000 | **Not a discount everywhere** — see below |
+| **Rent bare metal, on-demand** | Hours you hold the node | 100 % yours | none while you hold it | Flexible | 2.0–2.3× the owned rate |
+| **Rent spot / preemptible** | Hours you hold the node, until it is reclaimed | 100 % yours, **plus** preemption risk | **two minutes**, *"emitted on a best effort basis"* ([AWS](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-instance-termination-notices.html)) | *"up to 90% off"* On-Demand ([AWS](https://aws.amazon.com/ec2/spot/)); this tree's own p6-b300 point is **−68.6 %** ($5.591 vs $17.802) | Preempted mid-request; a reload you cannot finish inside the notice — see [§6.4](#64-spot-and-preemptible-capacity) |
+| **Buy tokens from an API** | Tokens only | **Zero** — the vendor eats it | n/a | You never pay for idle | You pay the vendor's margin and accept their SLO |
 
 The `res1y` caveat is load-bearing and is already established in
 [`cost-matrix.md` §7.4](../matrix/cost-matrix.md#74-reserved-res1y-pricing): B300's
@@ -992,7 +993,125 @@ exists on B300 with a 552B-backbone MoE is **TO BE VERIFIED**, and the prior is 
 it is *weaker*, because Blackwell Ultra's 1.5× FP4 tensor cores push decode off the
 memory-bound branch ([§3.2](#32-combined-effect-and-why-you-cannot-multiply-the-column)).
 
-### 6.4 Secondhand A100 / H100 economics
+### 6.4 Spot and preemptible capacity
+
+**Scope, first.** This lever applies to **the AWS p6 burst tier only**. The owned
+8×B300 nodes have **no spot tier** — you bought the hours, nobody can reclaim them,
+and §1.2's "Own" row has no interruption column for that reason. Everything below
+concerns the p6-b300 capacity
+[`05` §6.5](05-autoscaling-and-predictive-scaling.md#65-hybrid-reserved-bare-metal--cloud-burst-and-the-cross-over)
+provisions alongside the metal.
+
+**The published terms.**
+
+| Term | Value | Source |
+|---|---|---|
+| Discount band | *"up to 90% off"* On-Demand | [aws.amazon.com/ec2/spot](https://aws.amazon.com/ec2/spot/) |
+| This tree's actual p6-b300 point | **$5.591 vs $17.802/GPU-hr = −68.6 %** on-demand; **−29.6 %** vs `res1y` $7.94 | [`05` §6.5](05-autoscaling-and-predictive-scaling.md) (Vantage-reported) ⚠️ |
+| Interruption notice | *"a warning that is issued **two minutes** before Amazon EC2 stops or terminates your Spot Instance"*; *"Interruption notices are emitted on a **best effort** basis"*; check *"every 5 seconds"* | [AWS EC2 UG — interruption notices](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-instance-termination-notices.html) |
+| Notice exception | hibernate gets a notice but **no two-minute warning**, *"because the hibernation process begins immediately"* | same |
+| Why you are reclaimed | capacity (*"when it needs it back"*, host maintenance, hardware decommission), price above your max, or a launch-group/AZ-group constraint | [AWS EC2 UG — interruptions](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-interruptions.html) |
+
+Note the second row: the headline *"up to 90 %"* is not what this fleet's instance
+type is actually priced at. Use −68.6 %, and hold it ⚠️ — p6-b300 spot availability
+and interruption rates are **not published** ([`05` §6.5](05-autoscaling-and-predictive-scaling.md)).
+
+**The survivability test, which decides the question.** A two-minute notice is only
+useful if a replacement replica can be *ready* inside it. It cannot be. From
+[`06` §1](06-cold-start.md#1-what-a-cold-start-actually-costs), cold-start to
+first-token on this repo's models:
+
+| Model | Weights pre-staged on node NVMe | Cold pull from S3 | Fits in a 2-min notice? |
+|---|---:|---:|---|
+| Marlin-2B | ≈ 35–55 s | ≈ 37–57 s | **yes** |
+| Qwen3.8-27B | ≈ 50–80 s | ≈ 65–95 s | **marginally**, staged only |
+| DeepSeek-V4.1-Flash (±NVFP4) | ≈ 2–3 min | ≈ 4.5–6 min | **no** |
+| Kimi-K3 | ≈ 3.5–5 min | ≈ 11–13 min | **no** |
+
+[`05` §6.5](05-autoscaling-and-predictive-scaling.md) states the same test in one
+line — *"the entire question for spot is whether a 2-minute interruption notice is
+survivable for a replica with a 5–12 min reload. For DeepSeek and Kimi it is not;
+for Marlin-2B it plausibly is."* This section is where that arithmetic enters the
+cost model, and the conclusion is narrow:
+
+- **Never for an interactive pool with a warm floor.** The floor exists to absorb
+  bursts without a cold start ([§2.5](#25-scale-to-zero-for-small-models)); a floor
+  replica that can vanish on two minutes' notice is not a floor. Worse, correlated
+  reclamation is the normal case — spot capacity is pulled by instance type and AZ,
+  so you lose several at once, exactly when you cannot rebuild any of them.
+- **Only for the batch / flex tier of [§2.4](#24-mixed-slo-tiers--what-the-vendors-actually-sell).**
+  That tier already sells a 24-hour window for a 50 % discount. A job that may be
+  restarted twice inside 24 h violates nothing it promised.
+- **Marlin-2B is the one exception worth testing**, because its 35–57 s boot fits
+  the notice and it can be drained and re-placed like any stateless replica.
+
+**Checkpoint-resume economics.** Deferrable work only survives preemption if it
+checkpoints, and the break-even is
+
+```
+spot is worth it  iff  (C_ondemand − C_spot) × T  >  checkpoint_write_cost × E[preemptions in T]
+```
+
+where `checkpoint_write_cost` here is **not** model state — it is the cost of
+re-reaching the point you lost, i.e. the reload plus the in-flight batch. Per node
+(8 GPUs), from the prices above:
+
+```
+spot saving vs on-demand = (17.802 − 5.591) × 8 = $97.69/node-hour
+spot saving vs res1y     = ( 7.940 − 5.591) × 8 = $18.79/node-hour
+cost of one preemption, Kimi-K3 cold pull = 13 min × 8 × $5.591/hr = $9.69
+break-even, vs on-demand = 97.69 / 9.69 = ~10.1 preemptions/hour
+break-even, vs res1y     = 18.79 / 9.69 = ~1.9 preemptions/hour
+```
+
+`est.`, `python3`, on the ⚠️ Vantage spot price. Read that carefully: on the **cost**
+axis spot tolerates roughly ten interruptions an hour before it stops paying — no
+plausible interruption rate gets near that. **The binding constraint is the SLO, not
+the money.** Which is the whole point of scoping spot to the batch tier.
+
+The checkpoint *mechanism* costs nothing extra because it already exists: §2.4's
+deferred tier is a durable queue with per-request granularity, and
+[`12` §6.1 row 11](12-inference-providers.md#61-the-ranked-list) records the shape
+five operators ship — *"queue-based `/run` with guaranteed execution and retries"*.
+A completed request's output tokens **are** the checkpoint; the unit of lost work is
+one in-flight request plus the reload, not a job. So the only term worth measuring
+is the reload, and there is nothing new to build: drain on the two-minute notice,
+let in-flight requests finish or requeue, and re-place on reserved capacity.
+
+⚠️ **TO BE VERIFIED:** p6-b300 spot interruption rate (AWS publishes the Spot
+placement score and interruption frequency for common types, not for p6-b300), and
+whether a two-minute drain is long enough for an in-flight Kimi-K3 request at the
+§2.4 batch operating point — at 10.1 s TTFT plus decode it plausibly is not.
+
+**Egress and storage for weight distribution.** The other cost line §1.3's node
+model omits. Every cold pull moves the checkpoint, and Kimi-K3's is
+**1,560,936,091,448 B = 1,560.9 GB**
+([`kimik3/b300.md` §4](../models/kimik3/b300.md), from `architecture.md` §1.2/§4).
+[`12` §6.1 row 4](12-inference-providers.md#61-the-ranked-list) states the fan-out
+arithmetic: *"Pulling 1.56 TB to eight nodes from one object store is **12.5 TB** of
+origin traffic; the ring makes it **1.56 TB**"* — an **8× reduction in origin bytes**
+for one Baseten-style consistent-hash peer ring
+([`01` §5](01-bare-metal-cluster.md), [`06` §2](06-cold-start.md)).
+
+What those bytes cost depends entirely on where the origin sits:
+
+| Path | Per-GB transfer | 12.5 TB naive fan-out | 1.56 TB peer ring |
+|---|---|---:|---:|
+| S3 → EC2, **same region** | **$0.00** — *"Data transferred from an Amazon S3 bucket to any AWS service(s) within the same AWS Region … are free"* ([S3 pricing](https://aws.amazon.com/s3/pricing/)) | $0 | $0 |
+| S3 GET requests, 8 MiB ranges | **$0.0004 per 1,000** ([S3 pricing](https://aws.amazon.com/s3/pricing/)) | ~1.49 M GETs = **$0.60** | ~186 k GETs = **$0.07** |
+| On-prem origin → AWS p6 | ⚠️ **TO BE VERIFIED** — your transit/IX bill, not AWS's (AWS data transfer *in* is free); at a placeholder $0.02/GB this is **$250** vs **$31** per fan-out | ⚠️ | ⚠️ |
+| S3 Standard at-rest, 1,560.9 GB | ⚠️ **TO BE VERIFIED** — the S3 pricing page does not render a per-region rate; at the widely-quoted $0.023/GB-month ⚠️ it is **$35.90/month** to keep one Kimi-K3 checkpoint hot | — | — |
+
+`est.`, `python3` (GET counts = 1,560.9 GB ÷ 8 MiB × 8 nodes and × 1).
+
+**Decision rule.** Keep the origin in the same AWS region as the p6 burst tier and
+the dollar cost of weight distribution collapses to request charges — under a dollar
+per full fleet cold pull, which is noise against $97.69/node-hour. Put the origin
+on-prem and it becomes a real per-cold-start line *and* a bandwidth bottleneck. The
+peer ring is worth building for **time**, not for money: it is the difference
+between 12.5 TB and 1.56 TB crossing one link while eight nodes wait.
+
+### 6.5 Secondhand A100 / H100 economics
 
 ⚠️ All prices in this subsection are trade-press or broker aggregates; **no
 primary source publishes used-GPU prices.** Treat as indicative.
@@ -1032,7 +1151,7 @@ never reaches TPOT ≤ 50 ms at any concurrency. The risk to price in is the res
 cliff: H100s *"will depreciate sharply when Rubin-architecture GPUs arrive (late
 2026–2027)"* ⚠️ — buy them on a ≤24-month payback, not a 36-month one.
 
-### 6.5 NVL72 vs HGX
+### 6.6 NVL72 vs HGX
 
 | | HGX B300 (8-GPU node) | GB300 NVL72 (rack) |
 |---|---|---|
@@ -1270,6 +1389,17 @@ B200 blend of $0.19 becomes **$0.633** — three times DeepSeek's own $0.2074.
 [`cost-matrix.md` §9.2](../matrix/cost-matrix.md)'s flagged B300 operating point
 (batch 96, TPOT 49.9 ms) and should not be planned on without a measurement.
 
+⚠️ **The Kimi-K3 row's 2,224 tok/s/node is the decode-only basis, and the only
+published B300 measurement of this model is on the sustained one.** Wafer
+(TP8 + DCP8, SGLang, DSpark, ISL 1024 / OSL 400, peak at c64, 2026-07-31)
+measured **1,568 tok/s/node = 196 out tok/s/GPU**, within 1.5 % of
+[`kimik3/b300.md`](../models/kimik3/b300.md) §4.2's sustained 198.9 and 2.9× under
+the S4 decode-only rate. The reconciliation ([`kimik3/b300.md` §3.8](../models/kimik3/b300.md))
+found no error — the two rates are different definitions, not a disagreement — so
+**no figure in this table was recut**. A capacity plan that must survive contact
+with the published measurement should use the sustained node rate (1,591 at S1),
+which raises this row's `$/1M out` by the same 1.40×.
+
 ### 9.3 Blended $/1M vs the vendor API, at each utilisation
 
 Blended per [METHODOLOGY §6](../METHODOLOGY.md#6-cost)
@@ -1390,7 +1520,7 @@ are referenced, not duplicated.
     inherited here in [§3.2](#32-combined-effect-and-why-you-cannot-multiply-the-column)
     and [§7.2](#72-a-waste-taxonomy).
 11. **SemiAnalysis's $2.26/$2.31 per-chip-hour owning cost**
-    ([§6.5](#65-nvl72-vs-hgx)) would invert every GB300 cell in
+    ([§6.6](#66-nvl72-vs-hgx)) would invert every GB300 cell in
     [`cost-matrix.md`](../matrix/cost-matrix.md) if it were purchasable. It is a
     hyperscaler-owning survey figure, and the InferenceX methodology's own TCO
     inputs are not disclosed.
@@ -1491,7 +1621,7 @@ file. 56 claims checked: **41 CONFIRMED · 13 CORRECTED · 2 UNVERIFIABLE.**
 | 10 | 6.3 | *"four ~4B models"* | **CORRECTED** — **five** architectures: GQA, GQA-ctrl (Minitron-4B), MLA (TransMLA variant), Gated DeltaNet, Mamba2 | https://arxiv.org/html/2605.11999 |
 | 11 | 6.3 | wasted band *"1590–1980 MHz"* | **CORRECTED** — the band is **1590–1830 MHz**: *"Requesting 1980 MHz yields only ≈1830 MHz sustained."* The `<<0.1 %` throughput and `+7–13 %` power figures are verbatim-correct | https://arxiv.org/html/2605.11999 |
 | 12 | 6.3 | arXiv:2501.08219 *"by up to 30% without requiring any modifications to the model"* | **CORRECTED — quote not in the paper.** It reports *"an average of 42% energy savings with only a 1-6% latency increase"* going 2842 → 180 MHz, on five 1B–32B decoder-only LLMs across four NLP benchmarks, with decode *"77-91%"* of inference time | https://arxiv.org/abs/2501.08219 |
-| 13 | 6.4 | secondhand H100 *"~1.5× cheaper"* than on-prem-new | **CORRECTED — unit mismatch.** $1.265 is at `U` = 1, $1.856 at `U` = 0.90. At equal `U` = 0.90 the secondhand node is $1.405 → **1.32×**, not 1.5×. (The 2.5× vs Hyperstack's $3.20 rent is fine — rent has no `U` term) | `python3`; `cross-cutting/cloud-pricing.md` §9.2 (opened, $1.856 / 1.275 kW located) |
+| 13 | 6.5 | secondhand H100 *"~1.5× cheaper"* than on-prem-new | **CORRECTED — unit mismatch.** $1.265 is at `U` = 1, $1.856 at `U` = 0.90. At equal `U` = 0.90 the secondhand node is $1.405 → **1.32×**, not 1.5×. (The 2.5× vs Hyperstack's $3.20 rent is fine — rent has no `U` term) | `python3`; `cross-cutting/cloud-pricing.md` §9.2 (opened, $1.856 / 1.275 kW located) |
 
 ### UNVERIFIABLE
 
@@ -1537,8 +1667,8 @@ Measured numbers from papers and blogs:
 | 5.5 | LLMLingua: *"up to 20x compression with minimal performance loss"*; GPT2-small / LLaMA-7B compressors | https://github.com/microsoft/LLMLingua |
 | 6.1 | InferenceX MiniMax M2.5/M2.7 230B: 66 tok/s/user **B200 $0.10 vs H100 $0.26**; 89 tok/s/user **$0.15 vs $0.40** | https://inferencex.semianalysis.com/compare-per-dollar/minimax-m27-b200-vs-h100 |
 | 6.3 | Power capping: decode **137–300 W** on a 700 W H200; *"no cap ever triggers"*; caps **280–700 W** structurally ineffective; SM-clock locking **up to 32 %** energy (GDN 30 % @ BS=1, 32 % @ BS=32) at **< 1 %** throughput; *"SM clock locking Pareto-dominates power capping universally"* | https://arxiv.org/html/2605.11999 |
-| 6.3, 6.5 | GB300 NVL72: *"135 kW TDP; up to 155 kW peak"*, *"about 10% to air and 90% to liquid"*, TGP **1100 W**/GPU | https://lenovopress.lenovo.com/lp2357-lenovo-nvidia-gb300-nvl72-rack-scale-ai |
-| 6.5 | InferenceX DeepSeek R1: **B300 $2.26 / GB300 $2.31 per chip-hr** (*"SemiAnalysis Market July 2026 Pricing Surveys & AI Cloud TCO Model"*); 88 tok/s/user $0.13 vs $0.06 (*"102% more total tokens per dollar"*); 162 → $1.16 vs $0.33 (*"255% more cost-efficient"*); 235 → $2.68 vs $2.76 (*"3%"*) | https://inferencex.semianalysis.com/compare-per-dollar/deepseek-r1-b300-vs-gb300 |
+| 6.3, 6.6 | GB300 NVL72: *"135 kW TDP; up to 155 kW peak"*, *"about 10% to air and 90% to liquid"*, TGP **1100 W**/GPU | https://lenovopress.lenovo.com/lp2357-lenovo-nvidia-gb300-nvl72-rack-scale-ai |
+| 6.6 | InferenceX DeepSeek R1: **B300 $2.26 / GB300 $2.31 per chip-hr** (*"SemiAnalysis Market July 2026 Pricing Surveys & AI Cloud TCO Model"*); 88 tok/s/user $0.13 vs $0.06 (*"102% more total tokens per dollar"*); 162 → $1.16 vs $0.33 (*"255% more cost-efficient"*); 235 → $2.68 vs $2.76 (*"3%"*) | https://inferencex.semianalysis.com/compare-per-dollar/deepseek-r1-b300-vs-gb300 |
 | 8.1 | FinOps for AI: **ten** AI KPIs, last updated **2026-02-17**, Crawl/Walk/Run maturity; Cost Per Inference, Cost Per Token, Resource Utilization Efficiency (*"Actual Resource Utilization/Provisioned Capacity"*) and Anomaly Detection Rate all defined as quoted | https://www.finops.org/wg/finops-for-ai-overview/ |
 
 Arithmetic re-derived in `python3` (all reproduce):
@@ -1551,7 +1681,7 @@ Arithmetic re-derived in `python3` (all reproduce):
 | 4.4 | DeepSeek `131,072 × 890 B = 0.1167 GB → 11.7 ms @ 10 GB/s`; Kimi `131,072 × 13,824 B = 1.812 GB → 181 ms` | exact |
 | 5.2 | cascade `f × 0.4809 + (1−f) × 0.0602` → **0.4809 / 0.2706 / 0.1191 / 0.0602**; break-even `1 − 0.0602/0.4809 = 87.5 %` | exact |
 | 6.4 | `200,000/36 = 5,555.56` + `10.2 × 180 = 1,836` = `7,391.56 → $1.265/GPU-hr`; `3.20/1.265 = 2.53×` | exact |
-| 6.5 | `18.00 / 2.31 = 7.79×` | exact |
+| 6.6 | `18.00 / 2.31 = 7.79×` | exact |
 | 7.1 | staff `780 k / 3,941,864 = 19.8 %` ≈ 20 % | exact |
 | 7.2 | `100 × 20 s = 0.556 GPU-h/day = 2.3 %` | exact |
 | 9.1–9.4 | node-hour `$59.20`, node-month `$43,245.60`; aggregate tok/s = per-GPU rate × 8 for all five models (**10,984 / 3,848 / 99,704 / 2,224 / 746,168**); every `$/1M out` at `U` = 1 / 0.30 / 0.60 / 0.85; owned `3.3295 × 1.28 = 4.2618 → $24,906/node-month`; ratio `24,905/43,246 = 0.576` and its `U`-independence; tokens/node-month at 60 %; break-evens **232 % / 559 % / 6.3 % / 47.7 %**; §9.5's **2.83× / 2.53× / 7.2×** | exact |
@@ -1564,8 +1694,8 @@ Arithmetic re-derived in `python3` (all reproduce):
 | 5.1, 6.1, 9.3 | `cost-matrix.md` §4 blended B300/low and §8 cheapest-blended winners | **CONFIRMED** except Kimi-K3 — see structural note 1 below |
 | 3.1 | `cost-matrix.md` §7.1 (×0.833 / ×1.25), §7.2 (1.000 / 0.550 / 0.190 and the 61/95/68/78/60 % output shares), §7.3 (3.1× / 6.7× / 3.6× / 1.64× / 4.3×), §7.4 (B300 res1y $7.94 vs low $7.40) | **CONFIRMED**, all located verbatim |
 | 3.1, 4.4 | `serving-optimizations.md` §3.5 (2–3×, +45 %/+75 %, MORI-IO 2.5×, −20–30 %) and §1.5 (0.117 GB, 1.4 ms @ 83.4 GB/s, 2.097 PFLOP) | **CONFIRMED** |
-| 1.3, 4.4, 6.4, 9.1 | `cloud-pricing.md` §5.14 ($7.40 / $7.94 / $15.00 B300, $3.20 H100), §8.1 (1.275 kW), §8.2 (15–16 kW HGX B300), §8.3 (provisioned-kW billing), §9.1 ($2.50–$4.00 NVIDIA AI Enterprise, 8–15 % fabric, "add 20–35 %"), §9.2 ($3.702 B300, $1.856 H100, 1.938 kW/GPU), §10.1 ($0.0276 / $0.0560 per GB-hr) | **CONFIRMED** |
-| 6.5 | GB300 rack purchase *"~$3.3–3.8M"* | ⚠️ `cloud-pricing.md` §9.2 carries a single **$3.5 M est. ⚠️**, not a $3.3–3.8 M band. Left as printed (it brackets the pinned value) but it is a widening of the source |
+| 1.3, 4.4, 6.5, 9.1 | `cloud-pricing.md` §5.14 ($7.40 / $7.94 / $15.00 B300, $3.20 H100), §8.1 (1.275 kW), §8.2 (15–16 kW HGX B300), §8.3 (provisioned-kW billing), §9.1 ($2.50–$4.00 NVIDIA AI Enterprise, 8–15 % fabric, "add 20–35 %"), §9.2 ($3.702 B300, $1.856 H100, 1.938 kW/GPU), §10.1 ($0.0276 / $0.0560 per GB-hr) | **CONFIRMED** |
+| 6.6 | GB300 rack purchase *"~$3.3–3.8M"* | ⚠️ `cloud-pricing.md` §9.2 carries a single **$3.5 M est. ⚠️**, not a $3.3–3.8 M band. Left as printed (it brackets the pinned value) but it is a widening of the source |
 | 8.4, 9.5 | `cost-matrix.md` §6.2 — DeepSeek base clears 100 % in **1 of 16** cells (B200 low, 92 %), so *"15 of 16"* is right; Kimi-K3 clears only on B300 (48 %/97 %); Qwen 6–28 %; the 10.1 s batch-wave TTFT at batch 111 | **CONFIRMED** (`kimik3/b300.md` §4.2 opened) |
 
 ### Structural notes (not fixed here — they belong to other files)
@@ -1574,5 +1704,9 @@ Arithmetic re-derived in `python3` (all reproduce):
 2. **`cost-matrix.md` §7.3 contradicts its own §2–§4 header for Kimi-K3.** §7.3 says *"Every DeepSeek and Kimi cost in §2–§4 is **with** speculation on"*, yet its own Kimi row lists the **without**-DSpark figures ($7.3926 output / $2.3811 blended) as exactly the values §2/§4 publish, and the with-DSpark figures ($4.508 / $1.660) as the alternative. One of the two is wrong, and every Kimi-K3 price quoted in this document inherits whichever it is.
 3. **DeepSeek input price is forked across the tree** — $0.14 (`serving-optimizations.md` §1.5, from deepseek.ai/pricing) vs $0.15 (`cost-matrix.md` §6.1, from api-docs.deepseek.com). Both pages were opened today and both are live. This forks the vendor blend ($0.2074) that §8.4, §9.3 and §9.5 all key on, and it should be pinned in `METHODOLOGY.md` §8.
 4. **§4.4's CPU DRAM bandwidth (~40–63 GB/s) undercuts the tree's own measurement.** `serving-optimizations.md` §1.5 carries **83.4 GB/s** GPU↔CPU DMA, measured on H100 + Sapphire Rapids with 2 MB blocks, and §4.3 of this document uses that 83.4 GB/s figure four paragraphs later. The §4.4 table's "reported range" is a secondary aggregator's and should be replaced by the in-tree measurement.
-5. **Missing versus the brief.** This document has no section on **spot / preemptible capacity** and **checkpoint-resume economics**, which is the one large cost lever the brief implies (`predictive scaling`, `reduce inference cost`) and that §1.2's four-way buy table silently omits — spot is a fifth way to buy a GPU-hour, with a different risk shape from all four listed. It also never prices **egress / storage** for weight distribution, which for Kimi-K3's 1.56 TB is a real per-cold-start cost that §2.5 alludes to but never costs.
+5. **Missing versus the brief.** ~~This document has no section on **spot / preemptible capacity** and **checkpoint-resume economics**~~ … ~~It also never prices **egress / storage** for weight distribution~~. **Closed 2026-09-19 — see note 8 and [§6.4](#64-spot-and-preemptible-capacity).** The original finding stood: spot is a fifth way to buy a GPU-hour with a different risk shape from the four §1.2 listed, and Kimi-K3's 1.56 TB is a real per-cold-start cost that §2.5 alluded to but never costed.
 6. **Nothing in this document looks invented.** Every number traced to either a live primary source, an in-tree document, or a `python3` derivation shown inline. The failures found were all of the *over-quoting* kind — quotation marks around paraphrases (§1.1, §3.2), figure-read values presented as stated text (§2.2), and a citation attached to a page that does not carry the number (§1.3 colo, §6.3 arXiv:2501.08219).
+
+7. **2026-09-19, gap `G3` (Kimi-K3 B300 anchor) — checked, no recut.** §9.2's Kimi-K3 row (2,224 tok/s/node, $24.6380/$12.3190/$8.6958) and §9.4's $12.3235/$7.0972 are on the decode-only basis. The one published B300 measurement of Kimi-K3 — Wafer, TP8+DCP8, SGLang, DSpark, ISL 1024 / OSL 400, peak at c64: 1,568 tok/s/node = **196 out tok/s/GPU** (<https://www.wafer.ai/blog/kimi-k3-mi355x>, 2026-07-31) — falls within **1.5 %** of `kimik3/b300.md` §4.2's **sustained** 198.9 tok/s/GPU, corroborating the sustained basis and explaining the 2.9× gap to the decode-only S4 rate as a basis difference rather than an error ([`kimik3/b300.md` §3.8](../models/kimik3/b300.md)). **No figure was recut**; §9.2 gains a footnote naming the anchor and the 1.40× sustained-basis adjustment a planner would apply.
+
+8. **2026-09-19, gap `G2` (spot / preemptible and weight-distribution egress) — closed, note 5 resolved.** §1.2 becomes a **five**-row buy table with an interruption-notice column, and a new **[§6.4](#64-spot-and-preemptible-capacity)** covers spot scoped to the **AWS p6 burst tier only** (owned metal has no spot tier, stated explicitly). Primary sources opened today: <https://aws.amazon.com/ec2/spot/> (*"up to 90% off"* — the page carries **no** interruption-notice text), <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-interruptions.html> (reclamation reasons; terminate/stop/hibernate) and <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-instance-termination-notices.html> (*"a warning that is issued two minutes before"*, *"emitted on a best effort basis"*, check *"every 5 seconds"*, hibernate exempted from the two-minute warning) — the 2-minute figure is on the **third** page, not the second. The survivability test is carried over verbatim from [`05` §6.5](05-autoscaling-and-predictive-scaling.md) and joined to [`06` §1](06-cold-start.md)'s per-model cold-start table: 2 min < 2–13 min for both MoEs, so spot is batch/flex-tier only and never an interactive warm floor. New `python3` arithmetic, all on prices already in the tree: node-hour saving **$97.69** (vs on-demand) / **$18.79** (vs `res1y`), one Kimi-K3 preemption **$9.69**, break-even **~10.1** / **~1.9** preemptions per hour — i.e. the constraint is the SLO, not the money. Egress/storage priced from <https://aws.amazon.com/s3/pricing/>: same-region S3→EC2 transfer is **free** and GETs are **$0.0004/1,000**, so one full 12.5 TB fleet fan-out costs **$0.60** in requests (peer ring: **$0.07**) — the [`12` §6.1 row 4](12-inference-providers.md#61-the-ranked-list) 12.5 TB→1.56 TB ring is worth building for **time**, not money. ⚠️ **TO BE VERIFIED and marked as such in §6.4:** p6-b300 spot price (Vantage-reported, not a capacity guarantee) and its interruption rate (unpublished); on-prem-origin→AWS per-GB transit; the S3 Standard at-rest rate (the pricing page renders no per-region table). Companion edit: [`10` §7](10-blueprint.md)'s *"explicitly not built"* clause rescoped to owned metal.

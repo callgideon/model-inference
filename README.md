@@ -55,6 +55,9 @@ matrices worth bookmarking: [`research/matrix/fit-matrix.md`](research/matrix/fi
 (what fits where) and [`research/matrix/cost-matrix.md`](research/matrix/cost-matrix.md)
 ($/1M tokens, every cell linked to its source). All formulas live in
 [`research/METHODOLOGY.md`](research/METHODOLOGY.md).
+For running these models at scale in production — cluster, serving, cost,
+reliability, and how commercial inference providers do it — see
+[`research/scaling/`](research/scaling/README.md).
 
 ## Notes
 

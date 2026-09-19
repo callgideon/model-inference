@@ -1285,7 +1285,7 @@
     "concurrency": 111,
     "output_tokens_per_s_per_gpu": 278.06,
     "sustained_output_tokens_per_s_per_gpu": 198.9,
-    "throughput_basis_note": "2026-09-19: output_tokens_per_s_per_gpu is now the METHODOLOGY §4 decode-only rate 111 / 0.0499 s / 8 GPUs = 278.06. The previous 198.9 is b300.md §4.2's SUSTAINED request-cycle rate (batch / (TTFT + OSL x TPOT) x OSL, batch-wave TTFT 10,139 ms) and is kept in sustained_output_tokens_per_s_per_gpu.",
+    "throughput_basis_note": "2026-09-19: output_tokens_per_s_per_gpu is now the METHODOLOGY §4 decode-only rate 111 / 0.0499 s / 8 GPUs = 278.06. The previous 198.9 is b300.md §4.2's SUSTAINED request-cycle rate (batch / (TTFT + OSL x TPOT) x OSL, batch-wave TTFT 10,139 ms) and is kept in sustained_output_tokens_per_s_per_gpu. 2026-09-19 cross-check: Wafer's published B300 measurement (TP8+DCP8, SGLang, DSpark, ISL 1024 / OSL 400, peak at c64, 2026-07-31) gives 196 peak-aggregate out tok/s/GPU — within 1.5% of the 198.9 sustained figure, corroborating the sustained basis and leaving the 1.42x/2.91x gap to 278.06/569.4 fully explained by the decode-only basis (see b300.md §3.8); no number changed.",
     "tpot_ms": 49.9,
     "ttft_ms": 10139,
     "cost_per_1m_output_usd_low": 7.3926,

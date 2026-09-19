@@ -1630,7 +1630,11 @@ Reading notes, all from the source documents:
   ([`../matrix/pairs.json`](../matrix/pairs.json)), which is a batch-wave
   artefact, not a user-facing latency — this model is a throughput deployment on
   this hardware, and its `sustained_output_tokens_per_s_per_gpu` (198.9
-  interactive / 321.6 max-throughput) is the honest end-to-end rate.
+  interactive / 321.6 max-throughput) is the honest end-to-end rate — **and the
+  only basis with a published B300 measurement behind it**: Wafer's 196 out
+  tok/s/GPU lands within 1.5 % of the 198.9, while the decode-only 4,555
+  tok/s/node quoted above sits 2.9× above it on a different basis
+  ([`../models/kimik3/b300.md`](../models/kimik3/b300.md) §3.8).
 - **Marlin-2B's 93,271 tok/s/GPU is at 4K context**, where
   `max_concurrency = 3,327` ([`../models/marlin2b/b300.md`](../models/marlin2b/b300.md) §3.2);
   at 8K it is 1,934 and at 128K it is 142. It is also a video VLM whose real
@@ -2018,3 +2022,12 @@ place above; `UNVERIFIABLE` rows carry an inline ⚠️ **TO BE VERIFIED**.
 (marked ⚠️ inline).** The two changes that alter a planning decision are §3.3's
 MIG seat counts (a MIG slice holds ~100 seats, not ~1,500 — MIG is a far weaker
 consolidation story than the table implied) and §5.8's hugepage reversal.
+
+- **2026-09-19, gap `G3` (Kimi-K3 B300 anchor).** §8.1's Kimi-K3 reading note now
+  points at [`../models/kimik3/b300.md`](../models/kimik3/b300.md) §3.8, where Wafer's
+  published B300 measurement (196 out tok/s/GPU peak aggregate, TP8+DCP8, SGLang,
+  DSpark, ISL 1024 / OSL 400, c64 — <https://www.wafer.ai/blog/kimi-k3-mi355x>,
+  2026-07-31) is reconciled against this document's 4,555 tok/s/node. The 196 sits
+  within 1.5 % of the pair doc's **sustained** 198.9 tok/s/GPU, so the sustained
+  basis is corroborated and the 2.9× gap is the decode-only-vs-sustained basis
+  difference, not an error. **No number in this document changed.**

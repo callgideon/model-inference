@@ -1092,6 +1092,54 @@ error, with `min_replicas ≥ 1` per model so the P2P path always has a source. 
 the standby size is §5.1's inequality; the trade-off is that every replica of forecast error costs a
 full replica-hour whether or not traffic arrives.
 
+### 5.6 Pre-warming a PD-disaggregated pool
+
+Everything above §5.6 assumes one monolithic replica shape. **A prefill/decode-disaggregated pool
+has two cold-start budgets and two pre-warm policies**, because it boots two differently-shaped
+workers — different parallelism, different weight residency, different warm-up path — and they are
+scaled independently: Dynamo's planner *"scales prefill and decode pools separately against
+TTFT/ITL targets"*, llm-d gives each role its own `ScaledObject`, and AIBrix models the roles as
+StormService roles ([`05-autoscaling-and-predictive-scaling.md` §3](./05-autoscaling-and-predictive-scaling.md),
+lines 60 and 482; [planner guide](https://docs.nvidia.com/dynamo/v1.3.0/components/planner/planner-guide)).
+Two independently-scaled pools cannot share one warm buffer sized by §5.1.
+
+**Decode pool — §5.1 unchanged.** Decode is where a request spends its seat, so the decode pool
+sizes its warm buffer against the *arrival ramp* exactly as §5.1 does, with
+`capacity_per_replica` = max concurrency at your context
+([`fit-matrix.md`](../matrix/fit-matrix.md)) and `cold_start_p95` = the **decode worker's** boot,
+not the pool's.
+
+**Prefill pool — a different unit.** A prefill worker's capacity is not a concurrency seat; it is a
+token rate. Size it against the *prompt-token* arrival rate, mirroring the planner's own
+`prefill_replicas = ceil(predicted_load / interpolated_throughput / gpus_per_engine)`, whose
+`predicted_load` is `next_requests × next_isl / interval` — a tokens/second quantity
+([`05-autoscaling-and-predictive-scaling.md` §3](./05-autoscaling-and-predictive-scaling.md),
+line 504):
+
+```
+required_standby_prefill ≥ peak_prompt_token_ramp_rate (tok/s per second) × cold_start_p95_P (s)
+                                                                          # = tok/s of headroom needed
+n_standby_P = ceil( required_standby_prefill / prefill_tok_per_s_per_replica )
+```
+
+so `capacity_per_replica` for the prefill pool is **`prefill_tok_per_s`, not max concurrency**, and
+it must be *measured*: this tree's roofline for the sparse/indexer-attention class is **~13.4×
+optimistic** ([`04-throughput-and-utilization.md` §2.3](./04-throughput-and-utilization.md)), and a
+standby count built on it under-provisions prefill by an order of magnitude.
+
+**Boot order, and the number that goes into both rules.** A prefill worker cannot serve until at
+least one decode worker is up and KV transfer is established — it produces KV blocks it has nowhere
+to send. So the pool boots in dependency order (decode first, then prefill), and the **effective
+cold start of the pool is `max(t_P, t_D)` plus the KV-transfer handshake**, not either alone:
+
+```
+cold_start_pool = max( t_P, t_D ) + t_kv_handshake      # NIXL/Mooncake registration, §8.3 stage 9
+```
+
+Use `cold_start_pool` when deciding whether the *pool* can appear inside a forecast interval
+(§5.4's inequality), and the per-role `t_P` / `t_D` when sizing each pool's standby count above.
+§8.6 works the arithmetic for the one PD candidate this tree identifies.
+
 ---
 
 ## 6. Rolling updates and model version swaps
@@ -1490,6 +1538,53 @@ real node, per §1.2's predictor methodology, and re-measure after every engine 
 paper's **> 4× variance across nine vLLM releases** [src](https://arxiv.org/html/2606.07362v3) means
 a cold-start SLO that is not re-measured per release is not an SLO.
 
+### 8.6 Cold-start budget when the pool is disaggregated
+
+§8.3–§8.5 budget one monolithic replica. The only PD candidate this tree identifies is **Kimi-K3**
+— [`11-playbook.md` §1.1](./11-playbook.md) runs the five-gate table and concludes *"PD **not**
+recommended for DSF / DSF-NVFP4 / Qwen3.8-27B / Marlin-2B; Kimi-K3 is the only candidate, and it is
+marginal on gate 1"* — so this is the only shape worth budgeting. Shape taken from
+[`09-reference-architectures.md` §4.3](./09-reference-architectures.md): PP8 prefill node + TP8/DCP8
+decode node, KV over NIXL/Mooncake. **Every figure below is carried from §8.2–§8.4, not re-derived,
+and is `est.` under the same [open question 1](#open-questions) as the rest of §8.**
+
+**The weight term does not halve.** Both workers load the *same* checkpoint: PD splits the
+*phases*, not the parameters. So each of them pays §8.2's Kimi-K3 row in full —
+**1,560.9 GB → 156.1 s @10 GB/s, 78.0 s @20 GB/s** on node NVMe, 520.3 s from S3 — and a PD pool
+moves **2 × 1,560.9 GB = 3.12 TB** off storage per cold pool start, against 1.56 TB for one
+monolithic replica. The read-amplification caveat in §8.2 applies per worker, unchanged.
+
+| §8.3 stage | P worker (PP8) | D worker (TP8 + DCP8) | Differs? |
+|---|---:|---:|---|
+| 2. Container + imports | 10–21 s | 10–21 s | no |
+| 3. Tokenizer + config | ~13 s ⚠️ | ~13 s ⚠️ | no |
+| 4. `torch.distributed` / NCCL init | ~5 s ᵈ | ~5 s ᵈ | **only via parallelism** — both are 8-rank, so §8.3's 8-rank figure carries; a different rank count would not ⚠️ |
+| 5. **Weight load** | **78.0–156.1 s** | **78.0–156.1 s** | no — same checkpoint |
+| 6. Compile-cache load | 10–20 s ⚠️ | 10–20 s ⚠️ | no |
+| 7. KV profiling + allocation | 2–10 s ⚠️ | 2–10 s ⚠️ | no |
+| 8. **CUDA-graph capture** | 26–78 s ⚠️ | 26–78 s ⚠️ | **only via parallelism** — the two workers capture different ladders (prefill shapes vs the decode batch ladder), and §8.3ʰ's own finding is that *the ladder length, not the model, decides*. **⚠️ TO BE VERIFIED: no per-role ladder length is published for either shape**, so both carry §8.3's 26-size band unchanged |
+| 9. NIXL/IPC registration | 0.8–8.2 s ⁱ | 0.8–8.2 s ⁱ | no — but now **on** the critical path (§5.6), where §8.3 excluded it |
+| 10. Warm-up request set | 20–60 s ⚠️ | 20–60 s ⚠️ | no |
+| **Per-worker total (est.)** | **164.0–363.1 s** | **164.0–363.1 s** | = §8.3's Kimi-K3 column |
+
+**Pool total.** Per §5.6, `cold_start_pool = max(t_P, t_D) + t_kv_handshake`. With the two per-role
+totals identical to §8.3's (only stages 4 and 8 differ in principle, and neither is measured
+per-role), `max(t_P, t_D) = 164.0–363.1 s`, plus stage 9's 0.8–8.2 s handshake that §8.3 excluded:
+
+```
+cold_start_pool (warm NVMe, est.) = 164.0–363.1 s + 0.8–8.2 s = 164.8–371.3 s ≈ 2.7–6.2 min
+cold_start_pool (S3-cold,  est.) = 606.3–727.3 s + 0.8–8.2 s = 607.1–735.5 s ≈ 10.1–12.3 min
+```
+
+(S3-cold row from §8.4's recomputed column.) **This is the same band as the monolithic Kimi-K3
+replica plus a handshake** — PD does not make the pool boot faster; it makes it boot *twice*, and
+adds a dependency edge. The §8.5 policy row for Kimi-K3 (`min_replicas` = 1 whole node, 1 standby
+node or an accepted SLO break, forecast horizon ≥ 10 min) therefore applies **per role**: a
+disaggregated Kimi-K3 pool needs a standby *decode* node sized by §5.1 and a standby *prefill*
+node sized by §5.6's token-rate rule, and the standby cost in §5.1/§8.5 is paid twice. That cost,
+not the boot time, is the argument against PD at this fleet size — which is exactly gate 4 of
+[`11-playbook.md` §1.1](./11-playbook.md).
+
 ---
 
 ## Open questions
@@ -1785,3 +1880,5 @@ that overrides the old text, and every claim that could not be confirmed is mark
 - The scope note promises this document supplies *"the cold-start budget per model"* to the autoscaler and routing documents. It does (§8), but nothing in §8 is measured — every number is `est.` on other models' per-stage figures. **Open question 1 is not a footnote; it is the document's load-bearing gap.**
 - **Not covered against the brief**: nothing on cold start for the **prefill/decode-disaggregated** shapes this tree recommends elsewhere (a PD deployment boots two differently-shaped workers and the SLA Planner scales them independently — §5.4 cites the planner but never budgets a P or D worker separately); and nothing on **multi-node** cold start for Kimi-K3 at TP32 on H100, which `inference-engines.md` §6.3 documents as a shipped shape and where `torch.distributed` init across 32 ranks is not the ~5 s 8-rank figure §8.3 reuses.
 - **Claims that looked invented and were run down**: the AutoDeploy "being deprecated / agentic approaches" statement (**not on the cited page** — corrected, §1.4); the vLLM "share the cache among instances for autoscaling" quote (**not on the cited page** — ⚠️, §3.1); the sleep-mode "18–200× from 0.6–235 B models" headline (**no 235 B row, no 200×** — corrected, §4.4). Everything else that read as suspiciously precise — 0.63 s, 785×, 11 s, 650 s, 26.4 GB/s, 45 GB/s, 5.96 Gbps — checked out verbatim against its primary source.
+
+**2026-09-19 (gap G1 closed):** the PD half of the "Not covered against the brief" gap above is now fixed — **§5.6** (two cold-start budgets, per-pool pre-warm rules, `cold_start_pool = max(t_P, t_D) + t_kv_handshake`, cited to [`05-autoscaling-and-predictive-scaling.md` §3](./05-autoscaling-and-predictive-scaling.md) lines 60/482/504 and the [Dynamo planner guide](https://docs.nvidia.com/dynamo/v1.3.0/components/planner/planner-guide)) and **§8.6** (Kimi-K3, the only PD candidate per [`11-playbook.md` §1.1](./11-playbook.md); both workers load the same 1,560.9 GB checkpoint so the weight term does not halve, every stage carried from §8.2–§8.4, pool total **164.8–371.3 s warm / 607.1–735.5 s S3-cold**, `est.` under open question 1; per-role CUDA-graph ladder lengths remain **⚠️ TO BE VERIFIED**). `11-playbook.md` §1.1's "If you do it:" paragraph now links §5.6. The **multi-node TP32 Kimi-K3** half of that gap is still open.

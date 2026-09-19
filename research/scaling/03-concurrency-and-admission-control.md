@@ -32,7 +32,7 @@ Software moves fast; every flag below is dated.
 | vLLM | `main` branch, fetched 2026-09-19 (`vllm/config/scheduler.py`, `vllm/engine/arg_utils.py`, `docs/`) | `curl raw.githubusercontent.com` | The repo pins the **released** engine at **0.29.0 (2026-09-09)** ([`inference-engines.md` §2.1](../cross-cutting/inference-engines.md)). ⚠️ **TO BE VERIFIED** which of `max_num_queued_reqs`, `max_num_queued_tokens`, `max_num_active_seqs`, `watermark`, `scheduler_reserve_full_isl` shipped in 0.29.0 vs. only on `main`. Method: `vllm serve --help \| grep` on the deployed image before writing them into a manifest. |
 | SGLang | `main` branch, fetched 2026-09-19 (`python/sglang/srt/arg_groups/fields/schedule.py`, `managers/scheduler.py`, `managers/schedule_batch.py`) | `curl raw.githubusercontent.com` | The repo pins **0.5.20** ([`inference-engines.md` §2.2](../cross-cutting/inference-engines.md)). Same ⚠️ applies to `--max-queued-requests`, `--retraction-policy`, `--min-free-slots-delay`, the `hrrn` / `shortest-prefill-first` policies. |
 | TensorRT-LLM | docs at `nvidia.github.io/TensorRT-LLM` (undated page), repo pins **1.2.1 stable / 1.3.0rc27** ([`inference-engines.md` §2.3](../cross-cutting/inference-engines.md)) | WebFetch | Not applicable to any DeepSeek-V4.1 model here — TRT-LLM has no V4.1 support ([`../models/deepseek41f/b300.md` §5.2](../models/deepseek41f/b300.md)). |
-| NVIDIA Dynamo | docs site says **latest = v1.4.2** [src](https://docs.nvidia.com/dynamo/llms.txt); doc pages fetched from `ai-dynamo/dynamo@main` 2026-09-19 | `curl` + WebFetch | ⚠️ **Contradiction with this tree**: [`inference-engines.md` §2.4](../cross-cutting/inference-engines.md) states Dynamo **1.5.0**. Both are cited; the docs-site version index is the primary source for what the published docs describe. Not re-resolved here. |
+| NVIDIA Dynamo | docs site says **latest = v1.4.2** [src](https://docs.nvidia.com/dynamo/llms.txt); doc pages fetched from `ai-dynamo/dynamo@main` 2026-09-19 | `curl` + WebFetch | **Resolved — no conflict.** The two numbers name different artefacts: **v1.4.2** is the last numbered stable *release / container tag* (GitHub releases, 2026-08-29) and **1.5.0** is the current *PyPI `ai-dynamo`* stable (uploaded 2026-09-19 04:21 UTC); the docs site's `latest` index tracks the **container** release, hence v1.4.2. Both pinned from primary sources in [`02` §2.1 line 150](02-serving-stack-and-routing.md#21-version-pin) and its [verification log entry 5](02-serving-stack-and-routing.md#verification-log-2026-09-19) ([GitHub releases](https://github.com/ai-dynamo/dynamo/releases), [PyPI](https://pypi.org/pypi/ai-dynamo/json)). Which tag to deploy is a deployment decision: [`09` §2.1](09-reference-architectures.md#21-nvidia-dynamo) pins container **1.4.2** with model dev tags `1.5.0-kimi-k3-dev.1` and `1.6.0-deepseek-v4.1-flash-dev.1`. |
 | Gateway API Inference Extension | InferencePool `inference.networking.k8s.io/v1`; `endpointPickerRef` "became optional as of v1.5.0" [src](https://gateway-api-inference-extension.sigs.k8s.io/api-types/inferencepool/) | WebFetch | |
 | Envoy AI Gateway | renamed / redirects to **Agent Router** (`theagentrouter.ai`), `next` docs [src](https://theagentrouter.ai/docs/next/capabilities/traffic/usage-based-ratelimiting/) | WebFetch (301 followed) | The CRD group is still `gateway.envoyproxy.io/v1alpha1`. |
 | AIBrix | `aibrix.readthedocs.io/latest` | WebFetch | |
@@ -2236,11 +2236,15 @@ or the experiment that would close it.
    `--retraction-policy`, `--min-free-slots-delay`, `hrrn` /
    `shortest-prefill-first` against the pinned **0.5.20**. *Method:*
    `--help | grep` on the deployed image. (§1.2, §1.3, §8.7)
-2. **Dynamo version contradiction.** The docs site version index says latest =
-   **v1.4.2** [src](https://docs.nvidia.com/dynamo/llms.txt);
-   [`inference-engines.md` §2.4](../cross-cutting/inference-engines.md) says
-   **1.5.0**. Both cited, not resolved here. *Method:* `docker inspect` the
-   deployed Dynamo image tag.
+2. **Dynamo version contradiction — RESOLVED 2026-09-19, no longer open.**
+   The two numbers are different artefacts: **v1.4.2** is the last numbered
+   stable release / container tag (GitHub releases, 2026-08-29) and **1.5.0**
+   is the current PyPI `ai-dynamo` stable (uploaded 2026-09-19 04:21 UTC); the
+   docs site's `latest` index tracks the container release. Primary sources and
+   pins in [`02` §2.1 line 150](02-serving-stack-and-routing.md#21-version-pin)
+   and its [verification log entry 5](02-serving-stack-and-routing.md#verification-log-2026-09-19).
+   Deploy the tag [`09` §2.1](09-reference-architectures.md#21-nvidia-dynamo) pins (container
+   1.4.2 + model dev tags), not the PyPI number.
 3. **A good `watermark` value.** vLLM's default is 0.0 (disabled) and no
    published guidance was found. *Method:* set it to
    `(largest expected single-request KV) / (total KV blocks)` and measure the
@@ -2484,4 +2488,6 @@ separate places).
 
 ### Not re-opened
 
-Everything already carrying a ⚠️ in §1 (which flags shipped in 0.29.0 / 0.5.20), the Dynamo 1.4.2-vs-1.5.0 version contradiction, and the sixteen entries in *Open questions* — those state their own method and are unchanged by this pass. This document's claims about the five repo models were checked **against this repository's own pair docs**, which are the tree's authority for them; they have no external primary source and none was sought here.
+Everything already carrying a ⚠️ in §1 (which flags shipped in 0.29.0 / 0.5.20) and the sixteen entries in *Open questions* (of which the Dynamo 1.4.2-vs-1.5.0 entry is now resolved — see the dated line below) — those state their own method and are unchanged by this pass. This document's claims about the five repo models were checked **against this repository's own pair docs**, which are the tree's authority for them; they have no external primary source and none was sought here.
+
+**2026-09-19 (follow-up pass).** Resolved the Dynamo **1.4.2 vs. 1.5.0** contradiction left open by the pass above, using the primary sources already in this tree rather than a new fetch: the numbers name different artefacts — v1.4.2 is the last numbered stable release / container tag (GitHub releases, 2026-08-29), 1.5.0 is the current PyPI `ai-dynamo` stable (uploaded 2026-09-19 04:21 UTC), and the docs site's `latest` index tracks the container release — per [`02` §2.1 line 150](02-serving-stack-and-routing.md#21-version-pin) and its verification log entry 5 ([GitHub releases](https://github.com/ai-dynamo/dynamo/releases), [PyPI](https://pypi.org/pypi/ai-dynamo/json)), matching the pin in [`10` §2](10-blueprint.md). The §1 version table row, *Open questions* item 2 and the *Not re-opened* paragraph were updated to say so; for which tag to actually deploy, follow [`09` §2.1](09-reference-architectures.md#21-nvidia-dynamo).

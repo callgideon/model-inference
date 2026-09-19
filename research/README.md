@@ -70,6 +70,24 @@ table with peak/off-peak and third-party rows at
 Min-GPU counts and parallelism for every GPU, not just B300, are in
 [`matrix/fit-matrix.md` §1](matrix/fit-matrix.md#1-fit-grid--status--minimum-gpus--parallelism--executed-format).
 
+## Inference scaling
+
+Operational research for running these five models at scale — cluster
+hardware, serving stack, admission control, throughput, autoscaling, cold
+start, cost, reliability, reference architectures, and how commercial
+inference providers solve the same problems — lives in
+[`scaling/`](scaling/README.md), not in this document. This tree answers
+*does it fit and what does it cost*; `scaling/` answers *how do you run it in
+production*.
+
+- [`scaling/README.md`](scaling/README.md) — index, reading order, and a
+  paragraph-per-document guide to `scaling/01`–`12`.
+- [`scaling/10-blueprint.md`](scaling/10-blueprint.md) — assembles the whole
+  subtree into one target platform for this repo's 8×B300 nodes.
+- [`scaling/11-playbook.md`](scaling/11-playbook.md) — condenses it into
+  decision tables, checklists, alert thresholds and the 15 engine flags that
+  matter most.
+
 ## 4. Full file index
 
 - [`METHODOLOGY.md`](METHODOLOGY.md) — every formula (weights, KV, fit,
@@ -121,6 +139,23 @@ attention kernel support, quantization support, pricing pointers):
   prefix caching, speculative decoding, parallelism strategies, disaggregation.
 - [`inferencex-api.md`](cross-cutting/inferencex-api.md) — how to re-fetch the
   SemiAnalysis InferenceX/InferenceMAX benchmark rows cited elsewhere in this tree.
+
+**`scaling/`** — operational research on running these five models at scale;
+see [Inference scaling](#inference-scaling) above and
+[`scaling/README.md`](scaling/README.md) for the full reading guide:
+
+- [`scaling/01-bare-metal-cluster.md`](scaling/01-bare-metal-cluster.md) — hardware, fabric, OS/driver, orchestration, weight distribution.
+- [`scaling/02-serving-stack-and-routing.md`](scaling/02-serving-stack-and-routing.md) — layered serving stack, engines, routing, gateways.
+- [`scaling/03-concurrency-and-admission-control.md`](scaling/03-concurrency-and-admission-control.md) — request lifecycle, capacity limits, admission, backpressure.
+- [`scaling/04-throughput-and-utilization.md`](scaling/04-throughput-and-utilization.md) — MBU/MFU, batching, KV tiering, MoE cluster patterns.
+- [`scaling/05-autoscaling-and-predictive-scaling.md`](scaling/05-autoscaling-and-predictive-scaling.md) — signals, Kubernetes mechanisms, predictive scaling, scale-down.
+- [`scaling/06-cold-start.md`](scaling/06-cold-start.md) — weight-loading fast paths, compile/graph caches, snapshot/restore, pre-warming.
+- [`scaling/07-cost-engineering.md`](scaling/07-cost-engineering.md) — fleet cost model, utilisation and caching economics, FinOps loop.
+- [`scaling/08-reliability-and-operations.md`](scaling/08-reliability-and-operations.md) — SLOs, failure modes, recovery, observability, runbooks.
+- [`scaling/09-reference-architectures.md`](scaling/09-reference-architectures.md) — published production architectures, open-source stacks, blueprints.
+- [`scaling/10-blueprint.md`](scaling/10-blueprint.md) — the assembled target platform for this repo's hardware.
+- [`scaling/11-playbook.md`](scaling/11-playbook.md) — decision tables, checklists, alert thresholds, engine flags.
+- [`scaling/12-inference-providers.md`](scaling/12-inference-providers.md) — how 28 commercial inference operators build their platforms.
 
 **`models/<exp>/`** — one directory per experiment (`deepseek41f`,
 `deepseek41fnvfp4`, `qwen3827b`, `kimik3`, `marlin2b`), each holding:

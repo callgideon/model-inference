@@ -445,9 +445,9 @@ estimates for a *different* model — but they are **not** comparable to
 | Stack | Version at research date | Deployment unit | Routing | PD | KV tiering | Autoscaling | Maturity |
 |---|---|---|---|---|---|---|---|
 | **NVIDIA Dynamo** | containers `1.4.2`; model dev tags `1.5.0` / `1.6.0`; "New in 1.0" feature list | `DynamoGraphDeployment` CRD (+ `DynamoGraphDeploymentRequest` for zero-config), `ComputeDomain` for MNNVL | Dynamo Frontend+Router (`DYN_ROUTER_MODE=kv`) **or** Gateway API + Dynamo EPP | first-class (`prefill`/`decode` components) | **KVBM** GPU→CPU→SSD→remote + S3/Azure blob | **SLA Planner** (`ttft_ms`, `itl_ms`) | Production; **the only stack shipping recipes for this repo's exact models** |
-| **llm-d** | **v0.7 (2026-05)**; CNCF Sandbox since 2026-03 | Helm/kustomize "well-lit paths" over Deployments + **LeaderWorkerSet** | Inference Gateway + **EPP** (prefix-cache-aware, predicted-latency) | well-lit path | tiered prefix cache (CPU/NVMe/network) | **KEDA + EPP** (queue / saturation / token-aware / SLO-aware), WVA, Kueue rebalancing | Production for the foundations; batch gateway + async are **experimental** |
+| **llm-d** | **v0.9.0 (2026-08-17)** — corrected 2026-09-19 from v0.7: the repo README this row cited still advertises "Version 0.7 (May 2026)" and is stale, confirmed by `curl` against the GitHub releases API (`v0.9.0`, `published_at 2026-08-17T23:38:08Z`); see [`02-serving-stack-and-routing.md` §2.1](02-serving-stack-and-routing.md#21-version-pin). CNCF Sandbox since 2026-03; the well-lit-paths feature list below is v0.7's and stands unchanged | Helm/kustomize "well-lit paths" over Deployments + **LeaderWorkerSet** | Inference Gateway + **EPP** (prefix-cache-aware, predicted-latency) | well-lit path | tiered prefix cache (CPU/NVMe/network) | **KEDA + EPP** (queue / saturation / token-aware / SLO-aware), WVA, Kueue rebalancing | Production for the foundations; batch gateway + async are **experimental** |
 | **AIBrix** | **v0.7.0 (2026-06-16)** | CRDs + operator (`kubectl apply -f aibrix-core-v0.7.0.yaml`) | LLM gateway, prefix-aware + load-aware | yes | distributed KV cache | LLM-specific autoscalers, SLO-driven GPU optimizer | Production at ByteDance scale; hybrid K8s+Ray orchestration |
-| **KServe + vLLM** | **v0.17 (2026-03-13)** | `LLMInferenceService` CRD | GIE **v1.3.0** EPP | `spec.prefill` | via llm-d primitives | HPA/KEDA | `LLMInferenceService` **graduated to production-ready in 0.17**; built *on* llm-d |
+| **KServe + vLLM** | **v0.20.0 (2026-08-06)** — corrected 2026-09-19 from v0.17: confirmed by `curl` against the GitHub releases API (`v0.20.0`, `published_at 2026-08-06T15:07:42Z`; `v0.21.0-rc0` is a pre-release); see [`02-serving-stack-and-routing.md` §2.1](02-serving-stack-and-routing.md#21-version-pin) | `LLMInferenceService` CRD | GIE **v1.3.0** EPP (v0.17); **v1.6.2** current, per §2.1 above | `spec.prefill` | via llm-d primitives | HPA/KEDA | `LLMInferenceService` **graduated to production-ready in 0.17**; built *on* llm-d |
 | **SGLang router + PD** | router flags documented; SGLang PD roadmap issue #21703 targets 2026 Q2 items | plain processes / any orchestrator | `sglang_router --pd-disaggregation` | native (`--disaggregation-mode`) | HiCache (L1/L2/L3) | none built in | Engine-level; you supply the control plane |
 | **Ray Serve LLM** | Ray **2.58** docs; Anyscale post 2025-11-26 | Python `LLMConfig` + Serve deployments | `PrefixCacheAffinityRouter` | `build_pd_openai_app` | via engine | Ray Serve autoscaling | Production; programmable rather than declarative |
 
@@ -670,7 +670,10 @@ speculative config, which suggests vLLM does not.
 
 ### 2.2 llm-d
 
-**v0.7 (2026-05)**; joined the **CNCF as a Sandbox project in 2026-03**, founded by
+**v0.7 (2026-05)** shipped the well-lit paths described below; current latest is
+**v0.9.0 (2026-08-17)** — the README still prints "Version 0.7 (May 2026)" and is
+stale, confirmed by `curl` against the GitHub releases API (§2 table above). Joined
+the **CNCF as a Sandbox project in 2026-03**, founded by
 Red Hat, Google Cloud, IBM Research, CoreWeave and NVIDIA
 ([README](https://github.com/llm-d/llm-d)).
 
@@ -777,11 +780,14 @@ LoRA-heavy; otherwise Dynamo or llm-d dominate for this workload.**
 
 ### 2.4 KServe + vLLM
 
-**v0.17, 2026-03-13** ([release blog](https://kserve.github.io/website/blog/kserve-0.17-release)).
-`LLMInferenceService` **graduated from experimental to production-ready**, is
-*built on llm-d*, and integrates **Gateway Inference Extension v1.3.0**. The
+**v0.17, 2026-03-13** ([release blog](https://kserve.github.io/website/blog/kserve-0.17-release))
+is where `LLMInferenceService` **graduated from experimental to production-ready**,
+is *built on llm-d*, and integrated **Gateway Inference Extension v1.3.0**. The
 release note also flags a **breaking Helm chart restructuring** — upgrading from
-v0.16 requires a migration guide, not `helm upgrade`.
+v0.16 requires a migration guide, not `helm upgrade`. Current latest is
+**v0.20.0 (2026-08-06)**, confirmed by `curl` against the GitHub releases API
+(§2 table above); GIE is now at v1.6.2 per
+[`02-serving-stack-and-routing.md` §2.1](02-serving-stack-and-routing.md#21-version-pin).
 
 Minimal example, quoted verbatim from the release blog:
 
@@ -1452,7 +1458,7 @@ measurements of a cluster, and they inherit every caveat in
 |---|---|---:|---:|---:|---:|
 | DeepSeek-V4.1-Flash | TP4 (S1) / TP2 (S4) | 1,373 | $1.4973–$3.0352 | 2,656 | $0.4809–$0.9747 |
 | Qwen3.8-27B | TP1 × 8/node | 12,463 | $0.1649–$0.3343 | 13,461 | $0.0602–$0.1221 |
-| Kimi-K3 | TP8 + DCP8, 1 node | 278.06 (decode-only; 198.9 sustained) | $7.3926–$14.985 | 569.4 | $2.3811–$4.8265 |
+| Kimi-K3 | TP8 + DCP8, 1 node | 278.06 (decode-only; 198.9 sustained — only the sustained figure is corroborated by a published B300 measurement, [`../models/kimik3/b300.md §3.8`](../models/kimik3/b300.md)) | $7.3926–$14.985 | 569.4 | $2.3811–$4.8265 |
 | Marlin-2B | TP1 | 93,271 | $0.022–$0.0447 | 93,271 | $0.0092–$0.0185 |
 
 GPU-hour prices: `low` **$7.40** (Hyperstack), `high` **$15.00** (OCI), from
@@ -1807,6 +1813,14 @@ into many independently checkable numbers): 34 CONFIRMED, 8 CORRECTED,
 
 ### Structural notes
 
+- **Post-log update (2026-09-19, cross-doc consistency pass):** items #17 and #22
+  above CONFIRMED llm-d **v0.7** and KServe **v0.17** against the README/blog pages
+  that were open at the time; those pages describe real historical releases and the
+  CONFIRMED verdicts stand for what they say. But `02-serving-stack-and-routing.md`
+  §2.1 later found the llm-d README stale and pulled current versions from the
+  GitHub releases API instead: llm-d is now **v0.9.0** (2026-08-17), KServe is now
+  **v0.20.0** (2026-08-06). The §2 table and §2.2/§2.4 above are updated to match;
+  see those sections for the `curl`-verified detail.
 - **Fireworks' *"up to 4x higher throughput"* (§1.7)** was not re-opened in this
   pass; it remains `vendor`-labelled with no harness, which is the correct
   treatment either way.
@@ -1827,3 +1841,13 @@ into many independently checkable numbers): 34 CONFIRMED, 8 CORRECTED,
   most suspicious going in (the 750× with no baseline, the 4.2584 synthetic
   acceptance constant, and the 178 tok/s/user B300-beats-NVL72 inversion) — all
   three are real, and all three were already correctly hedged.
+
+- **2026-09-19, gap `G3` (Kimi-K3 B300 anchor).** §7's per-GPU input table now
+  qualifies the Kimi-K3 row: of its two rates only the **sustained** 198.9
+  tok/s/GPU is corroborated by a published B300 measurement — Wafer's 196 out
+  tok/s/GPU peak aggregate (TP8+DCP8, SGLang, DSpark, ISL 1024 / OSL 400, c64;
+  <https://www.wafer.ai/blog/kimi-k3-mi355x>, 2026-07-31), within 1.5 % of it and
+  1.42× under the decode-only 278.06 that Blueprints A/B/C's 2,224 / 4,449 /
+  17,796 tok/s/node figures rest on (2.9× under the S4 569.4). Reconciled in
+  [`../models/kimik3/b300.md`](../models/kimik3/b300.md) §3.8 as a basis
+  difference, not an error; **no number in this document changed.**
