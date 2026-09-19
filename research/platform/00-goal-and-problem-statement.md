@@ -109,13 +109,13 @@ These hold at every stage or the product is not sellable.
 
 | Invariant | Statement | How it is enforced | Where covered |
 |---|---|---|---|
-| **I1 Quality parity** | The candidate is non-inferior to the incumbent on the customer's frozen eval, at a stated margin and confidence | S7 gate + S9 online test | §5, doc 04, doc 07 |
-| **I2 Cost** | Blended $/1M of the served candidate < incumbent, *including* amortised annotation + training + eval + idle GPU | Cost model, re-checked at every promotion | §4, doc 06, [`scaling/07-cost-engineering.md`](../scaling/07-cost-engineering.md) |
-| **I3 Latency** | p50 **and** p99 TTFT/TPOT no worse than incumbent at the customer's concurrency | S8 measurement + S9 online | doc 01, [`scaling/03-concurrency-and-admission-control.md`](../scaling/03-concurrency-and-admission-control.md) |
-| **I4 Contract fidelity** | The API contract (schema, tool-call shape, refusal behaviour, streaming semantics) is byte-compatible enough that the customer changes one base URL | Contract conformance suite, run as part of S7 | §2.3, doc 01 |
-| **I5 Safety** | The distilled model does not regress on refusals, jailbreak resistance or PII leakage relative to incumbent | Safety eval is a *separate, non-negotiable* gate, never traded against quality | §3.4, doc 08 |
-| **I6 Privacy** | Customer traffic never trains another tenant's model; PII is redacted before annotation; residency honoured | Tenant-scoped storage + redaction before any egress to a teacher | §8.2, doc 08 |
-| **I7 Reversibility** | Any promotion is revertible to the previous main version in under one minute, with no data loss | Versioned endpoints + traffic split control plane | doc 01, doc 07 |
+| **I1 Quality parity** | The candidate is non-inferior to the incumbent on the customer's frozen eval, at a stated margin and confidence | S7 gate + S9 online test | §5, doc 04 |
+| **I2 Cost** | Blended $/1M of the served candidate < incumbent, *including* amortised annotation + training + eval + idle GPU | Cost model, re-checked at every promotion | §4, doc 05, doc 08, [`scaling/07-cost-engineering.md`](../scaling/07-cost-engineering.md) |
+| **I3 Latency** | p50 **and** p99 TTFT/TPOT no worse than incumbent at the customer's concurrency | S8 measurement + S9 online | doc 05, doc 06, [`scaling/03-concurrency-and-admission-control.md`](../scaling/03-concurrency-and-admission-control.md) |
+| **I4 Contract fidelity** | The API contract (schema, tool-call shape, refusal behaviour, streaming semantics) is byte-compatible enough that the customer changes one base URL | Contract conformance suite, run as part of S7 | §2.3, doc 06 |
+| **I5 Safety** | The distilled model does not regress on refusals, jailbreak resistance or PII leakage relative to incumbent | Safety eval is a *separate, non-negotiable* gate, never traded against quality | §3.4, doc 04, doc 06 |
+| **I6 Privacy** | Customer traffic never trains another tenant's model; PII is redacted before annotation; residency honoured | Tenant-scoped storage + redaction before any egress to a teacher | §8.2, doc 02, doc 06 |
+| **I7 Reversibility** | Any promotion is revertible to the previous main version in under one minute, with no data loss | Versioned endpoints + traffic split control plane | doc 06, doc 04 |
 
 **I7 is the one that makes the rest sellable.** A customer will accept an
 imperfect eval if rollback is instant and cheap; they will not accept a perfect
@@ -178,7 +178,7 @@ workarounds as if they were requirements. Two consequences:
 
 - The student must be trained with the *same* prompt stack it will be served with,
   or the distribution shifts between S5 and S9. This makes the prompt stack part of
-  the versioned artifact (doc 01), not a customer-side variable.
+  the versioned artifact (doc 06), not a customer-side variable.
 - Any customer prompt change after deployment is a **silent distribution shift**
   that invalidates the eval. The platform must detect it (prompt-hash in every
   trace) and refuse to claim parity across it. ⚠️ **TO BE VERIFIED** that customers
@@ -200,7 +200,7 @@ workarounds as if they were requirements. Two consequences:
 Point 1 is where the repo's existing work connects: the
 [`cross-cutting/inferencex-api.md`](../cross-cutting/inferencex-api.md) and
 [`scaling/02-serving-stack-and-routing.md`](../scaling/02-serving-stack-and-routing.md)
-documents already cover the serving surface; doc 01 will extend them with
+documents already cover the serving surface; doc 06 extends them with
 versioning and contract conformance.
 
 ---
@@ -282,7 +282,7 @@ as the eval demands:
 | **Long-tail reasoning** | Rare hard cases are rare in traffic, so they are rare in the distilled dataset by construction | Stratified eval slices, not aggregate score | Oversample hard slices in S3; keep a frontier fallback route for low-confidence requests |
 | **Tool-use breadth** | A 2–30B student holds fewer tool schemas in working memory; degrades as the tool count grows | Per-tool accuracy, not aggregate | Cap the student's tool surface; route tool-heavy requests to the incumbent |
 | **Multi-turn compounding** | Single-turn parity does not imply session parity; errors compound | Session-level eval (§5.4) | Train on full sessions, not turns |
-| **Distribution shift** | Customer's traffic mix drifts; the student was trained on last quarter's | Drift monitor on the trace store (doc 02/03) | Continuous re-annotation; the loop's whole reason to exist |
+| **Distribution shift** | Customer's traffic mix drifts; the student was trained on last quarter's | Drift monitor on the trace store (doc 01/02) | Continuous re-annotation; the loop's whole reason to exist |
 | **Style over substance** | Distillation transfers surface form fastest; a judge that rewards style will pass a student that is wrong in the right voice | Judge validation against human labels (§5.1) | Rubric graders + programmatic checks, not preference-only |
 | **Safety regression** | Refusal behaviour is a small fraction of tokens, so it is under-represented in the distillation signal | A *separate* safety eval, always run | Safety data explicitly oversampled; see I5 |
 | **Quantisation drift** | The served artifact ≠ the gated checkpoint | Gate twice (§1.2) | Re-run the gate on the serving artifact |
@@ -312,8 +312,8 @@ budget dominates cost, and the repo's own analysis shows the 240-frame cap makes
 10-minute clip cost the same as a 2-minute one — so the economics are unusually
 favourable *if* quality holds. The reasoning for why it may not: temporal
 reasoning over long clips is exactly the "long-tail reasoning" failure above, and
-evaluating it is harder than evaluating text (§5.5). **Doc 04 must treat video
-evals as a first-class, separately-resourced problem, not a variant of text.**
+evaluating it is harder than evaluating text (§5.5). **Docs 04 and 09 must treat
+video evals as a first-class, separately-resourced problem, not a variant of text.**
 
 ---
 
@@ -464,7 +464,7 @@ commercially load-bearing, and multi-tenant adapter serving (S-LoRA-style: thous
 of adapters on shared base weights, "up to 4×" throughput over HF PEFT and vLLM via
 Unified Paging [[src](https://arxiv.org/abs/2311.03285)]) is the single highest-
 leverage architecture decision in the whole platform, because it turns N customers'
-idle GPUs into one busy one. Doc 01 and doc 06 must treat it as a primary design
+idle GPUs into one busy one. Doc 06 and doc 05 must treat it as a primary design
 axis.
 
 ---
@@ -509,7 +509,7 @@ Note the sharper version of the problem: the RealHumanEval study found that
 "programmer preferences do not correlate with their actual performance"
 [[src](https://arxiv.org/abs/2404.02806)] — i.e. even *human* preference is not a
 valid proxy for task outcome. Wherever an outcome signal exists (ticket resolved,
-code merged, transaction completed), it beats any judge, and doc 03/04 should hunt
+code merged, transaction completed), it beats any judge, and doc 02/04 should hunt
 for one before building a rubric.
 
 ### 5.2 What "parity" should mean
@@ -559,7 +559,7 @@ Three multipliers on top:
   continuously and stopped on a win is not a 95 % test. Either commit to a horizon
   or use an always-valid/sequential procedure. ⚠️ **TO BE VERIFIED** — I could not
   fetch a primary source for always-valid inference in this session (the arXiv ID I
-  tried was a different paper); doc 07 must source this properly before the
+  tried was a different paper); doc 04 must source this properly before the
   platform implements a stopping rule.
 
 ### 5.4 Non-stationarity, rare tails, and multi-turn
@@ -597,7 +597,7 @@ is the honest signal of what a *good* video eval costs: roughly 3 human-authored
 items per video. ⚠️ **TO BE VERIFIED**: whether frame-sampled proxy evals (grading
 on the same 240-frame budget the model sees, per
 [`models/marlin2b/README.md`](../models/marlin2b/README.md) §9) are a valid stand-in
-for full-clip human grading. Doc 04 owns this question.
+for full-clip human grading. Doc 09 owns this question.
 
 ### 5.6 The minimum evidence a customer will accept
 
@@ -622,23 +622,29 @@ Items 3 and 6 do more selling than items 4 and 5. Build them first.
 
 ## 6. Problem decomposition — the map for docs 01–09
 
-| Doc | Component | Purpose | Hard problems | Build / buy candidates |
-|---|---|---|---|---|
-| **01** | **Inference, endpoints, versioning** | Serve `main` and `dev` endpoints per customer task; immutable versioned artifacts; instant promote/rollback; multi-adapter serving | Contract fidelity (I4); cold start; multi-tenant adapter packing; keeping the prompt stack inside the artifact | **Build** the control plane on **vLLM/SGLang** (already analysed in [`cross-cutting/inference-engines.md`](../cross-cutting/inference-engines.md)); **buy** burst capacity from Baseten dedicated ($0.10833–$0.16633/GPU-min [[src](https://www.baseten.co/pricing/)]); adopt **S-LoRA**-style unified paging [[src](https://arxiv.org/abs/2311.03285)] |
-| **02** | **Observability + traces** | Capture every request/response with full context; searchable; cheap at volume | Schema stability; cost of storing every token; PII before it lands; sampling that preserves the tail | **Buy/adopt**: Langfuse (open source, self-hostable, $29–$2,499/mo cloud, billed per "billable unit" [[src](https://langfuse.com/pricing)]), Braintrust ($0–$249/mo + $/GB + $/1k scores [[src](https://www.braintrust.dev/pricing)]), W&B Weave (agent-native tracing, PII/toxicity/hallucination scorers [[src](https://wandb.ai/site/weave/)]). Standardise on **OpenTelemetry GenAI semantic conventions** [[src](https://github.com/open-telemetry/semantic-conventions-genai)] |
-| **03** | **Data capture, analysis, annotation** | Turn traces into labelled training data: teacher completions, preference pairs, rubric scores, human adjudication | Teacher ToS (§8.1); PII redaction before egress; annotation cost; label quality; dedup | **Build** the pipeline; **buy** the teacher tokens (batch API, 50 % off); consider Snorkel for expert data where correctness is hard to define [[src](https://snorkel.ai/)]; NVIDIA **Data Designer** / **Safe Synthesizer** for synthetic and privacy-preserving data [[src](https://docs.nvidia.com/nemo/microservices/latest/index.html)] |
-| **04** | **Datasets + evals** | Versioned splits; a frozen, contamination-free eval suite; judge validation; video evals | Judge validity (§5.1); contamination (§8.4); slice design; session-level and video eval | **Build** the eval harness around the customer's outcome signal; **buy** nothing wholesale — note that **OpenAI's Evals platform is being sunset** (read-only 2026-10-31, shutdown 2026-11-30 [[src](https://developers.openai.com/api/docs/guides/evals)]), which is a warning about depending on a vendor eval product |
-| **05** | **Training (SFT / DPO / RL / distillation)** | Produce candidate checkpoints from S4 data | Choosing the rung on the §3.2 ladder; teacher logprob availability; forgetting; reproducibility | **Buy first**: Tinker (LoRA 1B–1T+, SFT/RL/GRPO/PPO/DPO/distillation, export to HuggingFace, train price $0.44–$14.58/1M by model — Nemotron-3.5-Lightning to GLM-5.3 [[src](https://tinker-docs.thinkingmachines.ai/tinker/models/)]), Baseten Training Jobs (GA) / Loops (early access, async RL, 256K+ sequences, one-command promotion to Dedicated Inference [[src](https://www.baseten.co/products/training/)]), Fireworks (SFT + RFT to 1T+ [[src](https://docs.fireworks.ai/)]). **Build** only the orchestration |
-| **06** | **Model + inference optimization on target hardware** | Turn a checkpoint into the cheapest artifact that meets the SLO on the customer's GPU | Quantisation changing behaviour; engine/format availability per GPU; speculative decoding; the gate-twice rule | **Build**, on top of this repo's existing work: [`matrix/gpu-optimizations.md`](../matrix/gpu-optimizations.md), [`cross-cutting/quantization-formats.md`](../cross-cutting/quantization-formats.md), [`cross-cutting/serving-optimizations.md`](../cross-cutting/serving-optimizations.md), [`cross-cutting/flash-attention.md`](../cross-cutting/flash-attention.md) |
-| **07** | **A/B testing + rollout** | Shadow → canary → % split → promote, with a defensible statistical claim | Sample size (§5.3); peeking; randomisation unit; non-stationarity; rare tails | **Build.** This is the product's differentiator and cannot be outsourced — it is where §5.6 items 3 and 6 live |
-| **08** | **Governance, privacy, safety, multi-tenancy** | Make the loop legally and contractually shippable | Teacher ToS (§8.1); PII; residency; tenant isolation; audit trail; safety gate | **Build** policy + enforcement; **buy** redaction/PII scorers (W&B Weave guardrails [[src](https://wandb.ai/site/weave/)], NVIDIA Guardrails [[src](https://docs.nvidia.com/nemo/microservices/latest/index.html)]) |
-| **09** | **The auto-research loop** | Automatically search the space of {data mix, method, hyperparameters, student base, quantisation, engine config} and propose the next experiment | Search cost; overfitting the eval; knowing when to stop; explaining a choice to a customer | **Build**, informed by the one public precedent: NVIDIA's blueprint "explores a vast number of possible options down to a manageable set" without manual experiment design [[src](https://github.com/NVIDIA-AI-Blueprints/data-flywheel)] — and is now deprecated, so the precedent is a design, not a dependency |
+This table is the shipped file set. Every "doc NN" elsewhere in this document
+names the **file** `NN-*.md` in this directory, not an abstract component.
 
-**The ordering that matters.** Docs 02 → 04 → 07 (traces, evals, A/B) are the
+| Doc | Component | Stage | Purpose | Hard problems | Build / buy candidates |
+|---|---|---|---|---|---|
+| **01** | **Observability + traces** | **S1–S2** | Capture every request/response with full context; searchable; cheap at volume | Schema stability; cost of storing every token; PII before it lands; sampling that preserves the tail | **Buy/adopt**: Langfuse (open source, self-hostable, $29–$2,499/mo cloud, billed per "billable unit" [[src](https://langfuse.com/pricing)]), Braintrust ($0–$249/mo + $/GB + $/1k scores [[src](https://www.braintrust.dev/pricing)]), W&B Weave (agent-native tracing, PII/toxicity/hallucination scorers [[src](https://wandb.ai/site/weave/)]). Standardise on **OpenTelemetry GenAI semantic conventions** [[src](https://github.com/open-telemetry/semantic-conventions-genai)] |
+| **02** | **Annotation + teacher labeling** | **S3** | Turn traces into labelled training data: teacher completions, preference pairs, rubric scores, human adjudication | Teacher ToS (§8.1); PII redaction before egress; annotation cost; label quality; dedup | **Build** the pipeline; **buy** the teacher tokens (batch API, 50 % off); consider Snorkel for expert data where correctness is hard to define [[src](https://snorkel.ai/)]; NVIDIA **Data Designer** / **Safe Synthesizer** for synthetic and privacy-preserving data [[src](https://docs.nvidia.com/nemo/microservices/latest/index.html)] |
+| **03** | **Training (SFT / DPO / RL / distillation)** | **S5–S6** | Produce candidate checkpoints from S4 data — and, as the loop matures, **auto-research over {data mix, method, hyperparameters, student base}**, proposing the next training experiment rather than waiting to be told | Choosing the rung on the §3.2 ladder; teacher logprob availability; forgetting; reproducibility; search cost and overfitting the eval once the search is automated | **Buy first**: Tinker (LoRA 1B–1T+, SFT/RL/GRPO/PPO/DPO/distillation, export to HuggingFace, train price $0.44–$14.58/1M by model — Nemotron-3.5-Lightning to GLM-5.3 [[src](https://tinker-docs.thinkingmachines.ai/tinker/models/)]), Baseten Training Jobs (GA) / Loops (early access, async RL, 256K+ sequences, one-command promotion to Dedicated Inference [[src](https://www.baseten.co/products/training/)]), Fireworks (SFT + RFT to 1T+ [[src](https://docs.fireworks.ai/)]). **Build** only the orchestration, and the search on top of it — informed by the one public precedent: NVIDIA's blueprint "explores a vast number of possible options down to a manageable set" without manual experiment design [[src](https://github.com/NVIDIA-AI-Blueprints/data-flywheel)], now deprecated, so the precedent is a design, not a dependency |
+| **04** | **Datasets + evals + A/B testing and rollout** | **S4, S7, S9** | Versioned splits; a frozen, contamination-free eval suite; judge validation; video evals — **and** the online half: shadow → canary → % split → promote, with a defensible statistical claim | Judge validity (§5.1); contamination (§8.4); slice design; session-level and video eval; sample size (§5.3); peeking; randomisation unit; non-stationarity; rare tails | **Build** the eval harness around the customer's outcome signal; **buy** nothing wholesale — note that **OpenAI's Evals platform is being sunset** (read-only 2026-10-31, shutdown 2026-11-30 [[src](https://developers.openai.com/api/docs/guides/evals)]), a warning about depending on a vendor eval product. The A/B and rollout half is the product's differentiator and cannot be outsourced — it is where §5.6 items 3 and 6 live |
+| **05** | **Model + inference optimization on target hardware** | **S8** | Turn a checkpoint into the cheapest artifact that meets the SLO on the customer's GPU — including **auto-research over {quantisation, engine config, parallelism, speculative decoding}** | Quantisation changing behaviour; engine/format availability per GPU; speculative decoding; the gate-twice rule; knowing when the search should stop, and explaining the chosen config to a customer | **Build**, on top of this repo's existing work: [`matrix/gpu-optimizations.md`](../matrix/gpu-optimizations.md), [`cross-cutting/quantization-formats.md`](../cross-cutting/quantization-formats.md), [`cross-cutting/serving-optimizations.md`](../cross-cutting/serving-optimizations.md), [`cross-cutting/flash-attention.md`](../cross-cutting/flash-attention.md) |
+| **06** | **Platform architecture — endpoints, versioning, governance** (**absorbs** the endpoint/versioning component *and* the governance/privacy/safety/multi-tenancy component that earlier drafts of this table listed as separate docs) | **S6, S9 mechanics; cross-cutting** | Serve `main` and `dev` endpoints per customer task; immutable versioned artifacts; instant promote/rollback; multi-adapter serving — *and* make the loop legally and contractually shippable | Contract fidelity (I4); cold start; multi-tenant adapter packing; keeping the prompt stack inside the artifact; PII; residency; tenant isolation; audit trail; safety gate | **Build** the control plane on **vLLM/SGLang** (already analysed in [`cross-cutting/inference-engines.md`](../cross-cutting/inference-engines.md)); **buy** burst capacity from Baseten dedicated ($0.10833–$0.16633/GPU-min [[src](https://www.baseten.co/pricing/)]); adopt **S-LoRA**-style unified paging [[src](https://arxiv.org/abs/2311.03285)]. **Build** policy + enforcement; **buy** redaction/PII scorers (W&B Weave guardrails [[src](https://wandb.ai/site/weave/)], NVIDIA Guardrails [[src](https://docs.nvidia.com/nemo/microservices/latest/index.html)]) |
+| **07** | **Competitor analysis** | **Cross-cutting (scores rivals on S1–S9)** | Who already sells part of this loop, what they prove, and what they leave open — the live version of §7 | Vendor claims churn faster than the research; distinguishing shipped product from launch copy; the sunsets (§7.1) | **Build** (it is a research artifact, not code), with web search available — the gap §7 and open question 1 name |
+| **08** | **Economics and business case** | **Cross-cutting (prices S1–S9)** | The unit economics of the loop: incumbent blended price vs. served student, amortised annotation/training/eval/idle GPU, and the break-even that qualifies a customer — the live version of §4 | Comparing against the customer's *batched, cached, tier-downed* incumbent price rather than list (§4.4); amortising one-time costs honestly | **Build**, from [`matrix/cost-matrix.md`](../matrix/cost-matrix.md) and [`scaling/07-cost-engineering.md`](../scaling/07-cost-engineering.md); formulas are [`METHODOLOGY.md`](../METHODOLOGY.md), never re-derived |
+| **09** | **Video and multimodal loop** | **S1–S9, video delta** | Everything above, restated for video: what changes in capture, annotation, training, eval and serving when the payload is frames (§3.4, §5.5) | No published video-distillation parity result (open question 7); frame-sampled eval validity (open question 8); eval cost per clip | **Build**; the evidence base is thin enough that the first job is finding it |
+
+**The ordering that matters.** Docs 01 → 04 (traces, then evals + A/B) are the
 *minimum sellable product*, because they deliver §5.6 items 1–3 and 6 without any
-training at all. Docs 03 and 05 (annotation, training) add the actual model. Docs
-01, 06, 08, 09 are what makes it a platform rather than a consulting engagement.
-**Do not build 09 first**, however tempting; an auto-research loop over an
+training at all. Docs 02 and 03 (annotation, training) add the actual model. Docs
+05 and 06 (optimisation; architecture, endpoints and governance) are what makes it
+a platform rather than a consulting engagement, and 07–09 are the market, money and
+video cases around it. **Do not build the auto-research layer first** — the
+{data-mix, method, hyperparameter} search in the 03 row and the {quantisation,
+engine} search in the 05 row — however tempting; an auto-research loop over an
 unvalidated eval is a machine for overfitting.
 
 ---
@@ -651,19 +657,19 @@ unvalidated eval is a machine for overfitting.
 |---|---|---|---|
 | **Thinking Machines Tinker** [[src](https://thinkingmachines.ai/tinker/)] [[docs](https://tinker-docs.thinkingmachines.ai/)] | A training API exposing four primitives — `forward_backward`, `optim_step`, `sample`, `save_state` — with LoRA over dense and MoE, text and vision; SFT, RL (GRPO/PPO), DPO, model *and prompt* distillation; ~30 open-weights models listed, spanning Qwen3.5-4B to Nemotron-3-Ultra-550B-A55B (⚠️ the "1B to 1T+" range is not stated on the pages fetched); export ("download any checkpoint you've saved") to HuggingFace; serverless inference in **beta** for its own Inkling models | **Training-as-a-service is solved and commoditised.** Also that a research lab thinks the *primitives*, not the pipeline, are the product | No traces, no production endpoints for arbitrary models, no A/B, no evals loop. It is stage S5 only |
 | **"Inkling"** — resolved | **Thinking Machines' own model family**, `thinkingmachines/Inkling` and `Inkling-Small`, trainable on Tinker at $1.87/$4.68/$5.61 per 1M (prefill/sample/train, at a 50 % promotional discount), with 64K and 256K variants; serverless inference beta at $0.30 in / $1.20 out for Inkling-Small [[src](https://tinker-docs.thinkingmachines.ai/tinker/models/)] | That the training-API vendor is also shipping its own student models — i.e. the "bring your own base model" promise has a house brand next to it | Whether Inkling is competitive as a student for customer tasks — ⚠️ no published benchmarks found |
-| **Baseten** [[training](https://www.baseten.co/products/training/)] [[pricing](https://www.baseten.co/pricing/)] | Training Jobs (GA, framework-agnostic, multi-node, SSH debugging) + **Loops** (early access: async RL, 256K+ sequences, 2T+ params, policy versioning, non-blocking weight sync) + Dedicated Inference + Model APIs. "Models trained with Loops promote directly to Baseten Dedicated Inference with one command." Users get "Full ownership of your trained weights, no lock-in", extending to training code and evaluation artifacts | **The train→deploy seam is being closed by an inference vendor**, and this is the nearest competitor to the platform's §6 docs 01+05. Also proves the pricing model: per-GPU-minute, no idle charge | No trace capture from customer production, no annotation pipeline, no A/B/eval loop, no teacher-in-the-loop. It is S5→S6→S8, missing S1–S4 and S7/S9 |
+| **Baseten** [[training](https://www.baseten.co/products/training/)] [[pricing](https://www.baseten.co/pricing/)] | Training Jobs (GA, framework-agnostic, multi-node, SSH debugging) + **Loops** (early access: async RL, 256K+ sequences, 2T+ params, policy versioning, non-blocking weight sync) + Dedicated Inference + Model APIs. "Models trained with Loops promote directly to Baseten Dedicated Inference with one command." Users get "Full ownership of your trained weights, no lock-in", extending to training code and evaluation artifacts | **The train→deploy seam is being closed by an inference vendor**, and this is the nearest competitor to the platform's §6 docs 06+03. Also proves the pricing model: per-GPU-minute, no idle charge | No trace capture from customer production, no annotation pipeline, no A/B/eval loop, no teacher-in-the-loop. It is S5→S6→S8, missing S1–S4 and S7/S9 |
 | **NVIDIA Data Flywheel Blueprint** [[src](https://github.com/NVIDIA-AI-Blueprints/data-flywheel)] | Reference implementation of exactly this loop: Elasticsearch trace logs → dedup/split by `workload_id` → auto fine-tune across several candidate models → LLM-as-judge comparison → flag candidates for human review. Apache-2.0. **Status: DEPRECATED (April 2026), "no longer actively maintained, and new production use is not recommended"** | The end-to-end loop works and produces radical results: Llama 3.2 **1B at ≈98 % of Llama 3.1 70B's accuracy** on an internal HR chatbot's *tool-calling* task with "up to 98.6 %" cost reduction; `Qwen-2.5-32b-coder` ≈ `Llama-3.1-70b-instruct` un-fine-tuned, at >50 % lower cost and TTFT — with NVIDIA's own scoping caveat: *"simpler tool calling use cases where an agent is using a tool call to route between a small set of tools"* | It was a blueprint, not a product, and it is dead. **The most direct proof of the thesis is also the most direct proof that shipping it as a maintained product is hard** |
 | **NVIDIA NeMo microservices** [[src](https://docs.nvidia.com/nemo/microservices/latest/index.html)] | Customizer (LoRA, SFT, DPO, embedding customisation), Evaluator, Guardrails, Data Designer (synthetic data), Safe Synthesizer (privacy-preserving synthetic), Auditor (agent vulnerability testing). SDK 2.0.1, image 26.03.1. **"NeMo Microservices will be sunset on October 1, 2026. All new development has moved to NeMo Platform"** | That the component decomposition in §6 is the industry-consensus decomposition — NVIDIA arrived at nearly the same box diagram | Distillation is **not** listed among Customizer's supported methods. And the second sunset in two rows: this space churns |
 | **OpenAI** [[FT](https://developers.openai.com/api/docs/guides/supervised-fine-tuning)] [[Evals](https://developers.openai.com/api/docs/guides/evals)] | SFT with a documented distillation workflow — verbatim, it is prompt-tuning the teacher, not fine-tuning it: *"Tune a prompt for a larger model (like `gpt-4.1`) until you get great performance"*, capture its results, build a dataset, then *"Tune a smaller model (like `gpt-4.1-mini`)"*. **"OpenAI is winding down the fine-tuning platform. The platform is no longer accessible to new users."** Supported bases are still gpt-4.1 / -mini / -nano. **Evals: read-only 2026-10-31, shutdown 2026-11-30**, users pointed at "Datasets" | That the incumbent *shipped* teacher→student distillation as a first-party product and is now **retreating from it**. Read this carefully: it is simultaneously the strongest validation of the demand and the strongest signal that the incumbents would rather you tier down within their family (Luna, §4.4) than distil out of it | Why they are winding it down. ⚠️ **TO BE VERIFIED** — strategy, economics, or replacement? |
 | **Anthropic** | No first-party distillation product; the usage policy explicitly prohibits it without authorisation (§8.1) | The teacher side is a *licensing* problem, not a technical one | — |
 | **Databricks Agent Bricks** [[src](https://docs.databricks.com/aws/en/generative-ai/agent-bricks/)] | Knowledge Assistant and Supervisor Agent components; Agent Evaluation to "measure quality, cost, and latency" and "use LLM judges to identify and resolve quality issues". Agent Services in Beta, page dated 2026-09-15 | Evals + judges as a platform feature next to the data warehouse — the "your data is already here" wedge | ⚠️ The automatic-optimisation and synthetic-data claims I expected were **not** on the page I fetched; do not repeat them without a source |
 | **Snorkel AI** [[src](https://snorkel.ai/)] | Expert data development, data-as-a-service with "curriculum-structured datasets… rubrics, reviewer guidance, difficulty tiers, and evaluation slices", benchmarks (Terminal-Bench 4.0, Senior SWE-bench, OSWorld 2.0), and "specialized agents… with pass/fail criteria" | That the expensive, human part of S3/S4 is a business in its own right, and that the sophisticated answer to agent eval is **verifiable environments** | It is a services company. It does not close the loop |
-| **Langfuse** [[src](https://langfuse.com/pricing)] | Open-source tracing + datasets/experiments/scores + prompt management + dashboards. Hobby free (50k units/mo), Core $29, Pro $199, Enterprise $2,499 (100k units included on Core/Pro/Enterprise), graduated overage $8/100k (100k–1M) → $7 → $6.50 → $6/100k (50M+). Self-hostable free ⚠️ — the "feature parity with Cloud" phrasing is **not** on the pricing page as fetched; it links to self-hosting docs without a parity statement | Trace capture and offline experiments are commodity and cheap. **Do not build doc 02 from scratch** | No training, no endpoints, no rollout |
+| **Langfuse** [[src](https://langfuse.com/pricing)] | Open-source tracing + datasets/experiments/scores + prompt management + dashboards. Hobby free (50k units/mo), Core $29, Pro $199, Enterprise $2,499 (100k units included on Core/Pro/Enterprise), graduated overage $8/100k (100k–1M) → $7 → $6.50 → $6/100k (50M+). Self-hostable free ⚠️ — the "feature parity with Cloud" phrasing is **not** on the pricing page as fetched; it links to self-hosting docs without a parity statement | Trace capture and offline experiments are commodity and cheap. **Do not build doc 01 from scratch** | No training, no endpoints, no rollout |
 | **Braintrust** [[src](https://www.braintrust.dev/pricing)] | Observe + Evaluate (LLM-judge, autoevals, custom scorers) + Discover + Playground + Human Review + a "Loop Agent" for autonomous eval and test-case generation. $0 / $249 / Enterprise, billed on GB processed + scores; on-prem available | The eval-tooling layer is commodity too, **including** an agent that writes test cases | Same gap |
-| **W&B Weave** [[src](https://wandb.ai/site/weave/)] | Agent-native tracing (sessions/turns/steps/tools/sub-agents as first-class), imperative eval API with regression comparison, Guardrails scorers (toxicity, bias, **PII**, hallucination, coherence, relevance), MCP server so coding agents can "read live production data, run evaluations, and execute automatic iteration loops" | That the "agent reads your traces and iterates" pattern — doc 09's core idea — is already shipping as a feature | Bound to the W&B ecosystem; no serving |
+| **W&B Weave** [[src](https://wandb.ai/site/weave/)] | Agent-native tracing (sessions/turns/steps/tools/sub-agents as first-class), imperative eval API with regression comparison, Guardrails scorers (toxicity, bias, **PII**, hallucination, coherence, relevance), MCP server so coding agents can "read live production data, run evaluations, and execute automatic iteration loops" | That the "agent reads your traces and iterates" pattern — the auto-research idea in the §6 docs 03 and 05 rows — is already shipping as a feature | Bound to the W&B ecosystem; no serving |
 | **Fireworks AI** [[src](https://docs.fireworks.ai/)] | Serverless + dedicated GPU inference, **supervised and reinforcement fine-tuning of models up to 1T+**, 100+ models across text/vision/audio/image/embeddings, OpenAI-compatible | Another inference vendor closing the train→serve seam | ⚠️ Pricing, LoRA-serving specifics and any traffic-driven customisation workflow were **not** on the docs index I fetched |
-| **Predibase** | ⚠️ **TO BE VERIFIED.** `predibase.com` now 301-redirects to `rubrik.com/products/rubrik-agent-cloud`, and that page returned 403. The redirect is strong evidence of an acquisition by Rubrik, but I could not fetch a confirming source in this session | — | Doc 09 must confirm the acquisition date and what survived of LoRAX / Turbo LoRA / reinforcement fine-tuning |
-| **OpenPipe** | ⚠️ **TO BE VERIFIED.** The page fetched with no substantive content. OpenPipe's historic pitch — capture production traffic, fine-tune a smaller model, deploy, compare — is the closest thing to this platform's thesis, so its current status matters | — | Doc 09 owes a proper look |
+| **Predibase** | ⚠️ **TO BE VERIFIED.** `predibase.com` now 301-redirects to `rubrik.com/products/rubrik-agent-cloud`, and that page returned 403. The redirect is strong evidence of an acquisition by Rubrik, but I could not fetch a confirming source in this session | — | Doc 07 must confirm the acquisition date and what survived of LoRAX / Turbo LoRA / reinforcement fine-tuning |
+| **OpenPipe** | ⚠️ **TO BE VERIFIED.** The page fetched with no substantive content. OpenPipe's historic pitch — capture production traffic, fine-tune a smaller model, deploy, compare — is the closest thing to this platform's thesis, so its current status matters | — | Doc 07 owes a proper look |
 
 ### 7.2 The Tesla data-engine analogy, and where it breaks
 
@@ -682,7 +688,7 @@ to build the wrong platform:
 What does transfer: **mine the disagreements, not the average.** The highest-value
 examples in S2 are the ones where student and incumbent disagree, or where the
 judge is uncertain, or where the user retried. That is the platform's version of a
-disengagement, and doc 03 should be built around it.
+disengagement, and doc 02 should be built around it.
 
 ---
 
@@ -711,15 +717,27 @@ core mechanism of the platform.**
 > replicate any component of the Services, including the underlying data or models
 > (e.g., parameter weights)."* [[src](https://ai.google.dev/gemini-api/terms)]
 
-> **OpenAI** — ⚠️ **TO BE VERIFIED.** `openai.com/policies/business-terms/` and the
-> terms-of-use pages returned **HTTP 403** to both WebFetch and curl in this
-> session, so I have **no verbatim quote**. I will not paraphrase a legal clause I
-> could not read. What *is* sourced: OpenAI documents a distillation workflow for
-> distilling *their own* larger models into *their own* smaller ones
-> [[src](https://developers.openai.com/api/docs/guides/supervised-fine-tuning)],
-> which is a meaningfully different act from distilling into an open-weights model
-> served elsewhere. **Doc 08 must obtain and quote the actual OpenAI clause before
-> any customer-facing claim is made.**
+> **OpenAI, Services Agreement ("Business Terms"), updated 2025-12-01, effective
+> 2026-01-01, §3.3 Restrictions** — *"Customer will not … (e) except for a
+> Permitted Exception, use Output to develop artificial intelligence models that
+> compete with OpenAI's products and services"*. The **Permitted Exception**
+> reaches only undistributed classifiers/embeddings and fine-tuning OpenAI's own
+> models — neither covers a distilled generative student served on our GPUs — and
+> *"model extraction or stealing attacks"* sits separately inside the **Reverse
+> Engineer** definition with no exception at all. Read via a **Wayback snapshot
+> dated 2026-09-12**; the live pages still return HTTP 403 (re-tested 2026-09-19
+> with a browser UA). Full quotes and the four findings:
+> [`02` §5.1](02-annotation-and-teacher-labeling.md).
+
+⚠️ **The gate still stands, for a narrower reason.** An archive capture evidences
+the published text, not the executed contract, and only the Business Terms were
+obtained — the Usage Policies, Service Terms and regional Terms of Use remain
+unread. **No customer-facing claim about OpenAI-teacher distillation may be made
+until counsel holds the real document.** The four off-web routes to it — the
+platform console export, the first lighthouse customer's executed MSA, an email to
+OpenAI sales/legal, and further Wayback captures — are listed with owners in
+[`02` §5.1, "How to obtain the clause without the web"](02-annotation-and-teacher-labeling.md).
+*Owner: doc 02 §5.1.*
 
 Note the asymmetry worth designing around: Anthropic's phrasing is *"without prior
 authorization from Anthropic"* — i.e. it contemplates authorisation existing.
@@ -740,7 +758,7 @@ risks and should not be treated as one.
 - **"Teaching from the customer's own production traffic"** — where the customer
   already paid for the outputs, in their own account, under their own agreement —
   is a *different* legal posture from us calling a teacher API. It may still be
-  prohibited; it is at minimum the customer's decision and their liability. Doc 08
+  prohibited; it is at minimum the customer's decision and their liability. Doc 06
   must make the platform capable of expressing that distinction, with per-tenant
   policy and an audit trail of which teacher produced which label.
 
@@ -763,7 +781,7 @@ tool arguments, user text. Concrete requirements:
 - **Right to deletion.** A trace deleted from the store is still in the checkpoint
   it trained. ⚠️ **TO BE VERIFIED** — there is no cheap mechanism for un-training
   one example; the practical answer is retention windows plus documented retrain
-  cadence, and doc 08 must say so plainly rather than imply deletion propagates.
+  cadence, and doc 06 §5.3 must say so plainly rather than imply deletion propagates.
 
 ### 8.3 Model collapse from self-training
 
@@ -858,7 +876,8 @@ distillation project. If the MVP cannot hit 10, the platform is a consultancy.
 
 ### 9.2 Explicit non-goals for the MVP
 
-- **Not** the auto-research loop (doc 09). One good manual iteration first.
+- **Not** the auto-research loop (the §6 docs 03 and 05 rows). One good manual
+  iteration first.
 - **Not** multi-tenant adapter packing. One customer, dedicated replica; take the
   bad unit economics and learn.
 - **Not** video. §3.4 and §5.5 say it needs its own evidence base; doing it
@@ -868,7 +887,7 @@ distillation project. If the MVP cannot hit 10, the platform is a consultancy.
 - **Not** frontier-teacher distillation by default. Start on open-weights teachers
   (§8.1) so the MVP has no legal dependency, and treat frontier teachers as a
   per-tenant, documented exception.
-- **Not** a trace-store or eval-UI rewrite. Adopt Langfuse or equivalent (§6 doc 02).
+- **Not** a trace-store or eval-UI rewrite. Adopt Langfuse or equivalent (§6 doc 01).
 - **Not** a promise of a specific speedup or cost multiple. Quote against §4.4's
   honest baseline or do not quote.
 
@@ -879,25 +898,25 @@ distillation project. If the MVP cannot hit 10, the platform is a consultancy.
 **What to build** — the parts that are the product, that nobody sells, or that
 cannot be outsourced without losing the business:
 
-1. **The A/B and rollout control plane (doc 07) — build first and build well.**
+1. **The A/B and rollout control plane (doc 04) — build first and build well.**
    Shadow-by-default; randomise at the session; paired offline comparison;
    pre-registered margin, α and power; sequential-testing discipline; instant
    rollback demonstrated to the buyer. This is §5.6 items 3 and 6, which is what
    actually closes the sale.
-2. **Versioned artifact + endpoint control plane (doc 01)**, where the artifact
+2. **Versioned artifact + endpoint control plane (doc 06)**, where the artifact
    includes the prompt stack, tokenizer, chat template and serving config, and where
    `main`/`dev` promotion is a single reversible operation.
-3. **The gate-twice discipline (doc 06)** — evaluate the *served* artifact, after
+3. **The gate-twice discipline (doc 05)** — evaluate the *served* artifact, after
    quantisation and engine selection, not the BF16 checkpoint. This repo's per-GPU
    format substitutions make this a first-order concern, not a nicety.
 4. **Judge validation as a product surface (doc 04)** — gold sets, agreement
    numbers, the judge's noise floor shown next to every delta, and a hard rule that
    the judge is never the teacher.
-5. **Disagreement mining (doc 03)** — the platform's version of a disengagement.
+5. **Disagreement mining (doc 02)** — the platform's version of a disengagement.
    Highest-value data, cheapest to identify, and directly demoable.
-6. **Per-tenant teacher policy + audit trail (doc 08)** — which teacher produced
+6. **Per-tenant teacher policy + audit trail (doc 06)** — which teacher produced
    which label, under whose agreement.
-7. **Multi-tenant adapter serving (doc 01/06)** — not in the MVP, but the thing
+7. **Multi-tenant adapter serving (doc 06/05)** — not in the MVP, but the thing
    that makes the unit economics work at N customers (§4.5), so design for it now.
 
 **What to buy / adopt** — where the market has commoditised faster than we could build:
@@ -938,53 +957,57 @@ cannot be outsourced without losing the business:
 
 1. **⚠️ Market coverage.** This session had **no web search** — §7 covers only
    platforms I could name and fetch by URL. Who else is selling parts of this loop?
-   *Owner: doc 09, with search available.*
-2. **⚠️ OpenAI's distillation terms.** `openai.com/policies/business-terms/` and the
-   terms-of-use pages returned HTTP 403 to both WebFetch and curl. No verbatim
-   clause obtained. **No customer-facing claim about OpenAI-teacher distillation
-   may be made until this is read and quoted.** *Owner: doc 08.*
+   *Owner: doc 07, with search available.*
+2. **⚠️ OpenAI's distillation terms — partially closed.** §3.3(e) and the
+   Permitted Exception are now quoted verbatim in
+   [`02` §5.1](02-annotation-and-teacher-labeling.md), from a 2026-09-12 Wayback
+   snapshot; the live pages still 403 (re-tested 2026-09-19, browser UA). What is
+   *not* closed: the **executed** document in counsel's hands, and the still-unread
+   Usage Policies, Service Terms and regional Terms of Use. **No customer-facing
+   claim about OpenAI-teacher distillation may be made until counsel holds the real
+   document** — the four off-web routes are in `02` §5.1. *Owner: doc 02 §5.1.*
 3. **⚠️ Why is OpenAI winding down fine-tuning?** The platform is "no longer
    accessible to new users" [[src](https://developers.openai.com/api/docs/guides/supervised-fine-tuning)]
    and Evals shuts down 2026-11-30. Strategy, economics, or a replacement? This
-   materially changes the competitive picture. *Owner: doc 09.*
+   materially changes the competitive picture. *Owner: doc 07 §5.1.*
 4. **⚠️ Predibase.** `predibase.com` 301-redirects to `rubrik.com`; that page 403'd.
-   Acquisition date, acquirer, and the fate of LoRAX / Turbo LoRA / RFT. *Owner: doc 09.*
+   Acquisition date, acquirer, and the fate of LoRAX / Turbo LoRA / RFT. *Owner: doc 07 §4.5.*
 5. **⚠️ OpenPipe.** Current status and product. Its historic pitch is the closest to
-   ours. *Owner: doc 09.*
+   ours. *Owner: doc 07 §3.1.*
 6. **⚠️ Teacher logprobs.** Which teachers expose per-token logprobs for
    *arbitrary supplied continuations*? On-policy distillation (§3.2) requires it;
-   without it the method degrades to rejection sampling. *Owner: doc 05.*
+   without it the method degrades to rejection sampling. *Owner: docs 02/03.*
 7. **⚠️ Video-understanding distillation evidence.** No published result found
    showing a small VLM at parity with a frontier model on a customer video task.
-   This is the largest evidence gap in the programme. *Owner: doc 04.*
+   This is the largest evidence gap in the programme. *Owner: doc 09.*
 8. **⚠️ Frame-sampled video eval validity.** Is grading on the model's own 240-frame
-   budget a valid proxy for full-clip human grading? *Owner: doc 04.*
+   budget a valid proxy for full-clip human grading? *Owner: doc 09.*
 9. **⚠️ Sequential / always-valid testing.** No primary source obtained this session
    (the arXiv ID tried was a different paper). Needed before a stopping rule ships.
-   *Owner: doc 07.*
+   *Owner: doc 04 §2.5.*
 10. **⚠️ Cost of human adjudication.** No public benchmark for $/adjudicated example
     at enterprise quality. This is likely the dominant one-time cost (§4.3c) and it
-    is currently unpriced. *Owner: doc 03.*
+    is currently unpriced. *Owner: doc 02 §4.4.*
 11. **⚠️ Prompt-change invalidation.** Will customers accept "your prompt changed,
-    your parity claim is void"? Product decision. *Owner: doc 07.*
+    your parity claim is void"? Product decision. *Owner: doc 04.*
 12. **⚠️ Right to deletion vs. trained weights.** No cheap un-training mechanism;
-    what do we commit to contractually? *Owner: doc 08.*
+    what do we commit to contractually? *Owner: doc 06 §5.3.*
 13. **⚠️ Inkling as a student.** No published benchmarks found for Thinking
-    Machines' own model family. *Owner: doc 05.*
+    Machines' own model family. *Owner: doc 07 §10.*
 14. **⚠️ Databricks Agent Bricks.** The automatic-optimisation and synthetic-data
-    claims were not on the doc page fetched; confirm before citing. *Owner: doc 09.*
+    claims were not on the doc page fetched; confirm before citing. *Owner: doc 07.*
 15. **⚠️ Fireworks specifics.** Pricing, LoRA serving, and any traffic-driven
-    customisation workflow were not on the docs index fetched. *Owner: doc 09.*
+    customisation workflow were not on the docs index fetched. *Owner: doc 07.*
 16. **⚠️ NeMo Platform.** NeMo Microservices sunsets 2026-10-01 in favour of "NeMo
-    Platform" — what is it, and does it close the loop? *Owner: doc 09.*
+    Platform" — what is it, and does it close the loop? *Owner: doc 07.*
 17. **⚠️ DeepSeek-V4.1-Flash vendor price.** This repo's README quotes $0.60/1M
     output (DeepSeek off-peak); Baseten's Model API quotes $1.20
     [[src](https://www.baseten.co/pricing/)]. Both are cited; reconcile which is the
-    right comparison row for the platform's pitch. *Owner: doc 06.*
+    right comparison row for the platform's pitch. *Owner: doc 08.*
 18. **⚠️ Utilisation break-even.** §4.5 gives the GPU hourly floor but not the
     requests/second at which a dedicated replica beats a serverless open model for
     each of the five repo models. That number is what qualifies a customer.
-    *Owner: doc 06, from [`matrix/cost-matrix.md`](../matrix/cost-matrix.md) +
+    *Owner: doc 08, from [`matrix/cost-matrix.md`](../matrix/cost-matrix.md) +
     [`scaling/07-cost-engineering.md`](../scaling/07-cost-engineering.md).*
 
 ---
@@ -1017,7 +1040,8 @@ All fetched 2026-09-19 unless the source states its own date.
 - Anthropic Usage Policy, eff. 2025-09-15 — https://www.anthropic.com/legal/aup
 - Anthropic Commercial Terms of Service, eff. 2025-06-17 — https://www.anthropic.com/legal/commercial-terms
 - Gemini API Additional Terms, eff. 2026-03-23 — https://ai.google.dev/gemini-api/terms
-- OpenAI business terms — **not obtained (HTTP 403)**, see Open Question 2
+- OpenAI Services Agreement ("Business Terms"), updated 2025-12-01, eff. 2026-01-01 — https://openai.com/policies/business-terms/ (live URL HTTP 403; read via Wayback snapshot 2026-09-12: http://web.archive.org/web/20260912202946/https://openai.com/policies/business-terms — quoted in [`02` §5.1](02-annotation-and-teacher-labeling.md))
+- OpenAI Usage Policies / Service Terms / ROW + EU Terms of Use — **not obtained (HTTP 403, re-tested 2026-09-19)**, see Open Question 2
 
 **Papers**
 - Orca: Progressive Learning from Complex Explanation Traces of GPT-4 (2023-06-05) — https://arxiv.org/abs/2306.02707
@@ -1072,7 +1096,7 @@ already printed here; every derivation was recomputed with `python3`; every
 | 7 | Sora-2 "$0.10/s (720p) and $0.70/s (Sora-2-pro 1080p)" | Sora-2 $0.10/s; **Sora-2-pro $0.30 (720p) / $0.50 (1024p) / $0.70 (1080p)** | §3.4 |
 | 8 | Fable 5.1 blended "$16.625¹ … slightly below" | exactly **$16.344** at its real 2.5 % cache read | §4.1 |
 | 9 | Tinker Qwen3.8-27B "**$0.372 prefill**" | list prefill is **$1.86**; $0.372 is the *cached*-prefill rate (80 % discount). Train $4.103 ✓ and sample $5.595 ✓, so the $5,554 training estimate is unaffected | §4.3(b) |
-| 10 | Tinker range "**$0.37–$14.58**/1M by model" | **$0.44** (Nemotron-3.5-Lightning) to $14.58 (GLM-5.3), train | §6 doc 05 |
+| 10 | Tinker range "**$0.37–$14.58**/1M by model" | **$0.44** (Nemotron-3.5-Lightning) to $14.58 (GLM-5.3), train | §6 doc 03 |
 | 11 | Serverless blended: GLM-5.3-Flash **$0.187**, DeepSeek V4 Pro **$1.588** | recomputed on each row's **listed** cached price (METHODOLOGY §6 forbids a generic 10 %): **$0.193** and **$1.577** | §4.2 |
 | 12 | Opus 5 at 90 % cache hit = "**$6.51**/1M — still 108×" | `0.75 × (0.1×5 + 0.9×0.5) + 0.25×25` = **$6.9625**, i.e. **116×**. $6.51 is below the $6.625 floor that 100 % input caching gives, so it was arithmetically unreachable | §4.4 |
 
@@ -1100,7 +1124,7 @@ teacher, it does not fine-tune it), and Tinker's model count/size range.
 - **Gemini API Additional Terms**, eff. 2026-03-23 — quote verbatim [[src](https://ai.google.dev/gemini-api/terms)].
 - **The three sunsets** — NVIDIA data-flywheel *"Deprecation notice (Apr 2026) … no longer actively maintained, and new production use is not recommended"*, Apache-2.0; NeMo Microservices *"will be sunset on October 1, 2026. All new development has moved to NeMo Platform"*, SDK 2.0.1 / image 26.03.1, Customizer listing LoRA+SFT+DPO and **not** distillation; OpenAI Evals read-only 2026-10-31, shutdown 2026-11-30; OpenAI fine-tuning *"no longer accessible to new users"* with gpt-4.1/-mini/-nano the surviving bases. All four verbatim.
 - **Langfuse** $0 (50k units) / $29 / $199 / $2,499 with $6–$8/100k graduated overage; **Braintrust** $0 / $249 / Enterprise on GB-processed + per-1k-scores, on-prem on Enterprise, Loop agent on Pro+; **Snorkel**'s benchmark list (Terminal-Bench 4.0, Senior SWE-bench, OSWorld 2.0) and both quoted phrases; **Databricks Agent Bricks** page dated 2026-09-15, Agent Services "(Beta)", and — confirming this document's own ⚠️ — automatic optimisation and synthetic data are indeed absent from it.
-- **OpenTelemetry GenAI semconv** — `open-telemetry/semantic-conventions-genai` exists and is active (380 stars, spans/metrics/events for GenAI clients, MCP and provider-specific conventions). The §6 doc-02 recommendation stands.
+- **OpenTelemetry GenAI semconv** — `open-telemetry/semantic-conventions-genai` exists and is active (380 stars, spans/metrics/events for GenAI clients, MCP and provider-specific conventions). The §6 doc-01 recommendation stands.
 - **Repo cross-references** — the five §4.2 rows reproduce [`matrix/cost-matrix.md`](../matrix/cost-matrix.md) exactly ($0.0092/$0.022 marlin2b·B300; $0.0602 qwen3827b·B300 and $0.159 H200; $0.1485/$0.565 deepseek41fnvfp4·B200; $0.190/$0.462 deepseek41f·B200; $2.3811/$7.3926 kimik3·B300); the min-GPU column matches [`README.md`](../README.md) §3 and [`fit-matrix.md`](../matrix/fit-matrix.md) §5; the 240-frame / ~23,560-token cap and "no published throughput or latency measurement on any hardware" are [`models/marlin2b/README.md`](../models/marlin2b/README.md) items 9 and 10 verbatim; open question 17's $0.60/1M is README line 58's DeepSeek off-peak column.
 
 ### Unverifiable in this session
@@ -1116,3 +1140,11 @@ flat 10 %, which is exact for GPT-6/GPT-5.6, Opus 5, Sonnet 5, Haiku 4.5 and thr
 of the five Baseten rows, and wrong for Fable 5.1, GLM-5.3-Flash and DeepSeek V4
 Pro — all three now recomputed above. Any future row added to §4.1 or §4.2 must
 use the listed cached price, not the 0.4125 shorthand.
+
+### Addendum 2026-09-19 — OpenAI teacher-ToS inconsistency resolved
+
+§8.1's OpenAI entry and Open Question 2 both still said "no verbatim quote (HTTP 403)" while [`02` §5.1](02-annotation-and-teacher-labeling.md) had already quoted the Services Agreement §3.3(e), the Permitted Exception and the Reverse-Engineer definition verbatim from a 2026-09-12 Wayback snapshot. Both now carry the quote and defer to `02` §5.1; the legal source list distinguishes the Business Terms (obtained via archive) from the Usage Policies / Service Terms / regional Terms of Use (still unobtained). The customer-facing gate is **kept**, re-grounded: an archive capture is not the executed contract, so the gate is counsel holding the real document, reachable by the four off-web routes in `02` §5.1. All five `openai.com` policy URLs re-tested with a browser user-agent on 2026-09-19: **HTTP 403** on every one.
+
+### Addendum 2026-09-19 — §6 decomposition renumbered to the shipped file set
+
+§6's table had been written against an obsolete component numbering (01 endpoints, 02 observability, 03 annotation, 04 datasets+evals, 05 training, 06 optimization, 07 A/B, 08 governance, 09 auto-research) that no longer matched any file on disk, so a reader following this document's ~45 "doc NN" pointers landed in the wrong document nearly every time. The table is now the shipped set — 01 observability+traces, 02 annotation+teacher labeling, 03 training, 04 evals+A/B, 05 optimization, 06 architecture (which absorbs the old endpoints/versioning row **and** the old governance/privacy/safety/multi-tenancy row, stated in the row text), 07 competitors, 08 economics, 09 video — with the old auto-research row's content split into the 03 and 05 rows, and a new **Stage** column mapping each row to S1–S9 (which is what [`README.md`](README.md) §4 claims it does). Every "doc NN" in this document was then retargeted, including all 18 open-question owners. **Pointer-only: no number, source, quote or ⚠️ marker was changed.** The same sweep was applied to [`05`](05-model-and-inference-optimization.md) and to [`07`](07-competitor-analysis.md) §15 OQ3, and `README.md` §4 was corrected to match.

@@ -11,12 +11,11 @@ from that document. Conventions (legend, `est.`/`meas.`, blended-cost formula,
 price tiers) are [`research/METHODOLOGY.md`](../METHODOLOGY.md); the loop stage
 names **S1–S9** are doc 00 §1.2 and are not redefined here.
 
-> **Numbering note.** Doc 00 §6 maps "doc 07" to *A/B testing + rollout* and
-> assigns the market-scan open questions to "doc 09". The platform owner's
-> request and the work plan both name this file `07-competitor-analysis.md`.
-> This document therefore occupies slot 07 and the §6 map needs one edit; I have
-> not edited doc 00. Whoever reconciles the index should decide whether the
-> A/B-testing document becomes 09 or whether competitor analysis becomes 10.
+> **Numbering note — resolved (2026-09-19).** Doc 00 §6 has been rewritten to the
+> shipped file set: slot **07 is competitor analysis** (this file), A/B testing
+> lives with evals in `04`, and the market-scan open questions (`00` OQ 1, 3, 4, 5,
+> 14, 15, 16) are owned here. Every "doc NN" below names the file `NN-*.md` in this
+> directory.
 
 ---
 
@@ -561,7 +560,7 @@ hate it — doc 00 §8.6 already names this; here is a concrete instance to poin
 in a sales conversation.
 (b) The retirement is *not* a retreat: it is a migration to *Responses API +
 Agent Traces*, i.e. from "stored completions" to a richer agent-trace substrate.
-That is the same schema move doc 02 has to make (OpenTelemetry GenAI conventions,
+That is the same schema move doc 01 has to make (OpenTelemetry GenAI conventions,
 sessions/turns/steps). Microsoft is re-platforming capture, not abandoning it.
 
 **Coverage:** S1 ● · S2 ● · S3 ◐ · S4 ● · S5 ● · S6 ◐ · S7 ◐ · S8 ○ · S9 ○
@@ -887,7 +886,7 @@ SOC2/ISO27001 reports and a BAA; a Teams add-on is $300/mo
 [[src](https://langfuse.com/pricing)].
 
 **This is the cheapest per-unit trace store surveyed and it self-hosts for free.**
-Doc 00 §6 already says do not build doc 02 from scratch; this confirms the price
+Doc 00 §6 already says do not build doc 01 from scratch; this confirms the price
 of not building it is near zero.
 
 ### 6.2 Braintrust
@@ -1109,7 +1108,7 @@ latency or becomes a SPOF" — has a published answer here, and it is not ours.
 
 ### 9.1 HuggingFace TRL
 
-The decisive find for doc 05's build/buy decision. TRL's trainer taxonomy now
+The decisive find for doc 03's build/buy decision. TRL's trainer taxonomy now
 includes a **dedicated knowledge-distillation family**
 [[src](https://huggingface.co/docs/trl/index)]:
 
@@ -1126,7 +1125,7 @@ Doc 00 §3.1 cites GKD [[arXiv](https://arxiv.org/abs/2306.13649)] and MiniLLM
 million-token sequences on one 8-GPU node
 [[src](https://huggingface.co/docs/trl/index)].
 
-**Consequence for doc 05:** the §3.2 ladder's rungs 2–6 are all covered by one
+**Consequence for doc 03:** the §3.2 ladder's rungs 2–6 are all covered by one
 Apache-licensed library that Baseten's own training product already supports
 [[src](https://docs.baseten.co/training/overview)]. Buying a training API (Tinker,
 Fireworks) buys *managed infrastructure*, not *methods*. That changes the
@@ -1892,7 +1891,7 @@ open questions 1, 3, 4, 5, 14, 15 and 16; the rest are new.
 3. **⚠️ Predibase — date, terms, and product fate.** (doc 00 OQ#4.) Rubrik's
    control of the domains is proven (§4.5); everything else is blocked by a 403.
    Also: **is LoRAX still maintained?** 901 commits is a lifetime count, and we are
-   considering depending on it. *Owner: doc 01 (serving) + this doc.*
+   considering depending on it. *Owner: doc 06 (serving/architecture) + this doc.*
 4. **⚠️ OpenPipe's revenue at acquisition.** (doc 00 OQ#5, now sharpened.) The
    status is resolved — migrated to W&B, legacy platform off 2026-07-30 — but the
    *business* question is not. $6.7M seed and ~$7M of claimed customer savings
@@ -1925,7 +1924,7 @@ open questions 1, 3, 4, 5, 14, 15 and 16; the rest are new.
     researching it further. *Owner: doc 04.*
 11. **⚠️ Baseten's rollout primitives.** Scored S9 ◐ on inference from their
     deployment product; not verified on a fetched page. If Baseten already ships
-    canary/percentage rollout, §14.1's whitespace narrows. *Owner: doc 01.*
+    canary/percentage rollout, §14.1's whitespace narrows. *Owner: doc 06.*
 12. **⚠️ Arize "multi-modal evaluation support" — does it cover video?**
     [[src](https://arize.com/pricing/)] If yes, it is a buy candidate for doc 04's
     hardest problem. *Owner: doc 04.*
@@ -2213,10 +2212,13 @@ verify what the document cites, and could not discover what it missed.
   `docs.predibase.com` **301 → rubrik.com**; `www.atla-ai.com` **404**;
   `zenbase.ai` **307 → thesynthesis.company**; `withpi.ai` and `lamini.ai` return
   nothing. §8.6's negative findings hold exactly as written.
-- **Repo cross-references, opened and checked:** doc 00 §6's doc-map does assign
-  slot 07 to A/B testing and route market-scan questions to "doc 09" (§1's
-  numbering note is accurate, and the conflict is real — doc 00 §6 separately
-  maps doc 09 to the auto-research loop). Doc 00's open questions **1, 3, 4, 5,
+- **Repo cross-references, opened and checked:** doc 00 §6's doc-map, *as it stood
+  at fact-check time*, did assign slot 07 to A/B testing and route market-scan
+  questions to "doc 09" (§1's numbering note was accurate, and the conflict was
+  real — doc 00 §6 separately mapped doc 09 to the auto-research loop). ⚠️
+  **Superseded 2026-09-19:** `00` §6 has since been rewritten to the shipped file
+  set, so that conflict no longer exists; see §1's numbering note. Doc 00's open
+  questions **1, 3, 4, 5,
   14, 15, 16** are the ones this document claims to own; they are. Doc 00 §5.1's
   *"≥200 human-adjudicated examples … Cohen's κ"* matches §14.4. Doc 00
   §4.3(b)'s Tinker inputs ($1.86 prefill, $0.372 cached, $5.595 sample, $4.103
@@ -2238,3 +2240,7 @@ verify what the document cites, and could not discover what it missed.
   disclosed (re-confirmed on CoreWeave's page), so revenue at acquisition is
   unknowable from public sources. The doc correctly calls this the single most
   decision-relevant unknown, and it stays open.
+
+### Addendum 2026-09-19 — numbering conflict closed
+
+`00` §6 was rewritten to the shipped file set, so the conflict §1's numbering note flagged (slot 07 assigned to A/B testing, market-scan questions routed to "doc 09") no longer exists: **07 is competitor analysis**, A/B testing lives with evals in `04`, and `00` OQ 1, 3, 4, 5, 14, 15, 16 are owned here. The note is marked resolved, the corresponding line under "Confirmed against the primary source" is marked superseded, and the stale pointers were retargeted — §15 OQ3 `doc 01 (serving)` → **06**, OQ11 `doc 01` → **06**, §5/§6.1 `doc 02` (trace store) → **01**, §9.1 `doc 05` (training build/buy) → **03**. **Pointer-only: no number, source or ⚠️ marker was changed.**

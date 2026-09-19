@@ -790,7 +790,7 @@ from a source fetched 2026-09-19, with the effective date attached. **It is not
 legal advice and the platform must not ship a customer-facing claim on it without
 counsel.**
 
-### 5.1 OpenAI — resolved, and narrower than hoped
+### 5.1 OpenAI — resolved for the Business Terms, and narrower than hoped
 
 Doc 00 could not read these pages (HTTP 403 to both `WebFetch` and `curl`), and
 correctly refused to paraphrase. The pages still 403 today. However, a **Wayback
@@ -802,6 +802,15 @@ The document is headed **"Updated: December 1, 2025 … Effective: January 1, 20
 and states it "only applies to use of OpenAI's APIs, ChatGPT Enterprise, ChatGPT
 Business, ChatGPT for Clinicians, and other services for customers who are
 businesses and developers".
+
+**What was, and was not, obtained.** Only the *Services Agreement* (the
+"Business Terms") was obtained, and only through an archive capture — which is
+evidence of what the page published on 2026-09-12, **not** the executed contract.
+OpenAI's **Usage Policies**, the separate **Service Terms**, and the **ROW/EU
+Terms of Use** remain unread in every session of this programme; nothing below is
+sourced from them, and the consumer-ChatGPT surface they govern is out of scope
+here. The routes to the real document are in *How to obtain the clause without the
+web*, below.
 
 > **§3.3 Restrictions.** "Customer will not, and will not permit End Users to:
 > … (d) **Reverse Engineer** any aspect of the Services or the systems used to
@@ -853,6 +862,48 @@ businesses and developers".
    amount cap still applies — but the *kind* of damages available to OpenAI is
    broadened specifically for this clause. A drafter singles out a clause like
    that for a reason.
+
+#### How to obtain the clause without the web
+
+Every doc in this tree treated the clause as simply unobtainable because
+`openai.com` 403s. That was a wrong conclusion from a true observation: four
+routes to the document do not pass through `openai.com`'s edge. Each is an action
+with an owner, in the order they are worth trying.
+
+- **(a) In-product.** The Business Terms and Service Terms are served inside the
+  OpenAI platform console's legal/settings surface to any signed-in account
+  holder; the edge that 403s anonymous fetches does not gate an authenticated
+  console session. **Action:** whoever holds our OpenAI org account opens the
+  console and exports the PDF. *Owner: whoever holds the org account.*
+  ⚠️ **TO BE VERIFIED** — that the console exposes a downloadable copy has not
+  been confirmed in this session.
+- **(b) The first lighthouse customer's executed MSA.** An enterprise customer's
+  signed agreement incorporates the Business Terms and Service Terms by
+  reference, and that customer's counsel already holds the copy that binds
+  *them* — which is the copy that matters, since the tenant, not the platform, is
+  the contracting party. **Action:** request it during legal onboarding of
+  lighthouse A; it is an ordinary diligence ask.
+  *Owner: doc 08 / the lighthouse-A owner ([`10` §4.1](10-roadmap-and-mvp.md)).*
+- **(c) Ask OpenAI.** Sales and legal will send the current terms on request.
+  **Action:** one email, sent before any customer-facing claim is drafted, not
+  after. *Owner: doc 08, with counsel.*
+- **(d) The Wayback Machine.** `web.archive.org` is not served by `openai.com`'s
+  edge. **This is the route that worked** — the 2026-09-12 snapshot quoted above.
+  **Action:** re-run it for the pages still missing (Usage Policies, Service
+  Terms, ROW/EU Terms of Use). *Owner: doc 08.*
+
+**Do not spend another attempt on the live URLs.** All five were re-tested on
+**2026-09-19** with a browser user-agent
+(`curl -sL -A 'Mozilla/5.0 … Chrome/140.0.0.0 Safari/537.36'`):
+`/policies/business-terms/`, `/policies/usage-policies/`,
+`/policies/services-agreement/`, `/policies/row-terms-of-use/` and
+`/policies/eu-terms-of-use/` each returned **HTTP 403**, and
+`platform.openai.com/docs/guides/distillation` 200s but redirects into the
+supervised-fine-tuning guide this tree already cites, at its
+`#distilling-from-a-larger-model` anchor
+[[src](https://developers.openai.com/api/docs/guides/supervised-fine-tuning#distilling-from-a-larger-model)]
+— there is no separate distillation guide to obtain. The
+block is at the edge, not in the tool; a sixth fetch attempt buys nothing.
 
 ### 5.2 Anthropic
 
@@ -2015,3 +2066,7 @@ T1 all ten rows · T2 all six rows · T3 (C1 is the one failure) · PoLL both-or
 
 1. **Judge-human agreement for 2026-generation judges** (Open Question 1). Re-attempted; `WebSearch` unavailable in this session too. No vendor pricing or API page fetched carries an agreement figure. The gap is **confirmed open**, and §2.6's instruction — measure it per customer, per task, per slice — remains the only defensible position.
 2. **Gemini logprob availability** (Open Question 3). A direct fetch of the `generate-content` REST reference did not surface `responseLogprobs`/`logprobs` in the visible `GenerationConfig` schema. **Inconclusive, not negative** — §3.2's "⚠️ not checked" row is correct to stay ⚠️.
+
+### Addendum 2026-09-19 — OpenAI policy URLs re-tested, and §5.1's heading reconciled
+
+All five `openai.com` policy URLs (`/policies/business-terms/`, `/usage-policies/`, `/services-agreement/`, `/row-terms-of-use/`, `/eu-terms-of-use/`) were re-fetched with `curl -sL` under a browser user-agent (`Mozilla/5.0 … Chrome/140.0.0.0 Safari/537.36`) and **all five returned HTTP 403**; the 2026-09-12 Wayback capture of the Business Terms returned **200** and still serves the text quoted in §5.1. §5.1's heading was overclaiming relative to [`00` §8.1](00-goal-and-problem-statement.md) and [`10` §7](10-roadmap-and-mvp.md), which still called the clause unread: it is now **"resolved for the Business Terms"**, with an explicit note that the Usage Policies, Service Terms and ROW/EU Terms of Use remain unread and that an archive capture is not the executed contract. §5.1 gains *How to obtain the clause without the web* — four off-web routes, each an action with an owner. `00` §8.1, `00` Open Question 2, `00`'s legal source list and `10` §7 row 1 now point at that subsection instead of restating "unread (403)". ⚠️ Route (a) (console export) is asserted, not verified in this session.

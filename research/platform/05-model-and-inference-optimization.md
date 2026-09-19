@@ -6,9 +6,9 @@ takes a checkpoint which has already passed the offline eval gate and turns it i
 cheapest artifact that still meets the customer's SLO on the customer's target GPU* — and then
 proves, on the artifact that will actually serve, that nothing was lost.
 
-> **Document numbering.** `00` §6 assigns this component the label "doc 06". The programme
-> filed it as `05`. Same component, same scope, same cross-references; the label in `00` §6
-> row **06** is this file. Nothing else in the decomposition moves.
+> **Document numbering.** Resolved. `00` §6 now labels this component **05**, matching this
+> file, and every "doc NN" below names the file `NN-*.md` in this directory. Earlier drafts of
+> `00` §6 called this component "doc 06"; that offset is gone.
 
 **Conventions.** Legend, cost formulas and the `low`/`high`/`res1y` price tiers are
 [`research/METHODOLOGY.md`](../METHODOLOGY.md). This document **does not re-derive any number
@@ -95,29 +95,29 @@ place where the platform will later be unable to defend a claim.
 
 | Input | Shape | Who owns it | Why S8 cannot proceed without it |
 |---|---|---|---|
-| **Checkpoint** | Immutable ref (registry URI + digest), weights + tokenizer + chat template + generation config | S6 (doc 01) | The chat template and generation config are part of the function. A student gated with one template and served with another is a different model. |
+| **Checkpoint** | Immutable ref (registry URI + digest), weights + tokenizer + chat template + generation config | S6 (doc 06) | The chat template and generation config are part of the function. A student gated with one template and served with another is a different model. |
 | **Prompt stack** | The system prompt(s), tool schemas, response schema, in a versioned blob with a hash | Customer, frozen into the artifact | `00` §2.2: the prompt stack is part of the versioned artifact, not a customer-side variable. It also determines the prefill:decode ratio, which determines which GPU wins. |
 | **Target hardware** | GPU model + count + interconnect + $/GPU-hr tier (`low`/`high`/`res1y`) | Platform + customer's residency/commitment | Format availability is a *silicon* property ([`quantization-formats.md` §4.2](../cross-cutting/quantization-formats.md)), so the target GPU prunes most of the search space before any search starts. |
 | **SLOs** | p50 **and** p99 TTFT and TPOT, at a stated concurrency; plus the availability target | Customer (I3 in `00` §1.3) | A p50-only SLO is not an SLO; §3.4 shows the search has a different optimum under p99. |
 | **Traffic profile** | Distribution of input length, output length, prefix-cache hit rate, arrival process, tool-call rate, image/video frame counts | Platform, mined from S2 traces | The repo's own evidence that this is load-bearing: measured prefix-cache hit rates range from **≈0 %** for video to **99.7 %** on agentic traces ([`cost-matrix.md` §7.2](../matrix/cost-matrix.md)). Benchmarking at the wrong hit rate is the most common way to produce a confidently wrong config. |
 | **Eval suite** | Frozen test split, per-slice, with judge config and the agreed margin δ, α, power | doc 04; thresholds by the customer | S8's exit gate is a *re-run* of S7's gate, not a new one. If the suite is not frozen and cheap to re-run, gate-at-each-rung is unaffordable. |
-| **Safety suite** | Separate, non-negotiable (I5) | doc 08 | Quantization is a plausible mechanism for refusal regression: refusal behaviour is a small fraction of tokens (`00` §3.3) and low-precision weights degrade rare behaviours first. ⚠️ **TO BE VERIFIED** — I found no published measurement of refusal-rate drift under PTQ; §"Open questions" Q4. |
+| **Safety suite** | Separate, non-negotiable (I5) | doc 06 | Quantization is a plausible mechanism for refusal regression: refusal behaviour is a small fraction of tokens (`00` §3.3) and low-precision weights degrade rare behaviours first. ⚠️ **TO BE VERIFIED** — I found no published measurement of refusal-rate drift under PTQ; §"Open questions" Q4. |
 | **Budget** | GPU-hours for the sweep, $ for the gate, wall-clock deadline | Platform | §1.6 prices the stage; without a cap, config search is unbounded. |
-| **Policy** | Tenant isolation class, teacher-provenance flags, export requirements | doc 08 | Determines whether the artifact may be co-resident with other tenants' adapters (§6.3). |
+| **Policy** | Tenant isolation class, teacher-provenance flags, export requirements | doc 06 | Determines whether the artifact may be co-resident with other tenants' adapters (§6.3). |
 
 ### 1.3 Outputs — the serving artifact and its paperwork
 
 | Output | Content | Consumed by |
 |---|---|---|
 | **Weight artifact(s)** | One or more format builds (e.g. BF16 reference, FP8, NVFP4), each a content-addressed blob set, each with its own quantization config and calibration-set hash | The engine; the registry (§5) |
-| **Serving config** | Engine name + exact version + container digest; parallelism (TP/PP/DP/EP); every flag that changes numerics or scheduling; KV dtype; attention backend; chunked-prefill budget; CUDA-graph capture sizes; `max_num_seqs`; `max_model_len` | The endpoint control plane (doc 01) |
+| **Serving config** | Engine name + exact version + container digest; parallelism (TP/PP/DP/EP); every flag that changes numerics or scheduling; KV dtype; attention backend; chunked-prefill budget; CUDA-graph capture sizes; `max_num_seqs`; `max_model_len` | The endpoint control plane (doc 06) |
 | **Speculative modules** | Draft head weights (MTP / EAGLE3 / DFlash / DSpark), γ, and the **measured acceptance on this customer's traffic** | The engine |
 | **Adapter set** | LoRA adapters + rank + target modules, if serving multi-LoRA (§6) | The engine |
-| **Benchmark report** | §3.7 schema: the Pareto curve, the chosen operating point, p50/p99 TTFT/TPOT at that point, tokens/s/GPU, $/1M in / out / blended at all three price tiers, and the full reproduction command | The customer; the cost model (I2); doc 07 |
-| **Eval-gate report** | Per-slice deltas vs the BF16 checkpoint **and** vs the incumbent, with the judge's own noise floor shown (`00` §5.1), plus the safety result | doc 07's promotion decision |
-| **Provenance record** | Lineage edges, signature, the exact calibration data used, the tool versions (§5.3–5.5) | doc 08's audit trail |
+| **Benchmark report** | §3.7 schema: the Pareto curve, the chosen operating point, p50/p99 TTFT/TPOT at that point, tokens/s/GPU, $/1M in / out / blended at all three price tiers, and the full reproduction command | The customer; the cost model (I2); doc 04 |
+| **Eval-gate report** | Per-slice deltas vs the BF16 checkpoint **and** vs the incumbent, with the judge's own noise floor shown (`00` §5.1), plus the safety result | doc 04's promotion decision |
+| **Provenance record** | Lineage edges, signature, the exact calibration data used, the tool versions (§5.3–5.5) | doc 06's audit trail |
 
-**An artifact without its benchmark report and eval-gate report is not an artifact.** Doc 01's
+**An artifact without its benchmark report and eval-gate report is not an artifact.** Doc 06's
 promotion API should refuse it.
 
 ### 1.4 The ordering invariant
@@ -170,7 +170,7 @@ Three ordering rules fall out, and all three are violated by the naive pipeline:
 - **Not eval design.** doc 04 owns the suite, the judge and the slices. S8 *consumes* a frozen
   suite and must not be allowed to touch it — an optimizer with write access to its own
   objective is the failure mode `00` names in "What to avoid".
-- **Not rollout.** doc 07 owns shadow/canary/split. S8 hands over an artifact and two reports.
+- **Not rollout.** doc 04 owns shadow/canary/split. S8 hands over an artifact and two reports.
 
 ### 1.6 What the stage itself costs
 
@@ -341,7 +341,7 @@ recovery method, and go back to AutoQuantize with FP8 on the menu (§2.2).
 *generic* accuracy and can still lose the customer's slice — always QAD on S4 data. (b) QAD
 after DPO/RL can undo alignment properties that the RL stage installed; the checkpoint-B row
 above is consistent with that, and the safety gate (I5) must be re-run unconditionally after
-QAD. (c) It is a training run, so it inherits doc 05-training's reproducibility burden.
+QAD. (c) It is a training run, so it inherits doc 03-training's reproducibility burden.
 
 **Upstream corroboration that 4-bit training is viable at all:** NVIDIA trained a **12B hybrid
 Mamba-Transformer on 10 trillion tokens in NVFP4** and reports it *"achieves training loss and
@@ -553,7 +553,7 @@ trade, not a technical preference.
 | Latency | No adapter overhead | Small per-token cost; Punica measured *"only adding 2ms latency per token"* at its scale [src](https://arxiv.org/abs/2310.18547) |
 | Throughput at N tenants | N replicas | S-LoRA: *"improve the throughput by up to 4 times"* vs HF PEFT and naive-LoRA vLLM [src](https://arxiv.org/abs/2311.03285); Punica: *"12x higher throughput in serving multiple LoRA models compared to state-of-the-art LLM serving systems"* [src](https://arxiv.org/abs/2310.18547) |
 | Version swap | Full weight reload (§5.7, [`scaling/06` §2](../scaling/06-cold-start.md)) | Adapter hot-load: `POST /v1/load_lora_adapter`, with `load_inplace=true` to replace under the same name [src](https://docs.vllm.ai/en/latest/features/lora.html) — the cheapest version swap available ([`scaling/06` §6.3](../scaling/06-cold-start.md)) |
-| Isolation | Complete | Shared process, shared base, shared scheduler — a tenancy decision (doc 08) |
+| Isolation | Complete | Shared process, shared base, shared scheduler — a tenancy decision (doc 06) |
 | Draft head | Can be trained against the merged target | ⚠️ acceptance under a hot-swapped adapter is unmeasured; Q9 |
 
 **Decision rule.** **Merge for the customer's `main` endpoint once the version is stable and the
@@ -744,7 +744,7 @@ a sweep:
 
 ### 3.7 The reproducible benchmark report
 
-This is a deliverable with a schema, because it is shown to a customer and because doc 07 will
+This is a deliverable with a schema, because it is shown to a customer and because doc 04 will
 re-derive cost from it.
 
 ```yaml
@@ -867,7 +867,7 @@ is consistent with the episode having happened, and is the more useful fact anyw
 1. **Any change to a numerics-affecting flag that the gate cannot see.** If the eval suite has no
    slice covering a behaviour, an optimizer is free to destroy it. Human review is the
    compensating control for gate coverage.
-2. **Any promotion.** `00` I7 and doc 07 own this; the optimizer's output is a *candidate*, never
+2. **Any promotion.** `00` I7 and doc 04 own this; the optimizer's output is a *candidate*, never
    a deployment.
 3. **Any result that beats the incumbent by more than the search was designed to find.** A 10×
    surprise is a bug 95 % of the time — this is the operational form of §4.2, and it should be an
@@ -951,7 +951,7 @@ customer prompt edit silently invalidates parity — `00` §2.2) and the **conta
 |---|---|---|---|
 | **MLflow Model Registry** [src](https://mlflow.org/docs/latest/ml/model-registry/) | *"a centralized model store, set of APIs and a UI … to collaboratively manage the full lifecycle"*; monotonic versions (`models:/MyModel/1`); **aliases** — *"a mutable, named reference to a particular version"* (e.g. `champion`); tags; *"Each registered model version is linked to the MLflow run, logged model or notebook that produced it, enabling full reproducibility"* | *"The provided content contains no information about model signing or attestation"* [ibid.] — signing must be layered on (§5.5). Not built for multi-GB artifact distribution | **Good fit for lineage and the `champion`/`dev` alias pattern**, which maps directly onto main/dev endpoints. Pair with an object store for bytes |
 | **W&B Registry** [src](https://docs.wandb.ai/guides/registry/) | *"a curated central repository of W&B Artifact versions within your organization"*; `v0`-indexed versions; collections; linking is a pointer — *"W&B does not duplicate artifacts when you link"*; *"Track an artifact's lineage and audit the history of changes"*; *"Automate downstream processes such as model CI/CD"*; permission-based access per registry | Ecosystem lock-in (`00` §8.6's lesson); automation/webhook mechanics not detailed on the page fetched ⚠️ | Strong if the training side already runs on W&B. The **automation-on-alias-change** hook is the right trigger shape for promotion |
-| **Hugging Face Hub, private repos** | Git-based versioning with commit pinning; **Xet** storage — *"a modern custom storage system built specifically for AI/ML development … enables chunk-level deduplication, smaller uploads, and faster downloads than Git LFS"* [src](https://huggingface.co/docs/hub/en/storage-backends) | Third-party custody of customer-derived weights — a doc 08 problem, not a doc 05 one | **Use for public base models; do not use for customer-derived checkpoints** unless the tenant's policy explicitly allows it |
+| **Hugging Face Hub, private repos** | Git-based versioning with commit pinning; **Xet** storage — *"a modern custom storage system built specifically for AI/ML development … enables chunk-level deduplication, smaller uploads, and faster downloads than Git LFS"* [src](https://huggingface.co/docs/hub/en/storage-backends) | Third-party custody of customer-derived weights — a doc 06 problem, not a doc 03 one | **Use for public base models; do not use for customer-derived checkpoints** unless the tenant's policy explicitly allows it |
 | **OCI artifacts — ModelPack + KitOps** | ModelPack: *"a vendor-neutral, open source specification standard to package, distribute and run AI models in a cloud native environments"*, *"based on the current OCI image specification"*, under **CNCF** [src](https://github.com/modelpack/model-spec). KitOps is *"the reference implementation of ModelPack"*, packaging *"models, datasets, code, agent skills, MCP servers, guardrail configs, and policies into a single versioned OCI artifact"*, working with *"Amazon ECR, Azure Container Registry, Docker Hub, GitHub Packages, GitLab Container Registry, Google Artifact Registry, Harbor, JFrog Artifactory, Quay.io"*, Apache-2.0, with *"Sign and verify … with the same Cosign workflow used for container images"* [src](https://kitops.org/) | Younger ecosystem; ModelPack *"only contains part of the model metadata, and handles model artifacts as opaque binaries"* [src](https://github.com/modelpack/model-spec) | **This is the right substrate for the *serving* artifact.** The artifact already travels next to a container digest; putting both in the same registry, with the same signing workflow and the same pull path onto a node, removes an entire class of drift |
 
 **Recommendation.** Two stores, one truth:
@@ -965,8 +965,8 @@ be exportable as plain files on demand.
 ### 5.3 Lineage
 
 Every artifact carries a DAG of typed edges back to a base model. The edges are not decoration:
-doc 07 needs them to answer "what changed between the version that worked and the one that
-didn't", and doc 08 needs them to answer "whose data, under whose teacher agreement".
+doc 04 needs them to answer "what changed between the version that worked and the one that
+didn't", and doc 06 needs them to answer "whose data, under whose teacher agreement".
 
 ```
 base:Qwen3.8-27B@<digest>
@@ -1024,7 +1024,7 @@ enforced property rather than a configuration convention. **Verify at load, not 
 
 ### 5.6 Promotion between dev and main, with gates
 
-The promotion contract (doc 01 owns the endpoint mechanics, doc 07 owns the statistical
+The promotion contract (doc 06 owns the endpoint mechanics, doc 04 owns the statistical
 decision; S8 owns the *preconditions*):
 
 ```
@@ -1151,7 +1151,7 @@ quantization of those weights, and the same engine version and flags.** Conseque
 | Base model version | **No** | Separate replica |
 | Quantization format | **No** | Separate replica — and this is why the format decision is a *fleet* decision, not a per-customer one |
 | Engine version | **No** | Separate replica, and a rolling-upgrade problem ([`scaling/06` §6](../scaling/06-cold-start.md)) |
-| Isolation class (doc 08) | **No**, by policy | Separate replica regardless of technical feasibility |
+| Isolation class (doc 06) | **No**, by policy | Separate replica regardless of technical feasibility |
 
 **The platform design conclusion: standardise hard on a small number of (base, format, engine
 version) triples — "serving pools" — and route tenants into them.** A platform that lets every
@@ -1193,7 +1193,7 @@ multiplexed within it.
 | **Noisy neighbour** | One tenant's long-context requests consume the shared KV pool; others' TTFT rises | Per-tenant admission control ([`scaling/03`](../scaling/03-concurrency-and-admission-control.md)); per-tenant SLO accounting, not per-replica |
 | **Rank inflation** | One tenant needs rank 128; `--max-lora-rank` is server-wide and start-time | Pool tenants by rank band; treat a rank bump as a pool migration |
 | **Adapter sprawl** | Every candidate version leaves an adapter behind | §5.8 retention, enforced by the registry |
-| **Cross-tenant leakage via a shared base** | An adapter loaded into the wrong pool | §5.5 signature verification at load; doc 08 owns the policy |
+| **Cross-tenant leakage via a shared base** | An adapter loaded into the wrong pool | §5.5 signature verification at load; doc 06 owns the policy |
 | **Shared-pool upgrade risk** | An engine upgrade moves every tenant at once, and engine upgrades change numerics (§5.4) | Blue/green the *pool* ([`scaling/06` §6.1](../scaling/06-cold-start.md)); re-run each tenant's Tier A screen against the new pool **before** cutting traffic. This is expensive and it is the real cost of multi-tenancy |
 
 **The last row is the honest cost of §6 and it is usually omitted from the pitch:** sharing a
@@ -1405,7 +1405,7 @@ A report that quotes list price is a report that will be caught.
 - **Free-form agentic kernel generation** (tier 4, §4.3). Consume kernels from engines.
 - **Letting the optimizer write to its own objective.** The eval suite is owned by doc 04, frozen,
   and read-only to S8.
-- **Auto-promotion.** Ever. `00` I7 and doc 07 own the decision; S8 produces candidates.
+- **Auto-promotion.** Ever. `00` I7 and doc 04 own the decision; S8 produces candidates.
 - **Per-customer format choice.** It destroys the serving pool (§6.3) and with it the
   multi-tenant economics that `00` §4.5 says the business depends on.
 - **Benchmarking at an assumed 50 % cache hit rate.** Measure it; the real range in this repo is
@@ -1431,11 +1431,11 @@ A report that quotes list price is a report that will be caught.
    speedup. Sparsity stays out of the ladder. *Owner: this doc.*
 3. **⚠️ Layer dropping on hybrid GDN/Mamba architectures.** ShortGPT and Minitron are transformer
    results. Dropping layers from a 6-of-24-attention stack changes KV-per-token and
-   state-per-sequence. No published result found. *Owner: this doc + doc 05-training.*
+   state-per-sequence. No published result found. *Owner: this doc + doc 03-training.*
 4. **⚠️ Does quantization regress refusal behaviour?** `00` I5 makes safety a non-negotiable gate
    and `00` §3.3 notes refusals are under-represented in the training signal. I found **no
    published measurement of refusal-rate or jailbreak-resistance drift under PTQ or QAD.** This
-   is a gap the platform will have to measure itself. *Owner: doc 08 + doc 04.*
+   is a gap the platform will have to measure itself. *Owner: doc 06 + doc 04.*
 5. **⚠️ Draft head: train against the quantized target or the BF16 target?** §1.4 rule 1 asserts
    the former on mechanical grounds, but no published ablation was found. *Owner: this doc.*
 6. **⚠️ Cost of training a draft head.** SpecForge documents the pipeline; the page fetched gives
@@ -1447,7 +1447,7 @@ A report that quotes list price is a report that will be caught.
    document quantized base model + LoRA support"* [src](https://docs.vllm.ai/en/latest/features/lora.html).
    This is load-bearing for §6: if adapters cannot ride a quantized base, multi-tenancy and
    quantization are mutually exclusive. **Verify before designing the serving pools.**
-   *Owner: this doc + doc 01.*
+   *Owner: this doc + doc 06.*
 9. **⚠️ Speculative decoding under multi-LoRA.** Acceptance rate with a hot-swapped adapter on a
    shared base is unmeasured anywhere I could fetch. If it collapses, §6's economics and §2.8's
    gains do not compose. *Owner: this doc.*
@@ -1465,7 +1465,7 @@ A report that quotes list price is a report that will be caught.
     *Owner: this doc.*
 13. **⚠️ The Sakana AI CUDA Engineer episode.** `sakana.ai/ai-cuda-engineer/` now redirects to
     arXiv:2509.14279 (verified by curl, 2026-09-19); the original claims and the correction are
-    not retrievable there. Needed as the canonical cautionary case for §4.2. *Owner: doc 09,
+    not retrievable there. Needed as the canonical cautionary case for §4.2. *Owner: doc 07,
     with search.*
 14. **⚠️ Requests/second break-even, dedicated replica vs shared pool vs serverless, per repo
     model.** `00` Open Question 18 assigns this here; it cannot be closed from per-pair documents
@@ -1477,11 +1477,12 @@ A report that quotes list price is a report that will be caught.
     help *more* here than for a decode-bound model — but the model is 4.4 GB and the GPU has
     241 GB usable, so the memory argument is nil and the whole case rests on GEMM rate. Worth a
     measurement. *Owner: this doc.*
-16. **⚠️ `00` Open Question 17 (DeepSeek-V4.1-Flash vendor price, $0.60 vs $1.20/1M output) is
-    assigned to "doc 06" = this document.** It is a *pricing-comparison* question
+16. **⚠️ `00` Open Question 17 (DeepSeek-V4.1-Flash vendor price, $0.60 vs $1.20/1M output) —
+    reassigned to doc 08 (economics).** An earlier draft of `00` §6 pointed it at "doc 06",
+    which resolved to this file. It is a *pricing-comparison* question
     ([`README.md` §3](../README.md) quotes DeepSeek off-peak; Baseten's Model API quotes $1.20
-    [[src](https://www.baseten.co/pricing/)]), not an optimization question. **Recommendation:
-    reassign to the cost/competitive document.** The answer this document would give: quote the
+    [[src](https://www.baseten.co/pricing/)]), not an optimization question. The answer this
+    document would give: quote the
     *serverless open-model* price the customer can actually buy at their volume and SLA — the
     off-peak rate is not a rate anyone can plan a p99 SLO against.
 17. **⚠️ MLPerf Inference accuracy targets.** The page fetched confirms the closed/open division
@@ -1491,7 +1492,7 @@ A report that quotes list price is a report that will be caught.
     rules, not from memory. *Owner: this doc.*
 18. **⚠️ LoRAX maintenance status.** No deprecation notice on the page fetched, but
     `predibase.com` redirects to `rubrik.com` (`00` Open Question 4). Whether LoRAX, Turbo LoRA
-    and the SGMV kernels survive matters for §6.2. *Owner: doc 09.*
+    and the SGMV kernels survive matters for §6.2. *Owner: doc 07.*
 
 ---
 
@@ -1661,3 +1662,7 @@ relocated on the live source; downgraded in place).
 Sweep costs **16 GPU-h → $118.40 / $240.00** and **40 GPU-h → $296.00**; screens **$7.40–$22.20** each and **$370–$1,110** at N = 50; QAD deltas **+3.39 / +2.69 / −0.27 pp**; Local-Hessian **5.10 − 3.10 = 2.00 pp**; AutoQuantize **52.5×**; §7.1 cache **−36.9 %** and S1→S4 **+8.0 %**; §7.2 per-clip `res1y` **$0.000523** and **$0.000426**, ratios **0.815** and **1.211**; **$487 / $590 / $426** at 1M clips, spread **$164** = **2.25 %** of a $7.3k replica-month; §7.3 **$4.16 / $0.0646 = 64.4×**; §5.8 **22 GB × $0.10 = $2.20/month**; §4.5 **12 × $120–$300 = $1,440–$3,600/customer/year** (the doc's "$1.5k–$4k" rounds outward on both ends and is defensible only once the gate is added — read it as $1.4k–$3.6k of sweep plus gate).
 
 One rounding worth naming: §7.2's RTX per-clip `low` **$0.000590** is 2 × the source's **$0.000293** = **$0.000586**. The 0.7 % difference does not move the 18.5 % / 21.1 % conclusions.
+
+### Addendum 2026-09-19 — "doc NN" pointers retargeted to the shipped file set
+
+`00` §6's decomposition was renumbered to the shipped files (01 observability, 02 annotation, 03 training, 04 evals+A/B, 05 optimization = this file, 06 architecture incl. endpoints and governance, 07 competitors, 08 economics, 09 video). All 34 "doc NN" references in this document followed the old component labels and were retargeted: endpoint/versioning and governance/tenancy items **01/08 → 06**, the statistical-promotion items **07 → 04**, training items **05 → 03**, and the vendor-status open questions **09 → 07**. The numbering note in the preamble is now marked resolved, and Open Question 16 records that `00` OQ17 moved to `08` (economics) rather than to this document. **Pointer-only: no number, source or ⚠️ marker was changed.**

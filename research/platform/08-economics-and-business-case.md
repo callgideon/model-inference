@@ -325,7 +325,7 @@ the hour whether or not traffic arrives. Real 2026 anchors:
 | [Fireworks](https://fireworks.ai/pricing) on-demand | H100 / H200 | 8.00 | $5,840 |
 | [ibid.](https://fireworks.ai/pricing) | B200 | 13.00 | $9,490 |
 | [Together](https://www.together.ai/pricing) on-demand | H100 | 5.49 (promo 3.99 to 09/30/26) | $4,008 |
-| [ibid.](https://www.together.ai/pricing) | B200 | 8.99 | $6,563 |
+| [ibid.](https://www.together.ai/pricing) | B200 | 8.19 | $5,979 |
 
 **Delivered $/1M = blended ÷ utilisation**, `est.` — the table to put in front of
 a buyer:
@@ -1250,8 +1250,8 @@ utilisation (§7.3) is otherwise an unsellable cost structure — which makes do
 
 | Model | Who uses it | Rate card | What it optimises for |
 |---|---|---|---|
-| **Per-GPU-time** | Baseten ($0.10833/min H100, $0.16633/min B200 [[src](https://www.baseten.co/pricing/)]), Fireworks ($8/h H100, $13/h B200 [[src](https://fireworks.ai/pricing)]), Together ($5.49/h H100, $8.99/h B200 [[src](https://www.together.ai/pricing)]), Modal/RunPod ([`12` §2.3](../scaling/12-inference-providers.md)) | $0.63–$13/GPU-h, ~5× spread on identical silicon | Vendor margin is predictable; **customer carries the utilisation risk** |
-| **Per-token, inference** | Every model API; Baseten Model APIs; Tinker serverless (Inkling-Small **$0.30/$1.20 ⚠️ TO BE VERIFIED** — re-fetched 2026-09-19, that page's Inkling-Small cells are **train $3.46 (promo $1.73), prefill $1.16 (promo $0.58), cached prefill $0.116**; no $0.30/$1.20 pair appears, so either the serverless-beta table has moved or the figure is misattributed [[src](https://tinker-docs.thinkingmachines.ai/tinker/models/)]) | $0.05–$50/1M | **Vendor carries utilisation risk**; commoditised, 9.5× spread within a single model slug ([`12` §5.3](../scaling/12-inference-providers.md)) |
+| **Per-GPU-time** | Baseten ($0.10833/min H100, $0.16633/min B200 [[src](https://www.baseten.co/pricing/)]), Fireworks ($8/h H100, $13/h B200 [[src](https://fireworks.ai/pricing)]), Together ($5.49/h H100, $8.19/h B200 [[src](https://www.together.ai/pricing)]), Modal/RunPod ([`12` §2.3](../scaling/12-inference-providers.md)) | $0.63–$13/GPU-h, ~5× spread on identical silicon | Vendor margin is predictable; **customer carries the utilisation risk** |
+| **Per-token, inference** | Every model API; Baseten Model APIs; Tinker serverless (Inkling-Small **$0.30** in / **$0.06** cached / **$1.20** out, 256K, beta, Inkling-family only [[src](https://tinker-docs.thinkingmachines.ai/tinker/models/)]) | $0.05–$50/1M | **Vendor carries utilisation risk**; commoditised, 9.5× spread within a single model slug ([`12` §5.3](../scaling/12-inference-providers.md)) |
 | **Per-token, training** | Tinker ($0.44–$14.58/1M train [[src](https://tinker-docs.thinkingmachines.ai/tinker/models/)]), Fireworks ($0.50–**$12**/1M ⚠️, [[src](https://fireworks.ai/pricing)]), Together ($0.34–**$40**/1M ⚠️, [[src](https://www.together.ai/pricing)]), Bedrock ($1.49/1M Llama 2 **13B**, $7.99/1M Llama 2 **70B** [[src](https://aws.amazon.com/bedrock/pricing/)]) | 12–**118×** spread by model class ⚠️ | ⚠️ **Corrected 2026-09-19** — the "$24" (Fireworks) and "$100" (Together) upper bounds printed here are **not on either page as re-fetched**. Fireworks tops out at **$12.00/1M** (full-parameter SFT and full-parameter DPO, 80B–300B band); Together's most expensive listed SFT is **GLM-5.2 at $40.00/1M**. The spread across the four vendors is therefore $0.34 → $40.00 = **118×**, not 290×. If a higher band exists behind a sales gate, cite it; do not carry the old figures. Aligns with work done; **but §1.4(b) shows training is ~3 % of the one-off, so this is not where margin lives** |
 | **Per-unit / per-GB / per-score** (observability & evals) | Langfuse ($8→$6 per 100k units [[src](https://langfuse.com/pricing)]), Braintrust ($3/GB + $1.50/1k scores [[src](https://www.braintrust.dev/pricing)]), W&B ($0.10/MB [[src](https://wandb.ai/site/pricing/)]) | $0.006–$0.10 per unit | Scales with *traffic*, not with value; §1.5 shows this can exceed the GPU bill |
 | **Platform fee + seats** | Databricks (DBU-based, $0.65/DBU [[src](https://www.databricks.com/product/pricing/mosaic-foundation-model-training)]), W&B ($60/mo Pro + seats [[src](https://wandb.ai/site/pricing/)]), Braintrust ($249/mo Pro), Langfuse ($199/$2,499) | $29–$2,499/mo + usage | Predictable floor; **the only model that funds the engineering in §1.4(d)** |
@@ -1699,7 +1699,7 @@ client-rendered SPA and its content lives in a JavaScript bundle.
 - [Baseten Training / Loops](https://www.baseten.co/products/training/) — GA/early-access status, "Full ownership of your trained weights, no lock-in", OpenEvidence "23x faster" / "$1.9M projected savings".
 - [Tinker model pricing](https://tinker-docs.thinkingmachines.ai/tinker/models/) — prefill/sample/train $/1M for Qwen3.8-27B, Inkling, Inkling-Small, Nemotron, GLM-5.3; 80 % cached-prefill discount; $0.10/GB-month checkpoints; serverless beta rates.
 - [Fireworks pricing](https://fireworks.ai/pricing) — LoRA/full SFT and DPO $/1M by model size band; on-demand H100/H200 $8/h, B200 $13/h.
-- [Together pricing](https://www.together.ai/pricing) — serverless per-token, SFT/DPO $/1M, dedicated H100 $5.49/h (promo $3.99 to 09/30/26), B200 $8.99/h.
+- [Together pricing](https://www.together.ai/pricing) — serverless per-token, SFT/DPO $/1M, dedicated H100 $5.49/h (promo $3.99 to 09/30/26), B200 $8.19/h.
 - [Databricks foundation-model training pricing](https://www.databricks.com/product/pricing/mosaic-foundation-model-training) — DBU tables for Llama 3.1/3.2/3.3 at 10M and 500M words, $0.65/DBU.
 - [AWS Bedrock Model Distillation docs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-distillation.html) — invocation-log training path, `requestMetadata` filtering, tenancy guarantee, 15k-pair synthesis ceiling.
 - [AWS Bedrock pricing](https://aws.amazon.com/bedrock/pricing/) — customization $/1M trained, $1.95/mo storage, provisioned throughput $21.18/h (1-mo) and $13.08/h (6-mo) per model unit.
@@ -1751,8 +1751,8 @@ Adversarial re-check of this document. **32 load-bearing claims** were selected
 cross-reference into `research/`, and every derived table) and each was taken to
 its **primary source, opened, and read** — no citation was trusted on the
 strength of its URL. Every `est.` table was **re-derived in `python3`** from the
-inputs as fetched, not from the printed outputs. Result: **22 CONFIRMED,
-9 CORRECTED, 1 UNVERIFIABLE.**
+inputs as fetched, not from the printed outputs. Result: **23 CONFIRMED,
+9 CORRECTED, 0 UNVERIFIABLE.**
 
 Note on the document's own research-method caveat at the top: it says doc 08 was
 produced *without* WebSearch. **This verification pass had full web access**, so
@@ -1774,7 +1774,7 @@ cite has now been independently re-opened.
 | 8 | §1.5 W&B: Pro from $60/mo, 1.5 GB Weave ingestion included, $0.10/MB, storage $0.03/GB | [wandb.ai/site/pricing](https://wandb.ai/site/pricing/) | **CONFIRMED**; $3,511 / $33,698 reproduce |
 | 9 | §1.3/§6.1 Baseten dedicated: $0.10833/min H100 (= $6.50/h), $0.16633/min B200 (= $9.98/h), $0.06667/min A100 (= $4.00/h) | [baseten.co/pricing](https://www.baseten.co/pricing/) | **CONFIRMED** (per-minute rates are the published unit; the $/h column is ×60) |
 | 10 | §1.3/§6.1 Fireworks: $8/h H100 **and H200**, $13/h B200; LoRA SFT $0.50 (≤16B) / $3.00 (16.1–80B); full SFT $1.00 (≤16B) | [fireworks.ai/pricing](https://fireworks.ai/pricing) | **CONFIRMED** (see CORRECTED #8 for the range's upper bound) |
-| 11 | §1.3/§1.4(b) Together: H100 $5.49 with promo $3.99 to 09/30/26, B200 $8.99; Llama-3.3-70B SFT $2.03/1M, Qwen3.5-9B $0.34/1M, GLM-5.2 $40.00/1M | [together.ai/pricing](https://www.together.ai/pricing) | **CONFIRMED** |
+| 11 | §1.3/§1.4(b) Together: H100 $5.49 with promo $3.99 to 09/30/26, B200 $8.99; Llama-3.3-70B SFT $2.03/1M, Qwen3.5-9B $0.34/1M, GLM-5.2 $40.00/1M | [together.ai/pricing](https://www.together.ai/pricing) | **B200 CORRECTED to $8.19** (platform consistency pass, 2026-09-19) — [`07` §15.1](07-competitor-analysis.md) had already re-fetched and corrected this same figure same-day; §1.3 and §1.5 updated to match. Rest CONFIRMED |
 | 12 | §1.4(b) Tinker train rates: Qwen3.8-27B $4.103/1M, GLM-5.3 (256K) $14.58/1M, Nemotron-3.5-Lightning $0.44 promo; checkpoints $0.10/GB-month | [tinker-docs](https://tinker-docs.thinkingmachines.ai/tinker/models/) | **CONFIRMED**; list rate $0.88 added inline |
 | 13 | §1.4(b) Databricks: $0.65/DBU; Llama-3.1-8B = 100 DBU at 10M words, 4,400 DBU at 500M words ⇒ $65 / $2,860 | [databricks.com](https://www.databricks.com/product/pricing/mosaic-foundation-model-training) | **CONFIRMED**, both rows reproduce |
 | 14 | §4.4 Bedrock: provisioned throughput **$21.18/h** (1-mo) and **$13.08/h** (6-mo) per model unit, custom-model storage **$1.95/mo**; §4.4's $15,461/mo, 2.9× a B300 and 11.8× an RTX PRO 6000 all reproduce | [aws.amazon.com/bedrock/pricing](https://aws.amazon.com/bedrock/pricing/) | **CONFIRMED** (see CORRECTED #7 on the $1.49 attribution) |
@@ -1786,7 +1786,8 @@ cite has now been independently re-opened.
 | 20 | §4.5 UniversalNER *"7-9 absolute F1 points"*, *"43 datasets across 9 diverse domains"*, *"over 30"* vs Alpaca/Vicuna; Distilling Step-by-Step *"770M T5"* > *"540B PaLM"* at *"80%"* of data across *"4 NLP benchmarks"*; Specializing Smaller LMs *"GPT-3.5 (≥175B)"* → *"T5 variants (≤11B)"*, *"by paying the price of decreased generic ability"* | [2308.03279](https://arxiv.org/abs/2308.03279), [2305.02301](https://arxiv.org/abs/2305.02301), [2301.12726](https://arxiv.org/abs/2301.12726) | **CONFIRMED**, all three abstracts verbatim |
 | 21 | §2.2 Deloitte 0.1 s → retail conversions **+8.4 %**, AOV **+9.2 %**, travel **+10.1 %** / **+1.9 %**, luxury page views/session **+8.6 %**, lead-gen bounce **8.3 %**, published **2020-03-24**, 4-week study; Nielsen **0.1 s / 1.0 s / 10 s**, 1993-01-01; web.dev Vodafone −31 % LCP → +8 % sales, Lazada 3× → +16.9 %, Tokopedia −55 % → +23 %, GYAO 3.1× → +108 % CTR, Agrofy −76 % abandonment, NDTV −50 % bounce; §4.5 Thinking Machines AIME'24 **60 % → 74.4 %**, ~150 steps, **1,800 vs 17,920** GPU-h, **9–30×**; §3.3 Not Diamond "5 %+"/"20 %+"/"2x", Rootly **39 %**, $4.8M → $3.6M at 1,000 engineers × $300/mo; §4.6/§7.3 Video-MME **900 videos / 254 h / 2,700 QA**; §4.1 OpenAI *"winding down the fine-tuning platform… no longer accessible to new users"* | 6 pages, all opened | **CONFIRMED**, every figure verbatim |
 | 22 | **Every `est.` table re-derived in `python3`** and reproducing to the printed precision: §1.2's blended grid (13 models × 4 cache scenarios) and its ratio table; §1.4(a) annotation ($3,000/$1,500/$750/$640/$406 — the Kimi-K3 cell is exactly `50k × (4,000 × $1.2921 + 400 × $7.3914)`); §1.4(b) all 11 training rows; §1.4(c) judge costs ($15/$76 … $378/$1,892) and the $1,682 marginal; §1.4(d) $43,200–$72,000; §1.5 all 8 observability cells and the $7,425 Braintrust-scores figure; §1.7 both sensitivity tables (all 6 output-share ratios); §3.1 all 4 risk rows and the 0.027 pp break-even; §3.3 all 4 fallback points; §5.3 all 42 video cells; §5.4 break-even volumes and the 5.47M-clips capacity; §7.1, §7.2 and §7.3 **in full**, including every payback month | `python3` | **CONFIRMED** — this document's arithmetic is exceptionally clean; the only arithmetic defect found is CORRECTED #3 |
-| 23 | Every cross-reference into `research/`, opened as a file: all 8 named cells in §1.3's marginal-cost table and their operating points against [`cost-matrix.md`](../matrix/cost-matrix.md) §2/§4/§5; the six `$/GPU-hour` rows against [`cloud-pricing.md` §5.14](../cross-cutting/cloud-pricing.md); §1.6's "6–28 %" and "11.5 % / 23.3 %"; §1.7's res1y B200 $0.0538; §2.1's 14.2–45.3 ms TPOT band and the inverted 44,686 / 49,020 tok/s prefill rates; §5.3's 23,560-token / 240-frame / 0.40 fps / 0.067 fps budget against [`marlin2b/architecture.md` §6.3](../models/marlin2b/architecture.md); §5.5's self-host-vs-buy verdict | `research/` files | **CONFIRMED** — every named cell matches its source document exactly |
+| 23 | §6.1 Tinker **serverless** (beta): `thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4` 256K at **$0.30** prefill / **$0.06** cached / **$1.20** sample, and `thinkingmachines/Inkling:peft:262144:sampling-nvfp4` 256K at **$1.00 / $0.17 / $4.05**; *"available for Inkling and Inkling-Small only"* | [tinker-docs](https://tinker-docs.thinkingmachines.ai/tinker/models/) (re-fetched 2026-09-19 with a browser UA) | **CONFIRMED** verbatim. The page carries **two distinct price tables**: the **Training** table (whose Inkling-Small cells are train $3.46 / promo $1.73, prefill $1.16 / promo $0.58, cached prefill $0.116) and, well below it, a separate section headed **"Serverless Inference (Beta)"** holding the $0.30/$0.06/$1.20 row. The earlier pass read the training table only and wrongly concluded the serverless figures were unsourced — see the UNVERIFIABLE note below. [`07` §15.3](07-competitor-analysis.md) and [`00` §7](00-goal-and-problem-statement.md) were right |
+| 24 | Every cross-reference into `research/`, opened as a file: all 8 named cells in §1.3's marginal-cost table and their operating points against [`cost-matrix.md`](../matrix/cost-matrix.md) §2/§4/§5; the six `$/GPU-hour` rows against [`cloud-pricing.md` §5.14](../cross-cutting/cloud-pricing.md); §1.6's "6–28 %" and "11.5 % / 23.3 %"; §1.7's res1y B200 $0.0538; §2.1's 14.2–45.3 ms TPOT band and the inverted 44,686 / 49,020 tok/s prefill rates; §5.3's 23,560-token / 240-frame / 0.40 fps / 0.067 fps budget against [`marlin2b/architecture.md` §6.3](../models/marlin2b/architecture.md); §5.5's self-host-vs-buy verdict | `research/` files | **CONFIRMED** — every named cell matches its source document exactly |
 
 ### CORRECTED — edited in place above
 
@@ -1802,7 +1803,14 @@ cite has now been independently re-opened.
 
 ### UNVERIFIABLE
 
-1. **§6.1 — Tinker serverless "Inkling-Small $0.30/$1.20".** The cited page as re-fetched prints Inkling-Small at **train $3.46 (promo $1.73), prefill $1.16 (promo $0.58), cached prefill $0.116**. No $0.30/$1.20 pair appears anywhere on it. Either a serverless-beta table has moved or the figure is misattributed; marked ⚠️ **TO BE VERIFIED** in place rather than deleted, since the document's Sources section records having seen "serverless beta rates" there.
+**None.** The one entry that stood here — *"§6.1 — Tinker serverless
+'Inkling-Small $0.30/$1.20' … no $0.30/$1.20 pair appears anywhere on it"* — was
+**itself wrong and has been withdrawn**. See CONFIRMED #23: the page carries two
+separate tables, the earlier pass read the training one, and the
+"Serverless Inference (Beta)" table confirms the figure exactly. This is the
+failure mode a verification log exists to prevent — a correctly sourced
+competitor price recorded as unsupported — so it is recorded here rather than
+silently deleted.
 
 ### Re-pointed, not corrected
 
@@ -1815,3 +1823,5 @@ their numbers; 12a's §3.4 normalisation is now §2.3/§5.6, where the
 scale-to-zero premium has itself been **corrected from "≈ +20 %" to a 20–37 %
 range**, and §5.2 now carries a sourcing note that its "19 endpoints" heading
 counts three non-OpenRouter rows. Both are noted at the citation sites.
+
+**2026-09-19** — §6.1 Tinker serverless re-adjudicated: `curl` with a browser UA on <https://tinker-docs.thinkingmachines.ai/tinker/models/> shows the page carries a Training price table *and*, further down, a separate **"Serverless Inference (Beta)"** table (grep `sampling-nvfp4`). The earlier pass read only the first and filed the figure as UNVERIFIABLE; the serverless table confirms **Inkling-Small $0.30 / $0.06 cached / $1.20** and **Inkling $1.00 / $0.17 / $4.05**, both 256K. The ⚠️ and its parenthetical are removed from §6.1, the UNVERIFIABLE entry is withdrawn, and the claim is now CONFIRMED #23. `07` §15.3 and `00` §7 were correct throughout and are unchanged.

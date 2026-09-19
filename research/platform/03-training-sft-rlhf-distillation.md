@@ -607,14 +607,14 @@ piece of evidence that the platform's planned multi-adapter design is right.
 | Qwen3.5-4B | 64 K | $0.33 | $1.005 | $0.737 |
 | Qwen3.5-9B | 64 K | $0.66 | $1.995 | $1.463 |
 | Qwen3.5-397B-A17B | 64 K | $3.00 | $7.50 | $6.60 |
-| Nemotron-3.5-Lightning-30B-A3B | 64 K | $0.39 | $0.99 | $0.88 — **these are the already-discounted prices** (row carries a "Limited-time 50 % discount" label; struck-through list is double: $0.78 / $1.98 / $1.76) |
-| Nemotron-3-Ultra-550B-A55B | 64 K | $4.98 | $12.45 | $10.956 — ⚠️ no discount label found on this row on re-fetch 2026-09-19; the previously printed "disc. $5.478" is unsourced |
+| Nemotron-3.5-Lightning-30B-A3B | 64 K | $0.39 | $0.99 | $0.88 — **these are the list prices** (row carries a "Limited-time 50 % discount" label; promo is half: $0.195 / $0.495 / $0.44) [re-verified 2026-09-19; matches [`07` §15.2](07-competitor-analysis.md), [`00` §7](00-goal-and-problem-statement.md)] |
+| Nemotron-3-Ultra-550B-A55B | 64 K | $4.98 | $12.45 | $10.956 — **list price; row carries a "Limited-time 50 % discount" label** (re-confirmed 2026-09-19), promo is $5.478 [matches [`07` §15.2](07-competitor-analysis.md)] |
 | GPT-OSS-120B | 32 K | $0.33 | $0.84 | $0.737 |
 | DeepSeek-V3.1 | 32 K | $1.695 | $4.215 | $3.718 |
 | GLM-5.3 | 256 K | $4.86 | $12.15 | $14.58 |
 | Kimi-K2.6 | **32 K** | **$2.205** | **$5.49** | **$4.84** (corrected 2026-09-19; a separate 128 K variant is listed, ⚠️ its prices — previously printed here as $5.15 / $12.81 / $15.40 — were not confirmed on re-fetch) |
-| **Inkling** (TM's own; MoE, hybrid + audio + vision) | 64 K | $3.74 | $9.36 | $11.22 — **already the 50 %-promo prices** (struck-through list: $7.48 / $18.72 / $22.44). The earlier "$1.87 / $4.68 / $5.61" halved an already-halved number |
-| **Inkling-Small** | 64 K | $1.16 | $2.88 | $3.46 — **already the 50 %-promo prices** (struck-through list: $2.32 / $5.76 / $6.92); the earlier "$0.58 / $1.44 / $1.73" halved twice |
+| **Inkling** (TM's own; MoE, hybrid + audio + vision) | 64 K | $3.74 | $9.36 | $11.22 — **these are the list prices**; 50 %-promo is $1.87 / $4.68 / $5.61 [re-verified 2026-09-19; matches [`07` §15.2](07-competitor-analysis.md), [`00` §7](00-goal-and-problem-statement.md)] |
+| **Inkling-Small** | 64 K | $1.16 | $2.88 | $3.46 — **these are the list prices**; 50 %-promo is $0.58 / $1.44 / $1.73 [re-verified 2026-09-19; matches [`07` §15.2](07-competitor-analysis.md)] |
 
 "All prices are per million tokens" with an "80% discount on cached prefill tokens".
 
@@ -1693,6 +1693,9 @@ nothing was removed.
 | 3 | §3.2 **Inkling** "$11.22 (50 % promo: $1.87 / $4.68 / $5.61)" and **Inkling-Small** "(promo: $0.58 / $1.44 / $1.73)" | The $3.74 / $9.36 / $11.22 and $1.16 / $2.88 / $3.46 figures **are already the 50 %-discounted prices**; the struck-through list prices are double them. The document halved an already-halved number, understating Inkling's train price by 2× [[src](https://tinker-docs.thinkingmachines.ai/tinker/models/)] | §3.2 |
 | 4 | §3.2 **Nemotron-3.5-Lightning** "$0.88 (disc. $0.44)" | Same error: $0.39 / $0.99 / $0.88 carry the "Limited-time 50 % discount" label; list is $0.78 / $1.98 / $1.76 [[src](https://tinker-docs.thinkingmachines.ai/tinker/models/)] | §3.2 |
 | 5 | §3.2 **Nemotron-3-Ultra-550B-A55B** "$10.956 (disc. $5.478)" | No discount label was found on that row on re-fetch. Downgraded to ⚠️ [[src](https://tinker-docs.thinkingmachines.ai/tinker/models/)] | §3.2 |
+
+**Re-verification, 2026-09-19 (platform consistency pass): items 3–5 above were themselves wrong and have been reversed in §3.2.** A fresh fetch of the same page shows $3.74 / $9.36 / $11.22 (Inkling 64K), $1.16 / $2.88 / $3.46 (Inkling-Small 64K), $0.39 / $0.99 / $0.88 (Nemotron-3.5-Lightning) and $4.98 / $12.45 / $10.956 (Nemotron-3-Ultra) are the **list** prices, each row carrying a "Limited-time 50 % discount" label; the promo (50 %-off) prices are $1.87 / $4.68 / $5.61, $0.58 / $1.44 / $1.73, $0.195 / $0.495 / $0.44 and $5.478 respectively — i.e. the *original* pre-2026-09-19 figures this log's items 3–5 struck through were correct all along, and [`07` §15.2](07-competitor-analysis.md), [`00` §7](00-goal-and-problem-statement.md) and [`06` §6.2](06-platform-architecture.md) had it right throughout. §3.2's table is corrected accordingly.
+
 | 6 | §3.3 / §6.5 Together: *"~$0.34–$0.84/1M (0.8–9 B) SFT … $1.05–$1.16 SFT / $2.62–$2.88 DPO for 27–35 B … $2.03–$5.60 SFT / $5.08–$14.00 DPO for 70 B+ … per-job minimum $4–$100"* | The page lists **one price per band**: 0.8–9 B **$0.34 SFT / $0.84 DPO**; 27–35 B **$1.05 SFT / $2.62 DPO**; 70 B+ **$2.03–$7.00 SFT / $5.08–$17.50 DPO**; per-job minimum **$4.00–$22.00**. The 70 B+ ceilings were understated by 25 % and 25 %; the $1.16 / $2.88 upper bounds and the $100 minimum do not exist [[src](https://www.together.ai/pricing)] | §3.3, §6.5, "What to buy" |
 | 7 | §6.5 *"Together's 27–35 B SFT price is 3.7–4.1× `low` and 1.8–2.0× `high`"* | With the single sourced price, **3.7×** `low` and **1.8×** `high`. Recomputed: 1.05 ÷ 0.286 = 3.671; 1.05 ÷ 0.579 = 1.813 | §6.5 |
 | 8 | §6.5 *"inference from the 2.4–14× price ratios"* | No pair of figures in that table yields 2.4×. The actual span is **1.35×** (Baseten B200 $9.98 ÷ B300 `low` $7.40) to **14.3×** (Tinker ÷ self-hosted `low`) | §6.5 |

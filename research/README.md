@@ -88,6 +88,22 @@ production*.
   decision tables, checklists, alert thresholds and the 15 engine flags that
   matter most.
 
+## Closed-loop platform
+
+Product research on turning these models into a full-stack closed-loop
+platform — endpoints, tracing, annotation by a larger teacher, distillation,
+evals, A/B-gated promotion, and post-deployment capture feeding the next
+round — lives in [`platform/`](platform/README.md), not in this document.
+This tree and `scaling/` answer *does it fit, what does it cost, how do you
+run it*; `platform/` answers *how do you replace a frontier model with one of
+these, defensibly, and keep replacing it*.
+
+- [`platform/README.md`](platform/README.md) — index, reading order, and a
+  paragraph-per-document guide to `platform/00`–`11`.
+- [`platform/00-goal-and-problem-statement.md`](platform/00-goal-and-problem-statement.md) — the goal, the nine loop stages, and why the platform bet works.
+- [`platform/10-roadmap-and-mvp.md`](platform/10-roadmap-and-mvp.md) — the MVP, sequenced plan and top risks.
+- [`platform/11-thesis-memo.md`](platform/11-thesis-memo.md) — the funding-memo compression of the whole tree.
+
 ## 4. Full file index
 
 - [`METHODOLOGY.md`](METHODOLOGY.md) — every formula (weights, KV, fit,
@@ -156,6 +172,23 @@ see [Inference scaling](#inference-scaling) above and
 - [`scaling/10-blueprint.md`](scaling/10-blueprint.md) — the assembled target platform for this repo's hardware.
 - [`scaling/11-playbook.md`](scaling/11-playbook.md) — decision tables, checklists, alert thresholds, engine flags.
 - [`scaling/12-inference-providers.md`](scaling/12-inference-providers.md) — how 28 commercial inference operators build their platforms.
+
+**`platform/`** — product research on the closed-loop model-replacement
+platform; see [Closed-loop platform](#closed-loop-platform) above and
+[`platform/README.md`](platform/README.md) for the full reading guide:
+
+- [`platform/00-goal-and-problem-statement.md`](platform/00-goal-and-problem-statement.md) — the nine loop stages, invariants, and why the bet works.
+- [`platform/01-observability-and-tracing.md`](platform/01-observability-and-tracing.md) — trace schema, storage, PII.
+- [`platform/02-annotation-and-teacher-labeling.md`](platform/02-annotation-and-teacher-labeling.md) — label types, teacher ToS, annotation cost.
+- [`platform/03-training-sft-rlhf-distillation.md`](platform/03-training-sft-rlhf-distillation.md) — the method ladder and framework choices.
+- [`platform/04-evals-and-ab-testing.md`](platform/04-evals-and-ab-testing.md) — eval tiers, statistics of parity, judge validity.
+- [`platform/05-model-and-inference-optimization.md`](platform/05-model-and-inference-optimization.md) — gate-at-each-rung optimisation on target hardware.
+- [`platform/06-platform-architecture.md`](platform/06-platform-architecture.md) — component architecture, data model, orchestration.
+- [`platform/07-competitor-analysis.md`](platform/07-competitor-analysis.md) — the loop-stage coverage matrix across 41+ products.
+- [`platform/08-economics-and-business-case.md`](platform/08-economics-and-business-case.md) — unit economics and the three customer profiles.
+- [`platform/09-video-and-multimodal-loop.md`](platform/09-video-and-multimodal-loop.md) — video-specific capture, annotation, training, evals.
+- [`platform/10-roadmap-and-mvp.md`](platform/10-roadmap-and-mvp.md) — MVP, sequenced plan, lighthouse runs, top risks.
+- [`platform/11-thesis-memo.md`](platform/11-thesis-memo.md) — the funding-memo compression of 00–09.
 
 **`models/<exp>/`** — one directory per experiment (`deepseek41f`,
 `deepseek41fnvfp4`, `qwen3827b`, `kimik3`, `marlin2b`), each holding:
