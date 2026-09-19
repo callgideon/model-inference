@@ -38,7 +38,8 @@ def canonical_prompt(weights, mode, event=None):
     # values are plain string literals, possibly with escaped quotes; decode escapes
     for name, val in re.findall(r'^([A-Z_]*PROMPT[A-Z_]*)\s*=\s*("""[\s\S]*?"""|"(?:[^"\\\n]|\\.)*"|\'(?:[^\'\\\n]|\\.)*\')', src, re.M):
         if any(k in name.upper() for k in aliases):
-            text = val.strip('"\'').encode().decode("unicode_escape")
+            inner = val[3:-3] if val.startswith(('"""', "'''")) else val[1:-1]
+            text = inner.encode().decode("unicode_escape")
             return text.format(event=event) if event and "{" in text else text
     body = src[src.find(f"def {mode}(") :]
     body = body[: body.find("\n    def ")] if "\n    def " in body[1:] else body
