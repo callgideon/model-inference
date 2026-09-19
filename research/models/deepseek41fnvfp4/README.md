@@ -35,8 +35,8 @@ max-throughput = S4 (no SLO).
 | **B300 HGX / DGX / p6-b300** | ⚠️ loads and executes NVFP4 natively on `sm_103`, but **no vendor validation**, not in vLLM's recipe catalogue, 3 `sm_103` kernel faults on record ([b300.md §0, §6.2](b300.md)) | **4** (2 with Engram off-GPU) | **4 × TP4/EP4**; two replicas per 8-GPU node | **native NVFP4 W4A4** | `FLASHMLA_MEGA_ATTN_DSV41` / `_SPARSE_` / FlashInfer sparse, 890 B/token | 10,199 | 869 | **481** (49.9 ms)ᵇ | 9,531 (53.7 ms) | **$4.27** (Hyperstack $7.40) – **$8.66** (OCI $15.00) | $0.216–$0.437 | $1.16–$2.35 | estimate |
 | **B200 HGX** | ✅ yes (vLLM `main`/nightly, SGLang `main`) — **but B200 is not validated for *this* checkpoint**; only the V4 NVFP4 builds are in the recipe catalogue ([b200.md §0](b200.md)) | **4** (TP4) | 4 × TP4 (throughput) or **8 × TP8** (≥ 32K context) | **native NVFP4 W4A4** | `FLASHMLA_MEGA_ATTN_DSV41`; SGLang `trtllm_mla` preferred (1.2× prefill / 1.45× decode) | 2,444 (TP4) / 8,887 (TP8) | 208 / 757 | **2,947** (21.7 ms) @ conc 256 | 34,705 (25.6 ms)ᵃ | **$0.565** ($6.00 Hyperstack) – **$1.319** ($14.00 OCI) | $0.048–$0.112 | $0.149–$0.346 | estimate |
 | **H200 SXM** | ❌ not supported. Loads only via explicit Marlin opt-in (`--moe-backend marlin --kv-cache-dtype fp8_ds_mla`); vLLM nightly / SGLang v0.5.20 ([h200.md §0](h200.md)) | 8 | 8 × TP8, one HGX node | **BF16** — NVFP4 dequantised in the Marlin epilogue (W4A16) | `FLASHMLA_SPARSE_DSV41` (SM90); Mega-Attn absent → **FP8 KV 1,650 B/token** | 3,103 | 232 | **1,094** (29.2 ms) @ conc 256ᶜ | 4,461 (57.4 ms) | **$1.01** ($3.99 Hyperstack) – **$2.01** ($7.912 AWS); res1y $0.71 | $0.25–$0.49 | $0.28–$0.56 | estimate |
-| **H100 SXM 80 GB** | ❌ not runnable in any supported sense. Marlin path has an **open** correctness bug (vLLM #49070); NVIDIA scopes the checkpoint to Blackwell ([h100.md §0, §6](h100.md)) | 8 | 8 × TP8 + **`--engram-config '{"cpu_offload":true}'`** (43× more concurrency at 128K) | **BF16** — NVFP4 → Marlin W4A16 | `FLASHMLA_SPARSE_DSV41` (block 64); ⚠️ SM90 sparse-decode contested. KV **890 B/token** per METHODOLOGY §8 | 2,546 | 217 | **964** (33.2 ms) @ batch 256 | 4,283 (59.8 ms) | **$0.784** (res1y $2.72) – **$1.983** ($6.880 AWS) | $0.176–$0.446 | $0.216–$0.546 | estimate |
-| **RTX PRO 6000 Server Ed.** | ⚠️ runnable in principle, **validated nowhere** on `sm_120` for this checkpoint ([rtx6000-pro.md §0](rtx6000-pro.md)) | **4** (Engram in pinned host RAM) | **8**, TP+EP, PCIe Gen5, Engram in host RAM | **Marlin W4A16 by default**; native only via opt-in `--moe-backend flashinfer_b12x` | `FLASHINFER_MLA_SPARSE_DSV41` / `_SM120` / B12X; **FP8 KV mandatory** | 2,517 (8 GPU) / 78 (4 GPU) | 186 / 5 | **285** (50.0 ms) @ 8 GPU C114 | 541–809 @ 8 GPU C256 | **$1.754** ($1.80 Nebius) – **$4.036** ($4.143 AWS) | $0.62–$2.13 | $0.48–$1.11 | estimate |
+| **H100 SXM 80 GB** | ❌ not runnable in any supported sense. Marlin path has an **open** correctness bug (vLLM #49070); NVIDIA scopes the checkpoint to Blackwell ([h100.md §0, §6](h100.md)) | 8 | 8 × TP8 + **`--engram-config '{"cpu_offload":true}'`** (43× more concurrency at 128K) | **BF16** — NVFP4 → Marlin W4A16 | `FLASHMLA_SPARSE_DSV41` (block 64); ⚠️ SM90 sparse-decode contested. KV **890 B/token** per METHODOLOGY §8 | 891 | 61 | **964** (33.2 ms) @ batch 256 | 4,283 (59.8 ms) | **$0.922** ($3.20 low) – **$1.983** ($6.880 AWS); res1y $0.784 | $0.208–$0.446 | $0.254–$0.546 | estimate |
+| **RTX PRO 6000 Server Ed.** | ⚠️ runnable in principle, **validated nowhere** on `sm_120` for this checkpoint ([rtx6000-pro.md §0](rtx6000-pro.md)) | **4** (Engram in pinned host RAM) | **8**, TP+EP, PCIe Gen5, Engram in host RAM | **Marlin W4A16 by default**; native only via opt-in `--moe-backend flashinfer_b12x` | `FLASHINFER_MLA_SPARSE_DSV41` / `_SM120` / B12X; **FP8 KV mandatory** | 2,517 (8 GPU) / 78 (4 GPU) | 186 / 5 | **285** (50.0 ms) @ 8 GPU C114 | 541–809 @ 8 GPU C256 | **$1.754** ($1.80 Nebius) – **$4.036** ($4.143 AWS) | $0.92–$2.13 | $0.48–$1.11 | estimate |
 | **MI355X** | ❌ not runnable as a production config. SGLang has no `DeepseekV41` gfx950 support (PR #39186 closed); vLLM-ROCm reduces to `EMULATION` ([mi355x.md §0, §2](mi355x.md)) | 4 | 4 × TP4 (two replicas per UBB baseboard) | **BF16** — NVFP4 nibbles unpacked by a Triton kernel **every forward step** | `ROCM_AITER_MLA_SPARSE` / `ROCM_FLASHMLA_SPARSE_DSV4`; **FP8 KV 1,650 B/token** | 7,371 | 552 | **1,230** (26.0 ms)ᵈ | 2,137 (29.9 ms)ᵈ | **$1.94** (OCI $8.60, low=high); $0.32 at colo `est.` | $1.12; $0.18 colo | $0.50–$0.77 | **not-runnable** |
 | **A100 SXM 80 GB** | ❌ not runnable. **No `sm_80` attention backend exists** in any engine; all three DSV4.1 backends reject CC 8 ([a100.md §0, §6.1](a100.md)) | 8 | 8 × TP8+EP8 (or TP4×DP2) + Engram CPU offload | **BF16** — Marlin W4A16, **activation scales discarded** | none upstream; community fork uses Triton BF16 sparse-MLA. **FP8 KV 1,650 B/token** | 13,364ᵉ | 1,001ᵉ | **380** (42.1 ms) @ C128ᶠ | 380 (scheduler-capped)ᶠ | **$1.162** ($1.59 RunPod) – **$2.508** ($3.431 AWS); res1y $0.994 | same (cap, not ceiling) | $0.33–$0.76 | **not-runnable** |
 
@@ -182,11 +182,18 @@ impact on the deployment decision.
 
 **Tier 2 — changes the numbers, not the decision**
 
-7. **Fixed per-sequence state: 2,703,360 B or 2,906,112 B?** METHODOLOGY §8 pins **2.77 MiB**
-   (43 layers, incl. the 3 MTP rings); [architecture.md §5.3](architecture.md) derives 2,703,360 B
-   from the 40 backbone layers. h200/b200/b300/gb300/mi355x use METHODOLOGY's; h100/rtx6000-pro use
-   architecture.md's. Worth ≤ 2 % at 8K, ~0 % at 1M. kern is the only engine that documents its
-   allocation and uses **S = 2** (5.81 MB/seq) ([b300.md §1.1](b300.md)).
+7. **Fixed per-sequence state — RESOLVED 2026-09-19 (gap `C2-deepseek-swa-fixed-state`) to
+   2,906,112 B = 2.77 MiB.** 43 rings = 40 backbone + 3 MTP, **MTP enabled** — every operating
+   point in this tree is costed with DSpark/MTP on ([`matrix/recommendations.md`](../../matrix/recommendations.md)
+   pins **DSpark γ=5** as the default, worth 3.13× output per byte), and an enabled MTP head
+   allocates its own SWA ring per sequence. **2,703,360 B = 2.58 MiB (40 backbone only) is the
+   `--num-speculative-tokens 0` floor**, not a competing reading;
+   [architecture.md §5.3/§5.4/§5.6](architecture.md) and [METHODOLOGY §8](../../METHODOLOGY.md)
+   now both carry the 43-ring figure and label the floor as such, and
+   [`h100.md` §1.1–1.3](h100.md) was recut onto it. Worth ≤ 2 % at 8K, ~0 % at 1M. ⚠️ Still open:
+   [`rtx6000-pro.md`](rtx6000-pro.md) §1/§3 keeps the 2,703,360 B convention and has not been
+   recut. kern is the only engine that documents its allocation and uses **S = 2**
+   (5.81 MB/seq) ([b300.md §1.1](b300.md)).
 8. **GB300 capacity basis: 279 GB or 288 GB?** [gb300.md §1.1](gb300.md) uses 279 per
    `gpus/gb300.md` §2.1; [architecture.md §5.6](architecture.md)'s GB300 row was computed from 288.
    ~7 % on every concurrency figure at 4 GPUs. METHODOLOGY §8 writes "288 GB (≈ 279 usable)", so
@@ -195,8 +202,12 @@ impact on the deployment decision.
    vLLM PR #56686 is an `nvidia-smi` MiB total labelled as GB ([gpus/b200.md §2](../../gpus/b200.md)).
    Sensitivity retained: 1.7 % of capacity, **11 %** of the TP4 KV budget
    ([b200.md §1.1, §6.3 #8](b200.md)).
-10. **A100: 80 GB pinned vs 85.90 GB from `nvidia-smi`** — 47.2 GB per node, **2.8×** the entire
-    no-offload KV budget ([a100.md §1.1](a100.md)).
+10. **A100 capacity basis — RESOLVED 2026-09-19, closed.** 80 GB **decimal** is the tree-wide
+    planning basis (`usable_hbm` 72.0 GB = 67.06 GiB/GPU); `nvidia-smi`'s 81,920 MiB =
+    80 GiB = 85.90 GB is an unsourced binary reading kept only as a labelled ⚠️ TO BE VERIFIED
+    +7.4 % sensitivity ([METHODOLOGY §8](../../METHODOLOGY.md#gpus),
+    [gpus/a100.md §2](../../gpus/a100.md)). No figure moved — [a100.md §1.1](a100.md) already
+    computed every primary table on 80 GB; its §1.3 85.90 GB table is now the sensitivity.
 11. **Activation workspace.** METHODOLOGY's 2–6 GB band is too narrow: [b200.md §3.3](b200.md)
     measures the implied workspace rising 4.0 → 9.8 GB from concurrency 1 to 128, and
     [h200.md §1.1](h200.md) plans 8 GiB because the sparse indexer allocates a
@@ -270,3 +281,13 @@ Every figure above is drawn from these documents; section references are inline 
 **Foundation**
 - [`research/METHODOLOGY.md`](../../METHODOLOGY.md) — §1 bytes/param, §2 KV and fixed state, §3 fit and the `infeasible (KV)` rule, §4 roofline and MBU/MFU bands, §6 cost model and scenarios S1–S4, §7 what must never happen, §8 pinned GPU / model / price inputs (the adjudicator for every disagreement listed above)
 - The base checkpoint's own tree: [`research/models/deepseek41f/`](../deepseek41f/) — the comparator this entire document is written against
+
+---
+
+## Sweep log
+
+- **2026-09-19 — gap `C1-a100-capacity-basis` CLOSED at 80 GB decimal.** Open question 10 above is now a resolution: `usable_hbm` = 0.90 × 80 GB = 72.0 GB = 67.06 GiB/GPU tree-wide, with `nvidia-smi`'s 81,920 MiB = 80 GiB = 85.90 GB retained only as a labelled ⚠️ TO BE VERIFIED +7.4 % sensitivity ([METHODOLOGY §8](../../METHODOLOGY.md#gpus), [gpus/a100.md §2](../../gpus/a100.md)). No number in this README or in [`a100.md`](a100.md) changed — both already planned on the decimal basis. The base checkpoint's [`deepseek41f/a100.md`](../deepseek41f/a100.md) did **not**, and its KV-budget and concurrency tables were recomputed in the same pass.
+
+- **2026-09-19 — gap `C2-deepseek-swa-fixed-state` CLOSED at 2,906,112 B = 2.77 MiB** (43 rings = 40 backbone + 3 MTP, MTP enabled). Open question 7 above was rewritten from a two-value disagreement into a resolution: the deployed figure is the 43-ring one because every operating point in this tree is costed with DSpark/MTP on, and **2,703,360 B = 2.58 MiB is the `--num-speculative-tokens 0` floor**. Recut in the same pass: [architecture.md §5.3/§5.4/§5.6](architecture.md), [`deepseek41f/architecture.md` §5.3/§5.4](../deepseek41f/architecture.md), [METHODOLOGY §8](../../METHODOLOGY.md), [`matrix/fit-matrix.md`](../../matrix/fit-matrix.md) and [`h100.md` §1.1–1.3](h100.md) (which had been the only `deepseek41fnvfp4` pair doc computing its fit table on the 2.58 MiB denominator). No fit verdict, GPU count or $/1M figure moved — the constant is worth ≤ 2 % of concurrency at 8K and ~0 % at 1M. Still open: [`rtx6000-pro.md`](rtx6000-pro.md) and the two `pairs.json` cells that declare the old convention.
+
+- **2026-09-19, final consistency pass.** Closed the `pairs.json` pointer directly above: `deepseek41fnvfp4/h100`'s `max_concurrency_8k` recut 898 → **891**. Also fixed three cells in this README's Cross-GPU table that had picked the `res1y` price tier as the band's `low` end instead of `low` (cheapest reputable on-demand) — inconsistent with `matrix/pairs.json`, which was already on the correct tier throughout: H100 row **$0.784–$1.983 → $0.922–$1.983** (max conc **2,546/217 → 891/61**, the stale pre-`C5` FP4 basis), and RTX PRO 6000 Server Ed. row **$0.62–$2.13 → $0.92–$2.13**.

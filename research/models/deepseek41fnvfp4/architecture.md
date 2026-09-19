@@ -1524,8 +1524,11 @@ exactly; **CORRECTED** = old value → new value, fixed in place above;
     3 × 144 + 288 = 720 and 3 × 34 + 68 = 170 → **890 B/token**, matching the
     base card's "890 bytes per token" exactly. The base card also independently
     confirms the format: "FP4 main KV caching (E2M1 format, one E4M3 scale per
-    16 channels)". §5.4 totals, §5.2 alternate precisions, §5.3's 2,703,360 B
-    SWA ring and §5.6's whole fit table all reproduce to the last digit.
+    16 channels)". §5.4 totals, §5.2 alternate precisions, §5.3's SWA ring and
+    §5.6's whole fit table all reproduce to the last digit. *(The ring figure
+    checked here was the 40-backbone 2,703,360 B; superseded 2026-09-19 by the
+    43-ring **2,906,112 B** — gap `C2-deepseek-swa-fixed-state`, see the Later
+    pin at the end of the Sweep log. The 890 B/token derivation is unaffected.)*
     https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/raw/main/README.md
 17. **CONFIRMED** — "8B activated during prefill and 16B during decode" is
     verbatim in the base card, and the CED and SWA-Bounded-Replay quotes are
@@ -1755,3 +1758,25 @@ shas rather than numbered releases, which matches
 V4.1-Flash is in **no** numbered vLLM or SGLang release; **per-(model, GPU) fit /
 throughput / cost tables** — this *is* a model document, so §5.6, §6.3 and §11.3
 belong here, and nothing of that kind was added to a GPU or cross-cutting doc.
+
+### Later pin
+
+- **2026-09-19 — gap `C2-deepseek-swa-fixed-state` RESOLVED → 2,906,112 B = 2.77 MiB**
+  (§5.3 derivation, §5.4 totals, §5.5 mechanism row, §5.6 fit table). §5.3 previously derived
+  the FP8 SWA ring from the **40 backbone layers only** (`67,584 B × 40 = 2,703,360 B =
+  2.58 MiB`) while [METHODOLOGY §8](../../METHODOLOGY.md) and 17 of the 19 `deepseek41f*`
+  documents used **43 rings** (40 backbone + 3 MTP) = **2,906,112 B**. 43 is the deployed
+  count: every operating point in this tree is costed with DSpark/MTP **enabled**
+  ([matrix/recommendations.md](../../matrix/recommendations.md) pins `DSpark γ=5` as the
+  default, worth 3.13× output per byte) and an enabled MTP head allocates its own SWA ring per
+  sequence. **`--num-speculative-tokens 0` gives 2,703,360 B = 2.58 MiB — the MTP-disabled
+  floor, not the deployed value** — and is labelled as such inline. §5.4's
+  `kv_total(ctx) = ctx × 890 + 2,906,112` and the whole §5.6 fit grid were recut on the new
+  constant with `python3`; the grid dropped ≤ 2.0 % at 8K and 0 % at 1M, and no fit verdict or
+  minimum-GPU count changed. Carried downstream to
+  [`h100.md` §1.1–1.3](h100.md) (the one pair doc still on the 40-ring denominator),
+  [`README.md`](README.md) open question 7 and
+  [`matrix/fit-matrix.md`](../../matrix/fit-matrix.md) §2/§5.2. The BF16-container reading
+  (`43 × 128 × 512 × 2 B = 5,636,096 B = 5.375 MiB` ⚠️) is a separate, still-open question and
+  is untouched; §6.3's `SWA ring read = 40 × 128 × 528 B` is a per-step **read** term for the
+  40 backbone layers, not this fixed state, and is deliberately left alone.

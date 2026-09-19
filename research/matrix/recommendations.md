@@ -195,7 +195,7 @@ reserved tiers reorder it materially (h200 `res1y` $2.79 → **$0.378/1k**)
 | DeepSeek-V4.1-Flash | [mi355x](../models/deepseek41f/mi355x.md) | 4 / 4 | 7,649 | 573 | 1,291 · 24.79 ms · 100 ms | $1.85 | 2,241 · 28.56 ms | $1.07 | $0.748 | $0.600 | `estimate` | 30 |
 | DeepSeek-V4.1-Flash | [rtx6000-pro](../models/deepseek41f/rtx6000-pro.md) | 4 / 4 | 336 | 25 | 185.1 · 10.8 ms · 1,700 ms | $2.70–$6.22 | 754.8 · 84.8 ms | $0.662–$1.52 | $0.718–$1.65 | $0.600 | `measured` | 20 |
 | …-Flash-NVFP4 | [h200](../models/deepseek41fnvfp4/h200.md) | 8 / 8 | 3,103 | 232 | 1,094 · 29.2 ms · 267 ms | $1.01–$2.01 | 4,461 · 57.4 ms | $0.250–$0.490 | $0.282–$0.559 | $0.600 | `estimate` | 20 |
-| …-Flash-NVFP4 | [mi355x](../models/deepseek41fnvfp4/mi355x.md) | 4 / 4 | 7,371 | 552 | 1,265 · 25.29 ms · 102 ms | $1.89 | 2,246 · 28.49 ms | $1.06 | $0.758 | $0.600 | `not-runnable` | 24 |
+| …-Flash-NVFP4 | [mi355x](../models/deepseek41fnvfp4/mi355x.md) | 4 / 4 | 7,371 | 552 | 1,229.9 · 26.02 ms · 102 ms | $1.94 | 2,137.3 · 29.94 ms | $1.12 | $0.771 | $0.600 | `not-runnable` | 24 |
 | …-Flash-NVFP4 | [rtx6000-pro](../models/deepseek41fnvfp4/rtx6000-pro.md) | 4 / 8 | 2,517 | 186 | 285 · 50 ms · 106 ms | $1.75–$4.04 | 541 · 59.1 ms | $0.924–$2.13 | $0.481–$1.11 | $0.600 | `estimate` | 18 |
 | Qwen3.8-27B | [h200](../models/qwen3827b/h200.md) | 1 / 1 | 138 | 19 | 6,953 · 24.2 ms · 374 ms | $0.159–$0.452 | 6,953 · 24.2 ms | $0.159–$0.452 | $0.0820–$0.196 | $3.00 | `estimate` | 13 |
 | Qwen3.8-27B | [mi355x](../models/qwen3827b/mi355x.md) | 1 / 1 | 356 | 50 | 11,312 · 38.3 ms · 153 ms | $0.211 | 12,225 · 83.8 ms | $0.195 | $0.0800 | $3.00 | `estimate` | 19 |
@@ -243,6 +243,13 @@ against 4,696 · 27.3 ms → $0.355–$0.828 in
 [b200.md §4.1](../models/deepseek41f/b200.md); `pairs.json` has been re-cut to the document's
 corrected figures and §2.2's row and §5's lowest-$/token cell carry them.
 
+*Verification log — 2026-09-19 (final consistency pass):* a second stale row found and closed
+the same way. `deepseek41fnvfp4 / mi355x` §2.3's row still carried the pair document's own
+pre-audit-fix figures (1,265.2 / 2,246.3 tok/s/GPU, $1.89 / $1.06, blended $0.758) after
+[mi355x.md §0/§4.2](../models/deepseek41fnvfp4/mi355x.md) corrected its decode-bytes table
+(the replicated KV read had been divided by the TP degree) to 1,229.9 / 2,137.3 tok/s/GPU,
+$1.94 / $1.12, blended $0.771. `pairs.json` and §2.3's row above are now re-cut to match.
+
 | Cell | [`pairs.json`](./pairs.json) | Per-model guide | Why |
 |---|---|---|---|
 | **deepseek41f / h200 max conc @8K, @128K** | 28,457 / 2,132 | **3,557 / 266** ([README §Cross-GPU](../models/deepseek41f/README.md)) | Exactly 8×. `pairs.json` carries the **aggregate** node budget; the guide carries the **per-GPU binding** reading, because `num_key_value_heads: 1` means the MLA latent is **replicated on every TP rank** and does not multiply by GPU count. The guide's reading is the one consistent with its own §1.3 tensor-sharding analysis |
@@ -250,8 +257,13 @@ corrected figures and §2.2's row and §5's lowest-$/token cell carry them.
 | **marlin2b / b300 interactive** | 93,271 tok/s/GPU · 35.7 ms (S1 = S4 at 3,327 concurrent) | **73,808 tok/s/GPU · 3.47 ms at b=256**, $0.0278–$0.0565 ([README §Cross-GPU](../models/marlin2b/README.md)) | The pair doc concludes TPOT ≤ 50 ms never binds — KV capacity does — so it collapses S1 onto S4; the guide's table reports a b=256 operating point instead. The $/1M difference is $0.0220–$0.0447 vs $0.0278–$0.0565 |
 | **marlin2b / gb300 interactive and $/1M** | 22,164 tok/s/GPU, $0.226 | **70,403 tok/s/GPU decode-only → $0.071** ([README footnote †](../models/marlin2b/README.md)) | `pairs.json` carries gb300.md's **sustained** (serial prefill + decode) rate; every other pair doc prices `$/1M output` on the **decode-only** rate. The guide re-derives the common basis and says so in its own footnote. GB300 is the most expensive card in the set either way |
 | **deepseek41f / gb300 max conc** | 16,164 / 1,378 | **11,193 / 954** resident, "(16,164 offloaded)" ([README §Cross-GPU](../models/deepseek41f/README.md)) | `pairs.json` carries the **Engram-offloaded** figure; the guide's binding column is the resident one, with the offloaded figure in parentheses |
-| **deepseek41f / b200 S1 $/1M out** | $0.462–$1.08 | **$0.39–$1.08** ([README §Cross-GPU](../models/deepseek41f/README.md)) | Low end only; the same document's headline quotes "$0.46–1.08/1M output interactive", matching `pairs.json` |
 | **How close B300 and B200 are on DeepSeek-V4.1-Flash** | *"B200 matches B300 within **2.5 %** until its 180 GB KV pool runs out at concurrency 128"* (`headline`, deepseek41f/b200) | *"B300 ≡ B200 to within **1.5 %** at every concurrency B200 can hold"* ([README §Summary item 8](../models/deepseek41f/README.md)) | Same claim, two tolerances, from the same measurement set. Immaterial to any decision — both say B300 wins on **capacity**, not rate — but quote whichever document you are citing, not a blend |
+
+*Resolved 2026-09-19 (final consistency pass):* **deepseek41f / b200 S1 $/1M out** is no
+longer a disagreement — both `pairs.json` ($0.462–$1.079) and
+[README §Cross-GPU](../models/deepseek41f/README.md) ($0.39–$1.08, itself mirroring the
+now-corrected `b200.md` §0) previously quoted the `res1y` tier as the band's `low` end; the
+README row is recut to **$0.46–$1.08** and the row above is removed.
 
 ---
 

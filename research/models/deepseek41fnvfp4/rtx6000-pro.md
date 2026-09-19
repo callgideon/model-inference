@@ -67,7 +67,8 @@ and is the comparator this whole document is written against.
    recommended 8-GPU/C114 point, **$3.06–$7.04** at the 4-GPU/C32 point, and
    **$5.22–$12.02** on the 4-GPU Marlin path; blended 75/25 **$0.48–$1.11**,
    **$0.81–$1.86** and **$1.35–$3.10** respectively.
-5. **Max throughput (S4, C256, no SLO): $0.62–$2.13 per 1M output** `est.`
+5. **Max throughput (S4, C256, no SLO), 8 GPU: $0.92–$2.13 per 1M output** `est.`
+   (kappa-lo; kappa-hi is $0.62–$1.42)
    **Confidence: `estimate`.** Zero measurements of this checkpoint on this GPU exist;
    the calibration κ is borrowed from the *base* checkpoint on the *same* GPU. Against
    DeepSeek's own $0.60/M output and $0.2074/M blended, this pair **never breaks even
@@ -1038,3 +1039,10 @@ source silicon, the 1,920 vs 2,000 dense-FP4 TFLOPS spread between `gpus/rtx6000
 §3c and METHODOLOGY §8, and the correction this document itself logs against
 `gpus/rtx6000-pro.md` §9g's "needs at least 8 cards" claim). No edits were made to any
 number, table, or prose in this document.
+
+**2026-09-19, final consistency pass.** §0 item 5 quoted **"$0.62–$2.13"** for S4
+max-throughput, mixing §4.1's `kappa-hi` Nebius cell ($0.618) with its `kappa-lo` AWS cell
+($2.126) — two different calibration scenarios in one band. §0 item 4's interactive range
+uses `kappa-lo` throughout, so item 5 was recut to the same scenario: **$0.92–$2.13**
+(`kappa-lo`, matching `matrix/pairs.json`'s already-correct $0.924–$2.126), with the
+`kappa-hi` reading ($0.62–$1.42) kept alongside for reference. `pairs.json` did not change.

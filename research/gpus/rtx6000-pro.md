@@ -860,8 +860,17 @@ GPU document** — they live in `research/models/<exp>/rtx6000-pro.md` and are w
 | **Qwen3.8-27B** NVFP4 (21.92 GB) | **1** | 21.92 GB | 60.48 GB | 32 KiB/tok + **392.2 MB** | **91** | 41 | 12 |
 | **Qwen3.8-27B** INT4 W4A16 (19.45 GB) | **1** | 19.45 GB | 62.95 GB | 32 KiB/tok + **392.2 MB** | **95** | 42 | 13 |
 | **Marlin-2B** BF16 (5.444 GB) | **1** | 5.44 GB | 76.96 GB | 12 KiB/tok + 18.63 MiB GDN | **640** | 182 | 47 |
-| **DeepSeek-V4.1-Flash** MXFP4 (510.29 GB) | **8** | 63.79 GB | 18.61 GB (148.9 GB aggregate) | 1,650 B/tok FP8 KV + 2.77 MiB SWA | **9,068** | 2,613 | 679 |
+| **DeepSeek-V4.1-Flash** MXFP4 (510.29 GB) | **8** | 63.79 GB | 18.61 GB/GPU (148.9 GB aggregate) | 1,650 B/tok FP8 KV + 2.77 MiB SWA | **(R) 1,133** / *(A) 9,066* | **326** / *2,613* | **84** / *679* |
 | **Kimi-K3** MXFP4 (1,560.9 GB) | **19** ⚠️ | — | — | 13.5 KiB/tok FP8 MLA + 2.25 GB KDA | **does not fit an 8-card box** | | |
+
+**(R) / (A) on the DeepSeek row** (METHODOLOGY §3, resolved 2026-09-19, gap
+`X6-kimik3-h200-concurrency-5x-disagreement`): `kv_budget × n_gpus` is valid only where KV is
+sharded across ranks. DeepSeek-V4.1-Flash is MLA with `num_key_value_heads = 1`, so under plain
+TP every rank holds a full KV copy and the **per-GPU (R) cut is the planning number**; the
+aggregate *(A)* needs EP + DP-attention, which this card has no published recipe for (§4 already
+rules out multi-node here). See [deepseek41f/h200.md §1.3](../models/deepseek41f/h200.md) for the
+same split with a measurement behind it. The Qwen3.8-27B and Marlin-2B rows are single-card and
+unaffected.
 
 **Qwen3.8-27B and Marlin-2B fit on one card, comfortably.** Both are the shape this GPU was built for
 (§10b: Lenovo's own scoping is "fewer than 70B parameters", re-verified verbatim 2026-09-19). Three details
@@ -927,6 +936,16 @@ request** (METHODOLOGY §8), so a single in-flight request consumes half the bud
 36 / 32 / 21 sequences at 8 K / 32 K / 128 K, on a 20-card PCIe cluster spanning three chassis with no GPU
 fabric. §4 already states multi-node LLM serving is **not a supported design point for this card**. Kimi-K3
 belongs on 8×B300 (2,144 GB per node, 195 GB/GPU — METHODOLOGY §8), not here.
+
+**Cross-reference — the 16-card community-overlay case (2026-09-19, gap `X7`).**
+[`models/kimik3/rtx6000-pro.md`](../models/kimik3/rtx6000-pro.md) documents a receipted community
+deployment on **16** of these cards that reaches a fit only by requantising the dense KDA/MLA projections
+to **MXFP8 online at load** — a path this section's standard-convention arithmetic does not model, and one
+that is **unverified and comes from an unaffiliated fork, not a vendor recipe**. That gap is now resolved
+**in favour of this section**: the pair document's planning figure is **32 cards** (§0.2, §3.7 there), with
+16 retained only as a labelled overlay case. The 19-card floor above stands unchanged; read the two
+documents together — this one for the convention, the pair doc §1.2/§3.7 for what the overlay buys and what
+it costs in confidence.
 
 ---
 
@@ -1444,12 +1463,14 @@ where this pass moved one of its numbers again, the row carries the whole chain.
 |---|---|---|---|
 | §9g (new) | section did not exist → fit, KV bytes/token and max concurrency at 8 K / 32 K / 128 K for **Qwen3.8-27B** (BF16/FP8/NVFP4/INT4), **Marlin-2B**, **DeepSeek-V4.1-Flash** and **Kimi-K3** | requested by the fact-checker; scoped to fit + KV only — **throughput and cost stay out of GPU docs** and the section links to `research/models/<exp>/rtx6000-pro.md` for them | METHODOLOGY §3, §8 |
 | §9g Qwen3.8-27B | — → 1 card at every precision; 38 / 122 / 143 / 149 seqs at 8 K for BF16 / FP8 / NVFP4 / INT4; `S = 1` assumed for the 153.9 MB GDN state and marked ⚠️ | METHODOLOGY §2 requires `S` to be taken from the engine doc or marked; vLLM's Mamba cache is ≥ 1 plus speculative slots | METHODOLOGY §2, §8 · models/qwen3827b/architecture.md |
+| §9g Qwen3.8-27B — **2026-09-19, gap `C7-qwen38-gdn-state-slots`** | 38 / 122 / 143 / 149 seqs at 8 K on a bare 153.9 MB fp32 slot with `S = 1` ⚠️ → **28 / 77 / 91 / 95** at the [METHODOLOGY §8](../METHODOLOGY.md) pin `S` = 5 × 78,446,592 B bf16 = **392.2 MB per request**, with the `S` = 1 floor (43 / 148 / 174 / 181) printed alongside | the ⚠️ that row carried is now resolved, not carried: `S` = 5 is SGLang's shipped default (`--mamba-radix-cache-strategy extra_buffer`) and the same convention §8 pins for Kimi-K3's KDA state; `mamba_ssm_dtype: float32` in `config.json` is a runtime declaration SGLang overrides. Recomputed with `python3`; the NVFP4 cell now matches architecture.md §10.2's 91 exactly. vLLM's `S` stays ⚠️ unpublished | METHODOLOGY §8 · models/qwen3827b/architecture.md §1.2, §5.4, §10.2 |
 | §9g Qwen3.8-27B NVFP4 | — → noted as **safe on sm_120** (dense GEMM, no MoE grouped GEMM), but capacity-only in practice because vLLM resolves ModelOpt NVFP4 as W4A16 → Marlin | §6a: dense NVFP4 GEMM on sm_120 was never broken; the grouped path is | §6a |
 | §9g Marlin-2B | — → 1 card, 640 seqs at 8 K, and **249 concurrent 240-frame video requests** at 23,520 tokens | the video path is the binding case for this model | models/marlin2b/architecture.md |
 | §9g DeepSeek-V4.1-Flash | — → **≥ 8 cards** (`510.29e9 / 82.40e9 = 6.19` → next topology step 8), 63.79 GB/GPU, 18.61 GB KV budget/GPU | METHODOLOGY §3 | METHODOLOGY §3, §8 |
 | §9g DeepSeek-V4.1-Flash | — → stated that routed experts are **MXFP4 (E2M1 + E8M0/32), not NVFP4**, and that NVIDIA's NVFP4 build is **527.27 GB — larger than the 510.29 GB base**, accuracy-neutral, **no published speedup**, and routes into the broken sm_120 grouped-GEMM path | checklist item 14; this is the first place in the doc the V4.1 formats appear, so it is stated rather than corrected | METHODOLOGY §8 |
 | §9g DeepSeek-V4.1-Flash KV | — → planned at the **FP8 column, 1,650 B/token** (9,068 seqs at 8 K), with METHODOLOGY §8's 890 B/token FP4 figure and `models/deepseek41f/architecture.md` §5.2's contrary claim (software dequant → "works identically on Hopper and Ampere") both recorded as a disagreement | METHODOLOGY §8: if a document disagrees, state it and cite both. Matters acutely here because sm_120 has no NVFP4-KV FMHA kernel | METHODOLOGY §8 · models/deepseek41f/architecture.md §5.2 · TensorRT-LLM#11799 |
 | §9g Kimi-K3 | — → **does not fit an 8-card box**: needs `1,560.9e9 / 82.40e9 = 18.94` → ≥ 19 cards; 8 cards give 659.2 GB against 1,560.9 GB, short by **901.7 GB (2.4× the box)**; the illustrative 20-card row shows `S = 5` KDA slots × 428.6 MiB = **2.25 GB per request** eating half a card's 4.36 GB budget | METHODOLOGY §2 `S` multiplier and §3 minimum-GPU rule; §4 already rules out multi-node on this card | METHODOLOGY §2, §3, §8 · models/kimik3/architecture.md |
+| §9g Kimi-K3 — **2026-09-19, gap `X7-kimik3-rtx6000-pro-16-vs-19-32-gpus`** | this section's 19-card floor (topology step 32) stood against [`models/kimik3/rtx6000-pro.md`](../models/kimik3/rtx6000-pro.md)'s 16-GPU headline verdict, with no pointer between them → **added a cross-reference paragraph** at the end of §9g naming the pair doc's 16-card community-overlay case, and recording that the gap is **resolved in favour of this section: the pair doc now plans 32 cards** and keeps 16 only as a labelled overlay case. `ceil(1,560,860,324,864 / (86.40e9 − 4e9))` = **19** re-verified exact with `python3`; **no number in §9g changed** | METHODOLOGY §7 forbids sizing on an engine path that is not supported as of 2026-09-19, and the 16-card fit rests on an unverified online MXFP8 weight-only overlay from an unaffiliated fork, not a vendor recipe; METHODOLOGY §8 requires the two documents to cite each other rather than diverge silently | METHODOLOGY §3, §7, §8 · models/kimik3/rtx6000-pro.md §0.2, §1.2, §3.7, §5.1 · matrix/pairs.json |
 
 ### Citation integrity — the five most load-bearing citations, re-fetched (checklist 13)
 
@@ -1468,3 +1489,7 @@ price corrections (2, 7), the B200-vs-H200 DeepSeek-R1 FP8 gap (9) and the DeepS
 (7) appear nowhere in this document — skipped silently per the sweep instructions, and listed here only so the
 next pass need not re-check them. Item 15 (no per-(model, GPU) throughput/cost tables in GPU docs) was
 honoured: §9g carries fit and KV only and points at `research/models/<exp>/rtx6000-pro.md` for the rest.
+
+## Sweep log (2026-09-19, gap `X6-kimik3-h200-concurrency-5x-disagreement`)
+
+- **2026-09-19 — §9g's DeepSeek-V4.1-Flash row recut from the aggregate budget to the per-GPU replicated reading.** [METHODOLOGY §3](../METHODOLOGY.md#3-fit) now multiplies `kv_budget` by `n_gpus` **only when KV is sharded across ranks**; this model is MLA with `num_key_value_heads = 1`, so under plain TP every rank holds a full KV copy, and this card has no published EP + DP-attention recipe (§4 rules out multi-node here). **8 cards, 18.61 GB/GPU: 9,068 / 2,613 / 679 → (R) 1,133 / 326 / 84** at 8 K / 32 K / 128 K, with the aggregate retained beside each as *(A) 9,066 / 2,613 / 679*. The Qwen3.8-27B, Marlin-2B and Kimi-K3 rows are unchanged (single-card, or "does not fit an 8-card box"). Recomputed with `python3`; the aggregate figures reproduce to ±2 on the 8 K cell (rounding in the printed 18.61 GB budget), so only the aggregation changed. Source: [deepseek41f/h200.md §1.3](../models/deepseek41f/h200.md), [fit-matrix §6.1](../matrix/fit-matrix.md#61-the-kv-reading-is-not-uniform-across-pair-documents--to-be-verified). ⚠️ Remaining: confirm against a booted engine's reported KV pool (benchmark B2).

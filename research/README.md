@@ -58,7 +58,7 @@ matrix docs — nothing below is a new number.
 | [DeepSeek-V4.1-Flash](models/deepseek41f/README.md) | B200 — [$0.462](models/deepseek41f/b200.md) | B200 — [$0.19](models/deepseek41f/b200.md) | 2 ([b300.md](models/deepseek41f/b300.md)) | $0.462–$6.217 | $0.355–$4.026 | $0.60 |
 | [DeepSeek-V4.1-Flash-NVFP4](models/deepseek41fnvfp4/README.md) | B200 — [$0.565](models/deepseek41fnvfp4/b200.md) | B200 — [$0.1485](models/deepseek41fnvfp4/b200.md) | 4 ([b300.md](models/deepseek41fnvfp4/b300.md)) | $0.565–$8.663 | $0.048–$2.507 | $0.60 |
 | [Qwen3.8-27B](models/qwen3827b/README.md) | H200 — [$0.159](models/qwen3827b/h200.md) | B300 — [$0.0602](models/qwen3827b/b300.md) | 1 ([b300.md](models/qwen3827b/b300.md)) | $0.159–$0.561 | $0.15–$0.469 | $3.00 |
-| [Kimi-K3](models/kimik3/README.md) | B300 — [$10.336](models/kimik3/b300.md) | B300 — [$3.117](models/kimik3/b300.md) | 8 ([b300.md](models/kimik3/b300.md)) | $10.336–$6,916.69¹ | $3.814–$87.91 | $15.00 |
+| [Kimi-K3](models/kimik3/README.md) | B300 — [$7.3926](models/kimik3/b300.md) | B300 — [$2.3811](models/kimik3/b300.md) | 8 ([b300.md](models/kimik3/b300.md)) | $7.3926–$6,916.69¹ | $3.6101–$87.91 | $15.00 |
 | [Marlin-2B](models/marlin2b/README.md) | B300 — [$0.022](models/marlin2b/b300.md) | B300 — [$0.0092](models/marlin2b/b300.md) | 1 ([b300.md](models/marlin2b/b300.md)) | $0.022–$0.2256 | $0.0188–$0.2141 | none |
 
 ¹ The $6,916.69 high is `kimik3/h100` at concurrency 1 — it never reaches the
@@ -195,7 +195,15 @@ $0.355–$0.828.)
    [gpu-optimizations §8.16](matrix/gpu-optimizations.md#8-open-questions)
 5. **Prefill / $-per-1M-input rates are the weakest input in the cost
    grid** — one pair is 2.7× pessimistic against its own measured TTFT, one
-   has no prefill measurement at all.
+   has no prefill measurement at all. **2026-09-19: GEMM-only prefill
+   rooflines (`2 × active_params × T` at an assumed MFU) are now known to be
+   ~13.4× high on the sparse/indexer-attention model class** — measured
+   9,267 vs. roofline 123,750 prefill tok/s/GPU for DeepSeek-V4.1-Flash on
+   B200, where the indexer scan, top-k, Engram gathers and mHC mixing
+   dominate, not the expert GEMMs. Treat any un-measured `$/1M input` for a
+   DSA/CSA-family model (DeepSeek-V4.1-Flash, Kimi-K3) as an order-of-magnitude
+   optimistic floor until a step-time measurement replaces it.
+   [gpus/b200.md §9.3](gpus/b200.md), [deepseek41f/b200.md §3.1](models/deepseek41f/b200.md),
    [cost-matrix §9.3.5](matrix/cost-matrix.md#93-open-questions-this-matrix-cannot-close)
 6. **DSpark/MTP speculative-decoding acceptance rates are benchmark
    constants, not measurements, on most pairs** — worth 3–6.7× on DeepSeek's
@@ -205,9 +213,23 @@ $0.355–$0.828.)
    *above* on-demand for B300** — "reserved" is not a uniform discount
    across this matrix.
    [cost-matrix §9.3.7](matrix/cost-matrix.md#93-open-questions-this-matrix-cannot-close)
-8. **DeepSeek-V4.1-Flash's KV-cache reading (replicated per rank vs.
-   aggregated under DP-attention) is picked differently by sibling pair
-   documents**, and `pairs.json` inherits whichever each one picked.
+8. ~~**The KV-cache reading (replicated per rank vs. aggregated under
+   DP-attention) is picked differently by sibling pair documents**, and
+   `pairs.json` inherits whichever each one picked.~~ **RULE RESOLVED
+   2026-09-19** (gap `X6-kimik3-h200-concurrency-5x-disagreement`) —
+   [METHODOLOGY §3](METHODOLOGY.md#3-fit) now multiplies `kv_budget` by
+   `n_gpus` **only when KV is sharded across ranks**; with replicated KV
+   (MLA at TP without DCP, or `num_key_value_heads = 1`) the single-GPU
+   budget is used and only the per-request state that *is* sharded gets
+   divided, and every table must state its reading. **Kimi-K3 is resolved
+   outright** — no published H200/H100 recipe configures DCP or
+   DP-attention, so [gpus/h200.md §2](gpus/h200.md) is recut
+   **169 / 148 / 98 → 98 / 42 / 12** at 8K/32K/128K (aggregate retained
+   beside it, labelled as requiring DCP), and `gpus/h100.md` §2 and
+   `gpus/rtx6000-pro.md` §9g the same way. **DeepSeek-V4.1-Flash stays
+   open** — it has a published EP8 + DP-attention shape, so both readings
+   stay printed per pair. ⚠️ Remaining: **confirm against a booted engine's
+   reported KV pool (benchmark B2)**.
    [fit-matrix §6.1](matrix/fit-matrix.md#61-the-kv-reading-is-not-uniform-across-pair-documents--to-be-verified)
 9. ~~**Whether the 890 B/token FP4 KV cache works outside Blackwell is
     disputed.**~~ **RESOLVED 2026-09-19** — the 890 B/token layout (720
@@ -252,3 +274,25 @@ $0.355–$0.828.)
     architectural 890 on a GPU that *does* have the kernel — is still
     unexplained.
     [gpu-optimizations §8.17–18](matrix/gpu-optimizations.md#8-open-questions)
+
+## 7. Resolution log
+
+- **2026-09-19 — gap `X5-b200-prefill-roofline-13x-high` RESOLVED in favour of the measurement.** [gpus/b200.md §9.3](gpus/b200.md)'s DeepSeek-V4.1-Flash prefill row was a GEMM-only roofline of **123,750 tok/s/GPU** (`2 × active × T` at MFU 0.22) while [deepseek41f/b200.md §3.1](models/deepseek41f/b200.md) measured **9,267 tok/s/GPU** (74,135 aggregate on 8× B200 TP8) from vLLM PR #56686's 220–222 ms chunked-prefill steps — **13.4×**. §9.3 now prints 9,267 `meas.` with the cause annotated (indexer scan, top-k, Engram gathers, mHC mixing) and a warning that a future DSA-family row must be ⚠️ **TO BE VERIFIED**, not formula-filled; §9.3 has no Kimi-K3 row and nothing else was rescaled. No `$/1M input` figure moved: gpus/b200.md §10.4 is an output grid, and [cost-matrix §5](matrix/cost-matrix.md)'s `deepseek41f/b200` cell **$0.1806–$0.42** was already built on the measured rate (it reproduces the pair document's own $0.180). Open question 5 above updated to carry the class-level warning.
+
+- **2026-09-19 — gap `X6-kimik3-h200-concurrency-5x-disagreement` RESOLVED to the per-GPU replicated reading** (open question 8 above). [METHODOLOGY §3](METHODOLOGY.md#3-fit) now multiplies `kv_budget` by `n_gpus` **only when KV is sharded across ranks**; with replicated KV (MLA at TP without DCP, or `num_key_value_heads = 1`) the single-GPU budget is used and only the per-request state that *is* sharded gets divided, and every table must state its reading. Recut: [gpus/h200.md §2](gpus/h200.md) Kimi-K3 **169 / 148 / 98 → 98 / 42 / 12** and both DeepSeek rows to both readings; [gpus/h100.md §2](gpus/h100.md) DeepSeek **1 157 / 79 → 144 / 9** and Kimi-K3 **53 / 31 → 21 / 2** (measured resident); [gpus/rtx6000-pro.md §9g](gpus/rtx6000-pro.md) DeepSeek **9,068 / 2,613 / 679 → 1,133 / 326 / 84**. No `pairs.json` concurrency value and no [fit-matrix §2](matrix/fit-matrix.md) grid cell moved — both already carried per-pair replicated readings; `kimik3/h200`'s 74 / 6 were verified against the chosen reading. Kimi-K3 is closed; DeepSeek-V4.1-Flash's per-pair default stays open because it has a published EP8 + DP-attention shape. Full write-up: [fit-matrix §6.1](matrix/fit-matrix.md#61-the-kv-reading-is-not-uniform-across-pair-documents--to-be-verified), [kimik3/h200.md §1.3](models/kimik3/h200.md#13-max-concurrency).
+
+- **2026-09-19 — gap `C1-a100-capacity-basis` RESOLVED → 80 GB decimal.** `usable_hbm` = 0.90 × 80 GB = **72.0 GB = 67.06 GiB/GPU** is now the single A100 planning basis tree-wide; `nvidia-smi`'s 81,920 MiB = 80 GiB = **85.90 GB** reading is demoted to a labelled ⚠️ TO BE VERIFIED **+7.4 %** sensitivity, never a planning basis ([METHODOLOGY §8](METHODOLOGY.md#gpus), [gpus/a100.md §2](gpus/a100.md)). Two pair docs had planned on the GiB reading and were recut: `deepseek41f/a100` (**15,473 → 12,886** @8K, 1,159 → 965 @128K) and `marlin2b/a100` (562 → 517 @8K, 41 → 38 @128K); `qwen3827b/a100`, `kimik3/a100` and both `deepseek41fnvfp4` A100 rows already used the decimal basis. No fit verdict, GPU count, throughput or $/1M figure moved. Full write-up: [fit-matrix §6.11](matrix/fit-matrix.md#6-open-questions-and-known-uncertainties).
+
+- **2026-09-19 — gap `C2-deepseek-swa-fixed-state` RESOLVED → 2,906,112 B = 2.77 MiB** (43 SWA rings = 40 backbone + 3 MTP, MTP/DSpark enabled — the deployed configuration everywhere in this tree). **2,703,360 B = 2.58 MiB (40 backbone only) is the `--num-speculative-tokens 0` floor**, now labelled as such wherever it appears, not a competing planning value. Recut: [METHODOLOGY §8](METHODOLOGY.md#gpus), both DeepSeek architecture docs' §5.3–§5.6, [fit-matrix §2/§5.2](matrix/fit-matrix.md), and [`deepseek41fnvfp4/h100.md` §1.1–1.3](models/deepseek41fnvfp4/h100.md), which had been the only pair doc still on the 40-ring denominator. Effect is ≤ 2 % of `max_concurrency` at 8K, ~0 % at 1M — no fit verdict, GPU count or $/1M figure moved. `pairs.json`'s `deepseek41fnvfp4/h100` row (898 → **891** @8K) was the one place this had not yet been closed; recut in this pass.
+
+- **2026-09-19 — gap `C6-kimi-k3-minimum-gpu-counts` RESOLVED → 32 GPUs.** 24 H100s is not a legal TP size for Kimi-K3 (hidden size 7168 is not divisible by 24; `gcd(96 heads, 7168) = 32`, valid TP set `{1, 2, 4, 8, 16, 32}`) and is outside [METHODOLOGY §3](METHODOLOGY.md#3-fit)'s topology set; the naive `checkpoint_bytes / n_gpus` share that made 24 look like it fit ignores the measured Marlin resident-weight multiplier, which puts N=24 at 79.5 GB/GPU against an 80 GB card. [gpus/h100.md §2](gpus/h100.md) and `gpus/a100.md` §2/§9 now state **≥ 32 H100/A100** (4 HGX nodes, TP32/EP32); `kimik3/a100`'s `min_gpus` moved 24 → 32 in `pairs.json` in the same pass. `kimik3/h100`'s `min_gpus` was already 32.
+
+- **2026-09-19 — Qwen3.8-27B GDN state-slot clash RESOLVED.** The "H100 `S` and state dtype" disagreement (`gpus/h100.md` 87/8 vs `architecture.md` §10.2's 56/7) is closed: [METHODOLOGY §8](METHODOLOGY.md#gpus) pins **`S` = 5 slots × 78,446,592 B bf16 = 392.2 MB per request** — SGLang's shipped default, the same convention already pinned for Kimi-K3's KDA state — and every `gpus/<gpu>.md` Qwen3.8-27B row is recut to it. What is left open: vLLM's own `S` is unpublished (a 1.5–2× swing), tracked as [qwen3827b/README.md](models/qwen3827b/README.md) open question 2.
+
+- **2026-09-19 — gap `C8-prefix-cache-hit-costed-free` RESOLVED.** Three pair docs ([qwen3827b/mi355x.md §4.4](models/qwen3827b/mi355x.md), [deepseek41f/gb300.md §4.4](models/deepseek41f/gb300.md), [deepseek41fnvfp4/h200.md §4.5](models/deepseek41fnvfp4/h200.md)) costed a prefix-cache hit as **free** (`1 − h`) in their own prefix-caching sensitivity tables while their blended $/1M rows correctly applied [METHODOLOGY §6](METHODOLOGY.md#6-cost)'s 10 %-of-uncached rule; all three are recut to `1 − 0.9h`. No blended cell moved anywhere in the tree — every one was already built on the `0.4125 × c_in + 0.25 × c_out` identity, which *is* the 10 % rule; only the three docs' own sensitivity tables changed. Full write-up: [cost-matrix.md](matrix/cost-matrix.md#amendment-log).
+
+- **2026-09-19 — gap `X1-throughput-basis-mixed-decode-vs-sustained` RESOLVED.** An internal-consistency sweep of `pairs.json` (all 40 rows) found six pairs (`deepseek41f/gb300`, `deepseek41f/a100`, `kimik3/h200`, `kimik3/b300`, `kimik3/mi355x`, `marlin2b/gb300`) mixing the **sustained end-to-end** `out tok/s/GPU` (prefill amortised into the rate) with the **decode-only** rate [METHODOLOGY §4](METHODOLOGY.md#4-throughput) defines. Decode-only is now the uniform `pairs.json` contract for cross-pair comparability; the sustained figure survives on each affected row as `sustained_output_tokens_per_s_per_gpu`, and no pair document's own tables changed — only which of their two already-published bases `pairs.json` carries. [cost-matrix §8](matrix/cost-matrix.md#8-ranking-per-model) notes the practical effect: on the decode-only basis `kimik3/b300` sweeps every ranking column it had previously lost to `kimik3/b200`.
+
+- **2026-09-19 — gap `X7-kimik3-rtx6000-pro-16-vs-19-32-gpus` RESOLVED → 32 GPUs.** [`kimik3/rtx6000-pro.md`](models/kimik3/rtx6000-pro.md) headlined a qualified 16-card deployment (a receipted community deployment resting on an **unverified online MXFP8 weight-only overlay**) against [gpus/rtx6000-pro.md §9g](gpus/rtx6000-pro.md)'s standard-convention floor of `ceil(1,560,860,324,864 / (86.40e9 − 4e9))` = 19 cards → topology step **32**. Resolved to 32 per [METHODOLOGY §7](METHODOLOGY.md#7-methodology)'s rule against sizing on an unsupported engine path; the 16-card case is retained in full as a labelled alternative with its receipts intact. `pairs.json`, [cost-matrix.md §2–§4](matrix/cost-matrix.md), [fit-matrix.md §1/§2/§4.1](matrix/fit-matrix.md) and [kimik3/README.md](models/kimik3/README.md) were all recut; this pass closed two cells the amendment left stale (`cost-matrix.md` §7.2's break-even cell and §7.4's `res1y` cell, both still on the 16-card blended figure).
+
+- **2026-09-19, final consistency pass — small stale-figure sweep.** Three arithmetic leftovers found while cross-checking every pair doc's §0 against `pairs.json`: (1) `deepseek41f/b200`'s S4/max-throughput cell in `pairs.json` had not picked up [b200.md](models/deepseek41f/b200.md)'s own audit fix (5,676 → 4,696 tok/s/GPU), recut to $0.355–$0.828; (2) `deepseek41fnvfp4/mi355x`'s interactive/max-throughput/blended cells likewise lagged [mi355x.md](models/deepseek41fnvfp4/mi355x.md)'s own audit fix ($1.89 → $1.94, $1.06 → $1.12, blended $0.758 → $0.771); (3) several pair docs' own §0 prose (not `pairs.json`, which was already correct) had quoted the `res1y` 1-year-reserved price tier as the band's `low` end instead of `low` = cheapest reputable on-demand — fixed in `deepseek41f/h100.md`, `deepseek41f/b200.md`, `deepseek41fnvfp4/h100.md`, `deepseek41fnvfp4/a100.md`, `deepseek41fnvfp4/rtx6000-pro.md` and `marlin2b/h200.md`. `matrix/fit-matrix.md` and `matrix/cost-matrix.md`'s generated grids were already on the corrected figures in every case but one (the `mi355x` NVFP4 cells above); this file's §3 headline table's Kimi-K3 row was still on the pre-`X1` sustained basis and is recut above to the decode-only figures ($7.3926 / $2.3811).

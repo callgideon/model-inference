@@ -119,10 +119,10 @@
    "max_throughput": {
     "gpus": 8,
     "concurrency": 1024,
-    "output_tokens_per_s_per_gpu": 5676,
-    "tpot_ms": 22.6,
-    "cost_per_1m_output_usd_low": 0.294,
-    "cost_per_1m_output_usd_high": 0.685
+    "output_tokens_per_s_per_gpu": 4696,
+    "tpot_ms": 27.3,
+    "cost_per_1m_output_usd_low": 0.355,
+    "cost_per_1m_output_usd_high": 0.828
    },
    "blended_cost_per_1m_usd_low": 0.19,
    "blended_cost_per_1m_usd_high": 0.443,
@@ -134,10 +134,11 @@
    "unverified_count": 16,
    "audit": {
     "recomputed_tables": 10,
-    "errors_fixed": 11,
+    "errors_fixed": 12,
     "contradictions": [
      "B200 usable capacity: METHODOLOGY \u00a78 and gpus/b200.md \u00a72 pin 180 GB as-deployed (used throughout this document's \u00a71.2/\u00a71.3 fit tables), but this document's own primary source (vLLM PR #56686, cited in \u00a71.4) backs out \u2248185,683 MiB (\u2248181.3 GiB) of addressable device memory from nvidia-smi's peak usage at 0.92 utilization, and the PR's own text independently labels the part '183 GB each' \u2014 a 3-8% disagreement with the pinned 180 GB that is stated but not resolved (this document deliberately keeps planning at 180 GB, per METHODOLOGY \u00a78's convention of being conservative).",
-     "Prefill throughput: gpus/b200.md \u00a79.3 gives an est. row of 123,750 prefill tok/s/GPU for DeepSeek-V4.1-Flash (GEMM-only MFU formula), while this document's \u00a73.1 measures 9,267 prefill tok/s/GPU from vLLM PR #56686's actual chunked-prefill step times \u2014 13.4x lower. This document explains the gap (the GEMM-only formula omits the indexer scan, top-k selection, Engram gathers and mHC mixing that dominate this model's prefill) and states gpus/b200.md \u00a79.3 should carry the correction, but that correction was out of scope for this audit pass (which covered only deepseek41f/b200.md) and gpus/b200.md itself was not edited."
+     "Prefill throughput \u2014 RESOLVED 2026-09-19 (gap X5-b200-prefill-roofline-13x-high): gpus/b200.md \u00a79.3 held an est. row of 123,750 prefill tok/s/GPU for DeepSeek-V4.1-Flash (GEMM-only MFU formula) against this document's \u00a73.1 measurement of 9,267 prefill tok/s/GPU from vLLM PR #56686's actual chunked-prefill step times \u2014 13.4x lower, because the GEMM-only formula omits the indexer scan, top-k selection, Engram gathers and mHC mixing that dominate this model's prefill. gpus/b200.md \u00a79.3 now prints the measured 9,267 tok/s/GPU (74,135 aggregate on 8 GPUs) with that cause annotated, so the two documents agree; no cost field in this entry changes, since every one of them was already built on the measured rate.",
+     "RESOLVED 2026-09-19 (final consistency pass): max_throughput was still carrying the document's own pre-audit-fix batch-1,024 numbers (5,676 tok/s/GPU, $0.294-$0.685/1M) after deepseek41f/b200.md \u00a76.6 corrected that cell to 4,696 tok/s/GPU, TPOT 27.3 ms, $0.355-$0.828/1M (the decode-step-time formula had omitted the growing KV-read term at batch>256). Recut to match the doc's \u00a74.1 table; interactive and blended fields were already on the corrected basis and are unchanged."
     ]
    },
    "key": "deepseek41f/b200"
@@ -203,27 +204,30 @@
    "interactive": {
     "gpus": 4,
     "concurrency": 128,
-    "output_tokens_per_s_per_gpu": 887.1,
+    "output_tokens_per_s_per_gpu": 1274.9,
+    "sustained_output_tokens_per_s_per_gpu": 887.1,
+    "throughput_basis_note": "2026-09-19: output_tokens_per_s_per_gpu is now the METHODOLOGY §4 decode-only rate 128 / 0.0251 s / 4 GPUs = 1,274.9. The previous 887.1 is InferenceX's measured out tok/s/GPU, a sustained end-to-end rate over the whole request (TTFT 452 ms included), kept in sustained_output_tokens_per_s_per_gpu.",
     "tpot_ms": 25.1,
     "ttft_ms": 452,
-    "cost_per_1m_output_usd_low": 5.636,
-    "cost_per_1m_output_usd_high": 5.636
+    "cost_per_1m_output_usd_low": 3.9219,
+    "cost_per_1m_output_usd_high": 3.9219
    },
    "max_throughput": {
     "gpus": 4,
     "concurrency": 256,
     "output_tokens_per_s_per_gpu": 1242,
     "tpot_ms": 50,
+    "throughput_basis_note": "⚠️ 2026-09-19: this 1,242 is gb300.md §4.2's 1.4x extrapolation of the S1 SUSTAINED 887.1, so it inherits a sustained basis, yet it also reproduces concurrency / TPOT / gpus (256 / 0.050 / 4 = 1,280) to 3%. Left as published; the mixed basis is unresolved and S1 > S4 here as a result. TO BE VERIFIED.",
     "cost_per_1m_output_usd_low": 4.026,
     "cost_per_1m_output_usd_high": 4.026
    },
-   "blended_cost_per_1m_usd_low": 1.722,
-   "blended_cost_per_1m_usd_high": 1.722,
+   "blended_cost_per_1m_usd_low": 1.2935,
+   "blended_cost_per_1m_usd_high": 1.2935,
    "vendor_api_output_usd_per_1m": 0.6,
    "price_per_gpu_hour_low": 18,
    "price_per_gpu_hour_high": 18,
    "confidence": "measured",
-   "headline": "Runs natively today on 4 GB300 (TP4, vLLM/SGLang nightly): MXFP4 W4A8 + 890 B/token FP4 KV, 887 output tok/s/GPU at 25 ms TPOT measured, KV never binds. $5.64/1M output at OCI's $18/GPU-h \u2014 9.4x DeepSeek's own API; only ownership economics close the gap.",
+   "headline": "Runs natively today on 4 GB300 (TP4, vLLM/SGLang nightly): MXFP4 W4A8 + 890 B/token FP4 KV, 1,275 decode-only output tok/s/GPU at 25 ms TPOT (887 sustained end-to-end, measured), KV never binds. $3.92/1M output decode-only at OCI's $18/GPU-h ($5.64 sustained) \u2014 6.5x DeepSeek's own API; only ownership economics close the gap.",
    "unverified_count": 17,
    "audit": {
     "recomputed_tables": 13,
@@ -245,8 +249,8 @@
    "parallelism": "TP4 x DP2 (attention-DP) with EP8 on one HGX A100 8-GPU NVSwitch node; Engram tables host-offloaded (--engram-config cpu_offload); no multi-node (EP over 200 Gb/s IB is a trap)",
    "weight_format_used": "MXFP4 experts -> Marlin W4A16 dequant-to-BF16; FP8 32x32 UE8M0 dense -> FP8-Marlin W8A16; memory win kept, compute win lost (sm_80 has no FP8/FP4 tensor cores)",
    "attention_kernel": "Community SM80 kernels: custom candidate-MQA (candidate_mqa_sm80.py) + patched sparse_attn_indexer, VLLM_SM80_CANDIDATE_MQA=1. No FlashMLA/DSA/FA3/FA4 on sm_80; FA2 exists but this model's gather-based sparse_attn is not a FlashAttention-shaped operator.",
-   "max_concurrency_8k": 15473,
-   "max_concurrency_128k": 1159,
+   "max_concurrency_8k": 12886,
+   "max_concurrency_128k": 965,
    "interactive": {
     "gpus": 8,
     "concurrency": 128,
@@ -261,6 +265,7 @@
     "concurrency": 256,
     "output_tokens_per_s_per_gpu": 380.1,
     "tpot_ms": 45.6,
+    "throughput_basis_note": "2026-09-19: 380.1 is already the METHODOLOGY §4 decode-only rate — a100.md §3's measured aggregate (3,040.71 tok/s / 8) on an 80-in / 1,024-out workload, so it is decode throughput, NOT a sustained prefill+decode figure. It does not reproduce concurrency / TPOT / gpus (256 / 0.0456 / 8 = 702) for a different reason: at requested concurrency 256 the engine admits only ~128 (a100.md §3 records running 127.55 / waiting 127.14) and 45.6 ms is that row's P95 TPOT, not its mean. Left unchanged; the mismatched fields are concurrency and tpot_ms, and rewriting the rate would overwrite a measurement. ⚠️ TO BE VERIFIED: re-cut this row at the admitted batch.",
     "cost_per_1m_output_usd_low": 1.162,
     "cost_per_1m_output_usd_high": 2.507
    },
@@ -387,8 +392,9 @@
    "parallelism": "TP8 in one HGX node, EP=1, plus --engram-config '{\"cpu_offload\":true}'. 4 GPUs cannot hold 527.27 GB. Latent KV cannot be head-sharded (num_key_value_heads=1) so it is replicated per TP rank; embed, MoE routers, mHC and norms (1.675 GB) are also replicated. Without Engram offload TP8 leaves 0.62 GB/GPU of KV (5 seats at 128K); TP16 over InfiniBand is the alternative and costs METHODOLOGY's 20-40% multi-node comm penalty.",
    "weight_format_used": "NVFP4 dequant-to-BF16 (Marlin W4A16) \u2014 memory win kept, compute win lost; sm_90 has no FP4 tensor core. MTP/DSpark experts take a separate MXFP4 Marlin path in the same process (unvalidated). FP8/MXFP8 remainder (attention, shared experts, 188.8 GiB Engram) runs block-scaled FP8 with software FP32 promotion.",
    "attention_kernel": "vLLM FLASHMLA_SPARSE_DSV41 (gate major in [9,10], block size 64 on SM90); SGLang --attention-backend dsa -> flashmla_sparse prefill / fa3 decode. FLASHMLA_MEGA_ATTN_DSV41 (the nvfp4_ds_mla KV path) and FLASHINFER_MLA_SPARSE_DSV41 are SM100+ only. FlashMLA README says V4.1 sparse decode is SM100-only while vLLM admits major 9 \u2014 contested, \u26a0\ufe0f. FA2/FA3/FA4 matter only for the ViT.",
-   "max_concurrency_8k": 2598,
-   "max_concurrency_128k": 217,
+   "max_concurrency_8k": 891,
+   "max_concurrency_128k": 61,
+   "kv_bytes_per_token_note": "KV on sm_90 is BF16 3,200 B/token, not the architectural 890 B: nvfp4_ds_mla resolves only through FLASHMLA_MEGA_ATTN_DSV41, gated on capability.major == 10 -> sm_100/sm_103. Resolved 2026-09-19, gap C5-890b-fp4-kv-kernel-gate; see matrix/fit-matrix.md 6.3 and models/deepseek41f/h100.md 1.4 (measured KV pool). Previous values 2598 / 217 assumed 890 B. RESOLVED 2026-09-19 (gap C2-deepseek-swa-fixed-state, final consistency pass): this cell now matches the pair document's 1.3 table, which uses METHODOLOGY 8's 2,906,112 B (43-ring, MTP-on) fixed-state convention throughout -> 891 / 61. Previously 898 (this file's now-superseded 2,703,360 B MTP-off convention); the doc itself flagged this file as the one place still on the old denominator.",
    "interactive": {
     "gpus": 8,
     "concurrency": 256,
@@ -653,7 +659,7 @@
     "recomputed_tables": 13,
     "errors_fixed": 0,
     "contradictions": [
-     "METHODOLOGY \u00a78 pins A100 HBM at 80 GB (decimal); gpus/a100.md \u00a72 instead derives 80 GiB = 85.90 GB from nvidia-smi's 81,920 MiB figure and builds its own \u00a79 roofline tables off that larger number \u2014 a 5.90 GB/GPU (47.2 GB/8-GPU-node) disagreement, worth ~2.8x the entire no-offload KV budget. The audited document (deepseek41fnvfp4/a100.md \u00a71.1) already surfaces this explicitly and does not silently pick a side (uses METHODOLOGY's 80 GB for its primary tables, shows 85.90 GB as a separately labelled sensitivity case) \u2014 reconfirmed as a genuine foundation-doc-level contradiction during this audit, not something I needed to resolve within the target file."
+     "RESOLVED 2026-09-19 (gap C1-a100-capacity-basis): A100 plans on 80 GB decimal, usable_hbm = 0.90 x 80 GB = 72.0 GB = 67.06 GiB/GPU (576 GB per 8-GPU node), per METHODOLOGY \u00a78 and gpus/a100.md \u00a72, which demoted nvidia-smi's 81,920 MiB = 80 GiB = 85.90 GB to a labelled TO BE VERIFIED +7.4% sensitivity. This pair needed no numeric change: deepseek41fnvfp4/a100.md computed every primary table on 80 GB already; its \u00a71.3 85.90 GB table is now the sensitivity and its \u00a71.1 disagreement box is a one-line pointer to the resolution."
     ]
    },
    "key": "deepseek41fnvfp4/a100"
@@ -721,33 +727,34 @@
    "interactive": {
     "gpus": 4,
     "concurrency": 128,
-    "output_tokens_per_s_per_gpu": 1265.2,
-    "tpot_ms": 25.29,
+    "output_tokens_per_s_per_gpu": 1229.9,
+    "tpot_ms": 26.02,
     "ttft_ms": 102,
-    "cost_per_1m_output_usd_low": 1.89,
-    "cost_per_1m_output_usd_high": 1.89
+    "cost_per_1m_output_usd_low": 1.94,
+    "cost_per_1m_output_usd_high": 1.94
    },
    "max_throughput": {
     "gpus": 4,
     "concurrency": 256,
-    "output_tokens_per_s_per_gpu": 2246.3,
-    "tpot_ms": 28.49,
-    "cost_per_1m_output_usd_low": 1.06,
-    "cost_per_1m_output_usd_high": 1.06
+    "output_tokens_per_s_per_gpu": 2137.3,
+    "tpot_ms": 29.94,
+    "cost_per_1m_output_usd_low": 1.12,
+    "cost_per_1m_output_usd_high": 1.12
    },
-   "blended_cost_per_1m_usd_low": 0.758,
-   "blended_cost_per_1m_usd_high": 0.758,
+   "blended_cost_per_1m_usd_low": 0.771,
+   "blended_cost_per_1m_usd_high": 0.771,
    "vendor_api_output_usd_per_1m": 0.6,
    "price_per_gpu_hour_low": 8.6,
    "price_per_gpu_hour_high": 8.6,
    "confidence": "not-runnable",
-   "headline": "Fits at TP4 (121 GB KV budget) but no engine serves it today: SGLang's NVFP4-to-MXFP4 requant has no DSV4.1 gfx950 support (PR #39186 closed) and vLLM-ROCm falls back to BF16 dequant emulation. 17 GB bigger and 4.9% slower than the base MXFP4 build. Use the base.",
+   "headline": "Fits at TP4 (121 GB KV budget) but no engine serves it today: SGLang's NVFP4-to-MXFP4 requant has no DSV4.1 gfx950 support (PR #39186 closed) and vLLM-ROCm falls back to BF16 dequant emulation. 17 GB bigger and 7.5% slower than the base MXFP4 build. Use the base.",
    "unverified_count": 24,
    "audit": {
     "recomputed_tables": 9,
-    "errors_fixed": 1,
+    "errors_fixed": 2,
     "contradictions": [
-     "No new contradiction found. \u00a71.1 of the audited doc already surfaces and resolves (not silently) a real disagreement between METHODOLOGY.md \u00a78 ('the FP4 KV cache is dequantised in software... so it is not Blackwell-only') and gpus/mi355x.md \u00a72/architecture cross-refs (the FP4 KV kernel nvfp4_ds_mla is capability.major==10 only, i.e. SM100-only, with no gfx950 kernel) -- the doc correctly plans at the GPU-doc's FP8-KV figure and states both sources."
+     "No new contradiction found. \u00a71.1 of the audited doc already surfaces and resolves (not silently) a real disagreement between METHODOLOGY.md \u00a78 ('the FP4 KV cache is dequantised in software... so it is not Blackwell-only') and gpus/mi355x.md \u00a72/architecture cross-refs (the FP4 KV kernel nvfp4_ds_mla is capability.major==10 only, i.e. SM100-only, with no gfx950 kernel) -- the doc correctly plans at the GPU-doc's FP8-KV figure and states both sources.",
+     "RESOLVED 2026-09-19 (final consistency pass): interactive and max_throughput still carried the document's own pre-audit-fix figures ($1.89/$1.06, 1,265.2/2,246.3 tok/s/GPU) after deepseek41fnvfp4/mi355x.md \u00a70/\u00a74.2 corrected the decode-bytes table (replicated KV read had been divided by the TP degree) to $1.94/$1.12, 1,229.9/2,137.3 tok/s/GPU, TPOT 26.02/29.94 ms. Recut to match; blended recut 0.758\u21920.771 per \u00a74.4's audit note."
     ]
    },
    "key": "deepseek41fnvfp4/mi355x"
@@ -1021,7 +1028,7 @@
     "recomputed_tables": 16,
     "errors_fixed": 0,
     "contradictions": [
-     "METHODOLOGY \u00a78 pins A100 SXM4 HBM at 80 GB decimal 'as deployed', while research/gpus/a100.md \u00a72 does all its memory arithmetic on an 80 GiB (nvidia-smi 81,920 MiB \u2248 85.9 GB) basis that gpus/a100.md itself marks \u26a0\ufe0f TO BE VERIFIED. The two bases differ by 7.4% and propagate into every usable_hbm/kv_budget/max_concurrency number in both documents (e.g. gpus/a100.md \u00a79's Qwen3.8-27B FP8+FP8KV 1-GPU max_concurrency=99 vs 87 on the decimal basis). research/models/qwen3827b/a100.md \u00a71.0 already surfaces this explicitly and states it plans on the conservative 80 GB decimal basis rather than silently picking one \u2014 this audit re-verified that disclosure and its cross-check arithmetic on both bases and found both correct; the underlying METHODOLOGY-vs-gpus/a100.md conflict itself remains unresolved and is outside this file's scope to fix."
+     "RESOLVED 2026-09-19 (gap C1-a100-capacity-basis): 80 GB decimal is the single A100 planning basis tree-wide, usable_hbm 72.0 GB = 67.06 GiB/GPU; the nvidia-smi 81,920 MiB = 80 GiB = 85.90 GB reading is an unsourced binary derivation kept only as a labelled TO BE VERIFIED +7.4% sensitivity (METHODOLOGY \u00a78, gpus/a100.md \u00a72). gpus/a100.md \u00a79 was recomputed onto the decimal budget (its Qwen3.8-27B FP8+FP8KV 1-GPU cell 99 -> 87 at S=1). qwen3827b/a100.md already planned on 80 GB decimal, so no number in this pair moved; its \u00a71.0 disagreement box became a one-line pointer and \u00a76 risk 5 is marked resolved."
     ]
    },
    "key": "qwen3827b/a100"
@@ -1113,7 +1120,7 @@
     "recomputed_tables": 14,
     "errors_fixed": 0,
     "contradictions": [
-     "mi355x.md's TTFT-90%-hit column (all three \u00a73.3 tables), the \u00a74.4 'Effect of prefix caching' table, and the '$0.080 \u2192 $0.056' blended-cost claim in \u00a74.4's prose compute a prefix-cache hit as literally free (cost multiplier 1-h). METHODOLOGY.md \u00a76 explicitly says to assume a cache hit costs 10% of the uncached prefill cost (multiplier 1-0.9h) unless measured. Under the correct METHODOLOGY rule: 90%-hit effective prefill tok/s should be ~188,400 (doc says 357,963), $/1M input at 90% hit should be ~$0.0126 (doc says $0.0067), and the 90%-hit blended cost should be ~$0.062 (doc says $0.056). The 'free' convention is applied consistently across every affected cell (not a one-off slip) and is undisclosed -- \u00a74.2's blended baseline elsewhere correctly applies and cites the 10% rule 'verbatim'. Left unedited; flagged here and in the doc's new audit log rather than silently choosing a convention."
+     "mi355x.md's TTFT-90%-hit column (all three \u00a73.3 tables), the \u00a74.4 'Effect of prefix caching' table, and the '$0.080 \u2192 $0.056' blended-cost claim in \u00a74.4's prose compute a prefix-cache hit as literally free (cost multiplier 1-h). METHODOLOGY.md \u00a76 explicitly says to assume a cache hit costs 10% of the uncached prefill cost (multiplier 1-0.9h) unless measured. Under the correct METHODOLOGY rule: 90%-hit effective prefill tok/s should be ~188,400 (doc says 357,963), $/1M input at 90% hit should be ~$0.0126 (doc says $0.0067), and the 90%-hit blended cost should be ~$0.062 (doc says $0.056). The 'free' convention is applied consistently across every affected cell (not a one-off slip) and is undisclosed -- \u00a74.2's blended baseline elsewhere correctly applies and cites the 10% rule 'verbatim'. RESOLVED 2026-09-19 (gap C8): the doc now costs hits at 1-0.9h -- §4.4 reads 65,084 / 188,400 eff. prefill tok/s and $0.0367 / $0.0127 per 1M input at 50%/90% hit, blended $0.080 -> $0.062; the §3.3 TTFT columns keep 1-h (latency only) and say so in the column header."
     ]
    },
    "key": "qwen3827b/mi355x"
@@ -1137,8 +1144,8 @@
     "output_tokens_per_s_per_gpu": 0.28,
     "tpot_ms": 113.1,
     "ttft_ms": 440,
-    "cost_per_1m_output_usd_low": 3217.55,
-    "cost_per_1m_output_usd_high": 6917.74
+    "cost_per_1m_output_usd_low": 3217.07,
+    "cost_per_1m_output_usd_high": 6916.69
    },
    "max_throughput": {
     "gpus": 32,
@@ -1160,7 +1167,8 @@
     "recomputed_tables": 9,
     "errors_fixed": 1,
     "contradictions": [
-     "research/gpus/h100.md \u00a72 states Kimi-K3 needs \u226524 H100 (3 nodes) to fit, using the naive checkpoint_bytes/n_gpus share (65.0 GB/GPU at N=24). research/models/kimik3/h100.md \u00a71.2-1.3 (backed by the measured Marlin resident-weight multiplier from two independent SGLang runs) shows N=24 is actually 79.5 GB/GPU against an 80 GB card \u2014 it does not fit, and 24 is not even a valid TP size (7168/24 is not integral) \u2014 the true minimum is 32 GPUs. This was already flagged inline in kimik3/h100.md \u00a71.3 as a correction to gpus/h100.md, but gpus/h100.md itself has not been updated, so the two foundation docs still disagree on Kimi-K3's minimum H100 count (24 vs 32). Left unresolved per instructions rather than silently edited."
+     "research/gpus/h100.md \u00a72 states Kimi-K3 needs \u226524 H100 (3 nodes) to fit, using the naive checkpoint_bytes/n_gpus share (65.0 GB/GPU at N=24). research/models/kimik3/h100.md \u00a71.2-1.3 (backed by the measured Marlin resident-weight multiplier from two independent SGLang runs) shows N=24 is actually 79.5 GB/GPU against an 80 GB card \u2014 it does not fit, and 24 is not even a valid TP size (7168/24 is not integral) \u2014 the true minimum is 32 GPUs. This was already flagged inline in kimik3/h100.md \u00a71.3 as a correction to gpus/h100.md, but gpus/h100.md itself has not been updated, so the two foundation docs still disagree on Kimi-K3's minimum H100 count (24 vs 32). Left unresolved per instructions rather than silently edited. RESOLVED 2026-09-19 (gap C6-kimi-k3-minimum-gpu-counts): gpus/h100.md §2 now states ≥ 32 H100 (4 HGX nodes, TP32/EP32) in both its Kimi-K3 row and the bullet below it, with the KV budget and seat counts recomputed at N=32 in python3 (615.10 GB = 572.86 GiB → 260/151 on the naive share; 127.04 GB = 118.32 GiB → 53/31 on the measured 64.03 GB/GPU resident), and kimik3/h100.md §1.3's per-rank 21 @ 8K / 2 @ 128K remains the planning pair. min_gpus here was already 32 and did not change; the matching A100 holdout (kimik3/a100.min_gpus 24 → 32) was fixed in the same pass.",
+     "RESOLVED 2026-09-19 (final consistency pass): interactive.cost_per_1m_output_usd_low/high were 3217.55/6917.74, a 0.015% stale artefact of an unrounded 113.115 ms TPOT that kimik3/h100.md's own audit log (gap X3) already superseded with 113.1 ms -> $3,217.07/$6,916.69 in its §4.1 table, while claiming (inaccurately) that pairs.json already matched. Recut to 3217.07/6916.69; research/README.md §6 footnote 1 recut in the same pass."
     ]
    },
    "key": "kimik3/h100"
@@ -1181,11 +1189,13 @@
    "interactive": {
     "gpus": 16,
     "concurrency": 8,
-    "output_tokens_per_s_per_gpu": 17.36,
+    "output_tokens_per_s_per_gpu": 21.54,
+    "sustained_output_tokens_per_s_per_gpu": 17.36,
+    "throughput_basis_note": "2026-09-19: output_tokens_per_s_per_gpu is now the METHODOLOGY §4 decode-only rate 8 / 0.02321 s / 16 GPUs = 21.54 (= the vessl card's 43.1 tok/s/user x 8 / 16). The previous 17.36 is that card's 277.7 tok/s aggregate divided by 16 — a sustained end-to-end rate over 1,530 in / 256 out including the 924 ms TTFT — kept in sustained_output_tokens_per_s_per_gpu.",
     "tpot_ms": 23.21,
     "ttft_ms": 2643,
-    "cost_per_1m_output_usd_low": 63.86,
-    "cost_per_1m_output_usd_high": 126.63
+    "cost_per_1m_output_usd_low": 51.4488,
+    "cost_per_1m_output_usd_high": 102.0208
    },
    "max_throughput": {
     "gpus": 16,
@@ -1195,19 +1205,19 @@
     "cost_per_1m_output_usd_low": 44.33,
     "cost_per_1m_output_usd_high": 87.91
    },
-   "blended_cost_per_1m_usd_low": 19.26,
-   "blended_cost_per_1m_usd_high": 38.19,
+   "blended_cost_per_1m_usd_low": 16.1572,
+   "blended_cost_per_1m_usd_high": 32.0377,
    "vendor_api_output_usd_per_1m": 15,
    "price_per_gpu_hour_low": 3.99,
    "price_per_gpu_hour_high": 7.912,
    "confidence": "estimate",
-   "headline": "Runnable on 16xH200 (2 nodes, TP16+EP16); MXFP4 runs via Marlin W4A16 dequant - no FP4 on sm_90. Measured 17.4 out tok/s/GPU at 23 ms TPOT with DSpark; decode is latency-bound (2-20% MBU). $64-$127/1M output vs Moonshot's $15 API. Break-even $2.44-$3.51/GPU-h beats no published H200 price.",
+   "headline": "Runnable on 16xH200 (2 nodes, TP16+EP16); MXFP4 runs via Marlin W4A16 dequant - no FP4 on sm_90. Measured 21.5 decode-only out tok/s/GPU at 23 ms TPOT with DSpark (17.4 sustained end-to-end); decode is latency-bound (2-20% MBU). $51-$102/1M output decode-only ($64-$127 sustained) vs Moonshot's $15 API. Break-even $2.44-$3.51/GPU-h beats no published H200 price.",
    "unverified_count": 12,
    "audit": {
     "recomputed_tables": 15,
     "errors_fixed": 1,
     "contradictions": [
-     "research/models/kimik3/h200.md \u00a71.3 gives 16\u00d7H200 max concurrency at 8K/32K/128K as 34\u201350/12\u201325/3\u20136 (per-GPU MLA-KV-replicated, KDA-state-divided-by-attnTP accounting), which numerically contradicts research/gpus/h200.md \u00a72's own summary table for the same pair (169/148/98, aggregate-budget accounting). I independently recomputed both formulas in python3: gpus/h200.md \u00a72's aggregate-budget formula does reproduce its own 169/148/98, but it divides the fixed per-request KDA state by n_gpus instead of leaving MLA KV unsharded (replicated per TP rank, since no DCP is used) and dividing only the KDA state by attention-TP width \u2014 which architecture.md \u00a75.3 states explicitly ('DP, EP, and DCP do not shard [the KDA state pool]; only attention-TP width, SSM dtype, and cache strategy change the per-GPU bill'). The per-GPU accounting in kimik3/h200.md \u00a71.3 is the one consistent with METHODOLOGY \u00a72-3 and architecture.md \u00a75.3, and kimik3/h200.md already documents this disagreement explicitly with its own reasoning (not silent). Per the task instructions this is reported here rather than resolved by editing gpus/h200.md, which is out of scope for this pass and still carries the higher, uncorrected 169/148/98 figures."
+     "research/models/kimik3/h200.md \u00a71.3 gives 16\u00d7H200 max concurrency at 8K/32K/128K as 34\u201350/12\u201325/3\u20136 (per-GPU MLA-KV-replicated, KDA-state-divided-by-attnTP accounting), which numerically contradicts research/gpus/h200.md \u00a72's own summary table for the same pair (169/148/98, aggregate-budget accounting). I independently recomputed both formulas in python3: gpus/h200.md \u00a72's aggregate-budget formula does reproduce its own 169/148/98, but it divides the fixed per-request KDA state by n_gpus instead of leaving MLA KV unsharded (replicated per TP rank, since no DCP is used) and dividing only the KDA state by attention-TP width \u2014 which architecture.md \u00a75.3 states explicitly ('DP, EP, and DCP do not shard [the KDA state pool]; only attention-TP width, SSM dtype, and cache strategy change the per-GPU bill'). The per-GPU accounting in kimik3/h200.md \u00a71.3 is the one consistent with METHODOLOGY \u00a72-3 and architecture.md \u00a75.3, and kimik3/h200.md already documents this disagreement explicitly with its own reasoning (not silent). RESOLVED 2026-09-19 (gap X6-kimik3-h200-concurrency-5x-disagreement) in favour of the per-GPU replicated reading: METHODOLOGY §3 now states that kv_budget is multiplied by n_gpus only when KV is sharded across ranks, and gpus/h200.md §2's Kimi-K3 row has been recut to 98/42/12 on the pinned METHODOLOGY §8 inputs (1,560.9 GB, mem_frac 0.90, 4 GiB/GPU activation workspace), with 169/148/98 retained beside it and labelled as the aggregate-budget reading that would require DCP/DP-attention, which no published H200 recipe configures. kimik3/h200.md §1.3's 34–50/12–25/3–6 is the same reading at the published SGLang profile (mem_frac 0.85) on the measured Marlin-resident 1,644 GB. max_concurrency_8k 74 / max_concurrency_128k 6 here are §1.3's S=4 bf16-state FP8-KV column, i.e. already the replicated reading — verified 2026-09-19, unchanged. Remaining ⚠️: confirm against a booted engine's reported KV pool (benchmark B2)."
     ]
    },
    "key": "kimik3/h200"
@@ -1273,27 +1283,30 @@
    "interactive": {
     "gpus": 8,
     "concurrency": 111,
-    "output_tokens_per_s_per_gpu": 198.9,
+    "output_tokens_per_s_per_gpu": 278.06,
+    "sustained_output_tokens_per_s_per_gpu": 198.9,
+    "throughput_basis_note": "2026-09-19: output_tokens_per_s_per_gpu is now the METHODOLOGY §4 decode-only rate 111 / 0.0499 s / 8 GPUs = 278.06. The previous 198.9 is b300.md §4.2's SUSTAINED request-cycle rate (batch / (TTFT + OSL x TPOT) x OSL, batch-wave TTFT 10,139 ms) and is kept in sustained_output_tokens_per_s_per_gpu.",
     "tpot_ms": 49.9,
     "ttft_ms": 10139,
-    "cost_per_1m_output_usd_low": 10.336,
-    "cost_per_1m_output_usd_high": 20.951
+    "cost_per_1m_output_usd_low": 7.3926,
+    "cost_per_1m_output_usd_high": 14.985
    },
    "max_throughput": {
     "gpus": 8,
     "concurrency": 256,
-    "output_tokens_per_s_per_gpu": 321.6,
+    "output_tokens_per_s_per_gpu": 569.4,
+    "sustained_output_tokens_per_s_per_gpu": 321.6,
     "tpot_ms": 56.2,
-    "cost_per_1m_output_usd_low": 6.391,
-    "cost_per_1m_output_usd_high": 12.955
+    "cost_per_1m_output_usd_low": 3.6101,
+    "cost_per_1m_output_usd_high": 7.3177
    },
-   "blended_cost_per_1m_usd_low": 3.117,
-   "blended_cost_per_1m_usd_high": 6.318,
+   "blended_cost_per_1m_usd_low": 2.3811,
+   "blended_cost_per_1m_usd_high": 4.8265,
    "vendor_api_output_usd_per_1m": 15,
    "price_per_gpu_hour_low": 7.4,
    "price_per_gpu_hour_high": 15,
    "confidence": "estimate",
-   "headline": "Kimi-K3's reference platform: fits one 8xB300 node at 195 GB/GPU, runs the native MXFP4 checkpoint at W4A8, TP8+DCP8. S1 $10.34-20.95/1M out (blended $3.12-6.32), S4 $6.39-12.96. Beats the Moonshot API at Hyperstack's $7.40/GPU-h; loses to it at OCI's $15.00 for interactive traffic.",
+   "headline": "Kimi-K3's reference platform: fits one 8xB300 node at 195 GB/GPU, runs the native MXFP4 checkpoint at W4A8, TP8+DCP8. S1 $7.39-14.99/1M out decode-only ($10.34-20.95 sustained; blended $2.38-4.83), S4 $3.61-7.32. Beats the Moonshot API at Hyperstack's $7.40/GPU-h; loses to it at OCI's $15.00 for interactive traffic.",
    "unverified_count": 18,
    "audit": {
     "recomputed_tables": 11,
@@ -1355,9 +1368,9 @@
    "path": "research/models/kimik3/a100.md",
    "fits": true,
    "supported_now": false,
-   "min_gpus": 24,
+   "min_gpus": 32,
    "recommended_gpus": 32,
-   "parallelism": "TP32 across 4 HGX A100 nodes (attn-TP 32), multi-node over 200 Gb/s IB. No EP>8, no DP-attention, no DCP on sm_80; MLA KV stays TP-replicated. Minimum fit is TP24 (3 nodes) with only 1.96 GB/GPU KV budget.",
+   "parallelism": "TP32 across 4 HGX A100 nodes (attn-TP 32), multi-node over 200 Gb/s IB. No EP>8, no DP-attention, no DCP on sm_80; MLA KV stays TP-replicated. Minimum fit is TP32 (4 nodes): 24 is not a legal TP size (7168 ∤ 24; gcd(96, 7168) = 32) and is not in METHODOLOGY §3's topology set {1, 2, 4, 8, 16, 32, 72}.",
    "weight_format_used": "MXFP4 experts stay packed in HBM and dequantise in-kernel via Marlin W4A16 (memory win, zero compute win); 57.19 B non-expert params run native BF16. No engine publishes this path on sm_80 and vLLM #35922 reports the Marlin MoE FP4 path crashing on A100 \u2014 contested, see doc \u00a76.1.",
    "attention_kernel": "TRITON_MLA for the 24 Gated-MLA layers (only Any-capability MLA backend) + Triton for the 69 KDA layers (fused CUDA/FlashInfer KDA decode gate on cc 90/100/120); FA2 for the MoonViT-V2 encoder. No FA3/FA4, no FlashMLA, no FlashInfer-MLA, no TOKENSPEED_MLA on sm_80.",
    "max_concurrency_8k": 99,
@@ -1385,15 +1398,16 @@
    "price_per_gpu_hour_low": 1.59,
    "price_per_gpu_hour_high": 3.431,
    "confidence": "not-runnable",
-   "headline": "Kimi-K3 does not serve on A100 today: no vLLM/SGLang/TRT-LLM sm_80 path, no FlashMLA, no fused KDA. Hardware fit needs 24 GPUs min / 32 recommended (TP32, 4 nodes). Est. best case 30 tok/s/GPU \u2014 5.2x worse per GPU than measured B300 \u2014 and $10.51-$22.67/1M blended vs Moonshot's $4.99 API.",
+   "headline": "Kimi-K3 does not serve on A100 today: no vLLM/SGLang/TRT-LLM sm_80 path, no FlashMLA, no fused KDA. Hardware fit needs 32 GPUs min (24 is not a legal TP size) / 32 recommended (TP32, 4 nodes). Est. best case 30 tok/s/GPU \u2014 5.2x worse per GPU than measured B300 \u2014 and $10.51-$22.67/1M blended vs Moonshot's $4.99 API.",
    "unverified_count": 16,
    "audit": {
     "recomputed_tables": 12,
     "errors_fixed": 8,
     "contradictions": [
-     "\u00a71.0: METHODOLOGY \u00a78 pins A100 at 80 GB (decimal); gpus/a100.md \u00a72 pins nvidia-smi's 80 GiB \u2248 85.9 GB (itself marked TO BE VERIFIED, unsourced). Pre-existing, already surfaced in the document (not silently resolved) \u2014 it plans with 80 GB and states the alternative moves max_concurrency(8K,FP8)@32GPU from 99 to ~128; confirmed correct by recomputation (128.17\u2192128).",
+     "\u00a71.0: RESOLVED 2026-09-19 (gap C1-a100-capacity-basis) to 80 GB decimal, usable_hbm 72.0 GB = 67.06 GiB/GPU (METHODOLOGY \u00a78, gpus/a100.md \u00a72); the nvidia-smi 80 GiB \u2248 85.9 GB reading is a labelled TO BE VERIFIED +7.4% sensitivity, not a competing basis. kimik3/a100.md planned with 80 GB already, so 32 GPUs minimum and max_concurrency(8K,FP8)@32GPU = 99 stand; the ~128 figure survives only as that sensitivity.",
      "\u00a76.2: gpus/a100.md \u00a79 ('The repo's models on A100') states a BF16-dequant sizing of '5.56 TB \u2248 72 GPUs (9 nodes)' for Kimi-K3; kimik3/a100.md uses the as-shipped MXFP4-packed 1,560.9 GB (Marlin dequantises in-register, never writes BF16 to HBM) and separately notes the BF16-path GPU count itself is off (83 GPUs at 67 GB/GPU usable, not 72 GB/GPU raw \u2014 confirmed by recomputation, 5,560/67=82.99\u219283). Pre-existing, already surfaced, not silently resolved.",
-     "gpus/a100.md \u00a79's worked fit table for the repo's models states 'usable_hbm 72.0 GiB/GPU, activation workspace 4 GiB/GPU'; kimik3/a100.md's \u00a71 formula (per the \u00a71.0 disagreement) instead uses 72.0 GB (decimal) usable with a 5 GB activation workspace (stated est., justified separately). The two documents' Kimi-K3-on-A100 fit numbers are not directly interchangeable; this was not previously called out explicitly in kimik3/a100.md and is now flagged in the audit log rather than silently reconciled."
+     "gpus/a100.md \u00a79's worked fit table for the repo's models states 'usable_hbm 72.0 GiB/GPU, activation workspace 4 GiB/GPU'; kimik3/a100.md's \u00a71 formula (per the \u00a71.0 disagreement) instead uses 72.0 GB (decimal) usable with a 5 GB activation workspace (stated est., justified separately). The two documents' Kimi-K3-on-A100 fit numbers are not directly interchangeable; this was not previously called out explicitly in kimik3/a100.md and is now flagged in the audit log rather than silently reconciled.",
+     "2026-09-19 (gap C6-kimi-k3-minimum-gpu-counts): min_gpus 24 → 32 and the headline/parallelism fields amended to '32 GPUs min (24 is not a legal TP size)'. 24 is not constructible as a TP size in vLLM or SGLang (7168 ∤ 24; gcd(96 heads, 7168 hidden) = 32) and is outside METHODOLOGY §3's topology set {1, 2, 4, 8, 16, 32, 72}; kimik3/h100.md §1.2-1.3's measured Marlin resident-weight multiplier independently puts N=24 at 79.5 GB/GPU against an 80 GB card before any activation workspace. recommended_gpus was already 32 and no capacity, throughput or cost figure in this entry changed (all were computed at 32 GPUs). Matches gpus/h100.md §2, gpus/a100.md §9, matrix/fit-matrix.md and models/kimik3/README.md, all resolved to 32/32 in the same pass."
     ]
    },
    "key": "kimik3/a100"
@@ -1404,43 +1418,44 @@
    "path": "research/models/kimik3/rtx6000-pro.md",
    "fits": true,
    "supported_now": true,
-   "min_gpus": 16,
-   "recommended_gpus": 16,
-   "parallelism": "TP16 + DCP16 in one chassis over 4x PCIe Gen5 switches; no NVLink, no EP, no PP, no DP. METHODOLOGY 3 (0.90 usable) would demand 19 cards -> clean step 32, but 32 = two chassis with no GPU fabric and is not a design point. 8 cards fit only the community 2-bit QSRT-K2 requant, at concurrency 1.",
+   "min_gpus": 32,
+   "recommended_gpus": 32,
+   "support_caveat": "a 16-card fit exists only with an unverified community MXFP8 weight-only overlay; gpus/rtx6000-pro.md 9g's standard-convention floor is 19 cards, topology step 32",
+   "parallelism": "TP32 + DCP32, the first topology step above METHODOLOGY 3's 19-card arithmetic floor (ceil(1,560.86e9/(86.40e9-4e9)) = 19); 32 cards = two chassis with no GPU fabric, so the shape is a planning figure, not a qualified deployment. Alternatives, both labelled: 16 cards TP16+DCP16 in one chassis ONLY with the unverified community online MXFP8 weight-only overlay (native is 97.55 GB/GPU against a 96 GB card), and 8 cards ONLY with the community 2-bit QSRT-K2 requant, at concurrency 1.",
    "weight_format_used": "MXFP4 experts executed as W4A16 dequant-in-kernel (B12X SM12x fused MoE; upstream vLLM lands on Marlin W4A16 for the same reason) PLUS an online MXFP8 weight-only overlay on the KDA/MLA q/k/v/b/f_a projections and the vision tower. Without the overlay 1,560.86 GB / 16 = 97.55 GB/GPU does not fit a 96 GB card at all. No native FP4 tensor-core MoE path.",
    "attention_kernel": "B12X SM12x dense MLA decode + FlashAttention-2 MLA prefill (upstream falls back to TRITON_MLA; TOKENSPEED_MLA/CUTLASS_MLA/FLASHINFER_MLA are all 10.x-gated). Triton chunk_kda prefill + native fused CUDA KDA decode (is_device_capability_family(120)). No FlashMLA, no FA3/FA4, no trtllm-gen FMHA, and no FlashInfer fused_kda_decode (B200/B300 only) on sm_120.",
-   "max_concurrency_8k": 12,
-   "max_concurrency_128k": 11,
+   "max_concurrency_8k": 455,
+   "max_concurrency_128k": 265,
    "interactive": {
-    "gpus": 16,
-    "concurrency": 11,
-    "output_tokens_per_s_per_gpu": 13.86,
-    "tpot_ms": 49.6,
-    "ttft_ms": 12160,
-    "cost_per_1m_output_usd_low": 36.08,
-    "cost_per_1m_output_usd_high": 83.05
+    "gpus": 32,
+    "concurrency": 29,
+    "output_tokens_per_s_per_gpu": 18.36,
+    "tpot_ms": 49.4,
+    "ttft_ms": 16022,
+    "cost_per_1m_output_usd_low": 27.24,
+    "cost_per_1m_output_usd_high": 62.69
    },
    "max_throughput": {
-    "gpus": 16,
-    "concurrency": 12,
-    "output_tokens_per_s_per_gpu": 14.33,
-    "tpot_ms": 52.3,
-    "cost_per_1m_output_usd_low": 34.89,
-    "cost_per_1m_output_usd_high": 80.31
+    "gpus": 32,
+    "concurrency": 465,
+    "output_tokens_per_s_per_gpu": 98.1,
+    "tpot_ms": 148.1,
+    "cost_per_1m_output_usd_low": 5.1,
+    "cost_per_1m_output_usd_high": 11.73
    },
-   "blended_cost_per_1m_usd_low": 9.91,
-   "blended_cost_per_1m_usd_high": 22.81,
+   "blended_cost_per_1m_usd_low": 7.7,
+   "blended_cost_per_1m_usd_high": 17.72,
    "vendor_api_output_usd_per_1m": 15,
    "price_per_gpu_hour_low": 1.8,
    "price_per_gpu_hour_high": 4.143,
    "confidence": "estimate",
-   "headline": "Runnable today, but only on a community-forked vLLM+B12X stack on 16 cards (TP16/DCP16, PCIe); no vendor recipe exists (404/absent). MXFP4 runs as W4A16 dequant and the dense projections must go MXFP8 or it will not fit 96 GB. $34.89-$83.05/1M out vs Moonshot's $15 API; B300 is 2.6x cheaper per token.",
+   "headline": "Plan 32 cards: METHODOLOGY 3's floor is 19 and the topology step is 32. No vendor recipe exists (404/absent) and METHODOLOGY 7 forbids sizing on an unsupported engine path, so the receipted 16-card community deployment - which only fits by an unverified online MXFP8 weight-only overlay from an unaffiliated fork - is carried as a labelled alternative, not as the planning figure. $27.24-$62.69/1M out at S1 on 32 cards vs Moonshot's $15 API; B300 remains the right home for this model.",
    "unverified_count": 15,
    "audit": {
     "recomputed_tables": 13,
     "errors_fixed": 0,
     "contradictions": [
-     "This document's headline verdict (a qualified 16-GPU deployment) contradicts gpus/rtx6000-pro.md \u00a79g, which under METHODOLOGY \u00a73's standard 0.90-usable/4GB-workspace convention states Kimi-K3 needs 'at least 19 cards (topology step: 32)' and 'does not fit an 8-card box, and it is not close.' Both figures are internally correct on their own assumptions (ceil(1,560.86e9/(86.4e9-4e9))=19 verified exact; the 16-GPU figure depends on an unverified online MXFP8 weight-only overlay sourced from an unaffiliated community fork, not a vendor recipe). This document already discloses the disagreement in its own header/\u00a75.1/\u00a76 \u2014 the audit restates it rather than resolving it, per METHODOLOGY \u00a78's 'do not silently pick one' rule."
+     "RESOLVED 2026-09-19 (gap X7-kimik3-rtx6000-pro-16-vs-19-32-gpus) \u2192 32 cards. The pair doc's 16-GPU headline contradicted gpus/rtx6000-pro.md \u00a79g, which under METHODOLOGY \u00a73's standard 0.90-usable/4GB-workspace convention states Kimi-K3 needs 'at least 19 cards (topology step: 32)' (ceil(1,560.86e9/(86.40e9-4e9)) = 19, verified exact). Resolution: min_gpus/recommended_gpus = 32, the topology step above the arithmetic floor, because METHODOLOGY \u00a77 forbids sizing on an engine path that is not supported as of 2026-09-19 and the 16-card fit rests on an unverified MXFP8 weight-only overlay from an unaffiliated community fork rather than a vendor recipe. The 16-card case is retained in the pair doc \u00a70/\u00a71/\u00a73 as a clearly labelled community-overlay alternative with its receipted measurements intact; see support_caveat."
     ]
    },
    "key": "kimik3/rtx6000-pro"
@@ -1461,27 +1476,30 @@
    "interactive": {
     "gpus": 8,
     "concurrency": 44,
-    "output_tokens_per_s_per_gpu": 74,
+    "output_tokens_per_s_per_gpu": 111.79,
+    "sustained_output_tokens_per_s_per_gpu": 74,
+    "throughput_basis_note": "2026-09-19: output_tokens_per_s_per_gpu is now the METHODOLOGY §4 decode-only rate 44 / 0.0492 s / 8 GPUs = 111.79. The previous 74.0 is InferenceX's measured out tok/s/GPU on a 119 K-input agentic trace — a sustained end-to-end rate whose traces are prefill-dominated (mi355x.md §3: 99.3 % of the token work is input, 'so decode never gets the node') — kept in sustained_output_tokens_per_s_per_gpu. Not a speculative-decoding artefact: DSpark is off in both InferenceX rows.",
     "tpot_ms": 49.2,
     "ttft_ms": 1842,
-    "cost_per_1m_output_usd_low": 32.28,
-    "cost_per_1m_output_usd_high": 32.28
+    "cost_per_1m_output_usd_low": 21.3697,
+    "cost_per_1m_output_usd_high": 21.3697
    },
    "max_throughput": {
     "gpus": 8,
     "concurrency": 70,
-    "output_tokens_per_s_per_gpu": 91.33,
+    "output_tokens_per_s_per_gpu": 110.9,
+    "sustained_output_tokens_per_s_per_gpu": 91.33,
     "tpot_ms": 78.9,
-    "cost_per_1m_output_usd_low": 26.16,
-    "cost_per_1m_output_usd_high": 26.16
+    "cost_per_1m_output_usd_low": 21.541,
+    "cost_per_1m_output_usd_high": 21.541
    },
-   "blended_cost_per_1m_usd_low": 8.49,
-   "blended_cost_per_1m_usd_high": 8.49,
+   "blended_cost_per_1m_usd_low": 5.7624,
+   "blended_cost_per_1m_usd_high": 5.7624,
    "vendor_api_output_usd_per_1m": 15,
    "price_per_gpu_hour_low": 8.6,
    "price_per_gpu_hour_high": 8.6,
    "confidence": "measured",
-   "headline": "Runs natively \u2014 MXFP4 experts execute on CDNA4 via AITER SiTU v2, 8xMI355X TP8, 205.1 GB/GPU incl. 11.5 GB unshardable. Measured by 3 parties. 74 out tok/s/GPU at TPOT 49 ms. At OCI's $8.60 (the only published rate) self-hosting costs 1.7-2.2x Moonshot's API and never breaks even.",
+   "headline": "Runs natively \u2014 MXFP4 experts execute on CDNA4 via AITER SiTU v2, 8xMI355X TP8, 205.1 GB/GPU incl. 11.5 GB unshardable. Measured by 3 parties. 111.8 decode-only out tok/s/GPU at TPOT 49 ms (74 sustained end-to-end on a prefill-dominated trace). At OCI's $8.60 (the only published rate) self-hosting costs 1.2-1.4x Moonshot's API and never breaks even.",
    "unverified_count": 19,
    "audit": {
     "recomputed_tables": 15,
@@ -1690,27 +1708,30 @@
    "interactive": {
     "gpus": 1,
     "concurrency": 256,
-    "output_tokens_per_s_per_gpu": 22164,
+    "output_tokens_per_s_per_gpu": 70330,
+    "sustained_output_tokens_per_s_per_gpu": 22164,
+    "throughput_basis_note": "2026-09-19: output_tokens_per_s_per_gpu is now the METHODOLOGY §4 decode-only rate 256 / 0.00364 s / 1 GPU = 70,330. The previous 22,164 was gb300.md §3.5's SUSTAINED end-to-end rate (gpu_seconds = prefill_time + osl x TPOT / batch; every scenario prefill-bound on GB300) and is kept in sustained_output_tokens_per_s_per_gpu.",
     "tpot_ms": 3.64,
     "ttft_ms": 19.5,
-    "cost_per_1m_output_usd_low": 0.2256,
-    "cost_per_1m_output_usd_high": 0.2256
+    "cost_per_1m_output_usd_low": 0.0711,
+    "cost_per_1m_output_usd_high": 0.0711
    },
    "max_throughput": {
     "gpus": 1,
     "concurrency": 1024,
-    "output_tokens_per_s_per_gpu": 23353,
+    "output_tokens_per_s_per_gpu": 84003,
+    "sustained_output_tokens_per_s_per_gpu": 23353,
     "tpot_ms": 12.19,
-    "cost_per_1m_output_usd_low": 0.2141,
-    "cost_per_1m_output_usd_high": 0.2141
+    "cost_per_1m_output_usd_low": 0.0595,
+    "cost_per_1m_output_usd_high": 0.0595
    },
-   "blended_cost_per_1m_usd_low": 0.068,
-   "blended_cost_per_1m_usd_high": 0.068,
+   "blended_cost_per_1m_usd_low": 0.0294,
+   "blended_cost_per_1m_usd_high": 0.0294,
    "vendor_api_output_usd_per_1m": null,
    "price_per_gpu_hour_low": 18,
    "price_per_gpu_hour_high": 18,
    "confidence": "estimate",
-   "headline": "Runs on 1 GPU at TP1 (vLLM main + --hf-overrides to Qwen3_5); fits 63x over, uses none of the rack (dense = no EP, bandwidth = GB200/B300). Every scenario prefill-bound. $0.226/1M out, $0.068 blended, $1.09/1k 2-min videos at OCI $18.00 - last of 8 pinned GPUs on $/video.",
+   "headline": "Runs on 1 GPU at TP1 (vLLM main + --hf-overrides to Qwen3_5); fits 63x over, uses none of the rack (dense = no EP, bandwidth = GB200/B300). Every scenario prefill-bound. $0.0711/1M out decode-only ($0.226 sustained prefill+decode), $0.0294 blended, $1.09/1k 2-min videos at OCI $18.00 - last of 8 pinned GPUs on $/video.",
    "unverified_count": 22,
    "audit": {
     "recomputed_tables": 13,
@@ -1732,8 +1753,8 @@
    "parallelism": "TP1, scale out by data-parallel replicas (8 independent TP1 replicas per HGX A100 8-GPU node). TP>2 is counter-productive: num_key_value_heads=2, so above TP2 vLLM replicates KV heads and TP8 buys only +17% concurrency over TP2, while 8 TP1 replicas give 3.3x TP8's capacity. No PP, no EP (dense model), no multi-node fabric.",
    "weight_format_used": "BF16 native (the only shipped checkpoint dtype; 5.0698 GiB as shipped with the materialised lm_head, 4.1224 GiB if the tie is honoured). sm_80 has no FP8 and no FP4 tensor cores, and no FP8/NVFP4/MXFP4 Marlin-2B checkpoint exists anyway. Published INT4-W4A16 GPTQ (2.418 GB, Marlin kernel) and SDNQ INT8 (3.117 GB) builds also execute but have zero published accuracy evals.",
    "attention_kernel": "Full-attention layers (6 of 24, head_dim 256, GQA 4:1): FA2 - vLLM gives FA3 only to major==9 and FA4 only to major==10/11, so sm_80 falls back; FA2 accepts head dims <=256. SGLang's A100 default is FlashInfer native. The FA4 hd256 2-CTA kernel that exists precisely for head_dim==256 is Blackwell-only. GDN layers (18 of 24): vLLM's fused CUDA decode kernel DOES run (gated has_device_capability(80); K=V=128, conv width 4, FP32 recurrent state all satisfied), but GDN prefill falls to Triton/FLA - FlashQLA lists SM90/100/103/120/121 only. No MLA and no sparse/DSA kernel needed (model has neither).",
-   "max_concurrency_8k": 562,
-   "max_concurrency_128k": 41,
+   "max_concurrency_8k": 517,
+   "max_concurrency_128k": 38,
    "interactive": {
     "gpus": 1,
     "concurrency": 256,
@@ -1763,7 +1784,7 @@
     "recomputed_tables": 22,
     "errors_fixed": 0,
     "contradictions": [
-     "architecture.md \u00a78.5 reads A100 usable HBM as decimal-GB (0.90\u00d780GB=67.055 GiB), while marlin2b/a100.md and gpus/a100.md \u00a72 read it GiB-based (nvidia-smi 81,920 MiB = 80 GiB, \u00d70.90 = 72.0 GiB) \u2014 a ~5% spread in every KV-budget/concurrency number, already self-disclosed in marlin2b/a100.md \u00a71.1 but not resolved upstream; gpus/a100.md \u00a72 itself flags the underlying 81,920 MiB figure as unverified (no primary NVIDIA doc found)."
+     "RESOLVED 2026-09-19 (gap C1-a100-capacity-basis): architecture.md \u00a78.5's decimal-GB reading is authoritative \u2014 A100 usable HBM = 0.90 x 80 GB = 72.0 GB = 67.06 GiB/GPU tree-wide (METHODOLOGY \u00a78, gpus/a100.md \u00a72), with the nvidia-smi 81,920 MiB = 80 GiB (x0.90 = 72.0 GiB) reading demoted to a labelled TO BE VERIFIED +7.4% sensitivity. marlin2b/a100.md \u00a71.1/\u00a76 were rewritten onto it: 67.06 GiB usable / 58.9 GiB KV budget is now the primary column, and TP1 seats move 562 -> 517 @8K, 41 -> 38 @128K, FP8-KV 967 -> 891."
     ]
    },
    "key": "marlin2b/a100"
@@ -1832,6 +1853,7 @@
     "gpus": 1,
     "concurrency": 256,
     "output_tokens_per_s_per_gpu": 36232,
+    "throughput_basis_note": "2026-09-19: this row's ratio runs the OTHER way (stated / (concurrency / TPOT / gpus) = 1.15), so it is not the sustained-vs-decode artefact and is left unchanged. Cause: mi355x.md §3.3 computes the rate at the 7.07 ms roofline decode step (256 / 0.00707 = 36,209) while tpot_ms carries the 8.07 ms figure that adds the +1.0 ms ROCm per-step overhead floor. Not speculative decoding — no Marlin drafter exists (§2). ⚠️ TO BE VERIFIED: pick one of the two TPOTs for both fields.",
     "tpot_ms": 8.1,
     "ttft_ms": 36,
     "cost_per_1m_output_usd_low": 0.066,

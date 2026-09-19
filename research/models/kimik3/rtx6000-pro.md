@@ -28,9 +28,36 @@
 ## 0. Verdict
 
 1. **Runnable today — but not on any vendor stack.** vLLM `0.29.0` and SGLang `0.5.20` both refuse: `https://recipes.vllm.ai/moonshotai/Kimi-K3/hw/rtx_pro_6000.json` → **HTTP 404** (re-probed 2026-09-19), `meta.hardware` = `{h200,b200,b300,gb200,gb300,mi355x,ascend_910c}`, SGLang `supportedHardware` = `[b300,gb300,b200,gb200,h200,h100,mi350x,mi355x,a3]` — no `rtx6000`, zero occurrences of `sm120` in the cookbook payload. What runs is the **community `local-inference-lab` fork** (vLLM tree `6e843eb` + B12X `2d466e3`, CUDA 13.3 / PyTorch 2.13 / FlashInfer 0.6.18, image `voipmonitor/vllm@sha256:32ff8027…`, [receipt r38](https://github.com/local-inference-lab/rtx6kpro/blob/master/models/kimi-k3/validation/kimi-k3-upstream-aligned-r38-20260918.json)).
-2. **Minimum 16 GPUs, recommended 16, parallelism TP16 + DCP16 in one chassis** behind 4 × PCIe Gen5 switches. 8 cards fit **only** the community 2-bit `lukealonso/Kimi-K3-QSRT-K2` requant (757.53 GB) and only at concurrency 1; METHODOLOGY §3's 0.90-usable rule puts the native checkpoint at 19 cards → clean topology step **32**, which is two chassis with no GPU fabric and is not a design point (§1, §5).
+2. **Plan 32 cards under the repo convention; 16 only with the community MXFP8 overlay (unverified).**
+   *(**Resolved 2026-09-19**, gap `X7-kimik3-rtx6000-pro-16-vs-19-32-gpus`; this item previously read "Minimum 16 GPUs, recommended 16".)*
+   METHODOLOGY §3's 0.90-usable / 4 GB-workspace convention puts the native
+   checkpoint at `ceil(1,560,860,324,864 / (86.40e9 − 4e9))` = **19 cards** →
+   first legal topology step **32** ([gpus/rtx6000-pro.md §9g](../../gpus/rtx6000-pro.md)).
+   **32 is the planning figure**, because METHODOLOGY §7 forbids sizing on an
+   engine path that is not supported as of 2026-09-19 and the 16-card fit rests
+   on an **unverified online MXFP8 weight-only overlay from an unaffiliated
+   community fork**, not a vendor recipe (§1.2, §6.1–§6.2). Two labelled
+   alternatives are carried, not promoted: **16 cards** TP16 + DCP16 in one
+   chassis behind 4 × PCIe Gen5 switches — the receipted community deployment,
+   every table below it intact — and **8 cards** with the community 2-bit
+   `lukealonso/Kimi-K3-QSRT-K2` requant (757.53 GB), at concurrency 1. Be clear
+   about what 32 costs: it is two chassis with **no GPU fabric between them**
+   (§5.1), so the 32-card shape is an arithmetic planning figure, not a
+   qualified deployment either — on this card Kimi-K3 has no shape that is both
+   convention-compliant and demonstrated.
 3. **Weight format actually executed: MXFP4 → W4A16 dequant-in-kernel** (B12X SM12x fused MoE, `B12X_W4A16_*` flags; upstream vLLM lands on Marlin W4A16 for the same reason), **plus an online MXFP8 weight-only overlay on the KDA/MLA `q/k/v/b/f_a` projections and the vision tower** — without that overlay 1,560.86 GB ÷ 16 = 97.55 GB/GPU does not fit a 96 GB card at all. **No native FP4 tensor-core MoE path.**
-4. **Interactive (S1, TPOT ≤ 50 ms): $36.08 – $83.05 per 1M output tokens** (conc 11, 13.86 tok/s/GPU est.); with DFlash speculation $18.32 – $42.16. **Max-throughput (S4, conc 12): $34.89 – $80.31 per 1M output.** Blended 75/25: **$9.91 – $22.81**. Moonshot's own API is **$15.00/1M output** — self-hosting this pair loses to the API on list price at every published GPU-hour rate unless speculation is on *and* utilisation is high (§4).
+4. **Cost at the 32-card planning figure** (§3.7, all `est.`, $1.80 Nebius –
+   $4.143 AWS per GPU-hour → **$57.60 – $132.58/h** for 32 cards):
+   **Interactive (S1, TPOT ≤ 50 ms): $27.24 – $62.69 per 1M output tokens**
+   (conc 29, 18.36 tok/s/GPU, TPOT 49.4 ms); **max-throughput (S4, conc 465 at
+   the METHODOLOGY §3 KV cap): $5.10 – $11.73**, a roofline and not a forecast.
+   Blended 75/25 at S1: **$7.70 – $17.72**.
+   **The 16-card community-overlay case, retained:** S1 **$36.08 – $83.05**
+   (conc 11, 13.86 tok/s/GPU), with DFlash speculation $18.32 – $42.16;
+   S4 (conc 12) **$34.89 – $80.31**; blended **$9.91 – $22.81** (§4).
+   Moonshot's own API is **$15.00/1M output** — self-hosting this pair loses to
+   the API on list price at every published GPU-hour rate and at both card
+   counts unless speculation is on *and* utilisation is high (§4).
 5. **Confidence: `estimate`, anchored on `meas.`** — batch-1 decode (55.801 / 122.695 / 155.069 tok/s), prefill (3,861.7 tok/s @ 8K) and the 1.46 M-token KV pool are *measured with receipts* on 16 Workstation-Edition cards; everything at concurrency > 1 and everything at Server-Edition bandwidth is derived from a model calibrated on those points. **15 items are ⚠️ TO BE VERIFIED** (§6).
 
 ---
@@ -99,8 +126,12 @@ loader plus `expandable_segments:True` reclaims enough — closes the last
 ([r38](https://github.com/local-inference-lab/rtx6kpro/blob/master/models/kimi-k3/validation/kimi-k3-upstream-aligned-r38-20260918.json));
 90.42 GiB = **97.09 GB**, which *also* exceeds the 96 GB nameplate, so that
 field number's unit is internally inconsistent — ⚠️ **TO BE VERIFIED** (§6).
-Planning value: **treat 16 cards as the field-demonstrated floor and assume the
-non-expert tensors must all be requantised**, i.e. plan the 94.09 GB/GPU row.
+Planning value (**revised 2026-09-19, gap `X7`**): **plan 32 cards** — the
+topology step above METHODOLOGY §3's 19-card floor (§0.2, §3.7). **16 cards is
+the field-demonstrated floor of the community overlay path only**, and reaching
+it assumes the non-expert tensors are *all* requantised, i.e. the 94.09 GB/GPU
+row — which is one rung beyond what the fork's own documentation claims it
+converts (⚠️ §6.2).
 
 ### 1.3 Fit table (METHODOLOGY §3)
 
@@ -309,7 +340,7 @@ At batch 1, **78 % of the bytes are the non-expert weights.** MXFP4 is a
 capacity win, not a latency win — and on this card, where the MoE runs W4A16
 anyway, it is *only* a capacity win.
 
-### 3.3 Estimated matrix — 16 × Server Edition, TP16 + DCP16
+### 3.3 Estimated matrix — 16 × Server Edition, TP16 + DCP16 (**community-overlay case**, not the planning figure — see §3.7)
 
 Feasibility per METHODOLOGY §3: rows are marked `infeasible (KV)` against the
 measured 1,460,937-token FP8 pool, and flagged when they exceed the measured
@@ -462,9 +493,56 @@ METHODOLOGY requires this distinction and it changes the conclusion.
 published with the throughput they produced. That is a genuinely useful thing
 for a card the vendors do not support.
 
+### 3.7 The 32-card planning figure (added 2026-09-19, gap `X7`)
+
+§0.2 resolves the planning count to **32**. Nothing here is measured — 32 cards
+is two chassis with no GPU fabric (§5.1) and no one has run it. These are the
+numbers `matrix/pairs.json` and `matrix/cost-matrix.md` carry, computed with
+`python3` from the *same* §3.1 model, changing only `n` 16 → 32 and dropping the
+MXFP8 overlay (unnecessary at 48.78 GB/GPU):
+
+```python
+# non-expert decode bytes, native BF16: 114.40 GB total − 2.35 GB embedding
+#   (§3.1's 93.85 GB = 114.40 − 18.20 overlay saving − 2.35 embed; 163,840 × 7168 × 2 B = 2.35 GB)
+NONEXPERT = 112.05e9      # instead of 93.85e9
+n = 32;  kv_budget/GPU = 0.90×96e9 − 1_560_860_324_864/32 − 4e9 = 33.62e9 B
+                        -> 1,075.94 GB aggregate   (weights 48.78 GB/GPU)
+```
+
+| Quantity | 32 cards (planning) | 16 cards (community overlay) |
+|---|---:|---:|
+| Weights/GPU | **48.78 GB** ✔ | 97.55 GB ✗ native / 96.42 GB ✗ overlay A / 94.09 GB overlay ceiling |
+| KV budget/GPU | **+33.62 GB** | −15.2 GB (native) |
+| Max concurrency @ 8 K, FP8 KV, `S`=5 | **455** | 12 (engine/workspace cap, not KV) |
+| Max concurrency @ 128 K | **265** | 11 |
+| **S1** (TPOT ≤ 50 ms) | **conc 29** · TPOT 49.4 ms · 18.36 tok/s/GPU · 587.4 agg · TTFT 16.02 s @ 0 % hit | conc 11 · 49.6 ms · 13.86 · 221.7 |
+| **S4** (no SLO, KV-capped at ctx 4,608) | conc 465 · TPOT 148.1 ms · 98.10 tok/s/GPU · 3,139.2 agg | conc 12 · 52.3 ms · 14.33 · 229.3 |
+| $/1M output, S1 | **$27.24 – $62.69** | $36.08 – $83.05 |
+| $/1M output, S4 | $5.10 – $11.73 | $34.89 – $80.31 |
+| $/1M input | $2.16 – $4.97 (unchanged: node cost and prefill both scale ×2) | $2.16 – $4.97 |
+| Blended 75/25 at S1 | **$7.70 – $17.72** | $9.91 – $22.81 |
+
+**Three caveats that make these softer than the 16-card rows, not harder.**
+(a) The collective term keeps §3.1's 24.1 µs NCCL floor and 35 GB/s bus
+bandwidth, which were estimated at **16** ranks in one chassis — a real TP32
+spanning two boxes over Ethernet would be far worse, so every row above is an
+**upper bound**. (b) `MBU = 0.312` was calibrated at TP16 and is reused here.
+(c) The S4 row drops the **measured 12-sequence engine admission cap**, because
+that cap was a consequence of ~2 GB/card of post-weight headroom (§1.4) which
+does not exist at 33.62 GB/card — but no one has measured the replacement, so
+S4 is a roofline. This is also what makes the 32-card concurrency figures
+**comparable with the other 39 cells** in `matrix/fit-matrix.md` §2, which are
+all KV-derived; the 16-card 12/11 pair never was (fit-matrix §6.7).
+
 ---
 
 ## 4. Cost
+
+> **Scope of this section (2026-09-19, gap `X7`).** Everything in §4 is the
+> **16-card community-overlay case**, kept intact because it is the only shape
+> with receipts. The **32-card planning figures** that `pairs.json` and
+> `matrix/cost-matrix.md` carry are in **§3.7**; at 32 cards the node is
+> $57.60/h (Nebius) – $132.58/h (AWS) and S1 lands at $27.24 – $62.69/1M output.
 
 ### 4.1 Prices used (cite the rows)
 
@@ -618,8 +696,16 @@ Two constraints kill anything larger:
    your NIC.
 
 So METHODOLOGY §3's "min 19 → topology step 32" is arithmetically correct and
-operationally void. **The real ladder for this pair is: 16 (native MXFP4 +
-MXFP8 overlay) or 8 (2-bit community requant).**
+operationally unqualified. **Revised 2026-09-19 (gap `X7`): 32 is nevertheless
+the planning figure** (§0.2, §3.7), because the alternatives are worse on
+METHODOLOGY's own terms — METHODOLOGY §7 forbids sizing on an engine path that
+is not supported, and both 16 (unverified MXFP8 overlay, unaffiliated fork) and
+8 (2-bit community requant, concurrency 1) are exactly that. The honest summary
+of this pair is that **no shape on this card is both convention-compliant and
+demonstrated**: 32 has the capacity and no fabric, 16 has the fabric and an
+unverified fit. The demonstrated ladder is still **16 (native MXFP4 + MXFP8
+overlay) or 8 (2-bit community requant)**, and every measured table in this
+document is on that ladder.
 
 ### 5.2 When PD disaggregation or wide-EP pays — it does not, here
 
@@ -891,6 +977,30 @@ last of which is the only published body of Kimi-K3-on-sm_120 measurement found.
 ---
 
 ## Audit log (2026-09-19)
+
+- **2026-09-19 — gap `X7-kimik3-rtx6000-pro-16-vs-19-32-gpus` RESOLVED → 32 cards.**
+  This document's headline verdict (a qualified 16-GPU deployment) contradicted
+  [`gpus/rtx6000-pro.md` §9g](../../gpus/rtx6000-pro.md)'s standard-convention
+  floor of `ceil(1,560,860,324,864 / (86.40e9 − 4e9))` = **19 cards → topology
+  step 32** (recomputed exact with `python3`). Resolved **to 32** as the
+  planning figure, per METHODOLOGY §7 (do not size on an engine path that is
+  not supported as of 2026-09-19): the 16-card fit depends on an **unverified
+  online MXFP8 weight-only overlay from an unaffiliated community fork**, not a
+  vendor recipe. The 16-card case is **retained in full** as a clearly labelled
+  community-overlay alternative — §3.3's matrix, §3.4's receipts and all of §4
+  are unchanged and now scoped as such. Added **§3.7** with the 32-card
+  arithmetic (weights 48.78 GB/GPU, KV budget +33.62 GB/GPU, 455 @ 8 K / 265 @
+  128 K FP8-KV `S`=5, S1 conc 29 · 49.4 ms · 18.36 tok/s/GPU · $27.24–$62.69,
+  S4 conc 465 · $5.10–$11.73 roofline, blended $7.70–$17.72), all recomputed
+  with `python3` from §3.1's own model at `n` = 32 with the overlay dropped.
+  Restated §0.2 and §0.4, revised §1.2's planning value and §5.1's ladder
+  paragraph. Recut downstream in [`matrix/pairs.json`](../../matrix/pairs.json)
+  (new `support_caveat`), [`matrix/cost-matrix.md`](../../matrix/cost-matrix.md)
+  §2/§3/§4, [`matrix/fit-matrix.md`](../../matrix/fit-matrix.md) §1/§2/§6.7 and
+  [`README.md`](README.md). **Honest residual:** 32 cards is two chassis with no
+  GPU fabric (§5.1), so no shape on this card is both convention-compliant and
+  demonstrated; §3.7's rows are upper bounds that reuse the 16-rank collective
+  constants and the TP16-calibrated MBU.
 
 Independent numerical audit, `python3`, against METHODOLOGY.md,
 `architecture.md` §3–6 and `gpus/rtx6000-pro.md` §2/§3/§8/§9. Every derived

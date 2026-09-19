@@ -34,14 +34,34 @@ Not generated — read out of the source document and compared to the grid cell:
 | Cell | Grid says (S1 out · input · blended, `low`/`high`) | Pair document says | Where |
 |---|---|---|---|
 | `deepseek41f/b200` | $0.462/$1.079 · $0.1806/$0.4200 · $0.190/$0.443 | **$0.462/$1.079 · $0.180/$0.420 · $0.190/$0.443** | [b200.md §4.1](../models/deepseek41f/b200.md), the three-row price table |
-| `kimik3/b300` | $10.336/$20.951 · $1.2921/$2.6188 · $3.117/$6.318 | **$10.336/$20.951 · $1.2917/$2.6183 · $3.117/$6.318** | [b300.md §4.2](../models/kimik3/b300.md), the S1 tier table |
+| `kimik3/b300` | $7.3926/$14.9850 · $1.2921/$2.6188 · $2.3811/$4.8265 | **decode-only**: $7.3926/$14.9850 · $1.2917/$2.6183 · $2.3811/$4.8265; **sustained** (what §4.2 prints): $10.336/$20.951 · — · $3.117/$6.318 | [b300.md §4.2](../models/kimik3/b300.md), the S1 tier table — see the throughput-basis note in §3 |
 | `marlin2b/h100` | $0.0237/$0.0509 · $0.0087/$0.0184 · $0.0095/$0.0203 | **$0.0237/$0.0509 · $0.0086/$0.0184 · $0.0095/$0.0203** | [h100.md §4.2](../models/marlin2b/h100.md), `S1 @ KV max (834)` rows |
 
-All three reproduce to rounding. Two further hand checks are recorded in place: the break-even
+All three reproduce to rounding on the decode-only basis the grids use. Two further hand checks are recorded in place: the break-even
 percentages in §6.2 against [qwen3827b/a100.md §4.4](../models/qwen3827b/a100.md), and the
 `res1y` scaling in §7.4 against three documents.
 
 **Verification log.**
+
+- 2026-09-19, gap `X1-throughput-basis-mixed-decode-vs-sustained` — an internal-consistency
+  sweep of all 40 rows in `python3` (`concurrency / TPOT / gpus` vs the stated
+  `output_tokens_per_s_per_gpu`) found `pairs.json` mixing two definitions. **Resolved in
+  favour of decode-only**, now stated in [METHODOLOGY §4](../METHODOLOGY.md); the sustained
+  figure moves to a new `sustained_output_tokens_per_s_per_gpu` field. Five rows were re-cut
+  (`marlin2b/gb300` S1+S4, `deepseek41f/gb300` S1, `kimik3/b300` S1+S4, `kimik3/mi355x` S1+S4,
+  `kimik3/h200` S1) with `cost_per_1m_output_*` and `blended_*` recomputed from the decode-only
+  rate. **The three grids were regenerated and only `kimik3/h200` moved** ($51.5504→$51.4488 /
+  $102.2222→$102.0208 in §2, $16.1826→$16.1572 / $32.088→$32.0377 in §4, ≤ 0.2 %) — §2–§5
+  already carried the decode-only rate; it was `pairs.json` that was on the sustained one. The
+  other recut cells reproduce their printed value to ≤ 0.03 % and were left as the pair
+  documents print them.
+  Downstream: §6.2 (5 cells), §7.1–§7.3 worked examples and §8's Kimi-K3 ranking, where B300
+  now sweeps all four columns, and Marlin-2B's S4 tok/s/GPU rank 3 (MI355X 41,304 → GB300
+  84,003). Two rows were **not** rewritten, and carry a `throughput_basis_note` in `pairs.json`
+  instead: `deepseek41f/a100` S4 (380.1 is a measured decode aggregate; the mismatch is that
+  concurrency 256 is the *requested* level at which the engine admits ~128, against a P95 TPOT)
+  and `marlin2b/mi355x` S1 (ratio runs the other way — the rate uses the 7.07 ms roofline step,
+  `tpot_ms` the 8.07 ms figure that adds the ROCm overhead floor; no drafter exists for Marlin).
 
 - 2026-09-19 — `pairs.json`'s `deepseek41f/b200` S4 block re-cut to the pair document's
   corrected 4,696 tok/s/GPU at TPOT 27.3 ms → **$0.355–$0.828** ([b200.md §4.1](../models/deepseek41f/b200.md));
@@ -49,6 +69,23 @@ percentages in §6.2 against [qwen3827b/a100.md §4.4](../models/qwen3827b/a100.
   the document now agree, so the `‡` footnote and its legend entry are removed and §9.3's
   open question about the disagreement is closed. Blended ($0.190/$0.443) is unchanged — it is
   built on the S1 operating point, which the correction does not touch.
+
+- 2026-09-19, gap `C8-prefix-cache-hit-costed-free` — the prefix-cache convention note above §1
+  was added after three pair docs were found costing a hit as free (multiplier `1 − h`) in
+  their prefix-caching tables while their own blended rows applied METHODOLOGY §6's 10 % rule
+  ([qwen3827b/mi355x.md §4.4](../models/qwen3827b/mi355x.md),
+  [deepseek41f/gb300.md §4.4](../models/deepseek41f/gb300.md),
+  [deepseek41fnvfp4/h200.md §4.5](../models/deepseek41fnvfp4/h200.md), all now recomputed at
+  `1 − 0.9h`). **No cell in this file changes**: every cost cell here was already built on the
+  `blended = 0.4125 × c_in + 0.25 × c_out` identity above, which is the 10 % rule.
+
+- 2026-09-19, gap `X5-b200-prefill-roofline-13x-high` — checked whether §5's input grid inherited
+  [gpus/b200.md §9.3](../gpus/b200.md)'s withdrawn 123,750 prefill tok/s/GPU roofline. **It did
+  not:** every §5 cell is inverted from `pairs.json`'s blended and S1 output fields, and the
+  `deepseek41f/b200` cell's derived $0.1806 already reproduces the pair document's measured-rate
+  $0.180 (the §5 cross-check table above). No number in this file changed; §5 gained a paragraph
+  recording the 13.4× roofline-vs-measurement gap as the calibration to expect on any un-measured
+  DSA/CSA-family input cell.
 
 ---
 
@@ -90,9 +127,9 @@ Each cell is `low–high`, at the operating point (`gpus`, `concurrency`) record
 | Model \ GPU | H100 | H200 | B200 | B300 | GB300 | A100 | RTX PRO 6000 | MI355X |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | **DeepSeek-V4.1-Flash** | [$2.2–$4.73](../models/deepseek41f/h100.md) | [$1.289–$2.556](../models/deepseek41f/h200.md) | [$0.462–$1.079](../models/deepseek41f/b200.md) | [$1.4973–$3.0352](../models/deepseek41f/b300.md) | [$3.9219](../models/deepseek41f/gb300.md) | [$1.162–$2.508](../models/deepseek41f/a100.md) \* | [$2.701–$6.217](../models/deepseek41f/rtx6000-pro.md) | [$1.85](../models/deepseek41f/mi355x.md) |
-| **DeepSeek-V4.1-Flash-NVFP4** | [$0.922–$1.983](../models/deepseek41fnvfp4/h100.md) \* | [$1.01–$2.01](../models/deepseek41fnvfp4/h200.md) \* | [$0.565–$1.319](../models/deepseek41fnvfp4/b200.md) | [$4.274–$8.663](../models/deepseek41fnvfp4/b300.md) | [$1.2395](../models/deepseek41fnvfp4/gb300.md) | [$1.162–$2.508](../models/deepseek41fnvfp4/a100.md) ⚠️ | [$1.754–$4.036](../models/deepseek41fnvfp4/rtx6000-pro.md) \* | [$1.89](../models/deepseek41fnvfp4/mi355x.md) ⚠️ |
+| **DeepSeek-V4.1-Flash-NVFP4** | [$0.922–$1.983](../models/deepseek41fnvfp4/h100.md) \* | [$1.01–$2.01](../models/deepseek41fnvfp4/h200.md) \* | [$0.565–$1.319](../models/deepseek41fnvfp4/b200.md) | [$4.274–$8.663](../models/deepseek41fnvfp4/b300.md) | [$1.2395](../models/deepseek41fnvfp4/gb300.md) | [$1.162–$2.508](../models/deepseek41fnvfp4/a100.md) ⚠️ | [$1.754–$4.036](../models/deepseek41fnvfp4/rtx6000-pro.md) \* | [$1.94](../models/deepseek41fnvfp4/mi355x.md) ⚠️ |
 | **Qwen3.8-27B** | [$0.221–$0.475](../models/qwen3827b/h100.md) | [$0.159–$0.452](../models/qwen3827b/h200.md) | [$0.185–$0.433](../models/qwen3827b/b200.md) | [$0.1649–$0.3343](../models/qwen3827b/b300.md) | [$0.347](../models/qwen3827b/gb300.md) | [$0.218–$0.469](../models/qwen3827b/a100.md) \* | [$0.244–$0.561](../models/qwen3827b/rtx6000-pro.md) | [$0.211](../models/qwen3827b/mi355x.md) |
-| **Kimi-K3** | [**infeasible (SLO)**](../models/kimik3/h100.md) | [$51.5504–$102.2222](../models/kimik3/h200.md) | [$16.339–$38.783](../models/kimik3/b200.md) | [$7.3914–$14.9826](../models/kimik3/b300.md) | [$19.74](../models/kimik3/gb300.md) | [$35.21–$75.98](../models/kimik3/a100.md) ⚠️ | [$36.08–$83.05](../models/kimik3/rtx6000-pro.md) | [$21.3675](../models/kimik3/mi355x.md) |
+| **Kimi-K3** | [**infeasible (SLO)**](../models/kimik3/h100.md) | [$51.4488–$102.0208](../models/kimik3/h200.md) | [$16.339–$38.783](../models/kimik3/b200.md) | [$7.3914–$14.9826](../models/kimik3/b300.md) | [$19.74](../models/kimik3/gb300.md) | [$35.21–$75.98](../models/kimik3/a100.md) ⚠️ | [$27.24–$62.69](../models/kimik3/rtx6000-pro.md) ⚠️ | [$21.3675](../models/kimik3/mi355x.md) |
 | **Marlin-2B** | [$0.0237–$0.0509](../models/marlin2b/h100.md) | [$0.033–$0.0655](../models/marlin2b/h200.md) | [$0.0235–$0.0547](../models/marlin2b/b200.md) | [$0.022–$0.0447](../models/marlin2b/b300.md) | [$0.0711](../models/marlin2b/gb300.md) | [$0.0221–$0.0476](../models/marlin2b/a100.md) | [$0.0372–$0.0857](../models/marlin2b/rtx6000-pro.md) | [$0.066](../models/marlin2b/mi355x.md) ⚠️ |
 
 Operating points behind the S1 grid (GPUs × concurrency, out tok/s/GPU, TPOT):
@@ -102,8 +139,25 @@ Operating points behind the S1 grid (GPUs × concurrency, out tok/s/GPU, TPOT):
 | **DeepSeek-V4.1-Flash** | 8×64 · 404 · 19.8 ms | 8×256 · 860 · 37.2 ms | 8×640 · 3,604 · 22.2 ms | 4×128 · 1,373 · 23.31 ms | 4×128 · 1,275 · 25.1 ms | 8×128 · 380 · 42.1 ms | 4×8 · 185 · 10.8 ms | 4×128 · 1,291 · 24.79 ms |
 | **DeepSeek-V4.1-Flash-NVFP4** | 8×256 · 964 · 33.2 ms | 8×256 · 1,094 · 29.2 ms | 4×256 · 2,947 · 21.7 ms | 4×96 · 481 · 49.9 ms | 4×256 · 4,034 · 15.87 ms | 8×128 · 380 · 42.1 ms | 8×114 · 285 · 50 ms | 4×128 · 1,265 · 25.29 ms |
 | **Qwen3.8-27B** | 2×128 · 4,027 · 15.89 ms | 1×168 · 6,953 · 24.2 ms | 1×128 · 8,989 · 14.2 ms | 1×256 · 12,463 · 20.54 ms | 1×414 · 14,411 · 28.7 ms | 1×92 · 2,030 · 45.3 ms | 1×64 · 2,052 · 31.2 ms | 1×433 · 11,312 · 38.3 ms |
-| **Kimi-K3** | 32×1 · 0.2763 · 113.1 ms | 16×8 · 22 · 23.21 ms | 16×64 · 102 · 39.2 ms | 8×111 · 278 · 49.9 ms | 8×96 · 253 · 46.7 ms | 32×20 · 13 · 49.8 ms | 16×11 · 14 · 49.6 ms | 8×44 · 112 · 49.2 ms |
+| **Kimi-K3** | 32×1 · 0.2763 · 113.1 ms | 16×8 · 22 · 23.21 ms | 16×64 · 102 · 39.2 ms | 8×111 · 278 · 49.9 ms | 8×96 · 253 · 46.7 ms | 32×20 · 13 · 49.8 ms | **32**×29 · 18 · 49.4 ms | 8×44 · 112 · 49.2 ms |
 | **Marlin-2B** | 1×834 · 37,549 · 22.21 ms | 1×256 · 33,565 · 7.63 ms | 1×256 · 71,040 · 3.6 ms | 1×3,327 · 93,271 · 35.7 ms | 1×256 · 70,330 · 3.64 ms | 1×256 · 20,011 · 12.79 ms | 1×256 · 13,434 · 19.06 ms | 1×256 · 36,232 · 8.1 ms |
+
+**⚠️ `kimik3/rtx6000-pro` moved 16 → 32 GPUs on 2026-09-19** (gap
+`X7-kimik3-rtx6000-pro-16-vs-19-32-gpus`), and its cells in §2, §3 and §4 were
+regenerated at **32 × $1.80 / $4.143 = $57.60 – $132.58 per node-hour**.
+METHODOLOGY §3's floor for this pair is `ceil(1,560,860,324,864 / (86.40e9 −
+4e9))` = **19 cards → topology step 32** ([gpus/rtx6000-pro.md §9g](../gpus/rtx6000-pro.md));
+the previous 16-card figures ($36.08–$83.05 S1, $34.89–$80.31 S4,
+$9.91–$22.81 blended) depended on an **unverified community MXFP8 weight-only
+overlay** that METHODOLOGY §7 does not allow as a sizing basis. They survive as
+a labelled alternative in [kimik3/rtx6000-pro.md §4](../models/kimik3/rtx6000-pro.md);
+the 32-card arithmetic is in **§3.7** of that document. Two health warnings
+travel with these three cells: **32 cards is two chassis with no GPU fabric**,
+and the **S4 row is a roofline** — it drops the measured 12-sequence engine
+admission cap (a ~2 GB/card headroom artifact that does not survive 33.62
+GB/card) without a measurement to replace it, and reuses collective constants
+estimated at 16 ranks. Read §3's $5.10–$11.73 as an upper bound on what the
+silicon could do, **not** as a price anyone has paid.
 
 **The one cell that does not meet its own SLO:** `kimik3/h100` is recorded at concurrency 1
 with **TPOT 113.1 ms**, i.e. it never reaches TPOT ≤ 50 ms at any concurrency
@@ -124,12 +178,28 @@ interactive price.
 | Model \ GPU | H100 | H200 | B200 | B300 | GB300 | A100 | RTX PRO 6000 | MI355X |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | **DeepSeek-V4.1-Flash** | [$0.96–$2.07](../models/deepseek41f/h100.md) | [$0.458–$0.909](../models/deepseek41f/h200.md) | [$0.355–$0.828](../models/deepseek41f/b200.md) | [$0.774–$1.569](../models/deepseek41f/b300.md) | [$4.026](../models/deepseek41f/gb300.md) | [$1.162–$2.507](../models/deepseek41f/a100.md) \* | [$0.662–$1.525](../models/deepseek41f/rtx6000-pro.md) | [$1.07](../models/deepseek41f/mi355x.md) |
-| **DeepSeek-V4.1-Flash-NVFP4** | [$0.208–$0.446](../models/deepseek41fnvfp4/h100.md) \* | [$0.25–$0.49](../models/deepseek41fnvfp4/h200.md) \* | [$0.048–$0.112](../models/deepseek41fnvfp4/b200.md) | [$0.216–$0.437](../models/deepseek41fnvfp4/b300.md) | [$0.3556](../models/deepseek41fnvfp4/gb300.md) | [$1.162–$2.507](../models/deepseek41fnvfp4/a100.md) ⚠️ | [$0.924–$2.126](../models/deepseek41fnvfp4/rtx6000-pro.md) \* | [$1.06](../models/deepseek41fnvfp4/mi355x.md) ⚠️ |
+| **DeepSeek-V4.1-Flash-NVFP4** | [$0.208–$0.446](../models/deepseek41fnvfp4/h100.md) \* | [$0.25–$0.49](../models/deepseek41fnvfp4/h200.md) \* | [$0.048–$0.112](../models/deepseek41fnvfp4/b200.md) | [$0.216–$0.437](../models/deepseek41fnvfp4/b300.md) | [$0.3556](../models/deepseek41fnvfp4/gb300.md) | [$1.162–$2.507](../models/deepseek41fnvfp4/a100.md) ⚠️ | [$0.924–$2.126](../models/deepseek41fnvfp4/rtx6000-pro.md) \* | [$1.12](../models/deepseek41fnvfp4/mi355x.md) ⚠️ |
 | **Qwen3.8-27B** | [$0.188–$0.403](../models/qwen3827b/h100.md) | [$0.159–$0.452](../models/qwen3827b/h200.md) | [$0.15–$0.351](../models/qwen3827b/b200.md) | [$0.1527–$0.3095](../models/qwen3827b/b300.md) | [$0.347](../models/qwen3827b/gb300.md) | [$0.218–$0.469](../models/qwen3827b/a100.md) \* | [$0.192–$0.441](../models/qwen3827b/rtx6000-pro.md) | [$0.195](../models/qwen3827b/mi355x.md) |
-| **Kimi-K3** | [$32.46–$69.8](../models/kimik3/h100.md) | [$44.33–$87.91](../models/kimik3/h200.md) | [$3.814–$9.053](../models/kimik3/b200.md) | [$3.61–$7.3176](../models/kimik3/b300.md) | [$14.52](../models/kimik3/gb300.md) | [$14.72–$31.75](../models/kimik3/a100.md) ⚠️ | [$34.89–$80.31](../models/kimik3/rtx6000-pro.md) | [$21.5409](../models/kimik3/mi355x.md) |
+| **Kimi-K3** | [$32.46–$69.8](../models/kimik3/h100.md) | [$44.33–$87.91](../models/kimik3/h200.md) | [$3.814–$9.053](../models/kimik3/b200.md) | [$3.61–$7.3176](../models/kimik3/b300.md) | [$14.52](../models/kimik3/gb300.md) | [$14.72–$31.75](../models/kimik3/a100.md) ⚠️ | [$5.10–$11.73](../models/kimik3/rtx6000-pro.md) ⚠️ **roofline** | [$21.5409](../models/kimik3/mi355x.md) |
 | **Marlin-2B** | [$0.0237–$0.0509](../models/marlin2b/h100.md) | [$0.0292–$0.058](../models/marlin2b/h200.md) | [$0.0195–$0.0455](../models/marlin2b/b200.md) | [$0.022–$0.0447](../models/marlin2b/b300.md) | [$0.0595](../models/marlin2b/gb300.md) | [$0.0188–$0.0406](../models/marlin2b/a100.md) | [$0.0315–$0.0724](../models/marlin2b/rtx6000-pro.md) | [$0.058](../models/marlin2b/mi355x.md) ⚠️ |
 
-Every S4 cell reproduces its document.
+Every S4 cell reproduces its document. **Except in kind, `kimik3/rtx6000-pro`:**
+its $5.10–$11.73 is a **roofline, not a price** — see the ⚠️ note in §2 and
+[kimik3/rtx6000-pro.md §3.7](../models/kimik3/rtx6000-pro.md).
+
+**Throughput basis (§2, §3 and §4 alike).** Six pairs published a **sustained
+prefill+decode** rate rather than the decode-only rate
+[METHODOLOGY §4](../METHODOLOGY.md) defines: `marlin2b/gb300`, `deepseek41f/gb300`,
+`kimik3/b300`, `kimik3/mi355x` and `kimik3/h200` — plus `deepseek41f/a100`, whose row was
+found on re-check to be decode-only already (its mismatch is a concurrency/TPOT field
+error, flagged in `pairs.json`). **Those cells now use the decode-only rate for
+comparability**, and each sustained rate is shown in the pair document
+([marlin2b/gb300.md §3.5](../models/marlin2b/gb300.md),
+[kimik3/b300.md §4.2](../models/kimik3/b300.md), and the corresponding §3/§4 elsewhere) and
+carried as `sustained_output_tokens_per_s_per_gpu` in [`pairs.json`](pairs.json). The two
+bases are never compared cell-for-cell. Regenerated 2026-09-19: only `kimik3/h200`'s §2/§4
+cells moved (≤ 0.2 %); the other grids already carried the decode-only rate — it was
+`pairs.json` that carried the sustained one.
 
 Operating points behind the S4 grid (GPUs × concurrency, out tok/s/GPU, TPOT):
 
@@ -138,7 +208,7 @@ Operating points behind the S4 grid (GPUs × concurrency, out tok/s/GPU, TPOT):
 | **DeepSeek-V4.1-Flash** | 8×256 · 924 · 34.6 ms | 8×1,024 · 2,418 · 52.9 ms | 8×1,024 · 4,696 · 27.3 ms | 2×128 · 2,656 · 24.1 ms | 4×256 · 1,242 · 50 ms | 8×256 · 380 · 45.6 ms | 4×256 · 755 · 84.8 ms | 4×256 · 2,241 · 28.56 ms |
 | **DeepSeek-V4.1-Flash-NVFP4** | 8×2,048 · 4,283 · 59.78 ms | 8×2,048 · 4,461 · 57.4 ms | 4×3,557 · 34,705 · 25.6 ms | 4×2,048 · 9,531 · 53.7 ms | 4×1,024 · 14,060 · 18.21 ms | 8×256 · 380 · 84.2 ms | 8×256 · 541 · 59.1 ms | 4×256 · 2,246 · 28.49 ms |
 | **Qwen3.8-27B** | 2×193 · 4,739 · 20.36 ms | 1×168 · 6,953 · 24.2 ms | 1×242 · 11,082 · 21.8 ms | 1×384 · 13,461 · 28.5 ms | 1×414 · 14,411 · 28.7 ms | 1×92 · 2,030 · 45.3 ms | 1×111 · 2,610 · 42.5 ms | 1×1,025 · 12,225 · 83.8 ms |
-| **Kimi-K3** | 32×128 · 27 · 146.1 ms | 16×74 · 25 · 185 ms | 16×411 · 437 · 58.8 ms | 8×256 · 569 · 56.2 ms | 8×147 · 344 · 51.6 ms | 32×143 · 30 · 148.9 ms | 16×12 · 14 · 52.3 ms | 8×70 · 111 · 78.9 ms |
+| **Kimi-K3** | 32×128 · 27 · 146.1 ms | 16×74 · 25 · 185 ms | 16×411 · 437 · 58.8 ms | 8×256 · 569 · 56.2 ms | 8×147 · 344 · 51.6 ms | 32×143 · 30 · 148.9 ms | **32**×465 · 98 · 148.1 ms | 8×70 · 111 · 78.9 ms |
 | **Marlin-2B** | 1×834 · 37,549 · 22.21 ms | 1×1,551 · 37,903 · 40.92 ms | 1×1,024 · 85,544 · 11.97 ms | 1×3,327 · 93,271 · 35.7 ms | 1×1,024 · 84,003 · 12.19 ms | 1×887 · 23,450 · 37.83 ms | 1×1,019 · 15,886 · 64.14 ms | 1×3,292 · 41,304 · 79.7 ms |
 
 S4 carries no SLO, so several of these points sit well past 50 ms TPOT (`qwen3827b/mi355x`
@@ -157,9 +227,9 @@ price, because a vendor's list price is also a blend.
 | Model \ GPU | H100 | H200 | B200 | B300 | GB300 | A100 | RTX PRO 6000 | MI355X |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | **DeepSeek-V4.1-Flash** | [$0.595–$1.279](../models/deepseek41f/h100.md) | [$0.379–$0.752](../models/deepseek41f/h200.md) | [$0.19–$0.443](../models/deepseek41f/b200.md) | [$0.4809–$0.9747](../models/deepseek41f/b300.md) | [$1.2935](../models/deepseek41f/gb300.md) | [$0.361–$0.778](../models/deepseek41f/a100.md) \* | [$0.7181–$1.6528](../models/deepseek41f/rtx6000-pro.md) | [$0.748](../models/deepseek41f/mi355x.md) |
-| **DeepSeek-V4.1-Flash-NVFP4** | [$0.254–$0.546](../models/deepseek41fnvfp4/h100.md) \* | [$0.2818–$0.5588](../models/deepseek41fnvfp4/h200.md) \* | [$0.1485–$0.3464](../models/deepseek41fnvfp4/b200.md) | [$1.16–$2.351](../models/deepseek41fnvfp4/b300.md) | [$0.33108](../models/deepseek41fnvfp4/gb300.md) | [$0.354–$0.764](../models/deepseek41fnvfp4/a100.md) ⚠️ | [$0.4812–$1.1076](../models/deepseek41fnvfp4/rtx6000-pro.md) \* | [$0.758](../models/deepseek41fnvfp4/mi355x.md) ⚠️ |
+| **DeepSeek-V4.1-Flash-NVFP4** | [$0.254–$0.546](../models/deepseek41fnvfp4/h100.md) \* | [$0.2818–$0.5588](../models/deepseek41fnvfp4/h200.md) \* | [$0.1485–$0.3464](../models/deepseek41fnvfp4/b200.md) | [$1.16–$2.351](../models/deepseek41fnvfp4/b300.md) | [$0.33108](../models/deepseek41fnvfp4/gb300.md) | [$0.354–$0.764](../models/deepseek41fnvfp4/a100.md) ⚠️ | [$0.4812–$1.1076](../models/deepseek41fnvfp4/rtx6000-pro.md) \* | [$0.771](../models/deepseek41fnvfp4/mi355x.md) ⚠️ |
 | **Qwen3.8-27B** | [$0.089–$0.192](../models/qwen3827b/h100.md) | [$0.082–$0.196](../models/qwen3827b/h200.md) | [$0.0633–$0.1477](../models/qwen3827b/b200.md) | [$0.0602–$0.1221](../models/qwen3827b/b300.md) | [$0.134](../models/qwen3827b/gb300.md) | [$0.126–$0.271](../models/qwen3827b/a100.md) \* | [$0.087–$0.199](../models/qwen3827b/rtx6000-pro.md) | [$0.08](../models/qwen3827b/mi355x.md) |
-| **Kimi-K3** | [$8.38–$18.01](../models/kimik3/h100.md) | [$16.1826–$32.088](../models/kimik3/h200.md) | [$4.402–$10.449](../models/kimik3/b200.md) | [$2.3808–$4.8259](../models/kimik3/b300.md) | [$5.61](../models/kimik3/gb300.md) | [$10.51–$22.67](../models/kimik3/a100.md) ⚠️ | [$9.91–$22.81](../models/kimik3/rtx6000-pro.md) | [$5.7619](../models/kimik3/mi355x.md) |
+| **Kimi-K3** | [$8.38–$18.01](../models/kimik3/h100.md) | [$16.1572–$32.0377](../models/kimik3/h200.md) | [$4.402–$10.449](../models/kimik3/b200.md) | [$2.3808–$4.8259](../models/kimik3/b300.md) | [$5.61](../models/kimik3/gb300.md) | [$10.51–$22.67](../models/kimik3/a100.md) ⚠️ | [$7.70–$17.72](../models/kimik3/rtx6000-pro.md) ⚠️ | [$5.7619](../models/kimik3/mi355x.md) |
 | **Marlin-2B** | [$0.0095–$0.0203](../models/marlin2b/h100.md) | [$0.0127–$0.0251](../models/marlin2b/h200.md) | [$0.0095–$0.0221](../models/marlin2b/b200.md) | [$0.0092–$0.0185](../models/marlin2b/b300.md) | [$0.0294](../models/marlin2b/gb300.md) | [$0.0112–$0.0242](../models/marlin2b/a100.md) | [$0.0135–$0.0311](../models/marlin2b/rtx6000-pro.md) | [$0.0236](../models/marlin2b/mi355x.md) ⚠️ |
 
 One blended cell is built on a different operating point than the rest: **`kimik3/h100`'s
@@ -225,6 +295,16 @@ largest calibration error in the document"*), and [qwen3827b/gb300.md](../models
 (architecture.md's full-FP4-peak rate vs. this doc's mixed-checkpoint rate *"moves $/1M input
 from $0.073 to $0.115"*). ⚠️ **TO BE VERIFIED** for all three.
 
+**How wrong a roofline can be — measured.** On `deepseek41f/b200` the two methods are both on
+record: [gpus/b200.md §9.3](../gpus/b200.md) held a GEMM-only `2 × active × T` roofline of
+**123,750 prefill tok/s/GPU**, and [deepseek41f/b200.md §3.1](../models/deepseek41f/b200.md)
+measured **9,267** from vLLM PR #56686's step times — **13.4×** apart, because a
+sparse/indexer-attention model's prefill is dominated by the indexer scan, top-k, Engram gathers
+and mHC mixing rather than the expert GEMMs (gpus/b200.md §9.3 was corrected to 9,267 on
+2026-09-19). **This grid's B200 cell is safe** — $0.1806 was inverted from the pair document's
+measured-rate blended figure and reproduces its stated $0.180. Read it as the scale of the error
+to expect in any *un-measured* DSA/CSA-family input cell here, not as a defect in this row.
+
 ---
 
 ## 6. Vendor API prices and break-even utilisation
@@ -252,10 +332,10 @@ self-hosting cannot match the API at any utilisation. Cells are `low-tier / high
 
 | Model \ GPU | H100 | H200 | B200 | B300 | GB300 | A100 | RTX PRO 6000 | MI355X |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| **DeepSeek-V4.1-Flash** | [287 % ✗ / 617 % ✗](../models/deepseek41f/h100.md) | [183 % ✗ / 363 % ✗](../models/deepseek41f/h200.md) | [**92 %** / 214 % ✗](../models/deepseek41f/b200.md) | [232 % ✗ / 470 % ✗](../models/deepseek41f/b300.md) | [830 % ✗ / 830 % ✗](../models/deepseek41f/gb300.md) | [174 % ✗ / 375 % ✗](../models/deepseek41f/a100.md) \* | [346 % ✗ / 797 % ✗](../models/deepseek41f/rtx6000-pro.md) | [361 % ✗ / 361 % ✗](../models/deepseek41f/mi355x.md) |
+| **DeepSeek-V4.1-Flash** | [287 % ✗ / 617 % ✗](../models/deepseek41f/h100.md) | [183 % ✗ / 363 % ✗](../models/deepseek41f/h200.md) | [**92 %** / 214 % ✗](../models/deepseek41f/b200.md) | [232 % ✗ / 470 % ✗](../models/deepseek41f/b300.md) | [624 % ✗ / 624 % ✗](../models/deepseek41f/gb300.md) | [174 % ✗ / 375 % ✗](../models/deepseek41f/a100.md) \* | [346 % ✗ / 797 % ✗](../models/deepseek41f/rtx6000-pro.md) | [361 % ✗ / 361 % ✗](../models/deepseek41f/mi355x.md) |
 | **DeepSeek-V4.1-Flash-NVFP4** | [122 % ✗ / 263 % ✗](../models/deepseek41fnvfp4/h100.md) \* | [136 % ✗ / 269 % ✗](../models/deepseek41fnvfp4/h200.md) \* | [**72 %** / 167 % ✗](../models/deepseek41fnvfp4/b200.md) | [559 % ✗ / 1,134 % ✗](../models/deepseek41fnvfp4/b300.md) | [160 % ✗ / 160 % ✗](../models/deepseek41fnvfp4/gb300.md) | [171 % ✗ / 368 % ✗](../models/deepseek41fnvfp4/a100.md) ⚠️ | [232 % ✗ / 534 % ✗](../models/deepseek41fnvfp4/rtx6000-pro.md) \* | [365 % ✗ / 365 % ✗](../models/deepseek41fnvfp4/mi355x.md) ⚠️ |
 | **Qwen3.8-27B** | [**9 %** / **20 %**](../models/qwen3827b/h100.md) | [**9 %** / **21 %**](../models/qwen3827b/h200.md) | [**7 %** / **15 %**](../models/qwen3827b/b200.md) | [**6 %** / **13 %**](../models/qwen3827b/b300.md) | [**14 %** / **14 %**](../models/qwen3827b/gb300.md) | [**13 %** / **28 %**](../models/qwen3827b/a100.md) \* | [**9 %** / **21 %**](../models/qwen3827b/rtx6000-pro.md) | [**8 %** / **8 %**](../models/qwen3827b/mi355x.md) |
-| **Kimi-K3** | [168 % ✗ / 361 % ✗](../models/kimik3/h100.md) | [386 % ✗ / 765 % ✗](../models/kimik3/h200.md) | [**88 %** / 209 % ✗](../models/kimik3/b200.md) | [**62 %** / 127 % ✗](../models/kimik3/b300.md) | [112 % ✗ / 112 % ✗](../models/kimik3/gb300.md) | [211 % ✗ / 454 % ✗](../models/kimik3/a100.md) ⚠️ | [199 % ✗ / 457 % ✗](../models/kimik3/rtx6000-pro.md) | [170 % ✗ / 170 % ✗](../models/kimik3/mi355x.md) |
+| **Kimi-K3** | [168 % ✗ / 361 % ✗](../models/kimik3/h100.md) | [324 % ✗ / 642 % ✗](../models/kimik3/h200.md) | [**88 %** / 209 % ✗](../models/kimik3/b200.md) | [**48 %** / **97 %**](../models/kimik3/b300.md) | [112 % ✗ / 112 % ✗](../models/kimik3/gb300.md) | [211 % ✗ / 454 % ✗](../models/kimik3/a100.md) ⚠️ | [154 % ✗ / 355 % ✗](../models/kimik3/rtx6000-pro.md) | [116 % ✗ / 116 % ✗](../models/kimik3/mi355x.md) |
 | **Marlin-2B** | — | — | — | — | — | — | — | — |
 
 Denominators: DeepSeek $0.2074 (off-peak), Qwen Cloud $0.956, Moonshot $4.99. `✗` = above
@@ -278,9 +358,14 @@ What the table says in one line per model:
   comfortable win at **72 %** — and it is also the cell whose operating point (concurrency
   3,557) is the least defensible in the matrix (§9.2). On a hyperscaler price, no DeepSeek cell
   is within 1.6× of break-even.
-- **Kimi-K3: never.** The cheapest cell is B300 at 62 %/127 %, and the *absolute* self-hosted
-  blend ($3.12–$38.19) is 0.6×–7.7× Moonshot's own $4.99. You are renting 8–32 GPUs to
-  reproduce a price the vendor already sells.
+- **Kimi-K3: one node, and only on the cheap tier.** On the decode-only basis (§3's
+  throughput-basis note) the cheapest cell is **B300 at 48 %/97 %** — the first Kimi cell that
+  clears 100 % on *both* tiers, though the high tier only draws level. Everything else is
+  above break-even, and the *absolute* self-hosted blend ($2.38–$32.04) is 0.5×–6.4×
+  Moonshot's own $4.99. Outside B300 you are renting 8–32 GPUs to reproduce a price the
+  vendor already sells. ⚠️ B300's 48 % rests on an S1 point at batch 111 with a **10.1 s
+  batch-wave TTFT** ([kimik3/b300.md §4.2](../models/kimik3/b300.md)); decode-only cost says
+  nothing about that queueing delay.
 
 ---
 
@@ -299,7 +384,7 @@ makes throughput **linear in MBU** and cost **inversely linear**:
 | **−20 %** (e.g. 0.60 → 0.48) | ×0.80 | **×1.250** |
 
 Worked on the two extremes of the blended grid at `low`: `marlin2b/b300` $0.0092 → $0.0077 /
-$0.0115; `kimik3/h200` $19.26 → $16.05 / $24.08.
+$0.0115; `kimik3/h200` $16.1572 → $13.46 / $20.20.
 
 [qwen3827b/gb300.md](../models/qwen3827b/gb300.md) states the same mechanism independently for
 its own numbers — *"the whole §3 table scales linearly with MBU; the 0.60–0.75 band is a ±13 %
@@ -334,14 +419,14 @@ Blended $/1M at `low` as the hit rate moves, for each model's cheapest-blended G
 | DeepSeek-V4.1-Flash | [B200](../models/deepseek41f/b200.md) | $0.251 | $0.19 | $0.1412 | 61 % |
 | DeepSeek-V4.1-Flash-NVFP4 | [B200](../models/deepseek41fnvfp4/b200.md) | $0.1544 | $0.1485 | $0.1437 | 95 % |
 | Qwen3.8-27B | [B300](../models/qwen3827b/b300.md) | $0.0757 | $0.0602 | $0.0478 | 68 % |
-| Kimi-K3 | [B300](../models/kimik3/b300.md) | $3.5531 | $3.117 | $2.7681 | 83 % |
+| Kimi-K3 | [B300](../models/kimik3/b300.md) | $2.8172 | $2.3811 | $2.0323 | 78 % |
 | Marlin-2B | [B300](../models/marlin2b/b300.md) | $0.0122 | $0.0092 | $0.0068 | 60 % |
 
 The "output share" column is the whole story: **once output is ~80 % of the blend, prefix
 caching stops being a cost lever and becomes a TTFT lever.** Kimi-K3 on B300 is the extreme —
 [kimik3/h200.md](../models/kimik3/h200.md) makes the same point for its own pair
 (*"the blend is already output-dominated (output is 83 % of the blended cost)"*), where a 90 %
-hit moves blended only $19.26 → $13.37.
+hit moves blended only $16.1572 → $14.00.
 
 Two caveats the pair documents raise, both cost-relevant:
 
@@ -353,7 +438,8 @@ Two caveats the pair documents raise, both cost-relevant:
   onto the output term"*.
 - **Or far too high.** [marlin2b/gb300.md](../models/marlin2b/gb300.md): hit rate ≈ **0 %** for
   video, so the 10 % cached term is *"charged but never earned"* and the realistic blend is
-  **+14 %** ($0.0680 → $0.0776). On the AMD path, **SGLang on MI350X must run
+  **+32 %** ($0.0294 → $0.0388 on the decode-only basis; $0.0680 → $0.0776 as the document
+  prints it on the sustained basis). On the AMD path, **SGLang on MI350X must run
   `--disable-radix-cache`** and forfeits prefix caching entirely — *"worth roughly 2× on
   blended cost for agentic traffic"* ([deepseek41f/mi355x.md](../models/deepseek41f/mi355x.md)).
 
@@ -368,7 +454,7 @@ the measured runs. Turning it off is the single largest swing in the matrix:
 | [deepseek41f/b300](../models/deepseek41f/b300.md) | $1.50 at $7.40 | $4.69 | **3.1× worse** (~68 % of throughput lost) |
 | [deepseek41f/mi355x](../models/deepseek41f/mi355x.md) | S1 point as published | $12.44 at batch 38 | **6.7× worse**, and TPOT ≤ 50 ms becomes unreachable above batch 39 |
 | [deepseek41f/h100](../models/deepseek41f/h100.md) | $2.20 at batch 64 | $7.96 "no-spec floor" at batch 32 | **3.6× worse** |
-| [kimik3/b300](../models/kimik3/b300.md) | +DSpark 1.64× → $6.302, blended $2.108 | $10.336, blended $3.117 | **1.64× better with it** |
+| [kimik3/b300](../models/kimik3/b300.md) | +DSpark 1.64× → $4.508, blended $1.660 | $7.3926, blended $2.3811 | **1.64× better with it** (the document prints the same ratio on its sustained basis: $6.302/$2.108 vs $10.336/$3.117) |
 | [qwen3827b/a100](../models/qwen3827b/a100.md) | MTP γ=3, accept 4.28, vcr 0 → $0.051 | vcr 0.5 → $0.218 | **up to 4.3× better**, or nothing |
 
 **Do not plan with the acceptance constant.** [deepseek41f/h100.md](../models/deepseek41f/h100.md)
@@ -394,7 +480,7 @@ Blended $/1M at `res1y`:
 | **DeepSeek-V4.1-Flash** | [$0.50575](../models/deepseek41f/h100.md) | [$0.26502](../models/deepseek41f/h200.md) | [$0.1615](../models/deepseek41f/b200.md) | [$0.51599](../models/deepseek41f/b300.md) | [$1.2935](../models/deepseek41f/gb300.md) | [$0.30878](../models/deepseek41f/a100.md) \* | [$0.51863](../models/deepseek41f/rtx6000-pro.md) | [$0.748](../models/deepseek41f/mi355x.md) |
 | **DeepSeek-V4.1-Flash-NVFP4** | [$0.2159](../models/deepseek41fnvfp4/h100.md) \* | [$0.19705](../models/deepseek41fnvfp4/h200.md) \* | [$0.12622](../models/deepseek41fnvfp4/b200.md) | [$1.24465](../models/deepseek41fnvfp4/b300.md) | [$0.33108](../models/deepseek41fnvfp4/gb300.md) | [$0.30279](../models/deepseek41fnvfp4/a100.md) ⚠️ | [$0.34753](../models/deepseek41fnvfp4/rtx6000-pro.md) \* | [$0.758](../models/deepseek41fnvfp4/mi355x.md) ⚠️ |
 | **Qwen3.8-27B** | [$0.07565](../models/qwen3827b/h100.md) | [$0.05734](../models/qwen3827b/h200.md) | [$0.0538](../models/qwen3827b/b200.md) | [$0.06459](../models/qwen3827b/b300.md) | [$0.134](../models/qwen3827b/gb300.md) | [$0.10777](../models/qwen3827b/a100.md) \* | [$0.06283](../models/qwen3827b/rtx6000-pro.md) | [$0.08](../models/qwen3827b/mi355x.md) |
-| **Kimi-K3** | [$7.123](../models/kimik3/h100.md) | [$11.31164](../models/kimik3/h200.md) | [$3.7417](../models/kimik3/b200.md) | [$2.55460](../models/kimik3/b300.md) | [$5.61](../models/kimik3/gb300.md) | [$8.98969](../models/kimik3/a100.md) ⚠️ | [$7.15722](../models/kimik3/rtx6000-pro.md) | [$5.7619](../models/kimik3/mi355x.md) |
+| **Kimi-K3** | [$7.123](../models/kimik3/h100.md) | [$11.31164](../models/kimik3/h200.md) | [$3.7417](../models/kimik3/b200.md) | [$2.55460](../models/kimik3/b300.md) | [$5.61](../models/kimik3/gb300.md) | [$8.98969](../models/kimik3/a100.md) ⚠️ | [$5.5611](../models/kimik3/rtx6000-pro.md) | [$5.7619](../models/kimik3/mi355x.md) |
 | **Marlin-2B** | [$0.00808](../models/marlin2b/h100.md) | [$0.00888](../models/marlin2b/h200.md) | [$0.00807](../models/marlin2b/b200.md) | [$0.00987](../models/marlin2b/b300.md) | [$0.0294](../models/marlin2b/gb300.md) | [$0.00958](../models/marlin2b/a100.md) | [$0.00975](../models/marlin2b/rtx6000-pro.md) | [$0.0236](../models/marlin2b/mi355x.md) ⚠️ |
 
 Three checks that this scaling is what the pair documents do: `deepseek41f/h100` → **$0.506**,
@@ -443,11 +529,16 @@ at `res1y`, Qwen3.8-27B's cheapest blend moves from B300 ($0.0602 on-demand) to 
 
 | Rank | Cheapest at the interactive SLO (S1, $/1M out) | Cheapest at max throughput (S4, $/1M out) | Best tokens/s/GPU (S4) | Cheapest blended |
 |---|---|---|---|---|
-| 1 | [B300](../models/kimik3/b300.md) **$10.336** | [B200](../models/kimik3/b200.md) **$3.814** | [B200](../models/kimik3/b200.md) **437** tok/s/GPU | [B300](../models/kimik3/b300.md) **$3.117** |
-| 2 | [B200](../models/kimik3/b200.md) **$16.339** | [B300](../models/kimik3/b300.md) **$6.391** | [GB300](../models/kimik3/gb300.md) **344** tok/s/GPU | [B200](../models/kimik3/b200.md) **$4.402** |
-| 3 | [GB300](../models/kimik3/gb300.md) **$19.74** | [GB300](../models/kimik3/gb300.md) **$14.52** | [B300](../models/kimik3/b300.md) **322** tok/s/GPU | [GB300](../models/kimik3/gb300.md) **$5.61** |
+| 1 | [B300](../models/kimik3/b300.md) **$7.3926** | [B300](../models/kimik3/b300.md) **$3.6101** | [B300](../models/kimik3/b300.md) **569** tok/s/GPU | [B300](../models/kimik3/b300.md) **$2.3811** |
+| 2 | [B200](../models/kimik3/b200.md) **$16.339** | [B200](../models/kimik3/b200.md) **$3.814** | [B200](../models/kimik3/b200.md) **437** tok/s/GPU | [B200](../models/kimik3/b200.md) **$4.402** |
+| 3 | [GB300](../models/kimik3/gb300.md) **$19.74** | [GB300](../models/kimik3/gb300.md) **$14.52** | [GB300](../models/kimik3/gb300.md) **344** tok/s/GPU | [GB300](../models/kimik3/gb300.md) **$5.61** |
 
 Excluded from the S1 column (TPOT > 50 ms at its recorded operating point): H100 (113.1 ms).
+
+**Recut 2026-09-19** on the decode-only basis (§3's throughput-basis note): B300 was carrying
+`kimik3/b300.md` §4.2's sustained request-cycle rate (198.9 / 321.6 tok/s/GPU), which put B200
+first at S4 and on tok/s/GPU. At the decode-only rate (278 / 569) **B300 sweeps all four
+columns** — it was never actually slower than B200, it was measured against a different clock.
 
 ### Marlin-2B (`marlin2b`)
 
@@ -455,13 +546,13 @@ Excluded from the S1 column (TPOT > 50 ms at its recorded operating point): H100
 |---|---|---|---|---|
 | 1 | [B300](../models/marlin2b/b300.md) **$0.022** | [A100](../models/marlin2b/a100.md) **$0.0188** | [B300](../models/marlin2b/b300.md) **93,271** tok/s/GPU | [B300](../models/marlin2b/b300.md) **$0.0092** |
 | 2 | [A100](../models/marlin2b/a100.md) **$0.0221** | [B200](../models/marlin2b/b200.md) **$0.0195** | [B200](../models/marlin2b/b200.md) **85,544** tok/s/GPU | [H100](../models/marlin2b/h100.md) **$0.0095** |
-| 3 | [B200](../models/marlin2b/b200.md) **$0.0235** | [B300](../models/marlin2b/b300.md) **$0.022** | [MI355X](../models/marlin2b/mi355x.md) **41,304** tok/s/GPU ⚠️ | [B200](../models/marlin2b/b200.md) **$0.0095** |
+| 3 | [B200](../models/marlin2b/b200.md) **$0.0235** | [B300](../models/marlin2b/b300.md) **$0.022** | [GB300](../models/marlin2b/gb300.md) **84,003** tok/s/GPU | [B200](../models/marlin2b/b200.md) **$0.0095** |
 
 **Reading the four columns together.** They do not agree, and the disagreement is the
 point:
 
-- **Cheapest at S1 ≠ cheapest at S4 for three of five models** (Qwen3.8-27B H200 → B200,
-  Kimi-K3 B300 → B200, Marlin-2B B300 → A100). Only the two DeepSeek checkpoints put B200 at
+- **Cheapest at S1 ≠ cheapest at S4 for two of five models** (Qwen3.8-27B H200 → B200,
+  Marlin-2B B300 → A100; Kimi-K3 stays on B300 in both since the 2026-09-19 decode-only recut). Only the two DeepSeek checkpoints put B200 at
   the top of both columns.
 - **Best tokens/s/GPU is rarely the cheapest cell.** GB300 takes a top-3 throughput slot for
   three of five models but a top-3 *cost* slot only for Kimi-K3 — where every option is
@@ -553,4 +644,6 @@ every price: [`cloud-pricing.md` §5.14](../cross-cutting/cloud-pricing.md). For
 
 ## Amendment log
 
+- **2026-09-19 — gap `X7-kimik3-rtx6000-pro-16-vs-19-32-gpus` RESOLVED → 32 GPUs; §2, §3 and §4 regenerated for `kimik3/rtx6000-pro`.** The pair was priced at 16 cards on the strength of a receipted community deployment whose fit depends on an **unverified online MXFP8 weight-only overlay from an unaffiliated fork**; [gpus/rtx6000-pro.md §9g](../gpus/rtx6000-pro.md)'s standard-convention floor is `ceil(1,560,860,324,864 / (86.40e9 − 4e9))` = **19 → topology step 32** (re-verified exact with `python3`). Resolved to **32** per METHODOLOGY §7 (do not size on an unsupported engine path). Recomputed with `python3` at **32 × $1.80 / $4.143 = $57.60 / $132.58 per node-hour** from [kimik3/rtx6000-pro.md §3.7](../models/kimik3/rtx6000-pro.md): **§2 S1 $36.08–$83.05 → $27.24–$62.69** (op point `16×11 · 14 · 49.6 ms` → `32×29 · 18 · 49.4 ms`); **§3 S4 $34.89–$80.31 → $5.10–$11.73** (`16×12 · 14 · 52.3 ms` → `32×465 · 98 · 148.1 ms`), flagged a **roofline** because it drops the measured 12-sequence engine cap without a replacement measurement; **§4 blended $9.91–$22.81 → $7.70–$17.72** (the $/1M **input** row in §5 is unchanged at $2.1576–$4.9636 — node cost and prefill rate both scale ×2). `pairs.json` updated (`min_gpus`/`recommended_gpus` 32, new `support_caveat`, both operating points and all four output-cost fields; validated with `json.load`), as were [fit-matrix.md](fit-matrix.md) §1/§2/§4.1/§6.7, [gpus/rtx6000-pro.md §9g](../gpus/rtx6000-pro.md) and [models/kimik3/README.md](../models/kimik3/README.md). **Not regenerated, and now stale:** §7's break-even-utilisation cell for this pair (199 % / 457 %) and §8's $7.15722 row still sit on the 16-card output costs — out of the scope this amendment was given, flagged here rather than silently left.
 - **2026-09-19 — `deepseek41f/a100` demoted to `supported_now: false`** in [`pairs.json`](pairs.json) (confidence stays `measured`, new `support_caveat` field): the measurement is real but runs on a community `vllm-backport` fork + 24-file SM80 patch set on 8× A800, which METHODOLOGY §7 says must not be presented as supported, and [gpus/a100.md §9](../gpus/a100.md), [inference-engines.md §3.2](../cross-cutting/inference-engines.md) and [flash-attention.md §16.1](../cross-cutting/flash-attention.md) independently scope A100 out. No cost number changed; the `\*` marker now applies to its cells in §2, §3, §4, §5, §6.2, §7.4 and §8, and the pair is listed in §9.2.
+- **2026-09-19, final consistency pass.** Closed two stale cells the `X7` amendment above flagged and left: `kimik3/rtx6000-pro`'s §7.2 break-even utilisation recut from the 16-card **199 % / 457 %** to the 32-card **154 % / 355 %** (`$7.70 / $17.72` blended ÷ Moonshot's `$4.99`), and §7.4's `res1y` cell recut from **$7.15722** to **$5.5611** (`$7.70 × $1.30/$1.80`). Also: `deepseek41f/b200`'s S4/max-throughput cell (§3) and `deepseek41fnvfp4/mi355x`'s S1/S4/blended cells (§2–§4) had not picked up those pair documents' own 2026-09-19 audit fixes (4,696 tok/s/GPU; $1.94/$1.12) — `matrix/pairs.json` was recut to match and this file's §3 `deepseek41f/b200` cell was already correct (generated after the doc fix); §2–§4's three `deepseek41fnvfp4/mi355x` cells recut **$1.89→$1.94**, **$1.06→$1.12**, **$0.758→$0.771**.
