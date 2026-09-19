@@ -290,3 +290,24 @@ much resolving them would change the decision. **34 distinct items.**
 vLLM's INT4 W4A16 GEMM kernel, and on several GPUs above that kernel is what a quantised Marlin-2B
 would run on. Searches for "vllm marlin" return the kernel, not this model
 ([architecture.md §8.7](architecture.md)).
+
+## Measured 2026-09-19 (AWS g6e.2xlarge, 1× L40S; branch `marlin2b`)
+
+First measurements, from `marlin2b/results/` on the experiment branch; the
+pair docs above remain estimates for the eight target GPUs.
+
+- vLLM nightly serves the checkpoint with `--hf-overrides` and reproduces the
+  transformers helper's caption events exactly; find mode returns well-formed
+  spans once the client sends `GROUNDING_PROMPT_TEMPLATE`.
+- **Token budget:** neither vLLM nor the vendor helper applies the model
+  card's 200,704 px/frame budget by default on transformers 5.17 — a 10 s
+  1080p clip costs 12,221 prompt tokens (grid 10×52×92) instead of the
+  training grid's 2,061 (10×28×28). `size.longest_edge` is a whole-clip
+  pixel budget; setting it to frames × 200,704 restores the training grid with
+  no loss in caption events. Cost models in this tree that assumed 196 tokens
+  per frame pair are right only with that setting.
+- **Throughput, concurrency 8, training budget:** 1.57 clips/s for a 1080p
+  5.5 MB clip vs 3.58 clips/s for a 360p 1 MB clip at the same token count;
+  TTFT p50 3.35 s vs 0.66 s; TPOT 7–8 ms. Per-request video decode and upload
+  dominate, not prefill. ≈ $0.02–0.04 per video-hour of dense captioning at
+  on-demand g6e pricing.
