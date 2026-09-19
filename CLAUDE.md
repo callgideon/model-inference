@@ -17,10 +17,12 @@ bare-metal cluster exists.
 `main` carries shared tooling (`common/`), every experiment's metadata
 (`<exp>/model.env`, `<exp>/download.sh`), and `research/`. Each experiment
 has a branch of the same name (`marlin2b`, `kimik3`, …) where that
-experiment's serve configs, benchmarks and results diverge. Experiment
-branches are kept fast-forwardable from `main`: merge `main` into them with
-`git merge --ff-only main` after every change to `main`; never merge an
-experiment branch back into `main` except for tooling fixes in `common/`.
+experiment's serve configs, benchmarks and results diverge. After every change to
+`main`, merge `main` into each experiment branch (`git merge main`; it
+fast-forwards until the branch has commits of its own). Never merge an
+experiment branch back into `main`; land tooling fixes on `main` directly.
+Measured results go in `<exp>/results/` on the branch, with a short
+"Measured" note in `research/models/<exp>/README.md` on `main`.
 
 ## Commands
 
@@ -37,8 +39,13 @@ free space in bytes on purpose (`SIZE_GB` is decimal GB, `df` reports GiB).
 account approved. `S3_DIR` in `model.env` deliberately differs from the
 directory name; the mirror predates the names.
 
-There is no build, lint or test suite yet; scripts are bash with
-`set -euo pipefail`, and `shellcheck` passes on `common/`.
+There is no build, lint or test suite; scripts are bash with
+`set -euo pipefail` plus small Python clients. On the `marlin2b` branch:
+`./marlin2b/serve.sh` (vLLM in docker), `marlin2b/smoke.py` (one request),
+`marlin2b/bench.py` (load test), `marlin2b/reference.py` (transformers
+path), `marlin2b/tokens.py` (video token budget). The dev box is a
+`g6e.2xlarge` (`i-0e8449a4ffca29bab`, us-east-1d) with the DLAMI's PyTorch
+env at `/opt/pytorch` and NVMe at `/opt/dlami/nvme`; see `marlin2b/README.md`.
 
 ## AWS access from this host
 
