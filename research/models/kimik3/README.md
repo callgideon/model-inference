@@ -1,0 +1,244 @@
+# moonshotai/Kimi-K3 — GPU selection guide
+
+> Research date **2026-09-19**. Synthesis of [`architecture.md`](architecture.md) and the
+> eight pair documents, per [`research/METHODOLOGY.md`](../../METHODOLOGY.md). Every number
+> below is carried from a pair doc and linked to it; **no new numbers are introduced here.**
+> Where two pair docs disagreed on an input, the disagreement is resolved against
+> [METHODOLOGY §8](../../METHODOLOGY.md) and stated in [§Open questions](#open-questions).
+
+---
+
+## Summary
+
+1. **What it needs:** 2,779.9 B params, **1,560.9 GB on disk** (97.9 % MXFP4 by bytes, 114.4 GB BF16/F32 non-expert), 104.19 B active/token of which only **46.7 % is MXFP4** — so FP4 silicon is Amdahl-capped at **1.87×** ([architecture.md §3.4, §6.1](architecture.md)). Two memory pools: **13,824 B/token FP8 MLA KV** (24 of 93 layers, TP-**replicated** unless DCP is on) and a **428.6 MiB KDA state slot × S=5 = 2.25 GB per request** that only attention-TP width shards ([architecture.md §5.2–§5.3](architecture.md)).
+2. **Runnable today, native MXFP4 W4A8:** **B300** (8 GPU, the only `verified` cells anywhere) ([b300 §0](b300.md)), **GB300** (8 GPU, four engines with evidence) ([gb300 §0](gb300.md)), **B200** (16 GPU / 2 nodes) ([b200 §0](b200.md)), **MI355X** (8 GPU, measured by three parties) ([mi355x §0](mi355x.md)).
+3. **Runnable today, MXFP4 dequantised by Marlin W4A16 (capacity win, zero FLOPS win):** **H200** (16 GPU) ([h200 §0](h200.md)) and **H100** (32 GPU / 4 nodes) ([h100 §0](h100.md)).
+4. **Best for interactive serving: 8× B300**, TP8 + DCP8, FP8 KV, native MXFP4 — **198.9 out tok/s/GPU at TPOT 49.9 ms** and $10.34–$20.95/1M output ([b300 §4.2](b300.md)). **GB300 is faster per GPU** (253.3 tok/s/GPU at 46.7 ms, [gb300 §3.3](gb300.md)) but its only published rate is $18.00/GPU-h, so it costs ~1.9× more per token.
+5. **Best cost per token: 8× B300 at max-throughput**, **$6.39/1M output** (low tier) / **$1.93 blended**, falling to **$3.90 / $1.30 with DSpark** ([b300 §4.2](b300.md)). B200 at Hyperstack's $6.00 with DSpark at the KV ceiling reaches **$2.63/1M output** ([b200 §4.3](b200.md)) — the lowest figure in the set, but it is modelled, not measured.
+6. **Cheapest viable:** **8× B300 at $7.40/GPU-h** (Hyperstack) is both the cheapest *per token* and the smallest deployable unit — one node, 195.1 GB/GPU, 72.8 % of 2,144 GB ([b300 §1.1–§1.2](b300.md)). **8× MI355X** is the cheapest *node count* alternative (205.1 GB/GPU on one UBB 2.0 baseboard, [mi355x §1.1](mi355x.md)) but its only published rate, OCI's $8.60, makes it 1.7–2.2× the API price ([mi355x §4.4](mi355x.md)).
+7. **Not runnable: A100.** No engine ships a path — vLLM's recipe API 404s for `hw/a100.json`, SGLang's `supportedHardware` excludes it, TRT-LLM is SM100-only. The *hardware* fits at 24–32 GPUs; the blocking question is whether MXFP4 MoE via Marlin executes on sm_80 at all ([a100 §0, §6.1](a100.md)).
+8. **Effectively not runnable on a vendor stack: RTX PRO 6000.** Both engines 404/omit `sm_120`; only a community fork serves it, on 16 cards, by requantising the dense projections to MXFP8 online — the native checkpoint needs 97.55 GB/GPU against a 96 GB card ([rtx6000-pro §0, §1.2](rtx6000-pro.md)).
+9. **Economically marginal everywhere on Hopper:** H100 self-hosting loses to Moonshot's API at **every** published price tier and operating point ([h100 §4.4](h100.md)); H200 likewise — *"there is no published H200 rental price at which self-hosting Kimi-K3 beats buying it from Moonshot"* ([h200 §4.6](h200.md)).
+10. **The one number that decides build-vs-buy is your cache-hit rate.** OpenRouter measures **92 %** on real K3 traffic and Moonshot claims *">90 % in coding workloads"*; a hit costs you ~10 % of a prefill but costs Moonshot 90 % of its input revenue, so **the more cacheable your traffic, the worse self-hosting looks** ([b300 §4.5](b300.md), [h100 §4.4](h100.md)).
+
+---
+
+## Cross-GPU comparison
+
+| GPU | Runnable today (engine) | Min GPUs | Recommended + parallelism | Weight format executed | Attention kernel | Max conc @8K | @128K | Interactive tok/s/GPU (TPOT) | Max-tput tok/s/GPU | $/1M out interactive (low–high) | $/1M out max-tput (low–high) | Blended $/1M | Confidence |
+|---|---|---:|---|---|---|---:|---:|---|---:|---|---|---|---|
+| **B300** ([doc](b300.md)) | **Yes** — vLLM ≥0.27.1, SGLang ≥0.5.17 (**the only `verified: true` cells for K3 anywhere**), TRT-LLM from source | **8** | **8 = 1 HGX node**, TP8 + DCP8 | **native MXFP4 W4A8** (FlashInfer trtllm-gen SiTU, `sm_103`) | `TOKENSPEED_MLA`/`cutedsl_mla` + FlashInfer `fused_kda_decode` (gate `(10,0),(10,3)`) | **101 meas.** (110 est. @0.85) | **64** est. | **198.9** @ **49.9 ms** (b=111) | **321.6** (b=256) | **$10.34–$20.95** | **$6.39–$12.96** | **$3.12–$6.32** (S1) | estimate on measured foundations |
+| **GB300** ([doc](gb300.md)) | **Yes** — vLLM `verified`, SGLang, **TRT-LLM guide validated on GB300**, Dynamo (4 recipes), TokenSpeed | **8** (2 NVL4 trays) | **8/replica, 9 replicas/rack**, TP8 + DCP8 | **native MXFP4 W4A8**, FP8 KV | same as B300 (`sm_103`); FlashMLA **not** listed for sm_103 | **169** est. (383 with bf16 state + S=4) | **98** est. | **253.3** @ **46.7 ms** (b=96) | **344.4** (b=147, ρ=0.90) | **$19.74** (single price) | **$14.52** (single price) | **$5.61** (S1) / $4.30 (S4) | **measured** (support, fit, curve); estimate for grid cells |
+| **B200** ([doc](b200.md)) | **Yes** — vLLM 2-node `verified`; SGLang cells `in-progress`; TRT-LLM TEP16 only | **16** (2 HGX nodes) | **16**, `PP2 × TP8 + DCP8 + EP8` (SGLang Balanced) or flat TP16 | **native MXFP4 W4A8** (`sm_100`) | `TOKENSPEED_MLA`/`trtllm_mla` + FlashInfer `fused_kda_decode`; **FA3 refused on Blackwell** | **401** (DCP8, FP8) | **225** (DCP8) | **102.0** @ **39.2 ms** (b=64) | **437.0** (b=411) | **$16.34–$38.78** | **$3.81–$9.05** | **$4.40–$10.45** | estimate, calibrated to 7 InferenceX rows |
+| **MI355X** ([doc](mi355x.md)) | **Yes** — vLLM `verified` (ROCm image), SGLang cell `verified:false`, **AMD ATOM Day-0**, InferenceX nightly | **8** | **8 = 1 UBB 2.0 node**, TP8 (replicas above that, never TP16) | **native MXFP4** (AITER SiTU v2, A8W4/A4W4) + BF16 non-expert | **AITER MLA** (vLLM, 1.2–1.5× Triton); **69/93 KDA layers on unfused Triton** | **120** (DCP1) / **161** (DCP8) | **22** (DCP1) / **93** (DCP8) | **74.0** @ **49.2 ms** (meas., conc 44) | **91.3** meas. (conc 70) / 239 est. | **$32.28** (single price) | **$26.16** meas. / **$10.01** est. | **$8.49** (S1) / $6.96 (S4) | **measured** (3 independent parties) |
+| **H200** ([doc](h200.md)) | **Yes** — vLLM `multi_node_tp` 2-node, SGLang (all cells `verified:false`); **TRT-LLM no** (SM100 only) | **16** (2 nodes, 400G IB/EFA **mandatory**) | **16**, TP16 + EP16; 32 for the high-throughput profile | **Marlin W4A16 dequant** — sm_90 has no FP4 TC; **+5.3 % resident bytes** | FlashMLA SM90 decode + FA3 prefill; vLLM fused CUDA KDA (no FlashInfer path) | **74** (FP8, S=4 bf16, TP16) | **6** | **17.36** @ **23.21 ms** (meas., DSpark, conc 8) | **25.0** est. (bracket 9.6–41.0) | **$63.86–$126.63** | **$44.33–$87.91** (mid) | **$19.26–$38.19** (S1) | estimate (4 measurements disagree 7×) |
+| **H100** ([doc](h100.md)) | **Barely** — SGLang cell `verified:false`, vLLM TP32 override; **TRT-LLM no** | **32** (4 nodes) — *not* the 24 the GPU doc implies | **32**, TP32 + EP32 (**TP capped at 32**: `gcd(96,7168)=32`) | **Marlin W4A16 dequant**; **resident = 1.31 × checkpoint/N** at N=32 | FlashMLA decode + FA3 prefill; `SGLANG_K3_ATTN_RES_MODE=jit` on every Hopper cell | **95** (mf 0.97, FP8) | **9** | **SLO unreachable** — best 113 ms est. / **172 ms meas.** | **27.38** (conc 128, FP8 KV) | **$3,218–$6,918** (b=1, SLO missed) | **$32.46–$69.80** | **$8.38–$18.01** (S4) | estimate |
+| **RTX PRO 6000 SE** ([doc](rtx6000-pro.md)) | **Community fork only** — vLLM recipe **404**, SGLang has no `rtx6000`; `local-inference-lab` fork serves it | **16** (native ckpt needs an online **MXFP8 overlay** to fit 96 GB) | **16**, TP16 + DCP16, one chassis, PCIe only | **MXFP4 → W4A16 dequant** + MXFP8 overlay on dense projections | B12X MLA / FA2 prefill (upstream: `TRITON_MLA`); **native fused CUDA KDA** (sm_120 gate) | **12** (engine/CUDA-graph cap, not KV) | **11** | **13.86** @ **49.6 ms** (conc 11) | **14.33** (conc 12) | **$36.08–$83.05** | **$34.89–$80.31** | **$9.91–$22.81** | estimate, anchored on receipted batch-1 measurements |
+| **A100** ([doc](a100.md)) | **No** — vLLM `hw/a100.json` → **404**, SGLang `supportedHardware` excludes it, TRT-LLM SM100 only | 24 fits / **32 useful** | **32**, TP32 (4 nodes, 200 Gb/s IB) | **Marlin W4A16** ⚠️ contested on sm_80 ([vLLM #35922](https://github.com/vllm-project/vllm/issues/35922)) | `TRITON_MLA` + Triton KDA — **every kernel is a fallback** | **99** (FP8, 32 GPU) | **9** | **12.54** @ **49.8 ms** (conc 20) `est.` | **30.01** (conc 143) `est.` | **$35.21–$75.98** | **$14.72–$31.75** | **$10.51–$22.67** | **not-runnable** |
+
+Notes that the table cannot hold:
+
+- **Concurrency columns are not comparable across rows without their basis.** B300's 101 is a *measured SGLang admission cap*; MI355X's 120/161 and GB300's 169 are `est.` at `mem-fraction 0.90`; RTX PRO 6000's 12 is an *engine* cap set by CUDA-graph pools, not by KV ([rtx6000-pro §1.4](rtx6000-pro.md)); A100's is arithmetic for a configuration nobody has run.
+- **H100 and A100 interactive columns are not operating points.** Neither reaches the 50 ms TPOT SLO at any concurrency; the H100 figure is the best cell that exists and it misses by 2.3× ([h100 §3.2](h100.md)).
+- **$/1M output at single-price GPUs (GB300 $18.00 OCI, MI355X $8.60 OCI) rests on one row each** — `low`, `high` and `res1y` are the same number ([gb300 §4.1](gb300.md), [mi355x §4.1](mi355x.md)).
+- **The B300 and GB300 measured rows come from different software vintages.** The InferenceX B300 row is dated 2026-08-16 and the GB300/GB200/H200 rows 2026-09-19 — in exactly the window vLLM published **2.2–2.8× gains on this pair**. Do not read "GB300 is 1.50× B300" off that comparison ([b300 §3.6–§3.7](b300.md)).
+
+---
+
+## Optimization impact
+
+Effects are per the pair docs' §2 (what runs) and §4 (what it is worth). `meas.` = published measurement; `est.` = derived.
+
+| Optimization | B300 | GB300 | B200 | MI355X | H200 | H100 | RTX PRO 6000 | A100 |
+|---|---|---|---|---|---|---|---|---|
+| **Attention kernel generation (MLA)** | native `TOKENSPEED_MLA`/`cutedsl_mla`; FlashInfer 0.6.17 added decode for *"96 global query heads against one KV head"* ([b300 §2](b300.md)) | same; FlashMLA **not** listed for sm_103 ([gb300 §2](gb300.md)) | native `TOKENSPEED_MLA`/`trtllm_mla`; **FA3 refused on Blackwell** ([b200 §2](b200.md)) | **AITER MLA = 1.2–1.5× Triton, 1.52× at conc 64**; a 1-line 12→16 head pad moves prefill **4–7k → ~13k tok/s** ([mi355x §2](mi355x.md)) | FlashMLA SM90 decode ✅; **which kernel serves MLA *prefill* on sm_90 is ⚠️ unresolved** ([h200 §2](h200.md)) | FlashMLA decode + FA3 prefill (~740 TFLOPS) ([h100 §2](h100.md)) | B12X MLA + FA2 prefill; **no FlashMLA/FA3/FA4/trtllm-gen on sm_120 at all** ([rtx6000-pro §2](rtx6000-pro.md)) | `TRITON_MLA` only — every 10.x/9.x backend rejects sm_80 ([a100 §2](a100.md)) |
+| **Attention kernel generation (KDA, 69/93 layers)** | FlashInfer `fused_kda_decode` — **1.33× at one row, geomean 1.13×** ([b300 §2](b300.md)) | same gate `(10,0),(10,3)` ([gb300 §2](gb300.md)) | same — B200/B300 are **the only two** GPUs with this path ([b200 §2](b200.md)) | **unfused Triton for 69 of 93 layers** — the single biggest software gap; `SGLANG_K3_KDA_FUSED_BACKEND=aiter` recovers **−8.9 % per layer** ([mi355x §2](mi355x.md)) | vLLM's native fused CUDA KDA ✅; forgoes the FlashInfer 1.13–1.33× ([h200 §2](h200.md)) | same as H200 ([h100 §2](h100.md)) | **native fused CUDA KDA** — the one kernel where sm_120 is first-class ([rtx6000-pro §2](rtx6000-pro.md)) | Triton only; **Triton-vs-fused gap unpublished on every GPU** ⚠️ ([a100 §2](a100.md)) |
+| **Weight format** | **native MXFP4 W4A8, no dequant.** Amdahl caps FP4 at **1.87×**; at batch 1 **81 % of bytes are BF16 non-expert** ([b300 §2, §3.3](b300.md)) | same ([gb300 §2](gb300.md)) | same; measured FP4 grouped-MoE GEMMs reach **11–14 % of the 9 PFLOPS peak** ([b200 §2](b200.md)) | **native MXFP4** via CDNA 4 micro-scaling MFMA (10,100 TFLOPS); BF16 remainder caps effective peak at **3,853 TFLOPS/GPU** ([mi355x §2, §3.1](mi355x.md)) | **Marlin W4A16 — capacity win, zero FLOPS win**; **W4AFP8 requant = +17.9 % tput, −33.9 % TTFT, −8.1 % TPOT** `meas.` ([h200 §2](h200.md)) | Marlin W4A16; FlashInfer MXFP4-W4A8 "Humming" on SM90 is ⚠️ untried for K3's SiTU experts ([h100 §2](h100.md)) | W4A16 dequant **+ online MXFP8 overlay on dense projections — the only reason 16 cards fit** ([rtx6000-pro §1.2](rtx6000-pro.md)) | Marlin W4A16 claimed by code, **contradicted by a bug report** ⚠️ ([a100 §6.1](a100.md)) |
+| **NVFP4 alternative** | **measurably worse**: TPOT 10.12 vs 8.51 ms at c=1, **+49 GB disk, −10 % admission, −2.5 GPQA** ([b300 §2](b300.md)) | runs; slower than MXFP4 on the sibling B300 ([gb300 §0](gb300.md)) | ⚠️ unmeasured on B200; +49 GB, needs `flashinfer_trtllm` ([b200 §2](b200.md)) | **not applicable** — CDNA 4 has no NVFP4 path ([mi355x §2](mi355x.md)) | pointless — Marlin W4A16 either way, +49–85 GB, −2.5 GPQA ([h200 §2](h200.md)) | same; plus vLLM #49070 Hopper NVFP4-MoE bugs ([h100 §2](h100.md)) | **do not** — MoE grouped GEMM is the broken sm_120 path ([rtx6000-pro §2](rtx6000-pro.md)) | would not run ([a100 §2](a100.md)) |
+| **KV quantization (FP8)** | **native and load-bearing** — *"bf16 KV does not fit 128 requests per replica"*; `TOKENSPEED_MLA` force-rewrites to fp8 ([b300 §2](b300.md)) | native, standard ([gb300 §2](gb300.md)) | **native and mandatory** on the `TOKENSPEED_MLA` path ([b200 §2](b200.md)) | native (SGLang/ATOM); **vLLM's AMD override does not set it** ⚠️; 128 K conc 12 → 22 ([mi355x §2](mi355x.md)) | native in SGLang, ⚠️ in vLLM; **+47–68 % concurrency** ([h200 §2](h200.md)) | native but **not in the shipped cell**; 8 K conc 88 → 130 at mf 0.97 ([h100 §2](h100.md)) | native; every field profile uses it ([rtx6000-pro §2](rtx6000-pro.md)) | **storage only** — no FA3, so no FP8 attention math; **+45–71 % concurrency** ([a100 §2](a100.md)) |
+| **KV quantization (4-bit)** | **unsupported for this model on every GPU** — engines expose `auto`/`bf16`/`fp8` only, even where the silicon has NVFP4 KV kernels ([b300 §2](b300.md), [b200 §2](b200.md)) | ″ | ″ | ″ | ″ | ″ | ″ | ″ |
+| **SSM-state dtype / cache strategy** | `--mamba-ssm-dtype bfloat16` + `extra_buffer_lazy` (S=5→4) lift the 8 K cap **101 → 250** ([b300 §1.2](b300.md)) | **+127 % concurrency at 8 K** (169 → 383) ([gb300 §1.3](gb300.md)) | **2.3× admitted concurrency** vs FP8 KV's 1.05× at 8 K ([b200 §1.5](b200.md)) | **2.3×** at 8 K (120 → 207) ([mi355x §1.3](mi355x.md)) | bf16 state **+36 %**, `extra_buffer_lazy` **+12 %**, together **+48 %** ([h200 §2](h200.md)) | available; ⚠️ changes numerics on F32 tensors ([h100 §6](h100.md)) | ⚠️ `S` accounting differs entirely under vLLM (`MAMBA_BLOCK_SIZE=12288`) ([rtx6000-pro §6](rtx6000-pro.md)) | applies in principle; untested ([a100 §2](a100.md)) |
+| **Speculative decoding (DSpark / DFlash)** | **the biggest output-cost lever**: TPOT 8.51→2.84 (**3.00×**) at c=1, 1.97× at 16, **1.64× at 64**; costs admission **101 → 68 (−33 %)**. ⚠️ measured at a **pinned synthetic acceptance 4.5** ([b300 §2, §4.4](b300.md)) | **2.98× measured** on GB300 TP8 bs=1 (111 → 331 tok/s); at batch ~96 use **1.2–2.0, not 4.5** ([gb300 §4.3](gb300.md)) | **enabled** (collapses `PP2×TP8 → TP16`) — corrects [architecture.md §7.6](architecture.md); at the KV ceiling it cuts $/1M out **$16.34 → $2.63, a 6.2× cut at the same interactivity** ([b200 §2, §4.3](b200.md)) | **2.2× single-stream, ~1.7× per-stream, +18 % peak aggregate** `meas.`; costs S 5 → 13, dropping the 8 K cap **120 → 56** ([mi355x §4.3](mi355x.md)) | **the only path to S1** — acceptance ≈3.4 `meas.`, TPOT 23.21 ms; without it ~79 ms, SLO failed ([h200 §4.5](h200.md)) | ⚠️ **no H100 DSPARK measurement exists**, and it is the one lever that would change the economics ([h100 §4.3](h100.md)) | **DFlash 2.78× / DSpark 2.20× at batch 1, with receipted acceptance 0.619 / 0.415** — the only *measured* K3 acceptance figures on any GPU ([rtx6000-pro §3.6](rtx6000-pro.md)) | ⚠️ likely unsupported (`trtllm_mha` draft backend) ([a100 §2](a100.md)) |
+| **MTP / EAGLE** | **n/a everywhere** — `num_nextn_predict_layers: 0`, the checkpoint ships **no** MTP head; InferenceX's `spec_method:"mtp"` label cannot be literal ⚠️ ([architecture.md §7.1](architecture.md)) | ″ | ″ | ″ | ″ | ″ | ″ | ″ |
+| **Prefix caching** | **off by default for K3**; `--prefix-match-unit 128` mandatory or the hit boundary is very coarse; internal KDA checkpoints cut TTFT **9–25 %** `meas.` ([b300 §2, §4.4](b300.md)) | **−81 % on $/1M input, −17 % on $/1M output** (by freeing prefill capacity), **19× better TTFT** ([gb300 §4.3](gb300.md)) | measured **87.6–94.1 % GPU hit** on agentic traces ([b200 §4.3](b200.md)) | measured **82–96 % hit**; ⚠️ `--prefix-match-unit 128` **absent** from vLLM's AMD override; TTFT is a cache-hit measurement in a latency costume ([mi355x §4.3](mi355x.md)) | ⚠️ **enabled in neither H200 recipe**; blended $19.26 → $17.10 at 90 % hit ([h200 §4.5](h200.md)) | ⚠️ in neither H100 cell; **only 4.4 % of blended cost** — output is 51× input here ([h100 §4.3](h100.md)) | **buys latency, not cost**: TTFT 12.16 s → 1.22 s, blended −6 % ([rtx6000-pro §4.4](rtx6000-pro.md)) | the largest lever available — input rate ~9.7×, blended −13 % ([a100 §4.3](a100.md)) |
+| **DCP (decode context parallel)** | **the single biggest capacity lever**: +72 % ceiling at ~1.8× ITL, ~7.9× logical KV; ⚠️ incompatible with `--enable-symm-mem`, and **L3 HiCache silently drops it** ([b300 §2](b300.md)) | **+34 % at 8 K, +326 % at 128 K** ([gb300 §1.3](gb300.md)) | **the difference between serving 128 K and not**: 29 → 225 concurrent; ⚠️ **vLLM does not offer DCP on B200** ([b200 §1.3, §6](b200.md)) | ⚠️ **measured on (InferenceX `dcp_size:8`, 2.95 M → 30.26 M KV tokens) but documented off** — worth 4–7× at 32 K–1 M ([mi355x §6](mi355x.md)) | **not offered on H200** — the largest *missing* optimisation ([h200 §2](h200.md)) | **unsupported on this cell** — the biggest missing capacity lever ([h100 §2](h100.md)) | **native and mandatory** (`DCP_SIZE=16`) ([rtx6000-pro §2](rtx6000-pro.md)) | **unsupported** — needs `TOKENSPEED_MLA` (10.x only) ([a100 §2](a100.md)) |
+| **EP / wide-EP** | in-node EP8 only; *"Don't use EP with an a2a backend — a2a buffers reclaim the KV that DCP buys"* ([b300 §2](b300.md)) | **DEP16 = 210 GB/rank** (114 GB BF16 replicated + 90 GB experts) → needs GB300-class memory; **a throughput play, not a capacity play** ([gb300 §1.2, §1.3](gb300.md)) | EP inside a node; MegaMoE a2a is **NVLink-only**, so EP is capped at 8 ([b200 §2, §6](b200.md)) | EP published, **unmeasured**; scale-up domain is 8, not 72 ([mi355x §2](mi355x.md)) | `multi_node_dep` **`unsupported`** on h200 — fortunate, DEP16 would not fit 141 GB ([h200 §1.4](h200.md)) | wide-EP/MegaMoE is **SM100/SM103 only** ([h100 §2](h100.md)) | **avoid** — all-to-all over PCIe is worse than all-reduce ([rtx6000-pro §2](rtx6000-pro.md)) | EP ≤ 8 in one baseboard; no A100 analogue of wide-EP ([a100 §2](a100.md)) |
+| **PD disaggregation** | native and **unforgiving** (recurrent state + paged KV + block tables must all arrive); PD decode role uses **S=1**; composed **2,808 tok/s/GPU** ([b300 §2, §5.1](b300.md)) | 1P1D measured: **75.9–90.0 TPS/user** but TTFT p50 4.8–6.4 s ([gb300 §3.4](gb300.md)) | the right multi-node pattern — moves KV over the fabric instead of collectives; prefill is **TP1 × PP16** ([b200 §2](b200.md)) | published, unmeasured ([mi355x §2](mi355x.md)) | **not at this scale** — ≥32 GPUs before it pays; Modular measures **−20–30 %** on small/untuned workloads ([h200 §5.2](h200.md)) | cells exist, `verified:false`; decode role drops S 5→1, ~5× admitted requests ([h100 §2](h100.md)) | **unsupported in practice** — PCIe only, no GPU fabric ([rtx6000-pro §2](rtx6000-pro.md)) | ⚠️ no profile in any engine ([a100 §2](a100.md)) |
+
+Two cross-cutting readings:
+
+- **MXFP4 is a capacity format for this model, not a bandwidth or latency one.** At batch 1 on B300, 81 % of the decode bytes are the 112 GB of BF16 non-expert weights, and TPOT barely moves with context (40.3 → 44.3 ms from S1 to S3 at b=64) ([b300 §3.3](b300.md)). The same holds on H200, where the incremental KV-read term is 0.010–0.293 ms against a 170 ms step ([h200 §3.3](h200.md)).
+- **Measured MBU is far below every planning band.** B300: **25 / 39 / 44 %** at batch 1/16/64 against METHODOLOGY's 0.5–0.7 ([b300 §3.1](b300.md)). H200: **3.1 %** at batch 1 ([h200 §3.3](h200.md)). RTX PRO 6000: **0.312** ([rtx6000-pro §3.5](rtx6000-pro.md)). MI355X: **0.12–0.33** ([mi355x §3.1](mi355x.md)). A 93-layer graph of small per-GPU GEMMs is a launch-count problem, not a bandwidth one — LMSYS say so directly.
+
+---
+
+## Cost vs vendor API
+
+Moonshot list for `kimi-k3`: **$3.00/1M cache-miss input · $0.30/1M cache-hit input · $15.00/1M output**, 1,048,576 context, no cache-write fee ([architecture.md §11](architecture.md)). Blended on METHODOLOGY §6's 75/25 mix at 50 % cached input, using **Moonshot's own published 10 % ratio**: **$4.987/1M**.
+
+| GPU | Operating point | Break-even $/GPU-h @100 % util (0 % hit) | @90 % hit | Price paid | **Utilisation needed** (0 % / 90 % hit) |
+|---|---|---:|---:|---:|---|
+| **B300** ([§4.5](b300.md)) | SGLang Balanced NOSPEC c=64 | **$21.79** | $10.93 | $7.40 low | **34.0 % / 67.7 %** |
+| ″ | + DSPARK c=64 | **$31.01** | $15.55 | $7.40 low | **23.9 % / 47.6 %** |
+| ″ | est. S1 TPOT ≤ 50 ms | $27.93 | $14.00 | $15.00 OCI | 53.7 % / **107 % — impossible** |
+| **GB300** ([§4.4](gb300.md)) | S1 batch 96 | **$35.56** | $15.87 | $18.00 OCI | **50.6 % / 113 % — never** |
+| ″ | S4 batch 147 | **$48.35** | $21.57 | $18.00 OCI | **37.2 % / 83.4 %** |
+| **B200** ([§4.4](b200.md)) | S1 interactive NOSPEC | $14.32 | $6.39 | $6.00 Hyperstack | 41.9 % / **~94 % (marginal)** |
+| ″ | S1 + DSPARK at the KV ceiling | — | **$39.69** | $6.00 / $14.242 AWS | comfortable at both |
+| ″ | S4 max throughput | $61.36 | $27.37 | $6.00 / $14.242 | **9.8 % / 23.2 %** (AWS) |
+| **MI355X** ([§4.4](mi355x.md)) | S1 measured (conc 44) | — | — | $8.60 OCI | **215 % — never breaks even** |
+| ″ | S4 est. DCP8 (4K/512) | — | — | $8.60 OCI | **67 %** (57 % with DSpark) |
+| ″ | S4 est. DCP8 | — | — | $2.95 TensorWave ⚠️ | **23 %** |
+| **H200** ([§4.6](h200.md)) | S1 conc 8 + DSpark | **$2.44** | $1.22 | $3.99 Hyperstack | **163 % / 327 % — impossible** |
+| ″ | S4 midpoint | $3.51 | $1.76 | $2.79 res1y | 79 % / **159 % — impossible** |
+| ″ | S4 upper bracket | $5.76 | $2.89 | $3.99 | **69 %** / 138 % — impossible |
+| **H100** ([§4.4](h100.md)) | S4 conc 128, FP8 KV | **$3.84** | $1.93 | $3.20 Hyperstack | **83.2 % / 166 % — impossible** |
+| ″ | ″ | ″ | ″ | $2.72 res1y | **70.8 % / 141 % — impossible** |
+| **RTX PRO 6000** ([§4.5](rtx6000-pro.md)) | conc 11, no spec | **$1.95** | $0.87 | $1.80 Nebius | **92.5 % / 207 % — unreachable** |
+| ″ | conc 11 + DFlash | **$3.83** | $1.71 | $1.80 Nebius | **47 % / 105 %** |
+| **A100** ([§4.4](a100.md)) | S4 max throughput | **$1.621** | — | $1.59 RunPod | **98 % — i.e. never idle** |
+| ″ | S1 blended | $0.755 | — | $1.59 | **2.1× short** |
+
+**The asymmetry that decides every row.** A cache hit costs you ~10 % of a prefill but costs the vendor 90 % of its input revenue, so break-even falls ~2.0× going from 0 % to 90 % hit — *every time* ([b300 §4.5](b300.md)). Since OpenRouter measures **92 %** on real K3 traffic, **the 90 % column is the realistic one for agentic work**, and it eliminates: all of H100, all of H200, GB300 at OCI list, B300 at OCI list, MI355X at OCI list, and RTX PRO 6000 without speculation. What survives at 90 % hit is **B300 on neocloud pricing** (47.6–67.7 % utilisation) and **B200 with DSpark**.
+
+**Corollary worth stating once:** self-hosting wins on *output-heavy* traffic, because output is 5–50× the price of cached input while costing the same bytes to produce. Kimi-K3's `reasoning_effort` defaults to **`max`** and its thinking tokens must be echoed back across turns ([architecture.md §1.4](architecture.md)) — so this model's natural traffic is unusually output-heavy *and* unusually cacheable at once, and which effect dominates is an empirical question about your own workload, not a question this repo can answer.
+
+---
+
+## Recommendation
+
+**For this repo's node types.**
+
+### Primary: 8× B300 (the existing node; AWS `p6-b300.48xlarge` is the same shape)
+
+Run **one replica per node**, exactly as both engines ship it ([b300 §5.1–§5.2](b300.md)):
+
+```bash
+vllm serve moonshotai/Kimi-K3 \
+  --trust-remote-code --gpu-memory-utilization 0.95 \
+  --tensor-parallel-size 8 --load-format fastsafetensors \
+  --no-enable-flashinfer-autotune --max-model-len 1048576 \
+  --kv-cache-dtype fp8 \
+  --attention-backend TOKENSPEED_MLA \
+  --attention-config '{"use_prefill_query_quantization":true,"mla_prefill_backend":"TOKENSPEED_MLA"}' \
+  --enable-prefix-caching --prefix-match-unit 128 \
+  --enable-auto-tool-choice --tool-call-parser kimi_k3 --reasoning-parser kimi_k3
+```
+
+or SGLang's verified cell: `--tp-size 8 --dcp-size 8 --mem-fraction-static 0.85`.
+
+Non-negotiables, each of which is load-bearing rather than a tuning preference:
+
+- **Leave the weight format alone.** The native MXFP4 checkpoint runs at W4A8 with no dequant; NVFP4 is **slower, larger and 2.5 GPQA points worse** on this GPU ([b300 §2](b300.md)). **Never INT8** — B300's INT8 is 0.083× its own BF16 rate ([b300 §2](b300.md)).
+- **`--kv-cache-dtype fp8` is mandatory**, and `TOKENSPEED_MLA` force-rewrites it anyway.
+- **`--prefix-match-unit 128` is mandatory** whenever prefix caching is on, or the hit boundary inflates to the Mamba state page ([architecture.md §8.8](architecture.md)).
+- **Use DCP8, not EP8.** On one node DCP beats EP, and SGLang warns the a2a buffers reclaim the KV that DCP buys. A known crash ([sglang#34260](https://github.com/sgl-project/sglang/issues/34260)) hit exactly the `DCP8 + EP8` combination.
+- **Do not pair L3 HiCache with DCP** — the storage keys are not `dcp_rank`-aware and DCP is silently dropped ([b300 §2](b300.md)).
+- **Confirm capacity with `nvidia-smi` before sizing.** At a DGX B300 (262.5 GB) or OCI (263 GB) sub-SKU the 8 K admission ceiling drops ~110 → ~94 ([b300 §1.1](b300.md)).
+- **Plan 5–10 min cold / 2–3 min warm** to first token; stage the 96 shards on the node's local NVMe (p6-b300 has 30.72 TB, 19× the checkpoint) rather than pulling 1.56 TB over the wire each time ([b300 §5.3](b300.md)).
+
+### AWS p6 family
+
+| Instance | Shape | Verdict |
+|---|---|---|
+| **`p6-b300.48xlarge`** (8× B300, 2,144 GB) | drop-in for the primary shape | **Use this.** On-demand $17.802/GPU-h is above every break-even in the 90 %-hit column — buy **Capacity Blocks ($14.04)** or reserve; at $17.80 on-demand, buy the API for agentic traffic and self-host only output-heavy `reasoning_effort=max` work ([b300 §4.1, §4.5](b300.md)). |
+| **`p6-b200.48xlarge`** (8× B200, 180 GB) | **two instances minimum** — 8× B200 overflows by 16 GB/GPU before one KV page ([b200 §1.2](b200.md)) | Workable as `PP2 × TP8 + DCP8 + EP8`; note **vLLM does not offer DCP on B200**, so long-context concurrency needs SGLang ([b200 §6](b200.md)). At AWS's $14.242 it is 2.1× the API blended price without DSpark. |
+| **`p6e-gb200` / `p6e-gb300`** | 16-GPU (GB200 NVL) / NVL72 slices | GB300 is the best-supported platform and the fastest per GPU, but **quote-only from seven of eight providers**; at OCI's $18.00 it is a utilisation bet ([gb300 §4.4](gb300.md)). Worth it if you can reach anything near the $2.31–$5.00 ownership anchors — every conclusion flips there. |
+| p5 / p5en (H100 / H200) | 4 nodes / 2 nodes | **Do not** run Kimi-K3 here for cost reasons. H100 needs 32 GPUs to reach 0.77× a single B300 node's throughput ([a100 §3.6](a100.md) via [h100 §3.3](h100.md)); H200's best measured point is 17.36 out tok/s/GPU against B300's 155–221 ([h200 §4.3](h200.md)). Use them for evaluation, data-residency or air-gapped work only. |
+
+### What to benchmark first, in order of how much money it moves
+
+1. **NOSPEC vs DSPARK on your own traffic, measuring acceptance.** Every DSpark cost figure in this repo inherits SGLang's **pinned synthetic** `SGLANG_SIMULATE_ACC_LEN=4.5`. Real measured acceptance ranges **5.51 (HumanEval) → 2.99 (AIME26)**, and AIME-shaped reasoning is exactly K3's traffic ([b300 §6.1](b300.md)). This single number moves $/1M output by up to 3×.
+2. **Your prefix-cache hit rate, with and without `--prefix-match-unit 128`.** It decides build-vs-buy more than any engine flag (§Cost vs vendor API).
+3. **The admission cap on your actual node** at your `--mem-fraction-static`. Modelled 110 vs measured 101 at 8 K; 68 under DSPARK ([b300 §1.2](b300.md)).
+4. **A 32 K and 128 K sweep.** **No published K3 measurement at any context other than 8K/1K or an agentic trace exists on any hardware** — S2 and S3 are pure extrapolation everywhere in this repo ([b300 §6.1 item 10](b300.md)).
+5. **FP8 KV accuracy.** The checkpoint ships `kv_cache_scheme: null`, so scales are engine-calibrated and unmeasured for K3 ([b300 §6.1 item 13](b300.md)).
+6. **Engine-version A/B.** vLLM moved this exact pair **2.2–2.8×** in under a month ([b300 §3.7](b300.md)). Pin versions, re-measure quarterly, and treat any number without an engine SHA as worthless.
+7. **DCP8 on/off**, reading back both the admission cap and the ITL cost (~1.8× per SGLang).
+8. **Serve at 300 K, not 1 M.** Moonshot's own card reports BrowseComp **91.2 with compaction at 300 K vs 90.4 with the full window** — and 1 M costs 20 concurrent per node against 124 at 32 K ([gb300 §6.3](gb300.md), [b300 §1.2](b300.md)).
+
+### Licence gate
+
+The Kimi K3 License §2 requires a separate agreement with Moonshot AI for any Model-as-a-Service business exceeding **US$20 M aggregate revenue over any consecutive 12 months**; §3 requires UI attribution above 100 M MAU or $20 M monthly revenue. **Internal use is exempt; token resale is gated** ([architecture.md §1.1](architecture.md)).
+
+---
+
+## Open questions
+
+Consolidated ⚠️ **TO BE VERIFIED** across all eight pair docs plus `architecture.md`, deduplicated and ordered by how much they move the decision. **25 items.**
+
+### A. Moves the money
+
+1. **No measured DSpark acceptance for any real workload on any GPU except RTX PRO 6000.** SGLang pins `SGLANG_SIMULATE_ACC_LEN=4.5`; the MI355X DeepSeek recipe's 3.51 is likewise synthetic. The only receipted end-to-end acceptances are the community rig's **0.415 (DSpark) / 0.619 (DFlash)** ([rtx6000-pro §3.6](rtx6000-pro.md)). Every DSpark $/token figure for B300, GB300, B200, H100 and A100 inherits the synthetic constant. ([b300 §6.1](b300.md), [gb300 §4.3](gb300.md), [b200 §6](b200.md), [mi355x §6](mi355x.md), [h100 §6](h100.md))
+2. **No published measurement at 32 K, 128 K or 1 M context for this model on any hardware.** Every serving number found is ISL 8192 / OSL 1024 or an agentic trace with `isl`/`osl` null. All S2/S3 rows everywhere are extrapolation. ([b300 §6.1](b300.md), [gb300 §6.1](gb300.md), [b200 §6](b200.md), [h200 §6.1](h200.md))
+3. **`spec_method: "mtp"` on every InferenceX Kimi-K3 row is mislabelled** — the checkpoint has `num_nextn_predict_layers: 0` and ships no MTP head. It presumably means a DSpark draft; which draft, and its acceptance, are not in the API response. Unresolved on b200, b300, gb300, mi355x and h200 alike. ([b300 §3.5](b300.md), [b200 §6](b200.md), [mi355x §6](mi355x.md))
+4. **Rows at batch ≥ 128 extrapolate MBU past the last measured anchor (c=64) on every Blackwell doc.** If MBU falls rather than holding at 0.45–0.48, S4 throughput and cost degrade proportionally. ([b300 §6.1](b300.md), [gb300 §6.1](gb300.md))
+5. **Does DCP actually run on MI355X?** InferenceX reports `dcp_size: 8` with a 2.95 M → 30.26 M KV-token step, while vLLM's recipe site 404s for the MI355X DCP variant and pairs DCP with a CUDA-only backend. Worth **4–7× concurrency at 32 K–1 M**. ([mi355x §6.1](mi355x.md))
+6. **Every MI355X and GB300 price rests on a single published row** (OCI $8.60 and $18.00). If MI355X's real clearing price is near the ⚠️ $2.95 quote, every §4.4 conclusion in that doc flips; if GB300 reaches its $2.31–$5.00 ownership anchors, so does every §4.4 conclusion there. ([mi355x §6.17](mi355x.md), [gb300 §4.1](gb300.md))
+7. **H200's four measurements disagree by 7× on per-user decode rate** (5.4 → 39.95 tok/s/user) and no two isolate a variable. The S4 bracket is consequently **4.3× wide**. ([h200 §3.5, §6.4](h200.md))
+
+### B. Blocks or changes a deployment
+
+8. **A100 (blocking): does MXFP4 MoE via Marlin execute on sm_80?** vLLM's code says yes (`get_min_capability() == 80`, `kMxfp4Static` in `SUPPORTED_W`); [vLLM #35922](https://github.com/vllm-project/vllm/issues/35922) says compressed-tensors MXFP4A16 on A100 fails with `no kernel image is available`, closed "not planned". Kimi-K3 is in the failing family, not the gpt-oss family. ([a100 §6.1](a100.md))
+9. **RTX PRO 6000: the exact MXFP8 overlay coverage**, and the r38 receipt's unit-inconsistent `model_memory_gib_per_rank = 90.42` (= 97.09 GB > the 96 GB nameplate). The documented five tensor names are arithmetically not enough to fit 16 cards. ([rtx6000-pro §6.1–§6.2](rtx6000-pro.md))
+10. **Open vLLM bug on B200: weight-loading memory is not reclaimed** — [vllm#57440](https://github.com/vllm-project/vllm/issues/57440), 40.6 GiB stranded, free memory down to 5.5 GiB; the reported workaround destroys throughput. Validate your build before trusting the B200 KV budget. ([b200 §6.6](b200.md))
+11. **DSpark on ROCm crashes out of the box in SGLang** (`NameError: top_k_renorm_prob`); patched by the reporter, upstream status unknown. Speculation is worth 1.7–2.2× on MI355X, so this is a blocker. ([mi355x §6.7](mi355x.md))
+12. **FlashInfer is the default Blackwell attention backend and is *"architecture-gated but not yet signoff-qualified"* on SM103a**, and **vLLM has no Blackwell CI at all** (CUDA CI covers L4 and H100 only). `sm_100a` binaries do not load on B300 — the #1 source of "works on B200, dies on B300". ([b300 §6.1 items 5–7](b300.md))
+13. **B300-specific crash** ([sglang#34260](https://github.com/sgl-project/sglang/issues/34260)): ~twice daily on 8× B300 cc 10.3 with `TP8 + DCP8 + EP8` + hierarchical caching. Closed, **no workaround recorded and no fix version named**. ([b300 §6.1 item 8](b300.md))
+14. **The vLLM Kimi-K3 tracking issue** [#50001](https://github.com/vllm-project/vllm/issues/50001) shows **0 of 20 checklist items complete**, with DCP, PCP, PP, KDA prefill, AttnRes kernel optimisation and mamba-prefix-caching restrictions all open. ([b300 §6.1 item 9](b300.md))
+15. **SGLang: only the two B300 1×8 Unified cells are `verified: true`**, and *"accuracy has not been re-measured on any cell — re-measure before you rely on one."* Every other cell in every other pair doc is a starting point. ([b300 §6.1 item 2](b300.md))
+
+### C. Affects sizing or accuracy, but not the platform choice
+
+16. **`--mamba-ssm-dtype bfloat16` accuracy on Kimi-K3 is unmeasured on every GPU**, and it is the largest capacity lever (+127 % concurrency at 8 K on GB300). The F32 conv kernels and decay parameterisation are the numerically sensitive tensors. ([gb300 §6.1 item 11](gb300.md), [h200 §6.3](h200.md))
+17. **FP8 KV accuracy for K3 is unmeasured anywhere.** `kv_cache_scheme: null` means runtime-calibrated scales; vLLM reports *"consistent modest degradation"* for Kimi-K2.5 on the FlashMLA FP8-KV path without calibration; `--kv-cache-dtype-skip-layers` exists precisely for hybrid shapes and has no K3 guidance. ([b300 §6.1 item 13](b300.md), [h200 §6.3](h200.md))
+18. **No unquantised reference exists.** The MXFP4 weights are quantization-aware-trained from the SFT stage onward — *"there is no BF16 Kimi-K3 checkpoint"* — so "MXFP4 accuracy loss" is not a measurable quantity. The only quantisation datapoint for any K3 variant is RedHatAI NVFP4's **GPQA Diamond 93.5 → 91.0**, and 93.5 is itself the MXFP4 model. No evals at all for `nvidia/Kimi-K3-NVFP4`, `RedHatAI/Kimi-K3-FP8-BLOCK` or the AMD Quark build. ([architecture.md §9](architecture.md), [b300 §6.1 item 12](b300.md))
+19. **`S` (KDA state slots per request) under vLLM is not 5.** METHODOLOGY §8 pins SGLang's `extra_buffer` default; vLLM's hybrid KV manager allocates "≥1 plus speculative slots", and the RTX PRO 6000 field configuration is only consistent with S≈1. Every concurrency table in this repo is SGLang-shaped. ([gb300 §6.1 item 12](gb300.md), [rtx6000-pro §6.4](rtx6000-pro.md))
+20. **The Marlin resident-weight multiplier is measured at two points and fitted, not validated at a third.** 1.313× at N=32 (H100) and 1.131× at N=16 (H200) give `w(N) = 1,481.6e9/N + 17.73e9`; the decomposition of the 17.73 GB replicated term is inferred, and N=64 is extrapolation. It is what turns 24 H100s from "fits" into "does not fit". ([h100 §1.2, §6](h100.md), [h200 §6.11](h200.md))
+21. **The 100 ms launch/collective term for H100 SXM TP32/4-node IB** is interpolated between two measurements on *different fabrics* and sets every decode figure in that doc — the author calls it *"the least defensible number in the document."* ([h100 §3.1, §6](h100.md))
+22. **Whether `TP8 × PP4` is the better H200 shape.** It is the only H200 topology keeping all-reduce on NVLink and produced the fastest per-user H200 number (39.95 tok/s/user), but vLLM does not list `multi_node_tp_pp` for h200 and the community report hit `RuntimeError: cp_world_size must be positive` during CUDA-graph capture. ([h200 §6.6](h200.md))
+23. **Whether the FlashInfer MXFP4 W4A8 "Humming" path has a SiTU variant on SM90.** Documented for DeepSeek-V4 on H100/H200, never demonstrated for K3's SiTU-GLU latent experts. If it works it is the largest throughput lever available on Hopper. ([h100 §6.7](h100.md))
+24. **MI355X: SGLang pins `--attention-backend triton`** on MI35x, forgoing vLLM's own measured 1.2–1.5× AITER MLA win, with no explanation; and the two engines give **opposite advice** on `AITER_SITUV2_A8W4` (1.2 % apart in measured throughput). ([mi355x §6.3–§6.4](mi355x.md))
+25. **Operational gotchas that will bite on day one, all sourced:** `mlx5dv_reg_dmabuf_mr` errno 524 → set `NCCL_DMABUF_ENABLE=0`; K3 *"occasionally emit a tool-call format its own parser doesn't expect"* (schema-validate and retry); setting any one of the three Blackwell attention knobs *"cancels the auto-resolution for the others"*; DCP is force-incompatible with `--enable-symm-mem`; L3 HiCache silently drops DCP; DSPARK requires `pp_size == 1`; an unset `--max-running-requests` resets to 48 under spec; `pip install flash-linear-attention` is a hard dependency for the KDA layers; **video and audio input are rejected** by the open-source processor despite the card's Video-MME 90.0. ([b300 §6.1 item 15](b300.md), [gb300 §6.2](gb300.md))
+
+### Disagreements between pair documents, resolved
+
+| Disagreement | Resolution |
+|---|---|
+| **`architecture.md` §10.5 and [h100 §3.3](h100.md) both state "no MLPerf / InferenceMAX / InferenceX row for Kimi-K3 on any hardware."** | **Wrong — the InferenceX rows exist.** [b300 §3.5](b300.md) re-fetched **68 rows** live on 2026-09-19 (11 on b300), [h200 §3.4](h200.md) 12 h200 rows, [b200 §3.4](b200.md) 7 b200 rows, [gb300 §3.4](gb300.md) 5 gb300 rows, [mi355x §3.3](mi355x.md) 20 mi355x rows. `architecture.md` flags its own result as *"a negative result from non-exhaustive search"* during the WebSearch outage, and [METHODOLOGY §8](../../METHODOLOGY.md) documents the `model=Kimi-K3` slug as re-fetchable. **The MLPerf half of the claim stands** — no MLPerf submission exists for Kimi-K3 on any hardware. |
+| **`architecture.md` §7.6: "DSPARK is not offered on B200."** | **Wrong.** The cookbook's disable rule is `isPipelined(s) && !specCollapses(s)`, and B200 cells carry `specCollapsePp: true`, so DSPARK **is** enabled and collapses `PP2×TP8 → TP16`. ([b200 §6.1](b200.md)) |
+| **`gpus/h100.md` §2: "Kimi-K3 needs ≥ 24 H100 (3 nodes)."** | **32.** True on the paper share (65.0 GB/GPU), false on the measured Marlin resident footprint (79.5 GB against an 80 GB card); and TP24 is invalid anyway since `7168/24` is not integral. Both engines publish 32. ([h100 §1.3](h100.md)) |
+| **`gpus/h200.md` §2: 169 / 148 / 98 concurrent at 8K/32K/128K on 16×H200.** | **50 / 21 / 6** at FP8 KV, S=5. The GPU doc treated MLA KV as sharded across ranks (it is **replicated** without DCP) and KDA state as unsharded (it **is** divided by attention-TP width). 3.4× / 7.0× / 16× lower. ([h200 §1.3](h200.md)) |
+| **`gpus/rtx6000-pro.md` §9g: "does not fit an 8-card box … at least 19 cards (topology step 32)"**, and `inference-engines.md` / `quantization-formats.md` record sm_120 as unsupported. | **All three are correct about vendor support and METHODOLOGY §3 arithmetic, and incomplete about the field.** A receipted 16-card community deployment exists, reaching 16 cards by requantising the dense projections to MXFP8 online — a path the repo's arithmetic did not model. ([rtx6000-pro header, §1.2](rtx6000-pro.md)) |
+| **`gpus/a100.md` §9: Kimi-K3 on A100 = "5.56 TB ≈ 72 GPUs of weights alone."** | **1,560.9 GB.** Marlin W4A16 keeps MXFP4 packed in HBM and dequantises in-register; no BF16 K3 checkpoint exists to convert (QAT'd at MXFP4). The BF16-on-disk figure would also be **83** GPUs, not 72. The **"No" verdict itself is agreed**, for software reasons. ([a100 §6.2](a100.md)) |
+| **B200 capacity: SGLang's catalogue says `vram: 192GB`; vLLM and METHODOLOGY §8 say 180 GB.** | **180 GB.** Sizing off 192 overstates a 16-GPU deployment by 192 GB. ([b200 §1.1, §6.2](b200.md)) |
+| **MI355X capacity: AMD's Day-0 note sizes against 288 GiB.** | **288 GB** (= 268.22 GiB) per METHODOLOGY §8 — the ROCm spec-table unit error. AMD's "82.6 GiB remaining" becomes **62.8 GiB** at physical capacity and **36.0 GiB** after the 0.90 factor. The conclusion (it fits comfortably) survives. ([mi355x header, §6.12](mi355x.md)) |
+| **B300 node capacity: 2,304 GB appears in some third-party write-ups.** | **2,144 GB** (8 × 268 GB as deployed). 2,304 is the GB300 NVL72 die nameplate and **does not exist as a shipping 8-GPU B300 product**. Sub-SKUs at 262.5 GB (DGX B300) and 263 GB (OCI) do exist and cost ~14 % of the admission ceiling. ([b300 §1.1](b300.md)) |
+| **A100 capacity: METHODOLOGY §8 says 80 GB; `gpus/a100.md` §2 says 80 GiB (85.9 GB), itself marked ⚠️.** | **Unresolved; planned with 80 GB** (conservative). The GiB reading would add 5.31 GB/GPU and move `max_concurrency(8K, FP8)` at 32 GPUs from 99 to ~128, and nothing else. ([a100 §1.0](a100.md)) |
+| **GB300 per-GPU power: `gpus/gb300.md` says 1.4 kW; `cloud-pricing.md` §8.1 corrects to 1,100 W citing Lenovo verbatim.** | **Named, not resolved** — both are primary-sourced. Measured under this workload: **969 W/GPU** (InferenceX). ([gb300 §4.1, §6.1 item 10](gb300.md)) |
+| **GB300 capacity: 288 GB (METHODOLOGY, cloud-pricing) vs 279 GB usable (`gpus/gb300.md`).** | **Not a conflict** — 288 is the die, 279 as-deployed, and cloud-pricing normalises on the nameplate on purpose. Sized from 279. ([gb300 §1.0](gb300.md)) |
+| **TensorRT-LLM support for Kimi-K3.** | **Supported**, SM100 family only — an earlier draft of `architecture.md` said otherwise and its verification log records the correction. Not a Hopper, Ampere, sm_120 or ROCm option. ([architecture.md verification log](architecture.md), [h200 §6.2](h200.md)) |
+
+---
+
+## Sources
+
+Every number in this document is carried from one of these, linked inline at the point of use. No new numbers were introduced.
+
+**Pair documents (this directory)**
+- [`architecture.md`](architecture.md) — identity, licence, checkpoint bytes, MXFP4/QAT scheme, tokenizer and thinking-history, layer census (69 KDA + 24 gated-MLA), Stable-LatentMoE, AttnRes, MoonViT-V2, parameter counts and the 46.7/53.3 active split, weight memory, KV and KDA state, compute profile, DSpark, engine matrix, quantised variants, published benchmarks, vendor pricing, open questions, verification log
+- [`b300.md`](b300.md) — the primary node: fit, the 101-request measured cap, the calibrated MBU ladder, SGLang's 12 verified/pre-release cells, InferenceX, vLLM's 2.2–2.8× software post, cost and break-even
+- [`gb300.md`](gb300.md) — NVL72 topology, DEP16 accounting, six independent measurement sets, prefill-saturation analysis, single-price cost
+- [`b200.md`](b200.md) — 2-node minimum, `PP2 × TP8` vs flat TP16, the state-pool crossover, InferenceX b200 rows, the DSPARK and 192-GB corrections
+- [`mi355x.md`](mi355x.md) — ATOM's loader-aware TP8 placement (205.056 vs 205.057 GB), native MXFP4 on CDNA 4, three independent measurement sets, GSM8K 0.941–0.975, the DCP question
+- [`h200.md`](h200.md) — Marlin repack +5.3 %, the corrected concurrency figures, four disagreeing measurements, W4AFP8 requant, break-even against the API
+- [`h100.md`](h100.md) — the Marlin resident multiplier, 32-GPU minimum, the two published Hopper runs, the launch/collective term, the cost verdict
+- [`rtx6000-pro.md`](rtx6000-pro.md) — the community 16-card deployment, MXFP8 overlay, receipted DSpark/DFlash acceptance, engine-cap-vs-KV-cap analysis
+- [`a100.md`](a100.md) — the not-runnable verdict, fit arithmetic, the Marlin-on-sm_80 blocking question, nearest runnable alternatives
+
+**Repo foundation documents**
+- [`research/METHODOLOGY.md`](../../METHODOLOGY.md) — §1 bytes/param, §2 KV and fixed state, §3 fit and the feasibility rule, §4 roofline and MBU/MFU bands, §5 the optimization checklist, §6 scenarios S1–S4 and the blended definition, §7 what must never happen, §8 pinned GPU / model / price inputs and the InferenceX slug map
+- `research/gpus/{b300,gb300,b200,mi355x,h200,h100,rtx6000-pro,a100}.md` and `research/cross-cutting/{flash-attention,quantization-formats,inference-engines,serving-optimizations,cloud-pricing,inferencex-api}.md` — reached through the pair docs' own Sources sections, which cite them by section
+
+**Vendor price anchor**
+- Moonshot AI, `kimi-k3`: $3.00 / $0.30 / $15.00 per 1M (miss input / hit input / output), 1,048,576 context — [platform.kimi.ai/docs/pricing/chat-k3](https://platform.kimi.ai/docs/pricing/chat-k3), via [`architecture.md` §11](architecture.md)
