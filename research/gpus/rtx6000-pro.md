@@ -855,10 +855,10 @@ GPU document** — they live in `research/models/<exp>/rtx6000-pro.md` and are w
 
 | Model | min GPUs | weights/GPU | KV budget/GPU | KV + fixed state per seq | 8 K | 32 K | 128 K |
 |---|---|---|---|---|---|---|---|
-| **Qwen3.8-27B** BF16 (55.56 GB) | **1** | 55.56 GB | 26.84 GB | 64 KiB/tok + 153.9 MB GDN | **38** | 11 | 3 |
-| **Qwen3.8-27B** FP8 (30.87 GB) | **1** | 30.87 GB | 51.53 GB | 32 KiB/tok + 153.9 MB | **122** | 41 | 11 |
-| **Qwen3.8-27B** NVFP4 (21.92 GB) | **1** | 21.92 GB | 60.48 GB | 32 KiB/tok + 153.9 MB | **143** | 49 | 13 |
-| **Qwen3.8-27B** INT4 W4A16 (19.45 GB) | **1** | 19.45 GB | 62.95 GB | 32 KiB/tok + 153.9 MB | **149** | 51 | 14 |
+| **Qwen3.8-27B** BF16 (55.56 GB) | **1** | 55.56 GB | 26.84 GB | 64 KiB/tok + **392.2 MB** GDN (78.4 MB bf16 × `S`=5) | **28** | 10 | 2 |
+| **Qwen3.8-27B** FP8 (30.87 GB) | **1** | 30.87 GB | 51.53 GB | 32 KiB/tok + **392.2 MB** | **77** | 35 | 10 |
+| **Qwen3.8-27B** NVFP4 (21.92 GB) | **1** | 21.92 GB | 60.48 GB | 32 KiB/tok + **392.2 MB** | **91** | 41 | 12 |
+| **Qwen3.8-27B** INT4 W4A16 (19.45 GB) | **1** | 19.45 GB | 62.95 GB | 32 KiB/tok + **392.2 MB** | **95** | 42 | 13 |
 | **Marlin-2B** BF16 (5.444 GB) | **1** | 5.44 GB | 76.96 GB | 12 KiB/tok + 18.63 MiB GDN | **640** | 182 | 47 |
 | **DeepSeek-V4.1-Flash** MXFP4 (510.29 GB) | **8** | 63.79 GB | 18.61 GB (148.9 GB aggregate) | 1,650 B/tok FP8 KV + 2.77 MiB SWA | **9,068** | 2,613 | 679 |
 | **Kimi-K3** MXFP4 (1,560.9 GB) | **19** ⚠️ | — | — | 13.5 KiB/tok FP8 MLA + 2.25 GB KDA | **does not fit an 8-card box** | | |
@@ -868,11 +868,16 @@ GPU document** — they live in `research/models/<exp>/rtx6000-pro.md` and are w
 matter here and nowhere else in this document:
 
 - Qwen3.8-27B is **48 Gated-DeltaNet linear-attention layers + 16 full-attention layers**, so only 16 layers
-  cache per token (`16 × 2 × 4 × 256 × 2` = 65,536 B = 64 KiB BF16). The price is a **fixed 153.9 MB fp32
-  recurrent state per slot** — METHODOLOGY §2's `S` multiplier. The rows above assume **`S = 1`**
-  ⚠️ **TO BE VERIFIED**: vLLM's Mamba-style cache allocates ≥ 1 plus speculative slots, and the state may be
-  bf16 (78.4 MB) rather than fp32. At `S = 2` the 8 K BF16 row drops from 38 to 36; the fixed state only
-  becomes decision-relevant at high concurrency and short context.
+  cache per token (`16 × 2 × 4 × 256 × 2` = 65,536 B = 64 KiB BF16). The price is a **fixed recurrent state
+  per slot**, multiplied by METHODOLOGY §2's `S`. [METHODOLOGY §8](../METHODOLOGY.md) pins it at
+  **78,446,592 B (bf16) × `S` = 5 = 392.2 MB per request** — SGLang's shipped default
+  (`--mamba-radix-cache-strategy extra_buffer`, [models/qwen3827b/architecture.md §5.4](../models/qwen3827b/architecture.md));
+  the rows above are that pin, and they match `architecture.md` §10.2's NVFP4 cell exactly (91 at 8 K).
+  The alternates: **`S` = 1** (the `--disable-radix-cache` floor) gives 43 / 148 / 174 / 181 at 8 K for
+  BF16 / FP8 / NVFP4 / INT4, and a 153.9 MB fp32 slot is what `config.json`'s `mamba_ssm_dtype` declares but
+  SGLang overrides. **vLLM's `S` is ⚠️ unpublished** — read the mamba-cache allocation out of its boot log
+  and divide by 78,446,592. At NVFP4 this is a 91-vs-174 swing from a scheduler constant, so on this card
+  the fixed state is decision-relevant at short context, not a footnote.
 - Qwen3.8-27B NVFP4 is one of the few NVFP4 checkpoints that is **safe on sm_120**: it quantises
   `lm_head` + the 64 layers' `mlp.{gate,up,down}_proj`, which are **dense** GEMMs — and dense NVFP4 GEMM on
   sm_120 was never broken (§6a). The broken path is MoE *grouped* GEMM, and this model has no MoE.
@@ -1142,7 +1147,8 @@ separates them:
 
 - **MoE and hybrid-attention models: the thesis holds.** gpt-oss-120b MXFP4 fits in 65.17 GB and, because
   18 of its 36 layers are sliding-window-capped at `W = 128`, leaves room for **112 concurrent sequences at
-  8 K** on one card. Qwen3.8-27B at FP8/NVFP4/INT4 gives **122–149**. Marlin-2B gives **640**. These are real
+  8 K** on one card. Qwen3.8-27B at FP8/NVFP4/INT4 gives **77–95** (§9g, at the pinned `S` = 5 GDN slots; 148–181 at the
+  `S` = 1 floor). Marlin-2B gives **640**. These are real
   serving densities on a single card with no interconnect tax.
 - **Dense 70 B-class models: the thesis is much weaker than 96 GB suggests.** A 70 B FP8 checkpoint is
   70.07 GB, leaving a 12.33 GB KV budget — **9 concurrent requests at 8 K, 2 at 32 K, and not one at 128 K**

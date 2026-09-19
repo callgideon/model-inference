@@ -440,6 +440,11 @@ SM90+ or SM100+. Qwen3.8-27B in **BF16** on A100 is the one arithmetically conce
 the GDN/linear-attention kernels are not claimed for SM80. **Treat A100 as out of scope and do
 not size a deployment on it.**
 
+A community SM80 backport exists and has been measured on 8×A800
+([models/deepseek41f/a100.md](../models/deepseek41f/a100.md)); it does not change this
+scoping — do not size a production deployment on it. That pair is carried as
+`supported_now: false` in [`matrix/pairs.json`](../matrix/pairs.json).
+
 ### 3.3 H100 (SM90a, 80 GB)
 
 | Model | vLLM | SGLang | TRT-LLM | Notes |
@@ -1726,6 +1731,7 @@ pasted back.
 | §8, DS-V4.1 matrix, B300 row | Min GPUs "2–4" → "2 **only with Engram CPU offload** (§6.1); 4 otherwise" | The TP2 row does not fit on weights alone once units are matched | recomputed |
 | Verification log, V20 | "RTX PRO 6000 = 96 GB GDDR7 / **1792 GB/s**" → "**1,597 GB/s (Server Edition)**", with an explicit amendment note | **Citation-integrity failure found:** 1,792 GB/s is the Workstation Edition and is not contained in the vendor page cited alongside it. The Server Edition is the board every recipe here targets | METHODOLOGY §8, [gpus/rtx6000-pro.md](../gpus/rtx6000-pro.md) |
 | Verification log, V16 | "32.8 KB at fp8 / 65.5 KB at bf16" → "32.8 kB / 65.5 kB = exactly **32 KiB / 64 KiB**", plus a note that the 48 linear-attention layers contribute **0 bytes/token** and are billed as GDN per-slot state | METHODOLOGY §1 (report KiB/GiB, not kB/GB) and §2 (linear-attention layers are 0/token) | METHODOLOGY §1, §2, §8 |
+| §3.2, after "do not size a deployment on it" *(2026-09-19 amendment)* | *(added)* "A community SM80 backport exists and has been measured on 8×A800 ([models/deepseek41f/a100.md](../models/deepseek41f/a100.md)); it does not change this scoping — do not size a production deployment on it." | Cross-reference for gap X4: the pair doc measures DeepSeek-V4.1-Flash on SM80 via a community `vllm-backport` fork + 24-file patch set on 8× A800. The §3.2 verdict is unchanged; `matrix/pairs.json` was demoted to `supported_now: false` so the matrices stop rendering it as runnable | [models/deepseek41f/a100.md](../models/deepseek41f/a100.md), [matrix/pairs.json](../matrix/pairs.json), METHODOLOGY §7 |
 
 ### Checked and left unchanged
 

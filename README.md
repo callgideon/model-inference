@@ -44,6 +44,18 @@ instance-store NVMe on a p6 node. Override it anywhere that path is wrong.
 `marlin2b` is **gated**: accept the licence on Hugging Face and export
 `HF_TOKEN`, or the download fails with a 403.
 
+## Research
+
+Fact-checked GPU-inference research for these five experiments × the 8 GPUs
+in `research/gpus/`: fit, parallelism, executed weight format, throughput,
+latency and $/1M tokens, each numerically audited against the model vendor's
+own API price. Start at [`research/README.md`](research/README.md) — the
+index, legend and a headline table of the best GPU per model. The two
+matrices worth bookmarking: [`research/matrix/fit-matrix.md`](research/matrix/fit-matrix.md)
+(what fits where) and [`research/matrix/cost-matrix.md`](research/matrix/cost-matrix.md)
+($/1M tokens, every cell linked to its source). All formulas live in
+[`research/METHODOLOGY.md`](research/METHODOLOGY.md).
+
 ## Notes
 
 - `S3_DIR` in `model.env` intentionally differs from the directory name. The S3

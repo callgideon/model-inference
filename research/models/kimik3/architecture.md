@@ -1225,8 +1225,11 @@ SGLang's `config.supportedHardware` array is literally
 Three independent blockers, none of which is a missing-flag problem:
 
 1. **Capacity.** 1561 GB of weights needs 20 × 80 GB A100 at 100 % occupancy,
-   i.e. 24–32 GPUs (3–4 nodes) with any KV at all. That is already H100's
-   configuration, on a slower fabric.
+   i.e. **32 GPUs (4 nodes)** with any KV at all — 16 is 97.6 GB/GPU, and 24,
+   though the bytes divide, is not a constructible TP size (7168 ∤ 24;
+   `gcd(96 heads, 7168) = 32`) nor a member of METHODOLOGY §3's topology set
+   ([a100.md §0.2, §1.1](./a100.md)). That is already H100's configuration, on a
+   slower fabric.
 2. **No FP4/FP8 tensor cores.** SM80 has neither. The MXFP4 experts must
    dequantise to BF16/FP16. Marlin's W4A16 kernels do target SM80, but neither
    engine ships or tests an A100 cell.

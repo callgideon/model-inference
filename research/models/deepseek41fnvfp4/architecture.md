@@ -469,8 +469,9 @@ nothing to turn off.
 
 ```
 SWA ring    : 128 slots × 528 B = 67,584 B per layer
-            × 40 backbone layers = 2,703,360 B = 2.58 MiB / sequence
-            × 43 incl. 3 MTP     = 2,906,112 B = 2.77 MiB / sequence
+            × 43 rings (40 backbone + 3 MTP, MTP enabled)
+                                 = 2,906,112 B = 2.77 MiB / sequence
+              (40 backbone alone = 2,703,360 B = 2.58 MiB)
 Compressor  : kv_state + score_state, [bsz, ratio=2, 512] fp32 × 2 × 3 layers
             = 3 × 2 × 2 × 512 × 4 = 24,576 B = 24 KiB / sequence
 Engram      : NgramHashState, small rolling hash; size not stated ⚠️ TO BE VERIFIED
@@ -480,11 +481,19 @@ Per METHODOLOGY §2, `fixed_state_per_seq = S × (ring buffers + recurrent state
 where `S` is the engine's per-request slot count. **No engine doc states an `S`
 for V4.1-Flash**, so every figure below assumes `S = 1` ⚠️ **TO BE VERIFIED** —
 an MTP-speculating runtime plausibly allocates extra ring slots for the drafted
-block (`dspark_block_size 5`), which would scale the 2.58 MiB accordingly. It is
-a per-sequence constant either way, so it moves `max_concurrency` by <1 % at 8K
+block (`dspark_block_size 5`), which would scale the 2.77 MiB accordingly. It is
+a per-sequence constant either way, so it moves `max_concurrency` by ≤2 % at 8K
 and not at all at 1M.
 
-The SWA state is a **ring buffer, not a KV cache**: a fixed 2.58 MiB per
+**Which count is deployed.** Every operating point in this tree is costed with
+DSpark/MTP **enabled** ([`matrix/recommendations.md`](../../matrix/recommendations.md)
+pins **DSpark γ=5** as the default, worth 3.13× output per byte), and an enabled
+MTP head allocates its own SWA ring per sequence — so **2,906,112 B** is the
+deployed figure and matches [METHODOLOGY §8](../../METHODOLOGY.md). With
+`--num-speculative-tokens 0` the 3 MTP rings are not allocated and the figure is
+**2,703,360 B = 2.58 MiB**: the MTP-disabled floor, not the deployed value.
+
+The SWA state is a **ring buffer, not a KV cache**: a fixed 2.77 MiB per
 sequence regardless of whether the context is 8K or 1M. The tech report calls
 the mechanism **SWA Bounded Replay** — *"reconstructs missing SWA KV states by
 replaying only the most recent n_win tokens, avoiding the need to persist SWA KV
@@ -494,22 +503,24 @@ the SWA ring is regenerated from the last 128 tokens.
 
 ### 5.4 Totals per sequence
 
-`kv_total(ctx) = ctx × 890 + 2,703,360`
+`kv_total(ctx) = ctx × 890 + 2,906,112` (43 rings, MTP enabled; recomputed with
+`python3`). The BF16-KV column carries the 43-ring BF16 container instead,
+`43 × 128 × 512 × 2 B = 5,636,096 B = 5.375 MiB` (§5.3 ⚠️).
 
 | Context | **Shipped (FP4)** | FP8 KV | BF16 KV |
 |---|---|---|---|
-| 8 K | **9.5 MiB** | 15.5 MiB | 30.0 MiB |
-| 32 K | **30.4 MiB** | 54.1 MiB | 105.0 MiB |
-| 128 K | **113.8 MiB** | 208.8 MiB | 405.0 MiB |
-| 1 M | **892.6 MiB** | 1,652.6 MiB | 3,205.0 MiB |
+| 8 K | **9.7 MiB** | 15.7 MiB | 30.4 MiB |
+| 32 K | **30.6 MiB** | 54.3 MiB | 105.4 MiB |
+| 128 K | **114.0 MiB** | 209.0 MiB | 405.4 MiB |
+| 1 M | **892.8 MiB** | 1,652.8 MiB | 3,205.4 MiB |
 
-Sequences per 100 GB of KV budget: **10,005 @ 8K · 3,138 @ 32K · 837 @ 128K · 106 @ 1M**.
+Sequences per 100 GB of KV budget: **9,806 @ 8K · 3,118 @ 32K · 836 @ 128K · 106 @ 1M**.
 
 ### 5.5 Effect of each mechanism, isolated
 
 | Mechanism | Effect on KV |
 |---|---|
-| Sliding window (W=128) | moves 40 layers' worth of K/V off the growing path entirely → **fixed 2.58 MiB/seq** |
+| Sliding window (W=128) | moves 40 layers' worth of K/V off the growing path entirely → **fixed 2.77 MiB/seq** (43 rings, MTP on) |
 | Cross-layer KV sharing (`kv_source_layers`) | 4 of 40 layers hold cache → **10× reduction** |
 | KV compression (`compress_ratios` 2 in the encoder) | encoder sources store ctx/2 positions → 3 of the 4 sources halved |
 | FP4 main KV (E2M1 + E4M3/16) | 3.60× vs BF16, 1.85× vs FP8 |
@@ -535,23 +546,24 @@ B300 row previously used 270 GB and the GB300 rows 279 GB.
 
 | GPU | HBM/GPU (as deployed) | Min GPUs to hold weights | KV budget there | Max concurrency @8K / 32K / 128K / 1M |
 |---|---|---|---|---|
-| GB300 (NVL72) | 288 GB (≈279 usable) | **4** | 493.5 GB (459.6 GiB) | 49,381 / 15,487 / 4,134 / **527** |
-| GB300 ×8 | 288 GB | — | 1,514.3 GB (1,410.3 GiB) | 151,519 / 47,520 / 12,687 / 1,617 |
-| B300 (HGX / DGX / p6-b300) | **268 GB** | **4** | 421.5 GB (392.6 GiB) | 42,176 / 13,227 / 3,531 / 450 |
-| B300 ×8 (one 2,144 GB node) | 268 GB | — | 1,370.3 GB (1,276.2 GiB) | 137,111 / 43,001 / 11,480 / 1,464 |
-| B200 | 180 GB | **4** | 104.7 GB (97.5 GiB) | 10,478 / 3,286 / 877 / 111 |
-| B200 ×8 | 180 GB | — | 736.7 GB (686.1 GiB) | 73,715 / 23,118 / 6,172 / 787 |
-| H200 SXM | 141 GB | **8** | 455.9 GB (424.6 GiB) | 45,618 / 14,307 / 3,819 / 487 |
-| H100 SXM 80 GB | 80 GB | **8** | 16.7 GB (15.6 GiB) | 1,673 / 524 / 140 / **17** |
-| H100 ×16 | 80 GB | — | 560.7 GB (522.2 GiB) | 56,104 / 17,595 / 4,697 / 599 |
+| GB300 (NVL72) | 288 GB (≈279 usable) | **4** | 493.5 GB (459.6 GiB) | 48,399 / 15,389 / 4,127 / **527** |
+| GB300 ×8 | 288 GB | — | 1,514.3 GB (1,410.3 GiB) | 148,507 / 47,219 / 12,665 / 1,617 |
+| B300 (HGX / DGX / p6-b300) | **268 GB** | **4** | 421.5 GB (392.6 GiB) | 41,338 / 13,144 / 3,525 / 450 |
+| B300 ×8 (one 2,144 GB node) | 268 GB | — | 1,370.3 GB (1,276.2 GiB) | 134,385 / 42,729 / 11,461 / 1,463 |
+| B200 | 180 GB | **4** | 104.7 GB (97.5 GiB) | 10,270 / 3,265 / 875 / 111 |
+| B200 ×8 | 180 GB | — | 736.7 GB (686.1 GiB) | 72,249 / 22,972 / 6,161 / 786 |
+| H200 SXM | 141 GB | **8** | 455.9 GB (424.6 GiB) | 44,711 / 14,216 / 3,813 / 487 |
+| H100 SXM 80 GB | 80 GB | **8** | 16.7 GB (15.6 GiB) | 1,640 / 521 / 139 / **17** |
+| H100 ×16 | 80 GB | — | 560.7 GB (522.2 GiB) | 54,989 / 17,484 / 4,689 / 598 |
 | A100 SXM 80 GB | 80 GB | **8** | 16.7 GB (15.6 GiB) | same as H100 ×8 *(capacity only — see §8, it cannot run this checkpoint)* |
-| RTX PRO 6000 Server Ed. (96 GB) | 96 GB | **8** | 131.9 GB (122.9 GiB) | 13,200 / 4,139 / 1,105 / 140 |
-| MI355X | 288 GB | **4** | 493.5 GB (459.6 GiB) | 49,381 / 15,487 / 4,134 / 527 |
-| MI355X ×8 | 288 GB | — | 1,514.3 GB (1,410.3 GiB) | 151,519 / 47,520 / 12,687 / 1,617 |
+| RTX PRO 6000 Server Ed. (96 GB) | 96 GB | **8** | 131.9 GB (122.9 GiB) | 12,937 / 4,113 / 1,103 / 140 |
+| MI355X | 288 GB | **4** | 493.5 GB (459.6 GiB) | 48,399 / 15,389 / 4,127 / 527 |
+| MI355X ×8 | 288 GB | — | 1,514.3 GB (1,410.3 GiB) | 148,507 / 47,219 / 12,665 / 1,617 |
 
 All of these are `est.` from the formula, with `usable = capacity × 0.90`,
 `activation_ws = 4 GB/GPU` and `max_concurrency(ctx) = floor(kv_budget /
-(ctx × 890 B + 2,703,360 B))`, all arithmetic in bytes. **Capacity fit is not the
+(ctx × 890 B + 2,906,112 B))` (43 rings, MTP on — §5.3), all arithmetic in bytes.
+Recut 2026-09-19 from 2,703,360 B; the whole grid dropped ≤ 2.0 % at 8K and 0 % at 1M. **Capacity fit is not the
 same as kernel support** — see §8. H100/H200/A100 and MI355X appear in this table
 because the *bytes* fit, not because the NVFP4 expert GEMM runs. GB300 and MI355X
 share a row of numbers because both are 288 GB at 8 TB/s; they share nothing else.

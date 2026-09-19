@@ -794,7 +794,7 @@
     "recomputed_tables": 10,
     "errors_fixed": 2,
     "contradictions": [
-     "gpus/h100.md \u00a72's Qwen3.8-27B-FP8 fit table (\"max conc 1\u00d7H100 @8K/@128K = 87/8\") and models/qwen3827b/architecture.md \u00a710.2 (\"56/7\") disagree, because they assume different SGLang state-slot counts and state dtypes (S=1+fp32 vs S=5+bf16). Both numbers reproduce exactly under their own stated assumption (verified independently in this audit). h100.md already surfaces this disagreement explicitly in its own \u00a71.1 and deliberately plans with S=5+bf16 rather than silently picking one \u2014 flagged here per the audit brief since it is a genuine contradiction between two foundation docs."
+     "RESOLVED 2026-09-19 (gap C7-qwen38-gdn-state-slots): gpus/h100.md \u00a72's Qwen3.8-27B-FP8 fit table used to print \"max conc 1\u00d7H100 @8K/@128K = 87/8\" (S=1 + fp32 state) against models/qwen3827b/architecture.md \u00a710.2's \"56/7\" (S=5 + bf16); both reproduced exactly under their own assumption. METHODOLOGY \u00a78 now pins the per-request GDN state at S = 5 slots \u00d7 78,446,592 B bf16 = 392.2 MB \u2014 SGLang's shipped default (--mamba-radix-cache-strategy extra_buffer) and the same convention \u00a78 already pins for Kimi-K3's KDA state \u2014 and gpus/h100.md \u00a72 was recut to it, so both docs now print 56/7 at S=5 (107/8 is the S=1 floor). vLLM's S remains unpublished (open question #2)."
     ]
    },
    "key": "qwen3827b/h100"

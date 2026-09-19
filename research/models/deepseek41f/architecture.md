@@ -637,11 +637,19 @@ RoPE tail included"* — so at FP8 + one E8M0 scale per 32 the budget is:
 
 ```
 per layer = 128 slots × (512 × 1 B + (512/32) × 1 B) = 128 × 528 = 67,584 B
-40 backbone layers  = 2,703,360 B = 2.58 MiB
- 3 DSpark layers    =   202,752 B = 0.19 MiB
+× 43 rings (40 backbone + 3 MTP, MTP enabled) = 2,906,112 B = 2.77 MiB
+   of which 40 backbone = 2,703,360 B = 2.58 MiB
+            3 MTP/DSpark =  202,752 B = 0.19 MiB
 -----------------------------------------------
 fixed per-seq state = 2,906,112 B = 2.77 MiB
 ```
+
+**43 rings, not 40, is the deployed value.** Every operating point in this tree is costed
+with DSpark/MTP **enabled** — [`matrix/recommendations.md`](../../matrix/recommendations.md)
+pins **DSpark γ=5** as the default and it is worth 3.13× output per byte — and an enabled MTP
+head allocates its own SWA ring per sequence. With `--num-speculative-tokens 0` the 3 MTP
+rings are not allocated and the figure is **2,703,360 B = 2.58 MiB**; that is the MTP-disabled
+floor, not the deployed value.
 
 **⚠️ TO BE VERIFIED — that 2.77 MiB is an engine-optimal figure, not what the cited code
 does.** In the reference implementation the ring buffer inherits

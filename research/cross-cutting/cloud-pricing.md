@@ -1758,3 +1758,15 @@ Bonus, from the document-specific finding: all three **AMD** product pages
 [MI325X](https://www.amd.com/en/products/accelerators/instinct/mi300/mi325x.html),
 [MI355X](https://www.amd.com/en/products/accelerators/instinct/mi350/mi355x.html))
 and [Hyperstack](https://www.hyperstack.cloud/gpu-pricing) — ✅ **CONFIRMED**, HTTP 200.
+
+---
+
+**Follow-up (2026-09-19) — §8.1's GB300 correction is now propagated.** §8.1's **1,100 W per
+GPU in a GB300 NVL72** (verification row 3 above) disagreed with `research/gpus/gb300.md`
+§1.1's 1.4 kW until today. The Lenovo page was re-fetched and again reads verbatim "1100W
+total graphics power per GPU" [src](https://lenovopress.lenovo.com/lp2357-lenovo-nvidia-gb300-nvl72-rack-scale-ai); `gpus/gb300.md` §1.1 and `gpus/b300.md` §1 were
+corrected to match, and the inline "both docs disagree" notes in `models/deepseek41f/gb300.md`,
+`models/kimik3/gb300.md`, `models/deepseek41fnvfp4/gb300.md` and `matrix/pairs.json` were
+replaced with references to the resolved figure. **Nothing in this document changed** — §8.1,
+§8.2 (135 kW / 155 kW rack) and the §9 on-prem $/GPU-hour model were already correct and are
+untouched.
