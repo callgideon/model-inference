@@ -22,30 +22,35 @@ ap.add_argument("--weights", default=os.environ.get("WEIGHTS", "/opt/dlami/nvme/
 ap.add_argument("--find", metavar="EVENT")
 ap.add_argument("--prompt")
 ap.add_argument("--max-tokens", type=int, default=2048)
+ap.add_argument("--show-prompt", action="store_true")
 ap.add_argument("--mm-kwargs", default=os.environ.get("MM_KWARGS", "auto"),
                 help="vLLM mm_processor_kwargs as JSON; 'auto' (default) reproduces Marlin's training video budget from the clip duration; '' sends none (processor default, ~6x more tokens)")
 a = ap.parse_args()
 
 
 def canonical_prompt(weights, mode, event=None):
-    """Pull the prompt string the vendor helpers use out of modeling_marlin.py.
-    Looks for a module-level constant whose name contains PROMPT and the mode
-    name; falls back to the largest string literal in that method's body."""
-    src = open(os.path.join(weights, "modeling_marlin.py"), encoding="utf-8").read()
-    aliases = {"caption": ("CAPTION",), "find": ("FIND", "GROUNDING")}[mode]
-    # values are plain string literals, possibly with escaped quotes; decode escapes
-    for name, val in re.findall(r'^([A-Z_]*PROMPT[A-Z_]*)\s*=\s*("""[\s\S]*?"""|"(?:[^"\\\n]|\\.)*"|\'(?:[^\'\\\n]|\\.)*\')', src, re.M):
-        if any(k in name.upper() for k in aliases):
+    """The exact prompt the vendor helpers use. Prefer importing modeling_marlin.py
+    (it defines CAPTION_PROMPT and GROUNDING_PROMPT_TEMPLATE); fall back to a
+    regex over the source when torch/transformers are not installed here."""
+    path = os.path.join(weights, "modeling_marlin.py")
+    consts = {}
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("modeling_marlin", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        consts = {k: v for k, v in vars(mod).items() if "PROMPT" in k and isinstance(v, str)}
+    except Exception as e:  # no torch here: parse the source instead
+        print(f"note: import failed ({type(e).__name__}); parsing source", file=sys.stderr)
+        src = open(path, encoding="utf-8").read()
+        for name, val in re.findall(r'^([A-Z_]*PROMPT[A-Z_]*)\s*=\s*\(?\s*("""[\s\S]*?"""|"(?:[^"\\\n]|\\.)*"|\'(?:[^\'\\\n]|\\.)*\')', src, re.M):
             inner = val[3:-3] if val.startswith(('"""', "'''")) else val[1:-1]
-            text = inner.encode().decode("unicode_escape")
+            consts[name] = inner.encode().decode("unicode_escape")
+    aliases = {"caption": ("CAPTION",), "find": ("FIND", "GROUNDING")}[mode]
+    for name, text in consts.items():
+        if any(k in name.upper() for k in aliases):
             return text.format(event=event) if event and "{" in text else text
-    body = src[src.find(f"def {mode}(") :]
-    body = body[: body.find("\n    def ")] if "\n    def " in body[1:] else body
-    lits = re.findall(r'("""[\s\S]*?"""|"[^"\n]{20,}"|\'[^\'\n]{20,}\')', body)
-    if not lits:
-        sys.exit(f"could not find a {mode} prompt in modeling_marlin.py; pass --prompt")
-    text = max(lits, key=len).strip('"\'')
-    return text.format(event=event) if event and "{" in text else text
+    sys.exit(f"no {mode} prompt constant found in {path} (have {list(consts)}); pass --prompt")
 
 
 def training_budget_kwargs(video_path, fps=2.0, min_frames=4, max_frames=240, px_per_frame=200704):
@@ -70,6 +75,8 @@ def training_budget_kwargs(video_path, fps=2.0, min_frames=4, max_frames=240, px
 
 mode = "find" if a.find else "caption"
 prompt = a.prompt or canonical_prompt(a.weights, mode, a.find)
+if a.show_prompt:
+    print("PROMPT:", repr(prompt), file=sys.stderr)
 
 if a.video.startswith(("http://", "https://")):
     url = a.video
