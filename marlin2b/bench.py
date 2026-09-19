@@ -22,6 +22,7 @@ ap.add_argument("--base-url", default=os.environ.get("BASE_URL", "http://localho
 ap.add_argument("--weights", default=os.environ.get("WEIGHTS", "/opt/dlami/nvme/marlin2b"))
 ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "results", "bench.jsonl"))
 ap.add_argument("--label", default="")
+ap.add_argument("--mm-kwargs", default=os.environ.get("MM_KWARGS", '{"fps": 2.0, "min_frames": 4, "max_frames": 240, "size": {"shortest_edge": 65536, "longest_edge": 200704}, "cap_pixels_per_frame": true}'))
 a = ap.parse_args()
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -51,7 +52,7 @@ async def one():
     first = None
     n = 0
     usage = None
-    async for ch in await client.chat.completions.create(model="marlin2b", messages=messages, max_tokens=a.max_tokens, temperature=0, stream=True, stream_options={"include_usage": True}):
+    async for ch in await client.chat.completions.create(model="marlin2b", messages=messages, max_tokens=a.max_tokens, temperature=0, stream=True, stream_options={"include_usage": True}, extra_body={"mm_processor_kwargs": json.loads(a.mm_kwargs)} if a.mm_kwargs else {}):
         if ch.usage:
             usage = ch.usage
         if ch.choices and ch.choices[0].delta.content:
@@ -84,7 +85,7 @@ async def main():
 wall = asyncio.run(main())
 p = lambda k, q: round(statistics.quantiles([r[k] for r in rows], n=100)[q - 1], 3) if len(rows) > 1 else round(rows[0][k], 3)
 res = {
-    "label": a.label, "video": os.path.basename(a.video), "concurrency": a.concurrency, "requests": len(rows), "max_tokens": a.max_tokens,
+    "label": a.label, "mm_kwargs": bool(a.mm_kwargs), "video": os.path.basename(a.video), "concurrency": a.concurrency, "requests": len(rows), "max_tokens": a.max_tokens,
     "prompt_tokens": rows[0]["in"], "wall_s": round(wall, 2),
     "req_per_s": round(len(rows) / wall, 3), "out_tok_per_s": round(sum(r["out"] for r in rows) / wall, 1),
     "ttft_p50": p("ttft", 50), "ttft_p95": p("ttft", 95), "tpot_p50_ms": round(p("tpot", 50) * 1000, 1), "tpot_p95_ms": round(p("tpot", 95) * 1000, 1),
