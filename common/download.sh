@@ -60,7 +60,10 @@ from_hf() {
     return 1
   fi
   echo "--- pulling from Hugging Face"
-  python3 -c 'import huggingface_hub' 2>/dev/null || pip install -q "huggingface_hub[hf_transfer]"
+  # `pip` is not on PATH on every image (AWS DLAMI has only `python3 -m pip`),
+  # and a --user install lands `hf` in ~/.local/bin.
+  export PATH="$HOME/.local/bin:$PATH"
+  command -v hf >/dev/null 2>&1 || python3 -m pip install -q --user "huggingface_hub[hf_transfer]"
   HF_HUB_ENABLE_HF_TRANSFER=1 hf download "$HF_REPO" \
     --local-dir "$DEST" --max-workers "${WORKERS:-16}"
 }
