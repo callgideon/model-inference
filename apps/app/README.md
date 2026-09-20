@@ -78,3 +78,12 @@ middleware.ts           session refresh + console route guard
 API keys are `sk-infrx-` + 40 base62 characters from the CSPRNG. Only the
 SHA-256 hex and the `sk-infrx-` + 8-character prefix are stored; the secret is
 shown once, in the create dialog.
+
+## Deployment (live)
+
+Vercel project `infrx-app` (`prj_W8JNBx71exKW6iEPBaALx1R9IxKn`, account
+gideon@callgideon.com), Git-linked to `callgideon/model-inference`, root
+directory `apps/app`, production branch `main`, domain
+`https://app.callbill.ai`. Environment variables are set in the project
+(Supabase URL, publishable key, secret key as a sensitive var, app URL);
+the same values live in AWS SSM under `/INFRX-SUPABASE-PROD/*`.
