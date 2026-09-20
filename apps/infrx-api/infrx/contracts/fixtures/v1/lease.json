@@ -1,0 +1,8 @@
+{
+  "acquired_at": "2026-09-20T12:00:02Z",
+  "expires_at": "2026-09-20T12:02:02Z",
+  "generation": 1,
+  "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+  "schema_version": 1,
+  "worker_id": "worker-a"
+}

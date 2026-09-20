@@ -1,0 +1,9 @@
+{
+  "entitlement_version": 7,
+  "key_id": "3c3c3c3c-0000-4000-8000-000000000003",
+  "legacy_key": false,
+  "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+  "principal": "3c3c3c3c-0000-4000-8000-000000000003",
+  "role": "owner",
+  "schema_version": 1
+}

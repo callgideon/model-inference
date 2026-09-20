@@ -1,0 +1,35 @@
+[
+  {
+    "payload": {
+      "phase": "running"
+    },
+    "schema_version": 1,
+    "type": "progress"
+  },
+  {
+    "payload": {
+      "content": "Hello"
+    },
+    "schema_version": 1,
+    "type": "delta"
+  },
+  {
+    "payload": {
+      "content": " world"
+    },
+    "schema_version": 1,
+    "type": "delta"
+  },
+  {
+    "payload": {},
+    "schema_version": 1,
+    "type": "usage",
+    "usage": {
+      "certainty": "authoritative",
+      "completion_tokens": 340,
+      "prompt_tokens": 1200,
+      "schema_version": 1,
+      "total_tokens": 1540
+    }
+  }
+]

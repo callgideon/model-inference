@@ -1,0 +1,7 @@
+{
+  "key": "client-key-0001",
+  "operation": "chat.completions",
+  "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+  "payload_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "schema_version": 1
+}

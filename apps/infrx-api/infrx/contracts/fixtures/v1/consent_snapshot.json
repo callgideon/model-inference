@@ -1,0 +1,9 @@
+{
+  "consent_version": 3,
+  "content_retention_days": 30,
+  "effective_at": "2026-09-01T00:00:00Z",
+  "evaluation_consent": true,
+  "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+  "schema_version": 1,
+  "trace_mode": "full"
+}

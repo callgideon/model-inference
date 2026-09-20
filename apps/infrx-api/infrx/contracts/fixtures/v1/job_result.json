@@ -1,0 +1,33 @@
+{
+  "cause": "completed",
+  "completed_at": "2026-09-20T12:00:09Z",
+  "job_handle": "job_Ck1hQeTdJ6WwWVQe4LnPXe9kM0bF1sAqTgYn2R7xVpU",
+  "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+  "response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "Two people unload boxes from a van onto a trolley.",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1789905600,
+    "id": "chatcmpl-4d4d4d4d-0000-4000-8000-000000000004",
+    "model": "nemostation/marlin-2b@2026-09-01",
+    "object": "chat.completion",
+    "usage": {
+      "completion_tokens": 340,
+      "prompt_tokens": 1200,
+      "total_tokens": 1540
+    }
+  },
+  "state": "succeeded",
+  "usage": {
+    "completion_tokens": 340,
+    "prompt_tokens": 1200,
+    "total_tokens": 1540
+  }
+}
