@@ -977,25 +977,28 @@ def _run(argv=None):
             asyncio.run(execute(a, state))
         except KeyboardInterrupt:
             state["interrupted"] = True
-    cfg = state["cfg"]
-    if cfg is None:                          # interrupted before the run could start
-        print("interrupted before the first request; nothing to summarise", file=sys.stderr)
-        return 130
-    wall = state["wall"] if state["wall"] is not None else \
-        (time.perf_counter() - state["t0"] if state["t0"] else 0.0)
-    res = summarize(state["rows"], wall, cfg)
-    res["interrupted"] = state["interrupted"]   # a partial run must never read as complete
-    res["raw"] = os.path.relpath(raw, os.path.dirname(a.out) or ".")
-    key = cfg["key"]                         # every sink below serialises, then redacts
-    line = dump_line(res, key)
-    with sigint_deferred(state):             # a second Ctrl-C must not lose the summary
+    # SIGINT is deferred for the WHOLE tail, not just the write calls: an impatient second
+    # Ctrl-C landing between summarize() and the append would have killed the process
+    # (observed: exit -2, killed by the signal) with the summary half written. The tail is
+    # bounded work on data already in memory, so holding the signal costs nothing.
+    with sigint_deferred(state):
+        cfg = state["cfg"]
+        if cfg is None:                      # interrupted before the run could start
+            print("interrupted before the first request; nothing to summarise", file=sys.stderr)
+            return 130
+        wall = state["wall"] if state["wall"] is not None else \
+            (time.perf_counter() - state["t0"] if state["t0"] else 0.0)
+        res = summarize(state["rows"], wall, cfg)
+        res["interrupted"] = state["interrupted"]   # a partial run must never read as complete
+        res["raw"] = os.path.relpath(raw, os.path.dirname(a.out) or ".")
+        key = cfg["key"]                     # every sink below serialises, then redacts
         print(dump_line(res, key, indent=2))
         if res["suppressed_percentiles"]:
             print("suppressed (sample count too small): " +
                   redact("; ".join(res["suppressed_percentiles"]), key), file=sys.stderr)
         with open(a.out, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-    return 130 if state["interrupted"] else (0 if res["accepted"] else 1)
+            f.write(dump_line(res, key) + "\n")
+        return 130 if state["interrupted"] else (0 if res["accepted"] else 1)
 
 
 if __name__ == "__main__":

@@ -508,13 +508,25 @@ def test_a_second_ctrl_c_cannot_lose_the_summary():
             f.write(b"\x00\x00\x00 ftypisom" + b"\x01" * 4096)
         out, raw = os.path.join(tmp, "bench.jsonl"), os.path.join(tmp, "raw.jsonl")
         env = dict(os.environ, MARLIN_API_KEY=KEY, PYTHONDONTWRITEBYTECODE="1")
+        # 400 requests at ~20/s cannot finish, and we wait for real rows instead of
+        # sleeping a guessed interval: no race either way.
         proc = subprocess.Popen(
             [sys.executable, os.path.join(os.path.dirname(HERE), "bench.py"), clip,
-             "-c", "1", "-n", "60", "--prompt", "p", "--no-warmup", "--target", "gateway",
+             "-c", "1", "-n", "400", "--prompt", "p", "--no-warmup", "--target", "gateway",
              "--forms", "video_b64", "--out", out, "--raw", raw,
              "--dry-run-transport", "fake_gateway:transport"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
-        time.sleep(2.0)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            rows_now = (len(open(raw, encoding="utf-8").read().splitlines())
+                        if os.path.exists(raw) else 0)
+            if rows_now >= 2:
+                break
+            assert proc.poll() is None, f"the run ended before we could signal it ({proc.poll()})"
+            time.sleep(0.02)
+        else:
+            proc.kill()
+            raise AssertionError("no raw row appeared within 30 s")
         proc.send_signal(signal.SIGINT)
         time.sleep(0.02)
         proc.send_signal(signal.SIGINT)          # the second one, during the write window
