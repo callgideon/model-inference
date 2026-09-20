@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 
-const MIN_LENGTH = 10;
+const MIN_LENGTH = 6;
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
