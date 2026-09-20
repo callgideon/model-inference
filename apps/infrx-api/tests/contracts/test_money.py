@@ -12,7 +12,11 @@ from decimal import Decimal
 import pytest
 from infrx.contracts import fixtures, money
 
-CASES = fixtures.load("money_cases.json")
+# The shared accept/reject set (r1 R11): byte-identical to the console half's
+# copy at apps/app/tests/contracts/money_cases.json, so a divergence in either
+# language's parser fails a test rather than reaching a ledger.
+PARSE_CASES = fixtures.load("money_cases.json")
+CASES = fixtures.load("money_tables.json")
 SEED = 20260920
 
 
@@ -35,30 +39,35 @@ def test_ledger_delta_fixture(case):
     assert money.format_money(money.parse(case["amount"])) == case["amount"]
 
 
-@pytest.mark.parametrize("value", CASES["rejected"], ids=lambda v: repr(v)[:24])
-def test_rejected_money_values(value):
-    with pytest.raises(ValueError):
-        money.parse(value)
-
-
 # --- the cross-language accept/reject set (r1 R11) ----------------------------
-@pytest.mark.parametrize("case", CASES["parse"], ids=lambda c: repr(c["input"])[:28])
+@pytest.mark.parametrize("case", PARSE_CASES, ids=lambda c: repr(c["input"])[:28])
 def test_parse_case_fixture(case):
-    """The identical table drives the TypeScript half, so a divergence in either
+    """The identical list drives the TypeScript half, so a divergence in either
     language's `parse` fails here or there, never silently in the ledger."""
     if case["valid"]:
         assert money.format_money(money.parse(case["input"])) == case["canonical"]
     else:
-        assert "canonical" not in case
+        assert case["canonical"] is None
         with pytest.raises(ValueError):
             money.parse(case["input"])
+
+
+def test_the_shared_case_list_is_a_sorted_list_of_triples():
+    """The coordinator diffs this file against the console copy at integration, so
+    its shape and ordering are part of the contract, not a local convenience."""
+    assert isinstance(PARSE_CASES, list) and len(PARSE_CASES) >= 69
+    assert [c["input"] for c in PARSE_CASES] == sorted(c["input"] for c in PARSE_CASES)
+    for case in PARSE_CASES:
+        assert set(case) == {"input", "valid", "canonical"}
+        assert isinstance(case["input"], str) and isinstance(case["valid"], bool)
+    assert sum(1 for c in PARSE_CASES if c["valid"]) >= 15
 
 
 def test_the_parse_table_pins_the_numeric_domain():
     """r1 R11: the money domain is exactly `numeric(20, 8)`, i.e. |value| < 10^12."""
     assert money.MAX_VALUE == Decimal(10) ** 12
-    inputs = [case["input"] for case in CASES["parse"]]
-    for edge in ("999999999999.99999999", "-123456789012.34567890"):
+    inputs = [case["input"] for case in PARSE_CASES]
+    for edge in ("999999999999.99999999", "-999999999999.99999999"):
         assert edge in inputs
     for over in ("1000000000000.00000000", "-1000000000000.00000000"):
         assert over in inputs

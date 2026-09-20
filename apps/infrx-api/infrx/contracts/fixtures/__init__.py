@@ -6,13 +6,21 @@ which model owns which file, so `tests/contracts/test_fixtures.py` can prove
 every file round-trips back to identical bytes, and `test_fixtures` fails on any
 file nobody claims - an unclassified fixture is a hole in the contract.
 
-`error_envelopes.json`, `error_codes.json` and `money_cases.json` are tables
-rather than single records and are checked by their own tests. The last two are
-the cross-language parity contract (08 §10 R11, R13): the TypeScript half must
-map the same codes to the same statuses and accept/reject exactly the same money
-inputs. `money_cases.json["parse"]` is that accept/reject set: every entry has
-`input` and `valid`, and a valid one also carries its `canonical` eight-digit
-form (an invalid one has no canonical form, so the key is absent).
+`error_envelopes.json`, `error_codes.json`, `money_cases.json` and
+`money_tables.json` are tables rather than single records and are checked by
+their own tests.
+
+`money_cases.json` and `error_codes.json` are the cross-language parity contract
+(08 §10 R11, R13): the TypeScript half must accept and reject exactly the same
+money inputs and map the same codes to the same statuses. `money_cases.json` is
+therefore **byte-identical** to the console half's copy at
+`apps/app/tests/contracts/money_cases.json`: a list of `{input, valid,
+canonical}` sorted by `input`, with `canonical: null` where the input is
+invalid. It is the one fixture that does not follow the no-nulls rule, because
+matching the other language exactly matters more than the house style, and the
+coordinator diffs the two files at integration. `money_tables.json` holds the
+Python-side debit, hold and ledger-delta tables that were in `money_cases.json`
+before r1.
 """
 from __future__ import annotations
 
@@ -69,7 +77,8 @@ LIST_MODELS: dict[str, type[BaseModel]] = {
     "judge_runs.json": records.JudgeRun,
 }
 
-TABLES = ("error_envelopes.json", "error_codes.json", "money_cases.json")
+TABLES = ("error_envelopes.json", "error_codes.json", "money_cases.json",
+          "money_tables.json")
 
 
 def names() -> tuple[str, ...]:

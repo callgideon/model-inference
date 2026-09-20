@@ -1,362 +1,347 @@
-{
-  "debits": [
-    {
-      "completion_tokens": 340,
-      "expected": "0.00044400",
-      "input_rate": "0.20000000",
-      "name": "typical_video_request",
-      "output_rate": "0.60000000",
-      "prompt_tokens": 1200
-    },
-    {
-      "completion_tokens": 0,
-      "expected": "0.00000000",
-      "input_rate": "0.20000000",
-      "name": "zero_tokens",
-      "output_rate": "0.60000000",
-      "prompt_tokens": 0
-    },
-    {
-      "completion_tokens": 0,
-      "expected": "0.00000001",
-      "input_rate": "0.00500000",
-      "name": "half_up_boundary_rounds_away_from_zero",
-      "note": "raw cost 0.000000005 USD; half up is the one rounding a debit gets",
-      "output_rate": "0.60000000",
-      "prompt_tokens": 1
-    },
-    {
-      "completion_tokens": 0,
-      "expected": "0.00000000",
-      "input_rate": "0.00400000",
-      "name": "below_half_boundary_rounds_down",
-      "note": "raw cost 0.000000004; the matching hold in holds[] ceilings to 1e-8",
-      "output_rate": "0.60000000",
-      "prompt_tokens": 1
-    },
-    {
-      "completion_tokens": 2048,
-      "expected": "0.00737280",
-      "input_rate": "0.20000000",
-      "name": "pilot_envelope_maximum",
-      "output_rate": "0.60000000",
-      "prompt_tokens": 30720
-    }
-  ],
-  "holds": [
-    {
-      "expected": "0.00000001",
-      "input_rate": "0.00400000",
-      "max_input_tokens": 1,
-      "max_output_tokens": 0,
-      "name": "ceiling_diverges_from_half_up",
-      "note": "same inputs as below_half_boundary_rounds_down, which debits 0.00000000",
-      "output_rate": "0.60000000"
-    },
-    {
-      "expected": "0.00737280",
-      "input_rate": "0.20000000",
-      "max_input_tokens": 30720,
-      "max_output_tokens": 2048,
-      "name": "pilot_envelope_hold",
-      "output_rate": "0.60000000"
-    },
-    {
-      "expected": "0.00000000",
-      "input_rate": "0.20000000",
-      "max_input_tokens": 0,
-      "max_output_tokens": 0,
-      "name": "zero_ceilings",
-      "output_rate": "0.60000000"
-    }
-  ],
-  "ledger_deltas": [
-    {
-      "amount": "25.00000000",
-      "name": "operator_grant"
-    },
-    {
-      "amount": "-0.00044400",
-      "name": "request_debit_is_negative"
-    },
-    {
-      "amount": "123456789012.34567890",
-      "name": "twenty_digit_total",
-      "note": "numeric(20, 8): twelve integral and eight fractional digits"
-    },
-    {
-      "amount": "0.00000001",
-      "name": "smallest_representable"
-    }
-  ],
-  "parse": [
-    {
-      "canonical": "0.00000000",
-      "input": "0",
-      "valid": true
-    },
-    {
-      "canonical": "0.00000000",
-      "input": "0.00000000",
-      "valid": true
-    },
-    {
-      "canonical": "1.00000000",
-      "input": "1",
-      "valid": true
-    },
-    {
-      "canonical": "1.00000000",
-      "input": "1.00000000",
-      "valid": true
-    },
-    {
-      "canonical": "0.00000001",
-      "input": "0.00000001",
-      "valid": true
-    },
-    {
-      "canonical": "-0.00000001",
-      "input": "-0.00000001",
-      "valid": true
-    },
-    {
-      "canonical": "25.00000000",
-      "input": "25.00000000",
-      "valid": true
-    },
-    {
-      "canonical": "-0.00044400",
-      "input": "-0.00044400",
-      "valid": true
-    },
-    {
-      "canonical": "0.10000000",
-      "input": "0.1",
-      "valid": true
-    },
-    {
-      "canonical": "0.10000000",
-      "input": "0.10000000",
-      "valid": true
-    },
-    {
-      "canonical": "123456789012.34567890",
-      "input": "123456789012.34567890",
-      "valid": true
-    },
-    {
-      "canonical": "-123456789012.34567890",
-      "input": "-123456789012.34567890",
-      "valid": true
-    },
-    {
-      "canonical": "999999999999.99999999",
-      "input": "999999999999.99999999",
-      "valid": true
-    },
-    {
-      "canonical": "0.12345678",
-      "input": "0.12345678",
-      "valid": true
-    },
-    {
-      "canonical": "-42.00000000",
-      "input": "-42",
-      "valid": true
-    },
-    {
-      "canonical": "1000000000.00000001",
-      "input": "1000000000.00000001",
-      "valid": true
-    },
-    {
-      "input": "1e5",
-      "valid": false
-    },
-    {
-      "input": "1E-5",
-      "valid": false
-    },
-    {
-      "input": "1e-8",
-      "valid": false
-    },
-    {
-      "input": "NaN",
-      "valid": false
-    },
-    {
-      "input": "nan",
-      "valid": false
-    },
-    {
-      "input": "Infinity",
-      "valid": false
-    },
-    {
-      "input": "-Infinity",
-      "valid": false
-    },
-    {
-      "input": "inf",
-      "valid": false
-    },
-    {
-      "input": "-0",
-      "valid": false
-    },
-    {
-      "input": "-0.0",
-      "valid": false
-    },
-    {
-      "input": "-0.00000000",
-      "valid": false
-    },
-    {
-      "input": "0.000000001",
-      "valid": false
-    },
-    {
-      "input": "-0.000000001",
-      "valid": false
-    },
-    {
-      "input": "1000000000000.00000000",
-      "valid": false
-    },
-    {
-      "input": "-1000000000000.00000000",
-      "valid": false
-    },
-    {
-      "input": "1234567890123.45678900",
-      "valid": false
-    },
-    {
-      "input": "+1.00",
-      "valid": false
-    },
-    {
-      "input": "01.5",
-      "valid": false
-    },
-    {
-      "input": "1.5.2",
-      "valid": false
-    },
-    {
-      "input": "",
-      "valid": false
-    },
-    {
-      "input": " 1.00",
-      "valid": false
-    },
-    {
-      "input": "1.00 ",
-      "valid": false
-    },
-    {
-      "input": "1.00\n",
-      "valid": false
-    },
-    {
-      "input": "1.00\t",
-      "valid": false
-    },
-    {
-      "input": "1_000.00",
-      "valid": false
-    },
-    {
-      "input": "0x10",
-      "valid": false
-    },
-    {
-      "input": "$1.00",
-      "valid": false
-    },
-    {
-      "input": "1,000.00",
-      "valid": false
-    },
-    {
-      "input": ".5",
-      "valid": false
-    },
-    {
-      "input": "5.",
-      "valid": false
-    },
-    {
-      "input": "--1",
-      "valid": false
-    },
-    {
-      "input": "1e",
-      "valid": false
-    },
-    {
-      "input": "USD 1",
-      "valid": false
-    },
-    {
-      "input": 1.5,
-      "valid": false
-    },
-    {
-      "input": 0.1,
-      "valid": false
-    },
-    {
-      "input": true,
-      "valid": false
-    },
-    {
-      "input": false,
-      "valid": false
-    },
-    {
-      "input": null,
-      "valid": false
-    },
-    {
-      "input": [],
-      "valid": false
-    },
-    {
-      "input": {},
-      "valid": false
-    },
-    {
-      "input": "0.123456789",
-      "valid": false
-    }
-  ],
-  "rejected": [
-    "1e5",
-    "1E-5",
-    "NaN",
-    "Infinity",
-    "-Infinity",
-    "-0.00000000",
-    "-0.0",
-    "0.000000001",
-    "1234567890123.45678900",
-    "+1.00",
-    "01.5",
-    "1.5.2",
-    "",
-    " 1.00",
-    "1_000.00",
-    "0x10",
-    "$1.00",
-    1.5,
-    true,
-    null,
-    [],
-    {}
-  ]
-}
+[
+  {
+    "input": "",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "\t1.00",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": " ",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": " 1.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "$1.00",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "+.5",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "+0",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "+1.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "--1",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-.5",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-0",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-0.0",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-0.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-0.00000001",
+    "valid": true,
+    "canonical": "-0.00000001"
+  },
+  {
+    "input": "-01.5",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-1.5",
+    "valid": true,
+    "canonical": "-1.50000000"
+  },
+  {
+    "input": "-1.50000000",
+    "valid": true,
+    "canonical": "-1.50000000"
+  },
+  {
+    "input": "-1000000000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-1000000000000.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-999999999999.99999999",
+    "valid": true,
+    "canonical": "-999999999999.99999999"
+  },
+  {
+    "input": "-Infinity",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": ".",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": ".5",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "0",
+    "valid": true,
+    "canonical": "0.00000000"
+  },
+  {
+    "input": "0.0",
+    "valid": true,
+    "canonical": "0.00000000"
+  },
+  {
+    "input": "0.00000000",
+    "valid": true,
+    "canonical": "0.00000000"
+  },
+  {
+    "input": "0.000000001",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "0.00000001",
+    "valid": true,
+    "canonical": "0.00000001"
+  },
+  {
+    "input": "0.1",
+    "valid": true,
+    "canonical": "0.10000000"
+  },
+  {
+    "input": "0.10000000",
+    "valid": true,
+    "canonical": "0.10000000"
+  },
+  {
+    "input": "0.100000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "0.1e1",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "0.99999999",
+    "valid": true,
+    "canonical": "0.99999999"
+  },
+  {
+    "input": "00",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "00.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "007.5",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "01.5",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "0x10",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1",
+    "valid": true,
+    "canonical": "1.00000000"
+  },
+  {
+    "input": "1 000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1,000.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.0\r",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.00\n",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.00000000",
+    "valid": true,
+    "canonical": "1.00000000"
+  },
+  {
+    "input": "1.00000000 ",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.123456789",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.2.3",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.5E2",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1000000000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1000000000000.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "123456789012.3456789",
+    "valid": true,
+    "canonical": "123456789012.34567890"
+  },
+  {
+    "input": "1234567890123.45678900",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "12345678901234567890",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1E-8",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1_000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1e+3",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1e3",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "5.",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "7.5",
+    "valid": true,
+    "canonical": "7.50000000"
+  },
+  {
+    "input": "999999999999.99999998",
+    "valid": true,
+    "canonical": "999999999999.99999998"
+  },
+  {
+    "input": "999999999999.99999999",
+    "valid": true,
+    "canonical": "999999999999.99999999"
+  },
+  {
+    "input": "999999999999.999999999",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "Infinity",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "NaN",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "inf",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "nan",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "one",
+    "valid": false,
+    "canonical": null
+  }
+]

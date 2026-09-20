@@ -7,6 +7,9 @@ Coordinator-owned. This directory is the single Python spelling of
 A change here is a contract revision: update the fixtures, the conformance suites
 and every consumer in the same review.
 
+**Revision r1** (08 §10, rulings R1–R15) is implemented here: read that section
+before changing anything below, because most of the refinement rows now quote it.
+
 Passing a conformance suite against the fakes means **implemented**. Only the same
 suite against the real service means integrated.
 
@@ -21,7 +24,7 @@ suite against the real service means integrated.
 | `limits.py` | The 08 §5 names and frozen defaults as pure data (`PilotSettings`) |
 | `tasklocal.py` | Task-local container names, host ports, databases and object prefixes (08 §8) |
 | `codec.py` | The one canonical JSON form: sorted keys, 2-space indent, no nulls |
-| `fixtures/v1/` | 37 serialized fixtures, byte-stable through their models |
+| `fixtures/v1/` | 38 serialized fixtures, byte-stable through their models; `money_cases.json` and `error_codes.json` are the cross-language parity tables |
 | `fakes/` | In-memory adapters with the real durable semantics, plus clock/ids/failure injection |
 | `conformance/` | Importable suites `run_<port>_conformance(factory)` |
 
@@ -67,7 +70,7 @@ suite against the real service means integrated.
 | `released_free` vs `released_platform_absorbed` | `released_free` = the customer was never going to be charged (`invalid_media`, `preparation_failed`, `queue_wait_expired`, a zero-cost success). `released_platform_absorbed` = we did work and ate the cost (`engine_error`, `lost_after_publication`, `journal_write_failed`, `retries_exhausted`, `platform_error`, and an aged unknown-usage hold). |
 | Unknown usage is free when nothing was published | A billable cause with no authoritative usage becomes `held_unknown` only if the publication marker was set. With no output ever committed there is nothing to reconcile, so the hold is released instead of freezing a customer's credit for 24h. |
 | `UNKNOWN_USAGE_RECONCILE_S` (86400) | 02 requires "after 24h, once execution is fenced and the job is terminal"; the window needed a name. |
-| `journal_write_failed` as an internal code | 02's "unforeseen write failure" needs a raisable error; `TerminalCause` already had the matching cause. |
+| `journal_write_failed` as an internal code | 08 §3 lists it as a `TerminalCause`, and it is one, but `StreamStore.append` also has to *raise* something when an event exceeds `JOURNAL_EVENT_MAX_BYTES`: 02 forbids silently truncating a successful result, and a retry cannot help, so `429 journal_capacity_exhausted` would be a lie. `errors.JournalWriteFailed` is therefore an **internal** code with no HTTP status (`errors.http_status` raises for it): W stops relaying and the job settles with the matching `TerminalCause`. It appears in `error_codes.json` only under `internal_only`, never in the HTTP table. |
 | `MAX_READ_LIMIT = 1000` | `read_owned` needs a hard page bound; requests above it are clamped, `limit <= 0` is `invalid_request`. |
 | A request UUID is admitted **once** | 06 keys jobs by the request UUID and allows "no second active hold per request". A second `admit` of the same request is a `state_conflict` (409), not a replay: without an idempotency key there is no payload to compare, and admitting it again would mint a hold nothing releases. The supported retry after an ambiguous acknowledgment is the idempotency key. |
 | A negative `hold` is `invalid_request` | `money.parse` allows negatives because ledger deltas need them; a *reservation* never does, and a negative one would lower `reserved_total` and fabricate available credit. |
@@ -80,8 +83,40 @@ suite against the real service means integrated.
 | Media objects are keyed by `(org_id, handle)` | Finalized content is immutable and tenant scoped: one org's handle can never replace, shadow or reach another org's object, and restaging the same handle with different content is a conflict rather than an overwrite. |
 | `TerminalOutcome` validates `cause` against `state` (`records.CAUSE_STATES`) | The pair is one fact. `succeeded` + `engine_error` would be a free success and `failed` + `completed` would lose a settled debit, so any cause not listed may only carry `failed`. |
 | Header names are constants in `wire.py` | 08 §3 fixes the header vocabulary; G, W and the console read `HEADER_*`/`PREFER_RESPOND_ASYNC` instead of hand-typing strings. |
-| `PREPARATION_CONCURRENCY` is not an admission gate | See the amendment request below. |
 | No Python `ConsoleServices` protocol | That ports-table row is TypeScript (08 §9), owned by the console half of F2. |
+
+### Revision r1 (08 §10) as implemented
+
+| Ruling | Where it lives |
+|---|---|
+| R1 preparation capacity | `MAX_PREPARING_JOBS` (8) in `limits.py`; `admit` counts jobs holding an active `preparation` reservation and answers `429 capacity_exhausted`. `PREPARATION_CONCURRENCY` (2) stays M/W's host pool size and gates nothing at admission. `prepared()` releases the unit. |
+| R2 media fetch names | `MEDIA_FETCH_TIMEOUT_S` (20), `MEDIA_FETCH_CONNECT_TIMEOUT_S` (3), `MEDIA_FETCH_MAX_REDIRECTS` (3), `MAX_MEDIA_BYTES`. F1's `FETCH_TIMEOUT_S` (30), `MAX_VIDEO_MB` and `MAX_REDIRECTS` keep their names, defaults and reader in `config.Settings`; no pilot name overlaps an F1 one (`test_the_f1_fetch_names_are_not_pilot_names`). |
+| R3 feedback body | `FeedbackName` (`thumb`/`rating`/`correction`/`comment`) plus `value` and optional `comment` on `records.Feedback` and `wire.FeedbackSubmission`. The name fixes the value's type: boolean, integer 1–5, or nonempty text. A JSON float is refused *before* pydantic's lax mode can round it into an integer. An empty body and a missing `idem.key` are both `400 invalid_request`. `rating: -1|0|1` is gone. |
+| R4 budgets snapshot | `records.Budgets` (`preparation_s`, `queue_wait_s`, `generation_s`, `first_token_s`, `stall_s`), captured by `admit` with `Budgets.of(limits, execution_mode)` and carried on `Admission`, which the store reads instead of its current settings. `Admission.admitted_at` **is** R4's `accepted_at`; the record was not renamed because `06` and the console already use `admitted_at`. |
+| R5 cumulative queue wait | `_queue_wait` accumulates across requeues and is compared with the admission's own `budgets.queue_wait_s`. |
+| R6 re-admitting a request | Unchanged from the previous pass: `409 state_conflict`, no side effects. |
+| R7 no caller time | `JobStore.recover()` takes no argument; `StreamStore.expire(now)` keeps 01's signature but clamps to `min(now, clock.now())`, so an argument is a bound at most. |
+| R8 ambiguous resolution | `JudgeCoordinator.resolve_ambiguous(run_id, operator, resolution, reason, *, external_id=None)` with `records.JudgeResolution`. `adopt_provider_evidence` needs the provider id (an extra keyword, because 01's four positional arguments carry nowhere to put it) and continues to `collecting`; `release_reservation` is terminal `quarantined` with the reservation freed. Both append an audit record and neither touches `submit_intent`. |
+| R9 current consent | The fake holds a per-org current consent record (`set_consent`/`revoke_consent` hooks) standing for `consent_history`. `begin_submit` reads *that*, not the snapshot the run was reserved with; a revocation releases the reservation, moves the run to `cancelled` and refuses egress. A frozen snapshot can never be the whole check, because the row a customer revokes is the live one. |
+| R10 tenant coherence | `admit` requires `idem.org_id == request.org_id` and the request's own media; `complete` requires `outcome.job_id == lease.job_id`; `reserve` requires `consent.org_id == run.org_id`; `accept` already required the caller's idempotency scope. Admission rechecks revocation, suspension **and** entitlement through `FakeJobStore.is_entitled`, an injectable callable a real adapter replaces with its query (`unentitle`/`entitle` hooks). |
+| R11 monetary inputs | `fakes/support.money_input` is the shared boundary: `money.parse` (no floats, exponents, `NaN`, negative zero, over-scale) and then a refusal of negatives, raised as `invalid_request` rather than a `ValueError`. Used by `admit`'s hold, `grant`, `reserve` and `settle`. The domain is exactly `numeric(20, 8)`: `money.MAX_VALUE = 10^12`. `fixtures/v1/money_cases.json["parse"]` is the accept/reject set both languages must match. |
+| R12 mode versus content | `TraceEnvelope` refuses content in any mode but `full`, and the sink drops a smuggled one as `malformed` and charges every content byte it accepts. |
+| R14 module list | No code change: `wire.py` and `tasklocal.py` are in the table above, and `UNKNOWN_USAGE_RECONCILE_S` is a §5 name rather than a refinement. |
+
+### Further refinements from the r1 pass
+
+| Refinement | Why |
+|---|---|
+| A refused admission reserves nothing | The journal reservation was taken before the price snapshot was resolved, so a client retrying an unpriced model drained the global journal budget. Everything that can refuse now runs first. |
+| Settlement is validated before money moves | `_terminalize` checks the `(cause, state)` pair and the usage certainty up front. Building the record last would debit the wallet and *then* raise, leaving money moved on a job that never became terminal. |
+| `completed` without authoritative usage is not a success | With nothing published there is no usage to reconcile, so the honest outcome is `engine_incomplete`/`failed` with no result reference, not a delivered success at zero cost. |
+| The winning worker can replay a rewritten settlement | `complete` compares the caller's proposal with the stored proposal as well as the committed outcome, so a crash-and-retry after an over-envelope rewrite returns the committed outcome instead of `AlreadyTerminal`. |
+| The queue-wait budget gates `claim` | A job the customer has already been told to give up on must not start running because a worker reached it before the reconciler. |
+| Staging is all or nothing | Every media reference is validated before any is stored, so a refused request leaves nothing staged (02: "a staging failure creates no job or hold"). |
+| `finalize_upload` cannot replace an object | Immutability held across tenants and for `stage`, but completing an upload over a handle the same tenant had already staged replaced its content. |
+| Index visibility is measured from the claim | `FakeScheduler` timed a candidate out from `available_at`, so an event older than the lease TTL was handed to two workers at once: pure throughput loss, and a misleading example for Q. |
+| Terminal judge runs are sticky, provider ids are required | `quarantine` refused to reopen `settled`/`cancelled`/`quarantined`; `record_submission` refuses an empty id, which is the ambiguity it exists to remove; `reserve` resets a caller-supplied `submit_intent` or `external_batch_id`. |
+| Port boundaries raise domain errors, never `ValueError` | `create_upload` (non-integer or out-of-range `max_bytes`, empty mime allow-list), `accept` (a non-object body) and every monetary input answer `400`, so a route cannot turn a caller's input into a 500. |
 
 ## Running a conformance suite against a real adapter
 
@@ -106,9 +141,16 @@ Rules for a factory:
 - `ids` supplies `uuid()`/`event_id()`;
 - `failures` is optional. Without it the crash-after-commit cases return early
   instead of failing, so a suite can be adopted in steps;
-- optional hooks (`publish`, `revoke_key`, `unrevoke_key`, `suspend_org`,
-  `journal_bytes`) behave the same way: absent means the case is skipped, and the
-  evidence report must say so rather than claim a pass.
+- optional hooks behave the same way: absent means the case returns early, and the
+  evidence report must say so rather than claim a pass. JobStore: `publish`,
+  `revoke_key`, `unrevoke_key`, `suspend_org`, `unentitle`, `entitle`, `retune`,
+  `journal_bytes`. JudgeCoordinator: `available`, `runs`, `set_consent`,
+  `revoke_consent`, `audit`. `retune` reconfigures the live adapter, so a case can
+  prove an accepted job keeps its own budgets;
+- the `streamstore`, `scheduler` and `feedback` factories also publish
+  `extra["jobs"]`, because those cases must admit a job first. The suites only call
+  *port* operations on it and never read a fake's attributes, so a real adapter can
+  pass its own JobStore there.
 
 `infrx/contracts/fakes/factories.py` is the reference implementation of all eight
 factories; `tests/contracts/test_conformance.py` runs every case against them.
@@ -147,38 +189,29 @@ numbered after `0002`.
 
 ## Amendment requests to the coordinator
 
-1. **`PREPARATION_CONCURRENCY` (2) versus 64 accepted nonterminal jobs.** 01 says
-   admission reserves preparation capacity, and the limits table says two active
-   preparation processes per host. Enforcing the concurrency figure at admission
-   would make the third simultaneous request a 429 while 62 job slots sit idle, so
-   the fake reserves a preparation *reservation row* at admission and treats the
-   concurrency figure as M/W's execution-side limit. If the coordinator wants a
-   hard admission gate instead, D and this suite both change.
-2. **`FETCH_TIMEOUT_S` means two things.** F1's gateway reads it with a default of
-   30s for inline media fetches; 08 §5 gives it a default of 20s for the pilot
-   path. Both currently read the same variable with different defaults.
-   Recommendation: rename the pilot one (`MEDIA_FETCH_TIMEOUT_S`) or retire F1's
-   when G takes over the fetch path. Likewise `MAX_MEDIA_BYTES` (08) and
-   `MAX_VIDEO_MB` (F1) express the same limit in different units.
-3. **Feedback `rating` range.** Nothing specifies it; encoded as `-1 | 0 | 1`
-   (thumbs). Widening it later is a contract revision plus a D migration.
-4. **`GENERATION_TIMEOUT_S` and the absolute deadline.** The records carry
-   `deadline_at` only; the split between preparation, queue and generation budgets
-   is left to G and W. If the deadline must be decomposed on the record, say so
-   before D1 persists it.
-5. **An ambiguous judge run has no resolution operation.** The ports table ends at
-   `quarantine`, so an `ambiguous` run keeps its budget reservation for ever:
-   `record_submission` and `settle` both refuse it, which is correct (02 forbids a
-   second billable batch) but leaves no way to record provider evidence. Requesting
-   one operator-only operation, e.g. `resolve(run, evidence)`, that either adopts a
-   discovered provider batch or releases the reservation with an audit record.
-6. **`recover(now)` takes a caller-supplied time.** 01's signature is
-   `recover(now)`, and the fake honours it so cases can drive the clock. In
-   PostgreSQL, D must read the database clock inside the transaction and treat the
-   argument as a bound at most: a caller-supplied `now` two days ahead would
-   otherwise release an unknown-usage hold before its 24h window.
-7. **Feedback body validation.** `accept` currently takes any body without a rating
-   or a correction (`{}` is accepted) and allows `idem.key=None`, while 01 says
-   `POST /v1/feedback` uses an idempotency key. If an empty submission must be
-   rejected and the key made mandatory, that is a contract revision for the wire
-   model plus this suite.
+Requests 1, 2, 3, 5, 6 and 7 of the previous pass were answered by revision r1
+(R1, R2, R3, R8, R7 and R3 respectively) and are implemented above. Still open:
+
+1. **`GENERATION_TIMEOUT_S` and the absolute deadline** (was request 4, partly
+   answered). R4 puts the budgets on the accepted job, so `budgets.generation_s`,
+   `first_token_s` and `stall_s` now exist as data. What 01/02 still leave open is
+   *who enforces* them: the records carry no per-phase deadline instants, so G and W
+   must derive them from `admitted_at + budgets` themselves. If D should persist a
+   `generation_deadline_at` instead, say so before D1.
+2. **`deadline_exceeded` and `sync_deadline` are billable.** `BILLABLE_CAUSES`
+   includes both, so a job that dies on the platform's own generation deadline with
+   authoritative usage is charged. 02 says platform-caused failures are free but
+   also that "known authoritative usage on customer cancellation may consume
+   promotional credits", and a synchronous client timeout is the customer's
+   deadline while the absolute generation deadline is ours. These two causes need a
+   ruling; money is not a place to guess. Owner: coordinator + D.
+3. **An expired upload window answers `result_expired`.** `finalize_upload` raises
+   `410 result_expired` ("The result is no longer available.") for an upload whose
+   window has closed, which is the wrong customer-facing message. The 08 §3 code
+   table has no `upload_expired`, and adding a code is a coordinator revision that
+   both halves and `error_codes.json` follow. Owner: coordinator.
+4. **`resolve_ambiguous`'s provider id is a keyword argument.** R8 names four
+   positional arguments and also requires the provider id for
+   `adopt_provider_evidence`; the id arrives as `external_id=` because there is no
+   fifth positional slot in the ruling. If the coordinator prefers `resolution` to
+   be a small record carrying the evidence, that is a signature change for D and J.
