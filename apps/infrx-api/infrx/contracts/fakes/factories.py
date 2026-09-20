@@ -31,10 +31,13 @@ def _jobstore(limits: PilotSettings | None = None):
 def _job_hooks(jobs: FakeJobStore, stream: FakeStreamStore | None = None) -> dict:
     from ..records import ChunkEventType, EngineEvent
 
+    # One journal per store, always: settlement writes its terminal event through
+    # the store's registered journal, so a throwaway per call would lose chunks.
+    stream = stream or FakeStreamStore(jobs)
+
     async def publish(lease):
         """Commit one chunk, i.e. set the publication marker."""
-        target = stream or FakeStreamStore(jobs)
-        return await target.append(lease, (EngineEvent(type=ChunkEventType.delta,
+        return await stream.append(lease, (EngineEvent(type=ChunkEventType.delta,
                                                        payload={"content": "x"}),))
 
     def balance(org_id):

@@ -71,6 +71,24 @@ BILLABLE_CAUSES = frozenset({
     TerminalCause.sync_deadline, TerminalCause.deadline_exceeded,
 })
 
+# The (cause, state) pair is part of the contract, not two independent fields: a
+# `succeeded` job whose cause is `engine_error` would be a free success, and a
+# `failed` job whose cause is `completed` would lose a settled debit. Any cause
+# not named here is a failure cause and may only carry `failed`.
+CAUSE_STATES: dict[TerminalCause, frozenset] = {
+    TerminalCause.completed: frozenset({JobState.succeeded}),
+    TerminalCause.client_cancelled: frozenset({JobState.cancelled}),
+    TerminalCause.client_disconnected: frozenset({JobState.failed, JobState.cancelled}),
+    TerminalCause.sync_deadline: frozenset({JobState.failed, JobState.cancelled}),
+    TerminalCause.queue_wait_expired: frozenset({JobState.expired}),
+    TerminalCause.deadline_exceeded: frozenset({JobState.failed, JobState.expired}),
+}
+_FAILED_ONLY = frozenset({JobState.failed})
+
+
+def states_for_cause(cause: TerminalCause) -> frozenset:
+    return CAUSE_STATES.get(cause, _FAILED_ONLY)
+
 
 class UsageCertainty(enum.StrEnum):
     authoritative = "authoritative"
@@ -259,8 +277,9 @@ class PriceSnapshot(Record):
     price_version: str
     currency: Literal["USD"] = "USD"
     model_revision: str
-    input_rate_per_million: Money
-    output_rate_per_million: Money
+    # A negative rate would turn a debit into a credit at settlement.
+    input_rate_per_million: Money = Field(ge=0)
+    output_rate_per_million: Money = Field(ge=0)
     token_rules_version: str
     captured_at: Timestamp
 
@@ -437,6 +456,9 @@ class TerminalOutcome(Record):
     def _consistent(self) -> TerminalOutcome:
         if self.state not in TERMINAL_STATES:
             raise ValueError(f"{self.state} is not a terminal state")
+        if self.state not in states_for_cause(self.cause):
+            raise ValueError(f"cause {self.cause} cannot carry state {self.state}; allowed: "
+                             f"{sorted(s.value for s in states_for_cause(self.cause))}")
         if self.usage is not None and self.usage.certainty is not UsageCertainty.authoritative:
             raise ValueError("a present usage must be authoritative; unknown usage is usage=None")
         if self.debit != 0 and self.settlement_state is not SettlementState.settled:

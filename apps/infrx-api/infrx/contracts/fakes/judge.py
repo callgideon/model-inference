@@ -54,6 +54,12 @@ class FakeJudgeCoordinator:
         self.failures.before("reserve")
         now: datetime = self.clock.now()
         max_cost = money.parse(max_cost)
+        stored = self.runs.get(run.run_id)
+        if stored is not None:
+            # One reservation per run (01: "duplicate calls produce one run/intent").
+            # Re-reserving must not reset the state, mint a second submission intent
+            # or buy a second provider batch for an ambiguous run.
+            return stored
         if not consent.allows_evaluation(now):
             raise errors.ConsentMissing(f"org {consent.org_id} has no current evaluation consent")
         if self.limits.judge_mode != "live":
@@ -86,6 +92,11 @@ class FakeJudgeCoordinator:
         if run.state in FROZEN_STATES:
             raise errors.AmbiguousSubmission(
                 f"run {run_id} is {run.state}: resolve it with provider evidence, do not resubmit")
+        if not run.consent.allows_evaluation(self.clock.now()):
+            # 02: consent must be *current at submission*, not merely at reservation.
+            # Nothing leaves the platform on a snapshot that has since expired.
+            raise errors.ConsentMissing(
+                f"run {run_id} has no current evaluation consent at submission time")
         if run.state is JudgeRunState.dry_run:
             raise errors.BudgetExceeded("dry-run mode cannot authorize a live submission")
         if run.state is JudgeRunState.submitting and run.submit_intent is not None:

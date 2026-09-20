@@ -102,8 +102,12 @@ def test_public_identifier_shapes():
     assert handle.startswith("job_") and handle[4:] not in request_id
     assert ids.require_handle(handle, ids.JOB_HANDLE_RE) == handle
     assert ids.new_job_handle() != ids.new_job_handle()      # random, not derived
-    for bad in ["not-a-uuid", request_id.upper(), "", None]:
-        assert not ids.is_request_id(bad)
+    for bad in ["not-a-uuid", request_id.upper(), "", None,
+                request_id + "\n", request_id + " ", request_id + "x"]:
+        assert not ids.is_request_id(bad), bad
+    for bad in (handle + "\n", handle + "/../other"):
+        with pytest.raises(ValueError):
+            ids.require_handle(bad, ids.JOB_HANDLE_RE)
 
 
 def test_cursor_token_round_trips_and_rejects_garbage():
@@ -233,6 +237,31 @@ def test_terminal_outcome_invariants():
                                 cause=records.TerminalCause.completed,
                                 settlement_state=records.SettlementState.released_free,
                                 settled_at=unknown.settled_at)
+
+
+def test_cause_and_state_must_agree():
+    """The pair is one fact: a succeeded job whose cause is `engine_error` would be
+    a free success, and a failed job whose cause is `completed` would lose a debit."""
+    settled = fixtures.model("terminal_success.json")
+    for state, cause in ((records.JobState.succeeded, records.TerminalCause.engine_error),
+                         (records.JobState.failed, records.TerminalCause.completed),
+                         (records.JobState.succeeded, records.TerminalCause.client_cancelled),
+                         (records.JobState.cancelled, records.TerminalCause.queue_wait_expired)):
+        with pytest.raises(ValueError):
+            records.TerminalOutcome(job_id=settled.job_id, state=state, cause=cause,
+                                    settlement_state=records.SettlementState.released_free,
+                                    settled_at=settled.settled_at)
+    assert records.states_for_cause(records.TerminalCause.platform_error) == \
+        frozenset({records.JobState.failed})
+
+
+def test_price_rates_are_never_negative():
+    """A negative rate would turn a settlement debit into a credit."""
+    raw = fixtures.load("price_snapshot.json")
+    with pytest.raises(ValueError):
+        records.PriceSnapshot(**{**raw, "input_rate_per_million": "-0.20000000"})
+    with pytest.raises(ValueError):
+        records.PriceSnapshot(**{**raw, "output_rate_per_million": "-0.60000000"})
 
 
 def test_usage_totals_must_add_up():

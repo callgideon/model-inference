@@ -42,7 +42,9 @@ class FakeMediaStore:
         self.limits = limits
         self.failures = failure_hooks(failures)
         self.uploads: dict[str, _Upload] = {}
-        self.objects: dict[str, MediaRef] = {}          # handle -> immutable ref
+        # (org, handle) -> immutable ref. Keyed by tenant so one org's handle can
+        # never name, replace or shadow another org's object.
+        self.objects: dict[tuple[str, str], MediaRef] = {}
         self.by_job: dict[str, tuple[MediaRef, ...]] = {}
 
     # --- test hooks (not part of the port) -----------------------------------
@@ -76,9 +78,19 @@ class FakeMediaStore:
                     raise errors.UnsupportedMedia("upload digest does not match the reference")
                 staged.append(resolved)
                 continue
+            existing = self.objects.get((org_id, ref.handle))
+            if existing is not None:
+                # Staged and finalized content is immutable: the same handle keeps
+                # the object it already has, and different content is a conflict
+                # rather than a silent overwrite.
+                if existing.digest != ref.digest:
+                    raise errors.Conflict(
+                        f"media handle {ref.handle} already holds different content")
+                staged.append(existing)
+                continue
             stored = ref.model_copy(update={
                 "storage_ref": self._key(org_id, ref.digest, ref.profile_version, "source")})
-            self.objects[stored.handle] = stored
+            self.objects[(org_id, stored.handle)] = stored
             staged.append(stored)
         return tuple(staged)
 
@@ -123,7 +135,7 @@ class FakeMediaStore:
         if upload is None or upload.org_id != org_id:
             raise errors.NotFound(f"no upload {upload_handle} owned by org {org_id}")
         if upload.state is UploadState.finalized:
-            return self.objects[upload_handle]          # idempotent completion
+            return self.objects[(org_id, upload_handle)]   # idempotent completion
         if self.clock.now() >= upload.expires_at:
             upload.state = UploadState.expired
             raise errors.Gone(code="result_expired", detail="the upload window has expired")
@@ -140,11 +152,11 @@ class FakeMediaStore:
                        bytes=len(upload.data), mime=upload.mime,
                        storage_ref=self._key(org_id, digest, "v1", "source"))
         upload.state = UploadState.finalized
-        self.objects[upload_handle] = ref                # immutable from here on
+        self.objects[(org_id, upload_handle)] = ref       # immutable from here on
         return ref
 
     async def resolve_owned(self, org_id: str, ref: str) -> MediaRef:
-        media = self.objects.get(ref)
+        media = self.objects.get((org_id, ref))
         if media is None or media.org_id != org_id:
             raise errors.NotFound(f"no media {ref} owned by org {org_id}")
         upload = self.uploads.get(ref)

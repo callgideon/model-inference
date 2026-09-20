@@ -78,6 +78,24 @@ async def dur_admit__idempotent_replay_returns_the_same_identity(factory):
     assert len(harness.extra["active_jobs"]()) == 1
 
 
+async def dur_admit__a_request_uuid_is_admitted_once(factory):
+    """DUR-ADMIT: the request UUID is the job key (06: "no second active hold per
+    request"), so re-admitting the same request never reserves twice. Without an
+    idempotency key there is nothing to replay, so it is a typed conflict."""
+    harness = factory()
+    request, first = await _admit(harness, key=None)
+    reserved = harness.extra["balance"](request.org_id)["reserved"]
+    for key in (None, "a-late-key"):
+        try:
+            await harness.port.admit(request, b.idem(request, key), (), b.hold_for(request))
+        except errors.DomainError as exc:
+            assert errors.http_status(exc.code) == 409, exc.code
+        else:
+            raise AssertionError(f"the same request was admitted twice (key={key!r})")
+    assert harness.extra["balance"](request.org_id)["reserved"] == reserved
+    assert len(harness.extra["active_jobs"]()) == 1
+
+
 async def dur_admit__changed_payload_with_the_same_key_is_a_conflict(factory):
     """DUR-ADMIT: reusing a key with a different canonical payload is 409."""
     harness = factory()
@@ -224,6 +242,25 @@ async def dur_cap__hold_cannot_exceed_the_available_balance(factory):
     assert balance["available"] >= 0 and balance["reserved"] == 0
 
 
+async def dur_cap__a_negative_maximum_hold_is_refused(factory):
+    """DUR-CAP: no negative available balance. A negative hold would reduce the
+    reserved total, fabricate credit out of an empty wallet and let the next
+    admission settle a real debit against it."""
+    harness = factory()
+    harness.extra["grant"](b.ORG_A, "0")
+    request = b.request(harness)
+    try:
+        await harness.port.admit(request, b.idem(request, "negative"), (),
+                                 -money.parse("10.00"))
+    except errors.DomainError as exc:
+        assert errors.http_status(exc.code) in (400, 402), exc.code
+    else:
+        raise AssertionError("a negative maximum hold was reserved")
+    balance = harness.extra["balance"](b.ORG_A)
+    assert balance["reserved"] == 0 and balance["available"] == 0
+    assert len(harness.extra["active_jobs"]()) == 0
+
+
 async def dur_cap__concurrent_admissions_never_oversubscribe(factory):
     """DUR-CAP: eight concurrent admissions against room for three: exactly three
     win, the balance never goes negative and no reservation is double counted."""
@@ -355,6 +392,26 @@ async def dur_output__prepublication_retries_are_bounded(factory):
         await harness.port.claim(request.request_id, "worker-a")
     assert outcome is not None, "retries were unbounded"
     assert outcome.cause is TerminalCause.retries_exhausted and outcome.debit == 0
+
+
+async def dur_output__queue_wait_does_not_restart_on_a_requeue(factory):
+    """DUR-OUTPUT: the queue-wait budget starts at the durable queued transition
+    and is never extended by a retry (01, limits table), so queue time accumulated
+    before a lost attempt still counts after the requeue."""
+    harness = factory(limits=DEFAULTS.replace(queue_wait_interactive_s=10))
+    request, admission = await _admit(harness, mode=ExecutionMode.sync, deadline_s=10_000)
+    await harness.port.prepared(admission.job_handle, ())
+    harness.clock.advance(9)                       # 9s of a 10s queue budget spent
+    await harness.port.claim(request.request_id, "worker-a")
+    harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
+    await harness.port.recover(harness.clock.now())            # lost, requeued
+    stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert stored.state is JobState.queued and outcome is None
+    harness.clock.advance(9)                       # 18s of queue wait in total
+    await harness.port.recover(harness.clock.now())
+    stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert outcome is not None, "the requeue handed the job a fresh queue-wait budget"
+    assert outcome.cause is TerminalCause.queue_wait_expired and outcome.debit == 0
 
 
 async def dur_output__the_absolute_deadline_bounds_recovery(factory):
@@ -555,6 +612,7 @@ def jobstore_cases():
     return [
         dur_admit__acceptance_creates_job_hold_reservations_and_outbox,
         dur_admit__idempotent_replay_returns_the_same_identity,
+        dur_admit__a_request_uuid_is_admitted_once,
         dur_admit__changed_payload_with_the_same_key_is_a_conflict,
         dur_admit__crash_after_commit_then_retry_does_not_double_reserve,
         dur_admit__expired_mapping_is_explicit_never_a_second_billable_job,
@@ -563,6 +621,7 @@ def jobstore_cases():
         dur_cap__total_org_and_key_limits_reject_with_retry_guidance,
         dur_cap__journal_reservation_must_fit_the_global_budget,
         dur_cap__hold_cannot_exceed_the_available_balance,
+        dur_cap__a_negative_maximum_hold_is_refused,
         dur_cap__concurrent_admissions_never_oversubscribe,
         dur_fence__claim_increments_the_generation_from_the_database_clock,
         dur_fence__an_expired_lease_can_neither_renew_nor_settle,
@@ -570,6 +629,7 @@ def jobstore_cases():
         dur_output__recovery_requeues_only_before_publication,
         dur_output__loss_after_publication_is_a_terminal_failure,
         dur_output__prepublication_retries_are_bounded,
+        dur_output__queue_wait_does_not_restart_on_a_requeue,
         dur_output__the_absolute_deadline_bounds_recovery,
         dur_settle__one_settlement_with_exact_decimals,
         dur_settle__duplicate_completion_is_idempotent_then_conflicts,
@@ -764,6 +824,52 @@ async def dur_output__an_oversize_event_is_refused(factory):
     assert page == ()
 
 
+async def dur_cap__a_job_cannot_store_past_its_journal_reservation(factory):
+    """DUR-CAP: 02 requires per-job *and* global byte limits, so one job's journal
+    cannot grow into the global budget past the bytes reserved for it."""
+    limits = DEFAULTS.replace(journal_job_reserve_bytes=4096, journal_event_max_bytes=1024,
+                              journal_total_bytes=1 << 20)
+    harness = factory(limits=limits)
+    request, admission, lease = await _stream_job(harness)
+    event = "x" * 900
+    for _ in range(4):
+        await harness.port.append(lease, b.events(event))      # ~3.6 KiB of 4 KiB
+    try:
+        await harness.port.append(lease, b.events(event))
+    except errors.JournalCapacityExhausted as exc:
+        assert errors.http_status(exc.code) == 429 and exc.retry_after_s >= 1
+    else:
+        raise AssertionError("a job stored past its per-job journal reservation")
+    journal_bytes = harness.extra.get("journal_bytes")
+    if journal_bytes is not None:
+        assert journal_bytes() <= limits.journal_job_reserve_bytes
+
+
+async def dur_settle__the_terminal_event_belongs_to_the_settling_transaction(factory):
+    """DUR-SETTLE (02 §7): one transaction inserts the terminal outcome, the
+    authoritative usage, the ledger settlement, the capacity releases *and* the
+    terminal journal event. Reading the journal straight after the settlement must
+    already show it: a crash between two writes would leave a settled job whose
+    terminal event nothing ever repairs."""
+    harness = factory()
+    jobs = harness.extra["jobs"]
+    request, admission, lease = await _stream_job(harness)
+    await harness.port.append(lease, b.events("a"))
+    outcome = await jobs.complete(lease, b.outcome(request.request_id, harness,
+                                                  tokens=b.usage(10, 1)))
+    page, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    terminal = [chunk for chunk in page if chunk.event_type is ChunkEventType.terminal]
+    assert len(terminal) == 1, "the settlement committed without its terminal event"
+    assert terminal[0].payload["settlement_state"] == outcome.settlement_state.value
+    assert await harness.port.finalize_in_transaction(outcome) == terminal[0]
+    # cancellation terminalizes through the same transaction
+    other, admitted, lease = await _stream_job(harness, key="cancelled")
+    cancelled = await jobs.cancel(other.org_id, admitted.job_handle)
+    page, _ = await harness.port.read_owned(other.org_id, admitted.job_handle, None, 10)
+    assert [chunk.event_type for chunk in page] == [ChunkEventType.terminal]
+    assert page[0].payload["cause"] == cancelled.cause.value
+
+
 async def dur_output__the_terminal_event_is_written_once_with_the_settlement(factory):
     """DUR-OUTPUT: the terminal journal event belongs to the settling transaction."""
     harness = factory()
@@ -795,7 +901,9 @@ def streamstore_cases():
         dur_output__a_pruned_prefix_is_an_explicit_replay_gap,
         dur_output__an_expired_journal_is_gone_not_regenerated,
         dur_cap__stored_unexpired_bytes_keep_counting,
+        dur_cap__a_job_cannot_store_past_its_journal_reservation,
         dur_fence__a_stale_worker_cannot_append,
         dur_output__an_oversize_event_is_refused,
         dur_output__the_terminal_event_is_written_once_with_the_settlement,
+        dur_settle__the_terminal_event_belongs_to_the_settling_transaction,
     ]

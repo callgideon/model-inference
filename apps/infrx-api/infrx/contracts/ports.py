@@ -21,8 +21,8 @@ from typing import Any, AsyncIterator, Protocol, runtime_checkable
 
 from .records import (Admission, AuthContext, Chunk, ConsentSnapshot, Cursor, EngineEvent,
                       Feedback, IdempotencyRef, IndexEvent, JudgeRun, Lease, MediaRef,
-                      NormalizedRequest, PreparedRequest, TerminalOutcome, TraceEnvelope,
-                      TraceOfferResult)
+                      NormalizedRequest, PreparedRequest, ReservationKind, TerminalOutcome,
+                      TraceEnvelope, TraceOfferResult)
 
 
 @runtime_checkable
@@ -30,13 +30,18 @@ class JobStore(Protocol):
     """D. Durable authority: acceptance, fencing, terminal settlement."""
 
     async def admit(self, request: NormalizedRequest, idem: IdempotencyRef,
-                    caps: tuple[Any, ...], hold: Decimal) -> Admission:
+                    caps: tuple[ReservationKind, ...], hold: Decimal) -> Admission:
         """One transaction: recheck authorization, capacity and balance, reserve
         preparation/inference/journal capacity and the maximum hold, insert the
         `preparing` job and its dispatch outbox. An idempotent replay returns the
         original admission with `replayed=True`; a changed payload raises
         `IdempotencyConflict`; an expired mapping raises `IdempotencyExpired`
-        rather than silently admitting a second billable job."""
+        rather than silently admitting a second billable job.
+
+        `caps` names *extra* reservation kinds beyond the three every admission
+        takes; amounts come from the store's own limits, never from the caller. The
+        request UUID is the job key, so re-admitting one raises `StateConflict`, and
+        a negative `hold` raises `InvalidRequest`."""
 
     async def get_owned(self, org_id: str, job_handle: str) -> tuple[Admission, TerminalOutcome | None]:
         """Ownership-checked lookup. Possession of a handle is never enough."""

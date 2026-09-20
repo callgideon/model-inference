@@ -113,12 +113,46 @@ async def media_sec__a_foreign_media_reference_is_not_staged(factory):
         raise AssertionError("an oversize source was staged")
 
 
+async def media_sec__staging_never_replaces_an_existing_object(factory):
+    """MEDIA-SEC: finalized and staged content is immutable and tenant scoped. A
+    staged reference can neither overwrite an object nor name another org's, so a
+    colliding handle cannot make the owner's upload disappear."""
+    harness = factory()
+    ticket = await harness.port.create_upload(b.ORG_A, {"max_bytes": 1024})
+    handle = ticket["upload_handle"]
+    harness.extra["put_object"](handle, b"the original bytes", "video/mp4")
+    owned = await harness.port.finalize_upload(b.ORG_A, handle)
+
+    # another tenant staging the same handle touches nothing of org A's
+    foreign = b.media(b.ORG_B, handle=handle, kind=MediaKind.inline)
+    staged = await harness.port.stage(b.ORG_B, b.request(harness, org_id=b.ORG_B,
+                                                         refs=(foreign,)))
+    assert await harness.port.resolve_owned(b.ORG_A, handle) == owned
+    assert staged[0].storage_ref != owned.storage_ref
+
+    # and the owner cannot rewrite it either: immutable content, or a conflict
+    clash = b.media(b.ORG_A, handle=handle, kind=MediaKind.inline)
+    try:
+        await harness.port.stage(b.ORG_A, b.request(harness, refs=(clash,)))
+    except errors.DomainError as exc:
+        assert errors.http_status(exc.code) in (400, 404, 409), exc.code
+    else:
+        raise AssertionError("staging overwrote an immutable object")
+    assert await harness.port.resolve_owned(b.ORG_A, handle) == owned
+
+    # restaging identical content is idempotent, not a second object
+    ref = b.media(b.ORG_A)
+    once = await harness.port.stage(b.ORG_A, b.request(harness, refs=(ref,)))
+    assert await harness.port.stage(b.ORG_A, b.request(harness, refs=(ref,))) == once
+
+
 def mediastore_cases():
     return [media_sec__an_upload_is_owned_verified_and_immutable,
             media_sec__another_org_cannot_resolve_or_finalize,
             media_sec__oversize_and_unsupported_uploads_are_refused,
             media_parity__staging_is_content_addressed_and_tenant_namespaced,
-            media_sec__a_foreign_media_reference_is_not_staged]
+            media_sec__a_foreign_media_reference_is_not_staged,
+            media_sec__staging_never_replaces_an_existing_object]
 
 
 # ==========================================================================
@@ -604,6 +638,30 @@ async def judge_budget__one_submission_intent_per_run(factory):
         raise AssertionError("a run recorded two provider batches")
 
 
+async def judge_budget__reserving_a_run_twice_does_not_reset_it(factory):
+    """JUDGE-BUDGET: duplicate calls produce one run and one intent (01). A second
+    reserve must not revive an ambiguous run, mint a second submission intent or
+    reserve the budget twice."""
+    harness = factory(judge_mode="live", budget="10.00")
+    run = _run(harness)
+    reserved = await harness.port.reserve(run, b.consent(), Decimal("4.00"))
+    assert await harness.port.reserve(run, b.consent(), Decimal("4.00")) == reserved
+    available = harness.extra.get("available")
+    if available is not None:
+        assert available() == Decimal("6.00")          # one reservation, not two
+    first = await harness.port.begin_submit(run.run_id)
+    await harness.port.quarantine(run.run_id, "submission timeout")
+    again = await harness.port.reserve(run, b.consent(), Decimal("4.00"))
+    assert again.state in {JudgeRunState.ambiguous, JudgeRunState.quarantined}
+    assert again.submit_intent == first.submit_intent
+    try:
+        await harness.port.begin_submit(run.run_id)
+    except errors.AmbiguousSubmission:
+        pass
+    else:
+        raise AssertionError("re-reserving an ambiguous run authorized a second submission")
+
+
 async def judge_budget__an_ambiguous_run_never_resubmits(factory):
     """JUDGE-BUDGET: resolve with provider evidence, never a second billable batch."""
     harness = factory(judge_mode="live", budget="1.00")
@@ -638,7 +696,8 @@ async def judge_budget__settlement_cannot_exceed_the_reservation(factory):
 
 
 async def judge_budget__revoked_or_missing_consent_is_refused_before_egress(factory):
-    """JUDGE-BUDGET: current consent is required at submission time."""
+    """JUDGE-BUDGET: current consent is required at submission time, so it is
+    checked again there and not only when the budget was reserved (02)."""
     harness = factory(judge_mode="live", budget="1.00")
     revoked = b.consent(revoked_at="2026-09-10T00:00:00Z")
     for consent in (revoked, b.consent(evaluation=False), b.consent(mode=TraceMode.minimal)):
@@ -648,12 +707,23 @@ async def judge_budget__revoked_or_missing_consent_is_refused_before_egress(fact
             pass
         else:
             raise AssertionError("a run without current consent was reserved")
+    # consent that lapses between the reservation and the submission
+    run = _run(harness)
+    await harness.port.reserve(run, b.consent(revoked_at=harness.clock.at(10)), Decimal("0.10"))
+    harness.clock.advance(3600)
+    try:
+        await harness.port.begin_submit(run.run_id)
+    except errors.ConsentMissing:
+        pass
+    else:
+        raise AssertionError("consent revoked after the reservation still authorized egress")
 
 
 def judge_cases():
     return [judge_budget__the_default_is_dry_run_with_no_authorization,
             judge_budget__reservations_include_outstanding_and_ambiguous_runs,
             judge_budget__one_submission_intent_per_run,
+            judge_budget__reserving_a_run_twice_does_not_reset_it,
             judge_budget__an_ambiguous_run_never_resubmits,
             judge_budget__settlement_cannot_exceed_the_reservation,
             judge_budget__revoked_or_missing_consent_is_refused_before_egress]

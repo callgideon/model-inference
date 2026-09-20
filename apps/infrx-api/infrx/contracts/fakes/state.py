@@ -75,7 +75,8 @@ class _Job:
     published: bool = False                  # first committed chunk
     attempts: int = 0                        # prepublication requeues used
     prepared: tuple[MediaRef, ...] = ()
-    queued_at: datetime | None = None
+    queued_at: datetime | None = None         # start of the current queued spell
+    queued_elapsed: timedelta = timedelta(0)  # queue time from earlier spells
     outcome: TerminalOutcome | None = None
     reservations: dict[ReservationKind, CapacityReservation] = field(default_factory=dict)
 
@@ -112,14 +113,24 @@ class _Journal:
         self.reserved[job_id] = want
         return want
 
-    def store(self, job_id: str, extra: int) -> None:
-        """Growing past the per-job reservation must fit in the global budget."""
+    def store(self, job_id: str, extra: int, *, settling: bool = False) -> None:
+        """Per-job and global byte limits, both enforced (02, Output section).
+
+        `settling=True` is the terminal event of the settling transaction: it is
+        charged but never refused, because the money has already moved and the
+        job's own 16 MiB reservation is still live to cover it.
+        """
         stored = self.stored.get(job_id, 0) + extra
         before = self.charge(job_id)
         after = max(self.reserved.get(job_id, 0), stored)
-        if self.total() - before + after > self.limits.journal_total_bytes:
-            raise errors.JournalCapacityExhausted(
-                f"journal budget cannot fit {extra} more bytes for {job_id}", retry_after_s=30)
+        if not settling:
+            if stored > self.limits.journal_job_reserve_bytes:
+                raise errors.JournalCapacityExhausted(
+                    f"job {job_id} would store {stored} bytes past its per-job reservation "
+                    f"of {self.limits.journal_job_reserve_bytes}", retry_after_s=30)
+            if self.total() - before + after > self.limits.journal_total_bytes:
+                raise errors.JournalCapacityExhausted(
+                    f"journal budget cannot fit {extra} more bytes for {job_id}", retry_after_s=30)
         self.stored[job_id] = stored
 
     def release_reservation(self, job_id: str) -> None:
@@ -148,6 +159,9 @@ class FakeJobStore:
         self.journal = journal or _Journal(limits)
         self.jobs: dict[str, _Job] = {}
         self.by_handle: dict[str, str] = {}
+        # The journal half of the same database: settlement writes the terminal
+        # event through it, in the transaction that moves the money (02 §7).
+        self.stream: FakeStreamStore | None = None
         self.idem: dict[tuple[str, str, str | None], _Idem] = {}
         self.wallets: dict[str, _Wallet] = {}
         self.holds: dict[str, _Hold] = {}
@@ -181,11 +195,21 @@ class FakeJobStore:
                     caps: tuple[object, ...] = (), hold: Decimal | str = money.ZERO) -> Admission:
         self.failures.before("admit")
         hold = money.parse(hold)
+        if hold < 0:
+            # money.parse allows negatives for ledger deltas; a reservation is
+            # never one. A negative hold would inflate `available` (DUR-CAP).
+            raise errors.InvalidRequest(f"the maximum hold must not be negative: {hold}")
         async with self._lock:
             now = self.clock.now()
             replay = self._replay(idem, now)
             if replay is not None:
                 return replay
+            if request.request_id in self.jobs:
+                # The request UUID is the job primary key (06): a second admission
+                # of the same request would mint a second hold that nothing ever
+                # releases. The supported retry is the idempotency key above.
+                raise errors.StateConflict(
+                    f"request {request.request_id} is already an admitted job")
 
             # Recheck authorization in the admitting transaction: a cached identity
             # never bypasses revocation, suspension or entitlement.
@@ -335,6 +359,11 @@ class FakeJobStore:
                 raise errors.NotClaimable(f"job {job_id} is {job.state}, not queued")
             if now >= job.request.deadline_at:
                 raise errors.NotClaimable(f"job {job_id} is past its absolute deadline")
+            if job.queued_at is not None:
+                # Queue wait accumulates across attempts; a requeue must not hand
+                # the job a fresh budget (01: no extension through retries).
+                job.queued_elapsed += now - job.queued_at
+                job.queued_at = None
             job.generation += 1                     # generation from the database clock
             job.state = JobState.running
             job.lease = Lease(job_id=job_id, generation=job.generation, worker_id=worker_id,
@@ -455,6 +484,11 @@ class FakeJobStore:
             job_id=job.id, state=state, cause=cause, usage=usage, result_ref=result_ref,
             settlement_state=settlement, debit=debit, settled_at=now,
             reconcile_after=reconcile_after)
+        if self.stream is not None:
+            # Same transaction as the outcome, the usage, the ledger settlement and
+            # the capacity releases: after this commit a settled job always has its
+            # terminal event, and the write cannot fail for want of journal budget.
+            self.stream.write_terminal(job, job.outcome)
         for kind in ReservationKind:
             self._release(job, kind)
         self.journal.release_reservation(job.id)
@@ -500,7 +534,8 @@ class FakeJobStore:
             wait = (self.limits.queue_wait_async_s
                     if job.request.execution_mode is ExecutionMode.async_
                     else self.limits.queue_wait_interactive_s)
-            if now >= job.queued_at + timedelta(seconds=wait):
+            waited = job.queued_elapsed + (now - job.queued_at)
+            if waited >= timedelta(seconds=wait):
                 return [self._terminalize(job, TerminalCause.queue_wait_expired, None, None,
                                           JobState.expired)]
         if job.state is JobState.running and job.lease is not None and now >= job.lease.expires_at:
@@ -554,6 +589,7 @@ class FakeStreamStore:
         self.chunks: dict[str, list[Chunk]] = {}
         self.pruned_to: dict[str, tuple[int, int]] = {}
         self.expired_jobs: set[str] = set()
+        jobs.stream = self          # one database: settlement writes the terminal event
 
     @staticmethod
     def event_bytes(event: EngineEvent) -> int:
@@ -583,8 +619,10 @@ class FakeStreamStore:
                 stored.append(chunk)
                 committed.append(chunk)
             # The first committed chunk establishes output ownership: from here on
-            # the request is never regenerated.
-            job.published = True
+            # the request is never regenerated. An empty batch commits nothing, so
+            # it must not forbid a prepublication requeue.
+            if committed:
+                job.published = True
         self.failures.after_commit("append")
         return tuple(committed)
 
@@ -608,13 +646,21 @@ class FakeStreamStore:
         return page, next_cursor
 
     async def finalize_in_transaction(self, outcome: TerminalOutcome) -> Chunk:
-        """The terminal journal event, written where the settlement commits."""
+        """Read back (or, for an outcome settled without this journal, write) the
+        terminal event of the settling transaction. Never the only chance to write
+        it: `JobStore` already did, where the money moved."""
         job = self.jobs.jobs.get(outcome.job_id)
         if job is None:
             raise errors.NotFound(f"no job {outcome.job_id}")
         if not job.terminal:
             raise errors.StateConflict("finalize_in_transaction runs inside the settling "
                                        "transaction, after the terminal outcome")
+        return self.write_terminal(job, outcome)
+
+    def write_terminal(self, job: _Job, outcome: TerminalOutcome) -> Chunk:
+        """Idempotent, synchronous, and never refused: it runs inside the settling
+        transaction, so a byte-budget rejection here would leave a settled job
+        without its terminal event."""
         stored = self.chunks.setdefault(job.id, [])
         for chunk in stored:
             if chunk.event_type is ChunkEventType.terminal:
@@ -630,7 +676,7 @@ class FakeStreamStore:
                       bytes=len(compact_bytes(payload)), persisted_at=now,
                       expires_at=now + timedelta(seconds=self.limits.journal_chunk_ttl_s))
         stored.append(chunk)
-        self.jobs.journal.store(job.id, chunk.bytes)
+        self.jobs.journal.store(job.id, chunk.bytes, settling=True)
         return chunk
 
     async def expire(self, now: datetime | None = None) -> int:

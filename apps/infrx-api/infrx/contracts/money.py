@@ -17,7 +17,8 @@ PER_MILLION = Decimal(1_000_000)
 MAX_DIGITS = 20                         # numeric(20, 8): 12 integral + 8 fractional
 
 # No exponent, no leading '+', no leading zeros, at most eight fractional digits.
-_PLAIN = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]{1,8})?$")
+# Matched with `fullmatch`: `$` alone would also accept a trailing newline.
+_PLAIN = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]{1,8})?")
 
 ZERO = Decimal("0.00000000")
 
@@ -33,7 +34,7 @@ def parse(raw: object) -> Decimal:
             raise ValueError(f"money must be finite: {raw!r}")
         value = raw
     elif isinstance(raw, str):
-        if not _PLAIN.match(raw):
+        if not _PLAIN.fullmatch(raw):
             raise ValueError(
                 "money must be a plain decimal string with at most eight fractional "
                 f"digits (no exponent, NaN, '+' or leading zeros): {raw!r}"

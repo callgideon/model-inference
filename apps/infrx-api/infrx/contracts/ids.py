@@ -16,11 +16,12 @@ UPLOAD_PREFIX = "upl_"
 FEEDBACK_PREFIX = "fb_"
 CHAT_PREFIX = "chatcmpl-"
 
-UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
-_HANDLE_BODY = r"[A-Za-z0-9_-]{22,64}$"
-JOB_HANDLE_RE = re.compile("^" + JOB_PREFIX + _HANDLE_BODY)
-UPLOAD_HANDLE_RE = re.compile("^" + UPLOAD_PREFIX + _HANDLE_BODY)
-FEEDBACK_ID_RE = re.compile("^" + FEEDBACK_PREFIX + _HANDLE_BODY)
+# Matched with `fullmatch` everywhere: `$` alone would accept a trailing newline.
+UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+_HANDLE_BODY = r"[A-Za-z0-9_-]{22,64}"
+JOB_HANDLE_RE = re.compile(JOB_PREFIX + _HANDLE_BODY)
+UPLOAD_HANDLE_RE = re.compile(UPLOAD_PREFIX + _HANDLE_BODY)
+FEEDBACK_ID_RE = re.compile(FEEDBACK_PREFIX + _HANDLE_BODY)
 
 
 def new_request_id() -> str:
@@ -53,7 +54,7 @@ def chat_completion_id(request_id: str) -> str:
 
 
 def is_request_id(value: object) -> bool:
-    return isinstance(value, str) and bool(UUID_RE.match(value))
+    return isinstance(value, str) and bool(UUID_RE.fullmatch(value))
 
 
 def require_request_id(value: str) -> str:
@@ -63,6 +64,6 @@ def require_request_id(value: str) -> str:
 
 
 def require_handle(value: str, pattern: re.Pattern[str]) -> str:
-    if not isinstance(value, str) or not pattern.match(value):
+    if not isinstance(value, str) or not pattern.fullmatch(value):
         raise ValueError(f"not a valid opaque handle for {pattern.pattern!r}: {value!r}")
     return value

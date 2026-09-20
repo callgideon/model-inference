@@ -98,6 +98,25 @@ def test_invalid_values_are_rejected_without_echoing_them():
     assert "hunter2" not in str(caught.value) and "LEASE_TTL_S" in str(caught.value)
 
 
+@pytest.mark.parametrize("name,raw", [
+    ("JUDGE_LIVE_BUDGET_USD", "Infinity"), ("JUDGE_LIVE_BUDGET_USD", "NaN"),
+    ("JUDGE_LIVE_BUDGET_USD", "1e9"), ("JUDGE_LIVE_BUDGET_USD", "-5"),
+    ("LEASE_TTL_S", "nan"), ("LEASE_TTL_S", "inf"), ("LEASE_TTL_S", "-5"),
+    ("MAX_ACTIVE_JOBS", "-1"), ("JOURNAL_TOTAL_BYTES", "-1"),
+])
+def test_nonsense_numbers_are_refused_at_the_boundary(name, raw):
+    """A limit that parses as `nan`, `inf` or a negative silently disables itself."""
+    with pytest.raises(ValueError, match=name):
+        config.pilot_from_env({name: raw})
+
+
+@pytest.mark.parametrize("name", config.MUST_BE_POSITIVE)
+def test_bounds_a_zero_would_disable_are_refused(name):
+    pilot = config.pilot_from_env({limits.env_name(name): "0"})
+    with pytest.raises(ValueError, match=limits.env_name(name)):
+        config.validate_pilot(pilot)
+
+
 def test_f1_gateway_settings_are_untouched():
     """F-BASE: the pilot names are additive; the F1 gateway defaults do not move."""
     gateway = config.from_env({})

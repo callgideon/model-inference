@@ -55,6 +55,13 @@ def test_format_never_emits_negative_zero():
     assert money.format_money(Decimal("0")) == "0.00000000"
 
 
+def test_trailing_whitespace_is_not_a_money_string():
+    """`$` in a regex also matches before a trailing newline; the parser must not."""
+    for bad in ("1\n", "1.00000000\n", " 1.00", "1.00 ", "1.00\t"):
+        with pytest.raises(ValueError):
+            money.parse(bad)
+
+
 def test_floats_are_never_money():
     for value in (0.1, 1.0, -2.5, True):
         with pytest.raises(ValueError):

@@ -12,10 +12,12 @@ environment. Nothing in the F1 path reads them, so adding them changes no
 existing behaviour.
 """
 import dataclasses
+import math
 import os
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
+from .contracts import money
 from .contracts.limits import DEFAULTS as PILOT_DEFAULTS
 from .contracts.limits import JUDGE_MODES, MODES, PilotSettings, env_name
 
@@ -95,16 +97,24 @@ def from_env(env=None):
 
 def _coerce(name, raw):
     """Coerce by the default's type; error messages name the variable, never its
-    value, because DATABASE_URL and friends carry credentials."""
+    value, because DATABASE_URL and friends carry credentials.
+
+    Numbers must be finite and nonnegative: `nan`, `inf` and `-5` are limits that
+    would silently disable a bound, and money goes through `money.parse`, which
+    rejects exponents and `NaN` outright.
+    """
     kind = type(getattr(PILOT_DEFAULTS, name))
     try:
         if kind is bool:
             return raw.strip().lower() in ("1", "true", "yes", "on")
-        if kind is Decimal:
-            return Decimal(raw)
-        return kind(raw)
+        value = money.parse(raw.strip()) if kind is Decimal else kind(raw)
     except (ValueError, ArithmeticError, InvalidOperation):
         raise ValueError(f"{env_name(name)} is not a valid {kind.__name__}") from None
+    if kind is float and not math.isfinite(value):
+        raise ValueError(f"{env_name(name)} must be a finite {kind.__name__}")
+    if kind in (int, float, Decimal) and value < 0:
+        raise ValueError(f"{env_name(name)} must not be negative")
+    return value
 
 
 def pilot_from_env(env=None):
@@ -120,6 +130,16 @@ def pilot_from_env(env=None):
     return PilotSettings(**values)
 
 
+# Bounds a zero would disable rather than tighten (a zero journal budget admits
+# nothing; a zero lease TTL fences every worker instantly).
+MUST_BE_POSITIVE = (
+    "max_request_bytes", "max_media_bytes", "journal_event_max_bytes",
+    "journal_job_reserve_bytes", "journal_total_bytes", "lease_ttl_s", "lease_heartbeat_s",
+    "max_active_jobs", "max_active_jobs_per_org", "max_active_jobs_per_key",
+    "idempotency_ttl_s", "unknown_usage_reconcile_s",
+)
+
+
 def validate_pilot(pilot, gateway=None):
     """Fail closed at startup: `pilot` mode refuses to run unmetered (no durable
     store) or unauthenticated (no per-key identity source), and live judging
@@ -130,6 +150,9 @@ def validate_pilot(pilot, gateway=None):
         raise ValueError(f"JUDGE_MODE must be one of {', '.join(JUDGE_MODES)}")
     if pilot.judge_mode == "live" and pilot.judge_live_budget_usd <= 0:
         raise ValueError("JUDGE_MODE=live requires a positive JUDGE_LIVE_BUDGET_USD")
+    for name in MUST_BE_POSITIVE:
+        if getattr(pilot, name) <= 0:
+            raise ValueError(f"{env_name(name)} must be positive")
     if pilot.infrx_mode == "pilot":
         if not pilot.database_url:
             raise ValueError("INFRX_MODE=pilot requires DATABASE_URL: admission must be metered")

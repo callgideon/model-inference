@@ -18,6 +18,20 @@ from .records import (ChunkEventType, ContentState, ExecutionMode, Feedback, Fee
 
 DONE = "[DONE]"
 
+# The header vocabulary of 08 §3, spelled once so G, W and the console never have
+# to hand-type it. `X-Infrx-Accept-Async` is superseded by `Prefer: respond-async`.
+HEADER_AUTHORIZATION = "Authorization"
+HEADER_IDEMPOTENCY_KEY = "Idempotency-Key"
+HEADER_PREFER = "Prefer"
+HEADER_LAST_EVENT_ID = "Last-Event-ID"
+HEADER_INFERENCE_ID = "Inference-Id"
+HEADER_PREFERENCE_APPLIED = "Preference-Applied"
+HEADER_RETRY_AFTER = "Retry-After"
+HEADER_IDEMPOTENCY_REPLAYED = "Idempotency-Replayed"
+HEADER_SERVER_TIMING = "Server-Timing"
+PREFER_RESPOND_ASYNC = "respond-async"
+IDEMPOTENCY_KEY_MAX_LEN = 255
+
 
 class WireModel(BaseModel):
     """Frozen and closed like a record, but not itself versioned: the
