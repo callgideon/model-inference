@@ -137,8 +137,13 @@ await services.calibration.label(operatorSession, {
 const set = await services.calibration.list(operatorSession, { limit: 50 });
 ```
 
-Suspension gates *new* work only: it never rewrites a ledger entry or a terminal usage row, because
-accounting that already happened is a fact. Entitlement limit names are a closed provisional set
+**Suspension gates new work and configuration only (R33).** A suspended organization keeps every
+read — `usage*`, `balances`, `ledger`, `traces`, `traceDetail`, `traceContent`, `feedback.list`,
+`settings.get`, `keys.list` — and keeps `keys.revoke`, so a leaked key can always be revoked;
+refusing that would make a suspension a security problem instead of a billing one. `keys.create`,
+`settings.update`, `feedback.submit` and `judgeRuns` return `org_suspended`. Operator operations keep
+working, or a suspension could never be lifted. It never rewrites a ledger entry or a terminal usage
+row, because accounting that already happened is a fact. Entitlement limit names are a closed provisional set
 (`ENTITLEMENT_LIMIT_NAMES`); an unknown name is `invalid_request`, not an ignored control.
 
 **The three entitlement states, and how U3 must word them (R24).** `model_ids` is deliberately
@@ -154,6 +159,11 @@ the same way is how an operator suspends a tenant by accident:
 A list may only name models the platform serves and may not repeat one; `null` and `[]` hash to
 different idempotency payloads, so a key replayed from one to the other is `idempotency_conflict`
 rather than a silent switch. `services.ids.modelId` is a served model id for building against.
+
+**A replay returns the original result, not the current state (R34).** A replayed grant reports the
+balance as it is now, but a replayed suspension, entitlement write or label returns exactly what the
+first call returned. U3 must re-read the state it is about to render after a replay rather than
+trusting the replayed body — the point of a replay is that nothing happened this time.
 
 **Operator scope is platform-wide in the pilot (R26).** `calibration.label` reaches a trace in *any*
 organization: the operator flag is the authority, the tenant comes from the row the label names, and
@@ -186,9 +196,22 @@ runMutationSafetyConformance(harness, "PostgreSQL ConsoleServices");
 
 The harness must supply a *fresh* tenant per factory call (the suite mutates settings, submits
 feedback and issues grants) and the identifiers listed above, including one belonging to another
-organization and one belonging to a suspended one. It must also seed **rows that share a
-`created_at`** in usage, the ledger and traces: the suite asserts a tie is present, because a
-`(created_at, id)` keyset resume is only tested where timestamps actually collide (N1). The suite asserts invariants, never row counts, so real data satisfies
+organization and one belonging to a suspended one. Beyond that it must supply:
+
+- **two operator sessions**: one that also owns `ids.orgId`, and one whose organization role is only
+  `member`. Operator authority is the flag; a harness with a single owner-operator cannot tell an
+  implementation that checks the flag from one that checks the role.
+- **rows that share a `created_at`** in usage, the ledger and traces, and all timestamps in one list
+  in the same format: the suite asserts a tie is present and that the widths match, because a
+  `(created_at, id)` keyset resume is only tested where timestamps actually collide.
+- **an outstanding hold** on at least one usage row, and two organizations of *different sizes* with
+  *different settings*, so the tenant-isolation and wallet cases compare real numbers rather than
+  shapes.
+- **an entitlement record of each kind** — `null`, `[]` and a non-empty list — across the
+  organizations.
+- a cursor may be any opaque string: the suite never parses one, and
+  `tests/contracts/opaque-cursor.test.ts` demonstrates the suite passing against cursors the
+  implementation alone can read. The suite asserts invariants, never row counts, so real data satisfies
 it: each list walked at two page sizes yields the identical ordered id list (so a keyset
 off-by-one that drops a row at a page boundary fails, not just a duplicate), the order is stable
 and descending, cursors are rejected when forged, reused with different filters or minted for
@@ -280,15 +303,29 @@ What that means in this directory:
   partition the union exactly.
 - **R26**: platform operators are platform-wide; no org-subset scoping in contracts v1.
 
+## `pnpm test:mutants` — the suite's own test
+
+A conformance case that names an invariant it cannot enforce is worse than no case: it tells C the
+invariant is checked. `pnpm test:mutants` (`tests/contracts/run-mutants.mjs`, list in
+`tests/contracts/mutants.json`) applies each declared single-edit mutant to a temporary copy of the
+console and requires it to fail at least one case of the **exported** conformance functions — not the
+fake-only tests, which are not what C runs. A surviving mutant exits non-zero, and so does a mutant
+whose `find` text no longer matches, because a stale mutant tests nothing.
+
+It is deliberately not part of `pnpm test`: it costs one Node process per mutant (115 mutants,
+about 15 seconds at four jobs). Add a mutant with every new invariant a case claims.
+
 ## Known fake-only behaviour
 
 Things U, V and C should not read as contract:
 
-- Cursors carry the id of the last row delivered, and resuming looks that id up in the current
-  list. That gives the keyset property the suite requires (a walk under insertion at the head
-  returns every row exactly once) with an O(n) scan C will do with an index instead. A cursor
-  whose row has disappeared is `invalid_cursor` here; C may prefer to resume after the missing
-  key, and the suite does not test deletion.
+- The fake's cursor is base64 JSON `{a, b, k}` — the row's `(created_at, id)` key plus a hash of the
+  query scope — resolved by an O(n) scan. That shape is *not* contract: the exported suite treats a
+  cursor as opaque (R36) and `tests/contracts/opaque-cursor.test.ts` proves it by running the whole
+  suite against a wrapper whose cursors the fake cannot parse. C should sign or encrypt its cursors;
+  the fake's are tamper-*evident* for the query scope but not tamper-proof, so swapping the key
+  component for another row's resumes elsewhere rather than failing. The shape-aware forgery cases
+  live in the fake's own tests, not in the exported suite.
 - The fixture clock is frozen at `orgs.json`'s `clock`; timestamps generated by a mutation
   advance a local counter by one second per call.
 - Idempotency records live for the lifetime of the instance and never expire, so the fake cannot
@@ -317,6 +354,16 @@ Things U, V and C should not read as contract:
   README omitted (ledger kinds, off-mode trace rows, `TraceMode` superseding 07's `TraceLevel`),
   added the fake-only behaviour section, and restated what the suite proves about pagination now
   that each list is walked at two page sizes. Row counts are unchanged (137 / 117 / 137).
+- 2026-09-20: Round-5 revision, for a review that found the *suite* rather than the fake wanting.
+  The exported cases now treat cursors as opaque (R36, proved by `opaque-cursor.test.ts`), drive the
+  role, suspension and input cases from the operation list, target operator writes at another
+  organization with a member-operator session, change one payload field per conflict assertion,
+  refuse a later field in every mutating operation with deep-equal snapshots, compare filtered walks
+  and per-organization figures against computed expectations, and require an outstanding hold.
+  Suspension gained its scope (R33), operator writes an append-only audit trail with `adminAudit`
+  (R34), and calibration labels became invisible to customers by living outside the feedback list
+  (R35). `pnpm test:mutants` (R32) holds all of it: 115 declared mutants, 115 killed by the exported
+  suite.
 - 2026-09-20: Rulings R24–R26 applied. Entitlements fail closed with three explicit states and
   copy guidance for U3, `journal_write_failed` joins the internal-only set (37 codes: 27 / 2 / 8,
   partition asserted), and platform-wide operator scope is recorded as a deliberate pilot decision.
