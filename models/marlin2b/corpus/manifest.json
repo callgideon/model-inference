@@ -1,8 +1,8 @@
 {
  "schema_version": 1,
  "corpus_version": "e1-2026-09-20",
- "generated_at_utc": "2026-09-20T18:07:34Z",
- "built_at_utc": "2026-09-20T18:07:37Z",
+ "generated_at_utc": "2026-09-20T19:17:48Z",
+ "built_at_utc": "2026-09-20T19:20:12Z",
  "cache_root_env": "CORPUS_CACHE",
  "cache_root_default": ".claude/corpus-cache",
  "api_limits": {
@@ -153,6 +153,7 @@
    "license_evidence_url": "https://images.nasa.gov/docs/images.nasa.gov_Guide_v1.0.pdf",
    "license_evidence_quote": "NASA content is generally not copyrighted and may be used for educational or informational purposes without needing explicit permissions",
    "attribution": "NASA's Goddard Space Flight Center (nasa_id GSFC_20180314_Aurora_m12865_Steve)",
+   "note": "The item's own NASA description credits 'amateur photographers from the Alberta Aurora Chasers', so parts of this video are very likely third-party stills that the generic NASA-content sentence does not cover. Nothing is redistributed (no media in git, derived clips stay in the local cache), but treat this source as attribution-only: swap in NASA-produced footage before any public redistribution. Item page: https://svs.gsfc.nasa.gov/12865 ('Please give credit for this item to: NASA's Goddard Space Flight Center').",
    "expected": {
     "duration_s": 132.885333,
     "width": 1920,
@@ -473,7 +474,7 @@
      1920
     ],
     "fps": 60,
-    "transpose": "90cw",
+    "transpose": null,
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -493,19 +494,19 @@
    "file": "clips/c004-bbb1080p30-1080x1920-portrait.mp4",
    "derived": {
     "duration_s": 9.0,
-    "bytes": 2492283,
+    "bytes": 2541582,
     "container": "mov,mp4,m4a,3gp,3g2,mj2",
     "codec": "h264",
-    "width": 1920,
-    "height": 1080,
+    "width": 1080,
+    "height": 1920,
     "fps": 60.0,
     "pix_fmt": "yuv420p",
     "frames": 540,
-    "aspect": "16:9",
-    "display_aspect_ratio": "16:9",
+    "aspect": "9:16",
+    "display_aspect_ratio": "9:16",
     "rotation_metadata": null,
-    "sha256": "0a8b3163dd71f046e42bdb7e9f658a4ab532f4d24d11a5e02d1735d45a313d6c",
-    "source_upscaled": false
+    "sha256": "a815d3d4688e687cd9b7c1f0aa55a62297c407a7897d26d42c0d2c1df018174d",
+    "source_upscaled": true
    },
    "status": "built"
   },
@@ -718,7 +719,7 @@
      1080
     ],
     "fps": 60,
-    "transpose": "180",
+    "transpose": null,
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -738,7 +739,7 @@
    "file": "clips/c009-tos720p-2560x1080-ultrawide.mp4",
    "derived": {
     "duration_s": 34.0,
-    "bytes": 11199085,
+    "bytes": 11201455,
     "container": "mov,mp4,m4a,3gp,3g2,mj2",
     "codec": "h264",
     "width": 2560,
@@ -749,7 +750,7 @@
     "aspect": "64:27",
     "display_aspect_ratio": "64:27",
     "rotation_metadata": null,
-    "sha256": "0772342dba7e1375ef91ddf78eded6a0eae3b037c5cf094784a5024da1eb6ead",
+    "sha256": "dcdfbba01a2978b58c36cb9597406863418fea64e657e0c12fa07d60edd2187f",
     "source_upscaled": true
    },
    "status": "built"
@@ -946,7 +947,7 @@
     "display_aspect_ratio": "4:1",
     "rotation_metadata": null,
     "sha256": "7e491843d1207c553d805f4b5920531d21fba1c332a8fcdd44d21bcc06ab4dac",
-    "source_upscaled": false
+    "source_upscaled": true
    },
    "status": "built"
   },
@@ -963,7 +964,7 @@
      1920
     ],
     "fps": 60,
-    "transpose": "90ccw",
+    "transpose": null,
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -983,19 +984,19 @@
    "file": "clips/c014-sintel1080p-480x1920-extreme-tall.mp4",
    "derived": {
     "duration_s": 3.0,
-    "bytes": 82625,
+    "bytes": 81166,
     "container": "mov,mp4,m4a,3gp,3g2,mj2",
     "codec": "h264",
-    "width": 1920,
-    "height": 480,
+    "width": 480,
+    "height": 1920,
     "fps": 60.0,
     "pix_fmt": "yuv420p",
     "frames": 180,
-    "aspect": "4:1",
-    "display_aspect_ratio": "4:1",
+    "aspect": "1:4",
+    "display_aspect_ratio": "1:4",
     "rotation_metadata": null,
-    "sha256": "0f6574daeb23ef1d274609db7dda796676dd8eac251773e82b6a14a9491d60b4",
-    "source_upscaled": false
+    "sha256": "79ffaf1cd75c14affca331e4887516ea768cd17506f6149e8cb860aca6a901f6",
+    "source_upscaled": true
    },
    "status": "built"
   },
@@ -1245,7 +1246,7 @@
    "status": "built"
   },
   {
-   "id": "c020-bbb1080p30-1080x1920-portrait",
+   "id": "c020-bbb1080p30-1080x1920-portrait-rot90cw",
    "kind": "clip",
    "source": "bbb1080p30",
    "geometry_label": "1080x1920-portrait",
@@ -1274,7 +1275,7 @@
     "full",
     "fast"
    ],
-   "file": "clips/c020-bbb1080p30-1080x1920-portrait.mp4",
+   "file": "clips/c020-bbb1080p30-1080x1920-portrait-rot90cw.mp4",
    "derived": {
     "duration_s": 20.0,
     "bytes": 4915372,
@@ -1289,7 +1290,7 @@
     "display_aspect_ratio": "16:9",
     "rotation_metadata": null,
     "sha256": "ff773e02560923f8929fb21b7eb24819507df60c3d9a51f42e176ce3cde7002b",
-    "source_upscaled": false
+    "source_upscaled": true
    },
    "status": "built"
   },
@@ -1490,7 +1491,7 @@
    "status": "built"
   },
   {
-   "id": "c025-tos720p-2560x1080-ultrawide",
+   "id": "c025-tos720p-2560x1080-ultrawide-rot180",
    "kind": "clip",
    "source": "tos720p",
    "geometry_label": "2560x1080-ultrawide",
@@ -1519,7 +1520,7 @@
     "full",
     "fast"
    ],
-   "file": "clips/c025-tos720p-2560x1080-ultrawide.mp4",
+   "file": "clips/c025-tos720p-2560x1080-ultrawide-rot180.mp4",
    "derived": {
     "duration_s": 112.0,
     "bytes": 35101136,
@@ -1730,12 +1731,12 @@
     "display_aspect_ratio": "4:1",
     "rotation_metadata": null,
     "sha256": "421a5677e1bc4d08a291c5c56f2c01f1e14ca0b60fa763a1b2adc4885ec85211",
-    "source_upscaled": false
+    "source_upscaled": true
    },
    "status": "built"
   },
   {
-   "id": "c030-sintel1080p-480x1920-extreme-tall",
+   "id": "c030-sintel1080p-480x1920-extreme-tall-rot90ccw",
    "kind": "clip",
    "source": "sintel1080p",
    "geometry_label": "480x1920-extreme-tall",
@@ -1764,7 +1765,7 @@
     "full",
     "fast"
    ],
-   "file": "clips/c030-sintel1080p-480x1920-extreme-tall.mp4",
+   "file": "clips/c030-sintel1080p-480x1920-extreme-tall-rot90ccw.mp4",
    "derived": {
     "duration_s": 9.0,
     "bytes": 437416,
@@ -1779,7 +1780,7 @@
     "display_aspect_ratio": "4:1",
     "rotation_metadata": null,
     "sha256": "9b588574f57d3fb0b2cb43eaa37c855f9fdb9dac69213fabc5d5472aa659280c",
-    "source_upscaled": false
+    "source_upscaled": true
    },
    "status": "built"
   },
@@ -2037,7 +2038,7 @@
      1920
     ],
     "fps": 24,
-    "transpose": "90cw",
+    "transpose": null,
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -2056,19 +2057,19 @@
    "file": "clips/c036-bbb1080p30-1080x1920-portrait.mp4",
    "derived": {
     "duration_s": 48.0,
-    "bytes": 9298411,
+    "bytes": 9270402,
     "container": "mov,mp4,m4a,3gp,3g2,mj2",
     "codec": "h264",
-    "width": 1920,
-    "height": 1080,
+    "width": 1080,
+    "height": 1920,
     "fps": 24.0,
     "pix_fmt": "yuv420p",
     "frames": 1152,
-    "aspect": "16:9",
-    "display_aspect_ratio": "16:9",
+    "aspect": "9:16",
+    "display_aspect_ratio": "9:16",
     "rotation_metadata": null,
-    "sha256": "3fd010deae24573fc4270bd69b60f5f81ca71c61b6e41d8a29d00815c44623c3",
-    "source_upscaled": false
+    "sha256": "e35e5a1f742f9b8395c873f2090fb17ce79ddb33180fbcbe3638efdf98793854",
+    "source_upscaled": true
    },
    "status": "built"
   },
@@ -2277,7 +2278,7 @@
      1080
     ],
     "fps": 24,
-    "transpose": "180",
+    "transpose": null,
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -2296,7 +2297,7 @@
    "file": "clips/c041-tos720p-2560x1080-ultrawide.mp4",
    "derived": {
     "duration_s": 5.0,
-    "bytes": 964260,
+    "bytes": 935383,
     "container": "mov,mp4,m4a,3gp,3g2,mj2",
     "codec": "h264",
     "width": 2560,
@@ -2307,7 +2308,7 @@
     "aspect": "64:27",
     "display_aspect_ratio": "64:27",
     "rotation_metadata": null,
-    "sha256": "069916b258f55184b461fcd1ee8971a8d0d2ea99745df79a9c54b413cc44ed02",
+    "sha256": "474fee14f276888cdc3298ff6727f9df81965ca8ea3656fa29b0a20330ab8341",
     "source_upscaled": true
    },
    "status": "built"
@@ -2500,7 +2501,7 @@
     "display_aspect_ratio": "4:1",
     "rotation_metadata": null,
     "sha256": "5ae53be2c5846d88de3fe2e03369085aa5fd0ba49c13e435b5eb1d96f50cbecc",
-    "source_upscaled": false
+    "source_upscaled": true
    },
    "status": "built"
   },
@@ -2517,7 +2518,7 @@
      1920
     ],
     "fps": 24,
-    "transpose": "90ccw",
+    "transpose": null,
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -2536,19 +2537,19 @@
    "file": "clips/c046-sintel1080p-480x1920-extreme-tall.mp4",
    "derived": {
     "duration_s": 20.0,
-    "bytes": 3339689,
+    "bytes": 3268442,
     "container": "mov,mp4,m4a,3gp,3g2,mj2",
     "codec": "h264",
-    "width": 1920,
-    "height": 480,
+    "width": 480,
+    "height": 1920,
     "fps": 24.0,
     "pix_fmt": "yuv420p",
     "frames": 480,
-    "aspect": "4:1",
-    "display_aspect_ratio": "4:1",
+    "aspect": "1:4",
+    "display_aspect_ratio": "1:4",
     "rotation_metadata": null,
-    "sha256": "0a442cb6adcdd87c4e3e3b9a56d63fa878f6cabe128596f9e07ca173f7576b64",
-    "source_upscaled": false
+    "sha256": "a01efe5a4518536a6be86f97079d1036c8090817e11c51d5f752d91c3a170f6b",
+    "source_upscaled": true
    },
    "status": "built"
   },
@@ -2805,7 +2806,7 @@
      1920
     ],
     "fps": 15,
-    "transpose": "90cw",
+    "transpose": null,
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -2824,19 +2825,19 @@
    "file": "clips/c052-bbb1080p30-1080x1920-portrait.mp4",
    "derived": {
     "duration_s": 2.0,
-    "bytes": 663266,
+    "bytes": 669669,
     "container": "mov,mp4,m4a,3gp,3g2,mj2",
     "codec": "h264",
-    "width": 1920,
-    "height": 1080,
+    "width": 1080,
+    "height": 1920,
     "fps": 15.0,
     "pix_fmt": "yuv420p",
     "frames": 30,
-    "aspect": "16:9",
-    "display_aspect_ratio": "16:9",
+    "aspect": "9:16",
+    "display_aspect_ratio": "9:16",
     "rotation_metadata": null,
-    "sha256": "095467863b79890c465c0e72da4f7d30388a6e4a4a63545532b214202576a228",
-    "source_upscaled": false
+    "sha256": "88c269e02ef4c5c54987c7484c712f96eb565ea6eee75208998a8d179d129f28",
+    "source_upscaled": true
    },
    "status": "built"
   },
@@ -3045,7 +3046,7 @@
      1080
     ],
     "fps": 15,
-    "transpose": "180",
+    "transpose": null,
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -3064,7 +3065,7 @@
    "file": "clips/c057-tos720p-2560x1080-ultrawide.mp4",
    "derived": {
     "duration_s": 12.0,
-    "bytes": 4364201,
+    "bytes": 4382091,
     "container": "mov,mp4,m4a,3gp,3g2,mj2",
     "codec": "h264",
     "width": 2560,
@@ -3075,7 +3076,7 @@
     "aspect": "64:27",
     "display_aspect_ratio": "64:27",
     "rotation_metadata": null,
-    "sha256": "078dcfdbce90403e3d584e067b305ef7d246ff00dc1fe6489e348954a7c5da60",
+    "sha256": "4084af842230b0cc4274eb81be37a1495ba2d0bd68c07909cf31540e891b745d",
     "source_upscaled": true
    },
    "status": "built"
@@ -3268,7 +3269,7 @@
     "display_aspect_ratio": "4:1",
     "rotation_metadata": null,
     "sha256": "2006440ed351d97a93b66d282eef7c7ef1d4636b670ecc3ffd6875006a1a6579",
-    "source_upscaled": false
+    "source_upscaled": true
    },
    "status": "built"
   },
@@ -3285,7 +3286,7 @@
      1920
     ],
     "fps": 15,
-    "transpose": "90ccw",
+    "transpose": null,
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -3304,19 +3305,19 @@
    "file": "clips/c062-sintel1080p-480x1920-extreme-tall.mp4",
    "derived": {
     "duration_s": 48.0,
-    "bytes": 4088033,
+    "bytes": 4065563,
     "container": "mov,mp4,m4a,3gp,3g2,mj2",
     "codec": "h264",
-    "width": 1920,
-    "height": 480,
+    "width": 480,
+    "height": 1920,
     "fps": 15.0,
     "pix_fmt": "yuv420p",
     "frames": 720,
-    "aspect": "4:1",
-    "display_aspect_ratio": "4:1",
+    "aspect": "1:4",
+    "display_aspect_ratio": "1:4",
     "rotation_metadata": null,
-    "sha256": "ba3f2dd67118d96c8a846b88fdd90c545945bab8381ef40521d058bb463ef011",
-    "source_upscaled": false
+    "sha256": "dd745ee778f1d78b19abe3c9fad9199b229e78b4090f5bca6524a151fd7f9bd5",
+    "source_upscaled": true
    },
    "status": "built"
   },

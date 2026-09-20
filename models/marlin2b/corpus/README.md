@@ -21,10 +21,20 @@ python models/marlin2b/corpus/build.py verify    # recompute every sha256 and re
 python models/marlin2b/corpus/build.py validate  # schema/distinctness only, no media needed
 ```
 
-`build` needs ~2.6 GB of cache (2.1 GB sources, 197 MB clips) and about 12 minutes
-of CPU at `--jobs 6`. `verify --rederive` re-cuts clips that are missing from the
-cache instead of failing. `plan` keeps the measured fields of any clip whose recipe
-did not change; a changed recipe drops back to `unbuilt` until rebuilt.
+`build` needs ~2.5 GB of cache (2.11 GB sources, 206 MB clips, plus 210 MB of pinned
+tools) and about 12 minutes of CPU at `--jobs 6` from cold. `verify --rederive`
+re-cuts clips that are missing from the cache instead of failing. `plan` keeps the
+measured fields — and the source pins — of anything whose recipe and URL did not
+change; a changed recipe or id drops back to `unbuilt` until rebuilt, and `build`
+re-derives it even when a stale file sits at that path. A cached source whose bytes
+no longer match the pinned sha256 is reported as `sha256_mismatch`, never silently
+re-pinned. A changed id leaves the old file in the cache as an unreferenced orphan;
+delete it or ignore it, nothing reads it.
+
+`FFMPEG_PIN.tarball_url` is upstream's unversioned "latest release" alias, so when
+it moves the pinned tarball hash will refuse it; fetch `7.0.2` from
+johnvansickle.com/ffmpeg/old-releases/ into `$CORPUS_CACHE/tools/` by hand in that
+case. The pinned binary hashes stay the real pin either way.
 
 Derivations are byte-reproducible: `-threads 1 -fflags +bitexact -flags:v +bitexact`
 with the pinned ffmpeg, so the sha256 in the manifest is a real pin, not a label.
@@ -40,30 +50,50 @@ ffmpeg, and none is used.
 | Big Buck Bunny (Sunflower 1080p30) | CC-BY-3.0 | <https://peach.blender.org/about/> | (CC) Blender Foundation \| peach.blender.org |
 | Tears of Steel (720p) | CC-BY-3.0 | <https://mango.blender.org/about/> | (CC) Blender Foundation \| mango.blender.org |
 | Sintel (2010 1080p) | CC-BY-3.0 | <https://durian.blender.org/sharing/> | (CC) Blender Foundation \| durian.blender.org |
-| The Aurora Named STEVE | public domain (US Gov) | <https://images.nasa.gov/docs/images.nasa.gov_Guide_v1.0.pdf> | NASA's Goddard Space Flight Center |
+| The Aurora Named STEVE | public domain (US Gov), see caveat | <https://images.nasa.gov/docs/images.nasa.gov_Guide_v1.0.pdf> | NASA's Goddard Space Flight Center |
 
 Each licence page was read, and the sentence relied on is quoted in the manifest's
 `license_evidence_quote`. `download.blender.org/demo/movies/ToS/copyright.txt` puts
 the *soundtrack* under CC-BY-ND-3.0; every derived clip is video-only (`-an`), so no
 soundtrack is redistributed. No private, customer or unlicensed media is used.
 
+**NASA STEVE caveat.** The generic "NASA content is not copyrighted" sentence is a
+site-wide guideline, and this item's own NASA description credits *"amateur
+photographers from the Alberta Aurora Chasers"*, so parts of the video are very
+likely third-party stills it does not cover. Nothing is redistributed (no media in
+git; clips stay in the local cache), so the risk is local only — but treat this
+source as attribution-only and swap in NASA-produced footage before any public
+redistribution. The manifest records the caveat and the item page
+(<https://svs.gsfc.nasa.gov/12865>) in the source's `note`.
+
 ## What the 64 clips cover
 
 - **Content:** 64 non-overlapping segments (the test asserts non-overlap), 6–24 per
   source, so no two clips share footage.
-- **Resolutions:** 14 distinct geometries, 1920×1080 and 2560×1080 among them —
-  1080p decode is the measured bottleneck (notes.md finding 7).
-- **Aspect/orientation:** 16:9, 9:16 portrait, 1:1 square, 21:9 (64:27) ultrawide,
-  2.4:1 scope, 4:3, 4:1 extreme wide, 1:4 extreme tall, plus real rotated pixels
-  (`transpose`) on three geometries.
+Every claim below is the **probed** geometry of the built files, asserted by
+`models/marlin2b/tests/test_corpus.py` against `manifest.json` (and by
+`build.py validate`), not the recipe's intent: a clip id or `geometry_label` that
+does not match the probed width/height/aspect is a validation error.
+
+- **Resolutions:** 16 distinct probed geometries, 1920×1080 and 2560×1080 among
+  them — 1080p decode is the measured bottleneck (notes.md finding 7).
+- **Aspect/orientation:** 16:9, 9:16 portrait (including a real 1080×1920), 1:1
+  square, 21:9 (64:27) ultrawide, 2.4:1 scope, 4:3, 4:1 extreme wide (1920×480),
+  1:4 extreme tall (480×1920), 240p tiny.
+- **Rotation:** three clips carry real rotated pixels and say so in their id
+  (`-rot90cw`, `-rot180`, `-rot90ccw`). Rotation is applied to **one** clip per
+  rotated geometry, not all four, so the unrotated portrait and extreme-tall
+  clips still exist; a `-rot90…` clip's probed axes are the label's, swapped.
 - **Durations:** 2 s to 112 s, 13 distinct values, all inside the 120 s API cap.
-- **Frame rates:** 5, 10, 15, 24, 30, 60 fps.
+- **Frame rates:** 10, 15, 24, 30, 60 fps (no 5 fps clip; 10 fps is the floor).
 - **Prompts:** 16 distinct prompts (caption, grounding, counting, camera motion,
   on-screen text, orientation …), paired per clip so prompt text varies with media.
 - **Subsets:** clips 0–31 are `fast` and already cover every geometry, duration,
-  source and prompt; `full` is all 64.
-- **`source_upscaled`** marks the 16 clips whose target height exceeds their
-  source's, so nobody quotes them as native-resolution parity evidence.
+  source and prompt, including the portrait and extreme-tall extremes; `full` is all 64.
+- **`source_upscaled`** marks the 28 clips whose pre-rotation target exceeds their
+  source on **either** axis (`force_original_aspect_ratio=increase` scales by
+  `max(W/sw, H/sh)`, so a width-only upsize counts), so nobody quotes them as
+  native-resolution parity evidence.
 
 Manifest order is stable; benchmark clients reorder with their own `--seed`.
 
@@ -82,4 +112,6 @@ real sha256 and an `expected_failure` class; none is expected to decode.
 - All clips are re-encoded H.264/yuv420p in MP4: container and codec diversity
   (HEVC, VP9, AV1, WebM) is not covered.
 - Audio is dropped; this corpus cannot test audio handling.
+- The lowest frame rate is 10 fps: no 5 fps or 1 fps clip, and no variable frame
+  rate. Adding one changes the `FPS[i % 5]` assignment and rebuilds all 64 clips.
 - Segment content is animation-heavy (three of four sources are animated films).

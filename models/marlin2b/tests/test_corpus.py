@@ -62,6 +62,73 @@ def test_diversity_the_perf_oracle_needs():
     assert len({c["recipe"]["fps"] for c in b}) >= 3
 
 
+def test_clip_ids_and_labels_match_the_probed_pixels():
+    """The review found every `1080x1920-portrait` clip was really 1920x1080 and every
+    `480x1920-extreme-tall` really 1920x480: rotation was keyed by geometry index, so it
+    hit all four clips of a geometry and the label became a lie."""
+    for c in built():
+        w, h = c["derived"]["width"], c["derived"]["height"]
+        label_wh = corpus.LABEL_GEOMETRY[c["geometry_label"]]
+        assert tuple(c["recipe"]["scale"]) == label_wh, f"{c['id']} label != recipe scale"
+        rot = c["recipe"]["transpose"]
+        want = (label_wh[1], label_wh[0]) if rot in ("90cw", "90ccw") else label_wh
+        assert (w, h) == want, f"{c['id']} is really {w}x{h}"
+        assert c["derived"]["aspect"] == corpus.aspect(*want), f"{c['id']} aspect"
+        assert c["id"].endswith(c["geometry_label"] + (f"-rot{rot}" if rot else "")), \
+            f"{c['id']} does not name the geometry it has"
+
+    have = {(c["derived"]["width"], c["derived"]["height"]) for c in built()}
+    assert (1080, 1920) in have, "no real 1080x1920 portrait clip"
+    assert (480, 1920) in have, "no real 1:4 extreme-tall clip"
+    assert (1920, 480) in have, "no real 4:1 extreme-wide clip"
+    ratios = [c["derived"]["width"] / c["derived"]["height"] for c in built()]
+    assert min(ratios) <= 0.25 and max(ratios) >= 4.0, "orientation extremes are the MEDIA-PARITY case"
+    assert [c for c in built() if c["recipe"]["transpose"]], "rotated pixels must still be covered"
+    assert sorted({c["derived"]["fps"] for c in built()}) == [10.0, 15.0, 24.0, 30.0, 60.0], \
+        "the README quotes this exact frame-rate set"
+
+
+def test_source_upscaled_is_true_for_every_upscaled_axis():
+    """The flag compared post-rotation height only, so 12 clips upscaled 1.5x-2.35x on
+    the other axis were recorded as native resolution."""
+    probed = {s["id"]: s["probed"] for s in MANIFEST["sources"]}
+    upscaled = 0
+    for c in built():
+        src = probed[c["source"]]
+        tw, th = c["recipe"]["scale"]                       # pre-rotation target
+        factor = max(tw / src["width"], th / src["height"])  # what force_original_aspect_ratio=increase does
+        assert c["derived"]["source_upscaled"] is (factor > 1.0001), \
+            f"{c['id']} upscales {factor:.2f}x but source_upscaled={c['derived']['source_upscaled']}"
+        upscaled += bool(c["derived"]["source_upscaled"])
+    assert 0 < upscaled < len(built()), "the corpus must have both native and upscaled clips"
+
+
+def test_validator_rejects_a_mislabelled_or_mis_flagged_clip():
+    m = copy.deepcopy(MANIFEST)
+    m["clips"][0]["derived"]["height"] = 999               # probed pixels no longer match the label
+    assert any("!= recipe scale/transpose" in e for e in corpus.validate_manifest(m))
+
+    m = copy.deepcopy(MANIFEST)
+    m["clips"][0]["geometry_label"] = "480p-16x9"           # label lies about the recipe
+    errors = corpus.validate_manifest(m)
+    assert any("means 854x480" in e for e in errors), errors
+    assert any("does not end with the geometry it claims" in e for e in errors), errors
+
+    m = copy.deepcopy(MANIFEST)
+    rot = [c for c in m["clips"] if c["recipe"]["transpose"]][0]
+    rot["id"] = rot["id"].split("-rot")[0]                  # rotated clip hiding its rotation
+    assert any("does not end with the geometry it claims" in e for e in corpus.validate_manifest(m))
+
+    m = copy.deepcopy(MANIFEST)
+    up = [c for c in m["clips"] if c["derived"]["source_upscaled"]][0]
+    up["derived"]["source_upscaled"] = False
+    assert any("source_upscaled False != True" in e for e in corpus.validate_manifest(m))
+
+    m = copy.deepcopy(MANIFEST)
+    m["sources"][0]["sha256"] = None                        # built clips from an unpinned source
+    assert any("unpinned source" in e for e in corpus.validate_manifest(m))
+
+
 def test_every_source_carries_verified_licence_fields():
     for s in MANIFEST["sources"]:
         for key in ("title", "url", "license", "license_url", "license_evidence_url",

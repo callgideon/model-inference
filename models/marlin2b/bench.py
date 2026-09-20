@@ -12,7 +12,9 @@ and one raw line per attempt to --raw (default <out dir>/raw/<run>.jsonl).
 
 Auth comes from $MARLIN_API_KEY or $INFRX_API_KEY only, sent as a Bearer header;
 the value is never printed, logged or written to any output file. Passing a key on
-the command line is refused.
+the command line is refused. Every row and summary is redacted as one serialised
+blob at each sink (redact()), so a key echoed back in any server-controlled field
+and any signed-URL query string are scrubbed before truncation, not after.
 
 Percentiles are suppressed, not guessed, when the accepted-sample count cannot
 support them (research/plan/04-verification.md: 32 samples cannot establish a p99).
@@ -58,10 +60,29 @@ def api_key():
     return ""
 
 
-def scrub(text, key):
-    """Never let the key reach stdout, the JSONL, the summary or an exception message."""
+# A URL query string carries the upload signature (`X-Amz-Signature`) and any token,
+# and httpx exception text quotes the full request URL. 04-verification.md forbids
+# signed URLs in committed artifacts and results/raw/ is a committed directory.
+URL_QUERY = re.compile(r'(https?://[^\s"\'\\]{1,2000}?)\?[^\s"\'\\]*')
+
+
+def redact(text, key):
+    """Scrub the API key and every URL query string out of anything printed or written.
+
+    Applied to the WHOLE serialised row, summary or exception at each sink rather than
+    field by field: a server controls every field it echoes (`error.code` and a
+    non-JSON error body both reached output unscrubbed), and it must run BEFORE any
+    truncation, or a cut can leave a usable key prefix behind.
+    """
     text = str(text)
-    return text.replace(key, "[redacted]") if key else text
+    if key:
+        text = text.replace(key, "[redacted-key]")
+    return URL_QUERY.sub(r"\1?[redacted-query]", text)
+
+
+def dump_line(obj, key, **kw):
+    """The only way a row or summary becomes text: serialise, then redact."""
+    return redact(json.dumps(obj, **kw), key)
 
 
 def parse_args(argv=None):
@@ -227,7 +248,11 @@ async def media_ref_for(item, cfg, client, row):
             return path
         raise ValueError("video_url form needs --media-base-url or an http(s) video")
     if form == "video_b64":
-        return path if path.startswith(("http://", "https://")) else data_url(path)
+        if path.startswith(("http://", "https://")):
+            return path
+        # base64 of a 35 MB clip is ~47 MB of CPU work: off the event loop, or one
+        # arrival delays every other arrival and the open-loop rate is a fiction.
+        return await asyncio.to_thread(data_url, path)
     if form == "upload":
         t = time.perf_counter()
         handle = await upload(client, cfg, path)
@@ -236,12 +261,16 @@ async def media_ref_for(item, cfg, client, row):
     raise ValueError(f"unknown form {form}")
 
 
+def read_and_digest(path):
+    with open(path, "rb") as f:
+        body = f.read()
+    return body, sha256(body).hexdigest()
+
+
 async def upload(client, cfg, path):
     """POST /v1/uploads -> PUT to the returned constrained destination ->
     POST /v1/uploads/{handle}/complete. Contracts v1 shape; unverified until M3/G4."""
-    with open(path, "rb") as f:
-        body = f.read()
-    digest = sha256(body).hexdigest()
+    body, digest = await asyncio.to_thread(read_and_digest, path)   # 35 MB read + sha off the loop
     mime = mimetypes.guess_type(path)[0] or "video/mp4"
     r = await client.post(cfg["base"] + "/uploads", headers=cfg["headers"],
                           json={"purpose": "video", "filename": os.path.basename(path),
@@ -251,7 +280,11 @@ async def upload(client, cfg, path):
     dest = created.get("upload") or created
     put = await client.request(dest.get("method", "PUT"), dest["url"], content=body,
                               headers={"content-type": mime, **(dest.get("headers") or {})})
-    put.raise_for_status()
+    if put.status_code >= 400:
+        # Not raise_for_status(): its message quotes the full request URL, and this one
+        # is the signed upload destination. Only the status may leave this function.
+        raise RuntimeError(f"upload PUT rejected with HTTP {put.status_code} "
+                           f"(signed destination withheld)")
     done = await client.post(f"{cfg['base']}/uploads/{created['handle']}/complete", headers=cfg["headers"],
                              json={"sha256": digest, "bytes": len(body)})
     done.raise_for_status()
@@ -280,20 +313,25 @@ async def attempt(client, cfg, item, t0, attempt_no):
            "last_token_s": None, "end_s": None, "http_status": None, "outcome": None, "error_class": None,
            "error_code": None, "error_message": None, "inference_id": None, "retry_after": None,
            "server_timing": None, "prompt_tokens": None, "completion_tokens": None, "usage_missing": None,
-           "content_chars": 0, "upload_s": None}
+           "content_chars": 0, "upload_s": None, "media_sent": False, "finish_reason": None,
+           "stream_complete": None, "schedule_lag_s": None,
+           # request-level fields, filled by run_one() on the attempt that ends the request
+           "request_send_s": None, "request_latency_s": None, "latency_from_scheduled_s": None}
     now = lambda: round(time.perf_counter() - t0, 6)
     try:
         await _send(client, cfg, item, row, now)
     except Exception as e:                               # transport, file, upload or protocol failure
         row["outcome"] = row["outcome"] or "failed"
         row["error_class"] = row["error_class"] or type(e).__name__
-        row["error_message"] = scrub(e, cfg["key"])[:200]
+        row["error_message"] = redact(e, cfg["key"])[:200]     # redact first, cut second
         row["end_s"] = row["end_s"] or now()
     ttft = None if row["first_token_s"] is None or row["send_s"] is None else \
         round(row["first_token_s"] - row["send_s"], 6)
     row["ttft_s"] = ttft
     row["latency_s"] = None if row["end_s"] is None or row["send_s"] is None else \
         round(row["end_s"] - row["send_s"], 6)
+    if cfg["open_loop"] and row["send_s"] is not None:    # coordinated omission: how late we sent
+        row["schedule_lag_s"] = round(row["send_s"] - row["scheduled_s"], 6)
     n = row["completion_tokens"] or 0
     row["tpot_s"] = (round((row["last_token_s"] - row["first_token_s"]) / max(n - 1, 1), 6)
                      if n and row["first_token_s"] is not None else None)
@@ -309,6 +347,7 @@ async def _send(client, cfg, item, row, now):
     if mm:
         payload["mm_processor_kwargs"] = mm
     row["send_s"] = now()
+    row["media_sent"] = ref is not None    # this clip's bytes/handle really went out
     async with client.stream("POST", cfg["base"] + "/chat/completions", json=payload,
                              headers=cfg["headers"]) as resp:
         row["first_byte_s"] = now()
@@ -317,7 +356,9 @@ async def _send(client, cfg, item, row, now):
         row["retry_after"] = resp.headers.get("retry-after")
         row["server_timing"] = parse_server_timing(resp.headers.get("server-timing"))
         if resp.status_code != 200:
-            body = (await resp.aread()).decode("utf-8", "replace")[:600]
+            # Redact the whole body before parsing or cutting it: `code`, `message` and
+            # the raw non-JSON body are all server-controlled and all reach output.
+            body = redact((await resp.aread()).decode("utf-8", "replace"), cfg["key"])
             err = {}
             try:
                 err = (json.loads(body) or {}).get("error") or {}
@@ -325,16 +366,18 @@ async def _send(client, cfg, item, row, now):
                 pass
             row["outcome"] = "rejected" if resp.status_code in REJECT_STATUS else "failed"
             row["error_class"] = f"http_{resp.status_code}"
-            row["error_code"] = err.get("code") or err.get("type")
-            row["error_message"] = scrub(err.get("message") or body[:200], cfg["key"])
+            code = str(err.get("code") or err.get("type") or "")[:120]   # becomes a summary key
+            row["error_code"] = code or None
+            row["error_message"] = str(err.get("message") or body)[:200]
             row["end_s"] = now()
             return
-        usage = None
+        usage, saw_done = None, False
         async for line in resp.aiter_lines():
             if not line.startswith("data:"):
                 continue
             data = line[5:].strip()
             if data == "[DONE]":
+                saw_done = True
                 break
             try:
                 chunk = json.loads(data)
@@ -350,6 +393,8 @@ async def _send(client, cfg, item, row, now):
                 row["end_s"] = now()
                 return
             for choice in chunk.get("choices") or []:
+                if choice.get("finish_reason"):
+                    row["finish_reason"] = choice["finish_reason"]
                 text = (choice.get("delta") or {}).get("content")
                 if text:
                     row["first_token_s"] = row["first_token_s"] or now()
@@ -360,17 +405,33 @@ async def _send(client, cfg, item, row, now):
         if usage:                                    # authoritative usage only, never chunk counting
             row["prompt_tokens"] = usage.get("prompt_tokens")
             row["completion_tokens"] = usage.get("completion_tokens")
-        row["outcome"] = "accepted" if row["first_token_s"] is not None else "failed"
+        # A 200 whose stream just stops — no [DONE], no finish_reason, no usage — is a
+        # truncated response, not a success; E2's abrupt-exit drill needs them apart.
+        row["stream_complete"] = bool(saw_done or row["finish_reason"] or usage)
         if row["first_token_s"] is None:
-            row["error_class"] = "no_content_delta"
+            row["outcome"], row["error_class"] = "failed", "no_content_delta"
+        elif not row["stream_complete"]:
+            row["outcome"], row["error_class"] = "failed", "truncated_stream"
+        else:
+            row["outcome"] = "accepted"
 
 
 async def run_one(client, cfg, item, t0, rows):
+    """Every attempt is kept in `rows`; the last one carries the request-level timings."""
+    first_send = None
     for k in range(cfg["retries"] + 1):
         row = await attempt(client, cfg, item, t0, k)
         row["retries"] = k
         rows.append(row)
+        first_send = row["send_s"] if first_send is None else first_send
         if row["http_status"] not in (429, 503) or k == cfg["retries"]:
+            # Request latency spans every rejected attempt and every retry wait: a
+            # retried request must never look as fast as a first-try success.
+            row["request_send_s"] = first_send
+            if row["end_s"] is not None and first_send is not None:
+                row["request_latency_s"] = round(row["end_s"] - first_send, 6)
+            if cfg["open_loop"] and row["end_s"] is not None:   # coordinated omission
+                row["latency_from_scheduled_s"] = round(row["end_s"] - row["scheduled_s"], 6)
             return row
         wait = float(row["retry_after"] or 1) if str(row["retry_after"] or "1").isdigit() else 1.0
         await asyncio.sleep(min(wait, 30.0))
@@ -447,11 +508,17 @@ def summarize(rows, wall, cfg):
     out_tokens = sum(r["completion_tokens"] or 0 for r in accepted)
     suppressed = []
     pct = {}
-    for field, scale in (("ttft_s", 1.0), ("latency_s", 1.0), ("tpot_ms", 1000.0)):
-        src = field if field != "tpot_ms" else "tpot_s"
+    for field, src, scale in (("ttft_s", "ttft_s", 1.0), ("latency_s", "request_latency_s", 1.0),
+                              ("tpot_ms", "tpot_s", 1000.0)):
         block, sup = percentile_block(accepted, src, scale)
         pct[field] = block
         suppressed += sup
+    # Coordinated omission: when the driver cannot keep up, latency from the SEND time
+    # hides the wait it caused. Reported from the scheduled arrival as well (open loop).
+    pct["latency_from_scheduled_s"], _ = percentile_block(accepted, "latency_from_scheduled_s")
+    lag_block, _ = percentile_block(rows, "schedule_lag_s")
+    lags = [r["schedule_lag_s"] for r in rows if r.get("schedule_lag_s") is not None]
+    lag_block["max"] = round(max(lags), 6) if lags else None
     cold = [r for r in accepted if r["cold"] is True]
     warm = [r for r in accepted if r["cold"] is False]
     cold_ttft, _ = percentile_block(cold, "ttft_s")
@@ -468,11 +535,21 @@ def summarize(rows, wall, cfg):
         "max_tokens": cfg["max_tokens"],
         "accepted": len(accepted), "rejected": len(rejected), "failed": len(failed),
         "accepted_without_usage": sum(1 for r in accepted if r["usage_missing"]),
+        # Retries collapse a request to its final attempt, so every rejected or failed
+        # ATTEMPT is reported too: a 429 that a retry papered over stays visible.
         "denominators": {"latency_samples": len(accepted), "rejected_excluded": len(rejected),
-                         "failed_excluded": len(failed), "scheduled": len(finals)},
+                         "failed_excluded": len(failed), "scheduled": len(finals),
+                         "attempts": len(rows),
+                         "rejected_attempts": sum(1 for r in rows if r["outcome"] == "rejected"),
+                         "failed_attempts": sum(1 for r in rows if r["outcome"] == "failed"),
+                         "retried_requests": sum(1 for r in finals if r.get("retries"))},
         "status_counts": _counts(finals, "http_status"), "error_classes": _counts(finals, "error_class"),
         "error_codes": _counts(finals, "error_code"),
-        "distinct_clips": len({r["clip_id"] for r in finals if r["clip_id"]}),
+        "attempt_status_counts": _counts(rows, "http_status"), "attempt_outcomes": _counts(rows, "outcome"),
+        # Only clips whose media actually went out: a `text` slot uses the clip's prompt
+        # and sends no media, so counting it would overstate cold-path coverage.
+        "distinct_clips": len({r["clip_id"] for r in rows if r["clip_id"] and r["media_sent"]}),
+        "distinct_clips_scheduled": len({r["clip_id"] for r in finals if r["clip_id"]}),
         "cold_requests": len(cold), "warm_requests": len(warm),
         "cold_ttft_s": cold_ttft, "warm_ttft_s": warm_ttft,
         "prompt_tokens": prompt_tokens[0] if prompt_tokens else None,
@@ -480,7 +557,8 @@ def summarize(rows, wall, cfg):
         "wall_s": round(wall, 2),
         "req_per_s": round(len(accepted) / wall, 3) if wall else None,
         "out_tok_per_s": round(out_tokens / wall, 1) if wall else None,
-        "percentiles": pct, "suppressed_percentiles": sorted(set(suppressed)),
+        "percentiles": pct, "schedule_lag_s": lag_block,
+        "suppressed_percentiles": sorted(set(suppressed)),
         "percentile_rule": f"a reported pN needs >= {MIN_TAIL} accepted samples beyond it "
                            f"(p50>=6, p95>=60, p99>=300)",
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -525,7 +603,7 @@ def make_config(a, clips=None, manifest=None):
               file=sys.stderr)
     return {"args": a, "key": key, "headers": headers, "base": a.base_url.rstrip("/"),
             "model": a.model, "max_tokens": a.max_tokens, "concurrency": a.concurrency,
-            "retries": a.retries, "video": a.video, "forms": forms,
+            "retries": a.retries, "video": a.video, "forms": forms, "open_loop": bool(a.rate),
             "media_base_url": a.media_base_url,
             "video_label": (os.path.basename(a.video) if a.video else f"corpus:{a.subset}"),
             "corpus_label": (manifest or {}).get("corpus_version") if a.corpus else None,
@@ -569,17 +647,18 @@ def main(argv=None):
     res = summarize(rows, wall, cfg)
     raw = raw_path(a)
     os.makedirs(os.path.dirname(raw) or ".", exist_ok=True)
+    key = cfg["key"]                    # every sink below serialises, then redacts
     with open(raw, "w", encoding="utf-8") as f:
         for r in rows:
-            f.write(json.dumps(r) + "\n")
+            f.write(dump_line(r, key) + "\n")
     res["raw"] = os.path.relpath(raw, os.path.dirname(a.out) or ".")
-    print(json.dumps(res, indent=2))
+    print(dump_line(res, key, indent=2))
     if res["suppressed_percentiles"]:
-        print("suppressed (sample count too small): " + "; ".join(res["suppressed_percentiles"]),
-              file=sys.stderr)
+        print("suppressed (sample count too small): " +
+              redact("; ".join(res["suppressed_percentiles"]), key), file=sys.stderr)
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "a", encoding="utf-8") as f:
-        f.write(json.dumps(res) + "\n")
+        f.write(dump_line(res, key) + "\n")
     return 0 if res["accepted"] else 1
 
 

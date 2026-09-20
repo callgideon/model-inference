@@ -15,12 +15,21 @@ import httpx
 class FakeGateway:
     def __init__(self, ttft=0.01, token_gap=0.001, tokens=3, usage=True, statuses=None,
                  require_bearer=None, server_timing=True, raise_with_key=None,
-                 completion_tokens=None, role_chunk=True):
+                 completion_tokens=None, role_chunk=True, echo_key_in_code=None,
+                 echo_key_in_long_body=None, upload_url=None, put_status=200, truncate_stream=False,
+                 finish_reason="stop", retry_after="3"):
         self.ttft, self.token_gap, self.tokens, self.usage = ttft, token_gap, tokens, usage
         self.statuses = statuses or {}
         self.require_bearer, self.server_timing = require_bearer, server_timing
         self.raise_with_key, self.role_chunk = raise_with_key, role_chunk
         self.completion_tokens = completion_tokens
+        # Hostile-server knobs: a key echoed into error.code, a key buried past the
+        # error-body truncation point, a signed upload URL and a rejected PUT, and a
+        # 200 stream that stops without [DONE], finish_reason or usage.
+        self.echo_key_in_code, self.echo_key_in_long_body = echo_key_in_code, echo_key_in_long_body
+        self.upload_url, self.put_status = upload_url, put_status
+        self.truncate_stream, self.finish_reason = truncate_stream, finish_reason
+        self.retry_after = retry_after
         self.seen = []            # one dict per chat request, for assertions
         self.uploads = {}
 
@@ -32,12 +41,15 @@ class FakeGateway:
     async def __call__(self, request):
         path = request.url.path
         if request.method == "PUT":
+            if self.put_status >= 400:
+                return httpx.Response(self.put_status, text="AccessDenied")
             return httpx.Response(200, json={"ok": True})
         if path.endswith("/uploads"):
             handle = f"up_{len(self.uploads):04d}"
             self.uploads[handle] = json.loads(request.content or b"{}")
+            url = self.upload_url or ("https://fake-upload.invalid/" + handle)
             return httpx.Response(200, json={"handle": handle, "upload": {
-                "method": "PUT", "url": "https://fake-upload.invalid/" + handle, "headers": {}}})
+                "method": "PUT", "url": url, "headers": {}}})
         if path.endswith("/complete"):
             return httpx.Response(200, json={"handle": path.split("/")[-2], "status": "ready"})
         if not path.endswith("/chat/completions"):
@@ -52,6 +64,12 @@ class FakeGateway:
                           "max_tokens": body.get("max_tokens")})
         if self.raise_with_key:
             raise RuntimeError(f"upstream refused request with header Bearer {self.raise_with_key}")
+        if self.echo_key_in_code:            # the key lands in a field nothing scrubbed per-field
+            return httpx.Response(401, json={"error": {"message": "nope", "type": "auth",
+                                                       "code": "bad_key:" + self.echo_key_in_code}})
+        if self.echo_key_in_long_body:       # non-JSON body, key straddling any truncation point
+            return httpx.Response(401, text="x" * 590 + " rejected key: " +
+                                  self.echo_key_in_long_body + " tail")
         if self.require_bearer and auth != f"Bearer {self.require_bearer}":
             return self._error(401, "invalid_api_key", "incorrect api key provided")
         status = self.statuses.get(index, 200)
@@ -66,7 +84,7 @@ class FakeGateway:
         return httpx.Response(200, headers=headers, content=self._stream(rid, body))
 
     def _error(self, status, code, message):
-        headers = {"retry-after": "3"} if status in (429, 503) else {}
+        headers = {"retry-after": self.retry_after} if status in (429, 503) else {}
         return httpx.Response(status, headers=headers,
                               json={"error": {"message": message, "code": code, "type": code,
                                               "request_id": uuid.uuid4().hex}})
@@ -83,7 +101,10 @@ class FakeGateway:
             if i:
                 await asyncio.sleep(self.token_gap)
             yield frame(base | {"choices": [{"index": 0, "delta": {"content": f"tok{i} "}}]})
-        yield frame(base | {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
+        if self.truncate_stream:      # 200 + content, then the connection just ends
+            return
+        if self.finish_reason:
+            yield frame(base | {"choices": [{"index": 0, "delta": {}, "finish_reason": self.finish_reason}]})
         if self.usage:
             yield frame(base | {"choices": [], "usage": {
                 "prompt_tokens": 2061,

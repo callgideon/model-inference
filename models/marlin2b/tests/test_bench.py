@@ -13,7 +13,14 @@ sys.path[:0] = [HERE, os.path.dirname(HERE)]
 import bench
 from fake_gateway import FakeGateway
 
+REAL_LOAD_CORPUS = bench.load_corpus            # with_clips() replaces it for the other tests
+MANIFEST_PATH = os.path.join(os.path.dirname(HERE), "corpus", "manifest.json")
+
 KEY = "sk-test-DO-NOT-LOG-4c2f9b1e"
+# canary signed upload destination: the query string is what must never be written
+SIGNED_URL = ("https://bucket.invalid/org1/up_0000?X-Amz-Algorithm=AWS4-HMAC-SHA256"
+              "&X-Amz-Credential=CANARYCRED&X-Amz-Signature=CANARYSIGdeadbeefcafebabe")
+SIGNED_CANARIES = ("CANARYSIGdeadbeefcafebabe", "X-Amz-Signature", "CANARYCRED")
 
 
 def make_clips(n, tmp):
@@ -79,14 +86,22 @@ def test_schedule_is_deterministic_and_independent_of_latency():
         assert a[0]["cold"] is True and any(r["cold"] is False for r in a)
 
         with_clips(clips)
-        rows = {}
-        for tag, ttft in (("fast", 0.001), ("slow", 0.12)):
+        rows, lag = {}, {}
+        for tag, ttft in (("fast", 0.001), ("slow", 0.25)):
             summary, raw, _, _ = run_bench(base_argv(tmp, requests=12, rate=8, seed=11),
                                            FakeGateway(ttft=ttft), env={"MARLIN_API_KEY": KEY})
             rows[tag] = [(r["seq"], r["clip_id"], r["form"], r["scheduled_s"], r["cold"])
                          for r in sorted(raw, key=lambda r: r["seq"])]
+            lag[tag] = summary["schedule_lag_s"]["max"]
             assert summary["accepted"] == 12
+            # open loop measured, not just planned: sends track the schedule even when the
+            # server is slow, and latency is also reported from the scheduled arrival.
+            assert lag[tag] < 0.1, f"{tag}: sends waited for completions (lag {lag[tag]}s)"
+            assert all(r["send_s"] >= r["scheduled_s"] for r in raw)
+            assert all(r["latency_from_scheduled_s"] >= r["latency_s"] for r in raw)
+            assert summary["percentiles"]["latency_from_scheduled_s"]["samples"] == 12
         assert rows["fast"] == rows["slow"], "arrival schedule must not depend on response latency"
+        assert lag["slow"] < 0.25, "a 0.25 s server must not delay the next arrival"
 
 
 def test_api_key_never_appears_in_any_output():
@@ -108,9 +123,106 @@ def test_api_key_never_appears_in_any_output():
         summary, raw, stdout, rc = run_bench(base_argv(tmp, requests=2, concurrency=1),
                                              FakeGateway(raise_with_key=KEY), env={"INFRX_API_KEY": KEY})
         assert summary["failed"] == 2 and summary["accepted"] == 0
-        assert all("[redacted]" in (r["error_message"] or "") for r in raw)
+        assert all("[redacted-key]" in (r["error_message"] or "") for r in raw)
         for blob in (stdout, json.dumps(raw)):
             assert KEY not in blob
+
+
+def all_output(tmp, summary, raw, stdout):
+    return [stdout, json.dumps(summary), json.dumps(raw),
+            open(os.path.join(tmp, "bench.jsonl"), encoding="utf-8").read(),
+            open(os.path.join(tmp, "raw.jsonl"), encoding="utf-8").read()]
+
+
+def test_server_controlled_fields_cannot_leak_the_key_or_a_signed_url():
+    """The three paths that escaped per-field scrubbing: error.code, an error body
+    long enough that truncating first would leave a key prefix, and httpx exception
+    text quoting the signed upload URL."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(4, tmp)
+        with_clips(clips)
+
+        # (a) the key echoed back in error.code, which reaches summary["error_codes"]
+        summary, raw, stdout, _ = run_bench(base_argv(tmp, requests=2, concurrency=1),
+                                            FakeGateway(echo_key_in_code=KEY), env={"MARLIN_API_KEY": KEY})
+        assert summary["rejected"] == 2 and "bad_key:[redacted-key]" in summary["error_codes"]
+        for blob in all_output(tmp, summary, raw, stdout):
+            assert KEY not in blob, "api key leaked through error.code"
+
+        # (b) a non-JSON body with the key past the truncation point: no prefix either
+        summary, raw, stdout, _ = run_bench(base_argv(tmp, requests=2, concurrency=1),
+                                            FakeGateway(echo_key_in_long_body=KEY),
+                                            env={"MARLIN_API_KEY": KEY})
+        assert summary["rejected"] == 2
+        for blob in all_output(tmp, summary, raw, stdout):
+            for cut in range(8, len(KEY) + 1):          # not even a usable prefix survives
+                assert KEY[:cut] not in blob, f"leaked {cut} chars of the key"
+
+        # (c) a rejected PUT to a signed destination: status only, never the URL
+        summary, raw, stdout, _ = run_bench(base_argv(tmp, requests=2, concurrency=1, forms="upload"),
+                                            FakeGateway(upload_url=SIGNED_URL, put_status=403),
+                                            env={"MARLIN_API_KEY": KEY})
+        assert summary["failed"] == 2 and summary["accepted"] == 0
+        assert all("HTTP 403" in (r["error_message"] or "") for r in raw)
+        for blob in all_output(tmp, summary, raw, stdout):
+            assert KEY not in blob
+            for canary in SIGNED_CANARIES:
+                assert canary not in blob, f"signed-URL canary {canary} leaked into output"
+
+
+def test_distinct_clips_counts_only_clips_whose_media_was_sent():
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(4, tmp)
+        with_clips(clips)
+        summary, raw, _, _ = run_bench(base_argv(tmp, requests=8, concurrency=1,
+                                                 forms="video_b64,text"), FakeGateway(),
+                                       env={"MARLIN_API_KEY": KEY})
+        text_rows = [r for r in raw if r["form"] == "text"]
+        media_rows = [r for r in raw if r["form"] != "text"]
+        assert text_rows and media_rows
+        assert all(r["media_sent"] is False for r in text_rows), "a text slot sends no media"
+        assert all(r["media_sent"] is True for r in media_rows)
+        assert summary["distinct_clips"] == len({r["clip_id"] for r in media_rows})
+        assert summary["distinct_clips"] < summary["distinct_clips_scheduled"], \
+            "text slots must not inflate the distinct-media count"
+        assert summary["distinct_clips"] == summary["cold_requests"], \
+            "every distinct clip whose media was sent is exactly one cold request"
+
+
+def test_truncated_200_stream_is_failed_not_accepted():
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(2, tmp)
+        with_clips(clips)
+        gw = FakeGateway(truncate_stream=True, usage=True)   # content, then silence
+        summary, raw, _, rc = run_bench(base_argv(tmp, requests=2, concurrency=1), gw,
+                                        env={"MARLIN_API_KEY": KEY})
+        assert summary["accepted"] == 0 and summary["failed"] == 2 and rc == 1
+        assert summary["error_classes"] == {"truncated_stream": 2}
+        for r in raw:
+            assert r["http_status"] == 200 and r["content_chars"] > 0
+            assert r["stream_complete"] is False and r["finish_reason"] is None
+        # a finish_reason alone (no [DONE], no usage) is a complete stream
+        summary, raw, _, _ = run_bench(base_argv(tmp, requests=2, concurrency=1),
+                                       FakeGateway(usage=False), env={"MARLIN_API_KEY": KEY})
+        assert summary["accepted"] == 2 and all(r["finish_reason"] == "stop" for r in raw)
+
+
+def test_retried_rejections_stay_visible_and_latency_covers_every_attempt():
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(2, tmp)
+        with_clips(clips)
+        gw = FakeGateway(statuses={0: 429}, retry_after="0", ttft=0.03)
+        summary, raw, _, _ = run_bench(base_argv(tmp, requests=2, concurrency=1, retries=1), gw,
+                                       env={"MARLIN_API_KEY": KEY})
+        assert summary["accepted"] == 2 and summary["rejected"] == 0     # the retry succeeded
+        assert summary["attempts"] == 3 and summary["attempt_status_counts"] == {"429": 1, "200": 2}
+        assert summary["attempt_outcomes"] == {"rejected": 1, "accepted": 2}
+        d = summary["denominators"]
+        assert d["rejected_attempts"] == 1 and d["attempts"] == 3 and d["retried_requests"] == 1, d
+        retried = [r for r in raw if r["retries"] == 1][0]
+        assert retried["request_send_s"] < retried["send_s"], "request starts at the first attempt"
+        assert retried["request_latency_s"] > retried["latency_s"], "retry wait must be in the latency"
+        assert summary["percentiles"]["latency_s"]["samples"] == 2
 
 
 def test_rejections_and_failures_are_counted_apart_from_accepted():
@@ -124,7 +236,9 @@ def test_rejections_and_failures_are_counted_apart_from_accepted():
         assert summary["rejected"] == 2 and summary["failed"] == 2      # 429/402 rejected, 500/503 failed
         assert summary["status_counts"] == {"429": 1, "402": 1, "500": 1, "503": 1, "200": 4}
         assert summary["denominators"] == {"latency_samples": 4, "rejected_excluded": 2,
-                                           "failed_excluded": 2, "scheduled": 8}
+                                           "failed_excluded": 2, "scheduled": 8, "attempts": 8,
+                                           "rejected_attempts": 2, "failed_attempts": 2,
+                                           "retried_requests": 0}
         assert summary["error_codes"]["rate_limit_exceeded"] == 1
         assert summary["error_codes"]["insufficient_credit"] == 1
         by_seq = {r["seq"]: r for r in raw}
@@ -201,6 +315,28 @@ def test_request_forms_and_upload_flow():
         assert any(r.startswith("upload://up_") for r in refs)
         assert any(r == "https://media.invalid/clips/clip000.mp4" or
                    r.startswith("https://media.invalid/clips/") for r in refs)
+
+
+def test_real_load_corpus_reads_the_committed_manifest():
+    """Every other test monkeypatches load_corpus, so the real loader, the $CORPUS_CACHE
+    resolution and the manifest's own field names are only exercised here."""
+    saved, bench.load_corpus = bench.load_corpus, REAL_LOAD_CORPUS
+    old_cache = os.environ.get("CORPUS_CACHE")
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["CORPUS_CACHE"] = tmp
+            clips, prompts, manifest = bench.load_corpus(MANIFEST_PATH, "fast")
+            assert len(clips) >= 32 and len(prompts) == 16 and manifest["corpus_version"]
+            assert len({c["id"] for c in clips}) == len(clips)
+            assert all(c["path"].startswith(tmp) and c["prompt"] and c["duration_s"] > 0 for c in clips)
+            geometries = {(c["width"], c["height"]) for c in clips}
+            assert (1080, 1920) in geometries and (480, 1920) in geometries, \
+                "the fast subset must carry the orientation extremes to the client"
+            assert len(REAL_LOAD_CORPUS(MANIFEST_PATH, "full")[0]) >= 64
+    finally:
+        bench.load_corpus = saved
+        os.environ.pop("CORPUS_CACHE", None) if old_cache is None else \
+            os.environ.__setitem__("CORPUS_CACHE", old_cache)
 
 
 def test_historical_cli_still_parses_and_refuses_command_line_keys():

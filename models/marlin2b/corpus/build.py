@@ -33,6 +33,10 @@ API_MAX_DURATION_S = 120  # research/plan/01-contracts.md preparation budget / v
 FFMPEG_PIN = {
     "version": "7.0.2-static",
     "build": "ffmpeg-7.0.2-amd64-static (johnvansickle.com static build, gcc 8/Debian)",
+    # Unversioned "latest release" alias: when upstream publishes 7.1 this URL stops
+    # matching tarball_sha256 and ensure_ffmpeg() refuses it. Then fetch 7.0.2 from
+    # https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-7.0.2-amd64-static.tar.xz
+    # (or a mirror) into $CORPUS_CACHE/tools/ by hand; the pinned hashes stay the pin.
     "tarball_url": "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz",
     "tarball_sha256": "abda8d77ce8309141f83ab8edf0596834087c52467f6badf376a6a2a4c87cf67",
     "ffmpeg_sha256": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
@@ -79,11 +83,20 @@ SOURCES = [
      "license_evidence_quote": "NASA content is generally not copyrighted and may be used for educational or "
                                "informational purposes without needing explicit permissions",
      "attribution": "NASA's Goddard Space Flight Center (nasa_id GSFC_20180314_Aurora_m12865_Steve)",
+     "note": "The item's own NASA description credits 'amateur photographers from the Alberta Aurora "
+             "Chasers', so parts of this video are very likely third-party stills that the generic "
+             "NASA-content sentence does not cover. Nothing is redistributed (no media in git, derived "
+             "clips stay in the local cache), but treat this source as attribution-only: swap in "
+             "NASA-produced footage before any public redistribution. Item page: "
+             "https://svs.gsfc.nasa.gov/12865 ('Please give credit for this item to: NASA's Goddard "
+             "Space Flight Center').",
      "expected": {"duration_s": 132.885333, "width": 1920, "height": 1080, "fps": 59.94, "codec": "h264"},
      "usable_start_s": 2.0, "usable_end_s": 130.0},
 ]
 
 # (width, height, label) BEFORE any rotation. 16 entries -> 4 clips per geometry.
+# A label is a promise about the pixels: validate_manifest() fails when a built
+# clip's probed width/height/aspect does not match its label (and its `-rot…` suffix).
 GEOMETRIES = [
     (1920, 1080, "1080p-16x9"), (1280, 720, "720p-16x9"), (854, 480, "480p-16x9"), (640, 360, "360p-16x9"),
     (1080, 1920, "1080x1920-portrait"), (720, 1280, "720x1280-portrait"), (480, 854, "480x854-portrait"),
@@ -95,10 +108,27 @@ GEOMETRIES = [
 # 13 durations (coprime with 16 geometries, so duration does not track geometry), all <= the 120 s API cap.
 DURATIONS_S = [2, 3, 5, 7, 9, 12, 15, 20, 26, 34, 48, 72, 112]
 FPS = [30, 24, 15, 10, 60]
-# Rotation on a few geometries: real rotated pixels. Container display-matrix
-# rotation is NOT covered: ffmpeg 7's mp4 muxer silently drops `-metadata rotate=`
-# (checked, the probed rotation stayed null), so no recipe claims it.
-ROTATE_AT = {4: "90cw", 9: "180", 14: "90ccw"}      # geometry index -> transpose
+# Rotation on a few geometries: real rotated pixels. Keyed by geometry index but
+# applied to ONE of the four clips per geometry (the i//16 == ROTATE_BAND pass), so
+# an unrotated 1080x1920 portrait and 480x1920 tall clip survive in the corpus and
+# in the fast subset: rotating every clip of a geometry would leave the corpus with
+# no real portrait-1080 or 1:4 tall media while the ids still claimed both.
+# Container display-matrix rotation is NOT covered: ffmpeg 7's mp4 muxer silently
+# drops `-metadata rotate=` (checked, the probed rotation stayed null).
+ROTATE_GEOMETRY = {4: "90cw", 9: "180", 14: "90ccw"}   # geometry index -> transpose
+ROTATE_BAND = 1                                        # only clips c016-c031 rotate
+
+
+LABEL_GEOMETRY = {label: (w, h) for w, h, label in GEOMETRIES}
+
+
+def transpose_for(i):
+    return ROTATE_GEOMETRY.get(i % 16) if i // 16 == ROTATE_BAND else None
+
+
+def clip_id(i, src_id, label, transpose):
+    return f"c{i:03d}-{src_id}-{label}" + (f"-rot{transpose}" if transpose else "")
+
 
 PROMPTS = [
     ("p00", "caption", "Describe every event in this clip, in order, with start and end times in seconds."),
@@ -213,6 +243,26 @@ def aspect(w, h):
     return f"{w // g}:{h // g}"
 
 
+def upscales(recipe, probed_source):
+    """True when the recipe scales the source UP on either axis.
+
+    `scale=W:H:force_original_aspect_ratio=increase` applies max(W/sw, H/sh), so an
+    upsize on width alone counts. Compared against the recipe's PRE-rotation target,
+    never the post-rotation derived height: MEDIA-PARITY reads this flag to keep
+    upscaled clips out of native-resolution parity evidence."""
+    sw, sh = (probed_source or {}).get("width"), (probed_source or {}).get("height")
+    if not sw or not sh:
+        return None
+    tw, th = recipe["scale"]
+    return bool(tw > sw or th > sh)
+
+
+def derived_geometry(recipe):
+    """(width, height) the derivation must produce: the target scale, axes swapped by a 90 deg transpose."""
+    w, h = recipe["scale"]
+    return (h, w) if recipe.get("transpose") in ("90cw", "90ccw") else (w, h)
+
+
 # ---------------------------------------------------------------- plan
 
 
@@ -248,12 +298,16 @@ def plan():
             raise RuntimeError(f"no source has {duration}s of unused footage left for clip {i}")
         start = cursors[src["id"]]
         cursors[src["id"]] = start + duration + 1.0  # 1 s guard so segments never overlap
+        transpose = transpose_for(i)
         recipe = {"start_s": round(start, 3), "duration_s": duration, "scale": [w, h],
-                  "fps": FPS[i % 5], "transpose": ROTATE_AT.get(i % 16), "encode": dict(ENCODE)}
-        clips.append({"id": f"c{i:03d}-{src['id']}-{label}", "kind": "clip", "source": src["id"],
+                  "fps": FPS[i % 5], "transpose": transpose, "encode": dict(ENCODE)}
+        # `label` is the pre-rotation geometry; a rotated clip says so in its id so no
+        # id claims an orientation its pixels do not have.
+        cid = clip_id(i, src["id"], label, transpose)
+        clips.append({"id": cid, "kind": "clip", "source": src["id"],
                       "geometry_label": label, "recipe": recipe, "prompt": PROMPTS[(i + i // 16) % 16][0],
                       "subset": ["full", "fast"] if i < 32 else ["full"],
-                      "file": f"clips/c{i:03d}-{src['id']}-{label}.mp4",
+                      "file": f"clips/{cid}.mp4",
                       "derived": None, "status": "unbuilt"})
     negatives = []
     for n, neg in enumerate(NEGATIVES):
@@ -308,7 +362,13 @@ def build(manifest, jobs=4, force=False):
                 src["status"], src["error"] = "unfetched", f"{type(e).__name__}: {e}"[:200]
                 print(f"  source {src['id']} unavailable: {src['error']}", file=sys.stderr)
                 continue
-        src["sha256"], src["bytes"] = sha256_file(path), path.stat().st_size
+        got = sha256_file(path)
+        if src.get("sha256") and got != src["sha256"]:   # never silently repin a changed source
+            src["status"] = "sha256_mismatch"
+            src["error"] = f"cached bytes sha256 {got} != pinned {src['sha256']}"
+            print(f"  source {src['id']}: {src['error']}", file=sys.stderr)
+            continue
+        src["sha256"], src["bytes"] = got, path.stat().st_size
         src["probed"] = probe(ffprobe, path)
         src["status"] = "fetched"
         if abs(src["probed"]["duration_s"] - src["expected"]["duration_s"]) > 1.0:
@@ -323,14 +383,16 @@ def build(manifest, jobs=4, force=False):
             return clip, "unbuilt", None, "source unavailable"
         dst = item_path(clip)
         dst.parent.mkdir(parents=True, exist_ok=True)
-        if force or not dst.exists():
+        # A clip that is not already `built` has a new or changed recipe: re-derive even
+        # when a file sits at that path, or its stale bytes would be hashed as the pin.
+        if force or not dst.exists() or clip["status"] != "built":
             r = subprocess.run(ffmpeg_args(ffmpeg, source_path(src), dst, clip["recipe"]),
                                capture_output=True, text=True, errors="replace")
             if r.returncode != 0:
                 return clip, "unbuilt", None, f"ffmpeg: {r.stderr.strip()[-200:]}"
         d = probe(ffprobe, dst)
         d["sha256"] = sha256_file(dst)
-        d["source_upscaled"] = bool(src["probed"]["height"] and d["height"] > src["probed"]["height"])
+        d["source_upscaled"] = upscales(clip["recipe"], src["probed"])
         return clip, "built", d, None
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -395,8 +457,21 @@ def validate_manifest(manifest):
         e.append(f"fast subset has {len(fast)} built clips, need >= 32")
     if len({c["id"] for c in clips}) != len(clips):
         e.append("duplicate clip ids")
+    by_src = {s["id"]: s for s in manifest["sources"]}
     hashes, recipes = {}, {}
     for c in clips:
+        # The id and the geometry label are claims about the pixels. A label names the
+        # PRE-rotation target, so a transposed clip must carry the `-rot…` suffix; the
+        # built-clip block below then checks the probed geometry against both.
+        label_wh = LABEL_GEOMETRY.get(c.get("geometry_label"))
+        suffix = c["geometry_label"] + (f"-rot{c['recipe']['transpose']}" if c["recipe"].get("transpose") else "")
+        if label_wh is None:
+            e.append(f"{c['id']} has unknown geometry_label {c.get('geometry_label')!r}")
+        elif tuple(c["recipe"]["scale"]) != label_wh:
+            e.append(f"{c['id']} label {c['geometry_label']} means {label_wh[0]}x{label_wh[1]} but the "
+                     f"recipe scales to {c['recipe']['scale'][0]}x{c['recipe']['scale'][1]}")
+        if not c["id"].endswith(suffix):
+            e.append(f"{c['id']} does not end with the geometry it claims ({suffix})")
         if c["recipe"]["duration_s"] > manifest["api_limits"]["max_clip_duration_s"]:
             e.append(f"{c['id']} duration {c['recipe']['duration_s']}s exceeds the API cap")
         if c["prompt"] not in prompts:
@@ -414,6 +489,21 @@ def validate_manifest(manifest):
             if d["sha256"] in hashes:
                 e.append(f"{c['id']} has the same content as {hashes[d['sha256']]}")
             hashes[d["sha256"]] = c["id"]
+            src = by_src.get(c["source"]) or {}
+            probed = src.get("probed") or {}
+            if not src.get("sha256"):
+                e.append(f"{c['id']} is built from unpinned source {c['source']}")
+            want = derived_geometry(c["recipe"])
+            if (d.get("width"), d.get("height")) != want:
+                e.append(f"{c['id']} derived {d.get('width')}x{d.get('height')} != "
+                         f"recipe scale/transpose {want[0]}x{want[1]}")
+            elif d.get("aspect") != aspect(*want):
+                e.append(f"{c['id']} derived aspect {d.get('aspect')} != {aspect(*want)} for "
+                         f"{want[0]}x{want[1]}")
+            up = upscales(c["recipe"], probed)
+            if up is not None and d.get("source_upscaled") != up:
+                e.append(f"{c['id']} source_upscaled {d.get('source_upscaled')} != {up} for recipe scale "
+                         f"{c['recipe']['scale']} from source {probed.get('width')}x{probed.get('height')}")
         elif c.get("derived"):
             e.append(f"{c['id']} is {c['status']} but carries derived metadata")
     for n in manifest["negatives"]:
@@ -430,8 +520,17 @@ def validate_manifest(manifest):
         e.append("fewer than 8 distinct durations among built clips")
     if not [c for c in built if 1080 in tuple(c["recipe"]["scale"])]:
         e.append("no 1080-line clip: 1080p decode is the measured bottleneck")
+    ratios = [(c["derived"]["width"] / c["derived"]["height"]) for c in built
+              if (c.get("derived") or {}).get("height")]
+    if not [r for r in ratios if r <= 0.3]:
+        e.append("no extreme-tall clip (derived w/h <= 0.3): MEDIA-PARITY injects orientation extremes")
+    if not [r for r in ratios if r >= 3.0]:
+        e.append("no extreme-wide clip (derived w/h >= 3.0): MEDIA-PARITY injects orientation extremes")
     if len({c["prompt"] for c in built}) < 8:
         e.append("fewer than 8 distinct prompts among built clips")
+    fps = {(c.get("derived") or {}).get("fps") for c in built} - {None}
+    if not [f for f in fps if f <= 10]:
+        e.append("no low-frame-rate clip (probed fps <= 10): frame-budget coverage needs one")
     return e
 
 
@@ -517,11 +616,17 @@ def main(argv=None):
     if a.command == "plan":
         m = plan()
         if path.exists():                      # keep measured fields for unchanged recipes
-            old = {c["id"]: c for c in load(path)["clips"] + load(path)["negatives"]}
+            prev_m = load(path)
+            old = {c["id"]: c for c in prev_m["clips"] + prev_m["negatives"]}
             for item in m["clips"] + m["negatives"]:
                 prev = old.get(item["id"])
                 if prev and prev.get("recipe") == item.get("recipe") and prev["status"] == "built":
                     item["derived"], item["status"] = prev["derived"], prev["status"]
+            old_src = {s["id"]: s for s in prev_m["sources"]}
+            for s in m["sources"]:              # and the source pins: plan must not unpin a built corpus
+                prev = old_src.get(s["id"])
+                if prev and prev.get("sha256") and prev.get("url") == s["url"]:
+                    s.update({k: prev.get(k) for k in ("sha256", "bytes", "probed", "status")})
         save(m, path)
         print(f"planned {len(m['clips'])} clips ({sum('fast' in c['subset'] for c in m['clips'])} fast), "
               f"{len(m['negatives'])} negatives -> {path}")
