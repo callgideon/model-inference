@@ -85,7 +85,8 @@ measured data. Two things change how future rows are produced:
 
 1. **Distinct corpus.** [`../corpus/`](../corpus/README.md) pins 64 licensed,
    non-overlapping clips (plus a 32-clip fast subset and four corrupt-media
-   fixtures) with real sha256 hashes, 14 geometries, 2–112 s durations and one of
+   fixtures) with real sha256 hashes, 14 geometries (corrected to 16 below),
+   2–112 s durations and one of
    16 prompts each. This is the answer to finding 5's caveat: reruns with
    `--corpus` cannot be absorbed by the multimodal cache the way two repeated
    clips were.
@@ -99,3 +100,23 @@ New summary rows also carry accepted/rejected/failed denominators, cold vs warm
 TTFT, request form, seed and arrival rate; per-attempt detail goes to a raw JSONL
 beside the summary. Legacy CLI flags and the default `--out` path are unchanged,
 so this file's history stays comparable.
+
+### E1 review round 1 (2026-09-20, commit `a1cb4f4`, still no measurements)
+
+An independent review found the corpus misdescribed itself and the client could
+leak. Corrections to the paragraph above, so nothing here stays wrong:
+
+- The corpus has **16** probed geometries, not 14 (the entry above said 14 while
+  rotation had collapsed two geometries onto ones already present).
+- Rotation had been applied to all four clips of each rotated geometry, so no real
+  1080×1920 portrait and no real 480×1920 (1:4) clip existed despite the ids. Twelve
+  clips were rebuilt with the pinned ffmpeg; the corpus now spans aspect 0.25–4.0.
+- The frame-rate set is **10/15/24/30/60**; an earlier "5 fps" claim was false.
+- `source_upscaled` now flags all **28** upscaled clips (it compared one axis).
+- Reading new summary rows: `distinct_clips` counts only clips whose media was
+  actually sent (`text` slots send none), `denominators` now also carries
+  attempt-level rejected/failed counts so a retry cannot hide a 429, `latency_s`
+  percentiles span every attempt of a request, and an open-loop run additionally
+  reports `latency_from_scheduled_s` and `schedule_lag_s` (coordinated omission).
+  A 200 whose stream ends without `[DONE]`, `finish_reason` or usage is now
+  `failed`/`truncated_stream`, not accepted.
