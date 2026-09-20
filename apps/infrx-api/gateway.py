@@ -10,6 +10,18 @@ What it adds on top of vLLM's own server (which stays bound to localhost):
     mm_processor_kwargs so the model sees its training grid (2 fps, 200,704 px
     per frame) instead of the processor default that costs 6x the tokens
     (see results/notes.md); rejects clips over MAX_VIDEO_SECONDS / MAX_VIDEO_MB
+  * the media fetch, once, safely (see README "Security"). A caller-supplied
+    `video_url` is fetched here and handed to vLLM inline as a base64 `data:`
+    URL, so the engine never fetches from the internet and the bytes cross the
+    wire once. The fetch itself is SSRF-hardened: http(s) only, every hostname
+    resolved and every resolved address checked against loopback / private /
+    link-local (169.254.0.0/16, the EC2 metadata endpoint) / multicast /
+    reserved, redirects followed by hand (MAX_REDIRECTS hops, re-validated
+    every hop), a total FETCH_TIMEOUT_S budget, a streaming byte counter that
+    aborts at MAX_VIDEO_MB, and an ALLOWED_VIDEO_MIME content-type/extension
+    allowlist. Upstream exception text never reaches the caller: it goes to
+    the journal and the client gets a generic 400 plus a reason class
+    (dns, blocked-address, too-large, timeout, unsupported-type, http-<status>).
   * `Inference-Id` response header + one JSON line per request in $USAGE_LOG
     (id, tokens, video seconds, TTFT, status), plus one `usage_events` row in
     Supabase per authenticated request, posted from a background queue with
@@ -21,13 +33,14 @@ What it adds on top of vLLM's own server (which stays bound to localhost):
 Env (see deploy/install.sh, which writes /etc/marlin2b-gateway.env):
   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, MODEL_ID, GATEWAY_API_KEY (legacy,
   optional), UPSTREAM, MAX_INFLIGHT, MAX_VIDEO_SECONDS, MAX_VIDEO_MB,
+  FETCH_TIMEOUT_S, MAX_REDIRECTS, ALLOWED_VIDEO_MIME,
   USAGE_LOG, USAGE_FAILED_LOG, MODELS_DOC. With none of them set the gateway
   imports and runs unauthenticated, which is what the tests use.
 
 Run:  uvicorn gateway:app --host 127.0.0.1 --port 8001
 Then put TLS in front (Caddyfile) and expose only 443.
 """
-import asyncio, base64, hashlib, json, os, re, subprocess, tempfile, time, uuid
+import asyncio, base64, hashlib, ipaddress, json, os, re, socket, subprocess, tempfile, time, uuid
 
 import httpx
 from fastapi import FastAPI, Request
@@ -39,6 +52,12 @@ MODEL_ID = os.environ.get("MODEL_ID", "nemostation/marlin-2b")
 MAX_INFLIGHT = int(os.environ.get("MAX_INFLIGHT", "16"))
 MAX_VIDEO_SECONDS = float(os.environ.get("MAX_VIDEO_SECONDS", "120"))
 MAX_VIDEO_MB = float(os.environ.get("MAX_VIDEO_MB", "64"))
+FETCH_TIMEOUT_S = float(os.environ.get("FETCH_TIMEOUT_S", "30"))
+MAX_REDIRECTS = int(os.environ.get("MAX_REDIRECTS", "3"))
+ALLOWED_VIDEO_MIME = {m.strip().lower() for m in os.environ.get(
+    "ALLOWED_VIDEO_MIME", "video/mp4,video/webm,video/quicktime,video/mpeg").split(",") if m.strip()}
+EXT_MIME = {".mp4": "video/mp4", ".m4v": "video/mp4", ".webm": "video/webm",
+            ".mov": "video/quicktime", ".mpeg": "video/mpeg", ".mpg": "video/mpeg"}
 USAGE_LOG = os.environ.get("USAGE_LOG", "/opt/dlami/nvme/logs/usage.jsonl")
 USAGE_FAILED_LOG = os.environ.get("USAGE_FAILED_LOG", os.path.join(os.path.dirname(USAGE_LOG), "usage_failed.jsonl"))
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -184,33 +203,145 @@ def budget_kwargs(seconds):
             "size": {"shortest_edge": 4096, "longest_edge": frames * PX_PER_FRAME}}
 
 
-async def video_seconds(part):
-    """Duration of the request's video (data URL or http URL). Downloads URLs so
-    vLLM's own fetch is not the only one that sees them; returns (seconds, error)."""
+# ---- media fetch: SSRF-hardened, once, then inline to vLLM ------------------
+def address_allowed(ip):
+    """False for anything not a routable public address: loopback, private,
+    link-local (169.254.0.0/16 and fe80::/10, so the EC2 metadata endpoint),
+    CGNAT, multicast, reserved, unspecified — v4 and v6, and v4-mapped v6."""
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    if a.version == 6 and a.ipv4_mapped:
+        a = a.ipv4_mapped
+    if a.is_private or a.is_loopback or a.is_link_local or a.is_multicast or a.is_reserved or a.is_unspecified:
+        return False
+    return a.is_global  # also drops 100.64.0.0/10 and the v6 special-purpose ranges
+
+
+async def resolve_public(host):
+    """All A/AAAA records for host, or an error class. Every record must pass:
+    one private answer among many is a rebinding attempt, not a fallback."""
+    if not host:
+        return None, "dns"
+    try:
+        infos = await asyncio.get_event_loop().getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except Exception:
+        return None, "dns"
+    addrs = [i[4][0] for i in infos]
+    if not addrs:
+        return None, "dns"
+    if not all(address_allowed(a) for a in addrs):
+        return None, "blocked-address"
+    return addrs, None
+
+
+def fetch_client():
+    """Separate from `client`: no base_url, no redirects, short connect. Tests swap it."""
+    return httpx.AsyncClient(timeout=httpx.Timeout(FETCH_TIMEOUT_S, connect=5), follow_redirects=False)
+
+
+def video_mime(content_type, url):
+    """Allowlisted mime for the response, or None. Falls back to the URL's
+    extension only when the server declines to say (octet-stream/empty)."""
+    ct = (content_type or "").split(";")[0].strip().lower()
+    if ct in ALLOWED_VIDEO_MIME:
+        return ct
+    if ct in ("", "application/octet-stream", "binary/octet-stream"):
+        ext = os.path.splitext(httpx.URL(url).path)[1].lower()
+        m = EXT_MIME.get(ext)
+        return m if m in ALLOWED_VIDEO_MIME else None
+    return None
+
+
+async def fetch_video(url, fh):
+    """Stream a caller-supplied URL into fh. Returns (mime, error class).
+
+    Redirects are followed by hand so every hop is re-validated; the size cap is
+    enforced on the stream, not after buffering the body.
+    ponytail: validation and connection are separate steps, so a DNS rebind
+    between them is still possible; pin the resolved IP (Host + sni_hostname on
+    an IP URL) if that threat becomes real."""
+    cap = int(MAX_VIDEO_MB * 2**20)
+    async with fetch_client() as c:
+        for _ in range(MAX_REDIRECTS + 1):
+            u = httpx.URL(url)
+            if u.scheme not in ("http", "https"):
+                return None, "unsupported-scheme"
+            _, err = await resolve_public(u.host)
+            if err:
+                return None, err
+            async with c.stream("GET", u) as r:
+                if r.is_redirect:  # httpx: 3xx *with* a Location header
+                    url = str(u.join(r.headers["location"]))
+                    continue
+                if r.status_code != 200:
+                    return None, f"http-{r.status_code}"
+                mime = video_mime(r.headers.get("content-type"), str(u))
+                if mime is None:
+                    return None, "unsupported-type"
+                cl = r.headers.get("content-length", "")
+                if cl.isdigit() and int(cl) > cap:
+                    return None, "too-large"
+                n = 0
+                async for chunk in r.aiter_bytes():
+                    n += len(chunk)
+                    if n > cap:
+                        return None, "too-large"   # abort mid-stream; the body is never fully read
+                    fh.write(chunk)
+                return mime, None
+    return None, "too-many-redirects"
+
+
+async def prepare_video(part):
+    """Duration of the request's video, plus the `data:` URL to send to vLLM in
+    place of the caller's URL, so the engine never fetches anything itself.
+    Returns (seconds, data_url, client-safe error)."""
     url = part.get("video_url", {}).get("url", "") if isinstance(part.get("video_url"), dict) else part.get("video_url", "")
+    if not isinstance(url, str) or not url:
+        return None, None, "video_url must be an http(s) URL or a data: URL"
+    data_url = url if url.startswith("data:") else None
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
         try:
             if url.startswith("data:"):
-                data = base64.b64decode(url.split(",", 1)[1])
+                try:
+                    data = base64.b64decode(url.split(",", 1)[1], validate=False)
+                except Exception:
+                    return None, None, "could not read video (bad data: URL)"
+                if len(data) > MAX_VIDEO_MB * 2**20:
+                    return None, None, f"video larger than {MAX_VIDEO_MB} MB"
+                f.write(data)
+                del data
             elif url.startswith(("http://", "https://")):
-                async with httpx.AsyncClient(timeout=60, follow_redirects=True) as c:
-                    r = await c.get(url)
-                    r.raise_for_status()
-                    data = r.content
+                try:
+                    mime, why = await asyncio.wait_for(fetch_video(url, f), FETCH_TIMEOUT_S)
+                except asyncio.TimeoutError:
+                    mime, why = None, "timeout"
+                except httpx.TimeoutException:
+                    mime, why = None, "timeout"
+                except Exception as e:  # never echoed: the blind-SSRF oracle
+                    print(f"gateway: video fetch failed ({type(e).__name__}: {e})", flush=True)
+                    mime, why = None, "fetch-failed"
+                if why:
+                    if why != "fetch-failed":
+                        print(f"gateway: video fetch rejected ({why})", flush=True)
+                    return None, None, f"could not fetch video ({why})"
             else:
-                return None, "video_url must be an http(s) URL or a data: URL"
-            if len(data) > MAX_VIDEO_MB * 2**20:
-                return None, f"video larger than {MAX_VIDEO_MB} MB"
-            f.write(data)
+                return None, None, "video_url must be an http(s) URL or a data: URL"
             f.flush()
-            secs = await asyncio.get_event_loop().run_in_executor(None, probe_seconds, f.name)
-        except Exception as e:
-            return None, f"could not read video: {type(e).__name__}: {e}"
+            try:
+                secs = await asyncio.get_event_loop().run_in_executor(None, probe_seconds, f.name)
+            except Exception as e:
+                print(f"gateway: ffprobe failed ({type(e).__name__}: {e})", flush=True)
+                return None, None, "could not read video (not a decodable video file)"
+            if data_url is None:
+                with open(f.name, "rb") as g:  # raw bytes are gone by now; only the base64 copy lives on
+                    data_url = f"data:{mime};base64,{base64.b64encode(g.read()).decode()}"
         finally:
             os.unlink(f.name)
     if secs > MAX_VIDEO_SECONDS:
-        return None, f"video is {secs:.0f}s; max is {MAX_VIDEO_SECONDS:.0f}s"
-    return secs, None
+        return None, None, f"video is {secs:.0f}s; max is {MAX_VIDEO_SECONDS:.0f}s"
+    return secs, data_url, None
 
 
 @app.get("/health")
@@ -257,9 +388,13 @@ async def chat(req: Request):
                     n_video += 1
                     if n_video > 1:
                         return JSONResponse({"error": {"message": "one video per request", "type": "invalid_request_error"}}, status_code=400)
-                    secs, err = await video_seconds(part)
+                    secs, data_url, err = await prepare_video(part)
                     if err:
                         return JSONResponse({"error": {"message": err, "type": "invalid_request_error"}}, status_code=400)
+                    if isinstance(part.get("video_url"), dict):   # hand vLLM the bytes, not the URL
+                        part["video_url"]["url"] = data_url
+                    else:
+                        part["video_url"] = data_url
     if n_video:
         body["mm_processor_kwargs"] = budget_kwargs(secs)
     stream = bool(body.get("stream"))

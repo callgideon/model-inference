@@ -15,12 +15,13 @@ client ─▶ Caddy :443 ─▶ gateway.py :8001 ─▶ vLLM :8000
 
 | file | what |
 |---|---|
-| `gateway.py` | the service: auth, video budget, `<think>` stripping, usage |
+| `gateway.py` | the service: auth, safe media fetch, video budget, `<think>` stripping, usage |
 | `deploy/install.sh` | idempotent installer, run as root on the box |
 | `deploy/*.service`, `deploy/Caddyfile` | systemd units and TLS |
 | `deploy/replay_usage.py` | re-post rows from `usage_failed.jsonl` |
 | `openrouter/provider-models.json` | served at `/v1/models` (see `openrouter/PLAN.md`) |
 | `tests/test_gateway_auth.py` | auth cache and cost maths, no network |
+| `tests/test_media.py` | SSRF address checks, size cap, redirects, data: URL to vLLM |
 | `client_example.py` | reference client |
 
 ## Environment
@@ -36,6 +37,7 @@ and serves unauthenticated, which is how the tests run it.
 | `GATEWAY_API_KEY` | `/model-inference/marlin2b_api_key` | legacy single key, still accepted while it exists |
 | `MODEL_ID` | — | id on the wire and in `usage_events.model_id` (`nemostation/marlin-2b`) |
 | `UPSTREAM`, `MAX_INFLIGHT`, `MAX_VIDEO_SECONDS`, `MAX_VIDEO_MB` | — | vLLM address, 429 threshold, video limits |
+| `FETCH_TIMEOUT_S`, `MAX_REDIRECTS`, `ALLOWED_VIDEO_MIME` | — | media fetch: total budget (30 s), redirect hops (3), content-type allowlist (`video/mp4,video/webm,video/quicktime,video/mpeg`) |
 | `USAGE_LOG`, `USAGE_FAILED_LOG` | — | `/opt/dlami/nvme/logs/usage.jsonl`, and `usage_failed.jsonl` beside it |
 | `MODELS_DOC` | — | path to the provider document served by `/v1/models` |
 
@@ -55,6 +57,46 @@ with the service role key. Plain httpx; no supabase client library.
 - `GATEWAY_API_KEY`, if set, is accepted as before. It has no org, so those
   requests are written to `usage.jsonl` only and never reach `usage_events`.
   Drop it from SSM once every caller has a console key.
+
+## Security: the media fetch (SSRF)
+
+A `video_url` is a caller-controlled URL that the gateway dereferences from
+inside the VPC, on an instance whose role can read SSM SecureStrings. It is
+fetched **once, in the gateway**, and handed to vLLM inline as a base64
+`data:` URL, so the engine never fetches from the internet — one download
+instead of two, and no second SSRF surface behind ours.
+
+Policy (`prepare_video` / `fetch_video` in `gateway.py`):
+
+- **scheme**: `http`/`https` only; anything else is rejected before a socket
+  is opened;
+- **address**: every hostname is resolved here and **all** A/AAAA answers must
+  be routable public addresses. Loopback, private (RFC1918), link-local
+  (`169.254.0.0/16` — the EC2 metadata endpoint — and `fe80::/10`), CGNAT,
+  multicast, reserved and unspecified are rejected, v4, v6 and v4-mapped v6;
+- **redirects**: followed by hand, at most `MAX_REDIRECTS` (3) hops, with the
+  address check re-run on **every** hop, so a 302 to `169.254.169.254` is
+  rejected as the original URL would have been;
+- **size**: `Content-Length` is checked up front and a byte counter aborts the
+  stream the moment it passes `MAX_VIDEO_MB`, so the body is never buffered
+  whole in RAM;
+- **time**: the whole fetch, redirects included, lives inside `FETCH_TIMEOUT_S`
+  (30 s), 5 s of it for connect;
+- **type**: `ALLOWED_VIDEO_MIME` (mp4, webm, mov/quicktime, mpeg); a server
+  that says nothing or `application/octet-stream` falls back to the URL's
+  extension, anything else is refused;
+- **errors**: upstream exception text is never returned — it goes to the
+  journal, the caller gets `400 could not fetch video (<class>)` where the
+  class is one of `dns`, `blocked-address`, `too-large`, `timeout`,
+  `unsupported-type`, `unsupported-scheme`, `too-many-redirects`,
+  `http-<status>`, `fetch-failed`. That keeps the blind-SSRF oracle shut.
+
+Not covered here, still worth having: egress rules denying the metadata range
+and RFC1918 from the fetch path, and a per-tenant origin allowlist. Validation
+and connection are two steps, so a DNS rebind between them remains
+theoretically possible; pinning the resolved IP is the upgrade.
+
+`data:` URLs are unchanged: decoded, size-capped, `ffprobe`d, forwarded as-is.
 
 ## Usage ingestion
 
@@ -97,10 +139,15 @@ aws ssm put-parameter --name /model-inference/supabase_service_role_key --type S
 ## Tests
 
 ```bash
-python3 -m pytest apps/infrx-api/tests/test_gateway_auth.py   # or: python3 apps/infrx-api/tests/test_gateway_auth.py
+python3 -m pytest apps/infrx-api/tests/     # or run either file directly with python3
 ```
 
-Covers key hashing, cache hit/expiry, revoked and unknown keys, the 503 path
-when Supabase is down, cost maths, and the spill to `usage_failed.jsonl`.
-`httpx.MockTransport` stands in for Supabase, so the tests need no network and
-no env vars.
+`test_gateway_auth.py` covers key hashing, cache hit/expiry, revoked and
+unknown keys, the 503 path when Supabase is down, cost maths, and the spill to
+`usage_failed.jsonl`. `test_media.py` covers the address validator (metadata,
+loopback, private, link-local, CGNAT, v4-mapped v6 all rejected; public
+accepted), the streaming size cap and the `Content-Length` pre-check, redirect
+re-validation and the hop budget, the content-type allowlist, and that the body
+forwarded to vLLM carries a `data:` URL rather than the caller's.
+`httpx.MockTransport` stands in for Supabase, the media origin and vLLM, so the
+tests need no network and no env vars.

@@ -56,10 +56,19 @@ reference path. Clip: `sample-10s.mp4` (10.1 s, 1920×1080). Rows in
 ## Cost sketch (measured throughput, on-demand g6e.2xlarge ≈ $2.24/h)
 
 At concurrency 8: 1.57 clips/s (1080p source) to 3.58 clips/s (360p source)
-× 10 s = 16–36 video-seconds per second → one GPU-hour processes 57–129
-video-hours → **$0.02–0.04 per video-hour** of dense captioning (~200
-output tokens per 10 s clip). Two distinct clips only; the vLLM multimodal
-cache makes repeated identical clips optimistic on decode cost.
+× 10.1 s = 15.9–36.2 video-seconds per second. Video-seconds per second is
+already video-hours per GPU-hour (both sides scale by 3,600), so one GPU-hour
+processes **15.9–36.2 video-hours** → at ≈ $2.24/h, **$0.14 (1080p) to $0.06
+(360p) per video-hour** of dense captioning (~200 output tokens per 10 s clip).
+Two distinct clips only; the vLLM multimodal cache makes repeated identical
+clips optimistic on decode cost.
+
+> **Correction 2026-09-20.** This sketch previously read *"16–36
+> video-seconds per second → one GPU-hour processes 57–129 video-hours →
+> $0.02–0.04 per video-hour"*: the conversion divided by 1,000 instead of
+> 3,600, so the throughput was 3.6× too high and the price 3.6× too cheap.
+> The corrected figures above are the ones to quote
+> ([`research/production-api/01-requirements-and-traffic-model.md`](../../../research/production-api/01-requirements-and-traffic-model.md) §3.8).
 
 ## Open
 

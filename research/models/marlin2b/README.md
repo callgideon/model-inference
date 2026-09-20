@@ -309,5 +309,7 @@ pair docs above remain estimates for the eight target GPUs.
 - **Throughput, concurrency 8, training budget:** 1.57 clips/s for a 1080p
   5.5 MB clip vs 3.58 clips/s for a 360p 1 MB clip at the same token count;
   TTFT p50 3.35 s vs 0.66 s; TPOT 7–8 ms. Per-request video decode and upload
-  dominate, not prefill. ≈ $0.02–0.04 per video-hour of dense captioning at
-  on-demand g6e pricing.
+  dominate, not prefill. That is 15.9–36.2 video-hours per GPU-hour, i.e.
+  ≈ **$0.06–0.14 per video-hour** of dense captioning at on-demand g6e
+  pricing (≈ $2.24/h) — corrected 2026-09-20 from *"$0.02–0.04"*, which
+  divided video-seconds by 1,000 instead of 3,600.
