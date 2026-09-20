@@ -173,6 +173,32 @@ async def media_sec__staging_never_replaces_an_existing_object(factory):
             "the staged object was replaced by the completed upload"
 
 
+async def media_sec__an_expired_upload_window_says_so(factory):
+    """MEDIA-SEC / r1 R22: a closed upload window answers `410 upload_expired`
+    ("The upload window has expired."), never `result_expired`: a customer told their
+    *result* is gone would go looking for a job that never existed."""
+    harness = factory()
+    ticket = await harness.port.create_upload(b.ORG_A, {"max_bytes": 1024})
+    handle = ticket["upload_handle"]
+    harness.extra["put_object"](handle, b"in time", "video/mp4")
+    harness.clock.advance(DEFAULTS.processing_cache_ttl_s + 1)
+    try:
+        await harness.port.finalize_upload(b.ORG_A, handle)
+    except errors.DomainError as exc:
+        assert exc.code == "upload_expired", exc.code
+        assert errors.http_status(exc.code) == 410
+        assert errors.error_type(exc.code) == "gone_error"
+        assert errors.MESSAGES[exc.code] == "The upload window has expired."
+    else:
+        raise AssertionError("an expired upload window still finalized")
+    try:
+        await harness.port.resolve_owned(b.ORG_A, handle)
+    except errors.DomainError as exc:
+        assert errors.http_status(exc.code) in (400, 404, 410), exc.code
+    else:
+        raise AssertionError("an expired upload resolved to an object")
+
+
 async def media_sec__a_partial_request_stages_nothing(factory):
     """MEDIA-SEC: staging is all or nothing (02: "a staging failure creates no job
     or hold"). A request whose second media item is refused must not leave its first
@@ -203,6 +229,7 @@ def mediastore_cases():
             media_parity__staging_is_content_addressed_and_tenant_namespaced,
             media_sec__a_foreign_media_reference_is_not_staged,
             media_sec__staging_never_replaces_an_existing_object,
+            media_sec__an_expired_upload_window_says_so,
             media_sec__a_partial_request_stages_nothing]
 
 
@@ -313,10 +340,13 @@ async def _drain(engine, lease, prepared):
 
 
 def _lease(harness):
+    """A lease as `JobStore.claim` mints one, phase instants included (r1 R20)."""
     from ..records import Lease
     now = harness.clock.now()
     return Lease(job_id=harness.ids.uuid(), generation=1, worker_id="worker-a",
-                 acquired_at=now, expires_at=harness.clock.at(DEFAULTS.lease_ttl_s))
+                 acquired_at=now, expires_at=harness.clock.at(DEFAULTS.lease_ttl_s),
+                 generation_deadline_at=harness.clock.at(DEFAULTS.generation_timeout_s),
+                 first_token_deadline_at=harness.clock.at(DEFAULTS.ttft_timeout_s))
 
 
 def _prepared(harness):
@@ -994,6 +1024,18 @@ async def judge_budget__an_ambiguous_run_is_resolved_only_by_an_operator(factory
     other = await harness.port.reserve(_run(harness), b.consent(), Decimal("0.30"))
     await harness.port.begin_submit(other.run_id)
     await harness.port.quarantine(other.run_id, "submission timeout")
+    try:
+        # r1 R23: the provider id belongs to the adopting resolution only. Releasing a
+        # reservation while naming a batch would discard the evidence that it may run.
+        await harness.port.resolve_ambiguous(other.run_id, operator,
+                                             JudgeResolution.release_reservation,
+                                             "provider has no record of it",
+                                             external_id="batch_placeholder_7")
+    except errors.InvalidRequest:
+        pass
+    else:
+        raise AssertionError("release_reservation accepted a provider id")
+    assert harness.extra["runs"]()[other.run_id].state is JudgeRunState.ambiguous
     released = await harness.port.resolve_ambiguous(other.run_id, operator,
                                                     JudgeResolution.release_reservation,
                                                     "provider has no record of it")

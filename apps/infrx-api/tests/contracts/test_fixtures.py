@@ -8,6 +8,7 @@ error table maps codes to the documented status/type with safe messages only.
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 
 import pytest
 from infrx.contracts import errors, fixtures, ids, limits, records, wire
@@ -325,6 +326,34 @@ def test_admission_carries_the_budgets_it_was_accepted_with():
     raw.pop("budgets")
     with pytest.raises(ValueError):          # not optional: an accepted job has them
         records.Admission.model_validate(raw)
+
+
+def test_phase_deadline_instants_live_on_the_records():
+    """r1 R20: the store derives each phase instant at the transition into that phase
+    and hands it to whoever enforces it — the reaper on the admission, the worker on
+    its lease — and no phase instant outlives `deadline_at`."""
+    admission = fixtures.model("admission.json")
+    assert admission.preparation_deadline_at == admission.admitted_at + timedelta(
+        seconds=admission.budgets.preparation_s)
+    assert admission.preparation_deadline_at <= admission.deadline_at
+    assert admission.queue_deadline_at is None, "a preparing job has no queue instant yet"
+    queued = fixtures.model("admission_replay.json")
+    assert queued.queue_deadline_at is not None and queued.queue_deadline_at <= queued.deadline_at
+    raw = fixtures.load("admission.json")
+    raw.pop("preparation_deadline_at")
+    with pytest.raises(ValueError):          # every accepted job has one
+        records.Admission.model_validate(raw)
+
+    lease = fixtures.model("lease.json")
+    assert lease.first_token_deadline_at <= lease.generation_deadline_at
+    raw = fixtures.load("lease.json")
+    with pytest.raises(ValueError):          # a first token cannot outlast generation
+        records.Lease.model_validate({**raw,
+                                      "first_token_deadline_at": raw["generation_deadline_at"],
+                                      "generation_deadline_at": raw["first_token_deadline_at"]})
+    for field in ("generation_deadline_at", "first_token_deadline_at"):
+        with pytest.raises(ValueError):
+            records.Lease.model_validate({k: v for k, v in raw.items() if k != field})
 
 
 FEEDBACK_VALUES = [("thumb", True, True), ("thumb", False, True), ("thumb", 1, False),

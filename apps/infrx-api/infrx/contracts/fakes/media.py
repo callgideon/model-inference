@@ -151,7 +151,7 @@ class FakeMediaStore:
             return self.objects[(org_id, upload_handle)]   # idempotent completion
         if self.clock.now() >= upload.expires_at:
             upload.state = UploadState.expired
-            raise errors.Gone(code="result_expired", detail="the upload window has expired")
+            raise errors.UploadExpired("the upload window closed before completion")
         if not upload.data:
             raise errors.InvalidRequest("no object was uploaded to the issued destination")
         if len(upload.data) > upload.max_bytes:

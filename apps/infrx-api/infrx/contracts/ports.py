@@ -231,7 +231,7 @@ class JudgeCoordinator(Protocol):
                                 external_id: str | None = None) -> JudgeRun:
         """R8, operator only: the one way out of `ambiguous`.
 
-        `adopt_provider_evidence` requires the discovered provider id and
-        continues to collection; `release_reservation` is terminal `quarantined`
-        with the reservation released. Either way an append-only audit record is
-        written and no second submission is ever created."""
+        `adopt_provider_evidence` requires the discovered provider id and continues
+        to collection; `release_reservation` is terminal `quarantined` with the
+        reservation released and **refuses** an `external_id` (R23). Either way an
+        append-only audit record is written and no second submission is created."""

@@ -34,6 +34,7 @@ HTTP_ERRORS: dict[str, tuple[int, str]] = {
     "result_pending": (409, "conflict_error"),
     "state_conflict": (409, "conflict_error"),
     "result_expired": (410, "gone_error"),
+    "upload_expired": (410, "gone_error"),
     "journal_expired": (410, "gone_error"),
     "replay_gap": (410, "gone_error"),
     "idempotency_expired": (410, "gone_error"),
@@ -77,6 +78,7 @@ MESSAGES: dict[str, str] = {
     "result_pending": "The result is not available yet.",
     "state_conflict": "The job is not in a state that allows this operation.",
     "result_expired": "The result is no longer available.",
+    "upload_expired": "The upload window has expired.",
     "journal_expired": "The event journal for this job has expired.",
     "replay_gap": "The requested events are no longer available for replay.",
     "idempotency_expired": "This idempotency key has expired; submit a new request.",
@@ -222,6 +224,12 @@ class Gone(DomainError):
 
 class ResultExpired(Gone):
     code = "result_expired"
+
+
+class UploadExpired(Gone):
+    """r1 R22: an upload window that closed is not an expired *result*."""
+
+    code = "upload_expired"
 
 
 class JournalExpired(Gone):

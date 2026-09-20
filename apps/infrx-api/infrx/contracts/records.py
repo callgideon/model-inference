@@ -58,18 +58,17 @@ class TerminalCause(enum.StrEnum):
     platform_error = "platform_error"
 
 
-# Free per 02 ("platform-caused failures, rejected requests and invalid
-# preparation are free"). Everything else settles authoritative usage when known.
-PLATFORM_FAILURE_CAUSES = frozenset({
-    TerminalCause.invalid_media, TerminalCause.preparation_failed, TerminalCause.engine_error,
-    TerminalCause.engine_incomplete, TerminalCause.lost_after_publication,
-    TerminalCause.journal_write_failed, TerminalCause.retries_exhausted,
-    TerminalCause.queue_wait_expired, TerminalCause.platform_error,
-})
+# r1 R21: exactly three causes may settle a debit, and only with authoritative
+# usage. Every other cause is platform-absorbed, because 02 makes platform-caused
+# failures free and the platform's own deadlines are platform-caused: a customer is
+# not charged for our generation deadline (`deadline_exceeded`), our queue
+# (`queue_wait_expired`) or a synchronous timeout we failed to answer within
+# (`sync_deadline`). The two sets partition `TerminalCause`, which
+# `test_fixtures.py` asserts, so a new cause cannot be silently billable.
 BILLABLE_CAUSES = frozenset({
     TerminalCause.completed, TerminalCause.client_cancelled, TerminalCause.client_disconnected,
-    TerminalCause.sync_deadline, TerminalCause.deadline_exceeded,
 })
+PLATFORM_FAILURE_CAUSES = frozenset(set(TerminalCause) - BILLABLE_CAUSES)
 
 # The (cause, state) pair is part of the contract, not two independent fields: a
 # `succeeded` job whose cause is `engine_error` would be a free success, and a
@@ -431,6 +430,13 @@ class Admission(Record):
     admitted_at: Timestamp              # r1 R4: this is the job's accepted_at
     deadline_at: Timestamp
     budgets: Budgets                    # r1 R4: snapshot, never re-read from config
+    # r1 R20: phase instants the store derives from the database clock at the
+    # transition into that phase, never beyond `deadline_at`. `preparation` exists
+    # from admission; `queue` appears at the first durable `queued` transition and
+    # is never reset by a prepublication requeue (R5). Workers and the reaper
+    # compare against these, not against a budget plus a local clock.
+    preparation_deadline_at: Timestamp
+    queue_deadline_at: Timestamp | None = None
     replayed: bool = False              # true when an idempotent replay returned it
 
 
@@ -441,6 +447,18 @@ class Lease(Record):
     worker_id: str
     acquired_at: Timestamp              # database clock
     expires_at: Timestamp
+    # r1 R20: derived at claim from the database clock and the job's budgets, capped
+    # by `deadline_at`. The worker enforces them: it stops generating at
+    # `generation_deadline_at` and gives up on a first token at
+    # `first_token_deadline_at` instead of timing a budget locally.
+    generation_deadline_at: Timestamp
+    first_token_deadline_at: Timestamp
+
+    @model_validator(mode="after")
+    def _phase_deadlines_are_ordered(self) -> Lease:
+        if self.first_token_deadline_at > self.generation_deadline_at:
+            raise ValueError("the first-token deadline cannot outlast the generation deadline")
+        return self
 
 
 class Cursor(Record):

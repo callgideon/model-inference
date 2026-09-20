@@ -353,5 +353,17 @@
     },
     "http_status": 400,
     "in_stream_only": false
+  },
+  "upload_expired": {
+    "envelope": {
+      "error": {
+        "code": "upload_expired",
+        "message": "The upload window has expired.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "gone_error"
+      }
+    },
+    "http_status": 410,
+    "in_stream_only": false
   }
 }

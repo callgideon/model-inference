@@ -30,6 +30,7 @@
     }
   ],
   "payload_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "preparation_deadline_at": "2026-09-20T12:02:00Z",
   "price_snapshot": {
     "captured_at": "2026-09-01T00:00:00Z",
     "currency": "USD",
@@ -40,6 +41,7 @@
     "schema_version": 1,
     "token_rules_version": "tr_v1"
   },
+  "queue_deadline_at": "2026-09-20T12:00:11Z",
   "replayed": true,
   "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
   "reservations": [

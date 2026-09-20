@@ -103,6 +103,10 @@
     "unsupported_parameter": {
       "status": 400,
       "type": "invalid_request_error"
+    },
+    "upload_expired": {
+      "status": 410,
+      "type": "gone_error"
     }
   },
   "in_stream_only": {

@@ -24,9 +24,9 @@ from decimal import Decimal
 from .. import errors, money
 from ..codec import compact_bytes
 from ..limits import DEFAULTS, PilotSettings
-from ..records import (Admission, Budgets, CapacityReservation, Chunk, ChunkEventType, Cursor,
-                       EngineEvent, HoldState, IdempotencyRef, IndexEvent, JobState, Lease,
-                       MediaRef, NormalizedRequest, OutboxEvent, OutboxKind, PLATFORM_FAILURE_CAUSES,
+from ..records import (Admission, BILLABLE_CAUSES, Budgets, CapacityReservation, Chunk,
+                       ChunkEventType, Cursor, EngineEvent, HoldState, IdempotencyRef, IndexEvent,
+                       JobState, Lease, MediaRef, NormalizedRequest, OutboxEvent, OutboxKind,
                        PriceSnapshot, ReservationKind, SettlementState, TERMINAL_STATES, TerminalCause,
                        TerminalOutcome, Usage, UsageCertainty, states_for_cause)
 from .support import FailurePlan, FakeClock, SequentialIds, failure_hooks, money_input
@@ -37,6 +37,12 @@ MAX_READ_LIMIT = 1000           # refinement: the bound on one replay page
 # never ran). released_platform_absorbed = we did work and ate the cost.
 FREE_CAUSES = frozenset({TerminalCause.invalid_media, TerminalCause.preparation_failed,
                          TerminalCause.queue_wait_expired})
+
+
+def _phase_deadline(now: datetime, budget_s: float, deadline_at: datetime) -> datetime:
+    """r1 R20: a phase instant is the database clock plus that phase's budget,
+    clamped by the absolute accepted deadline. No phase outlives the job."""
+    return min(now + timedelta(seconds=budget_s), deadline_at)
 
 
 @dataclass
@@ -91,6 +97,11 @@ class _Job:
     def budgets(self) -> Budgets:
         """r1 R4: the budgets captured at admission, never current configuration."""
         return self.admission.budgets
+
+    @property
+    def queue_deadline_at(self) -> datetime | None:
+        """r1 R20: set at the first durable `queued` transition, then immutable."""
+        return self.admission.queue_deadline_at
 
     def preparing(self) -> bool:
         reservation = self.reservations.get(ReservationKind.preparation)
@@ -314,6 +325,7 @@ class FakeJobStore:
                                  (ReservationKind.journal_bytes,
                                   self.limits.journal_job_reserve_bytes))
         }
+        budgets = Budgets.of(self.limits, request.execution_mode)
         wallet = self.wallet(request.org_id)
         wallet.reserved_total = wallet.reserved_total + hold
         self.holds[request.request_id] = _Hold(request.request_id, request.org_id, hold)
@@ -328,7 +340,11 @@ class FakeJobStore:
             state=JobState.preparing, outbox=(event,), admitted_at=now,
             deadline_at=request.deadline_at,
             # r1 R4: the accepted job keeps these, whatever configuration does next.
-            budgets=Budgets.of(self.limits, request.execution_mode))
+            budgets=budgets,
+            # r1 R20: the preparation phase starts here, so its instant is derived
+            # here, from the database clock and never beyond the absolute deadline.
+            preparation_deadline_at=_phase_deadline(now, budgets.preparation_s,
+                                                    request.deadline_at))
         self.jobs[request.request_id] = _Job(request=request, admission=admission,
                                              state=JobState.preparing, reservations=reservations)
         self.by_handle[handle] = request.request_id
@@ -381,6 +397,13 @@ class FakeJobStore:
             job.prepared = tuple(media)
             job.state = JobState.queued
             job.queued_at = now
+            if job.queue_deadline_at is None:
+                # r1 R20/R5: derived once, at the first durable queued transition; a
+                # prepublication requeue never moves it, so the queue budget cannot
+                # be extended by losing a worker.
+                job.admission = job.admission.model_copy(update={
+                    "queue_deadline_at": _phase_deadline(now, job.budgets.queue_wait_s,
+                                                         job.request.deadline_at)})
             self._release(job, ReservationKind.preparation)
             self._emit(job.id, OutboxKind.inference_dispatch, now,
                        {"job_handle": job_handle, "request_id": job.id})
@@ -414,11 +437,11 @@ class FakeJobStore:
                 raise errors.NotClaimable(f"job {job_id} is {job.state}, not queued")
             if now >= job.request.deadline_at:
                 raise errors.NotClaimable(f"job {job_id} is past its absolute deadline")
-            if self._queue_wait(job, now) >= timedelta(seconds=job.budgets.queue_wait_s):
-                # A job past its queue-wait budget is not executable: starting it
-                # would run work the customer has already been told to give up on.
-                # `recover` terminalizes it; `claim` refuses it meanwhile.
-                raise errors.NotClaimable(f"job {job_id} is past its queue-wait budget")
+            if job.queue_deadline_at is not None and now >= job.queue_deadline_at:
+                # r1 R20: compared against the *persisted* instant, not a budget plus
+                # a local clock. A job the customer has already been told to give up
+                # on must not start running; `recover` terminalizes it meanwhile.
+                raise errors.NotClaimable(f"job {job_id} is past its queue deadline")
             if job.queued_at is not None:
                 # Queue wait accumulates across attempts; a requeue must not hand
                 # the job a fresh budget (01: no extension through retries).
@@ -426,8 +449,16 @@ class FakeJobStore:
                 job.queued_at = None
             job.generation += 1                     # generation from the database clock
             job.state = JobState.running
-            job.lease = Lease(job_id=job_id, generation=job.generation, worker_id=worker_id,
-                              acquired_at=now, expires_at=now + timedelta(seconds=self.limits.lease_ttl_s))
+            generation_deadline_at = _phase_deadline(now, job.budgets.generation_s,
+                                                     job.request.deadline_at)
+            job.lease = Lease(
+                job_id=job_id, generation=job.generation, worker_id=worker_id, acquired_at=now,
+                expires_at=now + timedelta(seconds=self.limits.lease_ttl_s),
+                # r1 R20: the generation phase starts at the claim, so both instants
+                # are derived here and handed to the worker with its lease.
+                generation_deadline_at=generation_deadline_at,
+                first_token_deadline_at=_phase_deadline(now, job.budgets.first_token_s,
+                                                        generation_deadline_at))
             lease = job.lease
         self.failures.after_commit("claim")
         return lease
@@ -527,22 +558,28 @@ class FakeJobStore:
             or usage.completion_tokens > job.request.max_output_tokens)
         debit = money.ZERO
         reconcile_after = None
-        if cause in PLATFORM_FAILURE_CAUSES:
-            settlement = (SettlementState.released_free if cause in FREE_CAUSES
-                          else SettlementState.released_platform_absorbed)
-            self._release_hold(wallet, hold)
-        elif usage is None and not job.published:
-            # Nothing was ever published, so no tokens can have been produced for
-            # this attempt: free, rather than holding the customer's credit for 24h.
-            settlement = SettlementState.released_free
-            self._release_hold(wallet, hold)
-        elif usage is None:
+        if usage is None and job.published:
             # Published output but no authoritative usage: the hold stays held for
-            # reconciliation and is only released as platform-absorbed after 24h.
+            # reconciliation and is released as platform-absorbed after the fenced
+            # 24h, whatever the cause. 02 wants the internal cost reconciled; late
+            # evidence never becomes a delayed customer debit.
             settlement = SettlementState.held_unknown
             hold.state = HoldState.unknown
             reconcile_after = now + timedelta(seconds=self.limits.unknown_usage_reconcile_s)
             hold.reconcile_after = reconcile_after
+        elif cause not in BILLABLE_CAUSES or usage is None:
+            # r1 R21: only `completed`, `client_cancelled` and `client_disconnected`
+            # with authoritative usage settle a debit. Everything else - our
+            # deadlines included - is absorbed. `released_free` is "the customer was
+            # never going to be charged" (nothing ran, invalid input, the queue
+            # expired); `released_platform_absorbed` is "we did the work and ate the
+            # cost", which is what a `sync_deadline` or `deadline_exceeded` after
+            # real generation is.
+            never_charged = cause in FREE_CAUSES or (usage is None and not job.published
+                                                     and cause in BILLABLE_CAUSES)
+            settlement = (SettlementState.released_free if never_charged
+                          else SettlementState.released_platform_absorbed)
+            self._release_hold(wallet, hold)
         else:
             candidate = job.admission.price_snapshot.debit(usage.prompt_tokens,
                                                            usage.completion_tokens)
@@ -619,11 +656,18 @@ class FakeJobStore:
             if job.state is JobState.preparing:
                 cause, state = TerminalCause.preparation_failed, JobState.failed
             return [self._terminalize(job, cause, None, None, state)]
-        if job.state is JobState.queued and job.queued_at is not None:
-            # r1 R4/R5: the job's own snapshot, cumulative across requeues.
-            if self._queue_wait(job, now) >= timedelta(seconds=job.budgets.queue_wait_s):
+        if job.state is JobState.queued and job.queue_deadline_at is not None:
+            # r1 R20: the persisted instant, set once at the first queued transition.
+            if now >= job.queue_deadline_at:
                 return [self._terminalize(job, TerminalCause.queue_wait_expired, None, None,
                                           JobState.expired)]
+        if (job.state is JobState.running and job.lease is not None
+                and now >= job.lease.generation_deadline_at):
+            # r1 R20: the generation phase has its own persisted instant. Past it the
+            # attempt is over whether or not its lease is still live, and the cause is
+            # our deadline, which r1 R21 makes platform-absorbed.
+            return [self._terminalize(job, TerminalCause.deadline_exceeded, None, None,
+                                      JobState.failed)]
         if job.state is JobState.running and job.lease is not None and now >= job.lease.expires_at:
             if job.published:
                 # After the publication marker, never regenerate: fail honestly.

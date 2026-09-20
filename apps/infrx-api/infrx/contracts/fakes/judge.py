@@ -222,8 +222,9 @@ class FakeJudgeCoordinator:
     async def resolve_ambiguous(self, run_id: str, operator: AuthContext,
                                 resolution: JudgeResolution, reason: str, *,
                                 external_id: str | None = None) -> JudgeRun:
-        """r1 R8: the operator-only way out of `ambiguous`, with an audit record and
-        never a second submission."""
+        """r1 R8/R23: the operator-only way out of `ambiguous`, with an audit record
+        and never a second submission. `external_id` is required when adopting
+        provider evidence and refused otherwise."""
         self.failures.before("resolve_ambiguous")
         run = self._run(run_id)
         if operator is None or operator.role is not Role.operator:
@@ -231,6 +232,11 @@ class FakeJudgeCoordinator:
         if not reason or not reason.strip():
             raise errors.InvalidRequest("a resolution needs a reason for the audit record")
         resolution = JudgeResolution(resolution)
+        if resolution is not JudgeResolution.adopt_provider_evidence and external_id is not None:
+            # r1 R23: releasing a reservation *with* a provider id would throw away the
+            # one fact that says the batch may still be running, and bill nobody for it.
+            raise errors.InvalidRequest(
+                f"{resolution.value} takes no provider id; adopt the evidence instead")
         if run.state is not JudgeRunState.ambiguous:
             raise errors.Conflict(f"run {run_id} is {run.state}, not ambiguous")
         intent = run.submit_intent
