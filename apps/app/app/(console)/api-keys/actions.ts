@@ -5,7 +5,7 @@ import { generateKey, hashKey, keyPrefix } from "@/lib/keys";
 import { getSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
-export type CreateResult = { ok: true; key: string } | { ok: false; error: string };
+export type CreateResult = { ok: true; id: string; key: string } | { ok: false; error: string };
 
 /** Mints a key, stores only its SHA-256, and hands the secret back exactly once. */
 export async function createApiKey(name: string): Promise<CreateResult> {
@@ -18,17 +18,21 @@ export async function createApiKey(name: string): Promise<CreateResult> {
 
   const key = generateKey();
   const supabase = await createClient();
-  const { error } = await supabase.from("api_keys").insert({
-    org_id: session.orgId,
-    created_by: session.userId,
-    name: trimmed,
-    prefix: keyPrefix(key),
-    key_hash: await hashKey(key),
-  });
+  const { data, error } = await supabase
+    .from("api_keys")
+    .insert({
+      org_id: session.orgId,
+      created_by: session.userId,
+      name: trimmed,
+      prefix: keyPrefix(key),
+      key_hash: await hashKey(key),
+    })
+    .select("id")
+    .single();
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/api-keys");
-  return { ok: true, key };
+  return { ok: true, id: data.id as string, key };
 }
 
 export async function revokeApiKey(id: string): Promise<{ error?: string }> {

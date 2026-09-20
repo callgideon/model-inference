@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Check, Copy } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { recallKey } from "@/lib/keys";
 import type { Language } from "@/lib/types";
 
 export type SnippetKey = { id: string; name: string; prefix: string };
@@ -23,6 +24,16 @@ const LABELS: Record<Language, string> = {
   javascript: "JavaScript",
 };
 const ORDER: Language[] = ["curl", "python", "javascript"];
+
+// sessionStorage never changes behind our back within a tab, so there is nothing to
+// subscribe to; useSyncExternalStore is here for the server snapshot (null), which
+// keeps the secret out of the HTML and out of hydration mismatches.
+const noSubscription = () => () => {};
+
+function useStoredKey(id: string): string | null {
+  const read = useCallback(() => (id ? recallKey(id) : null), [id]);
+  return useSyncExternalStore(noSubscription, read, () => null);
+}
 
 export function Snippet({
   snippets,
@@ -41,9 +52,11 @@ export function Snippet({
   const [copied, setCopied] = useState(false);
 
   const selected = keys.find((k) => k.id === keyId);
-  // Keys are stored hashed, so the full secret only exists at creation time; the
-  // snippet carries the selected key's prefix and the reader pastes the rest.
-  const secret = selected ? `${selected.prefix}…` : "YOUR_API_KEY";
+  const stored = useStoredKey(keyId);
+  // Keys are stored hashed, so the server can never fill one in. If this tab minted
+  // the key it still has the secret; otherwise the snippet carries the prefix and the
+  // reader pastes the rest.
+  const secret = stored ?? (selected ? `${selected.prefix}…` : "YOUR_API_KEY");
 
   function render(l: Language) {
     return (snippets[l] ?? "").replaceAll("{{BASE_URL}}", baseUrl).replaceAll("{{KEY}}", secret);
@@ -115,9 +128,11 @@ export function Snippet({
       <p className="border-t px-4 py-2 text-xs text-muted-foreground">
         {disabled
           ? "This model is not serving yet — the snippet is a preview."
-          : selected
-            ? "Replace the truncated key with the full secret you copied when you created it; we only store its hash."
-            : "Create an API key to fill this in."}
+          : stored
+            ? "Ready to run — full key available in this browser session. It is never sent back to us; close the tab and only the prefix remains."
+            : selected
+              ? "Replace the truncated key with the full secret you copied when you created it; we only store its hash."
+              : "Create an API key to fill this in."}
       </p>
     </div>
   );

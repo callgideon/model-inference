@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { rememberKey } from "@/lib/keys";
 import { createApiKey } from "./actions";
 
 export function CreateKeyDialog() {
@@ -43,8 +44,11 @@ export function CreateKeyDialog() {
     setError(null);
     const result = await createApiKey(name);
     setPending(false);
-    if (result.ok) setSecret(result.key);
-    else setError(result.error);
+    if (result.ok) {
+      // Kept in this tab only, so the Models snippets are runnable without a re-paste.
+      rememberKey(result.id, result.key);
+      setSecret(result.key);
+    } else setError(result.error);
   }
 
   async function copy() {

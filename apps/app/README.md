@@ -58,14 +58,15 @@ In Authentication → URL Configuration:
   `http://localhost:3000/auth/callback`, and the preview pattern
   `https://*-humanbit.vercel.app/auth/callback`.
 
-Email magic links work out of the box. Google sign-in needs a Google OAuth
-client added under Authentication → Providers; until then the login page says so
-instead of failing silently.
+Email magic link is the only sign-in method at launch, and it works out of the
+box. Adding Google later is a provider in Authentication → Providers plus a
+`signInWithOAuth` button on the login page; `/auth/callback` already handles the
+OAuth code exchange unchanged.
 
 ## Structure
 
 ```
-app/(auth)/login        magic link + Google
+app/(auth)/login        email magic link
 app/auth/callback       code exchange
 app/(console)/…         models, usage, api-keys, billing, teams, dedicated, docs, admin
 components/             sidebar, snippet (Copy & Run), tiles, shadcn/ui in components/ui
