@@ -155,6 +155,9 @@ Rulings on the change requests raised while encoding F2. Both halves implement t
 | R21 | Billable terminal causes | Only `completed`, `client_cancelled` and `client_disconnected`, and only with authoritative usage, settle a debit. `sync_deadline`, `deadline_exceeded`, `queue_wait_expired` and every other cause are platform-absorbed (`released_free`, or `held_unknown` → `released_platform_absorbed` when usage is unknown). `02` makes platform-caused failures free; the platform's own deadlines are platform-caused. |
 | R22 | Upload expiry code | New `410 gone_error` code `upload_expired` (fixed message "The upload window has expired."). Both halves and `error_codes.json` add it; `result_expired` is no longer used for uploads. |
 | R23 | `resolve_ambiguous` shape | The provider id stays the keyword `external_id`, required when `resolution = adopt_provider_evidence` and refused otherwise. |
+| R24 | Entitlements | `OrgEntitlements` = `model_ids` plus integer limits from the closed `ENTITLEMENT_LIMIT_NAMES` set; D1 aligns its schema to it. `model_ids: null` = platform default set, `[]` = nothing entitled (every admission `model_not_entitled`), a non-empty list = exactly that set. |
+| R25 | `journal_write_failed` | Both a `TerminalCause` and an internal-only domain error (raised by `StreamStore.append` for an event over `JOURNAL_EVENT_MAX_BYTES`; never an HTTP status). Code sets in both languages: 27 HTTP, 2 in-stream, 8 internal. |
+| R26 | Operator scope | Platform operators are platform-wide in the pilot; `calibration.label` may reach any organization's trace, tenant taken from the row, audited with the operator principal. |
 
 ## Verification log
 
@@ -162,3 +165,4 @@ Rulings on the change requests raised while encoding F2. Both halves implement t
 - 2026-09-20: Revision r1 rulings added after two adversarial review rounds of both F2 halves; they are binding for the remaining F2 fixes and for D1/G1/J1/C1 consumers.
 - 2026-09-20: Rulings R16–R19 added for the console half's round-3 change requests.
 - 2026-09-20: Rulings R20–R23 added (phase deadlines, billable causes, upload expiry code, ambiguous-resolution shape) before D1 dispatch.
+- 2026-09-20: Rulings R24–R26 added (entitlement defaults, internal code parity, operator scope).
