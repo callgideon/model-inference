@@ -15,7 +15,7 @@ import inspect
 
 import pytest
 from infrx.contracts import ports, records
-from infrx.contracts.conformance import SUITES
+from infrx.contracts.conformance import MissingHook, SUITES, run_cases
 from infrx.contracts.fakes import FACTORIES
 
 CASES = [(name, case) for name, (cases, _runner) in SUITES.items() for case in cases()]
@@ -34,14 +34,41 @@ PROTOCOLS = {
 
 @pytest.mark.parametrize("port,case", CASES, ids=[f"{port}-{case.__name__}" for port, case in CASES])
 def test_fake_passes_conformance_case(port, case):
-    asyncio.run(case(FACTORIES[port]))
+    try:
+        asyncio.run(case(FACTORIES[port]))
+    except MissingHook as missing:
+        # r1 R32: a case the factory cannot drive is *skipped*, naming the hook, and
+        # never counted as a pass. The fakes provide every hook, so this never fires
+        # here; an adapter's own run is where it does.
+        pytest.skip(f"{case.__name__} needs the optional hook {missing.hook!r}")
 
 
 @pytest.mark.parametrize("port", sorted(SUITES))
 def test_runner_runs_the_whole_suite(port):
-    """The importable entry point a track calls with its own factory."""
+    """The importable entry point a track calls with its own factory. `run_cases`
+    refuses to treat a missing hook as a pass: without a `skipped` list it raises."""
     _cases, runner = SUITES[port]
     assert runner(FACTORIES[port]) == len(_cases())
+
+
+def test_a_missing_hook_is_a_skip_not_a_pass():
+    """R32, on the mechanism itself: a factory without an optional hook makes the
+    case raise `MissingHook`, `run_cases` refuses it by default, and a caller that
+    collects skips is told which hook and which case."""
+    def crippled(limits=None, **kw):
+        harness = FACTORIES["jobstore"](limits=limits, **kw)
+        harness.extra.pop("publish")
+        return harness
+
+    cases, runner = SUITES["jobstore"]
+    with pytest.raises(MissingHook) as caught:
+        runner(crippled)
+    assert caught.value.hook == "publish"
+    skipped: list[MissingHook] = []
+    ran = run_cases(cases(), crippled, skipped=skipped)
+    assert skipped and all(missing.hook == "publish" for missing in skipped)
+    assert {missing.case for missing in skipped}
+    assert ran == len(cases()) - len(skipped)
 
 
 # Deliberately synchronous, each for a stated reason: `Engine.generate` returns an
