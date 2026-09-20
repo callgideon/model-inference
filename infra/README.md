@@ -290,17 +290,22 @@ authority. The fail-closed check below therefore asserts against PostgreSQL, and
 there is no new parameter to own. Every remaining name has one consumer and one
 creating task.
 
-**Fail closed in pilot mode** (matrix row `M-FAILCLOSED`). `install.sh` today treats a missing SSM
-parameter as a warning and writes a partial env file, so the gateway can come
-up with the legacy key alone — no Supabase auth and no usage rows (evidence §1,
-"Installer failure mode", observed in `apps/infrx-api/deploy/install.sh` at the
-base SHA). That behaviour is acceptable for a
+**Fail closed in pilot mode** (matrix row `M-FAILCLOSED`, and a **prerequisite of
+the role, boundary and key work** — see the ordering hazard above). `install.sh`
+today treats *any* SSM failure as a warning, truncates the env file and restarts the
+gateway, and the gateway allows every request when neither auth mechanism is
+configured, so the stack can come up **fully open** rather than merely
+degraded — row `O-FAILOPEN` has the file and line numbers. I2's installer must
+abort instead, leaving the previous env file and the running service untouched, and
+must **distinguish `AccessDenied` and throttling from `ParameterNotFound`**: the
+first two mean "do not deploy", the third is the only case the present warning was
+written for. That behaviour is acceptable for a
 single-user dev box and unacceptable once promotional credits are enforced. I2
 must add an explicit mode:
 
 The mode flag is one operation, matrix row `M-FAILCLOSED`, split as that row says:
 
-- **unset or unrecognised `INFRX_MODE` refuses to start** — the installer writes no
+- **unset or unrecognised `INFRX_MODE` refuses to start** (matrix row `M-FAILCLOSED`) — the installer writes no
   env file and the units exit non-zero. A default is how an unmetered pilot happens
   by accident, so there is no default.
 - `INFRX_MODE=dev` keeps today's permissive behaviour, refuses to bind a public
@@ -337,6 +342,29 @@ role exists to remove. And **no KMS barrier stands behind it** — every SecureS
 `O-PARAMS`). Parameter-read permission therefore *is* decryption permission, which
 is why §5 step 5 and matrix row `M-KMS` exist.
 
+**Ordering hazard — fail closed before touching any permission.** Row `O-FAILOPEN`
+records what the checkout does today: the installer swallows every
+`get-parameter` failure, truncates the env file and restarts the gateway anyway,
+and the gateway **allows every request** when neither the legacy key nor the
+Supabase URL is configured. So **any** denied or failed parameter read during an
+install run publishes an unauthenticated, unmetered gateway on the pilot hostname —
+and the first install run after a permission change is exactly when a read is most
+likely to be denied. That makes the fail-closed work of matrix row `M-FAILCLOSED` a
+**hard prerequisite**, not a parallel task. **This exposure exists today**
+independent of anything I2 does: an SSM outage or a throttle during an install run
+has the same effect. Order, and it is not negotiable:
+
+**0.** `M-FAILCLOSED` first — the installer aborts without touching the env file and
+without restarting when a required parameter cannot be read, and it distinguishes
+`AccessDenied`/throttling from `ParameterNotFound` (the first two are failures, the
+third is the case the current warning was written for); the runtime refuses to start
+in pilot mode without auth and metering configured. Owners: **I2** for the installer,
+**G1/F** for the runtime refusal. Then, in this order: **1.** the role and boundary
+in `staging`, **2.** verify by simulation and by an install run that a denied read
+aborts, **3.** the pilot profile swap, **4.** the hop limit, **5.** the SSH group
+change. Steps 3–5 stay in that order for the reason §5 already gives: SSM access
+must not be the only path while the others are in progress.
+
 **The fix is a new role, not an edit of this one**, because the role's only
 instance profile is attached to the stopped llm-bootcamp box as well as to the
 pilot host (row `O-SHAREDPROFILE`): stripping statements in place would silently
@@ -363,13 +391,16 @@ Elastic-IP item. So I2:
 5. keeps `ec2:Describe*`, and **does not attach `AmazonSSMManagedInstanceCore`**.
    Instead it creates a **customer-managed agent policy** by copying row
    `O-MANAGED`'s action lists and removing exactly two actions. That row is the
-   verbatim policy document, and it has **no wildcard action in it**: the agent's
+   verbatim policy document. The property to preserve is **no parameter-read action
+   on a `Resource` outside `/model-inference/*`** — not "no wildcards", since the role
+   deliberately keeps `ec2:Describe*`: the agent's
    own statement enumerates fifteen `ssm:` actions, of which the new policy keeps
    thirteen and drops `ssm:GetParameter` and `ssm:GetParameters`; the channel
    statements enumerate **four** `ssmmessages:` actions and **six**
    `ec2messages:` actions, which are copied action by action. Copy the names from
    `O-MANAGED`, not from this paragraph, and **write no `ssmmessages:*` or
-   `ec2messages:*` wildcard** — an earlier revision of this step said those two
+   `ec2messages:*` wildcard** (those two statements are enumerated in the managed
+   policy, so a glob would widen them) — an earlier revision of this step said those two
    statements were wildcards and told I2 to carry them "verbatim", which would have
    shipped a *broader* agent policy than the managed one it replaces (§Verification
    log, fifth pass). The step-2 statement is then the role's **only**
@@ -388,26 +419,45 @@ Elastic-IP item. So I2:
    `ssm describe-instance-information` still reports the host `Online`.
 
 6. **puts the durable outbound control in a permissions boundary** (matrix row
-   `M-BOUNDARY`, **required**, I2, `staging` then `pilot`). Step 5 narrows an
-   identity policy, and that is all it does: re-attaching
+   `M-BOUNDARY`, **required**, I2, `staging` then `pilot`, **after step 0 below**).
+   Step 5 narrows an identity policy and that is all it does: re-attaching
    `AmazonSSMManagedInstanceCore`, adding a broad convenience policy or attaching a
-   second policy to the role restores the account-wide parameter read, and there is
-   no second control behind it. So `infrx-pilot-role` is created **with a
-   permissions boundary** carrying an explicit `Deny` on the four parameter-read
-   actions — `ssm:GetParameter`, `ssm:GetParameters`, `ssm:GetParametersByPath`,
-   `ssm:GetParameterHistory` — with `NotResource` set to the pilot-only parameter
-   path. An effective permission is the intersection of the boundary and the
-   identity policies, so **no later `Allow` on this role can restore the read**,
-   whoever adds it and however broad it is. The staging role gets the same boundary
-   against its sibling staging path.
+   second policy **to this role** restores the account-wide parameter read. So
+   `infrx-pilot-role` is created **with a permissions boundary**, and the boundary
+   has **two** statements, because a boundary is not a deny-list:
+
+   - an **`Allow`** broad enough to cover everything the role legitimately does —
+     either `Action: "*"` on `Resource: "*"`, or an explicit allow-list containing
+     the agent actions of step 5, the S3 actions for the two buckets, the
+     logs/metrics actions, `ec2:Describe*`, the scoped parameter reads and
+     **`kms:Decrypt`**;
+   - an explicit **`Deny`** on `ssm:GetParameter`, `ssm:GetParameters`,
+     `ssm:GetParametersByPath`, `ssm:GetParameterHistory` with
+     `NotResource: arn:aws:ssm:us-east-1:641134885443:parameter/model-inference/*`.
+
+   **Why both:** an effective permission is the **intersection** of the boundary and
+   the identity policies, so a boundary containing only a `Deny` permits *nothing*
+   and the host would do nothing at all. For the same reason **`kms:Decrypt` must be
+   in the `Allow`**: a key-policy grant to the role is itself limited by the
+   boundary, so omitting it would silently break step 7 and every SecureString read.
 
    **Read-only check:** `iam get-role --role-name infrx-pilot-role` shows
-   `PermissionsBoundary`; `iam get-policy-version` on the boundary policy shows the
-   `Deny` and all four actions; and `iam simulate-principal-policy` (a read verb, in
-   I2's allowlist, not I1's) returns a deny for `ssm:GetParameter` on
-   `/INFRX-SUPABASE-PROD/db_password` and an allow on the pilot path. I2 records the
-   simulation result in its evidence — that is what turns "isolated" from a claim
-   into an observation.
+   `PermissionsBoundary`; `iam get-policy-version` on the boundary policy shows both
+   statements; `iam simulate-principal-policy` (a read verb, in I2's allowlist, not
+   I1's) returns a **deny** for `ssm:GetParameter` on
+   `…:parameter/INFRX-SUPABASE-PROD/db_password` and an **allow** on
+   `…:parameter/model-inference/pg_journal_url`. I2 records the simulation result —
+   that is what turns "isolated" from a claim into an observation.
+
+   **What the boundary does not cover, stated so nobody over-trusts it.** It binds
+   *this role*: it stops any policy later attached **to `infrx-pilot-role`** from
+   restoring the read, and nothing else. It does **not** stop the instance profile
+   being swapped back to `bootcamp-instance-profile`, which carries no boundary (row
+   `O-PROFILE`), or to any other role's profile; it does **not** stop static
+   credentials being placed on the host; and it does **not** stop an administrator
+   removing it (`iam:DeleteRolePermissionsBoundary`,
+   `iam:PutRolePermissionsBoundary`). Those are detection questions, and this design
+   proposes no control for them.
 
 7. **adds the inbound control on the pilot's own secrets** (matrix row `M-KMS`,
    recommended, I2, `staging` then `pilot`). Steps 5 and 6 stop the pilot host
@@ -418,15 +468,21 @@ Elastic-IP item. So I2:
    role), and since every SecureString in us-east-1 is on the AWS-managed
    `alias/aws/ssm` key (row `O-PARAMS`), each of them decrypts ours for free. The
    parameter that matters most is the PROPOSED journal DSN: a credential for the
-   authoritative database. So the pilot's own parameters move to a **pilot-only
-   path** and are re-created as SecureString under a **customer-managed key**
-   `alias/infrx-pilot`, whose key policy is written out rather than defaulted:
+   authoritative database. So the pilot's own parameters — the existing names under
+   **`/model-inference/*`**, re-created **at the same names**, because every consumer
+   already reads there (the §5 table, the §3.4 probe, `M-DSN`, step 5's scope,
+   `install.sh` lines 17–19 and the on-the-box `hf_token` flow) — become SecureString
+   under a **customer-managed key** `alias/infrx-pilot`, whose key policy is written
+   out rather than defaulted:
    - **no account-root `kms:*` delegation statement**, so no IAM policy anywhere can
      grant use of this key and the key policy is the whole story;
-   - `kms:Decrypt` + `kms:DescribeKey` for `infrx-pilot-role`, and for the admin
-     principal that runs the documented operator flows which read parameters with
-     `--with-decryption` (`models/marlin2b/README.md` lines 27 and 51) — otherwise
-     those flows break;
+   - `kms:Decrypt` + `kms:DescribeKey` for `infrx-pilot-role`. That is also what the
+     documented `hf_token` flow needs, because `models/marlin2b/README.md` line 27
+     runs **on the box as the instance role** ("the instance role can read it") — not
+     as an admin principal, as an earlier revision of this section said. The
+     client-side flow at line 51 of that file runs as whichever **operator** principal
+     the reader uses, so that principal needs the same two actions or the documented
+     command stops working;
    - `kms:Encrypt`, `kms:GenerateDataKey*`, `kms:ReEncrypt*` for the admin principal
      that runs `ssm put-parameter --key-id` when a value is set or rotated; the
      runtime gets none of these, because it never writes a parameter;
@@ -437,20 +493,21 @@ Elastic-IP item. So I2:
    If I2 keeps the root delegation statement instead, the property that remains is
    only that decryption needs **both** an IAM allow and a key-policy allow — a
    principal with `ssm:GetParameter*` on `*` but no key-policy grant is still
-   refused — and I2 records that it took the weaker form and why. `staging` gets its
-   own key on its sibling path. **Read-only check:** `ssm describe-parameters` shows
-   `KeyId=alias/infrx-pilot` on the pilot path and `alias/aws/ssm` unchanged
-   elsewhere; `kms get-key-policy` and `kms list-grants` show exactly the principals
+   refused — and I2 records that it took the weaker form and why. `staging` keeps its own role, boundary and key on
+   the sibling prefix `/infrx-staging/*` (§1); nothing nests under the pilot prefix. **Read-only check:** `ssm describe-parameters` shows
+   `KeyId=alias/infrx-pilot` on the `/model-inference/*` parameters and
+   `alias/aws/ssm` unchanged on every other prefix; `kms get-key-policy` and `kms list-grants` show exactly the principals
    above. Nothing here touches `rey-aws-ssm-role` or `gideon-ecsInstanceRole`: they
    belong to other work, and this design proposes nothing about them.
 
-**Not a choice between the two.** The boundary `Deny` of step 6 is required — it is
-the only thing that keeps step 5's narrowing true after the next policy edit. The
-key of step 7 is the additional inbound control and is recommended before the
-journal DSN exists. An earlier revision of this section offered them as
-alternatives "I2 picks one" and described the key as what makes the isolation
-survive; that was wrong in direction — a key on our own parameters is not on the
-decryption path of anyone else's — and the §Verification log records it.
+**Not a choice between the two.** The boundary of step 6 is required: it is what
+keeps step 5's narrowing true against a later policy attached to this role. The key
+of step 7 is the additional inbound control, recommended before the journal DSN
+exists. Earlier revisions of this section got both wrong in turn — first offering
+them as alternatives and calling the key the thing that makes the isolation survive
+(a key on our own parameters is not on anyone else's decryption path), then
+specifying the boundary as a `Deny` alone (which would have permitted nothing at
+all). The §Verification log records both corrections.
 
 An IAM role is **account-global**, so "staging then pilot" is not a meaningful
 environment for it: the role and profile are created once and the *association*
@@ -478,10 +535,10 @@ published ports instead of host network, or, if host network stays, accept that 
 boundary `Deny` of step 6 — not the hop limit — is what bounds what those
 credentials can read. Nothing on the box is known to *need* role credentials from
 inside a container (the installer reads SSM on the host and writes
-`/etc/marlin2b-gateway.env`; the engine needs only weights already on disk), but
-what the **running** box does was not inspected (Limits item 4), so I2 verifies
-under the lock that no container fetches credentials from IMDS *before* flipping
-the hop limit. Flipping it blind can break the engine start, and a broken engine on
+`/etc/marlin2b-gateway.env`; the engine needs only weights already on disk). The
+network modes above are the **checkout's** (`O-NETMODE`); what the **running** box
+does was not inspected (Limits item 4), so I2 verifies under the lock that no
+container fetches credentials from IMDS *before* flipping the hop limit. Flipping it blind can break the engine start, and a broken engine on
 the serving host is worse than the exposure it closes for the minutes it takes to
 notice.
 
@@ -679,7 +736,8 @@ target group.
     shipper)"*, *"Legacy `marlin2b_api_key` cutover …"*), which the same pass adds
     to the evidence report, and the header links the report by its real filename.
 - 2026-09-20 (fourth review pass — the secret isolation of §5 did not actually
-  isolate; still read-only: **six** calls at 19:32:42Z–19:33:28Z —
+  isolate; still read-only — the calls are itemised in §Commands of the evidence
+  report and counted in its §Checks:
   `iam get-policy`, `iam get-policy-version`, `ec2 describe-security-groups`,
   `ec2 describe-network-interfaces`, `ssm describe-parameters` and
   `ec2 describe-instances` (the last is the one the security-group row cites for
@@ -713,11 +771,11 @@ target group.
     `ec2:ReplaceIamInstanceProfileAssociation`; §6's weights row marks the S3
     mirror of Marlin as **not proposed and not assigned** (it would write into
     another project's bucket).
-- 2026-09-20 (fifth review pass — convergence; still read-only: 57 `sts` /
+- 2026-09-20 (fifth review pass — convergence; still read-only: `sts` /
   `iam` / `ec2` / `autoscaling` / `ssm` / `route53` / `s3api` / `elasticache` /
   `elbv2` / `acm` / `wafv2` / `rds` / `backup` / `cloudwatch` / `service-quotas` /
-  `sesv2` read calls at 20:40:04Z–20:43:17Z, itemised in §Commands of the I1
-  evidence report with their raw-output files; **no** resource created, modified or
+  `sesv2` read calls at 20:40:04Z–20:43:17Z, counted and itemised in §Commands and
+  §Checks of the I1 evidence report rather than here; **no** resource created, modified or
   deleted, **no** secret value read, **no** remote command, **no** HTTP request, no
   Cost Explorer call):
   - **§5 step 5 no longer tells I2 to write a wildcard.** It said to carry
@@ -817,3 +875,47 @@ target group.
     evidence report's §Checks quotes the verbatim output of
     `research/plan/evidence/i/check_i1.py`, and the implementation SHA is stated only
     in its §Source.
+- 2026-09-20 (seventh review pass — the boundary as specified could not work; **no
+  AWS call was needed or made this pass**, only two reads of the checkout at
+  `25b9829`; **no** resource created, modified or deleted, **no** secret value read,
+  **no** remote command, **no** HTTP request):
+  - **§5 step 6 would have permitted nothing.** A permissions boundary is an
+    intersection, not a deny-list, so a boundary carrying only a `Deny` leaves the
+    role unable to do anything — the host would not start. Step 6 now specifies an
+    `Allow` (either `Action: "*"` on `Resource: "*"` or an enumerated list including
+    the agent actions, the bucket and logs/metrics actions, `ec2:Describe*`, the
+    scoped parameter reads and **`kms:Decrypt`**) **plus** the explicit `Deny` on the
+    four parameter-read actions with `NotResource` on the pilot path, and says why
+    `kms:Decrypt` must be in the `Allow`: a key-policy grant to the role is itself
+    limited by the boundary, so omitting it would break step 7 silently.
+  - **Step 6 also states what the boundary does not cover**: it binds this role only —
+    not a profile swap back to `bootcamp-instance-profile` (which has no boundary), not
+    static credentials on the host, not an administrator deleting the boundary.
+  - **One parameter path: `/model-inference/*`, at the existing names.** The sixth
+    pass's `/model-inference/pilot/*` is withdrawn — every consumer, including
+    `install.sh` lines 17–19 and the on-the-box `hf_token` flow, already reads
+    `/model-inference/*`, so step 7 re-keys the parameters **in place**. `staging`
+    keeps its own role, boundary and key on the sibling `/infrx-staging/*`. The
+    `hf_token` flow's principal is corrected: it runs **as the instance role** on the
+    box, not as an admin principal; the client-side flow at line 51 runs as the
+    operator's principal and needs the same two KMS actions.
+  - **New ordering hazard, stated before the numbered steps and made a prerequisite.**
+    Row `O-FAILOPEN`: today's installer swallows every parameter-read failure,
+    truncates the env file and restarts the gateway, and the gateway allows every
+    request when neither auth mechanism is configured — so a denied read during an
+    install run publishes an unauthenticated, unmetered gateway on the pilot hostname,
+    and that is true **today**, without any I2 change. `M-FAILCLOSED` is therefore
+    step **0**: fail closed (distinguishing `AccessDenied`/throttle from
+    `ParameterNotFound`) → role and boundary in staging → verify by simulation and by
+    an install run that a denial aborts → pilot swap → hop limit → SSH.
+  - N3: the claim "no wildcard actions" is replaced by the property that matters —
+    **no parameter-read action on a `Resource` outside `/model-inference/*`** — since
+    the role deliberately keeps `ec2:Describe*`. The IMDS paragraph now agrees with
+    `O-NETMODE` that the network modes are the checkout's and the running box was not
+    inspected.
+  - Counts are gone from this log: the fifth-pass entry's call count and the
+    fourth-pass entry's "six" are deleted, because the number belongs to §Commands and
+    §Checks of the evidence report, whose checker prints it. The evidence report's
+    seventh-pass entry records that the "57" stated in both fifth-pass entries was
+    wrong (55), why, and the complete list of log entries that were edited in place
+    before this rule took effect.
