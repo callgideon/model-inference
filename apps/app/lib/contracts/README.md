@@ -26,6 +26,12 @@ contract revision, not a track-local edit.
   customer whose organization is open (02, R19). An operator label comes from `calibration.label`
   and nowhere else; its entry is the only one that may carry `author_role: "operator"`,
   `calibration_set: true` and a rubric version.
+- **No customer view names an operator** (R41). `LedgerEntry.actor` is the organization's own
+  principal for its own actions, the literal `platform` (`PLATFORM_ACTOR`) for anything an operator
+  did, and null where nobody did; consent history records `platform` when an operator changes it. The
+  real principal lives in the operator's views — `adminAudit`, and the ledger read *by an operator
+  session* — so the masking is a view, not missing data. A tenant learns that the platform acted,
+  never which person at the platform did.
 - **A key secret is shown exactly once, in the first response** (R16). The idempotency record holds
   the key's id, never the secret, so a replay — by the creator, another owner or an operator —
   returns the key's *current* metadata with `secret: null` and `replayed: true`. There is nothing
@@ -80,11 +86,13 @@ const ack = await services.feedback.submit(services.sessions.owner, {
 });
 ```
 
-`services.sessions` gives `owner`, `member`, `operator`, `otherOwner` (a second organization) and
+`services.sessions` gives six sessions: `owner`, `member`, `operator` (a platform operator who also
+owns the first organization), `operatorMember` (a platform operator whose organization role is only
+`member` — operator authority is the flag, never the role), `otherOwner` (a second organization) and
 `suspendedOwner` (an organization suspended before anything runs, so `org_suspended` is reachable —
-R18). `services.ids` gives request and key identifiers for the states a page has to render:
-`availableRequestId`, `offRequestId`, `otherOrgRequestId` (must be `not_found`),
-`unknownRequestId`, `keyId`, `otherOrgKeyId`, `suspendedOrgId`.
+R18). `services.ids` gives the identifiers a page has to render: `orgId`, `otherOrgId`,
+`suspendedOrgId`, `availableRequestId`, `offRequestId`, `otherOrgRequestId` (must be `not_found`),
+`unknownRequestId`, `keyId`, `otherOrgKeyId` and `modelId` (a model the platform serves).
 
 What the fixture data covers, so a page can be built without guessing:
 
@@ -312,8 +320,21 @@ console and requires it to fail at least one case of the **exported** conformanc
 fake-only tests, which are not what C runs. A surviving mutant exits non-zero, and so does a mutant
 whose `find` text no longer matches, because a stale mutant tests nothing.
 
-It is deliberately not part of `pnpm test`: it costs one Node process per mutant (115 mutants,
-about 15 seconds at four jobs). Add a mutant with every new invariant a case claims.
+**What counts as a kill.** A non-zero exit is not enough: each mutant declares in `cases` the
+conformance cases that must catch it, and a kill requires one of *those* cases to fail by name. A
+mutant that fails to load, does not parse, uses a construct Node's type stripping rejects, hangs,
+fails without naming a case, or names a case the suite does not have is a **runner error** — it told
+us nothing — and fails the run, as does a stale `find`. Three mutants kill by *throwing*, because an
+accepted out-of-domain value throwing downstream is the defect; they are marked `kills_by: "throw"`.
+
+`node tests/contracts/run-mutants.mjs --self-test` checks the runner against its own claims: a
+syntax error, a load throw, an `enum`, a hang, a no-op, a stale `find`, a real defect attributed to
+the wrong case, a genuine kill, and a mutant with no declared cases must each be classified
+correctly. Run it after touching the runner.
+
+It is deliberately not part of `pnpm test`: it costs one Node process per mutant. Add a mutant with
+every new invariant a case claims — and if an invariant cannot be expressed as a mutant an exported
+case kills, it is fake-only and the README should say so rather than the case implying otherwise.
 
 ## Known fake-only behaviour
 
@@ -330,6 +351,14 @@ Things U, V and C should not read as contract:
   advance a local counter by one second per call.
 - Idempotency records live for the lifetime of the instance and never expire, so the fake cannot
   produce `idempotency_expired`. C's records expire (08 §5) and it must.
+- **Two invariants are fake-only, because `ConsoleServices` cannot express them.** (1) *The
+  idempotency record is written in the same transaction as the effect*: the interface has no failure
+  injection, so no exported case can lose a response between the two. The fake's `after_write`
+  injection covers it, and C gets it from its database transaction — a store that commits the effect
+  and the record separately will double-apply a retry, and no conformance run will tell it so. (2)
+  *An operator label does not shift the id or timestamp a customer's next write receives*: only
+  observable because the fake's ids and clock are deterministic. Both are pinned in
+  `tests/contracts/services.test.ts`.
 - `unsafeDebugState()` exists on the fake only, for the one assertion the contract cannot make from
   outside: that a key secret is retained nowhere in the state. Nothing but a test may call it, and C
   has no equivalent — the portable half of that assertion is the read sweep in the conformance suite.
@@ -354,6 +383,16 @@ Things U, V and C should not read as contract:
   README omitted (ledger kinds, off-mode trace rows, `TraceMode` superseding 07's `TraceLevel`),
   added the fake-only behaviour section, and restated what the suite proves about pagination now
   that each list is walked at two page sizes. Row counts are unchanged (137 / 117 / 137).
+- 2026-09-20: Round-6 revision. The mutation runner can no longer report a false kill: a kill needs a
+  named case the mutant declares, and load, parse, stripping, hang and unnamed failures are runner
+  errors that fail the run (nine self-tests pin it). One false kill was deleted and the invariant it
+  claimed — the idempotency record written in the same transaction as the effect — is recorded as
+  fake-only, with a note for C that its database transaction is what provides it. R41 keeps operator
+  principals out of every customer view. New cases close the invariants the suite named but could not
+  enforce: `adminAudit` by role *and* query shape, R35 over every label with an unannotated trace,
+  replays and conflicts appending no audit entry, grant and entitlement before/after, the
+  member-operator across the whole matrix, an operator whose own organization is suspended, a
+  suspension that can be lifted, and the wallet identity on a grant result.
 - 2026-09-20: Round-5 revision, for a review that found the *suite* rather than the fake wanting.
   The exported cases now treat cursors as opaque (R36, proved by `opaque-cursor.test.ts`), drive the
   role, suspension and input cases from the operation list, target operator writes at another
