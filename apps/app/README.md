@@ -46,7 +46,7 @@ functions: `org_usage_summary(p_org, p_from, p_to, p_key)`,
 - Framework preset Next.js; build and install commands are the defaults.
 - Environment variables: the four above, with `NEXT_PUBLIC_APP_URL` set to
   `https://app.callbill.ai` in production. Preview deployments can leave it
-  unset — the login form falls back to `window.location.origin`.
+  unset — the login page builds the callback from `window.location.origin`.
 - Domain `app.callbill.ai` via a Route 53 CNAME to `cname.vercel-dns.com`.
 
 ## Supabase auth settings
@@ -58,15 +58,17 @@ In Authentication → URL Configuration:
   `http://localhost:3000/auth/callback`, and the preview pattern
   `https://*-humanbit.vercel.app/auth/callback`.
 
-Email magic link is the only sign-in method at launch, and it works out of the
-box. Adding Google later is a provider in Authentication → Providers plus a
-`signInWithOAuth` button on the login page; `/auth/callback` already handles the
-OAuth code exchange unchanged.
+Google OAuth via Supabase is the only sign-in method — there is no email
+sign-in. The Google provider is enabled in Authentication → Providers with the
+callgideon Google OAuth client, and that client must list
+`https://fcbnscgsymzdykendbrc.supabase.co/auth/v1/callback` as an authorized
+redirect URI. The login page calls `signInWithOAuth`, and `/auth/callback`
+exchanges the code for a session and forwards to `?next=`.
 
 ## Structure
 
 ```
-app/(auth)/login        email magic link
+app/(auth)/login        Google sign-in
 app/auth/callback       code exchange
 app/(console)/…         models, usage, api-keys, billing, teams, dedicated, docs, admin
 components/             sidebar, snippet (Copy & Run), tiles, shadcn/ui in components/ui

@@ -13,13 +13,10 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <div className="space-y-2 text-center">
           <div className="font-heading text-2xl font-semibold tracking-tight">infrx</div>
           <p className="text-sm text-muted-foreground">
-            Sign in to manage keys, usage and credits.
+            Sign in to manage API keys and usage for the infrx API
           </p>
         </div>
         <LoginForm next={next} initialError={error} />
-        <p className="text-center text-xs text-muted-foreground">
-          By signing in you agree to be billed for what you call.
-        </p>
       </div>
     </main>
   );
