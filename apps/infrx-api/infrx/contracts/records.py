@@ -166,6 +166,22 @@ class AuthorRole(enum.StrEnum):
     judge = "judge"
 
 
+class FeedbackName(enum.StrEnum):
+    """r1 R3, from `research/traces/06` §2: the name fixes the value's type."""
+
+    thumb = "thumb"
+    rating = "rating"
+    correction = "correction"
+    comment = "comment"
+
+
+class JudgeResolution(enum.StrEnum):
+    """r1 R8: how an operator resolves an ambiguous judge run."""
+
+    adopt_provider_evidence = "adopt_provider_evidence"
+    release_reservation = "release_reservation"
+
+
 class JudgeRunState(enum.StrEnum):
     dry_run = "dry_run"
     reserved = "reserved"
@@ -327,6 +343,28 @@ class MediaRef(Record):
 
 
 # --- request and admission ---------------------------------------------------
+class Budgets(Record):
+    """r1 R4: the deadline budgets captured at admission, so a later
+    configuration change never alters an accepted job. The store reads these,
+    never its current settings, once the job exists."""
+
+    preparation_s: float = Field(ge=0)
+    queue_wait_s: float = Field(ge=0)
+    generation_s: float = Field(ge=0)
+    first_token_s: float = Field(ge=0)
+    stall_s: float = Field(ge=0)
+
+    @classmethod
+    def of(cls, limits, execution_mode: ExecutionMode) -> Budgets:
+        """From a `limits.PilotSettings`; the queue budget depends on the mode."""
+        return cls(preparation_s=limits.preparation_timeout_s,
+                   queue_wait_s=(limits.queue_wait_async_s
+                                 if execution_mode is ExecutionMode.async_
+                                 else limits.queue_wait_interactive_s),
+                   generation_s=limits.generation_timeout_s,
+                   first_token_s=limits.ttft_timeout_s, stall_s=limits.tpot_stall_s)
+
+
 class NormalizedRequest(Record):
     request_id: UuidStr
     org_id: UuidStr
@@ -390,8 +428,9 @@ class Admission(Record):
     reservations: tuple[CapacityReservation, ...]
     state: JobState
     outbox: tuple[OutboxEvent, ...]
-    admitted_at: Timestamp
+    admitted_at: Timestamp              # r1 R4: this is the job's accepted_at
     deadline_at: Timestamp
+    budgets: Budgets                    # r1 R4: snapshot, never re-read from config
     replayed: bool = False              # true when an idempotent replay returned it
 
 
@@ -524,20 +563,67 @@ class TraceEnvelope(Record):
             raise ValueError("a lossy capture is never content_complete")
         if self.content_complete and self.content_ref is None:
             raise ValueError("content_complete requires a content_ref")
+        if self.mode is not TraceMode.full and (self.content_ref is not None
+                                                or self.content_bytes > 0
+                                                or self.content_complete):
+            # r1 R12 (and 01's privacy rule): `minimal` is metadata only and `off`
+            # produces no row at all. Tying content to the mode here is what stops
+            # a minimal envelope from carrying uncharged, unconsented content.
+            raise ValueError(f"{self.mode} mode never carries content")
         return self
+
+    @property
+    def carries_content(self) -> bool:
+        return self.content_bytes > 0 or self.content_ref is not None
+
+
+def no_float_value(data: object) -> object:
+    """A JSON `1.0` is not a rating. Pydantic's lax mode would coerce it to 1, so
+    the float is refused before any member of the union sees it (r1 R3)."""
+    if isinstance(data, dict) and isinstance(data.get("value"), float):
+        raise ValueError("value must be a boolean, an integer or text, never a float")
+    return data
+
+
+def check_feedback_value(name: FeedbackName, value: object) -> None:
+    """r1 R3 / `research/traces/06` §2: the name fixes the value's type and range."""
+    if name is FeedbackName.thumb:
+        if not isinstance(value, bool):
+            raise ValueError("a thumb value is a boolean")
+    elif name is FeedbackName.rating:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("a rating value is an integer")
+        if not 1 <= value <= 5:
+            raise ValueError("a rating value is between 1 and 5")
+    else:                                # correction, comment
+        if isinstance(value, bool) or not isinstance(value, str) or not value.strip():
+            raise ValueError(f"a {name} value is nonempty text")
 
 
 class Feedback(Record):
+    """r1 R3: one signal per record — `name` fixes the type of `value`."""
+
     feedback_id: str
     request_id: UuidStr
     org_id: UuidStr
     author_principal: str
     author_role: AuthorRole             # server-set
     channel: FeedbackChannel            # server-set
-    rating: int | None = Field(default=None, ge=-1, le=1)
-    correction: str | None = None
+    name: FeedbackName
+    value: bool | int | str
+    comment: str | None = None
     calibration_set: str | None = None  # operator authorization required
     created_at: Timestamp
+
+    @model_validator(mode="before")
+    @classmethod
+    def _value_is_never_a_float(cls, data: object) -> object:
+        return no_float_value(data)
+
+    @model_validator(mode="after")
+    def _value_matches_the_name(self) -> Feedback:
+        check_feedback_value(self.name, self.value)
+        return self
 
 
 class JudgeRun(Record):

@@ -1,5 +1,13 @@
 {
   "admitted_at": "2026-09-20T12:00:00Z",
+  "budgets": {
+    "first_token_s": 60.0,
+    "generation_s": 300.0,
+    "preparation_s": 120.0,
+    "queue_wait_s": 10.0,
+    "schema_version": 1,
+    "stall_s": 20.0
+  },
   "deadline_at": "2026-09-20T12:07:30Z",
   "idempotency_key": "client-key-0001",
   "job_handle": "job_Ck1hQeTdJ6WwWVQe4LnPXe9kM0bF1sAqTgYn2R7xVpU",

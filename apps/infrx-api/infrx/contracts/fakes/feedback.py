@@ -44,6 +44,9 @@ class FakeFeedbackService:
         calibration_set = body.pop("calibration_set", None)
         if calibration_set is not None and not auth.is_operator:
             raise errors.Forbidden("calibration-set membership requires a platform operator")
+        if not body:
+            # r1 R3: an empty body is a 400, not a row that records nothing.
+            raise errors.InvalidRequest("a feedback submission needs a name and a value")
         try:
             submission = FeedbackSubmission.model_validate({**body, "request_id": request_id})
         except ValidationError as exc:
@@ -54,6 +57,10 @@ class FakeFeedbackService:
             raise errors.NotFound(f"no request {request_id} owned by org {auth.org_id}")
         if idem.org_id != auth.org_id:
             raise errors.Forbidden("idempotency scope must be the caller's org")
+        if idem.key is None:
+            # r1 R3: `Idempotency-Key` is required on POST /v1/feedback and console
+            # submit, so a retried submission can never become a second row.
+            raise errors.InvalidRequest("an idempotency key is required for feedback")
 
         existing = self.idem.get(idem.scope)
         if existing is not None:
@@ -68,11 +75,10 @@ class FakeFeedbackService:
             author_principal=auth.principal,
             # Console origin is not automatically an operator label.
             author_role=AuthorRole.operator if auth.is_operator else AuthorRole.customer,
-            channel=self.channel, rating=submission.rating, correction=submission.correction,
-            calibration_set=calibration_set, created_at=now)
+            channel=self.channel, name=submission.name, value=submission.value,
+            comment=submission.comment, calibration_set=calibration_set, created_at=now)
         self.items[record.feedback_id] = record
-        if idem.key is not None:
-            self.idem[idem.scope] = (idem.payload_hash, record.feedback_id)
+        self.idem[idem.scope] = (idem.payload_hash, record.feedback_id)
         # PostgreSQL commit plus outbox before the 201.
         self.outbox.append(OutboxEvent(event_id=self.ids.event_id(), aggregate_id=request_id,
                                        kind=OutboxKind.feedback_projection,

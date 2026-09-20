@@ -9,12 +9,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .codec import compact_bytes
 from .records import (ChunkEventType, ContentState, ExecutionMode, Feedback, FeedbackChannel,
-                      JobState, JsonObject, MediaRef, TerminalCause, Timestamp,
-                      TraceEnvelope, UploadState, Usage, UuidStr)
+                      FeedbackName, JobState, JsonObject, MediaRef, TerminalCause, Timestamp,
+                      TraceEnvelope, UploadState, Usage, UuidStr, check_feedback_value,
+                      no_float_value)
 
 DONE = "[DONE]"
 
@@ -184,11 +185,26 @@ class FeedbackAccepted(WireModel):
 
 
 class FeedbackSubmission(WireModel):
-    """What a client may send: no channel, no author role, no calibration flag."""
+    """What a client may send: no channel, no author role, no calibration flag.
+
+    r1 R3: `name` and `value` are both required, so an empty body is a 400 rather
+    than a row that says nothing; `comment` is the only optional field.
+    """
 
     request_id: UuidStr
-    rating: int | None = Field(default=None, ge=-1, le=1)
-    correction: str | None = None
+    name: FeedbackName
+    value: bool | int | str
+    comment: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _value_is_never_a_float(cls, data: object) -> object:
+        return no_float_value(data)
+
+    @model_validator(mode="after")
+    def _value_matches_the_name(self) -> FeedbackSubmission:
+        check_feedback_value(self.name, self.value)
+        return self
 
 
 class TraceExport(WireModel):

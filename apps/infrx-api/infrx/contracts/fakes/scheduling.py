@@ -22,7 +22,10 @@ class FakeScheduler:
         self.limits = limits
         self.failures = failure_hooks(failures)
         self.pending: dict[str, IndexEvent] = {}        # event_id -> event
-        self.inflight: dict[str, tuple[IndexEvent, str]] = {}
+        # event_id -> (event, worker, claimed_at). Visibility is measured from the
+        # claim, not from the event's own timestamp: an event older than the lease
+        # TTL would otherwise be handed to two workers back to back.
+        self.inflight: dict[str, tuple[IndexEvent, str, object]] = {}
         self.acknowledged: set[str] = set()
 
     async def enqueue(self, event: IndexEvent) -> bool:
@@ -39,15 +42,15 @@ class FakeScheduler:
         candidate returns to the index without touching PostgreSQL."""
         self.failures.before("claim_candidate")
         now = self.clock.now()
-        for event_id, (event, owner) in list(self.inflight.items()):
-            if now >= event.available_at + timedelta(seconds=self.limits.lease_ttl_s):
+        for event_id, (event, _owner, claimed_at) in list(self.inflight.items()):
+            if now >= claimed_at + timedelta(seconds=self.limits.lease_ttl_s):
                 del self.inflight[event_id]
                 self.pending[event_id] = event
         for event_id, event in sorted(self.pending.items(),
                                       key=lambda item: (item[1].available_at, item[0])):
             if event.available_at <= now:
                 del self.pending[event_id]
-                self.inflight[event_id] = (event, worker_id)
+                self.inflight[event_id] = (event, worker_id, now)
                 return event
         return None
 

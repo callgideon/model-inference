@@ -30,16 +30,20 @@ class PilotSettings:
     intake_timeout_s: float = 30.0
     max_media_bytes: int = 67_108_864            # 64 MiB decoded
     max_video_seconds: float = 120.0
-    fetch_connect_timeout_s: float = 3.0
-    fetch_timeout_s: float = 20.0
-    fetch_max_redirects: int = 3
+    # r1 R2: the new media path's own names. F1's FETCH_TIMEOUT_S (30),
+    # MAX_VIDEO_MB and MAX_REDIRECTS keep their names and defaults until M1
+    # retires them, so the two paths never read the same variable.
+    media_fetch_connect_timeout_s: float = 3.0
+    media_fetch_timeout_s: float = 20.0
+    media_fetch_max_redirects: int = 3
     probe_timeout_s: float = 10.0
 
     # preparation
     preparation_timeout_s: float = 120.0
     transcode_min_timeout_s: float = 15.0
     transcode_duration_factor: float = 0.5
-    preparation_concurrency: int = 2
+    preparation_concurrency: int = 2             # r1 R1: host worker-pool size only
+    max_preparing_jobs: int = 8                  # r1 R1: the admission-side cap
 
     # queue, generation, lease
     queue_wait_interactive_s: float = 10.0
@@ -94,7 +98,8 @@ class PilotSettings:
     s3_media_bucket: str = ""
     s3_trace_bucket: str = ""
 
-    # unknown-usage reconciliation window (02: release only after 24h + fencing)
+    # unknown-usage reconciliation window (02: release only after 24h + fencing;
+    # named by r1 R14 and part of 08 §5)
     unknown_usage_reconcile_s: float = 86_400.0
 
     def replace(self, **changes: object) -> PilotSettings:

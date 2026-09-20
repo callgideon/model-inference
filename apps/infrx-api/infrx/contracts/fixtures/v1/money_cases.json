@@ -89,6 +89,252 @@
       "name": "smallest_representable"
     }
   ],
+  "parse": [
+    {
+      "canonical": "0.00000000",
+      "input": "0",
+      "valid": true
+    },
+    {
+      "canonical": "0.00000000",
+      "input": "0.00000000",
+      "valid": true
+    },
+    {
+      "canonical": "1.00000000",
+      "input": "1",
+      "valid": true
+    },
+    {
+      "canonical": "1.00000000",
+      "input": "1.00000000",
+      "valid": true
+    },
+    {
+      "canonical": "0.00000001",
+      "input": "0.00000001",
+      "valid": true
+    },
+    {
+      "canonical": "-0.00000001",
+      "input": "-0.00000001",
+      "valid": true
+    },
+    {
+      "canonical": "25.00000000",
+      "input": "25.00000000",
+      "valid": true
+    },
+    {
+      "canonical": "-0.00044400",
+      "input": "-0.00044400",
+      "valid": true
+    },
+    {
+      "canonical": "0.10000000",
+      "input": "0.1",
+      "valid": true
+    },
+    {
+      "canonical": "0.10000000",
+      "input": "0.10000000",
+      "valid": true
+    },
+    {
+      "canonical": "123456789012.34567890",
+      "input": "123456789012.34567890",
+      "valid": true
+    },
+    {
+      "canonical": "-123456789012.34567890",
+      "input": "-123456789012.34567890",
+      "valid": true
+    },
+    {
+      "canonical": "999999999999.99999999",
+      "input": "999999999999.99999999",
+      "valid": true
+    },
+    {
+      "canonical": "0.12345678",
+      "input": "0.12345678",
+      "valid": true
+    },
+    {
+      "canonical": "-42.00000000",
+      "input": "-42",
+      "valid": true
+    },
+    {
+      "canonical": "1000000000.00000001",
+      "input": "1000000000.00000001",
+      "valid": true
+    },
+    {
+      "input": "1e5",
+      "valid": false
+    },
+    {
+      "input": "1E-5",
+      "valid": false
+    },
+    {
+      "input": "1e-8",
+      "valid": false
+    },
+    {
+      "input": "NaN",
+      "valid": false
+    },
+    {
+      "input": "nan",
+      "valid": false
+    },
+    {
+      "input": "Infinity",
+      "valid": false
+    },
+    {
+      "input": "-Infinity",
+      "valid": false
+    },
+    {
+      "input": "inf",
+      "valid": false
+    },
+    {
+      "input": "-0",
+      "valid": false
+    },
+    {
+      "input": "-0.0",
+      "valid": false
+    },
+    {
+      "input": "-0.00000000",
+      "valid": false
+    },
+    {
+      "input": "0.000000001",
+      "valid": false
+    },
+    {
+      "input": "-0.000000001",
+      "valid": false
+    },
+    {
+      "input": "1000000000000.00000000",
+      "valid": false
+    },
+    {
+      "input": "-1000000000000.00000000",
+      "valid": false
+    },
+    {
+      "input": "1234567890123.45678900",
+      "valid": false
+    },
+    {
+      "input": "+1.00",
+      "valid": false
+    },
+    {
+      "input": "01.5",
+      "valid": false
+    },
+    {
+      "input": "1.5.2",
+      "valid": false
+    },
+    {
+      "input": "",
+      "valid": false
+    },
+    {
+      "input": " 1.00",
+      "valid": false
+    },
+    {
+      "input": "1.00 ",
+      "valid": false
+    },
+    {
+      "input": "1.00\n",
+      "valid": false
+    },
+    {
+      "input": "1.00\t",
+      "valid": false
+    },
+    {
+      "input": "1_000.00",
+      "valid": false
+    },
+    {
+      "input": "0x10",
+      "valid": false
+    },
+    {
+      "input": "$1.00",
+      "valid": false
+    },
+    {
+      "input": "1,000.00",
+      "valid": false
+    },
+    {
+      "input": ".5",
+      "valid": false
+    },
+    {
+      "input": "5.",
+      "valid": false
+    },
+    {
+      "input": "--1",
+      "valid": false
+    },
+    {
+      "input": "1e",
+      "valid": false
+    },
+    {
+      "input": "USD 1",
+      "valid": false
+    },
+    {
+      "input": 1.5,
+      "valid": false
+    },
+    {
+      "input": 0.1,
+      "valid": false
+    },
+    {
+      "input": true,
+      "valid": false
+    },
+    {
+      "input": false,
+      "valid": false
+    },
+    {
+      "input": null,
+      "valid": false
+    },
+    {
+      "input": [],
+      "valid": false
+    },
+    {
+      "input": {},
+      "valid": false
+    },
+    {
+      "input": "0.123456789",
+      "valid": false
+    }
+  ],
   "rejected": [
     "1e5",
     "1E-5",

@@ -24,12 +24,12 @@ from decimal import Decimal
 from .. import errors, money
 from ..codec import compact_bytes
 from ..limits import DEFAULTS, PilotSettings
-from ..records import (Admission, CapacityReservation, Chunk, ChunkEventType, Cursor, EngineEvent,
-                       ExecutionMode, HoldState, IdempotencyRef, IndexEvent, JobState, Lease,
+from ..records import (Admission, Budgets, CapacityReservation, Chunk, ChunkEventType, Cursor,
+                       EngineEvent, HoldState, IdempotencyRef, IndexEvent, JobState, Lease,
                        MediaRef, NormalizedRequest, OutboxEvent, OutboxKind, PLATFORM_FAILURE_CAUSES,
                        PriceSnapshot, ReservationKind, SettlementState, TERMINAL_STATES, TerminalCause,
-                       TerminalOutcome, Usage)
-from .support import FailurePlan, FakeClock, SequentialIds, failure_hooks
+                       TerminalOutcome, Usage, UsageCertainty, states_for_cause)
+from .support import FailurePlan, FakeClock, SequentialIds, failure_hooks, money_input
 
 MAX_READ_LIMIT = 1000           # refinement: the bound on one replay page
 
@@ -79,10 +79,22 @@ class _Job:
     queued_elapsed: timedelta = timedelta(0)  # queue time from earlier spells
     outcome: TerminalOutcome | None = None
     reservations: dict[ReservationKind, CapacityReservation] = field(default_factory=dict)
+    # What the winning worker proposed, so its identical retry replays the
+    # committed outcome even when the store rewrote the settlement.
+    proposal: tuple | None = None
 
     @property
     def id(self) -> str:
         return self.request.request_id
+
+    @property
+    def budgets(self) -> Budgets:
+        """r1 R4: the budgets captured at admission, never current configuration."""
+        return self.admission.budgets
+
+    def preparing(self) -> bool:
+        reservation = self.reservations.get(ReservationKind.preparation)
+        return reservation is not None and reservation.active
 
     @property
     def terminal(self) -> bool:
@@ -168,15 +180,29 @@ class FakeJobStore:
         self.outbox: list[OutboxEvent] = []
         self.revoked_keys: set[str] = set()
         self.suspended_orgs: set[str] = set()
-        self.entitlement_version: dict[str, int] = {}
+        # r1 R10: the injectable entitlement source. A real adapter replaces the
+        # callable with its own query; the fake withdraws (org, model) pairs.
+        self.unentitled: set[tuple[str, str]] = set()
+        self.is_entitled = lambda org_id, model_revision: (org_id, model_revision) \
+            not in self.unentitled
         self._lock = asyncio.Lock()
 
     # --- test helpers (not part of the port) ---------------------------------
     def grant(self, org_id: str, amount: str | Decimal) -> Decimal:
-        """An operator credit grant: positive, append-only in the real ledger."""
+        """An operator credit grant: positive, append-only in the real ledger.
+
+        r1 R11: a negative grant is refused. Corrections are compensating entries
+        the store itself writes, never a caller-supplied negative grant."""
+        amount = money_input(amount, "a credit grant")
         wallet = self.wallets.setdefault(org_id, _Wallet())
-        wallet.ledger_total = wallet.ledger_total + money.parse(amount)
+        wallet.ledger_total = wallet.ledger_total + amount
         return wallet.ledger_total
+
+    def unentitle(self, org_id: str, model_revision: str) -> None:
+        self.unentitled.add((org_id, model_revision))
+
+    def entitle(self, org_id: str, model_revision: str) -> None:
+        self.unentitled.discard((org_id, model_revision))
 
     def wallet(self, org_id: str) -> _Wallet:
         return self.wallets.setdefault(org_id, _Wallet())
@@ -194,20 +220,28 @@ class FakeJobStore:
     async def admit(self, request: NormalizedRequest, idem: IdempotencyRef,
                     caps: tuple[object, ...] = (), hold: Decimal | str = money.ZERO) -> Admission:
         self.failures.before("admit")
-        hold = money.parse(hold)
-        if hold < 0:
-            # money.parse allows negatives for ledger deltas; a reservation is
-            # never one. A negative hold would inflate `available` (DUR-CAP).
-            raise errors.InvalidRequest(f"the maximum hold must not be negative: {hold}")
+        # money.parse allows negatives for ledger deltas; a reservation is never
+        # one. A negative hold would inflate `available` (DUR-CAP, r1 R11).
+        hold = money_input(hold, "the maximum hold")
+        for kind in caps:
+            if kind not in tuple(ReservationKind):
+                raise errors.InvalidRequest(f"{kind!r} is not a reservation kind")
+        if idem.org_id != request.org_id:
+            # r1 R10: one organization's idempotency scope never replays, expires or
+            # reads another's. Without this, ORG_B replays ORG_A's admission.
+            raise errors.Forbidden("the idempotency scope must name the request's org")
+        for ref in request.media:
+            if ref.org_id != request.org_id:
+                raise errors.NotFound("a request may only carry its own org's media")
         async with self._lock:
             now = self.clock.now()
             replay = self._replay(idem, now)
             if replay is not None:
                 return replay
             if request.request_id in self.jobs:
-                # The request UUID is the job primary key (06): a second admission
-                # of the same request would mint a second hold that nothing ever
-                # releases. The supported retry is the idempotency key above.
+                # The request UUID is the job primary key (06, r1 R6): a second
+                # admission of the same request would mint a second hold that nothing
+                # ever releases. The supported retry is the idempotency key above.
                 raise errors.StateConflict(
                     f"request {request.request_id} is already an admitted job")
 
@@ -217,11 +251,17 @@ class FakeJobStore:
                 raise errors.InvalidApiKey(f"key {request.key_id} is revoked")
             if request.org_id in self.suspended_orgs:
                 raise errors.OrgSuspended(f"org {request.org_id} is suspended")
+            if not self.is_entitled(request.org_id, request.model_revision):
+                raise errors.ModelNotEntitled(
+                    f"org {request.org_id} is not entitled to {request.model_revision}")
             self._check_capacity(request)
             self._check_balance(request.org_id, hold)
+            # Everything that can refuse the admission runs before anything is
+            # reserved: a rejected admission leaves no journal bytes, no hold and
+            # no job behind (`_price` fails closed on an unpriced model).
+            price = self._price(request)
             self.journal.reserve(request.request_id)
-
-            admission = self._insert(request, idem, hold, now)
+            admission = self._insert(request, idem, hold, now, price)
         self.failures.after_commit("admit")
         return admission
 
@@ -242,10 +282,15 @@ class FakeJobStore:
 
     def _check_capacity(self, request: NormalizedRequest) -> None:
         limits = self.limits
+        preparing = len([job for job in self.jobs.values()
+                         if not job.terminal and job.preparing()])
         for scope, count, ceiling in (
             ("total", len(self.active_jobs()), limits.max_active_jobs),
             ("org", len(self.active_jobs(org_id=request.org_id)), limits.max_active_jobs_per_org),
             ("key", len(self.active_jobs(key_id=request.key_id)), limits.max_active_jobs_per_key),
+            # r1 R1: admission reserves a preparation unit against its own cap.
+            # PREPARATION_CONCURRENCY stays the host worker-pool size.
+            ("preparation", preparing, limits.max_preparing_jobs),
         ):
             if count >= ceiling:
                 raise errors.CapacityExhausted(f"{scope} active job limit {ceiling} reached",
@@ -258,7 +303,7 @@ class FakeJobStore:
                 f"maximum hold exceeds available balance for org {org_id}")
 
     def _insert(self, request: NormalizedRequest, idem: IdempotencyRef, hold: Decimal,
-                now: datetime) -> Admission:
+                now: datetime, price: PriceSnapshot) -> Admission:
         handle = self.ids.job_handle()
         reservations = {
             kind: CapacityReservation(request_id=request.request_id, org_id=request.org_id,
@@ -278,10 +323,12 @@ class FakeJobStore:
         admission = Admission(
             request_id=request.request_id, job_handle=handle, org_id=request.org_id,
             key_id=request.key_id, operation=idem.operation, idempotency_key=idem.key,
-            payload_hash=idem.payload_hash, price_snapshot=self._price(request),
+            payload_hash=idem.payload_hash, price_snapshot=price,
             maximum_hold=hold, reservations=tuple(reservations.values()),
             state=JobState.preparing, outbox=(event,), admitted_at=now,
-            deadline_at=request.deadline_at)
+            deadline_at=request.deadline_at,
+            # r1 R4: the accepted job keeps these, whatever configuration does next.
+            budgets=Budgets.of(self.limits, request.execution_mode))
         self.jobs[request.request_id] = _Job(request=request, admission=admission,
                                              state=JobState.preparing, reservations=reservations)
         self.by_handle[handle] = request.request_id
@@ -341,6 +388,14 @@ class FakeJobStore:
         self.failures.after_commit("prepared")
         return admission
 
+    def _queue_wait(self, job: _Job, now: datetime) -> timedelta:
+        """r1 R5: cumulative from the first durable `queued` transition. A
+        prepublication requeue keeps the time already spent."""
+        spent = job.queued_elapsed
+        if job.queued_at is not None:
+            spent += now - job.queued_at
+        return spent
+
     def _release(self, job: _Job, kind: ReservationKind) -> None:
         reservation = job.reservations.get(kind)
         if reservation is not None and reservation.active:
@@ -359,6 +414,11 @@ class FakeJobStore:
                 raise errors.NotClaimable(f"job {job_id} is {job.state}, not queued")
             if now >= job.request.deadline_at:
                 raise errors.NotClaimable(f"job {job_id} is past its absolute deadline")
+            if self._queue_wait(job, now) >= timedelta(seconds=job.budgets.queue_wait_s):
+                # A job past its queue-wait budget is not executable: starting it
+                # would run work the customer has already been told to give up on.
+                # `recover` terminalizes it; `claim` refuses it meanwhile.
+                raise errors.NotClaimable(f"job {job_id} is past its queue-wait budget")
             if job.queued_at is not None:
                 # Queue wait accumulates across attempts; a requeue must not hand
                 # the job a fresh budget (01: no extension through retries).
@@ -415,17 +475,28 @@ class FakeJobStore:
         """Settlement is the store's authority: the caller's `settlement_state`
         and `debit` are recomputed, never trusted."""
         self.failures.before("complete")
+        if outcome.job_id != lease.job_id:
+            # r1 R10: an outcome built for one job never settles another. Without
+            # this, job A is settled with job B's usage and debit.
+            raise errors.InvalidRequest("the outcome does not belong to the leased job")
         async with self._lock:
             job = self.jobs.get(lease.job_id)
             if job is None:
                 raise errors.NotFound(f"no job {lease.job_id}")
             if job.terminal:
-                if (job.outcome.cause, job.outcome.usage) == (outcome.cause, outcome.usage):
-                    return job.outcome          # idempotent repeat of the same completion
+                proposal = (outcome.cause, outcome.usage, outcome.result_ref)
+                if proposal in (job.proposal,
+                                (job.outcome.cause, job.outcome.usage, job.outcome.result_ref)):
+                    # The identical completion replays, including when the store
+                    # rewrote the settlement (over-envelope usage, missing usage):
+                    # the winner's retry must see the committed outcome, not a
+                    # conflict it cannot act on.
+                    return job.outcome
                 raise errors.AlreadyTerminal(f"job {job.id} already settled as {job.outcome.cause}")
             self._fence(lease)
             settled = self._terminalize(job, outcome.cause, outcome.usage, outcome.result_ref,
                                         outcome.state)
+            job.proposal = (outcome.cause, outcome.usage, outcome.result_ref)
         self.failures.after_commit("complete")
         return settled
 
@@ -433,9 +504,23 @@ class FakeJobStore:
                      result_ref: str | None, state: JobState) -> TerminalOutcome:
         if state not in TERMINAL_STATES:
             raise errors.StateConflict(f"{state} is not terminal")
+        if state not in states_for_cause(cause):
+            # Validate the pair *before* the wallet moves. Building the record last
+            # would otherwise debit the customer and then raise, leaving money moved
+            # on a job that never became terminal.
+            raise errors.StateConflict(f"cause {cause} cannot carry state {state}")
+        if usage is not None and usage.certainty is not UsageCertainty.authoritative:
+            raise errors.InvalidRequest("a present usage must be authoritative")
         now = self.clock.now()
         hold = self.holds[job.id]
         wallet = self.wallet(job.request.org_id)
+
+        if usage is None and cause is TerminalCause.completed and not job.published:
+            # A delivered success with no authoritative usage and nothing published
+            # is not a free success: the engine never reported what it produced, so
+            # the honest outcome is an incomplete engine run (02: platform-caused
+            # failures are free, and output chunks never bill).
+            cause, state, result_ref = TerminalCause.engine_incomplete, JobState.failed, None
 
         over_envelope = usage is not None and (
             usage.prompt_tokens > job.request.max_input_tokens
@@ -508,12 +593,16 @@ class FakeJobStore:
             hold.state = HoldState.released
             hold.reconcile_after = None
 
-    async def recover(self, now: datetime | None = None) -> tuple[object, ...]:
+    async def recover(self) -> tuple[object, ...]:
         """Requeue only prepublication attempts, terminalize the rest, release aged
-        unknown-usage holds. Returns the index events and outcomes it produced."""
+        unknown-usage holds. Returns the index events and outcomes it produced.
+
+        r1 R7: no caller time. The only clock is the injected one that stands for
+        the database clock inside the transaction, so nothing a caller passes can
+        release an unknown-usage hold before its 24 h window."""
         self.failures.before("recover")
         async with self._lock:
-            now = now or self.clock.now()
+            now = self.clock.now()
             produced: list[object] = []
             for job in list(self.jobs.values()):
                 if job.terminal:
@@ -531,11 +620,8 @@ class FakeJobStore:
                 cause, state = TerminalCause.preparation_failed, JobState.failed
             return [self._terminalize(job, cause, None, None, state)]
         if job.state is JobState.queued and job.queued_at is not None:
-            wait = (self.limits.queue_wait_async_s
-                    if job.request.execution_mode is ExecutionMode.async_
-                    else self.limits.queue_wait_interactive_s)
-            waited = job.queued_elapsed + (now - job.queued_at)
-            if waited >= timedelta(seconds=wait):
+            # r1 R4/R5: the job's own snapshot, cumulative across requeues.
+            if self._queue_wait(job, now) >= timedelta(seconds=job.budgets.queue_wait_s):
                 return [self._terminalize(job, TerminalCause.queue_wait_expired, None, None,
                                           JobState.expired)]
         if job.state is JobState.running and job.lease is not None and now >= job.lease.expires_at:
@@ -680,7 +766,9 @@ class FakeStreamStore:
         return chunk
 
     async def expire(self, now: datetime | None = None) -> int:
-        now = now or self.clock.now()
+        # r1 R7: a caller-supplied time is a bound at most. Pruning never runs ahead
+        # of the database clock, so a future argument cannot expire a live journal.
+        now = min(now, self.clock.now()) if now is not None else self.clock.now()
         removed = 0
         for job_id, stored in list(self.chunks.items()):
             keep, drop = [], []

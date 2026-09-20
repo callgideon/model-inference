@@ -6,8 +6,13 @@ which model owns which file, so `tests/contracts/test_fixtures.py` can prove
 every file round-trips back to identical bytes, and `test_fixtures` fails on any
 file nobody claims - an unclassified fixture is a hole in the contract.
 
-`error_envelopes.json` and `money_cases.json` are tables rather than single
-records and are checked by their own tests.
+`error_envelopes.json`, `error_codes.json` and `money_cases.json` are tables
+rather than single records and are checked by their own tests. The last two are
+the cross-language parity contract (08 §10 R11, R13): the TypeScript half must
+map the same codes to the same statuses and accept/reject exactly the same money
+inputs. `money_cases.json["parse"]` is that accept/reject set: every entry has
+`input` and `valid`, and a valid one also carries its `canonical` eight-digit
+form (an invalid one has no canonical form, so the key is absent).
 """
 from __future__ import annotations
 
@@ -64,7 +69,7 @@ LIST_MODELS: dict[str, type[BaseModel]] = {
     "judge_runs.json": records.JudgeRun,
 }
 
-TABLES = ("error_envelopes.json", "money_cases.json")
+TABLES = ("error_envelopes.json", "error_codes.json", "money_cases.json")
 
 
 def names() -> tuple[str, ...]:

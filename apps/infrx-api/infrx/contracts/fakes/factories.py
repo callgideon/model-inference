@@ -45,6 +45,14 @@ def _job_hooks(jobs: FakeJobStore, stream: FakeStreamStore | None = None) -> dic
         return {"ledger": wallet.ledger_total, "reserved": wallet.reserved_total,
                 "available": wallet.available, "zero": money.ZERO}
 
+    def retune(**changes):
+        """Reconfigure the live store, the way an operator changing an environment
+        variable would. Accepted jobs must not notice."""
+        jobs.limits = jobs.limits.replace(**changes)
+        if stream is not None:
+            stream.limits = jobs.limits
+        return jobs.limits
+
     return {
         "grant": jobs.grant,
         "balance": balance,
@@ -57,6 +65,12 @@ def _job_hooks(jobs: FakeJobStore, stream: FakeStreamStore | None = None) -> dic
         "revoke_key": jobs.revoked_keys.add,
         "unrevoke_key": jobs.revoked_keys.discard,
         "suspend_org": jobs.suspended_orgs.add,
+        # r1 R10: the injectable entitlement source, rechecked inside admit.
+        "unentitle": jobs.unentitle,
+        "entitle": jobs.entitle,
+        # r1 R4: change the store's *current* configuration, to prove an accepted
+        # job keeps the budgets snapshotted at admission.
+        "retune": retune,
     }
 
 
@@ -124,7 +138,11 @@ def judge_factory(limits: PilotSettings | None = None, *, judge_mode: str = "dry
     coordinator = FakeJudgeCoordinator(clock, ids, limits=limits, failures=failures)
     return Harness(port=coordinator, clock=clock, ids=ids, failures=failures,
                    extra={"runs": lambda: dict(coordinator.runs),
-                          "available": coordinator.available})
+                          "available": coordinator.available,
+                          # r1 R9: the current consent source `begin_submit` reads.
+                          "set_consent": coordinator.set_consent,
+                          "revoke_consent": coordinator.revoke_consent,
+                          "audit": lambda: list(coordinator.audit)})
 
 
 FACTORIES = {

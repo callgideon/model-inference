@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from infrx.contracts import errors, fixtures, ids, records, wire
+from infrx.contracts import errors, fixtures, ids, limits, records, wire
 from infrx.contracts.codec import canonical_bytes
 
 ALL_FIXTURES = fixtures.names()
@@ -81,6 +81,9 @@ EXPECTED_ENUMS = {
     records.TraceOfferResult: ["accepted_in_memory", "dropped"],
     records.FeedbackChannel: ["api", "console"],
     records.AuthorRole: ["customer", "operator", "judge"],
+    # r1 R3 / R8 additions to 08 §3
+    records.FeedbackName: ["thumb", "rating", "correction", "comment"],
+    records.JudgeResolution: ["adopt_provider_evidence", "release_reservation"],
     records.JudgeRunState: ["dry_run", "reserved", "submitting", "submitted", "ambiguous",
                             "collecting", "settled", "quarantined", "cancelled"],
     records.UploadState: ["created", "finalized", "aborted", "expired"],
@@ -144,6 +147,22 @@ def test_error_envelope_matches_the_table(code):
     # the envelope itself is the frozen model and round-trips
     envelope = errors.ErrorEnvelope.model_validate(entry["envelope"])
     assert json.loads(canonical_bytes(envelope)) == entry["envelope"]
+
+
+def test_error_code_table_fixture_is_the_python_table():
+    """r1 R13: `ERROR_CODE_HTTP_STATUS` in the console must equal this table, and the
+    G0 parity test compares both halves against this one file."""
+    table = fixtures.load("error_codes.json")
+    assert set(table) == {"http", "in_stream_only", "internal_only", "retry_after_required"}
+    assert set(table["http"]) == set(errors.HTTP_ERRORS)
+    for code, entry in table["http"].items():
+        assert entry == {"status": errors.http_status(code), "type": errors.error_type(code)}
+    assert set(table["in_stream_only"]) == set(errors.STREAM_CODES)
+    for code, entry in table["in_stream_only"].items():
+        assert entry == {"type": errors.error_type(code)}
+    assert set(table["internal_only"]) == set(errors.INTERNAL_CODES)
+    assert set(table["retry_after_required"]) == set(errors.RETRY_AFTER_CODES)
+    assert not set(table["http"]) & set(table["internal_only"])
 
 
 def test_error_messages_are_fixed_and_safe():
@@ -278,10 +297,74 @@ def test_trace_envelope_cannot_claim_complete_content_after_loss():
                                  "loss_reason": "memory_budget"})
 
 
+def test_only_full_mode_carries_trace_content():
+    """r1 R12: `minimal` is metadata only and `off` has no row at all, so content
+    tied to anything but `full` is a malformed envelope."""
+    full = fixtures.load("trace_envelope.json")
+    for mode in ("minimal", "off"):
+        with pytest.raises(ValueError):
+            records.TraceEnvelope(**{**full, "mode": mode})
+        metadata_only = records.TraceEnvelope(**{**full, "mode": mode, "content_bytes": 0,
+                                                 "content_complete": False, "content_ref": None})
+        assert metadata_only.carries_content is False
+    assert records.TraceEnvelope(**full).carries_content is True
+
+
+def test_admission_carries_the_budgets_it_was_accepted_with():
+    """r1 R4: a configuration change after acceptance cannot move an accepted job's
+    deadlines, so the budgets are on the record."""
+    admission = fixtures.model("admission.json")
+    assert admission.budgets.queue_wait_s == limits.DEFAULTS.queue_wait_interactive_s
+    assert admission.budgets.generation_s == limits.DEFAULTS.generation_timeout_s
+    assert admission.budgets.first_token_s == limits.DEFAULTS.ttft_timeout_s
+    asynchronous = records.Budgets.of(limits.DEFAULTS, records.ExecutionMode.async_)
+    assert asynchronous.queue_wait_s == limits.DEFAULTS.queue_wait_async_s
+    with pytest.raises(ValueError):
+        records.Budgets(**{**admission.budgets.model_dump(), "queue_wait_s": -1})
+    raw = fixtures.load("admission.json")
+    raw.pop("budgets")
+    with pytest.raises(ValueError):          # not optional: an accepted job has them
+        records.Admission.model_validate(raw)
+
+
+FEEDBACK_VALUES = [("thumb", True, True), ("thumb", False, True), ("thumb", 1, False),
+                   ("rating", 1, True), ("rating", 5, True), ("rating", 0, False),
+                   ("rating", 6, False), ("rating", True, False), ("rating", 1.0, False),
+                   ("correction", "two people", True), ("correction", "", False),
+                   ("correction", "  ", False), ("comment", "fine", True),
+                   ("comment", 3, False)]
+
+
+@pytest.mark.parametrize("name,value,valid", FEEDBACK_VALUES,
+                         ids=[f"{n}-{v!r}" for n, v, _ in FEEDBACK_VALUES])
+def test_the_feedback_name_fixes_the_value_type(name, value, valid):
+    """r1 R3 / `research/traces/06` §2: thumb is boolean, rating is an integer 1-5,
+    correction and comment are nonempty text. A JSON float is never a rating."""
+    raw = {**fixtures.load("feedback.json"), "name": name, "value": value}
+    body = {"request_id": raw["request_id"], "name": name, "value": value}
+    if valid:
+        assert records.Feedback.model_validate(raw).value == value
+        assert wire.FeedbackSubmission.model_validate(body).value == value
+    else:
+        with pytest.raises(ValueError):
+            records.Feedback.model_validate(raw)
+        with pytest.raises(ValueError):
+            wire.FeedbackSubmission.model_validate(body)
+
+
 def test_client_feedback_submission_cannot_set_provenance():
-    """FEEDBACK-ACK: channel, author role and calibration are server-set."""
+    """FEEDBACK-ACK: channel, author role and calibration are server-set, and an
+    empty body is not a submission (r1 R3)."""
     with pytest.raises(Exception):
         wire.FeedbackSubmission.model_validate(
             {**fixtures.load("feedback_accepted.json"), "author_role": "operator"})
     accepted = wire.FeedbackAccepted.model_validate(fixtures.load("feedback_accepted.json"))
     assert accepted.channel is records.FeedbackChannel.api
+    feedback = fixtures.model("feedback.json")
+    for body in ({}, {"request_id": feedback.request_id},
+                 {"request_id": feedback.request_id, "name": "rating"},
+                 {"request_id": feedback.request_id, "value": 3},
+                 {"request_id": feedback.request_id, "name": "rating", "value": 3,
+                  "calibration_set": "golden"}):
+        with pytest.raises(Exception):
+            wire.FeedbackSubmission.model_validate(body)

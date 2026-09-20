@@ -12,9 +12,9 @@ from decimal import Decimal
 from typing import Any
 
 from ..records import (AuthContext, ChunkEventType, ConsentSnapshot, EngineEvent, ExecutionMode,
-                       IdempotencyRef, JobState, MediaKind, MediaRef, NormalizedRequest,
-                       PriceSnapshot, Role, TerminalCause, TerminalOutcome, TraceEnvelope,
-                       TraceMode, Usage)
+                       FeedbackName, IdempotencyRef, JobState, MediaKind, MediaRef,
+                       NormalizedRequest, PriceSnapshot, Role, TerminalCause, TerminalOutcome,
+                       TraceEnvelope, TraceMode, Usage)
 
 ORG_A = "1a1a1a1a-0000-4000-8000-000000000001"
 ORG_B = "2b2b2b2b-0000-4000-8000-000000000002"
@@ -107,6 +107,15 @@ def outcome(job_id: str, harness, *, cause: TerminalCause = TerminalCause.comple
                            result_ref=result_ref,
                            settlement_state=SettlementState.released_free,
                            settled_at=harness.clock.now())
+
+
+def feedback(name: FeedbackName = FeedbackName.rating, value: object = 4,
+             comment: str | None = None) -> dict[str, Any]:
+    """A client feedback body (r1 R3): one signal, `name` fixing the value's type."""
+    body: dict[str, Any] = {"name": name.value, "value": value}
+    if comment is not None:
+        body["comment"] = comment
+    return body
 
 
 def events(*contents: str) -> tuple[EngineEvent, ...]:

@@ -8,8 +8,29 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
+from .. import errors, money
 
 DEFAULT_START = datetime(2026, 9, 20, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def money_input(raw: object, what: str) -> Decimal:
+    """r1 R11: the monetary trust boundary every port shares.
+
+    `money.parse` already refuses floats, exponents, `NaN`, negative zero and
+    anything outside `numeric(20, 8)`; it raises `ValueError`, which is a bug
+    report, not an answer, so a port turns it into `invalid_request`. A negative
+    amount is refused here too: only the store's own compensating ledger entries
+    may be negative, never a hold, a grant, a settlement or a judge cost.
+    """
+    try:
+        value = money.parse(raw)
+    except ValueError:
+        raise errors.InvalidRequest(f"{what} is not a valid monetary amount") from None
+    if value < 0:
+        raise errors.InvalidRequest(f"{what} must not be negative: {value}")
+    return value
 
 
 class FakeClock:

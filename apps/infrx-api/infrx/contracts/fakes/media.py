@@ -65,13 +65,22 @@ class FakeMediaStore:
         self.failures.before("stage")
         if request.org_id != org_id:
             raise errors.Forbidden("a request may only be staged for its own org")
-        staged = []
+        # Validate every reference before storing any of them: a request whose
+        # second media item is oversize must leave nothing staged behind (02: "a
+        # staging failure creates no job or hold").
         for ref in request.media:
             if ref.org_id != org_id:
                 raise errors.NotFound("media reference does not belong to this org")
             if ref.bytes > self.limits.max_media_bytes:
                 raise errors.RequestTooLarge(
                     f"{ref.bytes} bytes exceeds MAX_MEDIA_BYTES {self.limits.max_media_bytes}")
+            existing = self.objects.get((org_id, ref.handle))
+            if (existing is not None and ref.kind is not MediaKind.upload
+                    and existing.digest != ref.digest):
+                raise errors.Conflict(
+                    f"media handle {ref.handle} already holds different content")
+        staged = []
+        for ref in request.media:
             if ref.kind is MediaKind.upload:
                 resolved = await self.resolve_owned(org_id, ref.handle)
                 if resolved.digest != ref.digest:
@@ -81,11 +90,8 @@ class FakeMediaStore:
             existing = self.objects.get((org_id, ref.handle))
             if existing is not None:
                 # Staged and finalized content is immutable: the same handle keeps
-                # the object it already has, and different content is a conflict
-                # rather than a silent overwrite.
-                if existing.digest != ref.digest:
-                    raise errors.Conflict(
-                        f"media handle {ref.handle} already holds different content")
+                # the object it already has (different content was refused above,
+                # before anything was stored).
                 staged.append(existing)
                 continue
             stored = ref.model_copy(update={
@@ -148,6 +154,11 @@ class FakeMediaStore:
             upload.state = UploadState.aborted
             raise errors.UnsupportedMedia(f"{upload.mime} is not an accepted type")
         digest = digest_of(upload.data)
+        existing = self.objects.get((org_id, upload_handle))
+        if existing is not None and existing.digest != digest:
+            # Immutable within the tenant too: finalizing must not replace an object
+            # already staged under this handle, or the owner's own content vanishes.
+            raise errors.Conflict(f"handle {upload_handle} already holds different content")
         ref = MediaRef(org_id=org_id, handle=upload_handle, kind=MediaKind.upload, digest=digest,
                        bytes=len(upload.data), mime=upload.mime,
                        storage_ref=self._key(org_id, digest, "v1", "source"))

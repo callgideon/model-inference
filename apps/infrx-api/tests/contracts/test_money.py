@@ -41,6 +41,36 @@ def test_rejected_money_values(value):
         money.parse(value)
 
 
+# --- the cross-language accept/reject set (r1 R11) ----------------------------
+@pytest.mark.parametrize("case", CASES["parse"], ids=lambda c: repr(c["input"])[:28])
+def test_parse_case_fixture(case):
+    """The identical table drives the TypeScript half, so a divergence in either
+    language's `parse` fails here or there, never silently in the ledger."""
+    if case["valid"]:
+        assert money.format_money(money.parse(case["input"])) == case["canonical"]
+    else:
+        assert "canonical" not in case
+        with pytest.raises(ValueError):
+            money.parse(case["input"])
+
+
+def test_the_parse_table_pins_the_numeric_domain():
+    """r1 R11: the money domain is exactly `numeric(20, 8)`, i.e. |value| < 10^12."""
+    assert money.MAX_VALUE == Decimal(10) ** 12
+    inputs = [case["input"] for case in CASES["parse"]]
+    for edge in ("999999999999.99999999", "-123456789012.34567890"):
+        assert edge in inputs
+    for over in ("1000000000000.00000000", "-1000000000000.00000000"):
+        assert over in inputs
+        with pytest.raises(ValueError):
+            money.parse(over)
+    assert money.parse("999999999999.99999999") == Decimal("999999999999.99999999")
+    # negative zero in either form, string or Decimal already in hand
+    for negative_zero in ("-0", "-0.00000000", Decimal("-0"), Decimal("-0.00")):
+        with pytest.raises(ValueError):
+            money.parse(negative_zero)
+
+
 def test_ceiling_diverges_from_half_up_on_the_same_inputs():
     """The documented divergence: a hold never rounds in the customer's favour."""
     debit = money.debit(1, 0, Decimal("0.00400000"), Decimal("0.60000000"))

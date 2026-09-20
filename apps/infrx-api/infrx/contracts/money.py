@@ -15,6 +15,9 @@ SCALE = Decimal("0.00000001")           # numeric(20, 8) USD
 FRACTIONAL_DIGITS = 8
 PER_MILLION = Decimal(1_000_000)
 MAX_DIGITS = 20                         # numeric(20, 8): 12 integral + 8 fractional
+# r1 R11: the money domain is exactly numeric(20, 8), i.e. |value| < 10^12, and
+# both languages accept and reject the same set (fixtures/v1/money_cases.json).
+MAX_VALUE = Decimal(10) ** 12
 
 # No exponent, no leading '+', no leading zeros, at most eight fractional digits.
 # Matched with `fullmatch`: `$` alone would also accept a trailing newline.
@@ -40,10 +43,11 @@ def parse(raw: object) -> Decimal:
                 f"digits (no exponent, NaN, '+' or leading zeros): {raw!r}"
             )
         value = Decimal(raw)
-        if value == 0 and raw.startswith("-"):
-            raise ValueError(f"negative zero is not a money value: {raw!r}")
     else:
         raise ValueError(f"money must be a string, int or Decimal, not {type(raw).__name__}")
+    if value == 0 and value.is_signed():
+        # Negative zero, whether it arrived as text or as a Decimal already in hand.
+        raise ValueError(f"negative zero is not a money value: {raw!r}")
     exponent = value.as_tuple().exponent
     if isinstance(exponent, int) and exponent < -FRACTIONAL_DIGITS:
         # Finer than 1e-8 is rejected, never silently rounded into the ledger.
@@ -52,8 +56,9 @@ def parse(raw: object) -> Decimal:
         quantized = value.quantize(SCALE, rounding=decimal.ROUND_HALF_UP, context=CONTEXT)
     except decimal.DecimalException as exc:
         raise ValueError(f"money is not representable as numeric(20, 8): {raw!r}") from exc
-    if len(quantized.as_tuple().digits) > MAX_DIGITS and quantized != 0:
-        raise ValueError(f"money exceeds numeric(20, 8): {raw!r}")
+    if abs(quantized) >= MAX_VALUE or (len(quantized.as_tuple().digits) > MAX_DIGITS
+                                       and quantized != 0):
+        raise ValueError(f"money exceeds numeric(20, 8), i.e. |value| < 10^12: {raw!r}")
     return quantized
 
 

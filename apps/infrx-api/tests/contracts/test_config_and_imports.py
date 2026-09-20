@@ -21,10 +21,15 @@ EXPECTED = {
     "INFRX_MODE": "dev", "DATABASE_URL": "",
     "MAX_REQUEST_BYTES": 100663296, "INTAKE_TIMEOUT_S": 30.0,
     "MAX_MEDIA_BYTES": 67108864, "MAX_VIDEO_SECONDS": 120.0,
-    "FETCH_CONNECT_TIMEOUT_S": 3.0, "FETCH_TIMEOUT_S": 20.0,
-    "FETCH_MAX_REDIRECTS": 3, "PROBE_TIMEOUT_S": 10.0,
+    # r1 R2: the pilot fetch limits are MEDIA_FETCH_*; F1's FETCH_TIMEOUT_S (30)
+    # keeps its own name, default and reader in config.Settings.
+    "MEDIA_FETCH_CONNECT_TIMEOUT_S": 3.0, "MEDIA_FETCH_TIMEOUT_S": 20.0,
+    "MEDIA_FETCH_MAX_REDIRECTS": 3, "PROBE_TIMEOUT_S": 10.0,
     "PREPARATION_TIMEOUT_S": 120.0, "TRANSCODE_MIN_TIMEOUT_S": 15.0,
     "TRANSCODE_DURATION_FACTOR": 0.5, "PREPARATION_CONCURRENCY": 2,
+    # r1 R1: PREPARATION_CONCURRENCY is the host pool; admission reserves against
+    # MAX_PREPARING_JOBS.
+    "MAX_PREPARING_JOBS": 8,
     "QUEUE_WAIT_INTERACTIVE_S": 10.0, "QUEUE_WAIT_ASYNC_S": 600.0,
     "GENERATION_TIMEOUT_S": 300.0, "TTFT_TIMEOUT_S": 60.0, "TPOT_STALL_S": 20.0,
     "LEASE_TTL_S": 120.0, "LEASE_HEARTBEAT_S": 40.0, "MAX_PREPUBLICATION_RETRIES": 2,
@@ -43,9 +48,19 @@ EXPECTED = {
     "TRACE_FSYNC_INTERVAL_S": 2.0, "JUDGE_MODE": "dry_run",
     "JUDGE_LIVE_BUDGET_USD": Decimal("0"), "VALKEY_URL": "", "CLICKHOUSE_URL": "",
     "S3_MEDIA_BUCKET": "", "S3_TRACE_BUCKET": "",
-    # refinement: the 24h window 02 requires before an unknown-usage hold is freed
+    # r1 R14: the 24h window 02 requires before an unknown-usage hold is freed
     "UNKNOWN_USAGE_RECONCILE_S": 86400.0,
 }
+
+
+def test_the_f1_fetch_names_are_not_pilot_names():
+    """r1 R2: no pilot setting reuses an F1 gateway variable, so the legacy
+    30 s FETCH_TIMEOUT_S cannot be changed by a contracts-v1 name (or vice versa)."""
+    legacy = {"FETCH_TIMEOUT_S", "MAX_VIDEO_MB", "MAX_REDIRECTS", "MAX_INFLIGHT",
+              "UPSTREAM", "GATEWAY_API_KEY", "USAGE_LOG", "ALLOWED_VIDEO_MIME"}
+    assert legacy.isdisjoint(set(EXPECTED))
+    assert config.from_env({"FETCH_TIMEOUT_S": "30"}).fetch_timeout_s == 30.0
+    assert config.pilot_from_env({"MEDIA_FETCH_TIMEOUT_S": "9"}).media_fetch_timeout_s == 9.0
 
 
 def test_every_configuration_name_and_default_is_frozen():
@@ -127,25 +142,33 @@ def test_f1_gateway_settings_are_untouched():
 
 # --- import boundary ---------------------------------------------------------
 HEAVY = ("psycopg", "valkey", "clickhouse_connect", "boto3", "anthropic")
+# Walk the package rather than listing modules by hand: a module added later is
+# covered without anyone remembering to add it here (F1 post-merge follow-up).
+# `gateway` is excluded because it is the F1 entry point, not part of the package.
 PROBE = """
-import sys
-import infrx.contracts
-from infrx.contracts import errors, fixtures, ids, limits, money, ports, records
-from infrx.contracts import tasklocal, wire
-from infrx.contracts import conformance
-from infrx.contracts import fakes
+import importlib, pkgutil, sys
+import infrx
+walked = []
+for info in pkgutil.walk_packages(infrx.__path__, prefix="infrx."):
+    importlib.import_module(info.name)
+    walked.append(info.name)
+if len(walked) < 10:
+    raise SystemExit("walk_packages found almost nothing: " + repr(walked))
 leaked = sorted({m.split('.')[0] for m in sys.modules} & set(%r))
-print(leaked)
+print(repr((leaked, len(walked))))
 """
 
 
 def test_contracts_import_pulls_in_no_track_dependency():
-    """A gateway process must not pay for a track's extra: importing the contracts,
-    the fakes and the conformance suites loads none of them."""
+    """A gateway process must not pay for a track's extra: importing *every* module
+    in the `infrx` package - contracts, fakes, conformance, fixtures, the F1 modules -
+    loads none of psycopg, valkey, clickhouse-connect, boto3 or anthropic."""
     completed = subprocess.run([sys.executable, "-c", PROBE % (HEAVY,)],
                                capture_output=True, text=True, cwd=str(_api_dir()))
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout.strip() == "[]", completed.stdout
+    leaked, walked = eval(completed.stdout.strip())      # our own literal, two ints deep
+    assert leaked == [], leaked
+    assert walked >= 20, f"only {walked} modules were walked"
 
 
 def test_the_extras_are_installed_so_the_check_is_meaningful():

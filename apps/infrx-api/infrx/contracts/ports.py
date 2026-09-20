@@ -10,6 +10,17 @@ adapter's constructor, so no operation reads the wall clock or the environment.
 No port exposes SQL, another tenant's rows or a raw object path: `*_owned`
 operations take the caller's org and raise `NotFound` for anything else.
 
+Two rules hold for every operation below (contracts v1 revision r1):
+
+* **Tenant coherence (R10).** An operation given two tenant-bearing arguments
+  verifies they name the same organization and fails `not_found`/`forbidden`
+  otherwise. Mixing them is never a successful cross-tenant read or write.
+* **Monetary inputs (R11).** Holds, grants, settlements and judge costs are
+  refused when negative, non-finite or outside `numeric(20, 8)`
+  (`|value| < 10^12`); only the store's own compensating entries are negative.
+  No operation takes a caller-supplied time for an expiry, lease or 24 h
+  decision (R7): the adapter reads the database clock inside its transaction.
+
 The ninth row of the table, console services, is TypeScript
 (`apps/app/lib/contracts/services.ts`, 08 §9) and has no Python protocol.
 """
@@ -20,9 +31,9 @@ from decimal import Decimal
 from typing import Any, AsyncIterator, Protocol, runtime_checkable
 
 from .records import (Admission, AuthContext, Chunk, ConsentSnapshot, Cursor, EngineEvent,
-                      Feedback, IdempotencyRef, IndexEvent, JudgeRun, Lease, MediaRef,
-                      NormalizedRequest, PreparedRequest, ReservationKind, TerminalOutcome,
-                      TraceEnvelope, TraceOfferResult)
+                      Feedback, IdempotencyRef, IndexEvent, JudgeResolution, JudgeRun, Lease,
+                      MediaRef, NormalizedRequest, PreparedRequest, ReservationKind,
+                      TerminalOutcome, TraceEnvelope, TraceOfferResult)
 
 
 @runtime_checkable
@@ -40,8 +51,13 @@ class JobStore(Protocol):
 
         `caps` names *extra* reservation kinds beyond the three every admission
         takes; amounts come from the store's own limits, never from the caller. The
-        request UUID is the job key, so re-admitting one raises `StateConflict`, and
-        a negative `hold` raises `InvalidRequest`."""
+        request UUID is the job key, so re-admitting one raises `StateConflict`
+        (R6), and a negative `hold` raises `InvalidRequest` (R11).
+
+        The transaction rechecks key revocation, org suspension *and* current
+        entitlement (`ModelNotEntitled`), reserves a `preparation` unit against
+        `MAX_PREPARING_JOBS` (R1) and captures the deadline `budgets` on the
+        admission (R4). `idem` must name the request's own organization (R10)."""
 
     async def get_owned(self, org_id: str, job_handle: str) -> tuple[Admission, TerminalOutcome | None]:
         """Ownership-checked lookup. Possession of a handle is never enough."""
@@ -64,11 +80,17 @@ class JobStore(Protocol):
         """The single terminal settlement: outcome, authoritative usage, ledger,
         capacity release, terminal journal event and projection outboxes in one
         transaction. Repeating the identical completion is idempotent; a
-        different one raises `AlreadyTerminal`."""
+        different one raises `AlreadyTerminal`. `outcome.job_id` must be the
+        lease's job (R10), and a settlement that cannot be built leaves the
+        wallet untouched: validation happens before any money moves."""
 
-    async def recover(self, now: datetime) -> tuple[TerminalOutcome | IndexEvent, ...]:
+    async def recover(self) -> tuple[TerminalOutcome | IndexEvent, ...]:
         """Requeue only prepublication attempts within retry and absolute deadline
-        limits, terminalize the rest, and release aged unknown-usage holds."""
+        limits, terminalize the rest, and release aged unknown-usage holds.
+
+        Takes no caller time (R7): every expiry, lease and 24 h decision reads the
+        database clock inside the transaction, so a caller cannot release an
+        unknown-usage hold early by claiming it is later than it is."""
 
 
 @runtime_checkable
@@ -87,8 +109,12 @@ class StreamStore(Protocol):
     async def finalize_in_transaction(self, outcome: TerminalOutcome) -> Chunk:
         """The terminal journal event, written in the settling transaction."""
 
-    async def expire(self, now: datetime) -> int:
-        """Prune chunks past their TTL and free their bytes; returns the count."""
+    async def expire(self, now: datetime | None = None) -> int:
+        """Prune chunks past their TTL and free their bytes; returns the count.
+
+        A caller-supplied `now` is a bound at most (R7): the adapter never prunes
+        past the database clock, so a future argument cannot expire a live
+        journal early."""
 
 
 @runtime_checkable
@@ -165,7 +191,11 @@ class FeedbackService(Protocol):
     async def accept(self, auth: AuthContext, request_id: str, feedback: dict[str, Any],
                      idem: IdempotencyRef) -> Feedback:
         """PostgreSQL commit plus outbox before acknowledgment. Channel and author
-        role are server-set; calibration membership needs operator authorization."""
+        role are server-set; calibration membership needs operator authorization.
+
+        R3: the body is one signal (`name`, `value`, optional `comment`); an empty
+        body is `invalid_request` and `idem.key` is required, so every submission
+        is replay-safe. `idem` must name the caller's organization (R10)."""
 
     async def list_owned(self, auth: AuthContext, request_id: str) -> tuple[Feedback, ...]: ...
 
@@ -176,14 +206,32 @@ class JudgeCoordinator(Protocol):
 
     async def reserve(self, run: JudgeRun, consent: ConsentSnapshot, max_cost: Decimal) -> JudgeRun:
         """Transactional worst-case reservation; outstanding and ambiguous runs
-        count against the budget, and live submission needs current consent."""
+        count against the budget, and live submission needs current consent.
+        `consent` must belong to the run's organization (R10) and `max_cost` is a
+        monetary input (R11). Idempotent per `run_id`: a second call returns the
+        stored run without resetting its state or intent."""
 
     async def begin_submit(self, run_id: str) -> JudgeRun:
-        """Persist one unique submission intent; repeating returns the same one."""
+        """Persist one unique submission intent; repeating returns the same one.
+
+        Consent is rechecked against the **current** consent record, not the
+        snapshot taken at `reserve` (R9): a revocation in between blocks egress and
+        releases the reservation."""
 
     async def record_submission(self, run_id: str, external_id: str) -> JudgeRun: ...
 
     async def settle(self, run_id: str, actual: Decimal) -> JudgeRun: ...
 
     async def quarantine(self, run_id: str, reason: str) -> JudgeRun:
-        """Hold the reservation and stop automatic retries."""
+        """Hold the reservation and stop automatic retries. A terminal run
+        (`settled`, `cancelled`) is not reopened."""
+
+    async def resolve_ambiguous(self, run_id: str, operator: AuthContext,
+                                resolution: JudgeResolution, reason: str, *,
+                                external_id: str | None = None) -> JudgeRun:
+        """R8, operator only: the one way out of `ambiguous`.
+
+        `adopt_provider_evidence` requires the discovered provider id and
+        continues to collection; `release_reservation` is terminal `quarantined`
+        with the reservation released. Either way an append-only audit record is
+        written and no second submission is ever created."""

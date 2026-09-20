@@ -29,8 +29,15 @@ class Harness:
 
     `extra` holds the named hooks a suite documents (for JobStore: `grant`,
     `balance`, `active_jobs`, `outbox`, `outbox_kinds`, and optionally `publish`,
-    `revoke_key`, `unrevoke_key`, `suspend_org`). A missing optional hook makes the
-    case return early rather than fail, so an adapter can adopt the suite in steps.
+    `revoke_key`, `unrevoke_key`, `suspend_org`, `unentitle`, `retune`,
+    `journal_bytes`; for JudgeCoordinator: `available`, `runs`, `set_consent`,
+    `revoke_consent`, `audit`). A missing optional hook makes the case return early
+    rather than fail, so an adapter can adopt the suite in steps.
+
+    The streamstore, scheduler and feedback factories also publish `extra["jobs"]`,
+    the JobStore a case needs to admit a job first. The cases only ever call *port*
+    operations on it, so a real adapter can pass its own JobStore there; nothing in
+    a suite reads a fake's attributes.
     """
 
     port: Any

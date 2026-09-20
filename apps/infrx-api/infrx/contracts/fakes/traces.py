@@ -44,12 +44,19 @@ class FakeTraceSink:
         if envelope.mode is TraceMode.off:
             # Off-mode requests produce no trace at all; offering one is a caller bug.
             raise ValueError("off-mode requests are never offered to the sink")
+        if envelope.mode is not TraceMode.full and envelope.carries_content:
+            # r1 R12: a minimal-mode envelope never carries content. The record model
+            # refuses to build one, so this only fires for an envelope an adapter
+            # assembled from raw bytes; it is dropped whole as malformed rather than
+            # queued with unconsented, uncharged content.
+            return self._drop(TraceLossReason.malformed)
         if len(self.queued) >= self.limits.trace_queue_max:
             return self._drop(TraceLossReason.queue_full)
         if self.metadata_bytes + envelope.metadata_bytes > self.limits.trace_metadata_reserve_bytes:
             return self._drop(TraceLossReason.metadata_budget)
 
-        keep_content = envelope.mode is TraceMode.full and envelope.content_bytes > 0
+        # Every accepted content byte is charged, whatever the mode claims (r1 R12).
+        keep_content = envelope.content_bytes > 0
         if keep_content and self.content_bytes + envelope.content_bytes > self.content_budget:
             # Discard the whole content capture; keep honest metadata.
             envelope = envelope.model_copy(update={
