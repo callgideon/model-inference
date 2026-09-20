@@ -151,6 +151,50 @@ export const ERROR_CODES = [
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
+/**
+ * The HTTP status each code is served with, frozen by the 08 §3 envelope table. `null` marks the
+ * codes that never carry an HTTP status: the two in-stream terminal error events and the internal
+ * domain errors. A trace row pairing a status with a code from another row is a bug, so the
+ * conformance suite asserts the pairing instead of leaving each renderer to guess.
+ */
+export const ERROR_CODE_HTTP_STATUS: Readonly<Record<ErrorCode, number | null>> = {
+  invalid_request: 400,
+  unsupported_parameter: 400,
+  unsupported_media: 400,
+  media_fetch_failed: 400,
+  context_length_exceeded: 400,
+  invalid_cursor: 400,
+  invalid_api_key: 401,
+  insufficient_credit: 402,
+  forbidden: 403,
+  org_suspended: 403,
+  model_not_entitled: 403,
+  not_found: 404,
+  idempotency_conflict: 409,
+  result_pending: 409,
+  state_conflict: 409,
+  result_expired: 410,
+  journal_expired: 410,
+  replay_gap: 410,
+  idempotency_expired: 410,
+  request_too_large: 413,
+  capacity_exhausted: 429,
+  journal_capacity_exhausted: 429,
+  rate_limited: 429,
+  internal_error: 500,
+  dependency_unavailable: 503,
+  deadline_exceeded: 504,
+  stream_interrupted: null,
+  status_unknown: null,
+  stale_lease: null,
+  already_terminal: null,
+  not_claimable: null,
+  capacity_unavailable: null,
+  budget_exceeded: null,
+  consent_missing: null,
+  ambiguous_submission: null,
+};
+
 // ---------------------------------------------------------------------------
 // Session, results and pagination
 // ---------------------------------------------------------------------------
@@ -418,6 +462,9 @@ export type FeedbackEntry = {
   /** Calibration membership requires explicit platform-operator authorization. */
   calibration_set: boolean;
 };
+
+/** Free-text bound on submitted feedback: a comment is a note, not an upload channel. */
+export const MAX_FEEDBACK_TEXT_CHARS = 4000;
 
 // ---------------------------------------------------------------------------
 // Settings

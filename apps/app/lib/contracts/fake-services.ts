@@ -33,7 +33,9 @@ import {
 import {
   DEFAULT_PAGE_LIMIT,
   FEEDBACK_RATINGS,
+  JOB_STATES,
   MAX_CONTENT_RETENTION_DAYS,
+  MAX_FEEDBACK_TEXT_CHARS,
   MAX_PAGE_LIMIT,
   ORG_ROLES,
   TRACE_CONTENT_AVAILABILITY,
@@ -189,6 +191,23 @@ function mulberry32(seed: number): () => number {
   };
 }
 
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+
+/** 08 §5 `TRACE_METADATA_MONTHS`. */
+const TRACE_METADATA_MONTHS = 13;
+
+/** Calendar-month arithmetic in UTC: 13 months is not 396 days. */
+function plusMonths(epochMs: number, months: number): string {
+  const day = new Date(epochMs).getUTCDate();
+  const shifted = new Date(epochMs);
+  shifted.setUTCDate(1);
+  shifted.setUTCMonth(shifted.getUTCMonth() + months);
+  // Clamp a day the target month does not have (31 January + 1 month is 28 or 29 February).
+  const lastDay = new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 0)).getUTCDate();
+  shifted.setUTCDate(Math.min(day, lastDay));
+  return shifted.toISOString();
+}
+
 function hex(value: number, length: number): string {
   return (value >>> 0)
     .toString(16)
@@ -262,6 +281,8 @@ type Outcome = {
   job_state: JobState;
   terminal_cause: TerminalCause | null;
   http_status: number;
+  /** The 08 §3 code for `http_status`; a failure that has no code is not a failure. */
+  error_code: ErrorCode | null;
   usage_certainty: UsageCertainty;
   settlement_state: SettlementState;
   billable: boolean;
@@ -272,6 +293,7 @@ const SUCCEEDED: Outcome = {
   job_state: "succeeded",
   terminal_cause: "completed",
   http_status: 200,
+  error_code: null,
   usage_certainty: "authoritative",
   settlement_state: "settled",
   billable: true,
@@ -286,6 +308,7 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
           job_state: "failed",
           terminal_cause: "platform_error",
           http_status: 503,
+          error_code: "dependency_unavailable",
           usage_certainty: "authoritative",
           settlement_state: "released_platform_absorbed",
           billable: false,
@@ -295,6 +318,7 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
           job_state: "failed",
           terminal_cause: "invalid_media",
           http_status: 400,
+          error_code: "unsupported_media",
           usage_certainty: "authoritative",
           settlement_state: "released_free",
           billable: false,
@@ -306,6 +330,7 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
       job_state: "running",
       terminal_cause: null,
       http_status: 200,
+      error_code: null,
       usage_certainty: "unknown",
       settlement_state: "held_unknown",
       billable: false,
@@ -317,6 +342,7 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
       job_state: "queued",
       terminal_cause: null,
       http_status: 200,
+      error_code: null,
       usage_certainty: "unknown",
       settlement_state: "held_unknown",
       billable: false,
@@ -328,6 +354,7 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
       job_state: "preparing",
       terminal_cause: null,
       http_status: 200,
+      error_code: null,
       usage_certainty: "unknown",
       settlement_state: "held_unknown",
       billable: false,
@@ -339,6 +366,7 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
       job_state: "failed",
       terminal_cause: "engine_incomplete",
       http_status: 500,
+      error_code: "internal_error",
       usage_certainty: "unknown",
       settlement_state: "held_unknown",
       billable: false,
@@ -350,6 +378,7 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
       job_state: "failed",
       terminal_cause: "platform_error",
       http_status: 503,
+      error_code: "dependency_unavailable",
       usage_certainty: "authoritative",
       settlement_state: "released_platform_absorbed",
       billable: false,
@@ -361,6 +390,7 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
       job_state: "failed",
       terminal_cause: "invalid_media",
       http_status: 400,
+      error_code: "unsupported_media",
       usage_certainty: "authoritative",
       settlement_state: "released_free",
       billable: false,
@@ -372,6 +402,7 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
       job_state: "cancelled",
       terminal_cause: "client_cancelled",
       http_status: 200,
+      error_code: null,
       usage_certainty: "authoritative",
       settlement_state: "settled",
       billable: true,
@@ -383,6 +414,7 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
       job_state: "expired",
       terminal_cause: "queue_wait_expired",
       http_status: 504,
+      error_code: "deadline_exceeded",
       usage_certainty: "authoritative",
       settlement_state: "released_free",
       billable: false,
@@ -394,6 +426,8 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
 
 type OrgState = {
   org_id: string;
+  /** Fixture namespace, mixed into every generated id so two organizations cannot collide. */
+  namespace: number;
   name: string;
   owner_email: string;
   created_at: string;
@@ -405,8 +439,6 @@ type OrgState = {
   traces: TraceDetail[];
   content: Map<string, TraceContentView>;
   judge: JudgeRun[];
-  /** Grant idempotency: org + operation + key, with the canonical payload it accepted. */
-  grants: Map<string, { payload: string; result: AdminGrantResult }>;
   counter: number;
 };
 
@@ -425,14 +457,18 @@ const EXECUTION_MODE_CYCLE: ExecutionMode[] = ["sync", "stream", "async"];
  * Capture mode decides what can exist; full-mode rows then cycle through the remaining
  * states (`sequence` counts full-mode rows only, so every state is reached).
  */
-function availabilityFor(mode: TraceMode, sequence: number): TraceContentAvailability {
+function availabilityFor(mode: TraceMode, sequence: number, agedOut: boolean): TraceContentAvailability {
   if (mode === "off") return "off";
   if (mode === "minimal") return "metadata_only";
-  return pick(
+  const cycled = pick(
     TRACE_CONTENT_AVAILABILITY,
     traceFixture.availability_cycle[sequence % traceFixture.availability_cycle.length],
     "availability_cycle",
   );
+  // Expiry is a fact about the clock, not a slot in a cycle: content is `expired` exactly when
+  // `created_at + retention` has passed, so `content_expires_at` never precedes `created_at`.
+  if (agedOut) return "expired";
+  return cycled === "expired" ? "available" : cycled;
 }
 
 function buildOrg(spec: OrgFixture): OrgState {
@@ -457,7 +493,9 @@ function buildOrg(spec: OrgFixture): OrgState {
   for (let i = 0; i < spec.usage_rows; i += 1) {
     const key = activeKeys[i % activeKeys.length];
     const model = orgsFixture.models[i % orgsFixture.models.length];
-    const createdMs = CLOCK_MS - (i + 1) * 137000;
+    // 137 s apart, then 3 days apart past row 119, so the oldest rows are genuinely older than
+    // the 30-day retention window and one of them can be `expired` for real. Still monotonic.
+    const createdMs = CLOCK_MS - (i + 1) * 137000 - Math.max(0, i - 119) * 3 * 86400000;
     const created_at = new Date(createdMs).toISOString();
     const promptTokens = 512 + Math.floor(random() * 20000);
     const completionTokens = 32 + Math.floor(random() * 480);
@@ -486,9 +524,8 @@ function buildOrg(spec: OrgFixture): OrgState {
       trace_mode: key.trace_mode,
     });
 
-    const availability = availabilityFor(key.trace_mode, fullModeRows);
+    const availability = availabilityFor(key.trace_mode, fullModeRows, createdMs + retentionMs < CLOCK_MS);
     if (key.trace_mode === "full") fullModeRows += 1;
-    const expired = availability === "expired";
     const list: TraceListItem = {
       request_id,
       created_at,
@@ -510,13 +547,13 @@ function buildOrg(spec: OrgFixture): OrgState {
     const contentExpiresAt =
       availability === "off" || availability === "metadata_only"
         ? null
-        : new Date(expired ? createdMs - 86400000 : createdMs + retentionMs).toISOString();
+        : new Date(createdMs + retentionMs).toISOString();
 
     traces.push({
       ...list,
       execution_mode: usage[i].execution_mode,
       terminal_cause: outcome.terminal_cause,
-      error_code: outcome.http_status >= 400 ? (outcome.http_status === 400 ? "unsupported_media" : "internal_error") : null,
+      error_code: outcome.error_code,
       usage_certainty: outcome.usage_certainty,
       settlement_state: outcome.settlement_state,
       timings: {
@@ -534,7 +571,7 @@ function buildOrg(spec: OrgFixture): OrgState {
         trace_schema_version: 1,
       },
       content_expires_at: contentExpiresAt,
-      metadata_expires_at: new Date(createdMs + 396 * 86400000).toISOString(),
+      metadata_expires_at: plusMonths(createdMs, TRACE_METADATA_MONTHS),
       feedback: [],
     });
 
@@ -586,6 +623,7 @@ function buildOrg(spec: OrgFixture): OrgState {
 
   const org: OrgState = {
     org_id: spec.org_id,
+    namespace: spec.namespace,
     name: spec.name,
     owner_email: spec.owner_email,
     created_at: spec.created_at,
@@ -602,7 +640,6 @@ function buildOrg(spec: OrgFixture): OrgState {
     traces,
     content,
     judge: [],
-    grants: new Map(),
     counter: 0,
   };
 
@@ -725,6 +762,13 @@ export function createFakeConsoleServices(): FakeConsoleServices {
   for (const spec of orgsFixture.orgs) orgs.set(spec.org_id, buildOrg(spec));
 
   const injected = new Map<ConsoleOperation, { code: ErrorCode; message: string }[]>();
+  /**
+   * Idempotency records keyed by caller organization + operation + key, never by the target: a
+   * key replayed with a different target organization is a changed payload, so it is a 409 and
+   * not a second grant (01-contracts, "changed payload is 409"; U3 "duplicate submit creates one
+   * audited grant").
+   */
+  const idempotency = new Map<string, { payload: string; result: AdminGrantResult }>();
   let clockMs = CLOCK_MS;
   let counter = 0;
 
@@ -773,6 +817,42 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     for (const row of org.usage) if (row.max_hold !== null) holds.push(row.max_hold);
     const reserved_total = sumMoney(holds);
     return { ledger_total, reserved_total, available: subMoney(ledger_total, reserved_total) };
+  }
+
+  /**
+   * 08 §9 promises "validated filters". A filter value outside its vocabulary is a client bug and
+   * must say so, rather than silently returning an empty page that reads as "no traffic".
+   */
+  function badFilter(query: UsageQuery & Partial<TraceQuery>): string | null {
+    for (const name of ["from", "to"] as const) {
+      const value = query[name];
+      if (value !== undefined && !(typeof value === "string" && RFC3339.test(value))) {
+        return `${name} must be an RFC 3339 UTC timestamp`;
+      }
+    }
+    for (const name of ["key_id", "model"] as const) {
+      const value = query[name];
+      if (value !== undefined && !(typeof value === "string" && value.length > 0 && value.length <= 200)) {
+        return `${name} must be a non-empty identifier`;
+      }
+    }
+    if (query.from !== undefined && query.to !== undefined && query.from > query.to) {
+      return "from must not be after to";
+    }
+    const vocabularies: [string, readonly string[], unknown][] = [
+      ["job_state", JOB_STATES, query.job_state],
+      ["trace_mode", TRACE_MODES, query.trace_mode],
+      ["content", TRACE_CONTENT_AVAILABILITY, query.content],
+    ];
+    for (const [name, allowed, value] of vocabularies) {
+      if (value !== undefined && !(typeof value === "string" && allowed.includes(value))) {
+        return `${name} must be one of ${allowed.join(", ")}`;
+      }
+    }
+    if (query.has_feedback !== undefined && typeof query.has_feedback !== "boolean") {
+      return "has_feedback must be a boolean";
+    }
+    return null;
   }
 
   function usageRowsFor(org: OrgState, query: UsageQuery): UsageRow[] {
@@ -849,6 +929,8 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     async usage(session, query) {
       const injectedResult = intercept<Page<UsageRow>>("usage");
       if (injectedResult !== null) return injectedResult;
+      const invalid = badFilter(query);
+      if (invalid !== null) return fail<Page<UsageRow>>("invalid_request", invalid);
       const resolved = tenant<Page<UsageRow>>(session);
       if (isError(resolved)) return resolved;
       const rows = usageRowsFor(resolved.org, query);
@@ -858,6 +940,8 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     async usageSummary(session, query) {
       const injectedResult = intercept<UsageSummary>("usageSummary");
       if (injectedResult !== null) return injectedResult;
+      const invalid = badFilter(query);
+      if (invalid !== null) return fail<UsageSummary>("invalid_request", invalid);
       const resolved = tenant<UsageSummary>(session);
       if (isError(resolved)) return resolved;
       const rows = usageRowsFor(resolved.org, query);
@@ -889,6 +973,8 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     async usageDaily(session, query) {
       const injectedResult = intercept<UsageDay[]>("usageDaily");
       if (injectedResult !== null) return injectedResult;
+      const invalid = badFilter(query);
+      if (invalid !== null) return fail<UsageDay[]>("invalid_request", invalid);
       const resolved = tenant<UsageDay[]>(session);
       if (isError(resolved)) return resolved;
       const days = new Map<string, UsageDay>();
@@ -929,6 +1015,8 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     async traces(session, query) {
       const injectedResult = intercept<Page<TraceListItem>>("traces");
       if (injectedResult !== null) return injectedResult;
+      const invalid = badFilter(query);
+      if (invalid !== null) return fail<Page<TraceListItem>>("invalid_request", invalid);
       const resolved = tenant<Page<TraceListItem>>(session);
       if (isError(resolved)) return resolved;
       const rows = traceRowsFor(resolved.org, query);
@@ -976,6 +1064,14 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (isError(resolved)) return resolved;
         if (!(FEEDBACK_RATINGS as readonly string[]).includes(input.rating)) {
           return fail("invalid_request", "rating must be up or down");
+        }
+        for (const name of ["comment", "correction"] as const) {
+          const value = input[name];
+          if (value === undefined || value === null) continue;
+          if (typeof value !== "string") return fail("invalid_request", `${name} must be a string`);
+          if (value.length > MAX_FEEDBACK_TEXT_CHARS) {
+            return fail("invalid_request", `${name} must be at most ${MAX_FEEDBACK_TEXT_CHARS} characters`);
+          }
         }
         const trace = ownedTrace(resolved.org, input.request_id);
         if (trace === undefined) return fail("not_found", "no such request for this organization");
@@ -1075,7 +1171,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         resolved.org.counter += 1;
         const suffix = hex(resolved.org.counter * 7919, 8);
         const summary: ApiKeySummary = {
-          id: deterministicUuid(4242, resolved.org.counter),
+          id: deterministicUuid(4242 + resolved.org.namespace, resolved.org.counter),
           name: input.name.trim(),
           prefix: `sk-infrx-${suffix}`,
           created_at: nextTimestamp(),
@@ -1154,7 +1250,8 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         kind: input.kind,
         reason: input.reason.trim(),
       });
-      const previous = target.grants.get(input.idempotency_key);
+      const record = `${session.orgId}|adminGrant|${input.idempotency_key}`;
+      const previous = idempotency.get(record);
       if (previous !== undefined) {
         if (previous.payload !== payload) {
           return fail("idempotency_conflict", "this idempotency key was used with a different payload");
@@ -1164,7 +1261,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
 
       target.counter += 1;
       const entry: LedgerEntry = {
-        id: deterministicUuid(8080, target.counter),
+        id: deterministicUuid(8080 + target.namespace, target.counter),
         created_at: nextTimestamp(),
         delta: amount,
         kind: "grant",
@@ -1184,7 +1281,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         replayed: false,
         balance: balanceOf(target),
       };
-      target.grants.set(input.idempotency_key, { payload, result });
+      idempotency.set(record, { payload, result });
       return ok(structuredClone(result));
     },
 

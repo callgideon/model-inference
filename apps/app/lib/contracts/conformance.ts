@@ -23,7 +23,9 @@ import {
   JUDGE_RUN_STATES,
   JUDGE_SCORE_KINDS,
   LEDGER_ENTRY_KINDS,
+  ERROR_CODE_HTTP_STATUS,
   MAX_CONTENT_RETENTION_DAYS,
+  MAX_FEEDBACK_TEXT_CHARS,
   MAX_PAGE_LIMIT,
   SETTLEMENT_STATES,
   TERMINAL_CAUSES,
@@ -36,6 +38,7 @@ import {
   type Page,
   type Result,
   type SessionContext,
+  type TraceDetail,
   type TraceListItem,
   type UsageRow,
 } from "./types.ts";
@@ -99,6 +102,28 @@ async function walkAll<T>(
   throw new Error(`${what}: pagination did not terminate`);
 }
 
+/**
+ * The same query walked at two page sizes must yield the identical ordered id list. Without this,
+ * a service that skips one row per page boundary passes a duplicate check and an order check --
+ * the classic keyset off-by-one -- while silently losing rows.
+ */
+async function assertSamePagesAtEveryLimit<T>(
+  fetch: (limit: number, cursor: string | null) => Promise<Result<Page<T>>>,
+  idOf: (row: T) => string,
+  what: string,
+): Promise<T[]> {
+  const small = await walkAll<T>((cursor) => fetch(7, cursor), `${what} at limit 7`);
+  const large = await walkAll<T>((cursor) => fetch(MAX_PAGE_LIMIT, cursor), `${what} at limit ${MAX_PAGE_LIMIT}`);
+  assert.deepEqual(
+    small.map(idOf),
+    large.map(idOf),
+    `${what}: walking at two page sizes returned different rows, so a page boundary drops or repeats one`,
+  );
+  const ids = small.map(idOf);
+  assert.equal(new Set(ids).size, ids.length, `${what}: a row was returned twice`);
+  return small;
+}
+
 function assertDescending(values: string[], what: string): void {
   for (let i = 1; i < values.length; i += 1) {
     assert.ok(values[i - 1] >= values[i], `${what}: order is not stable and descending at ${i}`);
@@ -159,6 +184,34 @@ function assertTraceListItem(row: TraceListItem): void {
   }
 }
 
+function assertTraceDetail(detail: TraceDetail): void {
+  assertTraceListItem(detail);
+  assert.ok(detail.error_code === null || inSet(ERROR_CODES, detail.error_code), "trace error_code");
+  // 08 §3 freezes one HTTP status per code: 500 internal_error, 503 dependency_unavailable,
+  // 504 deadline_exceeded. A row that pairs them differently would teach V the wrong envelope.
+  if (detail.error_code !== null) {
+    assert.equal(
+      ERROR_CODE_HTTP_STATUS[detail.error_code],
+      detail.http_status,
+      `trace ${detail.request_id}: HTTP ${detail.http_status} is not the status of ${detail.error_code}`,
+    );
+  }
+  if (detail.http_status >= 400) {
+    assert.ok(detail.error_code !== null, `HTTP ${detail.http_status} must carry an error code`);
+  }
+  // Content cannot expire before it was captured, nor metadata before the content it describes.
+  if (detail.content_expires_at !== null) {
+    assert.ok(
+      detail.content_expires_at > detail.created_at,
+      `trace ${detail.request_id}: content expires at ${detail.content_expires_at}, before it was created`,
+    );
+  }
+  assert.ok(
+    detail.metadata_expires_at > detail.created_at,
+    `trace ${detail.request_id}: metadata expires before it was created`,
+  );
+}
+
 function assertJudgeRun(run: JudgeRun): void {
   assert.ok(inSet(JUDGE_RUN_STATES, run.state), "judge state");
   assert.ok(inSet(JUDGE_MODES, run.mode), "judge mode");
@@ -203,8 +256,9 @@ export function runConsoleServicesConformance(
   describe(label, () => {
     it("usage pages walk every row exactly once, newest first", async () => {
       const { services, sessions } = await makeHarness();
-      const all = await walkAll<UsageRow>(
-        (cursor) => services.usage(sessions.owner, { limit: 10, cursor }),
+      const all = await assertSamePagesAtEveryLimit<UsageRow>(
+        (limit, cursor) => services.usage(sessions.owner, { limit, cursor }),
+        (row) => row.request_id,
         "usage",
       );
       const single = expectOk(
@@ -212,7 +266,6 @@ export function runConsoleServicesConformance(
         "usage single page",
       );
       assert.ok(all.length >= single.items.length, "paged walk lost rows");
-      assert.equal(new Set(all.map((row) => row.request_id)).size, all.length, "a row was returned twice");
       assertDescending(
         all.map((row) => row.created_at),
         "usage",
@@ -222,22 +275,22 @@ export function runConsoleServicesConformance(
 
     it("ledger and trace pages walk every row exactly once", async () => {
       const { services, sessions } = await makeHarness();
-      const ledger = await walkAll<LedgerEntry>(
-        (cursor) => services.ledger(sessions.owner, { limit: 7, cursor }),
+      const ledger = await assertSamePagesAtEveryLimit<LedgerEntry>(
+        (limit, cursor) => services.ledger(sessions.owner, { limit, cursor }),
+        (entry) => entry.id,
         "ledger",
       );
-      assert.equal(new Set(ledger.map((entry) => entry.id)).size, ledger.length, "duplicate ledger entry");
       assertDescending(
         ledger.map((entry) => entry.created_at),
         "ledger",
       );
       for (const entry of ledger) assertLedgerEntry(entry);
 
-      const traces = await walkAll<TraceListItem>(
-        (cursor) => services.traces(sessions.owner, { limit: 9, cursor }),
+      const traces = await assertSamePagesAtEveryLimit<TraceListItem>(
+        (limit, cursor) => services.traces(sessions.owner, { limit, cursor }),
+        (row) => row.request_id,
         "traces",
       );
-      assert.equal(new Set(traces.map((row) => row.request_id)).size, traces.length, "duplicate trace row");
       for (const row of traces) assertTraceListItem(row);
     });
 
@@ -361,6 +414,91 @@ export function runConsoleServicesConformance(
       );
     });
 
+    it("a filter or cursor from another organization never widens the tenant", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const ownKeys = new Set(
+        expectOk(await services.keys.list(sessions.owner), "owner keys").map((key) => key.id),
+      );
+      assert.ok(!ownKeys.has(ids.otherOrgKeyId), "the other organization's key must not be listed");
+
+      // Supplying another tenant's key id filters, it never joins: own rows or none, never theirs.
+      for (const rows of [
+        expectOk(await services.usage(sessions.owner, { key_id: ids.otherOrgKeyId }), "usage by foreign key").items,
+        expectOk(await services.traces(sessions.owner, { key_id: ids.otherOrgKeyId }), "traces by foreign key").items,
+      ]) {
+        for (const row of rows) {
+          assert.ok(ownKeys.has(row.key_id), `a foreign key filter returned ${row.key_id}`);
+        }
+      }
+
+      // A cursor is bound to its tenant as well as to its filters.
+      const page = expectOk(await services.usage(sessions.owner, { limit: 5 }), "owner usage page");
+      assert.ok(page.next_cursor !== null, "the harness needs more than one page");
+      expectError(
+        await services.usage(sessions.otherOwner, { limit: 5, cursor: page.next_cursor }),
+        "invalid_cursor",
+        "a cursor minted for one organization used by another",
+      );
+
+      // Nothing tenant-scoped leaks the other way either.
+      const ownTraces = new Set(
+        expectOk(await services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT }), "owner traces").items.map(
+          (row) => row.request_id,
+        ),
+      );
+      const foreignTraces = expectOk(
+        await services.traces(sessions.otherOwner, { limit: MAX_PAGE_LIMIT }),
+        "other organization traces",
+      );
+      for (const row of foreignTraces.items) {
+        assert.ok(!ownTraces.has(row.request_id), `trace ${row.request_id} is visible to both tenants`);
+      }
+      const ownRuns = new Set(
+        expectOk(await services.judgeRuns(sessions.owner, { limit: MAX_PAGE_LIMIT }), "owner judge runs").items.map(
+          (run) => run.id,
+        ),
+      );
+      for (const run of expectOk(
+        await services.judgeRuns(sessions.otherOwner, { limit: MAX_PAGE_LIMIT }),
+        "other organization judge runs",
+      ).items) {
+        assert.ok(!ownRuns.has(run.id), `judge run ${run.id} is visible to both tenants`);
+      }
+      const foreignKeys = expectOk(await services.keys.list(sessions.otherOwner), "other organization keys");
+      for (const key of foreignKeys) {
+        assert.ok(!ownKeys.has(key.id), `key ${key.id} is visible to both tenants`);
+      }
+    });
+
+    it("a filter outside its vocabulary is invalid_request, not an empty page", async () => {
+      const { services, sessions } = await makeHarness();
+      expectError(
+        await services.traces(sessions.owner, { job_state: "nope" as never }),
+        "invalid_request",
+        "unknown job_state",
+      );
+      expectError(
+        await services.traces(sessions.owner, { content: "maybe" as never }),
+        "invalid_request",
+        "unknown content availability",
+      );
+      expectError(
+        await services.traces(sessions.owner, { trace_mode: "metadata" as never }),
+        "invalid_request",
+        "trace mode from the superseded vocabulary",
+      );
+      expectError(
+        await services.usage(sessions.owner, { from: "yesterday" }),
+        "invalid_request",
+        "unparseable from",
+      );
+      expectError(
+        await services.usageSummary(sessions.owner, { from: "2026-09-20T12:00:00.000Z", to: "2026-01-01T00:00:00.000Z" }),
+        "invalid_request",
+        "reversed range",
+      );
+    });
+
     it("a member can read but cannot mutate settings or keys", async () => {
       const { services, sessions, ids } = await makeHarness();
       expectOk(await services.usage(sessions.member, { limit: 5 }), "member usage");
@@ -442,6 +580,25 @@ export function runConsoleServicesConformance(
         }),
         "invalid_request",
         "invalid rating",
+      );
+      // Free text is a note, not an upload channel, and not a place to smuggle a structure.
+      expectError(
+        await services.feedback.submit(sessions.owner, {
+          request_id: ids.availableRequestId,
+          rating: "up",
+          comment: "x".repeat(MAX_FEEDBACK_TEXT_CHARS + 1),
+        }),
+        "invalid_request",
+        "oversized comment",
+      );
+      expectError(
+        await services.feedback.submit(sessions.owner, {
+          request_id: ids.availableRequestId,
+          rating: "up",
+          correction: { nested: true } as unknown as string,
+        }),
+        "invalid_request",
+        "non-string correction",
       );
     });
 
@@ -527,6 +684,27 @@ export function runConsoleServicesConformance(
         "idempotency_conflict",
         "changed reason under the same key",
       );
+      // The target is part of the payload: replaying a key at another organization must not grant
+      // a second time, whichever organization the record is filed under.
+      expectError(
+        await services.adminGrant(sessions.operator, { ...input, target_org_id: ids.orgId }),
+        "idempotency_conflict",
+        "changed target organization under the same key",
+      );
+      const ownOrg = expectOk(
+        await services.adminGrant(sessions.operator, {
+          ...input,
+          target_org_id: ids.orgId,
+          idempotency_key: "grant-conformance-own-org",
+        }),
+        "grant to the first organization",
+      );
+      assert.equal(ownOrg.org_id, ids.orgId);
+      assert.notEqual(
+        ownOrg.grant_id,
+        first.grant_id,
+        "two organizations' first grants must not share an id",
+      );
 
       expectError(
         await services.adminGrant(sessions.operator, {
@@ -582,6 +760,7 @@ export function runConsoleServicesConformance(
         "traces",
       );
       for (const row of traces) {
+        assertTraceDetail(expectOk(await services.traceDetail(sessions.owner, row.request_id), "trace detail"));
         const view = expectOk(await services.traceContent(sessions.owner, row.request_id), "trace content");
         assert.equal(view.request_id, row.request_id);
         assert.equal(view.availability, row.content, "the list and the detail must agree on availability");
