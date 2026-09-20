@@ -4,6 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
+`HANDOFF.md` is the current state and plan; read it before changing
+anything live.
+
 Per-experiment inference and benchmarking for the Gideon GPU work, plus the
 research that sizes it. Five model experiments under `models/`, one directory each:
 `deepseek41f`, `deepseek41fnvfp4`, `qwen3827b`, `kimik3`, `marlin2b`; shared

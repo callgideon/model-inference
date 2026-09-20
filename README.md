@@ -1,5 +1,8 @@
 # model-inference
 
+New session? Start with [`HANDOFF.md`](HANDOFF.md) — live systems, access, measured
+numbers and the implementation plan as of 2026-09-20.
+
 Per-experiment inference and benchmarking code for the Gideon GPU work.
 
 ## Layout
