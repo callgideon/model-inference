@@ -1,0 +1,124 @@
+{
+  "_comment": "Money fixtures for 08 §4. `debits` are cross-language constants: the Python side computes them with Decimal (ROUND_HALF_UP for the charge, ROUND_CEILING for the hold); TypeScript only parses, formats, adds, subtracts and compares, so it asserts the strings agree and stay canonical.",
+  "canonical": [
+    { "input": "0.1", "money": "0.10000000" },
+    { "input": "0", "money": "0.00000000" },
+    { "input": "-0.00000001", "money": "-0.00000001" },
+    { "input": "12345678901234567890", "money": "12345678901234567890.00000000" },
+    { "input": "0.00000001", "money": "0.00000001" },
+    { "input": "007.5", "money": "7.50000000" }
+  ],
+  "invalid": [
+    "1e3",
+    "1E-8",
+    "NaN",
+    "Infinity",
+    "-Infinity",
+    "-0",
+    "-0.00000000",
+    "0.000000001",
+    " 1.00000000",
+    "1.00000000 ",
+    "+1.00000000",
+    ".5",
+    "1.",
+    "1,000.00000000",
+    "0x10",
+    "$1.00",
+    "",
+    "--1"
+  ],
+  "arithmetic": [
+    {
+      "a": "25.00000000",
+      "b": "0.00000001",
+      "sum": "25.00000001",
+      "difference": "24.99999999",
+      "compare": 1
+    },
+    {
+      "a": "0.00000000",
+      "b": "0.00012340",
+      "sum": "0.00012340",
+      "difference": "-0.00012340",
+      "compare": -1
+    },
+    {
+      "a": "12345678901234567890.00000000",
+      "b": "0.00000001",
+      "sum": "12345678901234567890.00000001",
+      "difference": "12345678901234567889.99999999",
+      "compare": 1
+    },
+    {
+      "a": "-1.50000000",
+      "b": "-1.50000000",
+      "sum": "-3.00000000",
+      "difference": "0.00000000",
+      "compare": 0
+    }
+  ],
+  "debits": [
+    {
+      "case": "half-up boundary: the ninth digit is exactly 5",
+      "prompt_tokens": 1,
+      "completion_tokens": 0,
+      "input_usd_per_m": "0.15",
+      "output_usd_per_m": "0.60",
+      "exact": "0.00000015",
+      "charge_half_up": "0.00000015",
+      "hold_ceiling": "0.00000015"
+    },
+    {
+      "case": "half-up boundary against truncation: 0.000000005 rounds up",
+      "prompt_tokens": 1,
+      "completion_tokens": 0,
+      "input_usd_per_m": "0.005",
+      "output_usd_per_m": "0.60",
+      "exact": "0.000000005",
+      "charge_half_up": "0.00000001",
+      "hold_ceiling": "0.00000001"
+    },
+    {
+      "case": "ceiling diverges from half-up below the midpoint",
+      "prompt_tokens": 1,
+      "completion_tokens": 0,
+      "input_usd_per_m": "0.001",
+      "output_usd_per_m": "0.60",
+      "exact": "0.000000001",
+      "charge_half_up": "0.00000000",
+      "hold_ceiling": "0.00000001",
+      "diverges": true
+    },
+    {
+      "case": "zero-token request costs nothing and still settles",
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "input_usd_per_m": "0.15",
+      "output_usd_per_m": "0.60",
+      "exact": "0",
+      "charge_half_up": "0.00000000",
+      "hold_ceiling": "0.00000000"
+    },
+    {
+      "case": "ordinary video request",
+      "prompt_tokens": 20480,
+      "completion_tokens": 512,
+      "input_usd_per_m": "0.15",
+      "output_usd_per_m": "0.60",
+      "exact": "0.00337920",
+      "charge_half_up": "0.00337920",
+      "hold_ceiling": "0.00337920"
+    }
+  ],
+  "ledger_deltas": ["25.00000000", "-0.00337920", "-0.00120000", "5.00000000"],
+  "display": [
+    { "money": "0.00000000", "display": "$0.00" },
+    { "money": "1.50000000", "display": "$1.50" },
+    { "money": "0.00012340", "display": "$0.0001234" },
+    { "money": "0.00000001", "display": "$0.00000001" },
+    { "money": "-2.00000000", "display": "-$2.00" },
+    { "money": "12345678901234567890.00000000", "display": "$12,345,678,901,234,567,890.00" },
+    { "money": "1234.56780000", "display": "$1,234.5678" }
+  ]
+}

@@ -1,0 +1,156 @@
+{
+  "_comment": "Console contract fixtures v1 (08 \u00a79). Two organizations: one established pilot tenant, one brand-new zero-balance tenant. Row-level data is generated deterministically from these parameters by fake-services.ts; nothing here is a real key, customer prompt or secret.",
+  "clock": "2026-09-20T12:00:00.000Z",
+  "models": [
+    "marlin-2b@2026-09-01",
+    "deepseek-v41-flash@2026-08-15"
+  ],
+  "rate_units_per_token": {
+    "input": 15,
+    "output": 60
+  },
+  "gateway_version": "1.0.0",
+  "price_snapshot_version": "prices-2026-09-01",
+  "orgs": [
+    {
+      "org_id": "11111111-1111-4111-8111-111111111111",
+      "namespace": 11,
+      "name": "Northwind Labs",
+      "owner_email": "owner@northwind.example",
+      "created_at": "2026-08-01T09:00:00.000Z",
+      "suspended": false,
+      "usage_rows": 137,
+      "grants": [
+        {
+          "amount": "25.00000000",
+          "reason": "pilot onboarding grant",
+          "created_at": "2026-08-01T09:05:00.000Z"
+        },
+        {
+          "amount": "5.00000000",
+          "reason": "benchmark top-up after platform incident",
+          "created_at": "2026-09-01T10:00:00.000Z"
+        }
+      ],
+      "adjustment": {
+        "amount": "-0.00120000",
+        "reason": "correction for double-counted reconciliation entry",
+        "created_at": "2026-09-10T08:00:00.000Z"
+      },
+      "keys": [
+        {
+          "id": "a1000000-0000-4000-8000-000000000001",
+          "name": "production",
+          "prefix": "sk-infrx-nw01pro",
+          "created_at": "2026-08-01T09:10:00.000Z",
+          "last_used_at": "2026-09-20T11:58:00.000Z",
+          "revoked_at": null,
+          "trace_mode": "full"
+        },
+        {
+          "id": "a1000000-0000-4000-8000-000000000002",
+          "name": "laptop",
+          "prefix": "sk-infrx-nw02lap",
+          "created_at": "2026-08-14T15:00:00.000Z",
+          "last_used_at": "2026-09-19T20:11:00.000Z",
+          "revoked_at": null,
+          "trace_mode": "minimal"
+        },
+        {
+          "id": "a1000000-0000-4000-8000-000000000003",
+          "name": "batch",
+          "prefix": "sk-infrx-nw03bat",
+          "created_at": "2026-08-20T11:00:00.000Z",
+          "last_used_at": "2026-09-20T06:00:00.000Z",
+          "revoked_at": null,
+          "trace_mode": "off"
+        },
+        {
+          "id": "a1000000-0000-4000-8000-000000000004",
+          "name": "ci (revoked)",
+          "prefix": "sk-infrx-nw04ci0",
+          "created_at": "2026-08-22T11:00:00.000Z",
+          "last_used_at": "2026-08-31T07:30:00.000Z",
+          "revoked_at": "2026-09-02T12:00:00.000Z",
+          "trace_mode": "minimal"
+        }
+      ],
+      "settings": {
+        "trace_mode": "full",
+        "content_retention_days": 30,
+        "evaluation_consent": true,
+        "consent_history": [
+          {
+            "changed_at": "2026-08-02T10:00:00.000Z",
+            "evaluation_consent": true,
+            "changed_by": "owner@northwind.example"
+          }
+        ]
+      },
+      "all_free": false
+    },
+    {
+      "org_id": "22222222-2222-4222-8222-222222222222",
+      "namespace": 22,
+      "name": "Fresh Pilot",
+      "owner_email": "owner@freshpilot.example",
+      "created_at": "2026-09-19T16:00:00.000Z",
+      "suspended": false,
+      "usage_rows": 4,
+      "grants": [],
+      "adjustment": null,
+      "keys": [
+        {
+          "id": "b1000000-0000-4000-8000-000000000001",
+          "name": "first key",
+          "prefix": "sk-infrx-fp01key",
+          "created_at": "2026-09-19T16:05:00.000Z",
+          "last_used_at": "2026-09-19T16:40:00.000Z",
+          "revoked_at": null,
+          "trace_mode": "off"
+        }
+      ],
+      "settings": {
+        "trace_mode": "off",
+        "content_retention_days": 7,
+        "evaluation_consent": false,
+        "consent_history": []
+      },
+      "all_free": true
+    }
+  ],
+  "sessions": {
+    "owner": {
+      "userId": "aaaaaaaa-0000-4000-8000-000000000001",
+      "email": "owner@northwind.example",
+      "orgId": "11111111-1111-4111-8111-111111111111",
+      "orgName": "Northwind Labs",
+      "role": "owner",
+      "isOperator": false
+    },
+    "member": {
+      "userId": "aaaaaaaa-0000-4000-8000-000000000002",
+      "email": "member@northwind.example",
+      "orgId": "11111111-1111-4111-8111-111111111111",
+      "orgName": "Northwind Labs",
+      "role": "member",
+      "isOperator": false
+    },
+    "operator": {
+      "userId": "aaaaaaaa-0000-4000-8000-000000000003",
+      "email": "operator@infrx.example",
+      "orgId": "11111111-1111-4111-8111-111111111111",
+      "orgName": "Northwind Labs",
+      "role": "owner",
+      "isOperator": true
+    },
+    "otherOwner": {
+      "userId": "aaaaaaaa-0000-4000-8000-000000000004",
+      "email": "owner@freshpilot.example",
+      "orgId": "22222222-2222-4222-8222-222222222222",
+      "orgName": "Fresh Pilot",
+      "role": "owner",
+      "isOperator": false
+    }
+  }
+}
