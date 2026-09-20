@@ -192,3 +192,4 @@ distinction.
   passing; every conformance pass is against fakes, so the task is implemented and not
   integrated. No cloud, GPU, container, paid provider or production resource was
   touched.
+- 2026-09-20: Corrected by the r4 pass (see `F2-py-<r4 sha>.md`). Three claims of this report were wrong: "four duplicate guards removed" (three were; `fakes/scheduling.py` had a zero-line diff), "early returns are now `hook(...)`" (twelve cases still read hooks silently), and "staging stays all-or-nothing" (an unresolvable upload left an inline sibling stored, now fixed with a case and three mutants). The mutation runner of this pass could also count a syntax or import error as a kill; r4 tightened the kill criterion and added six self-tests. History kept.
