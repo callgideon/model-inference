@@ -52,6 +52,7 @@ import {
   MAX_PAGE_LIMIT,
   MAX_RUBRIC_VERSION,
   ORG_ROLES,
+  PLATFORM_ACTOR,
   PAGE_QUERY_FIELDS,
   SETTINGS_UPDATE_FIELDS,
   TERMINAL_JOB_STATES,
@@ -246,6 +247,11 @@ function plusMonths(epochMs: number, months: number): string {
 /** `fb_` + namespace + per-organization ordinal: unique across organizations and across restarts. */
 function feedbackId(namespace: number, ordinal: number): string {
   return `fb_${hex(namespace, 4)}${hex(ordinal, 8)}`;
+}
+
+/** Operator labels get their own prefix and their own sequence (R35). */
+function labelId(namespace: number, ordinal: number): string {
+  return `cal_${hex(namespace, 4)}${hex(ordinal, 8)}`;
 }
 
 function hex(value: number, length: number): string {
@@ -580,6 +586,13 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
   return SUCCEEDED;
 }
 
+/**
+ * A ledger row as stored. `by_operator` is internal: it is what lets the read projection replace an
+ * operator's identity with `platform` for a customer session (R41) while the audit trail keeps the
+ * real principal. It is never part of the DTO.
+ */
+type StoredLedgerEntry = LedgerEntry & { by_operator: boolean };
+
 type OrgState = {
   org_id: string;
   /** Fixture namespace, mixed into every generated id so two organizations cannot collide. */
@@ -593,7 +606,7 @@ type OrgState = {
   settings: ConsoleSettings;
   keys: ApiKeySummary[];
   usage: UsageRow[];
-  ledger: LedgerEntry[];
+  ledger: StoredLedgerEntry[];
   traces: TraceDetail[];
   content: Map<string, TraceContentView>;
   judge: JudgeRun[];
@@ -610,6 +623,12 @@ type OrgState = {
    * collide with a seeded id however many are added.
    */
   feedbackCounter: number;
+  /**
+   * Labels count separately, so an operator's action cannot shift the id a customer's *next*
+   * submission will get — an observable side channel otherwise, and one a customer could use to
+   * notice that the platform had looked at their request (R35).
+   */
+  labelCounter: number;
 };
 
 /**
@@ -807,7 +826,7 @@ function buildOrg(spec: OrgFixture): OrgState {
     });
   }
 
-  const ledger: LedgerEntry[] = spec.grants.map((grant, index) => ({
+  const ledger: StoredLedgerEntry[] = spec.grants.map((grant, index) => ({
     id: deterministicUuid(spec.namespace + 500, index + 1),
     created_at: grant.created_at,
     delta: parseMoney(grant.amount),
@@ -815,6 +834,7 @@ function buildOrg(spec: OrgFixture): OrgState {
     reason: grant.reason,
     ref: null,
     actor: orgsFixture.sessions.operator.email,
+    by_operator: true,
   }));
   usage.forEach((row, index) => {
     if (row.settlement_state !== "settled") return;
@@ -826,6 +846,7 @@ function buildOrg(spec: OrgFixture): OrgState {
       reason: null,
       ref: row.request_id,
       actor: null,
+      by_operator: false,
     });
   });
   if (spec.adjustment !== null) {
@@ -837,6 +858,7 @@ function buildOrg(spec: OrgFixture): OrgState {
       reason: spec.adjustment.reason,
       ref: null,
       actor: orgsFixture.sessions.operator.email,
+      by_operator: true,
     });
   }
   // R13: a migrated `purchase` row. It has to render; no operation here creates one.
@@ -849,6 +871,7 @@ function buildOrg(spec: OrgFixture): OrgState {
       reason: spec.legacy_purchase.reason,
       ref: null,
       actor: null,
+      by_operator: false,
     });
   }
   // Every time-ordered list is sorted by exactly the key the cursor carries, newest first, with the
@@ -885,6 +908,7 @@ function buildOrg(spec: OrgFixture): OrgState {
     labels: [],
     counter: 0,
     feedbackCounter: 0,
+    labelCounter: 0,
   };
 
   // Seeded feedback and judge runs belong to the established organization only.
@@ -892,9 +916,13 @@ function buildOrg(spec: OrgFixture): OrgState {
     traceFixture.seed_feedback.forEach((seed) => {
       const trace = org.traces[seed.trace_index];
       if (trace === undefined) return;
-      org.feedbackCounter += 1;
+      const isLabel = seed.name === "calibration_label";
+      if (isLabel) org.labelCounter += 1;
+      else org.feedbackCounter += 1;
       const entry: FeedbackEntry = {
-        id: feedbackId(spec.namespace, org.feedbackCounter),
+        id: isLabel
+          ? labelId(spec.namespace, org.labelCounter)
+          : feedbackId(spec.namespace, org.feedbackCounter),
         request_id: trace.request_id,
         created_at: seed.created_at,
         channel: seed.channel === "api" ? "api" : "console",
@@ -906,7 +934,7 @@ function buildOrg(spec: OrgFixture): OrgState {
         calibration_set: seed.calibration_set,
         rubric_version: seed.rubric_version,
       };
-      if (entry.name === "calibration_label") {
+      if (isLabel) {
         org.labels.push(entry);
       } else {
         trace.feedback.push(entry);
@@ -1058,10 +1086,20 @@ export function createFakeConsoleServices(): FakeConsoleServices {
   const audit: AuditEntry[] = [];
   let auditCounter = 0;
   let clockMs = CLOCK_MS;
+  let operatorClockMs = CLOCK_MS;
 
   function nextTimestamp(): string {
     clockMs += 1000;
     return new Date(clockMs).toISOString();
+  }
+
+  /**
+   * A separate clock for operator-only records — labels and audit entries — so an operator action
+   * leaves no mark on the timestamps a customer's next write will get (R35).
+   */
+  function nextOperatorTimestamp(): string {
+    operatorClockMs += 1000;
+    return new Date(operatorClockMs).toISOString();
   }
 
   function appendAudit(
@@ -1076,7 +1114,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     auditCounter += 1;
     const entry: AuditEntry = {
       id: deterministicUuid(6060, auditCounter),
-      at: nextTimestamp(),
+      at: nextOperatorTimestamp(),
       actor_principal: session.email,
       action,
       target_org_id: targetOrgId,
@@ -1297,6 +1335,16 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     return org.traces.find((trace) => trace.request_id === requestId);
   }
 
+  /**
+   * R41: a customer session is told *that* the platform acted, never *who* at the platform did.
+   * The operator's identity stays in `adminAudit`, which only an operator can read.
+   */
+  function visibleLedger(entry: StoredLedgerEntry, session: SessionContext): LedgerEntry {
+    const { by_operator: byOperator, ...row } = structuredClone(entry);
+    if (!byOperator) return row;
+    return { ...row, actor: session.isOperator ? row.actor : PLATFORM_ACTOR };
+  }
+
   function orgKey(row: AdminOrgSummary): SortKey {
     return [row.name, row.org_id];
   }
@@ -1369,17 +1417,21 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       rubric_version: number | null;
     },
   ): FeedbackEntry {
-    org.feedbackCounter += 1;
+    const isLabel = provenance.name === "calibration_label";
+    if (isLabel) org.labelCounter += 1;
+    else org.feedbackCounter += 1;
     const entry: FeedbackEntry = {
-      id: feedbackId(org.namespace, org.feedbackCounter),
+      id: isLabel ? labelId(org.namespace, org.labelCounter) : feedbackId(org.namespace, org.feedbackCounter),
       request_id: trace.request_id,
-      created_at: nextTimestamp(),
+      // A label also takes its timestamp from a separate sequence, so an operator action leaves no
+      // trace in the clock a customer's next submission will read.
+      created_at: isLabel ? nextOperatorTimestamp() : nextTimestamp(),
       channel: "console",
       ...provenance,
     };
     // R35: a calibration label is operator data. It goes to the label list, so no customer view has
     // to remember to filter it out, and `feedback_count` and `has_feedback` never count one.
-    if (entry.name === "calibration_label") {
+    if (isLabel) {
       org.labels.push(entry);
     } else {
       trace.feedback.push(entry);
@@ -1549,7 +1601,8 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (rejected !== null) return rejected;
       const resolved = tenant<Page<LedgerEntry>>(session, "ledger");
       if (isError(resolved)) return resolved;
-      return paginate(resolved.org.ledger, query, scopeOf(resolved.org, "ledger", query), timeKey);
+      const rows = resolved.org.ledger.map((entry) => visibleLedger(entry, session));
+      return paginate(rows, query, scopeOf(resolved.org, "ledger", query), timeKey);
     },
 
     async traces(session, query) {
@@ -1791,7 +1844,9 @@ export function createFakeConsoleServices(): FakeConsoleServices {
             settings.consent_history.push({
               changed_at: nextTimestamp(),
               evaluation_consent: update.evaluation_consent,
-              changed_by: session.email,
+              // R41 again: this record is read by the customer, so an operator's identity does not
+              // belong in it even when the operator is also this organization's owner.
+              changed_by: session.isOperator ? PLATFORM_ACTOR : session.email,
             });
           }
           return structuredClone(settings);
@@ -1978,7 +2033,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
 
       return commit("adminGrant", session, input.idempotency_key, payload, () => {
         target.counter += 1;
-        const entry: LedgerEntry = {
+        const entry: StoredLedgerEntry = {
           id: deterministicUuid(8080 + target.namespace, target.counter),
           created_at: nextTimestamp(),
           delta: amount,
@@ -1988,6 +2043,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
           // key: a store that lost the record can still recognise the grant it already made.
           ref: input.idempotency_key,
           actor: session.email,
+          by_operator: true,
         };
         target.ledger.unshift(entry);
         target.ledger.sort((a, b) => -compareKeys(timeKey(a), timeKey(b)));

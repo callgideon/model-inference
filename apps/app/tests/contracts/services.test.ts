@@ -165,6 +165,39 @@ test("many submissions never reuse a feedback id, and two organizations never sh
   for (const entry of listed.value) assert.match(entry.id, /^fb_[0-9a-f]{12}$/, "feedback ids stay opaque");
 });
 
+test("an operator label leaves the fake's customer-visible sequences untouched", async () => {
+  // Fake-only because it depends on the fake minting ids and timestamps deterministically: C's ids
+  // are opaque, so the exported suite cannot state this. The property still matters here — a shifted
+  // id or clock would tell a customer that the platform had looked at their request (R35).
+  const withoutLabel = createFakeConsoleServices();
+  const withLabel = createFakeConsoleServices();
+  const submit = (services: ReturnType<typeof createFakeConsoleServices>, key: string) =>
+    services.feedback.submit(services.sessions.owner, {
+      request_id: services.ids.availableRequestId,
+      name: "comment",
+      value: "note",
+      idempotency_key: key,
+    });
+
+  const firstA = await submit(withoutLabel, "seq-1");
+  const secondA = await submit(withoutLabel, "seq-2");
+  const firstB = await submit(withLabel, "seq-1");
+  const label = await withLabel.calibration.label(withLabel.sessions.operator, {
+    request_id: withLabel.ids.availableRequestId,
+    rubric_version: 1,
+    label: "correct",
+    idempotency_key: "seq-label",
+  });
+  const secondB = await submit(withLabel, "seq-2");
+
+  assert.ok(firstA.ok && secondA.ok && firstB.ok && secondB.ok && label.ok);
+  assert.equal(firstB.value.id, firstA.value.id, "the instances start in step");
+  assert.equal(secondB.value.id, secondA.value.id, "and the label must not shift the next id");
+  assert.equal(secondB.value.created_at, secondA.value.created_at, "nor the next timestamp");
+  assert.match(label.value.id, /^cal_/, "a label carries its own id prefix");
+  assert.match(secondB.value.id, /^fb_/, "customer feedback keeps its own");
+});
+
 test("the fake's own cursor shape cannot be forged", async () => {
   // These were in the exported suite until R36: they read the cursor's structure, so they belong to
   // the implementation that chose that structure. C's cursors will look nothing like this.

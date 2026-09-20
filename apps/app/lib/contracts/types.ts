@@ -358,6 +358,13 @@ export type LedgerEntryKind = (typeof LEDGER_ENTRY_KINDS)[number];
 /** The kinds a running system may create; `purchase` is deliberately absent. */
 export const CREATABLE_LEDGER_ENTRY_KINDS = ["grant", "usage", "adjustment"] as const;
 
+/**
+ * What a customer session sees in place of an operator's identity (R41). A tenant learns that the
+ * platform acted, never which person at the platform did it; the real principal lives in the
+ * operator-only audit trail.
+ */
+export const PLATFORM_ACTOR = "platform";
+
 export type LedgerEntry = {
   id: string;
   created_at: string;
@@ -366,6 +373,11 @@ export type LedgerEntry = {
   kind: LedgerEntryKind;
   reason: string | null;
   ref: string | null;
+  /**
+   * Who caused the entry, as *this* session may know it: the organization's own principal for its
+   * own actions, the literal `platform` for anything an operator did, and null where nobody did
+   * (a usage debit). An operator principal never appears here (R41).
+   */
   actor: string | null;
 };
 
@@ -606,6 +618,7 @@ export const MAX_CONTENT_RETENTION_DAYS = 90;
 export type ConsentHistoryEntry = {
   changed_at: string;
   evaluation_consent: boolean;
+  /** The organization's own principal, or `platform` when an operator made the change (R41). */
   changed_by: string;
 };
 
