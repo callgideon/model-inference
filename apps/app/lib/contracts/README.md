@@ -10,9 +10,10 @@ contract revision, not a track-local edit.
 | `money.ts` | Branded `Money` string, BigInt units of 1e-8 USD, `parse/format/add/sub/compare/isNegative`, display formatter |
 | `types.ts` | Frozen vocabularies (`as const` lists with the unions derived from them), `SessionContext`, `Result`, `Page`, every DTO |
 | `services.ts` | The `ConsoleServices` interface and the operation names |
-| `fixtures/*.json` | Two organizations, sessions, money cases, trace content templates, judge runs |
+| `fixtures/*.json` | Two organizations, sessions, money arithmetic/display constants, trace content templates, judge runs |
 | `fake-services.ts` | Deterministic fixture-backed `ConsoleServices` with failure injection |
-| `conformance.ts` | The shared test bodies: one exported function taking a harness factory |
+| `conformance.ts` | The shared test bodies: `runConsoleServicesConformance` and `runMutationSafetyConformance`, each taking a harness factory |
+| `../../tests/contracts/money_cases.json` | The cross-language money accept/reject list (R11): data only, sorted by input, diffed against the Python half |
 
 ## Rules the interface exists to enforce
 
@@ -20,12 +21,26 @@ contract revision, not a track-local edit.
   `adminGrant`'s `target_org_id`, which is authorized against `session.isOperator`.
 - Feedback `channel`, `author_role`, `author_principal` and `calibration_set` are server-set;
   the input type has no way to supply them.
-- Lists return `Page<T>` with an opaque cursor bound to the query that produced it, and reject
-  `limit > 100` with `invalid_request` rather than clamping.
+- **An unknown input field is `invalid_request`**, mirroring pydantic `extra="forbid"` on the
+  Python side (08 §2). A caller that smuggles `org_id`, `author_role`, `channel` or a storage key
+  is refused, not silently ignored: ignoring it returns a page that looks right and teaches the
+  caller nothing. The accepted names per input are exported from `types.ts`
+  (`USAGE_QUERY_FIELDS`, `FEEDBACK_INPUT_FIELDS`, …).
+- Lists return `Page<T>` with an opaque cursor bound to its tenant, operation and filters — but
+  not to `limit`, so the page size may change mid-walk. `limit > 100` is `invalid_request`, never
+  a clamp.
 - Money crosses every boundary as a canonical eight-digit decimal string. `number` is never a
-  monetary value — not in arithmetic, not in display.
+  monetary value — not in arithmetic, not in display. The domain is `numeric(20, 8)`
+  (`|value| < 10^12`, R11), identical in both languages.
 - Failures come back as `Result` errors with the codes of 08 §3; nothing throws for an expected
-  condition.
+  condition, and **an amount or total outside the money domain is an expected condition**.
+- **Every mutation validates completely before it writes anything**, and files its idempotency
+  record only afterwards. So a refused operation leaves the state it touched byte-identical, and
+  the retry that always follows a refusal has exactly one effect. An idempotency key is scoped to
+  (caller organization, operation, target organization, payload): required on `adminGrant` and
+  `feedback.submit` (R3), optional on `keys.create`, `keys.revoke` and `settings.update`. A key
+  replayed with a changed payload — including a changed target organization — is
+  `idempotency_conflict`, never a second effect. Keys are bounded at 255 characters (08 §3).
 
 ## U and V: build against the fake
 
@@ -36,6 +51,16 @@ import type { ConsoleServices } from "@/lib/contracts/services.ts";
 const services: ConsoleServices = createFakeConsoleServices();
 const page = await services.usage(services.sessions.owner, { limit: 25 });
 if (!page.ok) return renderError(page.error); // typed code, safe message
+
+// A mutation carries the idempotency key of the form submission, so a double-submit,
+// a refresh or a retry after a timeout produces one signal rather than two.
+const ack = await services.feedback.submit(services.sessions.owner, {
+  request_id,
+  name: "rating",          // thumb | rating | correction | comment
+  value: 4,                // boolean | 1..5 | non-empty text, per name (R3)
+  comment: "cut off early", // optional
+  idempotency_key: formToken,
+});
 ```
 
 `services.sessions` gives `owner`, `member`, `operator` and `otherOwner` (a second
@@ -45,16 +70,27 @@ to render: `availableRequestId`, `offRequestId`, `otherOrgRequestId` (must be `n
 
 What the fixture data covers, so a page can be built without guessing:
 
-- 137 usage rows, 117 ledger entries and 137 traces for the established organization: more
-  than one page of each at the maximum limit of 100.
-- Every trace content state: `available`, `metadata_only`, `pending`, `lost`, `expired`, `off`.
+- 160 usage rows and 107 trace rows for the established organization (the 53 off-mode requests
+  have no trace row, R13), plus 137 ledger entries: more than one page of each at the maximum
+  limit of 100.
+- Every trace content state. Five of them — `available`, `metadata_only`, `pending`, `lost`,
+  `expired` — appear in the trace list; `off` is reached only from a usage row, through
+  `traceDetail`/`traceContent` on `ids.offRequestId`.
+- Non-terminal rows (`preparing`, `queued`, `running`) with `settlement_state: null` and an
+  outstanding `max_hold`, so a usage table has to render "not settled yet" rather than a state.
 - Outstanding holds, so `available` is strictly below `ledger_total`; unknown-usage rows that
   are held rather than charged; platform-absorbed and free failures that cost nothing.
+- A ledger with all four kinds, including one legacy `purchase` row that must render although
+  nothing creates one (R13).
+- Seeded feedback for each R3 name (`thumb`, `rating`, `correction`, `comment`), both channels
+  and a judge-authored entry.
 - A zero-balance new organization with no ledger history (`sessions.otherOwner`).
 - Judge runs in `dry_run`, `settled` and `ambiguous` state, a sample with
-  `limited_evaluation` (no media, so no groundedness score), and a held budget.
+  `limited_evaluation` (no media, so no groundedness score), and a held budget. `judgeRuns` is
+  owner and operator only, so a member session gets `forbidden` (R13).
 - Per-operation failure injection: `services.failNext("usage", "dependency_unavailable")`
-  makes exactly the next call fail, for loading/error/retry states.
+  makes exactly the next call fail, for loading/error/retry states. An injected failure is
+  returned before anything is written, so it never leaves half-changed state behind.
 
 Type-only imports keep the fake out of client bundles: import DTOs from `types.ts` in
 components and call the services from server components or server actions.
@@ -66,13 +102,20 @@ behaviour rather than to a parallel set of assertions:
 
 ```ts
 // apps/app/tests/c/console-services.test.ts
-import { runConsoleServicesConformance } from "../../lib/contracts/conformance.ts";
+import {
+  runConsoleServicesConformance,
+  runMutationSafetyConformance,
+} from "../../lib/contracts/conformance.ts";
 import { createConsoleServices } from "../../lib/services/console.ts";
 
-runConsoleServicesConformance(async () => {
+const harness = async () => {
   const services = await createConsoleServices({ /* task-local PG/CH per 08 §8 */ });
   return { services, sessions: await seedSessions(), ids: await seedIds() };
-}, "PostgreSQL ConsoleServices");
+};
+
+runConsoleServicesConformance(harness, "PostgreSQL ConsoleServices");
+// `runConsoleServicesConformance` already calls this; call it alone while wiring writes.
+runMutationSafetyConformance(harness, "PostgreSQL ConsoleServices");
 ```
 
 The harness must supply a *fresh* tenant per factory call (the suite mutates settings, submits
@@ -88,46 +131,86 @@ list organizations, grants are idempotent per key and conflict on a changed payl
 is capped at 90 days, consent moves independently of trace mode, and content DTOs never carry
 a storage path or signed URL.
 
+`runMutationSafetyConformance` is the half that hurts to implement, so it is stated plainly. It
+asserts that an amount which would take the wallet out of `numeric(20, 8)` is refused with
+nothing written and is still refused on retry under the same key, and that balances and the
+operator list keep working afterwards; that a refusal on each mutating operation leaves the
+ledger, keys, settings and feedback byte-identical; that an idempotency key is scoped to its
+operation, organization and payload, and replays rather than duplicating; that generated ids
+never collide within or across organizations; that a list walked while rows arrive at its head
+returns exactly the rows that existed when the walk began, in order; that nothing creates a
+`purchase` entry; and that an invented input field is `invalid_request`. Nothing in the suite
+may throw: a rejected promise fails the test with its own message.
+
 Passing it against the fake means **implemented**. C is *integrated* only when the same suite
 passes against real PostgreSQL and ClickHouse (F-CONTRACT, TRACE-TENANT, DUR-RLS,
 CONSOLE-FLOWS); see [04-verification.md](../../../../research/plan/04-verification.md).
 
-## Amendments requested against 08 §9
+## Rulings of contract revision r1, as encoded here
 
-- `keys.list/create/revoke` are declared here although §9 does not list them: U2 needs key
-  management behind the same session and role checks. Recorded in the F2 evidence report.
-- `adminGrant` takes `target_org_id`, the one caller-supplied organization id in the
-  interface, because an operator grant has to name its target. Every tenant-scoped operation
-  still binds the organization from the session only.
-- `usageSummary` and `usageDaily` are separate operations beside `usage`, matching the existing
-  `org_usage_summary` / `org_usage_daily` SQL functions.
-- `LedgerEntryKind` is `grant | usage | adjustment`, with no `purchase`: 00 §Out of scope excludes
-  payments, invoices and refunds of real money from the free pilot, so a wallet gains credit only
-  from an operator grant or an operator adjustment.
-- Off-mode requests **do** appear in the trace list, as a row with `content: "off"`.
-  `research/traces/07-console-spec.md` says an off-mode request has no ClickHouse trace row and is
-  excluded from coverage denominators; both still hold, because this row is the usage row projected
-  into the traces page so a customer can see which keys are not capturing. `traceContent` for such
-  a request returns `availability: "off"` with `content: null`, never `not_found`.
-- **`TraceMode` is `off | minimal | full`** — the 08 §3 vocabulary, which supersedes the
-  `off | metadata | full` of
+[08 §10](../../../../research/plan/08-contracts-v1-encoding.md) settled the amendments F2 raised.
+What that means in this directory:
+
+- **R13 accepted** `keys.list/create/revoke` (U2 needs key management behind the same session and
+  role checks), `adminGrant.target_org_id` with the idempotency scope including the target and the
+  payload, separate `usageSummary`/`usageDaily`, `TraceMode` = `off | minimal | full`,
+  `UsageRow.settlement_state` nullable before terminal, `judgeRuns` owner and operator only, and
+  `ERROR_CODE_HTTP_STATUS` — which must equal the Python table exactly (the G0 parity test).
+- **R13 amended** two things this README previously stated the other way round:
+  - `LedgerEntryKind` **keeps `purchase`** as a legacy read-only value. Historical rows must
+    render; nothing creates one, which `runMutationSafetyConformance` asserts.
+    `CREATABLE_LEDGER_ENTRY_KINDS` is the set a running system may write.
+  - Off-mode requests **do not** appear in `traces` at all — an off-mode request has no trace row.
+    They remain usage rows, and `traceDetail`/`traceContent` reached from a usage row report
+    availability `off` with `content: null`, never `not_found`.
+- **R3** fixes the feedback body: `name` ∈ `thumb | rating | correction | comment`, `value` a
+  boolean for `thumb`, an integer 1–5 for `rating`, non-empty text for `correction`/`comment`, an
+  optional `comment` alongside, and a required `idempotency_key`. An empty body is
+  `invalid_request`. This replaces the earlier `rating: "up" | "down"` with `comment`/`correction`
+  fields; V reads `research/traces/06` §2 for the field semantics.
+- **R11** bounds money to `numeric(20, 8)` in both languages, with the accept/reject set in
+  `tests/contracts/money_cases.json`. `adminGrant` refuses a negative, zero, non-decimal or
+  over-scale amount, and refuses a *total* that would leave the domain.
+- **`TraceMode` `off | minimal | full`** supersedes the `off | metadata | full` of
   [`research/traces/07-console-spec.md`](../../../../research/traces/07-console-spec.md)
   (`TraceLevel`, `trace-level-select.tsx`, the `X-Infrx-Trace` header). V reads 07 for field
   semantics and must write `minimal` wherever 07 writes `metadata`; the fake rejects `"metadata"`
   as `invalid_request`.
 
+### New amendments this round (change requests, not settled)
+
+- `keys.create`, `keys.revoke` and `settings.update` accept an **optional** `idempotency_key`
+  (`revoke` as a third argument). R3 requires one only for feedback and R13 only for grants, but
+  the defect class is the same everywhere: a double-submitted form must not mint two keys or
+  append two consent-history entries. A replayed `keys.create` returns the original response,
+  secret included — that is what an idempotent create means, and C must store enough to do the
+  same or decline the key.
+- New bounds with no source in 08: `MAX_KEY_NAME_CHARS` = 200 and `MAX_GRANT_REASON_CHARS` = 500.
+  A key label and a grant reason were unbounded, so C inherited no limit. Numbers chosen here;
+  the coordinator should confirm or replace them.
+- Unknown input fields are refused rather than ignored (above). This is stricter than §9 states
+  and is what makes the Python and TypeScript halves behave the same way.
+
 ## Known fake-only behaviour
 
 Things U, V and C should not read as contract:
 
-- Cursors are offset-based and bound to the page size as well as to the filters, so changing
-  `limit` mid-walk returns `invalid_cursor`, and a grant issued during a ledger walk shifts the
-  offsets and can repeat one entry. C's keyset cursors will not have either property; the suite
-  requires neither, so C is not over-constrained.
+- Cursors carry the id of the last row delivered, and resuming looks that id up in the current
+  list. That gives the keyset property the suite requires (a walk under insertion at the head
+  returns every row exactly once) with an O(n) scan C will do with an index instead. A cursor
+  whose row has disappeared is `invalid_cursor` here; C may prefer to resume after the missing
+  key, and the suite does not test deletion.
 - The fixture clock is frozen at `orgs.json`'s `clock`; timestamps generated by a mutation
   advance a local counter by one second per call.
-- `judgeRuns` is readable by a member. No handoff restricts it; if J or U want it owner-only, that
-  is a coordinator amendment, not a track-local change.
+- Idempotency records live for the lifetime of the instance and never expire, so the fake cannot
+  produce `idempotency_expired`. C's records expire (08 §5) and it must.
+- Row counts, ids and secrets are fixture data: 160 usage rows, the `sk-infrx-FAKE…` secret shape
+  and the `fb_<namespace><ordinal>` id shape are all fake-only. The contract is that ids are
+  opaque, not how these are built.
+- Every organization in the fixtures is active, so `org_suspended` is reachable in code
+  (`tenant()` returns it) but not through any session the harness offers. Exercising it needs a
+  suspended fixture organization plus a session for it — a coordinator amendment, listed as a
+  limit in the evidence report.
 
 ## Verification log
 
@@ -138,3 +221,10 @@ Things U, V and C should not read as contract:
   README omitted (ledger kinds, off-mode trace rows, `TraceMode` superseding 07's `TraceLevel`),
   added the fake-only behaviour section, and restated what the suite proves about pagination now
   that each list is walked at two page sizes. Row counts are unchanged (137 / 117 / 137).
+- 2026-09-20: Round-3 revision for contract revision r1. Rewrote the amendment section as the
+  rulings actually settled (R3 feedback body, R11 money domain, R13 — including the two items this
+  file previously stated the other way round: `purchase` is kept as a legacy kind, and off-mode
+  requests are absent from `traces`). Documented the validate-before-write rule, the idempotency
+  scope on every mutating operation, the refusal of unknown input fields, the keyset cursors, and
+  `runMutationSafetyConformance` as the second entry point C runs. Row counts change with the
+  fixture: 160 usage rows, 107 trace rows, 137 ledger entries.
