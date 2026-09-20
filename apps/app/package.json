@@ -9,7 +9,7 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test lib/keys.test.ts"
+    "test": "node --test lib/*.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

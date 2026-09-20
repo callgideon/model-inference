@@ -46,30 +46,58 @@ functions: `org_usage_summary(p_org, p_from, p_to, p_key)`,
 - Framework preset Next.js; build and install commands are the defaults.
 - Environment variables: the four above, with `NEXT_PUBLIC_APP_URL` set to
   `https://app.callbill.ai` in production. Preview deployments can leave it
-  unset — the login page builds the callback from `window.location.origin`.
+  unset — the reset email's callback is built from `window.location.origin`.
 - Domain `app.callbill.ai` via a Route 53 CNAME to `cname.vercel-dns.com`.
 
 ## Supabase auth settings
 
+Sign-in is **email + password, invite only**. Public sign-up is disabled, so
+there is no sign-up page: an operator creates the account, the user sets their
+own password from "Forgot password". Google OAuth is gone.
+
+In Authentication → Providers: **Email** enabled, "Allow new users to sign up"
+**off**, minimum password length **10**.
+
 In Authentication → URL Configuration:
 
 - **Site URL**: `https://app.callbill.ai`
-- **Redirect URLs**: `https://app.callbill.ai/auth/callback`,
-  `http://localhost:3000/auth/callback`, and the preview pattern
-  `https://*-humanbit.vercel.app/auth/callback`.
+- **Redirect URLs**: `https://app.callbill.ai/**` and
+  `http://localhost:3000/auth/callback`.
 
-Google OAuth via Supabase is the only sign-in method — there is no email
-sign-in. The Google provider is enabled in Authentication → Providers with the
-callgideon Google OAuth client, and that client must list
-`https://fcbnscgsymzdykendbrc.supabase.co/auth/v1/callback` as an authorized
-redirect URI. The login page calls `signInWithOAuth`, and `/auth/callback`
-exchanges the code for a session and forwards to `?next=`.
+### Creating a user
+
+Either in Authentication → Users → **Add user** (dashboard; set a throwaway
+password and leave "Auto Confirm User" on), or with the admin API:
+
+```bash
+curl -X POST "$NEXT_PUBLIC_SUPABASE_URL/auth/v1/admin/users" \
+  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"someone@example.com","password":"'"$(openssl rand -base64 18)"'","email_confirm":true}'
+```
+
+Then tell the user to go to `/forgot-password` and enter that address: the
+email links to `/auth/callback?token_hash=…&type=recovery&next=/update-password`,
+which verifies the link, signs them in and drops them on `/update-password` to
+choose their first password. The `auth.users` trigger creates their profile,
+organization and membership on first sign-in.
+
+### The routes
+
+- `/login` — `signInWithPassword`, then `router.push(?next=…)` (same-site paths only).
+- `/forgot-password` — `resetPasswordForEmail`; always answers "if that address
+  has an account, a reset link is on its way" (no account enumeration).
+- `/update-password` — `updateUser({ password })`; needs a session, reached from
+  the recovery link or from "Change password" in the sidebar user menu.
+- `/auth/callback` — exchanges `?code=` (PKCE) or verifies `?token_hash=&type=`,
+  forwards to `?next=`, and sends failures to `/login?error=…`.
 
 ## Structure
 
 ```
-app/(auth)/login        Google sign-in
-app/auth/callback       code exchange
+app/(auth)/…            login, forgot-password, update-password
+app/auth/callback       code exchange / recovery-link verification
 app/(console)/…         models, usage, api-keys, billing, teams, dedicated, docs, admin
 components/             sidebar, snippet (Copy & Run), tiles, shadcn/ui in components/ui
 lib/supabase/           client (browser), server (cookies), middleware (session), admin (service role)

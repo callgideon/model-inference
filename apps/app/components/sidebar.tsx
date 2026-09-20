@@ -17,6 +17,7 @@ import {
   Wallet,
   ChevronsUpDown,
   LogOut,
+  Lock,
   ShieldCheck,
 } from "lucide-react";
 import { signOut } from "@/app/actions";
@@ -138,6 +139,10 @@ export function Sidebar({
             <DropdownMenuContent side="top" align="start" className="w-56">
               <div className="px-1.5 py-1 text-xs text-muted-foreground">{email}</div>
               <DropdownMenuSeparator />
+              <DropdownMenuItem render={<Link href="/update-password" onClick={close} />}>
+                <Lock className="size-4" />
+                Change password
+              </DropdownMenuItem>
               <form action={signOut}>
                 <DropdownMenuItem
                   render={<button type="submit" className="w-full" />}
