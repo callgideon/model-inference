@@ -19,8 +19,17 @@ contract revision, not a track-local edit.
 
 - The tenant is `session.orgId`. No operation takes an org id from the caller, except
   `adminGrant`'s `target_org_id`, which is authorized against `session.isOperator`.
-- Feedback `channel`, `author_role`, `author_principal` and `calibration_set` are server-set;
-  the input type has no way to supply them.
+- Feedback `channel`, `author_role`, `author_principal`, `calibration_set` and `rubric_version` are
+  server-set; the input type has no way to supply them. **`feedback.submit` always produces a
+  customer signal** — `channel: "console"`, `author_role: "customer"`, `calibration_set: false`,
+  `rubric_version: null` — whatever authority the session holds, because the control belongs to the
+  customer whose organization is open (02, R19). An operator label comes from `calibration.label`
+  and nowhere else; its entry is the only one that may carry `author_role: "operator"`,
+  `calibration_set: true` and a rubric version.
+- **A key secret is shown exactly once, in the first response** (R16). The idempotency record holds
+  the key's id, never the secret, so a replay — by the creator, another owner or an operator —
+  returns the key's *current* metadata with `secret: null` and `replayed: true`. There is nothing
+  stored for an authorization mistake to hand over, which is a stronger property than a check.
 - **An unknown input field is `invalid_request`**, mirroring pydantic `extra="forbid"` on the
   Python side (08 §2). A caller that smuggles `org_id`, `author_role`, `channel` or a storage key
   is refused, not silently ignored: ignoring it returns a page that looks right and teaches the
@@ -28,7 +37,10 @@ contract revision, not a track-local edit.
   (`USAGE_QUERY_FIELDS`, `FEEDBACK_INPUT_FIELDS`, …).
 - Lists return `Page<T>` with an opaque cursor bound to its tenant, operation and filters — but
   not to `limit`, so the page size may change mid-walk. `limit > 100` is `invalid_request`, never
-  a clamp.
+  a clamp. The cursor carries the row's **sort key** — `(created_at, id)`, or `(name, org_id)` for
+  the operator list — and the next page resumes strictly *after* it. Equal timestamps are therefore
+  unambiguous, a row arriving at the head shifts nothing, and the cursor's own row may leave the
+  result set mid-walk (a filter stops matching it) without breaking the walk.
 - Money crosses every boundary as a canonical eight-digit decimal string. `number` is never a
   monetary value — not in arithmetic, not in display. The domain is `numeric(20, 8)`
   (`|value| < 10^12`, R11), identical in both languages.
@@ -38,9 +50,14 @@ contract revision, not a track-local edit.
   record only afterwards. So a refused operation leaves the state it touched byte-identical, and
   the retry that always follows a refusal has exactly one effect. An idempotency key is scoped to
   (caller organization, operation, target organization, payload): required on `adminGrant` and
-  `feedback.submit` (R3), optional on `keys.create`, `keys.revoke` and `settings.update`. A key
-  replayed with a changed payload — including a changed target organization — is
-  `idempotency_conflict`, never a second effect. Keys are bounded at 255 characters (08 §3).
+  `feedback.submit` (R3), `calibration.label`, `adminSetSuspension` and `adminSetEntitlements`
+  (R19), optional on `keys.create`, `keys.revoke` and `settings.update` (R16). A key replayed with a
+  changed payload — including a changed target organization — is `idempotency_conflict`, never a
+  second effect. Keys are bounded at 255 characters (08 §3).
+- **The effect and its idempotency record are one write.** If they can diverge, a crash between them
+  turns the client's retry into a second effect, so C must write the record in the same transaction
+  as the effect. A grant additionally carries its key as the ledger row's `ref`, so a store that
+  lost the record can still recognise the grant it already made.
 
 ## U and V: build against the fake
 
@@ -63,16 +80,19 @@ const ack = await services.feedback.submit(services.sessions.owner, {
 });
 ```
 
-`services.sessions` gives `owner`, `member`, `operator` and `otherOwner` (a second
-organization), and `services.ids` gives request and key identifiers for the states a page has
-to render: `availableRequestId`, `offRequestId`, `otherOrgRequestId` (must be `not_found`),
-`unknownRequestId`, `keyId`, `otherOrgKeyId`.
+`services.sessions` gives `owner`, `member`, `operator`, `otherOwner` (a second organization) and
+`suspendedOwner` (an organization suspended before anything runs, so `org_suspended` is reachable —
+R18). `services.ids` gives request and key identifiers for the states a page has to render:
+`availableRequestId`, `offRequestId`, `otherOrgRequestId` (must be `not_found`),
+`unknownRequestId`, `keyId`, `otherOrgKeyId`, `suspendedOrgId`.
 
 What the fixture data covers, so a page can be built without guessing:
 
 - 160 usage rows and 107 trace rows for the established organization (the 53 off-mode requests
   have no trace row, R13), plus 137 ledger entries: more than one page of each at the maximum
-  limit of 100.
+  limit of 100. Some of those rows **share a `created_at`**, deliberately placed either side of the
+  page boundaries the suite walks, because that is where a keyset cursor either holds or quietly
+  drops a row.
 - Every trace content state. Five of them — `available`, `metadata_only`, `pending`, `lost`,
   `expired` — appear in the trace list; `off` is reached only from a usage row, through
   `traceDetail`/`traceContent` on `ids.offRequestId`.
@@ -82,18 +102,44 @@ What the fixture data covers, so a page can be built without guessing:
   are held rather than charged; platform-absorbed and free failures that cost nothing.
 - A ledger with all four kinds, including one legacy `purchase` row that must render although
   nothing creates one (R13).
-- Seeded feedback for each R3 name (`thumb`, `rating`, `correction`, `comment`), both channels
-  and a judge-authored entry.
+- Seeded feedback for each R3 name (`thumb`, `rating`, `correction`, `comment`), both channels, a
+  judge-authored entry, and one `calibration_label` — the operator-authored, calibration-set shape
+  that only `calibration.label` creates.
+- A suspended organization (`sessions.suspendedOwner`, `ids.suspendedOrgId`) for the
+  `org_suspended` state, and the operator controls to suspend, restore and entitle any organization.
 - A zero-balance new organization with no ledger history (`sessions.otherOwner`).
 - Judge runs in `dry_run`, `settled` and `ambiguous` state, a sample with
   `limited_evaluation` (no media, so no groundedness score), and a held budget. `judgeRuns` is
   owner and operator only, so a member session gets `forbidden` (R13).
 - Per-operation failure injection: `services.failNext("usage", "dependency_unavailable")`
   makes exactly the next call fail, for loading/error/retry states. An injected failure is
-  returned before anything is written, so it never leaves half-changed state behind.
+  returned before anything is written, so it never leaves half-changed state behind. A fourth
+  argument, `"after_write"`, instead loses the *response* after the write and its idempotency
+  record are committed — the crash-after-commit case, for testing that a retry replays.
 
 Type-only imports keep the fake out of client bundles: import DTOs from `types.ts` in
 components and call the services from server components or server actions.
+
+### Operator surface (R19)
+
+```ts
+// Operator authority is the session flag, never a field in the request.
+await services.adminSetSuspension(operatorSession, {
+  target_org_id, suspended: true, reason: "payment dispute", idempotency_key: token,
+});
+await services.adminSetEntitlements(operatorSession, {
+  target_org_id, model_ids: ["marlin-2b@2026-09-01"],
+  limits: { max_concurrent_requests: 4 }, reason: "pilot tier", idempotency_key: token,
+});
+await services.calibration.label(operatorSession, {
+  request_id, rubric_version: 3, label: "partially_correct", idempotency_key: token,
+});
+const set = await services.calibration.list(operatorSession, { limit: 50 });
+```
+
+Suspension gates *new* work only: it never rewrites a ledger entry or a terminal usage row, because
+accounting that already happened is a fact. Entitlement limit names are a closed provisional set
+(`ENTITLEMENT_LIMIT_NAMES`); an unknown name is `invalid_request`, not an ignored control.
 
 ## C: pass the same tests with the real implementation
 
@@ -119,8 +165,10 @@ runMutationSafetyConformance(harness, "PostgreSQL ConsoleServices");
 ```
 
 The harness must supply a *fresh* tenant per factory call (the suite mutates settings, submits
-feedback and issues grants) and the identifiers listed above, including one belonging to
-another organization. The suite asserts invariants, never row counts, so real data satisfies
+feedback and issues grants) and the identifiers listed above, including one belonging to another
+organization and one belonging to a suspended one. It must also seed **rows that share a
+`created_at`** in usage, the ledger and traces: the suite asserts a tie is present, because a
+`(created_at, id)` keyset resume is only tested where timestamps actually collide (N1). The suite asserts invariants, never row counts, so real data satisfies
 it: each list walked at two page sizes yields the identical ordered id list (so a keyset
 off-by-one that drops a row at a page boundary fails, not just a duplicate), the order is stable
 and descending, cursors are rejected when forged, reused with different filters or minted for
@@ -138,9 +186,19 @@ operator list keep working afterwards; that a refusal on each mutating operation
 ledger, keys, settings and feedback byte-identical; that an idempotency key is scoped to its
 operation, organization and payload, and replays rather than duplicating; that generated ids
 never collide within or across organizations; that a list walked while rows arrive at its head
-returns exactly the rows that existed when the walk began, in order; that nothing creates a
-`purchase` entry; and that an invented input field is `invalid_request`. Nothing in the suite
-may throw: a rejected promise fails the test with its own message.
+returns exactly the rows that existed when the walk began, in order; that a *filtered* walk
+survives its own cursor row leaving the filter; that nothing creates a `purchase` entry; and that
+an invented input field is `invalid_request`. Nothing in the suite may throw: a rejected promise
+fails the test with its own message.
+
+The main suite adds, this round: a created secret is shown once and to the first response only —
+same user, another session, after revocation — and appears in no response of any read operation;
+the same console control yields `author_role: "customer"` for owner, member *and* operator
+sessions, while `calibration.label` is the only producer of an operator-authored, calibration-set
+entry; a suspended organization can do nothing while the operator still sees it and its wallet;
+suspension and restoration leave every ledger and usage row byte-identical; entitlements accept
+only the names the contract knows; and 27 error codes carry an HTTP status, which is how a code
+added on one side of the parity table only gets caught here instead of at integration.
 
 Passing it against the fake means **implemented**. C is *integrated* only when the same suite
 passes against real PostgreSQL and ClickHouse (F-CONTRACT, TRACE-TENANT, DUR-RLS,
@@ -177,19 +235,22 @@ What that means in this directory:
   semantics and must write `minimal` wherever 07 writes `metadata`; the fake rejects `"metadata"`
   as `invalid_request`.
 
-### New amendments this round (change requests, not settled)
+### Round-3 change requests, as ruled
 
-- `keys.create`, `keys.revoke` and `settings.update` accept an **optional** `idempotency_key`
-  (`revoke` as a third argument). R3 requires one only for feedback and R13 only for grants, but
-  the defect class is the same everywhere: a double-submitted form must not mint two keys or
-  append two consent-history entries. A replayed `keys.create` returns the original response,
-  secret included — that is what an idempotent create means, and C must store enough to do the
-  same or decline the key.
-- New bounds with no source in 08: `MAX_KEY_NAME_CHARS` = 200 and `MAX_GRANT_REASON_CHARS` = 500.
-  A key label and a grant reason were unbounded, so C inherited no limit. Numbers chosen here;
-  the coordinator should confirm or replace them.
-- Unknown input fields are refused rather than ignored (above). This is stricter than §9 states
-  and is what makes the Python and TypeScript halves behave the same way.
+- **R16**: `keys.create`, `keys.revoke` and `settings.update` accept an optional `idempotency_key`
+  (`revoke` as a third argument) — accepted. The secret question was ruled the other way from the
+  request: a replay returns metadata with `secret: null` and `replayed: true`, and nothing stores
+  the secret. C stores the key id against the record and rereads the key, exactly as the fake does.
+- **R17**: `MAX_KEY_NAME_CHARS` = 200 and `MAX_GRANT_REASON_CHARS` = 500 accepted as provisional;
+  unknown input fields are `invalid_request` in both languages. `MAX_RUBRIC_VERSION` = 1000,
+  `MAX_ENTITLEMENT_LIMIT` = 1,000,000 and the closed `ENTITLEMENT_LIMIT_NAMES` set are this round's
+  equivalents, and equally provisional.
+- **R18**: the suspended organization and session are in the harness, and suspension never alters
+  existing terminal accounting.
+- **R19**: `adminSetSuspension`, `adminSetEntitlements`, `calibration.label` and `calibration.list`
+  exist, operator-only, audited and idempotent; ordinary console feedback from an operator session
+  stays a customer signal.
+- **R22**: `upload_expired` is a 410 in the union and the status table.
 
 ## Known fake-only behaviour
 
@@ -204,13 +265,18 @@ Things U, V and C should not read as contract:
   advance a local counter by one second per call.
 - Idempotency records live for the lifetime of the instance and never expire, so the fake cannot
   produce `idempotency_expired`. C's records expire (08 §5) and it must.
+- `unsafeDebugState()` exists on the fake only, for the one assertion the contract cannot make from
+  outside: that a key secret is retained nowhere in the state. Nothing but a test may call it, and C
+  has no equivalent — the portable half of that assertion is the read sweep in the conformance suite.
+- `calibration.list` scans every organization, because an operator's calibration set spans tenants.
+  C will index it; the suite only requires that a non-operator gets `forbidden`.
+- The entitlement limit names, `MAX_RUBRIC_VERSION` and the calibration label vocabulary are
+  provisional (R17): they are shaped like the contract, and the numbers are this round's guesses.
 - Row counts, ids and secrets are fixture data: 160 usage rows, the `sk-infrx-FAKE…` secret shape
   and the `fb_<namespace><ordinal>` id shape are all fake-only. The contract is that ids are
   opaque, not how these are built.
-- Every organization in the fixtures is active, so `org_suspended` is reachable in code
-  (`tenant()` returns it) but not through any session the harness offers. Exercising it needs a
-  suspended fixture organization plus a session for it — a coordinator amendment, listed as a
-  limit in the evidence report.
+- Row counts and the third organization are fixture data. `org_suspended` is now reachable through
+  `sessions.suspendedOwner`, so the state is exercised rather than merely present in the code.
 
 ## Verification log
 
@@ -221,6 +287,14 @@ Things U, V and C should not read as contract:
   README omitted (ledger kinds, off-mode trace rows, `TraceMode` superseding 07's `TraceLevel`),
   added the fake-only behaviour section, and restated what the suite proves about pagination now
   that each list is walked at two page sizes. Row counts are unchanged (137 / 117 / 137).
+- 2026-09-20: Round-4 revision. A created key's secret is shown exactly once and stored nowhere
+  (R16); ordinary console feedback is a customer signal whatever the session, and operator labels
+  come only from the new `calibration.label` (R19, with `adminSetSuspension` and
+  `adminSetEntitlements`); a suspended organization and session are in the harness (R18);
+  `upload_expired` joins the status table at 410 (R22); the two provisional bounds are confirmed and
+  joined by three more (R17). Cursors carry the `(created_at, id)` sort key and resume after it, the
+  fixture seeds timestamp ties at the page boundaries, and the discovery guard now reports any path
+  with a dot segment, which no glob runs.
 - 2026-09-20: Round-3 revision for contract revision r1. Rewrote the amendment section as the
   rulings actually settled (R3 feedback body, R11 money domain, R13 — including the two items this
   file previously stated the other way round: `purchase` is kept as a legacy kind, and off-mode
