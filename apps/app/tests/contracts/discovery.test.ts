@@ -8,16 +8,25 @@ import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const appRoot = new URL("../../", import.meta.url);
-const SKIP = new Set(["node_modules", ".next", ".git", "out", "build", "coverage"]);
+/**
+ * Build output and dependencies, skipped only where they actually live — at the console root. The
+ * same names nested deeper are ordinary source directories (`app/(dashboard)/build/`,
+ * `scripts/build/`), and skipping them at every depth hid a test file from this guard entirely.
+ */
+const SKIP_AT_ROOT = new Set(["node_modules", ".next", ".git", "out", "build", "coverage", "dist"]);
+
+/** Every spelling someone might reach for; the guard's job is to catch the ones no glob runs. */
+const TEST_SUFFIXES = [".test.ts", ".test.tsx", ".test.mts", ".test.cts", ".spec.ts", ".spec.tsx"];
 
 function testFiles(directory = "", depth = 0): string[] {
   assert.ok(depth < 12, `refusing to walk deeper than 12 directories at ${directory}`);
   const found: string[] = [];
   for (const entry of readdirSync(new URL(directory, appRoot), { withFileTypes: true })) {
     if (entry.isDirectory()) {
-      if (SKIP.has(entry.name)) continue;
+      if (depth === 0 && SKIP_AT_ROOT.has(entry.name)) continue;
+      if (entry.isSymbolicLink()) continue;
       found.push(...testFiles(`${directory}${entry.name}/`, depth + 1));
-    } else if (entry.name.endsWith(".test.ts") || entry.name.endsWith(".test.tsx")) {
+    } else if (TEST_SUFFIXES.some((suffix) => entry.name.endsWith(suffix))) {
       found.push(`${directory}${entry.name}`);
     }
   }
@@ -56,8 +65,29 @@ test("every test file in the tree is matched by a declared pattern", () => {
   const files = testFiles();
   const expressions = patterns.map(globToRegExp);
   const missed = files.filter((file) => !expressions.some((expression) => expression.test(file)));
-  assert.deepEqual(missed, [], `these test files would never run: ${missed.join(", ")}`);
+  assert.deepEqual(
+    missed,
+    [],
+    `these test files would never run — rename them to *.test.ts under a declared directory, or ask the coordinator to widen the patterns: ${missed.join(", ")}`,
+  );
   assert.ok(files.length >= 6, `expected the console suites to be present, found ${files.length}`);
+});
+
+test("a test hidden in a directory named like build output is still flagged", () => {
+  // The guard used to skip `build`, `out` and `coverage` at every depth, so `scripts/build/x.test.ts`
+  // was neither run nor reported. Only the root-level directories are skipped now.
+  assert.equal(SKIP_AT_ROOT.has("build"), true, "build output is skipped at the root");
+  const files = testFiles();
+  assert.ok(
+    !files.some((file) => file.startsWith("node_modules/") || file.startsWith(".next/")),
+    "dependencies and build output must not be walked",
+  );
+  for (const suffix of [".test.mts", ".spec.ts"]) {
+    assert.ok(
+      TEST_SUFFIXES.includes(suffix),
+      `${suffix} must be recognised, so a file using it is reported rather than silently skipped`,
+    );
+  }
 });
 
 test("nested suites and the pre-existing library tests are both discovered", () => {

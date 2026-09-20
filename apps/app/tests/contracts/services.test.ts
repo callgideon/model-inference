@@ -130,30 +130,31 @@ test("many submissions never reuse a feedback id, and two organizations never sh
   // 187th submission collided with a seeded id. 200 submissions is well past that point.
   const services = createFakeConsoleServices();
   const seen = new Set<string>();
-  for (let i = 0; i < 200; i += 1) {
-    const entry = await services.feedback.submit(services.sessions.owner, {
-      request_id: services.ids.availableRequestId,
-      name: "comment",
-      value: `note ${i}`,
-      idempotency_key: `stress-${i}`,
-    });
-    assert.ok(entry.ok, `submission ${i}`);
-    assert.ok(!seen.has(entry.value.id), `submission ${i} reused id ${entry.value.id}`);
-    seen.add(entry.value.id);
+  // Both organizations submit the same number of times, so an id that left the organization out
+  // of its namespace collides here rather than in production.
+  for (const [session, requestId, who] of [
+    [services.sessions.owner, services.ids.availableRequestId, "first organization"],
+    [services.sessions.otherOwner, services.ids.otherOrgRequestId, "second organization"],
+  ] as [(typeof services)["sessions"]["owner"], string, string][]) {
+    for (let i = 0; i < 200; i += 1) {
+      const entry = await services.feedback.submit(session, {
+        request_id: requestId,
+        name: "comment",
+        value: `note ${i}`,
+        idempotency_key: `stress-${who}-${i}`,
+      });
+      assert.ok(entry.ok, `${who} submission ${i}`);
+      assert.ok(!seen.has(entry.value.id), `${who} submission ${i} reused id ${entry.value.id}`);
+      seen.add(entry.value.id);
+    }
   }
+  assert.equal(seen.size, 400, "400 submissions, 400 ids");
+
   const listed = await services.feedback.list(services.sessions.owner, services.ids.availableRequestId);
   assert.ok(listed.ok);
   assert.equal(new Set(listed.value.map((entry) => entry.id)).size, listed.value.length, "listed ids are unique");
   assert.equal(listed.value.length, 200 + 1, "the seeded entry on this trace plus the 200 minted ones");
-
-  const other = await services.feedback.submit(services.sessions.otherOwner, {
-    request_id: services.ids.otherOrgRequestId,
-    name: "thumb",
-    value: true,
-    idempotency_key: "other-org-1",
-  });
-  assert.ok(other.ok);
-  assert.ok(!seen.has(other.value.id), "the second organization must not reuse a feedback id");
+  for (const entry of listed.value) assert.match(entry.id, /^fb_[0-9a-f]{12}$/, "feedback ids stay opaque");
 });
 
 test("every operation can be made to fail on demand", async () => {
