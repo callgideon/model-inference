@@ -70,3 +70,17 @@ both usage functions; days are bucketed in UTC.
 | `org_members`, `models` | read only | everything |
 | `api_keys` | owner inserts and revokes own org's | everything |
 | `usage_events`, `credit_ledger` | read own org only | insert |
+
+## Applying from a machine without IPv6
+
+`db.<ref>.supabase.co` resolves to IPv6 only. Use the session pooler
+(IPv4) instead; this project is in **us-east-2**:
+
+```bash
+supabase db push --yes --db-url \
+  "postgresql://postgres.fcbnscgsymzdykendbrc:<url-encoded password>@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+```
+
+The password is in AWS SSM as `/INFRX-SUPABASE-PROD/db_password`; the
+publishable and secret API keys are `/INFRX-SUPABASE-PROD/publishable_key`
+and `/INFRX-SUPABASE-PROD/secret_key`. Applied 2026-09-20 (0001, 0002).
