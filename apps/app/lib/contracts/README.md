@@ -26,12 +26,18 @@ contract revision, not a track-local edit.
   customer whose organization is open (02, R19). An operator label comes from `calibration.label`
   and nowhere else; its entry is the only one that may carry `author_role: "operator"`,
   `calibration_set: true` and a rubric version.
-- **No customer view names an operator** (R41). `LedgerEntry.actor` is the organization's own
-  principal for its own actions, the literal `platform` (`PLATFORM_ACTOR`) for anything an operator
-  did, and null where nobody did; consent history records `platform` when an operator changes it. The
-  real principal lives in the operator's views — `adminAudit`, and the ledger read *by an operator
-  session* — so the masking is a view, not missing data. A tenant learns that the platform acted,
-  never which person at the platform did.
+- **No customer view names an operator** (R41), in *any* actor field:
+  - `LedgerEntry.actor` — the organization's own principal for its own actions, the literal
+    `platform` (`PLATFORM_ACTOR`) for anything an operator did, null where nobody did;
+  - `ConsentHistoryEntry.changed_by` — `platform` when an operator changed the setting;
+  - `FeedbackEntry.author_principal` — `platform` when an operator submitted ordinary console
+    feedback. The entry is still a *customer* signal (R19, `author_role: "customer"`); only who
+    pressed the button is withheld. This applies to a replay as well as a read.
+
+  The real principal is stored and shown in the operator's views — `adminAudit`, and the ledger,
+  settings or feedback read *by an operator session* — so the masking is a view rather than a
+  redaction, and an operator can still answer "who did this?". A tenant learns that the platform
+  acted, never which person at the platform did.
 - **A key secret is shown exactly once, in the first response** (R16). The idempotency record holds
   the key's id, never the secret, so a replay — by the creator, another owner or an operator —
   returns the key's *current* metadata with `secret: null` and `replayed: true`. There is nothing
@@ -124,6 +130,16 @@ What the fixture data covers, so a page can be built without guessing:
   returned before anything is written, so it never leaves half-changed state behind. A fourth
   argument, `"after_write"`, instead loses the *response* after the write and its idempotency
   record are committed — the crash-after-commit case, for testing that a retry replays.
+
+Two things worth knowing before building a page:
+
+- **A `traces` row is `TraceListItem` and nothing more.** It carries no `feedback` array, no
+  `timings`, no `versions`: open `traceDetail` for those. A conformance case pins the row's field set,
+  because a service that returned its detail object would satisfy every other assertion while handing
+  a list view data the detail masks (V1, C1).
+- **A grant's `reason` is customer-visible free text.** It appears in the ledger the organization
+  reads, so it is a sentence written for the customer, not an internal note; bounded at
+  `MAX_GRANT_REASON_CHARS`. The operator-only "why" belongs in the audit entry (U1).
 
 Type-only imports keep the fake out of client bundles: import DTOs from `types.ts` in
 components and call the services from server components or server actions.
@@ -320,17 +336,22 @@ console and requires it to fail at least one case of the **exported** conformanc
 fake-only tests, which are not what C runs. A surviving mutant exits non-zero, and so does a mutant
 whose `find` text no longer matches, because a stale mutant tests nothing.
 
-**What counts as a kill.** A non-zero exit is not enough: each mutant declares in `cases` the
-conformance cases that must catch it, and a kill requires one of *those* cases to fail by name. A
-mutant that fails to load, does not parse, uses a construct Node's type stripping rejects, hangs,
-fails without naming a case, or names a case the suite does not have is a **runner error** — it told
-us nothing — and fails the run, as does a stale `find`. Three mutants kill by *throwing*, because an
-accepted out-of-domain value throwing downstream is the defect; they are marked `kills_by: "throw"`.
+**What counts as a kill.** A non-zero exit is not enough, and neither is a named failing case. Each
+mutant declares in `cases` the conformance cases that must catch it, and a kill requires one of
+*those* cases to fail **on an assertion**. Everything else is a **runner error** that fails the run:
+a copy that does not load, parse or survive type stripping; a hang; a failure that names no case; a
+case the suite does not have; a stale or ambiguous `find`; a declared case that fails by *exception*
+rather than assertion; a `kills_by: "throw"` declaration that no longer matches; and "every case
+failed", which means the copy is broken rather than the invariant caught. Two mutants kill by
+throwing, where the accepted out-of-domain value throwing downstream *is* the defect; they say so
+with `kills_by: "throw"`.
 
-`node tests/contracts/run-mutants.mjs --self-test` checks the runner against its own claims: a
-syntax error, a load throw, an `enum`, a hang, a no-op, a stale `find`, a real defect attributed to
-the wrong case, a genuine kill, and a mutant with no declared cases must each be classified
-correctly. Run it after touching the runner.
+`node tests/contracts/run-mutants.mjs --self-test` checks the runner against its own claims: a syntax
+error, a load throw, an `enum`, a hang, a no-op, a stale `find`, a real defect attributed to the wrong
+case, a genuine kill, a mutant with no declared cases, a crash in the harness factory, a case failing
+by exception rather than assertion, and the round-4 reviewer's V03 edit (which must be killed *on an
+assertion*) must each be classified correctly. Run it after touching the runner — the classifier is
+the thing every "killed" claim rests on.
 
 It is deliberately not part of `pnpm test`: it costs one Node process per mutant. Add a mutant with
 every new invariant a case claims — and if an invariant cannot be expressed as a mutant an exported
@@ -383,6 +404,14 @@ Things U, V and C should not read as contract:
   README omitted (ledger kinds, off-mode trace rows, `TraceMode` superseding 07's `TraceLevel`),
   added the fake-only behaviour section, and restated what the suite proves about pagination now
   that each list is walked at two page sizes. Row counts are unchanged (137 / 117 / 137).
+- 2026-09-20: Round-7 corrections. R41 was incomplete: `feedback.submit` stored the submitter's
+  principal and no read masked it, so an operator's ordinary console feedback named them to the
+  customer — including through a replay — and the `traces` list was returning the whole stored trace
+  rather than `TraceListItem`, which is how the feedback array reached a list view at all. Both fixed
+  and pinned, consent-history provenance changed from redact-at-write to store-and-project, and the
+  mutation runner now checks *why* a declared case failed (an exception is a runner error unless the
+  mutant declares it) after two reproductions showed it reporting false kills. Suspension invariance
+  is now tested on the organization that actually has holds and settled rows.
 - 2026-09-20: Round-6 revision. The mutation runner can no longer report a false kill: a kill needs a
   named case the mutant declares, and load, parse, stripping, hang and unnamed failures are runner
   errors that fail the run (nine self-tests pin it). One false kill was deleted and the invariant it
