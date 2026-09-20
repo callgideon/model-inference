@@ -40,7 +40,7 @@ Composition roots (`infrx/gateway/app.py`, console `layout.tsx`/navigation) stay
 | `ChunkEventType` | `progress`, `delta`, `usage`, `error`, `terminal` |
 | `OutboxKind` | `prepare_dispatch`, `inference_dispatch`, `usage_projection`, `trace_projection`, `feedback_projection`, `judge_projection`, `callback_delivery` |
 | `TraceMode` | `off`, `minimal`, `full` |
-| `TraceLossReason` | `none`, `memory_budget`, `metadata_budget`, `queue_full`, `disk_budget`, `disk_error`, `shutdown`, `malformed` |
+| `TraceLossReason` | `none`, `memory_budget`, `metadata_budget`, `queue_full`, `disk_budget`, `disk_error`, `shutdown`, `malformed`, `abandoned` (R37) |
 | `TraceOfferResult` | `accepted_in_memory`, `dropped` |
 | `FeedbackChannel` / `AuthorRole` | `api`, `console` / `customer`, `operator`, `judge` |
 | `JudgeRunState` | `dry_run`, `reserved`, `submitting`, `submitted`, `ambiguous`, `collecting`, `settled`, `quarantined`, `cancelled` |
@@ -168,6 +168,10 @@ Rulings on the change requests raised while encoding F2. Both halves implement t
 | R34 | Operator audit trail | `adminGrant`, `adminSetSuspension`, `adminSetEntitlements` and `calibration.label` each append an immutable audit entry `{id, at, actor_principal, action, target_org_id, reason, before, after, idempotency_key}`; operator-only `adminAudit(session, {target_org_id?, cursor?, limit?})` pages them. A restore never overwrites the earlier suspension entry. A replay returns the original result and the caller re-reads current state. |
 | R35 | Calibration label visibility | Calibration labels are operator data: visible only through `calibration.list`; excluded from the customer's `feedback.list`, `traceDetail.feedback`, `feedback_count` and `has_feedback`, and never expose the operator principal to a customer session. |
 | R36 | Cursor opacity in conformance | Exported conformance suites treat cursors as opaque: forgery cases are black-box only (cursor from another list, tenant or filter; characters altered). Shape-aware forgeries belong to implementation-specific tests. R32 applies to the console suite too (`pnpm test:mutants`). |
+| R37 | Trace capture lifecycle | No trace operation may raise into the request path: `open` for `off`/`minimal` returns a no-op capture; `finish`/`abandon` are idempotent; `TraceCapture` is a context manager whose exit abandons an unfinished capture (G uses it in `finally`). `add` is synchronous, O(1), takes no lock beyond a short critical section and never touches disk. The sink reaps captures older than the job's `deadline_at` plus a grace period, releases their bytes and counts them under the new `TraceLossReason` value `abandoned`. |
+| R38 | Queue wait is time spent queued | Amends R5/R20: the queue budget is cumulative time in the `queued` state, not wall time since the first `queued` transition. The store persists `queue_wait_used_s`; at every `queued` transition `queue_deadline_at = min(now + budget − used, deadline_at)`; leaving `queued` adds the elapsed interval to `used`. A prepublication requeue therefore keeps only the unspent remainder, and interactive retries remain possible within `deadline_at`. |
+| R39 | Terminalize-then-refuse in a real store | When R29 makes an operation terminalize the job and refuse the caller, the adapter commits the terminalization and then returns the typed refusal; it must not raise inside the transaction that would roll the terminalization back. Every capacity check a settling transaction can fail on (journal bytes for the terminal event) happens before any wallet, outcome or reservation mutation. |
+| R40 | F2 merge criterion | F2 merges when the independent reviewer's accumulated mutant corpus and the committed mutant lists are all killed by named exported cases, the mutation runners cannot report a false kill or hide a skip, and evidence is accurate. Survivors found after that are filed against follow-up task F2.1 and block the owning track's integration (not F2) unless they concern money, fencing, tenant isolation, publication/regeneration or secret handling. |
 
 ## Verification log
 
@@ -178,3 +182,4 @@ Rulings on the change requests raised while encoding F2. Both halves implement t
 - 2026-09-20: Rulings R24–R26 added (entitlement defaults, internal code parity, operator scope).
 - 2026-09-20: Rulings R27–R32 added after F2-py review round 3 (trace accumulation port, consent during submission, deadlines on every fenced mutation, terminal integrity, Python feedback provenance, mutation-proof conformance).
 - 2026-09-21: Rulings R33–R36 added after F2-ts review round 4 (suspension scope, operator audit trail, calibration visibility, opaque cursors and mutation-proof console conformance).
+- 2026-09-21: Rulings R37–R40 added after F2-py review round 4 (capture lifecycle, queue wait as time queued, terminalize-then-refuse, explicit F2 merge criterion).
