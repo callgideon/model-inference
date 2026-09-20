@@ -45,7 +45,7 @@ to render: `availableRequestId`, `offRequestId`, `otherOrgRequestId` (must be `n
 
 What the fixture data covers, so a page can be built without guessing:
 
-- 137 usage rows, ~118 ledger entries and 137 traces for the established organization: more
+- 137 usage rows, 117 ledger entries and 137 traces for the established organization: more
   than one page of each at the maximum limit of 100.
 - Every trace content state: `available`, `metadata_only`, `pending`, `lost`, `expired`, `off`.
 - Outstanding holds, so `available` is strictly below `ledger_total`; unknown-usage rows that
