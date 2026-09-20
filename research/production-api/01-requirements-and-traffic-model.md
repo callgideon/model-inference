@@ -417,7 +417,9 @@ keys from the system automatically after they're at least 24 hours old"*
 `Idempotency-Key`, 24 h retention, same-key-different-body → 400.**
 
 **What "dropped" therefore means, operationally:** a request is dropped if it
-arrives and (a) gets no status within 2 s, or (b) gets a 5xx with no
+arrives and (a) gets neither a status nor a durable job id within
+`MEDIA_DECISION_S` = 2 s ([`09` §2.1](09-blueprint.md) — a `preparing` job id is
+not a drop, silence is), or (b) gets a 5xx with no
 `Retry-After`, or (c) is accepted and never reaches a terminal state, or (d)
 completes but leaves no `usage_events` row. Each of these is an alert (§6).
 
@@ -903,6 +905,11 @@ burst is 300 s. **Conclusion: S3 is met by admission control and headroom, not b
 autoscaling.** Concretely:
 
 - **Keep N+1 warm** so the fleet absorbs the first ~30 s of any spike.
+  ⚠️ **Superseded at pilot scale by [`09` §0.2 R6](09-blueprint.md).** The spare
+  costs 1/N, and at N = 1 that is +93.4 % of the fixed floor, so the pilot covers
+  the window with the 202 upgrade instead; [`09` §3.4a](09-blueprint.md) also
+  shows the absorbed window is **90–170 s, not ~30 s**. Applies as written at
+  N ≥ 3.
 - **Queue the rest with an honest ETA**, and let `Prefer: wait` callers convert
   to 202 automatically.
 - **Refuse above the deadline** with `Retry-After` and the queue headers — which
@@ -1249,10 +1256,17 @@ within 30 s; p99 latency stays inside the tier SLO for the remaining fleet.
 
 **A8 — D1/D4/D5 (the burst).** Replay S3: 50 req/s for 300 s against the pilot
 fleet.
-**Pass:** (i) every request gets a status within 2 s; (ii) every refusal carries
-`Retry-After` and `error.type` `queue_full`; (iii) the returned
-`X-Queue-Estimated-Wait-Seconds` is within **±30 %** of the actual wait at p50 and
-never **understates** at p95; (iv) no request is accepted and then abandoned.
+**Pass:** (i) within `MEDIA_DECISION_S` = **2 s** every request holds either a
+final status **or** a durable job id — a `202 + Location: /v1/jobs/{id}`, or an
+SSE stream opened with `state:"preparing"` — and **every `preparing` record
+reaches a terminal state** by the end of the run (none left hanging; see
+[`09` §2.1](09-blueprint.md) for why the original "a status within 2 s" is
+unsatisfiable on the cache-miss path, where the pre-admission media stage alone
+runs to 90 s); (ii) every refusal carries `Retry-After` and a typed
+`error.type` — `queue_full`, `rate_limit` or `media_stage_busy`; (iii) the
+returned `X-Queue-Estimated-Wait-Seconds` is within **±30 %** of the actual wait
+at p50 and never **understates** at p95; (iv) no request is accepted and then
+abandoned.
 
 **A9 — D6 (idempotency).** Same `Idempotency-Key`, sent twice concurrently and
 once after completion.
@@ -1623,3 +1637,20 @@ property and an OpenRouter-fronted key is pinned to `interactive`.
 ⚠️ with no `research/gpus/l40s.md` to pin it, closing with A3. This is the one
 `⚠️` in the capacity chain that the check could not reduce, because it needs
 `nvidia-smi` on the box, not a source.
+
+### Post-check amendments
+
+- **2026-09-20** — §3.7's *"Keep N+1 warm"* bullet annotated as superseded at
+  pilot scale by [`09` §0.2 R6](09-blueprint.md); the *"~30 s"* absorbed window
+  is recomputed as 90–170 s in [`09` §3.4a](09-blueprint.md). No number in this
+  document changed; §3.7's burst table and 438 s / 265 s stage budgets stand.
+- **2026-09-20** — Gap G5: A8's pass criterion (i) restated from *"every request
+  gets a status within 2 s"* to *"a final status **or** a durable job id within
+  `MEDIA_DECISION_S` = 2 s, and every `preparing` record reaches a terminal
+  state"*, and (ii) widened to any typed refusal code. Reason: the criterion as
+  written is unsatisfiable on the cache-miss path, where the pre-admission media
+  stage runs `FETCH_TIMEOUT_S + PROBE_TIMEOUT_S + TRANSCODE_TIMEOUT_S = 20 + 10 +
+  max(15, 0.5×duration)` = **90 s** for a 120 s clip before `eta_s` exists.
+  D1 restated to match in [`09` §2.1](09-blueprint.md); mechanism in
+  [`10` §4.2, §5, §6](10-implementation-spec.md). No traffic-model number in this
+  document changed.

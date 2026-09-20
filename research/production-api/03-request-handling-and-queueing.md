@@ -1182,7 +1182,12 @@ from the ALB, so it costs one request a minute rather than one per health check.
    So the SIGTERM handler must outlive the in-flight requests, not race them.
 3. `systemd` `TimeoutStopSec` ≥ `GENERATION_TIMEOUT_S` + margin (currently
    unset in `deploy/marlin2b-gateway.service` ⇒ the 90 s default ⇒ **we SIGKILL
-   mid-generation today**). Set `KillSignal=SIGTERM`, `TimeoutStopSec=330`.
+   mid-generation today**). Set `KillSignal=SIGTERM`, `TimeoutStopSec=930` —
+   > ALB `deregistration_delay` 900 ([`09` §0.2, §1.3](09-blueprint.md));
+   `DRAIN_TIMEOUT_S=180` bounds the normal case, 930 bounds the worst case.
+   *(Note: [`09` §0.2](09-blueprint.md) supersedes this document's earlier 330,
+   which sat 570 s inside the deregistration window and so produced exactly the
+   500-level errors quoted in point 2.)*
 4. On SIGTERM: stop pulling, finish in-flight, then exit. Any job still running
    at the hard deadline is released (lease `ZREM` + requeue) rather than left to
    expire — a clean handover instead of a 120 s stall.
@@ -1520,7 +1525,10 @@ In the order the changes should land.
 
 10. **Fix draining before adding a second worker.**
     `deploy/marlin2b-gateway.service` sets no `TimeoutStopSec`, so systemd's 90 s
-    default SIGKILLs mid-generation. Set `TimeoutStopSec=330`, add a SIGTERM
+    default SIGKILLs mid-generation. Set `TimeoutStopSec=930` (> ALB
+    `deregistration_delay` 900, [`09` §0.2, §1.3](09-blueprint.md);
+    `DRAIN_TIMEOUT_S=180` bounds the normal case, 930 bounds the worst case —
+    `09` §0.2 supersedes this document's earlier 330), add a SIGTERM
     handler that stops pulling and finishes in-flight, and — when the Elastic IP
     becomes an ALB — align `deregistration_delay.timeout_seconds` (default 300 s)
     with it, because a target that closes early gives the client a 500.
@@ -1806,3 +1814,12 @@ rfc-editor.org, MDN, OWASP), repo files read directly, and every derivation
 re-run in `python3`. Claims were selected for blast radius: anything that sizes
 a queue, sets a timeout, names a flag or metric the implementation would type
 verbatim, or feeds a price.*
+
+**2026-09-20** — CORRECTED, gateway `TimeoutStopSec` 330 → **930** in §6.3 and
+§8 item 10: 330 SIGKILLs the gateway 570 s inside the ALB's 900 s
+`deregistration_delay`, producing the 500-level early-close errors this
+document's own §6.3 point 2 quotes from AWS. [`09` §0.2](09-blueprint.md) pins
+`deregistration_delay = 900` as the number `TimeoutStopSec` must exceed and
+supersedes 330 everywhere; [`10` §1, §7.6, §13](10-implementation-spec.md)
+carried the same stale 330 and were corrected with it. vLLM unit unchanged at
+180.

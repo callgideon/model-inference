@@ -104,6 +104,23 @@ these, defensibly, and keep replacing it*.
 - [`platform/10-roadmap-and-mvp.md`](platform/10-roadmap-and-mvp.md) — the MVP, sequenced plan and top risks.
 - [`platform/11-thesis-memo.md`](platform/11-thesis-memo.md) — the funding-memo compression of the whole tree.
 
+## Production API
+
+Research on taking the single-box Marlin-2B endpoint (`apps/infrx-api`) to
+real, paying users on AWS today — no dropped requests, a bounded queue,
+automatic scale-up, caching, throughput optimization — lives in
+[`production-api/`](production-api/README.md), not in this document. Where
+`scaling/` plans the 8×B300 bare-metal destination with `est.` Marlin
+numbers, this tree plans one L40S growing to a handful, with **measured**
+Marlin numbers.
+
+- [`production-api/README.md`](production-api/README.md) — index, reading
+  order, and a paragraph-per-document guide to `production-api/01`–`10`.
+- [`production-api/09-blueprint.md`](production-api/09-blueprint.md) —
+  assembles `01`–`08` into one target AWS architecture and build order.
+- [`production-api/10-implementation-spec.md`](production-api/10-implementation-spec.md)
+  — the engineering spec: gateway v2, queue, worker, HTTP API, test plan.
+
 ## 4. Full file index
 
 - [`METHODOLOGY.md`](METHODOLOGY.md) — every formula (weights, KV, fit,
@@ -189,6 +206,22 @@ platform; see [Closed-loop platform](#closed-loop-platform) above and
 - [`platform/09-video-and-multimodal-loop.md`](platform/09-video-and-multimodal-loop.md) — video-specific capture, annotation, training, evals.
 - [`platform/10-roadmap-and-mvp.md`](platform/10-roadmap-and-mvp.md) — MVP, sequenced plan, lighthouse runs, top risks.
 - [`platform/11-thesis-memo.md`](platform/11-thesis-memo.md) — the funding-memo compression of 00–09.
+
+**`production-api/`** — research on taking Marlin-2B to real users on AWS
+today; see [Production API](#production-api) above and
+[`production-api/README.md`](production-api/README.md) for the full reading
+guide:
+
+- [`production-api/01-requirements-and-traffic-model.md`](production-api/01-requirements-and-traffic-model.md) — SLOs, traffic scenarios, capacity.
+- [`production-api/02-aws-architecture-options.md`](production-api/02-aws-architecture-options.md) — five AWS shapes compared.
+- [`production-api/03-request-handling-and-queueing.md`](production-api/03-request-handling-and-queueing.md) — no-drop admission, queue, gateway v2.
+- [`production-api/04-autoscaling-and-capacity.md`](production-api/04-autoscaling-and-capacity.md) — scaling signals, capacity scarcity, cold start.
+- [`production-api/05-caching.md`](production-api/05-caching.md) — transcode/media caching, prefix caching, response cache.
+- [`production-api/06-throughput-and-latency-optimization.md`](production-api/06-throughput-and-latency-optimization.md) — where the time goes, the CPU-bound fix ladder.
+- [`production-api/07-reliability-observability-operations.md`](production-api/07-reliability-observability-operations.md) — SLOs, runbooks, ALB tuning, security.
+- [`production-api/08-cost-model-and-unit-economics.md`](production-api/08-cost-model-and-unit-economics.md) — unit economics, margin, purchase instruments.
+- [`production-api/09-blueprint.md`](production-api/09-blueprint.md) — the assembled target AWS architecture.
+- [`production-api/10-implementation-spec.md`](production-api/10-implementation-spec.md) — gateway v2, worker, queue, HTTP API, test plan.
 
 **`models/<exp>/`** — one directory per experiment (`deepseek41f`,
 `deepseek41fnvfp4`, `qwen3827b`, `kimik3`, `marlin2b`), each holding:

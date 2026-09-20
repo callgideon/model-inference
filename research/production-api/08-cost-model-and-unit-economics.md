@@ -71,7 +71,7 @@ is filtered to `discountedOperation == "RunInstances"` (Linux/UNIX, no licence).
    vLLM). GPU nodes must sit in a **public subnet behind an Internet Gateway**
    (ingress is free); that single decision is worth **$29,443/month** at scenario C.
 5. **"No drops" is cheap at scale and expensive at the start.** One hot spare
-   GPU adds **+4.3 %** to the monthly bill at 23 GPUs and **+39.1 %** at 3 GPUs.
+   GPU adds **+4.3 %** to the monthly bill at 23 GPUs and **+38.9 %** at 3 GPUs.
    Below ~5 GPUs the right answer is a *stopped* warm-pool instance
    (**$16/month**, EBS only [src](https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-warm-pools.html))
    plus a bounded queue, not a hot spare. ⚠️ **Read §6.3's correction box before
@@ -351,7 +351,7 @@ its offer file and that file's `publicationDate`. 730 h/month.
 | Public IPv4, 1 in-use address | $0.005/h | $3.65 | `AmazonVPC` offer, 2026-09-17 [src](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/current/us-east-1/index.json) |
 | ALB, hourly | $0.0225/h | $16.43 | `AWSELB` offer, 2026-09-11 [src](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/current/us-east-1/index.json) |
 | ALB, LCU (idle floor) | $0.008/LCU-h | ~$0.08 | same |
-| ElastiCache **Valkey** `cache.t4g.micro` (0.5 GiB) | $0.0128/h | **$9.34** | `AmazonElastiCache` offer, 2026-09-14 [src](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/current/us-east-1/index.json) |
+| ElastiCache **Valkey** `cache.t4g.micro` (0.5 GiB) **× 2 — primary + replica** | $0.0128/h/node | **$18.69** | `AmazonElastiCache` offer, 2026-09-14 [src](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/current/us-east-1/index.json). **Two nodes, not one** (corrected 2026-09-20): Multi-AZ *"is only supported on … clusters with more than one node in each shard"* and needs *"at least one available read replica"* [src](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/AutoFailover.html), and this node holds accepted-but-unrun jobs, not a cache ([`09` §1.2](09-blueprint.md)) |
 | CloudWatch: 40 custom metrics + 20 alarms | $0.30/metric-mo (first 10,000), $0.10/alarm-mo (standard resolution); **first 10 metrics and 10 alarms free** — with the free tier the line is **$10.00** ⚠️ (corrected 2026-09-20) | $14.00 | `AmazonCloudWatch` offer, 2026-09-18 [src](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/current/us-east-1/index.json) |
 | Route 53 hosted zone + queries (pilot volume) | $0.50/zone-mo + $0.40/M queries | $0.74 | `AmazonRoute53` offer, 2026-09-11 [src](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRoute53/current/us-east-1/index.json) |
 | ECR, one 20 GB vLLM image | $0.10/GB-mo | $2.00 | `AmazonECR` offer, 2026-09-11 [src](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECR/current/us-east-1/index.json) |
@@ -467,23 +467,23 @@ hot spare for the 12 busy hours (B and C).
 | EBS gp3 200 GB × (1 live + 1 standby) | $32.00 | $32.00 | $32.00 |
 | Public IPv4 | $3.65 | $3.65 | $3.65 |
 | ALB (hourly + LCU) | $16.51 | $16.51 | $16.51 |
-| ElastiCache Valkey t4g.micro | $9.34 | $9.34 | $9.34 |
+| ElastiCache Valkey t4g.micro **× 2** (Multi-AZ pair, §2.1) | $18.69 | $18.69 | $18.69 |
 | SQS (if used) | $0.37 | $0.37 | $0.37 |
 | S3 transcode cache (1-day lifecycle) | $1.78 | $1.78 | $1.78 |
 | CloudWatch | $14.08 | $14.08 | $14.08 |
 | Route 53 | $0.74 | $0.74 | $0.74 |
 | Supabase Pro + Vercel Pro | $45.00 | $45.00 | $45.00 |
 | Data transfer out | $0.11 | $0.11 | $0.11 |
-| **Total** | **$1,760.47** | **$1,154.82** | **$1,609.57** (was $876.54) |
-| Cost per clip | $0.005787 | $0.003796 | $0.005287 (was $0.002881) |
-| Revenue $80.67 → **gross margin** | **−2,082 %** | **−1,332 %** | **−1,895 %** (was −987 %) |
+| **Total** | **$1,769.82** | **$1,164.17** | **$1,618.92** (was $876.54) |
+| Cost per clip | $0.005818 | $0.003827 | $0.005322 (was $0.002881) |
+| Revenue $80.67 → **gross margin** | **−2,094 %** | **−1,343 %** | **−1,907 %** (was −987 %) |
 | GPU utilisation | **3.2 %** | 3.2 % | 3.2 % |
 | NAT if used (1 / 2 downloads) | +$106 / +$180 | | |
 
-At pilot volume the product is a **$1,155–1,760/month fixed cost with rounding-error
+At pilot volume the product is a **$1,164–1,770/month fixed cost with rounding-error
 revenue** (⚠️ corrected 2026-09-20 from "$877–1,760": the $877 floor assumed spot at
 the Advisor's −54 %; at the measured $2.0354 the cheapest tier is the 1y Instance SP
-at $1,155, not spot). No serving optimization changes that. The only levers are scale-to-zero
+at $1,164, not spot). No serving optimization changes that. The only levers are scale-to-zero
 between requests (§6.4), a cheaper GPU family (§1.5), or booking this as
 customer-acquisition spend with an explicit monthly budget.
 
@@ -495,16 +495,16 @@ customer-acquisition spend with an explicit monthly budget.
 | EBS gp3 (1 live + 3 standby) | $64.00 | $64.00 | $64.00 |
 | Public IPv4 | $3.65 | $3.65 | $3.65 |
 | ALB | $18.05 | $18.05 | $18.05 |
-| ElastiCache Valkey | $9.34 | $9.34 | $9.34 |
+| ElastiCache Valkey **× 2** (Multi-AZ pair, §2.1) | $18.69 | $18.69 | $18.69 |
 | SQS | $7.30 | $7.30 | $7.30 |
 | S3 transcode cache | $35.55 | $35.55 | $35.55 |
 | CloudWatch | $15.52 | $15.52 | $15.52 |
 | Route 53 | $5.37 | $5.37 | $5.37 |
 | Supabase + Vercel | $45.00 | $45.00 | $45.00 |
 | Data transfer out | $2.19 | $2.19 | $2.19 |
-| **Total** | **$2,788.44** | **$1,832.92** | **$2,550.38** (was $1,393.91) |
-| Cost per clip | $0.000458 | $0.000301 | $0.000419 (was $0.000229) |
-| Revenue $1,613 → **gross margin** | **−72.8 %** | **−13.6 %** | **−58.1 %** (was +13.6 %) |
+| **Total** | **$2,797.79** | **$1,842.27** | **$2,559.73** (was $1,393.91) |
+| Cost per clip | $0.000460 | $0.000303 | $0.000421 (was $0.000229) |
+| Revenue $1,613 → **gross margin** | **−73.4 %** | **−14.2 %** | **−58.6 %** (was +13.6 %) |
 | NAT if used (1 / 2 downloads) | **+$1,503 / +$2,974** | | |
 
 Scenario B is where the pricing problem becomes undeniable: even on a Savings Plan,
@@ -523,19 +523,19 @@ weaken it.**
 | EBS gp3 (1 live + 23 standby) | $384.00 | $384.00 | $384.00 |
 | Public IPv4 | $3.65 | $3.65 | $3.65 |
 | ALB | $32.65 | $32.65 | $32.65 |
-| ElastiCache Valkey | $9.34 | $9.34 | $9.34 |
+| ElastiCache Valkey **× 2** (Multi-AZ pair, §2.1) | $18.69 | $18.69 | $18.69 |
 | SQS | $73.01 | $73.01 | $73.01 |
 | S3 transcode cache | $355.49 | $355.49 | $355.49 |
 | CloudWatch | $29.21 | $29.21 | $29.21 |
 | Route 53 | $49.17 | $49.17 | $49.17 |
 | Supabase + Vercel | $45.00 | $45.00 | $45.00 |
 | Data transfer out | $21.90 | $21.90 | $21.90 |
-| **Total** | **$19,462.07** | **$12,632.37** | **$17,760.51** (was $9,494.40) |
+| **Total** | **$19,471.42** | **$12,641.72** | **$17,769.86** (was $9,494.40) |
 | Cost per clip | $0.000320 | $0.000208 | $0.000292 (was $0.000156) |
-| Revenue $16,135 → **gross margin** | **−20.6 %** | **+21.7 %** | **−10.1 %** (was +41.2 %) |
+| Revenue $16,135 → **gross margin** | **−20.7 %** | **+21.6 %** | **−10.1 %** (was +41.2 %) |
 | NAT if used (1 / 2 downloads) | **+$14,738 / +$29,443** | | |
 
-Even at 2M clips/day on a Savings Plan the margin is **21.7 %** — far below the
+Even at 2M clips/day on a Savings Plan the margin is **21.6 %** — far below the
 70–80 % gross margin an inference API needs to fund everything that is not compute.
 Note the EBS line: 23 stopped warm-pool standbys cost **$384/month**, 3 % of the
 bill, for capacity that is hot in 2–3 minutes. That is the cheapest insurance in the
@@ -543,7 +543,7 @@ table.
 
 ### 3.4 Sensitivity — what moves the scenario-C bill
 
-Baseline: $12,632/month at the 1y SP rate, +21.7 % margin.
+Baseline: $12,642/month at the 1y SP rate, +21.6 % margin.
 
 | Change | Δ monthly bill | New margin | Δ |
 |---|---|---|---|
@@ -582,8 +582,8 @@ and `gateway.py` copies those into every `usage_events.cost_usd`
 | Post-transcode, on-demand | $0.000174 | +34.4 % | +22.8 % | −9.3 % | −118.7 % |
 | Post-transcode, 1y Instance SP | $0.000110 | +58.7 % | +51.4 % | +31.1 % | −37.8 % |
 | Post-transcode, 3y Instance SP | $0.000065 | +75.3 % | +71.0 % | +58.9 % | +17.8 % |
-| **All-in, scenario B (SP, incl. fixed floor)** | $0.000301 | — | — | **−13.6 %** | — |
-| **All-in, scenario C (SP, incl. fixed floor)** | $0.000208 | — | — | **+21.7 %** | — |
+| **All-in, scenario B (SP, incl. fixed floor)** | $0.000303 | — | — | **−14.2 %** | — |
+| **All-in, scenario C (SP, incl. fixed floor)** | $0.000208 | — | — | **+21.6 %** | — |
 
 Marginal margin and all-in margin diverge sharply because the fixed floor is large
 relative to traffic (§2.3). Quoting "58.7 % gross margin" off the marginal row would
@@ -886,7 +886,8 @@ cheap row in the family.
 | Implementation | $/month | Notes |
 |---|---|---|
 | In-process `asyncio` bounded queue in `gateway.py` | **$0** | Replaces today's `if inflight >= MAX_INFLIGHT: 429` ([`gateway.py`](../../apps/infrx-api/gateway.py)). Dies with the process. |
-| ElastiCache Valkey `cache.t4g.micro` (shared depth + admission counters) | **$9.34** | $0.0128/h [src](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/current/us-east-1/index.json). Survives a gateway restart; shared across nodes. |
+| ElastiCache Valkey `cache.t4g.micro`, **single node** (shared depth + admission counters) | **$9.34** | $0.0128/h [src](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/current/us-east-1/index.json). Survives a gateway restart; shared across nodes. **Does not survive losing the node**, so it is not sufficient for the "accepted means durable" half of the promise. |
+| …**primary + replica, Multi-AZ + automatic failover** — the configuration the promise actually requires ([`09` §1.2](09-blueprint.md)) | **$18.69** | Two nodes at the same rate. Multi-AZ needs *"at least one available read replica"* and failover completes *"typically just a few seconds"* [src](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/AutoFailover.html). The RPO is still **not zero** — replication is asynchronous — which is why [`09` OQ17](09-blueprint.md) is a decision rule and not a shrug. |
 | SQS standard, 3 requests/clip | $0.37 (A) / $7.30 (B) / **$73.01** (C) | $0.40 per 1M standard requests [src](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSQueueService/current/us-east-1/index.json). FIFO is $0.50/M — 25 % more for ordering we do not need. |
 | ALB holding queued connections open | **$0.008 per 3,000 connections per hour** | One LCU = 3,000 active connections/minute [src](https://aws.amazon.com/elasticloadbalancing/pricing/). Holding 1,000 waiting clients for an hour costs **$0.0027**. |
 
@@ -913,10 +914,10 @@ One hot spare `g6e.2xlarge`:
 
 | Scenario | GPUs at peak | No spare | +1 spare 12 h/day | +1 spare 24/7 |
 |---|---|---|---|---|
-| B (on-demand) | 3 | $1,969.99 | $2,788.44 (**+41.5 %**) | $3,606.89 (+83.1 %) |
-| B (1y ISP) | 3 | $1,317.30 | $1,832.92 (**+39.1 %**) | $2,348.55 (+78.3 %) |
-| C (on-demand) | 23 | $18,643.62 | $19,462.07 (**+4.4 %**) | $20,280.52 (+8.8 %) |
-| C (1y ISP) | 23 | $12,116.75 | $12,632.37 (**+4.3 %**) | $13,147.99 (+8.5 %) |
+| B (on-demand) | 3 | $1,979.34 | $2,797.79 (**+41.3 %**) | $3,616.24 (+82.7 %) |
+| B (1y ISP) | 3 | $1,326.65 | $1,842.27 (**+38.9 %**) | $2,357.90 (+77.7 %) |
+| C (on-demand) | 23 | $18,652.97 | $19,471.42 (**+4.4 %**) | $20,289.87 (+8.8 %) |
+| C (1y ISP) | 23 | $12,126.10 | $12,641.72 (**+4.3 %**) | $13,157.34 (+8.5 %) |
 
 **The cost of N+1 is 1/N.** At 23 GPUs it is a rounding error and should simply be
 bought. At 3 GPUs it is 39 % of the bill and must not be — which is precisely the
@@ -968,7 +969,7 @@ survive intact:**
    capacity — the same `InsufficientInstanceCapacity` that pins us to us-east-1d
    applies on restart.
 
-   The **$16 vs $1,637** comparison and the **9.0×** figure below are arithmetically
+   The **$16 vs $1,637** comparison and the **7.7×** figure below are arithmetically
    correct and are left standing, but they price a mechanism that, in the `g6e`
    capacity situation this document itself describes (§5.2), does not deliver the
    capacity it promises. See
@@ -981,12 +982,12 @@ trade.** The minimum-cost combination that still never drops:
 ```
 1 always-on GPU                   $1,031/mo (1y ISP)   - absorbs the baseline
 N stopped warm-pool instances     $16/mo each          - absorb growth within 2-3 min
-bounded queue with honest ETA     $9.34/mo (Valkey)    - absorbs those 2-3 min
+bounded queue with honest ETA     $18.69/mo (Valkey HA) - absorbs those 2-3 min
 ODCR on the always-on one         $0 extra (SP covers) - guarantees it can restart
 ```
 
-Incremental cost of the no-drop guarantee at scenario B: **3 × $16 + $9.34 = $57.34
-per month**, versus **$515.62** for a hot spare — a **9.0×** saving for the price of
+Incremental cost of the no-drop guarantee at scenario B: **3 × $16 + $18.69 = $66.69
+per month**, versus **$515.62** for a hot spare — a **7.7×** saving for the price of
 a bounded wait during scale-up. At scenario C, buy the hot spare as well (+4.3 %); it
 is cheap and removes the queue spike at the daily ramp entirely.
 
@@ -1172,7 +1173,7 @@ In order. Each names the file that changes.
    **2.28× throughput, −56 % $/clip, and the sign of the margin** (§1.6); prefer
    NVDEC on the idle L40S over libx264 on the contended 8 vCPUs.
 4. **Replace the 429 with a bounded queue** — `apps/infrx-api/gateway.py`. The queue
-   costs **$0–9.34/month**, and holding connections costs **$0.008 per 3,000 per
+   costs **$0–18.69/month**, and holding connections costs **$0.008 per 3,000 per
    hour** (§6.1). There is no cost argument for dropping requests. Verify and raise
    the ALB idle timeout in the same change.
 5. **Benchmark `g6.2xlarge` and `g5.2xlarge` before buying any commitment** —
@@ -1409,7 +1410,7 @@ gated behind the same quota ticket.
 | 8 | ALB **$0.0225/h**, **$0.008/LCU-h**, pub 2026-09-11; LCU active-connections dimension **3,000/minute**; holding 1,000 waiting clients for an hour = **$0.0027** | `AWSELB` offer + ELB pricing page |
 | 9 | SQS standard **$0.40/M**, FIFO **$0.50/M** (25 % more), Tier 1 runs to 100 B requests so every scenario is Tier 1 | `AWSQueueService` offer |
 | 10 | S3 **$0.023/GB-mo**, **$0.005/1k PUT**, **$0.0004/1k GET**, pub 2026-09-18 | `AmazonS3` offer |
-| 11 | ElastiCache **Valkey** `cache.t4g.micro` **$0.0128/h** → $9.34/mo, pub 2026-09-14 (Redis on the same node is $0.016 — the document picked the right engine) | `AmazonElastiCache` offer |
+| 11 | ElastiCache **Valkey** `cache.t4g.micro` **$0.0128/h** → $9.34/mo **per node**, pub 2026-09-14 (Redis on the same node is $0.016 — the document picked the right engine). The *rate* was confirmed; the *node count* was wrong — see the 2026-09-20 entry below | `AmazonElastiCache` offer |
 | 12 | CloudWatch **$0.30/metric-mo**, **$0.10/alarm-mo**, Logs **$0.50/GB** ingest + **$0.03/GB-mo** | `AmazonCloudWatch` offer |
 | 13 | Route 53 **$0.50/zone-mo**, **$0.40/M queries**, pub 2026-09-11 | `AmazonRoute53` offer |
 | 14 | ECR **$0.10/GB-mo**; public IPv4 in-use **$0.005/h**, pub 2026-09-17 | `AmazonECR`, `AmazonVPC` offers |
@@ -1501,3 +1502,25 @@ is registered as `vllm:num_preemptions` (a `Counter`) in
 `vllm/v1/metrics/loggers.py`, which `prometheus_client` exposes with the `_total`
 suffix — so the scrape name is right, but the metric is absent from the v1 list in
 the vLLM design docs. Confirm it on the engine build you actually run.
+
+**2026-09-20 — CORRECTED, the ElastiCache line was priced for one node.** §2.1,
+§3.1–3.3, §6.1 and §6.2 all carried `cache.t4g.micro` at **$9.34/month**, a single
+node with no replica, no Multi-AZ and no automatic failover — while [`09` D2](09-blueprint.md)
+promises that acceptance is durable before it is announced and stores that
+acceptance nowhere else. AWS's own page is explicit that Multi-AZ *"is only
+supported on Valkey and Redis OSS clusters with more than one node in each shard"*
+and needs *"at least one available read replica"*
+[src](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/AutoFailover.html),
+and that *"ElastiCache for Redis OSS Multi-AZ and append-only file (AOF) are
+mutually exclusive"* — so AOF was never the fallback [`07` §3.6](07-reliability-observability-operations.md)
+hoped for, and snapshots restore *into a new cache*
+[src](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/backups.html), not
+into the queue. The line is now **2 × $0.0128/h = $18.69/month**. Propagated:
+every scenario total **+$9.35**, scenario-C margin at the 1y SP rate **+21.7 % →
++21.6 %**, the N+1 premium at 3 GPUs **+39.1 % → +38.9 %**, and the no-drop
+increment at scenario B **$57.34 → $66.69/month** (a **7.7×** saving over a hot
+spare, not 9.0×). The conclusions do not move; the arithmetic now describes a
+configuration that can actually keep the promise. ⚠️ Still unverified: whether the
+resulting failover RPO can swallow an already-acknowledged `202` — that is a
+measurement, and [`09` OQ17](09-blueprint.md) now states the drill and the two
+things that ship if it fails.

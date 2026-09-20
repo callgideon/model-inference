@@ -60,9 +60,12 @@ matrices worth bookmarking: [`research/matrix/fit-matrix.md`](research/matrix/fi
 [`research/METHODOLOGY.md`](research/METHODOLOGY.md).
 For running these models at scale in production — cluster, serving, cost,
 reliability, and how commercial inference providers do it — see
-[`research/scaling/`](research/scaling/README.md). For the closed-loop
-model-replacement platform built on top of this — tracing, annotation,
-distillation, evals, A/B-gated promotion — see [`research/platform/`](research/platform/README.md).
+[`research/scaling/`](research/scaling/README.md). For taking the Marlin-2B
+endpoint to real users on AWS today — no dropped requests, autoscaling,
+caching, optimization — see [`research/production-api/`](research/production-api/README.md).
+For the closed-loop model-replacement platform built on top of this —
+tracing, annotation, distillation, evals, A/B-gated promotion — see
+[`research/platform/`](research/platform/README.md).
 
 ## Notes
 
