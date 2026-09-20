@@ -69,6 +69,17 @@ suite against the real service means integrated.
 | `UNKNOWN_USAGE_RECONCILE_S` (86400) | 02 requires "after 24h, once execution is fenced and the job is terminal"; the window needed a name. |
 | `journal_write_failed` as an internal code | 02's "unforeseen write failure" needs a raisable error; `TerminalCause` already had the matching cause. |
 | `MAX_READ_LIMIT = 1000` | `read_owned` needs a hard page bound; requests above it are clamped, `limit <= 0` is `invalid_request`. |
+| A request UUID is admitted **once** | 06 keys jobs by the request UUID and allows "no second active hold per request". A second `admit` of the same request is a `state_conflict` (409), not a replay: without an idempotency key there is no payload to compare, and admitting it again would mint a hold nothing releases. The supported retry after an ambiguous acknowledgment is the idempotency key. |
+| A negative `hold` is `invalid_request` | `money.parse` allows negatives because ledger deltas need them; a *reservation* never does, and a negative one would lower `reserved_total` and fabricate available credit. |
+| `caps` names extra reservation *kinds* | Amounts always come from the store's limits. A caller cannot ask for a smaller journal reservation or a cheaper capacity slot. |
+| The terminal journal event is written by the settling transaction | 02 §7 lists it inside the one transaction, so `complete`/`cancel`/`recover` write it where the money moves. `StreamStore.finalize_in_transaction` reads it back (and writes it only if some adapter settles without a journal), stays idempotent, and no longer fails a settled job for want of journal budget. |
+| Per-job journal limit = `JOURNAL_JOB_RESERVE_BYTES` | 02 requires per-job *and* global limits. Appends past the job's 16 MiB reservation are `journal_capacity_exhausted`; the terminal event is charged to the job but never refused, because settlement has already committed. |
+| Queue wait is cumulative | 01: the budget "starts at durable queued transition; no extension through retries", so a prepublication requeue keeps the queue time already spent instead of restarting the budget. |
+| `JudgeCoordinator.reserve` is idempotent per `run_id` | 01: "duplicate calls produce one run/intent". A second reserve returns the stored run untouched; it never resets state, mints a second submit intent or reserves twice. Changing a reservation means a new run. |
+| `begin_submit` rechecks consent | 02: consent "must be current at submission", not merely at reservation, so a snapshot revoked in between refuses with `consent_missing` before any egress. |
+| Media objects are keyed by `(org_id, handle)` | Finalized content is immutable and tenant scoped: one org's handle can never replace, shadow or reach another org's object, and restaging the same handle with different content is a conflict rather than an overwrite. |
+| `TerminalOutcome` validates `cause` against `state` (`records.CAUSE_STATES`) | The pair is one fact. `succeeded` + `engine_error` would be a free success and `failed` + `completed` would lose a settled debit, so any cause not listed may only carry `failed`. |
+| Header names are constants in `wire.py` | 08 §3 fixes the header vocabulary; G, W and the console read `HEADER_*`/`PREFER_RESPOND_ASYNC` instead of hand-typing strings. |
 | `PREPARATION_CONCURRENCY` is not an admission gate | See the amendment request below. |
 | No Python `ConsoleServices` protocol | That ports-table row is TypeScript (08 §9), owned by the console half of F2. |
 
@@ -155,3 +166,19 @@ numbered after `0002`.
    `deadline_at` only; the split between preparation, queue and generation budgets
    is left to G and W. If the deadline must be decomposed on the record, say so
    before D1 persists it.
+5. **An ambiguous judge run has no resolution operation.** The ports table ends at
+   `quarantine`, so an `ambiguous` run keeps its budget reservation for ever:
+   `record_submission` and `settle` both refuse it, which is correct (02 forbids a
+   second billable batch) but leaves no way to record provider evidence. Requesting
+   one operator-only operation, e.g. `resolve(run, evidence)`, that either adopts a
+   discovered provider batch or releases the reservation with an audit record.
+6. **`recover(now)` takes a caller-supplied time.** 01's signature is
+   `recover(now)`, and the fake honours it so cases can drive the clock. In
+   PostgreSQL, D must read the database clock inside the transaction and treat the
+   argument as a bound at most: a caller-supplied `now` two days ahead would
+   otherwise release an unknown-usage hold before its 24h window.
+7. **Feedback body validation.** `accept` currently takes any body without a rating
+   or a correction (`{}` is accepted) and allows `idem.key=None`, while 01 says
+   `POST /v1/feedback` uses an idempotency key. If an empty submission must be
+   rejected and the key made mandatory, that is a contract revision for the wire
+   model plus this suite.
