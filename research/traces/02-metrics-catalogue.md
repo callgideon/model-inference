@@ -1,5 +1,8 @@
 # Deep traces — metrics and field catalogue
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md), [durable protocols](../plan/02-durable-protocols.md) and [verification](../plan/04-verification.md). The text below is historical research where it conflicts. Trace loss does not stop inference; capture has active-byte, queue, spool and disk limits, and local durability begins at fsync on persistent storage. Off-mode requests have no CH trace row and are excluded from trace-coverage denominators. Canonical logical content is preserved, not raw HTTP wire bytes after normalization. Feedback 201 requires PG/outbox durability and tenant ownership independent of CH lag. Channel and author role are separate; customer console feedback is not an operator calibration label. Judge requires current consent, hard worst-case budget reservations and ambiguous-submit quarantine. CH schema/version/dedup must run against the pinned server; logical expiry is enforced before physical TTL deletion. Retention: 24h results, 7d processing cache, <=90d optional full content, 13mo metadata.
+
+
 Research date **2026-09-20**. The exhaustive, deduplicated list of what can
 be recorded per API call, from three sources: the product survey
 (LangSmith, Langfuse, OpenTelemetry GenAI semconv, OpenInference/Phoenix,
@@ -347,3 +350,7 @@ exists.
 ## Verification log
 
 - 2026-09-20 — Rows in §2 cross-checked against [`04-data-model.md`](04-data-model.md) §2.1/§2.2 column names; every `traces`/`scores` column appears exactly once here. vLLM `prompt_tokens_details` fields and gating (`_make_prompt_tokens_details(enable_prompt_tokens_details, num_cached_tokens, num_cache_creation_tokens, mm_token_counts)`) and `_base_request_id` reading `X-Request-Id` were fetched from the vLLM repo this session; `vllm/tracing/utils.py` attribute names are as verified in [`../platform/01`](../platform/01-observability-and-tracing.md) (2026-09-19). Prometheus names are those confirmed in `../production-api/03` verification item 11 and `07` §1.2; `vllm:request_prefill_time_seconds` / `_decode_time_seconds` and the exact `num_preemptions` spelling are **⚠️ TO BE VERIFIED** on the deployed nightly's `/metrics`. Vendor URLs are carried verbatim from the 2026-09-20 survey; the LangSmith and Langfuse API-reference pages render as JS apps and were confirmed via search excerpts only. The "~97 % without explicit feedback" figure is a practitioner claim without a primary source and is marked.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

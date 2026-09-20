@@ -1,5 +1,8 @@
 # Deep traces — console spec
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md), [durable protocols](../plan/02-durable-protocols.md) and [verification](../plan/04-verification.md). The text below is historical research where it conflicts. Trace loss does not stop inference; capture has active-byte, queue, spool and disk limits, and local durability begins at fsync on persistent storage. Off-mode requests have no CH trace row and are excluded from trace-coverage denominators. Canonical logical content is preserved, not raw HTTP wire bytes after normalization. Feedback 201 requires PG/outbox durability and tenant ownership independent of CH lag. Channel and author role are separate; customer console feedback is not an operator calibration label. Judge requires current consent, hard worst-case budget reservations and ambiguous-submit quarantine. CH schema/version/dedup must run against the pinned server; logical expiry is enforced before physical TTL deletion. Retention: 24h results, 7d processing cache, <=90d optional full content, 13mo metadata.
+
+
 Design date **2026-09-20**. The console half of
 [`01-requirements.md`](01-requirements.md): C1–C7, the key toggles behind
 T2/T3, console feedback F3, and the Vercel → ClickHouse access path of O5 and
@@ -644,3 +647,7 @@ have; they are covered by the manual checklist and by RLS itself (a member's
 ## Verification log
 
 - 2026-09-20 — Written against `apps/app` on `main` (`5210c67`): `usage/page.tsx`, `ranges.ts`, `usage-controls.tsx`, `api-keys/{page,actions,revoke-button}.tsx`, `admin/page.tsx`, `components/sidebar.tsx`, `lib/{session,format,types}.ts`, `lib/supabase/{server,admin}.ts`, `lib/*.test.ts`, `package.json` (`"test": "node --test lib/*.test.ts"`; deps have no Zod, no aws-sdk, no ClickHouse client), `components/ui/*` (Tabs, Select, Table, Badge, Card, Skeleton present), `next.config.ts` (empty — no CSP). ClickHouse parameterised-query form (`param_<name>`, `{name:Type}`) and header auth from the HTTP interface doc fetched this session. SigV4 query-string doc cited for U2; ⚠️ the example signature is **not** reproduced here on purpose. Column names checked against [`04`](04-data-model.md) §2.1–2.3 and §3.1 as written today; judge criterion names against [`01`](01-requirements.md) J3 only (06 not yet written). Nothing here has been executed.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

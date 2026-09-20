@@ -1,5 +1,8 @@
 # Caching at every layer
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md) and [durable protocols](../plan/02-durable-protocols.md). The text below is historical research where it conflicts with those documents. Pilot is free with promotional holds/settlement; ordinary chat never automatically returns 202; PG owns jobs, admission, leases, output journal and terminal accounting. Memory/Valkey queues are rebuildable indices. Admission stages immutable input and commits job/hold/outbox before acknowledgment. Output commits before relay, terminal success after settlement; no retry after publication. Existing A0 fixes are preserved, not repeated. Per-request context is not aggregate concurrency; pixel area 200704 is an area limit, not a 448px long edge. Old Lua/layout/schema snippets require contract tests and must not be copied verbatim. New launch, ownership and test gates are in the plan package.
+
+
 **Research date: 2026-09-20.** Scope: every cache that sits between a paying
 customer's HTTP request and a token coming back out of vLLM, for the system we
 run *today* — one `g6e.2xlarge` (L40S 48 GB, 8 vCPU) in `us-east-1d`, Caddy →
@@ -1746,3 +1749,7 @@ superseded text preserved in each "was / now" row above so the diff is auditable
 The four items that should travel to assembly: the ElastiCache figure (it appears
 four times), the S1/S2/S3-vs-A/B/C taxonomy conflict, the 4.426-vs-5.444 GB weight
 disagreement with `01`, and `MAX_INFLIGHT`'s removal by `03`.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

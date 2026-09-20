@@ -1,5 +1,8 @@
 # Console and API — requirements and architecture
 
+> **Implementation amendment — 2026-09-20.** Use [the unified handoff package](../research/plan/README.md) for current scope, dependencies and acceptance. First release is a free single-GPU pilot with promotional holds/settlement, existing organization roles, explicit async, opt-in trace content and separately consented evaluation. Payments, OpenRouter and commercial second-owner launch are deferred; do not treat old auth, payment, no-content-storage or ZDR assumptions as current implementation instructions.
+
+
 Status: spec, 2026-09-20. Two applications:
 
 | app | what | runs on |
@@ -230,3 +233,7 @@ Blocked on inputs from the owner: Supabase anon (publishable) key and service
 role key for `fcbnscgsymzdykendbrc` (the CLI login here belongs to another
 account), and a Google OAuth client if Google sign-in is wanted at launch
 (magic link works without it).
+
+### Implementation-plan amendment log — 2026-09-20
+
+Linked authoritative reviewed handoffs; no implementation or live-state change. Prior research remains historical context.

@@ -1,5 +1,8 @@
 # Reliability, observability and operations for the API
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md) and [durable protocols](../plan/02-durable-protocols.md). The text below is historical research where it conflicts with those documents. Pilot is free with promotional holds/settlement; ordinary chat never automatically returns 202; PG owns jobs, admission, leases, output journal and terminal accounting. Memory/Valkey queues are rebuildable indices. Admission stages immutable input and commits job/hold/outbox before acknowledgment. Output commits before relay, terminal success after settlement; no retry after publication. Existing A0 fixes are preserved, not repeated. Per-request context is not aggregate concurrency; pixel area 200704 is an area limit, not a 448px long edge. Old Lua/layout/schema snippets require contract tests and must not be copied verbatim. New launch, ownership and test gates are in the plan package.
+
+
 Research date: **2026-09-20**. Every price, quota, default and flag below was
 read from a primary document on this date and is cited inline. Anything without
 a citation is marked **⚠️ TO BE VERIFIED** with the reasoning stated.
@@ -1962,3 +1965,7 @@ measured cold start (#5); real series count (#6); WAF body-inspection limit (#7)
 ElastiCache durability per engine version (#8); paging provider (#9); and the
 presigned-S3 product question (#11), which remains the highest-leverage decision
 in the document.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

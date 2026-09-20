@@ -1,5 +1,8 @@
 # System boundaries, economics, and distribution
 
+> **Implementation amendment — 2026-09-20.** Use [the unified handoff package](../plan/README.md) for current scope, dependencies and acceptance. First release is a free single-GPU pilot with promotional holds/settlement, existing organization roles, explicit async, opt-in trace content and separately consented evaluation. Payments, OpenRouter and commercial second-owner launch are deferred; do not treat old auth, payment, no-content-storage or ZDR assumptions as current implementation instructions.
+
+
 Recommended design direction, 2026-09-19. This is a product architecture, not a deployment specification.
 
 ## Separate inference, administration, and accounting
@@ -107,3 +110,7 @@ Metadata-only telemetry can coexist with no stored prompt/output content, but re
 ## Verification log
 
 - 2026-09-19: Reviewed OpenRouter provider/video docs, Marlin public card and local benchmark notes, Stripe credits, LiteLLM and Langfuse docs. Architecture and billing policies are recommendations. No AWS configuration, live performance, payment integration or provider acceptance was verified in this session.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Linked authoritative reviewed handoffs; no implementation or live-state change. Prior research remains historical context.

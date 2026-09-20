@@ -1,5 +1,8 @@
 # Cost model and unit economics of the production API
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md) and [durable protocols](../plan/02-durable-protocols.md). The text below is historical research where it conflicts with those documents. Pilot is free with promotional holds/settlement; ordinary chat never automatically returns 202; PG owns jobs, admission, leases, output journal and terminal accounting. Memory/Valkey queues are rebuildable indices. Admission stages immutable input and commits job/hold/outbox before acknowledgment. Output commits before relay, terminal success after settlement; no retry after publication. Existing A0 fixes are preserved, not repeated. Per-request context is not aggregate concurrency; pixel area 200704 is an area limit, not a 448px long edge. Old Lua/layout/schema snippets require contract tests and must not be copied verbatim. New launch, ownership and test gates are in the plan package.
+
+
 Research date **2026-09-20**. This document answers one question: *at what price,
 on what hardware, at what utilisation does `https://marlin2b.callbill.ai` make
 money* — and what the "no dropped requests" promise costs in dollars.
@@ -1524,3 +1527,7 @@ configuration that can actually keep the promise. ⚠️ Still unverified: wheth
 resulting failover RPO can swallow an already-acknowledged `202` — that is a
 measurement, and [`09` OQ17](09-blueprint.md) now states the drill and the two
 things that ship if it fails.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

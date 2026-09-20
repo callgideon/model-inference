@@ -1,31 +1,16 @@
 # Handoff — state, plans and objectives of the platform on 2026-09-20
 
-**Who this is for.** A fresh *planning* session. Its job is to read this file,
-then the two specification trees it points at, and produce **one unified,
-phased plan with explicit parallel tracks** — each task written as a design
-spec + implementation plan with closed-loop tests and verification — that
-subsequent *execution* sessions implement one task at a time until the
-platform is live. Nothing in this file is a plan yet; it is the combined
-context the plan must be derived from. Read `CLAUDE.md` first for
-conventions, then this file end to end, then the documents in §7 in the
-order given there.
+**Start implementation with [research/plan/README.md](research/plan/README.md) and the [coordinator handoff](research/plan/COORDINATOR.md).** The detailed module briefs, dependency manifest, contracts and verification gates are now ready for Claude Opus 5 sessions. Implementation has not started in this documentation update.
 
-Everything below is committed on `main` (head `c3aa577` at the time of
-writing); nothing is pending in any working tree. The three feature
-worktrees (`claude/fe-int`, `claude/inf-opt`, `claude/traces-and`) are at or
-behind `main`.
+Read `CLAUDE.md` first, then the new package and your assigned module. The package supersedes conflicting scope, architecture, sequencing and acceptance instructions in this original handoff and the older research specs. Historical measurements/access inventory below are retained for context; they are not newly verified live state. Old branch/worktree claims must be checked, not assumed.
 
-## 0. The objective, in one paragraph
+## 0. Current objective and accepted changes
 
-Take the single-box Marlin-2B endpoint (`https://marlin2b.callbill.ai`, one
-`g6e.2xlarge`, one hand-made key) to a **trustworthy paid API with real
-users**: no dropped requests under burst, honest queueing and admission,
-measured latency targets, a console where developers get keys and see usage,
-**and** per-request deep traces with content (opt-in), feedback and an
-LLM judge so the production model's performance, relevance and accuracy are
-analysed on real traffic — the S1/S2 stages of the closed-loop platform
-whose thesis is in `research/platform/`. "Platform live" is defined by the
-four release gates in §6.4, not by a date.
+Deliver a **free single-GPU pilot** with promotional balances, atomic reservations/settlement, durable jobs and results, explicit asynchronous requests, secure public URL/upload ingestion, opt-in traces, feedback and consented budgeted evaluation. Retain the existing organization/owner/member model. Payments, commercial second-owner gate, OpenRouter and fleet rollout are later gates; fleet follows verified single-GPU pilot evidence.
+
+Requests remain synchronous unless async is explicitly requested. PostgreSQL owns acceptance, leases, stream journal and accounting; Valkey is rebuildable scheduling state. Inference continues when optional trace capture drops, with loss metrics and fsync-defined durability. Retention is24h results,7d processing cache, up to90d full trace content and13mo metadata. New org balances start zero; historical balances are preserved and historical usage is not retrocharged.
+
+The [contracts](research/plan/01-contracts.md), [durable protocols](research/plan/02-durable-protocols.md) and [release gates](research/plan/04-verification.md) are authoritative. Sections4–10 below describe the original research/planning input, not the current execution backlog. Do not implement superseded examples or repeat already-completed fixes.
 
 ## 1. What is live right now
 
@@ -35,7 +20,7 @@ four release gates in §6.4, not by a date.
 | GPU dev box | EC2 `i-0e8449a4ffca29bab`, `g6e.2xlarge` (1× L40S 48 GB, 8 vCPU), us-east-1d, Deep Learning AMI (Ubuntu 24.04, driver 595, PyTorch env at `/opt/pytorch`, NVMe at `/opt/dlami/nvme`) | Elastic IP `100.57.145.167` (`eipalloc-037e19cc644820961`). Security groups: original + `marlin2b-gateway` (80/443). **Running ≈ $2.24/h.** Weights at `/opt/dlami/nvme/marlin2b`, logs at `/opt/dlami/nvme/logs/` (`serve.log`, `usage.jsonl`, `usage_failed.jsonl`), repo clone at `/home/ubuntu/model-inference` on `main`. |
 | Customer console | `https://app.callbill.ai` | Next.js 16 (App Router, Tailwind 4, shadcn base-nova) in `apps/app`, Vercel project `infrx-app` (`prj_W8JNBx71exKW6iEPBaALx1R9IxKn`) in **gideon@callgideon.com**'s personal Vercel scope, Git-linked to `callgideon/model-inference`, root `apps/app`, auto-deploys on push to `main`. |
 | Database + auth | Supabase project `fcbnscgsymzdykendbrc` (**us-east-2**) | Schema `apps/app/supabase/migrations/0001_init.sql` (+ seed `0002`) applied. Email/password auth, **public signup disabled**, password min 6, Google provider disabled (its redirect URI was never added to the Google client). Auth email goes through **AWS SES** from `login@callbill.ai` (domain `callbill.ai` verified with DKIM; send-only address). |
-| Accounts | `dev@callbill.ai` / `devdev` (owner of org "dev"); `e2e-test@callbill.ai` (test user with a minted key, safe to delete) | Create more with the Supabase admin API (`POST /auth/v1/admin/users` with the secret key) — see `apps/app/supabase/README.md`. |
+| Accounts | `dev@callbill.ai` (owner of org "dev"); `e2e-test@callbill.ai` (historical test account) | Obtain credentials through the authorized secret/admin flow; no password values are stored in this handoff. See `apps/app/supabase/README.md`. |
 | DNS | Route 53 zone `callbill.ai` (`Z03431581IYCMMS6JWE78`) | `marlin2b.callbill.ai` A → EIP; `app.callbill.ai` CNAME → `cname.vercel-dns.com`; DKIM CNAMEs; `_dmarc` (p=none). `callgideon.com` zone `Z0255467Y94CH1V482H6` is unused by this project. |
 | Weights mirror | `s3://llm-bootcamp-641134885443/weights/` | only `deepseek-v41` mirrored; Marlin comes from Hugging Face (gated; account approved). |
 
@@ -89,11 +74,7 @@ research/                 METHODOLOGY.md (formulas, units, pinned inputs) and th
   traces/                 PROGRAM B — deep traces: 01 requirements … 08 phases and test plan
 ```
 
-Branch convention: `main` carries everything; feature work happens on
-`claude/*` branches in `.claude/worktrees/` and lands on `main` by
-fast-forward or PR. Experiment branches (`marlin2b`, …) exist but are behind
-`main`; work on `main` unless diverging serving configs per experiment again.
-Never merge an experiment branch into `main`.
+Branch convention: future module implementations use isolated `codex/<task>-<slug>` branches from a coordinator-recorded committed base. Follow [worktree rules](research/plan/03-execution-protocol.md). Never merge an experiment branch into `main`, auto-sync unrelated experiment branches or alter another session's worktree.
 
 ## 4. Measured facts (L40S, vLLM nightly pulled 2026-09-19)
 
@@ -409,3 +390,7 @@ cd apps/app && pnpm install && cp .env.example .env.local && pnpm dev   # fill k
 # benchmark through the gateway (Phase 0 of both programs)
 BASE_URL=https://marlin2b.callbill.ai/v1 MARLIN_API_KEY=$KEY python3 models/marlin2b/bench.py -c 8 -n 32   # add --distinct once A-P0 lands it
 ```
+
+## Documentation update log
+
+- 2026-09-20: Added authoritative implementation package, incorporated review decisions, removed plaintext account password from this file and retained historical source context. No live infrastructure or application implementation changed.

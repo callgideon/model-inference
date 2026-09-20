@@ -1,5 +1,8 @@
 # Prioritized product requirements
 
+> **Implementation amendment — 2026-09-20.** Use [the unified handoff package](../plan/README.md) for current scope, dependencies and acceptance. First release is a free single-GPU pilot with promotional holds/settlement, existing organization roles, explicit async, opt-in trace content and separately consented evaluation. Payments, OpenRouter and commercial second-owner launch are deferred; do not treat old auth, payment, no-content-storage or ZDR assumptions as current implementation instructions.
+
+
 Scope: our AWS; Marlin first; other model owners next. These are recommended release gates, not delivery-date estimates. P0 means required before paid external use; P1 means the repeatable platform and distribution phase; P2 means expansion after demand.
 
 ## P0 — a trustworthy paid Marlin API
@@ -78,3 +81,7 @@ Track time to first successful/paid request, repeat weekly paying usage, paid ow
 ## Verification log
 
 - 2026-09-19: Priorities derived from user scope, [competitor evidence](01-market-and-competitors.md), and [local Marlin results](../../models/marlin2b/results/notes.md). Release tests listed here are proposed acceptance work, not tests executed in this research session.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Linked authoritative reviewed handoffs; no implementation or live-state change. Prior research remains historical context.

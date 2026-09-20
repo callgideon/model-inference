@@ -1,5 +1,8 @@
 # Offering Marlin-2B on OpenRouter — end-to-end plan
 
+> **Implementation amendment — 2026-09-20.** Use [the unified handoff package](../../../research/plan/README.md) for current scope, dependencies and acceptance. First release is a free single-GPU pilot with promotional holds/settlement, existing organization roles, explicit async, opt-in trace content and separately consented evaluation. Payments, OpenRouter and commercial second-owner launch are deferred; do not treat old auth, payment, no-content-storage or ZDR assumptions as current implementation instructions.
+
+
 Researched 2026-09-20 from OpenRouter's provider docs, its provider
 model-document schema (v2.4), its video-input guide and its public models
 API. What OpenRouter does not publish (revenue share, approval time, minimum
@@ -103,3 +106,7 @@ first. Do it after OpenRouter is live.
 - Video URL fetching policy: size limits, allowed hosts, timeouts on our side.
 - Whether NemoStation wants attribution or a heads-up; Apache-2.0 does not
   require it, courtesy does.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Linked authoritative reviewed handoffs; no implementation or live-state change. Prior research remains historical context.

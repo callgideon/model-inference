@@ -1,5 +1,8 @@
 # Deep traces — phases and test plan
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md), [durable protocols](../plan/02-durable-protocols.md) and [verification](../plan/04-verification.md). The text below is historical research where it conflicts. Trace loss does not stop inference; capture has active-byte, queue, spool and disk limits, and local durability begins at fsync on persistent storage. Off-mode requests have no CH trace row and are excluded from trace-coverage denominators. Canonical logical content is preserved, not raw HTTP wire bytes after normalization. Feedback 201 requires PG/outbox durability and tenant ownership independent of CH lag. Channel and author role are separate; customer console feedback is not an operator calibration label. Judge requires current consent, hard worst-case budget reservations and ambiguous-submit quarantine. CH schema/version/dedup must run against the pinned server; logical expiry is enforced before physical TTL deletion. Retention: 24h results, 7d processing cache, <=90d optional full content, 13mo metadata.
+
+
 Plan date **2026-09-20**. Turns [`01-requirements.md`](01-requirements.md)
 through [`07-console-spec.md`](07-console-spec.md) into an ordered set of
 **small, independently verifiable blocks**. Every block names what it creates,
@@ -205,3 +208,7 @@ with 6.
 ## Verification log
 
 - 2026-09-20 — plan written against `main` at `5210c67`; phase boundaries chosen so that Phase 1 proves the async/durability path with rows only (cheapest possible failure), Phase 2 adds content, Phase 3 adds the viewer, and the judge (the only component with external egress and real spend) comes after feedback exists to calibrate it against. Effort numbers are unmeasured estimates. Test ids reference the series defined in `05` §11, `06` §5 and `07` §9; those documents were written in parallel with this one and their exact id lists should be checked against §10 at review (⚠️).
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

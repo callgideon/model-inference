@@ -1,5 +1,8 @@
 # No-drop request handling: admission, queueing, backpressure, streaming
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md) and [durable protocols](../plan/02-durable-protocols.md). The text below is historical research where it conflicts with those documents. Pilot is free with promotional holds/settlement; ordinary chat never automatically returns 202; PG owns jobs, admission, leases, output journal and terminal accounting. Memory/Valkey queues are rebuildable indices. Admission stages immutable input and commits job/hold/outbox before acknowledgment. Output commits before relay, terminal success after settlement; no retry after publication. Existing A0 fixes are preserved, not repeated. Per-request context is not aggregate concurrency; pixel area 200704 is an area limit, not a 448px long edge. Old Lua/layout/schema snippets require contract tests and must not be copied verbatim. New launch, ownership and test gates are in the plan package.
+
+
 **Research date: 2026-09-20.** Every source below was fetched on this date.
 Prices, quotas and API surfaces move; re-pin before you build.
 
@@ -1823,3 +1826,7 @@ document's own §6.3 point 2 quotes from AWS. [`09` §0.2](09-blueprint.md) pins
 supersedes 330 everywhere; [`10` §1, §7.6, §13](10-implementation-spec.md)
 carried the same stale 330 and were corrected with it. vLLM unit unchanged at
 180.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

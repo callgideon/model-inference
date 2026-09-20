@@ -1,5 +1,8 @@
 # Requirements, SLOs and traffic model for the public API
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md) and [durable protocols](../plan/02-durable-protocols.md). The text below is historical research where it conflicts with those documents. Pilot is free with promotional holds/settlement; ordinary chat never automatically returns 202; PG owns jobs, admission, leases, output journal and terminal accounting. Memory/Valkey queues are rebuildable indices. Admission stages immutable input and commits job/hold/outbox before acknowledgment. Output commits before relay, terminal success after settlement; no retry after publication. Existing A0 fixes are preserved, not repeated. Per-request context is not aggregate concurrency; pixel area 200704 is an area limit, not a 448px long edge. Old Lua/layout/schema snippets require contract tests and must not be copied verbatim. New launch, ownership and test gates are in the plan package.
+
+
 Research date **2026-09-20**. This is document 01 of `research/production-api/`, the
 tree that turns the single-box Marlin-2B endpoint into a service real developers
 can depend on. It fixes **what we promise** and **how much hardware that costs**;
@@ -1654,3 +1657,7 @@ property and an OpenRouter-fronted key is pinned to `interactive`.
   D1 restated to match in [`09` §2.1](09-blueprint.md); mechanism in
   [`10` §4.2, §5, §6](10-implementation-spec.md). No traffic-model number in this
   document changed.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

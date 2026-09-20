@@ -1,5 +1,8 @@
 # Deep traces — architecture
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md), [durable protocols](../plan/02-durable-protocols.md) and [verification](../plan/04-verification.md). The text below is historical research where it conflicts. Trace loss does not stop inference; capture has active-byte, queue, spool and disk limits, and local durability begins at fsync on persistent storage. Off-mode requests have no CH trace row and are excluded from trace-coverage denominators. Canonical logical content is preserved, not raw HTTP wire bytes after normalization. Feedback 201 requires PG/outbox durability and tenant ownership independent of CH lag. Channel and author role are separate; customer console feedback is not an operator calibration label. Judge requires current consent, hard worst-case budget reservations and ambiguous-submit quarantine. CH schema/version/dedup must run against the pinned server; logical expiry is enforced before physical TTL deletion. Retention: 24h results, 7d processing cache, <=90d optional full content, 13mo metadata.
+
+
 Design date **2026-09-20**. Implements the requirements in
 [`01-requirements.md`](01-requirements.md) under decisions D1–D8. Field
 definitions are in [`02-metrics-catalogue.md`](02-metrics-catalogue.md); DDL
@@ -324,3 +327,7 @@ NF8's ≤ $150/mo infra target holds at pilot; judge spend is a product setting.
 ## Verification log
 
 - 2026-09-20 — ClickHouse claims (TTL syntax, ORDER BY as primary key, `ttl_only_drop_parts`, `BACKUP … TO S3 … SETTINGS base_backup`, HTTP header auth, port 8123) fetched from the cited docs pages this session. OTel "store content externally" pattern quoted in [`../platform/01`](../platform/01-observability-and-tracing.md) §1.3 from the semconv repo. Anthropic image token formula and the 1000×1000 = 1,296 tokens row from the vision page fetched this session. S3 prices ($0.023/GB-mo, $0.005/1,000 PUT) are the values [`../platform/01`](../platform/01-observability-and-tracing.md) §3.2 verified on 2026-09-19. **⚠️ EC2 and EBS prices for `infrx-obs` are not sourced** and are marked. Hot-path costs in §2.3 are estimates pending H1.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

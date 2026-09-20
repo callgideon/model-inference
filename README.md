@@ -1,7 +1,8 @@
 # model-inference
 
-New session? Start with [`HANDOFF.md`](HANDOFF.md) — live systems, access, measured
-numbers and the implementation plan as of 2026-09-20.
+New implementation session? Start with the [structured handoff package](research/plan/README.md)
+and [coordinator guide](research/plan/COORDINATOR.md). [HANDOFF.md](HANDOFF.md) preserves
+operational context and historical measurements. Module implementation remains pending.
 
 Per-experiment inference and benchmarking code for the Gideon GPU work.
 

@@ -1,5 +1,8 @@
 # Deep traces — requirements
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md), [durable protocols](../plan/02-durable-protocols.md) and [verification](../plan/04-verification.md). The text below is historical research where it conflicts. Trace loss does not stop inference; capture has active-byte, queue, spool and disk limits, and local durability begins at fsync on persistent storage. Off-mode requests have no CH trace row and are excluded from trace-coverage denominators. Canonical logical content is preserved, not raw HTTP wire bytes after normalization. Feedback 201 requires PG/outbox durability and tenant ownership independent of CH lag. Channel and author role are separate; customer console feedback is not an operator calibration label. Judge requires current consent, hard worst-case budget reservations and ambiguous-submit quarantine. CH schema/version/dedup must run against the pinned server; logical expiry is enforced before physical TTL deletion. Retention: 24h results, 7d processing cache, <=90d optional full content, 13mo metadata.
+
+
 Research and decision date **2026-09-20**. This is the requirements document for
 **opt-in, per-request deep tracing** of the inference API: what a trace is, who
 turns it on, what it must never cost the request, and what "evaluate the
@@ -221,3 +224,7 @@ Ids are `T` (trace), `F` (feedback), `J` (judge), `C` (console), `O` (operations
 ## Verification log
 
 - 2026-09-20 — written against `main` at `5210c67` (HANDOFF.md present; gateway.py 500 lines). All `[src]` URLs were fetched during the same session; vLLM `X-Request-Id` behaviour read from `vllm/entrypoints/serve/engine/serving.py` (`_base_request_id`) and `vllm/entrypoints/serve/middleware/x_request_id.py`; `prompt_tokens_details` gating read from `vllm/entrypoints/openai/chat_completion/serving.py` (`_make_prompt_tokens_details(enable_prompt_tokens_details, num_cached_tokens, num_cache_creation_tokens, mm_token_counts)`). Anthropic Batches limits (100k requests / 256 MB, ≤24 h, 50 %) from the bundled SDK reference. OpenAI `metadata` limits (16 pairs, 64/512 chars) from the OpenAI reference. Nothing here is measured yet; NF1's budget is a target, not a result.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

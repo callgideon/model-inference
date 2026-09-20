@@ -1,5 +1,8 @@
 # Deep traces — data model
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md), [durable protocols](../plan/02-durable-protocols.md) and [verification](../plan/04-verification.md). The text below is historical research where it conflicts. Trace loss does not stop inference; capture has active-byte, queue, spool and disk limits, and local durability begins at fsync on persistent storage. Off-mode requests have no CH trace row and are excluded from trace-coverage denominators. Canonical logical content is preserved, not raw HTTP wire bytes after normalization. Feedback 201 requires PG/outbox durability and tenant ownership independent of CH lag. Channel and author role are separate; customer console feedback is not an operator calibration label. Judge requires current consent, hard worst-case budget reservations and ambiguous-submit quarantine. CH schema/version/dedup must run against the pinned server; logical expiry is enforced before physical TTL deletion. Retention: 24h results, 7d processing cache, <=90d optional full content, 13mo metadata.
+
+
 Design date **2026-09-20**. The storage contract for
 [`03-architecture.md`](03-architecture.md): ClickHouse DDL, the S3 object
 schemas, the spool line format, and the Supabase migration that carries the
@@ -384,3 +387,7 @@ becomes `id,org_id,revoked_at,trace_level,judge_enabled,organizations(media_copy
 ## Verification log
 
 - 2026-09-20 — DDL written against ClickHouse MergeTree docs fetched this session (`TTL … DELETE`, `ttl_only_drop_parts`, `ORDER BY` = primary key when unspecified). ⚠️ **Not yet executed** against a server: the `INDEX … TYPE set(16)` and `bloom_filter` on `Array(LowCardinality(String))` / `mapKeys()` forms are standard but must be run once in [`08`](08-phases-and-test-plan.md) Phase 0 (S1) before anything depends on them. `prompt_tokens_details.multimodal_tokens` naming from vLLM's `_make_prompt_tokens_details` (fetched); ⚠️ populated-for-video is an open question ([`01`](01-requirements.md) OQ 2). PostgREST FK embedding syntax `organizations(media_copy)` is how the console already reads `org_members → organizations(name)` (`apps/app/lib/session.ts`).
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

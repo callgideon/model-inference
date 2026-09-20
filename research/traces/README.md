@@ -1,5 +1,8 @@
 # research/traces/ — deep traces: requirements, design, phased plan
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md), [durable protocols](../plan/02-durable-protocols.md) and [verification](../plan/04-verification.md). The text below is historical research where it conflicts. Trace loss does not stop inference; capture has active-byte, queue, spool and disk limits, and local durability begins at fsync on persistent storage. Off-mode requests have no CH trace row and are excluded from trace-coverage denominators. Canonical logical content is preserved, not raw HTTP wire bytes after normalization. Feedback 201 requires PG/outbox durability and tenant ownership independent of CH lag. Channel and author role are separate; customer console feedback is not an operator calibration label. Judge requires current consent, hard worst-case budget reservations and ambiguous-submit quarantine. CH schema/version/dedup must run against the pinned server; logical expiry is enforced before physical TTL deletion. Retention: 24h results, 7d processing cache, <=90d optional full content, 13mo metadata.
+
+
 ## 1. What this is
 
 The specification set for **opt-in, per-request deep tracing** of the
@@ -121,3 +124,7 @@ derived; `meas.` = measured.
 ## Verification log
 
 - 2026-09-20 — tree written in one session against `main` at `5210c67`. `01`, `03`, `04`, `08` and this index by the orchestrating session; `02`, `05`, `06`, `07` by parallel sub-sessions sharing the same context; cross-document consistency (column names, test-id series, env var names, requirement ids) was checked in a final pass recorded in each document's own log. No code was written.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

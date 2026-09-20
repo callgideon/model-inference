@@ -1,0 +1,943 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "1db98e9",
+  "status": "documentation-ready-implementation-not-started",
+  "dependency_semantics": {
+    "start_dependencies": "Must be integrated before coding this task",
+    "integration_dependencies": "Additional tasks required before marking this task integrated; fakes permitted during development"
+  },
+  "tracks": [
+    {
+      "id": "F",
+      "title": "Foundation and shared contracts",
+      "handoff": "handoffs/F-foundation.md",
+      "ownership": [
+        "apps/infrx-api/gateway.py (extraction only)",
+        "apps/infrx-api/infrx/ (initial scaffolding only; transfer feature ownership at F2)",
+        "apps/infrx-api/tests/contracts/",
+        "apps/app/tests/contracts/",
+        "shared package/dependency/test configuration (through coordinator)"
+      ]
+    },
+    {
+      "id": "D",
+      "title": "Durable state and promotional accounting",
+      "handoff": "handoffs/D-durable-state.md",
+      "ownership": [
+        "apps/app/supabase/migrations/ (all future migrations)",
+        "apps/infrx-api/infrx/state/",
+        "apps/infrx-api/tests/d/"
+      ]
+    },
+    {
+      "id": "M",
+      "title": "Secure media ingestion and preparation",
+      "handoff": "handoffs/M-media.md",
+      "ownership": [
+        "apps/infrx-api/infrx/media/",
+        "apps/infrx-api/tests/m/"
+      ]
+    },
+    {
+      "id": "Q",
+      "title": "Scheduling indices and fair dispatch",
+      "handoff": "handoffs/Q-scheduling.md",
+      "ownership": [
+        "apps/infrx-api/infrx/scheduling/",
+        "apps/infrx-api/tests/q/"
+      ]
+    },
+    {
+      "id": "W",
+      "title": "Engine execution and lifecycle",
+      "handoff": "handoffs/W-worker.md",
+      "ownership": [
+        "apps/infrx-api/infrx/worker/",
+        "apps/infrx-api/tests/w/",
+        "models/marlin2b/serve.sh"
+      ]
+    },
+    {
+      "id": "G",
+      "title": "Public API and streaming relay",
+      "handoff": "handoffs/G-gateway.md",
+      "ownership": [
+        "apps/infrx-api/infrx/gateway/routes/",
+        "apps/infrx-api/infrx/auth/",
+        "apps/infrx-api/tests/g/",
+        "apps/infrx-api/client_example.py"
+      ]
+    },
+    {
+      "id": "T",
+      "title": "Trace capture, projection and retention",
+      "handoff": "handoffs/T-traces.md",
+      "ownership": [
+        "apps/infrx-api/infrx/traces/",
+        "apps/infrx-api/tests/t/",
+        "infra/clickhouse/"
+      ]
+    },
+    {
+      "id": "J",
+      "title": "Evaluation workflow and calibration",
+      "handoff": "handoffs/J-judge.md",
+      "ownership": [
+        "apps/infrx-api/infrx/judge/",
+        "apps/infrx-api/tests/j/"
+      ]
+    },
+    {
+      "id": "C",
+      "title": "Console data services and actions",
+      "handoff": "handoffs/C-console-services.md",
+      "ownership": [
+        "apps/app/lib/services/",
+        "apps/app/lib/credits.ts",
+        "apps/app/app/actions.ts (service migration)",
+        "apps/app/app/(console)/api-keys/actions.ts",
+        "apps/app/app/(console)/admin/actions.ts",
+        "apps/app/tests/c/"
+      ]
+    },
+    {
+      "id": "U",
+      "title": "Usage, balances, keys and administration UI",
+      "handoff": "handoffs/U-administration-ui.md",
+      "ownership": [
+        "apps/app/app/(console)/billing/ (presentation only)",
+        "apps/app/app/(console)/usage/",
+        "apps/app/app/(console)/api-keys/ (presentation; actions owned C)",
+        "apps/app/app/(console)/admin/ (presentation; actions owned C)",
+        "apps/app/app/(console)/settings/",
+        "apps/app/tests/u/"
+      ]
+    },
+    {
+      "id": "V",
+      "title": "Trace explorer and feedback UI",
+      "handoff": "handoffs/V-trace-ui.md",
+      "ownership": [
+        "apps/app/app/(console)/traces/",
+        "apps/app/components/traces/",
+        "apps/app/tests/v/"
+      ]
+    },
+    {
+      "id": "I",
+      "title": "Infrastructure and operations",
+      "handoff": "handoffs/I-infrastructure.md",
+      "ownership": [
+        "infra/ (except clickhouse owned T)",
+        "apps/infrx-api/deploy/",
+        "research/plan/evidence/i/"
+      ]
+    },
+    {
+      "id": "E",
+      "title": "Independent verification and release evidence",
+      "handoff": "handoffs/E-verification.md",
+      "ownership": [
+        "models/marlin2b/bench.py",
+        "models/marlin2b/results/ (new evidence only)",
+        "tests/integration/",
+        "apps/app/tests/e2e/",
+        "research/plan/evidence/e/"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "F1",
+      "title": "Extract current gateway behind an application factory",
+      "start_dependencies": [],
+      "integration_dependencies": [],
+      "test_ids": [
+        "F-BASE"
+      ],
+      "track": "F",
+      "handoff": "handoffs/F-foundation.md",
+      "status": "planned"
+    },
+    {
+      "id": "F2",
+      "title": "Freeze typed contracts, pins and executable fixtures",
+      "start_dependencies": [
+        "F1"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "F-CONTRACT",
+        "F-BASE"
+      ],
+      "track": "F",
+      "handoff": "handoffs/F-foundation.md",
+      "status": "planned"
+    },
+    {
+      "id": "D1",
+      "title": "Migrate durable schema, wallet summaries and permissions",
+      "start_dependencies": [
+        "F2"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "DUR-RLS",
+        "DUR-CAP"
+      ],
+      "track": "D",
+      "handoff": "handoffs/D-durable-state.md",
+      "status": "planned"
+    },
+    {
+      "id": "D2",
+      "title": "Atomic admission, durable preparation and dispatch outbox",
+      "start_dependencies": [
+        "D1"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "DUR-ADMIT",
+        "DUR-CAP",
+        "DUR-OUTBOX"
+      ],
+      "track": "D",
+      "handoff": "handoffs/D-durable-state.md",
+      "status": "planned"
+    },
+    {
+      "id": "D3",
+      "title": "Fenced leases, recovery and cancellation",
+      "start_dependencies": [
+        "D2"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "DUR-FENCE",
+        "DUR-OUTPUT"
+      ],
+      "track": "D",
+      "handoff": "handoffs/D-durable-state.md",
+      "status": "planned"
+    },
+    {
+      "id": "D4",
+      "title": "Persistent stream journal and replay",
+      "start_dependencies": [
+        "D3"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "DUR-OUTPUT",
+        "DUR-FENCE"
+      ],
+      "track": "D",
+      "handoff": "handoffs/D-durable-state.md",
+      "status": "planned"
+    },
+    {
+      "id": "D5",
+      "title": "Terminal transaction, grants and reconciliation",
+      "start_dependencies": [
+        "D4"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "DUR-SETTLE",
+        "DUR-CAP",
+        "DUR-OUTPUT"
+      ],
+      "track": "D",
+      "handoff": "handoffs/D-durable-state.md",
+      "status": "planned"
+    },
+    {
+      "id": "D6",
+      "title": "Durable feedback and judge coordination",
+      "start_dependencies": [
+        "D5"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "FEEDBACK-ACK",
+        "JUDGE-BUDGET",
+        "DUR-RLS"
+      ],
+      "track": "D",
+      "handoff": "handoffs/D-durable-state.md",
+      "status": "planned"
+    },
+    {
+      "id": "M1",
+      "title": "Bound and secure URL/base64 materialization",
+      "start_dependencies": [
+        "F2"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "MEDIA-SEC",
+        "F-CONTRACT"
+      ],
+      "track": "M",
+      "handoff": "handoffs/M-media.md",
+      "status": "planned"
+    },
+    {
+      "id": "M2",
+      "title": "Versioned preprocessing and tenant cache",
+      "start_dependencies": [
+        "M1"
+      ],
+      "integration_dependencies": [
+        "D2",
+        "W1"
+      ],
+      "test_ids": [
+        "MEDIA-PARITY",
+        "MEDIA-SEC"
+      ],
+      "track": "M",
+      "handoff": "handoffs/M-media.md",
+      "status": "planned"
+    },
+    {
+      "id": "M3",
+      "title": "Owned uploads, expiry and orphan collection",
+      "start_dependencies": [
+        "M1"
+      ],
+      "integration_dependencies": [
+        "D2"
+      ],
+      "test_ids": [
+        "MEDIA-SEC",
+        "TRACE-TENANT"
+      ],
+      "track": "M",
+      "handoff": "handoffs/M-media.md",
+      "status": "planned"
+    },
+    {
+      "id": "Q1",
+      "title": "Deterministic memory scheduler and fairness model",
+      "start_dependencies": [
+        "F2"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "F-CONTRACT",
+        "DUR-OUTBOX"
+      ],
+      "track": "Q",
+      "handoff": "handoffs/Q-scheduling.md",
+      "status": "planned"
+    },
+    {
+      "id": "Q2",
+      "title": "Valkey adapter with atomic tested scripts",
+      "start_dependencies": [
+        "Q1"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "F-CONTRACT",
+        "DUR-OUTBOX"
+      ],
+      "track": "Q",
+      "handoff": "handoffs/Q-scheduling.md",
+      "status": "planned"
+    },
+    {
+      "id": "Q3",
+      "title": "Outbox/reconciler integration and index loss recovery",
+      "start_dependencies": [
+        "Q2"
+      ],
+      "integration_dependencies": [
+        "D2",
+        "D3"
+      ],
+      "test_ids": [
+        "DUR-OUTBOX",
+        "DUR-FENCE"
+      ],
+      "track": "Q",
+      "handoff": "handoffs/Q-scheduling.md",
+      "status": "planned"
+    },
+    {
+      "id": "W1",
+      "title": "Engine adapter and deterministic execution fakes",
+      "start_dependencies": [
+        "F2"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "F-CONTRACT",
+        "API-STREAM"
+      ],
+      "track": "W",
+      "handoff": "handoffs/W-worker.md",
+      "status": "planned"
+    },
+    {
+      "id": "W2",
+      "title": "Lease-aware execution, cancellation and completion",
+      "start_dependencies": [
+        "W1"
+      ],
+      "integration_dependencies": [
+        "D5",
+        "M2",
+        "Q3"
+      ],
+      "test_ids": [
+        "DUR-FENCE",
+        "DUR-OUTPUT",
+        "DUR-SETTLE"
+      ],
+      "track": "W",
+      "handoff": "handoffs/W-worker.md",
+      "status": "planned"
+    },
+    {
+      "id": "W3",
+      "title": "Drain, engine pin and measured concurrency",
+      "start_dependencies": [
+        "W2"
+      ],
+      "integration_dependencies": [
+        "E1"
+      ],
+      "test_ids": [
+        "OPS-RECOVER",
+        "PERF-PILOT"
+      ],
+      "track": "W",
+      "handoff": "handoffs/W-worker.md",
+      "status": "planned"
+    },
+    {
+      "id": "G1",
+      "title": "Ingress, auth and capability validation",
+      "start_dependencies": [
+        "F2"
+      ],
+      "integration_dependencies": [
+        "D2"
+      ],
+      "test_ids": [
+        "MEDIA-SEC",
+        "DUR-RLS",
+        "F-BASE"
+      ],
+      "track": "G",
+      "handoff": "handoffs/G-gateway.md",
+      "status": "planned"
+    },
+    {
+      "id": "G2",
+      "title": "Synchronous chat and persistent SSE relay",
+      "start_dependencies": [
+        "G1"
+      ],
+      "integration_dependencies": [
+        "D5",
+        "W2",
+        "M2",
+        "Q3"
+      ],
+      "test_ids": [
+        "API-MODES",
+        "API-STREAM",
+        "DUR-OUTPUT"
+      ],
+      "track": "G",
+      "handoff": "handoffs/G-gateway.md",
+      "status": "planned"
+    },
+    {
+      "id": "G3",
+      "title": "Explicit jobs, status, cancellation and replay",
+      "start_dependencies": [
+        "G1"
+      ],
+      "integration_dependencies": [
+        "D5",
+        "W2"
+      ],
+      "test_ids": [
+        "API-MODES",
+        "DUR-ADMIT",
+        "DUR-FENCE"
+      ],
+      "track": "G",
+      "handoff": "handoffs/G-gateway.md",
+      "status": "planned"
+    },
+    {
+      "id": "G4",
+      "title": "Uploads, feedback and trace export adapters",
+      "start_dependencies": [
+        "G1"
+      ],
+      "integration_dependencies": [
+        "M3",
+        "D6",
+        "T2"
+      ],
+      "test_ids": [
+        "FEEDBACK-ACK",
+        "TRACE-TENANT",
+        "MEDIA-SEC"
+      ],
+      "track": "G",
+      "handoff": "handoffs/G-gateway.md",
+      "status": "planned"
+    },
+    {
+      "id": "G5",
+      "title": "Signed async completion callbacks",
+      "start_dependencies": [
+        "G3"
+      ],
+      "integration_dependencies": [
+        "D5",
+        "M1"
+      ],
+      "test_ids": [
+        "API-CALLBACK"
+      ],
+      "track": "G",
+      "handoff": "handoffs/G-gateway.md",
+      "status": "planned"
+    },
+    {
+      "id": "T1",
+      "title": "Byte-budgeted capture and persistent spool",
+      "start_dependencies": [
+        "F2"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "TRACE-BOUNDS",
+        "F-CONTRACT"
+      ],
+      "track": "T",
+      "handoff": "handoffs/T-traces.md",
+      "status": "planned"
+    },
+    {
+      "id": "T2",
+      "title": "Idempotent analytics and content shipping",
+      "start_dependencies": [
+        "T1"
+      ],
+      "integration_dependencies": [
+        "D5",
+        "D6"
+      ],
+      "test_ids": [
+        "TRACE-RECOVER",
+        "FEEDBACK-ACK"
+      ],
+      "track": "T",
+      "handoff": "handoffs/T-traces.md",
+      "status": "planned"
+    },
+    {
+      "id": "T3",
+      "title": "Logical retention, deletion and observability",
+      "start_dependencies": [
+        "T2"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "TRACE-TENANT",
+        "TRACE-RECOVER",
+        "OPS-RECOVER"
+      ],
+      "track": "T",
+      "handoff": "handoffs/T-traces.md",
+      "status": "planned"
+    },
+    {
+      "id": "J1",
+      "title": "Dry-run sampler, rubric and score validation",
+      "start_dependencies": [
+        "F2"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "JUDGE-SCORES",
+        "F-CONTRACT"
+      ],
+      "track": "J",
+      "handoff": "handoffs/J-judge.md",
+      "status": "planned"
+    },
+    {
+      "id": "J2",
+      "title": "Consent/budget coordinated submission and collection",
+      "start_dependencies": [
+        "J1"
+      ],
+      "integration_dependencies": [
+        "D6",
+        "T2"
+      ],
+      "test_ids": [
+        "JUDGE-BUDGET",
+        "JUDGE-SCORES"
+      ],
+      "track": "J",
+      "handoff": "handoffs/J-judge.md",
+      "status": "planned"
+    },
+    {
+      "id": "J3",
+      "title": "Operator calibration and quality report",
+      "start_dependencies": [
+        "J2"
+      ],
+      "integration_dependencies": [
+        "C3",
+        "V2"
+      ],
+      "test_ids": [
+        "JUDGE-SCORES",
+        "CONSOLE-FLOWS"
+      ],
+      "track": "J",
+      "handoff": "handoffs/J-judge.md",
+      "status": "planned"
+    },
+    {
+      "id": "C1",
+      "title": "Typed repositories, pagination and tenant query boundary",
+      "start_dependencies": [
+        "F2"
+      ],
+      "integration_dependencies": [
+        "D1"
+      ],
+      "test_ids": [
+        "TRACE-TENANT",
+        "DUR-RLS",
+        "CONSOLE-FLOWS"
+      ],
+      "track": "C",
+      "handoff": "handoffs/C-console-services.md",
+      "status": "planned"
+    },
+    {
+      "id": "C2",
+      "title": "Content access, expiry and safe signed references",
+      "start_dependencies": [
+        "C1"
+      ],
+      "integration_dependencies": [
+        "M3",
+        "T3"
+      ],
+      "test_ids": [
+        "TRACE-TENANT",
+        "CONSOLE-FLOWS"
+      ],
+      "track": "C",
+      "handoff": "handoffs/C-console-services.md",
+      "status": "planned"
+    },
+    {
+      "id": "C3",
+      "title": "Shared key/settings/grant/feedback/judge actions",
+      "start_dependencies": [
+        "C1"
+      ],
+      "integration_dependencies": [
+        "D6",
+        "J2"
+      ],
+      "test_ids": [
+        "FEEDBACK-ACK",
+        "JUDGE-BUDGET",
+        "DUR-RLS",
+        "CONSOLE-FLOWS"
+      ],
+      "track": "C",
+      "handoff": "handoffs/C-console-services.md",
+      "status": "planned"
+    },
+    {
+      "id": "U1",
+      "title": "Usage and promotional balance views",
+      "start_dependencies": [
+        "F2"
+      ],
+      "integration_dependencies": [
+        "C1",
+        "D5"
+      ],
+      "test_ids": [
+        "CONSOLE-FLOWS"
+      ],
+      "track": "U",
+      "handoff": "handoffs/U-administration-ui.md",
+      "status": "planned"
+    },
+    {
+      "id": "U2",
+      "title": "Keys and privacy/settings controls",
+      "start_dependencies": [
+        "U1"
+      ],
+      "integration_dependencies": [
+        "C3"
+      ],
+      "test_ids": [
+        "CONSOLE-FLOWS",
+        "DUR-RLS"
+      ],
+      "track": "U",
+      "handoff": "handoffs/U-administration-ui.md",
+      "status": "planned"
+    },
+    {
+      "id": "U3",
+      "title": "Operator grants, suspension and pilot operations",
+      "start_dependencies": [
+        "U1"
+      ],
+      "integration_dependencies": [
+        "C3"
+      ],
+      "test_ids": [
+        "CONSOLE-FLOWS",
+        "DUR-CAP",
+        "DUR-RLS"
+      ],
+      "track": "U",
+      "handoff": "handoffs/U-administration-ui.md",
+      "status": "planned"
+    },
+    {
+      "id": "V1",
+      "title": "Paginated trace list and filters",
+      "start_dependencies": [
+        "F2"
+      ],
+      "integration_dependencies": [
+        "C1",
+        "T2"
+      ],
+      "test_ids": [
+        "CONSOLE-FLOWS",
+        "TRACE-TENANT"
+      ],
+      "track": "V",
+      "handoff": "handoffs/V-trace-ui.md",
+      "status": "planned"
+    },
+    {
+      "id": "V2",
+      "title": "Trace detail, content and feedback",
+      "start_dependencies": [
+        "V1"
+      ],
+      "integration_dependencies": [
+        "C2",
+        "C3"
+      ],
+      "test_ids": [
+        "CONSOLE-FLOWS",
+        "FEEDBACK-ACK",
+        "TRACE-TENANT"
+      ],
+      "track": "V",
+      "handoff": "handoffs/V-trace-ui.md",
+      "status": "planned"
+    },
+    {
+      "id": "V3",
+      "title": "Judge score and calibration presentation",
+      "start_dependencies": [
+        "V2"
+      ],
+      "integration_dependencies": [
+        "J2"
+      ],
+      "test_ids": [
+        "JUDGE-SCORES",
+        "CONSOLE-FLOWS"
+      ],
+      "track": "V",
+      "handoff": "handoffs/V-trace-ui.md",
+      "status": "planned"
+    },
+    {
+      "id": "I1",
+      "title": "Read-only inventory and deploy design",
+      "start_dependencies": [],
+      "integration_dependencies": [],
+      "test_ids": [
+        "OPS-RECOVER"
+      ],
+      "track": "I",
+      "handoff": "handoffs/I-infrastructure.md",
+      "status": "planned"
+    },
+    {
+      "id": "I2",
+      "title": "Reproducible single-GPU deployment",
+      "start_dependencies": [
+        "I1",
+        "F2"
+      ],
+      "integration_dependencies": [
+        "D5",
+        "G2",
+        "G3",
+        "G4",
+        "W3",
+        "T3",
+        "C3",
+        "U3",
+        "V3",
+        "G5"
+      ],
+      "test_ids": [
+        "OPS-RECOVER",
+        "PERF-PILOT"
+      ],
+      "track": "I",
+      "handoff": "handoffs/I-infrastructure.md",
+      "status": "planned"
+    },
+    {
+      "id": "I3",
+      "title": "Recovery, alarms and rollback runbooks",
+      "start_dependencies": [
+        "I2"
+      ],
+      "integration_dependencies": [
+        "E3"
+      ],
+      "test_ids": [
+        "OPS-RECOVER",
+        "TRACE-RECOVER",
+        "DUR-OUTBOX"
+      ],
+      "track": "I",
+      "handoff": "handoffs/I-infrastructure.md",
+      "status": "planned"
+    },
+    {
+      "id": "I4",
+      "title": "Separately gated fleet deployment",
+      "start_dependencies": [
+        "I3",
+        "E4"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "FLEET-GATE",
+        "OPS-RECOVER"
+      ],
+      "track": "I",
+      "handoff": "handoffs/I-infrastructure.md",
+      "status": "planned"
+    },
+    {
+      "id": "E1",
+      "title": "Distinct corpus and authenticated benchmark client",
+      "start_dependencies": [],
+      "integration_dependencies": [],
+      "test_ids": [
+        "PERF-PILOT",
+        "MEDIA-PARITY"
+      ],
+      "track": "E",
+      "handoff": "handoffs/E-verification.md",
+      "status": "planned"
+    },
+    {
+      "id": "E2",
+      "title": "Pinned integration services and fault harness",
+      "start_dependencies": [
+        "E1",
+        "F2"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "F-CONTRACT",
+        "DUR-RLS"
+      ],
+      "track": "E",
+      "handoff": "handoffs/E-verification.md",
+      "status": "planned"
+    },
+    {
+      "id": "E3",
+      "title": "Cross-module failures and security gate",
+      "start_dependencies": [
+        "E2"
+      ],
+      "integration_dependencies": [
+        "D6",
+        "M3",
+        "Q3",
+        "W3",
+        "G4",
+        "T3",
+        "J2",
+        "C3",
+        "U3",
+        "V3",
+        "G5",
+        "J3"
+      ],
+      "test_ids": [
+        "DUR-ADMIT",
+        "DUR-CAP",
+        "DUR-FENCE",
+        "DUR-OUTPUT",
+        "DUR-SETTLE",
+        "DUR-OUTBOX",
+        "DUR-RLS",
+        "MEDIA-SEC",
+        "API-MODES",
+        "API-STREAM",
+        "TRACE-BOUNDS",
+        "TRACE-RECOVER",
+        "TRACE-TENANT",
+        "FEEDBACK-ACK",
+        "JUDGE-BUDGET",
+        "JUDGE-SCORES",
+        "CONSOLE-FLOWS",
+        "API-CALLBACK"
+      ],
+      "track": "E",
+      "handoff": "handoffs/E-verification.md",
+      "status": "planned"
+    },
+    {
+      "id": "E4",
+      "title": "Single-GPU release evidence and launch decision",
+      "start_dependencies": [
+        "E3"
+      ],
+      "integration_dependencies": [
+        "I3"
+      ],
+      "test_ids": [
+        "PERF-PILOT",
+        "OPS-RECOVER",
+        "MEDIA-PARITY",
+        "TRACE-BOUNDS"
+      ],
+      "track": "E",
+      "handoff": "handoffs/E-verification.md",
+      "status": "planned"
+    }
+  ]
+}

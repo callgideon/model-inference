@@ -4,8 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-`HANDOFF.md` is the current state and plan; read it before changing
-anything live.
+Read `HANDOFF.md` for historical operational context and `research/plan/README.md`
+for the authoritative implementation handoffs. Read the shared contracts and your
+assigned module brief before coding; no live-state claim is implied by the docs.
 
 Per-experiment inference and benchmarking for the Gideon GPU work, plus the
 research that sizes it. Five model experiments under `models/`, one directory each:
@@ -23,10 +24,10 @@ bare-metal cluster exists.
 `main` carries `models/` (shared tooling in `models/common/`, every
 experiment's metadata and scripts), `apps/`, and `research/`. Each experiment
 has a branch of the same name (`marlin2b`, `kimik3`, …) where that
-experiment's serve configs, benchmarks and results diverge. After every change to
-`main`, merge `main` into each experiment branch (`git merge main`; it
-fast-forwards until the branch has commits of its own). Never merge an
-experiment branch back into `main`; land tooling fixes on `main` directly.
+experiment's serve configs, benchmarks and results diverge. Implementation tasks use
+isolated `codex/<task>-<slug>` branches from a coordinator-recorded committed base;
+follow `research/plan/03-execution-protocol.md`. Do not automatically merge main into
+unrelated experiment branches. Never merge an experiment branch into main.
 Measured results go in `<exp>/results/` on the branch, with a short
 "Measured" note in `research/models/<exp>/README.md` on `main`.
 
@@ -45,8 +46,11 @@ free space in bytes on purpose (`SIZE_GB` is decimal GB, `df` reports GiB).
 account approved. `S3_DIR` in `model.env` deliberately differs from the
 directory name; the mirror predates the names.
 
-There is no build, lint or test suite; scripts are bash with
-`set -euo pipefail` plus small Python clients. On the `marlin2b` branch:
+Existing checks: `python -m pytest apps/infrx-api/tests -q`; in `apps/app`,
+`pnpm test`, `pnpm lint` and `pnpm build` as appropriate. F2 in the handoff package
+will pin the Python environment and expand console test discovery; do not assume
+new nested tests are discovered by the current top-level glob. Scripts also use
+`set -euo pipefail` plus small Python clients. Marlin tools:
 `./models/marlin2b/serve.sh` (vLLM in docker), `models/marlin2b/smoke.py`
 (one request), `bench.py` (load test), `reference.py` (transformers path),
 `tokens.py` (video token budget); `apps/infrx-api/gateway.py` is the public
@@ -97,3 +101,7 @@ are MXFP4 and the NVFP4 build is larger with no published speedup; its
 minimum on H100/A100; Marlin-2B loads in vLLM only with
 `--hf-overrides '{"architectures":["Qwen3_5ForConditionalGeneration"]}'`
 and ships no MTP weights.
+
+## Verification log
+
+- 2026-09-20: Updated implementation entry point, worktree rules and existing-test guidance; application behavior unchanged.

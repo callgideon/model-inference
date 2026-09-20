@@ -1,5 +1,8 @@
 # Throughput and latency optimization for the video-VLM workload
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md) and [durable protocols](../plan/02-durable-protocols.md). The text below is historical research where it conflicts with those documents. Pilot is free with promotional holds/settlement; ordinary chat never automatically returns 202; PG owns jobs, admission, leases, output journal and terminal accounting. Memory/Valkey queues are rebuildable indices. Admission stages immutable input and commits job/hold/outbox before acknowledgment. Output commits before relay, terminal success after settlement; no retry after publication. Existing A0 fixes are preserved, not repeated. Per-request context is not aggregate concurrency; pixel area 200704 is an area limit, not a 448px long edge. Old Lua/layout/schema snippets require contract tests and must not be copied verbatim. New launch, ownership and test gates are in the plan package.
+
+
 **Research date: 2026-09-20.** Follows [`research/METHODOLOGY.md`](../METHODOLOGY.md): every
 non-trivial claim carries an inline `[src]` link or the marker **⚠️ TO BE VERIFIED** with the
 estimation method stated. `meas.` = measured in this repo or published with a source; `est.` =
@@ -1619,3 +1622,7 @@ were checked by reading `apps/infrx-api/gateway.py`, `apps/infrx-api/deploy/*`,
 - §5.1's A10G row stays ⚠️ and is now known to be unanswerable from the cited matrix: it lists `NVIDIA A10` (Ampere, 5th-Gen NVDEC, 2 decoders) and has **no `A10G` row**.
 - §5.1 prints the L40S as "44 GiB" while §3.2 and §4 size against "48 GB". Both are defensible (48 GB decimal = 44.7 GiB; AWS reports 44 GiB usable) and the seat count is insensitive to the difference (109 vs 112 at 2-minute context), so no edit was made — but the document should pick one and say which.
 - Every ⚠️ **TO BE VERIFIED** already present in §2.2 (CRF 28), §2.3 (NVDEC sessions), §2.5 (S3 rate, 40× ratio), §3.5 (Ada encoder graphs), §3.6 (FlashQLA on SM89), §3.8 (`mm_processor_device`), §5.1 (A10G), §5.2 (`g6` capacity) and §6.6 (18 s penalty scope) was re-read and none was found to be resolvable from a primary source in this pass. They stay.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

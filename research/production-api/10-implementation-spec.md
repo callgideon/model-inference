@@ -1,5 +1,8 @@
 # Implementation spec — gateway v2, worker, queue, transcode
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md) and [durable protocols](../plan/02-durable-protocols.md). The text below is historical research where it conflicts with those documents. Pilot is free with promotional holds/settlement; ordinary chat never automatically returns 202; PG owns jobs, admission, leases, output journal and terminal accounting. Memory/Valkey queues are rebuildable indices. Admission stages immutable input and commits job/hold/outbox before acknowledgment. Output commits before relay, terminal success after settlement; no retry after publication. Existing A0 fixes are preserved, not repeated. Per-request context is not aggregate concurrency; pixel area 200704 is an area limit, not a 448px long edge. Old Lua/layout/schema snippets require contract tests and must not be copied verbatim. New launch, ownership and test gates are in the plan package.
+
+
 **Spec date: 2026-09-20.** This is an *engineering* document, not a research
 document: everything here is a decision, a signature, a key name, a number, or a
 test. It is written to be implemented without further research.
@@ -2290,3 +2293,7 @@ these.
   VERIFIED** by [`01` A8](01-requirements-and-traffic-model.md); ⚠️ so is
   `t̂_media`, which has no measured value in the tree yet, only the
   `infrx_media_stage_seconds` histogram that will produce one.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.

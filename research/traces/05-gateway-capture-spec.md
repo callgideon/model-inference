@@ -1,5 +1,8 @@
 # Deep traces — gateway capture spec
 
+> **Implementation amendment — 2026-09-20.** The current implementation authority is [the unified plan](../plan/README.md), especially [contracts](../plan/01-contracts.md), [durable protocols](../plan/02-durable-protocols.md) and [verification](../plan/04-verification.md). The text below is historical research where it conflicts. Trace loss does not stop inference; capture has active-byte, queue, spool and disk limits, and local durability begins at fsync on persistent storage. Off-mode requests have no CH trace row and are excluded from trace-coverage denominators. Canonical logical content is preserved, not raw HTTP wire bytes after normalization. Feedback 201 requires PG/outbox durability and tenant ownership independent of CH lag. Channel and author role are separate; customer console feedback is not an operator calibration label. Judge requires current consent, hard worst-case budget reservations and ambiguous-submit quarantine. CH schema/version/dedup must run against the pinned server; logical expiry is enforced before physical TTL deletion. Retention: 24h results, 7d processing cache, <=90d optional full content, 13mo metadata.
+
+
 Spec date **2026-09-20**, written against `apps/infrx-api/gateway.py` at `main`
 `5210c67` (500 lines; line numbers below are that file's). Implements
 [`01-requirements.md`](01-requirements.md) T1–T12, F1–F4, NF1, NF2, NF6, NF9,
@@ -767,3 +770,7 @@ asserts on `key_hash=eq.` only — unaffected).
 ## Verification log
 
 - 2026-09-20 — every `gateway.py` line number above was read from `main` `5210c67` in this session (auth select 110, prices select 158, `enqueue` 197–205, `prepare_video` 311–359 with ffprobe at 348 and the `data:` rebuild at 352–354, `chat()` 382–499: auth 385, capacity 391, body 394, model rewrite 397, video loop 400–413, budget 415, `log()` 423–433, upstream calls 440/463, strip 443–445/491–494, `finally` 453–454/496–498). `models.updated_at` + trigger confirmed at `0001_init.sql:54,115`. `bench.py` confirmed single-video, `api_key="none"` at line 52, percentiles p50/p95 only. vLLM `_base_request_id()` reads `X-Request-Id`; `chatcmpl-` prefix and `_make_prompt_tokens_details(enable_prompt_tokens_details, num_cached_tokens, num_cache_creation_tokens, mm_token_counts)` read from the cited source files; flag help text from the vLLM CLI reference. ClickHouse HTTP insert/auth forms from the HTTP-interface doc. Hot-path numbers in §10 are `est.` until H1.
+
+### Implementation-plan amendment log — 2026-09-20
+
+Documentation reconciliation only: incorporated the unified plan and review corrections above. Historical measurements and previous verification entries remain unchanged; new implementation/live tests are pending.
