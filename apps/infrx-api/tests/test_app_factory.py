@@ -21,7 +21,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from infrx.config import Settings
+from infrx.config import Settings, from_env
 from infrx.gateway.app import create_app
 
 BODY = {"model": "marlin2b", "messages": [{"role": "user", "content": "hi"}]}
@@ -96,6 +96,14 @@ def test_importing_the_package_has_no_side_effects():
     reads, built = eval(p.stdout)
     assert reads == [], reads
     assert built == [], built
+
+
+def test_usage_failed_log_derives_only_when_unset():
+    """USAGE_FAILED_LOG="" stayed "" in the old gateway (spill then writes nothing
+    and logs the empty path); only an *unset* variable derives from USAGE_LOG."""
+    assert from_env({"USAGE_LOG": "/x/y/u.jsonl"}).usage_failed_log == "/x/y/usage_failed.jsonl"
+    assert from_env({"USAGE_LOG": "/x/y/u.jsonl", "USAGE_FAILED_LOG": ""}).usage_failed_log == ""
+    assert from_env({"USAGE_FAILED_LOG": "/z/f.jsonl"}).usage_failed_log == "/z/f.jsonl"
 
 
 def test_two_apps_share_no_state():

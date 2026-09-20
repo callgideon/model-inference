@@ -36,7 +36,7 @@ class Settings:
     allowed_video_mime: set = field(default_factory=lambda: _mimes(DEFAULT_ALLOWED_VIDEO_MIME))
     ext_mime: dict = field(default_factory=lambda: dict(EXT_MIME))
     usage_log: str = "/opt/dlami/nvme/logs/usage.jsonl"
-    usage_failed_log: str = ""          # empty: derived from usage_log below
+    usage_failed_log: str = None        # None (not "") is "unset": derived from usage_log below
     supabase_url: str = ""
     supabase_key: str = ""
     models_doc: str = DEFAULT_MODELS_DOC
@@ -54,7 +54,8 @@ class Settings:
     retry_delays: tuple = (1, 3, 9, 0)  # usage_events insert backoff; 0 = give up and spill to disk
 
     def __post_init__(self):
-        if not self.usage_failed_log:
+        # only unset derives; USAGE_FAILED_LOG="" stayed "" in the old gateway
+        if self.usage_failed_log is None:
             self.usage_failed_log = os.path.join(os.path.dirname(self.usage_log), "usage_failed.jsonl")
 
 
@@ -73,7 +74,7 @@ def from_env(env=None):
         max_redirects=int(e.get("MAX_REDIRECTS", "3")),
         allowed_video_mime=_mimes(e.get("ALLOWED_VIDEO_MIME", DEFAULT_ALLOWED_VIDEO_MIME)),
         usage_log=e.get("USAGE_LOG", "/opt/dlami/nvme/logs/usage.jsonl"),
-        usage_failed_log=e.get("USAGE_FAILED_LOG", ""),
+        usage_failed_log=e.get("USAGE_FAILED_LOG"),
         supabase_url=e.get("SUPABASE_URL", "").rstrip("/"),
         supabase_key=e.get("SUPABASE_SERVICE_ROLE_KEY", ""),
         models_doc=e.get("MODELS_DOC", DEFAULT_MODELS_DOC),
