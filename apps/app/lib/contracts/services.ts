@@ -7,7 +7,13 @@
  *   operator-only grant target, checked against `session.isOperator`), an author
  *   role, a feedback channel or a storage key from the caller.
  * - lists return `Page<T>` with an opaque cursor and reject `limit > 100`.
- * - failures are returned as `Result` errors with the codes of 08 §3, not thrown.
+ * - failures are returned as `Result` errors with the codes of 08 §3, not thrown. That includes
+ *   an amount outside the money domain and a total that would leave it: an operation validates
+ *   everything before it writes anything, so a refused call leaves no trace and a retry under the
+ *   same idempotency key still produces exactly one effect.
+ * - an unknown field in any input is `invalid_request`, mirroring pydantic `extra="forbid"` on
+ *   the Python side: a smuggled `org_id`, `author_role`, `channel` or storage key is refused, not
+ *   quietly dropped.
  *
  * Owned by the coordinator: a change here is a contract revision.
  */
@@ -69,12 +75,13 @@ export interface ConsoleServices {
   keys: {
     list(session: SessionContext): Promise<Result<ApiKeySummary[]>>;
     create(session: SessionContext, input: ApiKeyCreateInput): Promise<Result<ApiKeyCreated>>;
-    revoke(session: SessionContext, keyId: string): Promise<Result<ApiKeySummary>>;
+    revoke(session: SessionContext, keyId: string, idempotencyKey?: string): Promise<Result<ApiKeySummary>>;
   };
 
   adminOrgs(session: SessionContext, query: PageQuery): Promise<Result<Page<AdminOrgSummary>>>;
   adminGrant(session: SessionContext, input: AdminGrantInput): Promise<Result<AdminGrantResult>>;
 
+  /** Owner and platform operator only (R13); a member cannot read evaluation runs. */
   judgeRuns(session: SessionContext, query: PageQuery): Promise<Result<Page<JudgeRun>>>;
 }
 
@@ -111,5 +118,21 @@ export const OWNER_ONLY_OPERATIONS = [
 /** Operations that require platform-operator authority. */
 export const OPERATOR_ONLY_OPERATIONS = [
   "adminOrgs",
+  "adminGrant",
+] as const satisfies readonly ConsoleOperation[];
+
+/** Readable by the organization owner or a platform operator, never a member (R13). */
+export const OWNER_OR_OPERATOR_OPERATIONS = ["judgeRuns"] as const satisfies readonly ConsoleOperation[];
+
+/**
+ * Operations that write. Each one validates completely before it mutates, and each one accepts an
+ * idempotency key scoped to (caller organization, operation, target organization, payload) —
+ * required on `adminGrant` and `feedback.submit` (R3/R13), optional on the rest.
+ */
+export const MUTATING_OPERATIONS = [
+  "feedback.submit",
+  "settings.update",
+  "keys.create",
+  "keys.revoke",
   "adminGrant",
 ] as const satisfies readonly ConsoleOperation[];

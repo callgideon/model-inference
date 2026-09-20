@@ -19,7 +19,7 @@
       "owner_email": "owner@northwind.example",
       "created_at": "2026-08-01T09:00:00.000Z",
       "suspended": false,
-      "usage_rows": 137,
+      "usage_rows": 160,
       "grants": [
         {
           "amount": "25.00000000",
@@ -36,6 +36,11 @@
         "amount": "-0.00120000",
         "reason": "correction for double-counted reconciliation entry",
         "created_at": "2026-09-10T08:00:00.000Z"
+      },
+      "legacy_purchase": {
+        "amount": "10.00000000",
+        "reason": "pre-pilot prepayment, migrated (legacy kind: nothing creates one any more)",
+        "created_at": "2026-07-28T14:00:00.000Z"
       },
       "keys": [
         {
@@ -99,6 +104,7 @@
       "usage_rows": 4,
       "grants": [],
       "adjustment": null,
+      "legacy_purchase": null,
       "keys": [
         {
           "id": "b1000000-0000-4000-8000-000000000001",

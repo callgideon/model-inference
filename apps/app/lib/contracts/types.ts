@@ -74,6 +74,9 @@ export const TRACE_LOSS_REASONS = [
 ] as const;
 export type TraceLossReason = (typeof TRACE_LOSS_REASONS)[number];
 
+/** Hard bound on `Idempotency-Key` (08 §3); a longer key is `invalid_request`. */
+export const MAX_IDEMPOTENCY_KEY_CHARS = 255;
+
 export const FEEDBACK_CHANNELS = ["api", "console"] as const;
 export type FeedbackChannel = (typeof FEEDBACK_CHANNELS)[number];
 
@@ -254,6 +257,22 @@ export type TraceQuery = PageQuery & {
   has_feedback?: boolean;
 };
 
+/**
+ * The accepted field names per input, so "extra fields are refused" is executable rather than a
+ * comment. The Python half gets this from pydantic's `extra="forbid"` (08 §2); a console service
+ * has to refuse the same way, or a caller that smuggles `org_id`, `author_role`, `channel` or a
+ * storage key gets a silent no-op instead of a 400 and learns nothing.
+ */
+export const PAGE_QUERY_FIELDS = ["limit", "cursor"] as const;
+export const USAGE_QUERY_FIELDS = [...PAGE_QUERY_FIELDS, "from", "to", "key_id", "model"] as const;
+export const TRACE_QUERY_FIELDS = [
+  ...USAGE_QUERY_FIELDS,
+  "job_state",
+  "trace_mode",
+  "content",
+  "has_feedback",
+] as const;
+
 // ---------------------------------------------------------------------------
 // Usage and money
 // ---------------------------------------------------------------------------
@@ -271,7 +290,8 @@ export type UsageRow = {
   prompt_tokens: number | null;
   completion_tokens: number | null;
   usage_certainty: UsageCertainty;
-  settlement_state: SettlementState;
+  /** Null until the request reaches a terminal state: nothing has been settled yet (R13). */
+  settlement_state: SettlementState | null;
   /** Charged amount; zero while unsettled, free or platform-absorbed. */
   cost: Money;
   /** Outstanding reservation, null once released. Never an authoritative charge. */
@@ -304,9 +324,16 @@ export type WalletBalance = {
   available: Money;
 };
 
-/** Free pilot kinds only; `purchase` stays deferred with payments (DEC-01). */
-export const LEDGER_ENTRY_KINDS = ["grant", "usage", "adjustment"] as const;
+/**
+ * Every kind a ledger row can *render* as. `purchase` is legacy and read-only (R13): historical
+ * rows must display, and nothing in the free pilot creates one, because payments are out of scope
+ * (DEC-01). A service that mints a `purchase` entry is a defect.
+ */
+export const LEDGER_ENTRY_KINDS = ["grant", "usage", "adjustment", "purchase"] as const;
 export type LedgerEntryKind = (typeof LEDGER_ENTRY_KINDS)[number];
+
+/** The kinds a running system may create; `purchase` is deliberately absent. */
+export const CREATABLE_LEDGER_ENTRY_KINDS = ["grant", "usage", "adjustment"] as const;
 
 export type LedgerEntry = {
   id: string;
@@ -333,10 +360,17 @@ export type ApiKeySummary = {
   trace_mode: TraceMode;
 };
 
+/** A key label is a label: bounded so a form cannot post a document into the keys page. */
+export const MAX_KEY_NAME_CHARS = 200;
+
 export type ApiKeyCreateInput = {
   name: string;
   trace_mode?: TraceMode;
+  /** Optional; supplied, a retried creation replays the first key instead of minting a second. */
+  idempotency_key?: string;
 };
+
+export const API_KEY_CREATE_FIELDS = ["name", "trace_mode", "idempotency_key"] as const;
 
 /** The secret exists only in this response (create-once presentation). */
 export type ApiKeyCreated = ApiKeySummary & { secret: string };
@@ -386,7 +420,8 @@ export type TraceDetail = TraceListItem & {
   terminal_cause: TerminalCause | null;
   error_code: ErrorCode | null;
   usage_certainty: UsageCertainty;
-  settlement_state: SettlementState;
+  /** Null until terminal, exactly as on the usage row it projects (R13). */
+  settlement_state: SettlementState | null;
   timings: TraceTimings;
   versions: TraceVersions;
   /** Logical expiry of full content (owner-selected, <= 90 days); null when there is none. */
@@ -438,15 +473,29 @@ export type TraceContentView = {
 // Feedback
 // ---------------------------------------------------------------------------
 
-export const FEEDBACK_RATINGS = ["up", "down"] as const;
-export type FeedbackRating = (typeof FEEDBACK_RATINGS)[number];
+/**
+ * The feedback body of R3, following `research/traces/06` §2: one named signal per submission.
+ * `thumb` carries a boolean, `rating` an integer 1–5, `correction` and `comment` non-empty text.
+ */
+export const FEEDBACK_NAMES = ["thumb", "rating", "correction", "comment"] as const;
+export type FeedbackName = (typeof FEEDBACK_NAMES)[number];
 
-/** What a client may submit. Channel, author role and calibration are server-set. */
+export const FEEDBACK_RATING_MIN = 1;
+export const FEEDBACK_RATING_MAX = 5;
+
+export type FeedbackValue = boolean | number | string;
+
+/**
+ * What a client may submit. Channel, author role, principal and calibration membership are
+ * server-set and have no field here; the idempotency key is required (R3), so a retried submit
+ * replays the original acceptance instead of recording the signal twice.
+ */
 export type FeedbackInput = {
   request_id: string;
-  rating: FeedbackRating;
+  name: FeedbackName;
+  value: FeedbackValue;
   comment?: string | null;
-  correction?: string | null;
+  idempotency_key: string;
 };
 
 export type FeedbackEntry = {
@@ -456,12 +505,20 @@ export type FeedbackEntry = {
   channel: FeedbackChannel;
   author_role: AuthorRole;
   author_principal: string;
-  rating: FeedbackRating;
+  name: FeedbackName;
+  value: FeedbackValue;
   comment: string | null;
-  correction: string | null;
   /** Calibration membership requires explicit platform-operator authorization. */
   calibration_set: boolean;
 };
+
+export const FEEDBACK_INPUT_FIELDS = [
+  "request_id",
+  "name",
+  "value",
+  "comment",
+  "idempotency_key",
+] as const;
 
 /** Free-text bound on submitted feedback: a comment is a note, not an upload channel. */
 export const MAX_FEEDBACK_TEXT_CHARS = 4000;
@@ -491,7 +548,16 @@ export type SettingsUpdate = {
   trace_mode?: TraceMode;
   content_retention_days?: number;
   evaluation_consent?: boolean;
+  /** Optional; supplied, a retried update does not append a second consent-history entry. */
+  idempotency_key?: string;
 };
+
+export const SETTINGS_UPDATE_FIELDS = [
+  "trace_mode",
+  "content_retention_days",
+  "evaluation_consent",
+  "idempotency_key",
+] as const;
 
 // ---------------------------------------------------------------------------
 // Operator administration
@@ -519,6 +585,17 @@ export type AdminGrantInput = {
   reason: string;
   idempotency_key: string;
 };
+
+export const ADMIN_GRANT_FIELDS = [
+  "target_org_id",
+  "amount",
+  "kind",
+  "reason",
+  "idempotency_key",
+] as const;
+
+/** A grant needs a reason a human wrote, not an essay. */
+export const MAX_GRANT_REASON_CHARS = 500;
 
 export type AdminGrantResult = {
   grant_id: string;

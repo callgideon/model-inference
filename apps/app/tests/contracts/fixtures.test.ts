@@ -13,7 +13,9 @@ import { isMoney } from "../../lib/contracts/money.ts";
 import {
   AUTHOR_ROLES,
   FEEDBACK_CHANNELS,
-  FEEDBACK_RATINGS,
+  FEEDBACK_NAMES,
+  FEEDBACK_RATING_MAX,
+  FEEDBACK_RATING_MIN,
   JUDGE_MODES,
   JUDGE_RUN_STATES,
   JUDGE_SCORE_KINDS,
@@ -41,6 +43,7 @@ const orgs = orgsFixture as unknown as {
     all_free: boolean;
     grants: { amount: string; reason: string; created_at: string }[];
     adjustment: { amount: string; reason: string } | null;
+    legacy_purchase: { amount: string; reason: string; created_at: string } | null;
     keys: { id: string; prefix: string; trace_mode: string; revoked_at: string | null }[];
     settings: {
       trace_mode: string;
@@ -59,7 +62,14 @@ const traces = traceFixture as unknown as {
     request: { model: string; messages: { role: string; content: unknown }[] };
     response: { status: number; choices: unknown[]; error: { code: string } | null };
   }[];
-  seed_feedback: { trace_index: number; channel: string; author_role: string; rating: string }[];
+  seed_feedback: {
+    trace_index: number;
+    channel: string;
+    author_role: string;
+    name: string;
+    value: boolean | number | string;
+    comment: string | null;
+  }[];
 };
 
 const judge = judgeFixture as unknown as {
@@ -120,6 +130,12 @@ test("the organization fixtures match the contract vocabulary", () => {
     }
     if (org.adjustment !== null) {
       assert.ok(isMoney(org.adjustment.amount), "adjustment amount");
+    }
+    // R13: one historical `purchase` row exists so the kind stays renderable.
+    if (org.legacy_purchase !== null) {
+      assert.ok(isMoney(org.legacy_purchase.amount), "legacy purchase amount");
+      assert.ok(org.legacy_purchase.reason.trim().length > 0, "a legacy purchase says what it was");
+      assert.match(org.legacy_purchase.created_at, RFC3339);
     }
     assert.ok(org.keys.length > 0, `${org.name} needs a key`);
     for (const key of org.keys) {
@@ -186,12 +202,37 @@ test("the trace fixtures are renderable content with no storage reference", () =
     assert.ok(Number.isInteger(seed.trace_index) && seed.trace_index >= 0);
     assert.ok(inSet(FEEDBACK_CHANNELS, seed.channel), "feedback channel");
     assert.ok(inSet(AUTHOR_ROLES, seed.author_role), "feedback author role");
-    assert.ok(inSet(FEEDBACK_RATINGS, seed.rating), "feedback rating");
+    assert.ok(inSet(FEEDBACK_NAMES, seed.name), "feedback name");
+    // R3 pairs each name with its value type; a fixture that drifts would teach V the wrong form.
+    if (seed.name === "thumb") {
+      assert.equal(typeof seed.value, "boolean", "a thumb value is a boolean");
+    } else if (seed.name === "rating") {
+      assert.ok(
+        typeof seed.value === "number" &&
+          Number.isInteger(seed.value) &&
+          seed.value >= FEEDBACK_RATING_MIN &&
+          seed.value <= FEEDBACK_RATING_MAX,
+        "a rating value is an integer from 1 to 5",
+      );
+    } else {
+      assert.ok(typeof seed.value === "string" && seed.value.trim().length > 0, "text feedback is non-empty");
+    }
+    assert.ok(seed.comment === null || (typeof seed.comment === "string" && seed.comment.length > 0));
   }
   assert.ok(
     traces.seed_feedback.some((seed) => seed.channel === "api") &&
       traces.seed_feedback.some((seed) => seed.channel === "console"),
     "both feedback channels must be represented",
+  );
+  for (const name of FEEDBACK_NAMES) {
+    assert.ok(
+      traces.seed_feedback.some((seed) => seed.name === name),
+      `V needs a seeded ${name} to render`,
+    );
+  }
+  assert.ok(
+    traces.seed_feedback.some((seed) => seed.author_role === "judge"),
+    "a judge-authored signal must be renderable",
   );
 });
 

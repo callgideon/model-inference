@@ -14,10 +14,11 @@ import { describe, it } from "node:test";
 import { addMoney, compareMoney, isMoney, parseMoney, subMoney, ZERO_MONEY, type Money } from "./money.ts";
 import {
   AUTHOR_ROLES,
+  CREATABLE_LEDGER_ENTRY_KINDS,
   ERROR_CODES,
   EXECUTION_MODES,
   FEEDBACK_CHANNELS,
-  FEEDBACK_RATINGS,
+  FEEDBACK_NAMES,
   JOB_STATES,
   JUDGE_MODES,
   JUDGE_RUN_STATES,
@@ -26,13 +27,16 @@ import {
   ERROR_CODE_HTTP_STATUS,
   MAX_CONTENT_RETENTION_DAYS,
   MAX_FEEDBACK_TEXT_CHARS,
+  MAX_IDEMPOTENCY_KEY_CHARS,
   MAX_PAGE_LIMIT,
   SETTLEMENT_STATES,
   TERMINAL_CAUSES,
+  TERMINAL_JOB_STATES,
   TRACE_CONTENT_AVAILABILITY,
   TRACE_LOSS_REASONS,
   TRACE_MODES,
   USAGE_CERTAINTIES,
+  type FeedbackEntry,
   type JudgeRun,
   type LedgerEntry,
   type Page,
@@ -84,6 +88,21 @@ function expectError<T>(result: Result<T>, code: string, what: string): void {
   assert.ok(inSet(ERROR_CODES, result.error.code), `${what}: unknown error code`);
   assert.ok(result.error.message.length > 0, `${what}: empty message`);
 }
+
+/**
+ * 08 §9: a failure is a `Result`, never an exception. A rejected promise is its own defect — it
+ * escapes the error rendering every console page is built on — so every call the suite makes about
+ * refusal goes through here.
+ */
+async function settle<T>(what: string, call: () => Promise<Result<T>>): Promise<Result<T>> {
+  try {
+    return await call();
+  } catch (error) {
+    assert.fail(`${what} threw instead of returning a Result error: ${String(error)}`);
+  }
+}
+
+const LARGEST_MONEY = "999999999999.99999999" as Money;
 
 /** Walk every page, with a hard stop so a broken cursor cannot loop forever. */
 async function walkAll<T>(
@@ -137,7 +156,16 @@ function assertUsageRow(row: UsageRow): void {
   assert.ok(row.terminal_cause === null || inSet(TERMINAL_CAUSES, row.terminal_cause), "usage terminal_cause");
   assert.ok(inSet(EXECUTION_MODES, row.execution_mode), "usage execution_mode");
   assert.ok(inSet(USAGE_CERTAINTIES, row.usage_certainty), "usage usage_certainty");
-  assert.ok(inSet(SETTLEMENT_STATES, row.settlement_state), "usage settlement_state");
+  // R13: the settlement column is null until the request is terminal, and set once it is.
+  assert.ok(
+    row.settlement_state === null || inSet(SETTLEMENT_STATES, row.settlement_state),
+    "usage settlement_state",
+  );
+  assert.equal(
+    row.settlement_state === null,
+    !inSet(TERMINAL_JOB_STATES, row.job_state),
+    `usage ${row.request_id}: ${row.job_state} must ${inSet(TERMINAL_JOB_STATES, row.job_state) ? "" : "not "}carry a settlement state`,
+  );
   assert.ok(inSet(TRACE_MODES, row.trace_mode), "usage trace_mode");
   assert.ok(isMoney(row.cost), `usage cost is not canonical money: ${row.cost}`);
   assert.ok(row.max_hold === null || isMoney(row.max_hold), "usage max_hold");
@@ -164,6 +192,10 @@ function assertLedgerEntry(entry: LedgerEntry): void {
   if (entry.kind === "usage") {
     assert.ok(compareMoney(entry.delta, ZERO_MONEY) <= 0, "a usage entry is a debit");
   }
+  if (entry.kind === "purchase") {
+    // R13: a legacy row must render. It is never created, which the mutation suite asserts.
+    assert.equal(compareMoney(entry.delta, ZERO_MONEY), 1, "a purchase is a credit");
+  }
 }
 
 function assertTraceListItem(row: TraceListItem): void {
@@ -173,9 +205,9 @@ function assertTraceListItem(row: TraceListItem): void {
   assert.ok(inSet(TRACE_LOSS_REASONS, row.loss_reason), "trace loss_reason");
   assert.ok(isMoney(row.cost), "trace cost");
   assert.ok(Number.isInteger(row.feedback_count) && row.feedback_count >= 0, "trace feedback_count");
-  if (row.trace_mode === "off") {
-    assert.equal(row.content, "off", "an off-mode request has no trace content");
-  }
+  // R13: an off-mode request has no trace row at all, so it can never appear in a trace list.
+  assert.notEqual(row.trace_mode, "off", `trace ${row.request_id}: an off-mode request has no trace row`);
+  assert.notEqual(row.content, "off", `trace ${row.request_id}: an off-mode row cannot be listed`);
   if (row.trace_mode === "minimal") {
     assert.equal(row.content, "metadata_only", "minimal capture stores metadata only");
   }
@@ -393,7 +425,12 @@ export function runConsoleServicesConformance(
         "cross-tenant feedback list",
       );
       expectError(
-        await services.feedback.submit(sessions.owner, { request_id: ids.otherOrgRequestId, rating: "up" }),
+        await services.feedback.submit(sessions.owner, {
+          request_id: ids.otherOrgRequestId,
+          name: "thumb",
+          value: true,
+          idempotency_key: "cross-tenant-feedback-1",
+        }),
         "not_found",
         "cross-tenant feedback submit",
       );
@@ -516,6 +553,10 @@ export function runConsoleServicesConformance(
         "member key creation",
       );
       expectError(await services.keys.revoke(sessions.member, ids.keyId), "forbidden", "member key revocation");
+      // R13: evaluation runs are owner and operator only.
+      expectError(await services.judgeRuns(sessions.member, {}), "forbidden", "member judge runs");
+      expectOk(await services.judgeRuns(sessions.owner, { limit: 5 }), "owner judge runs");
+      expectOk(await services.judgeRuns(sessions.operator, { limit: 5 }), "operator judge runs");
     });
 
     it("a non-operator can neither grant nor see other organizations", async () => {
@@ -541,31 +582,48 @@ export function runConsoleServicesConformance(
       }
     });
 
-    it("feedback appears immediately, with provenance the client cannot set", async () => {
+    it("feedback follows the R3 body, appears immediately, and has provenance the client cannot set", async () => {
       const { services, sessions, ids } = await makeHarness();
       const before = expectOk(
         await services.feedback.list(sessions.owner, ids.availableRequestId),
         "feedback before",
       );
-      // A client that sends provenance fields gets them ignored, not honoured.
+
+      // A client that sends provenance fields is refused, not quietly trimmed: the fields do not
+      // exist in the request, so their presence is a caller bug worth a 400.
       const spoofed = {
         request_id: ids.availableRequestId,
-        rating: "down",
-        comment: "cut off early",
-        correction: "two forklifts",
+        name: "thumb",
+        value: false,
+        idempotency_key: "spoofed-provenance-1",
         channel: "api",
         author_role: "judge",
         author_principal: "someone-else@example.com",
         calibration_set: true,
       } as unknown as Parameters<ConsoleServices["feedback"]["submit"]>[1];
-      const entry = expectOk(await services.feedback.submit(sessions.owner, spoofed), "feedback submit");
+      expectError(
+        await services.feedback.submit(sessions.owner, spoofed),
+        "invalid_request",
+        "feedback carrying server-set provenance",
+      );
 
+      const entry = expectOk(
+        await services.feedback.submit(sessions.owner, {
+          request_id: ids.availableRequestId,
+          name: "rating",
+          value: 4,
+          comment: "cut off early",
+          idempotency_key: "conformance-feedback-1",
+        }),
+        "feedback submit",
+      );
       assert.equal(entry.channel, "console", "the console sets the channel");
       assert.equal(entry.author_role, "customer", "a customer session stays a customer label");
       assert.equal(entry.author_principal, sessions.owner.email, "the principal comes from the session");
       assert.equal(entry.calibration_set, false, "a client cannot enrol its own feedback for calibration");
       assert.ok(inSet(FEEDBACK_CHANNELS, entry.channel) && inSet(AUTHOR_ROLES, entry.author_role));
-      assert.ok(inSet(FEEDBACK_RATINGS, entry.rating));
+      assert.ok(inSet(FEEDBACK_NAMES, entry.name), "feedback name");
+      assert.equal(entry.value, 4, "the submitted value is kept exactly");
       assert.match(entry.created_at, RFC3339, "feedback created_at");
 
       // Accepted durably means visible now, whatever the projection is doing.
@@ -573,32 +631,62 @@ export function runConsoleServicesConformance(
       assert.equal(after.length, before.length + 1, "accepted feedback must be listed immediately");
       assert.ok(after.some((item) => item.id === entry.id), "the accepted entry is missing from the list");
 
-      expectError(
-        await services.feedback.submit(sessions.owner, {
-          request_id: ids.availableRequestId,
-          rating: "sideways" as unknown as "up",
-        }),
-        "invalid_request",
-        "invalid rating",
-      );
+      // Each name carries the value type R3 gives it, and nothing else.
+      const wrongValues: [string, unknown, string][] = [
+        ["thumb", "yes", "a thumb is not a string"],
+        ["thumb", 1, "a thumb is not a number"],
+        ["rating", 0, "a rating below the range"],
+        ["rating", 6, "a rating above the range"],
+        ["rating", 3.5, "a fractional rating"],
+        ["rating", true, "a boolean rating"],
+        ["correction", "", "an empty correction"],
+        ["correction", "   ", "a whitespace correction"],
+        ["comment", 42, "a numeric comment"],
+        ["comment", "x".repeat(MAX_FEEDBACK_TEXT_CHARS + 1), "an oversized comment"],
+        ["thumbs_up", true, "a name outside the vocabulary"],
+      ];
+      for (const [name, value, what] of wrongValues) {
+        expectError(
+          await services.feedback.submit(sessions.owner, {
+            request_id: ids.availableRequestId,
+            name,
+            value,
+            idempotency_key: `bad-${name}-${String(value).slice(0, 12)}`,
+          } as unknown as Parameters<ConsoleServices["feedback"]["submit"]>[1]),
+          "invalid_request",
+          what,
+        );
+      }
       // Free text is a note, not an upload channel, and not a place to smuggle a structure.
       expectError(
         await services.feedback.submit(sessions.owner, {
           request_id: ids.availableRequestId,
-          rating: "up",
-          comment: "x".repeat(MAX_FEEDBACK_TEXT_CHARS + 1),
+          name: "correction",
+          value: { nested: true } as unknown as string,
+          idempotency_key: "conformance-feedback-structure",
         }),
         "invalid_request",
-        "oversized comment",
+        "non-string correction",
+      );
+      // R3 requires the key, and 08 §3 bounds it.
+      expectError(
+        await services.feedback.submit(sessions.owner, {
+          request_id: ids.availableRequestId,
+          name: "thumb",
+          value: true,
+        } as unknown as Parameters<ConsoleServices["feedback"]["submit"]>[1]),
+        "invalid_request",
+        "feedback without an idempotency key",
       );
       expectError(
         await services.feedback.submit(sessions.owner, {
           request_id: ids.availableRequestId,
-          rating: "up",
-          correction: { nested: true } as unknown as string,
+          name: "thumb",
+          value: true,
+          idempotency_key: "k".repeat(MAX_IDEMPOTENCY_KEY_CHARS + 1),
         }),
         "invalid_request",
-        "non-string correction",
+        "feedback with an oversized idempotency key",
       );
     });
 
@@ -754,7 +842,7 @@ export function runConsoleServicesConformance(
     });
 
     it("content availability decides the payload and never leaks a storage reference", async () => {
-      const { services, sessions } = await makeHarness();
+      const { services, sessions, ids } = await makeHarness();
       const traces = await walkAll<TraceListItem>(
         (cursor) => services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
         "traces",
@@ -776,6 +864,33 @@ export function runConsoleServicesConformance(
         assert.ok(!serialized.includes("s3://"), "no storage path in a content DTO");
         assert.ok(!serialized.includes("X-Amz-"), "no signed URL in a content DTO");
       }
+
+      // R13: the off-mode request is absent from the list above, and is reachable only the way a
+      // customer reaches it — from its usage row — where it reports `off` rather than `not_found`.
+      assert.ok(
+        !traces.some((row) => row.request_id === ids.offRequestId),
+        "an off-mode request must not appear in the trace list",
+      );
+      const usage = await walkAll<UsageRow>(
+        (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+        "usage",
+      );
+      assert.ok(
+        usage.some((row) => row.request_id === ids.offRequestId),
+        "an off-mode request is still a usage row",
+      );
+      const offDetail = expectOk(
+        await services.traceDetail(sessions.owner, ids.offRequestId),
+        "off-mode trace detail",
+      );
+      assert.equal(offDetail.trace_mode, "off");
+      assert.equal(offDetail.content, "off", "an off-mode request reports availability off");
+      const offContent = expectOk(
+        await services.traceContent(sessions.owner, ids.offRequestId),
+        "off-mode trace content",
+      );
+      assert.equal(offContent.availability, "off");
+      assert.equal(offContent.content, null, "an off-mode request has no content to render");
     });
 
     it("judge runs separate estimates, limited evaluations and held budgets", async () => {
@@ -785,6 +900,406 @@ export function runConsoleServicesConformance(
         "judge runs",
       );
       for (const run of runs) assertJudgeRun(run);
+    });
+  });
+
+  runMutationSafetyConformance(makeHarness, label);
+}
+
+/**
+ * The defect class every review round found a fresh instance of: a mutation that validates *after*
+ * it writes. A refused operation must leave the state it touched byte-identical, so the retry that
+ * always follows a refusal has exactly one effect — and no reachable input may throw instead of
+ * returning a `Result`.
+ *
+ * Exported separately so C can run it on its own while wiring the real services, and so a
+ * regression here names this suite rather than hiding inside the main one.
+ */
+export function runMutationSafetyConformance(
+  makeHarness: ConsoleHarnessFactory,
+  label = "ConsoleServices",
+): void {
+  describe(`${label}: mutations validate before they write`, () => {
+    it("an amount that would leave the money domain is refused, and nothing is written", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const ledgerIds = async (): Promise<string[]> =>
+        (
+          await walkAll<LedgerEntry>(
+            (cursor) => services.ledger(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+            "ledger",
+          )
+        ).map((entry) => entry.id);
+
+      // The largest representable amount: one of these two grants must overflow the wallet total,
+      // whatever the organization already holds. The type-valid input is the whole point — it
+      // passes every field check and only the *prospective total* refuses it.
+      const first = await settle("largest grant", () =>
+        services.adminGrant(sessions.operator, {
+          target_org_id: ids.orgId,
+          amount: LARGEST_MONEY,
+          kind: "promotional",
+          reason: "money domain probe",
+          idempotency_key: "domain-probe-1",
+        }),
+      );
+      const beforeIds = await ledgerIds();
+
+      for (const attempt of [1, 2]) {
+        const overflowing = await settle(`overflowing grant, attempt ${attempt}`, () =>
+          services.adminGrant(sessions.operator, {
+            target_org_id: ids.orgId,
+            amount: LARGEST_MONEY,
+            kind: "promotional",
+            reason: "money domain probe",
+            idempotency_key: "domain-probe-2",
+          }),
+        );
+        expectError(overflowing, "invalid_request", `overflowing grant, attempt ${attempt}`);
+        // A retry under the same key must behave identically: the refused attempt filed no
+        // idempotency record, so this is still the first (and still refused) grant.
+        assert.deepEqual(await ledgerIds(), beforeIds, `overflow attempt ${attempt} changed the ledger`);
+      }
+
+      // The reads a console page makes right after a refusal must still work. Before the fix, the
+      // committed-then-refused entry made every balance read throw for the rest of the session.
+      const balance = expectOk(await settle("balances after overflow", () => services.balances(sessions.owner)), "balances");
+      assert.ok(isMoney(balance.ledger_total) && isMoney(balance.available), "balances stay canonical money");
+      assert.equal(balance.available, subMoney(balance.ledger_total, balance.reserved_total));
+      expectOk(
+        await settle("admin orgs after overflow", () => services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT })),
+        "adminOrgs after overflow",
+      );
+      expectOk(
+        await settle("ledger after overflow", () => services.ledger(sessions.owner, { limit: 5 })),
+        "ledger after overflow",
+      );
+      if (first.ok) {
+        assert.equal(first.value.amount, LARGEST_MONEY, "an accepted grant keeps its amount");
+      }
+    });
+
+    it("every mutating operation refuses an injected failure without half-changing anything", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const snapshot = async () => ({
+        ledger: (
+          await walkAll<LedgerEntry>(
+            (cursor) => services.ledger(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+            "ledger",
+          )
+        ).map((entry) => entry.id),
+        keys: expectOk(await services.keys.list(sessions.owner), "keys").map((key) => `${key.id}:${key.revoked_at}`),
+        settings: expectOk(await services.settings.get(sessions.owner), "settings"),
+        feedback: expectOk(await services.feedback.list(sessions.owner, ids.availableRequestId), "feedback").length,
+      });
+
+      // Each refusal below is reached through a different validation path, one per mutating
+      // operation, and each must be a no-op.
+      const before = await snapshot();
+      expectError(
+        await settle("grant with a bad amount", () =>
+          services.adminGrant(sessions.operator, {
+            target_org_id: ids.orgId,
+            amount: "1e2" as Money,
+            kind: "promotional",
+            reason: "refusal drill",
+            idempotency_key: "refusal-grant",
+          }),
+        ),
+        "invalid_request",
+        "grant with an exponent amount",
+      );
+      expectError(
+        await settle("feedback with a bad value", () =>
+          services.feedback.submit(sessions.owner, {
+            request_id: ids.availableRequestId,
+            name: "rating",
+            value: 9,
+            idempotency_key: "refusal-feedback",
+          }),
+        ),
+        "invalid_request",
+        "feedback with a rating out of range",
+      );
+      expectError(
+        await settle("settings with a bad retention", () =>
+          services.settings.update(sessions.owner, { content_retention_days: MAX_CONTENT_RETENTION_DAYS + 1 }),
+        ),
+        "invalid_request",
+        "settings above the retention cap",
+      );
+      expectError(
+        await settle("key without a name", () => services.keys.create(sessions.owner, { name: "  " })),
+        "invalid_request",
+        "key with a blank name",
+      );
+      expectError(
+        await settle("revoke of an unknown key", () => services.keys.revoke(sessions.owner, ids.unknownRequestId)),
+        "not_found",
+        "revocation of a key that does not exist",
+      );
+      assert.deepEqual(await snapshot(), before, "a refused mutation changed the state anyway");
+    });
+
+    it("an idempotency key is scoped to its operation, its organization and its payload", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const key = "scope-probe-1";
+
+      // Same key, same payload: one effect, and the replay says so.
+      const grant = {
+        target_org_id: ids.orgId,
+        amount: "1.00000000" as Money,
+        kind: "promotional" as const,
+        reason: "idempotency scope",
+        idempotency_key: key,
+      };
+      const first = expectOk(await services.adminGrant(sessions.operator, grant), "first grant");
+      const replay = expectOk(await services.adminGrant(sessions.operator, grant), "replayed grant");
+      assert.equal(replay.grant_id, first.grant_id, "a replay returns the original grant");
+      assert.equal(replay.replayed, true);
+      assert.equal(replay.balance.ledger_total, first.balance.ledger_total, "a replay does not grant twice");
+
+      // Same key, different target or different value: a conflict, never a second effect.
+      expectError(
+        await services.adminGrant(sessions.operator, { ...grant, target_org_id: ids.otherOrgId }),
+        "idempotency_conflict",
+        "the same key against another organization",
+      );
+      expectError(
+        await services.adminGrant(sessions.operator, { ...grant, amount: "2.00000000" as Money }),
+        "idempotency_conflict",
+        "the same key with another amount",
+      );
+
+      // The same key on a *different operation* is a different record, not a conflict.
+      const feedback = expectOk(
+        await services.feedback.submit(sessions.owner, {
+          request_id: ids.availableRequestId,
+          name: "thumb",
+          value: true,
+          idempotency_key: key,
+        }),
+        "feedback under the grant's key",
+      );
+      const feedbackReplay = expectOk(
+        await services.feedback.submit(sessions.owner, {
+          request_id: ids.availableRequestId,
+          name: "thumb",
+          value: true,
+          idempotency_key: key,
+        }),
+        "replayed feedback",
+      );
+      assert.equal(feedbackReplay.id, feedback.id, "a replayed submission returns the original entry");
+      const entries = expectOk(
+        await services.feedback.list(sessions.owner, ids.availableRequestId),
+        "feedback after replay",
+      );
+      assert.equal(
+        entries.filter((item) => item.id === feedback.id).length,
+        1,
+        "a replayed submission must not be recorded twice",
+      );
+      expectError(
+        await services.feedback.submit(sessions.owner, {
+          request_id: ids.availableRequestId,
+          name: "thumb",
+          value: false,
+          idempotency_key: key,
+        }),
+        "idempotency_conflict",
+        "the same feedback key with another value",
+      );
+
+      // A key on an optional-key operation still replays instead of creating a second key.
+      const created = expectOk(
+        await services.keys.create(sessions.owner, { name: "idempotent key", idempotency_key: key }),
+        "key create",
+      );
+      const createdAgain = expectOk(
+        await services.keys.create(sessions.owner, { name: "idempotent key", idempotency_key: key }),
+        "replayed key create",
+      );
+      assert.equal(createdAgain.id, created.id, "a replayed creation returns the first key");
+      const keys = expectOk(await services.keys.list(sessions.owner), "keys after replay");
+      assert.equal(
+        keys.filter((candidate) => candidate.name === "idempotent key").length,
+        1,
+        "a replayed creation must not mint a second key",
+      );
+    });
+
+    it("generated identifiers never collide, within an organization or across two", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const seen = new Set<string>();
+      const add = (id: string, what: string): void => {
+        assert.ok(!seen.has(id), `${what}: ${id} was issued twice`);
+        seen.add(id);
+      };
+
+      for (const entry of expectOk(await services.feedback.list(sessions.owner, ids.availableRequestId), "seeded feedback")) {
+        add(entry.id, "seeded feedback");
+      }
+      const minted: FeedbackEntry[] = [];
+      for (let i = 0; i < 12; i += 1) {
+        minted.push(
+          expectOk(
+            await services.feedback.submit(sessions.owner, {
+              request_id: ids.availableRequestId,
+              name: "comment",
+              value: `note ${i}`,
+              idempotency_key: `id-probe-feedback-${i}`,
+            }),
+            `feedback ${i}`,
+          ),
+        );
+      }
+      for (const entry of minted) add(entry.id, "minted feedback");
+
+      for (const [session, who] of [
+        [sessions.owner, "first organization"],
+        [sessions.otherOwner, "second organization"],
+      ] as [SessionContext, string][]) {
+        for (let i = 0; i < 3; i += 1) {
+          add(expectOk(await services.keys.create(session, { name: `probe ${i}` }), `${who} key ${i}`).id, `${who} key`);
+        }
+      }
+      for (const [session, who] of [
+        [sessions.owner, "first organization"],
+        [sessions.otherOwner, "second organization"],
+      ] as [SessionContext, string][]) {
+        const grant = expectOk(
+          await services.adminGrant(sessions.operator, {
+            target_org_id: session.orgId,
+            amount: "3.00000000" as Money,
+            kind: "promotional",
+            reason: "id collision probe",
+            idempotency_key: `id-probe-grant-${session.orgId}`,
+          }),
+          `${who} grant`,
+        );
+        add(grant.grant_id, `${who} grant`);
+      }
+    });
+
+    it("a list walked while rows arrive at its head still returns every row exactly once", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const snapshot = (
+        await walkAll<LedgerEntry>(
+          (cursor) => services.ledger(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+          "ledger snapshot",
+        )
+      ).map((entry) => entry.id);
+      assert.ok(snapshot.length >= 3, "the harness needs a few ledger rows for this");
+
+      const collected: string[] = [];
+      let cursor: string | null = null;
+      let inserted = 0;
+      for (let page = 0; page < 500; page += 1) {
+        const rows: Page<LedgerEntry> = expectOk(
+          await services.ledger(sessions.owner, { limit: 2, cursor }),
+          `ledger page ${page}`,
+        );
+        collected.push(...rows.items.map((entry) => entry.id));
+        // A grant lands at the head of the ledger between two pages: the classic offset-cursor
+        // trap, where the next page repeats a row and the walk loses the last one.
+        if (inserted < 2) {
+          inserted += 1;
+          expectOk(
+            await services.adminGrant(sessions.operator, {
+              target_org_id: ids.orgId,
+              amount: "0.50000000" as Money,
+              kind: "promotional",
+              reason: "insertion during a walk",
+              idempotency_key: `walk-insert-${inserted}`,
+            }),
+            `grant during the walk ${inserted}`,
+          );
+        }
+        if (rows.next_cursor === null) break;
+        cursor = rows.next_cursor;
+      }
+      assert.equal(new Set(collected).size, collected.length, "a row was returned twice under insertion");
+      assert.deepEqual(
+        collected,
+        snapshot,
+        "a walk under head insertion must return the rows that existed when it started, in order",
+      );
+    });
+
+    it("nothing creates a legacy purchase entry", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const purchases = async (): Promise<string[]> =>
+        (
+          await walkAll<LedgerEntry>(
+            (cursor) => services.ledger(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+            "ledger",
+          )
+        )
+          .filter((entry) => entry.kind === "purchase")
+          .map((entry) => entry.id);
+
+      const before = await purchases();
+      const grant = expectOk(
+        await services.adminGrant(sessions.operator, {
+          target_org_id: ids.orgId,
+          amount: "4.00000000" as Money,
+          kind: "promotional",
+          reason: "purchase check",
+          idempotency_key: "purchase-check-1",
+        }),
+        "grant",
+      );
+      assert.ok(grant.grant_id.length > 0);
+      const entries = await walkAll<LedgerEntry>(
+        (cursor) => services.ledger(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+        "ledger after the grant",
+      );
+      const created = entries.find((entry) => entry.id === grant.grant_id);
+      assert.ok(created !== undefined, "the grant must be in the ledger");
+      assert.ok(
+        (CREATABLE_LEDGER_ENTRY_KINDS as readonly string[]).includes(created.kind),
+        `a new entry must not be a legacy kind, got ${created.kind}`,
+      );
+      assert.deepEqual(await purchases(), before, "R13: nothing creates a purchase entry");
+    });
+
+    it("no operation accepts a field the caller invented", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      // The point of the rule: a caller that thinks it can pick the tenant, the author role or the
+      // storage location learns that it cannot, instead of getting a page that looks right.
+      expectError(
+        await services.usage(sessions.owner, { org_id: ids.otherOrgId } as never),
+        "invalid_request",
+        "usage with a caller-supplied organization",
+      );
+      expectError(
+        await services.traces(sessions.owner, { storage_key: "s3://bucket/key" } as never),
+        "invalid_request",
+        "traces with a caller-supplied storage key",
+      );
+      expectError(
+        await services.ledger(sessions.owner, { org_id: ids.otherOrgId } as never),
+        "invalid_request",
+        "ledger with a caller-supplied organization",
+      );
+      expectError(
+        await services.settings.update(sessions.owner, { org_id: ids.otherOrgId } as never),
+        "invalid_request",
+        "settings update aimed at another organization",
+      );
+      expectError(
+        await services.keys.create(sessions.owner, { name: "smuggled", org_id: ids.otherOrgId } as never),
+        "invalid_request",
+        "key creation aimed at another organization",
+      );
+      expectError(
+        await services.judgeRuns(sessions.owner, { org_id: ids.otherOrgId } as never),
+        "invalid_request",
+        "judge runs aimed at another organization",
+      );
+      // The other organization's state is of course still untouched.
+      const foreign = expectOk(await services.settings.get(sessions.otherOwner), "other organization settings");
+      assert.ok(inSet(TRACE_MODES, foreign.trace_mode));
     });
   });
 }

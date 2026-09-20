@@ -58,9 +58,9 @@
       "channel": "api",
       "author_role": "customer",
       "author_principal": "sk-infrx-nw01pro",
-      "rating": "up",
+      "name": "thumb",
+      "value": true,
       "comment": "Correct description.",
-      "correction": null,
       "calibration_set": false,
       "created_at": "2026-09-20T11:30:00.000Z"
     },
@@ -69,11 +69,33 @@
       "channel": "console",
       "author_role": "operator",
       "author_principal": "operator@infrx.example",
-      "rating": "down",
+      "name": "correction",
+      "value": "Two forklifts cross the aisle.",
       "comment": "Missed the second forklift.",
-      "correction": "Two forklifts cross the aisle.",
       "calibration_set": true,
       "created_at": "2026-09-20T11:45:00.000Z"
+    },
+    {
+      "trace_index": 6,
+      "channel": "console",
+      "author_role": "customer",
+      "author_principal": "owner@northwind.example",
+      "name": "rating",
+      "value": 2,
+      "comment": null,
+      "calibration_set": false,
+      "created_at": "2026-09-20T11:50:00.000Z"
+    },
+    {
+      "trace_index": 12,
+      "channel": "api",
+      "author_role": "judge",
+      "author_principal": "judge:opus-5@rubric-3",
+      "name": "comment",
+      "value": "Groundedness could not be checked: the clip had expired.",
+      "comment": null,
+      "calibration_set": false,
+      "created_at": "2026-09-20T11:55:00.000Z"
     }
   ]
 }

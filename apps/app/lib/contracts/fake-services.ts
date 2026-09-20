@@ -20,26 +20,38 @@ import traceFixtureJson from "./fixtures/traces.json" with { type: "json" };
 import judgeFixtureJson from "./fixtures/judge.json" with { type: "json" };
 import {
   addMoney,
-  isNegativeMoney,
-  isZeroMoney,
   moneyFromUnits,
   moneyUnits,
   parseMoney,
-  subMoney,
   sumMoney,
+  tryMoneyFromUnits,
+  tryParseMoneyUnits,
   ZERO_MONEY,
   type Money,
 } from "./money.ts";
 import {
+  ADMIN_GRANT_FIELDS,
+  API_KEY_CREATE_FIELDS,
   DEFAULT_PAGE_LIMIT,
-  FEEDBACK_RATINGS,
+  FEEDBACK_INPUT_FIELDS,
+  FEEDBACK_NAMES,
+  FEEDBACK_RATING_MAX,
+  FEEDBACK_RATING_MIN,
   JOB_STATES,
   MAX_CONTENT_RETENTION_DAYS,
   MAX_FEEDBACK_TEXT_CHARS,
+  MAX_GRANT_REASON_CHARS,
+  MAX_IDEMPOTENCY_KEY_CHARS,
+  MAX_KEY_NAME_CHARS,
   MAX_PAGE_LIMIT,
   ORG_ROLES,
+  PAGE_QUERY_FIELDS,
+  SETTINGS_UPDATE_FIELDS,
+  TERMINAL_JOB_STATES,
   TRACE_CONTENT_AVAILABILITY,
   TRACE_MODES,
+  TRACE_QUERY_FIELDS,
+  USAGE_QUERY_FIELDS,
   type AdminGrantResult,
   type AdminOrgSummary,
   type ApiKeyCreated,
@@ -48,6 +60,8 @@ import {
   type ErrorCode,
   type ExecutionMode,
   type FeedbackEntry,
+  type FeedbackName,
+  type FeedbackValue,
   type JobState,
   type JudgeRun,
   type JudgeSample,
@@ -102,6 +116,8 @@ type OrgFixture = {
   all_free: boolean;
   grants: GrantFixture[];
   adjustment: GrantFixture | null;
+  /** A historical `purchase` row: R13 keeps the kind renderable, nothing creates one. */
+  legacy_purchase: GrantFixture | null;
   keys: KeyFixture[];
   settings: {
     trace_mode: string;
@@ -138,9 +154,9 @@ const traceFixture = traceFixtureJson as unknown as {
     channel: string;
     author_role: string;
     author_principal: string;
-    rating: string;
+    name: string;
+    value: FeedbackValue;
     comment: string | null;
-    correction: string | null;
     calibration_set: boolean;
     created_at: string;
   }[];
@@ -208,6 +224,11 @@ function plusMonths(epochMs: number, months: number): string {
   return shifted.toISOString();
 }
 
+/** `fb_` + namespace + per-organization ordinal: unique across organizations and across restarts. */
+function feedbackId(namespace: number, ordinal: number): string {
+  return `fb_${hex(namespace, 4)}${hex(ordinal, 8)}`;
+}
+
 function hex(value: number, length: number): string {
   return (value >>> 0)
     .toString(16)
@@ -231,17 +252,23 @@ function fnv1a(input: string): string {
   return hash.toString(16).padStart(8, "0");
 }
 
-function encodeCursor(offset: number, scope: string): string {
-  return btoa(JSON.stringify({ o: offset, k: fnv1a(scope) }));
+/**
+ * A cursor names the last row already delivered, not an offset. That is what keeps a walk correct
+ * while rows are inserted at the head — a grant lands at the top of the ledger mid-walk and the
+ * next page still resumes after the row the caller last saw, so nothing repeats and nothing is
+ * skipped. C's keyset cursors have the same property; an offset cursor would not.
+ */
+function encodeCursor(afterId: string, scope: string): string {
+  return btoa(JSON.stringify({ a: afterId, k: fnv1a(scope) }));
 }
 
 /** Any cursor this service did not mint for this exact query is rejected. */
-function decodeCursor(cursor: string, scope: string): number | null {
+function decodeCursor(cursor: string, scope: string): string | null {
   try {
-    const parsed = JSON.parse(atob(cursor)) as { o?: unknown; k?: unknown };
-    if (typeof parsed.o !== "number" || !Number.isInteger(parsed.o) || parsed.o < 0) return null;
+    const parsed = JSON.parse(atob(cursor)) as { a?: unknown; k?: unknown };
+    if (typeof parsed.a !== "string" || parsed.a === "") return null;
     if (parsed.k !== fnv1a(scope)) return null;
-    return parsed.o;
+    return parsed.a;
   } catch {
     return null;
   }
@@ -255,22 +282,109 @@ function fail<T>(code: ErrorCode, message: string): Result<T> {
   return { ok: false, error: { code, message } };
 }
 
-function paginate<T>(rows: T[], query: PageQuery, scope: string): Result<Page<T>> {
+function paginate<T>(rows: T[], query: PageQuery, scope: string, idOf: (row: T) => string): Result<Page<T>> {
   const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT) {
     return fail("invalid_request", `limit must be an integer between 1 and ${MAX_PAGE_LIMIT}`);
   }
-  let offset = 0;
+  let start = 0;
   if (query.cursor !== undefined && query.cursor !== null && query.cursor !== "") {
-    const decoded = decodeCursor(query.cursor, scope);
-    if (decoded === null) {
+    const after = decodeCursor(query.cursor, scope);
+    if (after === null) {
       return fail("invalid_cursor", "the cursor was not issued by this service for this query");
     }
-    offset = decoded;
+    const index = rows.findIndex((row) => idOf(row) === after);
+    if (index === -1) return fail("invalid_cursor", "the row this cursor points after is gone");
+    start = index + 1;
   }
-  const items = structuredClone(rows.slice(offset, offset + limit));
-  const nextOffset = offset + items.length;
-  return ok({ items, next_cursor: nextOffset < rows.length ? encodeCursor(nextOffset, scope) : null });
+  const items = structuredClone(rows.slice(start, start + limit));
+  const last = items[items.length - 1];
+  const exhausted = start + items.length >= rows.length || last === undefined;
+  return ok({ items, next_cursor: exhausted ? null : encodeCursor(idOf(last), scope) });
+}
+
+/**
+ * Timestamps are compared as instants, never as strings: the validator accepts both `…:00Z` and
+ * `…:00.000Z`, and `.` sorts before `Z`, so a lexical `from` filter would drop a row stamped at
+ * exactly the boundary.
+ */
+function instant(value: string): number {
+  return Date.parse(value);
+}
+
+/**
+ * Unknown input fields are refused, the way pydantic `extra="forbid"` refuses them on the Python
+ * side (08 §2). A caller that smuggles `org_id`, `author_role`, `channel` or a storage key gets a
+ * 400 instead of a silent no-op that reads as success. A key present with `undefined` is absent.
+ */
+function badInput<T>(input: unknown, allowed: readonly string[]): Result<T> | null {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return fail<T>("invalid_request", "this operation takes an object");
+  }
+  for (const [name, value] of Object.entries(input)) {
+    if (value !== undefined && !allowed.includes(name)) {
+      return fail<T>("invalid_request", `${name} is not a field of this request`);
+    }
+  }
+  return null;
+}
+
+/**
+ * The payload half of an idempotency record: the *meaningful* fields, normalised and ordered, so
+ * the same submission replays and a changed one conflicts whatever order the caller sent, and a
+ * key reused against another organization or another value is a 409 rather than a second effect.
+ */
+function canonicalPayload(value: Record<string, unknown>): string {
+  return JSON.stringify(
+    Object.entries(value)
+      .filter(([, field]) => field !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
+}
+
+/** R3: one named signal per submission, with the value type the name implies. */
+function badFeedbackBody(input: { name: FeedbackName; value: FeedbackValue; comment?: string | null }): string | null {
+  if (!(FEEDBACK_NAMES as readonly string[]).includes(input.name)) {
+    return `name must be one of ${FEEDBACK_NAMES.join(", ")}`;
+  }
+  if (input.name === "thumb") {
+    if (typeof input.value !== "boolean") return "a thumb value is a boolean";
+  } else if (input.name === "rating") {
+    if (
+      typeof input.value !== "number" ||
+      !Number.isInteger(input.value) ||
+      input.value < FEEDBACK_RATING_MIN ||
+      input.value > FEEDBACK_RATING_MAX
+    ) {
+      return `a rating value is an integer from ${FEEDBACK_RATING_MIN} to ${FEEDBACK_RATING_MAX}`;
+    }
+  } else {
+    if (typeof input.value !== "string" || input.value.trim() === "") {
+      return `a ${input.name} value is non-empty text`;
+    }
+    if (input.value.length > MAX_FEEDBACK_TEXT_CHARS) {
+      return `a ${input.name} value must be at most ${MAX_FEEDBACK_TEXT_CHARS} characters`;
+    }
+  }
+  const comment = input.comment;
+  if (comment !== undefined && comment !== null) {
+    if (typeof comment !== "string" || comment.trim() === "") return "comment must be non-empty text when present";
+    if (comment.length > MAX_FEEDBACK_TEXT_CHARS) {
+      return `comment must be at most ${MAX_FEEDBACK_TEXT_CHARS} characters`;
+    }
+  }
+  return null;
+}
+
+function badIdempotencyKey(key: unknown, required: boolean): string | null {
+  if (key === undefined || key === null) {
+    return required ? "an idempotency key is required" : null;
+  }
+  if (typeof key !== "string" || key.trim() === "") return "the idempotency key must be a non-empty string";
+  if (key.length > MAX_IDEMPOTENCY_KEY_CHARS) {
+    return `the idempotency key must be at most ${MAX_IDEMPOTENCY_KEY_CHARS} characters`;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -440,6 +554,12 @@ type OrgState = {
   content: Map<string, TraceContentView>;
   judge: JudgeRun[];
   counter: number;
+  /**
+   * Feedback ids are minted per organization and never restart: the namespace keeps two
+   * organizations apart and the counter starts past the seeded rows, so no submission can
+   * collide with a seeded id however many are added.
+   */
+  feedbackCounter: number;
 };
 
 const CLOCK_MS = Date.parse(orgsFixture.clock);
@@ -504,6 +624,12 @@ function buildOrg(spec: OrgFixture): OrgState {
     const outcome = outcomeFor(i, spec.all_free);
     const known = outcome.usage_certainty === "authoritative";
     const request_id = deterministicUuid(spec.namespace, i + 1);
+    // R13: nothing is settled until the request is terminal, so the column is null before then.
+    const settlement: SettlementState | null = (TERMINAL_JOB_STATES as readonly string[]).includes(
+      outcome.job_state,
+    )
+      ? outcome.settlement_state
+      : null;
 
     usage.push({
       request_id,
@@ -518,7 +644,7 @@ function buildOrg(spec: OrgFixture): OrgState {
       prompt_tokens: known ? promptTokens : null,
       completion_tokens: known ? completionTokens : null,
       usage_certainty: outcome.usage_certainty,
-      settlement_state: outcome.settlement_state,
+      settlement_state: settlement,
       cost: outcome.billable ? costOf(promptTokens, completionTokens) : ZERO_MONEY,
       max_hold: outcome.holds ? costOf(promptTokens, MAX_OUTPUT_TOKENS) : null,
       trace_mode: key.trace_mode,
@@ -555,7 +681,7 @@ function buildOrg(spec: OrgFixture): OrgState {
       terminal_cause: outcome.terminal_cause,
       error_code: outcome.error_code,
       usage_certainty: outcome.usage_certainty,
-      settlement_state: outcome.settlement_state,
+      settlement_state: settlement,
       timings: {
         auth_ms: 2,
         media_ms: outcome.terminal_cause === "invalid_media" ? null : 120 + Math.floor(random() * 300),
@@ -619,6 +745,18 @@ function buildOrg(spec: OrgFixture): OrgState {
       actor: orgsFixture.sessions.operator.email,
     });
   }
+  // R13: a migrated `purchase` row. It has to render; no operation here creates one.
+  if (spec.legacy_purchase !== null) {
+    ledger.push({
+      id: deterministicUuid(spec.namespace + 1100, 1),
+      created_at: spec.legacy_purchase.created_at,
+      delta: parseMoney(spec.legacy_purchase.amount),
+      kind: "purchase",
+      reason: spec.legacy_purchase.reason,
+      ref: null,
+      actor: null,
+    });
+  }
   ledger.sort((a, b) => (a.created_at === b.created_at ? b.id.localeCompare(a.id) : b.created_at.localeCompare(a.created_at)));
 
   const org: OrgState = {
@@ -641,23 +779,25 @@ function buildOrg(spec: OrgFixture): OrgState {
     content,
     judge: [],
     counter: 0,
+    feedbackCounter: 0,
   };
 
   // Seeded feedback and judge runs belong to the established organization only.
   if (spec.grants.length > 0) {
-    traceFixture.seed_feedback.forEach((seed, index) => {
+    traceFixture.seed_feedback.forEach((seed) => {
       const trace = org.traces[seed.trace_index];
       if (trace === undefined) return;
+      org.feedbackCounter += 1;
       trace.feedback.push({
-        id: `fb_${hex(spec.namespace * 17 + index, 12)}`,
+        id: feedbackId(spec.namespace, org.feedbackCounter),
         request_id: trace.request_id,
         created_at: seed.created_at,
         channel: seed.channel === "api" ? "api" : "console",
         author_role: seed.author_role === "operator" ? "operator" : seed.author_role === "judge" ? "judge" : "customer",
         author_principal: seed.author_principal,
-        rating: pick(FEEDBACK_RATINGS, seed.rating, "seed_feedback rating"),
+        name: pick(FEEDBACK_NAMES, seed.name, "seed_feedback name"),
+        value: seed.value,
         comment: seed.comment,
-        correction: seed.correction,
         calibration_set: seed.calibration_set,
       });
       trace.feedback_count = trace.feedback.length;
@@ -763,18 +903,52 @@ export function createFakeConsoleServices(): FakeConsoleServices {
 
   const injected = new Map<ConsoleOperation, { code: ErrorCode; message: string }[]>();
   /**
-   * Idempotency records keyed by caller organization + operation + key, never by the target: a
-   * key replayed with a different target organization is a changed payload, so it is a 409 and
-   * not a second grant (01-contracts, "changed payload is 409"; U3 "duplicate submit creates one
-   * audited grant").
+   * Idempotency records keyed by caller organization + operation + key. The *target* organization
+   * and the rest of the payload are part of the stored payload, never of the key: a key replayed
+   * against another organization is a changed payload, so it is a 409 and not a second grant
+   * (01-contracts, "changed payload is 409"; U3 "duplicate submit creates one audited grant").
+   *
+   * A record is written only after the operation has completed, and every operation validates
+   * before it mutates — so a refused call stores nothing and leaves nothing behind, and the retry
+   * that follows it still produces exactly one effect.
    */
-  const idempotency = new Map<string, { payload: string; result: AdminGrantResult }>();
+  const idempotency = new Map<string, { payload: string; value: unknown }>();
   let clockMs = CLOCK_MS;
-  let counter = 0;
 
   function nextTimestamp(): string {
     clockMs += 1000;
     return new Date(clockMs).toISOString();
+  }
+
+  function recordName(session: SessionContext, operation: ConsoleOperation, key: string): string {
+    return `${session.orgId}|${operation}|${key}`;
+  }
+
+  /** The stored result, an `idempotency_conflict`, or null when this key is unused. */
+  function replayOf<T>(
+    session: SessionContext,
+    operation: ConsoleOperation,
+    key: string | undefined | null,
+    payload: string,
+  ): Result<T> | null {
+    if (key === undefined || key === null) return null;
+    const previous = idempotency.get(recordName(session, operation, key));
+    if (previous === undefined) return null;
+    if (previous.payload !== payload) {
+      return fail<T>("idempotency_conflict", "this idempotency key was used with a different payload");
+    }
+    return ok(structuredClone(previous.value) as T);
+  }
+
+  function remember(
+    session: SessionContext,
+    operation: ConsoleOperation,
+    key: string | undefined | null,
+    payload: string,
+    value: unknown,
+  ): void {
+    if (key === undefined || key === null) return;
+    idempotency.set(recordName(session, operation, key), { payload, value: structuredClone(value) });
   }
 
   function intercept<T>(operation: ConsoleOperation): Result<T> | null {
@@ -811,12 +985,30 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     return null;
   }
 
-  function balanceOf(org: OrgState): WalletBalance {
-    const ledger_total = sumMoney(org.ledger.map((entry) => entry.delta));
-    const holds: Money[] = [];
-    for (const row of org.usage) if (row.max_hold !== null) holds.push(row.max_hold);
-    const reserved_total = sumMoney(holds);
-    return { ledger_total, reserved_total, available: subMoney(ledger_total, reserved_total) };
+  /** R13: evaluation runs are the owner's and the platform's business, not a member's. */
+  function requireOwnerOrOperator<T>(session: SessionContext): Result<T> | null {
+    if (session.role !== "owner" && !session.isOperator) {
+      return fail<T>("forbidden", "only an organization owner or a platform operator can read this");
+    }
+    return null;
+  }
+
+  /**
+   * The wallet as it would stand after `deltaUnits` is added to the ledger — `deltaUnits` of zero
+   * is simply the current balance. Null means some component leaves the `numeric(20, 8)` domain,
+   * which is the answer a mutating operation needs *before* it writes: `moneyFromUnits` would
+   * throw, and a throw after a partial write is how a double grant happens.
+   */
+  function balanceOf(org: OrgState, deltaUnits = BigInt(0)): WalletBalance | null {
+    let ledgerUnits = deltaUnits;
+    for (const entry of org.ledger) ledgerUnits += moneyUnits(entry.delta);
+    let reservedUnits = BigInt(0);
+    for (const row of org.usage) if (row.max_hold !== null) reservedUnits += moneyUnits(row.max_hold);
+    const ledger_total = tryMoneyFromUnits(ledgerUnits);
+    const reserved_total = tryMoneyFromUnits(reservedUnits);
+    const available = tryMoneyFromUnits(ledgerUnits - reservedUnits);
+    if (ledger_total === null || reserved_total === null || available === null) return null;
+    return { ledger_total, reserved_total, available };
   }
 
   /**
@@ -826,7 +1018,10 @@ export function createFakeConsoleServices(): FakeConsoleServices {
   function badFilter(query: UsageQuery & Partial<TraceQuery>): string | null {
     for (const name of ["from", "to"] as const) {
       const value = query[name];
-      if (value !== undefined && !(typeof value === "string" && RFC3339.test(value))) {
+      if (
+        value !== undefined &&
+        !(typeof value === "string" && RFC3339.test(value) && !Number.isNaN(instant(value)))
+      ) {
         return `${name} must be an RFC 3339 UTC timestamp`;
       }
     }
@@ -836,7 +1031,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         return `${name} must be a non-empty identifier`;
       }
     }
-    if (query.from !== undefined && query.to !== undefined && query.from > query.to) {
+    if (query.from !== undefined && query.to !== undefined && instant(query.from) > instant(query.to)) {
       return "from must not be after to";
     }
     const vocabularies: [string, readonly string[], unknown][] = [
@@ -855,11 +1050,18 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     return null;
   }
 
+  function inRange(createdAt: string, query: { from?: string; to?: string }): boolean {
+    const at = instant(createdAt);
+    return (
+      (query.from === undefined || at >= instant(query.from)) &&
+      (query.to === undefined || at <= instant(query.to))
+    );
+  }
+
   function usageRowsFor(org: OrgState, query: UsageQuery): UsageRow[] {
     return org.usage.filter(
       (row) =>
-        (query.from === undefined || row.created_at >= query.from) &&
-        (query.to === undefined || row.created_at <= query.to) &&
+        inRange(row.created_at, query) &&
         (query.key_id === undefined || row.key_id === query.key_id) &&
         (query.model === undefined || row.model === query.model),
     );
@@ -868,8 +1070,10 @@ export function createFakeConsoleServices(): FakeConsoleServices {
   function traceRowsFor(org: OrgState, query: TraceQuery): TraceListItem[] {
     return org.traces.filter(
       (row) =>
-        (query.from === undefined || row.created_at >= query.from) &&
-        (query.to === undefined || row.created_at <= query.to) &&
+        // R13: an off-mode request has no trace row at all, so it never appears in this list. Its
+        // usage row still links to `traceDetail`, which reports availability `off`.
+        row.trace_mode !== "off" &&
+        inRange(row.created_at, query) &&
         (query.key_id === undefined || row.key_id === query.key_id) &&
         (query.model === undefined || row.model === query.model) &&
         (query.job_state === undefined || row.job_state === query.job_state) &&
@@ -879,9 +1083,13 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     );
   }
 
+  /**
+   * A cursor is bound to its tenant, its operation and its filters — but not to `limit`, so a
+   * caller may change the page size mid-walk exactly as it can against a keyset implementation.
+   */
   function scopeOf(org: OrgState, operation: string, query: object): string {
     const parts = Object.entries(query)
-      .filter(([name, value]) => name !== "cursor" && value !== undefined)
+      .filter(([name, value]) => name !== "cursor" && name !== "limit" && value !== undefined)
       .sort(([a], [b]) => a.localeCompare(b));
     return `${org.org_id}|${operation}|${JSON.stringify(parts)}`;
   }
@@ -929,17 +1137,21 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     async usage(session, query) {
       const injectedResult = intercept<Page<UsageRow>>("usage");
       if (injectedResult !== null) return injectedResult;
+      const rejected = badInput<Page<UsageRow>>(query, USAGE_QUERY_FIELDS);
+      if (rejected !== null) return rejected;
       const invalid = badFilter(query);
       if (invalid !== null) return fail<Page<UsageRow>>("invalid_request", invalid);
       const resolved = tenant<Page<UsageRow>>(session);
       if (isError(resolved)) return resolved;
       const rows = usageRowsFor(resolved.org, query);
-      return paginate(rows, query, scopeOf(resolved.org, "usage", query));
+      return paginate(rows, query, scopeOf(resolved.org, "usage", query), (row) => row.request_id);
     },
 
     async usageSummary(session, query) {
       const injectedResult = intercept<UsageSummary>("usageSummary");
       if (injectedResult !== null) return injectedResult;
+      const rejected = badInput<UsageSummary>(query, USAGE_QUERY_FIELDS);
+      if (rejected !== null) return rejected;
       const invalid = badFilter(query);
       if (invalid !== null) return fail<UsageSummary>("invalid_request", invalid);
       const resolved = tenant<UsageSummary>(session);
@@ -957,7 +1169,9 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         completion += row.completion_tokens ?? 0;
         if (row.http_status >= 400) failed += 1;
         if (row.settlement_state === "released_platform_absorbed") absorbed += 1;
-        if (row.settlement_state === "held_unknown" && row.max_hold !== null) holds.push(row.max_hold);
+        // Everything still held: a non-terminal row has no settlement state yet (R13), so the
+        // hold itself is what says "awaiting reconciliation", not the settlement column.
+        if (row.usage_certainty === "unknown" && row.max_hold !== null) holds.push(row.max_hold);
       }
       return ok({
         requests: rows.length,
@@ -973,6 +1187,8 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     async usageDaily(session, query) {
       const injectedResult = intercept<UsageDay[]>("usageDaily");
       if (injectedResult !== null) return injectedResult;
+      const rejected = badInput<UsageDay[]>(query, USAGE_QUERY_FIELDS);
+      if (rejected !== null) return rejected;
       const invalid = badFilter(query);
       if (invalid !== null) return fail<UsageDay[]>("invalid_request", invalid);
       const resolved = tenant<UsageDay[]>(session);
@@ -1001,26 +1217,32 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (injectedResult !== null) return injectedResult;
       const resolved = tenant<WalletBalance>(session);
       if (isError(resolved)) return resolved;
-      return ok(balanceOf(resolved.org));
+      const balance = balanceOf(resolved.org);
+      if (balance === null) return fail<WalletBalance>("internal_error", "this wallet does not fit the money domain");
+      return ok(balance);
     },
 
     async ledger(session, query) {
       const injectedResult = intercept<Page<LedgerEntry>>("ledger");
       if (injectedResult !== null) return injectedResult;
+      const rejected = badInput<Page<LedgerEntry>>(query, PAGE_QUERY_FIELDS);
+      if (rejected !== null) return rejected;
       const resolved = tenant<Page<LedgerEntry>>(session);
       if (isError(resolved)) return resolved;
-      return paginate(resolved.org.ledger, query, scopeOf(resolved.org, "ledger", query));
+      return paginate(resolved.org.ledger, query, scopeOf(resolved.org, "ledger", query), (entry) => entry.id);
     },
 
     async traces(session, query) {
       const injectedResult = intercept<Page<TraceListItem>>("traces");
       if (injectedResult !== null) return injectedResult;
+      const rejected = badInput<Page<TraceListItem>>(query, TRACE_QUERY_FIELDS);
+      if (rejected !== null) return rejected;
       const invalid = badFilter(query);
       if (invalid !== null) return fail<Page<TraceListItem>>("invalid_request", invalid);
       const resolved = tenant<Page<TraceListItem>>(session);
       if (isError(resolved)) return resolved;
       const rows = traceRowsFor(resolved.org, query);
-      return paginate(rows, query, scopeOf(resolved.org, "traces", query));
+      return paginate(rows, query, scopeOf(resolved.org, "traces", query), (row) => row.request_id);
     },
 
     async traceDetail(session, requestId) {
@@ -1060,38 +1282,46 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       async submit(session, input) {
         const injectedResult = intercept<FeedbackEntry>("feedback.submit");
         if (injectedResult !== null) return injectedResult;
+        const rejected = badInput<FeedbackEntry>(input, FEEDBACK_INPUT_FIELDS);
+        if (rejected !== null) return rejected;
         const resolved = tenant<FeedbackEntry>(session);
         if (isError(resolved)) return resolved;
-        if (!(FEEDBACK_RATINGS as readonly string[]).includes(input.rating)) {
-          return fail("invalid_request", "rating must be up or down");
-        }
-        for (const name of ["comment", "correction"] as const) {
-          const value = input[name];
-          if (value === undefined || value === null) continue;
-          if (typeof value !== "string") return fail("invalid_request", `${name} must be a string`);
-          if (value.length > MAX_FEEDBACK_TEXT_CHARS) {
-            return fail("invalid_request", `${name} must be at most ${MAX_FEEDBACK_TEXT_CHARS} characters`);
-          }
-        }
+        const badKey = badIdempotencyKey(input.idempotency_key, true);
+        if (badKey !== null) return fail<FeedbackEntry>("invalid_request", badKey);
+        const badBody = badFeedbackBody(input);
+        if (badBody !== null) return fail<FeedbackEntry>("invalid_request", badBody);
         const trace = ownedTrace(resolved.org, input.request_id);
         if (trace === undefined) return fail("not_found", "no such request for this organization");
-        counter += 1;
+
+        const comment = input.comment ?? null;
+        const payload = canonicalPayload({
+          request_id: trace.request_id,
+          name: input.name,
+          value: input.value,
+          comment,
+        });
+        const replay = replayOf<FeedbackEntry>(session, "feedback.submit", input.idempotency_key, payload);
+        if (replay !== null) return replay;
+
+        // Everything above can refuse; from here nothing can, so the state cannot half-change.
         // Provenance is server-set: the channel is this console, the role comes from the
         // authenticated principal, and calibration membership needs a separate operator action.
+        resolved.org.feedbackCounter += 1;
         const entry: FeedbackEntry = {
-          id: `fb_${hex(counter, 12)}`,
+          id: feedbackId(resolved.org.namespace, resolved.org.feedbackCounter),
           request_id: trace.request_id,
           created_at: nextTimestamp(),
           channel: "console",
           author_role: session.isOperator ? "operator" : "customer",
           author_principal: session.email,
-          rating: input.rating,
-          comment: input.comment ?? null,
-          correction: input.correction ?? null,
+          name: input.name,
+          value: input.value,
+          comment,
           calibration_set: false,
         };
         trace.feedback.push(entry);
         trace.feedback_count = trace.feedback.length;
+        remember(session, "feedback.submit", input.idempotency_key, payload, entry);
         return ok(structuredClone(entry));
       },
     },
@@ -1108,10 +1338,14 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       async update(session, update) {
         const injectedResult = intercept<ConsoleSettings>("settings.update");
         if (injectedResult !== null) return injectedResult;
+        const rejected = badInput<ConsoleSettings>(update, SETTINGS_UPDATE_FIELDS);
+        if (rejected !== null) return rejected;
         const denied = requireOwner<ConsoleSettings>(session);
         if (denied !== null) return denied;
         const resolved = tenant<ConsoleSettings>(session);
         if (isError(resolved)) return resolved;
+        const badKey = badIdempotencyKey(update.idempotency_key, false);
+        if (badKey !== null) return fail<ConsoleSettings>("invalid_request", badKey);
         if (update.trace_mode !== undefined && !(TRACE_MODES as readonly string[]).includes(update.trace_mode)) {
           return fail("invalid_request", "trace_mode must be off, minimal or full");
         }
@@ -1127,6 +1361,14 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (update.evaluation_consent !== undefined && typeof update.evaluation_consent !== "boolean") {
           return fail("invalid_request", "evaluation_consent must be a boolean");
         }
+        const payload = canonicalPayload({
+          trace_mode: update.trace_mode,
+          content_retention_days: update.content_retention_days,
+          evaluation_consent: update.evaluation_consent,
+        });
+        const replay = replayOf<ConsoleSettings>(session, "settings.update", update.idempotency_key, payload);
+        if (replay !== null) return replay;
+
         const settings = resolved.org.settings;
         if (update.trace_mode !== undefined) settings.trace_mode = update.trace_mode;
         if (update.content_retention_days !== undefined) {
@@ -1142,6 +1384,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
             changed_by: session.email,
           });
         }
+        remember(session, "settings.update", update.idempotency_key, payload, settings);
         return ok(structuredClone(settings));
       },
     },
@@ -1158,43 +1401,71 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       async create(session, input) {
         const injectedResult = intercept<ApiKeyCreated>("keys.create");
         if (injectedResult !== null) return injectedResult;
+        const rejected = badInput<ApiKeyCreated>(input, API_KEY_CREATE_FIELDS);
+        if (rejected !== null) return rejected;
         const denied = requireOwner<ApiKeyCreated>(session);
         if (denied !== null) return denied;
         const resolved = tenant<ApiKeyCreated>(session);
         if (isError(resolved)) return resolved;
+        const badKey = badIdempotencyKey(input.idempotency_key, false);
+        if (badKey !== null) return fail<ApiKeyCreated>("invalid_request", badKey);
         if (typeof input.name !== "string" || input.name.trim() === "") {
           return fail("invalid_request", "a key needs a name");
+        }
+        if (input.name.length > MAX_KEY_NAME_CHARS) {
+          return fail("invalid_request", `a key name must be at most ${MAX_KEY_NAME_CHARS} characters`);
         }
         if (input.trace_mode !== undefined && !(TRACE_MODES as readonly string[]).includes(input.trace_mode)) {
           return fail("invalid_request", "trace_mode must be off, minimal or full");
         }
+        const name = input.name.trim();
+        const trace_mode = input.trace_mode ?? resolved.org.settings.trace_mode;
+        const payload = canonicalPayload({ name, trace_mode });
+        const replay = replayOf<ApiKeyCreated>(session, "keys.create", input.idempotency_key, payload);
+        if (replay !== null) return replay;
+
         resolved.org.counter += 1;
         const suffix = hex(resolved.org.counter * 7919, 8);
         const summary: ApiKeySummary = {
           id: deterministicUuid(4242 + resolved.org.namespace, resolved.org.counter),
-          name: input.name.trim(),
+          name,
           prefix: `sk-infrx-${suffix}`,
           created_at: nextTimestamp(),
           last_used_at: null,
           revoked_at: null,
-          trace_mode: input.trace_mode ?? resolved.org.settings.trace_mode,
+          trace_mode,
         };
         resolved.org.keys.push(summary);
         // Fixture secret: presented once, never stored, never a real credential.
-        return ok({ ...summary, secret: `sk-infrx-FAKE${suffix}${hex(resolved.org.counter, 24)}` });
+        const created: ApiKeyCreated = {
+          ...summary,
+          secret: `sk-infrx-FAKE${suffix}${hex(resolved.org.counter, 24)}`,
+        };
+        remember(session, "keys.create", input.idempotency_key, payload, created);
+        return ok(created);
       },
 
-      async revoke(session, keyId) {
+      async revoke(session, keyId, idempotencyKey) {
         const injectedResult = intercept<ApiKeySummary>("keys.revoke");
         if (injectedResult !== null) return injectedResult;
         const denied = requireOwner<ApiKeySummary>(session);
         if (denied !== null) return denied;
         const resolved = tenant<ApiKeySummary>(session);
         if (isError(resolved)) return resolved;
+        const badKey = badIdempotencyKey(idempotencyKey, false);
+        if (badKey !== null) return fail<ApiKeySummary>("invalid_request", badKey);
+        if (typeof keyId !== "string" || keyId === "") {
+          return fail("invalid_request", "a key id is required");
+        }
         const key = resolved.org.keys.find((candidate) => candidate.id === keyId);
         if (key === undefined) return fail("not_found", "no such key for this organization");
+        const payload = canonicalPayload({ key_id: keyId });
+        const replay = replayOf<ApiKeySummary>(session, "keys.revoke", idempotencyKey, payload);
+        if (replay !== null) return replay;
         if (key.revoked_at !== null) return fail("state_conflict", "this key is already revoked");
+
         key.revoked_at = nextTimestamp();
+        remember(session, "keys.revoke", idempotencyKey, payload, key);
         return ok(structuredClone(key));
       },
     },
@@ -1202,61 +1473,81 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     async adminOrgs(session, query) {
       const injectedResult = intercept<Page<AdminOrgSummary>>("adminOrgs");
       if (injectedResult !== null) return injectedResult;
+      const rejected = badInput<Page<AdminOrgSummary>>(query, PAGE_QUERY_FIELDS);
+      if (rejected !== null) return rejected;
       const denied = requireOperator<Page<AdminOrgSummary>>(session);
       if (denied !== null) return denied;
-      const cutoff = new Date(clockMs - 30 * 86400000).toISOString();
-      const rows: AdminOrgSummary[] = [...orgs.values()].map((org) => ({
-        org_id: org.org_id,
-        name: org.name,
-        owner_email: org.owner_email,
-        created_at: org.created_at,
-        suspended: org.suspended,
-        balance: balanceOf(org),
-        requests_30d: org.usage.filter((row) => row.created_at >= cutoff).length,
-      }));
-      rows.sort((a, b) => a.name.localeCompare(b.name));
-      return paginate(rows, query, `operators|adminOrgs|${JSON.stringify(query.limit ?? DEFAULT_PAGE_LIMIT)}`);
+      const cutoff = clockMs - 30 * 86400000;
+      const rows: AdminOrgSummary[] = [];
+      for (const org of orgs.values()) {
+        const balance = balanceOf(org);
+        if (balance === null) {
+          return fail<Page<AdminOrgSummary>>("internal_error", "a wallet does not fit the money domain");
+        }
+        rows.push({
+          org_id: org.org_id,
+          name: org.name,
+          owner_email: org.owner_email,
+          created_at: org.created_at,
+          suspended: org.suspended,
+          balance,
+          requests_30d: org.usage.filter((row) => instant(row.created_at) >= cutoff).length,
+        });
+      }
+      rows.sort((a, b) => (a.name === b.name ? a.org_id.localeCompare(b.org_id) : a.name.localeCompare(b.name)));
+      return paginate(rows, query, "operators|adminOrgs", (row) => row.org_id);
     },
 
     async adminGrant(session, input) {
       const injectedResult = intercept<AdminGrantResult>("adminGrant");
       if (injectedResult !== null) return injectedResult;
+      const rejected = badInput<AdminGrantResult>(input, ADMIN_GRANT_FIELDS);
+      if (rejected !== null) return rejected;
       const denied = requireOperator<AdminGrantResult>(session);
       if (denied !== null) return denied;
-      if (typeof input.idempotency_key !== "string" || input.idempotency_key.trim() === "") {
-        return fail("invalid_request", "a grant needs an idempotency key");
-      }
+      const badKey = badIdempotencyKey(input.idempotency_key, true);
+      if (badKey !== null) return fail<AdminGrantResult>("invalid_request", badKey);
       if (typeof input.reason !== "string" || input.reason.trim() === "") {
         return fail("invalid_request", "a grant needs a reason");
+      }
+      if (input.reason.length > MAX_GRANT_REASON_CHARS) {
+        return fail("invalid_request", `a grant reason must be at most ${MAX_GRANT_REASON_CHARS} characters`);
       }
       if (input.kind !== "promotional") {
         return fail("invalid_request", "only promotional grants exist in the free pilot");
       }
-      let amount: Money;
-      try {
-        amount = parseMoney(input.amount);
-      } catch {
-        return fail("invalid_request", "amount must be a USD decimal string");
+      // R11: negative, zero, non-decimal and over-scale amounts are refused at the boundary.
+      const units = tryParseMoneyUnits(input.amount);
+      if (units === null) {
+        return fail("invalid_request", "amount must be a USD decimal string within numeric(20, 8)");
       }
-      if (isZeroMoney(amount) || isNegativeMoney(amount)) {
-        return fail("invalid_request", "a grant amount must be positive");
-      }
+      if (units <= BigInt(0)) return fail("invalid_request", "a grant amount must be positive");
+      const amount = moneyFromUnits(units);
       const target = orgs.get(input.target_org_id);
       if (target === undefined) return fail("not_found", "no such organization");
 
-      const payload = JSON.stringify({
+      const reason = input.reason.trim();
+      const payload = canonicalPayload({
         target_org_id: input.target_org_id,
         amount,
         kind: input.kind,
-        reason: input.reason.trim(),
+        reason,
       });
-      const record = `${session.orgId}|adminGrant|${input.idempotency_key}`;
-      const previous = idempotency.get(record);
-      if (previous !== undefined) {
-        if (previous.payload !== payload) {
-          return fail("idempotency_conflict", "this idempotency key was used with a different payload");
+      const replay = replayOf<AdminGrantResult>(session, "adminGrant", input.idempotency_key, payload);
+      if (replay !== null) {
+        if (!replay.ok) return replay;
+        const current = balanceOf(target);
+        if (current === null) {
+          return fail<AdminGrantResult>("internal_error", "this wallet does not fit the money domain");
         }
-        return ok({ ...structuredClone(previous.result), replayed: true, balance: balanceOf(target) });
+        return ok({ ...replay.value, replayed: true, balance: current });
+      }
+      // The whole point of the pre-check: a total that would leave numeric(20, 8) is refused
+      // *before* the entry exists, so nothing is appended, no idempotency record is written, and
+      // the retry that follows still grants exactly once.
+      const projected = balanceOf(target, units);
+      if (projected === null) {
+        return fail("invalid_request", "this grant would take the wallet outside numeric(20, 8)");
       }
 
       target.counter += 1;
@@ -1265,7 +1556,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         created_at: nextTimestamp(),
         delta: amount,
         kind: "grant",
-        reason: input.reason.trim(),
+        reason,
         ref: input.idempotency_key,
         actor: session.email,
       };
@@ -1275,22 +1566,26 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         org_id: target.org_id,
         amount,
         kind: "promotional",
-        reason: entry.reason ?? "",
+        reason,
         created_at: entry.created_at,
         operator_principal: session.email,
         replayed: false,
-        balance: balanceOf(target),
+        balance: projected,
       };
-      idempotency.set(record, { payload, result });
+      remember(session, "adminGrant", input.idempotency_key, payload, result);
       return ok(structuredClone(result));
     },
 
     async judgeRuns(session, query) {
       const injectedResult = intercept<Page<JudgeRun>>("judgeRuns");
       if (injectedResult !== null) return injectedResult;
+      const rejected = badInput<Page<JudgeRun>>(query, PAGE_QUERY_FIELDS);
+      if (rejected !== null) return rejected;
+      const denied = requireOwnerOrOperator<Page<JudgeRun>>(session);
+      if (denied !== null) return denied;
       const resolved = tenant<Page<JudgeRun>>(session);
       if (isError(resolved)) return resolved;
-      return paginate(resolved.org.judge, query, scopeOf(resolved.org, "judgeRuns", query));
+      return paginate(resolved.org.judge, query, scopeOf(resolved.org, "judgeRuns", query), (run) => run.id);
     },
   };
 

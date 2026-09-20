@@ -51,6 +51,13 @@ test("the fixture set covers what U and V need to build against", async () => {
     cursor = page.value.next_cursor;
   } while (cursor !== null);
   for (const state of TRACE_CONTENT_AVAILABILITY) {
+    // R13: an off-mode request has no trace row, so `off` is reachable only through a usage row.
+    if (state === "off") {
+      assert.ok(!seen.has(state), "an off-mode request must not be listed as a trace");
+      const detail = await services.traceDetail(services.sessions.owner, services.ids.offRequestId);
+      assert.ok(detail.ok && detail.value.content === "off", "the off-mode request must still open");
+      continue;
+    }
     assert.ok(seen.has(state), `no fixture trace has content state ${state}`);
   }
 
@@ -75,6 +82,80 @@ test("the fixture set covers what U and V need to build against", async () => {
   );
 });
 
+test("the exact overflow the review found is refused, and the fake stays usable afterwards", async () => {
+  // Round 2 regression, reproduced precisely: the largest money is type-valid and parses, so only
+  // the prospective wallet total can refuse it. Before the fix, the entry was appended first and
+  // the refusal arrived as a thrown RangeError — a double grant on retry and permanently broken
+  // balance reads. Fake-only because it names the fixture's own 30 USD of ledger history.
+  const services = createFakeConsoleServices();
+  const { owner, operator } = services.sessions;
+  const { orgId } = services.ids;
+  const grant = {
+    target_org_id: orgId,
+    amount: "999999999999.99999999" as never,
+    kind: "promotional" as const,
+    reason: "big",
+    idempotency_key: "big-1",
+  };
+
+  const before = await services.ledger(owner, { limit: MAX_PAGE_LIMIT });
+  const beforeBalance = await services.balances(owner);
+  assert.ok(before.ok && beforeBalance.ok);
+  const beforeIds = before.value.items.map((entry) => entry.id);
+
+  for (const attempt of [1, 2]) {
+    const result = await services.adminGrant(operator, grant);
+    assert.equal(result.ok, false, `attempt ${attempt} must be refused`);
+    assert.ok(!result.ok && result.error.code === "invalid_request", `attempt ${attempt} code`);
+    const after = await services.ledger(owner, { limit: MAX_PAGE_LIMIT });
+    assert.ok(after.ok);
+    assert.deepEqual(after.value.items.map((entry) => entry.id), beforeIds, `attempt ${attempt} wrote a row`);
+  }
+
+  const balance = await services.balances(owner);
+  assert.ok(balance.ok, "balances must still work after a refused grant");
+  assert.deepEqual(balance.value, beforeBalance.value, "the wallet is exactly as it was");
+  const orgsPage = await services.adminOrgs(operator, {});
+  assert.ok(orgsPage.ok, "adminOrgs must still work after a refused grant");
+
+  // And a grant that does fit still lands exactly once under its key.
+  const fits = await services.adminGrant(operator, { ...grant, amount: "1.00000000" as never, idempotency_key: "big-2" });
+  assert.ok(fits.ok && fits.value.replayed === false);
+  const replay = await services.adminGrant(operator, { ...grant, amount: "1.00000000" as never, idempotency_key: "big-2" });
+  assert.ok(replay.ok && replay.value.replayed === true && replay.value.grant_id === fits.value.grant_id);
+});
+
+test("many submissions never reuse a feedback id, and two organizations never share one", async () => {
+  // Round 2 non-blocking finding: minted ids came from a global counter with no namespace, so the
+  // 187th submission collided with a seeded id. 200 submissions is well past that point.
+  const services = createFakeConsoleServices();
+  const seen = new Set<string>();
+  for (let i = 0; i < 200; i += 1) {
+    const entry = await services.feedback.submit(services.sessions.owner, {
+      request_id: services.ids.availableRequestId,
+      name: "comment",
+      value: `note ${i}`,
+      idempotency_key: `stress-${i}`,
+    });
+    assert.ok(entry.ok, `submission ${i}`);
+    assert.ok(!seen.has(entry.value.id), `submission ${i} reused id ${entry.value.id}`);
+    seen.add(entry.value.id);
+  }
+  const listed = await services.feedback.list(services.sessions.owner, services.ids.availableRequestId);
+  assert.ok(listed.ok);
+  assert.equal(new Set(listed.value.map((entry) => entry.id)).size, listed.value.length, "listed ids are unique");
+  assert.equal(listed.value.length, 200 + 1, "the seeded entry on this trace plus the 200 minted ones");
+
+  const other = await services.feedback.submit(services.sessions.otherOwner, {
+    request_id: services.ids.otherOrgRequestId,
+    name: "thumb",
+    value: true,
+    idempotency_key: "other-org-1",
+  });
+  assert.ok(other.ok);
+  assert.ok(!seen.has(other.value.id), "the second organization must not reuse a feedback id");
+});
+
 test("every operation can be made to fail on demand", async () => {
   const services = createFakeConsoleServices();
   const { owner, operator } = services.sessions;
@@ -90,7 +171,13 @@ test("every operation can be made to fail on demand", async () => {
     traceDetail: () => services.traceDetail(owner, availableRequestId),
     traceContent: () => services.traceContent(owner, availableRequestId),
     "feedback.list": () => services.feedback.list(owner, availableRequestId),
-    "feedback.submit": () => services.feedback.submit(owner, { request_id: availableRequestId, rating: "up" }),
+    "feedback.submit": () =>
+      services.feedback.submit(owner, {
+        request_id: availableRequestId,
+        name: "thumb",
+        value: true,
+        idempotency_key: "injection-probe-feedback",
+      }),
     "settings.get": () => services.settings.get(owner),
     "settings.update": () => services.settings.update(owner, { trace_mode: "minimal" }),
     "keys.list": () => services.keys.list(owner),
