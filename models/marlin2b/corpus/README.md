@@ -49,6 +49,19 @@ The pinned build is `ffmpeg 7.0.2-amd64-static` (johnvansickle.com), tarball sha
 it into `$CORPUS_CACHE/tools` and refuses any other binary. This host has no system
 ffmpeg, and none is used.
 
+## Benchmark client: labels and trust assumptions
+
+- A **local** clip is reported by its basename (`c012-…mp4`). A clip passed as an
+  **http(s) URL** is reported as `url-<12 hex of sha256(whole URL)>` plus a container
+  extension, and no other part of the URL is ever written down: a capability URL can
+  carry its secret in the query, a path segment, the file name or the host. E4 gets its
+  per-URL **distinctness from that digest** (stable across runs, so a label can be
+  matched back to a URL the caller already holds), never from URL text.
+- In the upload flow the **gateway chooses the PUT destination and its headers**, and the
+  API key is never sent there — only to `$BASE_URL`. `models/marlin2b/tests/fake_gateway.py`
+  is a test double, so that separation is a **trust assumption about the real gateway**,
+  not something these tests can prove.
+
 ## Sources and attribution
 
 | Source | Licence | Evidence checked | Attribution |
