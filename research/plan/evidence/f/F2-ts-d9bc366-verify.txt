@@ -1,0 +1,306 @@
+F2-ts round 6 verification transcript
+branch: codex/f2-contracts-ts   base: fab9fbe   head at capture: d9bc366
+date: 2026-09-20 (UTC)   node: v22.23.1   pnpm: 9.15.9
+
+$ pnpm --dir apps/app test
+  duration_ms: 2.416552
+  type: 'test'
+  ...
+# Subtest: a failure after the write replays instead of repeating, for every mutating operation
+ok 36 - a failure after the write replays instead of repeating, for every mutating operation
+  ---
+  duration_ms: 7.183127
+  type: 'test'
+  ...
+# Subtest: a key secret is retained nowhere in the fake's state
+ok 37 - a key secret is retained nowhere in the fake's state
+  ---
+  duration_ms: 7.280875
+  type: 'test'
+  ...
+# Subtest: every operation can be made to fail on demand, and recovers on the next call
+ok 38 - every operation can be made to fail on demand, and recovers on the next call
+  ---
+  duration_ms: 6.856873
+  type: 'test'
+  ...
+1..38
+# tests 120
+# suites 4
+# pass 120
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 629.464584
+exit=0
+
+$ pnpm --dir apps/app test:mutants
+
+> infrx-app@0.1.0 test:mutants /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app
+> node tests/contracts/run-mutants.mjs
+
+baseline: 43 exported cases pass unmutated; 130 mutants, 4 at a time, 120000 ms each
+
+killed   AUDIT-01         an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-02         an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-03         an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-04         an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-05         an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-06         an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-07         an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-08         an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-09         an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-10         an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-11         an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   BAL-01           balance is the ledger total minus reservations, and holds reduce what is available
+killed   BOUND-01         the provisional input bounds hold
+killed   BOUND-02         the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   BOUND-03         feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+killed   BOUND-04         the provisional input bounds hold
+killed   BOUND-05         the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   BOUND-06         retention is capped and evaluation consent is a separate control
+killed   BOUND-07         an operator label is the only path to operator authorship and calibration membership
+killed   BOUND-08         feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+killed   CODE-01          the HTTP status table is the one 08 §3 freezes, code for code
+killed   CODE-02          the HTTP status table is the one 08 §3 freezes, code for code
+killed   CODE-03          the HTTP status table is the one 08 §3 freezes, code for code
+killed   CONTENT-01       content availability decides the payload and never leaks a storage reference
+killed   CURSOR-01        rejects a cursor it did not issue for this query
+killed   CURSOR-02        usage pages walk every row exactly once, newest first
+killed   CURSOR-03        usage pages walk every row exactly once, newest first
+killed   CURSOR-04        usage pages walk every row exactly once, newest first
+killed   CURSOR-05        a filtered walk survives the cursor's own row leaving the filter, and stays complete
+killed   CURSOR-06        the operator list pages like every other list
+killed   CURSOR-07        the operator's own lists page at a small limit too
+killed   ENT-01           the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   ENT-02           the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   ENT-03           the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   ENT-04           the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   ENT-05           entitlement limits are replaced, not merged
+killed   FILTER-01        a filter filters, and an absent filter does not
+killed   FILTER-02        a filter filters, and an absent filter does not
+killed   FILTER-03        a filter filters, and an absent filter does not
+killed   FILTER-04        a filter filters, and an absent filter does not
+killed   FILTER-05        content availability decides the payload and never leaks a storage reference
+killed   GRANT-01         no customer view ever names an operator (R41)
+killed   GRANT-02         an operator grant is idempotent per key and conflicts on a changed payload
+killed   GRANT-03         an operator grant is idempotent per key and conflicts on a changed payload
+killed   GRANT-04         an amount that would leave the money domain is refused, and nothing is written
+killed   GRANT-05         an operator grant is idempotent per key and conflicts on a changed payload
+killed   GRANT-06         a suspension can be lifted, and lifting it restores exactly what it gated
+killed   GRANT-07         a fresh read of the ledger puts a new grant in its place
+killed   HOLD-01          balance is the ledger total minus reservations, and holds reduce what is available
+killed   HOLD-02          balance is the ledger total minus reservations, and holds reduce what is available
+killed   HOLD-03          balance is the ledger total minus reservations, and holds reduce what is available
+killed   HOLD-04          balance is the ledger total minus reservations, and holds reduce what is available
+killed   ID-01            generated identifiers never collide, within an organization or across two
+killed   IDEM-01          an idempotency key is scoped to its operation, its organization and its payload
+killed   IDEM-02          an idempotency key is scoped to its operation, its organization and its payload
+killed   IDEM-03          an idempotency key is scoped to its operation, its organization and its payload
+killed   IDEM-04          an idempotency key is scoped to its operation, its organization and its payload
+killed   IDEM-06          an idempotency key is scoped to its operation, its organization and its payload
+killed   INPUT-01         no operation accepts a field the caller invented
+killed   INPUT-02         a filter outside its vocabulary is invalid_request, not an empty page
+killed   INPUT-03         a filter outside its vocabulary is invalid_request, not an empty page
+killed   INPUT-04         a filter outside its vocabulary is invalid_request, not an empty page
+killed   LABEL-01         an operator acts on the organization it names, not on its own (R26)
+killed   LABEL-02         an operator acts on the organization it names, not on its own (R26)
+killed   LABEL-03         a calibration label is operator data a customer never sees (R35)
+killed   LABEL-04         a calibration label is operator data a customer never sees (R35)
+killed   LABEL-05         a calibration label is operator data a customer never sees (R35)
+killed   LABEL-06         a calibration label is operator data a customer never sees (R35)
+killed   LIMIT-01         rejects a limit above the hard bound and a limit that is not a positive integer
+killed   MONEY-01         an amount that would leave the money domain is refused, and nothing is written
+killed   MONEY-02         an operator grant is idempotent per key and conflicts on a changed payload
+killed   MONEY-03         an operator grant is idempotent per key and conflicts on a changed payload
+killed   MONEY-04         balance is the ledger total minus reservations, and holds reduce what is available
+killed   MONEY-05         balance is the ledger total minus reservations, and holds reduce what is available
+killed   ORDER-01         every mutating operation validates before it writes, whichever field is bad
+killed   ORDER-02         every mutating operation validates before it writes, whichever field is bad
+killed   ORDER-03         every mutating operation validates before it writes, whichever field is bad
+killed   ORDER-04         every mutating operation validates before it writes, whichever field is bad
+killed   ORDER-05         an amount that would leave the money domain is refused, and nothing is written
+killed   ORDER-06         every mutating operation validates before it writes, whichever field is bad
+killed   PAYLOAD-01       an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-02       an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-03       an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-04       an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-05       an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-06       an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-07       an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-08       the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   PAYLOAD-09       an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-10       an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-11       an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-12       an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-13       an idempotency key is scoped to its operation, its organization and its payload
+killed   PROV-01          an operator label is the only path to operator authorship and calibration membership
+killed   PROV-02          feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+killed   R41-01           an operator acts on the organization it names, not on its own (R26)
+killed   R41-02           no customer view ever names an operator (R41)
+killed   REVOKE-01        the provisional input bounds hold
+killed   ROLE-01          a member can read but cannot mutate settings or keys
+killed   ROLE-02          a non-operator can neither grant nor see other organizations
+killed   ROLE-03          a member can read but cannot mutate settings or keys
+killed   ROLE-04          a non-operator can neither grant nor see other organizations
+killed   ROLE-05          the role and suspension matrix holds for every operation
+killed   SECRET-01        a created key's secret is shown once and never again, to anybody
+killed   SECRET-02        a created key's secret is shown once and never again, to anybody
+killed   STATE-01         usage pages walk every row exactly once, newest first
+killed   STATE-02         retention is capped and evaluation consent is a separate control
+killed   STATE-03         retention is capped and evaluation consent is a separate control
+killed   SUSP-01          suspension gates new work and configuration, and nothing else (R33)
+killed   SUSP-02          suspension gates new work and configuration, and nothing else (R33)
+killed   SUSP-03          the role and suspension matrix holds for every operation
+killed   SUSP-04          a suspension can be lifted, and lifting it restores exactly what it gated
+killed   SUSP-05          a suspension can be lifted, and lifting it restores exactly what it gated
+killed   SUSP-06          a suspension can be lifted, and lifting it restores exactly what it gated
+killed   TARGET-01        an operator acts on the organization it names, not on its own (R26)
+killed   TARGET-02        an operator acts on the organization it names, not on its own (R26)
+killed   TARGET-03        an operator grant is idempotent per key and conflicts on a changed payload
+killed   TENANT-01        a new organization starts at zero with no ledger history
+killed   TENANT-02        balance is the ledger total minus reservations, and holds reduce what is available
+killed   TENANT-03        reads and writes never cross the tenant boundary, in either direction
+killed   TENANT-04        reads and writes never cross the tenant boundary, in either direction
+killed   TENANT-05        reads and writes never cross the tenant boundary, in either direction
+killed   TENANT-06        identifiers from another organization are not_found, in both directions
+killed   XHEAD-01         a list walked while rows arrive at its head still returns every row exactly once
+killed   XINPUT-01        no operation accepts a field the caller invented
+killed   XJUDGE-01        judge runs separate estimates, limited evaluations and held budgets
+killed   XJUDGE-02        judge runs separate estimates, limited evaluations and held budgets
+killed   XPURCHASE-01     nothing creates a legacy purchase entry
+killed   XREASON-01       every mutating operation validates before it writes, whichever field is bad
+killed   XTENANT-01       a filter or cursor from another organization never widens the tenant
+
+130 mutants: 130 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 21.4s
+exit=0
+
+$ node tests/contracts/run-mutants.mjs --self-test  (from apps/app)
+runner self-tests — R40: the runner must not be able to report a false kill
+
+ok   a syntax error is a runner error, not a kill
+       expected runner-error, got runner-error — Node's type stripping rejected the mutated file
+ok   a module that throws on load is a runner error, not a kill
+       expected runner-error, got runner-error — the suite failed without naming a case
+ok   a construct type stripping rejects is a runner error, not a kill
+       expected runner-error, got runner-error — Node's type stripping rejected the mutated file
+ok   a hang is a runner error, not a kill
+       expected runner-error, got runner-error — the suite did not finish in time
+ok   a no-op edit survives
+       expected survived, got survived — the suite passed
+ok   a `find` that no longer matches is stale
+       expected stale, got stale — its `find` text is not in the source any more
+ok   a real defect attributed to the wrong case survives
+       expected survived, got survived — the suite failed, but not in a declared case (failed: a new organization starts at zero with no ledger history; identifiers from another organization are not_found, in both directions; a filter or cursor from another organization never widens the tenant; suspension gates new work and configuration, and nothing else (R33); the role and suspension matrix holds for every operation; an operator acts on the organization it names, not on its own (R26); a suspension can be lifted, and lifting it restores exactly what it gated; an operator write is audited, and a restore adds an entry instead of erasing one (R34); an idempotency key is scoped to its operation, its organization and its payload; generated identifiers never collide, within an organization or across two; reads and writes never cross the tenant boundary, in either direction)
+ok   a genuine defect in its declared case is killed
+       expected killed, got killed — a new organization starts at zero with no ledger history
+ok   a mutant with no declared cases is a runner error
+       expected runner-error, got runner-error — the mutant declares no `cases`, so a kill cannot be attributed
+
+9 self-tests, 9 passed, 0 failed
+exit=0
+
+$ pnpm --dir apps/app lint
+
+> infrx-app@0.1.0 lint /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app
+> eslint
+
+
+/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/lib/contracts/conformance.ts
+  3552:35  warning  'ids' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/lib/contracts/fake-services.ts
+  79:8  warning  'AuditQuery' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+
+exit=0
+
+$ pnpm --dir apps/app exec tsc --noEmit
+exit=0
+
+$ pnpm --dir apps/app build (tail)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+exit=0
+
+$ git status --porcelain
+?? research/plan/evidence/f/F2-ts-d9bc366-verify.txt
+(empty = clean)
+
+$ git diff --stat fab9fbe -- apps/app/pnpm-lock.yaml apps/app/tsconfig.json
+(empty = untouched)
+
+$ git diff fab9fbe -- apps/app/package.json
+diff --git a/apps/app/package.json b/apps/app/package.json
+index 11ec1cd..f4db246 100644
+--- a/apps/app/package.json
++++ b/apps/app/package.json
+@@ -9,7 +9,11 @@
+     "lint": "eslint",
+     "format": "prettier --write .",
+     "format:check": "prettier --check .",
+-    "test": "node --test lib/*.test.ts"
++    "test": "node --test \"lib/**/*.test.ts\" \"tests/**/*.test.ts\" \"app/**/*.test.ts\" \"components/**/*.test.ts\"",
++    "test:mutants": "node tests/contracts/run-mutants.mjs"
++  },
++  "engines": {
++    "node": ">=22.18"
+   },
+   "dependencies": {
+     "@base-ui/react": "^1.8.0",
+
+$ git log --oneline 15f067f..HEAD
+d9bc366 contracts: README for R40, R41 and the two fake-only invariants
+70fe3d1 contracts: a runner that cannot report a false kill, and R41
+
+$ git rev-list --count fab9fbe..HEAD
+27
+
+$ per-commit owned-path check over fab9fbe..HEAD
+d9bc366 owned paths only
+70fe3d1 owned paths only
+15f067f owned paths only
+ab442af owned paths only
+07f9a5a owned paths only
+639ee7b owned paths only
+f947a15 owned paths only
+b48ffaa owned paths only
+3c772d6 owned paths only
+e392cc2 owned paths only
+2959a3d owned paths only
+0570bf2 owned paths only
+2948298 owned paths only
+012fc85 owned paths only
+7ccebfe owned paths only
+9f266de owned paths only
+585dd18 owned paths only
+e6f7162 owned paths only
+159cd27 owned paths only
+92a6022 owned paths only
+7272695 owned paths only
+d00fcbc owned paths only
+96164b7 owned paths only
+cadb02b owned paths only
+af5856c owned paths only
+108bed8 owned paths only
+cb00862 owned paths only
+
+$ test counts per file
+discovery.test.ts                                # tests 5
+fixtures.test.ts                                 # tests 4
+money.test.ts                                    # tests 11
+opaque-cursor.test.ts                            # tests 44
+services.test.ts                                 # tests 52
+keys.test.ts                                     # tests 3
+utils.test.ts                                    # tests 1
+
+$ grep -c '^    it(' apps/app/lib/contracts/conformance.ts   (exported cases)
+43
+$ declared mutants
+130
+$ mutants killing by a thrown error (declared)
+GRANT-04, MONEY-03, MONEY-04

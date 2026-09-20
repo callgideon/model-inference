@@ -125,3 +125,7 @@ are the provisional numbers R17 already labelled as such.
   customers (R35), and made cursor handling opaque with a wrapper proof (R36). `pnpm test` 109 pass
   0 fail; `test:mutants`, `lint`, `tsc --noEmit` and `build` all exit 0; lockfile and `tsconfig.json`
   untouched. Status **implemented**; no integration, push or deploy.
+- 2026-09-20: Round 6 corrected two claims in this report, recorded in `F2-ts-d9bc366.md`: the runner
+  counted any non-zero exit as a kill (so "115 killed" included outcomes that proved nothing), and
+  IDEM-05 was a false kill whose invariant no exported case can reach. The case count here ("40 it(")
+  was also wrong; the measured figure is in the later report.
