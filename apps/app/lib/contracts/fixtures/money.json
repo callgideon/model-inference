@@ -1,12 +1,30 @@
 {
-  "_comment": "Money fixtures for 08 §4. `debits` are cross-language constants: the Python side computes them with Decimal (ROUND_HALF_UP for the charge, ROUND_CEILING for the hold); TypeScript only parses, formats, adds, subtracts and compares, so it asserts the strings agree and stay canonical.",
+  "_comment": "Money fixtures for 08 \u00a74. `debits` are cross-language constants: the Python side computes them with Decimal (ROUND_HALF_UP for the charge, ROUND_CEILING for the hold); TypeScript only parses, formats, adds, subtracts and compares, so it asserts the strings agree and stay canonical. The parse domain is numeric(20, 8) \u2014 12 integral and 8 fractional digits, no leading zeros \u2014 identical to `infrx/contracts/money.py`.",
   "canonical": [
-    { "input": "0.1", "money": "0.10000000" },
-    { "input": "0", "money": "0.00000000" },
-    { "input": "-0.00000001", "money": "-0.00000001" },
-    { "input": "12345678901234567890", "money": "12345678901234567890.00000000" },
-    { "input": "0.00000001", "money": "0.00000001" },
-    { "input": "007.5", "money": "7.50000000" }
+    {
+      "input": "0.1",
+      "money": "0.10000000"
+    },
+    {
+      "input": "0",
+      "money": "0.00000000"
+    },
+    {
+      "input": "-0.00000001",
+      "money": "-0.00000001"
+    },
+    {
+      "input": "123456789012.3456789",
+      "money": "123456789012.34567890"
+    },
+    {
+      "input": "0.00000001",
+      "money": "0.00000001"
+    },
+    {
+      "input": "7.5",
+      "money": "7.50000000"
+    }
   ],
   "invalid": [
     "1e3",
@@ -26,7 +44,14 @@
     "0x10",
     "$1.00",
     "",
-    "--1"
+    "--1",
+    "007.5",
+    "01.5",
+    "-01.5",
+    "00",
+    "1234567890123.45678900",
+    "12345678901234567890",
+    "999999999999.99999999999"
   ],
   "arithmetic": [
     {
@@ -44,10 +69,10 @@
       "compare": -1
     },
     {
-      "a": "12345678901234567890.00000000",
+      "a": "123456789012.34567890",
       "b": "0.00000001",
-      "sum": "12345678901234567890.00000001",
-      "difference": "12345678901234567889.99999999",
+      "sum": "123456789012.34567891",
+      "difference": "123456789012.34567889",
       "compare": 1
     },
     {
@@ -60,7 +85,7 @@
   ],
   "debits": [
     {
-      "case": "half-up boundary: the ninth digit is exactly 5",
+      "case": "no rounding needed: the product is already an exact 1e-8 multiple",
       "prompt_tokens": 1,
       "completion_tokens": 0,
       "input_usd_per_m": "0.15",
@@ -111,14 +136,40 @@
       "hold_ceiling": "0.00337920"
     }
   ],
-  "ledger_deltas": ["25.00000000", "-0.00337920", "-0.00120000", "5.00000000"],
+  "ledger_deltas": [
+    "25.00000000",
+    "-0.00337920",
+    "-0.00120000",
+    "5.00000000"
+  ],
   "display": [
-    { "money": "0.00000000", "display": "$0.00" },
-    { "money": "1.50000000", "display": "$1.50" },
-    { "money": "0.00012340", "display": "$0.0001234" },
-    { "money": "0.00000001", "display": "$0.00000001" },
-    { "money": "-2.00000000", "display": "-$2.00" },
-    { "money": "12345678901234567890.00000000", "display": "$12,345,678,901,234,567,890.00" },
-    { "money": "1234.56780000", "display": "$1,234.5678" }
+    {
+      "money": "0.00000000",
+      "display": "$0.00"
+    },
+    {
+      "money": "1.50000000",
+      "display": "$1.50"
+    },
+    {
+      "money": "0.00012340",
+      "display": "$0.0001234"
+    },
+    {
+      "money": "0.00000001",
+      "display": "$0.00000001"
+    },
+    {
+      "money": "-2.00000000",
+      "display": "-$2.00"
+    },
+    {
+      "money": "123456789012.34567890",
+      "display": "$123,456,789,012.3456789"
+    },
+    {
+      "money": "1234.56780000",
+      "display": "$1,234.5678"
+    }
   ]
 }

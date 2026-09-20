@@ -16,15 +16,27 @@ export const MONEY_SCALE = 8;
 /** The project's tsconfig targets ES2017, where BigInt literals are unavailable; the call is not. */
 const ZERO_UNITS = BigInt(0);
 
-/** Plain decimal only: no exponent, no sign but a leading `-`, no whitespace, no `NaN`/`Infinity`. */
-const PLAIN_DECIMAL = /^-?[0-9]+(\.[0-9]+)?$/;
+/**
+ * Plain decimal only: no exponent, no sign but a leading `-`, no whitespace, no `NaN`/`Infinity`,
+ * no leading zeros. Deliberately the same grammar as the Python half's `_PLAIN`
+ * (`infrx/contracts/money.py`): both ends of a request must accept exactly the same strings.
+ */
+const PLAIN_DECIMAL = /^-?(?:0|[1-9][0-9]*)(\.[0-9]+)?$/;
+
+/**
+ * `numeric(20, 8)` holds 20 significant digits — 12 integral plus 8 fractional — so the scaled
+ * unit magnitude is bounded by 1e20. A larger value is refused here rather than accepted into a
+ * DTO and then rejected by PostgreSQL. Matches `MAX_DIGITS = 20` on the Python side.
+ */
+const MAX_UNITS = BigInt("100000000000000000000");
 
 export const ZERO_MONEY = "0.00000000" as Money;
 
 /**
  * Scaled units (1 = 1e-8 USD) for any accepted plain decimal string, or null.
  * Rejects non-strings (a float that got as far as JSON is a bug, not a value),
- * exponents, more precision than the scale can hold, and negative zero.
+ * exponents, leading zeros, more precision than the scale can hold, negative zero,
+ * and magnitudes `numeric(20, 8)` cannot store.
  */
 export function tryParseMoneyUnits(value: unknown): bigint | null {
   if (typeof value !== "string" || !PLAIN_DECIMAL.test(value)) return null;
@@ -36,13 +48,18 @@ export function tryParseMoneyUnits(value: unknown): bigint | null {
   if (fraction.length > MONEY_SCALE) return null;
   const units = BigInt(whole + fraction.padEnd(MONEY_SCALE, "0"));
   if (negative && units === ZERO_UNITS) return null;
+  if (units >= MAX_UNITS) return null;
   return negative ? -units : units;
 }
 
-/** The canonical eight-digit string for scaled units. */
+/** The canonical eight-digit string for scaled units. Overflow throws; it is never truncated. */
 export function moneyFromUnits(units: bigint): Money {
   const negative = units < ZERO_UNITS;
-  const digits = (negative ? -units : units).toString().padStart(MONEY_SCALE + 1, "0");
+  const magnitude = negative ? -units : units;
+  if (magnitude >= MAX_UNITS) {
+    throw new RangeError(`money overflows numeric(20, 8): ${magnitude.toString()} units`);
+  }
+  const digits = magnitude.toString().padStart(MONEY_SCALE + 1, "0");
   const whole = digits.slice(0, -MONEY_SCALE);
   return `${negative ? "-" : ""}${whole}.${digits.slice(-MONEY_SCALE)}` as Money;
 }

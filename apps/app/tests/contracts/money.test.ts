@@ -91,13 +91,23 @@ test("negative and zero are distinguishable, and negative zero does not exist", 
   assert.equal(moneyFromUnits(BigInt(0)), ZERO_MONEY, "there is one zero, and it is unsigned");
 });
 
-test("scaled units are 1e-8 USD and survive twenty significant digits", () => {
+test("scaled units are 1e-8 USD and stop at the twentieth significant digit", () => {
   assert.equal(moneyUnits(parseMoney("1")), BigInt(100000000));
   assert.equal(moneyUnits(parseMoney("-0.00000001")), BigInt(-1));
-  const big = parseMoney("12345678901234567890");
-  assert.equal(moneyUnits(big).toString(), "1234567890123456789000000000");
-  assert.equal(addMoney(big, parseMoney("0.00000001")), "12345678901234567890.00000001");
+  // numeric(20, 8): 12 integral + 8 fractional digits, the same bound the Python half enforces.
+  const largest = parseMoney("999999999999.99999999");
+  assert.equal(moneyUnits(largest).toString(), "99999999999999999999");
+  assert.throws(() => parseMoney("1000000000000"), TypeError, "13 integral digits do not fit");
+  assert.throws(() => parseMoney("-1000000000000.00000000"), TypeError, "nor do they when negative");
+  assert.throws(() => addMoney(largest, parseMoney("0.00000001")), RangeError, "a sum may not overflow");
   assert.throws(() => moneyUnits("1.5e0" as Money), TypeError, "a forged brand still fails at the boundary");
+});
+
+test("leading zeros are rejected, as they are on the Python side", () => {
+  for (const bad of ["007.5", "01.5", "-01.5", "00", "00.00000000"]) {
+    assert.equal(tryParseMoneyUnits(bad), null, `${bad} must not parse`);
+  }
+  assert.equal(parseMoney("0.50000000"), "0.50000000", "a single leading zero is the canonical form");
 });
 
 test("the charge and hold fixtures agree across languages and stay canonical", () => {
