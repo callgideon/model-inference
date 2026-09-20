@@ -21,8 +21,8 @@ document only places their artifacts on a host and orders their hooks.
 | Environment | Purpose | Compute | PostgreSQL | Object store | Secrets | Who deploys |
 |---|---|---|---|---|---|---|
 | `local` | Layer 1/2 tests: fakes, real local PG/CH/Valkey/S3-compatible, migrations, RLS | developer host / worktree | local container, per-worktree database name | local container, per-worktree prefix | local `.env` files, never SSM | any track (E2 owns the compose file) |
-| `staging` (allocated) | Layer 3 rehearsal of a deploy, migration and recovery drill | PROPOSED allocated GPU instance, separate instance id and EIP | PROPOSED separate Supabase project or schema | PROPOSED separate bucket/prefix | SSM prefix `/infrx/staging/*` PROPOSED | I2/I3 holding the lock |
-| `pilot` | The single-GPU free pilot serving real keys | `i-0e8449a4ffca29bab` (g6e.2xlarge, us-east-1d) OBSERVED | Supabase `fcbnscgsymzdykendbrc`, us-east-2 OBSERVED via SSM name only | PROPOSED `infrx-media`, `infrx-traces` | existing `/model-inference/*` + PROPOSED names in §5 | I2/I3 holding the lock, coordinator-authorized |
+| `staging` (allocated) | Layer 3 rehearsal of a deploy, migration and recovery drill | PROPOSED allocated GPU instance, separate instance id and EIP | PROPOSED separate Supabase project or schema | PROPOSED separate bucket/prefix | SSM prefix `/model-inference/staging/*` PROPOSED | I2/I3 holding the lock; **allocation itself is a coordinator action** |
+| `pilot` | The single-GPU free pilot serving real keys | `i-0e8449a4ffca29bab` (g6e.2xlarge, us-east-1d) OBSERVED | Supabase `fcbnscgsymzdykendbrc`, **us-east-2 — HISTORICAL CLAIM (HANDOFF.md §1)**; only the `/INFRX-SUPABASE-PROD/*` parameter *names* are OBSERVED, and a parameter name cannot reveal a project ref or region | PROPOSED `infrx-media`, `infrx-traces` | existing `/model-inference/*` + PROPOSED names in §5 | I2/I3 holding the lock, coordinator-authorized |
 
 **Single deployment lock.** One holder at a time may mutate `staging` or
 `pilot`. The lock is a coordinator record, not a technical mechanism: the holder
@@ -35,7 +35,13 @@ object prefixes and temp directories per the execution protocol.
 
 **Environment for every mutable operation** is assigned in the
 required-vs-existing matrix of the I1 evidence report; no mutation is performed
-by I1.
+by I1. Two operations this document proposes are **not** assigned to an
+implementation task because they are outside a task's authority: allocating the
+`staging` environment (a coordinator action per
+[03-execution-protocol.md](../research/plan/03-execution-protocol.md)) and
+enabling Supabase PITR (§6 — a paid plan change on the authoritative production
+database, **separately authorized**, never implied by this design). Both carry
+that marker in the matrix.
 
 ## 2. Process layout on the pilot host
 
@@ -57,6 +63,11 @@ the spool writer is the only writer under `/var/lib/infrx/traces`; media
 preparation runs as a separate process so a decode stall cannot block the
 gateway event loop; no process runs as root. Readiness (`/readyz`, protected)
 reports per-component state; public `/health` stays generic per contracts v1.
+Drain grace: `marlin2b-vllm.service` today has `ExecStop=docker stop` with no
+`-t`, so in-flight generation is killed after the 10 s default (OBSERVED in the
+unit file). I2 sets `docker stop -t 120` with a matching `TimeoutStopSec` on
+every unit that can hold an accepted job, so a deploy drains instead of
+truncating; the matrix row carries the owner and environment.
 
 Root volume budget on the current box: 300 GiB gp3 (OBSERVED,
 `vol-091e45c92f7426291`, 3000 IOPS / 125 MiB/s, unencrypted,
@@ -85,6 +96,15 @@ is on the client-visible path of every streamed event.
 | `first_progress_ms` | ingress → first committed progress event, including admission transaction | the contracts v1 SSE target is measured *including persistence* |
 | `terminal_txn_ms` | the single terminal transaction (outcome + usage + settlement + releases + outbox) | it gates success reporting |
 
+**Client round trips are fixed, not incidental.** At a cross-region RTT this
+choice alone decides Pass from Marginal, so the headline `commit_rtt_ms` is
+measured with **exactly one** client round trip: a single-statement append that
+commits implicitly (or an explicitly pipelined `BEGIN`/`INSERT`/`COMMIT` sent in
+one flush). The three-round-trip form (separate `BEGIN`, `INSERT`, `COMMIT`
+waits) is measured as a **secondary variant** and reported beside it, never
+merged into the headline. Every reported number states its round-trip count;
+`terminal_txn_ms` is inherently multi-statement and records its own count.
+
 Also record: pooler mode (transaction vs session), pool size, whether prepared
 statements are usable through the pooler, and packet loss / retransmits during
 the run. Report p50/p95/p99 with sample counts, not means.
@@ -105,25 +125,42 @@ Derived from contracts v1 (SSE first progress target 2 s including persistence;
 journal batch window 50 ms; lease 120 s with 40 s heartbeat) — the rule is that
 the 50 ms batch window, not the network, must remain the dominant term:
 
-| Verdict | Condition | Action |
-|---|---|---|
-| Pass | `commit_rtt_ms` p50 ≤ 25, p95 ≤ 50, p99 ≤ 150; `first_progress_ms` p95 ≤ 800; sustained ≥ 160 committed batches/s per host at concurrency 8 | keep PG in us-east-2 for the pilot; record as `meas.` |
-| Marginal | p95 in 50–120 ms, or first progress p95 in 800–1,500 ms | pilot may proceed only with a recorded contract note and the locality work scheduled before fleet; no throughput claim above the measured rate |
-| Fail | p95 > 120 ms, or `first_progress_ms` p95 > 1,500 ms, or append rate below the engine's event rate | do not claim the pilot envelope; take a §3.5 option before I2 release |
+Evaluate in this order and stop at the first match, so **every** result lands in
+exactly one verdict (the earlier table left gaps — e.g. p50 38 ms with p95
+47 ms matched nothing):
+
+| Order | Verdict | Condition | Action |
+|---|---|---|---|
+| 1 | **Fail** | `commit_rtt_ms` p95 > 120 ms, **or** `first_progress_ms` p95 > 1,500 ms, **or** sustained append rate < 120 committed batches/s per host at concurrency 8 | do not claim the pilot envelope; take a §3.5 option before I2 release |
+| 2 | **Pass** | `commit_rtt_ms` p50 ≤ 25 ms **and** p95 ≤ 50 ms **and** p99 ≤ 150 ms, **and** `first_progress_ms` p95 ≤ 800 ms, **and** sustained ≥ 160 committed batches/s | keep PG in us-east-2 for the pilot; record as `meas.` |
+| 3 | **Marginal** | everything else (by construction: not Fail, not Pass) | pilot may proceed only with a recorded contract note and the locality work scheduled before fleet; no throughput claim above the measured rate |
+
+The append-rate numbers are derived, not free-hand: the 50 ms batch window means
+one committed batch per job per 50 ms, i.e. **20/s per concurrent job**, so 8
+concurrent jobs need **160/s** to keep the window rather than the database as
+the limiting term; < 120/s means the host cannot sustain the window for even 6
+of the 8 jobs. "The engine's event rate" in the earlier wording is exactly this
+160/s figure.
 
 These thresholds are `est.` engineering limits proposed by I1; the coordinator
-confirms them against contracts v1 before I2 treats them as a gate.
+confirms them — together with the §3.1 round-trip form — against contracts v1
+before I2 treats them as a gate.
 
 ### 3.4 Who runs it, when, with which secrets
 
 I2 runs the probe **before** any release claim, as the first action under the
 deployment lock on a fresh allocated environment; E4 re-runs it as part of
-pilot evidence and publishes the distribution. The probe reads the connection
-string at runtime from SSM (`/INFRX-SUPABASE-PROD/db_password` plus the pooler
-host, or the PROPOSED single `/model-inference/pg_journal_url`), holds it only
-in process memory, and writes only aggregate timings — never the URL, password
-or any row content — into its evidence report. The probe script lives under
-`infra/` and takes the DSN from an environment variable name, never a literal.
+pilot evidence and publishes the distribution.
+
+Secret order is fixed, because §5 narrows the instance role to
+`/model-inference/*` and the probe must not be the reason that narrowing is
+skipped: I2 **first** creates the PROPOSED name `/model-inference/pg_journal_url`
+(value supplied out of band), **then** runs the probe, which reads only that
+one parameter. The probe never reads `/INFRX-SUPABASE-PROD/*`; that prefix stays
+outside the pilot role's reach. The probe holds the DSN in process memory only,
+takes it from an environment variable name and never a literal, and writes only
+aggregate timings — never the URL, password or any row content — into its
+evidence report. The probe script lives under `infra/`.
 
 ### 3.5 Locality options if it fails
 
@@ -202,7 +239,7 @@ and replaces them with `meas.`.
 
 | Layer | Backup mechanism | RPO | RTO | Restore test owner |
 |---|---|---|---|---|
-| PostgreSQL (jobs, leases, journal, ledger, holds, feedback) | Supabase-managed backups; PITR needed. Plan and retention **not observable from this host** (Supabase Management API is outside I1's allowed verbs) | `est.` ≤ 24 h today, target ≤ 5 min with PITR | `est.` ⚠️ TO BE VERIFIED (method: timed restore of a scratch project by I3) | I3 |
+| PostgreSQL (jobs, leases, journal, ledger, holds, feedback) | Supabase-managed backups. Plan and retention **not observable from this host** (Supabase Management API is outside I1's allowed verbs). PITR is proposed, and **enabling it is a paid plan change on the production database: separately authorized, coordinator-owned**, not an I2/I3 action | ⚠️ TO BE VERIFIED (method: read the project's plan and backup settings in I2/I3. If the plan includes daily backups the RPO is `est.` ≤ 24 h; **if the plan has no scheduled backups the current RPO is unbounded**. Target ≤ 5 min, reachable only with PITR enabled) | `est.` ⚠️ TO BE VERIFIED (method: timed restore of a scratch project by I3) | I3 measures; PITR enablement separately authorized |
 | Result / media objects (PROPOSED `infrx-media`) | S3 durability + versioning enabled at creation + lifecycle per retention policy (results 24 h, processing cache 7 d) | 0 | minutes `est.` | I3 |
 | Trace content (PROPOSED `infrx-traces`) | S3 versioning + per-object retention tags (≤ 90 d content, 13 mo metadata) | 0 | minutes `est.` | I3 with T |
 | Trace spool on EBS | not backed up by design; durability begins after fsync, host/volume loss is out of scope per durable protocol | `est.` ≤ 2 s of unsynced events | shipper drain time, `est.` ⚠️ TO BE VERIFIED | I3 with T |
@@ -264,3 +301,20 @@ authorized and are not implied by any design in this document.
   configuration changed. Every threshold here is `est.` until I2/I3/E4 measure
   it; the cross-region journal probe (§3) and the fail-closed pilot mode (§5)
   are the two items that gate an I2 release claim.
+- 2026-09-20 (review fixes, still read-only; no new resource, no configuration
+  change): §1 pilot row relabelled — the Supabase project ref and **us-east-2
+  region are a HISTORICAL CLAIM from HANDOFF.md §1**, not OBSERVED; only the
+  `/INFRX-SUPABASE-PROD/*` parameter *names* were seen, and a name cannot carry
+  a project ref or region. The §3 probe and the launch risk rest on that claim,
+  so it is now labelled as one. §1 also records that allocating `staging` is a
+  coordinator action and enabling Supabase PITR is separately authorized;
+  the staging SSM prefix is `/model-inference/staging/*`, consistent with the
+  §5 role narrowing. §2 gains the `docker stop -t 120` drain-grace rule. §3.1
+  fixes the measured transaction at one client round trip (three-round-trip form
+  reported separately). §3.3 is now an ordered, exhaustive Fail→Pass→Marginal
+  ladder with the append-rate thresholds derived from the 50 ms window
+  (< 120/s Fail, ≥ 160/s Pass). §3.4 fixes the secret order: I2 creates
+  `/model-inference/pg_journal_url` first and the probe reads only that,
+  never `/INFRX-SUPABASE-PROD/*`. §6 marks the PostgreSQL RPO
+  ⚠️ TO BE VERIFIED with a method, and records that the RPO is unbounded if the
+  project's plan has no scheduled backups.
