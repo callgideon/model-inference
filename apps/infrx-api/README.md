@@ -15,7 +15,10 @@ client ─▶ Caddy :443 ─▶ gateway.py :8001 ─▶ vLLM :8000
 
 | file | what |
 |---|---|
-| `gateway.py` | the service: auth, safe media fetch, video budget, `<think>` stripping, usage |
+| `infrx/gateway/` | the application factory and routes (F1 moved them out of `gateway.py`) |
+| `infrx/auth/`, `infrx/media/`, `infrx/usage.py`, `infrx/config.py` | auth cache, safe media fetch and video budget, usage shipping, settings |
+| `gateway.py` | compatibility entry point: `gateway:app` and the legacy globals the deploy unit imports |
+| `infrx/contracts/` | executable contracts v1: records, ports, fixtures, fakes and conformance suites ([README](infrx/contracts/README.md)) |
 | `deploy/install.sh` | idempotent installer, run as root on the box |
 | `deploy/*.service`, `deploy/Caddyfile` | systemd units and TLS |
 | `deploy/replay_usage.py` | re-post rows from `usage_failed.jsonl` |
@@ -138,9 +141,20 @@ aws ssm put-parameter --name /model-inference/supabase_service_role_key --type S
 
 ## Tests
 
+The environment is pinned (`pyproject.toml`, `uv.lock`, Python 3.12). From this
+directory:
+
 ```bash
-python3 -m pytest apps/infrx-api/tests/     # or run either file directly with python3
+uv sync --frozen --all-extras      # creates ./.venv exactly as locked
+uv run --frozen pytest -q          # the whole suite
+uv run --frozen pytest -q tests/contracts -k dur_settle   # one oracle's cases
 ```
+
+`make api-test` from the repository root runs the same command; `make check` adds
+the console and benchmark targets. A track adding a dependency asks the
+coordinator: nobody else edits `pyproject.toml` or `uv.lock`. Test files live in
+`tests/<track>/`, discovered with `--import-mode=importlib` so same-named files in
+different track directories do not collide.
 
 `test_gateway_auth.py` covers key hashing, cache hit/expiry, revoked and
 unknown keys, the 503 path when Supabase is down, cost maths, and the spill to
@@ -150,4 +164,6 @@ accepted), the streaming size cap and the `Content-Length` pre-check, redirect
 re-validation and the hop budget, the content-type allowlist, and that the body
 forwarded to vLLM carries a `data:` URL rather than the caller's.
 `httpx.MockTransport` stands in for Supabase, the media origin and vLLM, so the
-tests need no network and no env vars.
+tests need no network and no env vars. `tests/contracts/` covers the shared
+contracts: fixture round-trips, the money rules, the configuration names, and
+every port's conformance suite run against the in-memory fakes.

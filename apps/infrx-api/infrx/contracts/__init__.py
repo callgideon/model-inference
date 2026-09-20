@@ -18,7 +18,8 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-_SUBMODULES = ("codec", "errors", "ids", "limits", "money", "ports", "records", "wire")
+_SUBMODULES = ("codec", "errors", "ids", "limits", "money", "ports", "records",
+                "tasklocal", "wire")
 
 __all__ = list(_SUBMODULES)
 

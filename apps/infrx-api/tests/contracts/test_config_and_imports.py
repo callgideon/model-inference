@@ -13,7 +13,7 @@ from decimal import Decimal
 
 import pytest
 from infrx import config
-from infrx.contracts import limits
+from infrx.contracts import limits, tasklocal
 
 # 08 §5, name by name. A rename or a changed default is a contract revision, so it
 # must fail here first.
@@ -111,7 +111,8 @@ HEAVY = ("psycopg", "valkey", "clickhouse_connect", "boto3", "anthropic")
 PROBE = """
 import sys
 import infrx.contracts
-from infrx.contracts import errors, fixtures, ids, limits, money, ports, records, wire
+from infrx.contracts import errors, fixtures, ids, limits, money, ports, records
+from infrx.contracts import tasklocal, wire
 from infrx.contracts import conformance
 from infrx.contracts import fakes
 leaked = sorted({m.split('.')[0] for m in sys.modules} & set(%r))
@@ -134,6 +135,21 @@ def test_the_extras_are_installed_so_the_check_is_meaningful():
     missing = [name for name in HEAVY if importlib.util.find_spec(name) is None]
     if missing:
         pytest.skip(f"not installed (run uv sync --all-extras): {', '.join(missing)}")
+
+
+def test_task_local_services_never_collide_across_worktrees():
+    """08 §8: one container name, port, database and object prefix per task."""
+    assert tasklocal.all_host_ports()[55432] == "d/postgres"
+    d1 = tasklocal.local_services("D1")["postgres"]
+    assert (d1.container, d1.host_port, d1.database, d1.object_prefix) == \
+        ("infrx-d1-postgres", 55432, "infrx_d1", "test/d1/")
+    assert tasklocal.local_services("d2")["postgres"].container == "infrx-d2-postgres"
+    assert sorted(tasklocal.local_services("t")) == ["clickhouse", "s3"]
+    assert tasklocal.local_services("t")["s3"].host_port != \
+        tasklocal.local_services("m")["s3"].host_port
+    assert tasklocal.local_services("g3") == {}          # fakes until integration
+    with pytest.raises(ValueError):
+        tasklocal.local_services("z9")
 
 
 def _api_dir():
