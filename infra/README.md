@@ -301,10 +301,11 @@ must add an explicit mode:
 - `/readyz` stays 503 until admission, ledger and journal all answer; the
   systemd unit does not report `active` before that.
 
-The instance role `bootcamp-instance-role` currently grants, on
-`Resource: "*"` (OBSERVED 19:14:44Z, `iam get-role-policy --role-name
-bootcamp-instance-role --policy-name bootcamp-ops`; the full statement list is in
-§2 of the I1 evidence report): `ssm:GetParameter`, `GetParameters`,
+The instance role `bootcamp-instance-role`'s inline policy `bootcamp-ops` grants,
+on `Resource: "*"` (OBSERVED 19:14:44Z, `iam get-role-policy --role-name
+bootcamp-instance-role --policy-name bootcamp-ops`; its full statement list is the
+row *"IAM over-grant (inline `bootcamp-ops`)"* in §2 of the I1 evidence report):
+`ssm:GetParameter`, `GetParameters`,
 `GetParametersByPath`, **`ssm:StartSession`, `ssm:TerminateSession`,
 `ssm:DescribeSessions`**, `ec2:Describe*`, `ec2:RunInstances`,
 `TerminateInstances`, `Stop/StartInstances`, `Create/DeleteVolume`,
