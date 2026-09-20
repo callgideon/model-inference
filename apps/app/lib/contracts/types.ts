@@ -694,6 +694,41 @@ export const ADMIN_SUSPENSION_FIELDS = [
   "idempotency_key",
 ] as const;
 
+// ---------------------------------------------------------------------------
+// Operator audit trail (R34)
+// ---------------------------------------------------------------------------
+
+/** Every operator write names itself. The list is closed: a new operator write adds a value here. */
+export const AUDIT_ACTIONS = [
+  "grant",
+  "suspension_set",
+  "entitlements_set",
+  "calibration_label",
+] as const;
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+/**
+ * An immutable record of one operator write. Append-only: a restore *adds* an entry rather than
+ * overwriting the suspension that preceded it, so the history of a tenant's status survives
+ * whatever its current state says.
+ */
+export type AuditEntry = {
+  id: string;
+  at: string;
+  actor_principal: string;
+  action: AuditAction;
+  target_org_id: string;
+  reason: string;
+  /** The fields this write changed, before and after. `null` before a creation. */
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown>;
+  idempotency_key: string;
+};
+
+export type AuditQuery = PageQuery & { target_org_id?: string };
+
+export const AUDIT_QUERY_FIELDS = [...PAGE_QUERY_FIELDS, "target_org_id"] as const;
+
 export type AdminEntitlementsInput = {
   target_org_id: string;
   /** `null` restores the platform default; `[]` entitles nothing; a list is exactly that set. */

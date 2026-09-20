@@ -20,6 +20,8 @@
 
 import type {
   AdminEntitlementsInput,
+  AuditEntry,
+  AuditQuery,
   AdminGrantInput,
   AdminGrantResult,
   AdminOrgSummary,
@@ -98,11 +100,19 @@ export interface ConsoleServices {
   adminGrant(session: SessionContext, input: AdminGrantInput): Promise<Result<AdminGrantResult>>;
 
   /**
-   * Operator-only entitlement controls (R19). Suspension gates *new* work only: it never rewrites
-   * a ledger entry or a terminal usage row, because accounting that already happened is a fact.
+   * Operator-only entitlement controls (R19). Suspension gates new work and configuration changes
+   * only (R33): a suspended organization keeps every read and `keys.revoke`, so a leaked key can
+   * always be revoked, and no ledger entry or terminal usage row is ever rewritten.
    */
   adminSetSuspension(session: SessionContext, input: AdminSuspensionInput): Promise<Result<AdminOrgSummary>>;
   adminSetEntitlements(session: SessionContext, input: AdminEntitlementsInput): Promise<Result<OrgEntitlements>>;
+
+  /**
+   * Operator-only audit trail (R34): every `adminGrant`, `adminSetSuspension`,
+   * `adminSetEntitlements` and `calibration.label` appends an immutable entry. Append-only, so a
+   * restore never erases the suspension that preceded it.
+   */
+  adminAudit(session: SessionContext, query: AuditQuery): Promise<Result<Page<AuditEntry>>>;
 
   /** Owner and platform operator only (R13); a member cannot read evaluation runs. */
   judgeRuns(session: SessionContext, query: PageQuery): Promise<Result<Page<JudgeRun>>>;
@@ -131,6 +141,7 @@ export const CONSOLE_OPERATIONS = [
   "adminGrant",
   "adminSetSuspension",
   "adminSetEntitlements",
+  "adminAudit",
   "judgeRuns",
 ] as const;
 export type ConsoleOperation = (typeof CONSOLE_OPERATIONS)[number];
@@ -148,12 +159,54 @@ export const OPERATOR_ONLY_OPERATIONS = [
   "adminGrant",
   "adminSetSuspension",
   "adminSetEntitlements",
+  "adminAudit",
   "calibration.label",
   "calibration.list",
 ] as const satisfies readonly ConsoleOperation[];
 
 /** Readable by the organization owner or a platform operator, never a member (R13). */
 export const OWNER_OR_OPERATOR_OPERATIONS = ["judgeRuns"] as const satisfies readonly ConsoleOperation[];
+
+/**
+ * R33: what a suspended organization may still do. Every read stays available, and so does
+ * `keys.revoke` — a leaked key must be revocable whatever the organization's status. Everything
+ * that creates work or changes configuration returns `org_suspended`. Operator operations are not
+ * listed: they act on the organization rather than for it, and must keep working (otherwise a
+ * suspension could never be lifted).
+ */
+export const SUSPENDED_ALLOWED_OPERATIONS = [
+  "usage",
+  "usageSummary",
+  "usageDaily",
+  "balances",
+  "ledger",
+  "traces",
+  "traceDetail",
+  "traceContent",
+  "feedback.list",
+  "settings.get",
+  "keys.list",
+  "keys.revoke",
+] as const satisfies readonly ConsoleOperation[];
+
+/** Tenant-scoped operations a suspended organization is refused: new work or new configuration. */
+export const SUSPENDED_REFUSED_OPERATIONS = [
+  "keys.create",
+  "settings.update",
+  "feedback.submit",
+  "judgeRuns",
+] as const satisfies readonly ConsoleOperation[];
+
+/** Operations whose only argument is a session, or a session plus an opaque identifier. */
+export const OPERATIONS_WITHOUT_INPUT_OBJECT = [
+  "balances",
+  "traceDetail",
+  "traceContent",
+  "feedback.list",
+  "settings.get",
+  "keys.list",
+  "keys.revoke",
+] as const satisfies readonly ConsoleOperation[];
 
 /**
  * Operations that write. Each one validates completely before it mutates, and each one accepts an

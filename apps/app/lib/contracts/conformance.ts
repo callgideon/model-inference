@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { addMoney, compareMoney, isMoney, parseMoney, subMoney, ZERO_MONEY, type Money } from "./money.ts";
 import {
+  AUDIT_ACTIONS,
   AUTHOR_ROLES,
   CALIBRATION_LABELS,
   CREATABLE_LEDGER_ENTRY_KINDS,
@@ -31,7 +32,10 @@ import {
   JUDGE_SCORE_KINDS,
   LEDGER_ENTRY_KINDS,
   MAX_CONTENT_RETENTION_DAYS,
+  MAX_ENTITLEMENT_LIMIT,
   MAX_FEEDBACK_TEXT_CHARS,
+  MAX_GRANT_REASON_CHARS,
+  MAX_KEY_NAME_CHARS,
   MAX_IDEMPOTENCY_KEY_CHARS,
   MAX_PAGE_LIMIT,
   SETTLEMENT_STATES,
@@ -41,6 +45,8 @@ import {
   TRACE_LOSS_REASONS,
   TRACE_MODES,
   USAGE_CERTAINTIES,
+  type AdminOrgSummary,
+  type AuditEntry,
   type FeedbackEntry,
   type JudgeRun,
   type LedgerEntry,
@@ -51,14 +57,30 @@ import {
   type TraceListItem,
   type UsageRow,
 } from "./types.ts";
-import type { ConsoleServices } from "./services.ts";
+import {
+  CONSOLE_OPERATIONS,
+  OPERATIONS_WITHOUT_INPUT_OBJECT,
+  OPERATOR_ONLY_OPERATIONS,
+  OWNER_ONLY_OPERATIONS,
+  OWNER_OR_OPERATOR_OPERATIONS,
+  MUTATING_OPERATIONS,
+  SUSPENDED_REFUSED_OPERATIONS,
+  type ConsoleServices,
+} from "./services.ts";
 
 export type ConsoleHarness = {
   services: ConsoleServices;
   sessions: {
     owner: SessionContext;
     member: SessionContext;
+    /** A platform operator who also owns `ids.orgId`. */
     operator: SessionContext;
+    /**
+     * A platform operator whose organization role is only `member`. Operator authority is the flag
+     * and nothing else; a suite that only ever uses `operator` cannot tell an implementation that
+     * checks the flag from one that happens to check the role.
+     */
+    operatorMember: SessionContext;
     otherOwner: SessionContext;
     /** R18: the owner of an already-suspended organization. */
     suspendedOwner: SessionContext;
@@ -184,6 +206,17 @@ function assertStrictTotalOrder(rows: { at: string; id: string }[], what: string
 }
 
 /** The harness must contain the interesting case, or the assertion above proves nothing. */
+/**
+ * A keyset cursor compares `created_at` as a string, so every row in one list must use the same
+ * timestamp format. `…:00Z` and `…:00.000Z` for the same instant would sort differently and a walk
+ * across the two forms would skip rows.
+ */
+function assertComparableTimestamps(rows: { at: string }[], what: string): void {
+  const widths = new Set(rows.map((row) => row.at.length));
+  assert.ok(widths.size <= 1, `${what}: mixed timestamp formats (${[...widths].join(", ")} characters) cannot be ordered`);
+  for (const row of rows) assert.match(row.at, RFC3339, `${what}: timestamp format`);
+}
+
 function assertHasTimestampTie(rows: { at: string; id: string }[], what: string): void {
   const tied = rows.some((row, index) => index > 0 && rows[index - 1].at === row.at);
   assert.ok(
@@ -346,6 +379,203 @@ function assertJudgeRun(run: JudgeRun): void {
   }
 }
 
+/**
+ * One probe per operation, so the cases that must cover *every* operation are driven from
+ * `CONSOLE_OPERATIONS` rather than from a hand-kept list that a new operation can slip past.
+ * `call` is the operation performed legitimately; `withExtraField` repeats it with one invented
+ * field, for the operations that take an object.
+ */
+export type OperationProbe = {
+  call(session: SessionContext): Promise<Result<unknown>>;
+  withExtraField?(session: SessionContext): Promise<Result<unknown>>;
+  /** True when the result does not depend on the caller's organization (operator-wide lists). */
+  tenantIndependent?: boolean;
+};
+
+export function operationProbes(
+  services: ConsoleServices,
+  sessions: ConsoleHarness["sessions"],
+  ids: ConsoleHarness["ids"],
+): Record<string, OperationProbe> {
+  // One invented field, the most tempting one: the tenant. `as never` at each call site keeps the
+  // compiler honest about the fact that no input declares it.
+  const extra: Record<string, string> = { org_id: ids.otherOrgId };
+  const grant = (key: string) => ({
+    target_org_id: ids.otherOrgId,
+    amount: "1.00000000" as Money,
+    kind: "promotional" as const,
+    reason: "probe",
+    idempotency_key: key,
+  });
+  let unique = 0;
+  const nextKey = (name: string): string => {
+    unique += 1;
+    return `probe-${name}-${unique}`;
+  };
+  return {
+    usage: {
+      call: (session) => services.usage(session, { limit: 2 }),
+      withExtraField: (session) => services.usage(session, { limit: 2, ...extra }),
+    },
+    usageSummary: {
+      call: (session) => services.usageSummary(session, {}),
+      withExtraField: (session) => services.usageSummary(session, { ...extra }),
+    },
+    usageDaily: {
+      call: (session) => services.usageDaily(session, {}),
+      withExtraField: (session) => services.usageDaily(session, { ...extra }),
+    },
+    balances: { call: (session) => services.balances(session) },
+    ledger: {
+      call: (session) => services.ledger(session, { limit: 2 }),
+      withExtraField: (session) => services.ledger(session, { limit: 2, ...extra }),
+    },
+    traces: {
+      call: (session) => services.traces(session, { limit: 2 }),
+      withExtraField: (session) => services.traces(session, { limit: 2, ...extra }),
+    },
+    traceDetail: { call: (session) => services.traceDetail(session, ids.availableRequestId) },
+    traceContent: { call: (session) => services.traceContent(session, ids.availableRequestId) },
+    "feedback.list": { call: (session) => services.feedback.list(session, ids.availableRequestId) },
+    "feedback.submit": {
+      call: (session) =>
+        services.feedback.submit(session, {
+          request_id: ids.availableRequestId,
+          name: "thumb",
+          value: true,
+          idempotency_key: nextKey("feedback"),
+        }),
+      withExtraField: (session) =>
+        services.feedback.submit(session, {
+          request_id: ids.availableRequestId,
+          name: "thumb",
+          value: true,
+          idempotency_key: nextKey("feedback-extra"),
+          ...extra,
+        } as never),
+    },
+    "calibration.label": {
+      call: (session) =>
+        services.calibration.label(session, {
+          request_id: ids.availableRequestId,
+          rubric_version: 1,
+          label: "correct",
+          idempotency_key: nextKey("label"),
+        }),
+      withExtraField: (session) =>
+        services.calibration.label(session, {
+          request_id: ids.availableRequestId,
+          rubric_version: 1,
+          label: "correct",
+          idempotency_key: nextKey("label-extra"),
+          ...extra,
+        } as never),
+      tenantIndependent: true,
+    },
+    "calibration.list": {
+      call: (session) => services.calibration.list(session, { limit: 2 }),
+      withExtraField: (session) => services.calibration.list(session, { limit: 2, ...extra }),
+      tenantIndependent: true,
+    },
+    "settings.get": { call: (session) => services.settings.get(session) },
+    "settings.update": {
+      call: (session) => services.settings.update(session, { trace_mode: "full" }),
+      withExtraField: (session) => services.settings.update(session, { trace_mode: "full", ...extra } as never),
+    },
+    "keys.list": { call: (session) => services.keys.list(session) },
+    "keys.create": {
+      call: (session) => services.keys.create(session, { name: `probe ${nextKey("key")}` }),
+      withExtraField: (session) =>
+        services.keys.create(session, { name: `probe ${nextKey("key-extra")}`, ...extra } as never),
+    },
+    "keys.revoke": {
+      call: async (session) => {
+        const listed = await services.keys.list(session);
+        if (!listed.ok) return listed;
+        const active = listed.value.find((key) => key.revoked_at === null);
+        if (active === undefined) return { ok: false, error: { code: "not_found", message: "no active key" } };
+        return services.keys.revoke(session, active.id);
+      },
+    },
+    adminOrgs: {
+      call: (session) => services.adminOrgs(session, { limit: 2 }),
+      withExtraField: (session) => services.adminOrgs(session, { limit: 2, ...extra }),
+      tenantIndependent: true,
+    },
+    adminGrant: {
+      call: (session) => services.adminGrant(session, grant(nextKey("grant"))),
+      withExtraField: (session) => services.adminGrant(session, { ...grant(nextKey("grant-extra")), ...extra } as never),
+      tenantIndependent: true,
+    },
+    adminSetSuspension: {
+      call: (session) =>
+        services.adminSetSuspension(session, {
+          target_org_id: ids.otherOrgId,
+          suspended: false,
+          reason: "probe",
+          idempotency_key: nextKey("suspension"),
+        }),
+      withExtraField: (session) =>
+        services.adminSetSuspension(session, {
+          target_org_id: ids.otherOrgId,
+          suspended: false,
+          reason: "probe",
+          idempotency_key: nextKey("suspension-extra"),
+          ...extra,
+        } as never),
+      tenantIndependent: true,
+    },
+    adminSetEntitlements: {
+      call: (session) =>
+        services.adminSetEntitlements(session, {
+          target_org_id: ids.otherOrgId,
+          model_ids: null,
+          limits: {},
+          reason: "probe",
+          idempotency_key: nextKey("entitlements"),
+        }),
+      withExtraField: (session) =>
+        services.adminSetEntitlements(session, {
+          target_org_id: ids.otherOrgId,
+          model_ids: null,
+          limits: {},
+          reason: "probe",
+          idempotency_key: nextKey("entitlements-extra"),
+          ...extra,
+        } as never),
+      tenantIndependent: true,
+    },
+    adminAudit: {
+      call: (session) => services.adminAudit(session, { limit: 2 }),
+      withExtraField: (session) => services.adminAudit(session, { limit: 2, actor: "someone" } as never),
+      tenantIndependent: true,
+    },
+    judgeRuns: {
+      call: (session) => services.judgeRuns(session, { limit: 2 }),
+      withExtraField: (session) => services.judgeRuns(session, { limit: 2, ...extra }),
+    },
+  };
+}
+
+export function assertProbesCoverEveryOperation(probes: Record<string, OperationProbe>): void {
+  assert.deepEqual(
+    Object.keys(probes).sort(),
+    [...CONSOLE_OPERATIONS].sort(),
+    "every operation needs a probe, so a new one cannot escape the role, suspension and input cases",
+  );
+  const takesObject = CONSOLE_OPERATIONS.filter(
+    (operation) => !(OPERATIONS_WITHOUT_INPUT_OBJECT as readonly string[]).includes(operation),
+  );
+  assert.deepEqual(
+    Object.entries(probes)
+      .filter(([, probe]) => probe.withExtraField !== undefined)
+      .map(([name]) => name)
+      .sort(),
+    [...takesObject].sort(),
+    "every operation that takes an object must be probed with an invented field",
+  );
+}
+
 export function runConsoleServicesConformance(
   makeHarness: ConsoleHarnessFactory,
   label = "ConsoleServices",
@@ -368,6 +598,7 @@ export function runConsoleServicesConformance(
         "usage",
       );
       const keys = all.map((row) => ({ at: row.created_at, id: row.request_id }));
+      assertComparableTimestamps(keys, "keys");
       assertHasTimestampTie(keys, "usage");
       assertStrictTotalOrder(keys, "usage");
       for (const row of all) assertUsageRow(row);
@@ -385,6 +616,7 @@ export function runConsoleServicesConformance(
         "ledger",
       );
       const ledgerKeys = ledger.map((entry) => ({ at: entry.created_at, id: entry.id }));
+      assertComparableTimestamps(ledgerKeys, "ledgerKeys");
       assertHasTimestampTie(ledgerKeys, "ledger");
       assertStrictTotalOrder(ledgerKeys, "ledger");
       for (const entry of ledger) assertLedgerEntry(entry);
@@ -395,6 +627,7 @@ export function runConsoleServicesConformance(
         "traces",
       );
       const traceKeys = traces.map((row) => ({ at: row.created_at, id: row.request_id }));
+      assertComparableTimestamps(traceKeys, "traceKeys");
       assertHasTimestampTie(traceKeys, "traces");
       assertStrictTotalOrder(traceKeys, "traces");
       for (const row of traces) assertTraceListItem(row);
@@ -425,18 +658,24 @@ export function runConsoleServicesConformance(
         "invalid_cursor",
         "garbage cursor",
       );
-      // Correctly *shaped* cursors: the point is that the scope hash is checked, not that a
-      // malformed blob is rejected. An offset-shaped forgery would pass a keyset implementation
-      // trivially and prove nothing.
-      const decoded = JSON.parse(atob(cursor)) as Record<string, unknown>;
-      expectError(
-        await services.usage(sessions.owner, {
-          limit: 5,
-          cursor: btoa(JSON.stringify({ ...decoded, k: "deadbeef" })),
-        }),
-        "invalid_cursor",
-        "cursor with a forged scope",
-      );
+      // R36: a cursor is opaque here. Every forgery below is black box — a cursor from another
+      // list, another tenant or another filter, or this one with its characters disturbed — so an
+      // implementation that signs or encrypts its cursors passes unchanged. Shape-aware forgeries
+      // live in the implementation's own tests.
+      for (const [mutated, what] of [
+        [`${cursor}x`, "a character appended"],
+        [cursor.slice(0, -1), "the last character removed"],
+        [`x${cursor}`, "a character prepended"],
+        [cursor.split("").reverse().join(""), "the characters reversed"],
+        [cursor.toUpperCase() === cursor ? cursor.toLowerCase() : cursor.toUpperCase(), "the case flipped"],
+      ] as [string, string][]) {
+        if (mutated === cursor) continue;
+        expectError(
+          await services.usage(sessions.owner, { limit: 5, cursor: mutated }),
+          "invalid_cursor",
+          `cursor with ${what}`,
+        );
+      }
       const foreign = expectOk(
         await services.traces(sessions.owner, { limit: 5 }),
         "a page from another query",
@@ -446,11 +685,6 @@ export function runConsoleServicesConformance(
         await services.usage(sessions.owner, { limit: 5, cursor: foreign }),
         "invalid_cursor",
         "a cursor minted for another list",
-      );
-      expectError(
-        await services.usage(sessions.owner, { limit: 5, cursor: `${cursor}x` }),
-        "invalid_cursor",
-        "mutated cursor",
       );
       // A cursor is bound to the query that produced it, so filters cannot change mid-walk.
       expectError(
@@ -462,7 +696,7 @@ export function runConsoleServicesConformance(
     });
 
     it("balance is the ledger total minus reservations, and holds reduce what is available", async () => {
-      const { services, sessions } = await makeHarness();
+      const { services, sessions, ids } = await makeHarness();
       const balance = expectOk(await services.balances(sessions.owner), "balances");
       for (const value of [balance.ledger_total, balance.reserved_total, balance.available]) {
         assert.ok(isMoney(value), `balance value is not canonical money: ${value}`);
@@ -470,7 +704,7 @@ export function runConsoleServicesConformance(
       assert.equal(
         balance.available,
         subMoney(balance.ledger_total, balance.reserved_total),
-        "available must be total minus reserved",
+        "available must be total minus reserved, exactly",
       );
       const ledger = await walkAll<LedgerEntry>(
         (cursor) => services.ledger(sessions.owner, { limit: 50, cursor }),
@@ -479,13 +713,45 @@ export function runConsoleServicesConformance(
       let total = ZERO_MONEY;
       for (const entry of ledger) total = addMoney(total, entry.delta);
       assert.equal(balance.ledger_total, total, "the ledger total must equal the sum of its entries");
-      if (compareMoney(balance.reserved_total, ZERO_MONEY) === 1) {
-        assert.equal(compareMoney(balance.available, balance.ledger_total), -1, "a hold must reduce available");
-      }
+
+      // The reserved total is the sum of the outstanding holds — not "at least", not "something
+      // non-zero". A harness without an outstanding hold cannot test this, so it is required.
+      const rows = await walkAll<UsageRow>(
+        (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+        "usage",
+      );
+      const holds = rows.filter((row) => row.max_hold !== null).map((row) => row.max_hold as Money);
+      assert.ok(holds.length > 0, "the harness must have at least one outstanding hold");
+      let expectedReserved = ZERO_MONEY;
+      for (const hold of holds) expectedReserved = addMoney(expectedReserved, hold);
+      assert.equal(
+        balance.reserved_total,
+        expectedReserved,
+        "reserved_total must be the sum of every outstanding max_hold",
+      );
+      assert.equal(compareMoney(balance.reserved_total, ZERO_MONEY), 1, "and that sum is not zero here");
+      assert.equal(compareMoney(balance.available, balance.ledger_total), -1, "a hold must reduce available");
 
       const usage = expectOk(await services.usageSummary(sessions.owner, {}), "usage summary");
       assert.ok(isMoney(usage.cost), "summary cost");
       assert.ok(isMoney(usage.pending_reconciliation), "summary pending_reconciliation");
+      // Unknown usage is held, not charged, so the figure a customer reads as "awaiting
+      // reconciliation" must be the sum of those holds and never a constant.
+      let expectedPending = ZERO_MONEY;
+      for (const row of rows) {
+        if (row.usage_certainty === "unknown" && row.max_hold !== null) {
+          expectedPending = addMoney(expectedPending, row.max_hold);
+        }
+      }
+      assert.equal(usage.pending_reconciliation, expectedPending, "pending_reconciliation is the held sum");
+      assert.equal(compareMoney(usage.pending_reconciliation, ZERO_MONEY), 1, "which is not zero here");
+      // And the operator's view of the same wallet agrees with the customer's.
+      const operatorView = expectOk(
+        await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
+        "operator org list",
+      ).items.find((org) => org.org_id === ids.orgId);
+      assert.ok(operatorView !== undefined, "the organization must be listed for the operator");
+      assert.deepEqual(operatorView.balance, balance, "the operator sees the same wallet, not zeros");
     });
 
     it("a new organization starts at zero with no ledger history", async () => {
@@ -934,6 +1200,89 @@ export function runConsoleServicesConformance(
       );
     });
 
+    it("the provisional input bounds hold", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      // R17: a key label and an operator reason are bounded, so a form cannot post a document into
+      // either. The numbers are provisional; that they are enforced at all is not.
+      expectOk(
+        await services.keys.create(sessions.owner, { name: "k".repeat(MAX_KEY_NAME_CHARS) }),
+        "a key name at the bound",
+      );
+      expectError(
+        await services.keys.create(sessions.owner, { name: "k".repeat(MAX_KEY_NAME_CHARS + 1) }),
+        "invalid_request",
+        "a key name one character past the bound",
+      );
+      expectOk(
+        await services.adminGrant(sessions.operator, {
+          target_org_id: ids.orgId,
+          amount: "1.00000000" as Money,
+          kind: "promotional",
+          reason: "r".repeat(MAX_GRANT_REASON_CHARS),
+          idempotency_key: "bounds-reason-ok",
+        }),
+        "a reason at the bound",
+      );
+      expectError(
+        await services.adminGrant(sessions.operator, {
+          target_org_id: ids.orgId,
+          amount: "1.00000000" as Money,
+          kind: "promotional",
+          reason: "r".repeat(MAX_GRANT_REASON_CHARS + 1),
+          idempotency_key: "bounds-reason-too-long",
+        }),
+        "invalid_request",
+        "a reason one character past the bound",
+      );
+
+      // Entitlement limits: a ceiling, and whole numbers only — a typo must not mean "unlimited".
+      expectOk(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: null,
+          limits: { max_concurrent_requests: MAX_ENTITLEMENT_LIMIT },
+          reason: "at the ceiling",
+          idempotency_key: "bounds-limit-ok",
+        }),
+        "a limit at the ceiling",
+      );
+      for (const [what, value] of [
+        ["above the ceiling", MAX_ENTITLEMENT_LIMIT + 1],
+        ["fractional", 2.5],
+        ["not a number", "many" as unknown as number],
+        ["infinite", Number.POSITIVE_INFINITY],
+      ] as [string, number][]) {
+        expectError(
+          await services.adminSetEntitlements(sessions.operator, {
+            target_org_id: ids.orgId,
+            model_ids: null,
+            limits: { max_concurrent_requests: value },
+            reason: "bounds",
+            idempotency_key: `bounds-limit-${what.replace(/ /g, "-")}`,
+          }),
+          "invalid_request",
+          `a limit that is ${what}`,
+        );
+      }
+
+      // A second revocation is a conflict and must not move the timestamp of the first.
+      const keys = expectOk(await services.keys.list(sessions.owner), "keys");
+      const active = keys.find((key) => key.revoked_at === null);
+      assert.ok(active !== undefined, "an active key is needed");
+      const revoked = expectOk(await services.keys.revoke(sessions.owner, active.id), "first revocation");
+      assert.ok(revoked.revoked_at !== null);
+      expectError(
+        await services.keys.revoke(sessions.owner, active.id),
+        "state_conflict",
+        "a second revocation is a conflict",
+      );
+      const listed = expectOk(await services.keys.list(sessions.owner), "keys after").find(
+        (key) => key.id === active.id,
+      );
+      assert.ok(listed !== undefined);
+      assert.equal(listed.revoked_at, revoked.revoked_at, "a refused second revocation must not move the timestamp");
+    });
+
     it("content availability decides the payload and never leaks a storage reference", async () => {
       const { services, sessions, ids } = await makeHarness();
       const traces = await walkAll<TraceListItem>(
@@ -989,8 +1338,44 @@ export function runConsoleServicesConformance(
     it("the HTTP status table is the one 08 §3 freezes, code for code", async () => {
       // Parity with the Python `error_codes.json` is a table comparison, so the count is pinned:
       // a code added on one side only shows up here rather than at integration (R22).
+      // The values, not just the count: `not_found: 400` or `org_suspended: 401` would pass a
+      // count check and mis-render every error page built on the table.
+      const expected: Record<string, number> = {
+        invalid_request: 400,
+        unsupported_parameter: 400,
+        unsupported_media: 400,
+        media_fetch_failed: 400,
+        context_length_exceeded: 400,
+        invalid_cursor: 400,
+        request_too_large: 413,
+        invalid_api_key: 401,
+        insufficient_credit: 402,
+        forbidden: 403,
+        org_suspended: 403,
+        model_not_entitled: 403,
+        not_found: 404,
+        idempotency_conflict: 409,
+        result_pending: 409,
+        state_conflict: 409,
+        result_expired: 410,
+        upload_expired: 410,
+        journal_expired: 410,
+        replay_gap: 410,
+        idempotency_expired: 410,
+        capacity_exhausted: 429,
+        journal_capacity_exhausted: 429,
+        rate_limited: 429,
+        internal_error: 500,
+        dependency_unavailable: 503,
+        deadline_exceeded: 504,
+      };
       const served = ERROR_CODES.filter((code) => ERROR_CODE_HTTP_STATUS[code] !== null);
       assert.equal(served.length, 27, "27 codes carry an HTTP status");
+      assert.deepEqual(
+        Object.fromEntries(served.map((code) => [code, ERROR_CODE_HTTP_STATUS[code]])),
+        expected,
+        "every served code must carry exactly the status 08 §3 gives it",
+      );
       // The three sets partition the union exactly, which is what the G0 parity test compares
       // against the Python `error_codes.json` (R25).
       assert.equal(IN_STREAM_ONLY_CODES.length, 2, "2 codes exist only as in-stream terminal events");
@@ -1015,19 +1400,47 @@ export function runConsoleServicesConformance(
       }
     });
 
-    it("a suspended organization can do nothing, and suspension leaves its accounting alone", async () => {
+    it("suspension gates new work and configuration, and nothing else (R33)", async () => {
       const { services, sessions, ids } = await makeHarness();
-      // R18: reachable from the harness, not something the suite has to arrange first.
-      expectError(await services.usage(sessions.suspendedOwner, {}), "org_suspended", "suspended usage");
-      expectError(await services.balances(sessions.suspendedOwner), "org_suspended", "suspended balances");
-      expectError(await services.settings.get(sessions.suspendedOwner), "org_suspended", "suspended settings");
+      const suspended = sessions.suspendedOwner;
+
+      // Every read keeps working. A suspended tenant that cannot see its own usage cannot find out
+      // why it was suspended.
+      expectOk(await services.usage(suspended, { limit: 5 }), "suspended usage");
+      expectOk(await services.usageSummary(suspended, {}), "suspended usage summary");
+      expectOk(await services.usageDaily(suspended, {}), "suspended usage daily");
+      expectOk(await services.balances(suspended), "suspended balances");
+      expectOk(await services.ledger(suspended, { limit: 5 }), "suspended ledger");
+      expectOk(await services.traces(suspended, { limit: 5 }), "suspended traces");
+      expectOk(await services.settings.get(suspended), "suspended settings read");
+      const keys = expectOk(await services.keys.list(suspended), "suspended key list");
+      const trace = expectOk(await services.traces(suspended, { limit: 1 }), "a suspended trace").items[0];
+      if (trace !== undefined) {
+        expectOk(await services.traceDetail(suspended, trace.request_id), "suspended trace detail");
+        expectOk(await services.traceContent(suspended, trace.request_id), "suspended trace content");
+        expectOk(await services.feedback.list(suspended, trace.request_id), "suspended feedback list");
+      }
+
+      // And a leaked key is still revocable: refusing that would make a suspension a security
+      // problem rather than a billing one.
+      const revocable = keys.find((key) => key.revoked_at === null);
+      assert.ok(revocable !== undefined, "the suspended organization needs an active key");
+      const revoked = expectOk(await services.keys.revoke(suspended, revocable.id), "suspended key revocation");
+      assert.ok(revoked.revoked_at !== null, "the key is revoked while the organization is suspended");
+
+      // New work and new configuration are refused.
       expectError(
-        await services.keys.create(sessions.suspendedOwner, { name: "while suspended" }),
+        await services.keys.create(suspended, { name: "while suspended" }),
         "org_suspended",
         "suspended key creation",
       );
       expectError(
-        await services.feedback.submit(sessions.suspendedOwner, {
+        await services.settings.update(suspended, { trace_mode: "off" }),
+        "org_suspended",
+        "suspended settings update",
+      );
+      expectError(
+        await services.feedback.submit(suspended, {
           request_id: ids.availableRequestId,
           name: "thumb",
           value: true,
@@ -1036,256 +1449,264 @@ export function runConsoleServicesConformance(
         "org_suspended",
         "suspended feedback",
       );
+      expectError(await services.judgeRuns(suspended, {}), "org_suspended", "suspended judge runs");
 
-      // The operator still sees it, with its reason, and its wallet still adds up.
-      const listed = expectOk(
+      // The operator still sees it, with its reason and its real wallet.
+      const row = expectOk(
         await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
         "operator org list",
-      );
-      const row = listed.items.find((candidate) => candidate.org_id === ids.suspendedOrgId);
+      ).items.find((candidate) => candidate.org_id === ids.suspendedOrgId);
       assert.ok(row !== undefined, "a suspended organization is still listed for the operator");
       assert.equal(row.suspended, true);
       assert.ok(row.suspension_reason !== null && row.suspension_reason.length > 0, "suspension says why");
       assert.ok(isMoney(row.balance.ledger_total), "a suspended organization still has a wallet");
     });
 
-    it("an operator can suspend and restore an organization without touching what it already owes", async () => {
+    it("the role and suspension matrix holds for every operation", async () => {
       const { services, sessions, ids } = await makeHarness();
-      const accounting = async (): Promise<string> => {
-        const ledger = await walkAll<LedgerEntry>(
-          (cursor) => services.ledger(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
-          "ledger",
-        );
-        const usage = await walkAll<UsageRow>(
-          (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
-          "usage",
-        );
-        return JSON.stringify([
-          ledger.map((entry) => [entry.id, entry.delta, entry.kind]),
-          usage.map((row) => [row.request_id, row.cost, row.settlement_state, row.max_hold]),
-        ]);
-      };
-      const before = await accounting();
+      // Driven from the operation list, so a new operation cannot quietly default to "anyone".
+      const probes = operationProbes(services, sessions, ids);
+      assertProbesCoverEveryOperation(probes);
 
-      const denied = await services.adminSetSuspension(sessions.owner, {
-        target_org_id: ids.orgId,
-        suspended: true,
-        reason: "owner trying to suspend itself",
-        idempotency_key: "suspend-denied",
-      });
-      expectError(denied, "forbidden", "an owner cannot suspend an organization");
+      for (const operation of CONSOLE_OPERATIONS) {
+        const probe = probes[operation];
+        const operatorOnly = (OPERATOR_ONLY_OPERATIONS as readonly string[]).includes(operation);
+        const ownerOnly = (OWNER_ONLY_OPERATIONS as readonly string[]).includes(operation);
+        const ownerOrOperator = (OWNER_OR_OPERATOR_OPERATIONS as readonly string[]).includes(operation);
 
-      const suspended = expectOk(
-        await services.adminSetSuspension(sessions.operator, {
-          target_org_id: ids.orgId,
-          suspended: true,
-          reason: "conformance: suspend",
-          idempotency_key: "suspend-1",
-        }),
-        "operator suspension",
-      );
-      assert.equal(suspended.suspended, true);
-      assert.equal(suspended.suspension_reason, "conformance: suspend");
-      expectError(await services.usage(sessions.owner, {}), "org_suspended", "usage while suspended");
-
-      // Replay is one effect, and a changed payload under the same key is a conflict.
-      const replay = expectOk(
-        await services.adminSetSuspension(sessions.operator, {
-          target_org_id: ids.orgId,
-          suspended: true,
-          reason: "conformance: suspend",
-          idempotency_key: "suspend-1",
-        }),
-        "replayed suspension",
-      );
-      assert.equal(replay.suspended, true);
-      expectError(
-        await services.adminSetSuspension(sessions.operator, {
-          target_org_id: ids.orgId,
-          suspended: false,
-          reason: "conformance: suspend",
-          idempotency_key: "suspend-1",
-        }),
-        "idempotency_conflict",
-        "the same key flipped to a different state",
-      );
-      expectError(
-        await services.adminSetSuspension(sessions.operator, {
-          target_org_id: ids.orgId,
-          suspended: true,
-          reason: "   ",
-          idempotency_key: "suspend-no-reason",
-        }),
-        "invalid_request",
-        "suspension without a reason",
-      );
-
-      const restored = expectOk(
-        await services.adminSetSuspension(sessions.operator, {
-          target_org_id: ids.orgId,
-          suspended: false,
-          reason: "conformance: restore",
-          idempotency_key: "suspend-2",
-        }),
-        "operator restore",
-      );
-      assert.equal(restored.suspended, false);
-      assert.equal(await accounting(), before, "suspension must not alter existing accounting rows");
-    });
-
-    it("the three entitlement states are distinct, and the empty one is a denial", async () => {
-      const { services, sessions, ids } = await makeHarness();
-      const entitlementsOf = async (orgId: string) => {
-        const listed = expectOk(
-          await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
-          "operator org list",
-        );
-        const row = listed.items.find((candidate) => candidate.org_id === orgId);
-        assert.ok(row !== undefined, `${orgId} must be listed`);
-        return row.entitlements;
-      };
-
-      // R24: the harness carries one organization of each kind, because "not configured" and
-      // "entitled to nothing" are different facts and a page must not render them the same way.
-      const kinds = new Set<string>();
-      for (const row of expectOk(
-        await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
-        "operator org list",
-      ).items) {
-        const list = row.entitlements.model_ids;
-        assert.ok(list === null || Array.isArray(list), "model_ids is null or a list, never undefined");
-        kinds.add(list === null ? "default" : list.length === 0 ? "none" : "explicit");
-        if (list !== null) {
-          assert.equal(new Set(list).size, list.length, "a stored entitlement list must not repeat");
+        // A member may read what is not owner-only, and may never write or administer.
+        const asMember = await settle(`${operation} as member`, () => probe.call(sessions.member));
+        if (operatorOnly || ownerOnly || ownerOrOperator) {
+          expectError(asMember, "forbidden", `${operation} must refuse a member`);
+        } else {
+          expectOk(asMember, `${operation} must allow a member`);
         }
-        if (list === null) {
-          assert.equal(row.entitlements.updated_at, null, "an unrecorded default has no audit stamp");
+
+        // An owner without the operator flag may do everything but the operator operations.
+        const asOwner = await settle(`${operation} as owner`, () => probe.call(sessions.owner));
+        if (operatorOnly) {
+          expectError(asOwner, "forbidden", `${operation} must refuse a non-operator owner`);
+        } else {
+          expectOk(asOwner, `${operation} must allow an owner`);
+        }
+
+        // Operator authority is the flag, not the organization role: an operator whose role is only
+        // `member` must still be able to run every operator operation.
+        if (operatorOnly) {
+          expectOk(
+            await settle(`${operation} as member-operator`, () => probe.call(sessions.operatorMember)),
+            `${operation} must allow an operator whose org role is member`,
+          );
+        }
+
+        // Suspension: refused only where R33 says so, and operator operations keep working (a
+        // suspension that could not be lifted would be a trap).
+        if (!operatorOnly) {
+          const asSuspended = await settle(`${operation} while suspended`, () =>
+            probe.call(sessions.suspendedOwner),
+          );
+          if ((SUSPENDED_REFUSED_OPERATIONS as readonly string[]).includes(operation)) {
+            expectError(asSuspended, "org_suspended", `${operation} must refuse a suspended organization`);
+          } else if (!probe.tenantIndependent) {
+            assert.ok(
+              asSuspended.ok || asSuspended.error.code !== "org_suspended",
+              `${operation} must not refuse a suspended organization: R33 keeps every read and keys.revoke`,
+            );
+          }
         }
       }
-      assert.deepEqual([...kinds].sort(), ["default", "explicit", "none"], "all three states must be present");
-
-      // Setting each state, and the payload distinction between them.
-      const none = expectOk(
-        await services.adminSetEntitlements(sessions.operator, {
-          target_org_id: ids.orgId,
-          model_ids: [],
-          limits: {},
-          reason: "conformance: entitle nothing",
-          idempotency_key: "entitle-none",
-        }),
-        "entitle nothing",
-      );
-      assert.deepEqual(none.model_ids, [], "an empty list is stored as an empty list");
-      assert.deepEqual((await entitlementsOf(ids.orgId)).model_ids, [], "and read back as one");
-
-      const back = expectOk(
-        await services.adminSetEntitlements(sessions.operator, {
-          target_org_id: ids.orgId,
-          model_ids: null,
-          limits: {},
-          reason: "conformance: restore the default",
-          idempotency_key: "entitle-default",
-        }),
-        "restore the platform default",
-      );
-      assert.equal(back.model_ids, null, "null is the platform default set, not an empty list");
-      assert.equal((await entitlementsOf(ids.orgId)).model_ids, null);
-
-      // `null` and `[]` are different decisions, so the same key cannot mean both.
-      expectError(
-        await services.adminSetEntitlements(sessions.operator, {
-          target_org_id: ids.orgId,
-          model_ids: [],
-          limits: {},
-          reason: "conformance: restore the default",
-          idempotency_key: "entitle-default",
-        }),
-        "idempotency_conflict",
-        "the same key switched between the default and a denial",
-      );
-      expectError(
-        await services.adminSetEntitlements(sessions.operator, {
-          target_org_id: ids.orgId,
-          model_ids: [ids.modelId, ids.modelId],
-          limits: {},
-          reason: "conformance",
-          idempotency_key: "entitle-duplicate",
-        }),
-        "invalid_request",
-        "a repeated model id",
-      );
-      expectError(
-        await services.adminSetEntitlements(sessions.operator, {
-          target_org_id: ids.orgId,
-          model_ids: ["model-nobody-serves@2026-01-01"],
-          limits: {},
-          reason: "conformance",
-          idempotency_key: "entitle-unknown-model",
-        }),
-        "invalid_request",
-        "a model the platform does not serve",
-      );
     });
 
-    it("an operator sets entitlements, and only the names the contract knows", async () => {
+    it("an operator acts on the organization it names, not on its own (R26)", async () => {
       const { services, sessions, ids } = await makeHarness();
-      const set = expectOk(
-        await services.adminSetEntitlements(sessions.operator, {
-          target_org_id: ids.orgId,
-          model_ids: [ids.modelId],
-          limits: { max_concurrent_requests: 4 },
-          reason: "conformance: entitle",
-          idempotency_key: "entitle-1",
-        }),
-        "operator entitlements",
-      );
-      assert.deepEqual(set.model_ids, [ids.modelId]);
-      assert.equal(set.limits.max_concurrent_requests, 4);
-      assert.ok(set.updated_at !== null && set.updated_by === sessions.operator.email, "the write is audited");
+      // Every case here targets the *other* organization, with an operator session that belongs to
+      // the first: an implementation that reads `session.orgId` instead of the target passes a suite
+      // whose operator happens to own the target, and fails this one.
+      assert.notEqual(sessions.operator.orgId, ids.otherOrgId, "the operator must not own the target");
 
-      const listed = expectOk(
+      const grant = expectOk(
+        await services.adminGrant(sessions.operatorMember, {
+          target_org_id: ids.otherOrgId,
+          amount: "3.00000000" as Money,
+          kind: "promotional",
+          reason: "cross-organization grant",
+          idempotency_key: "cross-grant-1",
+        }),
+        "grant to the other organization",
+      );
+      assert.equal(grant.org_id, ids.otherOrgId, "the grant must land in the organization it named");
+      assert.equal(grant.operator_principal, sessions.operatorMember.email, "and record who made it");
+      const otherLedger = expectOk(await services.ledger(sessions.otherOwner, { limit: 5 }), "other ledger");
+      assert.ok(
+        otherLedger.items.some((entry) => entry.id === grant.grant_id && entry.actor === sessions.operatorMember.email),
+        "the other organization's ledger carries the grant, attributed to the operator",
+      );
+      const ownLedger = expectOk(await services.ledger(sessions.owner, { limit: MAX_PAGE_LIMIT }), "own ledger");
+      assert.ok(
+        !ownLedger.items.some((entry) => entry.id === grant.grant_id),
+        "and the operator's own organization did not receive it",
+      );
+
+      const suspension = expectOk(
+        await services.adminSetSuspension(sessions.operatorMember, {
+          target_org_id: ids.otherOrgId,
+          suspended: true,
+          reason: "cross-organization suspension",
+          idempotency_key: "cross-suspend-1",
+        }),
+        "suspend the other organization",
+      );
+      assert.equal(suspension.org_id, ids.otherOrgId, "the suspension must name its target");
+      assert.equal(suspension.suspended, true);
+      expectError(await services.keys.create(sessions.otherOwner, { name: "x" }), "org_suspended", "the target is suspended");
+      expectOk(await services.usage(sessions.owner, { limit: 1 }), "the operator's own organization is untouched");
+
+      const entitlements = expectOk(
+        await services.adminSetEntitlements(sessions.operatorMember, {
+          target_org_id: ids.otherOrgId,
+          model_ids: [ids.modelId],
+          limits: { max_concurrent_requests: 2 },
+          reason: "cross-organization entitlement",
+          idempotency_key: "cross-entitle-1",
+        }),
+        "entitle the other organization",
+      );
+      assert.equal(entitlements.org_id, ids.otherOrgId, "the entitlements must name their target");
+      assert.equal(entitlements.updated_by, sessions.operatorMember.email);
+      const rows = expectOk(
         await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
         "operator org list",
       );
-      const row = listed.items.find((candidate) => candidate.org_id === ids.orgId);
-      assert.ok(row !== undefined);
-      assert.deepEqual(row.entitlements.model_ids, [ids.modelId], "the list shows what was set");
+      const own = rows.items.find((candidate) => candidate.org_id === ids.orgId);
+      assert.ok(own !== undefined);
+      assert.notDeepEqual(own.entitlements.model_ids, [ids.modelId], "the operator's own org was not entitled");
 
-      expectError(
-        await services.adminSetEntitlements(sessions.owner, {
-          target_org_id: ids.orgId,
-          model_ids: null,
-          limits: {},
-          reason: "owner attempt",
-          idempotency_key: "entitle-denied",
+      // A label on the other organization's request, authored by the operator.
+      const label = expectOk(
+        await services.calibration.label(sessions.operatorMember, {
+          request_id: ids.otherOrgRequestId,
+          rubric_version: 2,
+          label: "incorrect",
+          idempotency_key: "cross-label-1",
         }),
-        "forbidden",
-        "an owner cannot set entitlements",
+        "label a request of the other organization",
       );
-      expectError(
+      assert.equal(label.request_id, ids.otherOrgRequestId, "the label must name the request it judged");
+      assert.equal(
+        label.author_principal,
+        sessions.operatorMember.email,
+        "the principal is the operator who judged, not the organization's owner",
+      );
+      assert.notEqual(label.author_principal, sessions.otherOwner.email);
+      assert.ok(
+        expectOk(await services.calibration.list(sessions.operator, { limit: MAX_PAGE_LIMIT }), "labels").items.some(
+          (item) => item.id === label.id,
+        ),
+        "the label is in the calibration set",
+      );
+    });
+
+    it("an operator write is audited, and a restore adds an entry instead of erasing one (R34)", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const auditFor = async (orgId: string): Promise<AuditEntry[]> =>
+        walkAll<AuditEntry>(
+          (cursor) => services.adminAudit(sessions.operator, { target_org_id: orgId, limit: 10, cursor }),
+          "audit",
+        );
+
+      expectError(await services.adminAudit(sessions.owner, {}), "forbidden", "an owner cannot read the audit");
+      expectError(await services.adminAudit(sessions.member, {}), "forbidden", "a member cannot read the audit");
+      const before = await auditFor(ids.otherOrgId);
+
+      expectOk(
+        await services.adminGrant(sessions.operator, {
+          target_org_id: ids.otherOrgId,
+          amount: "1.00000000" as Money,
+          kind: "promotional",
+          reason: "audit: grant",
+          idempotency_key: "audit-grant",
+        }),
+        "grant",
+      );
+      expectOk(
+        await services.adminSetSuspension(sessions.operator, {
+          target_org_id: ids.otherOrgId,
+          suspended: true,
+          reason: "audit: suspend",
+          idempotency_key: "audit-suspend",
+        }),
+        "suspend",
+      );
+      expectOk(
+        await services.adminSetSuspension(sessions.operator, {
+          target_org_id: ids.otherOrgId,
+          suspended: false,
+          reason: "audit: restore",
+          idempotency_key: "audit-restore",
+        }),
+        "restore",
+      );
+      expectOk(
         await services.adminSetEntitlements(sessions.operator, {
-          target_org_id: ids.orgId,
-          model_ids: null,
-          limits: { unlimited_everything: 1 } as never,
-          reason: "conformance",
-          idempotency_key: "entitle-bad-limit",
+          target_org_id: ids.otherOrgId,
+          model_ids: [ids.modelId],
+          limits: { max_requests_per_minute: 30 },
+          reason: "audit: entitle",
+          idempotency_key: "audit-entitle",
         }),
-        "invalid_request",
-        "an entitlement limit nobody defined",
+        "entitle",
       );
-      expectError(
-        await services.adminSetEntitlements(sessions.operator, {
-          target_org_id: ids.orgId,
-          model_ids: null,
-          limits: { max_concurrent_requests: -1 },
-          reason: "conformance",
-          idempotency_key: "entitle-negative",
+      expectOk(
+        await services.calibration.label(sessions.operator, {
+          request_id: ids.otherOrgRequestId,
+          rubric_version: 1,
+          label: "correct",
+          idempotency_key: "audit-label",
         }),
-        "invalid_request",
-        "a negative entitlement limit",
+        "label",
       );
-      for (const name of ENTITLEMENT_LIMIT_NAMES) {
-        assert.equal(typeof name, "string", "the limit vocabulary is a closed list");
+
+      const after = await auditFor(ids.otherOrgId);
+      assert.equal(after.length, before.length + 5, "each operator write appends exactly one entry");
+      const added = after.slice(0, 5);
+      for (const entry of added) {
+        assert.match(entry.at, RFC3339, "an audit entry is timestamped");
+        assert.equal(entry.actor_principal, sessions.operator.email, "and names who did it");
+        assert.ok(inSet(AUDIT_ACTIONS, entry.action), `unknown audit action ${entry.action}`);
+        assert.equal(entry.target_org_id, ids.otherOrgId, "and which organization it acted on");
+        assert.ok(entry.reason.length > 0, "and why");
+        assert.ok(entry.idempotency_key.length > 0, "and under which key");
+        assert.ok(entry.after !== null && typeof entry.after === "object", "and what it changed to");
+      }
+      const actions = added.map((entry) => entry.action).sort();
+      assert.deepEqual(actions, ["calibration_label", "entitlements_set", "grant", "suspension_set", "suspension_set"]);
+
+      // The restore did not overwrite the suspension: both entries are there, with their own
+      // reasons, and the before/after of each says what changed.
+      const suspensions = added.filter((entry) => entry.action === "suspension_set");
+      assert.equal(suspensions.length, 2, "a restore adds an entry rather than replacing one");
+      const reasons = suspensions.map((entry) => entry.reason).sort();
+      assert.deepEqual(reasons, ["audit: restore", "audit: suspend"], "each keeps its own reason");
+      for (const entry of suspensions) {
+        assert.ok(entry.before !== null, "a status change records what it changed from");
+        assert.notDeepEqual(entry.before, entry.after, "and that something actually changed");
+      }
+      const entitled = added.find((entry) => entry.action === "entitlements_set");
+      assert.ok(entitled !== undefined);
+      assert.equal(entitled.reason, "audit: entitle", "the entitlement reason is kept in the audit");
+
+      // Scoped, ordered and paged like every other list.
+      const all = await walkAll<AuditEntry>(
+        (cursor) => services.adminAudit(sessions.operator, { limit: 3, cursor }),
+        "all audit entries",
+      );
+      assert.ok(all.length >= after.length, "an unfiltered read includes the filtered one");
+      assertStrictTotalOrder(
+        all.map((entry) => ({ at: entry.at, id: entry.id })),
+        "audit",
+      );
+      for (const entry of await auditFor(ids.orgId)) {
+        assert.equal(entry.target_org_id, ids.orgId, "the filter must filter");
       }
     });
 
@@ -1552,66 +1973,203 @@ export function runMutationSafetyConformance(
       }
     });
 
-    it("every mutating operation refuses an injected failure without half-changing anything", async () => {
+    it("every mutating operation validates before it writes, whichever field is bad", async () => {
       const { services, sessions, ids } = await makeHarness();
+      // The whole readable state, so "nothing changed" is a deep comparison rather than a spot check.
       const snapshot = async () => ({
         ledger: (
           await walkAll<LedgerEntry>(
             (cursor) => services.ledger(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
             "ledger",
           )
-        ).map((entry) => entry.id),
-        keys: expectOk(await services.keys.list(sessions.owner), "keys").map((key) => `${key.id}:${key.revoked_at}`),
+        ).map((entry) => [entry.id, entry.delta, entry.kind, entry.reason, entry.ref, entry.actor]),
+        usage: (
+          await walkAll<UsageRow>(
+            (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+            "usage",
+          )
+        ).map((row) => [row.request_id, row.cost, row.settlement_state, row.max_hold]),
+        keys: expectOk(await services.keys.list(sessions.owner), "keys"),
         settings: expectOk(await services.settings.get(sessions.owner), "settings"),
-        feedback: expectOk(await services.feedback.list(sessions.owner, ids.availableRequestId), "feedback").length,
+        feedback: expectOk(await services.feedback.list(sessions.owner, ids.availableRequestId), "feedback"),
+        balance: expectOk(await services.balances(sessions.owner), "balance"),
+        orgs: expectOk(await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }), "orgs").items,
+        labels: expectOk(await services.calibration.list(sessions.operator, { limit: MAX_PAGE_LIMIT }), "labels").items,
+        audit: await walkAll<AuditEntry>(
+          (cursor) => services.adminAudit(sessions.operator, { limit: MAX_PAGE_LIMIT, cursor }),
+          "audit",
+        ),
+        otherSettings: expectOk(await services.settings.get(sessions.otherOwner), "their settings"),
+        otherKeys: expectOk(await services.keys.list(sessions.otherOwner), "their keys"),
       });
 
-      // Each refusal below is reached through a different validation path, one per mutating
-      // operation, and each must be a no-op.
-      const before = await snapshot();
-      expectError(
-        await settle("grant with a bad amount", () =>
-          services.adminGrant(sessions.operator, {
-            target_org_id: ids.orgId,
-            amount: "1e2" as Money,
-            kind: "promotional",
-            reason: "refusal drill",
-            idempotency_key: "refusal-grant",
-          }),
-        ),
-        "invalid_request",
-        "grant with an exponent amount",
+      // Each refusal below has *valid earlier fields and one invalid later field*: an implementation
+      // that applies fields as it validates them leaves the earlier ones written.
+      const refusals: [string, () => Promise<Result<unknown>>, string][] = [
+        [
+          "adminGrant: valid target and kind, bad amount",
+          () =>
+            services.adminGrant(sessions.operator, {
+              target_org_id: ids.orgId,
+              amount: "1e2" as Money,
+              kind: "promotional",
+              reason: "refusal drill",
+              idempotency_key: "refusal-grant",
+            }),
+          "invalid_request",
+        ],
+        [
+          "adminGrant: everything valid but the reason",
+          () =>
+            services.adminGrant(sessions.operator, {
+              target_org_id: ids.orgId,
+              amount: "1.00000000" as Money,
+              kind: "promotional",
+              reason: "   ",
+              idempotency_key: "refusal-grant-reason",
+            }),
+          "invalid_request",
+        ],
+        [
+          "feedback.submit: valid name, value out of range",
+          () =>
+            services.feedback.submit(sessions.owner, {
+              request_id: ids.availableRequestId,
+              name: "rating",
+              value: 9,
+              idempotency_key: "refusal-feedback",
+            }),
+          "invalid_request",
+        ],
+        [
+          "feedback.submit: valid name and value, empty comment",
+          () =>
+            services.feedback.submit(sessions.owner, {
+              request_id: ids.availableRequestId,
+              name: "thumb",
+              value: true,
+              comment: "   ",
+              idempotency_key: "refusal-feedback-comment",
+            }),
+          "invalid_request",
+        ],
+        [
+          "settings.update: valid trace_mode, bad retention",
+          () =>
+            services.settings.update(sessions.owner, {
+              trace_mode: "minimal",
+              content_retention_days: MAX_CONTENT_RETENTION_DAYS + 1,
+            }),
+          "invalid_request",
+        ],
+        [
+          "settings.update: valid trace_mode and retention, bad consent",
+          () =>
+            services.settings.update(sessions.owner, {
+              trace_mode: "off",
+              content_retention_days: 7,
+              evaluation_consent: "yes" as never,
+            }),
+          "invalid_request",
+        ],
+        [
+          "keys.create: valid name, bad trace_mode",
+          () => services.keys.create(sessions.owner, { name: "later field bad", trace_mode: "metadata" as never }),
+          "invalid_request",
+        ],
+        [
+          "keys.create: blank name",
+          () => services.keys.create(sessions.owner, { name: "  " }),
+          "invalid_request",
+        ],
+        [
+          "keys.revoke: unknown key",
+          () => services.keys.revoke(sessions.owner, ids.unknownRequestId),
+          "not_found",
+        ],
+        [
+          "adminSetSuspension: valid target and state, blank reason",
+          () =>
+            services.adminSetSuspension(sessions.operator, {
+              target_org_id: ids.orgId,
+              suspended: true,
+              reason: "   ",
+              idempotency_key: "refusal-suspension",
+            }),
+          "invalid_request",
+        ],
+        [
+          "adminSetSuspension: valid target and reason, non-boolean state",
+          () =>
+            services.adminSetSuspension(sessions.operator, {
+              target_org_id: ids.orgId,
+              suspended: "yes" as never,
+              reason: "refusal drill",
+              idempotency_key: "refusal-suspension-state",
+            }),
+          "invalid_request",
+        ],
+        [
+          "adminSetEntitlements: valid models, bad limit value",
+          () =>
+            services.adminSetEntitlements(sessions.operator, {
+              target_org_id: ids.orgId,
+              model_ids: [ids.modelId],
+              limits: { max_concurrent_requests: -1 },
+              reason: "refusal drill",
+              idempotency_key: "refusal-entitlements",
+            }),
+          "invalid_request",
+        ],
+        [
+          "adminSetEntitlements: valid models and limits, blank reason",
+          () =>
+            services.adminSetEntitlements(sessions.operator, {
+              target_org_id: ids.orgId,
+              model_ids: [ids.modelId],
+              limits: { max_concurrent_requests: 2 },
+              reason: "",
+              idempotency_key: "refusal-entitlements-reason",
+            }),
+          "invalid_request",
+        ],
+        [
+          "calibration.label: valid request and label, bad rubric",
+          () =>
+            services.calibration.label(sessions.operator, {
+              request_id: ids.availableRequestId,
+              rubric_version: 0,
+              label: "correct",
+              idempotency_key: "refusal-label",
+            }),
+          "invalid_request",
+        ],
+        [
+          "calibration.label: valid request and rubric, label outside the vocabulary",
+          () =>
+            services.calibration.label(sessions.operator, {
+              request_id: ids.availableRequestId,
+              rubric_version: 2,
+              label: "excellent" as never,
+              idempotency_key: "refusal-label-value",
+            }),
+          "invalid_request",
+        ],
+      ];
+
+      // Every mutating operation must appear, so a new one is not left out.
+      const covered = new Set(refusals.map(([what]) => what.split(":")[0]));
+      assert.deepEqual(
+        [...covered].sort(),
+        [...MUTATING_OPERATIONS].sort(),
+        "every mutating operation needs a validate-before-write refusal",
       );
-      expectError(
-        await settle("feedback with a bad value", () =>
-          services.feedback.submit(sessions.owner, {
-            request_id: ids.availableRequestId,
-            name: "rating",
-            value: 9,
-            idempotency_key: "refusal-feedback",
-          }),
-        ),
-        "invalid_request",
-        "feedback with a rating out of range",
-      );
-      expectError(
-        await settle("settings with a bad retention", () =>
-          services.settings.update(sessions.owner, { content_retention_days: MAX_CONTENT_RETENTION_DAYS + 1 }),
-        ),
-        "invalid_request",
-        "settings above the retention cap",
-      );
-      expectError(
-        await settle("key without a name", () => services.keys.create(sessions.owner, { name: "  " })),
-        "invalid_request",
-        "key with a blank name",
-      );
-      expectError(
-        await settle("revoke of an unknown key", () => services.keys.revoke(sessions.owner, ids.unknownRequestId)),
-        "not_found",
-        "revocation of a key that does not exist",
-      );
-      assert.deepEqual(await snapshot(), before, "a refused mutation changed the state anyway");
+
+      for (const [what, call, code] of refusals) {
+        const before = await snapshot();
+        expectError(await settle(what, call), code, what);
+        assert.deepEqual(await snapshot(), before, `${what}: a refused mutation changed the state anyway`);
+      }
     });
 
     it("an idempotency key is scoped to its operation, its organization and its payload", async () => {
@@ -1631,18 +2189,6 @@ export function runMutationSafetyConformance(
       assert.equal(replay.grant_id, first.grant_id, "a replay returns the original grant");
       assert.equal(replay.replayed, true);
       assert.equal(replay.balance.ledger_total, first.balance.ledger_total, "a replay does not grant twice");
-
-      // Same key, different target or different value: a conflict, never a second effect.
-      expectError(
-        await services.adminGrant(sessions.operator, { ...grant, target_org_id: ids.otherOrgId }),
-        "idempotency_conflict",
-        "the same key against another organization",
-      );
-      expectError(
-        await services.adminGrant(sessions.operator, { ...grant, amount: "2.00000000" as Money }),
-        "idempotency_conflict",
-        "the same key with another amount",
-      );
 
       // The same key on a *different operation* is a different record, not a conflict.
       const feedback = expectOk(
@@ -1673,16 +2219,6 @@ export function runMutationSafetyConformance(
         1,
         "a replayed submission must not be recorded twice",
       );
-      expectError(
-        await services.feedback.submit(sessions.owner, {
-          request_id: ids.availableRequestId,
-          name: "thumb",
-          value: false,
-          idempotency_key: key,
-        }),
-        "idempotency_conflict",
-        "the same feedback key with another value",
-      );
 
       // A key on an optional-key operation still replays instead of creating a second key.
       const created = expectOk(
@@ -1700,6 +2236,207 @@ export function runMutationSafetyConformance(
         1,
         "a replayed creation must not mint a second key",
       );
+
+      // …and revoking under a key replays too, rather than conflicting with itself.
+      const revocable = keys.find((candidate) => candidate.revoked_at === null);
+      assert.ok(revocable !== undefined, "an active key is needed");
+      const revoked = expectOk(await services.keys.revoke(sessions.owner, revocable.id, key), "revoke");
+      const revokedAgain = expectOk(
+        await services.keys.revoke(sessions.owner, revocable.id, key),
+        "replayed revoke",
+      );
+      assert.deepEqual(revokedAgain, revoked, "a replayed revocation returns the original result");
+      expectError(
+        await services.keys.revoke(sessions.owner, revocable.id, "a-different-key"),
+        "state_conflict",
+        "and without the original key it is simply already revoked",
+      );
+
+      // The same key from another organization is a different record: no collision, no conflict.
+      const theirSettings = expectOk(await services.settings.get(sessions.otherOwner), "their settings");
+      const ours = expectOk(
+        await services.settings.update(sessions.owner, { trace_mode: "minimal", idempotency_key: "shared-key" }),
+        "our settings write under a shared key",
+      );
+      const theirs = expectOk(
+        await services.settings.update(sessions.otherOwner, {
+          trace_mode: theirSettings.trace_mode === "full" ? "minimal" : "full",
+          idempotency_key: "shared-key",
+        }),
+        "their settings write under the same key",
+      );
+      assert.equal(ours.trace_mode, "minimal", "our write stands");
+      assert.notEqual(
+        theirs.trace_mode,
+        theirSettings.trace_mode,
+        "their write under the same key must apply, not replay ours",
+      );
+      const sharedFeedback = expectOk(
+        await services.feedback.submit(sessions.otherOwner, {
+          request_id: ids.otherOrgRequestId,
+          name: "thumb",
+          value: false,
+          idempotency_key: key,
+        }),
+        "their feedback under our key",
+      );
+      assert.notEqual(sharedFeedback.id, feedback.id, "two organizations' records must not share a key");
+
+      // One field changed at a time, for every field of every payload: a conflict check that
+      // compared only *some* fields survives a payload that omits one of them.
+      const conflicts: [string, () => Promise<Result<unknown>>][] = [
+        ["adminGrant target_org_id", () => services.adminGrant(sessions.operator, { ...grant, target_org_id: ids.otherOrgId })],
+        ["adminGrant amount", () => services.adminGrant(sessions.operator, { ...grant, amount: "2.00000000" as Money })],
+        ["adminGrant reason", () => services.adminGrant(sessions.operator, { ...grant, reason: "another reason" })],
+        [
+          "feedback.submit request_id",
+          () =>
+            services.feedback.submit(sessions.owner, {
+              request_id: ids.offRequestId,
+              name: "thumb",
+              value: true,
+              idempotency_key: key,
+            }),
+        ],
+        [
+          "feedback.submit name",
+          () =>
+            services.feedback.submit(sessions.owner, {
+              request_id: ids.availableRequestId,
+              name: "rating",
+              value: 3,
+              idempotency_key: key,
+            }),
+        ],
+        [
+          "feedback.submit value",
+          () =>
+            services.feedback.submit(sessions.owner, {
+              request_id: ids.availableRequestId,
+              name: "thumb",
+              value: false,
+              idempotency_key: key,
+            }),
+        ],
+        [
+          "feedback.submit comment",
+          () =>
+            services.feedback.submit(sessions.owner, {
+              request_id: ids.availableRequestId,
+              name: "thumb",
+              value: true,
+              comment: "now with a comment",
+              idempotency_key: key,
+            }),
+        ],
+        ["keys.create name", () => services.keys.create(sessions.owner, { name: "another name", idempotency_key: key })],
+        [
+          "keys.create trace_mode",
+          () => services.keys.create(sessions.owner, { name: "idempotent key", trace_mode: "off", idempotency_key: key }),
+        ],
+        [
+          "keys.revoke key_id",
+          async () => {
+            const active = expectOk(await services.keys.list(sessions.owner), "keys").find(
+              (candidate) => candidate.revoked_at === null,
+            );
+            assert.ok(active !== undefined, "another active key is needed");
+            return services.keys.revoke(sessions.owner, active.id, key);
+          },
+        ],
+        [
+          "settings.update trace_mode",
+          () => services.settings.update(sessions.owner, { trace_mode: "off", idempotency_key: "shared-key" }),
+        ],
+        [
+          "settings.update content_retention_days",
+          () =>
+            services.settings.update(sessions.owner, {
+              trace_mode: "minimal",
+              content_retention_days: 5,
+              idempotency_key: "shared-key",
+            }),
+        ],
+        [
+          "settings.update evaluation_consent",
+          () =>
+            services.settings.update(sessions.owner, {
+              trace_mode: "minimal",
+              evaluation_consent: !ours.evaluation_consent,
+              idempotency_key: "shared-key",
+            }),
+        ],
+      ];
+      for (const [what, call] of conflicts) {
+        expectError(await settle(what, call), "idempotency_conflict", `${what} changed alone must conflict`);
+      }
+
+      // The operator writes, each field alone.
+      const suspension = {
+        target_org_id: ids.otherOrgId,
+        suspended: true,
+        reason: "scope probe",
+        idempotency_key: "scope-suspension",
+      };
+      expectOk(await services.adminSetSuspension(sessions.operator, suspension), "suspension");
+      for (const [what, changed] of [
+        ["target_org_id", { ...suspension, target_org_id: ids.orgId }],
+        ["suspended", { ...suspension, suspended: false }],
+        ["reason", { ...suspension, reason: "a different reason" }],
+      ] as [string, typeof suspension][]) {
+        expectError(
+          await settle(`adminSetSuspension ${what}`, () => services.adminSetSuspension(sessions.operator, changed)),
+          "idempotency_conflict",
+          `adminSetSuspension ${what} changed alone must conflict`,
+        );
+      }
+      expectOk(
+        await services.adminSetSuspension(sessions.operator, { ...suspension, suspended: false, idempotency_key: "scope-restore" }),
+        "restore",
+      );
+
+      const entitlements = {
+        target_org_id: ids.otherOrgId,
+        model_ids: [ids.modelId],
+        limits: { max_concurrent_requests: 3 },
+        reason: "scope probe",
+        idempotency_key: "scope-entitlements",
+      };
+      expectOk(await services.adminSetEntitlements(sessions.operator, entitlements), "entitlements");
+      for (const [what, changed] of [
+        ["target_org_id", { ...entitlements, target_org_id: ids.orgId }],
+        ["model_ids", { ...entitlements, model_ids: null }],
+        ["limits", { ...entitlements, limits: { max_concurrent_requests: 4 } }],
+        ["limits (a different name)", { ...entitlements, limits: { max_requests_per_minute: 3 } }],
+        ["reason", { ...entitlements, reason: "a different reason" }],
+      ] as [string, typeof entitlements][]) {
+        expectError(
+          await settle(`adminSetEntitlements ${what}`, () => services.adminSetEntitlements(sessions.operator, changed)),
+          "idempotency_conflict",
+          `adminSetEntitlements ${what} changed alone must conflict`,
+        );
+      }
+
+      const label = {
+        request_id: ids.availableRequestId,
+        rubric_version: 3,
+        label: "correct" as const,
+        comment: "scope probe",
+        idempotency_key: "scope-label",
+      };
+      expectOk(await services.calibration.label(sessions.operator, label), "label");
+      for (const [what, changed] of [
+        ["request_id", { ...label, request_id: ids.offRequestId }],
+        ["rubric_version", { ...label, rubric_version: 4 }],
+        ["label", { ...label, label: "incorrect" as const }],
+        ["comment", { ...label, comment: "a different note" }],
+      ] as [string, typeof label][]) {
+        expectError(
+          await settle(`calibration.label ${what}`, () => services.calibration.label(sessions.operator, changed)),
+          "idempotency_conflict",
+          `calibration.label ${what} changed alone must conflict`,
+        );
+      }
     });
 
     it("generated identifiers never collide, within an organization or across two", async () => {
@@ -1800,17 +2537,27 @@ export function runMutationSafetyConformance(
       );
     });
 
-    it("a filtered walk survives the cursor's own row leaving the filter", async () => {
+    it("a filtered walk survives the cursor's own row leaving the filter, and stays complete", async () => {
       const { services, sessions } = await makeHarness();
       const query = { limit: 5, has_feedback: false } as const;
+      // The full filtered set up front, so a walk that quietly stops early is a failure rather than
+      // a shorter list nobody compared against anything.
+      const expected = (
+        await walkAll<TraceListItem>(
+          (cursor) => services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, has_feedback: false }),
+          "the filtered set",
+        )
+      ).map((row) => row.request_id);
+      assert.ok(expected.length > 10, "the harness needs a filtered set worth walking");
+
       const first = expectOk(await services.traces(sessions.owner, query), "first filtered page");
       assert.ok(first.next_cursor !== null, "the harness needs more than one page of unannotated traces");
       assert.ok(first.items.length > 0);
       const cursorRow = first.items[first.items.length - 1];
 
       // Annotate exactly the row the cursor points at: it now has feedback, so it no longer matches
-      // `has_feedback: false`. A cursor that resumes by *looking up* its row would 400 here; a
-      // keyset cursor resumes after the key and carries on (N2).
+      // `has_feedback: false`. A cursor that resumes by *looking up* its row either 400s or — worse —
+      // returns an empty page with a null cursor, which a "no duplicates" check would accept.
       expectOk(
         await services.feedback.submit(sessions.owner, {
           request_id: cursorRow.request_id,
@@ -1825,14 +2572,23 @@ export function runMutationSafetyConformance(
         await services.traces(sessions.owner, { ...query, cursor: first.next_cursor }),
         "the page after the vanished cursor row",
       );
-      const seen = [...first.items, ...second.items].map((row) => row.request_id);
-      assert.equal(new Set(seen).size, seen.length, "a row was repeated after the cursor row left the filter");
+      assert.ok(second.items.length > 0, "the page after the vanished cursor row must not be empty");
+
+      const collected = [...first.items.map((row) => row.request_id), ...second.items.map((row) => row.request_id)];
+      let cursor = second.next_cursor;
+      for (let page = 0; page < 500 && cursor !== null; page += 1) {
+        const next = expectOk(await services.traces(sessions.owner, { ...query, cursor }), `page ${page}`);
+        assert.ok(next.items.length > 0, "a non-final page must not be empty");
+        collected.push(...next.items.map((row) => row.request_id));
+        cursor = next.next_cursor;
+      }
+      assert.equal(cursor, null, "the walk must terminate");
+      assert.equal(new Set(collected).size, collected.length, "a row was repeated after the cursor row left the filter");
+      // Exactly the rows that were in the set when the walk began: the row that left the filter had
+      // already been delivered on the first page, so a complete walk loses nothing at all.
+      assert.deepEqual(collected, expected, "the walk must cover the whole filtered set, in order");
       for (const row of second.items) {
         assert.equal(row.feedback_count, 0, "the filter still holds for the rows that follow");
-        assert.ok(
-          row.created_at <= cursorRow.created_at,
-          "the walk resumed after the cursor key, not at the start",
-        );
       }
     });
 
@@ -1873,43 +2629,319 @@ export function runMutationSafetyConformance(
       assert.deepEqual(await purchases(), before, "R13: nothing creates a purchase entry");
     });
 
+    it("a calibration label is operator data a customer never sees (R35)", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const requestId = ids.availableRequestId;
+      const before = expectOk(await services.feedback.list(sessions.owner, requestId), "feedback before");
+      const detailBefore = expectOk(await services.traceDetail(sessions.owner, requestId), "detail before");
+      const unannotated = (
+        await walkAll<TraceListItem>(
+          (cursor) => services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, has_feedback: false }),
+          "unannotated traces",
+        )
+      ).map((row) => row.request_id);
+
+      const label = expectOk(
+        await services.calibration.label(sessions.operator, {
+          request_id: requestId,
+          rubric_version: 2,
+          label: "incorrect",
+          comment: "operator note the customer must not read",
+          idempotency_key: "visibility-1",
+        }),
+        "calibration label",
+      );
+
+      // Neither the owner nor a member may see it, in any of the four places it could leak.
+      for (const [session, who] of [
+        [sessions.owner, "owner"],
+        [sessions.member, "member"],
+      ] as [SessionContext, string][]) {
+        const listed = expectOk(await services.feedback.list(session, requestId), `${who} feedback list`);
+        assert.ok(!listed.some((entry) => entry.id === label.id), `${who}: a label must not be in feedback.list`);
+        assert.equal(listed.length, before.length, `${who}: the list length must not change`);
+        for (const entry of listed) {
+          assert.notEqual(entry.name, "calibration_label", `${who}: no label may appear`);
+          assert.notEqual(entry.author_role, "operator", `${who}: no operator-authored entry may appear`);
+          assert.equal(entry.calibration_set, false, `${who}: no calibration membership may appear`);
+        }
+        const detail = expectOk(await services.traceDetail(session, requestId), `${who} trace detail`);
+        assert.ok(
+          !detail.feedback.some((entry) => entry.id === label.id),
+          `${who}: a label must not be in traceDetail.feedback`,
+        );
+        assert.equal(
+          detail.feedback_count,
+          detailBefore.feedback_count,
+          `${who}: a label must not change feedback_count`,
+        );
+        const serialized = JSON.stringify([listed, detail]);
+        assert.ok(
+          !serialized.includes(sessions.operator.email),
+          `${who}: the operator principal must never reach a customer view`,
+        );
+        assert.ok(
+          !serialized.includes("operator note the customer must not read"),
+          `${who}: nor the operator's note`,
+        );
+      }
+
+      // `has_feedback` must not move either: a label is not customer feedback.
+      const after = (
+        await walkAll<TraceListItem>(
+          (cursor) => services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, has_feedback: false }),
+          "unannotated traces after the label",
+        )
+      ).map((row) => row.request_id);
+      assert.deepEqual(after, unannotated, "a label must not change which traces count as annotated");
+
+      // And the operator's own view holds only labels — never the customer's signals.
+      const labels = expectOk(
+        await services.calibration.list(sessions.operator, { limit: MAX_PAGE_LIMIT }),
+        "calibration set",
+      );
+      assert.ok(labels.items.some((entry) => entry.id === label.id), "the label is in the calibration set");
+      const customerIds = new Set(before.map((entry) => entry.id));
+      for (const entry of labels.items) {
+        assert.equal(entry.name, "calibration_label", "the calibration set holds labels only");
+        assert.equal(entry.calibration_set, true);
+        assert.equal(entry.author_role, "operator");
+        assert.ok(entry.rubric_version !== null, "and each names its rubric");
+        assert.ok(!customerIds.has(entry.id), "a customer signal must never appear in the calibration set");
+      }
+
+      // A client cannot author one through the ordinary submit path, whatever it sends.
+      expectError(
+        await services.feedback.submit(sessions.operator, {
+          request_id: requestId,
+          name: "calibration_label" as never,
+          value: "correct",
+          idempotency_key: "visibility-forge-1",
+        }),
+        "invalid_request",
+        "feedback.submit must refuse the operator-only name",
+      );
+      expectError(
+        await services.feedback.submit(sessions.owner, {
+          request_id: requestId,
+          name: "calibration_label" as never,
+          value: "correct",
+          idempotency_key: "visibility-forge-2",
+        }),
+        "invalid_request",
+        "and refuse it for a customer too",
+      );
+    });
+
     it("no operation accepts a field the caller invented", async () => {
       const { services, sessions, ids } = await makeHarness();
-      // The point of the rule: a caller that thinks it can pick the tenant, the author role or the
-      // storage location learns that it cannot, instead of getting a page that looks right.
-      expectError(
-        await services.usage(sessions.owner, { org_id: ids.otherOrgId } as never),
-        "invalid_request",
-        "usage with a caller-supplied organization",
-      );
-      expectError(
-        await services.traces(sessions.owner, { storage_key: "s3://bucket/key" } as never),
-        "invalid_request",
-        "traces with a caller-supplied storage key",
-      );
-      expectError(
-        await services.ledger(sessions.owner, { org_id: ids.otherOrgId } as never),
-        "invalid_request",
-        "ledger with a caller-supplied organization",
-      );
-      expectError(
-        await services.settings.update(sessions.owner, { org_id: ids.otherOrgId } as never),
-        "invalid_request",
-        "settings update aimed at another organization",
-      );
-      expectError(
-        await services.keys.create(sessions.owner, { name: "smuggled", org_id: ids.otherOrgId } as never),
-        "invalid_request",
-        "key creation aimed at another organization",
-      );
-      expectError(
-        await services.judgeRuns(sessions.owner, { org_id: ids.otherOrgId } as never),
-        "invalid_request",
-        "judge runs aimed at another organization",
-      );
-      // The other organization's state is of course still untouched.
+      const probes = operationProbes(services, sessions, ids);
+      assertProbesCoverEveryOperation(probes);
+
+      // Driven from the operation list: an operation added without an extra-field check fails the
+      // coverage assertion above rather than passing silently.
+      for (const [operation, probe] of Object.entries(probes)) {
+        if (probe.withExtraField === undefined) continue;
+        const session = (OPERATOR_ONLY_OPERATIONS as readonly string[]).includes(operation)
+          ? sessions.operator
+          : sessions.owner;
+        expectError(
+          await settle(`${operation} with an invented field`, () => probe.withExtraField!(session)),
+          "invalid_request",
+          `${operation} must refuse a field it does not declare`,
+        );
+      }
+
+      // And the other organization's state is of course untouched by any of it.
       const foreign = expectOk(await services.settings.get(sessions.otherOwner), "other organization settings");
       assert.ok(inSet(TRACE_MODES, foreign.trace_mode));
+    });
+
+    it("reads and writes never cross the tenant boundary, in either direction", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      // B8: computed expectations, not "it returned something". A service that aggregated across
+      // organizations, or read another organization's settings, would satisfy a shape check.
+      const rowsOf = async (session: SessionContext): Promise<UsageRow[]> =>
+        walkAll<UsageRow>((cursor) => services.usage(session, { limit: MAX_PAGE_LIMIT, cursor }), "usage");
+      const expectedSummary = (rows: UsageRow[]) => {
+        let cost = ZERO_MONEY;
+        let prompt = 0;
+        let completion = 0;
+        let failed = 0;
+        for (const row of rows) {
+          cost = addMoney(cost, row.cost);
+          prompt += row.prompt_tokens ?? 0;
+          completion += row.completion_tokens ?? 0;
+          if (row.http_status >= 400) failed += 1;
+        }
+        return { requests: rows.length, failed_requests: failed, prompt_tokens: prompt, completion_tokens: completion, cost };
+      };
+
+      for (const [session, who] of [
+        [sessions.owner, "first organization"],
+        [sessions.otherOwner, "second organization"],
+      ] as [SessionContext, string][]) {
+        const rows = await rowsOf(session);
+        const summary = expectOk(await services.usageSummary(session, {}), `${who} summary`);
+        const expected = expectedSummary(rows);
+        assert.equal(summary.requests, expected.requests, `${who}: the summary counts this organization's rows only`);
+        assert.equal(summary.cost, expected.cost, `${who}: and totals this organization's cost only`);
+        assert.equal(summary.prompt_tokens, expected.prompt_tokens, `${who}: prompt tokens`);
+        assert.equal(summary.completion_tokens, expected.completion_tokens, `${who}: completion tokens`);
+        assert.equal(summary.failed_requests, expected.failed_requests, `${who}: failed requests`);
+
+        const daily = expectOk(await services.usageDaily(session, {}), `${who} daily`);
+        assert.equal(
+          daily.reduce((sum, day) => sum + day.requests, 0),
+          rows.length,
+          `${who}: the daily breakdown covers exactly this organization's rows`,
+        );
+        const days = new Set(rows.map((row) => row.created_at.slice(0, 10)));
+        assert.deepEqual(new Set(daily.map((day) => day.day)), days, `${who}: and exactly its days`);
+      }
+
+      // Two organizations with different data must not report the same figures.
+      const ourSummary = expectOk(await services.usageSummary(sessions.owner, {}), "our summary");
+      const theirSummary = expectOk(await services.usageSummary(sessions.otherOwner, {}), "their summary");
+      assert.notEqual(ourSummary.requests, theirSummary.requests, "the harness needs differently sized tenants");
+
+      // Settings are per organization, and a write on one is invisible to the other.
+      const ourSettings = expectOk(await services.settings.get(sessions.owner), "our settings");
+      const theirBefore = expectOk(await services.settings.get(sessions.otherOwner), "their settings");
+      assert.notDeepEqual(ourSettings, theirBefore, "the harness needs two different settings records");
+      const changed = expectOk(
+        await services.settings.update(sessions.owner, {
+          content_retention_days: ourSettings.content_retention_days === 11 ? 12 : 11,
+          evaluation_consent: !ourSettings.evaluation_consent,
+        }),
+        "our settings update",
+      );
+      assert.notDeepEqual(changed, ourSettings, "the update must change something");
+      assert.deepEqual(
+        expectOk(await services.settings.get(sessions.otherOwner), "their settings after"),
+        theirBefore,
+        "another organization's settings must be byte-identical after our write",
+      );
+      expectOk(await services.keys.create(sessions.owner, { name: "isolation probe" }), "our key");
+      assert.deepEqual(
+        expectOk(await services.keys.list(sessions.otherOwner), "their keys after"),
+        expectOk(await services.keys.list(sessions.otherOwner), "their keys again"),
+        "their key list is stable",
+      );
+      assert.deepEqual(
+        expectOk(await services.settings.get(sessions.otherOwner), "their settings after our key"),
+        theirBefore,
+        "and their settings still untouched",
+      );
+    });
+
+    it("a filter filters, and an absent filter does not", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const all = await walkAll<UsageRow>(
+        (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+        "usage",
+      );
+      assert.ok(all.length > 2, "the harness needs a few rows");
+
+      const models = new Set(all.map((row) => row.model));
+      assert.ok(models.size > 1, "the harness needs more than one model, or the model filter is untestable");
+      for (const model of models) {
+        const filtered = await walkAll<UsageRow>(
+          (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, model }),
+          `usage by model ${model}`,
+        );
+        assert.deepEqual(
+          filtered.map((row) => row.request_id).sort(),
+          all.filter((row) => row.model === model).map((row) => row.request_id).sort(),
+          `the model filter must return exactly the rows of ${model}`,
+        );
+        assert.ok(filtered.length < all.length, "and fewer than all of them");
+      }
+
+      const keyIds = new Set(all.map((row) => row.key_id));
+      assert.ok(keyIds.size > 1, "the harness needs rows from more than one key");
+      const [someKey] = [...keyIds];
+      const byKey = await walkAll<UsageRow>(
+        (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, key_id: someKey }),
+        "usage by key",
+      );
+      assert.deepEqual(
+        byKey.map((row) => row.request_id).sort(),
+        all.filter((row) => row.key_id === someKey).map((row) => row.request_id).sort(),
+        "the key filter must return exactly that key's rows",
+      );
+
+      // A time window: everything strictly newer than the median row's timestamp.
+      const sorted = [...all].sort((a, b) => a.created_at.localeCompare(b.created_at));
+      const pivot = sorted[Math.floor(sorted.length / 2)].created_at;
+      const since = await walkAll<UsageRow>(
+        (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, from: pivot }),
+        "usage from the pivot",
+      );
+      assert.deepEqual(
+        since.map((row) => row.request_id).sort(),
+        all.filter((row) => row.created_at >= pivot).map((row) => row.request_id).sort(),
+        "from must exclude everything older",
+      );
+      assert.ok(since.length < all.length, "and it must exclude something");
+      const until = await walkAll<UsageRow>(
+        (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, to: pivot }),
+        "usage to the pivot",
+      );
+      assert.ok(until.length < all.length, "to must exclude something too");
+      assert.equal(
+        since.length + until.length - all.filter((row) => row.created_at === pivot).length,
+        all.length,
+        "the two halves must partition the rows, counting the boundary once",
+      );
+
+      // And a trace filter on a closed vocabulary.
+      const traces = await walkAll<TraceListItem>(
+        (cursor) => services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+        "traces",
+      );
+      const states = new Set(traces.map((row) => row.content));
+      assert.ok(states.size > 1, "the harness needs more than one content state");
+      for (const state of states) {
+        const filtered = await walkAll<TraceListItem>(
+          (cursor) => services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, content: state }),
+          `traces with content ${state}`,
+        );
+        assert.deepEqual(
+          filtered.map((row) => row.request_id).sort(),
+          traces.filter((row) => row.content === state).map((row) => row.request_id).sort(),
+          `the content filter must return exactly the ${state} rows`,
+        );
+      }
+      assert.ok(ids.modelId.length > 0);
+    });
+
+    it("the operator list pages like every other list", async () => {
+      const { services, sessions } = await makeHarness();
+      const all = await assertSamePagesAtEveryLimit<AdminOrgSummary>(
+        (limit, cursor) => services.adminOrgs(sessions.operator, { limit, cursor }),
+        (row) => row.org_id,
+        "adminOrgs",
+      );
+      // Walked one row at a time as well: the operator list is the one ascending list, and an
+      // off-by-one in its resume shows up only at a small page size.
+      const single = await walkAll<AdminOrgSummary>(
+        (cursor) => services.adminOrgs(sessions.operator, { limit: 1, cursor }),
+        "adminOrgs at limit 1",
+      );
+      assert.deepEqual(
+        single.map((row) => row.org_id),
+        all.map((row) => row.org_id),
+        "walking the operator list one row at a time must return the same organizations in the same order",
+      );
+      assert.ok(all.length >= 3, "the harness has at least three organizations");
+      for (const row of all) {
+        assert.ok(isMoney(row.balance.ledger_total), "every listed organization has a wallet");
+      }
+      assert.ok(
+        all.some((row) => compareMoney(row.balance.ledger_total, ZERO_MONEY) !== 0),
+        "and at least one of them is not zero, so a constant-zero balance fails here",
+      );
     });
   });
 }

@@ -32,6 +32,7 @@ import {
   ADMIN_GRANT_FIELDS,
   ADMIN_SUSPENSION_FIELDS,
   API_KEY_CREATE_FIELDS,
+  AUDIT_QUERY_FIELDS,
   CALIBRATION_LABEL_FIELDS,
   CALIBRATION_LABELS,
   DEFAULT_PAGE_LIMIT,
@@ -72,6 +73,9 @@ import {
   type JudgeRun,
   type JudgeSample,
   type JudgeScore,
+  type AuditAction,
+  type AuditEntry,
+  type AuditQuery,
   type CalibrationLabelValue,
   type EntitlementLimitName,
   type LedgerEntry,
@@ -96,7 +100,7 @@ import {
   type UsageSummary,
   type WalletBalance,
 } from "./types.ts";
-import type { ConsoleOperation, ConsoleServices } from "./services.ts";
+import { SUSPENDED_ALLOWED_OPERATIONS, type ConsoleOperation, type ConsoleServices } from "./services.ts";
 
 // ---------------------------------------------------------------------------
 // Fixture shapes (the JSON is data; these declarations are how we read it)
@@ -154,7 +158,10 @@ const orgsFixture = orgsFixtureJson as unknown as {
   gateway_version: string;
   price_snapshot_version: string;
   orgs: OrgFixture[];
-  sessions: Record<"owner" | "member" | "operator" | "otherOwner" | "suspendedOwner", SessionFixture>;
+  sessions: Record<
+    "owner" | "member" | "operator" | "operatorMember" | "otherOwner" | "suspendedOwner",
+    SessionFixture
+  >;
 };
 
 const traceFixture = traceFixtureJson as unknown as {
@@ -590,6 +597,12 @@ type OrgState = {
   traces: TraceDetail[];
   content: Map<string, TraceContentView>;
   judge: JudgeRun[];
+  /**
+   * R35: operator calibration labels are operator data. They are *not* in `traces[].feedback`, so
+   * a customer view cannot leak one by forgetting a filter — the only way to read them is
+   * `calibration.list`.
+   */
+  labels: FeedbackEntry[];
   counter: number;
   /**
    * Feedback ids are minted per organization and never restart: the namespace keeps two
@@ -869,6 +882,7 @@ function buildOrg(spec: OrgFixture): OrgState {
     traces,
     content,
     judge: [],
+    labels: [],
     counter: 0,
     feedbackCounter: 0,
   };
@@ -879,7 +893,7 @@ function buildOrg(spec: OrgFixture): OrgState {
       const trace = org.traces[seed.trace_index];
       if (trace === undefined) return;
       org.feedbackCounter += 1;
-      trace.feedback.push({
+      const entry: FeedbackEntry = {
         id: feedbackId(spec.namespace, org.feedbackCounter),
         request_id: trace.request_id,
         created_at: seed.created_at,
@@ -891,8 +905,13 @@ function buildOrg(spec: OrgFixture): OrgState {
         comment: seed.comment,
         calibration_set: seed.calibration_set,
         rubric_version: seed.rubric_version,
-      });
-      trace.feedback_count = trace.feedback.length;
+      };
+      if (entry.name === "calibration_label") {
+        org.labels.push(entry);
+      } else {
+        trace.feedback.push(entry);
+        trace.feedback_count = trace.feedback.length;
+      }
     });
 
     org.judge = judgeFixture.runs.map((run) => {
@@ -952,7 +971,14 @@ function buildOrg(spec: OrgFixture): OrgState {
 export type FakeSessions = {
   owner: SessionContext;
   member: SessionContext;
+  /** A platform operator who is also the *owner* of `ids.orgId`. */
   operator: SessionContext;
+  /**
+   * A platform operator whose organization role is only `member`. Operator authority is the flag and
+   * nothing else, so every operator operation must work for this session too — and a case that only
+   * ever uses `operator` cannot tell the two apart.
+   */
+  operatorMember: SessionContext;
   otherOwner: SessionContext;
   /** R18: an owner of a suspended organization, so `org_suspended` is reachable. */
   suspendedOwner: SessionContext;
@@ -1025,11 +1051,42 @@ export function createFakeConsoleServices(): FakeConsoleServices {
    * that follows it still produces exactly one effect.
    */
   const idempotency = new Map<string, { payload: string; value: unknown }>();
+  /**
+   * R34: append-only. Nothing in this file updates or removes an entry, which is why a restore
+   * cannot erase the suspension before it — the history is the list, not the current state.
+   */
+  const audit: AuditEntry[] = [];
+  let auditCounter = 0;
   let clockMs = CLOCK_MS;
 
   function nextTimestamp(): string {
     clockMs += 1000;
     return new Date(clockMs).toISOString();
+  }
+
+  function appendAudit(
+    session: SessionContext,
+    action: AuditAction,
+    targetOrgId: string,
+    reason: string,
+    before: Record<string, unknown> | null,
+    after: Record<string, unknown>,
+    idempotencyKey: string,
+  ): AuditEntry {
+    auditCounter += 1;
+    const entry: AuditEntry = {
+      id: deterministicUuid(6060, auditCounter),
+      at: nextTimestamp(),
+      actor_principal: session.email,
+      action,
+      target_org_id: targetOrgId,
+      reason,
+      before,
+      after,
+      idempotency_key: idempotencyKey,
+    };
+    audit.push(entry);
+    return entry;
   }
 
   function recordName(session: SessionContext, operation: ConsoleOperation, key: string): string {
@@ -1093,11 +1150,19 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     return ok(value);
   }
 
-  /** Tenant resolution: the org comes from the session and nowhere else. */
-  function tenant<T>(session: SessionContext): { org: OrgState } | Result<T> {
+  /**
+   * Tenant resolution: the org comes from the session and nowhere else.
+   *
+   * R33: suspension gates new work and configuration changes. Every read stays available and so
+   * does `keys.revoke`, because a leaked key must be revocable whatever the organization's status —
+   * refusing that would make a suspension a security problem instead of a billing one.
+   */
+  function tenant<T>(session: SessionContext, operation: ConsoleOperation): { org: OrgState } | Result<T> {
     const org = orgs.get(session.orgId);
     if (org === undefined) return fail<T>("not_found", "no such organization");
-    if (org.suspended) return fail<T>("org_suspended", "this organization is suspended");
+    if (org.suspended && !(SUSPENDED_ALLOWED_OPERATIONS as readonly string[]).includes(operation)) {
+      return fail<T>("org_suspended", "this organization is suspended");
+    }
     return { org };
   }
 
@@ -1312,8 +1377,14 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       channel: "console",
       ...provenance,
     };
-    trace.feedback.push(entry);
-    trace.feedback_count = trace.feedback.length;
+    // R35: a calibration label is operator data. It goes to the label list, so no customer view has
+    // to remember to filter it out, and `feedback_count` and `has_feedback` never count one.
+    if (entry.name === "calibration_label") {
+      org.labels.push(entry);
+    } else {
+      trace.feedback.push(entry);
+      trace.feedback_count = trace.feedback.length;
+    }
     return structuredClone(entry);
   }
 
@@ -1322,6 +1393,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       owner: sessionOf(orgsFixture.sessions.owner),
       member: sessionOf(orgsFixture.sessions.member),
       operator: sessionOf(orgsFixture.sessions.operator),
+      operatorMember: sessionOf(orgsFixture.sessions.operatorMember),
       otherOwner: sessionOf(orgsFixture.sessions.otherOwner),
       suspendedOwner: sessionOf(orgsFixture.sessions.suspendedOwner),
     },
@@ -1369,7 +1441,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (rejected !== null) return rejected;
       const invalid = badFilter(query);
       if (invalid !== null) return fail<Page<UsageRow>>("invalid_request", invalid);
-      const resolved = tenant<Page<UsageRow>>(session);
+      const resolved = tenant<Page<UsageRow>>(session, "usage");
       if (isError(resolved)) return resolved;
       const rows = usageRowsFor(resolved.org, query);
       return paginate(rows, query, scopeOf(resolved.org, "usage", query), usageKey);
@@ -1382,7 +1454,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (rejected !== null) return rejected;
       const invalid = badFilter(query);
       if (invalid !== null) return fail<UsageSummary>("invalid_request", invalid);
-      const resolved = tenant<UsageSummary>(session);
+      const resolved = tenant<UsageSummary>(session, "usageSummary");
       if (isError(resolved)) return resolved;
       const rows = usageRowsFor(resolved.org, query);
       // Units, not `addMoney`: a read must not throw because a *sum* left the money domain, even
@@ -1426,7 +1498,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (rejected !== null) return rejected;
       const invalid = badFilter(query);
       if (invalid !== null) return fail<UsageDay[]>("invalid_request", invalid);
-      const resolved = tenant<UsageDay[]>(session);
+      const resolved = tenant<UsageDay[]>(session, "usageDaily");
       if (isError(resolved)) return resolved;
       const days = new Map<string, UsageDay & { units: bigint }>();
       for (const row of usageRowsFor(resolved.org, query)) {
@@ -1463,7 +1535,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     async balances(session) {
       const injectedResult = intercept<WalletBalance>("balances");
       if (injectedResult !== null) return injectedResult;
-      const resolved = tenant<WalletBalance>(session);
+      const resolved = tenant<WalletBalance>(session, "balances");
       if (isError(resolved)) return resolved;
       const balance = balanceOf(resolved.org);
       if (balance === null) return fail<WalletBalance>("internal_error", "this wallet does not fit the money domain");
@@ -1475,7 +1547,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (injectedResult !== null) return injectedResult;
       const rejected = badInput<Page<LedgerEntry>>(query, PAGE_QUERY_FIELDS);
       if (rejected !== null) return rejected;
-      const resolved = tenant<Page<LedgerEntry>>(session);
+      const resolved = tenant<Page<LedgerEntry>>(session, "ledger");
       if (isError(resolved)) return resolved;
       return paginate(resolved.org.ledger, query, scopeOf(resolved.org, "ledger", query), timeKey);
     },
@@ -1487,7 +1559,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (rejected !== null) return rejected;
       const invalid = badFilter(query);
       if (invalid !== null) return fail<Page<TraceListItem>>("invalid_request", invalid);
-      const resolved = tenant<Page<TraceListItem>>(session);
+      const resolved = tenant<Page<TraceListItem>>(session, "traces");
       if (isError(resolved)) return resolved;
       const rows = traceRowsFor(resolved.org, query);
       return paginate(rows, query, scopeOf(resolved.org, "traces", query), traceKey);
@@ -1496,7 +1568,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     async traceDetail(session, requestId) {
       const injectedResult = intercept<TraceDetail>("traceDetail");
       if (injectedResult !== null) return injectedResult;
-      const resolved = tenant<TraceDetail>(session);
+      const resolved = tenant<TraceDetail>(session, "traceDetail");
       if (isError(resolved)) return resolved;
       const trace = ownedTrace(resolved.org, requestId);
       if (trace === undefined) return fail("not_found", "no such request for this organization");
@@ -1506,7 +1578,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     async traceContent(session, requestId) {
       const injectedResult = intercept<TraceContentView>("traceContent");
       if (injectedResult !== null) return injectedResult;
-      const resolved = tenant<TraceContentView>(session);
+      const resolved = tenant<TraceContentView>(session, "traceContent");
       if (isError(resolved)) return resolved;
       if (ownedTrace(resolved.org, requestId) === undefined) {
         return fail("not_found", "no such request for this organization");
@@ -1520,7 +1592,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       async list(session, requestId) {
         const injectedResult = intercept<FeedbackEntry[]>("feedback.list");
         if (injectedResult !== null) return injectedResult;
-        const resolved = tenant<FeedbackEntry[]>(session);
+        const resolved = tenant<FeedbackEntry[]>(session, "feedback.list");
         if (isError(resolved)) return resolved;
         const trace = ownedTrace(resolved.org, requestId);
         if (trace === undefined) return fail("not_found", "no such request for this organization");
@@ -1532,7 +1604,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (injectedResult !== null) return injectedResult;
         const rejected = badInput<FeedbackEntry>(input, FEEDBACK_INPUT_FIELDS);
         if (rejected !== null) return rejected;
-        const resolved = tenant<FeedbackEntry>(session);
+        const resolved = tenant<FeedbackEntry>(session, "feedback.submit");
         if (isError(resolved)) return resolved;
         const badKey = badIdempotencyKey(input.idempotency_key, true);
         if (badKey !== null) return fail<FeedbackEntry>("invalid_request", badKey);
@@ -1621,15 +1693,30 @@ export function createFakeConsoleServices(): FakeConsoleServices {
           session,
           input.idempotency_key,
           payload,
-          () => appendFeedback(found.org, found.trace, {
-            name: "calibration_label",
-            value: input.label as CalibrationLabelValue,
-            comment,
-            author_role: "operator",
-            author_principal: session.email,
-            calibration_set: true,
-            rubric_version: input.rubric_version,
-          }),
+          () => {
+            // R35: into the operator's label list, never into the customer's feedback. The
+            // principal here is the *operator's*, not the organization owner's — the label records
+            // who judged, and the organization comes from the row (R26, platform-wide scope).
+            const entry = appendFeedback(found.org, found.trace, {
+              name: "calibration_label",
+              value: input.label as CalibrationLabelValue,
+              comment,
+              author_role: "operator",
+              author_principal: session.email,
+              calibration_set: true,
+              rubric_version: input.rubric_version,
+            });
+            appendAudit(
+              session,
+              "calibration_label",
+              found.org.org_id,
+              comment ?? `calibration label for ${input.request_id}`,
+              null,
+              { request_id: input.request_id, rubric_version: input.rubric_version, label: input.label },
+              input.idempotency_key,
+            );
+            return entry;
+          },
         );
       },
 
@@ -1641,11 +1728,8 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         const denied = requireOperator<Page<FeedbackEntry>>(session);
         if (denied !== null) return denied;
         const rows: FeedbackEntry[] = [];
-        for (const org of orgs.values()) {
-          for (const trace of org.traces) {
-            for (const entry of trace.feedback) if (entry.calibration_set) rows.push(entry);
-          }
-        }
+        // Every organization's labels: an operator's calibration set spans tenants (R26).
+        for (const org of orgs.values()) rows.push(...org.labels);
         rows.sort((a, b) => -compareKeys(timeKey(a), timeKey(b)));
         return paginate(rows, query, "operators|calibration.list", timeKey);
       },
@@ -1655,7 +1739,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       async get(session) {
         const injectedResult = intercept<ConsoleSettings>("settings.get");
         if (injectedResult !== null) return injectedResult;
-        const resolved = tenant<ConsoleSettings>(session);
+        const resolved = tenant<ConsoleSettings>(session, "settings.get");
         if (isError(resolved)) return resolved;
         return ok(structuredClone(resolved.org.settings));
       },
@@ -1667,7 +1751,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (rejected !== null) return rejected;
         const denied = requireOwner<ConsoleSettings>(session);
         if (denied !== null) return denied;
-        const resolved = tenant<ConsoleSettings>(session);
+        const resolved = tenant<ConsoleSettings>(session, "settings.update");
         if (isError(resolved)) return resolved;
         const badKey = badIdempotencyKey(update.idempotency_key, false);
         if (badKey !== null) return fail<ConsoleSettings>("invalid_request", badKey);
@@ -1719,7 +1803,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       async list(session) {
         const injectedResult = intercept<ApiKeySummary[]>("keys.list");
         if (injectedResult !== null) return injectedResult;
-        const resolved = tenant<ApiKeySummary[]>(session);
+        const resolved = tenant<ApiKeySummary[]>(session, "keys.list");
         if (isError(resolved)) return resolved;
         return ok(structuredClone(resolved.org.keys));
       },
@@ -1731,7 +1815,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (rejected !== null) return rejected;
         const denied = requireOwner<ApiKeyCreated>(session);
         if (denied !== null) return denied;
-        const resolved = tenant<ApiKeyCreated>(session);
+        const resolved = tenant<ApiKeyCreated>(session, "keys.create");
         if (isError(resolved)) return resolved;
         const badKey = badIdempotencyKey(input.idempotency_key, false);
         if (badKey !== null) return fail<ApiKeyCreated>("invalid_request", badKey);
@@ -1766,7 +1850,9 @@ export function createFakeConsoleServices(): FakeConsoleServices {
           payload,
           () => {
             resolved.org.counter += 1;
-            const suffix = hex(resolved.org.counter * 7919, 8);
+            // The namespace is in the suffix, so two organizations' first keys never share a
+            // prefix or a fixture secret.
+            const suffix = hex(resolved.org.namespace * 0x10000 + resolved.org.counter * 7919, 8);
             const summary: ApiKeySummary = {
               id: deterministicUuid(4242 + resolved.org.namespace, resolved.org.counter),
               name,
@@ -1794,7 +1880,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (injectedResult !== null) return injectedResult;
         const denied = requireOwner<ApiKeySummary>(session);
         if (denied !== null) return denied;
-        const resolved = tenant<ApiKeySummary>(session);
+        const resolved = tenant<ApiKeySummary>(session, "keys.revoke");
         if (isError(resolved)) return resolved;
         const badKey = badIdempotencyKey(idempotencyKey, false);
         if (badKey !== null) return fail<ApiKeySummary>("invalid_request", badKey);
@@ -1884,8 +1970,9 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       // The whole point of the pre-check: a total that would leave numeric(20, 8) is refused
       // *before* the entry exists, so nothing is appended, no idempotency record is written, and
       // the retry that follows still grants exactly once.
+      const current = balanceOf(target);
       const projected = balanceOf(target, units);
-      if (projected === null) {
+      if (current === null || projected === null) {
         return fail("invalid_request", "this grant would take the wallet outside numeric(20, 8)");
       }
 
@@ -1904,6 +1991,15 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         };
         target.ledger.unshift(entry);
         target.ledger.sort((a, b) => -compareKeys(timeKey(a), timeKey(b)));
+        appendAudit(
+          session,
+          "grant",
+          target.org_id,
+          reason,
+          { ledger_total: current.ledger_total },
+          { ledger_total: projected.ledger_total, amount, grant_id: entry.id },
+          input.idempotency_key,
+        );
         return {
           grant_id: entry.id,
           org_id: target.org_id,
@@ -1944,10 +2040,17 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (replay !== null) return replay;
 
       return commit("adminSetSuspension", session, input.idempotency_key, payload, () => {
-        // Suspension gates new work. It does not touch the ledger or a terminal usage row: what was
-        // already settled stays settled, because accounting that happened is a fact (R18).
+        // Suspension gates new work and configuration (R33). It does not touch the ledger or a
+        // terminal usage row: what was already settled stays settled (R18).
+        const before = { suspended: target.suspended, suspension_reason: target.suspension_reason };
         target.suspended = input.suspended;
         target.suspension_reason = reason;
+        // R34: a restore *adds* an entry. The earlier suspension and its reason stay readable
+        // through `adminAudit` however many times the status flips afterwards.
+        appendAudit(session, "suspension_set", target.org_id, reason, before, {
+          suspended: target.suspended,
+          suspension_reason: target.suspension_reason,
+        }, input.idempotency_key);
         const cutoff = clockMs - 30 * 86400000;
         return summaryOf(target, balanceOf(target), cutoff);
       });
@@ -2003,6 +2106,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (replay !== null) return replay;
 
       return commit("adminSetEntitlements", session, input.idempotency_key, payload, () => {
+        const before = structuredClone(target.entitlements);
         target.entitlements = {
           org_id: target.org_id,
           model_ids,
@@ -2010,8 +2114,41 @@ export function createFakeConsoleServices(): FakeConsoleServices {
           updated_at: nextTimestamp(),
           updated_by: session.email,
         };
+        // The reason is not part of the entitlement record — it belongs to the audit entry, which
+        // is where "why does this tenant have these models" is answered (R34).
+        appendAudit(
+          session,
+          "entitlements_set",
+          target.org_id,
+          input.reason.trim(),
+          { model_ids: before.model_ids, limits: before.limits },
+          { model_ids, limits },
+          input.idempotency_key,
+        );
         return structuredClone(target.entitlements);
       });
+    },
+
+    async adminAudit(session, query) {
+      const injectedResult = intercept<Page<AuditEntry>>("adminAudit");
+      if (injectedResult !== null) return injectedResult;
+      const rejected = badInput<Page<AuditEntry>>(query, AUDIT_QUERY_FIELDS);
+      if (rejected !== null) return rejected;
+      const denied = requireOperator<Page<AuditEntry>>(session);
+      if (denied !== null) return denied;
+      if (query.target_org_id !== undefined && typeof query.target_org_id !== "string") {
+        return fail("invalid_request", "target_org_id must be an organization id");
+      }
+      const rows = audit.filter(
+        (entry) => query.target_org_id === undefined || entry.target_org_id === query.target_org_id,
+      );
+      const ordered = [...rows].sort((a, b) => -compareKeys([a.at, a.id], [b.at, b.id]));
+      return paginate(
+        ordered,
+        query,
+        `operators|adminAudit|${query.target_org_id ?? "(all)"}`,
+        (entry) => [entry.at, entry.id],
+      );
     },
 
     async judgeRuns(session, query) {
@@ -2021,7 +2158,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (rejected !== null) return rejected;
       const denied = requireOwnerOrOperator<Page<JudgeRun>>(session);
       if (denied !== null) return denied;
-      const resolved = tenant<Page<JudgeRun>>(session);
+      const resolved = tenant<Page<JudgeRun>>(session, "judgeRuns");
       if (isError(resolved)) return resolved;
       return paginate(resolved.org.judge, query, scopeOf(resolved.org, "judgeRuns", query), timeKey);
     },

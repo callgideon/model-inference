@@ -5,9 +5,13 @@
 // `runConsoleServicesConformance` call against the real services in tests/c/.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runConsoleServicesConformance } from "../../lib/contracts/conformance.ts";
+import {
+  assertProbesCoverEveryOperation,
+  operationProbes,
+  runConsoleServicesConformance,
+} from "../../lib/contracts/conformance.ts";
 import { createFakeConsoleServices } from "../../lib/contracts/fake-services.ts";
-import { CONSOLE_OPERATIONS } from "../../lib/contracts/services.ts";
+import { CONSOLE_OPERATIONS, OPERATOR_ONLY_OPERATIONS } from "../../lib/contracts/services.ts";
 import { compareMoney, ZERO_MONEY } from "../../lib/contracts/money.ts";
 import { MAX_PAGE_LIMIT, TRACE_CONTENT_AVAILABILITY } from "../../lib/contracts/types.ts";
 
@@ -159,6 +163,38 @@ test("many submissions never reuse a feedback id, and two organizations never sh
     assert.equal(entry.calibration_set, false, "and nothing submitted enrols itself for calibration");
   }
   for (const entry of listed.value) assert.match(entry.id, /^fb_[0-9a-f]{12}$/, "feedback ids stay opaque");
+});
+
+test("the fake's own cursor shape cannot be forged", async () => {
+  // These were in the exported suite until R36: they read the cursor's structure, so they belong to
+  // the implementation that chose that structure. C's cursors will look nothing like this.
+  const services = createFakeConsoleServices();
+  const owner = services.sessions.owner;
+  const page = await services.usage(owner, { limit: 5 });
+  assert.ok(page.ok && page.value.next_cursor !== null);
+  const decoded = JSON.parse(atob(page.value.next_cursor)) as Record<string, unknown>;
+  assert.deepEqual(Object.keys(decoded).sort(), ["a", "b", "k"], "the fake's cursor is {a, b, k}");
+
+  const forge = (fields: Record<string, unknown>): string => btoa(JSON.stringify({ ...decoded, ...fields }));
+  // Note what is *not* here: swapping the id for another row's is a well-formed key, so it resumes
+  // elsewhere in the order rather than failing. The fake's cursor is tamper-evident for scope, not
+  // tamper-proof; C should sign its cursors, and the exported suite requires only the black-box
+  // behaviour that both have.
+  for (const [what, cursor] of [
+    ["a forged scope hash", forge({ k: "deadbeef" })],
+    ["a missing tiebreak", btoa(JSON.stringify({ a: decoded.a, k: decoded.k }))],
+    ["a numeric key", forge({ a: 0 })],
+    ["an empty key", forge({ a: "" })],
+    ["not a cursor at all", btoa("{}")],
+    ["garbage", "not-base64-at-all"],
+  ] as [string, string][]) {
+    const result = await services.usage(owner, { limit: 5, cursor });
+    assert.ok(!result.ok, `${what} must be refused`);
+    assert.equal(result.error.code, "invalid_cursor", what);
+  }
+  // And the untouched cursor still works, so the forgeries above are not failing for another reason.
+  const reissued = await services.usage(owner, { limit: 5, cursor: page.value.next_cursor });
+  assert.ok(reissued.ok, "the genuine cursor still resumes");
 });
 
 test("a failure after the write replays instead of repeating, for every mutating operation", async () => {
@@ -313,74 +349,22 @@ test("a key secret is retained nowhere in the fake's state", async () => {
   );
 });
 
-test("every operation can be made to fail on demand", async () => {
+test("every operation can be made to fail on demand, and recovers on the next call", async () => {
   const services = createFakeConsoleServices();
-  const { owner, operator } = services.sessions;
-  const { availableRequestId, otherOrgId, keyId } = services.ids;
-
-  const calls: Record<string, () => Promise<{ ok: boolean }>> = {
-    usage: () => services.usage(owner, {}),
-    usageSummary: () => services.usageSummary(owner, {}),
-    usageDaily: () => services.usageDaily(owner, {}),
-    balances: () => services.balances(owner),
-    ledger: () => services.ledger(owner, {}),
-    traces: () => services.traces(owner, {}),
-    traceDetail: () => services.traceDetail(owner, availableRequestId),
-    traceContent: () => services.traceContent(owner, availableRequestId),
-    "feedback.list": () => services.feedback.list(owner, availableRequestId),
-    "feedback.submit": () =>
-      services.feedback.submit(owner, {
-        request_id: availableRequestId,
-        name: "thumb",
-        value: true,
-        idempotency_key: "injection-probe-feedback",
-      }),
-    "settings.get": () => services.settings.get(owner),
-    "settings.update": () => services.settings.update(owner, { trace_mode: "minimal" }),
-    "keys.list": () => services.keys.list(owner),
-    "keys.create": () => services.keys.create(owner, { name: "injected" }),
-    "keys.revoke": () => services.keys.revoke(owner, keyId),
-    adminOrgs: () => services.adminOrgs(operator, {}),
-    adminSetSuspension: () =>
-      services.adminSetSuspension(operator, {
-        target_org_id: otherOrgId,
-        suspended: false,
-        reason: "injection probe",
-        idempotency_key: "injection-probe-suspension",
-      }),
-    adminSetEntitlements: () =>
-      services.adminSetEntitlements(operator, {
-        target_org_id: otherOrgId,
-        model_ids: null,
-        limits: {},
-        reason: "injection probe",
-        idempotency_key: "injection-probe-entitlements",
-      }),
-    "calibration.label": () =>
-      services.calibration.label(operator, {
-        request_id: availableRequestId,
-        rubric_version: 2,
-        label: "correct",
-        idempotency_key: "injection-probe-label",
-      }),
-    "calibration.list": () => services.calibration.list(operator, {}),
-    adminGrant: () =>
-      services.adminGrant(operator, {
-        target_org_id: otherOrgId,
-        amount: "1.00000000" as never,
-        kind: "promotional",
-        reason: "injection probe",
-        idempotency_key: "injection-probe",
-      }),
-    judgeRuns: () => services.judgeRuns(owner, {}),
-  };
-  assert.deepEqual(Object.keys(calls).sort(), [...CONSOLE_OPERATIONS].sort(), "every operation must be covered");
+  // The probe table is the conformance suite's, so an operation cannot be added without appearing
+  // here — the old hand-kept list had to be remembered, and was not.
+  const probes = operationProbes(services, services.sessions, services.ids);
+  assertProbesCoverEveryOperation(probes);
 
   for (const operation of CONSOLE_OPERATIONS) {
+    const probe = probes[operation];
+    const session = (OPERATOR_ONLY_OPERATIONS as readonly string[]).includes(operation)
+      ? services.sessions.operator
+      : services.sessions.owner;
     services.failNext(operation, "dependency_unavailable");
-    const failed = await calls[operation]();
+    const failed = await probe.call(session);
     assert.equal(failed.ok, false, `${operation} ignored the injected failure`);
-    const recovered = await calls[operation]();
+    const recovered = await probe.call(session);
     assert.equal(recovered.ok, true, `${operation} did not recover after one injected failure`);
   }
 });

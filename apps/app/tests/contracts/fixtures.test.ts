@@ -205,7 +205,17 @@ test("the organization fixtures match the contract vocabulary", () => {
   );
 
   const sessions = Object.values(orgs.sessions);
-  assert.equal(sessions.length, 5, "owner, member, operator, another organization's owner, and a suspended one");
+  assert.equal(
+    sessions.length,
+    6,
+    "owner, member, two operators (one an owner, one only a member), another organization's owner, and a suspended one",
+  );
+  // B2: operator authority is the flag, so the harness needs an operator who is *not* an owner —
+  // otherwise an implementation that checks the role instead of the flag passes.
+  const operators = sessions.filter((session) => session.isOperator);
+  assert.equal(operators.length, 2, "two operator sessions");
+  assert.ok(operators.some((session) => session.role === "owner"), "one operator is also an owner");
+  assert.ok(operators.some((session) => session.role === "member"), "and one is only a member");
   assert.ok(
     sessions.some((session) => session.orgId === suspended[0].org_id),
     "R18: a session must belong to the suspended organization, or org_suspended is unreachable",
@@ -216,8 +226,12 @@ test("the organization fixtures match the contract vocabulary", () => {
     assert.equal(typeof session.isOperator, "boolean", "operator authority is a separate flag");
     assert.ok(ids.has(session.orgId), "a session must belong to a fixture organization");
   }
-  assert.equal(sessions.filter((session) => session.isOperator).length, 1, "exactly one operator");
-  assert.equal(sessions.filter((session) => session.role === "member").length, 1, "exactly one member");
+
+  assert.equal(
+    sessions.filter((session) => session.role === "member" && !session.isOperator).length,
+    1,
+    "exactly one plain member",
+  );
 });
 
 test("the trace fixtures are renderable content with no storage reference", () => {
