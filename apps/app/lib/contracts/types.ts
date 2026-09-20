@@ -132,6 +132,7 @@ export const ERROR_CODES = [
   "result_pending",
   "state_conflict",
   "result_expired",
+  "upload_expired",
   "journal_expired",
   "replay_gap",
   "idempotency_expired",
@@ -177,6 +178,7 @@ export const ERROR_CODE_HTTP_STATUS: Readonly<Record<ErrorCode, number | null>> 
   result_pending: 409,
   state_conflict: 409,
   result_expired: 410,
+  upload_expired: 410,
   journal_expired: 410,
   replay_gap: 410,
   idempotency_expired: 410,
@@ -360,7 +362,7 @@ export type ApiKeySummary = {
   trace_mode: TraceMode;
 };
 
-/** A key label is a label: bounded so a form cannot post a document into the keys page. */
+/** A key label is a label: bounded so a form cannot post a document into the keys page (R17). */
 export const MAX_KEY_NAME_CHARS = 200;
 
 export type ApiKeyCreateInput = {
@@ -372,8 +374,13 @@ export type ApiKeyCreateInput = {
 
 export const API_KEY_CREATE_FIELDS = ["name", "trace_mode", "idempotency_key"] as const;
 
-/** The secret exists only in this response (create-once presentation). */
-export type ApiKeyCreated = ApiKeySummary & { secret: string };
+/**
+ * The secret exists only in the *first* response (create-once presentation, R16). A replay under
+ * the same idempotency key returns the key's current metadata — including a `revoked_at` set since
+ * — with `secret: null` and `replayed: true`, for every session including the one that created it.
+ * The secret is never part of any stored state, so no authorization can make a replay produce it.
+ */
+export type ApiKeyCreated = ApiKeySummary & { secret: string | null; replayed: boolean };
 
 // ---------------------------------------------------------------------------
 // Traces
@@ -480,6 +487,14 @@ export type TraceContentView = {
 export const FEEDBACK_NAMES = ["thumb", "rating", "correction", "comment"] as const;
 export type FeedbackName = (typeof FEEDBACK_NAMES)[number];
 
+/**
+ * Every name a *stored* entry may carry: the four a client may submit plus the operator
+ * calibration label, which only `calibration.label` creates (R19). Keeping the two lists separate
+ * is what makes "a client cannot author an operator label" a type-level fact rather than a check.
+ */
+export const FEEDBACK_ENTRY_NAMES = [...FEEDBACK_NAMES, "calibration_label"] as const;
+export type FeedbackEntryName = (typeof FEEDBACK_ENTRY_NAMES)[number];
+
 export const FEEDBACK_RATING_MIN = 1;
 export const FEEDBACK_RATING_MAX = 5;
 
@@ -505,11 +520,16 @@ export type FeedbackEntry = {
   channel: FeedbackChannel;
   author_role: AuthorRole;
   author_principal: string;
-  name: FeedbackName;
+  name: FeedbackEntryName;
   value: FeedbackValue;
   comment: string | null;
   /** Calibration membership requires explicit platform-operator authorization. */
   calibration_set: boolean;
+  /**
+   * The rubric an operator labelled against. Set only on a `calibration_label` entry; null on
+   * every customer signal, whatever session submitted it (R19).
+   */
+  rubric_version: number | null;
 };
 
 export const FEEDBACK_INPUT_FIELDS = [
@@ -522,6 +542,38 @@ export const FEEDBACK_INPUT_FIELDS = [
 
 /** Free-text bound on submitted feedback: a comment is a note, not an upload channel. */
 export const MAX_FEEDBACK_TEXT_CHARS = 4000;
+
+// ---------------------------------------------------------------------------
+// Operator calibration (R19)
+// ---------------------------------------------------------------------------
+
+/**
+ * The verdict an operator records against a rubric. This — and only this — produces an entry with
+ * `author_role: "operator"` and `calibration_set: true`; ordinary console feedback from an
+ * operator session stays a customer signal (02: "console-origin input is not automatically an
+ * operator label").
+ */
+export const CALIBRATION_LABELS = ["correct", "partially_correct", "incorrect", "unusable"] as const;
+export type CalibrationLabelValue = (typeof CALIBRATION_LABELS)[number];
+
+export type CalibrationLabelInput = {
+  request_id: string;
+  rubric_version: number;
+  label: CalibrationLabelValue;
+  comment?: string | null;
+  idempotency_key: string;
+};
+
+export const CALIBRATION_LABEL_FIELDS = [
+  "request_id",
+  "rubric_version",
+  "label",
+  "comment",
+  "idempotency_key",
+] as const;
+
+/** Rubric versions are small positive integers; a provisional bound, like the other two (R17). */
+export const MAX_RUBRIC_VERSION = 1000;
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -563,15 +615,71 @@ export const SETTINGS_UPDATE_FIELDS = [
 // Operator administration
 // ---------------------------------------------------------------------------
 
+/**
+ * What an organization is entitled to run. The limit names are a closed provisional set: an
+ * unknown name is `invalid_request` rather than a silently ignored control (R17/R19).
+ */
+export const ENTITLEMENT_LIMIT_NAMES = [
+  "max_concurrent_requests",
+  "max_requests_per_minute",
+  "max_video_seconds",
+] as const;
+export type EntitlementLimitName = (typeof ENTITLEMENT_LIMIT_NAMES)[number];
+
+/** Provisional ceiling on any single entitlement limit, so a typo cannot mean "unlimited". */
+export const MAX_ENTITLEMENT_LIMIT = 1000000;
+
+export type OrgEntitlements = {
+  org_id: string;
+  /** Models the organization may call; empty means the platform default set, not "none". */
+  model_ids: string[];
+  limits: Partial<Record<EntitlementLimitName, number>>;
+  updated_at: string | null;
+  updated_by: string | null;
+};
+
 export type AdminOrgSummary = {
   org_id: string;
   name: string;
   owner_email: string;
   created_at: string;
   suspended: boolean;
+  /** Why the organization is suspended, or why it was last unsuspended; null if never set. */
+  suspension_reason: string | null;
   balance: WalletBalance;
   requests_30d: number;
+  entitlements: OrgEntitlements;
 };
+
+export type AdminSuspensionInput = {
+  target_org_id: string;
+  suspended: boolean;
+  reason: string;
+  idempotency_key: string;
+};
+
+export const ADMIN_SUSPENSION_FIELDS = [
+  "target_org_id",
+  "suspended",
+  "reason",
+  "idempotency_key",
+] as const;
+
+export type AdminEntitlementsInput = {
+  target_org_id: string;
+  model_ids: string[];
+  limits: Partial<Record<EntitlementLimitName, number>>;
+  reason: string;
+  idempotency_key: string;
+};
+
+export const ADMIN_ENTITLEMENTS_FIELDS = [
+  "target_org_id",
+  "model_ids",
+  "limits",
+  "reason",
+  "idempotency_key",
+] as const;
 
 /** The only allowed grant kind in the free pilot (DEC-01). */
 export const GRANT_KINDS = ["promotional"] as const;

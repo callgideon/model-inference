@@ -19,31 +19,37 @@ import orgsFixtureJson from "./fixtures/orgs.json" with { type: "json" };
 import traceFixtureJson from "./fixtures/traces.json" with { type: "json" };
 import judgeFixtureJson from "./fixtures/judge.json" with { type: "json" };
 import {
-  addMoney,
   moneyFromUnits,
   moneyUnits,
   parseMoney,
-  sumMoney,
   tryMoneyFromUnits,
   tryParseMoneyUnits,
   ZERO_MONEY,
   type Money,
 } from "./money.ts";
 import {
+  ADMIN_ENTITLEMENTS_FIELDS,
   ADMIN_GRANT_FIELDS,
+  ADMIN_SUSPENSION_FIELDS,
   API_KEY_CREATE_FIELDS,
+  CALIBRATION_LABEL_FIELDS,
+  CALIBRATION_LABELS,
   DEFAULT_PAGE_LIMIT,
+  ENTITLEMENT_LIMIT_NAMES,
+  FEEDBACK_ENTRY_NAMES,
   FEEDBACK_INPUT_FIELDS,
   FEEDBACK_NAMES,
   FEEDBACK_RATING_MAX,
   FEEDBACK_RATING_MIN,
   JOB_STATES,
   MAX_CONTENT_RETENTION_DAYS,
+  MAX_ENTITLEMENT_LIMIT,
   MAX_FEEDBACK_TEXT_CHARS,
   MAX_GRANT_REASON_CHARS,
   MAX_IDEMPOTENCY_KEY_CHARS,
   MAX_KEY_NAME_CHARS,
   MAX_PAGE_LIMIT,
+  MAX_RUBRIC_VERSION,
   ORG_ROLES,
   PAGE_QUERY_FIELDS,
   SETTINGS_UPDATE_FIELDS,
@@ -66,7 +72,10 @@ import {
   type JudgeRun,
   type JudgeSample,
   type JudgeScore,
+  type CalibrationLabelValue,
+  type EntitlementLimitName,
   type LedgerEntry,
+  type OrgEntitlements,
   type Page,
   type PageQuery,
   type Result,
@@ -112,6 +121,7 @@ type OrgFixture = {
   owner_email: string;
   created_at: string;
   suspended: boolean;
+  suspension_reason: string | null;
   usage_rows: number;
   all_free: boolean;
   grants: GrantFixture[];
@@ -143,7 +153,7 @@ const orgsFixture = orgsFixtureJson as unknown as {
   gateway_version: string;
   price_snapshot_version: string;
   orgs: OrgFixture[];
-  sessions: Record<"owner" | "member" | "operator" | "otherOwner", SessionFixture>;
+  sessions: Record<"owner" | "member" | "operator" | "otherOwner" | "suspendedOwner", SessionFixture>;
 };
 
 const traceFixture = traceFixtureJson as unknown as {
@@ -158,6 +168,7 @@ const traceFixture = traceFixtureJson as unknown as {
     value: FeedbackValue;
     comment: string | null;
     calibration_set: boolean;
+    rubric_version: number | null;
     created_at: string;
   }[];
 };
@@ -253,22 +264,35 @@ function fnv1a(input: string): string {
 }
 
 /**
- * A cursor names the last row already delivered, not an offset. That is what keeps a walk correct
- * while rows are inserted at the head — a grant lands at the top of the ledger mid-walk and the
- * next page still resumes after the row the caller last saw, so nothing repeats and nothing is
- * skipped. C's keyset cursors have the same property; an offset cursor would not.
+ * A cursor carries the **sort key** of the last row delivered — `(created_at, id)` for the
+ * time-ordered lists, `(name, org_id)` for the operator list — and the next page resumes strictly
+ * *after* that key. Three properties fall out, all of which the suite requires of C too:
+ *
+ * - equal timestamps are unambiguous, because the id breaks the tie inside the key;
+ * - a row arriving at the head mid-walk shifts nothing, because there is no offset;
+ * - the cursor row may *leave the result set* (a filter stops matching it, a row is deleted) and
+ *   the walk still continues, because resuming is a comparison and not a lookup.
  */
-function encodeCursor(afterId: string, scope: string): string {
-  return btoa(JSON.stringify({ a: afterId, k: fnv1a(scope) }));
+type SortKey = [string, string];
+
+function compareKeys(a: SortKey, b: SortKey): number {
+  if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1;
+  if (a[1] !== b[1]) return a[1] < b[1] ? -1 : 1;
+  return 0;
+}
+
+function encodeCursor(key: SortKey, scope: string): string {
+  return btoa(JSON.stringify({ a: key[0], b: key[1], k: fnv1a(scope) }));
 }
 
 /** Any cursor this service did not mint for this exact query is rejected. */
-function decodeCursor(cursor: string, scope: string): string | null {
+function decodeCursor(cursor: string, scope: string): SortKey | null {
   try {
-    const parsed = JSON.parse(atob(cursor)) as { a?: unknown; k?: unknown };
+    const parsed = JSON.parse(atob(cursor)) as { a?: unknown; b?: unknown; k?: unknown };
     if (typeof parsed.a !== "string" || parsed.a === "") return null;
+    if (typeof parsed.b !== "string" || parsed.b === "") return null;
     if (parsed.k !== fnv1a(scope)) return null;
-    return parsed.a;
+    return [parsed.a, parsed.b];
   } catch {
     return null;
   }
@@ -282,7 +306,14 @@ function fail<T>(code: ErrorCode, message: string): Result<T> {
   return { ok: false, error: { code, message } };
 }
 
-function paginate<T>(rows: T[], query: PageQuery, scope: string, idOf: (row: T) => string): Result<Page<T>> {
+/** Newest first for the time-ordered lists; `descending` is false only for the operator list. */
+function paginate<T>(
+  rows: T[],
+  query: PageQuery,
+  scope: string,
+  keyOf: (row: T) => SortKey,
+  descending = true,
+): Result<Page<T>> {
   const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT) {
     return fail("invalid_request", `limit must be an integer between 1 and ${MAX_PAGE_LIMIT}`);
@@ -293,14 +324,17 @@ function paginate<T>(rows: T[], query: PageQuery, scope: string, idOf: (row: T) 
     if (after === null) {
       return fail("invalid_cursor", "the cursor was not issued by this service for this query");
     }
-    const index = rows.findIndex((row) => idOf(row) === after);
-    if (index === -1) return fail("invalid_cursor", "the row this cursor points after is gone");
-    start = index + 1;
+    // The first row strictly after the cursor key, by comparison: the cursor's own row does not
+    // have to be here any more.
+    const index = rows.findIndex((row) =>
+      descending ? compareKeys(keyOf(row), after) < 0 : compareKeys(keyOf(row), after) > 0,
+    );
+    start = index === -1 ? rows.length : index;
   }
   const items = structuredClone(rows.slice(start, start + limit));
   const last = items[items.length - 1];
   const exhausted = start + items.length >= rows.length || last === undefined;
-  return ok({ items, next_cursor: exhausted ? null : encodeCursor(idOf(last), scope) });
+  return ok({ items, next_cursor: exhausted ? null : encodeCursor(keyOf(last), scope) });
 }
 
 /**
@@ -546,6 +580,8 @@ type OrgState = {
   owner_email: string;
   created_at: string;
   suspended: boolean;
+  suspension_reason: string | null;
+  entitlements: OrgEntitlements;
   settings: ConsoleSettings;
   keys: ApiKeySummary[];
   usage: UsageRow[];
@@ -561,6 +597,14 @@ type OrgState = {
    */
   feedbackCounter: number;
 };
+
+/**
+ * N1: rows that share a timestamp, placed either side of the page boundaries the suite walks (7
+ * and 100). A cursor that carried only `created_at` would either repeat or skip one of these; the
+ * `(created_at, id)` key does neither, and the suite asserts a tie is actually present so the case
+ * cannot quietly disappear from the fixture.
+ */
+const TIE_INDICES = new Set([6, 7, 13, 14, 99, 100, 106, 107]);
 
 const CLOCK_MS = Date.parse(orgsFixture.clock);
 const MAX_OUTPUT_TOKENS = 2048;
@@ -591,6 +635,19 @@ function availabilityFor(mode: TraceMode, sequence: number, agedOut: boolean): T
   return cycled === "expired" ? "available" : cycled;
 }
 
+/** The sort key of a time-ordered row, and the cursor's payload for these lists. */
+function timeKey(row: { created_at: string; id: string }): SortKey {
+  return [row.created_at, row.id];
+}
+
+function usageKey(row: UsageRow): SortKey {
+  return [row.created_at, row.request_id];
+}
+
+function traceKey(row: TraceListItem): SortKey {
+  return [row.created_at, row.request_id];
+}
+
 function buildOrg(spec: OrgFixture): OrgState {
   const random = mulberry32(spec.namespace * 7919 + 13);
   const keys: ApiKeySummary[] = spec.keys.map((key) => ({
@@ -614,8 +671,12 @@ function buildOrg(spec: OrgFixture): OrgState {
     const key = activeKeys[i % activeKeys.length];
     const model = orgsFixture.models[i % orgsFixture.models.length];
     // 137 s apart, then 3 days apart past row 119, so the oldest rows are genuinely older than
-    // the 30-day retention window and one of them can be `expired` for real. Still monotonic.
-    const createdMs = CLOCK_MS - (i + 1) * 137000 - Math.max(0, i - 119) * 3 * 86400000;
+    // the 30-day retention window and one of them can be `expired` for real. Still monotonic —
+    // and deliberately not *strictly* monotonic at TIE_INDICES, where a row repeats its
+    // predecessor's timestamp so a page boundary lands inside a group of equal timestamps.
+    const tieShift = TIE_INDICES.has(i) ? 1 : 0;
+    const createdMs =
+      CLOCK_MS - (i + 1 - tieShift) * 137000 - Math.max(0, i - tieShift - 119) * 3 * 86400000;
     const created_at = new Date(createdMs).toISOString();
     const promptTokens = 512 + Math.floor(random() * 20000);
     const completionTokens = 32 + Math.floor(random() * 480);
@@ -757,7 +818,12 @@ function buildOrg(spec: OrgFixture): OrgState {
       actor: null,
     });
   }
-  ledger.sort((a, b) => (a.created_at === b.created_at ? b.id.localeCompare(a.id) : b.created_at.localeCompare(a.created_at)));
+  // Every time-ordered list is sorted by exactly the key the cursor carries, newest first, with the
+  // id breaking a timestamp tie. Without the tiebreak the order is not total and a keyset walk
+  // across a group of equal timestamps is undefined.
+  ledger.sort((a, b) => -compareKeys(timeKey(a), timeKey(b)));
+  usage.sort((a, b) => -compareKeys(usageKey(a), usageKey(b)));
+  traces.sort((a, b) => -compareKeys(traceKey(a), traceKey(b)));
 
   const org: OrgState = {
     org_id: spec.org_id,
@@ -766,6 +832,10 @@ function buildOrg(spec: OrgFixture): OrgState {
     owner_email: spec.owner_email,
     created_at: spec.created_at,
     suspended: spec.suspended,
+    suspension_reason: spec.suspension_reason,
+    // No entitlement record until an operator writes one: an empty model list means the platform
+    // default set, which is what an organization that has never been configured gets.
+    entitlements: { org_id: spec.org_id, model_ids: [], limits: {}, updated_at: null, updated_by: null },
     settings: {
       trace_mode: pick(TRACE_MODES, spec.settings.trace_mode, `${spec.name} settings trace_mode`),
       content_retention_days: spec.settings.content_retention_days,
@@ -795,10 +865,11 @@ function buildOrg(spec: OrgFixture): OrgState {
         channel: seed.channel === "api" ? "api" : "console",
         author_role: seed.author_role === "operator" ? "operator" : seed.author_role === "judge" ? "judge" : "customer",
         author_principal: seed.author_principal,
-        name: pick(FEEDBACK_NAMES, seed.name, "seed_feedback name"),
+        name: pick(FEEDBACK_ENTRY_NAMES, seed.name, "seed_feedback name"),
         value: seed.value,
         comment: seed.comment,
         calibration_set: seed.calibration_set,
+        rubric_version: seed.rubric_version,
       });
       trace.feedback_count = trace.feedback.length;
     });
@@ -847,7 +918,7 @@ function buildOrg(spec: OrgFixture): OrgState {
         samples,
       };
     });
-    org.judge.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    org.judge.sort((a, b) => -compareKeys(timeKey(a), timeKey(b)));
   }
 
   return org;
@@ -862,6 +933,8 @@ export type FakeSessions = {
   member: SessionContext;
   operator: SessionContext;
   otherOwner: SessionContext;
+  /** R18: an owner of a suspended organization, so `org_suspended` is reachable. */
+  suspendedOwner: SessionContext;
 };
 
 export type FakeIds = {
@@ -877,13 +950,29 @@ export type FakeIds = {
   unknownRequestId: string;
   keyId: string;
   otherOrgKeyId: string;
+  /** R18: an organization that is already suspended when the harness is built. */
+  suspendedOrgId: string;
 };
+
+/**
+ * Where an injected failure fires. `before` is an ordinary refusal — nothing has happened yet.
+ * `after_write` models the Python `FailurePlan`'s crash-after-commit: the effect *and* its
+ * idempotency record are committed (one step, as they must be in one transaction), and then the
+ * response is lost. The retry that follows must replay, not repeat.
+ */
+export type FailurePhase = "before" | "after_write";
 
 export type FakeConsoleServices = ConsoleServices & {
   sessions: FakeSessions;
   ids: FakeIds;
   /** Deterministic failure injection: the next call of `operation` returns this error. */
-  failNext(operation: ConsoleOperation, code: ErrorCode, message?: string): void;
+  failNext(operation: ConsoleOperation, code: ErrorCode, message?: string, phase?: FailurePhase): void;
+  /**
+   * Fake-only escape hatch for one assertion the contract cannot make from the outside: that a
+   * created key's secret is retained nowhere. It returns the whole internal state, so a test can
+   * deep-scan it. Nothing but a test may call it, and C has no equivalent.
+   */
+  unsafeDebugState(): unknown;
 };
 
 function sessionOf(fixture: SessionFixture): SessionContext {
@@ -901,7 +990,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
   const orgs = new Map<string, OrgState>();
   for (const spec of orgsFixture.orgs) orgs.set(spec.org_id, buildOrg(spec));
 
-  const injected = new Map<ConsoleOperation, { code: ErrorCode; message: string }[]>();
+  const injected = new Map<ConsoleOperation, { code: ErrorCode; message: string; phase: FailurePhase }[]>();
   /**
    * Idempotency records keyed by caller organization + operation + key. The *target* organization
    * and the rest of the payload are part of the stored payload, never of the key: a key replayed
@@ -951,12 +1040,34 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     idempotency.set(recordName(session, operation, key), { payload, value: structuredClone(value) });
   }
 
-  function intercept<T>(operation: ConsoleOperation): Result<T> | null {
+  function intercept<T>(operation: ConsoleOperation, phase: FailurePhase = "before"): Result<T> | null {
     const queue = injected.get(operation);
     if (queue === undefined || queue.length === 0) return null;
+    if (queue[0].phase !== phase) return null;
     const next = queue.shift();
     if (next === undefined) return null;
     return fail<T>(next.code, next.message);
+  }
+
+  /**
+   * The write and its idempotency record are one step. A real store must do the same inside one
+   * transaction: if they can diverge, a crash between them turns the next retry into a second
+   * effect. `after_write` injection fires only once both are committed, which is the failure a
+   * client actually sees — a lost response, not a lost write.
+   */
+  function commit<T>(
+    operation: ConsoleOperation,
+    session: SessionContext,
+    key: string | undefined | null,
+    payload: string,
+    apply: () => T,
+    record: (value: T) => unknown = (value) => value,
+  ): Result<T> {
+    const value = apply();
+    remember(session, operation, key, payload, record(value));
+    const lost = intercept<T>(operation, "after_write");
+    if (lost !== null) return lost;
+    return ok(value);
   }
 
   /** Tenant resolution: the org comes from the session and nowhere else. */
@@ -1098,19 +1209,107 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     return org.traces.find((trace) => trace.request_id === requestId);
   }
 
+  function orgKey(row: AdminOrgSummary): SortKey {
+    return [row.name, row.org_id];
+  }
+
+  /** Every operator write is audited, so each one needs a reason a person actually typed. */
+  function badAuditReason(reason: unknown): string | null {
+    if (typeof reason !== "string" || reason.trim() === "") return "this operation needs a reason";
+    if (reason.length > MAX_GRANT_REASON_CHARS) {
+      return `the reason must be at most ${MAX_GRANT_REASON_CHARS} characters`;
+    }
+    return null;
+  }
+
+  function badEntitlementLimits(limits: unknown): string | null {
+    if (typeof limits !== "object" || limits === null || Array.isArray(limits)) {
+      return "limits must be an object";
+    }
+    for (const [name, value] of Object.entries(limits)) {
+      if (value === undefined) continue;
+      if (!(ENTITLEMENT_LIMIT_NAMES as readonly string[]).includes(name)) {
+        return `${name} is not an entitlement limit`;
+      }
+      if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > MAX_ENTITLEMENT_LIMIT) {
+        return `${name} must be an integer between 0 and ${MAX_ENTITLEMENT_LIMIT}`;
+      }
+    }
+    return null;
+  }
+
+  function summaryOf(org: OrgState, balance: WalletBalance | null, cutoff: number): AdminOrgSummary {
+    return {
+      org_id: org.org_id,
+      name: org.name,
+      owner_email: org.owner_email,
+      created_at: org.created_at,
+      suspended: org.suspended,
+      suspension_reason: org.suspension_reason,
+      // Only reached with a balance in hand; the callers check for the overflow case first.
+      balance: balance ?? { ledger_total: ZERO_MONEY, reserved_total: ZERO_MONEY, available: ZERO_MONEY },
+      requests_30d: org.usage.filter((row) => instant(row.created_at) >= cutoff).length,
+      entitlements: structuredClone(org.entitlements),
+    };
+  }
+
+  /** For operator-authority operations only: the tenant comes from the row, not from a caller field. */
+  function traceAnywhere(requestId: string): { org: OrgState; trace: TraceDetail } | undefined {
+    if (typeof requestId !== "string" || requestId === "") return undefined;
+    for (const org of orgs.values()) {
+      const trace = ownedTrace(org, requestId);
+      if (trace !== undefined) return { org, trace };
+    }
+    return undefined;
+  }
+
+  /**
+   * The one place a feedback entry is created. Provenance is a parameter of *this* function, so
+   * every caller has to state it explicitly and `feedback.submit` cannot acquire an operator label
+   * by accident.
+   */
+  function appendFeedback(
+    org: OrgState,
+    trace: TraceDetail,
+    provenance: {
+      name: FeedbackEntry["name"];
+      value: FeedbackValue;
+      comment: string | null;
+      author_role: FeedbackEntry["author_role"];
+      author_principal: string;
+      calibration_set: boolean;
+      rubric_version: number | null;
+    },
+  ): FeedbackEntry {
+    org.feedbackCounter += 1;
+    const entry: FeedbackEntry = {
+      id: feedbackId(org.namespace, org.feedbackCounter),
+      request_id: trace.request_id,
+      created_at: nextTimestamp(),
+      channel: "console",
+      ...provenance,
+    };
+    trace.feedback.push(entry);
+    trace.feedback_count = trace.feedback.length;
+    return structuredClone(entry);
+  }
+
   const services: FakeConsoleServices = {
     sessions: {
       owner: sessionOf(orgsFixture.sessions.owner),
       member: sessionOf(orgsFixture.sessions.member),
       operator: sessionOf(orgsFixture.sessions.operator),
       otherOwner: sessionOf(orgsFixture.sessions.otherOwner),
+      suspendedOwner: sessionOf(orgsFixture.sessions.suspendedOwner),
     },
     ids: (() => {
       const first = orgsFixture.orgs[0];
       const second = orgsFixture.orgs[1];
       const orgA = orgs.get(first.org_id);
       const orgB = orgs.get(second.org_id);
+      const suspended = [...orgs.values()].find((org) => org.suspended);
       if (orgA === undefined || orgB === undefined) throw new Error("fixture organizations missing");
+      if (suspended === undefined) throw new Error("fixtures must contain a suspended organization");
       const available = orgA.traces.find((trace) => trace.content === "available");
       const off = orgA.traces.find((trace) => trace.content === "off");
       if (available === undefined || off === undefined) {
@@ -1125,13 +1324,18 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         unknownRequestId: deterministicUuid(999, 999),
         keyId: orgA.keys[0].id,
         otherOrgKeyId: orgB.keys[0].id,
+        suspendedOrgId: suspended.org_id,
       };
     })(),
 
-    failNext(operation, code, message = "injected failure") {
+    failNext(operation, code, message = "injected failure", phase = "before") {
       const queue = injected.get(operation) ?? [];
-      queue.push({ code, message });
+      queue.push({ code, message, phase });
       injected.set(operation, queue);
+    },
+
+    unsafeDebugState() {
+      return { orgs: [...orgs.values()], idempotency: [...idempotency.entries()] };
     },
 
     async usage(session, query) {
@@ -1144,7 +1348,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       const resolved = tenant<Page<UsageRow>>(session);
       if (isError(resolved)) return resolved;
       const rows = usageRowsFor(resolved.org, query);
-      return paginate(rows, query, scopeOf(resolved.org, "usage", query), (row) => row.request_id);
+      return paginate(rows, query, scopeOf(resolved.org, "usage", query), usageKey);
     },
 
     async usageSummary(session, query) {
@@ -1157,21 +1361,28 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       const resolved = tenant<UsageSummary>(session);
       if (isError(resolved)) return resolved;
       const rows = usageRowsFor(resolved.org, query);
-      const holds: Money[] = [];
-      let cost = ZERO_MONEY;
+      // Units, not `addMoney`: a read must not throw because a *sum* left the money domain, even
+      // though each row is inside it (N8).
+      let costUnits = BigInt(0);
+      let heldUnits = BigInt(0);
       let prompt = 0;
       let completion = 0;
       let failed = 0;
       let absorbed = 0;
       for (const row of rows) {
-        cost = addMoney(cost, row.cost);
+        costUnits += moneyUnits(row.cost);
         prompt += row.prompt_tokens ?? 0;
         completion += row.completion_tokens ?? 0;
         if (row.http_status >= 400) failed += 1;
         if (row.settlement_state === "released_platform_absorbed") absorbed += 1;
         // Everything still held: a non-terminal row has no settlement state yet (R13), so the
         // hold itself is what says "awaiting reconciliation", not the settlement column.
-        if (row.usage_certainty === "unknown" && row.max_hold !== null) holds.push(row.max_hold);
+        if (row.usage_certainty === "unknown" && row.max_hold !== null) heldUnits += moneyUnits(row.max_hold);
+      }
+      const cost = tryMoneyFromUnits(costUnits);
+      const pending = tryMoneyFromUnits(heldUnits);
+      if (cost === null || pending === null) {
+        return fail<UsageSummary>("internal_error", "this usage total does not fit the money domain");
       }
       return ok({
         requests: rows.length,
@@ -1179,7 +1390,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         prompt_tokens: prompt,
         completion_tokens: completion,
         cost,
-        pending_reconciliation: sumMoney(holds),
+        pending_reconciliation: pending,
         platform_absorbed_requests: absorbed,
       });
     },
@@ -1193,7 +1404,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (invalid !== null) return fail<UsageDay[]>("invalid_request", invalid);
       const resolved = tenant<UsageDay[]>(session);
       if (isError(resolved)) return resolved;
-      const days = new Map<string, UsageDay>();
+      const days = new Map<string, UsageDay & { units: bigint }>();
       for (const row of usageRowsFor(resolved.org, query)) {
         const day = row.created_at.slice(0, 10);
         const existing = days.get(day) ?? {
@@ -1202,14 +1413,27 @@ export function createFakeConsoleServices(): FakeConsoleServices {
           prompt_tokens: 0,
           completion_tokens: 0,
           cost: ZERO_MONEY,
+          units: BigInt(0),
         };
         existing.requests += 1;
         existing.prompt_tokens += row.prompt_tokens ?? 0;
         existing.completion_tokens += row.completion_tokens ?? 0;
-        existing.cost = addMoney(existing.cost, row.cost);
+        existing.units += moneyUnits(row.cost);
         days.set(day, existing);
       }
-      return ok([...days.values()].sort((a, b) => b.day.localeCompare(a.day)));
+      const out: UsageDay[] = [];
+      for (const day of [...days.values()].sort((a, b) => b.day.localeCompare(a.day))) {
+        const cost = tryMoneyFromUnits(day.units);
+        if (cost === null) return fail<UsageDay[]>("internal_error", "a daily total does not fit the money domain");
+        out.push({
+          day: day.day,
+          requests: day.requests,
+          prompt_tokens: day.prompt_tokens,
+          completion_tokens: day.completion_tokens,
+          cost,
+        });
+      }
+      return ok(out);
     },
 
     async balances(session) {
@@ -1229,7 +1453,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (rejected !== null) return rejected;
       const resolved = tenant<Page<LedgerEntry>>(session);
       if (isError(resolved)) return resolved;
-      return paginate(resolved.org.ledger, query, scopeOf(resolved.org, "ledger", query), (entry) => entry.id);
+      return paginate(resolved.org.ledger, query, scopeOf(resolved.org, "ledger", query), timeKey);
     },
 
     async traces(session, query) {
@@ -1242,7 +1466,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       const resolved = tenant<Page<TraceListItem>>(session);
       if (isError(resolved)) return resolved;
       const rows = traceRowsFor(resolved.org, query);
-      return paginate(rows, query, scopeOf(resolved.org, "traces", query), (row) => row.request_id);
+      return paginate(rows, query, scopeOf(resolved.org, "traces", query), traceKey);
     },
 
     async traceDetail(session, requestId) {
@@ -1304,25 +1528,102 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (replay !== null) return replay;
 
         // Everything above can refuse; from here nothing can, so the state cannot half-change.
-        // Provenance is server-set: the channel is this console, the role comes from the
-        // authenticated principal, and calibration membership needs a separate operator action.
-        resolved.org.feedbackCounter += 1;
-        const entry: FeedbackEntry = {
-          id: feedbackId(resolved.org.namespace, resolved.org.feedbackCounter),
-          request_id: trace.request_id,
-          created_at: nextTimestamp(),
-          channel: "console",
-          author_role: session.isOperator ? "operator" : "customer",
-          author_principal: session.email,
-          name: input.name,
-          value: input.value,
+        // Provenance is server-set, and it does not consult the session's authority: an operator
+        // pressing the console's own feedback control is a customer signal, because the control is
+        // the customer's (02: "console-origin input is not automatically an operator label";
+        // R19). An operator label comes from `calibration.label` and nowhere else.
+        return commit(
+          "feedback.submit",
+          session,
+          input.idempotency_key,
+          payload,
+          () => appendFeedback(resolved.org, trace, {
+            name: input.name,
+            value: input.value,
+            comment,
+            author_role: "customer",
+            author_principal: session.email,
+            calibration_set: false,
+            rubric_version: null,
+          }),
+        );
+      },
+    },
+
+    calibration: {
+      async label(session, input) {
+        const injectedResult = intercept<FeedbackEntry>("calibration.label");
+        if (injectedResult !== null) return injectedResult;
+        const rejected = badInput<FeedbackEntry>(input, CALIBRATION_LABEL_FIELDS);
+        if (rejected !== null) return rejected;
+        const denied = requireOperator<FeedbackEntry>(session);
+        if (denied !== null) return denied;
+        const badKey = badIdempotencyKey(input.idempotency_key, true);
+        if (badKey !== null) return fail<FeedbackEntry>("invalid_request", badKey);
+        if (!(CALIBRATION_LABELS as readonly string[]).includes(input.label)) {
+          return fail("invalid_request", `label must be one of ${CALIBRATION_LABELS.join(", ")}`);
+        }
+        if (
+          !Number.isInteger(input.rubric_version) ||
+          input.rubric_version < 1 ||
+          input.rubric_version > MAX_RUBRIC_VERSION
+        ) {
+          return fail("invalid_request", `rubric_version must be an integer between 1 and ${MAX_RUBRIC_VERSION}`);
+        }
+        const comment = input.comment ?? null;
+        if (comment !== null && (typeof comment !== "string" || comment.trim() === "")) {
+          return fail("invalid_request", "comment must be non-empty text when present");
+        }
+        if (comment !== null && comment.length > MAX_FEEDBACK_TEXT_CHARS) {
+          return fail("invalid_request", `comment must be at most ${MAX_FEEDBACK_TEXT_CHARS} characters`);
+        }
+        // An operator labels a request of *some* organization, so the trace is looked up across
+        // organizations — the operator flag is the authority, and the label records which
+        // organization it landed in through the trace it names.
+        const found = traceAnywhere(input.request_id);
+        if (found === undefined) return fail("not_found", "no such request");
+
+        const payload = canonicalPayload({
+          request_id: input.request_id,
+          rubric_version: input.rubric_version,
+          label: input.label,
           comment,
-          calibration_set: false,
-        };
-        trace.feedback.push(entry);
-        trace.feedback_count = trace.feedback.length;
-        remember(session, "feedback.submit", input.idempotency_key, payload, entry);
-        return ok(structuredClone(entry));
+        });
+        const replay = replayOf<FeedbackEntry>(session, "calibration.label", input.idempotency_key, payload);
+        if (replay !== null) return replay;
+
+        return commit(
+          "calibration.label",
+          session,
+          input.idempotency_key,
+          payload,
+          () => appendFeedback(found.org, found.trace, {
+            name: "calibration_label",
+            value: input.label as CalibrationLabelValue,
+            comment,
+            author_role: "operator",
+            author_principal: session.email,
+            calibration_set: true,
+            rubric_version: input.rubric_version,
+          }),
+        );
+      },
+
+      async list(session, query) {
+        const injectedResult = intercept<Page<FeedbackEntry>>("calibration.list");
+        if (injectedResult !== null) return injectedResult;
+        const rejected = badInput<Page<FeedbackEntry>>(query, PAGE_QUERY_FIELDS);
+        if (rejected !== null) return rejected;
+        const denied = requireOperator<Page<FeedbackEntry>>(session);
+        if (denied !== null) return denied;
+        const rows: FeedbackEntry[] = [];
+        for (const org of orgs.values()) {
+          for (const trace of org.traces) {
+            for (const entry of trace.feedback) if (entry.calibration_set) rows.push(entry);
+          }
+        }
+        rows.sort((a, b) => -compareKeys(timeKey(a), timeKey(b)));
+        return paginate(rows, query, "operators|calibration.list", timeKey);
       },
     },
 
@@ -1369,23 +1670,24 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         const replay = replayOf<ConsoleSettings>(session, "settings.update", update.idempotency_key, payload);
         if (replay !== null) return replay;
 
-        const settings = resolved.org.settings;
-        if (update.trace_mode !== undefined) settings.trace_mode = update.trace_mode;
-        if (update.content_retention_days !== undefined) {
-          settings.content_retention_days = update.content_retention_days;
-        }
-        // Consent is an independent control (DEC-10): it changes only when asked to, and
-        // every change keeps an audit entry.
-        if (update.evaluation_consent !== undefined && update.evaluation_consent !== settings.evaluation_consent) {
-          settings.evaluation_consent = update.evaluation_consent;
-          settings.consent_history.push({
-            changed_at: nextTimestamp(),
-            evaluation_consent: update.evaluation_consent,
-            changed_by: session.email,
-          });
-        }
-        remember(session, "settings.update", update.idempotency_key, payload, settings);
-        return ok(structuredClone(settings));
+        return commit("settings.update", session, update.idempotency_key, payload, () => {
+          const settings = resolved.org.settings;
+          if (update.trace_mode !== undefined) settings.trace_mode = update.trace_mode;
+          if (update.content_retention_days !== undefined) {
+            settings.content_retention_days = update.content_retention_days;
+          }
+          // Consent is an independent control (DEC-10): it changes only when asked to, and
+          // every change keeps an audit entry.
+          if (update.evaluation_consent !== undefined && update.evaluation_consent !== settings.evaluation_consent) {
+            settings.evaluation_consent = update.evaluation_consent;
+            settings.consent_history.push({
+              changed_at: nextTimestamp(),
+              evaluation_consent: update.evaluation_consent,
+              changed_by: session.email,
+            });
+          }
+          return structuredClone(settings);
+        });
       },
     },
 
@@ -1421,28 +1723,46 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         const name = input.name.trim();
         const trace_mode = input.trace_mode ?? resolved.org.settings.trace_mode;
         const payload = canonicalPayload({ name, trace_mode });
-        const replay = replayOf<ApiKeyCreated>(session, "keys.create", input.idempotency_key, payload);
-        if (replay !== null) return replay;
+        // R16: a secret is shown exactly once, to the first response. The record holds the key's
+        // *id* and nothing else, so a replay — by the same user, another owner or an operator —
+        // rereads the key's current metadata and returns `secret: null`. There is no stored secret
+        // for any authorization to unlock.
+        const replayedId = replayOf<string>(session, "keys.create", input.idempotency_key, payload);
+        if (replayedId !== null) {
+          if (!replayedId.ok) return replayedId as unknown as Result<ApiKeyCreated>;
+          const existing = resolved.org.keys.find((candidate) => candidate.id === replayedId.value);
+          if (existing === undefined) return fail("not_found", "no such key for this organization");
+          return ok({ ...structuredClone(existing), secret: null, replayed: true });
+        }
 
-        resolved.org.counter += 1;
-        const suffix = hex(resolved.org.counter * 7919, 8);
-        const summary: ApiKeySummary = {
-          id: deterministicUuid(4242 + resolved.org.namespace, resolved.org.counter),
-          name,
-          prefix: `sk-infrx-${suffix}`,
-          created_at: nextTimestamp(),
-          last_used_at: null,
-          revoked_at: null,
-          trace_mode,
-        };
-        resolved.org.keys.push(summary);
-        // Fixture secret: presented once, never stored, never a real credential.
-        const created: ApiKeyCreated = {
-          ...summary,
-          secret: `sk-infrx-FAKE${suffix}${hex(resolved.org.counter, 24)}`,
-        };
-        remember(session, "keys.create", input.idempotency_key, payload, created);
-        return ok(created);
+        return commit(
+          "keys.create",
+          session,
+          input.idempotency_key,
+          payload,
+          () => {
+            resolved.org.counter += 1;
+            const suffix = hex(resolved.org.counter * 7919, 8);
+            const summary: ApiKeySummary = {
+              id: deterministicUuid(4242 + resolved.org.namespace, resolved.org.counter),
+              name,
+              prefix: `sk-infrx-${suffix}`,
+              created_at: nextTimestamp(),
+              last_used_at: null,
+              revoked_at: null,
+              trace_mode,
+            };
+            resolved.org.keys.push(summary);
+            // Fixture secret: presented once and held only in this response object, never a real
+            // credential. Nothing writes it to the key record or to the idempotency record.
+            return {
+              ...structuredClone(summary),
+              secret: `sk-infrx-FAKE${suffix}${hex(resolved.org.counter, 24)}`,
+              replayed: false,
+            };
+          },
+          (created) => created.id,
+        );
       },
 
       async revoke(session, keyId, idempotencyKey) {
@@ -1464,9 +1784,10 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (replay !== null) return replay;
         if (key.revoked_at !== null) return fail("state_conflict", "this key is already revoked");
 
-        key.revoked_at = nextTimestamp();
-        remember(session, "keys.revoke", idempotencyKey, payload, key);
-        return ok(structuredClone(key));
+        return commit("keys.revoke", session, idempotencyKey, payload, () => {
+          key.revoked_at = nextTimestamp();
+          return structuredClone(key);
+        });
       },
     },
 
@@ -1484,18 +1805,12 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (balance === null) {
           return fail<Page<AdminOrgSummary>>("internal_error", "a wallet does not fit the money domain");
         }
-        rows.push({
-          org_id: org.org_id,
-          name: org.name,
-          owner_email: org.owner_email,
-          created_at: org.created_at,
-          suspended: org.suspended,
-          balance,
-          requests_30d: org.usage.filter((row) => instant(row.created_at) >= cutoff).length,
-        });
+        rows.push(summaryOf(org, balance, cutoff));
       }
-      rows.sort((a, b) => (a.name === b.name ? a.org_id.localeCompare(b.org_id) : a.name.localeCompare(b.name)));
-      return paginate(rows, query, "operators|adminOrgs", (row) => row.org_id);
+      // Ascending by (name, org_id): the one list whose order is not newest-first, and the reason
+      // `paginate` takes a direction.
+      rows.sort((a, b) => compareKeys(orgKey(a), orgKey(b)));
+      return paginate(rows, query, "operators|adminOrgs", orgKey, false);
     },
 
     async adminGrant(session, input) {
@@ -1550,30 +1865,122 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         return fail("invalid_request", "this grant would take the wallet outside numeric(20, 8)");
       }
 
-      target.counter += 1;
-      const entry: LedgerEntry = {
-        id: deterministicUuid(8080 + target.namespace, target.counter),
-        created_at: nextTimestamp(),
-        delta: amount,
-        kind: "grant",
+      return commit("adminGrant", session, input.idempotency_key, payload, () => {
+        target.counter += 1;
+        const entry: LedgerEntry = {
+          id: deterministicUuid(8080 + target.namespace, target.counter),
+          created_at: nextTimestamp(),
+          delta: amount,
+          kind: "grant",
+          reason,
+          // The key is the ledger row's `ref`, so the effect carries its own natural idempotency
+          // key: a store that lost the record can still recognise the grant it already made.
+          ref: input.idempotency_key,
+          actor: session.email,
+        };
+        target.ledger.unshift(entry);
+        target.ledger.sort((a, b) => -compareKeys(timeKey(a), timeKey(b)));
+        return {
+          grant_id: entry.id,
+          org_id: target.org_id,
+          amount,
+          kind: "promotional" as const,
+          reason,
+          created_at: entry.created_at,
+          operator_principal: session.email,
+          replayed: false,
+          balance: projected,
+        };
+      });
+    },
+
+    async adminSetSuspension(session, input) {
+      const injectedResult = intercept<AdminOrgSummary>("adminSetSuspension");
+      if (injectedResult !== null) return injectedResult;
+      const rejected = badInput<AdminOrgSummary>(input, ADMIN_SUSPENSION_FIELDS);
+      if (rejected !== null) return rejected;
+      const denied = requireOperator<AdminOrgSummary>(session);
+      if (denied !== null) return denied;
+      const badKey = badIdempotencyKey(input.idempotency_key, true);
+      if (badKey !== null) return fail<AdminOrgSummary>("invalid_request", badKey);
+      if (typeof input.suspended !== "boolean") {
+        return fail("invalid_request", "suspended must be a boolean");
+      }
+      const badReason = badAuditReason(input.reason);
+      if (badReason !== null) return fail<AdminOrgSummary>("invalid_request", badReason);
+      const target = orgs.get(input.target_org_id);
+      if (target === undefined) return fail("not_found", "no such organization");
+      const reason = input.reason.trim();
+      const payload = canonicalPayload({
+        target_org_id: input.target_org_id,
+        suspended: input.suspended,
         reason,
-        ref: input.idempotency_key,
-        actor: session.email,
-      };
-      target.ledger.unshift(entry);
-      const result: AdminGrantResult = {
-        grant_id: entry.id,
-        org_id: target.org_id,
-        amount,
-        kind: "promotional",
-        reason,
-        created_at: entry.created_at,
-        operator_principal: session.email,
-        replayed: false,
-        balance: projected,
-      };
-      remember(session, "adminGrant", input.idempotency_key, payload, result);
-      return ok(structuredClone(result));
+      });
+      const replay = replayOf<AdminOrgSummary>(session, "adminSetSuspension", input.idempotency_key, payload);
+      if (replay !== null) return replay;
+
+      return commit("adminSetSuspension", session, input.idempotency_key, payload, () => {
+        // Suspension gates new work. It does not touch the ledger or a terminal usage row: what was
+        // already settled stays settled, because accounting that happened is a fact (R18).
+        target.suspended = input.suspended;
+        target.suspension_reason = reason;
+        const cutoff = clockMs - 30 * 86400000;
+        return summaryOf(target, balanceOf(target), cutoff);
+      });
+    },
+
+    async adminSetEntitlements(session, input) {
+      const injectedResult = intercept<OrgEntitlements>("adminSetEntitlements");
+      if (injectedResult !== null) return injectedResult;
+      const rejected = badInput<OrgEntitlements>(input, ADMIN_ENTITLEMENTS_FIELDS);
+      if (rejected !== null) return rejected;
+      const denied = requireOperator<OrgEntitlements>(session);
+      if (denied !== null) return denied;
+      const badKey = badIdempotencyKey(input.idempotency_key, true);
+      if (badKey !== null) return fail<OrgEntitlements>("invalid_request", badKey);
+      const badReason = badAuditReason(input.reason);
+      if (badReason !== null) return fail<OrgEntitlements>("invalid_request", badReason);
+      if (!Array.isArray(input.model_ids) || input.model_ids.length > 100) {
+        return fail("invalid_request", "model_ids must be a list of at most 100 model identifiers");
+      }
+      for (const model of input.model_ids) {
+        if (typeof model !== "string" || model.trim() === "" || model.length > 200) {
+          return fail("invalid_request", "each model id must be a non-empty identifier");
+        }
+      }
+      if (new Set(input.model_ids).size !== input.model_ids.length) {
+        return fail("invalid_request", "model_ids must not repeat");
+      }
+      const badLimit = badEntitlementLimits(input.limits);
+      if (badLimit !== null) return fail<OrgEntitlements>("invalid_request", badLimit);
+      const target = orgs.get(input.target_org_id);
+      if (target === undefined) return fail("not_found", "no such organization");
+
+      const model_ids = [...input.model_ids].sort();
+      const limits: Partial<Record<EntitlementLimitName, number>> = {};
+      for (const name of ENTITLEMENT_LIMIT_NAMES) {
+        const value = input.limits[name];
+        if (value !== undefined) limits[name] = value;
+      }
+      const payload = canonicalPayload({
+        target_org_id: input.target_org_id,
+        model_ids: model_ids.join(","),
+        limits: canonicalPayload(limits),
+        reason: input.reason.trim(),
+      });
+      const replay = replayOf<OrgEntitlements>(session, "adminSetEntitlements", input.idempotency_key, payload);
+      if (replay !== null) return replay;
+
+      return commit("adminSetEntitlements", session, input.idempotency_key, payload, () => {
+        target.entitlements = {
+          org_id: target.org_id,
+          model_ids,
+          limits,
+          updated_at: nextTimestamp(),
+          updated_by: session.email,
+        };
+        return structuredClone(target.entitlements);
+      });
     },
 
     async judgeRuns(session, query) {
@@ -1585,7 +1992,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (denied !== null) return denied;
       const resolved = tenant<Page<JudgeRun>>(session);
       if (isError(resolved)) return resolved;
-      return paginate(resolved.org.judge, query, scopeOf(resolved.org, "judgeRuns", query), (run) => run.id);
+      return paginate(resolved.org.judge, query, scopeOf(resolved.org, "judgeRuns", query), timeKey);
     },
   };
 

@@ -19,17 +19,21 @@
  */
 
 import type {
+  AdminEntitlementsInput,
   AdminGrantInput,
   AdminGrantResult,
   AdminOrgSummary,
+  AdminSuspensionInput,
   ApiKeyCreateInput,
   ApiKeyCreated,
   ApiKeySummary,
+  CalibrationLabelInput,
   ConsoleSettings,
   FeedbackEntry,
   FeedbackInput,
   JudgeRun,
   LedgerEntry,
+  OrgEntitlements,
   Page,
   PageQuery,
   Result,
@@ -58,9 +62,21 @@ export interface ConsoleServices {
   traceDetail(session: SessionContext, requestId: string): Promise<Result<TraceDetail>>;
   traceContent(session: SessionContext, requestId: string): Promise<Result<TraceContentView>>;
 
+  /**
+   * Ordinary console feedback. Whatever the session, the entry is `channel: "console"`,
+   * `author_role: "customer"`, `calibration_set: false`, `rubric_version: null` — an operator
+   * pressing the same button is a customer signal (02, R19). Operator labels come from
+   * `calibration.label` and nowhere else.
+   */
   feedback: {
     list(session: SessionContext, requestId: string): Promise<Result<FeedbackEntry[]>>;
     submit(session: SessionContext, input: FeedbackInput): Promise<Result<FeedbackEntry>>;
+  };
+
+  /** Operator-only (R19): the only path to an `operator` author role and calibration membership. */
+  calibration: {
+    label(session: SessionContext, input: CalibrationLabelInput): Promise<Result<FeedbackEntry>>;
+    list(session: SessionContext, query: PageQuery): Promise<Result<Page<FeedbackEntry>>>;
   };
 
   settings: {
@@ -81,6 +97,13 @@ export interface ConsoleServices {
   adminOrgs(session: SessionContext, query: PageQuery): Promise<Result<Page<AdminOrgSummary>>>;
   adminGrant(session: SessionContext, input: AdminGrantInput): Promise<Result<AdminGrantResult>>;
 
+  /**
+   * Operator-only entitlement controls (R19). Suspension gates *new* work only: it never rewrites
+   * a ledger entry or a terminal usage row, because accounting that already happened is a fact.
+   */
+  adminSetSuspension(session: SessionContext, input: AdminSuspensionInput): Promise<Result<AdminOrgSummary>>;
+  adminSetEntitlements(session: SessionContext, input: AdminEntitlementsInput): Promise<Result<OrgEntitlements>>;
+
   /** Owner and platform operator only (R13); a member cannot read evaluation runs. */
   judgeRuns(session: SessionContext, query: PageQuery): Promise<Result<Page<JudgeRun>>>;
 }
@@ -97,6 +120,8 @@ export const CONSOLE_OPERATIONS = [
   "traceContent",
   "feedback.list",
   "feedback.submit",
+  "calibration.label",
+  "calibration.list",
   "settings.get",
   "settings.update",
   "keys.list",
@@ -104,6 +129,8 @@ export const CONSOLE_OPERATIONS = [
   "keys.revoke",
   "adminOrgs",
   "adminGrant",
+  "adminSetSuspension",
+  "adminSetEntitlements",
   "judgeRuns",
 ] as const;
 export type ConsoleOperation = (typeof CONSOLE_OPERATIONS)[number];
@@ -119,6 +146,10 @@ export const OWNER_ONLY_OPERATIONS = [
 export const OPERATOR_ONLY_OPERATIONS = [
   "adminOrgs",
   "adminGrant",
+  "adminSetSuspension",
+  "adminSetEntitlements",
+  "calibration.label",
+  "calibration.list",
 ] as const satisfies readonly ConsoleOperation[];
 
 /** Readable by the organization owner or a platform operator, never a member (R13). */
@@ -135,4 +166,7 @@ export const MUTATING_OPERATIONS = [
   "keys.create",
   "keys.revoke",
   "adminGrant",
+  "adminSetSuspension",
+  "adminSetEntitlements",
+  "calibration.label",
 ] as const satisfies readonly ConsoleOperation[];

@@ -14,17 +14,20 @@ import { describe, it } from "node:test";
 import { addMoney, compareMoney, isMoney, parseMoney, subMoney, ZERO_MONEY, type Money } from "./money.ts";
 import {
   AUTHOR_ROLES,
+  CALIBRATION_LABELS,
   CREATABLE_LEDGER_ENTRY_KINDS,
+  ENTITLEMENT_LIMIT_NAMES,
+  ERROR_CODE_HTTP_STATUS,
   ERROR_CODES,
   EXECUTION_MODES,
   FEEDBACK_CHANNELS,
+  FEEDBACK_ENTRY_NAMES,
   FEEDBACK_NAMES,
   JOB_STATES,
   JUDGE_MODES,
   JUDGE_RUN_STATES,
   JUDGE_SCORE_KINDS,
   LEDGER_ENTRY_KINDS,
-  ERROR_CODE_HTTP_STATUS,
   MAX_CONTENT_RETENTION_DAYS,
   MAX_FEEDBACK_TEXT_CHARS,
   MAX_IDEMPOTENCY_KEY_CHARS,
@@ -55,6 +58,8 @@ export type ConsoleHarness = {
     member: SessionContext;
     operator: SessionContext;
     otherOwner: SessionContext;
+    /** R18: the owner of an already-suspended organization. */
+    suspendedOwner: SessionContext;
   };
   ids: {
     orgId: string;
@@ -65,8 +70,17 @@ export type ConsoleHarness = {
     unknownRequestId: string;
     keyId: string;
     otherOrgKeyId: string;
+    /** R18: an organization that is suspended before the suite touches anything. */
+    suspendedOrgId: string;
   };
 };
+
+/**
+ * What the harness must guarantee beyond the identifiers, because the suite cannot create it:
+ * enough rows for several pages, **and at least one group of rows sharing a `created_at`** in
+ * usage, the ledger and traces. Equal timestamps are where a keyset cursor either holds or quietly
+ * drops a row, so a harness without them leaves the interesting case untested (N1).
+ */
 
 export type ConsoleHarnessFactory = () => ConsoleHarness | Promise<ConsoleHarness>;
 
@@ -146,6 +160,53 @@ async function assertSamePagesAtEveryLimit<T>(
 function assertDescending(values: string[], what: string): void {
   for (let i = 1; i < values.length; i += 1) {
     assert.ok(values[i - 1] >= values[i], `${what}: order is not stable and descending at ${i}`);
+  }
+}
+
+/**
+ * The order must be *total*: newest first by `created_at`, ties broken by id, and no two rows equal
+ * on both. A merely "descending by created_at" list has an undefined order inside a group of equal
+ * timestamps, and a keyset cursor across that group then skips or repeats a row (N1).
+ */
+function assertStrictTotalOrder(rows: { at: string; id: string }[], what: string): void {
+  for (let i = 1; i < rows.length; i += 1) {
+    const previous = rows[i - 1];
+    const current = rows[i];
+    assert.ok(
+      previous.at > current.at || (previous.at === current.at && previous.id > current.id),
+      `${what}: (created_at, id) is not strictly descending at ${i}: ${JSON.stringify(previous)} then ${JSON.stringify(current)}`,
+    );
+  }
+}
+
+/** The harness must contain the interesting case, or the assertion above proves nothing. */
+function assertHasTimestampTie(rows: { at: string; id: string }[], what: string): void {
+  const tied = rows.some((row, index) => index > 0 && rows[index - 1].at === row.at);
+  assert.ok(
+    tied,
+    `${what}: the harness needs at least two rows sharing a created_at, or the keyset tie-break is untested`,
+  );
+}
+
+/** R19: an operator label is the only entry that may claim operator authorship or membership. */
+function assertFeedbackEntry(entry: FeedbackEntry, what: string): void {
+  assert.ok(inSet(FEEDBACK_ENTRY_NAMES, entry.name), `${what}: unknown feedback name ${entry.name}`);
+  assert.ok(inSet(FEEDBACK_CHANNELS, entry.channel), `${what}: feedback channel`);
+  assert.ok(inSet(AUTHOR_ROLES, entry.author_role), `${what}: feedback author role`);
+  if (entry.author_role === "operator") {
+    assert.equal(entry.name, "calibration_label", `${what}: only a calibration label is operator-authored`);
+  }
+  if (entry.calibration_set) {
+    assert.equal(entry.author_role, "operator", `${what}: calibration membership needs operator authority`);
+    assert.equal(entry.name, "calibration_label", `${what}: only a calibration label is in the set`);
+  }
+  assert.equal(
+    entry.rubric_version === null,
+    entry.name !== "calibration_label",
+    `${what}: a rubric version belongs to a calibration label and nothing else`,
+  );
+  if (entry.name === "calibration_label") {
+    assert.ok(inSet(CALIBRATION_LABELS, entry.value as string), `${what}: calibration label value`);
   }
 }
 
@@ -302,6 +363,9 @@ export function runConsoleServicesConformance(
         all.map((row) => row.created_at),
         "usage",
       );
+      const keys = all.map((row) => ({ at: row.created_at, id: row.request_id }));
+      assertHasTimestampTie(keys, "usage");
+      assertStrictTotalOrder(keys, "usage");
       for (const row of all) assertUsageRow(row);
     });
 
@@ -316,6 +380,9 @@ export function runConsoleServicesConformance(
         ledger.map((entry) => entry.created_at),
         "ledger",
       );
+      const ledgerKeys = ledger.map((entry) => ({ at: entry.created_at, id: entry.id }));
+      assertHasTimestampTie(ledgerKeys, "ledger");
+      assertStrictTotalOrder(ledgerKeys, "ledger");
       for (const entry of ledger) assertLedgerEntry(entry);
 
       const traces = await assertSamePagesAtEveryLimit<TraceListItem>(
@@ -323,6 +390,9 @@ export function runConsoleServicesConformance(
         (row) => row.request_id,
         "traces",
       );
+      const traceKeys = traces.map((row) => ({ at: row.created_at, id: row.request_id }));
+      assertHasTimestampTie(traceKeys, "traces");
+      assertStrictTotalOrder(traceKeys, "traces");
       for (const row of traces) assertTraceListItem(row);
     });
 
@@ -351,10 +421,27 @@ export function runConsoleServicesConformance(
         "invalid_cursor",
         "garbage cursor",
       );
+      // Correctly *shaped* cursors: the point is that the scope hash is checked, not that a
+      // malformed blob is rejected. An offset-shaped forgery would pass a keyset implementation
+      // trivially and prove nothing.
+      const decoded = JSON.parse(atob(cursor)) as Record<string, unknown>;
       expectError(
-        await services.usage(sessions.owner, { limit: 5, cursor: btoa('{"o":0,"k":"deadbeef"}') }),
+        await services.usage(sessions.owner, {
+          limit: 5,
+          cursor: btoa(JSON.stringify({ ...decoded, k: "deadbeef" })),
+        }),
         "invalid_cursor",
-        "forged cursor",
+        "cursor with a forged scope",
+      );
+      const foreign = expectOk(
+        await services.traces(sessions.owner, { limit: 5 }),
+        "a page from another query",
+      ).next_cursor;
+      assert.ok(foreign !== null, "the harness needs more than one page of traces");
+      expectError(
+        await services.usage(sessions.owner, { limit: 5, cursor: foreign }),
+        "invalid_cursor",
+        "a cursor minted for another list",
       );
       expectError(
         await services.usage(sessions.owner, { limit: 5, cursor: `${cursor}x` }),
@@ -833,7 +920,9 @@ export function runConsoleServicesConformance(
       expectError(
         await services.adminGrant(sessions.operator, {
           ...input,
-          target_org_id: "33333333-3333-4333-8333-333333333333",
+          // A well-formed id the harness guarantees exists nowhere — not a literal, which the
+          // fixtures could later claim (they did: it became the suspended organization).
+          target_org_id: ids.unknownRequestId,
           idempotency_key: "grant-conformance-unknown-org",
         }),
         "not_found",
@@ -891,6 +980,377 @@ export function runConsoleServicesConformance(
       );
       assert.equal(offContent.availability, "off");
       assert.equal(offContent.content, null, "an off-mode request has no content to render");
+    });
+
+    it("the HTTP status table is the one 08 §3 freezes, code for code", async () => {
+      // Parity with the Python `error_codes.json` is a table comparison, so the count is pinned:
+      // a code added on one side only shows up here rather than at integration (R22).
+      const served = ERROR_CODES.filter((code) => ERROR_CODE_HTTP_STATUS[code] !== null);
+      assert.equal(served.length, 27, "27 codes carry an HTTP status");
+      assert.equal(ERROR_CODE_HTTP_STATUS.upload_expired, 410, "an expired upload window is gone, not a 409");
+      assert.equal(ERROR_CODE_HTTP_STATUS.result_expired, 410);
+      for (const code of ERROR_CODES) {
+        const status = ERROR_CODE_HTTP_STATUS[code];
+        assert.ok(status === null || (status >= 400 && status <= 599), `${code} has a nonsense status`);
+      }
+    });
+
+    it("a suspended organization can do nothing, and suspension leaves its accounting alone", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      // R18: reachable from the harness, not something the suite has to arrange first.
+      expectError(await services.usage(sessions.suspendedOwner, {}), "org_suspended", "suspended usage");
+      expectError(await services.balances(sessions.suspendedOwner), "org_suspended", "suspended balances");
+      expectError(await services.settings.get(sessions.suspendedOwner), "org_suspended", "suspended settings");
+      expectError(
+        await services.keys.create(sessions.suspendedOwner, { name: "while suspended" }),
+        "org_suspended",
+        "suspended key creation",
+      );
+      expectError(
+        await services.feedback.submit(sessions.suspendedOwner, {
+          request_id: ids.availableRequestId,
+          name: "thumb",
+          value: true,
+          idempotency_key: "suspended-feedback",
+        }),
+        "org_suspended",
+        "suspended feedback",
+      );
+
+      // The operator still sees it, with its reason, and its wallet still adds up.
+      const listed = expectOk(
+        await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
+        "operator org list",
+      );
+      const row = listed.items.find((candidate) => candidate.org_id === ids.suspendedOrgId);
+      assert.ok(row !== undefined, "a suspended organization is still listed for the operator");
+      assert.equal(row.suspended, true);
+      assert.ok(row.suspension_reason !== null && row.suspension_reason.length > 0, "suspension says why");
+      assert.ok(isMoney(row.balance.ledger_total), "a suspended organization still has a wallet");
+    });
+
+    it("an operator can suspend and restore an organization without touching what it already owes", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const accounting = async (): Promise<string> => {
+        const ledger = await walkAll<LedgerEntry>(
+          (cursor) => services.ledger(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+          "ledger",
+        );
+        const usage = await walkAll<UsageRow>(
+          (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+          "usage",
+        );
+        return JSON.stringify([
+          ledger.map((entry) => [entry.id, entry.delta, entry.kind]),
+          usage.map((row) => [row.request_id, row.cost, row.settlement_state, row.max_hold]),
+        ]);
+      };
+      const before = await accounting();
+
+      const denied = await services.adminSetSuspension(sessions.owner, {
+        target_org_id: ids.orgId,
+        suspended: true,
+        reason: "owner trying to suspend itself",
+        idempotency_key: "suspend-denied",
+      });
+      expectError(denied, "forbidden", "an owner cannot suspend an organization");
+
+      const suspended = expectOk(
+        await services.adminSetSuspension(sessions.operator, {
+          target_org_id: ids.orgId,
+          suspended: true,
+          reason: "conformance: suspend",
+          idempotency_key: "suspend-1",
+        }),
+        "operator suspension",
+      );
+      assert.equal(suspended.suspended, true);
+      assert.equal(suspended.suspension_reason, "conformance: suspend");
+      expectError(await services.usage(sessions.owner, {}), "org_suspended", "usage while suspended");
+
+      // Replay is one effect, and a changed payload under the same key is a conflict.
+      const replay = expectOk(
+        await services.adminSetSuspension(sessions.operator, {
+          target_org_id: ids.orgId,
+          suspended: true,
+          reason: "conformance: suspend",
+          idempotency_key: "suspend-1",
+        }),
+        "replayed suspension",
+      );
+      assert.equal(replay.suspended, true);
+      expectError(
+        await services.adminSetSuspension(sessions.operator, {
+          target_org_id: ids.orgId,
+          suspended: false,
+          reason: "conformance: suspend",
+          idempotency_key: "suspend-1",
+        }),
+        "idempotency_conflict",
+        "the same key flipped to a different state",
+      );
+      expectError(
+        await services.adminSetSuspension(sessions.operator, {
+          target_org_id: ids.orgId,
+          suspended: true,
+          reason: "   ",
+          idempotency_key: "suspend-no-reason",
+        }),
+        "invalid_request",
+        "suspension without a reason",
+      );
+
+      const restored = expectOk(
+        await services.adminSetSuspension(sessions.operator, {
+          target_org_id: ids.orgId,
+          suspended: false,
+          reason: "conformance: restore",
+          idempotency_key: "suspend-2",
+        }),
+        "operator restore",
+      );
+      assert.equal(restored.suspended, false);
+      assert.equal(await accounting(), before, "suspension must not alter existing accounting rows");
+    });
+
+    it("an operator sets entitlements, and only the names the contract knows", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const set = expectOk(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: ["marlin-2b@2026-09-01"],
+          limits: { max_concurrent_requests: 4 },
+          reason: "conformance: entitle",
+          idempotency_key: "entitle-1",
+        }),
+        "operator entitlements",
+      );
+      assert.deepEqual(set.model_ids, ["marlin-2b@2026-09-01"]);
+      assert.equal(set.limits.max_concurrent_requests, 4);
+      assert.ok(set.updated_at !== null && set.updated_by === sessions.operator.email, "the write is audited");
+
+      const listed = expectOk(
+        await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
+        "operator org list",
+      );
+      const row = listed.items.find((candidate) => candidate.org_id === ids.orgId);
+      assert.ok(row !== undefined);
+      assert.deepEqual(row.entitlements.model_ids, ["marlin-2b@2026-09-01"], "the list shows what was set");
+
+      expectError(
+        await services.adminSetEntitlements(sessions.owner, {
+          target_org_id: ids.orgId,
+          model_ids: [],
+          limits: {},
+          reason: "owner attempt",
+          idempotency_key: "entitle-denied",
+        }),
+        "forbidden",
+        "an owner cannot set entitlements",
+      );
+      expectError(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: [],
+          limits: { unlimited_everything: 1 } as never,
+          reason: "conformance",
+          idempotency_key: "entitle-bad-limit",
+        }),
+        "invalid_request",
+        "an entitlement limit nobody defined",
+      );
+      expectError(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: [],
+          limits: { max_concurrent_requests: -1 },
+          reason: "conformance",
+          idempotency_key: "entitle-negative",
+        }),
+        "invalid_request",
+        "a negative entitlement limit",
+      );
+      for (const name of ENTITLEMENT_LIMIT_NAMES) {
+        assert.equal(typeof name, "string", "the limit vocabulary is a closed list");
+      }
+    });
+
+    it("an operator label is the only path to operator authorship and calibration membership", async () => {
+      const { services, sessions, ids } = await makeHarness();
+
+      // The same console control, three sessions, one provenance: customer. An operator holding a
+      // customer's org open in the console is not labelling anything (02, R19).
+      for (const [session, who] of [
+        [sessions.owner, "owner"],
+        [sessions.member, "member"],
+        [sessions.operator, "operator"],
+      ] as [SessionContext, string][]) {
+        const entry = expectOk(
+          await services.feedback.submit(session, {
+            request_id: ids.availableRequestId,
+            name: "thumb",
+            value: true,
+            idempotency_key: `provenance-${who}`,
+          }),
+          `${who} feedback`,
+        );
+        assert.equal(entry.channel, "console", `${who}: the channel is the console`);
+        assert.equal(entry.author_role, "customer", `${who}: console feedback is a customer signal`);
+        assert.equal(entry.calibration_set, false, `${who}: submitting does not enrol for calibration`);
+        assert.equal(entry.rubric_version, null, `${who}: no rubric is involved`);
+        assert.equal(entry.author_principal, session.email);
+        assertFeedbackEntry(entry, `${who} feedback`);
+      }
+
+      // Only an operator may label, and the label is what carries the operator role.
+      expectError(
+        await services.calibration.label(sessions.owner, {
+          request_id: ids.availableRequestId,
+          rubric_version: 3,
+          label: "correct",
+          idempotency_key: "label-denied-owner",
+        }),
+        "forbidden",
+        "an owner cannot write a calibration label",
+      );
+      expectError(
+        await services.calibration.list(sessions.owner, {}),
+        "forbidden",
+        "an owner cannot read the calibration set",
+      );
+      const label = expectOk(
+        await services.calibration.label(sessions.operator, {
+          request_id: ids.availableRequestId,
+          rubric_version: 3,
+          label: "partially_correct",
+          comment: "missed the second vehicle",
+          idempotency_key: "label-1",
+        }),
+        "operator calibration label",
+      );
+      assert.equal(label.author_role, "operator");
+      assert.equal(label.name, "calibration_label");
+      assert.equal(label.value, "partially_correct");
+      assert.equal(label.calibration_set, true);
+      assert.equal(label.rubric_version, 3);
+      assertFeedbackEntry(label, "calibration label");
+
+      const replayed = expectOk(
+        await services.calibration.label(sessions.operator, {
+          request_id: ids.availableRequestId,
+          rubric_version: 3,
+          label: "partially_correct",
+          comment: "missed the second vehicle",
+          idempotency_key: "label-1",
+        }),
+        "replayed calibration label",
+      );
+      assert.equal(replayed.id, label.id, "a replayed label is the same label");
+      expectError(
+        await services.calibration.label(sessions.operator, {
+          request_id: ids.availableRequestId,
+          rubric_version: 4,
+          label: "partially_correct",
+          idempotency_key: "label-1",
+        }),
+        "idempotency_conflict",
+        "the same key against another rubric",
+      );
+      expectError(
+        await services.calibration.label(sessions.operator, {
+          request_id: ids.availableRequestId,
+          rubric_version: 3,
+          label: "excellent" as never,
+          idempotency_key: "label-bad-value",
+        }),
+        "invalid_request",
+        "a label outside the vocabulary",
+      );
+      expectError(
+        await services.calibration.label(sessions.operator, {
+          request_id: ids.availableRequestId,
+          rubric_version: 0,
+          label: "correct",
+          idempotency_key: "label-bad-rubric",
+        }),
+        "invalid_request",
+        "a rubric version of zero",
+      );
+
+      const set = expectOk(await services.calibration.list(sessions.operator, { limit: MAX_PAGE_LIMIT }), "calibration set");
+      assert.ok(set.items.some((item) => item.id === label.id), "the label is in the calibration set");
+      for (const item of set.items) assertFeedbackEntry(item, "calibration set entry");
+
+      // And every entry the customer can see obeys the same invariant.
+      for (const entry of expectOk(
+        await services.feedback.list(sessions.owner, ids.availableRequestId),
+        "feedback list",
+      )) {
+        assertFeedbackEntry(entry, "listed feedback");
+      }
+    });
+
+    it("a created key's secret is shown once and never again, to anybody", async () => {
+      const { services, sessions } = await makeHarness();
+      const created = expectOk(
+        await services.keys.create(sessions.owner, { name: "secret once", idempotency_key: "secret-1" }),
+        "key create",
+      );
+      assert.equal(created.replayed, false);
+      assert.ok(typeof created.secret === "string" && created.secret.length > 0, "the first response carries it");
+      const secret = created.secret;
+
+      // Same user, same key: metadata only (R16).
+      const again = expectOk(
+        await services.keys.create(sessions.owner, { name: "secret once", idempotency_key: "secret-1" }),
+        "replayed key create",
+      );
+      assert.equal(again.id, created.id, "a replay is the same key");
+      assert.equal(again.secret, null, "a replay must not carry the secret");
+      assert.equal(again.replayed, true);
+
+      // Another session of the same organization replaying the key must not receive it either.
+      const byOperator = expectOk(
+        await services.keys.create(sessions.operator, { name: "secret once", idempotency_key: "secret-1" }),
+        "replay from another session",
+      );
+      assert.equal(byOperator.id, created.id, "the record is the organization's, not the user's");
+      assert.equal(byOperator.secret, null, "a different user must never receive the secret");
+      assert.equal(byOperator.replayed, true);
+
+      // Revoked, and still no secret — the replay reads the key's *current* metadata.
+      expectOk(await services.keys.revoke(sessions.owner, created.id), "revoke");
+      const afterRevoke = expectOk(
+        await services.keys.create(sessions.owner, { name: "secret once", idempotency_key: "secret-1" }),
+        "replay after revoke",
+      );
+      assert.equal(afterRevoke.secret, null, "a revoked key certainly has no secret to show");
+      assert.ok(afterRevoke.revoked_at !== null, "the replay shows the revocation");
+
+      // Exhaustive read sweep: the secret must appear in no response of any operation, for the
+      // owner or for the operator. This is the portable half of "it is stored nowhere".
+      const responses: unknown[] = [
+        await services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT }),
+        await services.usageSummary(sessions.owner, {}),
+        await services.usageDaily(sessions.owner, {}),
+        await services.balances(sessions.owner),
+        await services.ledger(sessions.owner, { limit: MAX_PAGE_LIMIT }),
+        await services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT }),
+        await services.settings.get(sessions.owner),
+        await services.keys.list(sessions.owner),
+        await services.judgeRuns(sessions.owner, { limit: MAX_PAGE_LIMIT }),
+        await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
+        await services.calibration.list(sessions.operator, { limit: MAX_PAGE_LIMIT }),
+        again,
+        byOperator,
+        afterRevoke,
+      ];
+      for (const response of responses) {
+        assert.ok(
+          !JSON.stringify(response).includes(secret),
+          "a key secret leaked into a later response",
+        );
+      }
     });
 
     it("judge runs separate estimates, limited evaluations and held budgets", async () => {
@@ -1224,6 +1684,42 @@ export function runMutationSafetyConformance(
         snapshot,
         "a walk under head insertion must return the rows that existed when it started, in order",
       );
+    });
+
+    it("a filtered walk survives the cursor's own row leaving the filter", async () => {
+      const { services, sessions } = await makeHarness();
+      const query = { limit: 5, has_feedback: false } as const;
+      const first = expectOk(await services.traces(sessions.owner, query), "first filtered page");
+      assert.ok(first.next_cursor !== null, "the harness needs more than one page of unannotated traces");
+      assert.ok(first.items.length > 0);
+      const cursorRow = first.items[first.items.length - 1];
+
+      // Annotate exactly the row the cursor points at: it now has feedback, so it no longer matches
+      // `has_feedback: false`. A cursor that resumes by *looking up* its row would 400 here; a
+      // keyset cursor resumes after the key and carries on (N2).
+      expectOk(
+        await services.feedback.submit(sessions.owner, {
+          request_id: cursorRow.request_id,
+          name: "thumb",
+          value: true,
+          idempotency_key: "filter-escape-1",
+        }),
+        "feedback on the cursor row",
+      );
+
+      const second = expectOk(
+        await services.traces(sessions.owner, { ...query, cursor: first.next_cursor }),
+        "the page after the vanished cursor row",
+      );
+      const seen = [...first.items, ...second.items].map((row) => row.request_id);
+      assert.equal(new Set(seen).size, seen.length, "a row was repeated after the cursor row left the filter");
+      for (const row of second.items) {
+        assert.equal(row.feedback_count, 0, "the filter still holds for the rows that follow");
+        assert.ok(
+          row.created_at <= cursorRow.created_at,
+          "the walk resumed after the cursor key, not at the start",
+        );
+      }
     });
 
     it("nothing creates a legacy purchase entry", async () => {

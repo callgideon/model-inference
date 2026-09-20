@@ -30,6 +30,9 @@ const PLAIN_DECIMAL = /^-?(?:0|[1-9][0-9]*)(\.[0-9]+)?$/;
  */
 const MAX_UNITS = BigInt("100000000000000000000");
 
+/** `-` + 12 integral digits + `.` + 8 fractional digits: nothing in the domain is longer. */
+export const MAX_MONEY_CHARS = 22;
+
 export const ZERO_MONEY = "0.00000000" as Money;
 
 /**
@@ -39,7 +42,11 @@ export const ZERO_MONEY = "0.00000000" as Money;
  * and magnitudes `numeric(20, 8)` cannot store.
  */
 export function tryParseMoneyUnits(value: unknown): bigint | null {
-  if (typeof value !== "string" || !PLAIN_DECIMAL.test(value)) return null;
+  // Length first: the regex and `BigInt()` are both superlinear, and a megabyte-long numeral
+  // arriving in a request body must cost nothing to refuse. No value the domain can hold is
+  // longer than sign + 12 integral digits + point + 8 fractional digits.
+  if (typeof value !== "string" || value.length > MAX_MONEY_CHARS) return null;
+  if (!PLAIN_DECIMAL.test(value)) return null;
   const negative = value.startsWith("-");
   const digits = negative ? value.slice(1) : value;
   const dot = digits.indexOf(".");
