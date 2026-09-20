@@ -12,10 +12,29 @@ and one raw line per attempt to --raw (default <out dir>/raw/<run>.jsonl).
 
 Auth comes from $MARLIN_API_KEY or $INFRX_API_KEY only, sent as a Bearer header;
 the value is never printed, logged or written to any output file. Passing a key on
-the command line is refused. Every byte this client emits — stdout, stderr, the
-summary line, every raw row, argparse usage and any traceback — passes through the
-one choke point redact(), which drops the key (and any usable prefix of it) and cuts
-every URL down to scheme://host/path before anything is truncated.
+the command line is refused, and so is any argv value or --out path carrying 8 or
+more characters of it.
+
+Output is an ALLOWLIST, not a filter. Three rounds of review broke the previous
+scrub-what-we-emit design, so this client does not emit untrusted text at all:
+
+  * no server-controlled string is recorded verbatim. An error response contributes
+    its status, our own error_class, and `error.code`/`error.type` only when they
+    fullmatch [a-z0-9_]{1,64} (otherwise the literal "unrecognized"); the body itself
+    is recorded as sha256 + byte count for correlation, never as text. Retry-After
+    must be numeric, Inference-Id must fullmatch [A-Za-z0-9-]{1,64}, Server-Timing
+    names [a-z0-9_-]{1,32}, finish_reason [a-z0-9_]{1,64}, token counts must be ints.
+  * exceptions contribute type(e).__name__ and our own class, never str(e), and a
+    top-level failure prints frames as file:line:function with no message and no locals.
+  * asyncio and httpx/httpcore logging is muted to name+level only: their handlers
+    print exception messages and request URLs, and they are not our sinks.
+  * a URL label is rebuilt from parsed parts — host + "/" + basename, and only when
+    the basename fullmatches [A-Za-z0-9._-]{1,128}, else the literal "url-input".
+    Never userinfo, query, fragment or intermediate path segments.
+
+redact() survives only as defense in depth on the final serialised line (it removes
+any key substring of 8 or more characters, and best-effort reduces URL query strings);
+it is no longer the guarantee, and no claim here depends on a regex matching a URL.
 
 Percentiles are suppressed, not guessed, when the accepted-sample count cannot
 support them (research/plan/04-verification.md: 32 samples cannot establish a p99).
@@ -25,7 +44,8 @@ httpx + stdlib rather than the openai SDK: this client needs response headers
 honest first-token timing, rejected-status bodies, and an in-process fake gateway
 (httpx.MockTransport) for tests without a server.
 """
-import argparse, asyncio, base64, json, math, mimetypes, os, random, re, statistics, sys, time, traceback
+import argparse, asyncio, base64, functools, json, logging, math, mimetypes, os, posixpath, random, re
+import statistics, subprocess, sys, time, traceback, urllib.parse
 from hashlib import sha256
 
 import httpx
@@ -61,61 +81,90 @@ def api_key():
     return ""
 
 
+def carries_key(value, key):
+    """True when `value` contains any 8-character window of the key, case-insensitively
+    and after the same slug folding raw_path() applies (a key in --label reappears in a
+    file name and in the summary's "raw" field with its punctuation rewritten).
+
+    Membership of the value's own 8-grams in a set of the key's: O(len(value)), no regex
+    over a caller-supplied string."""
+    if not key or len(key) < KEY_MIN_SUBSTRING:
+        return False
+    n = KEY_MIN_SUBSTRING
+    for shape in (key.lower(), fold(key)):
+        if len(shape) < n:
+            continue
+        grams = {shape[i:i + n] for i in range(len(shape) - n + 1)}
+        for cand in (str(value).lower(), fold(value)):
+            if any(cand[i:i + n] in grams for i in range(len(cand) - n + 1)):
+                return True
+    return False
+
+
+def refuse_key_in_args(a, key):
+    """Exit 2 naming the FLAG only, never the value, when an argument carries the key.
+    --label and --out end up in file names and in the summary; argparse would echo them
+    on any later error. Refusing beats redacting: the run never starts."""
+    for name, value in sorted(vars(a).items()):
+        if isinstance(value, str) and carries_key(value, key):
+            flag = "positional video argument" if name == "video" else f"--{name.replace('_', '-')}"
+            print(f"refusing to run: the {flag} contains 8 or more characters of the API key; "
+                  f"pass a value that does not embed it (the value is not echoed here)",
+                  file=sys.stderr)
+            raise SystemExit(2)
+
+
+# ---------------------------------------------------------------- allowlists
+#
+# The guarantee is here, not in redact(): a value a server or a URL controls is either
+# recognised by one of these patterns and recorded as-is, or replaced by a fixed
+# literal. Nothing server-controlled is ever recorded verbatim, so there is no query
+# string, no signature, no echoed key and no exception text to scrub in the first place.
+
+CODE_OK = re.compile(r"[a-z0-9_]{1,64}")            # error.code / error.type / finish_reason
+ID_OK = re.compile(r"[A-Za-z0-9-]{1,64}")           # Inference-Id (a UUID passes)
+TIMING_NAME_OK = re.compile(r"[a-z0-9_-]{1,32}")    # Server-Timing metric names
+BASENAME_OK = re.compile(r"[A-Za-z0-9._-]{1,128}")  # the file part of a URL path
+HOST_OK = re.compile(r"[A-Za-z0-9.-]{1,253}")       # host, never userinfo, never a port
+LABEL_OK = re.compile(r"[a-z0-9-]{1,64}")           # our own slugged --label
+UNKNOWN = "unrecognized"
+URL_LABEL_FALLBACK = "url-input"
 KEY_MARK = "[redacted-key]"
 QUERY_MARK = "[redacted-query]"
-USERINFO_MARK = "[redacted-userinfo]"
-KEY_MIN_PREFIX = 8          # not even a usable prefix of the key may survive
-
-# Every URL is cut down to scheme://host/path. A query string carries the upload
-# signature (`X-Amz-Signature`, `X-Amz-Credential`) or a token, and userinfo carries
-# credentials; httpx exception text, server error bodies, redirect targets and the
-# positional `video` argument all quote full URLs. 04-verification.md forbids signed
-# URLs in committed artifacts and both --out and results/raw/ are committed paths.
-# Case-insensitive on purpose: a server may echo `HTTPS://`.
-# The part before `?` may contain an apostrophe (a raw one in an object key survives
-# some SDKs), so only whitespace, a double quote and a backslash end it; the query
-# string itself stops at the first of those or at an apostrophe.
-URL = re.compile(r"""([a-zA-Z][a-zA-Z0-9+.\-]{0,15}://)     # scheme
-                     (?:([^/?\#\s"'\\@]{1,300})@)?          # userinfo, when present
-                     ([^\s"\\?\#]{0,2000})                  # host + path
-                     ([?\#][^\s"'\\]*)?                     # query string or fragment
-                  """, re.VERBOSE)
-# The same query with no scheme in front of it to anchor the match: a server that
-# echoes `bucket.host/key?X-Amz-Signature=…` still must not get it into a file.
-SIGNED_QUERY = re.compile(r"""\?[^\s"'\\]*?
-                              (?:x-amz-|signature=|sig=|token=|credential=|access[-_]?key)
-                              [^\s"'\\]*""", re.IGNORECASE | re.VERBOSE)
+KEY_MIN_SUBSTRING = 8       # no run of 8+ key characters may appear anywhere, ever
 
 
-def _reduce_url(m):
-    scheme, userinfo, hostpath, tail = m.groups()
-    return (scheme + (USERINFO_MARK + "@" if userinfo else "") + hostpath +
-            (tail[0] + QUERY_MARK if tail else ""))
+def allow(value, pattern, fallback=UNKNOWN):
+    """A server-controlled string, or `fallback`. None when the server sent nothing."""
+    if value is None or value == "":
+        return None
+    return value if isinstance(value, str) and pattern.fullmatch(value) else fallback
 
 
-def redact(text, key):
-    """The ONE choke point: no byte reaches stdout, stderr or a file without passing here.
-
-    Applied to the WHOLE serialised row, summary, message or traceback at each sink
-    rather than field by field: a server controls every field it echoes (`error.code`
-    and a non-JSON error body both reached output unscrubbed once), and it must run
-    BEFORE any truncation, or a cut leaves a usable key prefix or signature fragment
-    behind. Idempotent, so redacting twice is harmless.
-    """
-    text = str(text)
-    if key:
-        # Longest prefix first: a server that echoes back only part of the key, or a cut
-        # that lands inside it, must not leave >= KEY_MIN_PREFIX characters in the clear.
-        # ponytail: len(key) str.replace passes; a single alternation regex if this ever
-        # shows up in a profile (rows are small, keys are ~40 characters).
-        for n in range(len(key), min(KEY_MIN_PREFIX, len(key)) - 1, -1):
-            text = text.replace(key[:n], KEY_MARK)
-    return SIGNED_QUERY.sub("?" + QUERY_MARK, URL.sub(_reduce_url, text))
+def as_int(value):
+    """Token counts are numbers; a server that sends a string there gets None, not a row
+    field it controls the bytes of."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def dump_line(obj, key, **kw):
-    """The only way a row or summary becomes text: serialise, then redact."""
-    return redact(json.dumps(obj, **kw), key)
+def as_float(value):
+    """Retry-After, numeric only (seconds). A date form or anything else -> None."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def fold(text):
+    """The folding a label goes through on its way into a file name: lowercase, every
+    run of non-alphanumerics to a single '-'."""
+    return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+
+
+def slug(text, limit=64):
+    """Our own label, folded into LABEL_OK. Also what raw_path() names a file with."""
+    s = fold(text)[:limit]
+    return s if s and LABEL_OK.fullmatch(s) else ""
 
 
 def is_url(s):
@@ -123,11 +172,85 @@ def is_url(s):
 
 
 def video_label(video):
-    """Label for the positional `video` argument. A local file keeps its basename
-    (historical behaviour); an http(s) URL is kept WHOLE so redact() can reduce it to
-    scheme://host/path — basename() would strip the scheme and smuggle the signed query
-    string ('clip.mp4?X-Amz-Signature=…') past every redactor into --out and raw rows."""
-    return video if is_url(video) else os.path.basename(video)
+    """Label for the positional `video` argument, REBUILT from parsed parts rather than
+    filtered: host + "/" + the basename of the path, and only when both are recognised.
+
+    urlsplit().hostname drops userinfo and the port; posixpath.basename drops every
+    intermediate segment; BASENAME_OK drops a token or signature embedded in the file
+    name. Anything unrecognised becomes the literal "url-input". A query string or
+    fragment is never consulted, so no regex has to find one. Local files keep their
+    basename, as this script always reported them."""
+    if not is_url(video):
+        return os.path.basename(video)
+    try:
+        parts = urllib.parse.urlsplit(video)
+        host, name = parts.hostname or "", posixpath.basename(parts.path or "")
+    except ValueError:                                  # an unparseable URL tells us nothing
+        return URL_LABEL_FALLBACK
+    if HOST_OK.fullmatch(host) and BASENAME_OK.fullmatch(name):
+        return f"{host}/{name}"
+    return URL_LABEL_FALLBACK
+
+
+# ---------------------------------------------------------------- defense in depth
+
+# Best effort only, and no longer load-bearing: a query string is never recorded, so
+# nothing depends on this pattern finding one.
+QUERY_ISH = re.compile(r"\?[^\s\"'\\]{0,4000}")
+MARK_RUN = re.compile(r"(?:" + re.escape(KEY_MARK) + r"){2,}")   # adjacent windows read as one
+
+
+@functools.lru_cache(maxsize=4)
+def _key_grams(key):
+    """One alternation of every 8-character window of the key. Any longer run of key
+    characters contains such a window, so re.sub() with this cannot leave one behind —
+    a substring anywhere in the key, not just a prefix (an echoed key[9:] used to pass)."""
+    grams = {key[i:i + KEY_MIN_SUBSTRING] for i in range(len(key) - KEY_MIN_SUBSTRING + 1)}
+    return re.compile("|".join(re.escape(g) for g in sorted(grams))) if grams else None
+
+
+def redact(text, key):
+    """LAST line of defense on an already-built line, not the guarantee any more.
+
+    Removes every run of >= 8 key characters and blanks anything that still looks like a
+    URL query string. The allowlists above are what make the output safe; this exists so
+    that a field added later without thinking still cannot carry a key through, and it is
+    idempotent so applying it twice is free.
+    """
+    text = str(text)
+    if key:
+        text = text.replace(key, KEY_MARK)              # the whole key reads better as one mark
+        if len(key) >= KEY_MIN_SUBSTRING:
+            # Any longer run of key characters contains an 8-window, so nothing >= 8 survives;
+            # what is left over around a replaced window is shorter than that by construction.
+            text = MARK_RUN.sub(KEY_MARK, _key_grams(key).sub(KEY_MARK, text))
+    return QUERY_ISH.sub("?" + QUERY_MARK, text)
+
+
+def dump_line(obj, key, **kw):
+    """The only way a row or summary becomes text: serialise, then redact."""
+    return redact(json.dumps(obj, **kw), key)
+
+
+def mute_library_logging():
+    """asyncio's default handler prints 'Task exception was never retrieved' WITH the
+    exception message, and httpx logs request URLs; neither passes through our sinks.
+    Their loggers may say that they spoke, and nothing else."""
+    class NameOnly(logging.Handler):
+        def emit(self, record):
+            print(f"log: {record.name} {record.levelname}", file=sys.stderr)
+
+    for name in ("asyncio", "httpx", "httpcore", "hpack"):
+        log = logging.getLogger(name)
+        log.handlers = [NameOnly()]
+        log.propagate = False
+        log.setLevel(logging.WARNING)
+
+
+def frame_list(exc):
+    """A traceback as file:line:function only — no message, no locals, no source line."""
+    return [f"{os.path.basename(f.filename)}:{f.lineno}:{f.name}"
+            for f in traceback.extract_tb(exc.__traceback__)]
 
 
 class Parser(argparse.ArgumentParser):
@@ -217,11 +340,27 @@ def resolve_mm_kwargs(a, duration=None, video=None):
 # ---------------------------------------------------------------- corpus
 
 
+def shared_repo_root(start):
+    """The MAIN checkout's root, so every worktree shares one media cache instead of
+    filling up with its own 483 MB copy (N7). `git rev-parse --git-common-dir` points at
+    the main .git even from a linked worktree; without git we fall back to the tree we
+    are in. Mirrors corpus/build.py's default_cache_root() — the two must agree."""
+    try:
+        r = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=start, text=True,
+                           capture_output=True, timeout=10)
+        if r.returncode == 0 and r.stdout.strip():
+            return os.path.dirname(os.path.abspath(os.path.join(start, r.stdout.strip())))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
+
+
 def corpus_cache_root(manifest, path):
     env = os.environ.get(manifest.get("cache_root_env", "CORPUS_CACHE"))
     if env:
         return env
-    repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(path))))
+    here = os.path.dirname(os.path.abspath(path))
+    repo = shared_repo_root(here) or os.path.dirname(os.path.dirname(here))
     return os.path.join(repo, manifest.get("cache_root_default", ".claude/corpus-cache"))
 
 
@@ -308,7 +447,7 @@ async def media_ref_for(item, cfg, client, row):
         return await asyncio.to_thread(data_url, path)
     if form == "upload":
         t = time.perf_counter()
-        handle = await upload(client, cfg, path)
+        handle = await upload(client, cfg, path, row)
         row["upload_s"] = round(time.perf_counter() - t, 4)
         return UPLOAD_REF_SCHEME + handle
     raise ValueError(f"unknown form {form}")
@@ -320,7 +459,12 @@ def read_and_digest(path):
     return body, sha256(body).hexdigest()
 
 
-async def upload(client, cfg, path):
+class UploadFailed(RuntimeError):
+    """Carries no text: the status lands in row["upload_status"], the class in error_class.
+    httpx's raise_for_status() message would quote the signed destination URL."""
+
+
+async def upload(client, cfg, path, row):
     """POST /v1/uploads -> PUT to the returned constrained destination ->
     POST /v1/uploads/{handle}/complete. Contracts v1 shape; unverified until M3/G4."""
     body, digest = await asyncio.to_thread(read_and_digest, path)   # 35 MB read + sha off the loop
@@ -328,30 +472,40 @@ async def upload(client, cfg, path):
     r = await client.post(cfg["base"] + "/uploads", headers=cfg["headers"],
                           json={"purpose": "video", "filename": os.path.basename(path),
                                 "bytes": len(body), "sha256": digest, "content_type": mime})
-    r.raise_for_status()
+    row["upload_status"] = r.status_code
+    if r.status_code >= 400:
+        raise UploadFailed()
     created = r.json()
     dest = created.get("upload") or created
     put = await client.request(dest.get("method", "PUT"), dest["url"], content=body,
                               headers={"content-type": mime, **(dest.get("headers") or {})})
+    row["upload_status"] = put.status_code
     if put.status_code >= 400:
-        # Not raise_for_status(): its message quotes the full request URL, and this one
-        # is the signed upload destination. Only the status may leave this function.
-        raise RuntimeError(f"upload PUT rejected with HTTP {put.status_code} "
-                           f"(signed destination withheld)")
+        raise UploadFailed()
     done = await client.post(f"{cfg['base']}/uploads/{created['handle']}/complete", headers=cfg["headers"],
                              json={"sha256": digest, "bytes": len(body)})
-    done.raise_for_status()
+    row["upload_status"] = done.status_code
+    if done.status_code >= 400:
+        raise UploadFailed()
     return (done.json() or {}).get("handle", created["handle"])
 
 
 def parse_server_timing(value):
-    """`Server-Timing: queue;dur=12.3, prep;dur=400` -> {"queue": 12.3, "prep": 400.0}."""
-    out = {}
+    """`Server-Timing: queue;dur=12.3, prep;dur=400` -> {"queue": 12.3, "prep": 400.0}.
+
+    Names are allowlisted (TIMING_NAME_OK) and durations must parse as floats, so a
+    header is turned into numbers we chose the shape of, never echoed as text."""
+    out, dropped = {}, 0
     for part in (value or "").split(","):
         name, _, rest = part.strip().partition(";")
         m = re.search(r"dur\s*=\s*([0-9.]+)", rest)
-        if name and m:
-            out[name.strip()] = float(m.group(1))
+        name, dur = name.strip(), as_float(m.group(1)) if m else None
+        if TIMING_NAME_OK.fullmatch(name) and dur is not None:
+            out[name] = dur
+        elif name or dur is not None:
+            dropped += 1
+    if dropped:
+        out["dropped_metrics"] = dropped        # a count, never the name we refused
     return out or None
 
 
@@ -364,9 +518,13 @@ async def attempt(client, cfg, item, t0, attempt_no):
            "prompt_kind": item["prompt_kind"], "cold": item["cold"], "duration_s": item["duration_s"],
            "scheduled_s": item["arrival_s"], "send_s": None, "first_byte_s": None, "first_token_s": None,
            "last_token_s": None, "end_s": None, "http_status": None, "outcome": None, "error_class": None,
-           "error_code": None, "error_message": None, "inference_id": None, "retry_after": None,
+           # error_code/error_type are allowlisted server strings; the body itself is a
+           # digest and a length, never text (round 4: no verbatim server bytes at all)
+           "error_code": None, "error_type": None, "body_sha256": None, "body_bytes": None,
+           "inference_id": None, "retry_after": None,
            "server_timing": None, "prompt_tokens": None, "completion_tokens": None, "usage_missing": None,
-           "content_chars": 0, "upload_s": None, "media_sent": False, "finish_reason": None,
+           "content_chars": 0, "upload_s": None, "upload_status": None, "media_sent": False,
+           "finish_reason": None,
            "stream_complete": None, "schedule_lag_s": None,
            # request-level fields, filled by run_one() on the attempt that ends the request
            "request_send_s": None, "request_latency_s": None, "latency_from_scheduled_s": None}
@@ -374,9 +532,10 @@ async def attempt(client, cfg, item, t0, attempt_no):
     try:
         await _send(client, cfg, item, row, now)
     except Exception as e:                               # transport, file, upload or protocol failure
+        # The exception TYPE, never its text: httpx quotes the full request URL and any
+        # header it was given, and an OSError quotes the path it was handed.
         row["outcome"] = row["outcome"] or "failed"
         row["error_class"] = row["error_class"] or type(e).__name__
-        row["error_message"] = redact(e, cfg["key"])[:200]     # redact first, cut second
         row["end_s"] = row["end_s"] or now()
     ttft = None if row["first_token_s"] is None or row["send_s"] is None else \
         round(row["first_token_s"] - row["send_s"], 6)
@@ -408,30 +567,29 @@ async def _send(client, cfg, item, row, now):
                              headers=cfg["headers"]) as resp:
         row["first_byte_s"] = now()
         row["http_status"] = resp.status_code
-        row["inference_id"] = resp.headers.get("inference-id")
-        row["retry_after"] = resp.headers.get("retry-after")
+        # Headers are server-controlled: allowlist or fixed literal, never verbatim.
+        row["inference_id"] = allow(resp.headers.get("inference-id"), ID_OK)
+        row["retry_after"] = as_float(resp.headers.get("retry-after"))
         row["server_timing"] = parse_server_timing(resp.headers.get("server-timing"))
         if resp.status_code != 200:
-            # Redact the whole body before parsing or cutting it: `code`, `message` and
-            # the raw non-JSON body are all server-controlled and all reach output.
-            body = redact((await resp.aread()).decode("utf-8", "replace"), cfg["key"])
+            # The body is never recorded as text. It is hashed for correlation (an
+            # operator can match it against the gateway's own log) and counted, and only
+            # `code`/`type` may contribute, only when they fullmatch CODE_OK. There is
+            # nothing left to truncate, so no cut can strand half a secret.
+            raw = await resp.aread()
+            row["body_sha256"] = sha256(raw).hexdigest()
+            row["body_bytes"] = len(raw)
             try:
-                parsed = json.loads(body)
+                parsed = json.loads(raw.decode("utf-8", "replace"))
             except ValueError:
                 parsed = None
             err = parsed.get("error") if isinstance(parsed, dict) else None
-            if isinstance(err, str):        # {"error": "<message>"}: some servers do this
-                err = {"message": err}
-            elif not isinstance(err, dict):  # a list body, a bare string, null: keep the body
-                err = {}                     # (err.get on a str used to raise inside the 429 path)
+            if not isinstance(err, dict):   # a string, a list, null: nothing allowlistable
+                err = {}
             row["outcome"] = "rejected" if resp.status_code in REJECT_STATUS else "failed"
             row["error_class"] = f"http_{resp.status_code}"
-            # Redact the PARSED strings again before cutting them: json.loads turns a
-            # \uXXXX-escaped key into the literal key, which redact(body) above could not
-            # see, and the cut would then leave a prefix no sink can match any more.
-            code = redact(err.get("code") or err.get("type") or "", cfg["key"])[:120]
-            row["error_code"] = code or None
-            row["error_message"] = redact(err.get("message") or body, cfg["key"])[:200]
+            row["error_code"] = allow(err.get("code"), CODE_OK)
+            row["error_type"] = allow(err.get("type"), CODE_OK)
             row["end_s"] = now()
             return
         usage, saw_done = None, False
@@ -452,14 +610,14 @@ async def _send(client, cfg, item, row, now):
             if chunk.get("error"):
                 row["outcome"] = "failed"
                 row["error_class"] = "stream_error_event"
-                e = chunk["error"] if isinstance(chunk["error"], dict) else {"code": chunk["error"]}
-                # Server-controlled, so same treatment as the HTTP error path: redact, then cut.
-                row["error_code"] = redact(e.get("code") or "", cfg["key"])[:120] or None
+                e = chunk["error"] if isinstance(chunk["error"], dict) else {}
+                row["error_code"] = allow(e.get("code"), CODE_OK)      # same rule as HTTP
+                row["error_type"] = allow(e.get("type"), CODE_OK)
                 row["end_s"] = now()
                 return
             for choice in chunk.get("choices") or []:
                 if choice.get("finish_reason"):
-                    row["finish_reason"] = choice["finish_reason"]
+                    row["finish_reason"] = allow(choice["finish_reason"], CODE_OK)
                 text = (choice.get("delta") or {}).get("content")
                 if text:
                     row["first_token_s"] = row["first_token_s"] or now()
@@ -467,9 +625,9 @@ async def _send(client, cfg, item, row, now):
                     row["content_chars"] += len(text)
         row["end_s"] = now()
         row["usage_missing"] = usage is None
-        if usage:                                    # authoritative usage only, never chunk counting
-            row["prompt_tokens"] = usage.get("prompt_tokens")
-            row["completion_tokens"] = usage.get("completion_tokens")
+        if isinstance(usage, dict):   # authoritative usage only, never chunk counting; ints only
+            row["prompt_tokens"] = as_int(usage.get("prompt_tokens"))
+            row["completion_tokens"] = as_int(usage.get("completion_tokens"))
         # A 200 whose stream just stops — no [DONE], no finish_reason, no usage — is a
         # truncated response, not a success; E2's abrupt-exit drill needs them apart.
         row["stream_complete"] = bool(saw_done or row["finish_reason"] or usage)
@@ -479,6 +637,15 @@ async def _send(client, cfg, item, row, now):
             row["outcome"], row["error_class"] = "failed", "truncated_stream"
         else:
             row["outcome"] = "accepted"
+
+
+def write_row(cfg, row):
+    """One raw line per attempt, flushed as it completes (N3: a Ctrl-C used to lose the
+    whole run's rows, since they were only written after the last request)."""
+    f = cfg.get("raw_file")
+    if f is not None and not f.closed:
+        f.write(dump_line(row, cfg["key"]) + "\n")
+        f.flush()
 
 
 async def run_one(client, cfg, item, t0, rows):
@@ -497,9 +664,11 @@ async def run_one(client, cfg, item, t0, rows):
                 row["request_latency_s"] = round(row["end_s"] - first_send, 6)
             if cfg["open_loop"] and row["end_s"] is not None:   # coordinated omission
                 row["latency_from_scheduled_s"] = round(row["end_s"] - row["scheduled_s"], 6)
+            write_row(cfg, row)          # written once complete, request-level fields included
             return row
-        wait = float(row["retry_after"] or 1) if str(row["retry_after"] or "1").isdigit() else 1.0
-        await asyncio.sleep(min(wait, 30.0))
+        write_row(cfg, row)              # a retried attempt is already final as it stands
+        wait = row["retry_after"] if row["retry_after"] is not None else 1.0   # numeric already
+        await asyncio.sleep(min(max(wait, 0.0), 30.0))
 
 
 # ---------------------------------------------------------------- drivers
@@ -594,7 +763,8 @@ def summarize(rows, wall, cfg):
     warm_ttft, _ = percentile_block(warm, "ttft_s")
     prompt_tokens = [r["prompt_tokens"] for r in accepted if r["prompt_tokens"] is not None]
     res = {
-        "label": cfg["args"].label, "target": cfg["args"].target, "model": cfg["model"],
+        # our own label, slugged into LABEL_OK (it also names the raw file)
+        "label": slug(cfg["args"].label), "target": cfg["args"].target, "model": cfg["model"],
         "mode": "open-loop" if cfg["args"].rate else "closed-loop",
         "mm_kwargs": cfg["summary_mm_kwargs"], "video": cfg["video_label"],
         "corpus": cfg["corpus_label"], "subset": cfg["args"].subset if cfg["args"].corpus else None,
@@ -623,6 +793,7 @@ def summarize(rows, wall, cfg):
         "cold_ttft_s": cold_ttft, "warm_ttft_s": warm_ttft,
         "prompt_tokens": prompt_tokens[0] if prompt_tokens else None,
         "prompt_tokens_median": round(statistics.median(prompt_tokens), 1) if prompt_tokens else None,
+        "interrupted": False,        # _run() sets this true for a partial, Ctrl-C run
         "wall_s": round(wall, 2),
         "req_per_s": round(len(accepted) / wall, 3) if wall else None,
         "out_tok_per_s": round(out_tokens / wall, 1) if wall else None,
@@ -685,63 +856,84 @@ def make_config(a, clips=None, manifest=None):
 def raw_path(a):
     if a.raw:
         return a.raw
-    slug = re.sub(r"[^a-z0-9]+", "-", (a.label or "run").lower()).strip("-") or "run"
     return os.path.join(os.path.dirname(a.out) or ".", "raw",
-                        f"{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{slug}.jsonl")
+                        f"{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{slug(a.label) or 'run'}.jsonl")
 
 
-async def execute(a):
+async def execute(a, state):
+    """`state` carries rows, cfg and the start time OUT of here, so a Ctrl-C mid-run
+    still has everything completed so far (rows are already on disk as well)."""
     clips, manifest = [], None
     if a.corpus:
         clips, _, manifest = load_corpus(a.corpus, a.subset)
-    cfg = make_config(a, clips, manifest)
+    cfg = state["cfg"] = make_config(a, clips, manifest)
+    cfg["raw_file"] = state["raw_file"]
     prompt = a.prompt
     if not a.corpus and prompt is None:
         prompt = smoke_namespace()["canonical_prompt"](a.weights, "caption")
     schedule = build_schedule(a.requests, clips, cfg["forms"], prompt=prompt, rate=a.rate,
                               seed=a.seed, video=a.video)
-    rows = []
+    rows = state["rows"]
+    # asyncio's default handler prints the exception MESSAGE of an unretrieved task.
+    asyncio.get_running_loop().set_exception_handler(
+        lambda loop, ctx: print(f"loop: {type(ctx.get('exception')).__name__} "
+                                f"({len(ctx)} context keys withheld)", file=sys.stderr))
     transport = load_transport(a.dry_run_transport) if a.dry_run_transport else None
     async with httpx.AsyncClient(timeout=a.timeout, transport=transport) as client:
         if not a.rate and not a.corpus and not a.no_warmup:
             warm = build_schedule(1, clips, cfg["forms"], prompt=prompt, seed=a.seed, video=a.video)
             await run_one(client, cfg, warm[0], time.perf_counter(), [])   # warm-up, not counted
-        wall = await (run_open_loop(client, cfg, schedule, rows) if a.rate
-                      else run_closed_loop(client, cfg, schedule, rows))
-    return rows, wall, cfg
+        state["t0"] = time.perf_counter()
+        state["wall"] = await (run_open_loop(client, cfg, schedule, rows) if a.rate
+                               else run_closed_loop(client, cfg, schedule, rows))
 
 
 def main(argv=None):
-    """Wrapper only: nothing may reach stderr around _run() either. An uncaught
-    traceback quotes the request URL and the argv video URL, and a sys.exit() message
-    can quote a path the caller passed in."""
+    """Wrapper only: nothing may reach stderr around _run() either. A traceback would
+    carry the exception message; only its type and its frames may be printed."""
     try:
         return _run(argv)
     except SystemExit as e:
         raise SystemExit(redact(e.code, api_key()) if isinstance(e.code, str) else e.code)
-    except BaseException:
-        sys.exit(redact(traceback.format_exc(), api_key()))
+    except BaseException as e:
+        sys.exit(f"bench failed: {type(e).__name__} (message withheld) at " +
+                 " <- ".join(reversed(frame_list(e))))
 
 
 def _run(argv=None):
+    mute_library_logging()
     a = parse_args(argv)
-    rows, wall, cfg = asyncio.run(execute(a))
-    res = summarize(rows, wall, cfg)
+    refuse_key_in_args(a, api_key())         # exit 2 before anything is opened or printed
     raw = raw_path(a)
-    os.makedirs(os.path.dirname(raw) or ".", exist_ok=True)
-    key = cfg["key"]                    # every sink below serialises, then redacts
-    with open(raw, "w", encoding="utf-8") as f:
-        for r in rows:
-            f.write(dump_line(r, key) + "\n")
+    for path in (raw, a.out):
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    state = {"rows": [], "cfg": None, "wall": None, "t0": None, "raw_file": None}
+    interrupted = False
+    # Rows are appended and flushed as each attempt finishes: a Ctrl-C or a crash keeps
+    # every completed row instead of losing the whole run's raw data.
+    with open(raw, "w", encoding="utf-8") as raw_file:
+        state["raw_file"] = raw_file
+        try:
+            asyncio.run(execute(a, state))
+        except KeyboardInterrupt:
+            interrupted = True
+    cfg = state["cfg"]
+    if cfg is None:                          # interrupted before the run could start
+        print("interrupted before the first request; nothing to summarise", file=sys.stderr)
+        return 130
+    wall = state["wall"] if state["wall"] is not None else \
+        (time.perf_counter() - state["t0"] if state["t0"] else 0.0)
+    res = summarize(state["rows"], wall, cfg)
+    res["interrupted"] = interrupted         # a partial run must never read as a complete one
     res["raw"] = os.path.relpath(raw, os.path.dirname(a.out) or ".")
+    key = cfg["key"]                         # every sink below serialises, then redacts
     print(dump_line(res, key, indent=2))
     if res["suppressed_percentiles"]:
         print("suppressed (sample count too small): " +
               redact("; ".join(res["suppressed_percentiles"]), key), file=sys.stderr)
-    os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "a", encoding="utf-8") as f:
         f.write(dump_line(res, key) + "\n")
-    return 0 if res["accepted"] else 1
+    return 130 if interrupted else (0 if res["accepted"] else 1)
 
 
 if __name__ == "__main__":

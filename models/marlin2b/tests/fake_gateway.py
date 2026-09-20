@@ -18,7 +18,8 @@ class FakeGateway:
                  completion_tokens=None, role_chunk=True, echo_key_in_code=None,
                  echo_key_in_long_body=None, echo_key_in_json_message=None, echo_pad=0,
                  escape_key=False, upload_url=None, put_status=200, truncate_stream=False,
-                 finish_reason="stop", retry_after="3", chat_override=None, stream_error=None):
+                 finish_reason="stop", retry_after="3", chat_override=None, stream_error=None,
+                 hostile_fields=None, extra_headers=None):
         self.ttft, self.token_gap, self.tokens, self.usage = ttft, token_gap, tokens, usage
         self.statuses = statuses or {}
         self.require_bearer, self.server_timing = require_bearer, server_timing
@@ -40,6 +41,10 @@ class FakeGateway:
         # It runs after the request is recorded, so the upload handshake still works.
         # stream_error: emit this as an SSE `error` event mid-stream instead of finishing.
         self.chat_override, self.stream_error = chat_override, stream_error
+        # hostile_fields: one string a server controls, planted in finish_reason, in the
+        # usage counts and in the Inference-Id / Server-Timing / Retry-After headers at
+        # once -- every field a client might copy into a row without thinking.
+        self.hostile_fields, self.extra_headers = hostile_fields, extra_headers or {}
         self.seen = []            # one dict per chat request, for assertions
         self.uploads = {}
 
@@ -104,6 +109,11 @@ class FakeGateway:
         headers = {"content-type": "text/event-stream", "inference-id": rid}
         if self.server_timing:
             headers["server-timing"] = "queue;dur=12.5, prep;dur=340.0, gpu;dur=880.25"
+        if self.hostile_fields:
+            headers["inference-id"] = self.hostile_fields
+            headers["retry-after"] = self.hostile_fields
+            headers["server-timing"] = f"{self.hostile_fields};dur=1.0, queue;dur=2.5"
+        headers.update(self.extra_headers)
         return httpx.Response(200, headers=headers, content=self._stream(rid, body))
 
     def _json_error_body(self, obj, key):
@@ -135,6 +145,13 @@ class FakeGateway:
             yield frame(base | {"choices": [{"index": 0, "delta": {"content": f"tok{i} "}}]})
         if self.stream_error:         # 200 headers, then an error event inside the stream
             yield frame({"error": self.stream_error})
+            return
+        if self.hostile_fields:       # finish_reason and usage are server-controlled too
+            yield frame(base | {"choices": [{"index": 0, "delta": {},
+                                             "finish_reason": self.hostile_fields}],
+                                "usage": {"prompt_tokens": self.hostile_fields,
+                                          "completion_tokens": self.hostile_fields}})
+            yield b"data: [DONE]\n\n"
             return
         if self.truncate_stream:      # 200 + content, then the connection just ends
             return

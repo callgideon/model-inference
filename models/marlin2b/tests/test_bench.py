@@ -119,11 +119,13 @@ def test_api_key_never_appears_in_any_output():
         for blob in blobs:
             assert KEY not in blob, "api key leaked into client output"
 
-        # an upstream exception that echoes the header must be scrubbed too
+        # An upstream exception that echoes the header contributes its TYPE only: round 4
+        # dropped every verbatim server string, so no row has a message field to scrub.
         summary, raw, stdout, rc = run_bench(base_argv(tmp, requests=2, concurrency=1),
                                              FakeGateway(raise_with_key=KEY), env={"INFRX_API_KEY": KEY})
         assert summary["failed"] == 2 and summary["accepted"] == 0
-        assert all("[redacted-key]" in (r["error_message"] or "") for r in raw)
+        assert all(r["error_class"] == "RuntimeError" for r in raw)
+        assert all("error_message" not in r for r in raw), "no row field may carry server text"
         for blob in (stdout, json.dumps(raw)):
             assert KEY not in blob
 
@@ -141,64 +143,65 @@ def assert_no_key_prefix(tmp, summary, raw, stdout, why):
             assert KEY[:cut] not in blob, f"{why}: leaked {cut} of {len(KEY)} key characters"
 
 
-def test_server_controlled_fields_cannot_leak_the_key_or_a_signed_url():
-    """The paths that escaped per-field scrubbing: error.code, an error body or message
-    with the key STRADDLING the truncation point (cut before redacting leaves a prefix,
-    and a \\uXXXX-escaped key survives a scrub of the undecoded body), and httpx
-    exception text quoting the signed upload URL."""
+def test_server_controlled_fields_are_allowlisted_not_scrubbed():
+    """Rounds 1-3 tried to scrub these fields and lost three times. Round 4 stopped
+    recording them: a code that is not [a-z0-9_]{1,64} becomes "unrecognized", a body
+    becomes a sha256 and a length, and an exception becomes its class. There is nothing
+    left to truncate, so the straddle shapes cannot exist any more — but the same hostile
+    gateways must still produce clean, useful rows."""
     with tempfile.TemporaryDirectory() as tmp:
         clips = make_clips(4, tmp)
         with_clips(clips)
 
-        # (a) the key echoed back in error.code, which reaches summary["error_codes"]
+        # (a) the key echoed back in error.code: not allowlistable, so it never lands
         summary, raw, stdout, _ = run_bench(base_argv(tmp, requests=2, concurrency=1),
                                             FakeGateway(echo_key_in_code=KEY), env={"MARLIN_API_KEY": KEY})
-        assert summary["rejected"] == 2 and "bad_key:[redacted-key]" in summary["error_codes"]
+        assert summary["rejected"] == 2 and summary["error_codes"] == {"unrecognized": 2}
+        assert all(r["error_code"] == "unrecognized" and r["error_type"] == "auth" for r in raw)
+        assert all(len(r["body_sha256"]) == 64 and r["body_bytes"] > 0 for r in raw), \
+            "the body must still be correlatable by digest and length"
         for blob in all_output(tmp, summary, raw, stdout):
             assert KEY not in blob, "api key leaked through error.code"
 
-        # (b) a non-JSON body with the key straddling the 200-character cut: truncating
-        # before redacting leaks the first 15 characters, so no prefix may survive.
+        # (b) a non-JSON body carrying the key: recorded as a digest, never as text
         summary, raw, stdout, _ = run_bench(base_argv(tmp, requests=2, concurrency=1),
                                             FakeGateway(echo_key_in_long_body=KEY),
                                             env={"MARLIN_API_KEY": KEY})
         assert summary["rejected"] == 2
-        assert all(len(r["error_message"]) == 200 for r in raw), "the body must really be cut at 200"
-        assert_no_key_prefix(tmp, summary, raw, stdout, "non-JSON body straddling the 200-char cut")
+        assert all(r["error_code"] is None and r["body_bytes"] == 170 + 15 + len(KEY) + 5 for r in raw)
+        assert_no_key_prefix(tmp, summary, raw, stdout, "non-JSON body echoing the key")
 
-        # (b2) the same straddle inside error.message, with the key \uXXXX-escaped on the
-        # wire so redacting the undecoded body cannot see it: json.loads hands back the
-        # real key, so the parsed string must be redacted again before it is cut.
+        # (b2) the same key \uXXXX-escaped inside error.message: the field is gone
         summary, raw, stdout, _ = run_bench(base_argv(tmp, requests=2, concurrency=1),
                                             FakeGateway(echo_key_in_json_message=KEY, echo_pad=180,
                                                         escape_key=True), env={"MARLIN_API_KEY": KEY})
         assert summary["rejected"] == 2
-        # pad 180 + the 14-char marker: the key began before the 200-char cut and was
-        # replaced rather than sliced, so the field is 194 characters, not 200.
-        assert all(r["error_message"] == "x" * 180 + "[redacted-key]" for r in raw)
-        assert_no_key_prefix(tmp, summary, raw, stdout, "escaped key straddling the 200-char message cut")
+        assert all("error_message" not in r for r in raw)
+        assert_no_key_prefix(tmp, summary, raw, stdout, "escaped key inside error.message")
 
-        # (b3) and inside error.code, which is cut at 120 and becomes a summary key
+        # (b3) and inside error.code, which used to be cut at 120 and become a summary key
         summary, raw, stdout, _ = run_bench(base_argv(tmp, requests=2, concurrency=1),
                                             FakeGateway(echo_key_in_code=KEY, echo_pad=102,
                                                         escape_key=True), env={"MARLIN_API_KEY": KEY})
         assert summary["rejected"] == 2
-        assert all(len(r["error_code"]) == 120 for r in raw), "the code must really be cut at 120"
-        assert_no_key_prefix(tmp, summary, raw, stdout, "escaped key straddling the 120-char code cut")
+        assert all(r["error_code"] == "unrecognized" for r in raw), "no cut, no prefix, no echo"
+        assert_no_key_prefix(tmp, summary, raw, stdout, "escaped key inside error.code")
 
-        # (c) a rejected PUT to a signed destination: status only, never the URL
+        # (c) a rejected PUT to a signed destination: the status as a number, never the URL
         summary, raw, stdout, _ = run_bench(base_argv(tmp, requests=2, concurrency=1, forms="upload"),
                                             FakeGateway(upload_url=SIGNED_URL, put_status=403),
                                             env={"MARLIN_API_KEY": KEY})
         assert summary["failed"] == 2 and summary["accepted"] == 0
-        assert all("HTTP 403" in (r["error_message"] or "") for r in raw)
+        assert all(r["upload_status"] == 403 and r["error_class"] == "UploadFailed" for r in raw)
         for blob in all_output(tmp, summary, raw, stdout):
             assert KEY not in blob
             for canary in SIGNED_CANARIES:
                 assert canary not in blob, f"signed-URL canary {canary} leaked into output"
-        # a raw apostrophe in the path must not let the query string through
-        assert "CANARYSIG" not in bench.redact(
-            "Client error for url 'https://s3.invalid/b/o'x/up_1?X-Amz-Signature=CANARYSIGaa'", KEY)
+        # A well-formed code still survives intact: the allowlist must not flatten everything.
+        summary, raw, _, _ = run_bench(base_argv(tmp, requests=2, concurrency=1),
+                                       FakeGateway(statuses={0: 429, 1: 402}),
+                                       env={"MARLIN_API_KEY": KEY})
+        assert summary["error_codes"] == {"rate_limit_exceeded": 1, "insufficient_credit": 1}
 
 
 def test_distinct_clips_counts_only_clips_whose_media_was_sent():
@@ -285,7 +288,7 @@ def test_rejections_and_failures_are_counted_apart_from_accepted():
         assert summary["error_codes"]["rate_limit_exceeded"] == 1
         assert summary["error_codes"]["insufficient_credit"] == 1
         by_seq = {r["seq"]: r for r in raw}
-        assert by_seq[0]["retry_after"] == "3" and by_seq[0]["outcome"] == "rejected"
+        assert by_seq[0]["retry_after"] == 3.0 and by_seq[0]["outcome"] == "rejected"   # numeric only
         assert by_seq[0]["ttft_s"] is None and by_seq[0]["completion_tokens"] is None
         assert summary["percentiles"]["ttft_s"]["samples"] == 4
 
