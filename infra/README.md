@@ -204,9 +204,11 @@ worker, 8 concurrent writers, no engine — which bounds the database side of th
 160/s figure without proving the integrated path; it would be labelled
 `synthetic append rate`, not `append_rate_per_s`.)
 
-These thresholds are `est.` engineering limits proposed by I1; the coordinator
-confirms them — together with the §3.1 round-trip form — against contracts v1
-before I2 treats them as a gate.
+These thresholds are `est.` engineering limits proposed by I1, and per the
+coordinator's ruling they **stay `est.` and become a release gate only once E4 has
+measured them**. I2 runs the probe, records the distribution and the verdict wording
+above, and **fails nothing on these numbers** — not the deploy, not a release claim.
+Any earlier use of them as a gate is out of order.
 
 ### 3.4 Who runs it, when, with which secrets
 
@@ -298,8 +300,13 @@ must add an explicit mode:
 
 The mode flag is one operation, matrix row `M-FAILCLOSED`, split as that row says:
 
-- `INFRX_MODE=dev` keeps today's permissive behaviour and refuses to bind a
-  public interface.
+- **unset or unrecognised `INFRX_MODE` refuses to start** — the installer writes no
+  env file and the units exit non-zero. A default is how an unmetered pilot happens
+  by accident, so there is no default.
+- `INFRX_MODE=dev` keeps today's permissive behaviour, refuses to bind a public
+  interface, and **refuses to install or start the public Caddy site** (no `:80`/
+  `:443` listener, no ACME account, no certificate for the public name): a dev host
+  that answers on the pilot's DNS name is the same failure as an unmetered pilot.
 - `INFRX_MODE=pilot` asserts at startup that the auth backend, the journal DSN
   and ledger reachability are present **and that a usable price version for the
   served model resolves from D1's `price_versions`** (contracts v1: a missing
@@ -325,7 +332,7 @@ statement (row `O-MANAGED`, which quotes all three statements verbatim). So
 dropping the inline statement is **not** sufficient: attaching that managed policy
 unmodified to the new role would re-grant exactly the account-wide read the new
 role exists to remove. And **no KMS barrier stands behind it** — every SecureString
-in the account, this project's and the others', is encrypted with the AWS-managed
+**in us-east-1**, this project's and the others', is encrypted with the AWS-managed
 `alias/aws/ssm` key, which any principal in the account decrypts through SSM (row
 `O-PARAMS`). Parameter-read permission therefore *is* decryption permission, which
 is why §5 step 5 and matrix row `M-KMS` exist.
@@ -347,7 +354,7 @@ Elastic-IP item. So I2:
    §1), plus the two new buckets and the observability statement;
 3. grants **no** `ssm:StartSession`/`TerminateSession`/`DescribeSessions` — a
    `*`-scoped session-start grant on the serving host is remote shell into any
-   managed instance in the account;
+   managed instance in this account and region;
 4. grants **no** instance-lifecycle statements
    (`ec2:Run/Terminate/Stop/StartInstances`, `Create/DeleteVolume`,
    `Attach/DetachVolume`), no `ec2:CreateTags` on `*`, no `iam:PassRole`, and
@@ -380,37 +387,70 @@ Elastic-IP item. So I2:
    i-0e8449a4ffca29bab` shows `IamInstanceProfile` = `infrx-pilot-profile`; and
    `ssm describe-instance-information` still reports the host `Online`.
 
-6. **makes the isolation survive the next policy edit, or records that it did not.**
-   Step 5 closes today's exposure through the identity policy alone, and that is
-   the whole barrier: because every SecureString is on the AWS-managed
-   `alias/aws/ssm` key (row `O-PARAMS`), anything that later re-grants
-   `ssm:GetParameter*` on `*` — re-attaching the managed policy, a broad
-   convenience policy, a second role on the host — silently restores the
-   cross-project read, with no second control to stop it. The durable form,
-   **PROPOSED, assigned to I2, in `staging` then `pilot`** (matrix row `M-KMS`):
-   - a customer-managed KMS key, alias `alias/infrx-pilot`, whose **key policy
-     names only** `infrx-pilot-role` for `kms:Decrypt` (plus the account admin for
-     key administration) — a principal without that key policy cannot read the
-     pilot's SecureStrings even holding `ssm:GetParameter` on `*`;
-   - the pilot's own parameters under a **pilot-only path**, re-created as
-     SecureString under that key (`ssm put-parameter --key-id`, values supplied out
-     of band exactly as for `/model-inference/pg_journal_url`; **I1 read no value
-     and this step reads none**);
-   - `staging` on the **sibling** prefix `/infrx-staging/*` with its own key and
-     its own role — deliberately not nested below the pilot path, so neither
-     environment's role can reach the other's secrets (§1);
-   - **read-only verification:** `ssm describe-parameters` shows
-     `KeyId=alias/infrx-pilot` on the pilot parameters and `alias/aws/ssm`
-     unchanged on everything else, and `kms get-key-policy` /
-     `kms list-grants` (read verbs, in I2's allowlist, not I1's) show only the
-     pilot role as decryptor.
+6. **puts the durable outbound control in a permissions boundary** (matrix row
+   `M-BOUNDARY`, **required**, I2, `staging` then `pilot`). Step 5 narrows an
+   identity policy, and that is all it does: re-attaching
+   `AmazonSSMManagedInstanceCore`, adding a broad convenience policy or attaching a
+   second policy to the role restores the account-wide parameter read, and there is
+   no second control behind it. So `infrx-pilot-role` is created **with a
+   permissions boundary** carrying an explicit `Deny` on the four parameter-read
+   actions — `ssm:GetParameter`, `ssm:GetParameters`, `ssm:GetParametersByPath`,
+   `ssm:GetParameterHistory` — with `NotResource` set to the pilot-only parameter
+   path. An effective permission is the intersection of the boundary and the
+   identity policies, so **no later `Allow` on this role can restore the read**,
+   whoever adds it and however broad it is. The staging role gets the same boundary
+   against its sibling staging path.
 
-   If I2 defers the key, it records the deferral and the residual risk in its
-   evidence; the explicit `Deny` variant — a `Deny` on `ssm:GetParameter*` with
-   `NotResource arn:aws:ssm:us-east-1:641134885443:parameter/model-inference/*`,
-   which beats any later `Allow` on the same role — is a cheaper partial that
-   protects the role but not a *second* principal on the host. **I2 picks the key,
-   the `Deny`, or neither, and records which.**
+   **Read-only check:** `iam get-role --role-name infrx-pilot-role` shows
+   `PermissionsBoundary`; `iam get-policy-version` on the boundary policy shows the
+   `Deny` and all four actions; and `iam simulate-principal-policy` (a read verb, in
+   I2's allowlist, not I1's) returns a deny for `ssm:GetParameter` on
+   `/INFRX-SUPABASE-PROD/db_password` and an allow on the pilot path. I2 records the
+   simulation result in its evidence — that is what turns "isolated" from a claim
+   into an observation.
+
+7. **adds the inbound control on the pilot's own secrets** (matrix row `M-KMS`,
+   recommended, I2, `staging` then `pilot`). Steps 5 and 6 stop the pilot host
+   reading *other* projects' parameters. They do nothing about the opposite
+   direction: **other principals reading ours.** Three roles in this account hold
+   `ssm:GetParameter`/`GetParameters` on `Resource: "*"` today (row `O-MPATTACH` —
+   the pilot's, an SSM role of the account owner's and CallGideon's ECS instance
+   role), and since every SecureString in us-east-1 is on the AWS-managed
+   `alias/aws/ssm` key (row `O-PARAMS`), each of them decrypts ours for free. The
+   parameter that matters most is the PROPOSED journal DSN: a credential for the
+   authoritative database. So the pilot's own parameters move to a **pilot-only
+   path** and are re-created as SecureString under a **customer-managed key**
+   `alias/infrx-pilot`, whose key policy is written out rather than defaulted:
+   - **no account-root `kms:*` delegation statement**, so no IAM policy anywhere can
+     grant use of this key and the key policy is the whole story;
+   - `kms:Decrypt` + `kms:DescribeKey` for `infrx-pilot-role`, and for the admin
+     principal that runs the documented operator flows which read parameters with
+     `--with-decryption` (`models/marlin2b/README.md` lines 27 and 51) — otherwise
+     those flows break;
+   - `kms:Encrypt`, `kms:GenerateDataKey*`, `kms:ReEncrypt*` for the admin principal
+     that runs `ssm put-parameter --key-id` when a value is set or rotated; the
+     runtime gets none of these, because it never writes a parameter;
+   - `kms:*` for a **named** key administrator: with no root delegation, an unnamed
+     administrator cannot rotate, tag or schedule deletion of the key, and a key
+     nobody can administer is a future outage.
+
+   If I2 keeps the root delegation statement instead, the property that remains is
+   only that decryption needs **both** an IAM allow and a key-policy allow — a
+   principal with `ssm:GetParameter*` on `*` but no key-policy grant is still
+   refused — and I2 records that it took the weaker form and why. `staging` gets its
+   own key on its sibling path. **Read-only check:** `ssm describe-parameters` shows
+   `KeyId=alias/infrx-pilot` on the pilot path and `alias/aws/ssm` unchanged
+   elsewhere; `kms get-key-policy` and `kms list-grants` show exactly the principals
+   above. Nothing here touches `rey-aws-ssm-role` or `gideon-ecsInstanceRole`: they
+   belong to other work, and this design proposes nothing about them.
+
+**Not a choice between the two.** The boundary `Deny` of step 6 is required — it is
+the only thing that keeps step 5's narrowing true after the next policy edit. The
+key of step 7 is the additional inbound control and is recommended before the
+journal DSN exists. An earlier revision of this section offered them as
+alternatives "I2 picks one" and described the key as what makes the isolation
+survive; that was wrong in direction — a key on our own parameters is not on the
+decryption path of anyone else's — and the §Verification log records it.
 
 An IAM role is **account-global**, so "staging then pilot" is not a meaningful
 environment for it: the role and profile are created once and the *association*
@@ -425,18 +465,25 @@ inherits the account-wide SSM read. I2 sets the hop limit to 1 in the same chang
 as the profile swap (`ec2 modify-instance-metadata-options`, a mutation, under the
 lock).
 
-**Hardening fact I2 must check first, in this order** (still matrix row `M-IMDS`)**:** hop limit 1 is precisely
-what stops a *bridged* container reaching IMDS (the bridge consumes the single
-hop), and it does **not** stop a container started with `--network host`. Nothing
-on the box is known to need role credentials from inside a container — the
-installer reads SSM on the host and writes `/etc/marlin2b-gateway.env`, and the
-engine container needs only weights already on disk — but the vLLM and Caddy
-containers' network mode was not inspected (remote execution was forbidden to
-I1). So I2 verifies, under the lock, that no container fetches credentials from
-IMDS *before* flipping the hop limit; if one does, the credential path moves to
-an injected env file or the host network first. Flipping it blind can break the
-engine start, and a broken engine on the serving host is worse than the exposure
-it closes for the minutes it takes to notice.
+**What hop limit 1 does and does not close** (still matrix row `M-IMDS`). It stops
+a *bridged* container reaching IMDS, because the bridge consumes the single hop,
+and it does **not** stop a container started with `--network host`. That is not
+hypothetical here: per row `O-NETMODE` the repository starts **Caddy with
+`--network host`** and the **engine bridged**. So after the flip the engine
+container is cut off from the instance role and **the Caddy container still is
+not** — a residual exposure that the flip does not address, and the one an attacker
+with code execution in the TLS front door would use. I2's mitigation, in the same
+change or recorded as deferred with the residual risk: run Caddy bridged with
+published ports instead of host network, or, if host network stays, accept that the
+boundary `Deny` of step 6 — not the hop limit — is what bounds what those
+credentials can read. Nothing on the box is known to *need* role credentials from
+inside a container (the installer reads SSM on the host and writes
+`/etc/marlin2b-gateway.env`; the engine needs only weights already on disk), but
+what the **running** box does was not inspected (Limits item 4), so I2 verifies
+under the lock that no container fetches credentials from IMDS *before* flipping
+the hop limit. Flipping it blind can break the engine start, and a broken engine on
+the serving host is worse than the exposure it closes for the minutes it takes to
+notice.
 
 **SSH: host-scoped for the same reason as the role.** Per row `O-SG`, the only
 tcp/22 rule on either of the pilot's groups is in `bootcamp-sg`, which is attached
@@ -458,7 +505,7 @@ describe-instance-information` still reports `Online` immediately beforehand.
 
 ## 6. Backup and restore per durable layer
 
-No EC2 snapshot, AMI or AWS Backup plan exists in the account (row `O-BACKUPS`);
+No EC2 snapshot, AMI or AWS Backup plan exists in us-east-1 (row `O-BACKUPS`);
 creating the first one is matrix row `M-SNAPSHOT`, and the two buckets are
 `M-MEDIA` and `M-TRACES`. All values below are `est.` placeholders until I3
 measures them; I3 owns the drills
@@ -525,14 +572,13 @@ scheduling index; multi-AZ or second worker. I4 starts after I3 and E4, from
 measured pilot data, per the handoff. Capacity purchases are separately
 authorized and are not implied by any design in this document.
 
-**Pre-existing resources of these kinds are not this project's.** The account
-already holds an ALB with nine target groups, seven ACM certificates, nine Auto
-Scaling groups at desired capacity 0, ten launch templates and one scheduled
-`capacity-block` capacity reservation. They belong to CallGideon and to the
-llm-bootcamp/DeepSeek benchmark work. The identifiers, states, dates and the
-commands that returned them are evidence matrix row `M-FLEET` and handback item 12
-of the I1 evidence report; this document does not restate them, so the two files
-cannot come to disagree about a count again.
+**Pre-existing resources of these kinds are not this project's.** An ALB with its
+target groups, ACM certificates, Auto Scaling groups, launch templates and one
+scheduled `capacity-block` capacity reservation already exist in us-east-1,
+belonging to CallGideon and to the llm-bootcamp/DeepSeek benchmark work. **The
+counts, identifiers, states and dates are matrix row `M-FLEET` and handback item 12
+of the I1 evidence report and are deliberately not repeated here**, so the two files
+cannot come to disagree about a number again.
 
 **None of them is created, used, extended, modified or cancelled by any task in
 this document**, and nothing here proposes anything about the Capacity Block —
@@ -714,3 +760,60 @@ target group.
     §3.3 thresholds stay `est.` and become a gate only after **E4** measures them
     (coordinator ruling, evidence Limits item 9); prices are still only what
     `cloud-pricing.md` carries, i.e. none for g6e, with the method recorded.
+- 2026-09-20 (sixth review pass — the isolation of the fifth pass protected the
+  wrong direction; still read-only: one `iam list-entities-for-policy` call at
+  21:14:38Z plus two checkout reads, all itemised in §Commands of the I1 evidence
+  report; **no** resource created, modified or deleted, **no** secret value read,
+  **no** remote command, **no** HTTP request, no Cost Explorer call):
+  - **§5's durable control was pointed the wrong way, and is replaced.** The threat
+    step 6 named is **outbound** — the pilot host regaining `ssm:GetParameter*` on
+    `*` and reading other projects' secrets, all of which sit on the AWS-managed
+    `alias/aws/ssm` key. A customer-managed key on the **pilot's own** parameters is
+    not on that decryption path, so every regression scenario the step listed would
+    still have succeeded with it implemented. The outbound control is now an explicit
+    `Deny` on all four parameter-read actions — `ssm:GetParameter`,
+    `ssm:GetParameters`, `ssm:GetParametersByPath`, `ssm:GetParameterHistory` — in a
+    **permissions boundary** on `infrx-pilot-role`, so no later `Allow` on that role
+    can restore the read; it is **required**, matrix row `M-BOUNDARY`, I2, `staging`
+    then `pilot`, verified by `iam get-role`, `iam get-policy-version` and an
+    `iam simulate-principal-policy` result I2 records.
+  - **The key stays, restated as the inbound control** (step 7, `M-KMS`): it protects
+    the pilot's own secrets — above all the PROPOSED journal DSN — from the other
+    principals that can read them today, which row `O-MPATTACH` now names:
+    `AmazonSSMManagedInstanceCore` is attached to **three roles**, ours and two that
+    are not, and each decrypts `alias/aws/ssm` for free. Its key policy is specified
+    statement by statement instead of defaulted: no account-root `kms:*` delegation,
+    so the key policy is the whole story; `kms:Decrypt`/`DescribeKey` for the runtime
+    role and for the admin principal that runs the documented `--with-decryption`
+    operator flows; `kms:Encrypt`/`GenerateDataKey*`/`ReEncrypt*` for the admin
+    principal that runs `ssm put-parameter --key-id`, and none for the runtime, which
+    never writes a parameter; `kms:*` for a **named** administrator, because with no
+    root delegation an unnamed one cannot rotate or delete the key. If I2 keeps the
+    root delegation it records the weaker property that remains. **I2 no longer
+    "picks one":** the boundary is required, the key is the additional inbound
+    control.
+  - **Hop limit 1 does not close what the fifth pass implied it closed.** Row
+    `O-NETMODE` records from the checkout that Caddy runs `--network host`
+    (`install.sh` line 38) and the engine bridged (`serve.sh` lines 31–32), so after
+    the flip the engine container loses IMDS and the TLS front door keeps it. §5 now
+    states that residual exposure and assigns the mitigation — Caddy bridged with
+    published ports, or an explicit acceptance that `M-BOUNDARY` is what bounds those
+    credentials — to I2.
+  - §3.3 aligned with the coordinator's ruling: the probe thresholds stay `est.` and
+    become a gate **only after E4 measures them**; I2 records numbers and fails
+    nothing on them. §5's mode flag gains the two refusals that were missing: an
+    **unset or unrecognised `INFRX_MODE` refuses to start** (no default), and `dev`
+    also refuses to install or serve the public Caddy site. §9 no longer restates the
+    fleet counts, which live only in `M-FLEET`. Regional observations say "in
+    us-east-1" rather than "in the account", SSM parameters being regional.
+  - **Process, from here on:** corrections are **appended** log entries, never
+    in-place edits of earlier ones. Earlier entries *were* edited in place, and this
+    is the disclosure: this document's fourth-pass entry was rewritten at the fifth
+    pass (the "five calls" count), and the evidence report's fourth-pass entry was
+    edited at its fifth-pass commit (a range endpoint) and its fifth-pass entry at
+    the sixth (hand-typed counts removed in favour of the committed checker). Nothing
+    else was altered after the fact, and nothing will be.
+  - Counts, SHAs and "the checks pass" are no longer written here at all: the
+    evidence report's §Checks quotes the verbatim output of
+    `research/plan/evidence/i/check_i1.py`, and the implementation SHA is stated only
+    in its §Source.
