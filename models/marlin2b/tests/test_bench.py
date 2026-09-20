@@ -134,10 +134,18 @@ def all_output(tmp, summary, raw, stdout):
             open(os.path.join(tmp, "raw.jsonl"), encoding="utf-8").read()]
 
 
+def assert_no_key_prefix(tmp, summary, raw, stdout, why):
+    """Not even a usable prefix: a truncate-then-redact client leaves one behind."""
+    for blob in all_output(tmp, summary, raw, stdout):
+        for cut in range(8, len(KEY) + 1):
+            assert KEY[:cut] not in blob, f"{why}: leaked {cut} of {len(KEY)} key characters"
+
+
 def test_server_controlled_fields_cannot_leak_the_key_or_a_signed_url():
-    """The three paths that escaped per-field scrubbing: error.code, an error body
-    long enough that truncating first would leave a key prefix, and httpx exception
-    text quoting the signed upload URL."""
+    """The paths that escaped per-field scrubbing: error.code, an error body or message
+    with the key STRADDLING the truncation point (cut before redacting leaves a prefix,
+    and a \\uXXXX-escaped key survives a scrub of the undecoded body), and httpx
+    exception text quoting the signed upload URL."""
     with tempfile.TemporaryDirectory() as tmp:
         clips = make_clips(4, tmp)
         with_clips(clips)
@@ -149,14 +157,34 @@ def test_server_controlled_fields_cannot_leak_the_key_or_a_signed_url():
         for blob in all_output(tmp, summary, raw, stdout):
             assert KEY not in blob, "api key leaked through error.code"
 
-        # (b) a non-JSON body with the key past the truncation point: no prefix either
+        # (b) a non-JSON body with the key straddling the 200-character cut: truncating
+        # before redacting leaks the first 15 characters, so no prefix may survive.
         summary, raw, stdout, _ = run_bench(base_argv(tmp, requests=2, concurrency=1),
                                             FakeGateway(echo_key_in_long_body=KEY),
                                             env={"MARLIN_API_KEY": KEY})
         assert summary["rejected"] == 2
-        for blob in all_output(tmp, summary, raw, stdout):
-            for cut in range(8, len(KEY) + 1):          # not even a usable prefix survives
-                assert KEY[:cut] not in blob, f"leaked {cut} chars of the key"
+        assert all(len(r["error_message"]) == 200 for r in raw), "the body must really be cut at 200"
+        assert_no_key_prefix(tmp, summary, raw, stdout, "non-JSON body straddling the 200-char cut")
+
+        # (b2) the same straddle inside error.message, with the key \uXXXX-escaped on the
+        # wire so redacting the undecoded body cannot see it: json.loads hands back the
+        # real key, so the parsed string must be redacted again before it is cut.
+        summary, raw, stdout, _ = run_bench(base_argv(tmp, requests=2, concurrency=1),
+                                            FakeGateway(echo_key_in_json_message=KEY, echo_pad=180,
+                                                        escape_key=True), env={"MARLIN_API_KEY": KEY})
+        assert summary["rejected"] == 2
+        # pad 180 + the 14-char marker: the key began before the 200-char cut and was
+        # replaced rather than sliced, so the field is 194 characters, not 200.
+        assert all(r["error_message"] == "x" * 180 + "[redacted-key]" for r in raw)
+        assert_no_key_prefix(tmp, summary, raw, stdout, "escaped key straddling the 200-char message cut")
+
+        # (b3) and inside error.code, which is cut at 120 and becomes a summary key
+        summary, raw, stdout, _ = run_bench(base_argv(tmp, requests=2, concurrency=1),
+                                            FakeGateway(echo_key_in_code=KEY, echo_pad=102,
+                                                        escape_key=True), env={"MARLIN_API_KEY": KEY})
+        assert summary["rejected"] == 2
+        assert all(len(r["error_code"]) == 120 for r in raw), "the code must really be cut at 120"
+        assert_no_key_prefix(tmp, summary, raw, stdout, "escaped key straddling the 120-char code cut")
 
         # (c) a rejected PUT to a signed destination: status only, never the URL
         summary, raw, stdout, _ = run_bench(base_argv(tmp, requests=2, concurrency=1, forms="upload"),
@@ -168,6 +196,9 @@ def test_server_controlled_fields_cannot_leak_the_key_or_a_signed_url():
             assert KEY not in blob
             for canary in SIGNED_CANARIES:
                 assert canary not in blob, f"signed-URL canary {canary} leaked into output"
+        # a raw apostrophe in the path must not let the query string through
+        assert "CANARYSIG" not in bench.redact(
+            "Client error for url 'https://s3.invalid/b/o'x/up_1?X-Amz-Signature=CANARYSIGaa'", KEY)
 
 
 def test_distinct_clips_counts_only_clips_whose_media_was_sent():
@@ -223,6 +254,18 @@ def test_retried_rejections_stay_visible_and_latency_covers_every_attempt():
         assert retried["request_send_s"] < retried["send_s"], "request starts at the first attempt"
         assert retried["request_latency_s"] > retried["latency_s"], "retry wait must be in the latency"
         assert summary["percentiles"]["latency_s"]["samples"] == 2
+
+        # Open loop: the Retry-After wait sits between a retry's scheduled_s and its
+        # send_s, but it is not driver lag, so the summary block counts first attempts
+        # only (E4 uses schedule_lag_s.max to validate an open-loop cell).
+        summary, raw, _, _ = run_bench(base_argv(tmp, requests=4, concurrency=1, retries=1,
+                                                rate=20, seed=3),
+                                       FakeGateway(statuses={0: 429}, retry_after="1", ttft=0.01),
+                                       env={"MARLIN_API_KEY": KEY})
+        second = [r for r in raw if r["attempt"] == 1]
+        assert second and second[0]["schedule_lag_s"] > 0.9, "the retry really waited"
+        assert summary["schedule_lag_s"]["samples"] == 4, "one lag sample per request, not per attempt"
+        assert summary["schedule_lag_s"]["max"] < 0.1, "a retry wait must not count as schedule lag"
 
 
 def test_rejections_and_failures_are_counted_apart_from_accepted():

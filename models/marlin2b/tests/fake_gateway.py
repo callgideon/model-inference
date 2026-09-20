@@ -16,17 +16,22 @@ class FakeGateway:
     def __init__(self, ttft=0.01, token_gap=0.001, tokens=3, usage=True, statuses=None,
                  require_bearer=None, server_timing=True, raise_with_key=None,
                  completion_tokens=None, role_chunk=True, echo_key_in_code=None,
-                 echo_key_in_long_body=None, upload_url=None, put_status=200, truncate_stream=False,
+                 echo_key_in_long_body=None, echo_key_in_json_message=None, echo_pad=0,
+                 escape_key=False, upload_url=None, put_status=200, truncate_stream=False,
                  finish_reason="stop", retry_after="3"):
         self.ttft, self.token_gap, self.tokens, self.usage = ttft, token_gap, tokens, usage
         self.statuses = statuses or {}
         self.require_bearer, self.server_timing = require_bearer, server_timing
         self.raise_with_key, self.role_chunk = raise_with_key, role_chunk
         self.completion_tokens = completion_tokens
-        # Hostile-server knobs: a key echoed into error.code, a key buried past the
-        # error-body truncation point, a signed upload URL and a rejected PUT, and a
-        # 200 stream that stops without [DONE], finish_reason or usage.
+        # Hostile-server knobs: a key echoed into error.code or error.message, padded
+        # with `echo_pad` so it STRADDLES the client's truncation point (120 for code,
+        # 200 for message and for the non-JSON body) and optionally \uXXXX-escaped so a
+        # scrub of the undecoded body cannot see it; a signed upload URL and a rejected
+        # PUT; a 200 stream that stops without [DONE], finish_reason or usage.
         self.echo_key_in_code, self.echo_key_in_long_body = echo_key_in_code, echo_key_in_long_body
+        self.echo_key_in_json_message = echo_key_in_json_message
+        self.echo_pad, self.escape_key = echo_pad, escape_key
         self.upload_url, self.put_status = upload_url, put_status
         self.truncate_stream, self.finish_reason = truncate_stream, finish_reason
         self.retry_after = retry_after
@@ -65,10 +70,19 @@ class FakeGateway:
         if self.raise_with_key:
             raise RuntimeError(f"upstream refused request with header Bearer {self.raise_with_key}")
         if self.echo_key_in_code:            # the key lands in a field nothing scrubbed per-field
-            return httpx.Response(401, json={"error": {"message": "nope", "type": "auth",
-                                                       "code": "bad_key:" + self.echo_key_in_code}})
-        if self.echo_key_in_long_body:       # non-JSON body, key straddling any truncation point
-            return httpx.Response(401, text="x" * 590 + " rejected key: " +
+            return self._json_error_body(
+                {"error": {"message": "nope", "type": "auth",
+                           "code": "bad_key:" + "x" * self.echo_pad + self.echo_key_in_code}},
+                self.echo_key_in_code)
+        if self.echo_key_in_json_message:    # key straddling the 200-char message cut
+            key = self.echo_key_in_json_message
+            return self._json_error_body(
+                {"error": {"message": "x" * self.echo_pad + key, "code": "auth", "type": "auth"}}, key)
+        if self.echo_key_in_long_body:
+            # Non-JSON body: 170 pad + 15-char lead-in puts the key at offset 185, so it
+            # straddles the client's 200-character cut. A truncate-then-scrub client
+            # leaves the first 15 characters of the key behind.
+            return httpx.Response(401, text="x" * 170 + " rejected key: " +
                                   self.echo_key_in_long_body + " tail")
         if self.require_bearer and auth != f"Bearer {self.require_bearer}":
             return self._error(401, "invalid_api_key", "incorrect api key provided")
@@ -82,6 +96,15 @@ class FakeGateway:
         if self.server_timing:
             headers["server-timing"] = "queue;dur=12.5, prep;dur=340.0, gpu;dur=880.25"
         return httpx.Response(200, headers=headers, content=self._stream(rid, body))
+
+    def _json_error_body(self, obj, key):
+        """Serialise by hand so the key can be \\uXXXX-escaped in the wire bytes: a client
+        that scrubs the undecoded body misses it and json.loads hands back the real key."""
+        text = json.dumps(obj)
+        if self.escape_key:
+            text = text.replace(key, "".join("\\u%04x" % ord(c) for c in key))
+        return httpx.Response(401, content=text.encode(),
+                              headers={"content-type": "application/json"})
 
     def _error(self, status, code, message):
         headers = {"retry-after": self.retry_after} if status in (429, 503) else {}

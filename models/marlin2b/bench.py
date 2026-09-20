@@ -63,7 +63,10 @@ def api_key():
 # A URL query string carries the upload signature (`X-Amz-Signature`) and any token,
 # and httpx exception text quotes the full request URL. 04-verification.md forbids
 # signed URLs in committed artifacts and results/raw/ is a committed directory.
-URL_QUERY = re.compile(r'(https?://[^\s"\'\\]{1,2000}?)\?[^\s"\'\\]*')
+# The part before `?` may contain an apostrophe (a raw one in an object key survives
+# some SDKs), so only whitespace, a double quote and a backslash end it; the query
+# string itself stops at the first of those or at an apostrophe.
+URL_QUERY = re.compile(r'(https?://[^\s"\\]{1,2000}?)\?[^\s"\'\\]*')
 
 
 def redact(text, key):
@@ -366,9 +369,12 @@ async def _send(client, cfg, item, row, now):
                 pass
             row["outcome"] = "rejected" if resp.status_code in REJECT_STATUS else "failed"
             row["error_class"] = f"http_{resp.status_code}"
-            code = str(err.get("code") or err.get("type") or "")[:120]   # becomes a summary key
+            # Redact the PARSED strings again before cutting them: json.loads turns a
+            # \uXXXX-escaped key into the literal key, which redact(body) above could not
+            # see, and the cut would then leave a prefix no sink can match any more.
+            code = redact(err.get("code") or err.get("type") or "", cfg["key"])[:120]
             row["error_code"] = code or None
-            row["error_message"] = str(err.get("message") or body)[:200]
+            row["error_message"] = redact(err.get("message") or body, cfg["key"])[:200]
             row["end_s"] = now()
             return
         usage, saw_done = None, False
@@ -516,8 +522,12 @@ def summarize(rows, wall, cfg):
     # Coordinated omission: when the driver cannot keep up, latency from the SEND time
     # hides the wait it caused. Reported from the scheduled arrival as well (open loop).
     pct["latency_from_scheduled_s"], _ = percentile_block(accepted, "latency_from_scheduled_s")
-    lag_block, _ = percentile_block(rows, "schedule_lag_s")
-    lags = [r["schedule_lag_s"] for r in rows if r.get("schedule_lag_s") is not None]
+    # First attempts only: a retried attempt's send - scheduled includes the previous
+    # attempt and the Retry-After wait, which is not driver lag and must not invalidate
+    # an open-loop cell. Per-attempt lag stays in the raw rows.
+    firsts = [r for r in rows if r["attempt"] == 0]
+    lag_block, _ = percentile_block(firsts, "schedule_lag_s")
+    lags = [r["schedule_lag_s"] for r in firsts if r.get("schedule_lag_s") is not None]
     lag_block["max"] = round(max(lags), 6) if lags else None
     cold = [r for r in accepted if r["cold"] is True]
     warm = [r for r in accepted if r["cold"] is False]
