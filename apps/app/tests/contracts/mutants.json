@@ -372,8 +372,8 @@
       "note": "the model filter does not filter",
       "was": "Z02",
       "file": "lib/contracts/fake-services.ts",
-      "find": "        (query.model === undefined || row.model === query.model),\n    );\n  }\n\n  function traceRowsFor",
-      "replace": "        (query.model === undefined || true),\n    );\n  }\n\n  function traceRowsFor",
+      "find": "        (query.model === undefined || row.model === query.model) &&\n        (query.job_state === undefined || row.job_state === query.job_state) &&",
+      "replace": "        (query.model === undefined || true) &&\n        (query.job_state === undefined || row.job_state === query.job_state) &&",
       "cases": [
         "a filter filters, and an absent filter does not"
       ]
@@ -678,8 +678,8 @@
       "note": "calibration.list returns every feedback entry, not only labels",
       "was": "V06",
       "file": "lib/contracts/fake-services.ts",
-      "find": "        for (const org of orgs.values()) rows.push(...org.labels);",
-      "replace": "        for (const org of orgs.values()) {\n          rows.push(...org.labels);\n          for (const trace of org.traces) rows.push(...trace.feedback);\n        }",
+      "find": "        for (const org of orgs.values()) rows.push(...org.labels.map((entry) => visibleFeedback(entry, session)));",
+      "replace": "        for (const org of orgs.values()) {\n          rows.push(...org.labels.map((entry) => visibleFeedback(entry, session)));\n          for (const trace of org.traces) rows.push(...trace.feedback.map((entry) => visibleFeedback(entry, session)));\n        }",
       "cases": [
         "a calibration label is operator data a customer never sees (R35)"
       ]
@@ -749,16 +749,14 @@
     },
     {
       "id": "MONEY-04",
-      "note": "the canonical form loses its fixed scale",
+      "note": "the canonical form loses its fixed scale (a non-canonical form then fails an isMoney assertion)",
       "file": "lib/contracts/money.ts",
       "find": "  return `${negative ? \"-\" : \"\"}${whole}.${digits.slice(-MONEY_SCALE)}` as Money;",
       "replace": "  return `${negative ? \"-\" : \"\"}${whole}.${digits.slice(-MONEY_SCALE).replace(/0+$/, \"\")}` as Money;",
       "cases": [
         "an operator grant is idempotent per key and conflicts on a changed payload",
         "balance is the ledger total minus reservations, and holds reduce what is available"
-      ],
-      "kills_by": "throw",
-      "kills_by_note": "the non-canonical form throws when reparsed, which is the defect"
+      ]
     },
     {
       "id": "MONEY-05",
@@ -769,6 +767,16 @@
       "cases": [
         "balance is the ledger total minus reservations, and holds reduce what is available",
         "an amount that would leave the money domain is refused, and nothing is written"
+      ]
+    },
+    {
+      "id": "MONEY-06",
+      "note": "the grant boundary has its own looser amount check than the money domain",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const units = tryParseMoneyUnits(input.amount);\n      if (units === null) {",
+      "replace": "      const units = /^[+-]?[0-9]*\\.?[0-9]+$/.test(String(input.amount))\n        ? BigInt(Math.round(Number(input.amount) * 1e8))\n        : tryParseMoneyUnits(input.amount);\n      if (units === null) {",
+      "cases": [
+        "every amount the money domain rejects is rejected by the grant boundary too"
       ]
     },
     {
@@ -1005,11 +1013,52 @@
       ]
     },
     {
-      "id": "R41-02",
-      "note": "consent history records the operator principal a customer can read",
+      "id": "R41-03",
+      "note": "a customer sees which operator submitted ordinary console feedback",
       "file": "lib/contracts/fake-services.ts",
-      "find": "              changed_by: session.isOperator ? PLATFORM_ACTOR : session.email,",
-      "replace": "              changed_by: session.email,",
+      "find": "    if (!byOperator || session.isOperator) return row;\n    return { ...row, author_principal: PLATFORM_ACTOR };",
+      "replace": "    if (!byOperator || session.isOperator) return row;\n    return { ...row, author_principal: row.author_principal };",
+      "cases": [
+        "no customer view ever names an operator (R41)"
+      ]
+    },
+    {
+      "id": "R41-04",
+      "note": "an operator's submission is not marked, so nothing masks its principal",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      ...provenance,\n      by_operator: session.isOperator,",
+      "replace": "      ...provenance,\n      by_operator: false,",
+      "cases": [
+        "no customer view ever names an operator (R41)"
+      ]
+    },
+    {
+      "id": "R41-05",
+      "note": "a trace list row is the whole stored trace, so it leaks what the detail masks",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      .map(listItemOf);",
+      "replace": "      .map((row) => row as unknown as TraceListItem);",
+      "cases": [
+        "ledger and trace pages walk every row exactly once",
+        "no customer view ever names an operator (R41)"
+      ]
+    },
+    {
+      "id": "R41-06",
+      "note": "a consent change by an operator names the operator to the customer",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        changed_by: byOperator && !session.isOperator ? PLATFORM_ACTOR : entry.changed_by,",
+      "replace": "        changed_by: entry.changed_by,",
+      "cases": [
+        "no customer view ever names an operator (R41)"
+      ]
+    },
+    {
+      "id": "R41-07",
+      "note": "the consent history is redacted for everyone, so an operator cannot tell who changed it",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "              changed_by: session.email,\n              by_operator: session.isOperator,",
+      "replace": "              changed_by: session.isOperator ? PLATFORM_ACTOR : session.email,\n              by_operator: session.isOperator,",
       "cases": [
         "no customer view ever names an operator (R41)"
       ]
@@ -1077,6 +1126,17 @@
       "replace": "    if (session.role !== \"owner\" && !session.isOperator) {\n      return fail<T>(\"forbidden\", \"only an organization owner can change this\");",
       "cases": [
         "the role and suspension matrix holds for every operation"
+      ]
+    },
+    {
+      "id": "ROLE-06",
+      "note": "the operator list is filtered to the caller's own organization",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      for (const org of orgs.values()) {\n        const balance = balanceOf(org);",
+      "replace": "      for (const org of [...orgs.values()].filter((candidate) => candidate.org_id === session.orgId)) {\n        const balance = balanceOf(org);",
+      "cases": [
+        "an operator acts on the organization it names, not on its own (R26)",
+        "the operator list pages like every other list"
       ]
     },
     {
@@ -1193,6 +1253,36 @@
       ]
     },
     {
+      "id": "SUSP-07",
+      "note": "suspending an organization releases its outstanding holds",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        target.suspended = input.suspended;\n        target.suspension_reason = reason;\n        // R34: a restore *adds* an entry.",
+      "replace": "        target.suspended = input.suspended;\n        target.suspension_reason = reason;\n        if (input.suspended) for (const row of target.usage) row.max_hold = null;\n        // R34: a restore *adds* an entry.",
+      "cases": [
+        "suspending and restoring an organization with real accounting changes none of it"
+      ]
+    },
+    {
+      "id": "SUSP-08",
+      "note": "suspending an organization rewrites its settled rows as free",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        target.suspension_reason = reason;\n        // R34: a restore *adds* an entry.",
+      "replace": "        target.suspension_reason = reason;\n        if (input.suspended) {\n          for (const row of target.usage) if (row.settlement_state === \"settled\") row.settlement_state = \"released_free\";\n        }\n        // R34: a restore *adds* an entry.",
+      "cases": [
+        "suspending and restoring an organization with real accounting changes none of it"
+      ]
+    },
+    {
+      "id": "SUSP-09",
+      "note": "suspending an organization zeroes the cost of its settled rows",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const before = { suspended: target.suspended, suspension_reason: target.suspension_reason };",
+      "replace": "        const before = { suspended: target.suspended, suspension_reason: target.suspension_reason };\n        if (input.suspended) for (const row of target.usage) row.cost = ZERO_MONEY;",
+      "cases": [
+        "suspending and restoring an organization with real accounting changes none of it"
+      ]
+    },
+    {
       "id": "TARGET-01",
       "note": "adminSetSuspension acts on the caller's organization instead of the target",
       "was": "I19",
@@ -1264,8 +1354,8 @@
       "note": "settings.get reads the first organization's settings",
       "was": "X07",
       "file": "lib/contracts/fake-services.ts",
-      "find": "        return ok(structuredClone(resolved.org.settings));",
-      "replace": "        return ok(structuredClone([...orgs.values()][0].settings));",
+      "find": "        return ok(visibleSettings(resolved.org.settings, session));",
+      "replace": "        return ok(visibleSettings([...orgs.values()][0].settings, session));",
       "cases": [
         "reads and writes never cross the tenant boundary, in either direction"
       ]
@@ -1285,8 +1375,8 @@
       "id": "TENANT-06",
       "note": "a trace of any organization is readable by any session",
       "file": "lib/contracts/fake-services.ts",
-      "find": "  function ownedTrace(org: OrgState, requestId: string): TraceDetail | undefined {\n    return org.traces.find((trace) => trace.request_id === requestId);",
-      "replace": "  function ownedTrace(org: OrgState, requestId: string): TraceDetail | undefined {\n    for (const candidate of orgs.values()) {\n      const found = candidate.traces.find((trace) => trace.request_id === requestId);\n      if (found !== undefined) return found;\n    }\n    return org.traces.find((trace) => trace.request_id === requestId);",
+      "find": "  function ownedTrace(org: OrgState, requestId: string): StoredTrace | undefined {\n    return org.traces.find((trace) => trace.request_id === requestId);",
+      "replace": "  function ownedTrace(org: OrgState, requestId: string): StoredTrace | undefined {\n    for (const candidate of orgs.values()) {\n      const found = candidate.traces.find((trace) => trace.request_id === requestId);\n      if (found !== undefined) return found;\n    }\n    return org.traces.find((trace) => trace.request_id === requestId);",
       "cases": [
         "identifiers from another organization are not_found, in both directions"
       ]

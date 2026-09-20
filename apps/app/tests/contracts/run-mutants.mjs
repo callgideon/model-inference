@@ -63,9 +63,33 @@ function prepareCopy() {
   return { root, app };
 }
 
-/** Names of the failing subtests: how a *case* reports a failure in TAP. */
+/**
+ * The failing subtests, with *how* each failed. A kill has to be an assertion: a case that fell over
+ * with a TypeError tells us the copy is broken, not that the suite checks anything. The suite's own
+ * `settle()` wrapper reports a thrown error through `assert.fail`, so its message is recognised too —
+ * it is a thrown error wearing an assertion's clothes.
+ */
 function failingCases(out) {
-  return [...out.matchAll(/^ {4}not ok \d+ - (.*)$/gm)].map((match) => match[1].trim());
+  const cases = [];
+  const pattern = /^ {4}not ok \d+ - (.*)$/gm;
+  for (let match = pattern.exec(out); match !== null; match = pattern.exec(out)) {
+    const rest = out.slice(match.index + match[0].length);
+    const end = rest.search(/^ {6}\.\.\.$/m);
+    const diagnostic = end === -1 ? rest : rest.slice(0, end);
+    const assertion = /code: 'ERR_ASSERTION'/.test(diagnostic);
+    const wrapped = /threw instead of returning a Result/.test(diagnostic);
+    const error = /^ {6}name: '(\w+)'/m.exec(diagnostic);
+    cases.push({
+      name: match[1].trim(),
+      how: assertion && !wrapped ? "assertion" : "error",
+      error: wrapped ? "an exception surfaced by the suite's own wrapper" : (error?.[1] ?? "unknown"),
+    });
+  }
+  return cases;
+}
+
+function failingNames(out) {
+  return failingCases(out).map((entry) => entry.name);
 }
 
 function passingCases(out) {
@@ -107,7 +131,7 @@ function runSuite(app, limitMs = timeoutMs) {
     child.stderr.on("data", collect);
     child.on("close", (code) => {
       clearTimeout(timer);
-      done({ code, failed: failingCases(out), out, timedOut });
+      done({ code, failed: failingCases(out), passed: passingCases(out), out, timedOut });
     });
   });
 }
@@ -124,14 +148,17 @@ function applyMutant(app, mutant) {
   return { ok: true, restore: () => writeFileSync(target, pristine) };
 }
 
-/** Classifies one finished run. The only path to "killed" is a named, declared case failing. */
+/**
+ * Classifies one finished run. The only path to "killed" is a declared case failing *on an
+ * assertion* — or, where the mutant declares `kills_by: "throw"`, on the exception that is itself
+ * the defect. Everything else is a runner error, because a mutant that makes the whole suite fall
+ * over has not demonstrated that the suite checks anything.
+ */
 function classify(mutant, run) {
   if (run.timedOut) return { outcome: "runner-error", why: "the suite did not finish in time" };
   if (!/^# tests \d+/m.test(run.out)) {
     return { outcome: "runner-error", why: "the suite produced no TAP summary" };
   }
-  // No named case failed, yet the process failed: the suite did not really run, so this mutant
-  // tells us nothing either way.
   if (run.code !== 0 && run.failed.length === 0) {
     return { outcome: "runner-error", why: loadFailureReason(run.out) };
   }
@@ -140,14 +167,43 @@ function classify(mutant, run) {
     return { outcome: "runner-error", why: "the mutant declares no `cases`, so a kill cannot be attributed" };
   }
   if (run.code === 0) return { outcome: "survived", why: "the suite passed" };
-  const matched = run.failed.filter((name) => declared.includes(name));
+
+  // A mutant that breaks *everything* — a crash in the harness factory, say — has told us nothing
+  // about any particular invariant, whatever its declared case says.
+  if (run.passed.length === 0) {
+    return {
+      outcome: "runner-error",
+      why: `every case failed (${run.failed.length}), so the copy is broken rather than the invariant caught`,
+    };
+  }
+
+  const matched = run.failed.filter((entry) => declared.includes(entry.name));
   if (matched.length === 0) {
     return {
       outcome: "survived",
-      why: `the suite failed, but not in a declared case (failed: ${run.failed.join("; ") || "none named"})`,
+      why: `the suite failed, but not in a declared case (failed: ${failingNames(run.out).join("; ") || "none named"})`,
     };
   }
-  return { outcome: "killed", by: matched[0] };
+  const collateral = run.failed.length - matched.length;
+  const byAssertion = matched.filter((entry) => entry.how === "assertion");
+  if (byAssertion.length === 0) {
+    if (mutant.kills_by !== "throw") {
+      return {
+        outcome: "runner-error",
+        why:
+          `the declared case failed by exception (${matched[0].error}), not by assertion — ` +
+          `if that exception IS the defect, declare kills_by: "throw"`,
+      };
+    }
+    return { outcome: "killed", by: matched[0].name, collateral, how: "throw" };
+  }
+  if (mutant.kills_by === "throw") {
+    return {
+      outcome: "runner-error",
+      why: "the mutant declares kills_by: \"throw\" but its case fails on an assertion, so the declaration is wrong",
+    };
+  }
+  return { outcome: "killed", by: byAssertion[0].name, collateral, how: "assertion" };
 }
 
 // ---------------------------------------------------------------------------
@@ -223,6 +279,45 @@ const SELF_TESTS = [
     expect: "survived",
   },
   {
+    name: "a crash in the harness factory is a runner error, not a kill",
+    mutant: {
+      id: "SELF-FACTORY-CRASH",
+      file: "lib/contracts/fake-services.ts",
+      find: "export function createFakeConsoleServices(): FakeConsoleServices {",
+      replace:
+        "export function createFakeConsoleServices(): FakeConsoleServices {\n  (globalThis as never as { noSuchThing: { boom(): void } }).noSuchThing.boom();",
+      cases: [SELF_CASE],
+    },
+    expect: "runner-error",
+  },
+  {
+    name: "a declared case that fails by exception rather than assertion is a runner error",
+    mutant: {
+      id: "SELF-EXCEPTION-KILL",
+      file: "lib/contracts/fake-services.ts",
+      find: "      trace.feedback.push(entry);\n      trace.feedback_count = trace.feedback.length;",
+      replace:
+        "      (trace as never as { nope: { push(v: unknown): void } }).nope.push(entry);\n      trace.feedback_count = trace.feedback.length;",
+      cases: ["feedback follows the R3 body, appears immediately, and has provenance the client cannot set"],
+    },
+    expect: "runner-error",
+  },
+  {
+    // The round-4 reviewer's V03 edit, which round 5 reported as a kill while it was failing eight
+    // cases by TypeError. It is a *legitimate* kill now — the per-field idempotency case catches it on
+    // an assertion — and this self-test exists to keep it that way: if the case that catches it ever
+    // weakens, the classifier sees an exception again and refuses the kill.
+    name: "the old V03 edit is killed on an assertion, not on an exception",
+    mutant: {
+      id: "SELF-V03-REPLICA",
+      file: "lib/contracts/fake-services.ts",
+      find: "    const value = apply();\n    remember(session, operation, key, payload, record(value));",
+      replace: "    remember(session, operation, key, payload, record(undefined as never));\n    const value = apply();",
+      cases: ["an idempotency key is scoped to its operation, its organization and its payload"],
+    },
+    expect: "killed",
+  },
+  {
     name: "a genuine defect in its declared case is killed",
     mutant: {
       id: "SELF-REAL-KILL",
@@ -293,7 +388,7 @@ async function runCatalogue() {
       console.error(baseline.out.split("\n").filter((line) => /not ok|Error/.test(line)).join("\n"));
       return 2;
     }
-    const knownCases = new Set([...passingCases(baseline.out), ...failingCases(baseline.out)]);
+    const knownCases = new Set([...passingCases(baseline.out), ...failingNames(baseline.out)]);
     console.log(
       `baseline: ${knownCases.size} exported cases pass unmutated; ${mutants.length} mutants, ${jobs} at a time, ` +
         `${timeoutMs} ms each\n`,
@@ -331,7 +426,10 @@ async function runCatalogue() {
       counts[result.outcome] += 1;
       const label = result.outcome === "killed" ? "killed  " : result.outcome.toUpperCase().padEnd(8);
       const detail =
-        result.outcome === "killed" ? result.by : `${result.mutant.note ?? ""}${result.why ? ` — ${result.why}` : ""}`;
+        result.outcome === "killed"
+          ? `${result.by}${result.how === "throw" ? " (by the exception it declares)" : ""}` +
+            `${result.collateral > 0 ? ` [+${result.collateral} collateral]` : ""}`
+          : `${result.mutant.note ?? ""}${result.why ? ` — ${result.why}` : ""}`;
       console.log(`${label} ${result.mutant.id.padEnd(16)} ${detail}`);
     }
 

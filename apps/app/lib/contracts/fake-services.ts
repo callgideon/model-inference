@@ -64,6 +64,7 @@ import {
   type AdminOrgSummary,
   type ApiKeyCreated,
   type ApiKeySummary,
+  type ConsentHistoryEntry,
   type ConsoleSettings,
   type ErrorCode,
   type ExecutionMode,
@@ -593,6 +594,25 @@ function outcomeFor(index: number, allFree: boolean): Outcome {
  */
 type StoredLedgerEntry = LedgerEntry & { by_operator: boolean };
 
+/**
+ * Feedback as stored. `by_operator` is the same trick as the ledger's: an operator pressing the
+ * console's own feedback control is still a *customer* signal (R19), but the person who pressed it is
+ * an operator, and R41 says no customer view may name one. The flag lets the read mask the principal
+ * without losing it.
+ */
+type StoredFeedbackEntry = FeedbackEntry & { by_operator: boolean };
+
+/**
+ * Settings as stored. A consent change records *who* really made it; the read projects an operator's
+ * identity to `platform` for a customer, so an operator can still answer "who turned this off?"
+ * (R41 — masking is a view, not a redaction at write time, which would lose the fact).
+ */
+type StoredConsentEntry = ConsentHistoryEntry & { by_operator: boolean };
+type StoredSettings = Omit<ConsoleSettings, "consent_history"> & { consent_history: StoredConsentEntry[] };
+
+/** A trace as stored: its feedback carries the internal flag the DTO does not have. */
+type StoredTrace = Omit<TraceDetail, "feedback"> & { feedback: StoredFeedbackEntry[] };
+
 type OrgState = {
   org_id: string;
   /** Fixture namespace, mixed into every generated id so two organizations cannot collide. */
@@ -603,11 +623,11 @@ type OrgState = {
   suspended: boolean;
   suspension_reason: string | null;
   entitlements: OrgEntitlements;
-  settings: ConsoleSettings;
+  settings: StoredSettings;
   keys: ApiKeySummary[];
   usage: UsageRow[];
   ledger: StoredLedgerEntry[];
-  traces: TraceDetail[];
+  traces: StoredTrace[];
   content: Map<string, TraceContentView>;
   judge: JudgeRun[];
   /**
@@ -615,7 +635,7 @@ type OrgState = {
    * a customer view cannot leak one by forgetting a filter — the only way to read them is
    * `calibration.list`.
    */
-  labels: FeedbackEntry[];
+  labels: StoredFeedbackEntry[];
   counter: number;
   /**
    * Feedback ids are minted per organization and never restart: the namespace keeps two
@@ -714,7 +734,7 @@ function buildOrg(spec: OrgFixture): OrgState {
   const activeKeys = keys.filter((key) => key.revoked_at === null);
 
   const usage: UsageRow[] = [];
-  const traces: TraceDetail[] = [];
+  const traces: StoredTrace[] = [];
   let fullModeRows = 0;
   const content = new Map<string, TraceContentView>();
   const retentionMs = spec.settings.content_retention_days * 86400000;
@@ -897,7 +917,7 @@ function buildOrg(spec: OrgFixture): OrgState {
       trace_mode: pick(TRACE_MODES, spec.settings.trace_mode, `${spec.name} settings trace_mode`),
       content_retention_days: spec.settings.content_retention_days,
       evaluation_consent: spec.settings.evaluation_consent,
-      consent_history: spec.settings.consent_history.map((entry) => ({ ...entry })),
+      consent_history: spec.settings.consent_history.map((entry) => ({ ...entry, by_operator: false })),
     },
     keys,
     usage,
@@ -919,7 +939,7 @@ function buildOrg(spec: OrgFixture): OrgState {
       const isLabel = seed.name === "calibration_label";
       if (isLabel) org.labelCounter += 1;
       else org.feedbackCounter += 1;
-      const entry: FeedbackEntry = {
+      const entry: StoredFeedbackEntry = {
         id: isLabel
           ? labelId(spec.namespace, org.labelCounter)
           : feedbackId(spec.namespace, org.feedbackCounter),
@@ -933,6 +953,8 @@ function buildOrg(spec: OrgFixture): OrgState {
         comment: seed.comment,
         calibration_set: seed.calibration_set,
         rubric_version: seed.rubric_version,
+        // A seeded operator entry is the platform's; a seeded customer or judge entry is not.
+        by_operator: seed.author_role === "operator",
       };
       if (isLabel) {
         org.labels.push(entry);
@@ -1304,8 +1326,36 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     );
   }
 
+  /**
+   * A list row is the list shape, field for field. The fake used to hand back its whole stored trace,
+   * which is a larger object than the contract declares — and one that carried the feedback array,
+   * so a list row could leak what `traceDetail` masks. V and C must both be able to rely on a row
+   * being exactly this.
+   */
+  function listItemOf(trace: StoredTrace): TraceListItem {
+    return {
+      request_id: trace.request_id,
+      created_at: trace.created_at,
+      model: trace.model,
+      key_id: trace.key_id,
+      job_state: trace.job_state,
+      http_status: trace.http_status,
+      trace_mode: trace.trace_mode,
+      content: trace.content,
+      loss_reason: trace.loss_reason,
+      prompt_tokens: trace.prompt_tokens,
+      completion_tokens: trace.completion_tokens,
+      ttft_ms: trace.ttft_ms,
+      wall_ms: trace.wall_ms,
+      cost: trace.cost,
+      feedback_count: trace.feedback_count,
+      score_count: trace.score_count,
+    };
+  }
+
   function traceRowsFor(org: OrgState, query: TraceQuery): TraceListItem[] {
-    return org.traces.filter(
+    return org.traces
+      .filter(
       (row) =>
         // R13: an off-mode request has no trace row at all, so it never appears in this list. Its
         // usage row still links to `traceDetail`, which reports availability `off`.
@@ -1317,7 +1367,8 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         (query.trace_mode === undefined || row.trace_mode === query.trace_mode) &&
         (query.content === undefined || row.content === query.content) &&
         (query.has_feedback === undefined || query.has_feedback === row.feedback_count > 0),
-    );
+      )
+      .map(listItemOf);
   }
 
   /**
@@ -1331,7 +1382,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     return `${org.org_id}|${operation}|${JSON.stringify(parts)}`;
   }
 
-  function ownedTrace(org: OrgState, requestId: string): TraceDetail | undefined {
+  function ownedTrace(org: OrgState, requestId: string): StoredTrace | undefined {
     return org.traces.find((trace) => trace.request_id === requestId);
   }
 
@@ -1390,7 +1441,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
   }
 
   /** For operator-authority operations only: the tenant comes from the row, not from a caller field. */
-  function traceAnywhere(requestId: string): { org: OrgState; trace: TraceDetail } | undefined {
+  function traceAnywhere(requestId: string): { org: OrgState; trace: StoredTrace } | undefined {
     if (typeof requestId !== "string" || requestId === "") return undefined;
     for (const org of orgs.values()) {
       const trace = ownedTrace(org, requestId);
@@ -1406,7 +1457,8 @@ export function createFakeConsoleServices(): FakeConsoleServices {
    */
   function appendFeedback(
     org: OrgState,
-    trace: TraceDetail,
+    trace: StoredTrace,
+    session: SessionContext,
     provenance: {
       name: FeedbackEntry["name"];
       value: FeedbackValue;
@@ -1416,11 +1468,11 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       calibration_set: boolean;
       rubric_version: number | null;
     },
-  ): FeedbackEntry {
+  ): StoredFeedbackEntry {
     const isLabel = provenance.name === "calibration_label";
     if (isLabel) org.labelCounter += 1;
     else org.feedbackCounter += 1;
-    const entry: FeedbackEntry = {
+    const entry: StoredFeedbackEntry = {
       id: isLabel ? labelId(org.namespace, org.labelCounter) : feedbackId(org.namespace, org.feedbackCounter),
       request_id: trace.request_id,
       // A label also takes its timestamp from a separate sequence, so an operator action leaves no
@@ -1428,6 +1480,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       created_at: isLabel ? nextOperatorTimestamp() : nextTimestamp(),
       channel: "console",
       ...provenance,
+      by_operator: session.isOperator,
     };
     // R35: a calibration label is operator data. It goes to the label list, so no customer view has
     // to remember to filter it out, and `feedback_count` and `has_feedback` never count one.
@@ -1438,6 +1491,27 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       trace.feedback_count = trace.feedback.length;
     }
     return structuredClone(entry);
+  }
+
+  /**
+   * R41 for feedback: a customer session is never told which operator pressed the button. The entry
+   * is still a customer signal (R19) — only the principal is masked, and only for a viewer who is
+   * not an operator.
+   */
+  function visibleSettings(settings: StoredSettings, session: SessionContext): ConsoleSettings {
+    return {
+      ...structuredClone(settings),
+      consent_history: settings.consent_history.map(({ by_operator: byOperator, ...entry }) => ({
+        ...entry,
+        changed_by: byOperator && !session.isOperator ? PLATFORM_ACTOR : entry.changed_by,
+      })),
+    };
+  }
+
+  function visibleFeedback(entry: StoredFeedbackEntry, session: SessionContext): FeedbackEntry {
+    const { by_operator: byOperator, ...row } = structuredClone(entry);
+    if (!byOperator || session.isOperator) return row;
+    return { ...row, author_principal: PLATFORM_ACTOR };
   }
 
   const services: FakeConsoleServices = {
@@ -1625,7 +1699,10 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (isError(resolved)) return resolved;
       const trace = ownedTrace(resolved.org, requestId);
       if (trace === undefined) return fail("not_found", "no such request for this organization");
-      return ok(structuredClone(trace));
+      return ok({
+        ...structuredClone(trace),
+        feedback: trace.feedback.map((entry) => visibleFeedback(entry, session)),
+      });
     },
 
     async traceContent(session, requestId) {
@@ -1649,7 +1726,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (isError(resolved)) return resolved;
         const trace = ownedTrace(resolved.org, requestId);
         if (trace === undefined) return fail("not_found", "no such request for this organization");
-        return ok(structuredClone(trace.feedback));
+        return ok(trace.feedback.map((entry) => visibleFeedback(entry, session)));
       },
 
       async submit(session, input) {
@@ -1673,20 +1750,24 @@ export function createFakeConsoleServices(): FakeConsoleServices {
           value: input.value,
           comment,
         });
-        const replay = replayOf<FeedbackEntry>(session, "feedback.submit", input.idempotency_key, payload);
-        if (replay !== null) return replay;
+        // The record holds the stored entry, so a replay is projected exactly like a read: a customer
+        // replaying an operator's submission must not be handed the principal a read would mask.
+        const replay = replayOf<StoredFeedbackEntry>(session, "feedback.submit", input.idempotency_key, payload);
+        if (replay !== null) {
+          return replay.ok ? ok(visibleFeedback(replay.value, session)) : replay;
+        }
 
         // Everything above can refuse; from here nothing can, so the state cannot half-change.
         // Provenance is server-set, and it does not consult the session's authority: an operator
         // pressing the console's own feedback control is a customer signal, because the control is
         // the customer's (02: "console-origin input is not automatically an operator label";
         // R19). An operator label comes from `calibration.label` and nowhere else.
-        return commit(
+        const stored = commit(
           "feedback.submit",
           session,
           input.idempotency_key,
           payload,
-          () => appendFeedback(resolved.org, trace, {
+          () => appendFeedback(resolved.org, trace, session, {
             name: input.name,
             value: input.value,
             comment,
@@ -1696,6 +1777,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
             rubric_version: null,
           }),
         );
+        return stored.ok ? ok(visibleFeedback(stored.value, session)) : stored;
       },
     },
 
@@ -1738,10 +1820,12 @@ export function createFakeConsoleServices(): FakeConsoleServices {
           label: input.label,
           comment,
         });
-        const replay = replayOf<FeedbackEntry>(session, "calibration.label", input.idempotency_key, payload);
-        if (replay !== null) return replay;
+        const replay = replayOf<StoredFeedbackEntry>(session, "calibration.label", input.idempotency_key, payload);
+        if (replay !== null) {
+          return replay.ok ? ok(visibleFeedback(replay.value, session)) : replay;
+        }
 
-        return commit(
+        const stored = commit(
           "calibration.label",
           session,
           input.idempotency_key,
@@ -1750,7 +1834,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
             // R35: into the operator's label list, never into the customer's feedback. The
             // principal here is the *operator's*, not the organization owner's — the label records
             // who judged, and the organization comes from the row (R26, platform-wide scope).
-            const entry = appendFeedback(found.org, found.trace, {
+            const entry = appendFeedback(found.org, found.trace, session, {
               name: "calibration_label",
               value: input.label as CalibrationLabelValue,
               comment,
@@ -1771,6 +1855,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
             return entry;
           },
         );
+        return stored.ok ? ok(visibleFeedback(stored.value, session)) : stored;
       },
 
       async list(session, query) {
@@ -1782,7 +1867,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (denied !== null) return denied;
         const rows: FeedbackEntry[] = [];
         // Every organization's labels: an operator's calibration set spans tenants (R26).
-        for (const org of orgs.values()) rows.push(...org.labels);
+        for (const org of orgs.values()) rows.push(...org.labels.map((entry) => visibleFeedback(entry, session)));
         rows.sort((a, b) => -compareKeys(timeKey(a), timeKey(b)));
         return paginate(rows, query, "operators|calibration.list", timeKey);
       },
@@ -1794,7 +1879,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (injectedResult !== null) return injectedResult;
         const resolved = tenant<ConsoleSettings>(session, "settings.get");
         if (isError(resolved)) return resolved;
-        return ok(structuredClone(resolved.org.settings));
+        return ok(visibleSettings(resolved.org.settings, session));
       },
 
       async update(session, update) {
@@ -1828,10 +1913,13 @@ export function createFakeConsoleServices(): FakeConsoleServices {
           content_retention_days: update.content_retention_days,
           evaluation_consent: update.evaluation_consent,
         });
-        const replay = replayOf<ConsoleSettings>(session, "settings.update", update.idempotency_key, payload);
-        if (replay !== null) return replay;
+        // Stored, then projected: a replay masks exactly as a read does.
+        const replay = replayOf<StoredSettings>(session, "settings.update", update.idempotency_key, payload);
+        if (replay !== null) {
+          return replay.ok ? ok(visibleSettings(replay.value, session)) : replay;
+        }
 
-        return commit("settings.update", session, update.idempotency_key, payload, () => {
+        const stored = commit("settings.update", session, update.idempotency_key, payload, () => {
           const settings = resolved.org.settings;
           if (update.trace_mode !== undefined) settings.trace_mode = update.trace_mode;
           if (update.content_retention_days !== undefined) {
@@ -1844,13 +1932,14 @@ export function createFakeConsoleServices(): FakeConsoleServices {
             settings.consent_history.push({
               changed_at: nextTimestamp(),
               evaluation_consent: update.evaluation_consent,
-              // R41 again: this record is read by the customer, so an operator's identity does not
-              // belong in it even when the operator is also this organization's owner.
-              changed_by: session.isOperator ? PLATFORM_ACTOR : session.email,
+              // The real principal is stored; `visibleSettings` masks it for a customer (R41).
+              changed_by: session.email,
+              by_operator: session.isOperator,
             });
           }
           return structuredClone(settings);
         });
+        return stored.ok ? ok(visibleSettings(stored.value, session)) : stored;
       },
     },
 

@@ -11,6 +11,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import moneyCases from "../../tests/contracts/money_cases.json" with { type: "json" };
 import { addMoney, compareMoney, isMoney, parseMoney, subMoney, ZERO_MONEY, type Money } from "./money.ts";
 import {
   AUDIT_ACTIONS,
@@ -145,6 +146,9 @@ async function settle<T>(what: string, call: () => Promise<Result<T>>): Promise<
 }
 
 const LARGEST_MONEY = "999999999999.99999999" as Money;
+
+/** The cross-language accept/reject list (R11), fed through the interface by the case below. */
+const MONEY_CASES = moneyCases as unknown as { input: string; valid: boolean; canonical: string | null }[];
 
 /** Walk every page, with a hard stop so a broken cursor cannot loop forever. */
 async function walkAll<T>(
@@ -665,6 +669,29 @@ export function runConsoleServicesConformance(
         (row) => row.request_id,
         "traces",
       );
+      // A list row is the list shape and nothing more: a service that returned its detail object
+      // would pass every other assertion here while leaking whatever the detail carries.
+      const listFields = [
+        "request_id",
+        "created_at",
+        "model",
+        "key_id",
+        "job_state",
+        "http_status",
+        "trace_mode",
+        "content",
+        "loss_reason",
+        "prompt_tokens",
+        "completion_tokens",
+        "ttft_ms",
+        "wall_ms",
+        "cost",
+        "feedback_count",
+        "score_count",
+      ].sort();
+      for (const row of traces) {
+        assert.deepEqual(Object.keys(row).sort(), listFields, "a trace list row must be exactly the list shape");
+      }
       const traceKeys = traces.map((row) => ({ at: row.created_at, id: row.request_id }));
       assertComparableTimestamps(traceKeys, "traceKeys");
       assertHasTimestampTie(traceKeys, "traces");
@@ -1257,6 +1284,53 @@ export function runConsoleServicesConformance(
       );
     });
 
+    it("every amount the money domain rejects is rejected by the grant boundary too", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      // The shared case list, fed through the interface rather than to the parser: an implementation
+      // with its own amount check — a looser regex, a float parse — would pass the money suite it
+      // never calls and fail here.
+      const invalid = MONEY_CASES.filter((entry) => !entry.valid).map((entry) => entry.input);
+      assert.ok(invalid.length > 40, "the shared case list must supply plenty of rejects");
+      let index = 0;
+      for (const amount of invalid) {
+        index += 1;
+        expectError(
+          await settle(`grant of ${JSON.stringify(amount)}`, () =>
+            services.adminGrant(sessions.operator, {
+              target_org_id: ids.orgId,
+              amount: amount as Money,
+              kind: "promotional",
+              reason: "money domain probe",
+              idempotency_key: `money-domain-${index}`,
+            }),
+          ),
+          "invalid_request",
+          `an amount of ${JSON.stringify(amount)} must be refused`,
+        );
+      }
+      // And the canonical forms the list accepts are accepted, so the check above is not simply
+      // refusing everything.
+      const valid = MONEY_CASES.filter((entry) => entry.valid && entry.canonical !== null);
+      let accepted = 0;
+      for (const entry of valid) {
+        const canonical = entry.canonical as string;
+        if (canonical.startsWith("-") || canonical === "0.00000000") continue;
+        accepted += 1;
+        expectOk(
+          await services.adminGrant(sessions.operator, {
+            target_org_id: ids.orgId,
+            amount: canonical as Money,
+            kind: "promotional",
+            reason: "money domain probe",
+            idempotency_key: `money-domain-ok-${accepted}`,
+          }),
+          `an amount of ${canonical} must be accepted`,
+        );
+        if (accepted >= 3) break;
+      }
+      assert.ok(accepted >= 3, "at least three positive canonical amounts were accepted");
+    });
+
     it("the provisional input bounds hold", async () => {
       const { services, sessions, ids } = await makeHarness();
       // R17: a key label and an operator reason are bounded, so a form cannot post a document into
@@ -1570,29 +1644,31 @@ export function runConsoleServicesConformance(
         // are unrelated, and tying them together would mean a suspended operator could not lift the
         // suspension. `operatorMember` belongs to `ids.orgId`, which the case below suspends.
         if (operatorOnly) {
+          // Nothing but the probe goes inside `settle`: an assertion made in there would be reported
+          // as a thrown error, which reads as a crash rather than as the failure it is.
           expectOk(
-            await settle(`${operation} with the operator's own org suspended`, async () => {
-              expectOk(
-                await services.adminSetSuspension(sessions.operator, {
-                  target_org_id: sessions.operatorMember.orgId,
-                  suspended: true,
-                  reason: "matrix: operator's own organization",
-                  idempotency_key: `matrix-suspend-${operation}`,
-                }),
-                "suspend the operator's own organization",
-              );
-              const result = await probe.call(sessions.operatorMember);
-              expectOk(
-                await services.adminSetSuspension(sessions.operator, {
-                  target_org_id: sessions.operatorMember.orgId,
-                  suspended: false,
-                  reason: "matrix: restore",
-                  idempotency_key: `matrix-restore-${operation}`,
-                }),
-                "restore it",
-              );
-              return result;
+            await services.adminSetSuspension(sessions.operator, {
+              target_org_id: sessions.operatorMember.orgId,
+              suspended: true,
+              reason: "matrix: operator's own organization",
+              idempotency_key: `matrix-suspend-${operation}`,
             }),
+            "suspend the operator's own organization",
+          );
+          const whileSuspended = await settle(`${operation} with the operator's own org suspended`, () =>
+            probe.call(sessions.operatorMember),
+          );
+          expectOk(
+            await services.adminSetSuspension(sessions.operator, {
+              target_org_id: sessions.operatorMember.orgId,
+              suspended: false,
+              reason: "matrix: restore",
+              idempotency_key: `matrix-restore-${operation}`,
+            }),
+            "restore it",
+          );
+          expectOk(
+            whileSuspended,
             `${operation} must work for an operator whose own organization is suspended`,
           );
         }
@@ -1674,6 +1750,22 @@ export function runConsoleServicesConformance(
       const rows = expectOk(
         await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
         "operator org list",
+      );
+      // The same list for either operator: authority is the flag, so an implementation that filtered
+      // the list by the caller's own organization would serve a member-operator a shorter one.
+      const asMemberOperator = expectOk(
+        await services.adminOrgs(sessions.operatorMember, { limit: MAX_PAGE_LIMIT }),
+        "org list as a member-operator",
+      );
+      assert.deepEqual(
+        asMemberOperator.items.map((row) => row.org_id),
+        rows.items.map((row) => row.org_id),
+        "a member-operator must see exactly the same organizations",
+      );
+      assert.deepEqual(
+        asMemberOperator.items.map((row) => row.balance),
+        rows.items.map((row) => row.balance),
+        "with the same balances",
       );
       const own = rows.items.find((candidate) => candidate.org_id === ids.orgId);
       assert.ok(own !== undefined);
@@ -1806,6 +1898,60 @@ export function runConsoleServicesConformance(
         .map((entry) => entry.reason)
         .sort();
       assert.deepEqual(suspensions, ["lift probe: restore", "lift probe: suspend"], "both statuses are recorded");
+    });
+
+    it("suspending and restoring an organization with real accounting changes none of it", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      // `ids.orgId` is the organization with outstanding holds and settled rows; the suspension cases
+      // that use the other one cannot detect a suspension that releases a hold or rewrites a
+      // settlement, because there is nothing there to rewrite.
+      const accounting = async () => {
+        const usage = await walkAll<UsageRow>(
+          (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+          "usage",
+        );
+        const ledger = await walkAll<LedgerEntry>(
+          (cursor) => services.ledger(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+          "ledger",
+        );
+        return {
+          usage: usage.map((row) => [row.request_id, row.cost, row.settlement_state, row.max_hold, row.usage_certainty]),
+          ledger: ledger.map((entry) => [entry.id, entry.delta, entry.kind, entry.reason, entry.ref, entry.actor]),
+          balance: expectOk(await services.balances(sessions.owner), "balance"),
+          summary: expectOk(await services.usageSummary(sessions.owner, {}), "summary"),
+          adminBalance: expectOk(
+            await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
+            "operator org list",
+          ).items.find((row) => row.org_id === ids.orgId)?.balance,
+        };
+      };
+
+      const before = await accounting();
+      assert.ok(before.usage.some((row) => row[3] !== null), "the organization must have an outstanding hold");
+      assert.ok(before.usage.some((row) => row[2] === "settled"), "and settled rows");
+      assert.equal(compareMoney(before.balance.reserved_total, ZERO_MONEY), 1, "so its wallet reserves something");
+
+      expectOk(
+        await services.adminSetSuspension(sessions.operator, {
+          target_org_id: ids.orgId,
+          suspended: true,
+          reason: "accounting invariance: suspend",
+          idempotency_key: "accounting-suspend",
+        }),
+        "suspend",
+      );
+      assert.deepEqual(await accounting(), before, "suspension must not touch a single accounting row");
+
+      expectOk(
+        await services.adminSetSuspension(sessions.operator, {
+          target_org_id: ids.orgId,
+          suspended: false,
+          reason: "accounting invariance: restore",
+          idempotency_key: "accounting-restore",
+        }),
+        "restore",
+      );
+      assert.deepEqual(await accounting(), before, "and neither must lifting it");
     });
 
     it("entitlement limits are replaced, not merged", async () => {
@@ -2115,6 +2261,27 @@ export function runConsoleServicesConformance(
         }),
         "entitlements",
       );
+      // Ordinary feedback from an operator session: a *customer* signal by R19, but written by an
+      // operator, so R41 still applies to who wrote it. Both operator sessions, because either could
+      // be the one holding the console open.
+      const operatorFeedback = [];
+      for (const [session, key] of [
+        [sessions.operator, "r41-feedback-1"],
+        [sessions.operatorMember, "r41-feedback-2"],
+      ] as [SessionContext, string][]) {
+        const entry = expectOk(
+          await services.feedback.submit(session, {
+            request_id: ids.availableRequestId,
+            name: "comment",
+            value: `operator-submitted note ${key}`,
+            idempotency_key: key,
+          }),
+          `feedback from ${session.email}`,
+        );
+        assert.equal(entry.author_role, "customer", "an operator's console feedback is a customer signal (R19)");
+        operatorFeedback.push({ session, key, id: entry.id });
+      }
+
       // An operator who also owns the organization changing its settings is still the platform.
       expectOk(
         await services.settings.update(sessions.operator, {
@@ -2149,11 +2316,72 @@ export function runConsoleServicesConformance(
       assert.ok(mine !== undefined, "including the grant this case just made");
       assert.equal(mine.actor, sessions.operatorMember.email, "and name exactly who made it");
       const settings = expectOk(await services.settings.get(sessions.owner), "settings after");
+      const latest = settings.consent_history[settings.consent_history.length - 1];
+      assert.ok(latest !== undefined, "the consent change above is recorded");
       for (const change of settings.consent_history) {
         assert.ok(
           !operatorPrincipals.includes(change.changed_by),
           "a consent-history entry must not name an operator",
         );
+      }
+      assert.equal(latest.changed_by, PLATFORM_ACTOR, "an operator's consent change reads as the platform");
+      // Masked, not erased: an operator can still answer "who turned this off?".
+      const operatorSettings = expectOk(await services.settings.get(sessions.operator), "settings as an operator");
+      const operatorLatest = operatorSettings.consent_history[operatorSettings.consent_history.length - 1];
+      assert.ok(operatorLatest !== undefined);
+      assert.equal(
+        operatorLatest.changed_by,
+        sessions.operator.email,
+        "an operator view keeps the principal that made the change",
+      );
+      // A customer's own change is still attributed to the customer.
+      const byOwner = expectOk(
+        await services.settings.update(sessions.owner, { evaluation_consent: !latest.evaluation_consent }),
+        "the owner changing consent",
+      );
+      const ownerEntry = byOwner.consent_history[byOwner.consent_history.length - 1];
+      assert.equal(ownerEntry.changed_by, sessions.owner.email, "an organization's own action keeps its own principal");
+
+      // The customer's own views of those entries must not name the operator who submitted them, and
+      // neither must an *idempotent replay* the customer triggers with the same key.
+      for (const { key, id } of operatorFeedback) {
+        const listed = expectOk(
+          await services.feedback.list(sessions.owner, ids.availableRequestId),
+          "feedback list",
+        );
+        const entry = listed.find((candidate) => candidate.id === id);
+        assert.ok(entry !== undefined, "the operator-submitted entry is in the customer's list");
+        assert.equal(
+          entry.author_principal,
+          PLATFORM_ACTOR,
+          "a customer must see `platform`, not the operator who submitted it",
+        );
+        const replay = expectOk(
+          await services.feedback.submit(sessions.owner, {
+            request_id: ids.availableRequestId,
+            name: "comment",
+            value: `operator-submitted note ${key}`,
+            idempotency_key: key,
+          }),
+          "the customer replaying the same key",
+        );
+        assert.equal(replay.id, id, "the replay returns the original entry");
+        assert.equal(
+          replay.author_principal,
+          PLATFORM_ACTOR,
+          "and a replay must mask the principal exactly as a read does",
+        );
+      }
+
+      // An operator reading the same entries still sees who wrote them.
+      const asOperatorList = expectOk(
+        await services.feedback.list(sessions.operator, ids.availableRequestId),
+        "feedback as an operator reads it",
+      );
+      for (const { session, id } of operatorFeedback) {
+        const entry = asOperatorList.find((candidate) => candidate.id === id);
+        assert.ok(entry !== undefined);
+        assert.equal(entry.author_principal, session.email, "an operator view keeps the principal");
       }
 
       // Every customer-session read, for both an owner and a member.
@@ -3704,6 +3932,35 @@ export function runMutationSafetyConformance(
         all.length,
         "the two halves must partition the rows, counting the boundary once",
       );
+
+      // The trace list has its own copy of every filter, so each must be exercised there too.
+      const allTraces = await walkAll<TraceListItem>(
+        (cursor) => services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+        "traces",
+      );
+      for (const model of new Set(allTraces.map((row) => row.model))) {
+        const filtered = await walkAll<TraceListItem>(
+          (cursor) => services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, model }),
+          `traces by model ${model}`,
+        );
+        assert.deepEqual(
+          filtered.map((row) => row.request_id).sort(),
+          allTraces.filter((row) => row.model === model).map((row) => row.request_id).sort(),
+          `the trace model filter must return exactly the rows of ${model}`,
+        );
+        assert.ok(filtered.length < allTraces.length, "and fewer than all of them");
+      }
+      for (const state of new Set(allTraces.map((row) => row.job_state))) {
+        const filtered = await walkAll<TraceListItem>(
+          (cursor) => services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, job_state: state }),
+          `traces by job state ${state}`,
+        );
+        assert.deepEqual(
+          filtered.map((row) => row.request_id).sort(),
+          allTraces.filter((row) => row.job_state === state).map((row) => row.request_id).sort(),
+          `the job_state filter must return exactly the ${state} rows`,
+        );
+      }
 
       // And a trace filter on a closed vocabulary.
       const traces = await walkAll<TraceListItem>(
