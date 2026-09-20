@@ -1,0 +1,1455 @@
+{
+  "_comment": "R32/R40: one single-edit mutant per invariant the exported conformance suite claims. `pnpm test:mutants` applies each to a temporary copy and requires it to be killed by a NAMED case listed in its `cases` \u2014 a non-zero exit alone is not a kill, and a load, syntax, stripping or timeout failure is a runner error that fails the run. `kills_by: \"throw\"` marks the mutants whose thrown error IS the defect (an accepted out-of-domain value that then throws); every other mutant must die on an assertion. Ids are this repository's; `was` records the round-4 reviewer's id where their description identified the mutant. A claimed invariant with no mutant, or a mutant with no case, is the defect this list exists to prevent.",
+  "mutants": [
+    {
+      "id": "AUDIT-01",
+      "note": "nothing is audited",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    audit.push(entry);",
+      "replace": "    if (false) audit.push(entry);",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
+      ]
+    },
+    {
+      "id": "AUDIT-02",
+      "note": "a restore overwrites the earlier suspension entry instead of appending",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        appendAudit(session, \"suspension_set\", target.org_id, reason, before, {",
+      "replace": "        while (audit.length > 0 && audit[audit.length - 1].action === \"suspension_set\") audit.pop();\n        appendAudit(session, \"suspension_set\", target.org_id, reason, before, {",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
+      ]
+    },
+    {
+      "id": "AUDIT-03",
+      "note": "the audit entry names the organization instead of the operator who acted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      actor_principal: session.email,\n      action,",
+      "replace": "      actor_principal: session.orgName,\n      action,",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
+      ]
+    },
+    {
+      "id": "AUDIT-04",
+      "note": "the entitlement audit entry loses the reason",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          \"entitlements_set\",\n          target.org_id,\n          input.reason.trim(),",
+      "replace": "          \"entitlements_set\",\n          target.org_id,\n          \"\",",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
+      ]
+    },
+    {
+      "id": "AUDIT-05",
+      "note": "the audit records no before state",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const before = { suspended: target.suspended, suspension_reason: target.suspension_reason };",
+      "replace": "        const before = { suspended: input.suspended, suspension_reason: reason };",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
+      ]
+    },
+    {
+      "id": "AUDIT-06",
+      "note": "adminAudit is readable by anyone",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const denied = requireOperator<Page<AuditEntry>>(session);",
+      "replace": "      const denied = null as Result<Page<AuditEntry>> | null;",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
+      ]
+    },
+    {
+      "id": "AUDIT-07",
+      "note": "the audit target filter does not filter",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        (entry) => query.target_org_id === undefined || entry.target_org_id === query.target_org_id,",
+      "replace": "        () => true,",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
+      ]
+    },
+    {
+      "id": "AUDIT-08",
+      "note": "a replay appends a second audit entry",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (key === undefined || key === null) return null;\n    const previous = idempotency.get(recordName(session, operation, key));",
+      "replace": "    if (key === undefined || key === null) return null;\n    if (operation === \"adminSetSuspension\") return null;\n    const previous = idempotency.get(recordName(session, operation, key));",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
+      ]
+    },
+    {
+      "id": "AUDIT-09",
+      "note": "a grant's audit entry records the balance from before the grant as its `after`",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          { ledger_total: current.ledger_total },\n          { ledger_total: projected.ledger_total, amount, grant_id: entry.id },",
+      "replace": "          { ledger_total: current.ledger_total },\n          { ledger_total: current.ledger_total, amount, grant_id: entry.id },",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
+      ]
+    },
+    {
+      "id": "AUDIT-10",
+      "note": "an entitlement audit entry records the new value as its `before`",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          { model_ids: before.model_ids, limits: before.limits },\n          { model_ids, limits },",
+      "replace": "          { model_ids, limits },\n          { model_ids, limits },",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
+      ]
+    },
+    {
+      "id": "AUDIT-11",
+      "note": "adminAudit is readable by an owner asking only for its own organization",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const denied = requireOperator<Page<AuditEntry>>(session);\n      if (denied !== null) return denied;\n      if (query.target_org_id !== undefined && typeof query.target_org_id !== \"string\") {",
+      "replace": "      const denied = query.target_org_id === session.orgId ? null : requireOperator<Page<AuditEntry>>(session);\n      if (denied !== null) return denied;\n      if (query.target_org_id !== undefined && typeof query.target_org_id !== \"string\") {",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
+      ]
+    },
+    {
+      "id": "BAL-01",
+      "note": "the operator list reports every wallet as zero",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      balance: balance ?? { ledger_total: ZERO_MONEY, reserved_total: ZERO_MONEY, available: ZERO_MONEY },",
+      "replace": "      balance: { ledger_total: ZERO_MONEY, reserved_total: ZERO_MONEY, available: ZERO_MONEY },",
+      "cases": [
+        "balance is the ledger total minus reservations, and holds reduce what is available",
+        "the operator list pages like every other list"
+      ]
+    },
+    {
+      "id": "BOUND-01",
+      "note": "the key name bound is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (input.name.length > MAX_KEY_NAME_CHARS) {",
+      "replace": "        if (false) {",
+      "cases": [
+        "the provisional input bounds hold"
+      ]
+    },
+    {
+      "id": "BOUND-02",
+      "note": "the operator reason bound is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (reason.length > MAX_GRANT_REASON_CHARS) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "the three entitlement states are distinct, and the empty one is a denial (R24)",
+        "an operator suspension needs a reason within the bound"
+      ]
+    },
+    {
+      "id": "BOUND-03",
+      "note": "the idempotency key bound is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  if (key.length > MAX_IDEMPOTENCY_KEY_CHARS) {",
+      "replace": "  if (false) {",
+      "cases": [
+        "feedback follows the R3 body, appears immediately, and has provenance the client cannot set"
+      ]
+    },
+    {
+      "id": "BOUND-04",
+      "note": "the entitlement limit ceiling and whole-number rule are dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > MAX_ENTITLEMENT_LIMIT) {",
+      "replace": "      if (false) {",
+      "cases": [
+        "the provisional input bounds hold"
+      ]
+    },
+    {
+      "id": "BOUND-05",
+      "note": "an unknown entitlement limit name is accepted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (!(ENTITLEMENT_LIMIT_NAMES as readonly string[]).includes(name)) {",
+      "replace": "      if (false) {",
+      "cases": [
+        "the three entitlement states are distinct, and the empty one is a denial (R24)"
+      ]
+    },
+    {
+      "id": "BOUND-06",
+      "note": "the retention cap is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          if (!Number.isInteger(days) || days < 1 || days > MAX_CONTENT_RETENTION_DAYS) {",
+      "replace": "          if (false) {",
+      "cases": [
+        "retention is capped and evaluation consent is a separate control"
+      ]
+    },
+    {
+      "id": "BOUND-07",
+      "note": "the rubric version bound is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          !Number.isInteger(input.rubric_version) ||\n          input.rubric_version < 1 ||",
+      "replace": "          false ||",
+      "cases": [
+        "an operator label is the only path to operator authorship and calibration membership"
+      ]
+    },
+    {
+      "id": "BOUND-08",
+      "note": "the feedback text bound is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (input.value.length > MAX_FEEDBACK_TEXT_CHARS) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "feedback follows the R3 body, appears immediately, and has provenance the client cannot set"
+      ]
+    },
+    {
+      "id": "CODE-01",
+      "note": "a code that must never carry an HTTP status gets one",
+      "file": "lib/contracts/types.ts",
+      "find": "  journal_write_failed: null,",
+      "replace": "  journal_write_failed: 500,",
+      "cases": [
+        "the HTTP status table is the one 08 \u00a73 freezes, code for code"
+      ]
+    },
+    {
+      "id": "CODE-02",
+      "note": "not_found is served as a 400",
+      "file": "lib/contracts/types.ts",
+      "find": "  not_found: 404,",
+      "replace": "  not_found: 400,",
+      "cases": [
+        "the HTTP status table is the one 08 \u00a73 freezes, code for code"
+      ]
+    },
+    {
+      "id": "CODE-03",
+      "note": "org_suspended is served as a 401",
+      "file": "lib/contracts/types.ts",
+      "find": "  org_suspended: 403,",
+      "replace": "  org_suspended: 401,",
+      "cases": [
+        "the HTTP status table is the one 08 \u00a73 freezes, code for code"
+      ]
+    },
+    {
+      "id": "CONTENT-01",
+      "note": "content is rendered whatever its availability says",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        availability === \"available\"\n          ? { ...structuredClone(template), request: { ...structuredClone(template.request), model } }\n          : null,",
+      "replace": "        { ...structuredClone(template), request: { ...structuredClone(template.request), model } },",
+      "cases": [
+        "content availability decides the payload and never leaks a storage reference"
+      ]
+    },
+    {
+      "id": "CURSOR-01",
+      "note": "the cursor is not bound to its query",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (parsed.k !== fnv1a(scope)) return null;",
+      "replace": "    if (false) return null;",
+      "cases": [
+        "rejects a cursor it did not issue for this query",
+        "a filter or cursor from another organization never widens the tenant"
+      ]
+    },
+    {
+      "id": "CURSOR-02",
+      "note": "resuming skips the first matching row",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    start = index === -1 ? rows.length : index;",
+      "replace": "    start = index === -1 ? rows.length : index + 1;",
+      "cases": [
+        "usage pages walk every row exactly once, newest first",
+        "ledger and trace pages walk every row exactly once"
+      ]
+    },
+    {
+      "id": "CURSOR-03",
+      "note": "resuming repeats the cursor's own row",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      descending ? compareKeys(keyOf(row), after) < 0 : compareKeys(keyOf(row), after) > 0,",
+      "replace": "      descending ? compareKeys(keyOf(row), after) <= 0 : compareKeys(keyOf(row), after) >= 0,",
+      "cases": [
+        "usage pages walk every row exactly once, newest first",
+        "ledger and trace pages walk every row exactly once"
+      ]
+    },
+    {
+      "id": "CURSOR-04",
+      "note": "the cursor ignores the tiebreak, so a group of equal timestamps is walked wrongly",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "function compareKeys(a: SortKey, b: SortKey): number {\n  if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1;\n  if (a[1] !== b[1]) return a[1] < b[1] ? -1 : 1;\n  return 0;",
+      "replace": "function compareKeys(a: SortKey, b: SortKey): number {\n  if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1;\n  return 0;",
+      "cases": [
+        "usage pages walk every row exactly once, newest first",
+        "ledger and trace pages walk every row exactly once"
+      ]
+    },
+    {
+      "id": "CURSOR-05",
+      "note": "the last page still offers a cursor, so a walk never ends",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  const exhausted = start + items.length >= rows.length || last === undefined;",
+      "replace": "  const exhausted = last === undefined;",
+      "cases": [
+        "a filtered walk survives the cursor's own row leaving the filter, and stays complete"
+      ]
+    },
+    {
+      "id": "CURSOR-06",
+      "note": "the operator list is paged in the wrong direction",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      return paginate(rows, query, \"operators|adminOrgs\", orgKey, false);",
+      "replace": "      return paginate(rows, query, \"operators|adminOrgs\", orgKey, true);",
+      "cases": [
+        "the operator list pages like every other list"
+      ]
+    },
+    {
+      "id": "CURSOR-07",
+      "note": "the calibration set cannot be walked at a small page size",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        return paginate(rows, query, \"operators|calibration.list\", timeKey);",
+      "replace": "        return paginate(rows, query, \"operators|calibration.list\", (entry) => [entry.created_at, entry.created_at]);",
+      "cases": [
+        "the operator's own lists page at a small limit too"
+      ]
+    },
+    {
+      "id": "ENT-01",
+      "note": "an unserved model id is accepted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          if (typeof model !== \"string\" || !KNOWN_MODEL_IDS.includes(model)) {",
+      "replace": "          if (typeof model !== \"string\") {",
+      "cases": [
+        "the three entitlement states are distinct, and the empty one is a denial (R24)"
+      ]
+    },
+    {
+      "id": "ENT-02",
+      "note": "a repeated model id is accepted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (new Set(input.model_ids).size !== input.model_ids.length) {",
+      "replace": "        if (false) {",
+      "cases": [
+        "the three entitlement states are distinct, and the empty one is a denial (R24)"
+      ]
+    },
+    {
+      "id": "ENT-03",
+      "note": "the platform default is stored as a denial",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const model_ids = input.model_ids === null ? null : [...input.model_ids].sort();",
+      "replace": "      const model_ids = input.model_ids === null ? [] : [...input.model_ids].sort();",
+      "cases": [
+        "the three entitlement states are distinct, and the empty one is a denial (R24)"
+      ]
+    },
+    {
+      "id": "ENT-04",
+      "note": "the entitlement write is not attributed",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          updated_at: nextTimestamp(),\n          updated_by: session.email,",
+      "replace": "          updated_at: null,\n          updated_by: null,",
+      "cases": [
+        "the three entitlement states are distinct, and the empty one is a denial (R24)"
+      ]
+    },
+    {
+      "id": "ENT-05",
+      "note": "entitlement limits are merged with the previous ones instead of replaced",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const limits: Partial<Record<EntitlementLimitName, number>> = {};",
+      "replace": "      const limits: Partial<Record<EntitlementLimitName, number>> = {\n        ...(orgs.get(input.target_org_id)?.entitlements.limits ?? {}),\n      };",
+      "cases": [
+        "entitlement limits are replaced, not merged"
+      ]
+    },
+    {
+      "id": "FILTER-01",
+      "note": "the model filter does not filter",
+      "was": "Z02",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        (query.model === undefined || row.model === query.model) &&\n        (query.job_state === undefined || row.job_state === query.job_state) &&",
+      "replace": "        (query.model === undefined || true) &&\n        (query.job_state === undefined || row.job_state === query.job_state) &&",
+      "cases": [
+        "a filter filters, and an absent filter does not"
+      ]
+    },
+    {
+      "id": "FILTER-02",
+      "note": "the time window does not filter",
+      "was": "Z04",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      (query.from === undefined || at >= instant(query.from)) &&",
+      "replace": "      (query.from === undefined || true) &&",
+      "cases": [
+        "a filter filters, and an absent filter does not"
+      ]
+    },
+    {
+      "id": "FILTER-03",
+      "note": "the key filter does not filter",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        (query.key_id === undefined || row.key_id === query.key_id) &&\n        (query.model === undefined || row.model === query.model),",
+      "replace": "        (query.key_id === undefined || true) &&\n        (query.model === undefined || row.model === query.model),",
+      "cases": [
+        "a filter filters, and an absent filter does not"
+      ]
+    },
+    {
+      "id": "FILTER-04",
+      "note": "the content filter does not filter",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        (query.content === undefined || row.content === query.content) &&",
+      "replace": "        (query.content === undefined || true) &&",
+      "cases": [
+        "a filter filters, and an absent filter does not"
+      ]
+    },
+    {
+      "id": "FILTER-05",
+      "note": "off-mode requests appear in the trace list again",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        row.trace_mode !== \"off\" &&",
+      "replace": "        true &&",
+      "cases": [
+        "content availability decides the payload and never leaks a storage reference"
+      ]
+    },
+    {
+      "id": "GRANT-01",
+      "note": "the ledger row does not record which operator made the grant",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          ref: input.idempotency_key,\n          actor: session.email,",
+      "replace": "          ref: input.idempotency_key,\n          actor: null,",
+      "cases": [
+        "no customer view ever names an operator (R41)"
+      ]
+    },
+    {
+      "id": "GRANT-02",
+      "note": "the grant result reports the caller's organization",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          grant_id: entry.id,\n          org_id: target.org_id,",
+      "replace": "          grant_id: entry.id,\n          org_id: session.orgId,",
+      "cases": [
+        "an operator grant is idempotent per key and conflicts on a changed payload",
+        "an operator acts on the organization it names, not on its own (R26)"
+      ]
+    },
+    {
+      "id": "GRANT-03",
+      "note": "a zero or negative grant is accepted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (units <= BigInt(0)) return fail(\"invalid_request\", \"a grant amount must be positive\");",
+      "replace": "      if (false) return fail(\"invalid_request\", \"a grant amount must be positive\");",
+      "cases": [
+        "an operator grant is idempotent per key and conflicts on a changed payload"
+      ]
+    },
+    {
+      "id": "GRANT-04",
+      "note": "a grant that leaves the money domain is written anyway",
+      "was": "R11",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (current === null || projected === null) {",
+      "replace": "      if (false) {",
+      "cases": [
+        "an amount that would leave the money domain is refused, and nothing is written"
+      ],
+      "kills_by": "throw",
+      "kills_by_note": "the overflow it allows throws on the next money conversion, which is the defect"
+    },
+    {
+      "id": "GRANT-05",
+      "note": "a grant kind other than promotional is accepted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (input.kind !== \"promotional\") {",
+      "replace": "      if (false) {",
+      "cases": [
+        "an operator grant is idempotent per key and conflicts on a changed payload"
+      ]
+    },
+    {
+      "id": "GRANT-06",
+      "note": "the grant result reports a balance that ignores outstanding holds",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          replayed: false,\n          balance: projected,",
+      "replace": "          replayed: false,\n          balance: { ...projected, available: projected.ledger_total },",
+      "cases": [
+        "a suspension can be lifted, and lifting it restores exactly what it gated"
+      ]
+    },
+    {
+      "id": "GRANT-07",
+      "note": "a new grant is not ordered into a fresh ledger read",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        target.ledger.unshift(entry);\n        target.ledger.sort((a, b) => -compareKeys(timeKey(a), timeKey(b)));",
+      "replace": "        target.ledger.push(entry);",
+      "cases": [
+        "a fresh read of the ledger puts a new grant in its place"
+      ]
+    },
+    {
+      "id": "HOLD-01",
+      "note": "every hold is counted twice",
+      "was": "H02",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    for (const row of org.usage) if (row.max_hold !== null) reservedUnits += moneyUnits(row.max_hold);",
+      "replace": "    for (const row of org.usage) if (row.max_hold !== null) reservedUnits += moneyUnits(row.max_hold) * BigInt(2);",
+      "cases": [
+        "balance is the ledger total minus reservations, and holds reduce what is available"
+      ]
+    },
+    {
+      "id": "HOLD-02",
+      "note": "holds are ignored, so nothing is reserved",
+      "was": "H04",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    for (const row of org.usage) if (row.max_hold !== null) reservedUnits += moneyUnits(row.max_hold);",
+      "replace": "    for (const row of org.usage) if (false) reservedUnits += moneyUnits(row.max_hold as Money);",
+      "cases": [
+        "balance is the ledger total minus reservations, and holds reduce what is available"
+      ]
+    },
+    {
+      "id": "HOLD-03",
+      "note": "pending reconciliation is a constant zero",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (row.usage_certainty === \"unknown\" && row.max_hold !== null) heldUnits += moneyUnits(row.max_hold);",
+      "replace": "        if (false) heldUnits += moneyUnits(row.max_hold as Money);",
+      "cases": [
+        "balance is the ledger total minus reservations, and holds reduce what is available"
+      ]
+    },
+    {
+      "id": "HOLD-04",
+      "note": "available is the ledger total, ignoring reservations",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    const available = tryMoneyFromUnits(ledgerUnits - reservedUnits);",
+      "replace": "    const available = tryMoneyFromUnits(ledgerUnits);",
+      "cases": [
+        "balance is the ledger total minus reservations, and holds reduce what is available"
+      ]
+    },
+    {
+      "id": "ID-01",
+      "note": "feedback ids are not namespaced, so two organizations collide",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      id: isLabel ? labelId(org.namespace, org.labelCounter) : feedbackId(org.namespace, org.feedbackCounter),",
+      "replace": "      id: isLabel ? labelId(0, org.labelCounter) : feedbackId(0, org.feedbackCounter),",
+      "cases": [
+        "generated identifiers never collide, within an organization or across two"
+      ]
+    },
+    {
+      "id": "IDEM-01",
+      "note": "the idempotency record is not scoped to the organization",
+      "was": "I01",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    return `${session.orgId}|${operation}|${key}`;",
+      "replace": "    return `${operation}|${key}`;",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "IDEM-02",
+      "note": "the idempotency record is not scoped to the operation",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    return `${session.orgId}|${operation}|${key}`;",
+      "replace": "    return `${session.orgId}|${key}`;",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "IDEM-03",
+      "note": "nothing is remembered, so every retry repeats the effect",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    idempotency.set(recordName(session, operation, key), { payload, value: structuredClone(value) });",
+      "replace": "    if (false) idempotency.set(recordName(session, operation, key), { payload, value: structuredClone(value) });",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "IDEM-04",
+      "note": "a changed payload replays instead of conflicting",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (previous.payload !== payload) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "IDEM-06",
+      "note": "keys.revoke ignores its idempotency key",
+      "was": "I12",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const replay = replayOf<ApiKeySummary>(session, \"keys.revoke\", idempotencyKey, payload);",
+      "replace": "        const replay = replayOf<ApiKeySummary>(session, \"keys.revoke\", undefined, payload);",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "INPUT-01",
+      "note": "unknown input fields are ignored",
+      "was": "X11",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (value !== undefined && !allowed.includes(name)) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "no operation accepts a field the caller invented"
+      ]
+    },
+    {
+      "id": "INPUT-02",
+      "note": "an out-of-vocabulary filter returns an empty page instead of a refusal",
+      "was": "X12",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (value !== undefined && !(typeof value === \"string\" && allowed.includes(value))) {\n        return `${name} must be one of ${allowed.join(\", \")}`;",
+      "replace": "      if (false) {\n        return `${name} must be one of ${allowed.join(\", \")}`;",
+      "cases": [
+        "a filter outside its vocabulary is invalid_request, not an empty page"
+      ]
+    },
+    {
+      "id": "INPUT-03",
+      "note": "an unparseable timestamp filter is accepted",
+      "was": "X13",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        return `${name} must be an RFC 3339 UTC timestamp`;",
+      "replace": "        return null;",
+      "cases": [
+        "a filter outside its vocabulary is invalid_request, not an empty page"
+      ]
+    },
+    {
+      "id": "INPUT-04",
+      "note": "a reversed time range is accepted",
+      "was": "X14",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (query.from !== undefined && query.to !== undefined && instant(query.from) > instant(query.to)) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "a filter outside its vocabulary is invalid_request, not an empty page"
+      ]
+    },
+    {
+      "id": "LABEL-01",
+      "note": "calibration.label only reaches the operator's own organization (R26 says platform-wide)",
+      "was": "I09",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const found = traceAnywhere(input.request_id);",
+      "replace": "        const own = orgs.get(session.orgId);\n        const ownTrace = own === undefined ? undefined : ownedTrace(own, input.request_id);\n        const found = own === undefined || ownTrace === undefined ? undefined : { org: own, trace: ownTrace };",
+      "cases": [
+        "an operator acts on the organization it names, not on its own (R26)"
+      ]
+    },
+    {
+      "id": "LABEL-02",
+      "note": "the label records the organization's owner instead of the operator who judged",
+      "was": "I10",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "              author_role: \"operator\",\n              author_principal: session.email,\n              calibration_set: true,",
+      "replace": "              author_role: \"operator\",\n              author_principal: found.org.owner_email,\n              calibration_set: true,",
+      "cases": [
+        "an operator acts on the organization it names, not on its own (R26)"
+      ]
+    },
+    {
+      "id": "LABEL-03",
+      "note": "a label is filed as customer feedback, so customers can see it (R35)",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (isLabel) {\n      org.labels.push(entry);\n    } else {\n      trace.feedback.push(entry);\n      trace.feedback_count = trace.feedback.length;\n    }",
+      "replace": "    trace.feedback.push(entry);\n    trace.feedback_count = trace.feedback.length;\n    if (isLabel) org.labels.push(entry);",
+      "cases": [
+        "a calibration label is operator data a customer never sees (R35)"
+      ]
+    },
+    {
+      "id": "LABEL-04",
+      "note": "calibration.list returns every feedback entry, not only labels",
+      "was": "V06",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        for (const org of orgs.values()) rows.push(...org.labels.map((entry) => visibleFeedback(entry, session)));",
+      "replace": "        for (const org of orgs.values()) {\n          rows.push(...org.labels.map((entry) => visibleFeedback(entry, session)));\n          for (const trace of org.traces) rows.push(...trace.feedback.map((entry) => visibleFeedback(entry, session)));\n        }",
+      "cases": [
+        "a calibration label is operator data a customer never sees (R35)"
+      ]
+    },
+    {
+      "id": "LABEL-05",
+      "note": "feedback.submit accepts the operator-only name",
+      "was": "V07",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  if (!(FEEDBACK_NAMES as readonly string[]).includes(input.name)) {",
+      "replace": "  if (!(FEEDBACK_ENTRY_NAMES as readonly string[]).includes(input.name)) {",
+      "cases": [
+        "a calibration label is operator data a customer never sees (R35)"
+      ]
+    },
+    {
+      "id": "LABEL-06",
+      "note": "a label bumps the trace's score count",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (isLabel) {\n      org.labels.push(entry);",
+      "replace": "    if (isLabel) {\n      trace.score_count += 1;\n      org.labels.push(entry);",
+      "cases": [
+        "a calibration label is operator data a customer never sees (R35)"
+      ]
+    },
+    {
+      "id": "LIMIT-01",
+      "note": "a limit above the hard bound is clamped instead of refused",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT) {",
+      "replace": "  if (!Number.isInteger(limit) || limit < 1) {",
+      "cases": [
+        "rejects a limit above the hard bound and a limit that is not a positive integer"
+      ]
+    },
+    {
+      "id": "MONEY-01",
+      "note": "the money domain is widened past numeric(20, 8)",
+      "file": "lib/contracts/money.ts",
+      "find": "const MAX_UNITS = BigInt(\"100000000000000000000\");",
+      "replace": "const MAX_UNITS = BigInt(\"10000000000000000000000000\");",
+      "cases": [
+        "an amount that would leave the money domain is refused, and nothing is written"
+      ]
+    },
+    {
+      "id": "MONEY-02",
+      "note": "more precision than the scale can hold is accepted",
+      "file": "lib/contracts/money.ts",
+      "find": "  if (fraction.length > MONEY_SCALE) return null;",
+      "replace": "  if (false) return null;",
+      "cases": [
+        "an operator grant is idempotent per key and conflicts on a changed payload"
+      ]
+    },
+    {
+      "id": "MONEY-03",
+      "note": "an exponent is accepted",
+      "file": "lib/contracts/money.ts",
+      "find": "const PLAIN_DECIMAL = /^-?(?:0|[1-9][0-9]*)(\\.[0-9]+)?$/;",
+      "replace": "const PLAIN_DECIMAL = /^-?(?:0|[1-9][0-9]*)(\\.[0-9]+)?(e-?[0-9]+)?$/;",
+      "cases": [
+        "an operator grant is idempotent per key and conflicts on a changed payload"
+      ],
+      "kills_by": "throw",
+      "kills_by_note": "the accepted exponent throws in BigInt, which is the defect"
+    },
+    {
+      "id": "MONEY-04",
+      "note": "the canonical form loses its fixed scale (a non-canonical form then fails an isMoney assertion)",
+      "file": "lib/contracts/money.ts",
+      "find": "  return `${negative ? \"-\" : \"\"}${whole}.${digits.slice(-MONEY_SCALE)}` as Money;",
+      "replace": "  return `${negative ? \"-\" : \"\"}${whole}.${digits.slice(-MONEY_SCALE).replace(/0+$/, \"\")}` as Money;",
+      "cases": [
+        "an operator grant is idempotent per key and conflicts on a changed payload",
+        "balance is the ledger total minus reservations, and holds reduce what is available"
+      ]
+    },
+    {
+      "id": "MONEY-05",
+      "note": "subtraction is addition",
+      "file": "lib/contracts/money.ts",
+      "find": "export function subMoney(a: Money, b: Money): Money {\n  return moneyFromUnits(moneyUnits(a) - moneyUnits(b));",
+      "replace": "export function subMoney(a: Money, b: Money): Money {\n  return moneyFromUnits(moneyUnits(a) + moneyUnits(b));",
+      "cases": [
+        "balance is the ledger total minus reservations, and holds reduce what is available",
+        "an amount that would leave the money domain is refused, and nothing is written"
+      ]
+    },
+    {
+      "id": "MONEY-06",
+      "note": "the grant boundary has its own looser amount check than the money domain",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const units = tryParseMoneyUnits(input.amount);\n      if (units === null) {",
+      "replace": "      const units = /^[+-]?[0-9]*\\.?[0-9]+$/.test(String(input.amount))\n        ? BigInt(Math.round(Number(input.amount) * 1e8))\n        : tryParseMoneyUnits(input.amount);\n      if (units === null) {",
+      "cases": [
+        "every amount the money domain rejects is rejected by the grant boundary too"
+      ]
+    },
+    {
+      "id": "ORDER-01",
+      "note": "settings.update writes the trace mode before validating the retention",
+      "was": "C04",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (update.content_retention_days !== undefined) {\n          const days = update.content_retention_days;",
+      "replace": "        if (update.trace_mode !== undefined) resolved.org.settings.trace_mode = update.trace_mode;\n        if (update.content_retention_days !== undefined) {\n          const days = update.content_retention_days;",
+      "cases": [
+        "every mutating operation validates before it writes, whichever field is bad"
+      ]
+    },
+    {
+      "id": "ORDER-02",
+      "note": "adminSetSuspension writes the status before validating the reason",
+      "was": "C05",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const badReason = badAuditReason(input.reason);\n      if (badReason !== null) return fail<AdminOrgSummary>(\"invalid_request\", badReason);",
+      "replace": "      const eager = orgs.get(input.target_org_id);\n      if (eager !== undefined) eager.suspended = input.suspended;\n      const badReason = badAuditReason(input.reason);\n      if (badReason !== null) return fail<AdminOrgSummary>(\"invalid_request\", badReason);",
+      "cases": [
+        "every mutating operation validates before it writes, whichever field is bad"
+      ]
+    },
+    {
+      "id": "ORDER-03",
+      "note": "adminSetEntitlements writes the models before validating the limits",
+      "was": "C06",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const badLimit = badEntitlementLimits(input.limits);",
+      "replace": "      const eager = orgs.get(input.target_org_id);\n      if (eager !== undefined && Array.isArray(input.model_ids)) {\n        eager.entitlements = { ...eager.entitlements, model_ids: [...input.model_ids].sort() };\n      }\n      const badLimit = badEntitlementLimits(input.limits);",
+      "cases": [
+        "every mutating operation validates before it writes, whichever field is bad"
+      ]
+    },
+    {
+      "id": "ORDER-04",
+      "note": "keys.create pushes the key before validating the trace mode",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (input.trace_mode !== undefined && !(TRACE_MODES as readonly string[]).includes(input.trace_mode)) {\n          return fail(\"invalid_request\", \"trace_mode must be off, minimal or full\");\n        }\n        const name = input.name.trim();",
+      "replace": "        resolved.org.keys.push({\n          id: deterministicUuid(4242 + resolved.org.namespace, 9000),\n          name: String(input.name),\n          prefix: \"sk-infrx-eager\",\n          created_at: nextTimestamp(),\n          last_used_at: null,\n          revoked_at: null,\n          trace_mode: \"full\",\n        });\n        if (input.trace_mode !== undefined && !(TRACE_MODES as readonly string[]).includes(input.trace_mode)) {\n          return fail(\"invalid_request\", \"trace_mode must be off, minimal or full\");\n        }\n        const name = input.name.trim();",
+      "cases": [
+        "every mutating operation validates before it writes, whichever field is bad"
+      ]
+    },
+    {
+      "id": "ORDER-05",
+      "note": "the grant is appended before the money domain is checked",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const current = balanceOf(target);\n      const projected = balanceOf(target, units);",
+      "replace": "      target.ledger.unshift({\n        id: deterministicUuid(8080 + target.namespace, 9000),\n        created_at: nextTimestamp(),\n        delta: amount,\n        kind: \"grant\",\n        reason,\n        ref: input.idempotency_key,\n        actor: session.email,\n      });\n      const current = balanceOf(target);\n      const projected = balanceOf(target, units);",
+      "cases": [
+        "an amount that would leave the money domain is refused, and nothing is written",
+        "every mutating operation validates before it writes, whichever field is bad"
+      ]
+    },
+    {
+      "id": "ORDER-06",
+      "note": "calibration.label writes before validating the rubric version",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (\n          !Number.isInteger(input.rubric_version) ||",
+      "replace": "        const eagerFound = traceAnywhere(input.request_id);\n        if (eagerFound !== undefined) {\n          eagerFound.org.labels.push({\n            id: feedbackId(eagerFound.org.namespace, 9000),\n            request_id: input.request_id,\n            created_at: nextTimestamp(),\n            channel: \"console\",\n            author_role: \"operator\",\n            author_principal: session.email,\n            name: \"calibration_label\",\n            value: input.label,\n            comment: null,\n            calibration_set: true,\n            rubric_version: input.rubric_version,\n          });\n        }\n        if (\n          !Number.isInteger(input.rubric_version) ||",
+      "cases": [
+        "every mutating operation validates before it writes, whichever field is bad"
+      ]
+    },
+    {
+      "id": "PAYLOAD-01",
+      "note": "the grant payload omits the target organization",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const payload = canonicalPayload({\n        target_org_id: input.target_org_id,\n        amount,\n        kind: input.kind,\n        reason,\n      });",
+      "replace": "      const payload = canonicalPayload({ amount, kind: input.kind, reason });",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "PAYLOAD-02",
+      "note": "the grant payload omits the amount",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        target_org_id: input.target_org_id,\n        amount,\n        kind: input.kind,\n        reason,",
+      "replace": "        target_org_id: input.target_org_id,\n        kind: input.kind,\n        reason,",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "PAYLOAD-03",
+      "note": "the feedback payload omits the request",
+      "was": "T12",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const payload = canonicalPayload({\n          request_id: trace.request_id,\n          name: input.name,\n          value: input.value,\n          comment,\n        });",
+      "replace": "        const payload = canonicalPayload({ name: input.name, value: input.value, comment });",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "PAYLOAD-04",
+      "note": "the feedback payload omits the value",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          request_id: trace.request_id,\n          name: input.name,\n          value: input.value,\n          comment,",
+      "replace": "          request_id: trace.request_id,\n          name: input.name,\n          comment,",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "PAYLOAD-05",
+      "note": "the label payload omits the label itself",
+      "was": "T14",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const payload = canonicalPayload({\n          request_id: input.request_id,\n          rubric_version: input.rubric_version,\n          label: input.label,\n          comment,\n        });",
+      "replace": "        const payload = canonicalPayload({ request_id: input.request_id, rubric_version: input.rubric_version, comment });",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "PAYLOAD-06",
+      "note": "the label payload omits the rubric version",
+      "was": "T15",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          request_id: input.request_id,\n          rubric_version: input.rubric_version,\n          label: input.label,\n          comment,",
+      "replace": "          request_id: input.request_id,\n          label: input.label,\n          comment,",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "PAYLOAD-07",
+      "note": "the entitlement payload omits the limits",
+      "was": "T16",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        limits: canonicalPayload(limits),\n        reason: input.reason.trim(),",
+      "replace": "        reason: input.reason.trim(),",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "PAYLOAD-08",
+      "note": "the entitlement payload cannot tell the platform default from a denial",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        model_ids: model_ids === null ? \"(platform default)\" : `[${model_ids.join(\",\")}]`,",
+      "replace": "        model_ids: model_ids === null ? \"\" : model_ids.join(\",\"),",
+      "cases": [
+        "the three entitlement states are distinct, and the empty one is a denial (R24)"
+      ]
+    },
+    {
+      "id": "PAYLOAD-09",
+      "note": "the suspension payload omits the state being set",
+      "was": "T18",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        target_org_id: input.target_org_id,\n        suspended: input.suspended,\n        reason,",
+      "replace": "        target_org_id: input.target_org_id,\n        reason,",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "PAYLOAD-10",
+      "note": "the suspension payload omits the reason",
+      "was": "T19",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const payload = canonicalPayload({\n        target_org_id: input.target_org_id,\n        suspended: input.suspended,\n        reason,\n      });",
+      "replace": "      const payload = canonicalPayload({ target_org_id: input.target_org_id, suspended: input.suspended });",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "PAYLOAD-11",
+      "note": "the key payload omits the trace mode",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const payload = canonicalPayload({ name, trace_mode });",
+      "replace": "        const payload = canonicalPayload({ name });",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "PAYLOAD-12",
+      "note": "the settings payload omits the retention",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          content_retention_days: update.content_retention_days,\n          evaluation_consent: update.evaluation_consent,",
+      "replace": "          evaluation_consent: update.evaluation_consent,",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "PAYLOAD-13",
+      "note": "the revoke payload omits the key",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const payload = canonicalPayload({ key_id: keyId });",
+      "replace": "        const payload = canonicalPayload({});",
+      "cases": [
+        "an idempotency key is scoped to its operation, its organization and its payload"
+      ]
+    },
+    {
+      "id": "PROV-01",
+      "note": "console feedback from an operator session is labelled operator",
+      "was": "V02",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "            author_role: \"customer\",\n            author_principal: session.email,\n            calibration_set: false,\n            rubric_version: null,",
+      "replace": "            author_role: session.isOperator ? \"operator\" : \"customer\",\n            author_principal: session.email,\n            calibration_set: false,\n            rubric_version: null,",
+      "cases": [
+        "an operator label is the only path to operator authorship and calibration membership"
+      ]
+    },
+    {
+      "id": "PROV-02",
+      "note": "the channel is taken from the caller rather than set by the console",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      channel: \"console\",\n      ...provenance,",
+      "replace": "      ...provenance,\n      channel: \"api\",",
+      "cases": [
+        "an operator label is the only path to operator authorship and calibration membership",
+        "feedback follows the R3 body, appears immediately, and has provenance the client cannot set"
+      ]
+    },
+    {
+      "id": "R41-01",
+      "note": "a customer session sees the operator's identity on an operator-made ledger entry",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    return { ...row, actor: session.isOperator ? row.actor : PLATFORM_ACTOR };",
+      "replace": "    return { ...row, actor: row.actor };",
+      "cases": [
+        "no customer view ever names an operator (R41)",
+        "an operator acts on the organization it names, not on its own (R26)"
+      ]
+    },
+    {
+      "id": "R41-03",
+      "note": "a customer sees which operator submitted ordinary console feedback",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (!byOperator || session.isOperator) return row;\n    return { ...row, author_principal: PLATFORM_ACTOR };",
+      "replace": "    if (!byOperator || session.isOperator) return row;\n    return { ...row, author_principal: row.author_principal };",
+      "cases": [
+        "no customer view ever names an operator (R41)"
+      ]
+    },
+    {
+      "id": "R41-04",
+      "note": "an operator's submission is not marked, so nothing masks its principal",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      ...provenance,\n      by_operator: session.isOperator,",
+      "replace": "      ...provenance,\n      by_operator: false,",
+      "cases": [
+        "no customer view ever names an operator (R41)"
+      ]
+    },
+    {
+      "id": "R41-05",
+      "note": "a trace list row is the whole stored trace, so it leaks what the detail masks",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      .map(listItemOf);",
+      "replace": "      .map((row) => row as unknown as TraceListItem);",
+      "cases": [
+        "ledger and trace pages walk every row exactly once",
+        "no customer view ever names an operator (R41)"
+      ]
+    },
+    {
+      "id": "R41-06",
+      "note": "a consent change by an operator names the operator to the customer",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        changed_by: byOperator && !session.isOperator ? PLATFORM_ACTOR : entry.changed_by,",
+      "replace": "        changed_by: entry.changed_by,",
+      "cases": [
+        "no customer view ever names an operator (R41)"
+      ]
+    },
+    {
+      "id": "R41-07",
+      "note": "the consent history is redacted for everyone, so an operator cannot tell who changed it",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "              changed_by: session.email,\n              by_operator: session.isOperator,",
+      "replace": "              changed_by: session.isOperator ? PLATFORM_ACTOR : session.email,\n              by_operator: session.isOperator,",
+      "cases": [
+        "no customer view ever names an operator (R41)"
+      ]
+    },
+    {
+      "id": "REVOKE-01",
+      "note": "a second revocation moves the timestamp of the first",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (key.revoked_at !== null) return fail(\"state_conflict\", \"this key is already revoked\");",
+      "replace": "        if (false) return fail(\"state_conflict\", \"this key is already revoked\");",
+      "cases": [
+        "the provisional input bounds hold"
+      ]
+    },
+    {
+      "id": "ROLE-01",
+      "note": "the owner-only check is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (session.role !== \"owner\") {",
+      "replace": "    if (false) {",
+      "cases": [
+        "the role and suspension matrix holds for every operation",
+        "a member can read but cannot mutate settings or keys"
+      ]
+    },
+    {
+      "id": "ROLE-02",
+      "note": "the operator check is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (!session.isOperator) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "the role and suspension matrix holds for every operation",
+        "a non-operator can neither grant nor see other organizations"
+      ]
+    },
+    {
+      "id": "ROLE-03",
+      "note": "judgeRuns loses its owner-or-operator check",
+      "was": "C09",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (session.role !== \"owner\" && !session.isOperator) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "the role and suspension matrix holds for every operation",
+        "a member can read but cannot mutate settings or keys"
+      ]
+    },
+    {
+      "id": "ROLE-04",
+      "note": "operator authority is taken from the organization role instead of the flag",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  function requireOperator<T>(session: SessionContext): Result<T> | null {\n    if (!session.isOperator) {",
+      "replace": "  function requireOperator<T>(session: SessionContext): Result<T> | null {\n    if (session.role !== \"owner\") {",
+      "cases": [
+        "the role and suspension matrix holds for every operation",
+        "a non-operator can neither grant nor see other organizations"
+      ]
+    },
+    {
+      "id": "ROLE-05",
+      "note": "the operator flag stands in for the owner role on an owner-only operation",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (session.role !== \"owner\") {\n      return fail<T>(\"forbidden\", \"only an organization owner can change this\");",
+      "replace": "    if (session.role !== \"owner\" && !session.isOperator) {\n      return fail<T>(\"forbidden\", \"only an organization owner can change this\");",
+      "cases": [
+        "the role and suspension matrix holds for every operation"
+      ]
+    },
+    {
+      "id": "ROLE-06",
+      "note": "the operator list is filtered to the caller's own organization",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      for (const org of orgs.values()) {\n        const balance = balanceOf(org);",
+      "replace": "      for (const org of [...orgs.values()].filter((candidate) => candidate.org_id === session.orgId)) {\n        const balance = balanceOf(org);",
+      "cases": [
+        "an operator acts on the organization it names, not on its own (R26)",
+        "the operator list pages like every other list"
+      ]
+    },
+    {
+      "id": "SECRET-01",
+      "note": "the idempotency record keeps the whole response, so a replay returns the secret",
+      "was": "K02",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          (created) => created.id,",
+      "replace": "          (created) => created,",
+      "cases": [
+        "a created key's secret is shown once and never again, to anybody"
+      ]
+    },
+    {
+      "id": "SECRET-02",
+      "note": "a replayed creation reports itself as a first response",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          return ok({ ...structuredClone(existing), secret: null, replayed: true });",
+      "replace": "          return ok({ ...structuredClone(existing), secret: null, replayed: false });",
+      "cases": [
+        "a created key's secret is shown once and never again, to anybody"
+      ]
+    },
+    {
+      "id": "STATE-01",
+      "note": "a non-terminal row reports a settlement state",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    const settlement: SettlementState | null = (TERMINAL_JOB_STATES as readonly string[]).includes(\n      outcome.job_state,\n    )\n      ? outcome.settlement_state\n      : null;",
+      "replace": "    const settlement: SettlementState | null = outcome.settlement_state;",
+      "cases": [
+        "usage pages walk every row exactly once, newest first"
+      ]
+    },
+    {
+      "id": "STATE-02",
+      "note": "consent changes are not audited in the settings history",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "            settings.consent_history.push({",
+      "replace": "            if (false) settings.consent_history.push({",
+      "cases": [
+        "retention is capped and evaluation consent is a separate control"
+      ]
+    },
+    {
+      "id": "STATE-03",
+      "note": "changing the trace mode also moves consent",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          if (update.trace_mode !== undefined) settings.trace_mode = update.trace_mode;",
+      "replace": "          if (update.trace_mode !== undefined) {\n            settings.trace_mode = update.trace_mode;\n            settings.evaluation_consent = update.trace_mode !== \"off\";\n          }",
+      "cases": [
+        "retention is capped and evaluation consent is a separate control"
+      ]
+    },
+    {
+      "id": "SUSP-01",
+      "note": "suspension is ignored entirely",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (org.suspended && !(SUSPENDED_ALLOWED_OPERATIONS as readonly string[]).includes(operation)) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "suspension gates new work and configuration, and nothing else (R33)",
+        "the role and suspension matrix holds for every operation"
+      ]
+    },
+    {
+      "id": "SUSP-02",
+      "note": "suspension also blocks reads and keys.revoke (R33 says it must not)",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (org.suspended && !(SUSPENDED_ALLOWED_OPERATIONS as readonly string[]).includes(operation)) {",
+      "replace": "    if (org.suspended) {",
+      "cases": [
+        "suspension gates new work and configuration, and nothing else (R33)",
+        "the role and suspension matrix holds for every operation"
+      ]
+    },
+    {
+      "id": "SUSP-03",
+      "note": "an operator whose own organization is suspended cannot operate the platform",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  function requireOperator<T>(session: SessionContext): Result<T> | null {\n    if (!session.isOperator) {",
+      "replace": "  function requireOperator<T>(session: SessionContext): Result<T> | null {\n    if (orgs.get(session.orgId)?.suspended === true) {\n      return fail<T>(\"org_suspended\", \"this organization is suspended\");\n    }\n    if (!session.isOperator) {",
+      "cases": [
+        "the role and suspension matrix holds for every operation"
+      ]
+    },
+    {
+      "id": "SUSP-04",
+      "note": "suspending an organization revokes its keys",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        target.suspended = input.suspended;\n        target.suspension_reason = reason;",
+      "replace": "        target.suspended = input.suspended;\n        target.suspension_reason = reason;\n        if (input.suspended) for (const key of target.keys) key.revoked_at = key.revoked_at ?? nextTimestamp();",
+      "cases": [
+        "a suspension can be lifted, and lifting it restores exactly what it gated"
+      ]
+    },
+    {
+      "id": "SUSP-05",
+      "note": "a restore is a no-op, so a suspension can never be lifted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        target.suspended = input.suspended;\n        target.suspension_reason = reason;\n        // R34: a restore *adds* an entry.",
+      "replace": "        target.suspended = target.suspended || input.suspended;\n        target.suspension_reason = reason;\n        // R34: a restore *adds* an entry.",
+      "cases": [
+        "a suspension can be lifted, and lifting it restores exactly what it gated"
+      ]
+    },
+    {
+      "id": "SUSP-06",
+      "note": "a grant to a suspended organization is refused, tying accounting to status",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const target = orgs.get(input.target_org_id);\n      if (target === undefined) return fail(\"not_found\", \"no such organization\");\n\n      const reason = input.reason.trim();",
+      "replace": "      const target = orgs.get(input.target_org_id);\n      if (target === undefined) return fail(\"not_found\", \"no such organization\");\n      if (target.suspended) return fail(\"org_suspended\", \"this organization is suspended\");\n\n      const reason = input.reason.trim();",
+      "cases": [
+        "a suspension can be lifted, and lifting it restores exactly what it gated"
+      ]
+    },
+    {
+      "id": "SUSP-07",
+      "note": "suspending an organization releases its outstanding holds",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        target.suspended = input.suspended;\n        target.suspension_reason = reason;\n        // R34: a restore *adds* an entry.",
+      "replace": "        target.suspended = input.suspended;\n        target.suspension_reason = reason;\n        if (input.suspended) for (const row of target.usage) row.max_hold = null;\n        // R34: a restore *adds* an entry.",
+      "cases": [
+        "suspending and restoring an organization with real accounting changes none of it"
+      ]
+    },
+    {
+      "id": "SUSP-08",
+      "note": "suspending an organization rewrites its settled rows as free",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        target.suspension_reason = reason;\n        // R34: a restore *adds* an entry.",
+      "replace": "        target.suspension_reason = reason;\n        if (input.suspended) {\n          for (const row of target.usage) if (row.settlement_state === \"settled\") row.settlement_state = \"released_free\";\n        }\n        // R34: a restore *adds* an entry.",
+      "cases": [
+        "suspending and restoring an organization with real accounting changes none of it"
+      ]
+    },
+    {
+      "id": "SUSP-09",
+      "note": "suspending an organization zeroes the cost of its settled rows",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const before = { suspended: target.suspended, suspension_reason: target.suspension_reason };",
+      "replace": "        const before = { suspended: target.suspended, suspension_reason: target.suspension_reason };\n        if (input.suspended) for (const row of target.usage) row.cost = ZERO_MONEY;",
+      "cases": [
+        "suspending and restoring an organization with real accounting changes none of it"
+      ]
+    },
+    {
+      "id": "TARGET-01",
+      "note": "adminSetSuspension acts on the caller's organization instead of the target",
+      "was": "I19",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const badReason = badAuditReason(input.reason);\n      if (badReason !== null) return fail<AdminOrgSummary>(\"invalid_request\", badReason);\n      const target = orgs.get(input.target_org_id);",
+      "replace": "      const badReason = badAuditReason(input.reason);\n      if (badReason !== null) return fail<AdminOrgSummary>(\"invalid_request\", badReason);\n      const target = orgs.get(session.orgId);",
+      "cases": [
+        "an operator acts on the organization it names, not on its own (R26)"
+      ]
+    },
+    {
+      "id": "TARGET-02",
+      "note": "adminSetEntitlements acts on the caller's organization instead of the target",
+      "was": "I20",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const badLimit = badEntitlementLimits(input.limits);\n      if (badLimit !== null) return fail<OrgEntitlements>(\"invalid_request\", badLimit);\n      const target = orgs.get(input.target_org_id);",
+      "replace": "      const badLimit = badEntitlementLimits(input.limits);\n      if (badLimit !== null) return fail<OrgEntitlements>(\"invalid_request\", badLimit);\n      const target = orgs.get(session.orgId);",
+      "cases": [
+        "an operator acts on the organization it names, not on its own (R26)"
+      ]
+    },
+    {
+      "id": "TARGET-03",
+      "note": "adminGrant credits the caller's organization instead of the target",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const target = orgs.get(input.target_org_id);\n      if (target === undefined) return fail(\"not_found\", \"no such organization\");\n\n      const reason = input.reason.trim();",
+      "replace": "      const target = orgs.get(session.orgId);\n      if (target === undefined) return fail(\"not_found\", \"no such organization\");\n\n      const reason = input.reason.trim();",
+      "cases": [
+        "an operator acts on the organization it names, not on its own (R26)",
+        "an operator grant is idempotent per key and conflicts on a changed payload"
+      ]
+    },
+    {
+      "id": "TENANT-01",
+      "note": "the tenant comes from the first organization instead of the session",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    const org = orgs.get(session.orgId);",
+      "replace": "    const org = [...orgs.values()][0];",
+      "cases": [
+        "reads and writes never cross the tenant boundary, in either direction",
+        "a new organization starts at zero with no ledger history"
+      ]
+    },
+    {
+      "id": "TENANT-02",
+      "note": "usageSummary aggregates across every organization",
+      "was": "X02",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const rows = usageRowsFor(resolved.org, query);\n      // Units, not `addMoney`",
+      "replace": "      const rows = [...orgs.values()].flatMap((org) => usageRowsFor(org, query));\n      // Units, not `addMoney`",
+      "cases": [
+        "reads and writes never cross the tenant boundary, in either direction",
+        "balance is the ledger total minus reservations, and holds reduce what is available"
+      ]
+    },
+    {
+      "id": "TENANT-03",
+      "note": "usageDaily aggregates across every organization",
+      "was": "X03",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      for (const row of usageRowsFor(resolved.org, query)) {",
+      "replace": "      for (const row of [...orgs.values()].flatMap((org) => usageRowsFor(org, query))) {",
+      "cases": [
+        "reads and writes never cross the tenant boundary, in either direction"
+      ]
+    },
+    {
+      "id": "TENANT-04",
+      "note": "settings.get reads the first organization's settings",
+      "was": "X07",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        return ok(visibleSettings(resolved.org.settings, session));",
+      "replace": "        return ok(visibleSettings([...orgs.values()][0].settings, session));",
+      "cases": [
+        "reads and writes never cross the tenant boundary, in either direction"
+      ]
+    },
+    {
+      "id": "TENANT-05",
+      "note": "settings.update writes the first organization's settings",
+      "was": "X08",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          const settings = resolved.org.settings;",
+      "replace": "          const settings = [...orgs.values()][0].settings;",
+      "cases": [
+        "reads and writes never cross the tenant boundary, in either direction"
+      ]
+    },
+    {
+      "id": "TENANT-06",
+      "note": "a trace of any organization is readable by any session",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  function ownedTrace(org: OrgState, requestId: string): StoredTrace | undefined {\n    return org.traces.find((trace) => trace.request_id === requestId);",
+      "replace": "  function ownedTrace(org: OrgState, requestId: string): StoredTrace | undefined {\n    for (const candidate of orgs.values()) {\n      const found = candidate.traces.find((trace) => trace.request_id === requestId);\n      if (found !== undefined) return found;\n    }\n    return org.traces.find((trace) => trace.request_id === requestId);",
+      "cases": [
+        "identifiers from another organization are not_found, in both directions"
+      ]
+    },
+    {
+      "id": "XHEAD-01",
+      "note": "a row arriving at the head shifts the walk, so one is repeated",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  const items = structuredClone(rows.slice(start, start + limit));",
+      "replace": "  const items = structuredClone(rows.slice(Math.max(0, start - 1), Math.max(0, start - 1) + limit));",
+      "cases": [
+        "a list walked while rows arrive at its head still returns every row exactly once"
+      ]
+    },
+    {
+      "id": "XINPUT-01",
+      "note": "a non-object input is accepted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  if (typeof input !== \"object\" || input === null || Array.isArray(input)) {\n    return fail<T>(\"invalid_request\", \"this operation takes an object\");\n  }",
+      "replace": "  if (typeof input !== \"object\" || input === null) return null;",
+      "cases": [
+        "no operation accepts a field the caller invented"
+      ]
+    },
+    {
+      "id": "XJUDGE-01",
+      "note": "a dry-run score is reported as a provider result",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        mode: run.mode === \"live\" ? \"live\" : \"dry_run\",",
+      "replace": "        mode: \"live\" as const,",
+      "cases": [
+        "judge runs separate estimates, limited evaluations and held budgets"
+      ]
+    },
+    {
+      "id": "XJUDGE-02",
+      "note": "the sample count does not match the samples",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        sample_count: samples.length,",
+      "replace": "        sample_count: samples.length + 1,",
+      "cases": [
+        "judge runs separate estimates, limited evaluations and held budgets"
+      ]
+    },
+    {
+      "id": "XPURCHASE-01",
+      "note": "a grant is written as a legacy purchase row",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          delta: amount,\n          kind: \"grant\",\n          reason,",
+      "replace": "          delta: amount,\n          kind: \"purchase\" as const,\n          reason,",
+      "cases": [
+        "nothing creates a legacy purchase entry"
+      ]
+    },
+    {
+      "id": "XREASON-01",
+      "note": "an operator write accepts a blank reason",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (typeof reason !== \"string\" || reason.trim() === \"\") return \"this operation needs a reason\";",
+      "replace": "    if (false) return \"this operation needs a reason\";",
+      "cases": [
+        "every mutating operation validates before it writes, whichever field is bad"
+      ]
+    },
+    {
+      "id": "XTENANT-01",
+      "note": "a cursor is not bound to the organization that minted it",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    return `${org.org_id}|${operation}|${JSON.stringify(parts)}`;",
+      "replace": "    return `${operation}|${JSON.stringify(parts)}`;",
+      "cases": [
+        "a filter or cursor from another organization never widens the tenant"
+      ]
+    }
+  ]
+}

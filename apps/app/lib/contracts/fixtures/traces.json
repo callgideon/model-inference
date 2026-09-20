@@ -1,0 +1,146 @@
+{
+  "_comment": "Trace content templates and seeded feedback. Templates are attached by fake-services.ts to the generated traces whose content is `available`; `trace_index` is an index into the org's generated trace list (newest first). The one `calibration_label` seed is what calibration.label creates \u2014 the only entry shape carrying author_role operator and calibration membership (R19). No real customer content, storage key or signed URL appears here.",
+  "availability_cycle": [
+    "available",
+    "metadata_only",
+    "pending",
+    "lost",
+    "expired",
+    "available"
+  ],
+  "content_templates": [
+    {
+      "v": 1,
+      "request": {
+        "model": "marlin-2b@2026-09-01",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Describe the clip in one sentence."
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "What happens in this clip?"
+              },
+              {
+                "type": "video_url",
+                "video_url": {
+                  "url": "upl_fixture000000000001",
+                  "source": "upload"
+                }
+              }
+            ]
+          }
+        ],
+        "params": {
+          "max_tokens": 256,
+          "n": 1,
+          "stream": false
+        }
+      },
+      "response": {
+        "status": 200,
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "content": "A forklift moves a pallet across a warehouse aisle and stops at the loading bay.",
+            "reasoning_content": null
+          }
+        ],
+        "error": null
+      }
+    },
+    {
+      "v": 1,
+      "request": {
+        "model": "marlin-2b@2026-09-01",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Summarise the safety rules for aisle traffic."
+          }
+        ],
+        "params": {
+          "max_tokens": 128,
+          "n": 1,
+          "stream": true
+        }
+      },
+      "response": {
+        "status": 500,
+        "choices": [],
+        "error": {
+          "type": "server_error",
+          "code": "stream_interrupted",
+          "message": "The stream ended before the model finished."
+        }
+      }
+    }
+  ],
+  "seed_feedback": [
+    {
+      "trace_index": 0,
+      "channel": "api",
+      "author_role": "customer",
+      "author_principal": "sk-infrx-nw01pro",
+      "name": "thumb",
+      "value": true,
+      "comment": "Correct description.",
+      "calibration_set": false,
+      "created_at": "2026-09-20T11:30:00.000Z",
+      "rubric_version": null
+    },
+    {
+      "trace_index": 6,
+      "channel": "console",
+      "author_role": "operator",
+      "author_principal": "operator@infrx.example",
+      "name": "calibration_label",
+      "value": "partially_correct",
+      "comment": "Missed the second forklift.",
+      "calibration_set": true,
+      "rubric_version": 3,
+      "created_at": "2026-09-20T11:45:00.000Z"
+    },
+    {
+      "trace_index": 6,
+      "channel": "console",
+      "author_role": "customer",
+      "author_principal": "owner@northwind.example",
+      "name": "correction",
+      "value": "Two forklifts cross the aisle.",
+      "comment": null,
+      "calibration_set": false,
+      "rubric_version": null,
+      "created_at": "2026-09-20T11:47:00.000Z"
+    },
+    {
+      "trace_index": 6,
+      "channel": "console",
+      "author_role": "customer",
+      "author_principal": "owner@northwind.example",
+      "name": "rating",
+      "value": 2,
+      "comment": null,
+      "calibration_set": false,
+      "created_at": "2026-09-20T11:50:00.000Z",
+      "rubric_version": null
+    },
+    {
+      "trace_index": 12,
+      "channel": "api",
+      "author_role": "judge",
+      "author_principal": "judge:opus-5@rubric-3",
+      "name": "comment",
+      "value": "Groundedness could not be checked: the clip had expired.",
+      "comment": null,
+      "calibration_set": false,
+      "created_at": "2026-09-20T11:55:00.000Z",
+      "rubric_version": null
+    }
+  ]
+}

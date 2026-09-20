@@ -1,0 +1,971 @@
+F2-ts round 5 verification transcript
+branch: codex/f2-contracts-ts   base: fab9fbe   head at capture: ab442af
+date: 2026-09-20 (UTC)   node: v22.23.1   pnpm: 9.15.9
+
+$ pnpm --dir apps/app test
+
+> infrx-app@0.1.0 test /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app
+> node --test "lib/**/*.test.ts" "tests/**/*.test.ts" "app/**/*.test.ts" "components/**/*.test.ts"
+
+TAP version 13
+# (node:1108720) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/lib/keys.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: keys look like keys and are unique
+ok 1 - keys look like keys and are unique
+  ---
+  duration_ms: 17.255775
+  type: 'test'
+  ...
+# Subtest: every base62 character can appear (rejection sampling is not truncating the alphabet)
+ok 2 - every base62 character can appear (rejection sampling is not truncating the alphabet)
+  ---
+  duration_ms: 5.318217
+  type: 'test'
+  ...
+# Subtest: hash is the sha256 hex the gateway computes
+ok 3 - hash is the sha256 hex the gateway computes
+  ---
+  duration_ms: 5.025055
+  type: 'test'
+  ...
+# (node:1108721) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/lib/utils.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: safeNext keeps same-site paths and rejects everything else
+ok 4 - safeNext keeps same-site paths and rejects everything else
+  ---
+  duration_ms: 0.990505
+  type: 'test'
+  ...
+# (node:1108730) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/tests/contracts/discovery.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: the test script declares the four directory patterns of 08 §7
+ok 5 - the test script declares the four directory patterns of 08 §7
+  ---
+  duration_ms: 1.965713
+  type: 'test'
+  ...
+# Subtest: every test file in the tree is matched by a declared pattern
+ok 6 - every test file in the tree is matched by a declared pattern
+  ---
+  duration_ms: 9.521071
+  type: 'test'
+  ...
+# Subtest: a test hidden in a directory named like build output, or behind a dot, is still flagged
+ok 7 - a test hidden in a directory named like build output, or behind a dot, is still flagged
+  ---
+  duration_ms: 2.884152
+  type: 'test'
+  ...
+# Subtest: nested suites and the pre-existing library tests are both discovered
+ok 8 - nested suites and the pre-existing library tests are both discovered
+  ---
+  duration_ms: 2.755069
+  type: 'test'
+  ...
+# Subtest: the console pins a Node version that strips types
+ok 9 - the console pins a Node version that strips types
+  ---
+  duration_ms: 0.333902
+  type: 'test'
+  ...
+# (node:1108731) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/tests/contracts/fixtures.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: every fixture file is one the contract knows about
+ok 10 - every fixture file is one the contract knows about
+  ---
+  duration_ms: 2.120013
+  type: 'test'
+  ...
+# Subtest: the organization fixtures match the contract vocabulary
+ok 11 - the organization fixtures match the contract vocabulary
+  ---
+  duration_ms: 1.65135
+  type: 'test'
+  ...
+# Subtest: the trace fixtures are renderable content with no storage reference
+ok 12 - the trace fixtures are renderable content with no storage reference
+  ---
+  duration_ms: 0.589397
+  type: 'test'
+  ...
+# Subtest: the judge fixtures keep dry-run, live and ambiguous runs honest
+ok 13 - the judge fixtures keep dry-run, live and ambiguous runs honest
+  ---
+  duration_ms: 0.552686
+  type: 'test'
+  ...
+# (node:1108737) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/tests/contracts/money.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: the shared case list is the accept/reject domain, and both halves must agree on it
+ok 14 - the shared case list is the accept/reject domain, and both halves must agree on it
+  ---
+  duration_ms: 5.257216
+  type: 'test'
+  ...
+# Subtest: no number ever becomes money, however innocent it looks
+ok 15 - no number ever becomes money, however innocent it looks
+  ---
+  duration_ms: 0.61408
+  type: 'test'
+  ...
+# Subtest: a value that is canonical but not eight digits is not money
+ok 16 - a value that is canonical but not eight digits is not money
+  ---
+  duration_ms: 0.204539
+  type: 'test'
+  ...
+# Subtest: addition, subtraction, comparison and sums are exact at the eighth digit
+ok 17 - addition, subtraction, comparison and sums are exact at the eighth digit
+  ---
+  duration_ms: 0.480034
+  type: 'test'
+  ...
+# Subtest: negative and zero are distinguishable, and negative zero does not exist
+ok 18 - negative and zero are distinguishable, and negative zero does not exist
+  ---
+  duration_ms: 0.382057
+  type: 'test'
+  ...
+# Subtest: scaled units are 1e-8 USD and stop at the twentieth significant digit
+ok 19 - scaled units are 1e-8 USD and stop at the twentieth significant digit
+  ---
+  duration_ms: 0.324956
+  type: 'test'
+  ...
+# Subtest: an absurdly long numeral is refused on its length, before the regex or BigInt
+ok 20 - an absurdly long numeral is refused on its length, before the regex or BigInt
+  ---
+  duration_ms: 0.327522
+  type: 'test'
+  ...
+# Subtest: a prospective total can be tested for the domain without throwing
+ok 21 - a prospective total can be tested for the domain without throwing
+  ---
+  duration_ms: 0.195453
+  type: 'test'
+  ...
+# Subtest: leading zeros are rejected, as they are on the Python side
+ok 22 - leading zeros are rejected, as they are on the Python side
+  ---
+  duration_ms: 0.334325
+  type: 'test'
+  ...
+# Subtest: the charge and hold fixtures agree across languages and stay canonical
+ok 23 - the charge and hold fixtures agree across languages and stay canonical
+  ---
+  duration_ms: 0.503613
+  type: 'test'
+  ...
+# Subtest: display never routes the value through Number
+ok 24 - display never routes the value through Number
+  ---
+  duration_ms: 0.471214
+  type: 'test'
+  ...
+# (node:1108743) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/tests/contracts/opaque-cursor.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: the wrapper really does make cursors unreadable to the implementation
+ok 25 - the wrapper really does make cursors unreadable to the implementation
+  ---
+  duration_ms: 8.442745
+  type: 'test'
+  ...
+# Subtest: ConsoleServices with opaque cursors
+    # Subtest: usage pages walk every row exactly once, newest first
+    ok 1 - usage pages walk every row exactly once, newest first
+      ---
+      duration_ms: 14.233368
+      type: 'test'
+      ...
+    # Subtest: ledger and trace pages walk every row exactly once
+    ok 2 - ledger and trace pages walk every row exactly once
+      ---
+      duration_ms: 9.481316
+      type: 'test'
+      ...
+    # Subtest: rejects a limit above the hard bound and a limit that is not a positive integer
+    ok 3 - rejects a limit above the hard bound and a limit that is not a positive integer
+      ---
+      duration_ms: 3.37711
+      type: 'test'
+      ...
+    # Subtest: rejects a cursor it did not issue for this query
+    ok 4 - rejects a cursor it did not issue for this query
+      ---
+      duration_ms: 3.581831
+      type: 'test'
+      ...
+    # Subtest: balance is the ledger total minus reservations, and holds reduce what is available
+    ok 5 - balance is the ledger total minus reservations, and holds reduce what is available
+      ---
+      duration_ms: 6.679196
+      type: 'test'
+      ...
+    # Subtest: a new organization starts at zero with no ledger history
+    ok 6 - a new organization starts at zero with no ledger history
+      ---
+      duration_ms: 2.089375
+      type: 'test'
+      ...
+    # Subtest: identifiers from another organization are not_found, in both directions
+    ok 7 - identifiers from another organization are not_found, in both directions
+      ---
+      duration_ms: 2.569068
+      type: 'test'
+      ...
+    # Subtest: a filter or cursor from another organization never widens the tenant
+    ok 8 - a filter or cursor from another organization never widens the tenant
+      ---
+      duration_ms: 3.456273
+      type: 'test'
+      ...
+    # Subtest: a filter outside its vocabulary is invalid_request, not an empty page
+    ok 9 - a filter outside its vocabulary is invalid_request, not an empty page
+      ---
+      duration_ms: 2.783852
+      type: 'test'
+      ...
+    # Subtest: a member can read but cannot mutate settings or keys
+    ok 10 - a member can read but cannot mutate settings or keys
+      ---
+      duration_ms: 2.442551
+      type: 'test'
+      ...
+    # Subtest: a non-operator can neither grant nor see other organizations
+    ok 11 - a non-operator can neither grant nor see other organizations
+      ---
+      duration_ms: 2.232744
+      type: 'test'
+      ...
+    # Subtest: feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+    ok 12 - feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+      ---
+      duration_ms: 9.281545
+      type: 'test'
+      ...
+    # Subtest: retention is capped and evaluation consent is a separate control
+    ok 13 - retention is capped and evaluation consent is a separate control
+      ---
+      duration_ms: 2.860863
+      type: 'test'
+      ...
+    # Subtest: an operator grant is idempotent per key and conflicts on a changed payload
+    ok 14 - an operator grant is idempotent per key and conflicts on a changed payload
+      ---
+      duration_ms: 2.58741
+      type: 'test'
+      ...
+    # Subtest: the provisional input bounds hold
+    ok 15 - the provisional input bounds hold
+      ---
+      duration_ms: 2.72564
+      type: 'test'
+      ...
+    # Subtest: content availability decides the payload and never leaks a storage reference
+    ok 16 - content availability decides the payload and never leaks a storage reference
+      ---
+      duration_ms: 8.025434
+      type: 'test'
+      ...
+    # Subtest: the HTTP status table is the one 08 §3 freezes, code for code
+    ok 17 - the HTTP status table is the one 08 §3 freezes, code for code
+      ---
+      duration_ms: 0.352946
+      type: 'test'
+      ...
+    # Subtest: suspension gates new work and configuration, and nothing else (R33)
+    ok 18 - suspension gates new work and configuration, and nothing else (R33)
+      ---
+      duration_ms: 2.801826
+      type: 'test'
+      ...
+    # Subtest: the role and suspension matrix holds for every operation
+    ok 19 - the role and suspension matrix holds for every operation
+      ---
+      duration_ms: 8.061261
+      type: 'test'
+      ...
+    # Subtest: an operator acts on the organization it names, not on its own (R26)
+    ok 20 - an operator acts on the organization it names, not on its own (R26)
+      ---
+      duration_ms: 3.037446
+      type: 'test'
+      ...
+    # Subtest: the three entitlement states are distinct, and the empty one is a denial (R24)
+    ok 21 - the three entitlement states are distinct, and the empty one is a denial (R24)
+      ---
+      duration_ms: 3.045642
+      type: 'test'
+      ...
+    # Subtest: an operator suspension needs a reason within the bound
+    ok 22 - an operator suspension needs a reason within the bound
+      ---
+      duration_ms: 2.102027
+      type: 'test'
+      ...
+    # Subtest: an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+    ok 23 - an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+      ---
+      duration_ms: 3.447368
+      type: 'test'
+      ...
+    # Subtest: an operator label is the only path to operator authorship and calibration membership
+    ok 24 - an operator label is the only path to operator authorship and calibration membership
+      ---
+      duration_ms: 3.176955
+      type: 'test'
+      ...
+    # Subtest: a created key's secret is shown once and never again, to anybody
+    ok 25 - a created key's secret is shown once and never again, to anybody
+      ---
+      duration_ms: 5.811469
+      type: 'test'
+      ...
+    # Subtest: judge runs separate estimates, limited evaluations and held budgets
+    ok 26 - judge runs separate estimates, limited evaluations and held budgets
+      ---
+      duration_ms: 2.717991
+      type: 'test'
+      ...
+    1..26
+ok 26 - ConsoleServices with opaque cursors
+  ---
+  duration_ms: 114.323311
+  type: 'suite'
+  ...
+# Subtest: ConsoleServices with opaque cursors: mutations validate before they write
+    # Subtest: an amount that would leave the money domain is refused, and nothing is written
+    ok 1 - an amount that would leave the money domain is refused, and nothing is written
+      ---
+      duration_ms: 3.855377
+      type: 'test'
+      ...
+    # Subtest: every mutating operation validates before it writes, whichever field is bad
+    ok 2 - every mutating operation validates before it writes, whichever field is bad
+      ---
+      duration_ms: 47.867875
+      type: 'test'
+      ...
+    # Subtest: an idempotency key is scoped to its operation, its organization and its payload
+    ok 3 - an idempotency key is scoped to its operation, its organization and its payload
+      ---
+      duration_ms: 3.604472
+      type: 'test'
+      ...
+    # Subtest: generated identifiers never collide, within an organization or across two
+    ok 4 - generated identifiers never collide, within an organization or across two
+      ---
+      duration_ms: 2.703116
+      type: 'test'
+      ...
+    # Subtest: a list walked while rows arrive at its head still returns every row exactly once
+    ok 5 - a list walked while rows arrive at its head still returns every row exactly once
+      ---
+      duration_ms: 4.089042
+      type: 'test'
+      ...
+    # Subtest: a filtered walk survives the cursor's own row leaving the filter, and stays complete
+    ok 6 - a filtered walk survives the cursor's own row leaving the filter, and stays complete
+      ---
+      duration_ms: 5.052891
+      type: 'test'
+      ...
+    # Subtest: nothing creates a legacy purchase entry
+    ok 7 - nothing creates a legacy purchase entry
+      ---
+      duration_ms: 4.102242
+      type: 'test'
+      ...
+    # Subtest: a calibration label is operator data a customer never sees (R35)
+    ok 8 - a calibration label is operator data a customer never sees (R35)
+      ---
+      duration_ms: 3.84536
+      type: 'test'
+      ...
+    # Subtest: no operation accepts a field the caller invented
+    ok 9 - no operation accepts a field the caller invented
+      ---
+      duration_ms: 2.850792
+      type: 'test'
+      ...
+    # Subtest: reads and writes never cross the tenant boundary, in either direction
+    ok 10 - reads and writes never cross the tenant boundary, in either direction
+      ---
+      duration_ms: 4.318091
+      type: 'test'
+      ...
+    # Subtest: a filter filters, and an absent filter does not
+    ok 11 - a filter filters, and an absent filter does not
+      ---
+      duration_ms: 5.96261
+      type: 'test'
+      ...
+    # Subtest: the operator list pages like every other list
+    ok 12 - the operator list pages like every other list
+      ---
+      duration_ms: 3.952074
+      type: 'test'
+      ...
+    1..12
+ok 27 - ConsoleServices with opaque cursors: mutations validate before they write
+  ---
+  duration_ms: 92.688453
+  type: 'suite'
+  ...
+# (node:1108749) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/tests/contracts/services.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: fixture-backed ConsoleServices
+    # Subtest: usage pages walk every row exactly once, newest first
+    ok 1 - usage pages walk every row exactly once, newest first
+      ---
+      duration_ms: 15.618053
+      type: 'test'
+      ...
+    # Subtest: ledger and trace pages walk every row exactly once
+    ok 2 - ledger and trace pages walk every row exactly once
+      ---
+      duration_ms: 10.216821
+      type: 'test'
+      ...
+    # Subtest: rejects a limit above the hard bound and a limit that is not a positive integer
+    ok 3 - rejects a limit above the hard bound and a limit that is not a positive integer
+      ---
+      duration_ms: 3.565723
+      type: 'test'
+      ...
+    # Subtest: rejects a cursor it did not issue for this query
+    ok 4 - rejects a cursor it did not issue for this query
+      ---
+      duration_ms: 4.091873
+      type: 'test'
+      ...
+    # Subtest: balance is the ledger total minus reservations, and holds reduce what is available
+    ok 5 - balance is the ledger total minus reservations, and holds reduce what is available
+      ---
+      duration_ms: 4.863654
+      type: 'test'
+      ...
+    # Subtest: a new organization starts at zero with no ledger history
+    ok 6 - a new organization starts at zero with no ledger history
+      ---
+      duration_ms: 2.528143
+      type: 'test'
+      ...
+    # Subtest: identifiers from another organization are not_found, in both directions
+    ok 7 - identifiers from another organization are not_found, in both directions
+      ---
+      duration_ms: 3.593797
+      type: 'test'
+      ...
+    # Subtest: a filter or cursor from another organization never widens the tenant
+    ok 8 - a filter or cursor from another organization never widens the tenant
+      ---
+      duration_ms: 4.035147
+      type: 'test'
+      ...
+    # Subtest: a filter outside its vocabulary is invalid_request, not an empty page
+    ok 9 - a filter outside its vocabulary is invalid_request, not an empty page
+      ---
+      duration_ms: 2.159905
+      type: 'test'
+      ...
+    # Subtest: a member can read but cannot mutate settings or keys
+    ok 10 - a member can read but cannot mutate settings or keys
+      ---
+      duration_ms: 3.294135
+      type: 'test'
+      ...
+    # Subtest: a non-operator can neither grant nor see other organizations
+    ok 11 - a non-operator can neither grant nor see other organizations
+      ---
+      duration_ms: 2.438429
+      type: 'test'
+      ...
+    # Subtest: feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+    ok 12 - feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+      ---
+      duration_ms: 9.326185
+      type: 'test'
+      ...
+    # Subtest: retention is capped and evaluation consent is a separate control
+    ok 13 - retention is capped and evaluation consent is a separate control
+      ---
+      duration_ms: 1.97576
+      type: 'test'
+      ...
+    # Subtest: an operator grant is idempotent per key and conflicts on a changed payload
+    ok 14 - an operator grant is idempotent per key and conflicts on a changed payload
+      ---
+      duration_ms: 3.329467
+      type: 'test'
+      ...
+    # Subtest: the provisional input bounds hold
+    ok 15 - the provisional input bounds hold
+      ---
+      duration_ms: 2.770487
+      type: 'test'
+      ...
+    # Subtest: content availability decides the payload and never leaks a storage reference
+    ok 16 - content availability decides the payload and never leaks a storage reference
+      ---
+      duration_ms: 8.437965
+      type: 'test'
+      ...
+    # Subtest: the HTTP status table is the one 08 §3 freezes, code for code
+    ok 17 - the HTTP status table is the one 08 §3 freezes, code for code
+      ---
+      duration_ms: 0.491684
+      type: 'test'
+      ...
+    # Subtest: suspension gates new work and configuration, and nothing else (R33)
+    ok 18 - suspension gates new work and configuration, and nothing else (R33)
+      ---
+      duration_ms: 2.786325
+      type: 'test'
+      ...
+    # Subtest: the role and suspension matrix holds for every operation
+    ok 19 - the role and suspension matrix holds for every operation
+      ---
+      duration_ms: 5.982048
+      type: 'test'
+      ...
+    # Subtest: an operator acts on the organization it names, not on its own (R26)
+    ok 20 - an operator acts on the organization it names, not on its own (R26)
+      ---
+      duration_ms: 3.557613
+      type: 'test'
+      ...
+    # Subtest: the three entitlement states are distinct, and the empty one is a denial (R24)
+    ok 21 - the three entitlement states are distinct, and the empty one is a denial (R24)
+      ---
+      duration_ms: 3.02358
+      type: 'test'
+      ...
+    # Subtest: an operator suspension needs a reason within the bound
+    ok 22 - an operator suspension needs a reason within the bound
+      ---
+      duration_ms: 1.78626
+      type: 'test'
+      ...
+    # Subtest: an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+    ok 23 - an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+      ---
+      duration_ms: 3.737286
+      type: 'test'
+      ...
+    # Subtest: an operator label is the only path to operator authorship and calibration membership
+    ok 24 - an operator label is the only path to operator authorship and calibration membership
+      ---
+      duration_ms: 2.362448
+      type: 'test'
+      ...
+    # Subtest: a created key's secret is shown once and never again, to anybody
+    ok 25 - a created key's secret is shown once and never again, to anybody
+      ---
+      duration_ms: 5.610897
+      type: 'test'
+      ...
+    # Subtest: judge runs separate estimates, limited evaluations and held budgets
+    ok 26 - judge runs separate estimates, limited evaluations and held budgets
+      ---
+      duration_ms: 2.192464
+      type: 'test'
+      ...
+    1..26
+ok 28 - fixture-backed ConsoleServices
+  ---
+  duration_ms: 115.62979
+  type: 'suite'
+  ...
+# Subtest: fixture-backed ConsoleServices: mutations validate before they write
+    # Subtest: an amount that would leave the money domain is refused, and nothing is written
+    ok 1 - an amount that would leave the money domain is refused, and nothing is written
+      ---
+      duration_ms: 3.969739
+      type: 'test'
+      ...
+    # Subtest: every mutating operation validates before it writes, whichever field is bad
+    ok 2 - every mutating operation validates before it writes, whichever field is bad
+      ---
+      duration_ms: 42.520485
+      type: 'test'
+      ...
+    # Subtest: an idempotency key is scoped to its operation, its organization and its payload
+    ok 3 - an idempotency key is scoped to its operation, its organization and its payload
+      ---
+      duration_ms: 3.663344
+      type: 'test'
+      ...
+    # Subtest: generated identifiers never collide, within an organization or across two
+    ok 4 - generated identifiers never collide, within an organization or across two
+      ---
+      duration_ms: 2.688855
+      type: 'test'
+      ...
+    # Subtest: a list walked while rows arrive at its head still returns every row exactly once
+    ok 5 - a list walked while rows arrive at its head still returns every row exactly once
+      ---
+      duration_ms: 3.541615
+      type: 'test'
+      ...
+    # Subtest: a filtered walk survives the cursor's own row leaving the filter, and stays complete
+    ok 6 - a filtered walk survives the cursor's own row leaving the filter, and stays complete
+      ---
+      duration_ms: 5.983021
+      type: 'test'
+      ...
+    # Subtest: nothing creates a legacy purchase entry
+    ok 7 - nothing creates a legacy purchase entry
+      ---
+      duration_ms: 2.928443
+      type: 'test'
+      ...
+    # Subtest: a calibration label is operator data a customer never sees (R35)
+    ok 8 - a calibration label is operator data a customer never sees (R35)
+      ---
+      duration_ms: 3.468413
+      type: 'test'
+      ...
+    # Subtest: no operation accepts a field the caller invented
+    ok 9 - no operation accepts a field the caller invented
+      ---
+      duration_ms: 2.851736
+      type: 'test'
+      ...
+    # Subtest: reads and writes never cross the tenant boundary, in either direction
+    ok 10 - reads and writes never cross the tenant boundary, in either direction
+      ---
+      duration_ms: 3.432869
+      type: 'test'
+      ...
+    # Subtest: a filter filters, and an absent filter does not
+    ok 11 - a filter filters, and an absent filter does not
+      ---
+      duration_ms: 7.325743
+      type: 'test'
+      ...
+    # Subtest: the operator list pages like every other list
+    ok 12 - the operator list pages like every other list
+      ---
+      duration_ms: 2.373658
+      type: 'test'
+      ...
+    1..12
+ok 29 - fixture-backed ConsoleServices: mutations validate before they write
+  ---
+  duration_ms: 85.210099
+  type: 'suite'
+  ...
+# Subtest: the fixtures are deterministic and each instance has its own state
+ok 30 - the fixtures are deterministic and each instance has its own state
+  ---
+  duration_ms: 5.184769
+  type: 'test'
+  ...
+# Subtest: the fixture set covers what U and V need to build against
+ok 31 - the fixture set covers what U and V need to build against
+  ---
+  duration_ms: 3.64717
+  type: 'test'
+  ...
+# Subtest: the exact overflow the review found is refused, and the fake stays usable afterwards
+ok 32 - the exact overflow the review found is refused, and the fake stays usable afterwards
+  ---
+  duration_ms: 2.877148
+  type: 'test'
+  ...
+# Subtest: many submissions never reuse a feedback id, and two organizations never share one
+ok 33 - many submissions never reuse a feedback id, and two organizations never share one
+  ---
+  duration_ms: 12.021822
+  type: 'test'
+  ...
+# Subtest: the fake's own cursor shape cannot be forged
+ok 34 - the fake's own cursor shape cannot be forged
+  ---
+  duration_ms: 2.920708
+  type: 'test'
+  ...
+# Subtest: a failure after the write replays instead of repeating, for every mutating operation
+ok 35 - a failure after the write replays instead of repeating, for every mutating operation
+  ---
+  duration_ms: 3.229866
+  type: 'test'
+  ...
+# Subtest: a key secret is retained nowhere in the fake's state
+ok 36 - a key secret is retained nowhere in the fake's state
+  ---
+  duration_ms: 4.033274
+  type: 'test'
+  ...
+# Subtest: every operation can be made to fail on demand, and recovers on the next call
+ok 37 - every operation can be made to fail on demand, and recovers on the next call
+  ---
+  duration_ms: 5.647324
+  type: 'test'
+  ...
+1..37
+# tests 109
+# suites 4
+# pass 109
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 466.102543
+exit=0
+
+$ pnpm --dir apps/app test:mutants
+
+> infrx-app@0.1.0 test:mutants /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app
+> node tests/contracts/run-mutants.mjs
+
+baseline: conformance suite passes (115 mutants to apply, 4 at a time)
+
+killed   AUDIT-01     an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-02     an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-03     an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-04     an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-05     an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   AUDIT-06     the role and suspension matrix holds for every operation
+killed   AUDIT-07     an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+killed   BAL-01       balance is the ledger total minus reservations, and holds reduce what is available
+killed   BOUND-01     the provisional input bounds hold
+killed   BOUND-02     the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   BOUND-03     feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+killed   BOUND-04     the provisional input bounds hold
+killed   BOUND-05     the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   BOUND-06     retention is capped and evaluation consent is a separate control
+killed   BOUND-07     an operator label is the only path to operator authorship and calibration membership
+killed   BOUND-08     feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+killed   CODE-01      the HTTP status table is the one 08 §3 freezes, code for code
+killed   CODE-02      the HTTP status table is the one 08 §3 freezes, code for code
+killed   CODE-03      the HTTP status table is the one 08 §3 freezes, code for code
+killed   CONTENT-01   content availability decides the payload and never leaks a storage reference
+killed   CURSOR-01    rejects a cursor it did not issue for this query
+killed   CURSOR-02    usage pages walk every row exactly once, newest first
+killed   CURSOR-03    usage pages walk every row exactly once, newest first
+killed   CURSOR-04    usage pages walk every row exactly once, newest first
+killed   CURSOR-05    a filtered walk survives the cursor's own row leaving the filter, and stays complete
+killed   CURSOR-06    the operator list pages like every other list
+killed   ENT-01       the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   ENT-02       the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   ENT-03       the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   ENT-04       an operator acts on the organization it names, not on its own (R26)
+killed   FILTER-01    a filter filters, and an absent filter does not
+killed   FILTER-02    a filter filters, and an absent filter does not
+killed   FILTER-03    a filter filters, and an absent filter does not
+killed   FILTER-04    a filter filters, and an absent filter does not
+killed   FILTER-05    ledger and trace pages walk every row exactly once
+killed   GRANT-01     an operator acts on the organization it names, not on its own (R26)
+killed   GRANT-02     an operator grant is idempotent per key and conflicts on a changed payload
+killed   GRANT-03     an operator grant is idempotent per key and conflicts on a changed payload
+killed   GRANT-04     an amount that would leave the money domain is refused, and nothing is written
+killed   GRANT-05     an operator grant is idempotent per key and conflicts on a changed payload
+killed   HOLD-01      balance is the ledger total minus reservations, and holds reduce what is available
+killed   HOLD-02      balance is the ledger total minus reservations, and holds reduce what is available
+killed   HOLD-03      balance is the ledger total minus reservations, and holds reduce what is available
+killed   HOLD-04      balance is the ledger total minus reservations, and holds reduce what is available
+killed   ID-01        generated identifiers never collide, within an organization or across two
+killed   IDEM-01      an idempotency key is scoped to its operation, its organization and its payload
+killed   IDEM-02      an idempotency key is scoped to its operation, its organization and its payload
+killed   IDEM-03      an operator grant is idempotent per key and conflicts on a changed payload
+killed   IDEM-04      an operator grant is idempotent per key and conflicts on a changed payload
+killed   IDEM-05      an operator grant is idempotent per key and conflicts on a changed payload
+killed   IDEM-06      an idempotency key is scoped to its operation, its organization and its payload
+killed   INPUT-01     feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+killed   INPUT-02     a filter outside its vocabulary is invalid_request, not an empty page
+killed   INPUT-03     a filter outside its vocabulary is invalid_request, not an empty page
+killed   INPUT-04     a filter outside its vocabulary is invalid_request, not an empty page
+killed   LABEL-01     an operator acts on the organization it names, not on its own (R26)
+killed   LABEL-02     an operator acts on the organization it names, not on its own (R26)
+killed   LABEL-03     a calibration label is operator data a customer never sees (R35)
+killed   LABEL-04     a calibration label is operator data a customer never sees (R35)
+killed   LABEL-05     a calibration label is operator data a customer never sees (R35)
+killed   LIMIT-01     rejects a limit above the hard bound and a limit that is not a positive integer
+killed   MONEY-01     an amount that would leave the money domain is refused, and nothing is written
+killed   MONEY-02     an operator grant is idempotent per key and conflicts on a changed payload
+killed   MONEY-03     an operator grant is idempotent per key and conflicts on a changed payload
+killed   MONEY-04     usage pages walk every row exactly once, newest first
+killed   MONEY-05     balance is the ledger total minus reservations, and holds reduce what is available
+killed   ORDER-01     every mutating operation validates before it writes, whichever field is bad
+killed   ORDER-02     every mutating operation validates before it writes, whichever field is bad
+killed   ORDER-03     every mutating operation validates before it writes, whichever field is bad
+killed   ORDER-04     every mutating operation validates before it writes, whichever field is bad
+killed   ORDER-05     an operator grant is idempotent per key and conflicts on a changed payload
+killed   ORDER-06     every mutating operation validates before it writes, whichever field is bad
+killed   PAYLOAD-01   an operator grant is idempotent per key and conflicts on a changed payload
+killed   PAYLOAD-02   an operator grant is idempotent per key and conflicts on a changed payload
+killed   PAYLOAD-03   an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-04   an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-05   an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-06   an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-07   an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-08   the three entitlement states are distinct, and the empty one is a denial (R24)
+killed   PAYLOAD-09   an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-10   an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-11   an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-12   an idempotency key is scoped to its operation, its organization and its payload
+killed   PAYLOAD-13   an idempotency key is scoped to its operation, its organization and its payload
+killed   PROV-01      an operator label is the only path to operator authorship and calibration membership
+killed   PROV-02      feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+killed   REVOKE-01    the provisional input bounds hold
+killed   ROLE-01      a member can read but cannot mutate settings or keys
+killed   ROLE-02      a non-operator can neither grant nor see other organizations
+killed   ROLE-03      a member can read but cannot mutate settings or keys
+killed   ROLE-04      a non-operator can neither grant nor see other organizations
+killed   SECRET-01    a created key's secret is shown once and never again, to anybody
+killed   SECRET-02    a created key's secret is shown once and never again, to anybody
+killed   STATE-01     usage pages walk every row exactly once, newest first
+killed   STATE-02     retention is capped and evaluation consent is a separate control
+killed   STATE-03     retention is capped and evaluation consent is a separate control
+killed   SUSP-01      suspension gates new work and configuration, and nothing else (R33)
+killed   SUSP-02      suspension gates new work and configuration, and nothing else (R33)
+killed   TARGET-01    an operator acts on the organization it names, not on its own (R26)
+killed   TARGET-02    an operator acts on the organization it names, not on its own (R26)
+killed   TARGET-03    an operator grant is idempotent per key and conflicts on a changed payload
+killed   TENANT-01    a new organization starts at zero with no ledger history
+killed   TENANT-02    balance is the ledger total minus reservations, and holds reduce what is available
+killed   TENANT-03    reads and writes never cross the tenant boundary, in either direction
+killed   TENANT-04    reads and writes never cross the tenant boundary, in either direction
+killed   TENANT-05    reads and writes never cross the tenant boundary, in either direction
+killed   TENANT-06    identifiers from another organization are not_found, in both directions
+killed   XHEAD-01     usage pages walk every row exactly once, newest first
+killed   XINPUT-01    no operation accepts a field the caller invented
+killed   XJUDGE-01    judge runs separate estimates, limited evaluations and held budgets
+killed   XJUDGE-02    judge runs separate estimates, limited evaluations and held budgets
+killed   XPURCHASE-01 nothing creates a legacy purchase entry
+killed   XREASON-01   every mutating operation validates before it writes, whichever field is bad
+killed   XTENANT-01   a filter or cursor from another organization never widens the tenant
+
+115 mutants, 115 killed by the exported conformance suite, 0 survived, 0 stale, 14.8s
+exit=0
+
+$ pnpm --dir apps/app lint
+
+> infrx-app@0.1.0 lint /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app
+> eslint
+
+
+/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/lib/contracts/conformance.ts
+  2997:35  warning  'ids' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/lib/contracts/fake-services.ts
+  78:8  warning  'AuditQuery' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+
+exit=0
+
+$ pnpm --dir apps/app exec tsc --noEmit
+exit=0
+
+$ pnpm --dir apps/app build (tail)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+exit=0
+
+$ git status --porcelain
+?? research/plan/evidence/f/F2-ts-ab442af-verify.txt
+(empty = clean)
+
+$ git diff --stat fab9fbe -- apps/app/pnpm-lock.yaml apps/app/tsconfig.json
+(empty = untouched)
+
+$ git diff fab9fbe -- apps/app/package.json
+diff --git a/apps/app/package.json b/apps/app/package.json
+index 11ec1cd..f4db246 100644
+--- a/apps/app/package.json
++++ b/apps/app/package.json
+@@ -9,7 +9,11 @@
+     "lint": "eslint",
+     "format": "prettier --write .",
+     "format:check": "prettier --check .",
+-    "test": "node --test lib/*.test.ts"
++    "test": "node --test \"lib/**/*.test.ts\" \"tests/**/*.test.ts\" \"app/**/*.test.ts\" \"components/**/*.test.ts\"",
++    "test:mutants": "node tests/contracts/run-mutants.mjs"
++  },
++  "engines": {
++    "node": ">=22.18"
+   },
+   "dependencies": {
+     "@base-ui/react": "^1.8.0",
+
+$ git log --oneline f947a15..HEAD
+ab442af contracts: README for R32-R36 and the harness C must supply
+07f9a5a contracts: make the exported suite enforce what it claims
+639ee7b contracts: an audit trail, suspension with a scope, and labels customers cannot see
+
+$ git rev-list --count fab9fbe..HEAD  (commits on this branch)
+24
+
+$ git diff --stat f947a15..HEAD
+ apps/app/lib/contracts/README.md               |   67 +-
+ apps/app/lib/contracts/conformance.ts          | 1893 ++++++++++++++++++++----
+ apps/app/lib/contracts/fake-services.ts        |  225 ++-
+ apps/app/lib/contracts/fixtures/orgs.json      |    8 +
+ apps/app/lib/contracts/services.ts             |   57 +-
+ apps/app/lib/contracts/types.ts                |   35 +
+ apps/app/package.json                          |    3 +-
+ apps/app/tests/contracts/fixtures.test.ts      |   20 +-
+ apps/app/tests/contracts/mutants.json          |  844 +++++++++++
+ apps/app/tests/contracts/opaque-cursor.test.ts |  103 ++
+ apps/app/tests/contracts/run-mutants.mjs       |  173 +++
+ apps/app/tests/contracts/services.test.ts      |  114 +-
+ 12 files changed, 3114 insertions(+), 428 deletions(-)
+
+$ per-commit owned-path check over fab9fbe..HEAD
+ab442af owned paths only
+07f9a5a owned paths only
+639ee7b owned paths only
+f947a15 owned paths only
+b48ffaa owned paths only
+3c772d6 owned paths only
+e392cc2 owned paths only
+2959a3d owned paths only
+0570bf2 owned paths only
+2948298 owned paths only
+012fc85 owned paths only
+7ccebfe owned paths only
+9f266de owned paths only
+585dd18 owned paths only
+e6f7162 owned paths only
+159cd27 owned paths only
+92a6022 owned paths only
+7272695 owned paths only
+d00fcbc owned paths only
+96164b7 owned paths only
+cadb02b owned paths only
+af5856c owned paths only
+108bed8 owned paths only
+cb00862 owned paths only
+
+$ test counts per file
+discovery.test.ts                                # tests 5
+fixtures.test.ts                                 # tests 4
+money.test.ts                                    # tests 11
+opaque-cursor.test.ts                            # tests 39
+services.test.ts                                 # tests 46
+keys.test.ts                                     # tests 3
+utils.test.ts                                    # tests 1
+
+$ conformance cases exported (it(...) count)
+40
+$ declared mutants
+115

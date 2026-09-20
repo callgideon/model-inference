@@ -1,0 +1,116 @@
+{
+  "_comment": "Judge runs for the established org (02 §Feedback and judge). One dry-run estimate, one settled live run, one ambiguous run whose worst-case budget stays reserved. `trace_index` indexes the org's generated trace list (newest first).",
+  "runs": [
+    {
+      "id": "c1000000-0000-4000-8000-000000000001",
+      "created_at": "2026-09-18T09:00:00.000Z",
+      "state": "dry_run",
+      "mode": "dry_run",
+      "rubric_version": 3,
+      "judge_model": "claude-opus-5",
+      "judge_model_version": "2026-08-01",
+      "budget_reserved": "0.00000000",
+      "budget_settled": null,
+      "consent_snapshot_at": "2026-09-18T08:59:30.000Z",
+      "external_batch_id": null,
+      "quarantine_reason": null,
+      "samples": [
+        {
+          "id": "c1100000-0000-4000-8000-000000000001",
+          "trace_index": 0,
+          "limited_evaluation": false,
+          "limited_reason": null,
+          "scores": [
+            {
+              "name": "groundedness",
+              "kind": "numeric",
+              "value_num": 0.8,
+              "value_bool": null,
+              "value_label": null,
+              "value_text": null,
+              "rationale": "Estimated from the dry-run prompt; no provider call was made.",
+              "estimated": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c1000000-0000-4000-8000-000000000002",
+      "created_at": "2026-09-19T09:00:00.000Z",
+      "state": "settled",
+      "mode": "live",
+      "rubric_version": 3,
+      "judge_model": "claude-opus-5",
+      "judge_model_version": "2026-08-01",
+      "budget_reserved": "0.42000000",
+      "budget_settled": "0.31500000",
+      "consent_snapshot_at": "2026-09-19T08:59:30.000Z",
+      "external_batch_id": "msgbatch_fixture_0001",
+      "quarantine_reason": null,
+      "samples": [
+        {
+          "id": "c1100000-0000-4000-8000-000000000002",
+          "trace_index": 0,
+          "limited_evaluation": false,
+          "limited_reason": null,
+          "scores": [
+            {
+              "name": "groundedness",
+              "kind": "numeric",
+              "value_num": 0.9,
+              "value_bool": null,
+              "value_label": null,
+              "value_text": null,
+              "rationale": "The description matches the frames sampled from the clip.",
+              "estimated": false
+            },
+            {
+              "name": "refusal",
+              "kind": "boolean",
+              "value_num": null,
+              "value_bool": false,
+              "value_label": null,
+              "value_text": null,
+              "rationale": null,
+              "estimated": false
+            }
+          ]
+        },
+        {
+          "id": "c1100000-0000-4000-8000-000000000003",
+          "trace_index": 1,
+          "limited_evaluation": true,
+          "limited_reason": "no_media",
+          "scores": [
+            {
+              "name": "instruction_following",
+              "kind": "label",
+              "value_num": null,
+              "value_bool": null,
+              "value_label": "partial",
+              "value_text": null,
+              "rationale": "Metadata-only trace: the clip was not available, so groundedness was not scored.",
+              "estimated": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c1000000-0000-4000-8000-000000000003",
+      "created_at": "2026-09-20T09:00:00.000Z",
+      "state": "ambiguous",
+      "mode": "live",
+      "rubric_version": 3,
+      "judge_model": "claude-opus-5",
+      "judge_model_version": "2026-08-01",
+      "budget_reserved": "0.18000000",
+      "budget_settled": null,
+      "consent_snapshot_at": "2026-09-20T08:59:30.000Z",
+      "external_batch_id": null,
+      "quarantine_reason": "submission timed out without a provider batch id; reservation held pending reconciliation",
+      "samples": []
+    }
+  ]
+}

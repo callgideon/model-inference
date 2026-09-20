@@ -1,0 +1,447 @@
+F2-ts round 3 verification transcript
+worktree: /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts
+branch:   codex/f2-contracts-ts    base: fab9fbe    head at capture: 9f266de
+date:     2026-09-20 (UTC)
+node:     v22.23.1   pnpm: 9.15.9
+
+$ pnpm --dir apps/app test
+
+> infrx-app@0.1.0 test /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app
+> node --test "lib/**/*.test.ts" "tests/**/*.test.ts" "app/**/*.test.ts" "components/**/*.test.ts"
+
+TAP version 13
+# (node:4063913) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/lib/keys.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: keys look like keys and are unique
+ok 1 - keys look like keys and are unique
+  ---
+  duration_ms: 12.235119
+  type: 'test'
+  ...
+# Subtest: every base62 character can appear (rejection sampling is not truncating the alphabet)
+ok 2 - every base62 character can appear (rejection sampling is not truncating the alphabet)
+  ---
+  duration_ms: 5.078824
+  type: 'test'
+  ...
+# Subtest: hash is the sha256 hex the gateway computes
+ok 3 - hash is the sha256 hex the gateway computes
+  ---
+  duration_ms: 6.703828
+  type: 'test'
+  ...
+# (node:4063914) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/lib/utils.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: safeNext keeps same-site paths and rejects everything else
+ok 4 - safeNext keeps same-site paths and rejects everything else
+  ---
+  duration_ms: 1.01048
+  type: 'test'
+  ...
+# (node:4063920) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/tests/contracts/discovery.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: the test script declares the four directory patterns of 08 §7
+ok 5 - the test script declares the four directory patterns of 08 §7
+  ---
+  duration_ms: 1.996879
+  type: 'test'
+  ...
+# Subtest: every test file in the tree is matched by a declared pattern
+ok 6 - every test file in the tree is matched by a declared pattern
+  ---
+  duration_ms: 1.964382
+  type: 'test'
+  ...
+# Subtest: a test hidden in a directory named like build output is still flagged
+ok 7 - a test hidden in a directory named like build output is still flagged
+  ---
+  duration_ms: 1.345607
+  type: 'test'
+  ...
+# Subtest: nested suites and the pre-existing library tests are both discovered
+ok 8 - nested suites and the pre-existing library tests are both discovered
+  ---
+  duration_ms: 1.170716
+  type: 'test'
+  ...
+# Subtest: the console pins a Node version that strips types
+ok 9 - the console pins a Node version that strips types
+  ---
+  duration_ms: 0.509155
+  type: 'test'
+  ...
+# (node:4063921) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/tests/contracts/fixtures.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: every fixture file is one the contract knows about
+ok 10 - every fixture file is one the contract knows about
+  ---
+  duration_ms: 1.48453
+  type: 'test'
+  ...
+# Subtest: the organization fixtures match the contract vocabulary
+ok 11 - the organization fixtures match the contract vocabulary
+  ---
+  duration_ms: 0.982569
+  type: 'test'
+  ...
+# Subtest: the trace fixtures are renderable content with no storage reference
+ok 12 - the trace fixtures are renderable content with no storage reference
+  ---
+  duration_ms: 0.324693
+  type: 'test'
+  ...
+# Subtest: the judge fixtures keep dry-run, live and ambiguous runs honest
+ok 13 - the judge fixtures keep dry-run, live and ambiguous runs honest
+  ---
+  duration_ms: 0.260318
+  type: 'test'
+  ...
+# (node:4063927) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/tests/contracts/money.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: the shared case list is the accept/reject domain, and both halves must agree on it
+ok 14 - the shared case list is the accept/reject domain, and both halves must agree on it
+  ---
+  duration_ms: 5.377902
+  type: 'test'
+  ...
+# Subtest: no number ever becomes money, however innocent it looks
+ok 15 - no number ever becomes money, however innocent it looks
+  ---
+  duration_ms: 0.577666
+  type: 'test'
+  ...
+# Subtest: a value that is canonical but not eight digits is not money
+ok 16 - a value that is canonical but not eight digits is not money
+  ---
+  duration_ms: 0.215053
+  type: 'test'
+  ...
+# Subtest: addition, subtraction, comparison and sums are exact at the eighth digit
+ok 17 - addition, subtraction, comparison and sums are exact at the eighth digit
+  ---
+  duration_ms: 0.477531
+  type: 'test'
+  ...
+# Subtest: negative and zero are distinguishable, and negative zero does not exist
+ok 18 - negative and zero are distinguishable, and negative zero does not exist
+  ---
+  duration_ms: 0.375775
+  type: 'test'
+  ...
+# Subtest: scaled units are 1e-8 USD and stop at the twentieth significant digit
+ok 19 - scaled units are 1e-8 USD and stop at the twentieth significant digit
+  ---
+  duration_ms: 0.337691
+  type: 'test'
+  ...
+# Subtest: a prospective total can be tested for the domain without throwing
+ok 20 - a prospective total can be tested for the domain without throwing
+  ---
+  duration_ms: 0.285443
+  type: 'test'
+  ...
+# Subtest: leading zeros are rejected, as they are on the Python side
+ok 21 - leading zeros are rejected, as they are on the Python side
+  ---
+  duration_ms: 0.214965
+  type: 'test'
+  ...
+# Subtest: the charge and hold fixtures agree across languages and stay canonical
+ok 22 - the charge and hold fixtures agree across languages and stay canonical
+  ---
+  duration_ms: 0.568222
+  type: 'test'
+  ...
+# Subtest: display never routes the value through Number
+ok 23 - display never routes the value through Number
+  ---
+  duration_ms: 0.827167
+  type: 'test'
+  ...
+# (node:4063936) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/tests/contracts/services.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: fixture-backed ConsoleServices
+    # Subtest: usage pages walk every row exactly once, newest first
+    ok 1 - usage pages walk every row exactly once, newest first
+      ---
+      duration_ms: 20.408635
+      type: 'test'
+      ...
+    # Subtest: ledger and trace pages walk every row exactly once
+    ok 2 - ledger and trace pages walk every row exactly once
+      ---
+      duration_ms: 8.441568
+      type: 'test'
+      ...
+    # Subtest: rejects a limit above the hard bound and a limit that is not a positive integer
+    ok 3 - rejects a limit above the hard bound and a limit that is not a positive integer
+      ---
+      duration_ms: 2.836668
+      type: 'test'
+      ...
+    # Subtest: rejects a cursor it did not issue for this query
+    ok 4 - rejects a cursor it did not issue for this query
+      ---
+      duration_ms: 3.004632
+      type: 'test'
+      ...
+    # Subtest: balance is the ledger total minus reservations, and holds reduce what is available
+    ok 5 - balance is the ledger total minus reservations, and holds reduce what is available
+      ---
+      duration_ms: 4.475728
+      type: 'test'
+      ...
+    # Subtest: a new organization starts at zero with no ledger history
+    ok 6 - a new organization starts at zero with no ledger history
+      ---
+      duration_ms: 2.33826
+      type: 'test'
+      ...
+    # Subtest: identifiers from another organization are not_found, in both directions
+    ok 7 - identifiers from another organization are not_found, in both directions
+      ---
+      duration_ms: 2.640706
+      type: 'test'
+      ...
+    # Subtest: a filter or cursor from another organization never widens the tenant
+    ok 8 - a filter or cursor from another organization never widens the tenant
+      ---
+      duration_ms: 3.531824
+      type: 'test'
+      ...
+    # Subtest: a filter outside its vocabulary is invalid_request, not an empty page
+    ok 9 - a filter outside its vocabulary is invalid_request, not an empty page
+      ---
+      duration_ms: 2.260706
+      type: 'test'
+      ...
+    # Subtest: a member can read but cannot mutate settings or keys
+    ok 10 - a member can read but cannot mutate settings or keys
+      ---
+      duration_ms: 3.605522
+      type: 'test'
+      ...
+    # Subtest: a non-operator can neither grant nor see other organizations
+    ok 11 - a non-operator can neither grant nor see other organizations
+      ---
+      duration_ms: 2.416181
+      type: 'test'
+      ...
+    # Subtest: feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+    ok 12 - feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+      ---
+      duration_ms: 2.145482
+      type: 'test'
+      ...
+    # Subtest: retention is capped and evaluation consent is a separate control
+    ok 13 - retention is capped and evaluation consent is a separate control
+      ---
+      duration_ms: 1.74493
+      type: 'test'
+      ...
+    # Subtest: an operator grant is idempotent per key and conflicts on a changed payload
+    ok 14 - an operator grant is idempotent per key and conflicts on a changed payload
+      ---
+      duration_ms: 2.630184
+      type: 'test'
+      ...
+    # Subtest: content availability decides the payload and never leaks a storage reference
+    ok 15 - content availability decides the payload and never leaks a storage reference
+      ---
+      duration_ms: 6.407876
+      type: 'test'
+      ...
+    # Subtest: judge runs separate estimates, limited evaluations and held budgets
+    ok 16 - judge runs separate estimates, limited evaluations and held budgets
+      ---
+      duration_ms: 1.890718
+      type: 'test'
+      ...
+    1..16
+ok 24 - fixture-backed ConsoleServices
+  ---
+  duration_ms: 72.485352
+  type: 'suite'
+  ...
+# Subtest: fixture-backed ConsoleServices: mutations validate before they write
+    # Subtest: an amount that would leave the money domain is refused, and nothing is written
+    ok 1 - an amount that would leave the money domain is refused, and nothing is written
+      ---
+      duration_ms: 3.95038
+      type: 'test'
+      ...
+    # Subtest: every mutating operation refuses an injected failure without half-changing anything
+    ok 2 - every mutating operation refuses an injected failure without half-changing anything
+      ---
+      duration_ms: 2.719487
+      type: 'test'
+      ...
+    # Subtest: an idempotency key is scoped to its operation, its organization and its payload
+    ok 3 - an idempotency key is scoped to its operation, its organization and its payload
+      ---
+      duration_ms: 2.260226
+      type: 'test'
+      ...
+    # Subtest: generated identifiers never collide, within an organization or across two
+    ok 4 - generated identifiers never collide, within an organization or across two
+      ---
+      duration_ms: 3.092902
+      type: 'test'
+      ...
+    # Subtest: a list walked while rows arrive at its head still returns every row exactly once
+    ok 5 - a list walked while rows arrive at its head still returns every row exactly once
+      ---
+      duration_ms: 3.479361
+      type: 'test'
+      ...
+    # Subtest: nothing creates a legacy purchase entry
+    ok 6 - nothing creates a legacy purchase entry
+      ---
+      duration_ms: 2.566323
+      type: 'test'
+      ...
+    # Subtest: no operation accepts a field the caller invented
+    ok 7 - no operation accepts a field the caller invented
+      ---
+      duration_ms: 2.86311
+      type: 'test'
+      ...
+    1..7
+ok 25 - fixture-backed ConsoleServices: mutations validate before they write
+  ---
+  duration_ms: 21.240716
+  type: 'suite'
+  ...
+# Subtest: the fixtures are deterministic and each instance has its own state
+ok 26 - the fixtures are deterministic and each instance has its own state
+  ---
+  duration_ms: 9.145062
+  type: 'test'
+  ...
+# Subtest: the fixture set covers what U and V need to build against
+ok 27 - the fixture set covers what U and V need to build against
+  ---
+  duration_ms: 3.755316
+  type: 'test'
+  ...
+# Subtest: the exact overflow the review found is refused, and the fake stays usable afterwards
+ok 28 - the exact overflow the review found is refused, and the fake stays usable afterwards
+  ---
+  duration_ms: 2.653656
+  type: 'test'
+  ...
+# Subtest: many submissions never reuse a feedback id, and two organizations never share one
+ok 29 - many submissions never reuse a feedback id, and two organizations never share one
+  ---
+  duration_ms: 11.47951
+  type: 'test'
+  ...
+# Subtest: every operation can be made to fail on demand
+ok 30 - every operation can be made to fail on demand
+  ---
+  duration_ms: 4.996532
+  type: 'test'
+  ...
+1..30
+# tests 51
+# suites 2
+# pass 51
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 322.973086
+exit=0
+
+$ pnpm --dir apps/app lint
+
+> infrx-app@0.1.0 lint /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app
+> eslint
+
+exit=0
+
+$ pnpm --dir apps/app exec tsc --noEmit
+exit=0
+
+$ git diff --stat fab9fbe -- apps/app/pnpm-lock.yaml apps/app/tsconfig.json
+(empty above = untouched) exit=0
+
+$ git diff fab9fbe -- apps/app/package.json
+diff --git a/apps/app/package.json b/apps/app/package.json
+index 11ec1cd..e9333ac 100644
+--- a/apps/app/package.json
++++ b/apps/app/package.json
+@@ -9,7 +9,10 @@
+     "lint": "eslint",
+     "format": "prettier --write .",
+     "format:check": "prettier --check .",
+-    "test": "node --test lib/*.test.ts"
++    "test": "node --test \"lib/**/*.test.ts\" \"tests/**/*.test.ts\" \"app/**/*.test.ts\" \"components/**/*.test.ts\""
++  },
++  "engines": {
++    "node": ">=22.18"
+   },
+   "dependencies": {
+     "@base-ui/react": "^1.8.0",
+
+$ git log --oneline fab9fbe..HEAD
+9f266de contracts: README for revision r1 and the validate-before-write rule
+585dd18 contracts: the discovery guard skips build output only where it lives
+e6f7162 contracts: validate before writing, and apply the r1 console rulings
+159cd27 contracts: an overflow-safe money probe and the shared cross-language case list
+92a6022 plan/evidence: F2 console contracts, round 2 after review (7272695)
+7272695 contracts: record the three missing amendments and the fake-only behaviour
+d00fcbc contracts: grant idempotency scope, unique ids, real pagination coverage, §3 pairing
+96164b7 contracts: bound Money to numeric(20, 8) and reject leading zeros
+cadb02b plan/evidence: F2 console contracts, fixtures and test discovery (af5856c)
+af5856c contracts: correct the ledger row count in the console contracts README
+108bed8 contracts: recursive console test discovery and the shared conformance suite
+cb00862 contracts: console DTO types, money helpers and fixture-backed fake services
+
+$ git diff --stat fab9fbe..HEAD
+ apps/app/lib/contracts/README.md                  |  230 +++
+ apps/app/lib/contracts/conformance.ts             | 1305 +++++++++++++++++
+ apps/app/lib/contracts/fake-services.ts           | 1593 +++++++++++++++++++++
+ apps/app/lib/contracts/fixtures/judge.json        |  116 ++
+ apps/app/lib/contracts/fixtures/money.json        |  122 ++
+ apps/app/lib/contracts/fixtures/orgs.json         |  162 +++
+ apps/app/lib/contracts/fixtures/traces.json       |  101 ++
+ apps/app/lib/contracts/money.ts                   |  145 ++
+ apps/app/lib/contracts/services.ts                |  138 ++
+ apps/app/lib/contracts/types.ts                   |  668 +++++++++
+ apps/app/package.json                             |    5 +-
+ apps/app/tests/contracts/discovery.test.ts        |  122 ++
+ apps/app/tests/contracts/fixtures.test.ts         |  280 ++++
+ apps/app/tests/contracts/money.test.ts            |  200 +++
+ apps/app/tests/contracts/money_cases.json         |  347 +++++
+ apps/app/tests/contracts/services.test.ts         |  207 +++
+ research/plan/evidence/f/F2-ts-7272695-verify.txt |  346 +++++
+ research/plan/evidence/f/F2-ts-7272695.md         |  187 +++
+ research/plan/evidence/f/F2-ts-af5856c.md         |  159 ++
+ 19 files changed, 6432 insertions(+), 1 deletion(-)
+
+$ per-commit owned-path check
+9f266de owned paths only
+585dd18 owned paths only
+e6f7162 owned paths only
+159cd27 owned paths only
+92a6022 owned paths only
+7272695 owned paths only
+d00fcbc owned paths only
+96164b7 owned paths only
+cadb02b owned paths only
+af5856c owned paths only
+108bed8 owned paths only
+cb00862 owned paths only
