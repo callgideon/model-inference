@@ -26,7 +26,7 @@
 
 | Instant | Derived | Enforced by | Record |
 |---|---|---|---|
-| `preparation_deadline_at` | at admission | the reaper (M/W's preparation loop reads it) | `Admission` |
+| `preparation_deadline_at` | at admission | **nothing, at this SHA** - corrected below | `Admission` |
 | `queue_deadline_at` | at the **first** durable `queued` transition, nullable before it | `claim` refuses a job past it; `recover` expires it `queue_wait_expired` | `Admission` |
 | `generation_deadline_at` | at claim | `recover` terminalizes a running attempt past it as `deadline_exceeded`, even while its lease is live | `Lease` |
 | `first_token_deadline_at` | at claim | the **worker** (01 leaves TTFT policy with W); the store only persists it | `Lease` |
@@ -65,8 +65,11 @@ billable by omission (asserted in `test_fixtures.py`). `_terminalize` routes:
 3. a billable cause with authoritative usage → the debit, with the existing
    over-envelope rewrite unchanged.
 
-`dur_settle__only_three_causes_can_charge` drives **all thirteen** causes with the
-same authoritative usage (1200/340): the three billable ones debit
+`dur_settle__only_three_causes_can_charge` drives **thirteen of the fourteen**
+`TerminalCause` values with the same authoritative usage (1200/340); the fourteenth,
+`lost_after_publication`, is outside that loop because it is produced by recovery
+rather than by a worker's completion, and
+`dur_output__loss_after_publication_is_a_terminal_failure` covers it: the three billable ones debit
 `price_snapshot.debit(1200, 340)` exactly, and the ten others charge nothing while
 releasing the hold — including `sync_deadline` with authoritative usage, as the
 ruling requires. Behaviour change worth D's attention:
@@ -174,6 +177,17 @@ Not touched: `apps/app/**`, `pyproject.toml`, `uv.lock`, `.python-version`, the 
 - **Open questions:** none. Every amendment request this track raised has been ruled
   on and implemented.
 
+## Corrections (made in the r3 pass, `F2-py-<r3>.md`)
+
+- **The R20 table above overstated enforcement.** At `2aeca2f` the preparation
+  instant was persisted but nothing compared against it: neither `prepared` nor
+  `recover` read it, and `prepared` did not check `deadline_at` either. The r3 review
+  found it; r1 R29 now makes every fenced mutation enforce the instants, `prepared`
+  terminalizes a late preparation itself, and `recover` reaps one that never returns.
+- **"All thirteen causes" was wrong** - `TerminalCause` has fourteen values. The
+  sentence above is corrected in place: the case drives thirteen and names why
+  `lost_after_publication` is covered by its own case.
+
 ## Verification log
 
 - 2026-09-20: R20–R23 applied on `codex/f2-contracts-py` from base `fab9fbe`,
@@ -188,3 +202,4 @@ Not touched: `apps/app/**`, `pyproject.toml`, `uv.lock`, `.python-version`, the 
   tests/lint and the benchmark suite are pending, not passing; every conformance pass
   is against fakes, so the task is implemented and not integrated. No cloud, GPU,
   container, paid provider or production resource was touched.
+- 2026-09-20: Extended by `F2-py-f0c98a6.md` (review r3). Two claims of this report are corrected above, in place: the R20 table's preparation-instant row (nothing enforced it at this SHA; r1 R29 now does) and "all thirteen causes" (`TerminalCause` has fourteen). Rulings R27–R32 and a 132-mutant runner landed there. History kept.
