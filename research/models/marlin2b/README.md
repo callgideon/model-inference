@@ -293,7 +293,7 @@ would run on. Searches for "vllm marlin" return the kernel, not this model
 
 ## Measured 2026-09-19 (AWS g6e.2xlarge, 1× L40S; branch `marlin2b`)
 
-First measurements, from `marlin2b/results/` on the experiment branch; the
+First measurements, from `models/marlin2b/results/` on the experiment branch; the
 pair docs above remain estimates for the eight target GPUs.
 
 - vLLM nightly serves the checkpoint with `--hf-overrides` and reproduces the

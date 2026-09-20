@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install/refresh the marlin2b stack on the box: vLLM (systemd, docker),
 # gateway (systemd, /opt/pytorch), Caddy (docker, TLS). Idempotent; run as root.
-#   sudo ./marlin2b/deploy/install.sh
+#   sudo ./apps/infrx-api/deploy/install.sh
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REGION=${AWS_REGION:-us-east-1}

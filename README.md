@@ -9,12 +9,15 @@ shared tooling and every experiment's metadata; experiment branches are where
 that experiment's serve configs, benchmarks and results diverge.
 
 ```
-common/         shared logic — download, env. Fix things here, not five times.
-deepseek41f/        deepseek-ai/DeepSeek-V4.1-Flash          ~511GB
-deepseek41fnvfp4/   nvidia/DeepSeek-V4.1-Flash-NVFP4         ~492GB
-qwen3827b/          Qwen/Qwen3.8-27B                          ~54GB
-kimik3/             moonshotai/Kimi-K3                      ~1400GB
-marlin2b/           NemoStation/Marlin-2B (gated)              ~5GB
+models/common/          shared logic — download, env. Fix things here, not five times.
+models/deepseek41f/     deepseek-ai/DeepSeek-V4.1-Flash          ~511GB
+models/deepseek41fnvfp4/ nvidia/DeepSeek-V4.1-Flash-NVFP4        ~492GB
+models/qwen3827b/       Qwen/Qwen3.8-27B                          ~54GB
+models/kimik3/          moonshotai/Kimi-K3                      ~1400GB
+models/marlin2b/        NemoStation/Marlin-2B (gated)              ~5GB
+apps/app/               customer console (Next.js, Vercel, Supabase)
+apps/infrx-api/         AWS-side API gateway + deployment (spec: apps/README.md)
+research/               sizing, scaling and platform research
 ```
 
 Each experiment directory holds:
@@ -25,9 +28,9 @@ Each experiment directory holds:
 ## Downloading weights
 
 ```bash
-./deepseek41f/download.sh              # S3 if reachable, else Hugging Face
-SOURCE=hf ./qwen3827b/download.sh      # force Hugging Face
-DEST=/data/w ./kimik3/download.sh      # somewhere other than WEIGHTS_ROOT
+./models/deepseek41f/download.sh       # S3 if reachable, else Hugging Face
+SOURCE=hf ./models/qwen3827b/download.sh # force Hugging Face
+DEST=/data/w ./models/kimik3/download.sh # somewhere other than WEIGHTS_ROOT
 ```
 
 S3 is tried first when `S3_BUCKET` is exported, because on an AWS node that copy

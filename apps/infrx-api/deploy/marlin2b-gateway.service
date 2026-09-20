@@ -4,7 +4,7 @@ After=network-online.target marlin2b-vllm.service
 
 [Service]
 User=ubuntu
-WorkingDirectory=/home/ubuntu/model-inference/marlin2b
+WorkingDirectory=/home/ubuntu/model-inference/apps/infrx-api
 EnvironmentFile=/etc/marlin2b-gateway.env
 Environment=USAGE_LOG=/opt/dlami/nvme/logs/usage.jsonl
 ExecStart=/opt/pytorch/bin/uvicorn gateway:app --host 127.0.0.1 --port 8001 --workers 1

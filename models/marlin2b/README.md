@@ -25,13 +25,13 @@ The HF token is in SSM Parameter Store as `/model-inference/hf_token`
 # on the box
 export PATH=/opt/pytorch/bin:$PATH WEIGHTS_ROOT=/opt/dlami/nvme HF_HOME=/opt/dlami/nvme/hf
 export HF_TOKEN=$(aws ssm get-parameter --name /model-inference/hf_token --with-decryption --query Parameter.Value --output text)
-./marlin2b/download.sh                                  # ~5.4 GB from Hugging Face
-python marlin2b/reference.py /opt/dlami/nvme/samples/sample-10s.mp4        # transformers path (vendor-supported)
-python marlin2b/reference.py --dump-prompts             # the canonical prompts the helpers use
-./marlin2b/serve.sh                                     # vLLM nightly in docker, port 8000
-python marlin2b/smoke.py /opt/dlami/nvme/samples/sample-10s.mp4            # one request, timed
-python marlin2b/smoke.py video.mp4 --find "a person enters the room"
-python marlin2b/bench.py video.mp4 -c 8 -n 32           # load test -> results/bench.jsonl
+./models/marlin2b/download.sh                                  # ~5.4 GB from Hugging Face
+python models/marlin2b/reference.py /opt/dlami/nvme/samples/sample-10s.mp4        # transformers path (vendor-supported)
+python models/marlin2b/reference.py --dump-prompts             # the canonical prompts the helpers use
+./models/marlin2b/serve.sh                                     # vLLM nightly in docker, port 8000
+python models/marlin2b/smoke.py /opt/dlami/nvme/samples/sample-10s.mp4            # one request, timed
+python models/marlin2b/smoke.py video.mp4 --find "a person enters the room"
+python models/marlin2b/bench.py video.mp4 -c 8 -n 32           # load test -> results/bench.jsonl
 ```
 
 ## Public endpoint (dev)
@@ -39,9 +39,9 @@ python marlin2b/bench.py video.mp4 -c 8 -n 32           # load test -> results/b
 `https://marlin2b.callbill.ai` — OpenAI-compatible, TLS by Caddy (Let's
 Encrypt), Elastic IP 100.57.145.167 (`eipalloc-037e19cc644820961`), Route 53
 zone callbill.ai, security group `marlin2b-gateway` (80/443). Stack on the
-box: `marlin2b-vllm.service` (docker, localhost:8000) → `gateway.py`
+box: `marlin2b-vllm.service` (docker, localhost:8000) → `apps/infrx-api/gateway.py`
 (`marlin2b-gateway.service`, localhost:8001) → Caddy (docker, :443).
-Install or refresh with `sudo ./marlin2b/deploy/install.sh`.
+Install or refresh with `sudo ./apps/infrx-api/deploy/install.sh`.
 
 API key: SSM `/model-inference/marlin2b_api_key` (SecureString). Model id on
 the wire is `nemostation/marlin-2b`; usage is logged to

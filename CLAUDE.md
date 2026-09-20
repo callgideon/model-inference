@@ -5,8 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repo is
 
 Per-experiment inference and benchmarking for the Gideon GPU work, plus the
-research that sizes it. Five model experiments, one directory each:
-`deepseek41f`, `deepseek41fnvfp4`, `qwen3827b`, `kimik3`, `marlin2b`.
+research that sizes it. Five model experiments under `models/`, one directory each:
+`deepseek41f`, `deepseek41fnvfp4`, `qwen3827b`, `kimik3`, `marlin2b`; shared
+scripts in `models/common/`. `apps/app` is the customer console (Next.js on
+Vercel, Supabase auth/DB) and `apps/infrx-api` the AWS-side API gateway and
+deployment files; `apps/README.md` is their spec.
 Target hardware is 8×B300 HGX nodes (268 GB/GPU as deployed, ~2,144 GB per
 node; 288 GB is the GB300 NVL72 figure, not ours) with local NVMe, plus AWS
 p6 nodes for burst. Development happens on AWS GPU instances until the
@@ -14,8 +17,8 @@ bare-metal cluster exists.
 
 ## Branch convention
 
-`main` carries shared tooling (`common/`), every experiment's metadata
-(`<exp>/model.env`, `<exp>/download.sh`), and `research/`. Each experiment
+`main` carries `models/` (shared tooling in `models/common/`, every
+experiment's metadata and scripts), `apps/`, and `research/`. Each experiment
 has a branch of the same name (`marlin2b`, `kimik3`, …) where that
 experiment's serve configs, benchmarks and results diverge. After every change to
 `main`, merge `main` into each experiment branch (`git merge main`; it
@@ -27,13 +30,13 @@ Measured results go in `<exp>/results/` on the branch, with a short
 ## Commands
 
 ```bash
-./marlin2b/download.sh                 # weights: S3 mirror if S3_BUCKET is exported, else Hugging Face
-SOURCE=hf ./qwen3827b/download.sh      # force Hugging Face
-DEST=/data/w ./kimik3/download.sh      # somewhere other than $WEIGHTS_ROOT (/mnt/nvme)
+./models/marlin2b/download.sh          # weights: S3 mirror if S3_BUCKET is exported, else Hugging Face
+SOURCE=hf ./models/qwen3827b/download.sh # force Hugging Face
+DEST=/data/w ./models/kimik3/download.sh # somewhere other than $WEIGHTS_ROOT (/mnt/nvme)
 ```
 
-Each `<exp>/download.sh` is a one-line shim calling `common/download.sh`;
-put logic in `common/`, data in `model.env`. `common/download.sh` compares
+Each `models/<exp>/download.sh` is a one-line shim calling
+`models/common/download.sh`; put logic in `common/`, data in `model.env`. It compares
 free space in bytes on purpose (`SIZE_GB` is decimal GB, `df` reports GiB).
 `marlin2b` is a gated Hugging Face repo: `HF_TOKEN` must be exported and the
 account approved. `S3_DIR` in `model.env` deliberately differs from the
@@ -41,9 +44,10 @@ directory name; the mirror predates the names.
 
 There is no build, lint or test suite; scripts are bash with
 `set -euo pipefail` plus small Python clients. On the `marlin2b` branch:
-`./marlin2b/serve.sh` (vLLM in docker), `marlin2b/smoke.py` (one request),
-`marlin2b/bench.py` (load test), `marlin2b/reference.py` (transformers
-path), `marlin2b/tokens.py` (video token budget). The dev box is a
+`./models/marlin2b/serve.sh` (vLLM in docker), `models/marlin2b/smoke.py`
+(one request), `bench.py` (load test), `reference.py` (transformers path),
+`tokens.py` (video token budget); `apps/infrx-api/gateway.py` is the public
+OpenAI-compatible gateway (systemd + Caddy, `apps/infrx-api/deploy/`). The dev box is a
 `g6e.2xlarge` (`i-0e8449a4ffca29bab`, us-east-1d) with the DLAMI's PyTorch
 env at `/opt/pytorch` and NVMe at `/opt/dlami/nvme`; see `marlin2b/README.md`.
 
