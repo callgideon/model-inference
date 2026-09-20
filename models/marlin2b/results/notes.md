@@ -76,3 +76,26 @@ clips optimistic on decode cost.
   lengths in one benchmark.
 - Same runs on B300/H200 once available (the research pair docs are
   estimates; these L40S numbers are the first measurements).
+
+## E1 tooling (2026-09-20, no new measurements)
+
+Task E1 replaced the single-clip benchmark client and added a distinct-clip
+corpus; **no GPU run was made**, so every row above still stands as the only
+measured data. Two things change how future rows are produced:
+
+1. **Distinct corpus.** [`../corpus/`](../corpus/README.md) pins 64 licensed,
+   non-overlapping clips (plus a 32-clip fast subset and four corrupt-media
+   fixtures) with real sha256 hashes, 14 geometries, 2–112 s durations and one of
+   16 prompts each. This is the answer to finding 5's caveat: reruns with
+   `--corpus` cannot be absorbed by the multimodal cache the way two repeated
+   clips were.
+2. **Honest percentiles.** `bench.py` now refuses a percentile the sample count
+   cannot support (a reported pN needs >= 3 accepted samples beyond it: p50>=6,
+   p95>=60, p99>=300). The four historical rows above report `ttft_p95` and
+   `latency_p95` from 5–32 samples; under the new rule those would be suppressed.
+   Read them as p50-grade evidence with a tail hint, not as p95 SLOs.
+
+New summary rows also carry accepted/rejected/failed denominators, cold vs warm
+TTFT, request form, seed and arrival rate; per-attempt detail goes to a raw JSONL
+beside the summary. Legacy CLI flags and the default `--out` path are unchanged,
+so this file's history stays comparable.
