@@ -18,7 +18,7 @@ class FakeGateway:
                  completion_tokens=None, role_chunk=True, echo_key_in_code=None,
                  echo_key_in_long_body=None, echo_key_in_json_message=None, echo_pad=0,
                  escape_key=False, upload_url=None, put_status=200, truncate_stream=False,
-                 finish_reason="stop", retry_after="3"):
+                 finish_reason="stop", retry_after="3", chat_override=None, stream_error=None):
         self.ttft, self.token_gap, self.tokens, self.usage = ttft, token_gap, tokens, usage
         self.statuses = statuses or {}
         self.require_bearer, self.server_timing = require_bearer, server_timing
@@ -35,6 +35,11 @@ class FakeGateway:
         self.upload_url, self.put_status = upload_url, put_status
         self.truncate_stream, self.finish_reason = truncate_stream, finish_reason
         self.retry_after = retry_after
+        # chat_override(request) -> a Response, or raises a transport exception: one knob
+        # for the outcomes the leak matrix needs (redirects, odd error bodies, timeouts).
+        # It runs after the request is recorded, so the upload handshake still works.
+        # stream_error: emit this as an SSE `error` event mid-stream instead of finishing.
+        self.chat_override, self.stream_error = chat_override, stream_error
         self.seen = []            # one dict per chat request, for assertions
         self.uploads = {}
 
@@ -67,6 +72,10 @@ class FakeGateway:
                           "has_mm_processor_kwargs": "mm_processor_kwargs" in body,
                           "content": body.get("messages", [{}])[0].get("content"),
                           "max_tokens": body.get("max_tokens")})
+        if self.chat_override:
+            r = self.chat_override(request)
+            if r is not None:
+                return r
         if self.raise_with_key:
             raise RuntimeError(f"upstream refused request with header Bearer {self.raise_with_key}")
         if self.echo_key_in_code:            # the key lands in a field nothing scrubbed per-field
@@ -124,6 +133,9 @@ class FakeGateway:
             if i:
                 await asyncio.sleep(self.token_gap)
             yield frame(base | {"choices": [{"index": 0, "delta": {"content": f"tok{i} "}}]})
+        if self.stream_error:         # 200 headers, then an error event inside the stream
+            yield frame({"error": self.stream_error})
+            return
         if self.truncate_stream:      # 200 + content, then the connection just ends
             return
         if self.finish_reason:

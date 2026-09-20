@@ -12,9 +12,10 @@ and one raw line per attempt to --raw (default <out dir>/raw/<run>.jsonl).
 
 Auth comes from $MARLIN_API_KEY or $INFRX_API_KEY only, sent as a Bearer header;
 the value is never printed, logged or written to any output file. Passing a key on
-the command line is refused. Every row and summary is redacted as one serialised
-blob at each sink (redact()), so a key echoed back in any server-controlled field
-and any signed-URL query string are scrubbed before truncation, not after.
+the command line is refused. Every byte this client emits — stdout, stderr, the
+summary line, every raw row, argparse usage and any traceback — passes through the
+one choke point redact(), which drops the key (and any usable prefix of it) and cuts
+every URL down to scheme://host/path before anything is truncated.
 
 Percentiles are suppressed, not guessed, when the accepted-sample count cannot
 support them (research/plan/04-verification.md: 32 samples cannot establish a p99).
@@ -24,7 +25,7 @@ httpx + stdlib rather than the openai SDK: this client needs response headers
 honest first-token timing, rejected-status bodies, and an in-process fake gateway
 (httpx.MockTransport) for tests without a server.
 """
-import argparse, asyncio, base64, json, math, mimetypes, os, random, re, statistics, sys, time
+import argparse, asyncio, base64, json, math, mimetypes, os, random, re, statistics, sys, time, traceback
 from hashlib import sha256
 
 import httpx
@@ -60,27 +61,56 @@ def api_key():
     return ""
 
 
-# A URL query string carries the upload signature (`X-Amz-Signature`) and any token,
-# and httpx exception text quotes the full request URL. 04-verification.md forbids
-# signed URLs in committed artifacts and results/raw/ is a committed directory.
+KEY_MARK = "[redacted-key]"
+QUERY_MARK = "[redacted-query]"
+USERINFO_MARK = "[redacted-userinfo]"
+KEY_MIN_PREFIX = 8          # not even a usable prefix of the key may survive
+
+# Every URL is cut down to scheme://host/path. A query string carries the upload
+# signature (`X-Amz-Signature`, `X-Amz-Credential`) or a token, and userinfo carries
+# credentials; httpx exception text, server error bodies, redirect targets and the
+# positional `video` argument all quote full URLs. 04-verification.md forbids signed
+# URLs in committed artifacts and both --out and results/raw/ are committed paths.
+# Case-insensitive on purpose: a server may echo `HTTPS://`.
 # The part before `?` may contain an apostrophe (a raw one in an object key survives
 # some SDKs), so only whitespace, a double quote and a backslash end it; the query
 # string itself stops at the first of those or at an apostrophe.
-URL_QUERY = re.compile(r'(https?://[^\s"\\]{1,2000}?)\?[^\s"\'\\]*')
+URL = re.compile(r"""([a-zA-Z][a-zA-Z0-9+.\-]{0,15}://)     # scheme
+                     (?:([^/?\#\s"'\\@]{1,300})@)?          # userinfo, when present
+                     ([^\s"\\?\#]{0,2000})                  # host + path
+                     ([?\#][^\s"'\\]*)?                     # query string or fragment
+                  """, re.VERBOSE)
+# The same query with no scheme in front of it to anchor the match: a server that
+# echoes `bucket.host/key?X-Amz-Signature=…` still must not get it into a file.
+SIGNED_QUERY = re.compile(r"""\?[^\s"'\\]*?
+                              (?:x-amz-|signature=|sig=|token=|credential=|access[-_]?key)
+                              [^\s"'\\]*""", re.IGNORECASE | re.VERBOSE)
+
+
+def _reduce_url(m):
+    scheme, userinfo, hostpath, tail = m.groups()
+    return (scheme + (USERINFO_MARK + "@" if userinfo else "") + hostpath +
+            (tail[0] + QUERY_MARK if tail else ""))
 
 
 def redact(text, key):
-    """Scrub the API key and every URL query string out of anything printed or written.
+    """The ONE choke point: no byte reaches stdout, stderr or a file without passing here.
 
-    Applied to the WHOLE serialised row, summary or exception at each sink rather than
-    field by field: a server controls every field it echoes (`error.code` and a
-    non-JSON error body both reached output unscrubbed), and it must run BEFORE any
-    truncation, or a cut can leave a usable key prefix behind.
+    Applied to the WHOLE serialised row, summary, message or traceback at each sink
+    rather than field by field: a server controls every field it echoes (`error.code`
+    and a non-JSON error body both reached output unscrubbed once), and it must run
+    BEFORE any truncation, or a cut leaves a usable key prefix or signature fragment
+    behind. Idempotent, so redacting twice is harmless.
     """
     text = str(text)
     if key:
-        text = text.replace(key, "[redacted-key]")
-    return URL_QUERY.sub(r"\1?[redacted-query]", text)
+        # Longest prefix first: a server that echoes back only part of the key, or a cut
+        # that lands inside it, must not leave >= KEY_MIN_PREFIX characters in the clear.
+        # ponytail: len(key) str.replace passes; a single alternation regex if this ever
+        # shows up in a profile (rows are small, keys are ~40 characters).
+        for n in range(len(key), min(KEY_MIN_PREFIX, len(key)) - 1, -1):
+            text = text.replace(key[:n], KEY_MARK)
+    return SIGNED_QUERY.sub("?" + QUERY_MARK, URL.sub(_reduce_url, text))
 
 
 def dump_line(obj, key, **kw):
@@ -88,10 +118,30 @@ def dump_line(obj, key, **kw):
     return redact(json.dumps(obj, **kw), key)
 
 
+def is_url(s):
+    return bool(s) and s.lower().startswith(("http://", "https://"))
+
+
+def video_label(video):
+    """Label for the positional `video` argument. A local file keeps its basename
+    (historical behaviour); an http(s) URL is kept WHOLE so redact() can reduce it to
+    scheme://host/path — basename() would strip the scheme and smuggle the signed query
+    string ('clip.mp4?X-Amz-Signature=…') past every redactor into --out and raw rows."""
+    return video if is_url(video) else os.path.basename(video)
+
+
+class Parser(argparse.ArgumentParser):
+    """argparse writes usage and errors straight to stderr, echoing the offending argv
+    token — and the positional `video` argument may be a signed URL. Same choke point."""
+
+    def _print_message(self, message, file=None):
+        super()._print_message(redact(message, api_key()) if message else message, file)
+
+
 def parse_args(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     refuse_embedded_key(argv)
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = Parser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("video", nargs="?", help="local file or http(s) URL; omit when --corpus is used")
     ap.add_argument("-c", "--concurrency", type=int, default=4)
     ap.add_argument("-n", "--requests", type=int, default=16)
@@ -159,7 +209,7 @@ def resolve_mm_kwargs(a, duration=None, video=None):
         return json.loads(a.mm_kwargs)
     if duration is not None:
         return training_budget_kwargs(duration=duration)
-    if video and not video.startswith(("http://", "https://")):
+    if video and not is_url(video):
         return training_budget_kwargs(video)
     return None
 
@@ -215,7 +265,7 @@ def build_schedule(n, clips, forms, prompt=None, rate=None, seed=0, video=None):
             cold = clip["id"] not in seen
             seen.add(clip["id"])
         out.append({"seq": i, "arrival_s": round(t, 6), "form": form, "cold": cold,
-                    "clip_id": clip["id"] if clip else (os.path.basename(video) if video else None),
+                    "clip_id": clip["id"] if clip else (video_label(video) if video else None),
                     "clip": clip, "prompt": (prompt or (clip or {}).get("prompt") or ""),
                     "prompt_kind": (clip or {}).get("prompt_kind") if not prompt else "override",
                     "duration_s": (clip or {}).get("duration_s")})
@@ -247,11 +297,11 @@ async def media_ref_for(item, cfg, client, row):
     if form == "video_url":
         if clip and cfg["media_base_url"]:
             return cfg["media_base_url"].rstrip("/") + "/" + os.path.basename(clip["file"])
-        if path and path.startswith(("http://", "https://")):
+        if path and is_url(path):
             return path
         raise ValueError("video_url form needs --media-base-url or an http(s) video")
     if form == "video_b64":
-        if path.startswith(("http://", "https://")):
+        if is_url(path):
             return path
         # base64 of a 35 MB clip is ~47 MB of CPU work: off the event loop, or one
         # arrival delays every other arrival and the open-loop rate is a fiction.
@@ -346,7 +396,10 @@ async def _send(client, cfg, item, row, now):
     ref = await media_ref_for(item, cfg, client, row)
     payload = {"model": cfg["model"], "messages": messages_for(item, ref), "max_tokens": cfg["max_tokens"],
                "temperature": 0, "stream": True, "stream_options": {"include_usage": True}}
-    mm = resolve_mm_kwargs(cfg["args"], duration=item["duration_s"], video=cfg["video"])
+    # A corpus clip knows its duration; the single-video path does not, and 'auto' there
+    # means an ffprobe subprocess, so make_config() resolved it once instead of per attempt.
+    mm = (resolve_mm_kwargs(cfg["args"], duration=item["duration_s"])
+          if item["duration_s"] is not None else cfg["mm_fixed"])
     if mm:
         payload["mm_processor_kwargs"] = mm
     row["send_s"] = now()
@@ -362,11 +415,15 @@ async def _send(client, cfg, item, row, now):
             # Redact the whole body before parsing or cutting it: `code`, `message` and
             # the raw non-JSON body are all server-controlled and all reach output.
             body = redact((await resp.aread()).decode("utf-8", "replace"), cfg["key"])
-            err = {}
             try:
-                err = (json.loads(body) or {}).get("error") or {}
+                parsed = json.loads(body)
             except ValueError:
-                pass
+                parsed = None
+            err = parsed.get("error") if isinstance(parsed, dict) else None
+            if isinstance(err, str):        # {"error": "<message>"}: some servers do this
+                err = {"message": err}
+            elif not isinstance(err, dict):  # a list body, a bare string, null: keep the body
+                err = {}                     # (err.get on a str used to raise inside the 429 path)
             row["outcome"] = "rejected" if resp.status_code in REJECT_STATUS else "failed"
             row["error_class"] = f"http_{resp.status_code}"
             # Redact the PARSED strings again before cutting them: json.loads turns a
@@ -395,7 +452,9 @@ async def _send(client, cfg, item, row, now):
             if chunk.get("error"):
                 row["outcome"] = "failed"
                 row["error_class"] = "stream_error_event"
-                row["error_code"] = (chunk["error"] or {}).get("code")
+                e = chunk["error"] if isinstance(chunk["error"], dict) else {"code": chunk["error"]}
+                # Server-controlled, so same treatment as the HTTP error path: redact, then cut.
+                row["error_code"] = redact(e.get("code") or "", cfg["key"])[:120] or None
                 row["end_s"] = now()
                 return
             for choice in chunk.get("choices") or []:
@@ -611,13 +670,14 @@ def make_config(a, clips=None, manifest=None):
     if a.target == "gateway" and a.mm_kwargs and a.mm_kwargs != "":
         print("note: --target gateway does not send mm_processor_kwargs (server-side budget)",
               file=sys.stderr)
+    mm_fixed = resolve_mm_kwargs(a, video=a.video) if not a.corpus else None   # probes once
     return {"args": a, "key": key, "headers": headers, "base": a.base_url.rstrip("/"),
             "model": a.model, "max_tokens": a.max_tokens, "concurrency": a.concurrency,
             "retries": a.retries, "video": a.video, "forms": forms, "open_loop": bool(a.rate),
-            "media_base_url": a.media_base_url,
-            "video_label": (os.path.basename(a.video) if a.video else f"corpus:{a.subset}"),
+            "media_base_url": a.media_base_url, "mm_fixed": mm_fixed,
+            "video_label": (video_label(a.video) if a.video else f"corpus:{a.subset}"),
             "corpus_label": (manifest or {}).get("corpus_version") if a.corpus else None,
-            "summary_mm_kwargs": resolve_mm_kwargs(a, video=a.video) if not a.corpus else
+            "summary_mm_kwargs": mm_fixed if not a.corpus else
                                  ("per-clip auto" if a.mm_kwargs == "auto" and a.target == "direct"
                                   else resolve_mm_kwargs(a))}
 
@@ -652,6 +712,18 @@ async def execute(a):
 
 
 def main(argv=None):
+    """Wrapper only: nothing may reach stderr around _run() either. An uncaught
+    traceback quotes the request URL and the argv video URL, and a sys.exit() message
+    can quote a path the caller passed in."""
+    try:
+        return _run(argv)
+    except SystemExit as e:
+        raise SystemExit(redact(e.code, api_key()) if isinstance(e.code, str) else e.code)
+    except BaseException:
+        sys.exit(redact(traceback.format_exc(), api_key()))
+
+
+def _run(argv=None):
     a = parse_args(argv)
     rows, wall, cfg = asyncio.run(execute(a))
     res = summarize(rows, wall, cfg)
