@@ -32,10 +32,14 @@ and `validate` fails), never silently re-pinned; `--force` re-derives and re-pin
 purpose. A changed id leaves the old file in the cache as an unreferenced orphan;
 delete it or ignore it, nothing reads it.
 
-`FFMPEG_PIN.tarball_url` is upstream's unversioned "latest release" alias, so when
-it moves the pinned tarball hash will refuse it; fetch `7.0.2` from
-johnvansickle.com/ffmpeg/old-releases/ into `$CORPUS_CACHE/tools/` by hand in that
-case. The pinned binary hashes stay the real pin either way.
+`FFMPEG_PIN.tarball_url` is a **versioned** URL,
+`johnvansickle.com/ffmpeg/releases/ffmpeg-7.0.2-amd64-static.tar.xz`, re-downloaded
+on 2026-09-20 and confirmed to serve exactly the pinned `tarball_sha256`
+(41,888,096 bytes, upstream md5 `7fa72b65…cdf3`). `tarball_url_fallbacks` keeps the
+unversioned `ffmpeg-release-amd64-static.tar.xz` alias (the same bytes today, until
+upstream publishes 7.1) and the `old-releases/` path the file moves to when 7.0.2 is
+retired; `ensure_ffmpeg()` tries them in order and the sha256 decides, whichever
+answered. The pinned binary hashes stay the real pin either way.
 
 Derivations are byte-reproducible: `-threads 1 -fflags +bitexact -flags:v +bitexact`
 with the pinned ffmpeg, so the sha256 in the manifest is a real pin, not a label.

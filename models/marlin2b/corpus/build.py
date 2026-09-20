@@ -33,12 +33,21 @@ API_MAX_DURATION_S = 120  # research/plan/01-contracts.md preparation budget / v
 FFMPEG_PIN = {
     "version": "7.0.2-static",
     "build": "ffmpeg-7.0.2-amd64-static (johnvansickle.com static build, gcc 8/Debian)",
-    # Unversioned "latest release" alias: when upstream publishes 7.1 this URL stops
-    # matching tarball_sha256 and ensure_ffmpeg() refuses it. Then fetch 7.0.2 from
-    # https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-7.0.2-amd64-static.tar.xz
-    # (or a mirror) into $CORPUS_CACHE/tools/ by hand; the pinned hashes stay the pin.
-    "tarball_url": "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz",
+    # Versioned URL, verified 2026-09-20 to serve exactly tarball_sha256 below (41,888,096
+    # bytes, Last-Modified 2024-08-24, upstream md5 7fa72b65…cdf3 matching its own .md5).
+    # `…/releases/ffmpeg-release-amd64-static.tar.xz` is the unversioned alias for the same
+    # bytes today and stops matching the moment upstream publishes 7.1, so it is only the
+    # fallback; when upstream retires 7.0.2 it moves to
+    # https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-7.0.2-amd64-static.tar.xz .
+    # Whatever the source, the sha256 is the pin: ensure_ffmpeg() refuses anything else.
+    "tarball_url": "https://johnvansickle.com/ffmpeg/releases/ffmpeg-7.0.2-amd64-static.tar.xz",
+    "tarball_url_fallbacks": [
+        "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz",
+        "https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-7.0.2-amd64-static.tar.xz",
+    ],
     "tarball_sha256": "abda8d77ce8309141f83ab8edf0596834087c52467f6badf376a6a2a4c87cf67",
+    "tarball_md5": "7fa72b652e19bf84c9461e332ea1cdf3",
+    "tarball_bytes": 41888096,
     "ffmpeg_sha256": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
     "ffprobe_sha256": "4f231a1960d83e403d08f7971e271707bec278a9ae18e21b8b5b03186668450d",
     "dir": "ffmpeg-7.0.2-amd64-static",
@@ -184,12 +193,18 @@ def ensure_ffmpeg(download=True):
     if not (ffmpeg.exists() and ffprobe.exists()):
         if not download:
             sys.exit(f"pinned ffmpeg missing under {base}; run 'build' first")
-        tar = CACHE / "tools" / "ffmpeg-release-amd64-static.tar.xz"
+        tar = CACHE / "tools" / FFMPEG_PIN["tarball_url"].rsplit("/", 1)[-1]
         tar.parent.mkdir(parents=True, exist_ok=True)
-        if not tar.exists() or sha256_file(tar) != FFMPEG_PIN["tarball_sha256"]:
-            print(f"fetching {FFMPEG_PIN['tarball_url']}", file=sys.stderr)
-            fetch(FFMPEG_PIN["tarball_url"], tar)
-        got = sha256_file(tar)
+        # Versioned URL first, then the aliases: the sha256 decides, whichever answered.
+        for url in [FFMPEG_PIN["tarball_url"], *FFMPEG_PIN["tarball_url_fallbacks"]]:
+            if tar.exists() and sha256_file(tar) == FFMPEG_PIN["tarball_sha256"]:
+                break
+            print(f"fetching {url}", file=sys.stderr)
+            try:
+                fetch(url, tar)
+            except OSError as e:
+                print(f"  {type(e).__name__}: {e}", file=sys.stderr)
+        got = sha256_file(tar) if tar.exists() else None
         if got != FFMPEG_PIN["tarball_sha256"]:
             sys.exit(f"ffmpeg tarball sha256 {got} != pinned {FFMPEG_PIN['tarball_sha256']}")
         with tarfile.open(tar) as t:

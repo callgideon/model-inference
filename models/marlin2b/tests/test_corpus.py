@@ -29,6 +29,9 @@ def test_manifest_validates_and_has_the_required_scale():
     assert MANIFEST["schema_version"] == corpus.SCHEMA_VERSION and MANIFEST["corpus_version"]
     for key in ("version", "tarball_sha256", "ffmpeg_sha256", "ffprobe_sha256"):
         assert MANIFEST["ffmpeg"][key], f"ffmpeg identity missing {key}"
+    assert MANIFEST["ffmpeg"] == corpus.FFMPEG_PIN, "manifest ffmpeg identity drifted from the pin"
+    assert "7.0.2" in MANIFEST["ffmpeg"]["tarball_url"], \
+        "the primary tarball URL must name the version, not the moving 'release' alias"
 
 
 def test_clips_are_distinct_by_content_and_by_recipe():
