@@ -52,16 +52,29 @@ export function tryParseMoneyUnits(value: unknown): bigint | null {
   return negative ? -units : units;
 }
 
-/** The canonical eight-digit string for scaled units. Overflow throws; it is never truncated. */
-export function moneyFromUnits(units: bigint): Money {
+/**
+ * The canonical eight-digit string for scaled units, or null when the value is outside
+ * `numeric(20, 8)`. Every caller that computes a *prospective* total — a grant about to be
+ * appended, a balance about to be reported — uses this and decides what to do, because a
+ * service must reject an out-of-domain amount before it mutates anything, not throw halfway.
+ */
+export function tryMoneyFromUnits(units: bigint): Money | null {
   const negative = units < ZERO_UNITS;
   const magnitude = negative ? -units : units;
-  if (magnitude >= MAX_UNITS) {
-    throw new RangeError(`money overflows numeric(20, 8): ${magnitude.toString()} units`);
-  }
+  if (magnitude >= MAX_UNITS) return null;
   const digits = magnitude.toString().padStart(MONEY_SCALE + 1, "0");
   const whole = digits.slice(0, -MONEY_SCALE);
   return `${negative ? "-" : ""}${whole}.${digits.slice(-MONEY_SCALE)}` as Money;
+}
+
+/** The canonical eight-digit string for scaled units. Overflow throws; it is never truncated. */
+export function moneyFromUnits(units: bigint): Money {
+  const value = tryMoneyFromUnits(units);
+  if (value === null) {
+    const magnitude = units < ZERO_UNITS ? -units : units;
+    throw new RangeError(`money overflows numeric(20, 8): ${magnitude.toString()} units`);
+  }
+  return value;
 }
 
 /** Parse and normalise, or throw. Use at every trust boundary that yields money. */

@@ -1,7 +1,9 @@
 // node --test "tests/**/*.test.ts"  (nested; Node strips the types, no framework)
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import money from "../../lib/contracts/fixtures/money.json" with { type: "json" };
+import moneyCasesJson from "./money_cases.json" with { type: "json" };
 import {
   addMoney,
   compareMoney,
@@ -14,14 +16,24 @@ import {
   parseMoney,
   subMoney,
   sumMoney,
+  tryMoneyFromUnits,
   tryParseMoneyUnits,
   ZERO_MONEY,
   type Money,
 } from "../../lib/contracts/money.ts";
 
+/**
+ * The money domain is one contract across both languages (R11): `money_cases.json` is the
+ * shared accept/reject list, data only and sorted by input, and the Python half asserts the
+ * identical file. A disagreement is a defect in whichever side deviates, not a local tweak.
+ */
+const moneyCases = moneyCasesJson as unknown as {
+  input: string;
+  valid: boolean;
+  canonical: string | null;
+}[];
+
 const fixture = money as unknown as {
-  canonical: { input: string; money: string }[];
-  invalid: string[];
   arithmetic: { a: string; b: string; sum: string; difference: string; compare: number }[];
   debits: {
     case: string;
@@ -35,25 +47,58 @@ const fixture = money as unknown as {
   display: { money: string; display: string }[];
 };
 
-test("parsing normalises to exactly eight fractional digits", () => {
-  for (const { input, money: expected } of fixture.canonical) {
-    assert.equal(parseMoney(input), expected, input);
-    assert.ok(isMoney(expected), `${expected} should be canonical`);
-    assert.equal(parseMoney(expected), expected, "canonical form is a fixed point");
+test("the shared case list is the accept/reject domain, and both halves must agree on it", () => {
+  const inputs = moneyCases.map((row) => row.input);
+  assert.deepEqual(inputs, [...inputs].sort(), "money_cases.json must stay sorted by input");
+  assert.equal(new Set(inputs).size, inputs.length, "money_cases.json must not repeat an input");
+
+  for (const row of moneyCases) {
+    const label = JSON.stringify(row.input);
+    if (row.valid) {
+      assert.ok(row.canonical !== null, `${label}: a valid case needs its canonical form`);
+      assert.equal(parseMoney(row.input), row.canonical, label);
+      assert.ok(isMoney(row.canonical), `${label}: ${row.canonical} must itself be canonical`);
+      assert.equal(parseMoney(row.canonical), row.canonical, `${label}: canonical form is a fixed point`);
+    } else {
+      assert.equal(row.canonical, null, `${label}: an invalid case has no canonical form`);
+      assert.equal(tryParseMoneyUnits(row.input), null, `${label} must not parse`);
+      assert.equal(isMoney(row.input), false, `${label} must not look like money`);
+      assert.throws(() => parseMoney(row.input), TypeError, `${label} must throw`);
+    }
+  }
+
+  // The boundary and the cases that took a differential run to find are all present.
+  const byInput = new Map(moneyCases.map((row) => [row.input, row]));
+  for (const [input, valid] of [
+    ["999999999999.99999999", true],
+    ["1000000000000", false],
+    ["0.000000001", false],
+    ["1e3", false],
+    ["NaN", false],
+    ["-0", false],
+    ["+1.00000000", false],
+    ["1.00\n", false],
+    ["", false],
+    ["007.5", false],
+    [".5", false],
+    ["5.", false],
+  ] as [string, boolean][]) {
+    const row = byInput.get(input);
+    assert.ok(row !== undefined, `money_cases.json must cover ${JSON.stringify(input)}`);
+    assert.equal(row.valid, valid, `${JSON.stringify(input)} validity`);
   }
   assert.equal(ZERO_MONEY, "0.00000000");
   assert.equal(parseMoney("0"), ZERO_MONEY);
 });
 
-test("everything that is not a plain decimal string is rejected", () => {
-  for (const bad of fixture.invalid) {
-    assert.equal(tryParseMoneyUnits(bad), null, `${JSON.stringify(bad)} must not parse`);
-    assert.equal(isMoney(bad), false, `${JSON.stringify(bad)} must not look like money`);
-    assert.throws(() => parseMoney(bad), TypeError, `${JSON.stringify(bad)} must throw`);
-  }
-  // Numbers never reach the money type, however innocent they look.
+test("no number ever becomes money, however innocent it looks", () => {
   for (const bad of [0, 1, 0.1, 1e-8, NaN, Infinity, -0, null, undefined, {}, [], BigInt(10)]) {
     assert.equal(tryParseMoneyUnits(bad), null, `${String(bad)} must not parse`);
+  }
+  // A float can never sneak in through a helper either: the money module has no float path.
+  const source = readFileSync(new URL("../../lib/contracts/money.ts", import.meta.url), "utf8");
+  for (const forbidden of ["parseFloat", "toFixed", "Number(", "parseInt", "Math."]) {
+    assert.ok(!source.includes(forbidden), `money.ts must not use ${forbidden}`);
   }
 });
 
@@ -101,6 +146,19 @@ test("scaled units are 1e-8 USD and stop at the twentieth significant digit", ()
   assert.throws(() => parseMoney("-1000000000000.00000000"), TypeError, "nor do they when negative");
   assert.throws(() => addMoney(largest, parseMoney("0.00000001")), RangeError, "a sum may not overflow");
   assert.throws(() => moneyUnits("1.5e0" as Money), TypeError, "a forged brand still fails at the boundary");
+});
+
+test("a prospective total can be tested for the domain without throwing", () => {
+  // What a service needs before it mutates: an answer, not an exception.
+  assert.equal(tryMoneyFromUnits(BigInt("99999999999999999999")), "999999999999.99999999");
+  assert.equal(tryMoneyFromUnits(BigInt("100000000000000000000")), null, "one unit past the domain");
+  assert.equal(tryMoneyFromUnits(BigInt("-100000000000000000000")), null, "and past it downwards");
+  assert.equal(tryMoneyFromUnits(BigInt(0)), ZERO_MONEY);
+  assert.equal(
+    tryMoneyFromUnits(moneyUnits(parseMoney("999999999999.99999999")) + BigInt(1)),
+    null,
+    "the sum a grant would produce is testable in advance",
+  );
 });
 
 test("leading zeros are rejected, as they are on the Python side", () => {
