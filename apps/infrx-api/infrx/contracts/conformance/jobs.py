@@ -496,14 +496,18 @@ async def dur_output__loss_after_publication_is_a_terminal_failure(factory):
     stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
     assert stored.state is JobState.failed
     assert outcome.cause is TerminalCause.lost_after_publication
-    assert outcome.debit == 0 and outcome.settlement_state in {
-        SettlementState.held_unknown, SettlementState.released_platform_absorbed,
-        SettlementState.released_free}
-    if outcome.settlement_state is SettlementState.held_unknown:
-        harness.clock.advance(DEFAULTS.unknown_usage_reconcile_s + 1)
-        await harness.port.recover()
-        _stored, final = await harness.port.get_owned(request.org_id, admission.job_handle)
-        assert final.settlement_state is SettlementState.released_platform_absorbed
+    # r1 R21: published tokens with unknown usage reconcile, whatever the cause. The
+    # held reservation is what makes the reconciliation backlog visible (02 alerts on
+    # it), so releasing it at once would hide an attempt whose real cost we never
+    # learned; the customer is charged either way, which is to say never.
+    assert outcome.debit == 0
+    assert outcome.settlement_state is SettlementState.held_unknown
+    assert outcome.reconcile_after is not None
+    assert harness.extra["balance"](request.org_id)["reserved"] == admission.maximum_hold
+    harness.clock.advance(DEFAULTS.unknown_usage_reconcile_s + 1)
+    await harness.port.recover()
+    _stored, final = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert final.settlement_state is SettlementState.released_platform_absorbed
     after = harness.extra["balance"](request.org_id)
     assert after["reserved"] == 0 and after["ledger"] == before["ledger"]
 
@@ -574,9 +578,11 @@ async def dur_output__phase_deadlines_are_persisted_at_each_transition(factory):
     to whoever enforces it. The instants are facts on the record, not a budget every
     worker re-derives against its own clock, and a configuration change after
     admission moves none of them."""
-    harness = factory()
+    # A queue budget wide enough that the requeue below really happens: this case is
+    # about where the instants come from, not about queue expiry.
+    harness = factory(limits=DEFAULTS.replace(queue_wait_interactive_s=10_000))
     retune = harness.extra.get("retune")
-    request, admission = await _admit(harness, deadline_s=10_000)
+    request, admission = await _admit(harness, deadline_s=100_000)
     assert admission.preparation_deadline_at == harness.clock.at(admission.budgets.preparation_s)
     assert admission.queue_deadline_at is None          # not queued yet
     harness.clock.advance(7)
@@ -590,15 +596,20 @@ async def dur_output__phase_deadlines_are_persisted_at_each_transition(factory):
     assert lease.generation_deadline_at == harness.clock.at(queued.budgets.generation_s)
     assert lease.first_token_deadline_at == harness.clock.at(queued.budgets.first_token_s)
     assert lease.first_token_deadline_at <= lease.generation_deadline_at
-    # a prepublication requeue re-claims, and the queue instant is still the first one
+    # a prepublication requeue keeps the instants it already has (R5): a job that
+    # loses a worker must not be handed a fresh queue budget
     harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
     await harness.port.recover()
     requeued, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
-    if outcome is None:
-        assert requeued.state is JobState.queued
-        assert requeued.queue_deadline_at == first_queue_deadline, \
-            "a requeue moved the queue deadline"
-        assert requeued.preparation_deadline_at == admission.preparation_deadline_at
+    assert outcome is None and requeued.state is JobState.queued, \
+        "the requeue this case is about did not happen"
+    assert requeued.queue_deadline_at == first_queue_deadline, "a requeue moved the queue deadline"
+    assert requeued.preparation_deadline_at == admission.preparation_deadline_at
+    # and the second attempt's generation instants are its own, derived at its claim
+    second = await harness.port.claim(request.request_id, "worker-b")
+    assert second.generation == 2
+    assert second.generation_deadline_at == harness.clock.at(queued.budgets.generation_s)
+    assert second.generation_deadline_at > lease.generation_deadline_at
 
 
 async def dur_output__no_phase_deadline_outlives_the_accepted_deadline(factory):
