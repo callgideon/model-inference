@@ -121,6 +121,26 @@ Marlin numbers.
 - [`production-api/10-implementation-spec.md`](production-api/10-implementation-spec.md)
   — the engineering spec: gateway v2, queue, worker, HTTP API, test plan.
 
+## Deep traces
+
+Opt-in, per-request deep tracing of the API — input, output, configuration,
+timings, tokens, cost — captured asynchronously with no hot-path cost into
+ClickHouse + S3, with a Traces page in the console, a feedback API and an
+asynchronous LLM-as-judge, so the production model's performance, relevance
+and accuracy can be analysed on real traffic. Requirements, design and a
+phased plan live in [`traces/`](traces/README.md), not in this document.
+It adopts `platform/01`'s trace schema and adds the content/quality plane
+to `production-api/`'s ops plane.
+
+- [`traces/README.md`](traces/README.md) — index, reading order, the design
+  in ten sentences, headline numbers.
+- [`traces/01-requirements.md`](traces/01-requirements.md) — decisions D1–D8,
+  requirements with acceptance, non-functional limits (≤ 1 ms p50 hot path).
+- [`traces/03-architecture.md`](traces/03-architecture.md) — request path,
+  trace worker, store, read path, sizing, failure modes.
+- [`traces/08-phases-and-test-plan.md`](traces/08-phases-and-test-plan.md) —
+  seven verifiable phases with exit criteria and drills.
+
 ## 4. Full file index
 
 - [`METHODOLOGY.md`](METHODOLOGY.md) — every formula (weights, KV, fit,

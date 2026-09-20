@@ -132,6 +132,15 @@ absorbed by the bounded queue + headroom, not by scale-up (≈7 min lead time).
 
 ## 7. Other open items (not blocking the API work)
 
+- **Deep traces (specified 2026-09-20, not started):** opt-in per-key
+  request tracing (input/output/config/timings/tokens/cost) shipped
+  asynchronously to ClickHouse + S3, a console Traces page, `POST /v1/feedback`,
+  and an async LLM-as-judge. Requirements, architecture, data model, gateway /
+  judge / console specs and a seven-phase plan with measured exit criteria are
+  in [`research/traces/`](research/traces/README.md). It shares seams with §6:
+  it reads `MediaRef` after Phase 1, moves into `shared/usage.py` at Phase 2,
+  and registers its counters on Phase 3's `/metrics`. Start with
+  `research/traces/08-phases-and-test-plan.md` Phase 0.
 - OpenRouter listing: plan and provider document in `apps/infrx-api/openrouter/`; apply once Phase 2–4 make uptime and pricing defensible.
 - Google sign-in: add `https://fcbnscgsymzdykendbrc.supabase.co/auth/v1/callback` to the callgideon OAuth client, re-enable the provider, restore the button (git history has it: commit `ad575a8`).
 - Console: `NEXT_PUBLIC_APP_URL` is set on Vercel but no longer read; Billing/Dedicated/Teams are display-only; Stripe not integrated.

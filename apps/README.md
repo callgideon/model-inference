@@ -29,7 +29,11 @@ metadata half of "request observability".
 Out of scope for this slice (P1 in the research): payments and hard spend
 protection, dedicated deployments, model-owner onboarding, teams beyond a
 single organization per user, traces with content. The console shows the
-places for them so the product reads complete.
+places for them so the product reads complete. Traces with content are now
+specified separately in [`research/traces/`](../research/traces/README.md)
+(per-key opt-in, ClickHouse + S3, a Traces page, feedback API, LLM judge);
+the console changes it needs are in `research/traces/07-console-spec.md`,
+and its Supabase migration `0003_traces.sql` in `04-data-model.md` §5.
 
 ## 2. Users and journeys
 
