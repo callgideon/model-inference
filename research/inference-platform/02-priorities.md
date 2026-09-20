@@ -77,4 +77,4 @@ Track time to first successful/paid request, repeat weekly paying usage, paid ow
 
 ## Verification log
 
-- 2026-09-19: Priorities derived from user scope, [competitor evidence](01-market-and-competitors.md), and [local Marlin results](../../marlin2b/results/notes.md). Release tests listed here are proposed acceptance work, not tests executed in this research session.
+- 2026-09-19: Priorities derived from user scope, [competitor evidence](01-market-and-competitors.md), and [local Marlin results](../../models/marlin2b/results/notes.md). Release tests listed here are proposed acceptance work, not tests executed in this research session.

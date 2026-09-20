@@ -984,7 +984,7 @@ elastic cloud capacity where nodes appear without warning.
 
 ### 5.3 Pre-staged weights on every node's NVMe
 
-This repo already has the right primitive: [`common/download.sh`](../../common/download.sh) tries
+This repo already has the right primitive: [`common/download.sh`](../../models/common/download.sh) tries
 **S3 first, Hugging Face second**, lands in `$WEIGHTS_ROOT/$EXP` (default `/mnt/nvme`, "instance-store
 NVMe on a p6 node"), and pre-checks free space **in bytes** before starting. Turning it into a
 pre-warmer is a scheduling change, not a code change:
@@ -1782,7 +1782,7 @@ Primary sources fetched for this document, 2026-09-19.
   and the measured B200 prefill step time used in §8.3 note ʰ
 - [`research/matrix/fit-matrix.md`](../matrix/fit-matrix.md) — max concurrency per replica, the
   `capacity_per_replica` input to §5.1
-- [`common/download.sh`](../../common/download.sh), [`common/env.sh`](../../common/env.sh) — the
+- [`common/download.sh`](../../models/common/download.sh), [`common/env.sh`](../../models/common/env.sh) — the
   existing S3-first weight staging path extended in §5.3
 
 ---

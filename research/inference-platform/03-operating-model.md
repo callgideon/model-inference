@@ -58,7 +58,7 @@ Request traces are operational records. The financial ledger is the source of tr
 
 The public model card describes video captioning and temporal grounding and labels the repository Apache-2.0 with gated access. Record the accepted gate terms and artifact provenance during onboarding. Do not present this specialist as a general chat or tool-calling model. [Model card](https://huggingface.co/NemoStation/Marlin-2B)
 
-Local experiment evidence in [results notes](../../marlin2b/results/notes.md) reports:
+Local experiment evidence in [results notes](../../models/marlin2b/results/notes.md) reports:
 
 - vLLM uses an architecture override; canonical caption/find prompts matter.
 - Explicit video preprocessing changes the tested clip's prompt usage from 12,221 to 2,061 tokens.
