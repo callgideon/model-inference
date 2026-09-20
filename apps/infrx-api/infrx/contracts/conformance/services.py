@@ -69,12 +69,15 @@ async def media_sec__oversize_and_unsupported_uploads_are_refused(factory):
         pass
     else:
         raise AssertionError("an unsupported media type was finalized")
-    try:
-        await harness.port.create_upload(b.ORG_A, {"max_bytes": DEFAULTS.max_media_bytes * 2})
-    except errors.InvalidRequest:
-        pass
-    else:
-        raise AssertionError("a caller raised its own byte ceiling")
+    for constraints in ({"max_bytes": DEFAULTS.max_media_bytes * 2}, {"max_bytes": 0},
+                        {"max_bytes": -1}, {"max_bytes": "4096"}, {"max_bytes": 1.5},
+                        {"accepted_mime": ()}):
+        try:
+            await harness.port.create_upload(b.ORG_A, constraints)
+        except errors.InvalidRequest:
+            pass
+        else:
+            raise AssertionError(f"a caller shaped its own constraints: {constraints}")
 
 
 async def media_parity__staging_is_content_addressed_and_tenant_namespaced(factory):
@@ -145,14 +148,29 @@ async def media_sec__staging_never_replaces_an_existing_object(factory):
     once = await harness.port.stage(b.ORG_A, b.request(harness, refs=(ref,)))
     assert await harness.port.stage(b.ORG_A, b.request(harness, refs=(ref,))) == once
 
-    # nor does finalizing an upload replace what that handle already holds
+    # nor does finalizing an upload replace what that handle already holds *within*
+    # the tenant: the immutability claim held across orgs and for `stage`, but a
+    # tenant's own object staged under a not-yet-finalized upload handle could be
+    # overwritten by completing that upload with different bytes.
     reused = await harness.port.create_upload(b.ORG_A, {"max_bytes": 1024})
     second = reused["upload_handle"]
-    harness.extra["put_object"](second, b"the first bytes", "video/mp4")
-    first_ref = await harness.port.finalize_upload(b.ORG_A, second)
+    squatted = b.media(b.ORG_A, handle=second, kind=MediaKind.inline)
+    staged_first = await harness.port.stage(b.ORG_A, b.request(harness, refs=(squatted,)))
     harness.extra["put_object"](second, b"different bytes entirely", "video/mp4")
-    again = await harness.port.finalize_upload(b.ORG_A, second)
-    assert again == first_ref, "finalizing replaced an object the tenant already had"
+    try:
+        finalized = await harness.port.finalize_upload(b.ORG_A, second)
+    except errors.DomainError as exc:
+        assert errors.http_status(exc.code) in (400, 404, 409), exc.code
+    else:
+        assert finalized.digest == staged_first[0].digest, \
+            "finalizing replaced an object the tenant already had"
+    try:
+        current = await harness.port.resolve_owned(b.ORG_A, second)
+    except errors.DomainError:
+        pass                      # a handle left unfinalized may refuse resolution
+    else:
+        assert current.digest == staged_first[0].digest, \
+            "the staged object was replaced by the completed upload"
 
 
 async def media_sec__a_partial_request_stages_nothing(factory):
@@ -580,6 +598,7 @@ async def feedback_ack__the_body_is_one_valid_signal_with_a_required_key(factory
         b.feedback(FeedbackName.correction, "   "),           # nonempty text
         b.feedback(FeedbackName.comment, False),
         {"name": "sentiment", "value": "good"},               # not a known signal
+        [{"name": "thumb", "value": True}],                   # not even an object
     )
     for n, body in enumerate(bad_bodies):
         try:
@@ -770,6 +789,17 @@ async def judge_budget__one_submission_intent_per_run(factory):
         pass
     else:
         raise AssertionError("a run recorded two provider batches")
+    # and an empty provider id is the very ambiguity this call exists to remove
+    other = await harness.port.reserve(_run(harness), b.consent(), Decimal("0.10"))
+    await harness.port.begin_submit(other.run_id)
+    for empty in ("", "   ", None):
+        try:
+            await harness.port.record_submission(other.run_id, empty)
+        except errors.InvalidRequest:
+            pass
+        else:
+            raise AssertionError(f"provider batch id {empty!r} was recorded")
+    assert harness.extra["runs"]()[other.run_id].external_batch_id is None
 
 
 async def judge_budget__reserving_a_run_twice_does_not_reset_it(factory):

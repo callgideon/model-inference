@@ -121,10 +121,17 @@ class FakeMediaStore:
 
     async def create_upload(self, org_id: str, constraints: dict[str, object]) -> dict[str, object]:
         self.failures.before("create_upload")
-        max_bytes = int(constraints.get("max_bytes", self.limits.max_media_bytes))
+        raw = constraints.get("max_bytes", self.limits.max_media_bytes)
+        # A caller-supplied bound is a trust boundary: `"abc"`, `1.5` or `nan` must be
+        # a typed 400, not a ValueError escaping to a 500.
+        if isinstance(raw, bool) or not isinstance(raw, int):
+            raise errors.InvalidRequest("max_bytes must be an integer number of bytes")
+        max_bytes = raw
         if max_bytes <= 0 or max_bytes > self.limits.max_media_bytes:
             raise errors.InvalidRequest(f"max_bytes must be in 1..{self.limits.max_media_bytes}")
         mimes = tuple(constraints.get("accepted_mime", ("video/mp4",)))
+        if not mimes or not all(isinstance(mime, str) and mime.strip() for mime in mimes):
+            raise errors.InvalidRequest("accepted_mime must be a nonempty list of media types")
         handle = self.ids.upload_handle()
         upload = _Upload(handle=handle, org_id=org_id, max_bytes=max_bytes, accepted_mime=mimes,
                          expires_at=self.clock.at(self.limits.processing_cache_ttl_s))

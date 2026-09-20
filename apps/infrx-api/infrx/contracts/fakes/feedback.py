@@ -37,6 +37,9 @@ class FakeFeedbackService:
     async def accept(self, auth, request_id: str, feedback: dict[str, Any],
                      idem: IdempotencyRef) -> Feedback:
         self.failures.before("accept")
+        if not isinstance(feedback, dict):
+            # A JSON array or scalar body is a 400, not a TypeError on the way in.
+            raise errors.InvalidRequest("a feedback body is a JSON object")
         body = dict(feedback)
         for name in SERVER_SET:
             if name in body:
