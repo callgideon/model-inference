@@ -248,7 +248,9 @@ def main() -> int:
     #    how many of them assert something OBSERVED. The design document should
     #    trend towards zero: observed facts belong to the evidence report.
     classes = ("OBSERVED", "HISTORICAL CLAIM", "PROPOSED", "DERIVED", "CORRECTED")
-    for doc, text in (("evidence", ev), ("README", rm)):
+    # fences stripped: the §Checks block quotes this output, so counting it would
+    # make the quoted numbers change every time they are quoted
+    for doc, text in (("evidence", ev_claims), ("README", rm_claims)):
         body = text[:text.index("## Verification log")]
         claim_lines = [l for l in body.split("\n")
                        if l.strip() and set(l.strip()) - set("|- ")]
