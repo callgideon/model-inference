@@ -129,3 +129,5 @@ are the provisional numbers R17 already labelled as such.
   counted any non-zero exit as a kill (so "115 killed" included outcomes that proved nothing), and
   IDEM-05 was a false kill whose invariant no exported case can reach. The case count here ("40 it(")
   was also wrong; the measured figure is in the later report.
+- 2026-09-20: Round 7 also applies: the suspension cases this report added all targeted the all-free
+  organization, so the accounting invariance they claimed was unenforced. See `F2-ts-25888e9.md`.

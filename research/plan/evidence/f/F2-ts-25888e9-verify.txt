@@ -1,0 +1,166 @@
+F2-ts round 7 verification transcript
+branch: codex/f2-contracts-ts   base: fab9fbe   head at capture: 25888e9
+date: 2026-09-20 (UTC)   node: v22.23.1   pnpm: 9.15.9
+
+$ pnpm --dir apps/app test
+  duration_ms: 3.955236
+  type: 'test'
+  ...
+1..38
+# tests 124
+# suites 4
+# pass 124
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 609.747725
+exit=0
+
+$ pnpm --dir apps/app test:mutants
+killed   XJUDGE-02        judge runs separate estimates, limited evaluations and held budgets
+killed   XPURCHASE-01     nothing creates a legacy purchase entry [+1 collateral]
+killed   XREASON-01       every mutating operation validates before it writes, whichever field is bad
+killed   XTENANT-01       a filter or cursor from another organization never widens the tenant
+
+139 mutants: 139 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 23.0s
+exit=0
+
+$ node tests/contracts/run-mutants.mjs --self-test
+runner self-tests — R40: the runner must not be able to report a false kill
+
+ok   a syntax error is a runner error, not a kill
+       expected runner-error, got runner-error — Node's type stripping rejected the mutated file
+ok   a module that throws on load is a runner error, not a kill
+       expected runner-error, got runner-error — the suite failed without naming a case
+ok   a construct type stripping rejects is a runner error, not a kill
+       expected runner-error, got runner-error — Node's type stripping rejected the mutated file
+ok   a hang is a runner error, not a kill
+       expected runner-error, got runner-error — the suite did not finish in time
+ok   a no-op edit survives
+       expected survived, got survived — the suite passed
+ok   a `find` that no longer matches is stale
+       expected stale, got stale — its `find` text is not in the source any more
+ok   a real defect attributed to the wrong case survives
+       expected survived, got survived — the suite failed, but not in a declared case (failed: a new organization starts at zero with no ledger history; identifiers from another organization are not_found, in both directions; a filter or cursor from another organization never widens the tenant; suspension gates new work and configuration, and nothing else (R33); the role and suspension matrix holds for every operation; an operator acts on the organization it names, not on its own (R26); a suspension can be lifted, and lifting it restores exactly what it gated; an operator write is audited, and a restore adds an entry instead of erasing one (R34); an idempotency key is scoped to its operation, its organization and its payload; generated identifiers never collide, within an organization or across two; reads and writes never cross the tenant boundary, in either direction)
+ok   a crash in the harness factory is a runner error, not a kill
+       expected runner-error, got runner-error — the declared case failed by exception (TypeError), not by assertion — if that exception IS the defect, declare kills_by: "throw"
+ok   a declared case that fails by exception rather than assertion is a runner error
+       expected runner-error, got runner-error — the declared case failed by exception (TypeError), not by assertion — if that exception IS the defect, declare kills_by: "throw"
+ok   the old V03 edit is killed on an assertion, not on an exception
+       expected killed, got killed — an idempotency key is scoped to its operation, its organization and its payload
+ok   a genuine defect in its declared case is killed
+       expected killed, got killed — a new organization starts at zero with no ledger history
+ok   a mutant with no declared cases is a runner error
+       expected runner-error, got runner-error — the mutant declares no `cases`, so a kill cannot be attributed
+
+12 self-tests, 12 passed, 0 failed
+exit=0
+
+$ pnpm --dir apps/app lint
+
+> infrx-app@0.1.0 lint /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app
+> eslint
+
+
+/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/lib/contracts/conformance.ts
+  3780:35  warning  'ids' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-f2ts/apps/app/lib/contracts/fake-services.ts
+  80:8  warning  'AuditQuery' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+
+exit=0
+
+$ pnpm --dir apps/app exec tsc --noEmit
+exit=0
+
+$ pnpm --dir apps/app build (tail)
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+exit=0
+
+$ git status --porcelain
+?? research/plan/evidence/f/F2-ts-round7-verify.txt
+(empty = clean)
+
+$ git diff --stat fab9fbe -- apps/app/pnpm-lock.yaml apps/app/tsconfig.json
+(empty = untouched)
+
+$ git diff fab9fbe -- apps/app/package.json
+diff --git a/apps/app/package.json b/apps/app/package.json
+index 11ec1cd..f4db246 100644
+--- a/apps/app/package.json
++++ b/apps/app/package.json
+@@ -9,7 +9,11 @@
+     "lint": "eslint",
+     "format": "prettier --write .",
+     "format:check": "prettier --check .",
+-    "test": "node --test lib/*.test.ts"
++    "test": "node --test \"lib/**/*.test.ts\" \"tests/**/*.test.ts\" \"app/**/*.test.ts\" \"components/**/*.test.ts\"",
++    "test:mutants": "node tests/contracts/run-mutants.mjs"
++  },
++  "engines": {
++    "node": ">=22.18"
+   },
+   "dependencies": {
+     "@base-ui/react": "^1.8.0",
+
+$ git log --oneline e3dc89e..HEAD
+25888e9 contracts: README corrections for R41, the kill criterion and two page rules
+ccbc80f contracts: mask operator principals everywhere, and a classifier that reads WHY
+
+$ git rev-list --count fab9fbe..HEAD
+30
+
+$ per-commit owned-path check
+25888e9 owned paths only
+ccbc80f owned paths only
+e3dc89e owned paths only
+d9bc366 owned paths only
+70fe3d1 owned paths only
+15f067f owned paths only
+ab442af owned paths only
+07f9a5a owned paths only
+639ee7b owned paths only
+f947a15 owned paths only
+b48ffaa owned paths only
+3c772d6 owned paths only
+e392cc2 owned paths only
+2959a3d owned paths only
+0570bf2 owned paths only
+2948298 owned paths only
+012fc85 owned paths only
+7ccebfe owned paths only
+9f266de owned paths only
+585dd18 owned paths only
+e6f7162 owned paths only
+159cd27 owned paths only
+92a6022 owned paths only
+7272695 owned paths only
+d00fcbc owned paths only
+96164b7 owned paths only
+cadb02b owned paths only
+af5856c owned paths only
+108bed8 owned paths only
+cb00862 owned paths only
+
+$ test counts per file
+discovery.test.ts                            # tests 5
+fixtures.test.ts                             # tests 4
+money.test.ts                                # tests 11
+opaque-cursor.test.ts                        # tests 46
+services.test.ts                             # tests 54
+keys.test.ts                                 # tests 3
+utils.test.ts                                # tests 1
+
+$ grep -c '^    it(' conformance.ts
+45
+$ declared mutants
+139
+$ kills_by throw
+GRANT-04, MONEY-03
+$ invalid money cases fed through adminGrant
+52

@@ -140,3 +140,10 @@ for it: I cannot certify my own list is complete, only that every claim in it is
   `pnpm test` 120 pass 0 fail; `test:mutants` 130/130 killed, 0 survivors, 0 runner errors;
   self-tests 9/9; `lint`, `tsc --noEmit` and `build` all exit 0; lockfile and `tsconfig.json`
   untouched. Status **implemented**; no integration, push or deploy.
+- 2026-09-20: Round 7 corrected two claims in this report (`F2-ts-25888e9.md`). The runner still could
+  report a false kill: `classify()` never looked at *why* a declared case failed, so a crash in the
+  harness factory and a case failing by TypeError were both counted as kills. And R41 was incomplete —
+  `feedback.submit` stored the submitter's principal with nothing masking it, so an operator's ordinary
+  console feedback named them to the customer; the `traces` list was also returning the whole stored
+  trace rather than `TraceListItem`. The "130 killed" figure here therefore included outcomes the
+  current classifier would reject.
