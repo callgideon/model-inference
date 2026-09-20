@@ -14,7 +14,7 @@ value carrying the key refuses the run. This file tests that property from the o
 
 No network (httpx.MockTransport), no built media (fake clip bytes), no corpus cache.
 """
-import contextlib, io, json, os, random, string, sys, tempfile
+import contextlib, io, json, os, random, re, signal, string, subprocess, sys, tempfile, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.dirname(HERE)]
@@ -31,6 +31,8 @@ KEY = "sk-infrx-CANARYKEY-0123456789abcdef/+=q"
 SIG = "CANARYSIGdeadbeefcafebabe0123"
 CRED = "AKIACANARYCREDENTIAL"
 TOKEN = "CANARYPATHTOKEN9876"                  # B5: a token embedded in the path itself
+BASETOK = "CANARYBASENAMETOK5432"               # B6: the secret IS the file name
+HOSTTOK = "canaryhosttok1234"                   # B6: the secret is a tunnel subdomain
 QUERY = f"X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential={CRED}&X-Amz-Signature={SIG}"
 VIDEO_URL = f"https://r3-bucket.invalid/private/clip.mp4?{QUERY}"     # documented positional input
 UPLOAD_URL = f"https://upload-bucket.invalid/org1/up_0000?{QUERY}"    # signed PUT destination
@@ -41,11 +43,21 @@ USERINFO_URL = f"https://user'{SIG}:{CRED}@r3-bucket.invalid/private/clip.mp4"
 LONG_USERINFO_URL = f"https://{'u' * 400}{SIG}@r3-bucket.invalid/private/clip.mp4"
 # B3: a path longer than the old 2000-character bound, with the signature after it.
 LONG_PATH_URL = f"https://r3-bucket.invalid/{'d/' * 1200}clip.mp4?sig={SIG}"
-# B5: the token is in a path SEGMENT, so only host + basename may be reported.
+# B5: the token is in a path SEGMENT.
 TOKEN_PATH_URL = f"https://r3-bucket.invalid/{TOKEN}/private/clip.mp4"
-# The label the client must produce for the URLs above: host + "/" + a safe basename.
-LABEL = "r3-bucket.invalid/clip.mp4"
-CANARIES = (SIG, CRED, TOKEN, "X-Amz-Signature", "X-Amz-Credential")
+# B6: a capability URL whose secret is the basename, and one whose secret is the host.
+BASENAME_TOKEN_URL = f"https://cdn.invalid/v/{BASETOK}.mp4"
+HOSTNAME_TOKEN_URL = f"https://{HOSTTOK}.trycloudflare.invalid/clip.mp4"
+CANARIES = (SIG, CRED, TOKEN, BASETOK, HOSTTOK, "X-Amz-Signature", "X-Amz-Credential",
+            "r3-bucket.invalid", "cdn.invalid", "trycloudflare")
+
+
+def label_of(url):
+    """What the client must emit for a URL: a digest, plus an allowlisted extension."""
+    return bench.video_label(url)
+
+
+LABEL = label_of(VIDEO_URL)                    # url-<12 hex>.mp4, no text from the URL
 
 
 # ------------------------------------------------------------------ harness
@@ -64,6 +76,9 @@ def body(status, payload, **kw):
             return httpx.Response(status, text=payload, **kw)
         return httpx.Response(status, json=payload, **kw)
     return handler
+
+
+body_response = body          # alias: some tests use `body` as a local variable
 
 
 def escaped(text):
@@ -157,7 +172,7 @@ EXPECT = {
 }
 
 
-def run(tmp, form, positional, gw_kwargs, requests=2, video=None, extra=()):
+def run(tmp, form, positional, gw_kwargs, requests=2, video=None, extra=(), key=None):
     """One bench.main() run. Returns (blobs, summary_or_None): blobs is every byte the
     client emitted -- stdout, stderr, --out and the raw JSONL."""
     out, raw = os.path.join(tmp, "bench.jsonl"), os.path.join(tmp, "raw.jsonl")
@@ -175,7 +190,7 @@ def run(tmp, form, positional, gw_kwargs, requests=2, video=None, extra=()):
 
     gw = FakeGateway(ttft=0.001, token_gap=0.0, tokens=2, **gw_kwargs)
     bench.load_transport = lambda spec: gw.transport()
-    os.environ["MARLIN_API_KEY"] = KEY
+    os.environ["MARLIN_API_KEY"] = key or KEY
     sout, serr = io.StringIO(), io.StringIO()
     try:
         with contextlib.redirect_stdout(sout), contextlib.redirect_stderr(serr):
@@ -254,35 +269,47 @@ def test_every_adversarial_url_shape_yields_a_rebuilt_label():
     reaches any sink — no pattern has to match the URL for that to hold."""
     shapes = {"signed query": VIDEO_URL, "quote and backslash in query": QUOTED_URL,
               "userinfo with a quote": USERINFO_URL, "oversized userinfo": LONG_USERINFO_URL,
-              "oversized path": LONG_PATH_URL, "token in a path segment": TOKEN_PATH_URL}
+              "oversized path": LONG_PATH_URL, "token in a path segment": TOKEN_PATH_URL,
+              "token IS the basename": BASENAME_TOKEN_URL,
+              "token IS the hostname": HOSTNAME_TOKEN_URL}
+    seen = set()
     with tempfile.TemporaryDirectory() as tmp:
         for why, url in shapes.items():
+            want = label_of(url)
+            assert re.fullmatch(r"url-[0-9a-f]{12}(\.mp4)?", want), (why, want)
             blobs, summary = run(tmp, "video_url", True, {}, video=url)
             assert summary["accepted"] == 2, why
-            assert summary["video"] == LABEL, (why, summary["video"])
+            assert summary["video"] == want, (why, summary["video"])
             rows = [json.loads(l) for l in blobs["raw"].splitlines()]
-            assert rows and all(r["clip_id"] == LABEL for r in rows), why
-            assert json.loads(blobs["out"].splitlines()[-1])["video"] == LABEL, why
+            assert rows and all(r["clip_id"] == want for r in rows), why
+            assert json.loads(blobs["out"].splitlines()[-1])["video"] == want, why
             assert_clean(blobs, why)
             assert_parses(blobs, why)
+            seen.add(want)
+    assert len(seen) == len(shapes), "distinctness for E4 comes from the digest"
 
 
-def test_video_label_is_rebuilt_from_parsed_parts():
+def test_video_label_is_a_digest_with_no_text_from_the_url():
+    """B6: host and basename are secrets in capability URLs, so neither is recorded."""
     label = bench.video_label
-    assert label(VIDEO_URL) == LABEL and label(QUOTED_URL) == LABEL
-    assert label(USERINFO_URL) == LABEL and label(LONG_USERINFO_URL) == LABEL
-    assert label(LONG_PATH_URL) == LABEL and label(TOKEN_PATH_URL) == LABEL
-    assert label("https://h.invalid/a/b/c.mp4") == "h.invalid/c.mp4"
-    assert label("https://h.invalid:8443/c.mp4") == "h.invalid/c.mp4", "no port either"
-    # anything the allowlist does not recognise is one fixed literal, never a fragment
-    for bad in (f"https://h.invalid/{'n' * 200}.mp4",           # basename too long
-                "https://h.invalid/clip name.mp4",              # space
-                f"https://h.invalid/clip'{SIG}.mp4",            # quote in the basename
-                "https://h.invalid/"):                          # no basename at all
-        assert label(bad) == "url-input", bad
-    # a fragment or a query is dropped by the parse, so the basename stays recognisable
-    assert label(f"https://h.invalid/c.mp4#token={SIG}") == "h.invalid/c.mp4"
-    assert label(f"https://h.invalid/c.mp4?sig={SIG}") == "h.invalid/c.mp4"
+    for url in (VIDEO_URL, QUOTED_URL, USERINFO_URL, LONG_USERINFO_URL, LONG_PATH_URL,
+                TOKEN_PATH_URL, BASENAME_TOKEN_URL, HOSTNAME_TOKEN_URL,
+                "https://h.invalid/a/b/c.mp4", "https://h.invalid:8443/c.mp4",
+                f"https://h.invalid/c.mp4#token={SIG}", "https://h.invalid/"):
+        got = label(url)
+        assert re.fullmatch(r"url-[0-9a-f]{12}(\.(mp4|m4v|webm|mov|mpeg|mpg))?", got), (url, got)
+        for piece in (BASETOK, HOSTTOK, SIG, CRED, TOKEN, "h.invalid", "cdn.invalid"):
+            assert piece not in got, (url, piece)
+        assert label(url) == got, "the digest must be stable"
+    # stable, per-URL distinct, and only an allowlisted extension may ride along
+    assert label("https://h.invalid/x.mp4") != label("https://h.invalid/y.mp4")
+    assert label("https://h.invalid/x.mp4").endswith(".mp4")
+    assert label("https://h.invalid/x.MOV").endswith(".mov"), "case-folded extension"
+    for hostile_ext in ("https://h.invalid/x.exe", "https://h.invalid/x.mp4.sh",
+                        f"https://h.invalid/x.{SIG}", "https://h.invalid/x"):
+        assert re.fullmatch(r"url-[0-9a-f]{12}", label(hostile_ext)), hostile_ext
+    # the query and fragment change the digest (they are part of the URL identity)
+    assert label("https://h.invalid/x.mp4") != label("https://h.invalid/x.mp4?v=2")
     assert label("/mnt/nvme/clips/c000.mp4") == "c000.mp4", "local files keep the basename"
     assert label("clip.mp4") == "clip.mp4"
 
@@ -308,6 +335,63 @@ def test_no_server_controlled_string_is_recorded_verbatim():
         assert all(r["finish_reason"] == "stop" and len(r["inference_id"]) == 32 for r in rows)
         assert all(r["server_timing"] == {"queue": 12.5, "prep": 340.0, "gpu": 880.25} for r in rows)
         assert all(r["prompt_tokens"] == 2061 for r in rows)
+
+
+def test_an_allowlisted_field_carrying_the_key_is_still_refused():
+    """n1: a lower-cased key body fullmatches [a-z0-9_]{1,64}, so the pattern alone would
+    have recorded it. allow() runs the same 8-gram key check the argv gate uses."""
+    body = bench.fold(KEY[9:])                    # the secret body, slug-folded, no punctuation
+    assert bench.CODE_OK.fullmatch(body.replace("-", "_")), "the shape really is allowlistable"
+    with tempfile.TemporaryDirectory() as tmp:
+        with_clips(make_clips(2, tmp))
+        for why, gw, field in (
+                ("error.code", {"chat_override": body_response(
+                    401, {"error": {"code": body.replace("-", "_"), "type": "auth"}})}, "error_code"),
+                ("error.type", {"chat_override": body_response(
+                    401, {"error": {"code": "auth", "type": body.replace("-", "_")}})}, "error_type"),
+                ("finish_reason / headers", {"hostile_fields": body.replace("-", "_")}, "finish_reason"),
+                ("uppercased key body", {"chat_override": body_response(
+                    401, {"error": {"code": KEY[9:].lower().replace("/", "_").replace("+", "_")
+                                    .replace("=", "_"), "type": "auth"}})}, "error_code")):
+            blobs, summary = run(tmp, "video_b64", False, gw)
+            rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+            assert rows, why
+            assert all(r[field] == "unrecognized" for r in rows), (why, rows[0][field])
+            assert_clean(blobs, why)
+        # an Inference-Id and a Server-Timing metric name carrying the body go the same way
+        blobs, summary = run(tmp, "video_b64", False,
+                             {"hostile_fields": "x" * 0 + body.replace("-", "")})
+        rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+        assert all(r["inference_id"] == "unrecognized" for r in rows)
+        assert all("dropped_metrics" in (r["server_timing"] or {}) for r in rows)
+        assert_clean(blobs, "hostile id and timing name")
+
+
+def test_the_argv_gate_ignores_the_public_key_prefix():
+    """n3: `sk-infrx-` is public boilerplate; `apps/infrx-api/...` must not refuse a run,
+    while 6+ characters of the secret body still must."""
+    key = "sk-infrx-" + "SECRETBODY0123456789"
+    for public in ("apps/infrx-api/tests", "out/infrx-run.jsonl", "sk-infrx-", "infrx-api",
+                   "/home/x/.claude/worktrees/infrx-impl/out.jsonl"):
+        assert not bench.carries_key(public, key), public
+    for secret in ("run-SECRETBO", "x/secretbody0123", key, key[9:], key[:17],
+                   "out/bench-" + key[12:22] + ".jsonl"):
+        assert bench.carries_key(secret, key), secret
+    # fail-closed for a key with no known prefix: every window counts
+    odd = "zz-custom-ABCDEFGH1234"
+    assert bench.carries_key("zz-custom-ABCDEFGH", odd) and bench.carries_key(odd[:9], odd)
+    with tempfile.TemporaryDirectory() as tmp:
+        with_clips(make_clips(2, tmp))
+        os.environ["MARLIN_API_KEY"] = key
+        try:
+            blobs, summary = run(tmp, "video_b64", False, {}, extra=["--label", "infrx api run"],
+                                 key=key)
+            assert summary is not None and summary["label"] == "infrx-api-run"
+            blobs, summary = run(tmp, "video_b64", False, {},
+                                 extra=["--label", f"run {key[9:20]}"], key=key)
+            assert summary is None and "refusing to run" in blobs["stderr"]
+        finally:
+            os.environ.pop("MARLIN_API_KEY", None)
 
 
 def test_an_argv_value_carrying_the_key_refuses_to_run():
@@ -404,6 +488,48 @@ def test_rows_are_on_disk_as_they_finish_and_an_interrupt_is_marked():
         assert_clean(blobs, "interrupted run")
 
 
+def test_a_second_ctrl_c_cannot_lose_the_summary():
+    """n5: SIGINT is held for the length of one row write and of the final summary write,
+    so an impatient second Ctrl-C cannot truncate either. Exit is still 130."""
+    import signal as sig
+    state = {"interrupted": False}
+    with bench.sigint_deferred(state):
+        os.kill(os.getpid(), sig.SIGINT)         # would raise KeyboardInterrupt unprotected
+        os.kill(os.getpid(), sig.SIGINT)         # the impatient second one
+        landed = "still running"
+    assert landed == "still running", "the write must complete"
+    assert state["interrupted"] is True, "and the interrupt must not be swallowed"
+    assert sig.getsignal(sig.SIGINT) is sig.default_int_handler, "handler restored"
+
+    # end to end, in a real process: two signals, summary and rows still written
+    with tempfile.TemporaryDirectory() as tmp:
+        clip = os.path.join(tmp, "c.mp4")
+        with open(clip, "wb") as f:
+            f.write(b"\x00\x00\x00 ftypisom" + b"\x01" * 4096)
+        out, raw = os.path.join(tmp, "bench.jsonl"), os.path.join(tmp, "raw.jsonl")
+        env = dict(os.environ, MARLIN_API_KEY=KEY, PYTHONDONTWRITEBYTECODE="1")
+        proc = subprocess.Popen(
+            [sys.executable, os.path.join(os.path.dirname(HERE), "bench.py"), clip,
+             "-c", "1", "-n", "60", "--prompt", "p", "--no-warmup", "--target", "gateway",
+             "--forms", "video_b64", "--out", out, "--raw", raw,
+             "--dry-run-transport", "fake_gateway:transport"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        time.sleep(2.0)
+        proc.send_signal(signal.SIGINT)
+        time.sleep(0.02)
+        proc.send_signal(signal.SIGINT)          # the second one, during the write window
+        stdout, stderr = proc.communicate(timeout=30)
+        assert proc.returncode == 130, (proc.returncode, stderr[-300:])
+        assert os.path.exists(out), "the summary line must exist"
+        summary = json.loads(open(out, encoding="utf-8").read().splitlines()[-1])
+        assert summary["interrupted"] is True and summary["attempts"] >= 1
+        rows = [json.loads(l) for l in open(raw, encoding="utf-8").read().splitlines()]
+        assert len(rows) == summary["attempts"], "every completed row survived"
+        assert_clean({"stdout": stdout, "stderr": stderr,
+                      "out": open(out, encoding="utf-8").read(),
+                      "raw": open(raw, encoding="utf-8").read()}, "double Ctrl-C")
+
+
 def test_redact_is_defense_in_depth_over_any_key_substring():
     """redact() is no longer the guarantee, but it must still catch a key substring
     anywhere (not just a prefix) in a line some future field forgot to allowlist."""
@@ -435,9 +561,11 @@ def test_generative_urls_and_bodies_never_leak_and_always_parse():
             canary = rng.choice([SIG, CRED, TOKEN])
             body_canary = rng.choice([KEY, KEY[rng.randrange(1, 9):], SIG, CRED, TOKEN])
             host = rng.choice(["r3-bucket.invalid", "R3-BUCKET.INVALID", "h.invalid:8443",
-                              f"{'h' * rng.randrange(1, 40)}.invalid"])
+                               f"{HOSTTOK}.trycloudflare.invalid",       # B6: secret host
+                               f"{'h' * rng.randrange(1, 40)}.invalid"])
             userinfo = rng.choice(["", f"u'{canary}@", f"{'u' * rng.randrange(1, 500)}{canary}@"])
             path = rng.choice(["/private/clip.mp4", f"/{canary}/clip.mp4",
+                               f"/v/{BASETOK}.mp4",                      # B6: secret basename
                                f"/{'d/' * rng.randrange(1, 1500)}clip.mp4",
                                f"/clip{noise(3)}.mp4"])
             query = rng.choice(["", f"?sig={canary}", f"?a='{canary}&b=\\{canary}",
@@ -452,7 +580,12 @@ def test_generative_urls_and_bodies_never_leak_and_always_parse():
             elif shape == 2:
                 gw = {"chat_override": raises(httpx.ConnectError, f"connect {url} {body_canary}")}
             else:
-                gw = {"hostile_fields": f"{body_canary}{noise(5)}"}
+                # hostile_fields plants the value in Inference-Id / finish_reason / usage /
+                # Server-Timing. The ruling lets an Inference-Id be any opaque
+                # [A-Za-z0-9-]{1,64}, so a KEY-derived value is what must be suppressed
+                # here (allow() checks the key); see the documented residual in
+                # test_an_opaque_server_id_is_a_documented_residual.
+                gw = {"hostile_fields": f"{rng.choice([KEY, KEY[9:], KEY[1:]])}{noise(5)}"}
             positional = bool(i % 2)
             blobs, summary = run(tmp, "video_url" if positional else "video_b64", positional, gw,
                                  video=url if positional else None)
@@ -461,11 +594,32 @@ def test_generative_urls_and_bodies_never_leak_and_always_parse():
             assert_parses(blobs, why)
             assert summary is not None, (why, blobs["stderr"][:200])
             if positional:
-                # structurally: the fixed literal, or exactly host + "/" + one safe basename
+                # structurally: a digest of the whole URL, plus an allowlisted extension
                 v = summary["video"]
-                assert v == "url-input" or (
-                    v.count("/") == 1 and v.split("/")[0] == host.split(":")[0].lower()
-                    and bench.BASENAME_OK.fullmatch(v.split("/")[1])), (why, v)
+                assert re.fullmatch(r"url-[0-9a-f]{12}(\.(mp4|m4v|webm|mov|mpeg|mpg))?", v), (why, v)
+                assert v == bench.video_label(url), (why, v)
+
+
+def test_an_opaque_server_id_is_a_documented_residual():
+    """The known boundary of the ruling's allowlist, asserted rather than left implicit.
+
+    `Inference-Id` may be any opaque [A-Za-z0-9-]{1,64}, and a request id is
+    indistinguishable from a signature-shaped token, so a gateway that echoes one there
+    HAS it recorded. A key-derived value is still suppressed, and anything outside the
+    pattern still becomes "unrecognized". Recorded in the evidence report under Limits."""
+    with tempfile.TemporaryDirectory() as tmp:
+        with_clips(make_clips(2, tmp))
+        blobs, _ = run(tmp, "video_b64", False, {"extra_headers": {"inference-id": SIG}})
+        rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+        assert all(r["inference_id"] == SIG for r in rows), "documented residual, not a surprise"
+        # but the same value one character outside the pattern, or carrying the key, does not
+        blobs, _ = run(tmp, "video_b64", False, {"extra_headers": {"inference-id": SIG + "/x"}})
+        rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+        assert all(r["inference_id"] == "unrecognized" for r in rows)
+        blobs, _ = run(tmp, "video_b64", False, {"extra_headers": {"inference-id": KEY[9:25]}})
+        rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+        assert all(r["inference_id"] == "unrecognized" for r in rows)
+        assert_clean(blobs, "key body echoed as an Inference-Id")
 
 
 def main():
