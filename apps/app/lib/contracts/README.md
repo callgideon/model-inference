@@ -141,6 +141,26 @@ Suspension gates *new* work only: it never rewrites a ledger entry or a terminal
 accounting that already happened is a fact. Entitlement limit names are a closed provisional set
 (`ENTITLEMENT_LIMIT_NAMES`); an unknown name is `invalid_request`, not an ignored control.
 
+**The three entitlement states, and how U3 must word them (R24).** `model_ids` is deliberately
+nullable, because "nobody has decided" and "decided: nothing" are different facts and rendering them
+the same way is how an operator suspends a tenant by accident:
+
+| `model_ids` | Means | Suggested copy |
+|---|---|---|
+| `null` | The platform default set. No per-organization decision recorded; `updated_at` is null too. | "Platform default models" |
+| `[]` | **Nothing entitled** — every admission fails `model_not_entitled`. A recorded, fail-closed decision. | "No models — all requests will be refused" |
+| `["…"]` | Exactly those models, nothing else. | The list, named |
+
+A list may only name models the platform serves and may not repeat one; `null` and `[]` hash to
+different idempotency payloads, so a key replayed from one to the other is `idempotency_conflict`
+rather than a silent switch. `services.ids.modelId` is a served model id for building against.
+
+**Operator scope is platform-wide in the pilot (R26).** `calibration.label` reaches a trace in *any*
+organization: the operator flag is the authority, the tenant comes from the row the label names, and
+the entry records the operator principal. Contracts v1 has no notion of an operator scoped to a
+subset of organizations — a deliberate pilot decision, not an oversight. If that changes it is a
+contract revision, and `calibration.label`/`calibration.list` are where it lands.
+
 ## C: pass the same tests with the real implementation
 
 `conformance.ts` exports the test bodies, so the real services are held to the fixtures'
@@ -251,6 +271,14 @@ What that means in this directory:
   exist, operator-only, audited and idempotent; ordinary console feedback from an operator session
   stays a customer signal.
 - **R22**: `upload_expired` is a 410 in the union and the status table.
+- **R24**: the `OrgEntitlements` shape is the contract, with `model_ids` `null` = platform default,
+  `[]` = nothing entitled, a list = exactly that set (table above). D1 aligns its schema; the
+  per-model defaults stay in `models.limits`.
+- **R25**: `journal_write_failed` is an internal-only code as well as a `TerminalCause`, so the
+  union is 37 codes: 27 with an HTTP status, 2 in-stream (`IN_STREAM_ONLY_CODES`), 8 internal
+  (`INTERNAL_ONLY_CODES`). The three sets are exported for the G0 parity test and asserted to
+  partition the union exactly.
+- **R26**: platform operators are platform-wide; no org-subset scoping in contracts v1.
 
 ## Known fake-only behaviour
 
@@ -272,6 +300,8 @@ Things U, V and C should not read as contract:
   C will index it; the suite only requires that a non-operator gets `forbidden`.
 - The entitlement limit names, `MAX_RUBRIC_VERSION` and the calibration label vocabulary are
   provisional (R17): they are shaped like the contract, and the numbers are this round's guesses.
+- `KNOWN_MODEL_IDS` is the fixture's model list. C validates entitlements against the real model
+  catalogue instead; only the shape of the check is contract.
 - Row counts, ids and secrets are fixture data: 160 usage rows, the `sk-infrx-FAKE…` secret shape
   and the `fb_<namespace><ordinal>` id shape are all fake-only. The contract is that ids are
   opaque, not how these are built.
@@ -287,6 +317,9 @@ Things U, V and C should not read as contract:
   README omitted (ledger kinds, off-mode trace rows, `TraceMode` superseding 07's `TraceLevel`),
   added the fake-only behaviour section, and restated what the suite proves about pagination now
   that each list is walked at two page sizes. Row counts are unchanged (137 / 117 / 137).
+- 2026-09-20: Rulings R24–R26 applied. Entitlements fail closed with three explicit states and
+  copy guidance for U3, `journal_write_failed` joins the internal-only set (37 codes: 27 / 2 / 8,
+  partition asserted), and platform-wide operator scope is recorded as a deliberate pilot decision.
 - 2026-09-20: Round-4 revision. A created key's secret is shown exactly once and stored nowhere
   (R16); ordinary console feedback is a customer signal whatever the session, and operator labels
   come only from the new `calibration.label` (R19, with `adminSetSuspension` and
