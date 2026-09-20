@@ -9,7 +9,7 @@ Environment=WEIGHTS_ROOT=/opt/dlami/nvme
 Environment=HOME=/home/ubuntu
 # serve.sh runs `docker run --rm` in the foreground, so systemd owns the lifecycle.
 ExecStartPre=-/usr/bin/docker rm -f marlin2b-8000
-ExecStart=/home/ubuntu/model-inference/marlin2b/serve.sh --host 127.0.0.1 --max-num-seqs 32
+ExecStart=/home/ubuntu/model-inference/marlin2b/serve.sh --max-num-seqs 32
 ExecStop=/usr/bin/docker stop marlin2b-8000
 Restart=always
 RestartSec=5

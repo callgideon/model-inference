@@ -18,7 +18,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$here/model.env"
 
 WEIGHTS=${WEIGHTS:-$WEIGHTS_ROOT/$EXP}
-PORT=${PORT:-8000}
+PORT=${PORT:-8000}          # BIND=0.0.0.0 to expose beyond localhost (the gateway fronts it)
 GPU=${GPU:-0}
 IMAGE=${IMAGE:-vllm/vllm-openai:nightly}   # Qwen3.5 needs vLLM main (base model card)
 # 240 frames x 196 tokens per 2-frame temporal patch at 448x448 = ~23.5K video
@@ -29,7 +29,7 @@ MAX_MODEL_LEN=${MAX_MODEL_LEN:-32768}
 test -f "$WEIGHTS/config.json" || { echo "no weights at $WEIGHTS — run ./marlin2b/download.sh" >&2; exit 1; }
 
 exec docker run --rm --name "marlin2b-$PORT" --gpus "\"device=$GPU\"" --ipc=host \
-  -p "$PORT:8000" \
+  -p "${BIND:-127.0.0.1}:$PORT:8000" \
   -v "$WEIGHTS:/model:ro" \
   -e VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL:-INFO}" \
   "$IMAGE" /model \
