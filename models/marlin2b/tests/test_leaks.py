@@ -500,6 +500,20 @@ def test_a_second_ctrl_c_cannot_lose_the_summary():
     assert landed == "still running", "the write must complete"
     assert state["interrupted"] is True, "and the interrupt must not be swallowed"
     assert sig.getsignal(sig.SIGINT) is sig.default_int_handler, "handler restored"
+    # the summary tail asks for the stronger form: SIGINT ignored on the way out, because a
+    # coalesced second signal can still be pending when a handler is restored
+    state = {"interrupted": False}
+    with bench.sigint_deferred(state, ignore_after=True):
+        os.kill(os.getpid(), sig.SIGINT)
+    assert sig.getsignal(sig.SIGINT) == sig.SIG_IGN and state["interrupted"] is True
+    sig.signal(sig.SIGINT, sig.default_int_handler)      # leave the test process as we found it
+    # and an IN-PROCESS run must never change the caller's disposition: only a standalone
+    # CLI run (bench.CLI_PROCESS) may leave SIGINT ignored on its way out.
+    with tempfile.TemporaryDirectory() as t2:
+        with_clips(make_clips(2, t2))
+        run(t2, "video_b64", False, {})
+        assert sig.getsignal(sig.SIGINT) is sig.default_int_handler, \
+            "an embedded run must not leave SIGINT ignored in the host process"
 
     # end to end, in a real process: two signals, summary and rows still written
     with tempfile.TemporaryDirectory() as tmp:

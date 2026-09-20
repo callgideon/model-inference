@@ -61,6 +61,9 @@ PCTS = (50, 90, 95, 99)
 # Upload-flow and handle-reference shapes follow research/plan/01-contracts.md §HTTP
 # behaviour. Nothing has implemented them yet: unverifiable until M3/G4 land.
 UPLOAD_REF_SCHEME = "upload://"
+# Only a standalone CLI run may leave SIGINT ignored after writing its summary; an
+# in-process caller (the tests, any future harness) keeps its own signal disposition.
+CLI_PROCESS = False
 
 
 # ---------------------------------------------------------------- config / auth
@@ -675,14 +678,21 @@ async def _send(client, cfg, item, row, now):
 
 
 @contextlib.contextmanager
-def sigint_deferred(state):
+def sigint_deferred(state, ignore_after=False):
     """Hold SIGINT for the length of one short write.
 
     A Ctrl-C landing between `write()` and `flush()`, or in the middle of the final
     summary, would lose exactly the data the interrupt handling exists to keep — and a
     second, impatient Ctrl-C used to do just that. The signal is recorded in `state` and
-    acted on after the write; the exit code is still 130. Not the main thread (a test
-    harness, say): nothing to defer, the writes are still short."""
+    acted on afterwards; the exit code is still 130. Not the main thread (a test harness,
+    say): nothing to defer, the writes are still short.
+
+    `ignore_after` leaves SIGINT *ignored* on the way out instead of restoring the default
+    handler, and the final summary needs it: CPython coalesces signals into one flag and
+    runs the Python-level callback at the next bytecode check, so a second SIGINT could
+    still be pending when the handler is restored and would then kill the process
+    (measured: exit -2 in 3 of 10 runs) after the summary was already safely written. By
+    then there is nothing left to interrupt but the return of an exit code."""
     try:
         previous = signal.signal(signal.SIGINT, lambda *_: state.__setitem__("interrupted", True))
     except ValueError:
@@ -691,7 +701,7 @@ def sigint_deferred(state):
     try:
         yield
     finally:
-        signal.signal(signal.SIGINT, previous)
+        signal.signal(signal.SIGINT, signal.SIG_IGN if ignore_after else previous)
 
 
 def write_row(cfg, row):
@@ -980,8 +990,9 @@ def _run(argv=None):
     # SIGINT is deferred for the WHOLE tail, not just the write calls: an impatient second
     # Ctrl-C landing between summarize() and the append would have killed the process
     # (observed: exit -2, killed by the signal) with the summary half written. The tail is
-    # bounded work on data already in memory, so holding the signal costs nothing.
-    with sigint_deferred(state):
+    # bounded work on data already in memory, so holding the signal costs nothing, and
+    # ignore_after keeps a coalesced second signal from landing once we are done.
+    with sigint_deferred(state, ignore_after=CLI_PROCESS):
         cfg = state["cfg"]
         if cfg is None:                      # interrupted before the run could start
             print("interrupted before the first request; nothing to summarise", file=sys.stderr)
@@ -1002,4 +1013,5 @@ def _run(argv=None):
 
 
 if __name__ == "__main__":
+    CLI_PROCESS = True
     sys.exit(main())
