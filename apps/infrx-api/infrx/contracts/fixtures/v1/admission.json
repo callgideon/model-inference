@@ -41,6 +41,7 @@
     "schema_version": 1,
     "token_rules_version": "tr_v1"
   },
+  "queue_wait_used_s": 0.0,
   "replayed": false,
   "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
   "reservations": [

@@ -133,6 +133,9 @@ def test_the_fakes_skip_no_conformance_case():
     from infrx.contracts.fakes import FACTORIES
     from infrx.contracts.conformance import OPTIONAL_HOOKS
     for port, factory in FACTORIES.items():
-        provided = set(factory().extra)
+        harness = factory()
+        # `failures` is a Harness field, not an `extra` entry, but it is read through
+        # the same `hook()` helper, so it counts as provided when it is not None.
+        provided = set(harness.extra) | ({"failures"} if harness.failures is not None else set())
         missing = OPTIONAL_HOOKS.get(port, frozenset()) - provided
         assert missing == set(), f"the {port} fake is missing hooks {sorted(missing)}"

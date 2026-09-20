@@ -78,7 +78,9 @@ EXPECTED_ENUMS = {
                          "callback_delivery"],
     records.TraceMode: ["off", "minimal", "full"],
     records.TraceLossReason: ["none", "memory_budget", "metadata_budget", "queue_full",
-                              "disk_budget", "disk_error", "shutdown", "malformed"],
+                              "disk_budget", "disk_error", "shutdown", "malformed",
+                              # r1 R37
+                              "abandoned"],
     records.TraceOfferResult: ["accepted_in_memory", "dropped"],
     records.FeedbackChannel: ["api", "console"],
     records.AuthorRole: ["customer", "operator", "judge"],
@@ -296,6 +298,18 @@ def test_trace_envelope_cannot_claim_complete_content_after_loss():
     with pytest.raises(ValueError):
         records.TraceEnvelope(**{**fixtures.load("trace_envelope.json"),
                                  "loss_reason": "memory_budget"})
+
+
+def test_an_abandoned_capture_is_an_honest_envelope():
+    """r1 R37: a reaped or abandoned capture keeps no content and says why."""
+    raw = fixtures.load("trace_envelope_abandoned.json")
+    envelope = records.TraceEnvelope.model_validate(raw)
+    assert envelope.loss_reason is records.TraceLossReason.abandoned
+    assert envelope.content_bytes == 0 and envelope.content_ref is None
+    assert envelope.content_complete is False and envelope.carries_content is False
+    with pytest.raises(ValueError):          # an abandoned capture is never complete
+        records.TraceEnvelope(**{**raw, "content_complete": True,
+                                 "content_ref": "traces/x.json.zst"})
 
 
 def test_only_full_mode_carries_trace_content():

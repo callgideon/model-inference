@@ -44,12 +44,12 @@ def hook(harness: "Harness", name: str):
 # `MissingHook`. The fakes provide all of them (`test_mutants.py` asserts that).
 OPTIONAL_HOOKS: dict[str, frozenset[str]] = {
     "jobstore": frozenset({"publish", "revoke_key", "unrevoke_key", "suspend_org", "unentitle",
-                           "entitle", "retune", "journal_bytes", "failures"}),
+                           "entitle", "retune", "journal_bytes", "failures", "stream"}),
     "streamstore": frozenset({"jobs", "journal_bytes", "failures"}),
     "mediastore": frozenset({"put_object", "attach"}),
     "scheduler": frozenset({"jobs"}),
     "engine": frozenset({"text"}),
-    "tracesink": frozenset({"queued", "crash", "content_budget"}),
+    "tracesink": frozenset({"queued", "crash", "content_budget", "reap"}),
     "feedback": frozenset({"jobs", "outbox", "audit"}),
     "judge": frozenset({"runs", "available", "set_consent", "revoke_consent", "audit"}),
 }

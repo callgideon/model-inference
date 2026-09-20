@@ -86,8 +86,7 @@ class _Job:
     published: bool = False                  # first committed chunk
     attempts: int = 0                        # prepublication requeues used
     prepared: tuple[MediaRef, ...] = ()
-    queued_at: datetime | None = None         # start of the current queued spell
-    queued_elapsed: timedelta = timedelta(0)  # queue time from earlier spells
+    queued_at: datetime | None = None         # start of the current queued interval
     outcome: TerminalOutcome | None = None
     reservations: dict[ReservationKind, CapacityReservation] = field(default_factory=dict)
     # What the winning worker proposed, so its identical retry replays the
@@ -105,8 +104,13 @@ class _Job:
 
     @property
     def queue_deadline_at(self) -> datetime | None:
-        """r1 R20: set at the first durable `queued` transition, then immutable."""
+        """r1 R20/R38: recomputed at every `queued` transition from the remaining
+        budget, so it moves only ever *closer* in terms of unspent time."""
         return self.admission.queue_deadline_at
+
+    @property
+    def queue_wait_used_s(self) -> float:
+        return self.admission.queue_wait_used_s
 
     def preparing(self) -> bool:
         reservation = self.reservations.get(ReservationKind.preparation)
@@ -141,7 +145,13 @@ class _Journal:
         self.reserved[job_id] = want
         return want
 
-    def store(self, job_id: str, extra: int, *, settling: bool = False) -> None:
+    def check(self, job_id: str, extra: int, *, settling: bool = False) -> None:
+        """Would `store` accept these bytes? Raises exactly what `store` would, without
+        charging anything, so a caller can check before it mutates anything else."""
+        self.store(job_id, extra, settling=settling, dry_run=True)
+
+    def store(self, job_id: str, extra: int, *, settling: bool = False,
+              dry_run: bool = False) -> None:
         """Per-job and global byte limits, both enforced (02, Output section).
 
         `settling=True` is the terminal event of the settling transaction: it is
@@ -164,7 +174,8 @@ class _Journal:
         if self.total() - before + after > self.limits.journal_total_bytes:
             raise errors.JournalCapacityExhausted(
                 f"journal budget cannot fit {extra} more bytes for {job_id}", retry_after_s=30)
-        self.stored[job_id] = stored
+        if not dry_run:
+            self.stored[job_id] = stored
 
     def release_reservation(self, job_id: str) -> None:
         """Terminalization frees the unused reservation; stored bytes keep counting
@@ -434,13 +445,7 @@ class FakeJobStore:
             job.prepared = tuple(media)
             job.state = JobState.queued
             job.queued_at = now
-            if job.queue_deadline_at is None:
-                # r1 R20/R5: derived once, at the first durable queued transition; a
-                # prepublication requeue never moves it, so the queue budget cannot
-                # be extended by losing a worker.
-                job.admission = job.admission.model_copy(update={
-                    "queue_deadline_at": _phase_deadline(now, job.budgets.queue_wait_s,
-                                                         job.request.deadline_at)})
+            self._enter_queued(job, now)
             self._release(job, ReservationKind.preparation)
             self._emit(job.id, OutboxKind.inference_dispatch, now,
                        {"job_handle": job_handle, "request_id": job.id})
@@ -448,10 +453,28 @@ class FakeJobStore:
         self.failures.after_commit("prepared")
         return admission
 
+    def _enter_queued(self, job: _Job, now: datetime) -> None:
+        """r1 R38: entering `queued` recomputes the deadline from what is left of the
+        budget. The remainder never grows, so a prepublication requeue cannot buy queue
+        time, and it never reaches past the absolute deadline."""
+        remaining = max(0.0, job.budgets.queue_wait_s - job.queue_wait_used_s)
+        job.queued_at = now
+        job.admission = job.admission.model_copy(update={
+            "queue_deadline_at": _phase_deadline(now, remaining, job.request.deadline_at)})
+
+    def _leave_queued(self, job: _Job, now: datetime) -> None:
+        """r1 R38: leaving `queued` adds that interval to the used time. Time spent
+        `running` is the generation budget's business, not the queue's."""
+        if job.queued_at is None:
+            return
+        spent = max(0.0, (now - job.queued_at).total_seconds())
+        job.queued_at = None
+        job.admission = job.admission.model_copy(update={
+            "queue_wait_used_s": job.queue_wait_used_s + spent})
+
     def _queue_wait(self, job: _Job, now: datetime) -> timedelta:
-        """r1 R5: cumulative from the first durable `queued` transition. A
-        prepublication requeue keeps the time already spent."""
-        spent = job.queued_elapsed
+        """Cumulative time in `queued`, including the current interval."""
+        spent = timedelta(seconds=job.queue_wait_used_s)
         if job.queued_at is not None:
             spent += now - job.queued_at
         return spent
@@ -473,17 +496,19 @@ class FakeJobStore:
             if job.state is not JobState.queued:
                 raise errors.NotClaimable(f"job {job_id} is {job.state}, not queued")
             if now >= job.request.deadline_at:
+                # Kept deliberately, though `queue_deadline_at` is capped by
+                # `deadline_at` and therefore fires first for every job `prepared` has
+                # queued: a mutation of this line alone is equivalent, and the evidence
+                # says so. It is the guard that still holds if a store ever queues a job
+                # without a queue instant.
                 raise errors.NotClaimable(f"job {job_id} is past its absolute deadline")
             if job.queue_deadline_at is not None and now >= job.queue_deadline_at:
                 # r1 R20: compared against the *persisted* instant, not a budget plus
                 # a local clock. A job the customer has already been told to give up
                 # on must not start running; `recover` terminalizes it meanwhile.
                 raise errors.NotClaimable(f"job {job_id} is past its queue deadline")
-            if job.queued_at is not None:
-                # Queue wait accumulates across attempts; a requeue must not hand
-                # the job a fresh budget (01: no extension through retries).
-                job.queued_elapsed += now - job.queued_at
-                job.queued_at = None
+            # r1 R38: the queue interval that ends here is charged to the used time.
+            self._leave_queued(job, now)
             job.generation += 1                     # generation from the database clock
             job.state = JobState.running
             generation_deadline_at = _phase_deadline(now, job.budgets.generation_s,
@@ -533,6 +558,23 @@ class FakeJobStore:
         if self.clock.now() >= job.lease.expires_at:
             raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")
         self._enforce_deadlines(job)
+        return job
+
+    def _fence_without_deadlines(self, lease: Lease) -> _Job:
+        """Exists for the mutation list: it is `_fence` minus the deadline check, so a
+        single edit can put a store that ignores r1 R29 in front of the cases. Nothing
+        in the fake calls it."""
+        job = self.jobs.get(lease.job_id)
+        if job is None:
+            raise errors.NotFound(f"no job {lease.job_id}")
+        if job.terminal:
+            raise errors.AlreadyTerminal(f"job {job.id} is already {job.state}")
+        if job.state is not JobState.running or job.lease is None:
+            raise errors.StaleLease(f"job {job.id} is {job.state} with no active lease")
+        if job.generation != lease.generation or job.lease.worker_id != lease.worker_id:
+            raise errors.StaleLease("stale lease")
+        if self.clock.now() >= job.lease.expires_at:
+            raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")
         return job
 
     def _enforce_deadlines(self, job: _Job) -> None:
@@ -613,6 +655,13 @@ class FakeJobStore:
         now = self.clock.now()
         hold = self.holds[job.id]
         wallet = self.wallet(job.request.org_id)
+        if self.stream is not None:
+            # r1 R39: every capacity check a settling transaction can fail on happens
+            # **before** any wallet, outcome or reservation mutation. The terminal
+            # journal event is the only one left, so its bytes are checked here: a
+            # `JournalCapacityExhausted` raised halfway through would otherwise leave a
+            # debited ledger with active reservations and no terminal outcome.
+            self.stream.check_terminal_capacity(job)
 
         if usage is None and cause is TerminalCause.completed and not job.published:
             # A delivered success with no authoritative usage and nothing published
@@ -751,7 +800,7 @@ class FakeJobStore:
             job.attempts += 1
             job.state = JobState.queued
             job.lease = None
-            job.queued_at = now
+            self._enter_queued(job, now)          # r1 R38: only the remainder is left
             event = IndexEvent(event_id=self.ids.event_id(), job_id=job.id,
                                org_id=job.request.org_id, key_id=job.request.key_id,
                                execution_mode=job.request.execution_mode, available_at=now,
@@ -885,6 +934,25 @@ class FakeStreamStore:
             raise errors.StateConflict("that is not the committed outcome for this job")
         return self.write_terminal(job, job.outcome)
 
+    def terminal_payload(self, outcome: TerminalOutcome) -> dict:
+        return {"state": outcome.state.value, "cause": outcome.cause.value,
+                "settlement_state": outcome.settlement_state.value}
+
+    def check_terminal_capacity(self, job: _Job) -> None:
+        """r1 R39: can the settling transaction's own journal event be written?
+
+        Asked before anything moves, with the largest payload the outcome could carry,
+        so the answer cannot change between the check and the write.
+        """
+        for chunk in self.chunks.get(job.id, ()):
+            if chunk.event_type is ChunkEventType.terminal:
+                return                                  # already written; nothing to add
+        widest = max(len(compact_bytes({"state": state.value, "cause": cause.value,
+                                        "settlement_state": settlement.value}))
+                     for state in TERMINAL_STATES for cause in (TerminalCause.platform_error,)
+                     for settlement in SettlementState)
+        self.jobs.journal.check(job.id, widest, settling=True)
+
     def write_terminal(self, job: _Job, outcome: TerminalOutcome) -> Chunk:
         """Idempotent and synchronous: it runs inside the settling transaction, whose
         bytes were reserved at admission (`TERMINAL_EVENT_RESERVE_BYTES`), so it is
@@ -901,8 +969,7 @@ class FakeStreamStore:
         sequence = max((chunk.sequence for chunk in stored if chunk.generation == generation),
                        default=0) + 1
         now = self.clock.now()
-        payload = {"state": outcome.state.value, "cause": outcome.cause.value,
-                   "settlement_state": outcome.settlement_state.value}
+        payload = self.terminal_payload(outcome)
         chunk = Chunk(job_id=job.id, generation=generation, sequence=sequence,
                       event_type=ChunkEventType.terminal, payload=payload,
                       bytes=len(compact_bytes(payload)), persisted_at=now,

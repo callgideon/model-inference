@@ -214,6 +214,8 @@ async def media_sec__a_refused_upload_stays_refused(factory):
     else:
         raise AssertionError("an upload was finalized against a digest it does not have")
     for constraints in ({"accepted_mime": "video/mp4"},        # a string is not a list
+                        {"accepted_mime": 5},                   # nor is a number
+                        {"accepted_mime": None},
                         {"maxbytes": 1024},                     # a rule nobody enforces
                         {"digest": "deadbeef"}):
         try:
@@ -251,26 +253,38 @@ async def media_sec__an_expired_upload_window_says_so(factory):
 
 
 async def media_sec__a_partial_request_stages_nothing(factory):
-    """MEDIA-SEC: staging is all or nothing (02: "a staging failure creates no job
-    or hold"). A request whose second media item is refused must not leave its first
-    one behind, or a retry with corrected media would find a half-staged request."""
+    """MEDIA-SEC: staging is all or nothing (02: "a staging failure creates no job or
+    hold"). Whatever refuses the request - an oversize source, another tenant's
+    reference, or an upload handle that cannot be **resolved** - the first item must
+    not be left behind, or a client correcting the bad reference and retrying finds
+    half its request already stored under a handle it can no longer change."""
     harness = factory()
     good = b.media(b.ORG_A, handle="upl_partialfixture00000000000000000000001")
-    oversize = b.media(b.ORG_A, handle="upl_partialfixture00000000000000000000002",
-                       nbytes=DEFAULTS.max_media_bytes + 1)
-    request = b.request(harness, refs=(good, oversize))
-    try:
-        await harness.port.stage(b.ORG_A, request)
-    except errors.RequestTooLarge:
-        pass
-    else:
-        raise AssertionError("an oversize source was staged")
-    try:
-        await harness.port.resolve_owned(b.ORG_A, good.handle)
-    except errors.NotFound:
-        pass
-    else:
-        raise AssertionError("a refused request left its first media item staged")
+    refusals = (
+        b.media(b.ORG_A, handle="upl_partialfixture00000000000000000000002",
+                nbytes=DEFAULTS.max_media_bytes + 1),                 # oversize
+        b.media(b.ORG_B, handle="upl_partialfixture00000000000000000000003"),  # not ours
+        b.media(b.ORG_A, handle="upl_partialfixture00000000000000000000004",
+                kind=MediaKind.upload),                               # unresolvable upload
+    )
+    for n, bad in enumerate(refusals):
+        request = b.request(harness, refs=(good, bad))
+        try:
+            await harness.port.stage(b.ORG_A, request)
+        except errors.DomainError as exc:
+            assert errors.http_status(exc.code) in (400, 403, 404, 409, 413), exc.code
+        else:
+            raise AssertionError(f"refusal {n} was staged anyway")
+        try:
+            await harness.port.resolve_owned(b.ORG_A, good.handle)
+        except errors.NotFound:
+            pass
+        else:
+            raise AssertionError(f"refusal {n} left the first media item staged")
+    # and the corrected retry stages cleanly
+    staged = await harness.port.stage(b.ORG_A, b.request(harness, refs=(good,)))
+    assert staged[0].handle == good.handle
+    assert await harness.port.resolve_owned(b.ORG_A, good.handle) == staged[0]
 
 
 def mediastore_cases():
@@ -305,6 +319,29 @@ async def dur_outbox__enqueue_is_replay_safe(factory):
     first = await harness.port.claim_candidate("worker-a")
     assert first is not None and first.event_id == event.event_id
     assert await harness.port.claim_candidate("worker-b") is None
+
+
+async def dur_outbox__a_claimed_candidate_is_not_re_indexed(factory):
+    """DUR-OUTBOX: at-least-once delivery means the same event id arrives again while
+    the first copy is **in flight**. Re-indexing it would hand one job to two workers at
+    once; they would both race `JobStore.claim`, and one would always have done its
+    preparation for nothing."""
+    harness = factory()
+    event = _index_event(harness)
+    assert await harness.port.enqueue(event) is True
+    claimed = await harness.port.claim_candidate("worker-a")
+    assert claimed is not None and claimed.event_id == event.event_id
+    assert await harness.port.enqueue(event) is False, "a claimed event was re-indexed"
+    assert await harness.port.claim_candidate("worker-b") is None, \
+        "the same candidate was handed to two workers"
+    # after the visibility timeout it is one candidate again, not two
+    harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
+    again = await harness.port.claim_candidate("worker-b")
+    assert again is not None and again.event_id == event.event_id
+    assert await harness.port.claim_candidate("worker-c") is None
+    await harness.port.acknowledge(again)
+    assert await harness.port.enqueue(event) is False        # and never after the ack
+    assert await harness.port.claim_candidate("worker-c") is None
 
 
 async def dur_outbox__the_index_never_authorizes_execution(factory):
@@ -380,6 +417,7 @@ async def dur_outbox__rebuild_restores_every_queued_job_exactly_once(factory):
 
 def scheduler_cases():
     return [dur_outbox__enqueue_is_replay_safe,
+            dur_outbox__a_claimed_candidate_is_not_re_indexed,
             dur_outbox__the_index_never_authorizes_execution,
             dur_outbox__acknowledged_candidates_do_not_come_back,
             dur_outbox__a_lost_worker_returns_its_candidate,
@@ -607,13 +645,18 @@ async def trace_bounds__off_mode_produces_no_trace_at_all(factory):
     stats = await harness.port.stats()
     assert stats["accepted"] == 0 and stats["in_memory"] == 0
     assert stats["loss_reasons"]["malformed"] == 1
-    # nor does an off-mode request open a content capture
-    try:
-        harness.port.open(harness.ids.uuid(), b.ORG_A, TraceMode.off)
-    except errors.DomainError:
-        pass
-    else:
-        raise AssertionError("an off-mode request opened a content capture")
+    # r1 R37: an off-mode (or minimal) request gets a **no-op** capture rather than an
+    # exception - the trace path may never raise into the request path, and G needs no
+    # branch on the mode. It keeps nothing and charges nothing.
+    for mode in (TraceMode.off, TraceMode.minimal):
+        request_id = harness.ids.uuid()
+        capture = harness.port.open(request_id, b.ORG_A, mode)
+        assert capture.add("content that must never be kept") is False
+        with capture:
+            pass
+        stats = await harness.port.stats()
+        assert stats["in_memory"] == 0 and stats["in_memory_content_bytes"] == 0
+        assert stats["accepted"] == 0
 
 
 async def trace_bounds__concurrent_captures_share_one_budget(factory):
@@ -660,18 +703,22 @@ async def trace_bounds__an_abandoned_capture_releases_its_bytes(factory):
     """TRACE-BOUNDS / r1 R27: a request that dies mid-capture must not hold capture
     budget for the rest of the process's life. `abandon` releases the bytes and counts
     the loss, and the freed budget is usable by the next request."""
-    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=3_000,
+    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=5_000,
                                               trace_metadata_reserve_bytes=1_000))
     doomed_id = harness.ids.uuid()
     doomed = harness.port.open(doomed_id, b.ORG_A, TraceMode.full)
     assert doomed.add("y" * 2_000) is True
     assert (await harness.port.stats())["in_memory_content_bytes"] == 2_000
-    await doomed.abandon(TraceLossReason.shutdown)
+    await doomed.abandon(TraceLossReason.abandoned)
     stats = await harness.port.stats()
     assert stats["in_memory_content_bytes"] == 0
     assert stats["in_memory"] == 0 and stats["accepted"] == 0
-    assert stats["loss_reasons"]["shutdown"] == 1
+    assert stats["loss_reasons"]["abandoned"] == 1
     assert stats["open_captures"] == 0
+    # r1 R37: idempotent, and it never raises - releasing twice releases once
+    await doomed.abandon(TraceLossReason.abandoned)
+    assert (await harness.port.stats())["loss_reasons"]["abandoned"] == 1
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 0
     # the whole budget is available again, and a finished capture is not abandonable
     survivor_id = harness.ids.uuid()
     survivor = harness.port.open(survivor_id, b.ORG_A, TraceMode.full)
@@ -679,13 +726,18 @@ async def trace_bounds__an_abandoned_capture_releases_its_bytes(factory):
     await survivor.finish(b.trace(survivor_id, content_bytes=2_000, metadata_bytes=16,
                                   harness=harness))
     assert (await harness.port.stats())["in_memory_content_bytes"] == 2_000
-    try:
-        await survivor.finish(b.trace(survivor_id, content_bytes=1, metadata_bytes=1,
-                                      harness=harness))
-    except errors.DomainError:
-        pass
-    else:
-        raise AssertionError("a capture was finished twice")
+    # r1 R37: finishing twice queues one record, and raises nothing
+    assert await survivor.finish(b.trace(survivor_id, content_bytes=2_000, metadata_bytes=16,
+                                         harness=harness)) is TraceOfferResult.accepted_in_memory
+    stats = await harness.port.stats()
+    assert stats["in_memory"] == 1 and stats["in_memory_content_bytes"] == 2_000
+
+    # a capture used as a context manager abandons itself if the request dies first
+    with harness.port.open(harness.ids.uuid(), b.ORG_A, TraceMode.full) as dying:
+        assert dying.add("y" * 500) is True
+        assert (await harness.port.stats())["in_memory_content_bytes"] == 2_500
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 2_000
+    assert (await harness.port.stats())["open_captures"] == 0
 
 
 async def trace_bounds__a_capture_belongs_to_its_own_request(factory):
@@ -695,15 +747,19 @@ async def trace_bounds__a_capture_belongs_to_its_own_request(factory):
     own_id = harness.ids.uuid()
     capture = harness.port.open(own_id, b.ORG_A, TraceMode.full)
     assert capture.add("some content") is True
-    for foreign in (b.trace(harness.ids.uuid(), content_bytes=12, harness=harness),
-                    b.trace(own_id, org_id=b.ORG_B, content_bytes=12, harness=harness)):
-        try:
-            await capture.finish(foreign)
-        except errors.DomainError:
-            pass
-        else:
-            raise AssertionError("a capture accepted another request's envelope")
-    assert (await harness.port.stats())["in_memory"] == 0
+    # r1 R37: refused *and counted*, never raised - a trace bug may not become the
+    # request's error. The capture's bytes are released either way.
+    foreign = b.trace(harness.ids.uuid(), content_bytes=12, harness=harness)
+    assert await capture.finish(foreign) is TraceOfferResult.dropped
+    stats = await harness.port.stats()
+    assert stats["in_memory"] == 0 and stats["in_memory_content_bytes"] == 0
+    assert stats["loss_reasons"]["malformed"] >= 1
+    other_tenant = harness.port.open(own_id, b.ORG_A, TraceMode.full)
+    assert other_tenant.add("some content") is True
+    assert await other_tenant.finish(
+        b.trace(own_id, org_id=b.ORG_B, content_bytes=12, harness=harness)) \
+        is TraceOfferResult.dropped
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 0
 
 
 async def trace_bounds__minimal_mode_never_carries_content(factory):
@@ -740,12 +796,109 @@ async def trace_bounds__minimal_mode_never_carries_content(factory):
     assert hook(harness, "queued")()[-1].content_ref is None
 
 
+async def trace_bounds__a_flush_leaves_open_captures_alone(factory):
+    """TRACE-BOUNDS / r1 R27: flushing the queue must not zero the bytes of captures
+    that are still **accumulating**. A sink that reset the counter would let every
+    in-flight capture spend the whole budget again, and the process would overrun the
+    memory bound it exists to enforce."""
+    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=5_000,
+                                              trace_metadata_reserve_bytes=1_000))
+    budget = hook(harness, "content_budget")()          # 4,000
+    open_id = harness.ids.uuid()
+    still_open = harness.port.open(open_id, b.ORG_A, TraceMode.full)
+    assert still_open.add("o" * 3_000) is True
+    finished_id = harness.ids.uuid()
+    finished = harness.port.open(finished_id, b.ORG_A, TraceMode.full)
+    assert finished.add("f" * 1_000) is True
+    await finished.finish(b.trace(finished_id, content_bytes=1_000, metadata_bytes=16,
+                                  harness=harness))
+    assert (await harness.port.stats())["in_memory_content_bytes"] == budget
+
+    stats = await harness.port.flush(harness.clock.now())
+    assert stats["appended"] == 1 and stats["in_memory"] == 0
+    assert stats["in_memory_content_bytes"] == 3_000, \
+        "the flush released bytes a capture is still accumulating"
+    assert stats["open_captures"] == 1
+    # so the budget is still honoured for the next request
+    late = harness.port.open(harness.ids.uuid(), b.ORG_A, TraceMode.full)
+    assert late.add("l" * 1_000) is True             # exactly fills it
+    assert (await harness.port.stats())["in_memory_content_bytes"] == budget
+    assert late.add("x") is False                    # and one byte more is a breach,
+    # which discards that capture's whole content, releasing its 1,000 bytes
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 3_000
+    await still_open.abandon(TraceLossReason.abandoned)
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 0
+
+
+async def trace_bounds__a_dropped_finish_releases_its_charge(factory):
+    """TRACE-BOUNDS: a capture whose `finish` is dropped - the queue is full, or the
+    metadata reserve is gone - must release the bytes it had charged. Keeping them
+    would leak the whole budget away one dropped record at a time, and the sink would
+    stop capturing anything with nothing queued to show for it."""
+    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=9_000,
+                                              trace_metadata_reserve_bytes=1_000,
+                                              trace_queue_max=1))
+    first_id = harness.ids.uuid()
+    first = harness.port.open(first_id, b.ORG_A, TraceMode.full)
+    assert first.add("a" * 1_000) is True
+    await first.finish(b.trace(first_id, content_bytes=1_000, metadata_bytes=16,
+                               harness=harness))
+    assert (await harness.port.stats())["in_memory"] == 1        # the queue is now full
+    dropped_id = harness.ids.uuid()
+    dropped = harness.port.open(dropped_id, b.ORG_A, TraceMode.full)
+    assert dropped.add("b" * 2_000) is True
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 3_000
+    result = await dropped.finish(b.trace(dropped_id, content_bytes=2_000, metadata_bytes=16,
+                                          harness=harness))
+    assert result is TraceOfferResult.dropped
+    stats = await harness.port.stats()
+    assert stats["loss_reasons"]["queue_full"] == 1
+    assert stats["in_memory_content_bytes"] == 1_000, \
+        "a dropped record kept its charge on the budget"
+    assert stats["in_memory"] == 1
+
+
+async def trace_bounds__an_open_capture_past_its_deadline_is_reaped(factory):
+    """TRACE-BOUNDS / r1 R37: a request that dies without its `finally` running - a
+    killed process, a connection lost mid-stream - would hold capture budget until the
+    process restarted. The sink reaps captures still open past the job's `deadline_at`
+    plus a grace period, releases their bytes and counts them `abandoned`."""
+    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=3_000,
+                                              trace_metadata_reserve_bytes=1_000))
+    reap = hook(harness, "reap")
+    deadline = harness.clock.at(100)
+    lost = harness.port.open(harness.ids.uuid(), b.ORG_A, TraceMode.full, deadline)
+    assert lost.add("z" * 1_900) is True
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 1_900
+    assert reap() == 0                              # inside its deadline: left alone
+    harness.clock.advance(120)
+    assert reap() == 0, "reaped before the grace period"
+    harness.clock.advance(60)
+    assert reap() == 1
+    stats = await harness.port.stats()
+    assert stats["in_memory_content_bytes"] == 0 and stats["open_captures"] == 0
+    assert stats["loss_reasons"]["abandoned"] == 1
+    assert reap() == 0                              # idempotent
+    # the freed budget is usable, and the reaped capture keeps nothing
+    survivor = harness.port.open(harness.ids.uuid(), b.ORG_A, TraceMode.full, deadline)
+    assert survivor.add("w" * 1_900) is True
+    assert lost.add("more") is False
+    # a crash while captures are open must not drive the counters negative
+    crash = hook(harness, "crash")
+    crash()
+    await survivor.abandon(TraceLossReason.abandoned)
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 0
+
+
 def tracesink_cases():
     return [trace_bounds__an_accepted_offer_is_in_memory_only,
             trace_bounds__minimal_mode_never_carries_content,
             trace_bounds__concurrent_captures_share_one_budget,
             trace_bounds__an_abandoned_capture_releases_its_bytes,
             trace_bounds__a_capture_belongs_to_its_own_request,
+            trace_bounds__a_flush_leaves_open_captures_alone,
+            trace_bounds__a_dropped_finish_releases_its_charge,
+            trace_bounds__an_open_capture_past_its_deadline_is_reaped,
             trace_bounds__a_content_budget_breach_discards_the_whole_content,
             trace_bounds__metadata_exhaustion_drops_with_counters,
             trace_bounds__a_full_queue_drops_and_inference_continues,
@@ -945,10 +1098,21 @@ async def feedback_ack__an_operator_may_label_a_calibration_set(factory):
             pass
         else:
             raise AssertionError(f"label {bad_label!r} with key {bad_idem.key!r} was accepted")
+    # r1 R26: platform-wide. An operator whose own session names another organization
+    # still labels this row, and the label belongs to the *row's* tenant - a store
+    # using `auth.org_id` would file it under the operator's org, where the customer
+    # who owns the trace could never see it and the calibration set would be split.
+    foreign_operator = b.auth(org_id=b.ORG_B, key_id=b.KEY_B, role=Role.operator)
+    cross = await harness.port.label_calibration(
+        foreign_operator, request.request_id, "golden",
+        b.idem(request, "cal-cross", operation="calibration.label"))
+    assert cross.org_id == request.org_id, "the label was filed under the operator's org"
+    assert cross.author_role is AuthorRole.operator and cross.calibration_set == "golden"
     entries = [entry for entry in hook(harness, "audit")()
                if entry.get("event") == "label_calibration"]
-    assert len(entries) == 1 and entries[0]["label"] == "golden"
+    assert len(entries) == 2 and {entry["label"] for entry in entries} == {"golden"}
     assert entries[0]["operator"] == b.auth(role=Role.operator).principal
+    assert all(entry["org_id"] == request.org_id for entry in entries)
 
 
 def feedback_cases():
@@ -1328,6 +1492,36 @@ async def judge_budget__an_ambiguous_run_is_resolved_only_by_an_operator(factory
     assert events.count("resolve_ambiguous") == 2 and "quarantine" in events
 
 
+async def judge_budget__an_ambiguous_run_cannot_be_settled_directly(factory):
+    """JUDGE-BUDGET / r1 R8: an ambiguous run is resolved by an operator through
+    `resolve_ambiguous`, never by settling it. Allowing `settle` here would let an
+    automatic collector close a run whose provider batch nobody has confirmed - paying
+    for evidence that may not exist, with no audit record and no operator."""
+    harness = factory(judge_mode="live", budget="1.00")
+    available, runs = hook(harness, "available"), hook(harness, "runs")
+    run = await harness.port.reserve(_run(harness), b.consent(), Decimal("0.40"))
+    await harness.port.begin_submit(run.run_id)
+    await harness.port.quarantine(run.run_id, "no provider id before the timeout")
+    assert runs()[run.run_id].state is JudgeRunState.ambiguous
+    before = available()
+    for amount in (Decimal("0.10"), Decimal("0.40"), Decimal("0")):
+        try:
+            await harness.port.settle(run.run_id, amount)
+        except errors.DomainError as exc:
+            assert exc.code in ("state_conflict", "budget_exceeded"), exc.code
+        else:
+            raise AssertionError("an ambiguous run was settled without an operator")
+        assert available() == before, "a refused settlement moved the budget"
+        assert runs()[run.run_id].state is JudgeRunState.ambiguous
+    # the operator path still works, and only then can it settle
+    adopted = await harness.port.resolve_ambiguous(
+        run.run_id, b.auth(role=Role.operator), JudgeResolution.adopt_provider_evidence,
+        "found it in the provider console", external_id="batch_placeholder_5")
+    assert adopted.state is JudgeRunState.collecting
+    settled = await harness.port.settle(run.run_id, Decimal("0.10"))
+    assert settled.state is JudgeRunState.settled and settled.actual_cost == Decimal("0.10")
+
+
 async def judge_budget__a_settled_run_is_closed(factory):
     """JUDGE-BUDGET: terminal states are sticky. Quarantining a settled run would
     put its money back among the outstanding reservations and erase the settlement
@@ -1358,6 +1552,7 @@ def judge_cases():
             judge_budget__an_ambiguous_run_is_resolved_only_by_an_operator,
             judge_budget__settlement_cannot_exceed_the_reservation,
             judge_budget__settlement_amounts_are_validated_money,
+            judge_budget__an_ambiguous_run_cannot_be_settled_directly,
             judge_budget__a_settled_run_is_closed,
             judge_budget__consent_revoked_while_submitting_holds_the_reservation,
             judge_budget__a_run_and_its_consent_belong_to_one_org,

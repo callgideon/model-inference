@@ -77,8 +77,11 @@ def _job_hooks(jobs: FakeJobStore, stream: FakeStreamStore | None = None) -> dic
 def jobstore_factory(limits: PilotSettings | None = None, **_: object) -> Harness:
     jobs, clock, ids, failures = _jobstore(limits)
     stream = FakeStreamStore(jobs, failures=failures)
-    return Harness(port=jobs, clock=clock, ids=ids, failures=failures,
-                   extra=_job_hooks(jobs, stream))
+    hooks = _job_hooks(jobs, stream)
+    # The journal half of the same store, for the cases that must prove a rule holds
+    # for `append` as well as for the JobStore's own operations.
+    hooks["stream"] = stream
+    return Harness(port=jobs, clock=clock, ids=ids, failures=failures, extra=hooks)
 
 
 def streamstore_factory(limits: PilotSettings | None = None, **_: object) -> Harness:
@@ -118,7 +121,9 @@ def tracesink_factory(limits: PilotSettings | None = None, **_: object) -> Harne
     sink = FakeTraceSink(clock, limits=limits or DEFAULTS, failures=failures)
     return Harness(port=sink, clock=clock, ids=ids, failures=failures,
                    extra={"queued": lambda: list(sink.queued), "crash": sink.crash,
-                          "content_budget": lambda: sink.content_budget})
+                          "content_budget": lambda: sink.content_budget,
+                          # r1 R37: the reaper a real sink runs on a timer
+                          "reap": sink.reap})
 
 
 def feedback_factory(limits: PilotSettings | None = None, *,

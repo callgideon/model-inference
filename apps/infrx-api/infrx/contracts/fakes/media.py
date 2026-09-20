@@ -60,15 +60,22 @@ class FakeMediaStore:
 
     # --- port ---------------------------------------------------------------
     async def stage(self, org_id: str, request: NormalizedRequest) -> tuple[MediaRef, ...]:
-        """Durable, immutable staging before acceptance. The storage key is built
-        from the tenant, the source digest and the profile version; the caller has
-        no say in it."""
+        """Durable, immutable staging before acceptance. The storage key is built from
+        the tenant, the source digest and the profile version; the caller has no say
+        in it.
+
+        All or nothing (02: "a staging failure creates no job or hold"): every
+        reference is validated **and resolved** first, the objects to write are
+        prepared in memory, and only then does anything become visible. An upload that
+        cannot be resolved therefore leaves no inline sibling staged behind, so a
+        client that corrects the bad reference and retries does not find half its
+        request already stored under a handle it can no longer change.
+        """
         self.failures.before("stage")
         if request.org_id != org_id:
             raise errors.Forbidden("a request may only be staged for its own org")
-        # Validate every reference before storing any of them: a request whose
-        # second media item is oversize must leave nothing staged behind (02: "a
-        # staging failure creates no job or hold").
+        resolved: list[MediaRef] = []
+        pending: dict[tuple[str, str], MediaRef] = {}
         for ref in request.media:
             if ref.org_id != org_id:
                 raise errors.NotFound("media reference does not belong to this org")
@@ -76,30 +83,29 @@ class FakeMediaStore:
                 raise errors.RequestTooLarge(
                     f"{ref.bytes} bytes exceeds MAX_MEDIA_BYTES {self.limits.max_media_bytes}")
             existing = self.objects.get((org_id, ref.handle))
-            if (existing is not None and ref.kind is not MediaKind.upload
-                    and existing.digest != ref.digest):
-                raise errors.Conflict(
-                    f"media handle {ref.handle} already holds different content")
-        staged = []
-        for ref in request.media:
             if ref.kind is MediaKind.upload:
-                resolved = await self.resolve_owned(org_id, ref.handle)
-                if resolved.digest != ref.digest:
+                # Resolution can fail (unknown handle, unfinalized upload, digest
+                # mismatch), so it belongs in this pass, before anything is written.
+                owned = await self.resolve_owned(org_id, ref.handle)
+                if owned.digest != ref.digest:
                     raise errors.UnsupportedMedia("upload digest does not match the reference")
-                staged.append(resolved)
+                resolved.append(owned)
                 continue
-            existing = self.objects.get((org_id, ref.handle))
             if existing is not None:
-                # Staged and finalized content is immutable: the same handle keeps
-                # the object it already has (different content was refused above,
-                # before anything was stored).
-                staged.append(existing)
+                # Staged and finalized content is immutable: the same handle keeps the
+                # object it already has, and different content is a conflict.
+                if existing.digest != ref.digest:
+                    raise errors.Conflict(
+                        f"media handle {ref.handle} already holds different content")
+                resolved.append(existing)
                 continue
             stored = ref.model_copy(update={
                 "storage_ref": self._key(org_id, ref.digest, ref.profile_version, "source")})
-            self.objects[(org_id, stored.handle)] = stored
-            staged.append(stored)
-        return tuple(staged)
+            pending[(org_id, stored.handle)] = stored
+            resolved.append(stored)
+        # One visible step: nothing above wrote to `self.objects`.
+        self.objects.update(pending)
+        return tuple(resolved)
 
     @staticmethod
     def _key(org_id: str, digest: str, profile_version: str, part: str) -> str:
@@ -136,6 +142,9 @@ class FakeMediaStore:
             # nobody enforces; silently ignoring it is how a limit goes missing.
             raise errors.InvalidRequest(f"unknown upload constraints: {sorted(unknown)}")
         raw_mimes = constraints.get("accepted_mime", ("video/mp4",))
+        if not isinstance(raw_mimes, (list, tuple, set, frozenset, str, bytes)):
+            # `5` is not an allow-list; `tuple(5)` would be a TypeError out of a port.
+            raise errors.InvalidRequest("accepted_mime must be a list of media types")
         if isinstance(raw_mimes, (str, bytes)):
             # `tuple("video/mp4")` is a tuple of characters, which would accept nothing
             # and look like an allow-list. A single type must be a one-item list.

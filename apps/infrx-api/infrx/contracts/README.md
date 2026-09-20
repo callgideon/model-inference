@@ -110,6 +110,9 @@ suite against the real service means integrated.
 | R29 deadlines bind mutations | `_enforce_deadlines` runs inside `_fence` (so `heartbeat`, `append` and `complete` all pass through it) and inside `prepared`: past the persisted instant the store terminalizes the job in that same operation (`preparation_failed` past the preparation instant, `deadline_exceeded` past generation or `deadline_at`) and the call fails `already_terminal`. `recover` also reaps a preparation that never returns. Leases are renewed from the **stored** lease. `admit` refuses a `deadline_at` in the past or beyond `accepted_at + preparation + queue + generation`. |
 | R30 terminal integrity | `append` refuses `terminal` events; the terminal chunk is derived from the stored outcome, with one idempotency guard in `write_terminal`; `finalize_in_transaction` treats its argument as a lookup key and refuses an outcome that is not the committed one; an expired journal answers `journal_expired` instead of minting a new chunk; `complete(succeeded)` requires `result_ref`. The settling event's bytes are held back from the job's reservation (`TERMINAL_EVENT_RESERVE_BYTES`), so it is checked against the byte limits rather than bypassing them. |
 | R31 feedback provenance | `accept` always records `author_role=customer` on either channel and refuses `calibration_set` outright; `label_calibration(auth, request, label, idem)` is the only operator path - operator only, platform-wide (the tenant comes from the labelled row, R26), idempotent and audited. `judge` authorship only through J's projection. |
+| R37 capture lifecycle | Nothing in the trace path raises into the request path: `open` for `off`/`minimal` returns a **no-op capture** (`add` False, `finish` keeps nothing), `finish`/`abandon` are idempotent, a mismatched envelope is dropped and counted rather than raised, and `TraceCapture` is a context manager whose exit abandons an unfinished capture (G uses it in `finally`). `add` is synchronous, O(1) and touches no disk. `TraceSink.reap(grace_s)` releases the bytes of captures still open past the job's `deadline_at` plus a grace period and counts them under the new `TraceLossReason.abandoned`. A crash plus a late `abandon` cannot drive the byte counter negative. |
+| R38 queue wait is time queued | The queue budget is cumulative time **in** `queued`. `Admission.queue_wait_used_s` is persisted; entering `queued` sets `queue_deadline_at = min(now + budget − used, deadline_at)`, leaving it adds the interval to `used`. Time spent `running` belongs to the generation budget, so an interactive job can still be retried after a lease loss within its absolute deadline - which is why the three retry cases no longer need a widened queue budget. |
+| R39 terminalize-then-refuse | `_terminalize` asks `check_terminal_capacity` **before** any wallet, outcome or reservation mutation, so a `JournalCapacityExhausted` can never leave a debited ledger with active reservations. For D: when R29 makes an operation terminalize and then refuse the caller, **commit the terminalization and return the typed refusal**; do not raise inside the transaction that would roll it back. The refusal is information, the terminalization is the fact. |
 | R32 conformance strength | `tests/contracts/mutants.py` declares 132 single-edit mutants, one or more per invariant a case names; `test_mutants.py` runs a subset in the default suite and `make api-mutants` runs all of them, each against a copy of the package in a temporary directory. A surviving mutant fails the suite, and `test_every_case_is_covered_by_a_mutant` refuses a case no mutant can break. Optional-hook skips raise `MissingHook`, which pytest reports as a skip naming the hook; `run_cases` refuses to call one a pass. |
 | R23 `resolve_ambiguous` shape | `external_id` stays a keyword: required for `adopt_provider_evidence`, `invalid_request` for `release_reservation`. Releasing a reservation while naming a batch would discard the one fact that says the batch may still be running. |
 
@@ -206,18 +209,28 @@ revision r1, so the schema has to carry them:
 |---|---|---|
 | `Admission` (the job row) | `budgets` (`preparation_s`, `queue_wait_s`, `generation_s`, `first_token_s`, `stall_s`) | R4: captured once at admission; never re-read from configuration. Five numerics or one JSON column, but immutable after insert. |
 | `Admission` | `preparation_deadline_at`, `queue_deadline_at` | R20: timestamps from the database clock, `queue_deadline_at` nullable until the first `queued` transition and immutable afterwards. Both `<= deadline_at`. |
+| `Admission` | `queue_wait_used_s` | R38: seconds spent in `queued`, updated when the job leaves `queued`; `queue_deadline_at` is recomputed from it at every `queued` transition. |
 | `Lease` (the attempt row) | `generation_deadline_at`, `first_token_deadline_at` | R20: written at claim with the generation; `first_token_deadline_at <= generation_deadline_at`. Renewal reads the stored row: a worker's copy is a fencing token (R29). |
 | `Feedback` | `calibration_set` is written only by `label_calibration` | R31: `accept` never sets it and always stores `author_role=customer`; the operator path needs its own idempotency scope and audit row. |
 | `Feedback` | `name`, `value`, `comment` replace `rating` and `correction` | R3: one signal per row, `name` fixing the value's type, as `research/traces/06` §2 §1's `scores` table does (`value_bool`/`value_num`/`value_text` or a checked variant column). |
 | `TerminalOutcome` | no new field, but `BILLABLE_CAUSES` changed | R21: `sync_deadline`, `deadline_exceeded` and `queue_wait_expired` never carry a debit, and `held_unknown` now also covers `lost_after_publication`. Historical rows are outside the new settlement regime (02) and must not be replayed into debits. |
 | error codes | `upload_expired` | R22: a new 410 code the gateway must map; nothing persisted changes. |
 
+**G derives the deadline.** `admit` refuses a `deadline_at` that is in the past or
+beyond `accepted_at + preparation + queue + generation` (R29), so G computes the
+deadline it sends from the budgets rather than picking a round number, and a client
+cannot ask for a longer one.
+
 **T1 also changes shape.** `TraceSink` is no longer offer-only: T implements
 `open() -> TraceCapture` with `add`/`finish`/`abandon` (R27). Bytes are charged while
 content accumulates, against a budget shared by every open capture, and `add` is
 synchronous because it runs on the request path. The spool writer therefore needs a
 per-capture accumulator, not just a queue of finished envelopes. `offer` remains for
-metadata-only envelopes and must never raise into the request path.
+metadata-only envelopes and must never raise into the request path. Per R37 the
+capture is a context manager (G calls it in `finally`), `open` on an `off`/`minimal`
+request returns a no-op capture so no caller branches on the mode, `finish`/`abandon`
+are idempotent, and the sink runs `reap` on a timer to release the bytes of captures
+whose request died without closing them (`TraceLossReason.abandoned`).
 
 ## Amendment requests to the coordinator
 

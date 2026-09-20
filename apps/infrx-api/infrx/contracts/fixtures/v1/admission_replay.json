@@ -42,6 +42,7 @@
     "token_rules_version": "tr_v1"
   },
   "queue_deadline_at": "2026-09-20T12:00:11Z",
+  "queue_wait_used_s": 1.0,
   "replayed": true,
   "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
   "reservations": [

@@ -56,6 +56,7 @@ MODELS: dict[str, type[BaseModel]] = {
     "terminal_unknown_usage.json": records.TerminalOutcome,
     "trace_envelope.json": records.TraceEnvelope,
     "trace_envelope_lossy.json": records.TraceEnvelope,
+    "trace_envelope_abandoned.json": records.TraceEnvelope,
     "feedback.json": records.Feedback,
     # wire
     "chat_stream_interrupted_sse.json": wire.SseTranscript,

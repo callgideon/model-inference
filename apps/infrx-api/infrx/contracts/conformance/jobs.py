@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from decimal import Decimal
 
 from .. import errors, money
 from ..limits import DEFAULTS
@@ -144,6 +145,36 @@ async def dur_admit__expired_mapping_is_explicit_never_a_second_billable_job(fac
     else:
         raise AssertionError("an expired key silently admitted a new job")
     assert len(harness.extra["active_jobs"]()) == 0
+
+
+async def dur_admit__the_tombstone_ttl_runs_from_the_terminal_state(factory):
+    """DUR-ADMIT (01: "retain mappings/tombstones at least 24h **after terminal
+    state**"): the clock starts when the job ends, not when it was admitted. A store
+    measuring from `admitted_at` would drop the mapping of a long job the moment it
+    finished, and the client's retry would buy a second billable job."""
+    harness = factory(limits=DEFAULTS.replace(queue_wait_interactive_s=300,
+                                              generation_timeout_s=300,
+                                              lease_ttl_s=10_000, lease_heartbeat_s=1_000))
+    request, admission = await _admit(harness, deadline_s=700)
+    await harness.port.prepared(admission.job_handle, ())
+    lease = await harness.port.claim(request.request_id, "worker-a")
+    harness.clock.advance(250)                     # a long, honest attempt
+    await harness.port.complete(lease, b.outcome(request.request_id, harness,
+                                                 tokens=b.usage(1200, 340)))
+    # 86,350s after *terminal* is still inside the 24h tombstone, though it is well
+    # past 24h since admission
+    harness.clock.advance(DEFAULTS.idempotency_ttl_s - 50)
+    replay = await harness.port.admit(request, b.idem(request, "idem-1"), (),
+                                      b.hold_for(request))
+    assert replay.replayed is True and replay.job_handle == admission.job_handle
+    assert len(harness.extra["active_jobs"]()) == 0
+    harness.clock.advance(100)                     # now past it
+    try:
+        await harness.port.admit(request, b.idem(request, "idem-1"), (), b.hold_for(request))
+    except errors.IdempotencyExpired:
+        pass
+    else:
+        raise AssertionError("the tombstone outlived its TTL or admitted a second job")
 
 
 async def dur_admit__an_active_jobs_mapping_never_expires(factory):
@@ -474,6 +505,31 @@ async def dur_cap__hold_cannot_exceed_the_available_balance(factory):
     assert balance["available"] >= 0 and balance["reserved"] == 0
 
 
+async def dur_cap__a_hold_is_checked_against_available_not_the_ledger(factory):
+    """DUR-CAP (01: "available = total minus reserved"): the gate is the **available**
+    balance, so an outstanding hold reduces what the next admission may reserve. A
+    store comparing against the ledger total would let two jobs reserve the same
+    credit and settle both, taking the wallet negative."""
+    harness = factory()
+    harness.extra["grant"](b.ORG_A, "0.01000000")
+    first = b.request(harness, max_input_tokens=30_000, max_output_tokens=2_000)
+    hold = b.hold_for(first)
+    assert hold * 2 > Decimal("0.01") >= hold, "the case needs two holds to overflow one wallet"
+    await harness.port.admit(first, b.idem(first, "avail-1"), (), hold)
+    balance = harness.extra["balance"](b.ORG_A)
+    assert balance["reserved"] == hold and balance["available"] == Decimal("0.01") - hold
+    second = b.request(harness, max_input_tokens=30_000, max_output_tokens=2_000)
+    try:
+        await harness.port.admit(second, b.idem(second, "avail-2"), (), hold)
+    except errors.InsufficientCredit as exc:
+        assert errors.http_status(exc.code) == 402
+    else:
+        raise AssertionError("two holds were reserved against one wallet's credit")
+    after = harness.extra["balance"](b.ORG_A)
+    assert after["reserved"] == hold and after["available"] >= 0
+    assert len(harness.extra["active_jobs"]()) == 1
+
+
 async def dur_cap__a_negative_maximum_hold_is_refused(factory):
     """DUR-CAP: no negative available balance. A negative hold would reduce the
     reserved total, fabricate credit out of an empty wallet and let the next
@@ -619,16 +675,67 @@ async def dur_fence__a_lease_is_a_fencing_token_not_a_record(factory):
     assert outcome.cause is TerminalCause.deadline_exceeded
 
 
+async def dur_fence__a_deadline_binds_append_and_complete(factory):
+    """DUR-FENCE / r1 R29: past the persisted generation deadline neither `append` nor
+    `complete` may proceed - **published output does not buy more time** - and the
+    store terminalizes the job in that same operation, with no debit. A worker holding
+    a live lease must not be able to keep generating, or settle usage it produced after
+    the deadline the customer was promised."""
+    for published in (False, True):
+        harness = factory(limits=DEFAULTS.replace(generation_timeout_s=30, lease_ttl_s=10_000,
+                                                  lease_heartbeat_s=1_000,
+                                                  queue_wait_interactive_s=200))
+        publish = hook(harness, "publish")
+        request, admission, lease = await _running(harness, key=f"bind-{published}",
+                                                   deadline_s=230)
+        if published:
+            await publish(lease)
+        before = harness.extra["balance"](request.org_id)
+        harness.clock.advance(31)                  # 31s into a 30s generation budget
+        assert harness.clock.now() < lease.expires_at
+        try:
+            await harness.port.complete(lease, b.outcome(request.request_id, harness,
+                                                         tokens=b.usage(1200, 340)))
+        except (errors.AlreadyTerminal, errors.StaleLease):
+            pass
+        else:
+            raise AssertionError(f"a settlement past the generation deadline was accepted "
+                                 f"(published={published})")
+        stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+        assert outcome is not None, "complete did not terminalize the overdue job"
+        assert outcome.cause is TerminalCause.deadline_exceeded, outcome.cause
+        assert outcome.debit == 0, "usage produced past the deadline was charged"
+        after = harness.extra["balance"](request.org_id)
+        assert after["ledger"] == before["ledger"]
+        # and the same for `append`, on a fresh job of the same store
+        stream = hook(harness, "stream")
+        request, admission, lease = await _running(harness, key=f"bind-append-{published}",
+                                                   deadline_s=230)
+        if published:
+            await stream.append(lease, b.events("first"))
+        harness.clock.advance(31)
+        try:
+            await stream.append(lease, b.events("too late"))
+        except (errors.AlreadyTerminal, errors.StaleLease):
+            pass
+        else:
+            raise AssertionError(f"an append past the generation deadline was accepted "
+                                 f"(published={published})")
+        _stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+        assert outcome is not None and outcome.cause is TerminalCause.deadline_exceeded
+        assert outcome.debit == 0
+
+
 async def dur_fence__a_stale_generation_is_rejected(factory):
     """DUR-FENCE: after recovery and a new claim, the old generation is fenced. The
     **same worker** reclaims, so the generation is the only thing that differs: a store
     that compared only the worker id would let the first attempt settle the job the
     second attempt is running.
 
-    The queue budget is widened because a lost 120 s lease would otherwise take the
-    job past its persisted queue deadline (r1 R20) before it can be reclaimed; this
-    case is about generation fencing, not about queueing."""
-    harness = factory(limits=DEFAULTS.replace(queue_wait_interactive_s=10_000))
+    r1 R38 is what makes this work on default limits: the 120 s lease loss is time
+    spent *running*, which the queue budget never sees, so the requeued job still has
+    its unspent queue remainder and an ordinary interactive job can be retried."""
+    harness = factory()
     request, admission, first = await _running(harness)
     harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
     await harness.port.recover()
@@ -690,10 +797,31 @@ async def dur_output__loss_after_publication_is_a_terminal_failure(factory):
     assert after["reserved"] == 0 and after["ledger"] == before["ledger"]
 
 
+async def dur_output__any_committed_chunk_is_publication(factory):
+    """DUR-OUTPUT (02: "persisting output before a client reads is enough to prohibit
+    regeneration"): the publication marker is set by the **first committed chunk**,
+    whatever its type. A store that only counted deltas would regenerate a request
+    whose progress or usage event a client has already seen."""
+    from ..records import EngineEvent
+    for event in (EngineEvent(type=ChunkEventType.progress, payload={"phase": "running"}),
+                  EngineEvent(type=ChunkEventType.usage, payload={"tokens": 1}),
+                  EngineEvent(type=ChunkEventType.error, payload={"code": "engine_error"})):
+        harness = factory()
+        jobs = hook(harness, "jobs")
+        request, admission, lease = await _stream_job(harness, key=f"pub-{event.type.value}")
+        committed = await harness.port.append(lease, (event,))
+        assert len(committed) == 1
+        harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
+        await jobs.recover()
+        stored, outcome = await jobs.get_owned(request.org_id, admission.job_handle)
+        assert outcome is not None, f"a {event.type.value} chunk did not forbid regeneration"
+        assert outcome.cause is TerminalCause.lost_after_publication, event.type
+        assert stored.state is JobState.failed and outcome.debit == 0
+
+
 async def dur_output__prepublication_retries_are_bounded(factory):
     """DUR-OUTPUT: retries are capped, then the job fails honestly."""
-    harness = factory(limits=DEFAULTS.replace(max_prepublication_retries=1,
-                                              queue_wait_interactive_s=10_000))
+    harness = factory(limits=DEFAULTS.replace(max_prepublication_retries=1))
     request, admission, lease = await _running(harness)
     for _ in range(3):
         harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
@@ -819,14 +947,19 @@ async def dur_output__phase_deadlines_are_persisted_at_each_transition(factory):
     assert lease.generation_deadline_at == harness.clock.at(queued.budgets.generation_s)
     assert lease.first_token_deadline_at == harness.clock.at(queued.budgets.first_token_s)
     assert lease.first_token_deadline_at <= lease.generation_deadline_at
-    # a prepublication requeue keeps the instants it already has (R5): a job that
-    # loses a worker must not be handed a fresh queue budget
+    # r1 R38: a prepublication requeue gets only the unspent remainder of the queue
+    # budget. The job sat queued for 7s of its 10,000s here, so the new deadline is
+    # that much shorter in unspent time, and the used time is persisted.
     harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
     await harness.port.recover()
     requeued, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
     assert outcome is None and requeued.state is JobState.queued, \
         "the requeue this case is about did not happen"
-    assert requeued.queue_deadline_at == first_queue_deadline, "a requeue moved the queue deadline"
+    assert requeued.queue_wait_used_s == 0, "time spent running was charged to the queue"
+    assert requeued.queue_deadline_at == harness.clock.at(queued.budgets.queue_wait_s)
+    remaining_now = (requeued.queue_deadline_at - harness.clock.now()).total_seconds()
+    first_remaining = (first_queue_deadline - queued.admitted_at).total_seconds()
+    assert remaining_now <= first_remaining, "a requeue bought queue time"
     assert requeued.preparation_deadline_at == admission.preparation_deadline_at
     # and the second attempt's generation instants are its own, derived at its claim
     second = await harness.port.claim(request.request_id, "worker-b")
@@ -874,6 +1007,49 @@ async def dur_output__the_generation_deadline_ends_a_running_attempt(factory):
     assert outcome.debit == 0 and stored.state in {JobState.failed, JobState.expired}
     after = harness.extra["balance"](request.org_id)
     assert after["ledger"] == before["ledger"] and after["reserved"] == 0
+
+
+async def dur_output__queue_time_is_time_spent_queued(factory):
+    """DUR-OUTPUT / r1 R38: the queue budget is cumulative time **in** `queued`, not
+    wall time since the first transition. Time spent `running` belongs to the
+    generation budget, so a lost lease does not eat the queue budget; the used time is
+    persisted, the remainder never grows, and the deadline never reaches past
+    `deadline_at`. This is what keeps an interactive retry possible at all."""
+    harness = factory(limits=DEFAULTS.replace(queue_wait_interactive_s=100,
+                                              lease_ttl_s=30, lease_heartbeat_s=10))
+    request, admission = await _admit(harness, mode=ExecutionMode.sync)
+    assert admission.queue_wait_used_s == 0 and admission.queue_deadline_at is None
+    queued = await harness.port.prepared(admission.job_handle, ())
+    assert queued.queue_deadline_at == harness.clock.at(100)
+
+    harness.clock.advance(40)                      # 40s queued
+    lease = await harness.port.claim(request.request_id, "worker-a")
+    running, _ = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert running.queue_wait_used_s == 40, running.queue_wait_used_s
+
+    harness.clock.advance(31)                      # 31s running: lost lease, requeued
+    await harness.port.recover()
+    requeued, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert outcome is None and requeued.state is JobState.queued, "the retry was not possible"
+    assert requeued.queue_wait_used_s == 40, "running time was charged to the queue budget"
+    # 60s of queue budget left, and not a second more
+    assert requeued.queue_deadline_at == harness.clock.at(60)
+    second = await harness.port.claim(request.request_id, "worker-a")
+    assert second.generation == 2
+
+    harness.clock.advance(20)                      # 20s more running
+    await harness.port.heartbeat(second)
+    harness.clock.advance(31)                      # lease lost again
+    await harness.port.recover()
+    again, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert outcome is None and again.queue_wait_used_s == 40
+    assert again.queue_deadline_at == harness.clock.at(60)     # still exactly the remainder
+
+    harness.clock.advance(61)                      # 101s queued in total
+    await harness.port.recover()
+    _stored, expired = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert expired is not None, "the queue budget never expired"
+    assert expired.cause is TerminalCause.queue_wait_expired and expired.debit == 0
 
 
 async def dur_output__a_job_past_its_queue_budget_is_not_claimable(factory):
@@ -1276,6 +1452,68 @@ async def dur_settle__cancelling_after_publication_reconciles(factory):
     assert harness.extra["balance"](other.org_id)["reserved"] == 0
 
 
+async def dur_settle__a_published_job_past_its_deadline_reconciles(factory):
+    """DUR-SETTLE / r1 R21+R29: a job killed by our own generation deadline **after**
+    publishing output produced tokens nobody counted, so it is `held_unknown` with the
+    hold held until the fenced 24 h, not released on the spot. Releasing at once would
+    drop it out of the reconciliation backlog 02 wants alerted on."""
+    harness = factory(limits=DEFAULTS.replace(generation_timeout_s=30, lease_ttl_s=10_000,
+                                              lease_heartbeat_s=1_000,
+                                              queue_wait_interactive_s=200))
+    publish = hook(harness, "publish")
+    request, admission, lease = await _running(harness, deadline_s=230)
+    await publish(lease)
+    before = harness.extra["balance"](request.org_id)
+    harness.clock.advance(31)
+    await harness.port.recover()
+    _stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert outcome is not None and outcome.cause is TerminalCause.deadline_exceeded
+    assert outcome.settlement_state is SettlementState.held_unknown, outcome.settlement_state
+    assert outcome.reconcile_after is not None and outcome.debit == 0
+    assert harness.extra["balance"](request.org_id)["reserved"] == admission.maximum_hold
+    harness.clock.advance(DEFAULTS.unknown_usage_reconcile_s + 1)
+    await harness.port.recover()
+    _stored, final = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert final.settlement_state is SettlementState.released_platform_absorbed
+    after = harness.extra["balance"](request.org_id)
+    assert after["reserved"] == 0 and after["ledger"] == before["ledger"]
+
+
+async def dur_settle__a_settlement_that_cannot_journal_moves_no_money(factory):
+    """DUR-SETTLE / r1 R39: every capacity check a settling transaction can fail on
+    happens before any wallet, outcome or reservation mutation. With a journal
+    reservation too small to hold even the terminal event, `complete` must refuse with
+    the ledger, the hold, the reservations and the state all untouched - never a
+    debited customer whose job is not terminal and whose capacity is still held."""
+    limits = DEFAULTS.replace(journal_job_reserve_bytes=16, journal_event_max_bytes=8,
+                              journal_total_bytes=1 << 20)
+    harness = factory(limits=limits)
+    request, admission = await _admit(harness)
+    await harness.port.prepared(admission.job_handle, ())
+    lease = await harness.port.claim(request.request_id, "worker-a")
+    before = harness.extra["balance"](request.org_id)
+    try:
+        await harness.port.complete(lease, b.outcome(request.request_id, harness,
+                                                     tokens=b.usage(1200, 340)))
+    except errors.JournalCapacityExhausted as exc:
+        assert errors.http_status(exc.code) == 429 and exc.retry_after_s >= 1
+    else:
+        raise AssertionError("a settlement committed without room for its terminal event")
+    after = harness.extra["balance"](request.org_id)
+    assert after == before, "money moved in a settlement that could not be journalled"
+    stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert outcome is None and stored.state is JobState.running
+    assert all(r.active for r in stored.reservations if r.kind is not ReservationKind.preparation)
+    # with room for it, the same settlement goes through
+    roomy = factory(limits=DEFAULTS)
+    other, admitted = await _admit(roomy, key="roomy")
+    await roomy.port.prepared(admitted.job_handle, ())
+    lease = await roomy.port.claim(other.request_id, "worker-a")
+    settled = await roomy.port.complete(lease, b.outcome(other.request_id, roomy,
+                                                        tokens=b.usage(1200, 340)))
+    assert settled.settlement_state is SettlementState.settled and settled.debit > 0
+
+
 async def dur_settle__terminalization_releases_every_reservation(factory):
     """DUR-SETTLE (02: "terminalization releases execution/preparation capacity and
     unused journal reservation"): the reservation rows are deactivated, and a later
@@ -1407,6 +1645,7 @@ def jobstore_cases():
         dur_admit__crash_after_commit_then_retry_does_not_double_reserve,
         dur_admit__expired_mapping_is_explicit_never_a_second_billable_job,
         dur_admit__an_active_jobs_mapping_never_expires,
+        dur_admit__the_tombstone_ttl_runs_from_the_terminal_state,
         dur_admit__tombstone_is_retained_after_the_terminal_state,
         dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction,
         dur_admit__an_idempotency_scope_belongs_to_the_requests_own_org,
@@ -1416,12 +1655,14 @@ def jobstore_cases():
         dur_cap__admission_reserves_preparation_capacity,
         dur_cap__journal_reservation_must_fit_the_global_budget,
         dur_cap__hold_cannot_exceed_the_available_balance,
+        dur_cap__a_hold_is_checked_against_available_not_the_ledger,
         dur_cap__a_negative_maximum_hold_is_refused,
         dur_cap__a_credit_grant_is_never_negative,
         dur_cap__concurrent_admissions_never_oversubscribe,
         dur_fence__claim_increments_the_generation_from_the_database_clock,
         dur_fence__another_worker_at_the_same_generation_is_still_fenced,
         dur_fence__a_lease_is_a_fencing_token_not_a_record,
+        dur_fence__a_deadline_binds_append_and_complete,
         dur_fence__an_expired_lease_can_neither_renew_nor_settle,
         dur_fence__a_stale_generation_is_rejected,
         dur_output__recovery_requeues_only_before_publication,
@@ -1433,6 +1674,7 @@ def jobstore_cases():
         dur_output__phase_deadlines_are_persisted_at_each_transition,
         dur_output__no_phase_deadline_outlives_the_accepted_deadline,
         dur_output__the_generation_deadline_ends_a_running_attempt,
+        dur_output__queue_time_is_time_spent_queued,
         dur_output__a_job_past_its_queue_budget_is_not_claimable,
         dur_output__the_absolute_deadline_bounds_recovery,
         dur_settle__one_settlement_with_exact_decimals,
@@ -1448,6 +1690,8 @@ def jobstore_cases():
         dur_settle__the_winning_worker_can_always_replay_its_completion,
         dur_settle__only_three_causes_can_charge,
         dur_settle__cancelling_after_publication_reconciles,
+        dur_settle__a_published_job_past_its_deadline_reconciles,
+        dur_settle__a_settlement_that_cannot_journal_moves_no_money,
         dur_settle__terminalization_releases_every_reservation,
         dur_settle__platform_failures_are_free,
         dur_settle__usage_beyond_the_reserved_envelope_is_a_platform_failure,
@@ -1609,6 +1853,37 @@ async def dur_output__a_worker_cannot_forge_a_terminal_event(factory):
     assert journal_bytes() == bytes_after_expiry, "finalize recharged journal bytes"
 
 
+async def dur_output__no_terminal_event_anywhere_in_a_batch(factory):
+    """DUR-OUTPUT / r1 R30: a worker may not append a terminal event **anywhere** in a
+    batch. Checking only the first event would let `[delta, terminal]` through, and the
+    forged chunk would then be the one a later settlement finds and keeps, so the
+    journal would show a terminal state the ledger never agreed to."""
+    from ..records import EngineEvent
+    harness = factory()
+    jobs = hook(harness, "jobs")
+    request, admission, lease = await _stream_job(harness)
+    terminal = EngineEvent(type=ChunkEventType.terminal,
+                           payload={"state": "succeeded", "cause": "completed",
+                                    "settlement_state": "settled"})
+    for batch in ((terminal,), (*b.events("a"), terminal), (terminal, *b.events("b")),
+                  (*b.events("a"), terminal, *b.events("b"))):
+        try:
+            await harness.port.append(lease, batch)
+        except errors.DomainError as exc:
+            assert errors.http_status(exc.code) in (400, 409), exc.code
+        else:
+            raise AssertionError("a batch containing a terminal event was appended")
+    page, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    assert page == (), "a refused batch committed part of itself"
+    # and the real settlement still writes exactly one terminal event, its own
+    cancelled = await jobs.cancel(request.org_id, admission.job_handle)
+    page, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    terminals = [chunk for chunk in page if chunk.event_type is ChunkEventType.terminal]
+    assert len(terminals) == 1
+    assert terminals[0].payload["cause"] == cancelled.cause.value
+    assert terminals[0].payload["settlement_state"] == cancelled.settlement_state.value
+
+
 async def dur_output__a_pruned_prefix_is_an_explicit_replay_gap(factory):
     """DUR-OUTPUT: a gap is reported, never filled by regenerating output."""
     # A short chunk TTL so the prefix expires while the lease is still valid.
@@ -1628,6 +1903,28 @@ async def dur_output__a_pruned_prefix_is_an_explicit_replay_gap(factory):
     page, _ = await harness.port.read_owned(request.org_id, admission.job_handle,
                                             Cursor.parse("1-2"), 10)
     assert [chunk.payload["content"] for chunk in page] == ["c"]
+
+
+async def dur_output__expiry_never_runs_on_a_callers_clock(factory):
+    """DUR-OUTPUT / r1 R7: `expire` reads the database clock. A caller passing a time a
+    year ahead must prune nothing that is still live, or a client could have another
+    tenant's - or its own - replay window destroyed by asking nicely."""
+    harness = factory()
+    request, admission, lease = await _stream_job(harness)
+    await harness.port.append(lease, b.events("still live"))
+    assert await harness.port.expire(harness.clock.at(365 * 86_400)) == 0, \
+        "a caller's clock pruned a live journal"
+    page, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    assert [chunk.payload["content"] for chunk in page] == ["still live"]
+    # and the database clock still prunes when it really is past the TTL
+    harness.clock.advance(DEFAULTS.journal_chunk_ttl_s + 1)
+    assert await harness.port.expire() >= 1
+    try:
+        await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    except errors.JournalExpired:
+        pass
+    else:
+        raise AssertionError("an expired journal still served events")
 
 
 async def dur_output__an_expired_journal_is_gone_not_regenerated(factory):
@@ -1667,9 +1964,8 @@ async def dur_cap__stored_unexpired_bytes_keep_counting(factory):
 
 
 async def dur_fence__a_stale_worker_cannot_append(factory):
-    """DUR-FENCE: an expired or superseded lease appends nothing. (Wide queue budget
-    for the same reason as `dur_fence__a_stale_generation_is_rejected`.)"""
-    harness = factory(limits=DEFAULTS.replace(queue_wait_interactive_s=10_000))
+    """DUR-FENCE: an expired or superseded lease appends nothing."""
+    harness = factory()
     jobs = hook(harness, "jobs")
     request, admission, first = await _stream_job(harness)
     harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
@@ -1780,10 +2076,13 @@ def streamstore_cases():
     return [
         dur_output__append_commits_before_it_relays,
         dur_output__the_first_append_sets_the_publication_marker,
+        dur_output__any_committed_chunk_is_publication,
         dur_output__cursors_are_generation_then_sequence,
         api_stream__reads_are_bounded_and_ownership_checked,
         api_stream__a_cursor_past_the_head_is_invalid,
         dur_output__a_worker_cannot_forge_a_terminal_event,
+        dur_output__no_terminal_event_anywhere_in_a_batch,
+        dur_output__expiry_never_runs_on_a_callers_clock,
         dur_output__a_pruned_prefix_is_an_explicit_replay_gap,
         dur_output__an_expired_journal_is_gone_not_regenerated,
         dur_cap__stored_unexpired_bytes_keep_counting,

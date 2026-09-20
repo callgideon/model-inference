@@ -147,6 +147,7 @@ class TraceLossReason(enum.StrEnum):
     disk_error = "disk_error"
     shutdown = "shutdown"
     malformed = "malformed"
+    abandoned = "abandoned"          # r1 R37: a capture the sink reaped or the caller dropped
 
 
 class TraceOfferResult(enum.StrEnum):
@@ -437,6 +438,12 @@ class Admission(Record):
     # compare against these, not against a budget plus a local clock.
     preparation_deadline_at: Timestamp
     queue_deadline_at: Timestamp | None = None
+    # r1 R38: the queue budget is cumulative time *in* the `queued` state, so the
+    # store persists how much of it has been spent. At every queued transition
+    # `queue_deadline_at = min(now + budget - used, deadline_at)`; leaving `queued`
+    # adds that interval to `used`. A requeue therefore keeps only the remainder,
+    # and an interactive job can still retry within its absolute deadline.
+    queue_wait_used_s: float = Field(default=0.0, ge=0)
     replayed: bool = False              # true when an idempotent replay returned it
 
 
