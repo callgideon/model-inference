@@ -93,6 +93,39 @@ def test_clip_ids_and_labels_match_the_probed_pixels():
         "the README quotes this exact frame-rate set"
 
 
+def test_display_geometry_is_declared_and_matches_the_pixels():
+    """geometry_label names the PRE-rotation recipe scale, so the c020/c030 labels do not
+    describe what is on disk. display_width/display_height do, explicitly (round 4 N5)."""
+    rotated = 0
+    for c in built():
+        w, h = c["derived"]["width"], c["derived"]["height"]
+        assert (c["display_width"], c["display_height"]) == (w, h), f"{c['id']} display != probed"
+        assert (c["display_width"], c["display_height"]) == corpus.derived_geometry(c["recipe"])
+        label_wh = corpus.LABEL_GEOMETRY[c["geometry_label"]]
+        if c["recipe"]["transpose"] in ("90cw", "90ccw"):
+            rotated += 1
+            assert (c["display_width"], c["display_height"]) == (label_wh[1], label_wh[0]), \
+                f"{c['id']} display must be the label's axes swapped"
+        else:
+            assert (c["display_width"], c["display_height"]) == label_wh
+    assert rotated >= 2, "the rotated clips are the reason this field exists"
+
+    m = copy.deepcopy(MANIFEST)                       # and the validator holds it both ways
+    m["clips"][0]["display_width"] = 12345
+    assert any("display_width/height" in e for e in corpus.validate_manifest(m))
+    m = copy.deepcopy(MANIFEST)
+    m["clips"][0]["derived"]["width"] = m["clips"][0]["display_width"] + 2
+    assert any("declared display" in e for e in corpus.validate_manifest(m))
+
+
+def test_the_default_cache_root_is_shared_by_every_worktree():
+    """A per-worktree default meant every worktree grew its own 483 MB media cache (N7)."""
+    root = corpus.default_cache_root()
+    assert root.is_absolute() and root.name == "corpus-cache" and root.parent.name == ".claude"
+    assert ".claude/worktrees" not in str(root), \
+        "the cache must live in the main checkout, not inside a linked worktree"
+
+
 def test_source_upscaled_is_true_for_every_upscaled_axis():
     """The flag compared post-rotation height only, so 12 clips upscaled 1.5x-2.35x on
     the other axis were recorded as native resolution."""

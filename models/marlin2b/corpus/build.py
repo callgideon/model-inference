@@ -23,7 +23,24 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 MANIFEST = HERE / "manifest.json"
 REPO = HERE.parents[2]
-CACHE = Path(os.environ.get("CORPUS_CACHE", REPO / ".claude" / "corpus-cache"))
+
+
+def default_cache_root():
+    """<main checkout>/.claude/corpus-cache. `git rev-parse --git-common-dir` resolves to
+    the MAIN .git even from a linked worktree, so every worktree shares one media cache
+    instead of growing its own 483 MB copy (N7). No git, or git failing: the tree we are
+    in, as before. bench.py's corpus_cache_root() mirrors this and must agree."""
+    try:
+        r = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=HERE, text=True,
+                           capture_output=True, timeout=10)
+        if r.returncode == 0 and r.stdout.strip():
+            return (HERE / r.stdout.strip()).resolve().parent / ".claude" / "corpus-cache"
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return REPO / ".claude" / "corpus-cache"
+
+
+CACHE = Path(os.environ.get("CORPUS_CACHE") or default_cache_root())
 SCHEMA_VERSION = 1
 CORPUS_VERSION = "e1-2026-09-20"
 API_MAX_DURATION_S = 120  # research/plan/01-contracts.md preparation budget / video cap
@@ -319,8 +336,13 @@ def plan():
         # `label` is the pre-rotation geometry; a rotated clip says so in its id so no
         # id claims an orientation its pixels do not have.
         cid = clip_id(i, src["id"], label, transpose)
+        # geometry_label stays PRE-rotation (it names the recipe scale); display_width /
+        # display_height are the on-disk, post-rotation pixels, so a reader never has to
+        # infer them from the label and the validator can hold both against the probe.
+        dw, dh = derived_geometry(recipe)
         clips.append({"id": cid, "kind": "clip", "source": src["id"],
-                      "geometry_label": label, "recipe": recipe, "prompt": PROMPTS[(i + i // 16) % 16][0],
+                      "geometry_label": label, "display_width": dw, "display_height": dh,
+                      "recipe": recipe, "prompt": PROMPTS[(i + i // 16) % 16][0],
                       "subset": ["full", "fast"] if i < 32 else ["full"],
                       "file": f"clips/{cid}.mp4",
                       "derived": None, "status": "unbuilt"})
@@ -491,6 +513,11 @@ def validate_manifest(manifest):
                      f"recipe scales to {c['recipe']['scale'][0]}x{c['recipe']['scale'][1]}")
         if not c["id"].endswith(suffix):
             e.append(f"{c['id']} does not end with the geometry it claims ({suffix})")
+        # display_* are the on-disk pixels a reader may trust without decoding the label.
+        want_display = derived_geometry(c["recipe"])
+        if (c.get("display_width"), c.get("display_height")) != want_display:
+            e.append(f"{c['id']} display_width/height {c.get('display_width')}x{c.get('display_height')} "
+                     f"!= recipe scale/transpose {want_display[0]}x{want_display[1]}")
         if c["recipe"]["duration_s"] > manifest["api_limits"]["max_clip_duration_s"]:
             e.append(f"{c['id']} duration {c['recipe']['duration_s']}s exceeds the API cap")
         if c["prompt"] not in prompts:
@@ -513,6 +540,9 @@ def validate_manifest(manifest):
             if not src.get("sha256"):
                 e.append(f"{c['id']} is built from unpinned source {c['source']}")
             want = derived_geometry(c["recipe"])
+            if (d.get("width"), d.get("height")) != (c.get("display_width"), c.get("display_height")):
+                e.append(f"{c['id']} probed {d.get('width')}x{d.get('height')} != declared display "
+                         f"{c.get('display_width')}x{c.get('display_height')}")
             if (d.get("width"), d.get("height")) != want:
                 e.append(f"{c['id']} derived {d.get('width')}x{d.get('height')} != "
                          f"recipe scale/transpose {want[0]}x{want[1]}")

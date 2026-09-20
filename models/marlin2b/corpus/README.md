@@ -14,7 +14,8 @@ metadata; the clips live under the git-ignored cache.
 ## Build and verify
 
 ```bash
-export CORPUS_CACHE=/path/to/model-inference/.claude/corpus-cache   # required from a worktree
+# $CORPUS_CACHE overrides; the default is now <main checkout>/.claude/corpus-cache,
+# resolved with `git rev-parse --git-common-dir`, so every worktree shares one cache
 python models/marlin2b/corpus/build.py plan      # deterministic recipes, status unbuilt
 python models/marlin2b/corpus/build.py build     # fetch sources, derive clips, fill hashes
 python models/marlin2b/corpus/build.py verify    # recompute every sha256 and reprobe
@@ -77,6 +78,11 @@ Every claim below is the **probed** geometry of the built files, asserted by
 `models/marlin2b/tests/test_corpus.py` against `manifest.json` (and by
 `build.py validate`), not the recipe's intent: a clip id or `geometry_label` that
 does not match the probed width/height/aspect is a validation error.
+
+`geometry_label` names the **pre-rotation** recipe scale, so the three rotated clips
+(`c020`, `c025`, `c030`) carry a label whose axes are swapped relative to the file.
+Read `display_width` / `display_height` instead: they are the on-disk, post-rotation
+pixels, and `validate` fails if they disagree with either the recipe or the probe.
 
 - **Content:** 64 non-overlapping segments (the test asserts non-overlap), 6–24 per
   source, so no two clips share footage.
