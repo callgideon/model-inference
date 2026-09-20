@@ -9,11 +9,24 @@ import test from "node:test";
 
 const appRoot = new URL("../../", import.meta.url);
 /**
- * Build output and dependencies, skipped only where they actually live — at the console root. The
- * same names nested deeper are ordinary source directories (`app/(dashboard)/build/`,
- * `scripts/build/`), and skipping them at every depth hid a test file from this guard entirely.
+ * Build output, skipped only where it actually lives — at the console root. The same names nested
+ * deeper are ordinary source directories (`app/(dashboard)/build/`, `scripts/build/`), and skipping
+ * them at every depth hid a test file from this guard entirely.
  */
-const SKIP_AT_ROOT = new Set(["node_modules", ".next", ".git", "out", "build", "coverage", "dist"]);
+const SKIP_AT_ROOT = new Set(["out", "build", "coverage", "dist"]);
+
+/** Never source, at any depth, and enormous: not walked, and nothing inside is a console test. */
+const SKIP_ANYWHERE = new Set(["node_modules", ".git"]);
+
+/**
+ * Node's glob does not match a path segment beginning with `.`, so a test inside a dot-directory or
+ * a dotfile test never runs however the patterns are written. Such a path counts as **unmatched**:
+ * the guard reports it rather than walking past it, because the alternative is a test file that
+ * looks present and silently never executes.
+ */
+function hasDotSegment(file: string): boolean {
+  return file.split("/").some((segment) => segment.startsWith("."));
+}
 
 /** Every spelling someone might reach for; the guard's job is to catch the ones no glob runs. */
 const TEST_SUFFIXES = [".test.ts", ".test.tsx", ".test.mts", ".test.cts", ".spec.ts", ".spec.tsx"];
@@ -23,6 +36,7 @@ function testFiles(directory = "", depth = 0): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(new URL(directory, appRoot), { withFileTypes: true })) {
     if (entry.isDirectory()) {
+      if (SKIP_ANYWHERE.has(entry.name)) continue;
       if (depth === 0 && SKIP_AT_ROOT.has(entry.name)) continue;
       if (entry.isSymbolicLink()) continue;
       found.push(...testFiles(`${directory}${entry.name}/`, depth + 1));
@@ -64,7 +78,9 @@ test("the test script declares the four directory patterns of 08 §7", () => {
 test("every test file in the tree is matched by a declared pattern", () => {
   const files = testFiles();
   const expressions = patterns.map(globToRegExp);
-  const missed = files.filter((file) => !expressions.some((expression) => expression.test(file)));
+  const missed = files.filter(
+    (file) => hasDotSegment(file) || !expressions.some((expression) => expression.test(file)),
+  );
   assert.deepEqual(
     missed,
     [],
@@ -73,14 +89,14 @@ test("every test file in the tree is matched by a declared pattern", () => {
   assert.ok(files.length >= 6, `expected the console suites to be present, found ${files.length}`);
 });
 
-test("a test hidden in a directory named like build output is still flagged", () => {
+test("a test hidden in a directory named like build output, or behind a dot, is still flagged", () => {
   // The guard used to skip `build`, `out` and `coverage` at every depth, so `scripts/build/x.test.ts`
   // was neither run nor reported. Only the root-level directories are skipped now.
   assert.equal(SKIP_AT_ROOT.has("build"), true, "build output is skipped at the root");
   const files = testFiles();
   assert.ok(
-    !files.some((file) => file.startsWith("node_modules/") || file.startsWith(".next/")),
-    "dependencies and build output must not be walked",
+    !files.some((file) => file.startsWith("node_modules/") || file.startsWith(".git/")),
+    "dependencies and git internals must not be walked",
   );
   for (const suffix of [".test.mts", ".spec.ts"]) {
     assert.ok(
@@ -88,6 +104,15 @@ test("a test hidden in a directory named like build output is still flagged", ()
       `${suffix} must be recognised, so a file using it is reported rather than silently skipped`,
     );
   }
+  // A dot anywhere in the path means no glob runs it, whatever the suffix says.
+  assert.equal(hasDotSegment("tests/.hidden/h.test.ts"), true, "a dot-directory is unmatched");
+  assert.equal(hasDotSegment("tests/contracts/.wip.test.ts"), true, "a dotfile is unmatched");
+  assert.equal(hasDotSegment("tests/contracts/money.test.ts"), false, "an ordinary path is not");
+  const expressions = patterns.map(globToRegExp);
+  assert.ok(
+    expressions.some((expression) => expression.test("tests/contracts/.wip.test.ts")),
+    "the pattern itself would match a dotfile, which is exactly why the dot check is separate",
+  );
 });
 
 test("nested suites and the pre-existing library tests are both discovered", () => {

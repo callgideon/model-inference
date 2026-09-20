@@ -11,6 +11,7 @@ import {
   isMoney,
   isNegativeMoney,
   isZeroMoney,
+  MAX_MONEY_CHARS,
   moneyFromUnits,
   moneyUnits,
   parseMoney,
@@ -146,6 +147,17 @@ test("scaled units are 1e-8 USD and stop at the twentieth significant digit", ()
   assert.throws(() => parseMoney("-1000000000000.00000000"), TypeError, "nor do they when negative");
   assert.throws(() => addMoney(largest, parseMoney("0.00000001")), RangeError, "a sum may not overflow");
   assert.throws(() => moneyUnits("1.5e0" as Money), TypeError, "a forged brand still fails at the boundary");
+});
+
+test("an absurdly long numeral is refused on its length, before the regex or BigInt", () => {
+  // N9: the verdict was always "invalid", but the *cost* was not bounded — the regex and `BigInt()`
+  // are both superlinear, so a megabyte of digits in a request body was a megabyte of work.
+  assert.equal(MAX_MONEY_CHARS, "-999999999999.99999999".length, "the bound is the widest real value");
+  assert.equal(parseMoney("-999999999999.99999999"), "-999999999999.99999999", "which still parses");
+  for (const huge of ["1".repeat(1000000), `0.${"0".repeat(1000000)}1`, `${"9".repeat(500000)}.5`]) {
+    assert.equal(tryParseMoneyUnits(huge), null, "a huge numeral is refused");
+  }
+  assert.equal(tryParseMoneyUnits("1".repeat(MAX_MONEY_CHARS + 1)), null, "one character past the bound");
 });
 
 test("a prospective total can be tested for the domain without throwing", () => {
