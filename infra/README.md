@@ -21,7 +21,7 @@ document only places their artifacts on a host and orders their hooks.
 | Environment | Purpose | Compute | PostgreSQL | Object store | Secrets | Who deploys |
 |---|---|---|---|---|---|---|
 | `local` | Layer 1/2 tests: fakes, real local PG/CH/Valkey/S3-compatible, migrations, RLS | developer host / worktree | local container, per-worktree database name | local container, per-worktree prefix | local `.env` files, never SSM | any track (E2 owns the compose file) |
-| `staging` (allocated) | Layer 3 rehearsal of a deploy, migration and recovery drill | PROPOSED allocated GPU instance, separate instance id and EIP | PROPOSED separate Supabase project or schema | PROPOSED separate bucket/prefix | SSM prefix `/model-inference/staging/*` PROPOSED | I2/I3 holding the lock; **allocation itself is a coordinator action** |
+| `staging` (allocated) | Layer 3 rehearsal of a deploy, migration and recovery drill | PROPOSED allocated GPU instance, separate instance id and EIP | PROPOSED separate Supabase project or schema | PROPOSED separate bucket/prefix | SSM prefix `/infrx-staging/*` PROPOSED — a **sibling** of `/model-inference/*`, deliberately not nested under it (see §5: a pilot role narrowed to `/model-inference/*` would otherwise read staging secrets, and a staging host reusing that role would read the pilot journal DSN) | I2/I3 holding the lock; **allocation itself is a coordinator action** |
 | `pilot` | The single-GPU free pilot serving real keys | `i-0e8449a4ffca29bab` (g6e.2xlarge, us-east-1d) OBSERVED | Supabase `fcbnscgsymzdykendbrc`, **us-east-2 — HISTORICAL CLAIM (HANDOFF.md §1)**; only the `/INFRX-SUPABASE-PROD/*` parameter *names* are OBSERVED, and a parameter name cannot reveal a project ref or region | PROPOSED `infrx-media`, `infrx-traces` | existing `/model-inference/*` + PROPOSED names in §5 | I2/I3 holding the lock, coordinator-authorized |
 
 **Single deployment lock.** One holder at a time may mutate `staging` or
@@ -48,6 +48,11 @@ that marker in the matrix.
 Current units are `marlin2b-vllm.service`, `marlin2b-gateway.service` and a
 `caddy` docker container (OBSERVED in the repository; running state observed
 only through the public endpoint). Target layout:
+
+Every unit marked PROPOSED below is created by **I2**, in `staging` then
+`pilot` (the matrix row "New systemd units" in the I1 evidence report carries the
+same assignment); the owner track named in the table owns what runs *inside* the
+unit, not the unit file.
 
 | Process | Unit (PROPOSED unless noted) | Listens | Owner track | Working paths | Needs persistent EBS |
 |---|---|---|---|---|---|
@@ -111,13 +116,34 @@ the run. Report p50/p95/p99 with sample counts, not means.
 
 ### 3.2 Sample sizes and procedure
 
-Run from the pilot AZ (us-east-1d) against the real pooler, against a scratch
-schema owned by D, never against live tables. Warm the pool, discard the first
-50 samples, then: ≥ 2,000 `commit_rtt_ms` samples at concurrency 1, ≥ 2,000 at
+**Host and target are fixed.** The number that gates release measures the pilot
+path: the probe runs **on the pilot GPU host** `i-0e8449a4ffca29bab`
+(us-east-1d) — the same AZ, ENI and pooler the worker will use — against the
+**authoritative pilot PostgreSQL**, writing only to D1's scratch schema, never a
+live table. If `staging` is allocated first, the identical script runs there as a
+rehearsal against the staging database using `/infrx-staging/pg_journal_url`;
+a staging number is a rehearsal, never the release evidence, because it does not
+measure the pilot AZ↔pooler path. Warm the pool, discard the first 50 samples,
+then: ≥ 2,000 `commit_rtt_ms` samples at concurrency 1, ≥ 2,000 at
 concurrency 8, and ≥ 300 `terminal_txn_ms` samples; repeat the whole run at
 three separated times of day to expose cross-region variance. A single burst is
 not evidence; `04-verification.md` already rejects small samples for tail
 claims.
+
+**What each metric needs, and when it can be measured.** `connect_ms`,
+`commit_rtt_ms` and `terminal_txn_ms` need only D1's tables replicated in the
+scratch schema, so they are measurable as soon as D1 exists — that is the first
+run, and the verdict ladder's `commit_rtt_ms` clauses can be evaluated from it
+alone. `first_progress_ms` and `append_rate_per_s` include the real admission
+and worker path, so they are **not** measurable by a standalone script: they are
+measured once G/Q/W are integrated, by E4 on the same host, and until then the
+ladder is evaluated on the `commit_rtt_ms` and `terminal_txn_ms` clauses with
+the two missing metrics recorded as "not run", never as passed.
+
+**Scratch schema ownership.** D1 authors the scratch-schema SQL and its drop
+(D owns all SQL); **I2 executes both under the deployment lock**, because D1
+holds no lock. The schema is created immediately before the run and dropped
+immediately after; its name is recorded in the lock record.
 
 ### 3.3 Pass / fail thresholds
 
@@ -131,8 +157,8 @@ exactly one verdict (the earlier table left gaps — e.g. p50 38 ms with p95
 
 | Order | Verdict | Condition | Action |
 |---|---|---|---|
-| 1 | **Fail** | `commit_rtt_ms` p95 > 120 ms, **or** `first_progress_ms` p95 > 1,500 ms, **or** sustained append rate < 120 committed batches/s per host at concurrency 8 | do not claim the pilot envelope; take a §3.5 option before I2 release |
-| 2 | **Pass** | `commit_rtt_ms` p50 ≤ 25 ms **and** p95 ≤ 50 ms **and** p99 ≤ 150 ms, **and** `first_progress_ms` p95 ≤ 800 ms, **and** sustained ≥ 160 committed batches/s | keep PG in us-east-2 for the pilot; record as `meas.` |
+| 1 | **Fail** | `commit_rtt_ms` p95 > 120 ms, **or** `first_progress_ms` p95 > 1,500 ms, **or** `terminal_txn_ms` p95 > 600 ms, **or** sustained append rate < 120 committed batches/s per host at concurrency 8 | do not claim the pilot envelope; take a §3.5 option before I2 release |
+| 2 | **Pass** | `commit_rtt_ms` p50 ≤ 25 ms **and** p95 ≤ 50 ms **and** p99 ≤ 150 ms, **and** `first_progress_ms` p95 ≤ 800 ms, **and** `terminal_txn_ms` p95 ≤ 250 ms, **and** sustained ≥ 160 committed batches/s | keep PG in us-east-2 for the pilot; record as `meas.` |
 | 3 | **Marginal** | everything else (by construction: not Fail, not Pass) | pilot may proceed only with a recorded contract note and the locality work scheduled before fleet; no throughput claim above the measured rate |
 
 The append-rate numbers are derived, not free-hand: the 50 ms batch window means
@@ -142,15 +168,23 @@ the limiting term; < 120/s means the host cannot sustain the window for even 6
 of the 8 jobs. "The engine's event rate" in the earlier wording is exactly this
 160/s figure.
 
+`terminal_txn_ms` is derived the same way: the terminal transaction is
+inherently multi-statement and its statements are dependent, so it costs
+`est.` 5 round trips rather than one — at the Pass `commit_rtt_ms` p95 of 50 ms
+that is ≤ 250 ms, and > 600 ms means the network, not the work, dominates the
+transaction that gates success reporting.
+
 These thresholds are `est.` engineering limits proposed by I1; the coordinator
 confirms them — together with the §3.1 round-trip form — against contracts v1
 before I2 treats them as a gate.
 
 ### 3.4 Who runs it, when, with which secrets
 
-I2 runs the probe **before** any release claim, as the first action under the
-deployment lock on a fresh allocated environment; E4 re-runs it as part of
-pilot evidence and publishes the distribution.
+I2 runs the probe **before** any release claim, as its first action under the
+deployment lock on the pilot host (§3.2 fixes host and target; a staging
+rehearsal first if that environment is allocated); E4 re-runs it — including the
+two integrated metrics I2 cannot measure — as part of pilot evidence and
+publishes the distribution.
 
 Secret order is fixed, because §5 narrows the instance role to
 `/model-inference/*` and the probe must not be the reason that narrowing is
@@ -166,10 +200,14 @@ evidence report. The probe script lives under `infra/`.
 
 | Option | Change | Cost / risk |
 |---|---|---|
-| A. PG authority to us-east-1 | new Supabase project (or self-managed PG) in us-east-1; migrate schema, data and auth | console auth and existing balances move with it; DEC-08 forbids re-debiting history, so the migration must copy the ledger verbatim; largest change, best latency |
-| B. GPU to us-east-2 | relaunch the pilot host in us-east-2 | g6e AZ offerings in us-east-2 ⚠️ TO BE VERIFIED (method: `ec2 describe-instance-type-offerings --region us-east-2`; I1 queried us-east-1 only); new EIP and DNS record; weights re-download |
+| A. PG authority to us-east-1 | new Supabase project (or self-managed PG) in us-east-1; migrate schema, data and auth | **separately authorized / coordinator** — a new paid project plus a migration of the authoritative production database. Console auth and existing balances move with it; DEC-08 forbids re-debiting history, so the migration must copy the ledger verbatim; largest change, best latency |
+| B. GPU to us-east-2 | relaunch the pilot host in us-east-2 | **separately authorized / coordinator** — it replaces the serving host. g6e AZ offerings in us-east-2 ⚠️ TO BE VERIFIED (method: `ec2 describe-instance-type-offerings --region us-east-2`; I1 queried us-east-1 only); new EIP and DNS record; weights re-download |
 | C. Widen the batch window | 50 ms → 100–200 ms, coalesce by bytes as well as time | needs a coordinator contract revision; raises event lag, keeps one region; cheapest |
 | D. Reduce commit count | one commit per N events with a bytes trigger, terminal transaction unchanged | same contract revision as C; does not help `first_progress_ms` |
+
+All four are contingencies, not scheduled operations: none is owned by an
+implementation task, and none is performed unless the probe returns Fail and the
+coordinator selects it.
 
 Rejected: buffering journal events locally and acknowledging before the PG
 commit. DEC-09 and durable protocol §6 require commit before relay; a local
@@ -185,7 +223,7 @@ per-artifact durable/ephemeral table; the rule for I2 is:
 
 | Class | Location | Loss on host stop |
 |---|---|---|
-| Accepted jobs, leases, journal, ledger, holds, feedback | PostgreSQL (us-east-2) | none |
+| Accepted jobs, leases, journal, ledger, holds, feedback | PostgreSQL (us-east-2 — HISTORICAL CLAIM, HANDOFF.md §1; not observable from this host) | none |
 | Immutable staged payloads, results, trace content | S3 (PROPOSED `infrx-media`, `infrx-traces`) | none |
 | Trace spool segments (post-fsync), usage spill, compile cache, ACME material | `/var/lib/infrx/*` on the root EBS volume | none on stop; **total on termination** while `DeleteOnTermination=true` |
 | Weights, transcode scratch, engine working files | `/opt/dlami/nvme/*` (instance store) | total, by design; rebuildable |
@@ -198,14 +236,21 @@ through the instance role at install or start time.
 
 | Parameter name | State | Consumer |
 |---|---|---|
-| `/model-inference/marlin2b_api_key` | OBSERVED (SecureString) | legacy gateway key; must map to an explicit org/key or be disabled at cutover (contracts v1) |
+| `/model-inference/marlin2b_api_key` | OBSERVED (SecureString) | legacy gateway key; must map to an explicit org/key or be disabled at cutover (contracts v1). **Owner: G1** for the mapping-or-disable decision and its enforcement (`handoffs/G-gateway.md`, "Reconcile legacy key mapping for pilot cutover"); **I2** for the installer half — whether `INFRX_MODE=pilot` still writes `GATEWAY_API_KEY` into the env file. Environment: staging then pilot. The matrix row in the I1 evidence report carries the same split |
 | `/model-inference/supabase_url` | OBSERVED (String) | gateway auth |
 | `/model-inference/supabase_service_role_key` | OBSERVED (SecureString) | gateway auth / usage rows |
 | `/model-inference/hf_token` | OBSERVED (SecureString) | weight download |
 | `/model-inference/pg_journal_url` | PROPOSED | worker/gateway journal + ledger DSN (I2) |
 | `/model-inference/clickhouse_dsn`, `/model-inference/clickhouse_writer_password` | PROPOSED, names owned by T | trace projection |
 | `/model-inference/anthropic_api_key` | PROPOSED | judge, J, live budget default zero |
-| `/model-inference/price_table_version` | PROPOSED (String, not a secret) | admission refuses without a price snapshot |
+
+An earlier draft of this table proposed `/model-inference/price_table_version`.
+**Withdrawn**, not reassigned: contracts v1 makes the `PriceSnapshot` immutable
+and admission resolve it by model and effective time from D1's `price_versions`
+table, so a deploy-time version pin in SSM would be a second, conflicting price
+authority. The fail-closed check below therefore asserts against PostgreSQL, and
+there is no new parameter to own. Every remaining name has one consumer and one
+creating task.
 
 **Fail closed in pilot mode.** `install.sh` today treats a missing SSM
 parameter as a warning and writes a partial env file, so the gateway can come
@@ -216,20 +261,43 @@ must add an explicit mode:
 
 - `INFRX_MODE=dev` keeps today's permissive behaviour and refuses to bind a
   public interface.
-- `INFRX_MODE=pilot` asserts at startup that the auth backend, journal DSN,
-  price table version and ledger reachability are all present, and **exits
-  non-zero** otherwise; the installer refuses to write an env file that is
-  missing any pilot-required name, instead of warning.
+- `INFRX_MODE=pilot` asserts at startup that the auth backend, the journal DSN
+  and ledger reachability are present **and that a usable price version for the
+  served model resolves from D1's `price_versions`** (contracts v1: a missing
+  model or rate rejects admission), and **exits non-zero** otherwise; the
+  installer refuses to write an env file that is missing any pilot-required
+  name, instead of warning. Owners: I2 for the installer refusal, G1/F for the
+  runtime assertion, D1 for the table it reads.
 - No default falls back to unauthenticated or unmetered: an absent
   authentication backend is a startup failure in pilot mode, not an open door.
 - `/readyz` stays 503 until admission, ledger and journal all answer; the
   systemd unit does not report `active` before that.
 
-The instance role `bootcamp-instance-role` currently grants
-`ssm:GetParameter*` on `Resource: "*"` and broad `ec2:*Instances` with
-`iam:PassRole` on itself (OBSERVED). I2 should narrow parameter access to
-`/model-inference/*` and drop the instance-lifecycle statements from the pilot
-role; both are configuration changes for I2 under the lock, not I1.
+The instance role `bootcamp-instance-role` currently grants, on
+`Resource: "*"` (OBSERVED 18:29:06Z, `iam get-role-policy … bootcamp-ops`):
+`ssm:GetParameter`, `GetParameters`, `GetParametersByPath`, **`ssm:StartSession`,
+`ssm:TerminateSession`, `ssm:DescribeSessions`**, `ec2:RunInstances`,
+`TerminateInstances`, `Stop/StartInstances`, `Create/DeleteVolume`,
+`Attach/DetachVolume`, **`ec2:CreateTags`** and `ce:GetCostAndUsage`, plus
+`iam:PassRole` on itself. For the pilot role I2 must, explicitly, all four:
+
+1. narrow `ssm:GetParameter*` to `/model-inference/*` **only** (not a parent of
+   the staging prefix — hence the sibling `/infrx-staging/*` in §1);
+2. **remove `ssm:StartSession`/`TerminateSession`/`DescribeSessions`** — a
+   `*`-scoped session-start grant on the serving host is remote shell into any
+   managed instance in the account, and narrowing only the parameter statement
+   leaves it in place;
+3. drop the instance-lifecycle statements (`ec2:Run/Terminate/Stop/StartInstances`,
+   `Create/DeleteVolume`, `Attach/DetachVolume`) and `ec2:CreateTags` on `*`;
+4. keep `ec2:Describe*` and the observability statement.
+
+Compounding these: the instance has IMDSv2 required but
+**`HttpPutResponseHopLimit=2`** (OBSERVED 18:28:03Z), so a process inside a
+docker container — including the unpinned `vllm/vllm-openai:nightly` image —
+reaches the instance-role credentials and today inherits account-wide SSM read.
+I2 sets the hop limit to 1 (or blocks IMDS egress from the container network) in
+the same change as the role narrowing; both are configuration changes for I2
+under the lock, not I1.
 
 ## 6. Backup and restore per durable layer
 
@@ -245,7 +313,7 @@ and replaces them with `meas.`.
 | Trace spool on EBS | not backed up by design; durability begins after fsync, host/volume loss is out of scope per durable protocol | `est.` ≤ 2 s of unsynced events | shipper drain time, `est.` ⚠️ TO BE VERIFIED | I3 with T |
 | ClickHouse projections | rebuildable from S3 content + PG truth; plus T's own backup to S3 | `est.` 24 h | `est.` ⚠️ TO BE VERIFIED | T, drilled by I3 |
 | Pilot host root volume | EBS snapshot before every deploy; `DeleteOnTermination=true` must be flipped or the snapshot is the only copy | one deploy cycle | `est.` 10–20 min from snapshot | I2 creates, I3 restores |
-| Weights | reproducible from Hugging Face (gated) and the S3 mirror prefix | n/a | download time, `est.` ⚠️ TO BE VERIFIED (no measured cold start exists) | I2 |
+| Weights | reproducible from the **gated Hugging Face repo only**: per HANDOFF.md and CLAUDE.md (HISTORICAL CLAIM, not re-observed — I1 listed top-level prefixes only) the `weights/` mirror in `llm-bootcamp-641134885443` holds `deepseek-v41` and **no Marlin copy**, so a cold start depends on Hugging Face availability and a valid `HF_TOKEN`. Mirroring Marlin to the bucket would remove that dependency — I2's call, out of pilot scope if HF is deemed sufficient | n/a | download time, `est.` ⚠️ TO BE VERIFIED (no measured cold start exists) | I2 |
 
 ## 7. Migration ordering hooks
 
@@ -294,6 +362,21 @@ scheduling index; multi-AZ or second worker. I4 starts after I3 and E4, from
 measured pilot data, per the handoff. Capacity purchases are separately
 authorized and are not implied by any design in this document.
 
+**Pre-existing resources of these kinds are not this project's.** OBSERVED
+2026-09-20T18:27Z: 9 `gideon-*` Auto Scaling groups (all desired capacity 0) and
+10 launch templates exist in the account — nine `gideon-*` plus
+`b300-deepseek-bench` (`lt-04f4c7eafa9fbf1da`, 3 versions), which belongs to the
+llm-bootcamp/DeepSeek benchmark work, not to the infrx pilot. One capacity
+reservation exists: `cr-04397f3102a3955b7`, **ReservationType=capacity-block**,
+`p6-b300.48xlarge`, us-east-1b, state `scheduled`,
+**start 2026-09-21T11:30:00Z, end 2026-09-22T11:30:00Z**, tags
+`Name=b300-bootcamp`, `Purpose=llm-bootcamp`, created 2026-09-18T18:06:31Z.
+No `ReservationType=default` on-demand capacity reservation exists. None of these
+is created, used, extended or cancelled by any task in this document; the
+Capacity Block is surfaced to the coordinator in the I1 handback because it is a
+prepaid commitment in the same project family that starts within a day, and
+acting on it is separately authorized.
+
 ## Verification log
 
 - 2026-09-20: Authored by I1 from read-only AWS observation, the live public
@@ -318,3 +401,28 @@ authorized and are not implied by any design in this document.
   never `/INFRX-SUPABASE-PROD/*`. §6 marks the PostgreSQL RPO
   ⚠️ TO BE VERIFIED with a method, and records that the RPO is unbounded if the
   project's plan has no scheduled backups.
+- 2026-09-20 (second review pass, still read-only — seven further `describe-*` /
+  `get-role-policy` / `list-users` calls, no resource created, modified or
+  deleted, no secret value read, no remote command): §9 now records the
+  **OBSERVED** launch-template, ASG and capacity-reservation state instead of
+  leaving those kinds unexamined — including the pre-existing `b300-deepseek-bench`
+  launch template and the scheduled p6-b300 **Capacity Block**
+  (`cr-04397f3102a3955b7`, 2026-09-21T11:30Z → 2026-09-22T11:30Z), both out of
+  pilot scope and untouched. §5 withdraws the proposed
+  `/model-inference/price_table_version` (contracts v1 resolves `PriceSnapshot`
+  from D1's `price_versions` by effective time; an SSM pin would be a second
+  price authority) and instead assigns the fail-closed price check to
+  I2/G1/D1; the legacy `marlin2b_api_key` cutover is split explicitly between
+  **G1** (mapping or disable) and **I2** (installer), with an environment. §5
+  also names the three `ssm:*Session` grants and `ec2:CreateTags` that the
+  earlier narrowing instruction would have left on `Resource: "*"`, and the
+  IMDS `HttpPutResponseHopLimit=2` that lets containers reach the role.
+  §1 moves the staging secret prefix to the sibling `/infrx-staging/*` so a role
+  narrowed to `/model-inference/*` cannot read staging secrets. §3.2/§3.4 fix the
+  probe's host (the pilot GPU instance) and target (the authoritative pilot PG,
+  D1's scratch schema executed by I2 under the lock) and state which two metrics
+  need the integrated path and so are E4's, not I2's; §3.3 gains a
+  `terminal_txn_ms` threshold with its derivation. §3.5 options A and B are
+  marked separately authorized. §2 assigns the new units to I2 with an
+  environment; §6 corrects the weights row (no Marlin copy in the S3 mirror) and
+  §4 labels the us-east-2 PostgreSQL location a HISTORICAL CLAIM.
