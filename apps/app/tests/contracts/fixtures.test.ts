@@ -13,6 +13,7 @@ import { isMoney } from "../../lib/contracts/money.ts";
 import {
   AUTHOR_ROLES,
   CALIBRATION_LABELS,
+  ENTITLEMENT_LIMIT_NAMES,
   FEEDBACK_CHANNELS,
   FEEDBACK_ENTRY_NAMES,
   FEEDBACK_RATING_MAX,
@@ -35,6 +36,7 @@ function inSet(allowed: readonly string[], value: unknown): boolean {
 
 const orgs = orgsFixture as unknown as {
   clock: string;
+  models: string[];
   orgs: {
     org_id: string;
     name: string;
@@ -47,6 +49,7 @@ const orgs = orgsFixture as unknown as {
     grants: { amount: string; reason: string; created_at: string }[];
     adjustment: { amount: string; reason: string } | null;
     legacy_purchase: { amount: string; reason: string; created_at: string } | null;
+    entitlements: { model_ids: string[] | null; limits: Record<string, number> };
     keys: { id: string; prefix: string; trace_mode: string; revoked_at: string | null }[];
     settings: {
       trace_mode: string;
@@ -161,6 +164,29 @@ test("the organization fixtures match the contract vocabulary", () => {
     }
     // No fixture may carry anything that looks like a live credential.
     assert.ok(!JSON.stringify(org).includes("sk-infrx-FAKE") || org.all_free, "keys are prefixes only");
+  }
+
+  // R24: the three entitlement states are different facts, and U3 must render each of them.
+  const states = orgs.orgs.map((org) =>
+    org.entitlements.model_ids === null
+      ? "default"
+      : org.entitlements.model_ids.length === 0
+        ? "none"
+        : "explicit",
+  );
+  assert.deepEqual([...states].sort(), ["default", "explicit", "none"], "one organization of each kind");
+  for (const org of orgs.orgs) {
+    const list = org.entitlements.model_ids;
+    if (list !== null) {
+      assert.equal(new Set(list).size, list.length, `${org.name} entitlement list repeats a model`);
+      for (const model of list) {
+        assert.ok(orgs.models.includes(model), `${org.name} is entitled to ${model}, which is not served`);
+      }
+    }
+    for (const [name, value] of Object.entries(org.entitlements.limits)) {
+      assert.ok(inSet(ENTITLEMENT_LIMIT_NAMES, name), `${org.name} limit ${name}`);
+      assert.ok(Number.isInteger(value) && value >= 0, `${org.name} limit ${name} must be a whole number`);
+    }
   }
 
   const zeroBalance = orgs.orgs.filter((org) => org.grants.length === 0);

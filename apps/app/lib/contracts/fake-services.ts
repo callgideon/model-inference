@@ -128,6 +128,7 @@ type OrgFixture = {
   adjustment: GrantFixture | null;
   /** A historical `purchase` row: R13 keeps the kind renderable, nothing creates one. */
   legacy_purchase: GrantFixture | null;
+  entitlements: { model_ids: string[] | null; limits: Record<string, number> };
   keys: KeyFixture[];
   settings: {
     trace_mode: string;
@@ -606,6 +607,9 @@ type OrgState = {
  */
 const TIE_INDICES = new Set([6, 7, 13, 14, 99, 100, 106, 107]);
 
+/** The models this platform serves. C reads the real catalogue; the shape of the check is the same. */
+const KNOWN_MODEL_IDS: readonly string[] = orgsFixture.models;
+
 const CLOCK_MS = Date.parse(orgsFixture.clock);
 const MAX_OUTPUT_TOKENS = 2048;
 const INPUT_UNITS = BigInt(orgsFixture.rate_units_per_token.input);
@@ -633,6 +637,22 @@ function availabilityFor(mode: TraceMode, sequence: number, agedOut: boolean): T
   // `created_at + retention` has passed, so `content_expires_at` never precedes `created_at`.
   if (agedOut) return "expired";
   return cycled === "expired" ? "available" : cycled;
+}
+
+function entitlementsOf(spec: OrgFixture): OrgEntitlements {
+  const limits: Partial<Record<EntitlementLimitName, number>> = {};
+  for (const name of ENTITLEMENT_LIMIT_NAMES) {
+    const value = spec.entitlements.limits[name];
+    if (value !== undefined) limits[name] = value;
+  }
+  const recorded = spec.entitlements.model_ids !== null || Object.keys(limits).length > 0;
+  return {
+    org_id: spec.org_id,
+    model_ids: spec.entitlements.model_ids === null ? null : [...spec.entitlements.model_ids].sort(),
+    limits,
+    updated_at: recorded ? spec.created_at : null,
+    updated_by: recorded ? orgsFixture.sessions.operator.email : null,
+  };
 }
 
 /** The sort key of a time-ordered row, and the cursor's payload for these lists. */
@@ -833,9 +853,10 @@ function buildOrg(spec: OrgFixture): OrgState {
     created_at: spec.created_at,
     suspended: spec.suspended,
     suspension_reason: spec.suspension_reason,
-    // No entitlement record until an operator writes one: an empty model list means the platform
-    // default set, which is what an organization that has never been configured gets.
-    entitlements: { org_id: spec.org_id, model_ids: [], limits: {}, updated_at: null, updated_by: null },
+    // R24: `null` is "the platform default set, nothing recorded here", so an organization with a
+    // null list has no audit stamp either. `[]` is a recorded decision to entitle nothing, and it
+    // carries one.
+    entitlements: entitlementsOf(spec),
     settings: {
       trace_mode: pick(TRACE_MODES, spec.settings.trace_mode, `${spec.name} settings trace_mode`),
       content_retention_days: spec.settings.content_retention_days,
@@ -950,6 +971,8 @@ export type FakeIds = {
   unknownRequestId: string;
   keyId: string;
   otherOrgKeyId: string;
+  /** A model id the platform serves, for entitlements and for the `model` filter. */
+  modelId: string;
   /** R18: an organization that is already suspended when the harness is built. */
   suspendedOrgId: string;
 };
@@ -1324,6 +1347,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         unknownRequestId: deterministicUuid(999, 999),
         keyId: orgA.keys[0].id,
         otherOrgKeyId: orgB.keys[0].id,
+        modelId: KNOWN_MODEL_IDS[0],
         suspendedOrgId: suspended.org_id,
       };
     })(),
@@ -1940,23 +1964,28 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (badKey !== null) return fail<OrgEntitlements>("invalid_request", badKey);
       const badReason = badAuditReason(input.reason);
       if (badReason !== null) return fail<OrgEntitlements>("invalid_request", badReason);
-      if (!Array.isArray(input.model_ids) || input.model_ids.length > 100) {
-        return fail("invalid_request", "model_ids must be a list of at most 100 model identifiers");
-      }
-      for (const model of input.model_ids) {
-        if (typeof model !== "string" || model.trim() === "" || model.length > 200) {
-          return fail("invalid_request", "each model id must be a non-empty identifier");
+      // R24: `null` restores the platform default, `[]` entitles nothing, a list is exactly that
+      // set — and every id in it must be a model the platform actually serves, or the organization
+      // would be "entitled" to something that can never run.
+      if (input.model_ids !== null) {
+        if (!Array.isArray(input.model_ids) || input.model_ids.length > 100) {
+          return fail("invalid_request", "model_ids must be null or a list of at most 100 model ids");
         }
-      }
-      if (new Set(input.model_ids).size !== input.model_ids.length) {
-        return fail("invalid_request", "model_ids must not repeat");
+        for (const model of input.model_ids) {
+          if (typeof model !== "string" || !KNOWN_MODEL_IDS.includes(model)) {
+            return fail("invalid_request", `${String(model)} is not a model this platform serves`);
+          }
+        }
+        if (new Set(input.model_ids).size !== input.model_ids.length) {
+          return fail("invalid_request", "model_ids must not repeat");
+        }
       }
       const badLimit = badEntitlementLimits(input.limits);
       if (badLimit !== null) return fail<OrgEntitlements>("invalid_request", badLimit);
       const target = orgs.get(input.target_org_id);
       if (target === undefined) return fail("not_found", "no such organization");
 
-      const model_ids = [...input.model_ids].sort();
+      const model_ids = input.model_ids === null ? null : [...input.model_ids].sort();
       const limits: Partial<Record<EntitlementLimitName, number>> = {};
       for (const name of ENTITLEMENT_LIMIT_NAMES) {
         const value = input.limits[name];
@@ -1964,7 +1993,9 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       }
       const payload = canonicalPayload({
         target_org_id: input.target_org_id,
-        model_ids: model_ids.join(","),
+        // `null` and `[]` are different decisions, so they must be different payloads: an
+        // idempotency key replayed from one to the other is a conflict, not a replay.
+        model_ids: model_ids === null ? "(platform default)" : `[${model_ids.join(",")}]`,
         limits: canonicalPayload(limits),
         reason: input.reason.trim(),
       });

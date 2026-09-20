@@ -351,7 +351,7 @@ test("every operation can be made to fail on demand", async () => {
     adminSetEntitlements: () =>
       services.adminSetEntitlements(operator, {
         target_org_id: otherOrgId,
-        model_ids: [],
+        model_ids: null,
         limits: {},
         reason: "injection probe",
         idempotency_key: "injection-probe-entitlements",

@@ -93,7 +93,17 @@
           }
         ]
       },
-      "all_free": false
+      "all_free": false,
+      "entitlements": {
+        "model_ids": [
+          "marlin-2b@2026-09-01",
+          "deepseek-v41-flash@2026-08-15"
+        ],
+        "limits": {
+          "max_concurrent_requests": 8,
+          "max_video_seconds": 600
+        }
+      }
     },
     {
       "suspension_reason": null,
@@ -124,7 +134,11 @@
         "evaluation_consent": false,
         "consent_history": []
       },
-      "all_free": true
+      "all_free": true,
+      "entitlements": {
+        "model_ids": null,
+        "limits": {}
+      }
     },
     {
       "org_id": "33333333-3333-4333-8333-333333333333",
@@ -161,7 +175,13 @@
         "evaluation_consent": false,
         "consent_history": []
       },
-      "all_free": false
+      "all_free": false,
+      "entitlements": {
+        "model_ids": [],
+        "limits": {
+          "max_concurrent_requests": 0
+        }
+      }
     }
   ],
   "sessions": {

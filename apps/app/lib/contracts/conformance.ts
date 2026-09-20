@@ -23,6 +23,8 @@ import {
   FEEDBACK_CHANNELS,
   FEEDBACK_ENTRY_NAMES,
   FEEDBACK_NAMES,
+  IN_STREAM_ONLY_CODES,
+  INTERNAL_ONLY_CODES,
   JOB_STATES,
   JUDGE_MODES,
   JUDGE_RUN_STATES,
@@ -70,6 +72,8 @@ export type ConsoleHarness = {
     unknownRequestId: string;
     keyId: string;
     otherOrgKeyId: string;
+    /** A model id the platform serves. */
+    modelId: string;
     /** R18: an organization that is suspended before the suite touches anything. */
     suspendedOrgId: string;
   };
@@ -411,7 +415,7 @@ export function runConsoleServicesConformance(
     });
 
     it("rejects a cursor it did not issue for this query", async () => {
-      const { services, sessions } = await makeHarness();
+      const { services, sessions, ids } = await makeHarness();
       const first = expectOk(await services.usage(sessions.owner, { limit: 5 }), "usage first page");
       assert.ok(first.next_cursor !== null, "the fixture needs more than one page");
       const cursor = first.next_cursor;
@@ -450,7 +454,7 @@ export function runConsoleServicesConformance(
       );
       // A cursor is bound to the query that produced it, so filters cannot change mid-walk.
       expectError(
-        await services.usage(sessions.owner, { limit: 5, cursor, model: "marlin-2b@2026-09-01" }),
+        await services.usage(sessions.owner, { limit: 5, cursor, model: ids.modelId }),
         "invalid_cursor",
         "cursor reused with a different filter",
       );
@@ -987,6 +991,22 @@ export function runConsoleServicesConformance(
       // a code added on one side only shows up here rather than at integration (R22).
       const served = ERROR_CODES.filter((code) => ERROR_CODE_HTTP_STATUS[code] !== null);
       assert.equal(served.length, 27, "27 codes carry an HTTP status");
+      // The three sets partition the union exactly, which is what the G0 parity test compares
+      // against the Python `error_codes.json` (R25).
+      assert.equal(IN_STREAM_ONLY_CODES.length, 2, "2 codes exist only as in-stream terminal events");
+      assert.equal(INTERNAL_ONLY_CODES.length, 8, "8 codes are internal-only domain errors");
+      assert.equal(ERROR_CODES.length, 27 + 2 + 8, "the three sets cover the union with no overlap");
+      assert.deepEqual(
+        [...ERROR_CODES].sort(),
+        [...served, ...IN_STREAM_ONLY_CODES, ...INTERNAL_ONLY_CODES].sort(),
+        "every code is in exactly one of the three sets",
+      );
+      for (const code of [...IN_STREAM_ONLY_CODES, ...INTERNAL_ONLY_CODES]) {
+        assert.equal(ERROR_CODE_HTTP_STATUS[code], null, `${code} must not carry an HTTP status`);
+      }
+      // Both a TerminalCause and an internal error: the journal refusing an oversized event.
+      assert.ok(INTERNAL_ONLY_CODES.includes("journal_write_failed"), "R25");
+      assert.ok(TERMINAL_CAUSES.includes("journal_write_failed"), "and still a terminal cause");
       assert.equal(ERROR_CODE_HTTP_STATUS.upload_expired, 410, "an expired upload window is gone, not a 409");
       assert.equal(ERROR_CODE_HTTP_STATUS.result_expired, 410);
       for (const code of ERROR_CODES) {
@@ -1113,19 +1133,113 @@ export function runConsoleServicesConformance(
       assert.equal(await accounting(), before, "suspension must not alter existing accounting rows");
     });
 
+    it("the three entitlement states are distinct, and the empty one is a denial", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const entitlementsOf = async (orgId: string) => {
+        const listed = expectOk(
+          await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
+          "operator org list",
+        );
+        const row = listed.items.find((candidate) => candidate.org_id === orgId);
+        assert.ok(row !== undefined, `${orgId} must be listed`);
+        return row.entitlements;
+      };
+
+      // R24: the harness carries one organization of each kind, because "not configured" and
+      // "entitled to nothing" are different facts and a page must not render them the same way.
+      const kinds = new Set<string>();
+      for (const row of expectOk(
+        await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
+        "operator org list",
+      ).items) {
+        const list = row.entitlements.model_ids;
+        assert.ok(list === null || Array.isArray(list), "model_ids is null or a list, never undefined");
+        kinds.add(list === null ? "default" : list.length === 0 ? "none" : "explicit");
+        if (list !== null) {
+          assert.equal(new Set(list).size, list.length, "a stored entitlement list must not repeat");
+        }
+        if (list === null) {
+          assert.equal(row.entitlements.updated_at, null, "an unrecorded default has no audit stamp");
+        }
+      }
+      assert.deepEqual([...kinds].sort(), ["default", "explicit", "none"], "all three states must be present");
+
+      // Setting each state, and the payload distinction between them.
+      const none = expectOk(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: [],
+          limits: {},
+          reason: "conformance: entitle nothing",
+          idempotency_key: "entitle-none",
+        }),
+        "entitle nothing",
+      );
+      assert.deepEqual(none.model_ids, [], "an empty list is stored as an empty list");
+      assert.deepEqual((await entitlementsOf(ids.orgId)).model_ids, [], "and read back as one");
+
+      const back = expectOk(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: null,
+          limits: {},
+          reason: "conformance: restore the default",
+          idempotency_key: "entitle-default",
+        }),
+        "restore the platform default",
+      );
+      assert.equal(back.model_ids, null, "null is the platform default set, not an empty list");
+      assert.equal((await entitlementsOf(ids.orgId)).model_ids, null);
+
+      // `null` and `[]` are different decisions, so the same key cannot mean both.
+      expectError(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: [],
+          limits: {},
+          reason: "conformance: restore the default",
+          idempotency_key: "entitle-default",
+        }),
+        "idempotency_conflict",
+        "the same key switched between the default and a denial",
+      );
+      expectError(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: [ids.modelId, ids.modelId],
+          limits: {},
+          reason: "conformance",
+          idempotency_key: "entitle-duplicate",
+        }),
+        "invalid_request",
+        "a repeated model id",
+      );
+      expectError(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: ["model-nobody-serves@2026-01-01"],
+          limits: {},
+          reason: "conformance",
+          idempotency_key: "entitle-unknown-model",
+        }),
+        "invalid_request",
+        "a model the platform does not serve",
+      );
+    });
+
     it("an operator sets entitlements, and only the names the contract knows", async () => {
       const { services, sessions, ids } = await makeHarness();
       const set = expectOk(
         await services.adminSetEntitlements(sessions.operator, {
           target_org_id: ids.orgId,
-          model_ids: ["marlin-2b@2026-09-01"],
+          model_ids: [ids.modelId],
           limits: { max_concurrent_requests: 4 },
           reason: "conformance: entitle",
           idempotency_key: "entitle-1",
         }),
         "operator entitlements",
       );
-      assert.deepEqual(set.model_ids, ["marlin-2b@2026-09-01"]);
+      assert.deepEqual(set.model_ids, [ids.modelId]);
       assert.equal(set.limits.max_concurrent_requests, 4);
       assert.ok(set.updated_at !== null && set.updated_by === sessions.operator.email, "the write is audited");
 
@@ -1135,12 +1249,12 @@ export function runConsoleServicesConformance(
       );
       const row = listed.items.find((candidate) => candidate.org_id === ids.orgId);
       assert.ok(row !== undefined);
-      assert.deepEqual(row.entitlements.model_ids, ["marlin-2b@2026-09-01"], "the list shows what was set");
+      assert.deepEqual(row.entitlements.model_ids, [ids.modelId], "the list shows what was set");
 
       expectError(
         await services.adminSetEntitlements(sessions.owner, {
           target_org_id: ids.orgId,
-          model_ids: [],
+          model_ids: null,
           limits: {},
           reason: "owner attempt",
           idempotency_key: "entitle-denied",
@@ -1151,7 +1265,7 @@ export function runConsoleServicesConformance(
       expectError(
         await services.adminSetEntitlements(sessions.operator, {
           target_org_id: ids.orgId,
-          model_ids: [],
+          model_ids: null,
           limits: { unlimited_everything: 1 } as never,
           reason: "conformance",
           idempotency_key: "entitle-bad-limit",
@@ -1162,7 +1276,7 @@ export function runConsoleServicesConformance(
       expectError(
         await services.adminSetEntitlements(sessions.operator, {
           target_org_id: ids.orgId,
-          model_ids: [],
+          model_ids: null,
           limits: { max_concurrent_requests: -1 },
           reason: "conformance",
           idempotency_key: "entitle-negative",

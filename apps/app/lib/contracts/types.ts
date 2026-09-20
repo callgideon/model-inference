@@ -152,8 +152,28 @@ export const ERROR_CODES = [
   "budget_exceeded",
   "consent_missing",
   "ambiguous_submission",
+  "journal_write_failed",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
+
+/**
+ * The three sets 08 §3 partitions the codes into, exported so the G0 parity test can compare them
+ * against the Python `error_codes.json` set by set rather than code by code. `journal_write_failed`
+ * is both a `TerminalCause` and an internal-only error (`StreamStore.append` raises it for an event
+ * over `JOURNAL_EVENT_MAX_BYTES`); it never carries an HTTP status (R25).
+ */
+export const IN_STREAM_ONLY_CODES = ["stream_interrupted", "status_unknown"] as const;
+
+export const INTERNAL_ONLY_CODES = [
+  "already_terminal",
+  "ambiguous_submission",
+  "budget_exceeded",
+  "capacity_unavailable",
+  "consent_missing",
+  "journal_write_failed",
+  "not_claimable",
+  "stale_lease",
+] as const;
 
 /**
  * The HTTP status each code is served with, frozen by the 08 §3 envelope table. `null` marks the
@@ -198,6 +218,7 @@ export const ERROR_CODE_HTTP_STATUS: Readonly<Record<ErrorCode, number | null>> 
   budget_exceeded: null,
   consent_missing: null,
   ambiguous_submission: null,
+  journal_write_failed: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -629,10 +650,18 @@ export type EntitlementLimitName = (typeof ENTITLEMENT_LIMIT_NAMES)[number];
 /** Provisional ceiling on any single entitlement limit, so a typo cannot mean "unlimited". */
 export const MAX_ENTITLEMENT_LIMIT = 1000000;
 
+/**
+ * What an organization may call (R24), stated explicitly so the default cannot be confused with a
+ * denial:
+ *
+ * - `null` — the platform default set. No per-organization decision has been recorded.
+ * - `[]` — **nothing entitled**. Every admission fails `model_not_entitled`. This is a deliberate
+ *   fail-closed state, not an empty field.
+ * - a non-empty list — exactly those models, and nothing else.
+ */
 export type OrgEntitlements = {
   org_id: string;
-  /** Models the organization may call; empty means the platform default set, not "none". */
-  model_ids: string[];
+  model_ids: string[] | null;
   limits: Partial<Record<EntitlementLimitName, number>>;
   updated_at: string | null;
   updated_by: string | null;
@@ -667,7 +696,8 @@ export const ADMIN_SUSPENSION_FIELDS = [
 
 export type AdminEntitlementsInput = {
   target_org_id: string;
-  model_ids: string[];
+  /** `null` restores the platform default; `[]` entitles nothing; a list is exactly that set. */
+  model_ids: string[] | null;
   limits: Partial<Record<EntitlementLimitName, number>>;
   reason: string;
   idempotency_key: string;
