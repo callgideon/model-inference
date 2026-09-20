@@ -1,11 +1,19 @@
 # Pilot deploy design — free single-GPU pilot
 
 Living design for **I2** to implement. I1 created nothing: every row marked
-PROPOSED does not exist. Observed state, historical claims and proposals are
-separated in the I1 inventory,
+PROPOSED does not exist.
+
+**Where the facts live.** The I1 inventory,
 [`research/plan/evidence/i/I1-4e052f4.md`](../research/plan/evidence/i/I1-4e052f4.md)
-(one report for I1, updated in place), which is the factual basis for this
-document. Every cross-reference below names the exact row or section it means. Conventions per `CLAUDE.md`: `est.` stays
+(one report, updated in place), owns **every observed fact and the single table of
+commands that produced them**. This document is the design: it cites that report's
+stable row ids — `O-…` for a row of observed state, `M-…` for a row of the
+required-vs-existing matrix — and does **not** restate what a command returned in
+its own words, because that duplication is what made these two documents drift
+through four review rounds. If a number, port, action list or count appears here
+without an id beside it, it is a proposal, an `est.` budget or a rule, not an
+observation. Identifiers of things a step operates on (an instance, an ENI, a role,
+a parameter name) are named here with their row id. Conventions per `CLAUDE.md`: `est.` stays
 `est.` until measured, `meas.` carries a source, unknowns are
 `⚠️ TO BE VERIFIED` with the estimation method, prices only from
 [cloud-pricing.md](../research/cross-cutting/cloud-pricing.md).
@@ -24,7 +32,7 @@ document only places their artifacts on a host and orders their hooks.
 |---|---|---|---|---|---|---|
 | `local` | Layer 1/2 tests: fakes, real local PG/CH/Valkey/S3-compatible, migrations, RLS | developer host / worktree | local container, per-worktree database name | local container, per-worktree prefix | local `.env` files, never SSM | any track (E2 owns the compose file) |
 | `staging` (allocated) | Layer 3 rehearsal of a deploy, migration and recovery drill | PROPOSED allocated GPU instance, separate instance id and EIP | PROPOSED separate Supabase project or schema | PROPOSED separate bucket/prefix | SSM prefix `/infrx-staging/*` PROPOSED — a **sibling** of `/model-inference/*`, deliberately not nested under it (see §5: a pilot role narrowed to `/model-inference/*` would otherwise read staging secrets, and a staging host reusing that role would read the pilot journal DSN) | I2/I3 holding the lock; **allocation itself is a coordinator action** |
-| `pilot` | The single-GPU free pilot serving real keys | `i-0e8449a4ffca29bab` (g6e.2xlarge, us-east-1d) OBSERVED | Supabase `fcbnscgsymzdykendbrc`, **us-east-2 — HISTORICAL CLAIM (HANDOFF.md §1)**; only the `/INFRX-SUPABASE-PROD/*` parameter *names* are OBSERVED, and a parameter name cannot reveal a project ref or region | PROPOSED `infrx-media`, `infrx-traces` | existing `/model-inference/*` + PROPOSED names in §5 | I2/I3 holding the lock, coordinator-authorized |
+| `pilot` | The single-GPU free pilot serving real keys | `i-0e8449a4ffca29bab` — row `O-INSTANCE` | Supabase `fcbnscgsymzdykendbrc`, **us-east-2 — HISTORICAL CLAIM (HANDOFF.md §1)**; only the `/INFRX-SUPABASE-PROD/*` parameter *names* are OBSERVED, and a parameter name cannot reveal a project ref or region | PROPOSED `infrx-media`, `infrx-traces` | existing `/model-inference/*` + PROPOSED names in §5 | I2/I3 holding the lock, coordinator-authorized |
 
 **Single deployment lock.** One holder at a time may mutate `staging` or
 `pilot`. The lock is a coordinator record, not a technical mechanism: the holder
@@ -51,10 +59,9 @@ Current units are `marlin2b-vllm.service`, `marlin2b-gateway.service` and a
 `caddy` docker container (OBSERVED in the repository; running state observed
 only through the public endpoint). Target layout:
 
-Every unit marked PROPOSED below is created by **I2**, in `staging` then
-`pilot` (matrix row *"New systemd units (worker, preparation, trace shipper)"* in
-§5 of the I1 evidence report carries the same assignment); the owner track named
-in the table owns what runs *inside* the unit, not the unit file.
+Every unit marked PROPOSED below is created by **I2**, in `staging` then `pilot`
+(matrix row `M-UNITS`); the owner track named in the table owns what runs *inside*
+the unit, not the unit file.
 
 | Process | Unit (PROPOSED unless noted) | Listens | Owner track | Working paths | Needs persistent EBS |
 |---|---|---|---|---|---|
@@ -70,19 +77,17 @@ the spool writer is the only writer under `/var/lib/infrx/traces`; media
 preparation runs as a separate process so a decode stall cannot block the
 gateway event loop; no process runs as root. Readiness (`/readyz`, protected)
 reports per-component state; public `/health` stays generic per contracts v1.
-Drain grace: `marlin2b-vllm.service` today has `ExecStop=docker stop` with no
-`-t`, so in-flight generation is killed after the 10 s default (OBSERVED in the
-unit file). I2 sets `docker stop -t 120` with a matching `TimeoutStopSec` on
-every unit that can hold an accepted job, so a deploy drains instead of
-truncating; matrix row *"`ExecStop=docker stop -t 120` + matching
-`TimeoutStopSec` …"* carries the owner and environment.
+Drain grace: the vLLM unit's `ExecStop` carries no `-t` today, so in-flight
+generation is killed after docker's 10 s default (evidence §1, "systemd units").
+I2 sets `docker stop -t 120` with a matching `TimeoutStopSec` on every unit that
+can hold an accepted job, so a deploy drains instead of truncating; matrix row
+`M-DRAIN` carries the owner and environment.
 
-Root volume budget on the current box: 300 GiB gp3 (OBSERVED,
-`vol-091e45c92f7426291`, 3000 IOPS / 125 MiB/s, unencrypted,
-`DeleteOnTermination=true`). Allocation `est.`: OS + DLAMI ~120 GiB, trace spool
-10 GiB cap, media/staging 60 GiB, compile cache 10 GiB, journal spill and logs
-5 GiB — fits with headroom. `DeleteOnTermination=true` and the absence of any
-snapshot (OBSERVED) are the two facts that make §6 mandatory before I2 deploys.
+Root volume budget on the current box: the 300 GiB gp3 volume of row `O-ROOTVOL`.
+Allocation `est.`: OS + DLAMI ~120 GiB, trace spool 10 GiB cap, media/staging
+60 GiB, compile cache 10 GiB, journal spill and logs 5 GiB — fits with headroom.
+That row's `DeleteOnTermination=true` and the zero snapshots/AMIs/backup plans of
+row `O-BACKUPS` are the two facts that make §6 mandatory before I2 deploys.
 
 ## 3. Cross-region journal latency — probe design
 
@@ -152,9 +157,10 @@ measured once G/Q/W are integrated, by E4 on the same host, and until then the
 ladder is evaluated on the `commit_rtt_ms` and `terminal_txn_ms` clauses with
 the two missing metrics recorded as "not run", never as passed.
 
-**Scratch schema ownership.** D1 authors the scratch-schema SQL and its drop
-(D owns all SQL); **I2 executes both under the deployment lock**, because D1
-holds no lock. The schema is created immediately before the run and dropped
+**Scratch schema ownership** (matrix row `M-SCRATCH`). D1 authors the
+scratch-schema SQL and its drop (D owns all SQL); **I2 executes both under the
+deployment lock**, because D1 holds no lock — so the one mutation this probe makes
+to the authoritative database has exactly one lock holder. The schema is created immediately before the run and dropped
 immediately after; its name is recorded in the lock record.
 
 ### 3.3 Pass / fail thresholds
@@ -186,7 +192,7 @@ inherently multi-statement and its statements are dependent, so it costs
 that is ≤ 250 ms, and > 600 ms means the network, not the work, dominates the
 transaction that gates success reporting.
 
-**I2 cannot reach a Pass verdict, and that is expected.** Both the Pass and Fail
+**I2 cannot reach a Pass verdict, and that is expected** (matrix row `M-PROBE`). Both the Pass and Fail
 rows contain `first_progress_ms` and `append_rate_per_s` clauses, which §3.2 shows
 are not measurable before G/Q/W are integrated. So I2's outcome is at best
 *"not Fail on the `commit_rtt_ms` and `terminal_txn_ms` clauses, two metrics not
@@ -260,14 +266,16 @@ per-artifact durable/ephemeral table; the rule for I2 is:
 
 No secret value appears in the repository, a log, an evidence report or a
 process argument. The runtime reads SSM parameter **names**; values arrive
-through the instance role at install or start time.
+through the instance role at install or start time. Which names exist today, with
+their types, key ids and timestamps, is evidence row `O-PARAMS`; the `State`
+column below says only whether this design needs a name created, and by whom.
 
 | Parameter name | State | Consumer |
 |---|---|---|
-| `/model-inference/marlin2b_api_key` | OBSERVED (SecureString) | legacy gateway key; must map to an explicit org/key or be disabled at cutover (contracts v1). **Owner: G1** for the mapping-or-disable decision and its enforcement (`handoffs/G-gateway.md`, "Reconcile legacy key mapping for pilot cutover"); **I2** for the installer half — whether `INFRX_MODE=pilot` still writes `GATEWAY_API_KEY` into the env file. Environment: staging then pilot. Matrix row *"Legacy `marlin2b_api_key` cutover — map to an explicit org/key or disable"* in §5 of the I1 evidence report carries the same split |
-| `/model-inference/supabase_url` | OBSERVED (String) | gateway auth |
-| `/model-inference/supabase_service_role_key` | OBSERVED (SecureString) | gateway auth / usage rows |
-| `/model-inference/hf_token` | OBSERVED (SecureString) | weight download |
+| `/model-inference/marlin2b_api_key` | exists — row `O-PARAMS` | legacy gateway key; must map to an explicit org/key or be disabled at cutover (contracts v1). **Owner: G1** for the mapping-or-disable decision and its enforcement (`handoffs/G-gateway.md`, "Reconcile legacy key mapping for pilot cutover"); **I2** for the installer half — whether `INFRX_MODE=pilot` still writes `GATEWAY_API_KEY` into the env file. Environment: staging then pilot. Matrix row `M-KEYCUT` carries the same split |
+| `/model-inference/supabase_url` | exists — row `O-PARAMS` | gateway auth |
+| `/model-inference/supabase_service_role_key` | exists — row `O-PARAMS` | gateway auth / usage rows |
+| `/model-inference/hf_token` | exists — row `O-PARAMS` | weight download |
 | `/model-inference/pg_journal_url` | PROPOSED | worker/gateway journal + ledger DSN (I2) |
 | `/model-inference/clickhouse_dsn`, `/model-inference/clickhouse_writer_password` | PROPOSED, names owned by T | trace projection |
 | `/model-inference/anthropic_api_key` | PROPOSED | judge, J, live budget default zero |
@@ -280,12 +288,15 @@ authority. The fail-closed check below therefore asserts against PostgreSQL, and
 there is no new parameter to own. Every remaining name has one consumer and one
 creating task.
 
-**Fail closed in pilot mode.** `install.sh` today treats a missing SSM
+**Fail closed in pilot mode** (matrix row `M-FAILCLOSED`). `install.sh` today treats a missing SSM
 parameter as a warning and writes a partial env file, so the gateway can come
-up with the legacy key alone — no Supabase auth and no usage rows (OBSERVED in
-`apps/infrx-api/deploy/install.sh`). That behaviour is acceptable for a
+up with the legacy key alone — no Supabase auth and no usage rows (evidence §1,
+"Installer failure mode", observed in `apps/infrx-api/deploy/install.sh` at the
+base SHA). That behaviour is acceptable for a
 single-user dev box and unacceptable once promotional credits are enforced. I2
 must add an explicit mode:
+
+The mode flag is one operation, matrix row `M-FAILCLOSED`, split as that row says:
 
 - `INFRX_MODE=dev` keeps today's permissive behaviour and refuses to bind a
   public interface.
@@ -301,46 +312,32 @@ must add an explicit mode:
 - `/readyz` stays 503 until admission, ledger and journal all answer; the
   systemd unit does not report `active` before that.
 
-The instance role `bootcamp-instance-role`'s inline policy `bootcamp-ops` grants,
-on `Resource: "*"` (OBSERVED 19:14:44Z, `iam get-role-policy --role-name
-bootcamp-instance-role --policy-name bootcamp-ops`; its full statement list is the
-row *"IAM over-grant (inline `bootcamp-ops`)"* in §2 of the I1 evidence report):
-`ssm:GetParameter`, `GetParameters`,
-`GetParametersByPath`, **`ssm:StartSession`, `ssm:TerminateSession`,
-`ssm:DescribeSessions`**, `ec2:Describe*`, `ec2:RunInstances`,
-`TerminateInstances`, `Stop/StartInstances`, `Create/DeleteVolume`,
-`Attach/DetachVolume`, **`ec2:CreateTags`**, `servicequotas:GetServiceQuota` /
-`ListServiceQuotas` / `GetAWSDefaultServiceQuota` /
-`ListRequestedServiceQuotaChangeHistoryByQuota`, `ce:GetCostAndUsage`,
-`pricing:GetProducts` and `sts:GetCallerIdentity`, plus `iam:PassRole` on itself.
+**Why the instance role has to be replaced — the facts, by row id.** The role
+`bootcamp-instance-role` that the pilot host uses today grants, on
+`Resource: "*"`, an account-wide SSM parameter read, remote-shell
+(`ssm:StartSession`) on any managed instance, instance and volume lifecycle,
+`ec2:CreateTags`, the cost/quota/pricing verbs and `iam:PassRole` on itself
+(evidence row `O-OPS`, which is the verbatim statement list — this document does
+not repeat it). **The parameter read arrives twice**: the second source is the
+attached AWS managed policy `AmazonSSMManagedInstanceCore`, whose default version
+grants `ssm:GetParameter` and `ssm:GetParameters` on `Resource: "*"` in its first
+statement (row `O-MANAGED`, which quotes all three statements verbatim). So
+dropping the inline statement is **not** sufficient: attaching that managed policy
+unmodified to the new role would re-grant exactly the account-wide read the new
+role exists to remove. And **no KMS barrier stands behind it** — every SecureString
+in the account, this project's and the others', is encrypted with the AWS-managed
+`alias/aws/ssm` key, which any principal in the account decrypts through SSM (row
+`O-PARAMS`). Parameter-read permission therefore *is* decryption permission, which
+is why §5 step 5 and matrix row `M-KMS` exist.
 
-**Two grants, not one — and the managed policy is the one that matters.**
-`bootcamp-ops` is the inline policy; the role **also** has the AWS managed policy
-`AmazonSSMManagedInstanceCore` attached (OBSERVED 17:44:30Z), whose default
-version **v2** carries `ssm:GetParameter` and `ssm:GetParameters` on
-`Resource: "*"` in its first statement (OBSERVED 19:32:42Z–19:32:55Z:
-`iam get-policy --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore`
-→ `DefaultVersionId=v2`, then `iam get-policy-version --version-id v2`; itemised
-in §Commands of the I1 evidence report, matrix row *"Pilot-specific instance role
-+ profile …"*). So dropping the inline statement is **not** sufficient: attaching
-that managed policy unmodified to the new role would re-grant the exact
-account-wide parameter read the new role exists to remove. There is no KMS
-barrier behind it either — every SecureString under `/INFRX-SUPABASE-PROD/*`,
-`/callgideon/*` and `/model-inference/*` is encrypted with `alias/aws/ssm`, the
-AWS-managed key, which any principal in the account decrypts through SSM
-(OBSERVED 19:33:11Z, `ssm describe-parameters` querying name and `KeyId` for the
-SecureString parameters — names and key ids only, **no value was read**).
+**The fix is a new role, not an edit of this one**, because the role's only
+instance profile is attached to the stopped llm-bootcamp box as well as to the
+pilot host (row `O-SHAREDPROFILE`): stripping statements in place would silently
+change another project's permissions, the same class of mistake as the withdrawn
+Elastic-IP item. So I2:
 
-**The fix is a new role, not an edit of this one.** `bootcamp-instance-role` has
-exactly one instance profile, `bootcamp-instance-profile` (OBSERVED 19:14:45Z),
-and that profile is attached to **both** `i-0e8449a4ffca29bab` (the pilot host)
-and the stopped `i-03723906646f2bb05` (`Project=llm-bootcamp`, not part of this
-project) — both OBSERVED 19:14:35Z–19:14:36Z. Stripping statements in place would
-silently change another project's permissions, the same class of mistake as the
-withdrawn Elastic-IP item. So I2:
-
-1. creates a **pilot-specific role `infrx-pilot-role` and profile
-   `infrx-pilot-profile`** carrying only what the pilot needs, then swaps the
+1. (matrix row `M-ROLE`) creates a **pilot-specific role `infrx-pilot-role` and
+   profile `infrx-pilot-profile`** carrying only what the pilot needs, then swaps the
    profile onto `i-0e8449a4ffca29bab` alone by calling
    `ec2:ReplaceIamInstanceProfileAssociation` **as its own admin principal** —
    that call is I2's, not a permission inside the new role, which grants no
@@ -357,38 +354,78 @@ withdrawn Elastic-IP item. So I2:
    none of the cost/quota/pricing statements (they exist for the benchmark work,
    not for serving);
 5. keeps `ec2:Describe*`, and **does not attach `AmazonSSMManagedInstanceCore`**.
-   Instead it carries a **custom minimal agent policy**: that managed policy's
-   `ssmmessages:*` and `ec2messages:*` statements verbatim, plus its first
-   statement with **`ssm:GetParameter` and `ssm:GetParameters` removed** — the
-   agent itself needs only `UpdateInstanceInformation`, `ListAssociations`,
-   `ListInstanceAssociations`, `DescribeAssociation`, `GetDocument`,
-   `DescribeDocument`, `GetManifest`, `GetDeployablePatchSnapshotForInstance`,
-   `PutInventory`, `PutComplianceItems`, `PutConfigurePackageResult`,
-   `UpdateAssociationStatus` and `UpdateInstanceAssociationStatus`, none of which
-   reads a parameter. The step-2 statement is then the role's **only**
-   `ssm:GetParameter*` grant, which is what makes the `/model-inference/*`
-   scoping real. Two alternatives, if something later forces the managed policy
-   back on: an explicit `Deny` on `ssm:GetParameter*` with
-   `NotResource arn:aws:ssm:us-east-1:641134885443:parameter/model-inference/*`
-   (a `Deny` beats any `Allow`), or a customer-managed KMS key on the pilot's own
-   parameters — the only option that also survives a future policy edit, at the
-   cost of a key to manage. **I2 picks one and records which in its evidence.**
+   Instead it creates a **customer-managed agent policy** by copying row
+   `O-MANAGED`'s action lists and removing exactly two actions. That row is the
+   verbatim policy document, and it has **no wildcard action in it**: the agent's
+   own statement enumerates fifteen `ssm:` actions, of which the new policy keeps
+   thirteen and drops `ssm:GetParameter` and `ssm:GetParameters`; the channel
+   statements enumerate **four** `ssmmessages:` actions and **six**
+   `ec2messages:` actions, which are copied action by action. Copy the names from
+   `O-MANAGED`, not from this paragraph, and **write no `ssmmessages:*` or
+   `ec2messages:*` wildcard** — an earlier revision of this step said those two
+   statements were wildcards and told I2 to carry them "verbatim", which would have
+   shipped a *broader* agent policy than the managed one it replaces (§Verification
+   log, fifth pass). The step-2 statement is then the role's **only**
+   `ssm:GetParameter*` grant, which is what makes the `/model-inference/*` scoping
+   real.
+
+   **Read-only check that the scoping took effect**, run by I2 after the swap and
+   recorded in its evidence:
+   `iam list-attached-role-policies --role-name infrx-pilot-role` lists **no**
+   `AmazonSSMManagedInstanceCore`; `iam list-role-policies` +
+   `iam get-role-policy` (and `get-policy-version` for any customer-managed policy
+   attached) show every `ssm:GetParameter*` resource under
+   `arn:aws:ssm:us-east-1:641134885443:parameter/model-inference/*`, no `*` action
+   and no `ssm:*Session`; `ec2 describe-instances --instance-ids
+   i-0e8449a4ffca29bab` shows `IamInstanceProfile` = `infrx-pilot-profile`; and
+   `ssm describe-instance-information` still reports the host `Online`.
+
+6. **makes the isolation survive the next policy edit, or records that it did not.**
+   Step 5 closes today's exposure through the identity policy alone, and that is
+   the whole barrier: because every SecureString is on the AWS-managed
+   `alias/aws/ssm` key (row `O-PARAMS`), anything that later re-grants
+   `ssm:GetParameter*` on `*` — re-attaching the managed policy, a broad
+   convenience policy, a second role on the host — silently restores the
+   cross-project read, with no second control to stop it. The durable form,
+   **PROPOSED, assigned to I2, in `staging` then `pilot`** (matrix row `M-KMS`):
+   - a customer-managed KMS key, alias `alias/infrx-pilot`, whose **key policy
+     names only** `infrx-pilot-role` for `kms:Decrypt` (plus the account admin for
+     key administration) — a principal without that key policy cannot read the
+     pilot's SecureStrings even holding `ssm:GetParameter` on `*`;
+   - the pilot's own parameters under a **pilot-only path**, re-created as
+     SecureString under that key (`ssm put-parameter --key-id`, values supplied out
+     of band exactly as for `/model-inference/pg_journal_url`; **I1 read no value
+     and this step reads none**);
+   - `staging` on the **sibling** prefix `/infrx-staging/*` with its own key and
+     its own role — deliberately not nested below the pilot path, so neither
+     environment's role can reach the other's secrets (§1);
+   - **read-only verification:** `ssm describe-parameters` shows
+     `KeyId=alias/infrx-pilot` on the pilot parameters and `alias/aws/ssm`
+     unchanged on everything else, and `kms get-key-policy` /
+     `kms list-grants` (read verbs, in I2's allowlist, not I1's) show only the
+     pilot role as decryptor.
+
+   If I2 defers the key, it records the deferral and the residual risk in its
+   evidence; the explicit `Deny` variant — a `Deny` on `ssm:GetParameter*` with
+   `NotResource arn:aws:ssm:us-east-1:641134885443:parameter/model-inference/*`,
+   which beats any later `Allow` on the same role — is a cheaper partial that
+   protects the role but not a *second* principal on the host. **I2 picks the key,
+   the `Deny`, or neither, and records which.**
 
 An IAM role is **account-global**, so "staging then pilot" is not a meaningful
 environment for it: the role and profile are created once and the *association*
 is swapped per host — staging gets its own role scoped to `/infrx-staging/*`.
-Matrix row *"Pilot-specific instance role + profile …"* records it that way, and
-matrix row *"Set `HttpPutResponseHopLimit` to 1 …"* carries the IMDS change.
+Matrix row `M-ROLE` records it that way, `M-KMS` carries the key, and `M-IMDS`
+carries the IMDS change.
 
-Compounding these: the instance has IMDSv2 required
-(`HttpTokens=required`, `HttpEndpoint=enabled`) but
-**`HttpPutResponseHopLimit=2`** (OBSERVED 19:14:35Z), so a process inside a
-bridged docker container — including the unpinned `vllm/vllm-openai:nightly`
-image — reaches the instance-role credentials and today inherits account-wide SSM
-read. I2 sets the hop limit to 1 in the same change as the profile swap
-(`ec2 modify-instance-metadata-options`, a mutation, under the lock).
+Compounding these (matrix row `M-IMDS`): the host enforces IMDSv2 but runs at
+**hop limit 2** (row `O-IMDS`), so a process inside a bridged docker container — including the unpinned
+`vllm/vllm-openai:nightly` image — reaches the instance-role credentials and today
+inherits the account-wide SSM read. I2 sets the hop limit to 1 in the same change
+as the profile swap (`ec2 modify-instance-metadata-options`, a mutation, under the
+lock).
 
-**Hardening fact I2 must check first, in this order:** hop limit 1 is precisely
+**Hardening fact I2 must check first, in this order** (still matrix row `M-IMDS`)**:** hop limit 1 is precisely
 what stops a *bridged* container reaching IMDS (the bridge consumes the single
 hop), and it does **not** stop a container started with `--network host`. Nothing
 on the box is known to need role credentials from inside a container — the
@@ -401,30 +438,30 @@ an injected env file or the host network first. Flipping it blind can break the
 engine start, and a broken engine on the serving host is worse than the exposure
 it closes for the minutes it takes to notice.
 
-**SSH: host-scoped for the same reason as the role.** The only tcp/22 ingress in
-the two pilot security groups lives in `sg-0145dcf39dfe8194e` (`bootcamp-sg`);
-`sg-050d7b384ad79856d` (`marlin2b-gateway`) carries only tcp/80 and tcp/443
-(OBSERVED 19:32:45Z, `ec2 describe-security-groups --group-ids` both). And
-`bootcamp-sg` is attached to **both** the pilot host's ENI
-`eni-0eedf581ac04cd880` and the stopped llm-bootcamp box's
-`eni-08a7db926a0d98572` (OBSERVED 19:32:57Z,
-`ec2 describe-network-interfaces --filters Name=group-id,Values=sg-0145dcf39dfe8194e`).
-Revoking the rule in place would close SSH on another project's instance — the
-same defect as editing `bootcamp-instance-role`. So I2 changes the **pilot ENI's
-group set** instead (`ec2 modify-network-interface-attribute --groups`, a
-mutation, under the lock): either `marlin2b-gateway` alone, since the SSM agent is
-`Online` and SSH is not required, or `marlin2b-gateway` plus a new
+**SSH: host-scoped for the same reason as the role.** Per row `O-SG`, the only
+tcp/22 rule on either of the pilot's groups is in `bootcamp-sg`, which is attached
+to the stopped llm-bootcamp box's ENI as well as the pilot host's; `marlin2b-gateway`
+carries only the two web ports and is attached to the pilot ENI alone. Revoking the
+rule in place would close SSH on another project's instance — the same defect as
+editing `bootcamp-instance-role`. So I2 changes the **pilot ENI's group set**
+instead (`ec2 modify-network-interface-attribute --groups`, a mutation, under the
+lock): either `marlin2b-gateway` alone, since the SSM agent is `Online` (row
+`O-SSMAGENT`) and SSH is not required, or `marlin2b-gateway` plus a new
 `infrx-pilot-sg` with tcp/22 from an admin CIDR if key access is kept.
-`bootcamp-sg` itself is not modified. Matrix row *"Restrict tcp/22 from
-`0.0.0.0/0` …"* records it host-scoped. **Order:** this is the last of the three
+`bootcamp-sg` itself is not modified, and no rule of it is changed. **This is an
+ingress change only:** both groups allow all egress (`O-SG`), so it restricts
+nothing outbound, and an outbound control would be a separate proposal with its own
+matrix row. Matrix row `M-SSH` records it host-scoped. **Order:** this is the last of the three
 host changes, because removing SSH before the profile swap and the hop-limit flip
 removes the fallback if SSM access breaks; I2 confirms `ssm
 describe-instance-information` still reports `Online` immediately beforehand.
 
 ## 6. Backup and restore per durable layer
 
-No EC2 snapshot, AMI or AWS Backup plan exists in the account (OBSERVED). All
-values below are `est.` placeholders until I3 measures them; I3 owns the drills
+No EC2 snapshot, AMI or AWS Backup plan exists in the account (row `O-BACKUPS`);
+creating the first one is matrix row `M-SNAPSHOT`, and the two buckets are
+`M-MEDIA` and `M-TRACES`. All values below are `est.` placeholders until I3
+measures them; I3 owns the drills
 and replaces them with `meas.`.
 
 | Layer | Backup mechanism | RPO | RTO | Restore test owner |
@@ -442,15 +479,16 @@ and replaces them with `meas.`.
 The deploy script contains no SQL and no DDL. It invokes, in order, under the
 deployment lock:
 
-1. **Snapshot** the root volume and record the snapshot id in the lock record.
+1. **Snapshot** the root volume and record the snapshot id in the lock record
+   (matrix row `M-SNAPSHOT`).
 2. **Pause admission** (maintenance mode accepting no new work, existing jobs
    draining).
-3. **D's PostgreSQL migrations** — numbered files, one per change, applied
+3. **D's PostgreSQL migrations** (matrix row `M-PGSCHEMA`) — numbered files, one per change, applied
    through the pooler URL. D owns the files and the sequence numbers; the
    deploy calls D's entry point and fails the deploy on a non-zero exit.
    Additive expand/contract only, forward-compatible with the currently
    deployed runtime.
-4. **T's ClickHouse DDL** — same contract, T's entry point, after PG so a trace
+4. **T's ClickHouse DDL** (matrix row `M-CHDDL`) — same contract, T's entry point, after PG so a trace
    projection never references a column that does not exist yet.
 5. **Restart** engine, worker, preparation, spool shipper, gateway in that
    order; each waits for the previous readiness signal.
@@ -461,9 +499,12 @@ two-deploy change, never one.
 
 ## 8. Rollback rule
 
-From [03-execution-protocol.md](../research/plan/03-execution-protocol.md):
+From [03-execution-protocol.md](../research/plan/03-execution-protocol.md). The
+runbook that turns these rules into a drilled procedure is matrix row
+`M-RUNBOOKS` (I3); nothing below is an operation I2 performs outside the lock:
 
-1. Pause admission; drain and fence in-flight work; reconcile durable jobs.
+1. Pause admission; drain and fence in-flight work; reconcile durable jobs
+   (matrix row `M-RUNBOOKS` owns writing and drilling this as a procedure).
 2. Deploy the previous **compatible** runtime. Rebuild queue indices from
    PostgreSQL; disabling Valkey is not a data migration and cannot discard jobs.
 3. If no compatible runtime exists, serve **maintenance 503** until one does.
@@ -478,37 +519,27 @@ From [03-execution-protocol.md](../research/plan/03-execution-protocol.md):
 ## 9. Deferred to I4 (not pilot scope)
 
 ALB across ≥ 2 AZs, ACM certificate and WAF (Caddy with Let's Encrypt stays for
-the pilot — OBSERVED issuer on the live endpoint); Auto Scaling group and launch
+the pilot — row `O-TLS` records the live issuer as of 17:47Z); Auto Scaling group and launch
 template; baked AMI; on-demand capacity reservation; ElastiCache Valkey as a
 scheduling index; multi-AZ or second worker. I4 starts after I3 and E4, from
 measured pilot data, per the handoff. Capacity purchases are separately
 authorized and are not implied by any design in this document.
 
-**Pre-existing resources of these kinds are not this project's.** Each fact below
-was re-observed in the third pass and is itemised with its command and UTC time in
-§Commands of the I1 evidence report:
+**Pre-existing resources of these kinds are not this project's.** The account
+already holds an ALB with nine target groups, seven ACM certificates, nine Auto
+Scaling groups at desired capacity 0, ten launch templates and one scheduled
+`capacity-block` capacity reservation. They belong to CallGideon and to the
+llm-bootcamp/DeepSeek benchmark work. The identifiers, states, dates and the
+commands that returned them are evidence matrix row `M-FLEET` and handback item 12
+of the I1 evidence report; this document does not restate them, so the two files
+cannot come to disagree about a count again.
 
-- `autoscaling describe-auto-scaling-groups` (OBSERVED 19:14:59Z): **9** Auto
-  Scaling groups, every one `gideon-{chat-agent,platform-api,voice-agent}-{dev,exp,prod}-asg`,
-  all at desired capacity 0.
-- `ec2 describe-launch-templates` (OBSERVED 19:14:56Z–19:14:57Z): **10** launch
-  templates — the nine matching `gideon-*` plus `b300-deepseek-bench`, which
-  belongs to the llm-bootcamp/DeepSeek benchmark work, not to the infrx pilot. Its
-  three versions carry **no `IamInstanceProfile`**
-  (`ec2 describe-launch-template-versions`, OBSERVED 19:15:00Z), which is why the
-  §5 profile swap has a blast radius of the two g6e instances only.
-- `ec2 describe-capacity-reservations` (OBSERVED 19:14:54Z, tags and creation date
-  19:15:10Z): exactly one reservation, `cr-04397f3102a3955b7`,
-  **ReservationType=capacity-block**, `p6-b300.48xlarge`, us-east-1b, state
-  `scheduled`, **start 2026-09-21T11:30:00Z, end 2026-09-22T11:30:00Z**, tags
-  `Name=b300-bootcamp`, `Purpose=llm-bootcamp`, created 2026-09-18T18:06:31Z. No
-  `ReservationType=default` on-demand capacity reservation exists.
-
-None of these is created, used, extended, modified or cancelled by any task in
-this document. The Capacity Block is surfaced to the coordinator as handback item
-12 of the I1 evidence report, because it is a prepaid commitment in the same
-project family that starts within a day; acting on it is separately authorized and
-nothing here proposes anything about it.
+**None of them is created, used, extended, modified or cancelled by any task in
+this document**, and nothing here proposes anything about the Capacity Block —
+acting on another project's prepaid commitment is separately authorized. Genuinely
+absent for this project, per the same row: no on-demand capacity reservation, no
+WAF web ACL, no ElastiCache cluster, no self-owned AMI, no infrx load balancer or
+target group.
 
 ## Verification log
 
@@ -602,9 +633,14 @@ nothing here proposes anything about it.
     shipper)"*, *"Legacy `marlin2b_api_key` cutover …"*), which the same pass adds
     to the evidence report, and the header links the report by its real filename.
 - 2026-09-20 (fourth review pass — the secret isolation of §5 did not actually
-  isolate; still read-only: five `iam get-policy` / `get-policy-version` /
-  `describe-security-groups` / `describe-network-interfaces` /
-  `describe-parameters` calls at 19:32:42Z–19:33:30Z, **no** resource created,
+  isolate; still read-only: **six** calls at 19:32:42Z–19:33:28Z —
+  `iam get-policy`, `iam get-policy-version`, `ec2 describe-security-groups`,
+  `ec2 describe-network-interfaces`, `ssm describe-parameters` and
+  `ec2 describe-instances` (the last is the one the security-group row cites for
+  the pilot ENI's group set, and an earlier revision of this entry omitted it and
+  said "five"); the counts and the closing time are whatever §Commands of the I1
+  evidence report says, which is now the only place either is stated. **No**
+  resource created,
   modified or deleted, **no** secret value read, **no** remote command, **no**
   HTTP request):
   - **§5 no longer attaches `AmazonSSMManagedInstanceCore` to the new role.** Its
@@ -631,3 +667,50 @@ nothing here proposes anything about it.
     `ec2:ReplaceIamInstanceProfileAssociation`; §6's weights row marks the S3
     mirror of Marlin as **not proposed and not assigned** (it would write into
     another project's bucket).
+- 2026-09-20 (fifth review pass — convergence; still read-only: 57 `sts` /
+  `iam` / `ec2` / `autoscaling` / `ssm` / `route53` / `s3api` / `elasticache` /
+  `elbv2` / `acm` / `wafv2` / `rds` / `backup` / `cloudwatch` / `service-quotas` /
+  `sesv2` read calls at 20:40:04Z–20:43:17Z, itemised in §Commands of the I1
+  evidence report with their raw-output files; **no** resource created, modified or
+  deleted, **no** secret value read, **no** remote command, **no** HTTP request, no
+  Cost Explorer call):
+  - **§5 step 5 no longer tells I2 to write a wildcard.** It said to carry
+    `AmazonSSMManagedInstanceCore`'s "`ssmmessages:*` and `ec2messages:*`
+    statements verbatim". Re-reading that policy with no `--query` shows it contains
+    **no wildcard action**: the channel statements enumerate four `ssmmessages:` and
+    six `ec2messages:` actions. The instruction would have shipped a *broader* agent
+    policy than the managed one it replaces. Step 5 now builds the customer-managed
+    policy by copying evidence row `O-MANAGED`'s enumerated actions and dropping
+    exactly `ssm:GetParameter` and `ssm:GetParameters`, and says so explicitly.
+  - **Step 6 is new: how the isolation is actually achieved, not just today.**
+    Because every SecureString in the account is on the AWS-managed `alias/aws/ssm`
+    key (row `O-PARAMS`), the identity-policy narrowing is the only barrier and any
+    later re-grant of `ssm:GetParameter*` on `*` silently restores the cross-project
+    read. The durable form — a customer-managed key `alias/infrx-pilot` whose key
+    policy names only `infrx-pilot-role`, the pilot parameters re-created under it,
+    staging on the sibling `/infrx-staging/*` with its own key and role — is a
+    **PROPOSAL assigned to I2 in `staging` then `pilot`**, with matrix row `M-KMS`
+    and a read-only verification (`ssm describe-parameters` shows the pilot `KeyId`;
+    `kms get-key-policy` shows only the pilot role). Steps 5 and 6 each carry the
+    read-only check that proves they took effect.
+  - **This document stops restating observed facts.** Every fact it needs now
+    resolves through a stable evidence row id (`O-…` for observed state, `M-…` for a
+    matrix row): the IAM statement lists, the per-group ingress and ENI attachments,
+    the volume attributes, the IMDS options, the parameter inventory and §9's
+    ASG/launch-template/Capacity-Block listing are cited, not repeated. Four review
+    rounds of drift all came from the same duplication.
+  - **The two documents can no longer disagree about what was run.** This log's
+    fourth-pass entry said "five" calls where the evidence report itemised six and
+    omitted the `ec2 describe-instances` call that the security-group row depends
+    on; it now says six, names it, and defers the count and the window to the single
+    §Commands table. The HTTP request budget is stated **only** in §Commands, which
+    records it as closed by the coordinator; nothing here restates it.
+  - New facts that reached the design: both pilot security groups allow **all
+    egress**, so the tcp/22 change is an ingress control only and `marlin2b-gateway`
+    alone cuts no outbound traffic; `marlin2b-gateway` is attached to the pilot ENI
+    alone, which is what makes it safe to keep; the managed-policy **attachment** is
+    cited at its real observation time rather than 17:44:30Z.
+  - Unchanged: no resource was created and no configuration changed by I1; the
+    §3.3 thresholds stay `est.` and become a gate only after **E4** measures them
+    (coordinator ruling, evidence Limits item 9); prices are still only what
+    `cloud-pricing.md` carries, i.e. none for g6e, with the method recorded.
