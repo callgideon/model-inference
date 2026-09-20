@@ -154,7 +154,163 @@ test("many submissions never reuse a feedback id, and two organizations never sh
   assert.ok(listed.ok);
   assert.equal(new Set(listed.value.map((entry) => entry.id)).size, listed.value.length, "listed ids are unique");
   assert.equal(listed.value.length, 200 + 1, "the seeded entry on this trace plus the 200 minted ones");
+  for (const entry of listed.value) {
+    assert.equal(entry.author_role, "customer", "nothing submitted through the console is operator-authored");
+    assert.equal(entry.calibration_set, false, "and nothing submitted enrols itself for calibration");
+  }
   for (const entry of listed.value) assert.match(entry.id, /^fb_[0-9a-f]{12}$/, "feedback ids stay opaque");
+});
+
+test("a failure after the write replays instead of repeating, for every mutating operation", async () => {
+  // The Python FailurePlan's crash-after-commit: the effect and its idempotency record are
+  // committed together and then the response is lost. The retry the client makes must find the
+  // original effect, not make a second one (N7).
+  const services = createFakeConsoleServices();
+  const { owner, operator } = services.sessions;
+  const { orgId, otherOrgId, availableRequestId } = services.ids;
+
+  const ledgerIds = async (): Promise<string[]> => {
+    const page = await services.ledger(owner, { limit: 100 });
+    assert.ok(page.ok);
+    return page.value.items.map((entry) => entry.id);
+  };
+  const feedbackIds = async (): Promise<string[]> => {
+    const list = await services.feedback.list(owner, availableRequestId);
+    assert.ok(list.ok);
+    return list.value.map((entry) => entry.id);
+  };
+  const keyIds = async (): Promise<string[]> => {
+    const list = await services.keys.list(owner);
+    assert.ok(list.ok);
+    return list.value.map((key) => key.id);
+  };
+
+  // adminGrant
+  services.failNext("adminGrant", "dependency_unavailable", "lost response", "after_write");
+  const grantInput = {
+    target_org_id: orgId,
+    amount: "2.00000000" as never,
+    kind: "promotional" as const,
+    reason: "crash after commit",
+    idempotency_key: "crash-grant-1",
+  };
+  const lostGrant = await services.adminGrant(operator, grantInput);
+  assert.equal(lostGrant.ok, false, "the response is lost");
+  const afterGrant = await ledgerIds();
+  const retriedGrant = await services.adminGrant(operator, grantInput);
+  assert.ok(retriedGrant.ok && retriedGrant.value.replayed === true, "the retry replays the committed grant");
+  assert.deepEqual(await ledgerIds(), afterGrant, "the retry must not grant a second time");
+  // The committed row carries the key as its `ref`, so a store that lost the record can still
+  // recognise its own grant.
+  const page = await services.ledger(owner, { limit: 100 });
+  assert.ok(page.ok);
+  assert.equal(
+    page.value.items.filter((entry) => entry.ref === "crash-grant-1").length,
+    1,
+    "exactly one ledger row carries the idempotency key",
+  );
+
+  // feedback.submit
+  services.failNext("feedback.submit", "dependency_unavailable", "lost response", "after_write");
+  const feedbackInput = {
+    request_id: availableRequestId,
+    name: "thumb" as const,
+    value: true,
+    idempotency_key: "crash-feedback-1",
+  };
+  assert.equal((await services.feedback.submit(owner, feedbackInput)).ok, false);
+  const afterFeedback = await feedbackIds();
+  const retriedFeedback = await services.feedback.submit(owner, feedbackInput);
+  assert.ok(retriedFeedback.ok);
+  assert.deepEqual(await feedbackIds(), afterFeedback, "the retry must not record a second signal");
+
+  // keys.create — and the retry must still not hand over the secret
+  services.failNext("keys.create", "dependency_unavailable", "lost response", "after_write");
+  const keyInput = { name: "crash key", idempotency_key: "crash-key-1" };
+  assert.equal((await services.keys.create(owner, keyInput)).ok, false);
+  const afterCreate = await keyIds();
+  const retriedCreate = await services.keys.create(owner, keyInput);
+  assert.ok(retriedCreate.ok);
+  assert.equal(retriedCreate.value.secret, null, "a lost first response does not entitle the retry to the secret");
+  assert.equal(retriedCreate.value.replayed, true);
+  assert.deepEqual(await keyIds(), afterCreate, "the retry must not mint a second key");
+
+  // keys.revoke
+  const active = (await services.keys.list(owner));
+  assert.ok(active.ok);
+  const target = active.value.find((key) => key.revoked_at === null);
+  assert.ok(target !== undefined);
+  services.failNext("keys.revoke", "dependency_unavailable", "lost response", "after_write");
+  assert.equal((await services.keys.revoke(owner, target.id, "crash-revoke-1")).ok, false);
+  const retriedRevoke = await services.keys.revoke(owner, target.id, "crash-revoke-1");
+  assert.ok(retriedRevoke.ok && retriedRevoke.value.revoked_at !== null, "the retry returns the revocation");
+
+  // settings.update — the audit trail must not gain a second entry
+  services.failNext("settings.update", "dependency_unavailable", "lost response", "after_write");
+  const settingsInput = { evaluation_consent: false, idempotency_key: "crash-settings-1" };
+  assert.equal((await services.settings.update(owner, settingsInput)).ok, false);
+  const afterSettings = await services.settings.get(owner);
+  assert.ok(afterSettings.ok);
+  const retriedSettings = await services.settings.update(owner, settingsInput);
+  assert.ok(retriedSettings.ok);
+  assert.deepEqual(retriedSettings.value, afterSettings.value, "the retry changes nothing further");
+
+  // the two operator writes
+  services.failNext("adminSetSuspension", "dependency_unavailable", "lost response", "after_write");
+  const suspensionInput = {
+    target_org_id: otherOrgId,
+    suspended: true,
+    reason: "crash after commit",
+    idempotency_key: "crash-suspend-1",
+  };
+  assert.equal((await services.adminSetSuspension(operator, suspensionInput)).ok, false);
+  const retriedSuspension = await services.adminSetSuspension(operator, suspensionInput);
+  assert.ok(retriedSuspension.ok && retriedSuspension.value.suspended === true);
+
+  services.failNext("calibration.label", "dependency_unavailable", "lost response", "after_write");
+  const labelInput = {
+    request_id: availableRequestId,
+    rubric_version: 2,
+    label: "correct" as const,
+    idempotency_key: "crash-label-1",
+  };
+  assert.equal((await services.calibration.label(operator, labelInput)).ok, false);
+  const labels = await services.calibration.list(operator, { limit: 100 });
+  assert.ok(labels.ok);
+  const committed = labels.value.items.filter((entry) => entry.request_id === availableRequestId).length;
+  const retriedLabel = await services.calibration.label(operator, labelInput);
+  assert.ok(retriedLabel.ok);
+  const after = await services.calibration.list(operator, { limit: 100 });
+  assert.ok(after.ok);
+  assert.equal(
+    after.value.items.filter((entry) => entry.request_id === availableRequestId).length,
+    committed,
+    "the retry must not add a second label",
+  );
+});
+
+test("a key secret is retained nowhere in the fake's state", async () => {
+  // The portable half of this lives in the conformance suite (no operation returns the secret).
+  // This is the part only a fake can prove: it is not in the state at all, so no future operation
+  // and no authorization mistake can produce it (B1/R16).
+  const services = createFakeConsoleServices();
+  const created = await services.keys.create(services.sessions.owner, {
+    name: "deep scan",
+    idempotency_key: "deep-scan-1",
+  });
+  assert.ok(created.ok && typeof created.value.secret === "string");
+  const secret = created.value.secret;
+  assert.ok(secret.length > 20, "the fixture secret is long enough to be worth hiding");
+
+  const dumped = JSON.stringify(services.unsafeDebugState());
+  assert.ok(!dumped.includes(secret), "the secret is somewhere in the fake's state");
+  // The prefix is public and must still be there, so the scan above is not passing by accident.
+  assert.ok(dumped.includes(created.value.prefix), "the key's public prefix is part of the state");
+  await services.keys.revoke(services.sessions.owner, created.value.id);
+  assert.ok(
+    !JSON.stringify(services.unsafeDebugState()).includes(secret),
+    "revocation must not resurrect the secret either",
+  );
 });
 
 test("every operation can be made to fail on demand", async () => {
@@ -185,6 +341,29 @@ test("every operation can be made to fail on demand", async () => {
     "keys.create": () => services.keys.create(owner, { name: "injected" }),
     "keys.revoke": () => services.keys.revoke(owner, keyId),
     adminOrgs: () => services.adminOrgs(operator, {}),
+    adminSetSuspension: () =>
+      services.adminSetSuspension(operator, {
+        target_org_id: otherOrgId,
+        suspended: false,
+        reason: "injection probe",
+        idempotency_key: "injection-probe-suspension",
+      }),
+    adminSetEntitlements: () =>
+      services.adminSetEntitlements(operator, {
+        target_org_id: otherOrgId,
+        model_ids: [],
+        limits: {},
+        reason: "injection probe",
+        idempotency_key: "injection-probe-entitlements",
+      }),
+    "calibration.label": () =>
+      services.calibration.label(operator, {
+        request_id: availableRequestId,
+        rubric_version: 2,
+        label: "correct",
+        idempotency_key: "injection-probe-label",
+      }),
+    "calibration.list": () => services.calibration.list(operator, {}),
     adminGrant: () =>
       services.adminGrant(operator, {
         target_org_id: otherOrgId,

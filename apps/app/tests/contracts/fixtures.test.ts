@@ -12,8 +12,9 @@ import traceFixture from "../../lib/contracts/fixtures/traces.json" with { type:
 import { isMoney } from "../../lib/contracts/money.ts";
 import {
   AUTHOR_ROLES,
+  CALIBRATION_LABELS,
   FEEDBACK_CHANNELS,
-  FEEDBACK_NAMES,
+  FEEDBACK_ENTRY_NAMES,
   FEEDBACK_RATING_MAX,
   FEEDBACK_RATING_MIN,
   JUDGE_MODES,
@@ -41,6 +42,8 @@ const orgs = orgsFixture as unknown as {
     created_at: string;
     usage_rows: number;
     all_free: boolean;
+    suspended: boolean;
+    suspension_reason: string | null;
     grants: { amount: string; reason: string; created_at: string }[];
     adjustment: { amount: string; reason: string } | null;
     legacy_purchase: { amount: string; reason: string; created_at: string } | null;
@@ -69,6 +72,8 @@ const traces = traceFixture as unknown as {
     name: string;
     value: boolean | number | string;
     comment: string | null;
+    calibration_set: boolean;
+    rubric_version: number | null;
   }[];
 };
 
@@ -102,9 +107,19 @@ test("every fixture file is one the contract knows about", () => {
 
 test("the organization fixtures match the contract vocabulary", () => {
   assert.match(orgs.clock, RFC3339);
-  assert.equal(orgs.orgs.length, 2, "two organizations are needed for cross-tenant denial");
+  // Two for cross-tenant denial, a third suspended so `org_suspended` is reachable (R18).
+  assert.equal(orgs.orgs.length, 3, "an established, a new and a suspended organization");
   const ids = new Set(orgs.orgs.map((org) => org.org_id));
-  assert.equal(ids.size, 2, "the two organizations need distinct ids");
+  assert.equal(ids.size, 3, "the organizations need distinct ids");
+  const suspended = orgs.orgs.filter((org) => org.suspended);
+  assert.equal(suspended.length, 1, "exactly one organization is suspended");
+  assert.ok(
+    suspended[0].suspension_reason !== null && suspended[0].suspension_reason.length > 0,
+    "a suspended organization records why",
+  );
+  for (const org of orgs.orgs.filter((candidate) => !candidate.suspended)) {
+    assert.equal(org.suspension_reason, null, `${org.name} is not suspended, so it has no reason`);
+  }
 
   for (const org of orgs.orgs) {
     assert.match(org.org_id, UUID, org.name);
@@ -150,7 +165,7 @@ test("the organization fixtures match the contract vocabulary", () => {
 
   const zeroBalance = orgs.orgs.filter((org) => org.grants.length === 0);
   assert.equal(zeroBalance.length, 1, "exactly one organization must start at zero");
-  const established = orgs.orgs.filter((org) => org.grants.length > 0);
+  const established = orgs.orgs.filter((org) => org.grants.length > 0 && !org.suspended);
   assert.equal(established.length, 1);
   assert.ok(
     established[0].keys.some((key) => key.trace_mode === "full") &&
@@ -164,7 +179,11 @@ test("the organization fixtures match the contract vocabulary", () => {
   );
 
   const sessions = Object.values(orgs.sessions);
-  assert.equal(sessions.length, 4, "owner, member, operator and another organization's owner");
+  assert.equal(sessions.length, 5, "owner, member, operator, another organization's owner, and a suspended one");
+  assert.ok(
+    sessions.some((session) => session.orgId === suspended[0].org_id),
+    "R18: a session must belong to the suspended organization, or org_suspended is unreachable",
+  );
   for (const session of sessions) {
     assert.match(session.userId, UUID);
     assert.ok(inSet(ORG_ROLES, session.role), "a session carries an organization role");
@@ -202,7 +221,7 @@ test("the trace fixtures are renderable content with no storage reference", () =
     assert.ok(Number.isInteger(seed.trace_index) && seed.trace_index >= 0);
     assert.ok(inSet(FEEDBACK_CHANNELS, seed.channel), "feedback channel");
     assert.ok(inSet(AUTHOR_ROLES, seed.author_role), "feedback author role");
-    assert.ok(inSet(FEEDBACK_NAMES, seed.name), "feedback name");
+    assert.ok(inSet(FEEDBACK_ENTRY_NAMES, seed.name), "feedback name");
     // R3 pairs each name with its value type; a fixture that drifts would teach V the wrong form.
     if (seed.name === "thumb") {
       assert.equal(typeof seed.value, "boolean", "a thumb value is a boolean");
@@ -214,8 +233,19 @@ test("the trace fixtures are renderable content with no storage reference", () =
           seed.value <= FEEDBACK_RATING_MAX,
         "a rating value is an integer from 1 to 5",
       );
+    } else if (seed.name === "calibration_label") {
+      // R19: the one entry shape that may claim operator authorship and calibration membership.
+      assert.ok(inSet(CALIBRATION_LABELS, seed.value), "a calibration label value");
+      assert.equal(seed.author_role, "operator", "a calibration label is operator-authored");
+      assert.equal(seed.calibration_set, true, "a calibration label is in the set");
+      assert.ok(Number.isInteger(seed.rubric_version), "a calibration label names its rubric");
     } else {
       assert.ok(typeof seed.value === "string" && seed.value.trim().length > 0, "text feedback is non-empty");
+    }
+    if (seed.name !== "calibration_label") {
+      assert.equal(seed.rubric_version, null, "only a calibration label carries a rubric version");
+      assert.notEqual(seed.author_role, "operator", "ordinary feedback is never operator-authored");
+      assert.equal(seed.calibration_set, false, "ordinary feedback is not in the calibration set");
     }
     assert.ok(seed.comment === null || (typeof seed.comment === "string" && seed.comment.length > 0));
   }
@@ -224,7 +254,7 @@ test("the trace fixtures are renderable content with no storage reference", () =
       traces.seed_feedback.some((seed) => seed.channel === "console"),
     "both feedback channels must be represented",
   );
-  for (const name of FEEDBACK_NAMES) {
+  for (const name of FEEDBACK_ENTRY_NAMES) {
     assert.ok(
       traces.seed_feedback.some((seed) => seed.name === name),
       `V needs a seeded ${name} to render`,
