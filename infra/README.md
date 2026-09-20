@@ -210,12 +210,16 @@ rehearsal first if that environment is allocated); E4 re-runs it — including t
 two integrated metrics I2 cannot measure — as part of pilot evidence and
 publishes the distribution.
 
-Secret order is fixed, because §5 narrows the instance role to
-`/model-inference/*` and the probe must not be the reason that narrowing is
-skipped: I2 **first** creates the PROPOSED name `/model-inference/pg_journal_url`
-(value supplied out of band), **then** runs the probe, which reads only that
-one parameter. The probe never reads `/INFRX-SUPABASE-PROD/*`; that prefix stays
-outside the pilot role's reach. The probe holds the DSN in process memory only,
+Secret order is fixed, because §5 replaces the instance role with one whose only
+`ssm:GetParameter*` grant is scoped to `/model-inference/*`, and the probe must
+not be the reason that scoping is skipped: I2 **first** creates the PROPOSED name
+`/model-inference/pg_journal_url` (value supplied out of band), **then** runs the
+probe, which reads only that one parameter. The probe never reads
+`/INFRX-SUPABASE-PROD/*`. That prefix is outside the pilot role's reach **only
+once §5 step 5 is carried out**: today's role — and equally any new role that
+attaches `AmazonSSMManagedInstanceCore` unmodified — can read every parameter in
+the account, because that managed policy grants `ssm:GetParameter`/`GetParameters`
+on `Resource: "*"` itself (§5). The probe holds the DSN in process memory only,
 takes it from an environment variable name and never a literal, and writes only
 aggregate timings — never the URL, password or any row content — into its
 evidence report. The probe script lives under `infra/`.
@@ -309,6 +313,23 @@ bootcamp-instance-role --policy-name bootcamp-ops`; the full statement list is i
 `ListRequestedServiceQuotaChangeHistoryByQuota`, `ce:GetCostAndUsage`,
 `pricing:GetProducts` and `sts:GetCallerIdentity`, plus `iam:PassRole` on itself.
 
+**Two grants, not one — and the managed policy is the one that matters.**
+`bootcamp-ops` is the inline policy; the role **also** has the AWS managed policy
+`AmazonSSMManagedInstanceCore` attached (OBSERVED 17:44:30Z), whose default
+version **v2** carries `ssm:GetParameter` and `ssm:GetParameters` on
+`Resource: "*"` in its first statement (OBSERVED 19:32:42Z–19:32:55Z:
+`iam get-policy --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore`
+→ `DefaultVersionId=v2`, then `iam get-policy-version --version-id v2`; itemised
+in §Commands of the I1 evidence report, matrix row *"Pilot-specific instance role
++ profile …"*). So dropping the inline statement is **not** sufficient: attaching
+that managed policy unmodified to the new role would re-grant the exact
+account-wide parameter read the new role exists to remove. There is no KMS
+barrier behind it either — every SecureString under `/INFRX-SUPABASE-PROD/*`,
+`/callgideon/*` and `/model-inference/*` is encrypted with `alias/aws/ssm`, the
+AWS-managed key, which any principal in the account decrypts through SSM
+(OBSERVED 19:33:11Z, `ssm describe-parameters` querying name and `KeyId` for the
+SecureString parameters — names and key ids only, **no value was read**).
+
 **The fix is a new role, not an edit of this one.** `bootcamp-instance-role` has
 exactly one instance profile, `bootcamp-instance-profile` (OBSERVED 19:14:45Z),
 and that profile is attached to **both** `i-0e8449a4ffca29bab` (the pilot host)
@@ -318,9 +339,11 @@ silently change another project's permissions, the same class of mistake as the
 withdrawn Elastic-IP item. So I2:
 
 1. creates a **pilot-specific role `infrx-pilot-role` and profile
-   `infrx-pilot-profile`** carrying only what the pilot needs, and
-   `ec2:ReplaceIamInstanceProfileAssociation` on `i-0e8449a4ffca29bab` alone;
-   `bootcamp-instance-role` is left untouched for its owner;
+   `infrx-pilot-profile`** carrying only what the pilot needs, then swaps the
+   profile onto `i-0e8449a4ffca29bab` alone by calling
+   `ec2:ReplaceIamInstanceProfileAssociation` **as its own admin principal** —
+   that call is I2's, not a permission inside the new role, which grants no
+   `ec2:*` write at all; `bootcamp-instance-role` is left untouched for its owner;
 2. scopes `ssm:GetParameter*` in the new role to `/model-inference/*` **only**
    (not a parent of the staging prefix — hence the sibling `/infrx-staging/*` in
    §1), plus the two new buckets and the observability statement;
@@ -332,7 +355,23 @@ withdrawn Elastic-IP item. So I2:
    `Attach/DetachVolume`), no `ec2:CreateTags` on `*`, no `iam:PassRole`, and
    none of the cost/quota/pricing statements (they exist for the benchmark work,
    not for serving);
-5. keeps `ec2:Describe*` and `AmazonSSMManagedInstanceCore`.
+5. keeps `ec2:Describe*`, and **does not attach `AmazonSSMManagedInstanceCore`**.
+   Instead it carries a **custom minimal agent policy**: that managed policy's
+   `ssmmessages:*` and `ec2messages:*` statements verbatim, plus its first
+   statement with **`ssm:GetParameter` and `ssm:GetParameters` removed** — the
+   agent itself needs only `UpdateInstanceInformation`, `ListAssociations`,
+   `ListInstanceAssociations`, `DescribeAssociation`, `GetDocument`,
+   `DescribeDocument`, `GetManifest`, `GetDeployablePatchSnapshotForInstance`,
+   `PutInventory`, `PutComplianceItems`, `PutConfigurePackageResult`,
+   `UpdateAssociationStatus` and `UpdateInstanceAssociationStatus`, none of which
+   reads a parameter. The step-2 statement is then the role's **only**
+   `ssm:GetParameter*` grant, which is what makes the `/model-inference/*`
+   scoping real. Two alternatives, if something later forces the managed policy
+   back on: an explicit `Deny` on `ssm:GetParameter*` with
+   `NotResource arn:aws:ssm:us-east-1:641134885443:parameter/model-inference/*`
+   (a `Deny` beats any `Allow`), or a customer-managed KMS key on the pilot's own
+   parameters — the only option that also survives a future policy edit, at the
+   cost of a key to manage. **I2 picks one and records which in its evidence.**
 
 An IAM role is **account-global**, so "staging then pilot" is not a meaningful
 environment for it: the role and profile are created once and the *association*
@@ -361,6 +400,26 @@ an injected env file or the host network first. Flipping it blind can break the
 engine start, and a broken engine on the serving host is worse than the exposure
 it closes for the minutes it takes to notice.
 
+**SSH: host-scoped for the same reason as the role.** The only tcp/22 ingress in
+the two pilot security groups lives in `sg-0145dcf39dfe8194e` (`bootcamp-sg`);
+`sg-050d7b384ad79856d` (`marlin2b-gateway`) carries only tcp/80 and tcp/443
+(OBSERVED 19:32:45Z, `ec2 describe-security-groups --group-ids` both). And
+`bootcamp-sg` is attached to **both** the pilot host's ENI
+`eni-0eedf581ac04cd880` and the stopped llm-bootcamp box's
+`eni-08a7db926a0d98572` (OBSERVED 19:32:57Z,
+`ec2 describe-network-interfaces --filters Name=group-id,Values=sg-0145dcf39dfe8194e`).
+Revoking the rule in place would close SSH on another project's instance — the
+same defect as editing `bootcamp-instance-role`. So I2 changes the **pilot ENI's
+group set** instead (`ec2 modify-network-interface-attribute --groups`, a
+mutation, under the lock): either `marlin2b-gateway` alone, since the SSM agent is
+`Online` and SSH is not required, or `marlin2b-gateway` plus a new
+`infrx-pilot-sg` with tcp/22 from an admin CIDR if key access is kept.
+`bootcamp-sg` itself is not modified. Matrix row *"Restrict tcp/22 from
+`0.0.0.0/0` …"* records it host-scoped. **Order:** this is the last of the three
+host changes, because removing SSH before the profile swap and the hop-limit flip
+removes the fallback if SSM access breaks; I2 confirms `ssm
+describe-instance-information` still reports `Online` immediately beforehand.
+
 ## 6. Backup and restore per durable layer
 
 No EC2 snapshot, AMI or AWS Backup plan exists in the account (OBSERVED). All
@@ -375,7 +434,7 @@ and replaces them with `meas.`.
 | Trace spool on EBS | not backed up by design; durability begins after fsync, host/volume loss is out of scope per durable protocol | `est.` ≤ 2 s of unsynced events | shipper drain time, `est.` ⚠️ TO BE VERIFIED | I3 with T |
 | ClickHouse projections | rebuildable from S3 content + PG truth; plus T's own backup to S3 | `est.` 24 h | `est.` ⚠️ TO BE VERIFIED | T, drilled by I3 |
 | Pilot host root volume | EBS snapshot before every deploy; `DeleteOnTermination=true` must be flipped or the snapshot is the only copy | one deploy cycle | `est.` 10–20 min from snapshot | I2 creates, I3 restores |
-| Weights | reproducible from the **gated Hugging Face repo only**: per HANDOFF.md and CLAUDE.md (HISTORICAL CLAIM, not re-observed — I1 listed top-level prefixes only) the `weights/` mirror in `llm-bootcamp-641134885443` holds `deepseek-v41` and **no Marlin copy**, so a cold start depends on Hugging Face availability and a valid `HF_TOKEN`. Mirroring Marlin to the bucket would remove that dependency — I2's call, out of pilot scope if HF is deemed sufficient | n/a | download time, `est.` ⚠️ TO BE VERIFIED (no measured cold start exists) | I2 |
+| Weights | reproducible from the **gated Hugging Face repo only**: per HANDOFF.md and CLAUDE.md (HISTORICAL CLAIM, not re-observed — I1 listed top-level prefixes only) the `weights/` mirror in `llm-bootcamp-641134885443` holds `deepseek-v41` and **no Marlin copy**, so a cold start depends on Hugging Face availability and a valid `HF_TOKEN`. Mirroring Marlin to the bucket would remove that dependency, but it is **not proposed and not assigned here**: it writes into `llm-bootcamp-641134885443`, which is another project's bucket, so it needs that owner's agreement and a matrix row of its own before anyone runs it. Out of pilot scope while HF plus a valid `HF_TOKEN` is deemed sufficient | n/a | download time, `est.` ⚠️ TO BE VERIFIED (no measured cold start exists) | I2 |
 
 ## 7. Migration ordering hooks
 
@@ -541,3 +600,33 @@ nothing here proposes anything about it.
     evidence matrix rows (*"New systemd units (worker, preparation, trace
     shipper)"*, *"Legacy `marlin2b_api_key` cutover …"*), which the same pass adds
     to the evidence report, and the header links the report by its real filename.
+- 2026-09-20 (fourth review pass — the secret isolation of §5 did not actually
+  isolate; still read-only: five `iam get-policy` / `get-policy-version` /
+  `describe-security-groups` / `describe-network-interfaces` /
+  `describe-parameters` calls at 19:32:42Z–19:33:30Z, **no** resource created,
+  modified or deleted, **no** secret value read, **no** remote command, **no**
+  HTTP request):
+  - **§5 no longer attaches `AmazonSSMManagedInstanceCore` to the new role.** Its
+    default version v2 grants `ssm:GetParameter` and `ssm:GetParameters` on
+    `Resource: "*"` (OBSERVED 19:32:42Z–19:32:55Z), so the previous step 5
+    ("keeps … `AmazonSSMManagedInstanceCore`") re-granted the account-wide
+    parameter read that step 2's `/model-inference/*` scoping exists to remove —
+    the narrowing would have taken no effect, and every SecureString under
+    `/INFRX-SUPABASE-PROD/*` and `/callgideon/prod/*` would still have been
+    readable from the pilot host. There is no KMS barrier: all of them use the
+    AWS-managed `alias/aws/ssm` (OBSERVED 19:33:11Z, names and key ids only).
+    Step 5 is now a custom minimal agent policy with those two actions removed,
+    with the explicit-`Deny` and customer-managed-key alternatives named; the
+    managed policy's grant is recorded as OBSERVED with its command.
+  - **§3.4's claim that `/INFRX-SUPABASE-PROD/*` "stays outside the pilot role's
+    reach" was false** as the design stood and now says under which condition it
+    becomes true.
+  - **§5 adds the tcp/22 hardening, host-scoped.** The only port-22 rule is in
+    `bootcamp-sg`, which is attached to the stopped llm-bootcamp box's ENI as well
+    as the pilot host's (OBSERVED 19:32:45Z, 19:32:57Z), so revoking it in place
+    would have repeated the `bootcamp-instance-role` mistake on a security group.
+    I2 changes the pilot ENI's group set instead, last of the three host changes.
+  - §5 step 1 no longer reads as if the new role carried
+    `ec2:ReplaceIamInstanceProfileAssociation`; §6's weights row marks the S3
+    mirror of Marlin as **not proposed and not assigned** (it would write into
+    another project's bucket).
