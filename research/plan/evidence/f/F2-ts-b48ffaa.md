@@ -96,3 +96,6 @@ that had been forwarded three times is closed by R25.
   exported and asserted) and R26 (platform-wide operator scope documented) applied. 62 tests pass,
   `lint`, `tsc --noEmit` and `build` exit 0; lockfile and `tsconfig.json` untouched. Four mutation
   drills confirm the new guards. Status **implemented**.
+- 2026-09-20: Round 5 followed, recorded in `F2-ts-ab442af.md`: the exported conformance suite was
+  rebuilt so every invariant it names is killable, with `pnpm test:mutants` (115 mutants, 115 killed)
+  as the standing proof.
