@@ -173,31 +173,62 @@ class Engine(Protocol):
 
 @runtime_checkable
 class TraceCapture(Protocol):
-    """T, r1 R27: one request's content, accumulating under the shared budget.
+    """T, r1 R27/R37: one request's content, accumulating under the shared budget.
 
     `add` is deliberately *not* async: it runs on the request path, where it may not
-    await anything. It returns False the moment this capture is over."""
+    await anything, and it is O(1) with no disk access. **No operation here raises into
+    the request path**: a malformed part, a finished capture or an envelope belonging to
+    another request is dropped and counted, never thrown.
+
+    The object is a context manager so G can hold it in a `with`/`finally` and know that
+    an abandoned request releases its bytes.
+    """
 
     def add(self, part: bytes | str) -> bool:
-        """Charge `part` to the capture budget. False once the budget is breached,
-        at which point the whole of this capture's content is discarded and the loss
-        counted: a partial capture must never look complete."""
+        """Charge `part` to the capture budget. False once the budget is breached, at
+        which point the whole of this capture's content is discarded and the loss
+        counted: a partial capture must never look complete. A part that is not bytes or
+        text is also False (dropped, counted `malformed`), never a `TypeError`."""
 
     async def finish(self, envelope: TraceEnvelope) -> TraceOfferResult:
         """Hand the completed capture to the bounded queue. A capture that lost its
-        content finishes as honest metadata with its loss reason."""
+        content finishes as honest metadata with its loss reason.
+
+        Idempotent: calling it again returns the **first** result and queues nothing
+        more, and a capture contributes at most one loss count however it ends. On a
+        no-op capture (`off`/`minimal`) it behaves as `offer`, so a `minimal` request
+        still produces exactly the metadata row 01 requires and G needs no branch on
+        the mode."""
 
     async def abandon(self, reason: TraceLossReason) -> None:
-        """Release this capture's bytes without queueing anything."""
+        """Release this capture's bytes without queueing anything. Idempotent."""
+
+    def __enter__(self) -> "TraceCapture":
+        """r1 R37: `with sink.open(...) as capture:` - the exit abandons an unfinished
+        capture, so a request that dies mid-stream cannot leak capture budget."""
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
+        """Abandons unless `finish` already ran; never swallows the caller's
+        exception (returns False)."""
 
 
 @runtime_checkable
 class TraceSink(Protocol):
     """T. Bounded, nonblocking, and never an acceptance dependency."""
 
-    def open(self, request_id: str, org_id: str, mode: TraceMode) -> TraceCapture:
-        """r1 R27: begin accumulating content for a `full`-mode request. `off` has no
-        trace row and `minimal` is metadata only, so neither opens a capture."""
+    def open(self, request_id: str, org_id: str, mode: TraceMode,
+             deadline_at: datetime) -> TraceCapture:
+        """r1 R27/R37: begin accumulating content for this request.
+
+        `deadline_at` is the job's absolute deadline and is **required**: it is what
+        lets `reap` release the bytes of a capture whose request died without closing
+        it, which is the leak R37 exists to close. A capture with no deadline could
+        hold budget until the process restarted, so an adapter that is handed `None`
+        returns a no-op capture rather than one it can never reap.
+
+        `off` and `minimal` requests return a **no-op capture**: `add` is False, and
+        `finish` behaves as `offer` (a metadata row for `minimal`, nothing for `off`).
+        Callers therefore never branch on the mode, and nothing here raises."""
 
     async def offer(self, envelope: TraceEnvelope) -> TraceOfferResult:
         """A metadata-only envelope: accepted into memory or dropped with a counted
@@ -208,6 +239,12 @@ class TraceSink(Protocol):
         """In-memory, appended and fsynced counts plus loss reasons, separately."""
 
     async def flush(self, deadline: datetime) -> dict[str, Any]: ...
+
+    def reap(self, grace_s: float) -> int:
+        """r1 R37: release the bytes of captures still open past their job's
+        `deadline_at` plus `grace_s`, counting each under `TraceLossReason.abandoned`.
+        Returns how many were reaped; idempotent, and a negative grace is clamped to
+        zero rather than reaping live captures. A real sink runs this on a timer."""
 
 
 @runtime_checkable

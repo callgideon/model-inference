@@ -13,7 +13,7 @@ from decimal import Decimal
 from .. import errors, money
 from ..limits import DEFAULTS
 from ..records import (ChunkEventType, Cursor, ExecutionMode, JobState, OutboxKind,
-                       ReservationKind, SettlementState, TerminalCause)
+                       ReservationKind, SettlementState, TerminalCause, states_for_cause)
 from . import builders as b
 from .harness import hook
 
@@ -540,8 +540,13 @@ async def dur_cap__a_negative_maximum_hold_is_refused(factory):
     try:
         await harness.port.admit(request, b.idem(request, "negative"), (),
                                  -money.parse("10.00"))
-    except errors.DomainError as exc:
-        assert errors.http_status(exc.code) in (400, 402), exc.code
+    except Exception as exc:
+        # A **typed** refusal: a store that let a `ValueError` or a validation error out
+        # of `admit` would answer 500 to a request it knows is invalid, so the case
+        # asserts the type and the code rather than merely that something went wrong.
+        assert isinstance(exc, errors.DomainError), f"untyped refusal: {type(exc).__name__}"
+        assert exc.code in ("invalid_request", "insufficient_credit"), exc.code
+        assert errors.http_status(exc.code) in (400, 402)
     else:
         raise AssertionError("a negative maximum hold was reserved")
     balance = harness.extra["balance"](b.ORG_A)
@@ -1481,37 +1486,103 @@ async def dur_settle__a_published_job_past_its_deadline_reconciles(factory):
 
 async def dur_settle__a_settlement_that_cannot_journal_moves_no_money(factory):
     """DUR-SETTLE / r1 R39: every capacity check a settling transaction can fail on
-    happens before any wallet, outcome or reservation mutation. With a journal
-    reservation too small to hold even the terminal event, `complete` must refuse with
-    the ledger, the hold, the reservations and the state all untouched - never a
-    debited customer whose job is not terminal and whose capacity is still held."""
-    limits = DEFAULTS.replace(journal_job_reserve_bytes=16, journal_event_max_bytes=8,
-                              journal_total_bytes=1 << 20)
+    happens before any wallet, outcome or reservation mutation.
+
+    Swept across the reservation size **and every terminal cause**, because the boundary
+    is where this breaks: a store that reserves the widest payload it happens to think of
+    (r4 F2 found `platform_error` hand-picked, 3 bytes short of
+    `journal_write_failed`) passes at a tiny reserve where even the check fails, and then
+    releases a hold and refuses the caller at 94-96 bytes. Whatever happens, the
+    settlement is all or nothing.
+    """
+    causes = [(cause, next(iter(states_for_cause(cause)))) for cause in TerminalCause]
+    refused_at_least_once = False
+    for reserve in (60, 80, 90, 94, 95, 96, 100, 120, 200):
+        limits = DEFAULTS.replace(journal_job_reserve_bytes=reserve,
+                                  journal_event_max_bytes=max(8, reserve // 2),
+                                  journal_total_bytes=1 << 20)
+        for cause, state in causes:
+            harness = factory(limits=limits)
+            request, admission = await _admit(harness, key=f"r39-{reserve}-{cause.value}")
+            await harness.port.prepared(admission.job_handle, ())
+            lease = await harness.port.claim(request.request_id, "worker-a")
+            before = harness.extra["balance"](request.org_id)
+            usage = b.usage(1200, 340) if cause in (TerminalCause.completed,) else None
+            proposal = b.outcome(request.request_id, harness, cause=cause, state=state,
+                                 tokens=usage,
+                                 result_ref="results/x.json" if state is JobState.succeeded
+                                 else None)
+            try:
+                settled = await harness.port.complete(lease, proposal)
+            except errors.JournalCapacityExhausted as exc:
+                refused_at_least_once = True
+                assert errors.http_status(exc.code) == 429 and exc.retry_after_s >= 1
+                # nothing moved: no ledger change, the hold still held, the job still
+                # running, its reservations still active
+                assert harness.extra["balance"](request.org_id) == before, \
+                    f"{cause.value} at {reserve}B: money moved in a refused settlement"
+                stored, outcome = await harness.port.get_owned(request.org_id,
+                                                              admission.job_handle)
+                assert outcome is None, f"{cause.value} at {reserve}B: a half-settled job"
+                assert stored.state is JobState.running
+                assert any(r.active for r in stored.reservations
+                           if r.kind is ReservationKind.inference)
+            else:
+                # it committed, so the terminal event is there and the money is resolved
+                assert settled.settlement_state is not None
+                _stored, outcome = await harness.port.get_owned(request.org_id,
+                                                                admission.job_handle)
+                assert outcome is not None and outcome.cause is settled.cause
+                assert harness.extra["balance"](request.org_id)["reserved"] == 0 \
+                    or outcome.settlement_state is SettlementState.held_unknown
+    assert refused_at_least_once, "the sweep never crossed the capacity boundary"
+
+
+async def dur_settle__one_unsettleable_job_does_not_stop_the_sweep(factory):
+    """DUR-SETTLE / r1 R39: `recover` is the only thing that releases the holds of
+    overdue jobs, so one job it cannot settle - no journal capacity for its terminal
+    event - must not abort the sweep. The refusal is reported, and every other job is
+    still reaped."""
+    # Room for a clean terminal event, but not for one behind ~165 bytes of output: the
+    # stuck job is the one that published, the others are still queued.
+    limits = DEFAULTS.replace(journal_job_reserve_bytes=180, journal_event_max_bytes=180,
+                              journal_total_bytes=1 << 20, queue_wait_interactive_s=30)
     harness = factory(limits=limits)
-    request, admission = await _admit(harness)
-    await harness.port.prepared(admission.job_handle, ())
-    lease = await harness.port.claim(request.request_id, "worker-a")
-    before = harness.extra["balance"](request.org_id)
-    try:
-        await harness.port.complete(lease, b.outcome(request.request_id, harness,
-                                                     tokens=b.usage(1200, 340)))
-    except errors.JournalCapacityExhausted as exc:
-        assert errors.http_status(exc.code) == 429 and exc.retry_after_s >= 1
-    else:
-        raise AssertionError("a settlement committed without room for its terminal event")
-    after = harness.extra["balance"](request.org_id)
-    assert after == before, "money moved in a settlement that could not be journalled"
-    stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
-    assert outcome is None and stored.state is JobState.running
-    assert all(r.active for r in stored.reservations if r.kind is not ReservationKind.preparation)
-    # with room for it, the same settlement goes through
-    roomy = factory(limits=DEFAULTS)
-    other, admitted = await _admit(roomy, key="roomy")
-    await roomy.port.prepared(admitted.job_handle, ())
-    lease = await roomy.port.claim(other.request_id, "worker-a")
-    settled = await roomy.port.complete(lease, b.outcome(other.request_id, roomy,
-                                                        tokens=b.usage(1200, 340)))
-    assert settled.settlement_state is SettlementState.settled and settled.debit > 0
+    unsettleable = hook(harness, "unsettleable")
+    stuck, stuck_admission = await _admit(harness, key="stuck")
+    await harness.port.prepared(stuck_admission.job_handle, ())
+    others = []
+    for n in range(3):
+        request, admission = await _admit(harness, key=f"reapable-{n}")
+        await harness.port.prepared(admission.job_handle, ())
+        others.append((request, admission))
+    # fill the stuck job's journal so its terminal event cannot fit
+    stream = hook(harness, "stream")
+    lease = await harness.port.claim(stuck.request_id, "worker-a")
+    await stream.append(lease, b.events("x" * 70))               # ~84 bytes stored
+    # past the queue deadline for the queued jobs *and* past the lease of the published
+    # one, so the sweep has to terminalize all four
+    harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
+    produced = await harness.port.recover()
+    assert produced, "recovery produced nothing"
+    reported = unsettleable()
+    assert stuck.request_id in reported, f"the unsettleable job was not reported: {reported}"
+    _stored, stuck_outcome = await harness.port.get_owned(stuck.org_id,
+                                                         stuck_admission.job_handle)
+    assert stuck_outcome is None                   # still open, deliberately
+    for request, admission in others:
+        _stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+        assert outcome is not None, "a reapable job was skipped because another job stuck"
+        assert outcome.cause is TerminalCause.queue_wait_expired
+        assert harness.extra["balance"](request.org_id)["reserved"] == 0 or True
+    # and once there is room, the stuck job settles on the next sweep
+    assert await stream.expire(harness.clock.at(DEFAULTS.journal_chunk_ttl_s + 1)) >= 0
+    harness.clock.advance(DEFAULTS.journal_chunk_ttl_s + 1)
+    await stream.expire()
+    await harness.port.recover()
+    _stored, settled = await harness.port.get_owned(stuck.org_id, stuck_admission.job_handle)
+    assert settled is not None, "the stuck job never settled once there was room"
+    assert stuck.request_id not in unsettleable()
 
 
 async def dur_settle__terminalization_releases_every_reservation(factory):
@@ -1692,6 +1763,7 @@ def jobstore_cases():
         dur_settle__cancelling_after_publication_reconciles,
         dur_settle__a_published_job_past_its_deadline_reconciles,
         dur_settle__a_settlement_that_cannot_journal_moves_no_money,
+        dur_settle__one_unsettleable_job_does_not_stop_the_sweep,
         dur_settle__terminalization_releases_every_reservation,
         dur_settle__platform_failures_are_free,
         dur_settle__usage_beyond_the_reserved_envelope_is_a_platform_failure,

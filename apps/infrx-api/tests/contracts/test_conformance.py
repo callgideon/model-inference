@@ -125,7 +125,7 @@ def test_a_missing_hook_is_a_skip_not_a_pass():
 # Deliberately synchronous, each for a stated reason: `Engine.generate` returns an
 # async iterator, and `TraceSink.open` / `TraceCapture.add` run on the request path
 # where they may not await (r1 R27).
-SYNCHRONOUS = {("engine", "generate"), ("tracesink", "open")}
+SYNCHRONOUS = {("engine", "generate"), ("tracesink", "open"), ("tracesink", "reap")}
 
 
 @pytest.mark.parametrize("port", sorted(PROTOCOLS))
@@ -144,12 +144,95 @@ def test_fake_satisfies_its_protocol(port):
                 or inspect.isasyncgenfunction(operation)), f"{port}.{name} is not async"
 
 
+def test_a_sink_built_from_the_declared_signatures_alone_satisfies_the_suite():
+    """r4 F1: the exported cases must be callable against a sink written from
+    `ports.TraceSink`/`ports.TraceCapture` **and nothing else**.
+
+    The previous round's port declared `open(request_id, org_id, mode)` while the suite
+    called `open(..., deadline)`, so an adapter matching the Protocol exactly passed
+    `isinstance` and then died with a `TypeError` inside a conformance case. This builds
+    the minimal sink the signatures describe and makes every call the suite makes.
+    """
+    from infrx.contracts.records import TraceLossReason, TraceMode, TraceOfferResult
+
+    class MinimalCapture:
+        """Written from the Protocol's docstrings: no-op, but shaped exactly."""
+
+        def __init__(self):
+            self.finished = None
+
+        def add(self, part):
+            return isinstance(part, (bytes, str))
+
+        async def finish(self, envelope):
+            if self.finished is None:
+                self.finished = TraceOfferResult.accepted_in_memory
+            return self.finished
+
+        async def abandon(self, reason):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class MinimalSink:
+        def open(self, request_id, org_id, mode, deadline_at):
+            return MinimalCapture()
+
+        async def offer(self, envelope):
+            return TraceOfferResult.accepted_in_memory
+
+        async def stats(self):
+            return {"accepted": 0, "dropped": 0, "in_memory": 0, "in_memory_content_bytes": 0,
+                    "in_memory_metadata_bytes": 0, "open_captures": 0, "appended": 0,
+                    "fsynced": 0, "loss_reasons": {}}
+
+        async def flush(self, deadline):
+            return await self.stats()
+
+        def reap(self, grace_s):
+            return 0
+
+    sink, capture_factory = MinimalSink(), MinimalCapture()
+    assert isinstance(sink, ports.TraceSink)
+    assert isinstance(capture_factory, ports.TraceCapture)
+    # every shape the suite relies on, against the declaration alone
+    clock = FACTORIES["tracesink"]().clock
+    capture = sink.open("00000000-0000-4000-8000-000000000001",
+                        "11111111-0000-4000-8000-000000000001", records.TraceMode.full,
+                        clock.at(600))
+    assert capture.add("bytes") is True
+    with capture as entered:
+        assert entered is capture
+    assert asyncio.run(capture.abandon(records.TraceLossReason.abandoned)) is None
+    assert sink.reap(60.0) == 0
+    assert asyncio.run(sink.stats())["loss_reasons"] == {}
+    # and the real fake accepts the same calls in the same order
+    real = FACTORIES["tracesink"]()
+    live = real.port.open("00000000-0000-4000-8000-000000000002",
+                          "11111111-0000-4000-8000-000000000001", records.TraceMode.full,
+                          real.clock.at(600))
+    with live:
+        assert live.add(b"bytes") is True
+    assert real.port.reap(60.0) == 0
+    for mode in (records.TraceMode.off, records.TraceMode.minimal):
+        noop = real.port.open("00000000-0000-4000-8000-000000000003",
+                              "11111111-0000-4000-8000-000000000001", mode, real.clock.at(600))
+        assert noop.add("x") is False
+        with noop:
+            pass
+
+
 def test_the_trace_capture_shape_is_what_the_port_declares():
     """r1 R27: `add` is synchronous (the request path cannot await), `finish` and
     `abandon` are not."""
     sink = FACTORIES["tracesink"]().port
     capture = sink.open("00000000-0000-4000-8000-000000000001",
-                        "11111111-0000-4000-8000-000000000001", records.TraceMode.full)
+                        "11111111-0000-4000-8000-000000000001", records.TraceMode.full,
+                        FACTORIES["tracesink"]().clock.at(600))
     assert isinstance(capture, ports.TraceCapture)
     assert not inspect.iscoroutinefunction(capture.add)
     for name in ("finish", "abandon"):

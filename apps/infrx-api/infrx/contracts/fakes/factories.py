@@ -62,6 +62,7 @@ def _job_hooks(jobs: FakeJobStore, stream: FakeStreamStore | None = None) -> dic
         "outbox_kinds": jobs.outbox_kinds,
         "publish": publish,
         "journal_bytes": jobs.journal.total,
+        "unsettleable": lambda: dict(jobs.unsettleable),
         "revoke_key": jobs.revoked_keys.add,
         "unrevoke_key": jobs.revoked_keys.discard,
         "suspend_org": jobs.suspended_orgs.add,

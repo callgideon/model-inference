@@ -42,6 +42,10 @@ class FakeTraceCapture:
         self.lost_reason: TraceLossReason = TraceLossReason.none
         self.closed = False
         self.finished = False
+        # A capture contributes **at most one** loss count however it ends: abandoned
+        # then finished, breached then reaped, exited twice - one record, one count.
+        self.counted = False
+        self.result: TraceOfferResult | None = None
 
     def __enter__(self) -> FakeTraceCapture:
         return self
@@ -57,6 +61,14 @@ class FakeTraceCapture:
     def lost(self) -> bool:
         return self.lost_reason is not TraceLossReason.none
 
+    def _count(self, reason: TraceLossReason) -> None:
+        """Record this capture's single loss. `_discard` is the only caller and runs at
+        most once per capture (it sets `lost_reason`, which every entry point checks), so
+        `counted` is not a second guard: it is what tells `_drop` the loss is already in
+        `loss_reasons` and must not be added again."""
+        self.counted = True
+        self.sink.loss_reasons[reason] += 1
+
     def add(self, part: bytes | str) -> bool:
         """Charge `part` to the shared capture budget.
 
@@ -68,7 +80,14 @@ class FakeTraceCapture:
         """
         if self.no_op or self.closed or self.lost:
             return False
-        size = len(part.encode() if isinstance(part, str) else part)
+        if isinstance(part, str):
+            part = part.encode()
+        elif not isinstance(part, (bytes, bytearray, memoryview)):
+            # Not content: dropped and counted, never a `TypeError` into the request
+            # path (R37). The capture is over, as it is for any other malformed input.
+            self._discard(TraceLossReason.malformed)
+            return False
+        size = len(part)
         if self.sink.content_bytes + size > self.sink.content_budget:
             self._discard(TraceLossReason.memory_budget)
             return False
@@ -82,7 +101,7 @@ class FakeTraceCapture:
         self.sink.content_bytes = max(0, self.sink.content_bytes - self.content_bytes)
         self.content_bytes = 0
         self.lost_reason = reason
-        self.sink.loss_reasons[reason] += 1
+        self._count(reason)
 
     async def finish(self, envelope: TraceEnvelope) -> TraceOfferResult:
         """Hand the completed capture to the bounded queue. A capture that lost its
@@ -92,16 +111,28 @@ class FakeTraceCapture:
         result, and a mismatched envelope is *dropped and counted*, never raised - this
         runs where a request is finishing, and a trace bug may not become its error.
         """
-        if self.finished:
-            return TraceOfferResult.accepted_in_memory
+        if self.result is not None:
+            # Idempotent, and the answer is the **first** one: a caller retrying after a
+            # drop must not be told the record was accepted.
+            return self.result
         if self.no_op:
+            # r1 R37 / 01 ("minimal stores metadata only"): a no-op capture behaves as
+            # `offer`, so a minimal request still produces exactly its metadata row and
+            # G needs no branch on the mode. An off-mode request has no row at all.
             self.closed = self.finished = True
-            return self.sink._drop(TraceLossReason.malformed)
+            self.result = self.sink._offer_metadata(envelope)
+            return self.result
         if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):
-            self._close(TraceLossReason.abandoned)
-            return self.sink._drop(TraceLossReason.malformed)
-        if self.closed:                      # abandoned first: nothing left to queue
-            return self.sink._drop(self.lost_reason or TraceLossReason.abandoned)
+            # The single loss this capture contributes is labelled by what went wrong:
+            # the envelope did not belong to it, which is `malformed`, not `abandoned`.
+            self._close(TraceLossReason.malformed)
+            self.result = self.sink._drop(TraceLossReason.malformed, counted=True)
+            return self.result
+        if self.closed:                      # abandoned or reaped first: nothing to queue
+            self.finished = True
+            self.result = self.sink._drop(self.lost_reason or TraceLossReason.abandoned,
+                                          counted=self.counted)
+            return self.result
         self.closed = self.finished = True
         charged = self.content_bytes
         if self.lost or envelope.content_bytes == 0:
@@ -110,7 +141,8 @@ class FakeTraceCapture:
                 "loss_reason": self.lost_reason})
             self.sink.content_bytes = max(0, self.sink.content_bytes - charged)
             self.content_bytes = charged = 0
-        return self.sink._enqueue(envelope, charged=charged)
+        self.result = self.sink._enqueue(envelope, charged=charged, capture=self)
+        return self.result
 
     async def abandon(self, reason: TraceLossReason = TraceLossReason.abandoned) -> None:
         """Give the bytes back: an abandoned capture must not hold budget a live request
@@ -161,8 +193,11 @@ class FakeTraceSink:
         still open past it (plus a grace period) and counts them `abandoned`.
         """
         self.failures.before("open")
+        # r1 R37: `deadline_at` is what makes a capture reapable. Without one the sink
+        # could never release its bytes, so it gets a no-op capture instead of a leak.
+        no_op = mode is not TraceMode.full or deadline_at is None
         capture = FakeTraceCapture(self, request_id, org_id, mode, deadline_at=deadline_at,
-                                   no_op=mode is not TraceMode.full)
+                                   no_op=no_op)
         self.captures.append(capture)
         return capture
 
@@ -174,6 +209,7 @@ class FakeTraceSink:
         restarted. Counted under `abandoned`, never charged to the customer.
         """
         now = self.clock.now()
+        grace_s = max(0.0, grace_s)             # a negative grace never reaps live work
         reaped = 0
         for capture in self.captures:
             if capture.closed or capture.deadline_at is None:
@@ -184,30 +220,40 @@ class FakeTraceSink:
         return reaped
 
     async def offer(self, envelope: TraceEnvelope) -> TraceOfferResult:
-        """Metadata-only envelopes (r1 R27); content arrives through `open`."""
+        """Metadata-only envelopes (r1 R27); content arrives through `open`.
+
+        An off-mode envelope has no trace row (01) and a minimal one never carries
+        content (R12): both are dropped and counted `malformed`, because the trace path
+        never raises into the request path - and counting is how the caller's bug
+        becomes visible.
+        """
         self.failures.before("offer")
+        return self._offer_metadata(envelope)
+
+    def _offer_metadata(self, envelope: TraceEnvelope) -> TraceOfferResult:
+        """`offer` semantics, shared with a no-op capture's `finish` (R37)."""
         if envelope.mode is TraceMode.off:
-            # r1 R27: an off-mode request has no trace row. Offering one is a caller
-            # bug, but the trace path never raises into the request path: it is
-            # dropped and counted, which is also how the bug becomes visible.
             return self._drop(TraceLossReason.malformed)
         if envelope.mode is not TraceMode.full and envelope.carries_content:
-            # r1 R12: a minimal-mode envelope never carries content. The record model
-            # refuses to build one, so this only fires for an envelope an adapter
-            # assembled from raw bytes; it is dropped whole as malformed rather than
-            # queued with unconsented, uncharged content.
             return self._drop(TraceLossReason.malformed)
         return self._enqueue(envelope, charged=0)
 
-    def _enqueue(self, envelope: TraceEnvelope, *, charged: int) -> TraceOfferResult:
+    def _enqueue(self, envelope: TraceEnvelope, *, charged: int,
+                 capture: FakeTraceCapture | None = None) -> TraceOfferResult:
         """The bounded queue. `charged` is what a capture already accounted for, so
-        finishing one never counts its bytes twice."""
-        if len(self.queued) >= self.limits.trace_queue_max:
+        finishing one never counts its bytes twice - and **every** path that drops the
+        record gives those bytes back, or the budget would leak one drop at a time."""
+        for reason in (TraceLossReason.queue_full if len(self.queued) >= self.limits.trace_queue_max
+                       else None,
+                       TraceLossReason.metadata_budget
+                       if self.metadata_bytes + envelope.metadata_bytes
+                       > self.limits.trace_metadata_reserve_bytes else None):
+            if reason is None:
+                continue
             self.content_bytes = max(0, self.content_bytes - charged)
-            return self._drop(TraceLossReason.queue_full)
-        if self.metadata_bytes + envelope.metadata_bytes > self.limits.trace_metadata_reserve_bytes:
-            self.content_bytes = max(0, self.content_bytes - charged)
-            return self._drop(TraceLossReason.metadata_budget)
+            if capture is not None:
+                capture.content_bytes = 0
+            return self._drop(reason, counted=capture.counted if capture else False)
         uncharged = envelope.content_bytes - charged
         if uncharged > 0:
             # Content that never went through a capture still has to fit the budget,
@@ -216,7 +262,10 @@ class FakeTraceSink:
                 envelope = envelope.model_copy(update={
                     "content_complete": False, "content_ref": None, "content_bytes": 0,
                     "loss_reason": TraceLossReason.memory_budget})
-                self.loss_reasons[TraceLossReason.memory_budget] += 1
+                if capture is not None:
+                    capture._count(TraceLossReason.memory_budget)
+                else:
+                    self.loss_reasons[TraceLossReason.memory_budget] += 1
             else:
                 self.content_bytes += uncharged
         self.metadata_bytes += envelope.metadata_bytes
@@ -224,9 +273,12 @@ class FakeTraceSink:
         self.accepted += 1
         return TraceOfferResult.accepted_in_memory
 
-    def _drop(self, reason: TraceLossReason) -> TraceOfferResult:
+    def _drop(self, reason: TraceLossReason, *, counted: bool = False) -> TraceOfferResult:
+        """One dropped record. `counted=True` means this capture's loss is already in
+        `loss_reasons`, so the drop is recorded without counting the loss twice."""
         self.dropped += 1
-        self.loss_reasons[reason] += 1
+        if not counted:
+            self.loss_reasons[reason] += 1
         return TraceOfferResult.dropped
 
     async def stats(self) -> dict[str, object]:

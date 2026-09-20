@@ -216,6 +216,15 @@ revision r1, so the schema has to carry them:
 | `TerminalOutcome` | no new field, but `BILLABLE_CAUSES` changed | R21: `sync_deadline`, `deadline_exceeded` and `queue_wait_expired` never carry a debit, and `held_unknown` now also covers `lost_after_publication`. Historical rows are outside the new settlement regime (02) and must not be replayed into debits. |
 | error codes | `upload_expired` | R22: a new 410 code the gateway must map; nothing persisted changes. |
 
+### Notes per track (r5)
+
+| Track | What to do with it |
+|---|---|
+| **G1** | Always pass `deadline_at` to `TraceSink.open` - it is required, and it is what makes a capture reapable; a sink handed `None` returns a no-op capture rather than a leak. Hold the capture in a `with`/`finally`: its exit abandons an unfinished one. Never branch on the trace mode: `open` on `off`/`minimal` returns a no-op capture whose `finish` behaves as `offer`, so a `minimal` request still produces exactly the metadata row 01 requires. Derive `deadline_at` for `admit` from the budgets (admission refuses one it cannot keep). |
+| **W1** | `first_token_deadline_at` is **persisted by the store and enforced by W**: nothing in `JobStore` or `StreamStore` compares against it. Expect `already_terminal` from `append`/`heartbeat`/`complete` once a phase deadline has passed - the store terminalizes the job in that same call (R29) and the refusal is information, not a reason to retry. |
+| **Q1** | `rebuild(snapshot)` replaces the index: `pending` becomes the snapshot and `inflight`/`acknowledged` are cleared, so a candidate in flight before the rebuild is a candidate again after it (PostgreSQL decides the winner, so a duplicate hand-out costs throughput, never correctness). The clears themselves are **not** pinned by a conformance case - the index is keyed by event id, so no exported case can tell the difference; if Valkey's semantics differ here, say so in Q1's evidence rather than assuming these are equivalent. |
+| **D1** | R39's ordering, plus: one job the sweep cannot settle must not abort `recover` - continue, and report it (the fake exposes `unsettleable` for exactly that). The terminal event's reserved bytes are computed over **every** `TerminalCause x JobState x SettlementState`, not a hand-picked cause. |
+
 **G derives the deadline.** `admit` refuses a `deadline_at` that is in the past or
 beyond `accepted_at + preparation + queue + generation` (R29), so G computes the
 deadline it sends from the budgets rather than picking a round number, and a client

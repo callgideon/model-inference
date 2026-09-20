@@ -271,3 +271,36 @@ None. R1–R40 plus 01/02 decided everything this pass needed.
   conformance cases, 40 fixtures, 27 HTTP codes. Console tests/lint and the benchmark
   suite are pending, not passing. No cloud, GPU, container, paid provider or production
   resource was touched.
+
+## Corrections (r5 review, fixed in the following pass)
+
+Three claims in this report were wrong, and one behaviour it described was not encoded:
+
+1. **"The two mutants that died on untyped errors now die on typed ones" was false at
+   this SHA.** `admit_accepts_a_negative_hold` still died on a pydantic
+   `ValidationError`/`ValueError` and `judge_reserve_negative` on a `LookupError` from
+   `errors.http_status`. Worse, the judge case's assertion
+   `errors.http_status(exc.code) in (400, 402) or exc.code == "budget_exceeded"`
+   evaluated `http_status` **first**, which raises for internal codes, so the `or` branch
+   was dead and an adapter legitimately answering `budget_exceeded` would have crashed the
+   case. Both cases now assert `isinstance(exc, errors.DomainError)` and the code, with
+   the internal code checked before `http_status`, and the judge boundary case drives
+   negative, non-finite, over-scale and float inputs.
+2. **The R39 "largest payload" sentence was wrong.** `check_terminal_capacity` computed
+   the widest terminal payload over `cause in (platform_error,)` only, which is 3 bytes
+   short of `journal_write_failed` + `failed` + `released_platform_absorbed`; at a 94-96
+   byte reservation a settlement released the hold and *then* refused the caller. The
+   maximum is now computed over every `TerminalCause x JobState x SettlementState`, and
+   the case sweeps reserves 60-200 bytes across every cause asserting all-or-nothing.
+3. **R37 "G needs no branch" did not hold.** A minimal-mode envelope handed to
+   `capture.finish()` was dropped as `malformed`, losing the metadata row 01 requires.
+   `finish` on a no-op capture now behaves as `offer`, so a minimal request yields exactly
+   one metadata envelope with zero content bytes and G really needs no branch; the port
+   says so and a case pins it.
+4. **R37 was not encoded in `ports.py` at all** (zero-line diff): the Protocol declared
+   `open(request_id, org_id, mode)` while the exported suite called
+   `open(..., deadline_at)`, so an adapter matching the declaration exactly passed
+   `isinstance` and then failed a conformance case with a `TypeError`. `open` now declares
+   a **required** `deadline_at`, `TraceCapture.__enter__`/`__exit__` and
+   `TraceSink.reap(grace_s)` are declared, and a new test builds a minimal sink from the
+   signatures alone and makes every call the suite makes.

@@ -101,6 +101,12 @@ class FakeMediaStore:
                 continue
             stored = ref.model_copy(update={
                 "storage_ref": self._key(org_id, ref.digest, ref.profile_version, "source")})
+            clash = pending.get((org_id, stored.handle))
+            if clash is not None and clash.digest != stored.digest:
+                # The same handle twice in one request, with different content: last-wins
+                # would silently stage one and hand the job the other's digest.
+                raise errors.InvalidRequest(
+                    f"media handle {ref.handle} appears twice with different content")
             pending[(org_id, stored.handle)] = stored
             resolved.append(stored)
         # One visible step: nothing above wrote to `self.objects`.

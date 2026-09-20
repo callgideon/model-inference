@@ -44,6 +44,11 @@ FREE_CAUSES = frozenset({TerminalCause.invalid_media, TerminalCause.preparation_
                          TerminalCause.queue_wait_expired})
 
 
+class _NeverRaised(Exception):
+    """For the mutation list: an exception class nothing raises, so a single edit can
+    turn a `except errors.DomainError` into a sweep that aborts on the first refusal."""
+
+
 def _phase_deadline(now: datetime, budget_s: float, deadline_at: datetime) -> datetime:
     """r1 R20: a phase instant is the database clock plus that phase's budget,
     clamped by the absolute accepted deadline. No phase outlives the job."""
@@ -210,6 +215,9 @@ class FakeJobStore:
         self.wallets: dict[str, _Wallet] = {}
         self.holds: dict[str, _Hold] = {}
         self.outbox: list[OutboxEvent] = []
+        # Jobs the last `recover` could not settle, by error code: a real store exposes
+        # this as the reconciliation backlog 02 wants alerted on.
+        self.unsettleable: dict[str, str] = {}
         self.revoked_keys: set[str] = set()
         self.suspended_orgs: set[str] = set()
         # r1 R10: the injectable entitlement source. A real adapter replaces the
@@ -761,7 +769,17 @@ class FakeJobStore:
             for job in list(self.jobs.values()):
                 if job.terminal:
                     continue
-                produced.extend(self._recover_job(job, now))
+                try:
+                    produced.extend(self._recover_job(job, now))
+                except errors.DomainError as refused:
+                    # One job that cannot be settled right now - no journal capacity for
+                    # its terminal event, say - must not stop the sweep: every other
+                    # overdue job still needs reaping, and the reaper is the only thing
+                    # that releases their holds. It is reported, not swallowed.
+                    self.unsettleable[job.id] = refused.code
+                    produced.append(refused)
+                    continue
+                self.unsettleable.pop(job.id, None)
             produced.extend(self._release_aged_unknown_holds(now))
         self.failures.after_commit("recover")
         return tuple(produced)
@@ -947,9 +965,13 @@ class FakeStreamStore:
         for chunk in self.chunks.get(job.id, ()):
             if chunk.event_type is ChunkEventType.terminal:
                 return                                  # already written; nothing to add
+        # Over **every** combination, computed rather than listed: the widest terminal
+        # payload is not the one with the longest cause name, and hand-picking a cause
+        # (r4 F2: `platform_error` alone) under-reserved by 3 bytes, which refused a
+        # settlement *after* it had released the hold.
         widest = max(len(compact_bytes({"state": state.value, "cause": cause.value,
                                         "settlement_state": settlement.value}))
-                     for state in TERMINAL_STATES for cause in (TerminalCause.platform_error,)
+                     for state in JobState for cause in TerminalCause
                      for settlement in SettlementState)
         self.jobs.journal.check(job.id, widest, settling=True)
 
