@@ -1,0 +1,10 @@
+# TLS termination for the marlin2b gateway. Caddy fetches and renews the
+# certificate itself; ports 80 and 443 must be reachable and DNS must point here.
+marlin2b.callbill.ai {
+    reverse_proxy 127.0.0.1:8001 {
+        flush_interval -1
+        transport http {
+            read_timeout 600s
+        }
+    }
+}
