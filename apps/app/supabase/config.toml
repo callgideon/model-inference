@@ -1,0 +1,2 @@
+# Supabase CLI config. Only what `supabase link` / `supabase db push` need.
+project_id = "fcbnscgsymzdykendbrc"
