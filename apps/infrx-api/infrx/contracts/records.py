@@ -423,7 +423,7 @@ class Admission(Record):
     idempotency_key: str | None = None
     payload_hash: str
     price_snapshot: PriceSnapshot
-    maximum_hold: Money
+    maximum_hold: Money = Field(ge=0)
     reservations: tuple[CapacityReservation, ...]
     state: JobState
     outbox: tuple[OutboxEvent, ...]
@@ -505,7 +505,7 @@ class TerminalOutcome(Record):
     usage: Usage | None = None
     result_ref: str | None = None
     settlement_state: SettlementState
-    debit: Money = money.ZERO
+    debit: Money = Field(default=money.ZERO, ge=0)
     settled_at: Timestamp
     reconcile_after: Timestamp | None = None    # set when settlement_state is held_unknown
 
@@ -651,7 +651,7 @@ class JudgeRun(Record):
     consent: ConsentSnapshot
     rubric_version: str
     model_revision: str
-    reserved_cost: Money = money.ZERO
+    reserved_cost: Money = Field(default=money.ZERO, ge=0)
     actual_cost: Money | None = None
     submit_intent: UuidStr | None = None
     external_batch_id: str | None = None

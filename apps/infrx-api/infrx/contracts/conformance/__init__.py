@@ -15,42 +15,34 @@ Case names carry their oracle (`dur_admit__...`, `api_stream__...`), so
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Callable
 
+from .harness import Harness, MissingHook, OPTIONAL_HOOKS, hook
 from .jobs import jobstore_cases, streamstore_cases
 from .services import (engine_cases, feedback_cases, judge_cases, mediastore_cases,
                        scheduler_cases, tracesink_cases)
 
 
-@dataclass
-class Harness:
-    """What a factory hands a case: the adapter plus the hooks it needs.
+def run_cases(cases, factory: Callable[..., Harness], *,
+              skipped: list[MissingHook] | None = None) -> int:
+    """Run a suite and return how many cases actually ran.
 
-    `extra` holds the named hooks a suite documents (for JobStore: `grant`,
-    `balance`, `active_jobs`, `outbox`, `outbox_kinds`, and optionally `publish`,
-    `revoke_key`, `unrevoke_key`, `suspend_org`, `unentitle`, `retune`,
-    `journal_bytes`; for JudgeCoordinator: `available`, `runs`, `set_consent`,
-    `revoke_consent`, `audit`). A missing optional hook makes the case return early
-    rather than fail, so an adapter can adopt the suite in steps.
-
-    The streamstore, scheduler and feedback factories also publish `extra["jobs"]`,
-    the JobStore a case needs to admit a job first. The cases only ever call *port*
-    operations on it, so a real adapter can pass its own JobStore there; nothing in
-    a suite reads a fake's attributes.
+    A case that needs an optional hook the factory does not provide raises
+    `MissingHook`. With `skipped` given it is collected and the run continues, and the
+    caller must report it; without, it fails the run. A skip is never a pass (R32).
     """
-
-    port: Any
-    clock: Any
-    ids: Any
-    failures: Any = None
-    extra: dict[str, Any] = field(default_factory=dict)
-
-
-def run_cases(cases, factory: Callable[..., Harness]) -> int:
+    ran = 0
     for case in cases:
-        asyncio.run(case(factory))
-    return len(cases)
+        try:
+            asyncio.run(case(factory))
+        except MissingHook as missing:
+            if skipped is None:
+                raise
+            missing.case = case.__name__
+            skipped.append(missing)
+            continue
+        ran += 1
+    return ran
 
 
 def run_jobstore_conformance(factory) -> int:
@@ -97,4 +89,5 @@ SUITES: dict[str, tuple[Callable[[], list], Callable[..., int]]] = {
     "judge": (judge_cases, run_judge_conformance),
 }
 
-__all__ = ["Harness", "SUITES", "run_cases", *(f"run_{name}_conformance" for name in SUITES)]
+__all__ = ["Harness", "MissingHook", "OPTIONAL_HOOKS", "SUITES", "hook", "run_cases",
+           *(f"run_{name}_conformance" for name in SUITES)]

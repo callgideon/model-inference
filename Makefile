@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: check api-env api-test console-test console-lint bench-test
+.PHONY: check api-env api-test api-mutants console-test console-lint bench-test
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -11,6 +11,11 @@ api-env:
 
 api-test:
 	cd $(API) && uv run --frozen pytest -q
+
+# r1 R32: the whole mutation list (one pytest process per mutant, ~75s). The default
+# suite runs a subset; a surviving mutant is a failed suite either way.
+api-mutants:
+	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py
 
 console-test:
 	cd apps/app && pnpm test
@@ -27,4 +32,4 @@ bench-test:
 		echo "bench-test: not run - models/marlin2b/tests does not exist yet (E1 owns it)"; \
 	fi
 
-check: api-test console-test console-lint bench-test
+check: api-test api-mutants console-test console-lint bench-test

@@ -32,6 +32,11 @@ from ..records import (Admission, BILLABLE_CAUSES, Budgets, CapacityReservation,
 from .support import FailurePlan, FakeClock, SequentialIds, failure_hooks, money_input
 
 MAX_READ_LIMIT = 1000           # refinement: the bound on one replay page
+# The settling transaction must always be able to write its terminal event, so that
+# many bytes of every job's reservation are kept back for it: appends stop short of
+# the reservation, and the terminal write is then checked like any other, never
+# waved through (02: per-job *and* global byte limits, both enforced).
+TERMINAL_EVENT_RESERVE_BYTES = 1024
 
 # released_free = the customer was never going to be charged (rejected, invalid,
 # never ran). released_platform_absorbed = we did work and ate the cost.
@@ -146,14 +151,19 @@ class _Journal:
         stored = self.stored.get(job_id, 0) + extra
         before = self.charge(job_id)
         after = max(self.reserved.get(job_id, 0), stored)
-        if not settling:
-            if stored > self.limits.journal_job_reserve_bytes:
-                raise errors.JournalCapacityExhausted(
-                    f"job {job_id} would store {stored} bytes past its per-job reservation "
-                    f"of {self.limits.journal_job_reserve_bytes}", retry_after_s=30)
-            if self.total() - before + after > self.limits.journal_total_bytes:
-                raise errors.JournalCapacityExhausted(
-                    f"journal budget cannot fit {extra} more bytes for {job_id}", retry_after_s=30)
+        # An append may fill the job's reservation except for the bytes held back for
+        # the terminal event; the settling write may use those too, and is refused only
+        # if even they do not fit.
+        ceiling = self.limits.journal_job_reserve_bytes - (
+            0 if settling else min(TERMINAL_EVENT_RESERVE_BYTES,
+                                   self.limits.journal_job_reserve_bytes // 2))
+        if stored > ceiling:
+            raise errors.JournalCapacityExhausted(
+                f"job {job_id} would store {stored} bytes past the {ceiling} available "
+                f"in its per-job reservation", retry_after_s=30)
+        if self.total() - before + after > self.limits.journal_total_bytes:
+            raise errors.JournalCapacityExhausted(
+                f"journal budget cannot fit {extra} more bytes for {job_id}", retry_after_s=30)
         self.stored[job_id] = stored
 
     def release_reservation(self, job_id: str) -> None:
@@ -265,6 +275,7 @@ class FakeJobStore:
             if not self.is_entitled(request.org_id, request.model_revision):
                 raise errors.ModelNotEntitled(
                     f"org {request.org_id} is not entitled to {request.model_revision}")
+            self._check_deadline(request, now)
             self._check_capacity(request)
             self._check_balance(request.org_id, hold)
             # Everything that can refuse the admission runs before anything is
@@ -289,7 +300,7 @@ class FakeJobStore:
         if record.payload_hash != idem.payload_hash:
             raise errors.IdempotencyConflict("same idempotency key, different canonical payload")
         job = self.jobs[record.request_id]
-        return job.admission.model_copy(update={"state": job.state, "replayed": True})
+        return self._snapshot(job).model_copy(update={"replayed": True})
 
     def _check_capacity(self, request: NormalizedRequest) -> None:
         limits = self.limits
@@ -307,8 +318,22 @@ class FakeJobStore:
                 raise errors.CapacityExhausted(f"{scope} active job limit {ceiling} reached",
                                                retry_after_s=5)
 
+    def _check_deadline(self, request: NormalizedRequest, now: datetime) -> None:
+        """r1 R29: a deadline is a promise the store can keep. One already past is a
+        job nothing may ever run; one years out would pin a preparation unit, a
+        journal reservation and a hold for as long as the caller likes."""
+        if request.deadline_at <= now:
+            raise errors.InvalidRequest("the request deadline has already passed")
+        budgets = Budgets.of(self.limits, request.execution_mode)
+        ceiling = now + timedelta(seconds=(budgets.preparation_s + budgets.queue_wait_s
+                                           + budgets.generation_s))
+        if request.deadline_at > ceiling:
+            raise errors.InvalidRequest(
+                "the request deadline exceeds the preparation, queue and generation budgets")
+
     def _check_balance(self, org_id: str, hold: Decimal) -> None:
-        wallet = self.wallet(org_id)
+        # A *read*: a refused admission must not leave an empty wallet row behind.
+        wallet = self.wallets.get(org_id) or _Wallet()
         if hold > wallet.available:
             raise errors.InsufficientCredit(
                 f"maximum hold exceeds available balance for org {org_id}")
@@ -368,8 +393,16 @@ class FakeJobStore:
         return event
 
     async def get_owned(self, org_id: str, job_handle: str) -> tuple[Admission, TerminalOutcome | None]:
+        self.failures.before("get_owned")
         job = self._owned(org_id, job_handle)
-        return job.admission.model_copy(update={"state": job.state}), job.outcome
+        return self._snapshot(job), job.outcome
+
+    def _snapshot(self, job: _Job) -> Admission:
+        """The admission as it stands now: the state *and* the capacity reservations,
+        which terminalization deactivates. Returning the row as inserted would report
+        capacity as held for ever after a job finished."""
+        return job.admission.model_copy(update={"state": job.state,
+                                                "reservations": tuple(job.reservations.values())})
 
     def _owned(self, org_id: str, job_handle: str) -> _Job:
         request_id = self.by_handle.get(job_handle)
@@ -390,6 +423,10 @@ class FakeJobStore:
                 raise errors.AlreadyTerminal(f"job {job_handle} is {job.state}")
             if job.state is not JobState.preparing:
                 raise errors.StateConflict(f"prepared requires preparing, not {job.state}")
+            # r1 R29: a preparation worker that comes back late finds the job already
+            # terminal, and its own call is what terminalized it: a dead preparation
+            # must not pin a preparation unit, a journal reservation and a hold.
+            self._enforce_deadlines(job)
             for ref in media:
                 if ref.org_id != job.request.org_id:
                     raise errors.Forbidden("prepared media must belong to the job's org")
@@ -407,7 +444,7 @@ class FakeJobStore:
             self._release(job, ReservationKind.preparation)
             self._emit(job.id, OutboxKind.inference_dispatch, now,
                        {"job_handle": job_handle, "request_id": job.id})
-            admission = job.admission.model_copy(update={"state": job.state})
+            admission = self._snapshot(job)
         self.failures.after_commit("prepared")
         return admission
 
@@ -464,13 +501,18 @@ class FakeJobStore:
         return lease
 
     async def heartbeat(self, lease: Lease) -> Lease:
+        """Renew the **stored** lease. r1 R29: the caller's copy is a fencing token
+        and nothing else, so a worker cannot rewrite its own deadlines, generation or
+        acquisition time by handing back an edited record."""
         self.failures.before("heartbeat")
         async with self._lock:
             job = self._fence(lease)
             now = self.clock.now()
-            job.lease = lease.model_copy(update={
+            job.lease = job.lease.model_copy(update={
                 "expires_at": now + timedelta(seconds=self.limits.lease_ttl_s)})
-            return job.lease
+            renewed = job.lease
+        self.failures.after_commit("heartbeat")
+        return renewed
 
     def _fence(self, lease: Lease) -> _Job:
         """Generation, owner, state and lease expiry, compared against durable
@@ -485,10 +527,32 @@ class FakeJobStore:
         if job.generation != lease.generation:
             raise errors.StaleLease(f"generation {lease.generation} != {job.generation}")
         if job.lease.worker_id != lease.worker_id:
+            # A different worker at the same generation is still the wrong worker: two
+            # processes that both believe they own generation N must not both append.
             raise errors.StaleLease(f"lease belongs to {job.lease.worker_id}")
         if self.clock.now() >= job.lease.expires_at:
             raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")
+        self._enforce_deadlines(job)
         return job
+
+    def _enforce_deadlines(self, job: _Job) -> None:
+        """r1 R29: every fenced mutation fails once the store clock is past the
+        persisted phase instant or `deadline_at`, and the job is terminalized in that
+        same operation, so the outcome never depends on when a reaper happens to run.
+
+        The instants are the ones the store persisted at each transition; nothing a
+        caller passes can move them.
+        """
+        now = self.clock.now()
+        if job.state is JobState.preparing and now >= job.admission.preparation_deadline_at:
+            self._terminalize(job, TerminalCause.preparation_failed, None, None, JobState.failed)
+            raise errors.AlreadyTerminal(
+                f"job {job.id} passed its preparation deadline "
+                f"{job.admission.preparation_deadline_at}")
+        if now >= job.request.deadline_at or (
+                job.lease is not None and now >= job.lease.generation_deadline_at):
+            self._terminalize(job, TerminalCause.deadline_exceeded, None, None, JobState.failed)
+            raise errors.AlreadyTerminal(f"job {job.id} passed its deadline")
 
     async def cancel(self, org_id: str, job_handle: str) -> TerminalOutcome:
         self.failures.before("cancel")
@@ -506,6 +570,10 @@ class FakeJobStore:
         """Settlement is the store's authority: the caller's `settlement_state`
         and `debit` are recomputed, never trusted."""
         self.failures.before("complete")
+        if outcome.state is JobState.succeeded and not outcome.result_ref:
+            # r1 R30: a success the customer cannot fetch is not a success, and it
+            # would settle a debit for a result that was never stored.
+            raise errors.InvalidRequest("a succeeded outcome requires a result reference")
         if outcome.job_id != lease.job_id:
             # r1 R10: an outcome built for one job never settles another. Without
             # this, job A is settled with job B's usage and debit.
@@ -646,16 +714,20 @@ class FakeJobStore:
                     continue
                 produced.extend(self._recover_job(job, now))
             produced.extend(self._release_aged_unknown_holds(now))
-            return tuple(produced)
+        self.failures.after_commit("recover")
+        return tuple(produced)
 
     def _recover_job(self, job: _Job, now: datetime) -> list[object]:
-        if now >= job.request.deadline_at:
-            cause = (TerminalCause.queue_wait_expired if job.state is JobState.queued
-                     else TerminalCause.deadline_exceeded)
-            state = JobState.expired if job.state is JobState.queued else JobState.failed
-            if job.state is JobState.preparing:
-                cause, state = TerminalCause.preparation_failed, JobState.failed
-            return [self._terminalize(job, cause, None, None, state)]
+        if job.state is JobState.preparing and now >= job.admission.preparation_deadline_at:
+            # r1 R29/R20: a preparation worker that never comes back at all is the
+            # reaper's job; `prepared` catches the one that comes back late. Without
+            # this a crashed preparation would hold its preparation unit, its journal
+            # reservation and the customer's hold until the absolute deadline.
+            return [self._terminalize(job, TerminalCause.preparation_failed, None, None,
+                                      JobState.failed)]
+        # No separate absolute-deadline branch: every phase instant is already capped
+        # by `deadline_at` (r1 R20), so the phase that is running is the one that
+        # expires, with the cause that phase deserves.
         if job.state is JobState.queued and job.queue_deadline_at is not None:
             # r1 R20: the persisted instant, set once at the first queued transition.
             if now >= job.queue_deadline_at:
@@ -730,6 +802,12 @@ class FakeStreamStore:
         async with self.jobs._lock:
             job = self.jobs._fence(lease)
             now = self.clock.now()
+            for event in events:
+                if event.type is ChunkEventType.terminal:
+                    # r1 R30: the terminal event is derived from the stored outcome
+                    # inside the settling transaction. A worker that could append one
+                    # could fake a settlement the ledger never made.
+                    raise errors.InvalidRequest("a worker may not append a terminal event")
             sizes = [self.event_bytes(event) for event in events]
             for size in sizes:
                 if size > self.limits.journal_event_max_bytes:
@@ -758,6 +836,7 @@ class FakeStreamStore:
 
     async def read_owned(self, org_id: str, job_handle: str, cursor: Cursor | None = None,
                          limit: int = 100) -> tuple[tuple[Chunk, ...], Cursor | None]:
+        self.failures.before("read_owned")
         job = self.jobs._owned(org_id, job_handle)
         if not isinstance(limit, int) or limit <= 0:
             raise errors.InvalidRequest(f"limit must be a positive integer, not {limit!r}")
@@ -765,6 +844,12 @@ class FakeStreamStore:
         if job.id in self.expired_jobs:
             raise errors.JournalExpired(f"journal for {job_handle} has expired")
         position = (cursor.generation, cursor.sequence) if cursor else (0, 0)
+        head = max(((chunk.generation, chunk.sequence) for chunk in self.chunks.get(job.id, ())),
+                   default=(0, 0))
+        if position > head:
+            # A cursor the journal never issued is a client bug, not an empty page: it
+            # would otherwise poll for ever against a stream that already ended.
+            raise errors.InvalidCursor(f"cursor {cursor.token} is past the last event")
         pruned_to = self.pruned_to.get(job.id)
         if pruned_to is not None and position < pruned_to:
             raise errors.ReplayGap(f"events up to {pruned_to} are no longer retained")
@@ -776,21 +861,38 @@ class FakeStreamStore:
         return page, next_cursor
 
     async def finalize_in_transaction(self, outcome: TerminalOutcome) -> Chunk:
-        """Read back (or, for an outcome settled without this journal, write) the
-        terminal event of the settling transaction. Never the only chance to write
-        it: `JobStore` already did, where the money moved."""
+        """Read back the terminal event of the settling transaction.
+
+        r1 R30: the event is derived from the **stored** outcome, never from the
+        argument, which is a lookup key here. A caller cannot recharge journal bytes
+        or rewrite history by passing an outcome of its own invention, and once the
+        journal has expired the answer is `journal_expired`, not a freshly minted
+        terminal chunk.
+        """
+        self.failures.before("finalize_in_transaction")
         job = self.jobs.jobs.get(outcome.job_id)
         if job is None:
             raise errors.NotFound(f"no job {outcome.job_id}")
         if not job.terminal:
             raise errors.StateConflict("finalize_in_transaction runs inside the settling "
                                        "transaction, after the terminal outcome")
-        return self.write_terminal(job, outcome)
+        if job.id in self.expired_jobs:
+            raise errors.JournalExpired(f"journal for job {job.id} has expired")
+        if outcome != job.outcome:
+            # The argument is a lookup key, not content: an outcome that is not the
+            # committed one is a caller bug, and answering it would be the store
+            # confirming a settlement it never made.
+            raise errors.StateConflict("that is not the committed outcome for this job")
+        return self.write_terminal(job, job.outcome)
 
     def write_terminal(self, job: _Job, outcome: TerminalOutcome) -> Chunk:
-        """Idempotent, synchronous, and never refused: it runs inside the settling
-        transaction, so a byte-budget rejection here would leave a settled job
-        without its terminal event."""
+        """Idempotent and synchronous: it runs inside the settling transaction, whose
+        bytes were reserved at admission (`TERMINAL_EVENT_RESERVE_BYTES`), so it is
+        checked against the byte limits like any other write instead of bypassing
+        them. `outcome` is always the store's own committed outcome (r1 R30)."""
+        assert outcome is job.outcome or job.outcome is None, "the stored outcome only"
+        # One idempotency guard, here: `finalize_in_transaction` delegates rather than
+        # repeating it, so the rule has a single home to break (and to test).
         stored = self.chunks.setdefault(job.id, [])
         for chunk in stored:
             if chunk.event_type is ChunkEventType.terminal:
@@ -810,6 +912,7 @@ class FakeStreamStore:
         return chunk
 
     async def expire(self, now: datetime | None = None) -> int:
+        self.failures.before("expire")
         # r1 R7: a caller-supplied time is a bound at most. Pruning never runs ahead
         # of the database clock, so a future argument cannot expire a live journal.
         now = min(now, self.clock.now()) if now is not None else self.clock.now()

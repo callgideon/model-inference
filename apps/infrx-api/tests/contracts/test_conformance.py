@@ -14,7 +14,7 @@ import asyncio
 import inspect
 
 import pytest
-from infrx.contracts import ports
+from infrx.contracts import ports, records
 from infrx.contracts.conformance import SUITES
 from infrx.contracts.fakes import FACTORIES
 
@@ -44,16 +44,38 @@ def test_runner_runs_the_whole_suite(port):
     assert runner(FACTORIES[port]) == len(_cases())
 
 
+# Deliberately synchronous, each for a stated reason: `Engine.generate` returns an
+# async iterator, and `TraceSink.open` / `TraceCapture.add` run on the request path
+# where they may not await (r1 R27).
+SYNCHRONOUS = {("engine", "generate"), ("tracesink", "open")}
+
+
 @pytest.mark.parametrize("port", sorted(PROTOCOLS))
 def test_fake_satisfies_its_protocol(port):
-    """Shape check: the fake has every operation the ports table names, async."""
+    """Shape check: the fake has every operation the ports table names, async unless
+    the contract says otherwise."""
     protocol, adapter = PROTOCOLS[port], FACTORIES[port]().port
     assert isinstance(adapter, protocol)
     for name in protocol.__protocol_attrs__:
         operation = getattr(adapter, name)
         assert callable(operation), name
+        if (port, name) in SYNCHRONOUS:
+            assert not inspect.iscoroutinefunction(operation), f"{port}.{name} became async"
+            continue
         assert (inspect.iscoroutinefunction(operation)
                 or inspect.isasyncgenfunction(operation)), f"{port}.{name} is not async"
+
+
+def test_the_trace_capture_shape_is_what_the_port_declares():
+    """r1 R27: `add` is synchronous (the request path cannot await), `finish` and
+    `abandon` are not."""
+    sink = FACTORIES["tracesink"]().port
+    capture = sink.open("00000000-0000-4000-8000-000000000001",
+                        "11111111-0000-4000-8000-000000000001", records.TraceMode.full)
+    assert isinstance(capture, ports.TraceCapture)
+    assert not inspect.iscoroutinefunction(capture.add)
+    for name in ("finish", "abandon"):
+        assert inspect.iscoroutinefunction(getattr(capture, name)), name
 
 
 def test_every_port_has_a_suite_and_a_fake():

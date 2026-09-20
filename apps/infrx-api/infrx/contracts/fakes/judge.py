@@ -90,6 +90,10 @@ class FakeJudgeCoordinator:
                                   f"{run.run_id}")
         stored = self.runs.get(run.run_id)
         if stored is not None:
+            if stored.org_id != run.org_id:
+                # A run id is not a capability: guessing one must not return another
+                # organization's run, its samples, its consent or its costs.
+                raise errors.NotFound(f"no judge run {run.run_id}")
             # One reservation per run (01: "duplicate calls produce one run/intent").
             # Re-reserving must not reset the state, mint a second submission intent
             # or buy a second provider batch for an ambiguous run.
@@ -145,13 +149,25 @@ class FakeJudgeCoordinator:
         now = self.clock.now()
         consent = self.current_consent(run)
         if not consent.allows_evaluation(now):
-            # r1 R9 / 02: consent must be current *at submission*, checked against
-            # the current consent record and not only the snapshot reserved with.
-            # Revocation blocks egress and releases the reservation.
-            self._release(run, JudgeRunState.cancelled,
-                          reconciled_at=now, consent=consent)
-            self.audit.append({"run_id": run_id, "at": now, "event": "consent_revoked",
-                               "consent_version": consent.consent_version})
+            # r1 R9 / 02: consent must be current *at submission*, checked against the
+            # current consent record and not only the snapshot reserved with.
+            if run.state is JudgeRunState.submitting:
+                # r1 R28: an intent already exists, so the batch may be in flight. The
+                # reservation stays held and the run becomes ambiguous, resolvable only
+                # through `resolve_ambiguous`: releasing the money here would leave an
+                # untracked billable batch running against a budget that looks free.
+                held = run.model_copy(update={"state": JudgeRunState.ambiguous,
+                                              "consent": consent, "reconciled_at": None})
+                self.runs[run_id] = held
+                self.audit.append({"run_id": run_id, "at": now,
+                                   "event": "consent_revoked_while_submitting",
+                                   "consent_version": consent.consent_version,
+                                   "reserved_cost": str(held.reserved_cost)})
+            else:
+                # From `reserved` nothing has left the platform: release it (R9).
+                self._release(run, JudgeRunState.cancelled, reconciled_at=now, consent=consent)
+                self.audit.append({"run_id": run_id, "at": now, "event": "consent_revoked",
+                                   "consent_version": consent.consent_version})
             raise errors.ConsentMissing(
                 f"run {run_id} has no current evaluation consent at submission time")
         if run.state is JudgeRunState.dry_run:
@@ -203,16 +219,21 @@ class FakeJudgeCoordinator:
         return run
 
     async def quarantine(self, run_id: str, reason: str) -> JudgeRun:
-        """Hold the reservation and stop automatic retries. Without a provider id
-        the outcome is `ambiguous`; with one it is `quarantined`."""
+        """Hold the reservation and stop automatic retries.
+
+        The outcome is always `ambiguous`: the reservation is held and the run stays
+        resolvable through `resolve_ambiguous` (R8), whether or not a provider id is
+        already known. `quarantined` is reserved for the *terminal* state that
+        `resolve_ambiguous(release_reservation)` produces, so quarantining can never
+        leave a run holding budget with no way out.
+        """
         self.failures.before("quarantine")
         run = self._run(run_id)
         if run.state in CLOSED_STATES:
             # A resolved run is closed: reopening a settled one would double count
             # its money and erase the audit trail.
             raise errors.Conflict(f"run {run_id} is already {run.state}")
-        state = (JudgeRunState.quarantined if run.external_batch_id is not None
-                 else JudgeRunState.ambiguous)
+        state = JudgeRunState.ambiguous
         run = run.model_copy(update={"state": state, "reconciled_at": None})
         self.runs[run_id] = run
         self.audit.append({"run_id": run_id, "at": self.clock.now(), "event": "quarantine",

@@ -11,10 +11,21 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import Any
 
+from ..limits import DEFAULTS
 from ..records import (AuthContext, ChunkEventType, ConsentSnapshot, EngineEvent, ExecutionMode,
                        FeedbackName, IdempotencyRef, JobState, MediaKind, MediaRef,
                        NormalizedRequest, PriceSnapshot, Role, TerminalCause, TerminalOutcome,
                        TraceEnvelope, TraceMode, Usage)
+
+
+def default_deadline_s(mode: ExecutionMode = ExecutionMode.stream,
+                       limits=DEFAULTS) -> float:
+    """The longest deadline r1 R29 lets a store accept: preparation + queue +
+    generation on that mode's budgets. A case wanting a longer horizon widens a
+    budget through the factory's `limits`, because the store checks against its own."""
+    queue = (limits.queue_wait_async_s if mode is ExecutionMode.async_
+             else limits.queue_wait_interactive_s)
+    return limits.preparation_timeout_s + queue + limits.generation_timeout_s
 
 ORG_A = "1a1a1a1a-0000-4000-8000-000000000001"
 ORG_B = "2b2b2b2b-0000-4000-8000-000000000002"
@@ -57,7 +68,7 @@ def media(org_id: str = ORG_A, handle: str = "upl_conformancefixture000000000000
 def request(harness, *, org_id: str = ORG_A, key_id: str = KEY_A,
             mode: ExecutionMode = ExecutionMode.stream, max_input_tokens: int = 30_720,
             max_output_tokens: int = 2_048, snapshot: PriceSnapshot | None = None,
-            refs: tuple[MediaRef, ...] = (), deadline_s: float = 450.0,
+            refs: tuple[MediaRef, ...] = (), deadline_s: float | None = None,
             parameters: dict[str, Any] | None = None) -> NormalizedRequest:
     """A normalized request on the harness's clock and id sequence.
 
@@ -67,6 +78,7 @@ def request(harness, *, org_id: str = ORG_A, key_id: str = KEY_A,
     `admission.price_snapshot`, never against this builder's copy.
     """
     snapshot = snapshot or price()
+    deadline_s = default_deadline_s(mode) if deadline_s is None else deadline_s
     now = harness.clock.now()
     request_id = harness.ids.uuid()
     return NormalizedRequest(

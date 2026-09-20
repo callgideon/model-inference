@@ -33,7 +33,8 @@ from typing import Any, AsyncIterator, Protocol, runtime_checkable
 from .records import (Admission, AuthContext, Chunk, ConsentSnapshot, Cursor, EngineEvent,
                       Feedback, IdempotencyRef, IndexEvent, JudgeResolution, JudgeRun, Lease,
                       MediaRef, NormalizedRequest, PreparedRequest, ReservationKind,
-                      TerminalOutcome, TraceEnvelope, TraceOfferResult)
+                      TerminalOutcome, TraceEnvelope, TraceLossReason, TraceMode,
+                      TraceOfferResult)
 
 
 @runtime_checkable
@@ -171,12 +172,37 @@ class Engine(Protocol):
 
 
 @runtime_checkable
+class TraceCapture(Protocol):
+    """T, r1 R27: one request's content, accumulating under the shared budget.
+
+    `add` is deliberately *not* async: it runs on the request path, where it may not
+    await anything. It returns False the moment this capture is over."""
+
+    def add(self, part: bytes | str) -> bool:
+        """Charge `part` to the capture budget. False once the budget is breached,
+        at which point the whole of this capture's content is discarded and the loss
+        counted: a partial capture must never look complete."""
+
+    async def finish(self, envelope: TraceEnvelope) -> TraceOfferResult:
+        """Hand the completed capture to the bounded queue. A capture that lost its
+        content finishes as honest metadata with its loss reason."""
+
+    async def abandon(self, reason: TraceLossReason) -> None:
+        """Release this capture's bytes without queueing anything."""
+
+
+@runtime_checkable
 class TraceSink(Protocol):
     """T. Bounded, nonblocking, and never an acceptance dependency."""
 
+    def open(self, request_id: str, org_id: str, mode: TraceMode) -> TraceCapture:
+        """r1 R27: begin accumulating content for a `full`-mode request. `off` has no
+        trace row and `minimal` is metadata only, so neither opens a capture."""
+
     async def offer(self, envelope: TraceEnvelope) -> TraceOfferResult:
-        """Accept into memory or drop with a counted reason. Never blocks the
-        request path and never promises fsync."""
+        """A metadata-only envelope: accepted into memory or dropped with a counted
+        reason. Never blocks the request path, never promises fsync and **never
+        raises into it** - an off-mode envelope is dropped and counted `malformed`."""
 
     async def stats(self) -> dict[str, Any]:
         """In-memory, appended and fsynced counts plus loss reasons, separately."""
@@ -194,8 +220,16 @@ class FeedbackService(Protocol):
         role are server-set; calibration membership needs operator authorization.
 
         R3: the body is one signal (`name`, `value`, optional `comment`); an empty
-        body is `invalid_request` and `idem.key` is required, so every submission
-        is replay-safe. `idem` must name the caller's organization (R10)."""
+        body is `invalid_request` and `idem.key` is required, so every submission is
+        replay-safe. `idem` must name the caller's organization (R10). R31: the author
+        role is always `customer` here, whatever the session - a client may not send
+        provenance at all, and `calibration_set` is refused."""
+
+    async def label_calibration(self, auth: AuthContext, request_id: str, label: str,
+                                idem: IdempotencyRef) -> Feedback:
+        """R31/R19: the only path to `author_role=operator` with calibration
+        membership. Operator only and platform-wide (R26): the tenant comes from the
+        labelled row, not from the operator's session. Idempotent and audited."""
 
     async def list_owned(self, auth: AuthContext, request_id: str) -> tuple[Feedback, ...]: ...
 
@@ -223,8 +257,10 @@ class JudgeCoordinator(Protocol):
     async def settle(self, run_id: str, actual: Decimal) -> JudgeRun: ...
 
     async def quarantine(self, run_id: str, reason: str) -> JudgeRun:
-        """Hold the reservation and stop automatic retries. A terminal run
-        (`settled`, `cancelled`) is not reopened."""
+        """Hold the reservation, stop automatic retries and leave the run
+        `ambiguous`, i.e. resolvable through `resolve_ambiguous` whether or not a
+        provider id is known: a quarantine that held budget with no way out would be
+        a leak. A closed run (`settled`, `cancelled`, `quarantined`) is not reopened."""
 
     async def resolve_ambiguous(self, run_id: str, operator: AuthContext,
                                 resolution: JudgeResolution, reason: str, *,

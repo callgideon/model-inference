@@ -30,6 +30,7 @@ class _Upload:
     state: UploadState = UploadState.created
     data: bytes | None = None
     mime: str | None = None
+    declared_digest: str | None = None       # what the client said it would upload
 
 
 class FakeMediaStore:
@@ -129,12 +130,27 @@ class FakeMediaStore:
         max_bytes = raw
         if max_bytes <= 0 or max_bytes > self.limits.max_media_bytes:
             raise errors.InvalidRequest(f"max_bytes must be in 1..{self.limits.max_media_bytes}")
-        mimes = tuple(constraints.get("accepted_mime", ("video/mp4",)))
+        unknown = set(constraints) - {"max_bytes", "accepted_mime", "digest"}
+        if unknown:
+            # A constraint the store does not understand is a caller expecting a rule
+            # nobody enforces; silently ignoring it is how a limit goes missing.
+            raise errors.InvalidRequest(f"unknown upload constraints: {sorted(unknown)}")
+        raw_mimes = constraints.get("accepted_mime", ("video/mp4",))
+        if isinstance(raw_mimes, (str, bytes)):
+            # `tuple("video/mp4")` is a tuple of characters, which would accept nothing
+            # and look like an allow-list. A single type must be a one-item list.
+            raise errors.InvalidRequest("accepted_mime must be a list of media types")
+        mimes = tuple(raw_mimes)
         if not mimes or not all(isinstance(mime, str) and mime.strip() for mime in mimes):
             raise errors.InvalidRequest("accepted_mime must be a nonempty list of media types")
+        declared = constraints.get("digest")
+        if declared is not None and not (isinstance(declared, str)
+                                         and declared.startswith("sha256:") and len(declared) == 71):
+            raise errors.InvalidRequest("a declared digest must be sha256:<64 hex digits>")
         handle = self.ids.upload_handle()
         upload = _Upload(handle=handle, org_id=org_id, max_bytes=max_bytes, accepted_mime=mimes,
-                         expires_at=self.clock.at(self.limits.processing_cache_ttl_s))
+                         expires_at=self.clock.at(self.limits.processing_cache_ttl_s),
+                         declared_digest=declared)
         self.uploads[handle] = upload
         return {"upload_handle": handle,
                 # A constrained server-issued destination, never a caller-shaped key.
@@ -149,6 +165,10 @@ class FakeMediaStore:
             raise errors.NotFound(f"no upload {upload_handle} owned by org {org_id}")
         if upload.state is UploadState.finalized:
             return self.objects[(org_id, upload_handle)]   # idempotent completion
+        if upload.state in (UploadState.aborted, UploadState.expired):
+            # A refused upload stays refused: re-finalizing after an oversize or
+            # unsupported body would be a second chance at the same check.
+            raise errors.Conflict(f"upload {upload_handle} is {upload.state}")
         if self.clock.now() >= upload.expires_at:
             upload.state = UploadState.expired
             raise errors.UploadExpired("the upload window closed before completion")
@@ -161,6 +181,11 @@ class FakeMediaStore:
             upload.state = UploadState.aborted
             raise errors.UnsupportedMedia(f"{upload.mime} is not an accepted type")
         digest = digest_of(upload.data)
+        if upload.declared_digest is not None and upload.declared_digest != digest:
+            # The client said what it would upload; the store checked, as 01 requires
+            # ("completion verifies object metadata/checksum").
+            upload.state = UploadState.aborted
+            raise errors.UnsupportedMedia("the uploaded bytes do not match the declared digest")
         existing = self.objects.get((org_id, upload_handle))
         if existing is not None and existing.digest != digest:
             # Immutable within the tenant too: finalizing must not replace an object
@@ -174,8 +199,10 @@ class FakeMediaStore:
         return ref
 
     async def resolve_owned(self, org_id: str, ref: str) -> MediaRef:
+        # Keyed by tenant: another org's handle simply is not in this org's namespace,
+        # which is the single guard rather than a second comparison after the lookup.
         media = self.objects.get((org_id, ref))
-        if media is None or media.org_id != org_id:
+        if media is None:
             raise errors.NotFound(f"no media {ref} owned by org {org_id}")
         upload = self.uploads.get(ref)
         if upload is not None and upload.state is not UploadState.finalized:

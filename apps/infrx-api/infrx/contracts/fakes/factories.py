@@ -117,7 +117,8 @@ def tracesink_factory(limits: PilotSettings | None = None, **_: object) -> Harne
     clock, ids, failures = FakeClock(), SequentialIds(), FailurePlan()
     sink = FakeTraceSink(clock, limits=limits or DEFAULTS, failures=failures)
     return Harness(port=sink, clock=clock, ids=ids, failures=failures,
-                   extra={"queued": lambda: list(sink.queued), "crash": sink.crash})
+                   extra={"queued": lambda: list(sink.queued), "crash": sink.crash,
+                          "content_budget": lambda: sink.content_budget})
 
 
 def feedback_factory(limits: PilotSettings | None = None, *,
@@ -127,6 +128,7 @@ def feedback_factory(limits: PilotSettings | None = None, *,
     hooks = _job_hooks(jobs)
     hooks["jobs"] = jobs
     hooks["outbox"] = lambda: list(service.outbox)
+    hooks["audit"] = lambda: list(service.audit)
     return Harness(port=service, clock=clock, ids=ids, failures=failures, extra=hooks)
 
 

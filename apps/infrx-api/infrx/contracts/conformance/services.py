@@ -8,9 +8,11 @@ from decimal import Decimal
 
 from .. import errors
 from ..limits import DEFAULTS
-from ..records import (AuthorRole, ChunkEventType, FeedbackChannel, FeedbackName, JudgeRunState,
-                       MediaKind, Role, TraceLossReason, TraceMode, TraceOfferResult)
+from ..records import (AuthorRole, ChunkEventType, FeedbackChannel, FeedbackName,
+                       JudgeResolution, JudgeRunState, MediaKind, Role, TraceLossReason,
+                       TraceMode, TraceOfferResult)
 from . import builders as b
+from .harness import hook
 
 # ==========================================================================
 # MediaStore
@@ -94,6 +96,10 @@ async def media_parity__staging_is_content_addressed_and_tenant_namespaced(facto
     prepared = await harness.port.prepare("job_stagingfixture", "profile-2")
     assert prepared[0].profile_version == "profile-2"
     assert prepared[0].storage_ref != staged_a[0].storage_ref
+    # the profile version namespaces the cache (01: "tenant source digest + profile
+    # version namespace both media cache keys"), so it is *in* the key
+    assert "profile-2" in prepared[0].storage_ref
+    assert b.ORG_A in prepared[0].storage_ref
     assert prepared[0].digest == staged_a[0].digest            # same source content
 
 
@@ -173,6 +179,51 @@ async def media_sec__staging_never_replaces_an_existing_object(factory):
             "the staged object was replaced by the completed upload"
 
 
+async def media_sec__a_refused_upload_stays_refused(factory):
+    """MEDIA-SEC: an upload aborted by a failed check is final. Re-finalizing it would
+    be a second attempt at the same size and type checks, and a declared checksum is
+    verified against the bytes that actually arrived (01: "completion verifies object
+    metadata/checksum and ownership before use")."""
+    harness = factory()
+    ticket = await harness.port.create_upload(b.ORG_A, {"max_bytes": 8})
+    handle = ticket["upload_handle"]
+    harness.extra["put_object"](handle, b"far too many bytes", "video/mp4")
+    try:
+        await harness.port.finalize_upload(b.ORG_A, handle)
+    except errors.RequestTooLarge:
+        pass
+    else:
+        raise AssertionError("an oversize upload was finalized")
+    harness.extra["put_object"](handle, b"tiny", "video/mp4")      # now within the limit
+    try:
+        await harness.port.finalize_upload(b.ORG_A, handle)
+    except errors.DomainError as exc:
+        assert errors.http_status(exc.code) in (400, 404, 409), exc.code
+    else:
+        raise AssertionError("an aborted upload was finalized on a second attempt")
+
+    # a declared digest is checked against the bytes that arrived
+    declared = await harness.port.create_upload(
+        b.ORG_A, {"max_bytes": 1024, "digest": "sha256:" + "0" * 64})
+    other = declared["upload_handle"]
+    harness.extra["put_object"](other, b"not what was promised", "video/mp4")
+    try:
+        await harness.port.finalize_upload(b.ORG_A, other)
+    except errors.DomainError as exc:
+        assert errors.http_status(exc.code) in (400, 409), exc.code
+    else:
+        raise AssertionError("an upload was finalized against a digest it does not have")
+    for constraints in ({"accepted_mime": "video/mp4"},        # a string is not a list
+                        {"maxbytes": 1024},                     # a rule nobody enforces
+                        {"digest": "deadbeef"}):
+        try:
+            await harness.port.create_upload(b.ORG_A, constraints)
+        except errors.InvalidRequest:
+            pass
+        else:
+            raise AssertionError(f"constraints {constraints} were accepted")
+
+
 async def media_sec__an_expired_upload_window_says_so(factory):
     """MEDIA-SEC / r1 R22: a closed upload window answers `410 upload_expired`
     ("The upload window has expired."), never `result_expired`: a customer told their
@@ -229,6 +280,7 @@ def mediastore_cases():
             media_parity__staging_is_content_addressed_and_tenant_namespaced,
             media_sec__a_foreign_media_reference_is_not_staged,
             media_sec__staging_never_replaces_an_existing_object,
+            media_sec__a_refused_upload_stays_refused,
             media_sec__an_expired_upload_window_says_so,
             media_sec__a_partial_request_stages_nothing]
 
@@ -259,9 +311,7 @@ async def dur_outbox__the_index_never_authorizes_execution(factory):
     """DUR-OUTBOX: claiming a candidate mutates no durable job state; only
     JobStore.claim decides the winner."""
     harness = factory()
-    jobs = harness.extra.get("jobs")
-    if jobs is None:
-        return
+    jobs = hook(harness, "jobs")
     from .jobs import _admit
     from dataclasses import replace
     inner = replace(harness, port=jobs)
@@ -312,13 +362,20 @@ async def dur_outbox__rebuild_restores_every_queued_job_exactly_once(factory):
     for event in snapshot:
         await harness.port.enqueue(event)
     claimed = await harness.port.claim_candidate("worker-a")
-    await harness.port.remove(claimed.job_id)
+    assert claimed is not None                     # in flight, deliberately not removed
     assert await harness.port.rebuild(snapshot) == 3
     seen = set()
     while (candidate := await harness.port.claim_candidate("worker-a")) is not None:
         assert candidate.event_id not in seen
         seen.add(candidate.event_id)
     assert seen == {event.event_id for event in snapshot}
+    # the rebuild replaced the index: no pre-rebuild in-flight entry comes back later
+    harness.clock.advance(DEFAULTS.lease_ttl_s * 2 + 1)
+    returned = set()
+    while (candidate := await harness.port.claim_candidate("worker-b")) is not None:
+        assert candidate.event_id not in returned, "an event came back twice after rebuild"
+        returned.add(candidate.event_id)
+    assert returned == seen, "the rebuilt index lost or duplicated a job"
 
 
 def scheduler_cases():
@@ -465,22 +522,35 @@ async def trace_bounds__an_accepted_offer_is_in_memory_only(factory):
 
 
 async def trace_bounds__a_content_budget_breach_discards_the_whole_content(factory):
-    """TRACE-BOUNDS: no retained partial content pretending to be complete;
-    metadata still flows and the loss is counted."""
+    """TRACE-BOUNDS: no retained partial content pretending to be complete; metadata
+    still flows and the loss is counted. The budget is a **running total**: envelopes
+    that each fit on their own but not together must not all be kept, so a sink that
+    only compares one envelope against the budget fails here."""
     harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=4096,
                                               trace_metadata_reserve_bytes=1024))
-    small = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=1024,
-                                             metadata_bytes=16, harness=harness))
-    assert small is TraceOfferResult.accepted_in_memory
-    big = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=99_999,
-                                           metadata_bytes=16, harness=harness))
-    assert big is TraceOfferResult.accepted_in_memory        # metadata survived
+    budget = harness.extra["content_budget"]()              # 3,072 bytes
+    for _ in range(3):
+        # 1,024 each: three fit exactly, and each one alone is far inside the budget
+        assert await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=1024,
+                                                metadata_bytes=16, harness=harness)) \
+            is TraceOfferResult.accepted_in_memory
+    assert (await harness.port.stats())["in_memory_content_bytes"] == budget
+    over = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=1024,
+                                            metadata_bytes=16, harness=harness))
+    assert over is TraceOfferResult.accepted_in_memory      # metadata survived
     kept = harness.extra["queued"]()[-1]
     assert kept.content_bytes == 0 and kept.content_ref is None
     assert kept.content_complete is False
     assert kept.loss_reason is TraceLossReason.memory_budget
     stats = await harness.port.stats()
     assert stats["loss_reasons"]["memory_budget"] == 1
+    assert stats["in_memory_content_bytes"] == budget       # never over, never double
+    # and one oversize envelope is discarded the same way
+    huge = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=99_999,
+                                            metadata_bytes=16, harness=harness))
+    assert huge is TraceOfferResult.accepted_in_memory
+    assert harness.extra["queued"]()[-1].content_bytes == 0
+    assert (await harness.port.stats())["in_memory_content_bytes"] == budget
 
 
 async def trace_bounds__metadata_exhaustion_drops_with_counters(factory):
@@ -526,17 +596,114 @@ async def trace_bounds__in_memory_appended_and_fsynced_are_separate_states(facto
 
 
 async def trace_bounds__off_mode_produces_no_trace_at_all(factory):
-    """TRACE-BOUNDS: mode off means no row and no content, so off-mode jobs stay
-    out of the coverage denominator entirely."""
+    """TRACE-BOUNDS / r1 R27: mode off means no row and no content, so off-mode jobs
+    stay out of the coverage denominator entirely. The sink drops the envelope and
+    counts it `malformed`; it never raises, because the trace path must not be able to
+    fail the request path it is called from."""
     harness = factory()
+    result = await harness.port.offer(b.trace(harness.ids.uuid(), mode=TraceMode.off,
+                                              content_bytes=0, harness=harness))
+    assert result is TraceOfferResult.dropped
+    stats = await harness.port.stats()
+    assert stats["accepted"] == 0 and stats["in_memory"] == 0
+    assert stats["loss_reasons"]["malformed"] == 1
+    # nor does an off-mode request open a content capture
     try:
-        await harness.port.offer(b.trace(harness.ids.uuid(), mode=TraceMode.off, content_bytes=0,
-                                         harness=harness))
-    except ValueError:
+        harness.port.open(harness.ids.uuid(), b.ORG_A, TraceMode.off)
+    except errors.DomainError:
         pass
     else:
-        raise AssertionError("an off-mode request was captured")
-    assert (await harness.port.stats())["accepted"] == 0
+        raise AssertionError("an off-mode request opened a content capture")
+
+
+async def trace_bounds__concurrent_captures_share_one_budget(factory):
+    """TRACE-BOUNDS / r1 R27: bytes are charged while content accumulates, so the
+    budget is shared across every open capture. Two requests that each fit alone but
+    not together must not both be kept: whichever crosses the line loses its whole
+    content capture, the others are untouched, and the loss is counted."""
+    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=5_000,
+                                              trace_metadata_reserve_bytes=1_000))
+    budget = harness.extra["content_budget"]()           # 4,000 bytes of content
+    first_id, second_id = harness.ids.uuid(), harness.ids.uuid()
+    first = harness.port.open(first_id, b.ORG_A, TraceMode.full)
+    second = harness.port.open(second_id, b.ORG_A, TraceMode.full)
+    part = "x" * 1_000
+    for _ in range(3):
+        assert first.add(part) is True
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 3_000
+    # the second capture fits on its own, but not beside the first
+    assert second.add(part) is True                      # 4,000 exactly
+    assert second.add(part) is False, "the shared budget was overrun"
+    assert second.add("x") is False                      # and it stays over
+    stats = await harness.port.stats()
+    assert stats["loss_reasons"]["memory_budget"] == 1
+    assert stats["in_memory_content_bytes"] == 3_000     # the loser released its bytes
+    # the loser finishes as honest metadata; the winner keeps its content
+    lossy = await second.finish(b.trace(second_id, content_bytes=1_000, metadata_bytes=16,
+                                        harness=harness))
+    kept = await first.finish(b.trace(first_id, content_bytes=3_000, metadata_bytes=16,
+                                      harness=harness))
+    assert lossy is TraceOfferResult.accepted_in_memory
+    assert kept is TraceOfferResult.accepted_in_memory
+    queued = {env.request_id: env for env in harness.extra["queued"]()}
+    assert queued[second_id].content_bytes == 0
+    assert queued[second_id].content_ref is None
+    assert queued[second_id].content_complete is False
+    assert queued[second_id].loss_reason is TraceLossReason.memory_budget
+    assert queued[first_id].content_bytes == 3_000
+    assert queued[first_id].content_complete is True
+    # and the accounting never exceeded the budget
+    assert (await harness.port.stats())["in_memory_content_bytes"] <= budget
+
+
+async def trace_bounds__an_abandoned_capture_releases_its_bytes(factory):
+    """TRACE-BOUNDS / r1 R27: a request that dies mid-capture must not hold capture
+    budget for the rest of the process's life. `abandon` releases the bytes and counts
+    the loss, and the freed budget is usable by the next request."""
+    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=3_000,
+                                              trace_metadata_reserve_bytes=1_000))
+    doomed_id = harness.ids.uuid()
+    doomed = harness.port.open(doomed_id, b.ORG_A, TraceMode.full)
+    assert doomed.add("y" * 2_000) is True
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 2_000
+    await doomed.abandon(TraceLossReason.shutdown)
+    stats = await harness.port.stats()
+    assert stats["in_memory_content_bytes"] == 0
+    assert stats["in_memory"] == 0 and stats["accepted"] == 0
+    assert stats["loss_reasons"]["shutdown"] == 1
+    assert stats["open_captures"] == 0
+    # the whole budget is available again, and a finished capture is not abandonable
+    survivor_id = harness.ids.uuid()
+    survivor = harness.port.open(survivor_id, b.ORG_A, TraceMode.full)
+    assert survivor.add("z" * 2_000) is True
+    await survivor.finish(b.trace(survivor_id, content_bytes=2_000, metadata_bytes=16,
+                                  harness=harness))
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 2_000
+    try:
+        await survivor.finish(b.trace(survivor_id, content_bytes=1, metadata_bytes=1,
+                                      harness=harness))
+    except errors.DomainError:
+        pass
+    else:
+        raise AssertionError("a capture was finished twice")
+
+
+async def trace_bounds__a_capture_belongs_to_its_own_request(factory):
+    """TRACE-BOUNDS: the envelope handed to `finish` must be this capture's own, or
+    one request's content would be filed under another request - and another tenant."""
+    harness = factory()
+    own_id = harness.ids.uuid()
+    capture = harness.port.open(own_id, b.ORG_A, TraceMode.full)
+    assert capture.add("some content") is True
+    for foreign in (b.trace(harness.ids.uuid(), content_bytes=12, harness=harness),
+                    b.trace(own_id, org_id=b.ORG_B, content_bytes=12, harness=harness)):
+        try:
+            await capture.finish(foreign)
+        except errors.DomainError:
+            pass
+        else:
+            raise AssertionError("a capture accepted another request's envelope")
+    assert (await harness.port.stats())["in_memory"] == 0
 
 
 async def trace_bounds__minimal_mode_never_carries_content(factory):
@@ -576,6 +743,9 @@ async def trace_bounds__minimal_mode_never_carries_content(factory):
 def tracesink_cases():
     return [trace_bounds__an_accepted_offer_is_in_memory_only,
             trace_bounds__minimal_mode_never_carries_content,
+            trace_bounds__concurrent_captures_share_one_budget,
+            trace_bounds__an_abandoned_capture_releases_its_bytes,
+            trace_bounds__a_capture_belongs_to_its_own_request,
             trace_bounds__a_content_budget_breach_discards_the_whole_content,
             trace_bounds__metadata_exhaustion_drops_with_counters,
             trace_bounds__a_full_queue_drops_and_inference_continues,
@@ -726,24 +896,60 @@ async def feedback_ack__a_client_cannot_forge_provenance(factory):
             pass
         else:
             raise AssertionError(f"a client set {field}")
-    try:
-        await harness.port.accept(b.auth(), request.request_id,
-                                  {**b.feedback(), "calibration_set": "golden"},
-                                  b.idem(request, "fb-cal", operation="feedback"))
-    except errors.Forbidden:
-        pass
-    else:
-        raise AssertionError("a customer stamped calibration membership")
+    # r1 R31: `calibration_set` is server-set and exists only through the operator
+    # path, so even an operator session cannot send it on `accept`
+    for auth in (b.auth(), b.auth(role=Role.operator)):
+        try:
+            await harness.port.accept(auth, request.request_id,
+                                      {**b.feedback(), "calibration_set": "golden"},
+                                      b.idem(request, "fb-cal", operation="feedback"))
+        except errors.InvalidRequest:
+            pass
+        else:
+            raise AssertionError("a client stamped calibration membership")
+    # and an operator session on the customer path is still a customer signal
+    operator_says = await harness.port.accept(b.auth(role=Role.operator), request.request_id,
+                                              b.feedback(FeedbackName.thumb, True),
+                                              b.idem(request, "fb-op-customer",
+                                                     operation="feedback"))
+    assert operator_says.author_role is AuthorRole.customer
+    assert operator_says.calibration_set is None
 
 
 async def feedback_ack__an_operator_may_label_a_calibration_set(factory):
-    """FEEDBACK-ACK: only an authorized platform operator calibrates."""
+    """FEEDBACK-ACK / r1 R31+R19+R26: operator provenance exists only through
+    `label_calibration`. It is operator-only, idempotent, audited, and platform-wide:
+    the organization comes from the labelled row, not from the operator's session."""
     harness = factory()
     request, _ = await _owned_request(harness)
-    record = await harness.port.accept(b.auth(role=Role.operator), request.request_id,
-                                       {**b.feedback(), "calibration_set": "golden"},
-                                       b.idem(request, "fb-op", operation="feedback"))
+    idem = b.idem(request, "cal-1", operation="calibration.label")
+    try:
+        await harness.port.label_calibration(b.auth(), request.request_id, "golden", idem)
+    except errors.Forbidden:
+        pass
+    else:
+        raise AssertionError("a customer labelled a calibration set")
+    record = await harness.port.label_calibration(b.auth(role=Role.operator),
+                                                  request.request_id, "golden", idem)
     assert record.calibration_set == "golden" and record.author_role is AuthorRole.operator
+    assert record.org_id == request.org_id          # the row's tenant, not the operator's
+    assert await harness.port.label_calibration(b.auth(role=Role.operator), request.request_id,
+                                                "golden", idem) == record      # idempotent
+    for bad_label, bad_idem in (("", idem), ("   ", idem),
+                                ("golden", b.idem(request, None,
+                                                  operation="calibration.label"))):
+        try:
+            await harness.port.label_calibration(b.auth(role=Role.operator), request.request_id,
+                                                 bad_label, bad_idem)
+        except errors.InvalidRequest:
+            pass
+        else:
+            raise AssertionError(f"label {bad_label!r} with key {bad_idem.key!r} was accepted")
+    audit = harness.extra.get("audit")
+    if audit is not None:
+        entries = [entry for entry in audit() if entry.get("event") == "label_calibration"]
+        assert len(entries) == 1 and entries[0]["label"] == "golden"
+        assert entries[0]["operator"] == b.auth(role=Role.operator).principal
 
 
 def feedback_cases():
@@ -791,16 +997,34 @@ async def judge_budget__reservations_include_outstanding_and_ambiguous_runs(fact
         pass
     else:
         raise AssertionError("outstanding reservations were not counted")
-    submitting = await harness.port.begin_submit(first.run_id)
-    await harness.port.record_submission(submitting.run_id, "batch_placeholder_1")
+    await harness.port.begin_submit(first.run_id)
+    # No provider id: the submission may or may not have reached the provider, which
+    # is exactly when the money must keep counting against the budget.
     ambiguous = await harness.port.quarantine(first.run_id, "submission timeout")
-    assert ambiguous.state in {JudgeRunState.ambiguous, JudgeRunState.quarantined}
+    assert ambiguous.state is JudgeRunState.ambiguous
+    assert ambiguous.reserved_cost == Decimal("0.60")
+    available = harness.extra.get("available")
+    if available is not None:
+        assert available() == Decimal("0.40")
     try:
         await harness.port.reserve(_run(harness), b.consent(), Decimal("0.50"))
     except errors.BudgetExceeded:
         pass
     else:
         raise AssertionError("an ambiguous run freed its reservation")
+    # the same after a provider id is known: still outstanding until it settles
+    with_id = await harness.port.resolve_ambiguous(
+        first.run_id, b.auth(role=Role.operator), JudgeResolution.adopt_provider_evidence,
+        "found in the provider console", external_id="batch_placeholder_1")
+    assert with_id.state is JudgeRunState.collecting and with_id.reserved_cost == Decimal("0.60")
+    if available is not None:
+        assert available() == Decimal("0.40")
+    try:
+        await harness.port.reserve(_run(harness), b.consent(), Decimal("0.50"))
+    except errors.BudgetExceeded:
+        pass
+    else:
+        raise AssertionError("a collecting run freed its reservation")
 
 
 async def judge_budget__one_submission_intent_per_run(factory):
@@ -904,8 +1128,7 @@ async def judge_budget__revoked_or_missing_consent_is_refused_before_egress(fact
             pass
         else:
             raise AssertionError("a run without current consent was reserved")
-    if harness.extra.get("revoke_consent") is None:
-        return                                     # optional hook; adapter may skip
+    hook(harness, "revoke_consent")
     harness = factory(judge_mode="live", budget="1.00")   # fresh, with its own hooks
     revoke, available = harness.extra["revoke_consent"], harness.extra.get("available")
     run = _run(harness)
@@ -932,6 +1155,53 @@ async def judge_budget__revoked_or_missing_consent_is_refused_before_egress(fact
         raise AssertionError("a consent-revoked run was submitted on a retry")
 
 
+async def judge_budget__consent_revoked_while_submitting_holds_the_reservation(factory):
+    """JUDGE-BUDGET / r1 R28: release on revocation applies only from `reserved`. Once
+    a submission intent exists the batch may already be in flight, so the run becomes
+    `ambiguous` with its reservation **held** and is resolved only through
+    `resolve_ambiguous`. Freeing the money here would leave a billable provider batch
+    running against a budget that looks free."""
+    harness = factory(judge_mode="live", budget="1.00")
+    revoke = hook(harness, "revoke_consent")
+    available, runs = harness.extra["available"], harness.extra["runs"]
+    run = _run(harness)
+    await harness.port.reserve(run, b.consent(), Decimal("0.60"))
+    submitting = await harness.port.begin_submit(run.run_id)
+    assert submitting.state is JudgeRunState.submitting and submitting.submit_intent is not None
+    revoke(b.ORG_A)
+    try:
+        await harness.port.begin_submit(run.run_id)     # the worker retries after a crash
+    except errors.ConsentMissing:
+        pass
+    else:
+        raise AssertionError("a revoked run authorized a submission")
+    stored = runs()[run.run_id]
+    assert stored.state is JudgeRunState.ambiguous, stored.state
+    assert stored.reserved_cost == Decimal("0.60"), "the in-flight batch freed its budget"
+    assert stored.submit_intent == submitting.submit_intent
+    assert available() == Decimal("0.40")
+    # it resolves only through R8, and the reservation is freed there
+    operator = b.auth(role=Role.operator)
+    released = await harness.port.resolve_ambiguous(run.run_id, operator,
+                                                    JudgeResolution.release_reservation,
+                                                    "provider has no batch for this intent")
+    assert released.state is JudgeRunState.quarantined and released.reserved_cost == 0
+    assert available() == Decimal("1.00")
+    # from `reserved` (no intent yet) revocation still releases at once, per R9
+    other = _run(harness)
+    harness.extra["set_consent"](b.consent())
+    await harness.port.reserve(other, b.consent(), Decimal("0.50"))
+    revoke(b.ORG_A)
+    try:
+        await harness.port.begin_submit(other.run_id)
+    except errors.ConsentMissing:
+        pass
+    else:
+        raise AssertionError("a revoked reservation authorized a submission")
+    assert runs()[other.run_id].state is JudgeRunState.cancelled
+    assert available() == Decimal("1.00")
+
+
 async def judge_budget__a_run_and_its_consent_belong_to_one_org(factory):
     """JUDGE-BUDGET / r1 R10: two tenant-bearing arguments must agree. Another
     organization's evaluation consent never authorizes this org's traces leaving the
@@ -945,9 +1215,21 @@ async def judge_budget__a_run_and_its_consent_belong_to_one_org(factory):
     else:
         raise AssertionError("another org's consent reserved this run")
     assert harness.extra["runs"]() == {}
+    # nor is a *stored* run readable by guessing its id from another organization: a
+    # run id is not a capability, and the reply would carry its samples and its costs
+    reserved = await harness.port.reserve(run, b.consent(b.ORG_A), Decimal("0.10"))
+    assert reserved.state is JudgeRunState.reserved
+    impostor = reserved.model_copy(update={"org_id": b.ORG_B, "consent": b.consent(b.ORG_B)})
+    try:
+        stolen = await harness.port.reserve(impostor, b.consent(b.ORG_B), Decimal("0.10"))
+    except errors.DomainError as exc:
+        assert errors.http_status(exc.code) in (403, 404), exc.code
+    else:
+        raise AssertionError(f"run {stolen.run_id} of org {stolen.org_id} was read by another org")
     available = harness.extra.get("available")
     if available is not None:
-        assert available() == Decimal("1.00")
+        # only ORG_A's own reservation stands; the refused attempts reserved nothing
+        assert available() == Decimal("0.90")
 
 
 async def judge_budget__settlement_amounts_are_validated_money(factory):
@@ -988,7 +1270,6 @@ async def judge_budget__an_ambiguous_run_is_resolved_only_by_an_operator(factory
     either adopts the discovered provider batch (collection continues) or releases the
     reservation (terminal `quarantined`); either way there is an audit record, the
     submission intent is unchanged and no second billable batch is ever created."""
-    from ..records import JudgeResolution
     harness = factory(judge_mode="live", budget="1.00")
     available, runs = harness.extra["available"], harness.extra["runs"]
     run = await harness.port.reserve(_run(harness), b.consent(), Decimal("0.40"))
@@ -1087,5 +1368,6 @@ def judge_cases():
             judge_budget__settlement_cannot_exceed_the_reservation,
             judge_budget__settlement_amounts_are_validated_money,
             judge_budget__a_settled_run_is_closed,
+            judge_budget__consent_revoked_while_submitting_holds_the_reservation,
             judge_budget__a_run_and_its_consent_belong_to_one_org,
             judge_budget__revoked_or_missing_consent_is_refused_before_egress]
