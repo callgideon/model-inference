@@ -1,5 +1,18 @@
 # E1 — Distinct corpus and authenticated benchmark client (review round 1)
 
+> **Partly superseded by [`E1-6c58be7.md`](E1-6c58be7.md) (review round 2).** Round 2
+> found that this report's claim "each fixed at its root cause with a regression test
+> that fails on the old behaviour" does **not** hold for finding 3(b): the fake put the
+> key at offset ~605 of a 600+ byte body, past every truncation point, so that case
+> also passed on the unfixed `1c7d96d` code and proved nothing about
+> truncate-before-scrub. Two truncate-then-redact paths also survived in this round's
+> own code (a `\uXXXX`-escaped key straddling the 200-character `error.message` cut and
+> the 120-character `error.code` cut leaked a 20- and a 10-character prefix). The
+> 19:28:28Z Commands row and the "600+ byte non-JSON body" Failure-drill row below are
+> therefore weaker than they read. The Failure-drill row "Source bytes changed after
+> pinning" was reasoned from the code, not exercised; round 2 exercises it in a test.
+> Findings 1, 2 and 4 of round 1 were independently confirmed fixed at the root.
+
 ## Task and status
 
 - **Task:** E1 (track E, verification). Corpus + benchmark client tooling for the
@@ -307,3 +320,9 @@ lower rate or pre-encoded media.
   GPU, cloud, paid or deployment operation was performed; PERF-PILOT and
   MEDIA-PARITY remain unproven oracles awaiting M3/G4 and E4. Status is
   **implemented**, never integrated.
+- 2026-09-20 (appended by the round-2 session, `19b96d3`/`6c58be7`): corrected the
+  claims named in the banner above. Nothing in the body of this report was rewritten
+  or deleted. Measured longest leaked key prefix for the four hostile shapes, by
+  revision: `1c7d96d` 15/27 (non-JSON body) and 27/27 (`error.code`); this round's
+  code 20/27 (escaped `error.message`) and 10/27 (escaped `error.code`); after
+  `19b96d3`, 0 for all four. See `E1-6c58be7.md` for the commands and exit codes.
