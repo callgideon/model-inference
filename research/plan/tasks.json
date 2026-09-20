@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "baseline_commit": "1db98e9",
-  "status": "documentation-ready-implementation-not-started",
+  "status": "implementation-in-progress",
   "dependency_semantics": {
     "start_dependencies": "Must be integrated before coding this task",
     "integration_dependencies": "Additional tasks required before marking this task integrated; fakes permitted during development"
@@ -157,7 +157,7 @@
       ],
       "track": "F",
       "handoff": "handoffs/F-foundation.md",
-      "status": "planned"
+      "status": "integrated"
     },
     {
       "id": "F2",
@@ -172,7 +172,7 @@
       ],
       "track": "F",
       "handoff": "handoffs/F-foundation.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "D1",
@@ -784,7 +784,7 @@
       ],
       "track": "I",
       "handoff": "handoffs/I-infrastructure.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "I2",
@@ -858,7 +858,7 @@
       ],
       "track": "E",
       "handoff": "handoffs/E-verification.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "E2",
