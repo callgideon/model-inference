@@ -345,3 +345,23 @@ this branch. Every host in the diff is a licence/source page, `*.invalid` or
   leaks nothing across 11 output files. The only network request this session was the
   ffmpeg tarball GET; no live, GPU, cloud, paid or deployment operation was performed.
   Status is **implemented**, never integrated.
+- 2026-09-20 (appended by round 4, `43006d1`/`b8960f8`; nothing above is rewritten):
+  claims in this report are superseded, see [`E1-b8960f8.md`](E1-b8960f8.md).
+  (1) "reduces every URL of any scheme in any case to `scheme://host/path`" was
+  **disproved**: review round 4 reproduced five bypasses of that regex — a query
+  containing `'` or `\`, a userinfo with `'` or over 300 characters, a path over 2000
+  characters, a scheme-less or escaped-slash echo, and a path-embedded token — plus a
+  prefix-only key rule that let an echoed key BODY (`key[9:]`) through whole. Measured on
+  the round-4 matrix, `bench.py@73c210c` leaked in 14 of 176 cells and in 4 of 5
+  adversarial URL shapes. The design is no longer a filter: the client allowlists what it
+  emits (a URL label rebuilt from `urlsplit` parts, no verbatim server strings, no
+  exception text, muted library logging, refusal when argv carries the key), and
+  `redact()` is defense in depth only. (2) The "class swept / 0 leaking cells" result
+  holds only for the 15 outcomes that round tested; the round-4 matrix adds 7 more.
+  (3) `manifest.json` is no longer sha256 `232bad7e…0fe3`: `b8960f8` added
+  `display_width`/`display_height` per clip, giving
+  `386a2d89c26c1bbff4df03004239b3153651901ffcda76f36c3ce5fc23095e18`, 80,773 bytes.
+  (4) The "27 tests / 0 skipped" and "row schema" statements are superseded by 35 tests
+  and a changed raw-row schema (`error_message` removed; `error_type`, `body_sha256`,
+  `body_bytes`, `upload_status` added; `retry_after` numeric; summary gains
+  `interrupted`). The versioned ffmpeg pin recorded here is unchanged and still verified.
