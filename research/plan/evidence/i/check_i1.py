@@ -88,6 +88,13 @@ def main() -> int:
     root = pathlib.Path(args.root).resolve()
     ev = (root / EV_PATH).read_text()
     rm = (root / RM_PATH).read_text()
+    # §Checks quotes this script's own output. That block is machine output, not a
+    # claim either document makes, so it is excluded from the scans that look for
+    # stated times, SHAs and section references — otherwise the report could never
+    # quote a run without failing the run it quotes.
+    fence = re.compile(r"^```.*?^```", re.M | re.S)
+    ev_claims = fence.sub("", ev)
+    rm_claims = fence.sub("", rm)
     out: list[str] = []
     failures: list[str] = []
 
@@ -105,14 +112,25 @@ def main() -> int:
     check(tables == 1, "commands table is single", f"{tables} header row(s)")
     ordered = rows == sorted(rows, key=lambda r: (r[0], r[1]))
     check(ordered, "command rows ordered by pass then UTC")
-    cited_times = set(re.findall(r"\b(\d\d:\d\d:\d\d)Z", ev)) | set(
-        re.findall(r"\b(\d\d:\d\d:\d\d)Z", rm))
+    cited_times = set(re.findall(r"\b(\d\d:\d\d:\d\d)Z", ev_claims)) | set(
+        re.findall(r"\b(\d\d:\d\d:\d\d)Z", rm_claims))
     declared = {t for _, t in rows}
-    # times that appear as claims but name no command row; the log narrates a few
-    # deliberately (pass 2's unitemised calls, the local pytest run)
-    narrated = {"18:27:00", "18:28:03", "18:29:06", "19:42:21"}
-    orphans = sorted(cited_times - declared - narrated)
-    check(not orphans, "every cited UTC time has a command row", str(orphans))
+    # Times a document states on purpose that no command row can back, each because
+    # the report says so where it uses them. Printed, not hidden, so a reviewer sees
+    # the whole exemption set rather than trusting the check.
+    documented = {
+        "18:27:00": "pass 2, unitemised call (re-observed in pass 3)",
+        "18:28:03": "pass 2, unitemised call (re-observed in pass 3)",
+        "18:29:06": "pass 2, unitemised call (re-observed in pass 3)",
+        "19:42:21": "local pytest attempt, not an AWS call",
+        "18:02:53": "CloudTrail DescribeAlarmHistory, read-only, unattributed",
+        "18:02:59": "CloudTrail DescribeRouteTables, read-only, unattributed",
+    }
+    out.append("cited times with no command row, documented: "
+               + "; ".join(f"{k} ({v})" for k, v in sorted(documented.items())))
+    orphans = sorted(cited_times - declared - set(documented))
+    check(not orphans, "every cited UTC time has a command row or a documented "
+                       "exemption", str(orphans))
 
     # 2. row ids
     defined = collections.Counter(ID_DEF.findall(ev))
@@ -141,7 +159,7 @@ def main() -> int:
     hev, hrm = headings(ev), headings(rm)
     known = sorted(hev | hrm, key=len, reverse=True)
     unresolved = []
-    for doc, text in (("evidence", ev), ("README", rm)):
+    for doc, text in (("evidence", ev_claims), ("README", rm_claims)):
         for m in re.finditer("§", text):
             tail = text[m.end():m.end() + 70]
             if any(tail.startswith(k) for k in known):
@@ -218,8 +236,8 @@ def main() -> int:
     shas = re.findall(r"`([0-9a-f]{7})`", source)
     impl = re.search(r"\| Implementation SHA \| \*\*`([0-9a-f]{7})`\*\*", source)
     if impl:
-        elsewhere = (ev.count(impl.group(1)) - source.count(impl.group(1))
-                     + rm.count(impl.group(1)))
+        elsewhere = (ev_claims.count(impl.group(1)) - source.count(impl.group(1))
+                     + rm_claims.count(impl.group(1)))
         out.append(f"implementation SHA in §Source: {impl.group(1)} "
                    f"(occurrences outside §Source: {elsewhere})")
         check(elsewhere == 0, "implementation SHA stated only in §Source")
