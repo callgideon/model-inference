@@ -6,10 +6,24 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REGION=${AWS_REGION:-us-east-1}
 
-# gateway secrets from SSM, never in the repo
-key=$(aws ssm get-parameter --name /model-inference/marlin2b_api_key --with-decryption --region "$REGION" --query Parameter.Value --output text)
+# gateway secrets from SSM, never in the repo. A missing parameter is a warning,
+# not an error: the gateway runs with the legacy key alone (no Supabase auth or
+# usage rows) and with Supabase alone (no legacy key).
+ssm() {
+  aws ssm get-parameter --name "$1" --with-decryption --region "$REGION" \
+      --query Parameter.Value --output text 2>/dev/null || {
+    echo "warning: SSM $1 missing; leaving it out of /etc/marlin2b-gateway.env" >&2; }
+}
+key=$(ssm /model-inference/marlin2b_api_key)
+supabase_url=$(ssm /model-inference/supabase_url)
+supabase_key=$(ssm /model-inference/supabase_service_role_key)
+
 install -m 600 -o ubuntu /dev/null /etc/marlin2b-gateway.env
-printf 'GATEWAY_API_KEY=%s\nMODEL_ID=nemostation/marlin-2b\nMAX_INFLIGHT=16\n' "$key" > /etc/marlin2b-gateway.env
+{ printf 'MODEL_ID=nemostation/marlin-2b\nMAX_INFLIGHT=16\n'
+  if [ -n "$key" ]; then printf 'GATEWAY_API_KEY=%s\n' "$key"; fi
+  if [ -n "$supabase_url" ]; then printf 'SUPABASE_URL=%s\n' "$supabase_url"; fi
+  if [ -n "$supabase_key" ]; then printf 'SUPABASE_SERVICE_ROLE_KEY=%s\n' "$supabase_key"; fi
+} > /etc/marlin2b-gateway.env
 
 /opt/pytorch/bin/pip install -q fastapi uvicorn httpx
 command -v ffprobe >/dev/null || apt-get install -y -qq ffmpeg

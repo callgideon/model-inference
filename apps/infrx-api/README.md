@@ -1,0 +1,106 @@
+# infrx-api — the inference gateway
+
+OpenAI-compatible gateway in front of vLLM, plus its deployment files and the
+OpenRouter provider document. Runs on the GPU box as `marlin2b-gateway.service`
+(uvicorn on localhost:8001) behind Caddy; vLLM stays on localhost:8000. Box
+layout and the public endpoint: [`models/marlin2b/README.md`](../../models/marlin2b/README.md).
+Requirements and data model: [`apps/README.md`](../README.md) §6–§7.
+
+```
+client ─▶ Caddy :443 ─▶ gateway.py :8001 ─▶ vLLM :8000
+                          │  auth: api_keys (cache 60 s)
+                          ├─▶ Supabase  usage_events (background queue)
+                          └─▶ usage.jsonl (always) · usage_failed.jsonl (on failure)
+```
+
+| file | what |
+|---|---|
+| `gateway.py` | the service: auth, video budget, `<think>` stripping, usage |
+| `deploy/install.sh` | idempotent installer, run as root on the box |
+| `deploy/*.service`, `deploy/Caddyfile` | systemd units and TLS |
+| `deploy/replay_usage.py` | re-post rows from `usage_failed.jsonl` |
+| `openrouter/provider-models.json` | served at `/v1/models` (see `openrouter/PLAN.md`) |
+| `tests/test_gateway_auth.py` | auth cache and cost maths, no network |
+| `client_example.py` | reference client |
+
+## Environment
+
+`install.sh` writes `/etc/marlin2b-gateway.env` from SSM; the unit adds
+`USAGE_LOG`. Everything is optional — with none of it set the gateway imports
+and serves unauthenticated, which is how the tests run it.
+
+| var | SSM parameter | meaning |
+|---|---|---|
+| `SUPABASE_URL` | `/model-inference/supabase_url` | project REST base, e.g. `https://fcbnscgsymzdykendbrc.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | `/model-inference/supabase_service_role_key` | service role; bypasses RLS, box only |
+| `GATEWAY_API_KEY` | `/model-inference/marlin2b_api_key` | legacy single key, still accepted while it exists |
+| `MODEL_ID` | — | id on the wire and in `usage_events.model_id` (`nemostation/marlin-2b`) |
+| `UPSTREAM`, `MAX_INFLIGHT`, `MAX_VIDEO_SECONDS`, `MAX_VIDEO_MB` | — | vLLM address, 429 threshold, video limits |
+| `USAGE_LOG`, `USAGE_FAILED_LOG` | — | `/opt/dlami/nvme/logs/usage.jsonl`, and `usage_failed.jsonl` beside it |
+| `MODELS_DOC` | — | path to the provider document served by `/v1/models` |
+
+## Auth
+
+`Authorization: Bearer <key>` → `sha256(key).hexdigest()` → `GET
+{SUPABASE_URL}/rest/v1/api_keys?key_hash=eq.<hash>&select=id,org_id,revoked_at`
+with the service role key. Plain httpx; no supabase client library.
+
+- cache keyed by hash: hits 60 s, misses 10 s, so a console-revoked key stops
+  working within a minute;
+- `revoked_at` set → 401;
+- Supabase unreachable → keys already in the cache keep working (stale entries
+  are served), unknown keys get **503**, not 401, so a caller retries instead
+  of rotating a key that is fine;
+- `last_used_at` is PATCHed at most once a minute per key, fire-and-forget;
+- `GATEWAY_API_KEY`, if set, is accepted as before. It has no org, so those
+  requests are written to `usage.jsonl` only and never reach `usage_events`.
+  Drop it from SSM once every caller has a console key.
+
+## Usage ingestion
+
+Every request writes its `usage.jsonl` line (durable, unchanged). Authenticated
+requests also queue an `usage_events` row — id = the `Inference-Id` header, so
+inserts are idempotent — for a background task that POSTs it to
+`{SUPABASE_URL}/rest/v1/usage_events` with `Prefer: return=minimal`. The queue
+holds 10k rows; failures retry after 1 s, 3 s and 9 s and then append to
+`usage_failed.jsonl`. Nothing about the request body or response is stored.
+
+`cost_usd = prompt_tokens × input_usd_per_m / 1e6 + completion_tokens ×
+output_usd_per_m / 1e6`, from `models` for `MODEL_ID`, re-read every 5 minutes.
+If the prices cannot be read the row is written with `cost_usd = 0` and a
+warning goes to the journal — the row is never dropped over a price.
+
+Replay after an outage (the file is moved aside first, so the gateway can keep
+appending; a 409 counts as already inserted):
+
+```bash
+set -a; . /etc/marlin2b-gateway.env; set +a
+/opt/pytorch/bin/python ~/model-inference/apps/infrx-api/deploy/replay_usage.py
+```
+
+## Deploy
+
+```bash
+cd ~/model-inference && git pull
+sudo ./apps/infrx-api/deploy/install.sh          # reads SSM, writes the env file, restarts
+journalctl -u marlin2b-gateway -f
+```
+
+Missing SSM parameters are a warning, not a failure: the gateway keeps running
+with whatever is present. Add the Supabase parameters once, as SecureString:
+
+```bash
+aws ssm put-parameter --name /model-inference/supabase_url --type String --value https://<ref>.supabase.co --overwrite
+aws ssm put-parameter --name /model-inference/supabase_service_role_key --type SecureString --value <key> --overwrite
+```
+
+## Tests
+
+```bash
+python3 -m pytest apps/infrx-api/tests/test_gateway_auth.py   # or: python3 apps/infrx-api/tests/test_gateway_auth.py
+```
+
+Covers key hashing, cache hit/expiry, revoked and unknown keys, the 503 path
+when Supabase is down, cost maths, and the spill to `usage_failed.jsonl`.
+`httpx.MockTransport` stands in for Supabase, so the tests need no network and
+no env vars.

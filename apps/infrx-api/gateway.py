@@ -2,43 +2,173 @@
 """OpenAI-compatible gateway in front of vLLM for Marlin-2B.
 
 What it adds on top of vLLM's own server (which stays bound to localhost):
-  * bearer API-key check (key from $GATEWAY_API_KEY)
+  * bearer API-key check against Supabase `api_keys` (sha256 hex of the key),
+    cached 60 s (10 s for misses); revoked keys get 401, and if Supabase is
+    unreachable cached keys keep working while unknown keys get 503, not 401.
+    $GATEWAY_API_KEY still works as a legacy single key when set.
   * per-request video budget: reads the clip's duration and sets vLLM's
     mm_processor_kwargs so the model sees its training grid (2 fps, 200,704 px
     per frame) instead of the processor default that costs 6x the tokens
     (see results/notes.md); rejects clips over MAX_VIDEO_SECONDS / MAX_VIDEO_MB
   * `Inference-Id` response header + one JSON line per request in $USAGE_LOG
-    (id, tokens, video seconds, TTFT, status) for billing
+    (id, tokens, video seconds, TTFT, status), plus one `usage_events` row in
+    Supabase per authenticated request, posted from a background queue with
+    retries; rows that never land go to usage_failed.jsonl for deploy/replay_usage.py.
+    cost_usd uses the `models` prices, re-read every 5 minutes.
   * early 429 above MAX_INFLIGHT instead of queueing
   * strips the leading `<think>` token Marlin emits (non-streaming and streaming)
 
-Run:  GATEWAY_API_KEY=... uvicorn gateway:app --host 127.0.0.1 --port 8001
+Env (see deploy/install.sh, which writes /etc/marlin2b-gateway.env):
+  SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, MODEL_ID, GATEWAY_API_KEY (legacy,
+  optional), UPSTREAM, MAX_INFLIGHT, MAX_VIDEO_SECONDS, MAX_VIDEO_MB,
+  USAGE_LOG, USAGE_FAILED_LOG, MODELS_DOC. With none of them set the gateway
+  imports and runs unauthenticated, which is what the tests use.
+
+Run:  uvicorn gateway:app --host 127.0.0.1 --port 8001
 Then put TLS in front (Caddyfile) and expose only 443.
 """
-import asyncio, base64, json, os, re, subprocess, tempfile, time, uuid
+import asyncio, base64, hashlib, json, os, re, subprocess, tempfile, time, uuid
 
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 UPSTREAM = os.environ.get("UPSTREAM", "http://127.0.0.1:8000")
-API_KEY = os.environ.get("GATEWAY_API_KEY", "")
+LEGACY_KEY = os.environ.get("GATEWAY_API_KEY", "")
 MODEL_ID = os.environ.get("MODEL_ID", "nemostation/marlin-2b")
 MAX_INFLIGHT = int(os.environ.get("MAX_INFLIGHT", "16"))
 MAX_VIDEO_SECONDS = float(os.environ.get("MAX_VIDEO_SECONDS", "120"))
 MAX_VIDEO_MB = float(os.environ.get("MAX_VIDEO_MB", "64"))
 USAGE_LOG = os.environ.get("USAGE_LOG", "/opt/dlami/nvme/logs/usage.jsonl")
+USAGE_FAILED_LOG = os.environ.get("USAGE_FAILED_LOG", os.path.join(os.path.dirname(USAGE_LOG), "usage_failed.jsonl"))
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 MODELS_DOC = os.environ.get("MODELS_DOC", os.path.join(os.path.dirname(__file__), "openrouter", "provider-models.json"))
 FPS, MIN_FRAMES, MAX_FRAMES, PX_PER_FRAME = 2.0, 4, 240, 200704
+KEY_TTL, MISS_TTL, PRICE_TTL, LAST_USED_TTL = 60, 10, 300, 60
+RETRY_DELAYS = (1, 3, 9, 0)  # usage_events insert backoff; 0 = give up and spill to disk
 
 app = FastAPI()
 client = httpx.AsyncClient(base_url=UPSTREAM, timeout=httpx.Timeout(600, connect=10))
+sb = httpx.AsyncClient(base_url=f"{SUPABASE_URL}/rest/v1", timeout=httpx.Timeout(5, connect=2),
+                       headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
+                                "Content-Type": "application/json"})
 inflight = 0
 THINK = re.compile(r"^\s*<think>(?:.*?</think>)?\s*", re.S)
 
+# ---- auth: sha256(key) -> api_keys row, cached ------------------------------
+_keys = {}        # key_hash -> (expires_at, row or None)
+_last_used = {}   # key_hash -> ts of the last last_used_at PATCH
 
-def unauthorized(req):
-    return API_KEY and req.headers.get("authorization", "") != f"Bearer {API_KEY}"
+
+async def authenticate(req):
+    """Returns (api_keys row, error status). The row is None both for the legacy
+    key and when nothing is configured; the status is None when the call is allowed."""
+    token = req.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    if LEGACY_KEY and token == LEGACY_KEY:
+        return None, None
+    if not SUPABASE_URL:
+        return None, 401 if LEGACY_KEY else None
+    if not token:
+        return None, 401
+    h = hashlib.sha256(token.encode()).hexdigest()
+    hit = _keys.get(h)
+    if hit is None or hit[0] < time.time():
+        try:
+            r = await sb.get("/api_keys", params={"key_hash": f"eq.{h}", "select": "id,org_id,revoked_at"})
+            r.raise_for_status()
+            rows = r.json()
+            hit = _keys[h] = (time.time() + (KEY_TTL if rows else MISS_TTL), rows[0] if rows else None)
+        except Exception as e:
+            if hit is None:  # never seen this key and Supabase is down: fail closed, but retryable
+                print(f"gateway: api_keys lookup failed ({type(e).__name__}: {e})", flush=True)
+                return None, 503
+    row = hit[1]
+    if row is None or row.get("revoked_at"):
+        return None, 401
+    if time.time() - _last_used.get(h, 0) > LAST_USED_TTL:
+        _last_used[h] = time.time()
+        asyncio.create_task(touch(h))
+    return row, None
+
+
+async def touch(h):
+    """Fire-and-forget api_keys.last_used_at update (at most once a minute per key)."""
+    try:
+        await sb.patch("/api_keys", params={"key_hash": f"eq.{h}"},
+                       json={"last_used_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+                       headers={"Prefer": "return=minimal"})
+    except Exception as e:
+        print(f"gateway: last_used_at update failed ({type(e).__name__}: {e})", flush=True)
+
+
+# ---- usage: bounded background queue -> usage_events ------------------------
+_usage_q = asyncio.Queue(maxsize=10000)
+_worker = None
+_prices = (0.0, None)  # (expires_at, {input_usd_per_m, output_usd_per_m} or None)
+
+
+def cost(prompt_tokens, completion_tokens, prices):
+    """0 when prices are unknown or unusable: never drop a usage row over a price."""
+    try:
+        return round((prompt_tokens or 0) * float(prices["input_usd_per_m"]) / 1e6
+                     + (completion_tokens or 0) * float(prices["output_usd_per_m"]) / 1e6, 8)
+    except Exception:
+        return 0.0
+
+
+async def get_prices():
+    global _prices
+    if _prices[0] < time.time():
+        try:
+            r = await sb.get("/models", params={"id": f"eq.{MODEL_ID}", "select": "input_usd_per_m,output_usd_per_m"})
+            r.raise_for_status()
+            rows = r.json()
+            if not rows:
+                print(f"gateway: no prices for {MODEL_ID}; cost_usd=0", flush=True)
+            _prices = (time.time() + PRICE_TTL, rows[0] if rows else None)
+        except Exception as e:
+            _prices = (time.time() + PRICE_TTL, _prices[1])  # keep the last known prices
+            if _prices[1] is None:
+                print(f"gateway: price fetch failed ({type(e).__name__}: {e}); cost_usd=0", flush=True)
+    return _prices[1]
+
+
+def spill(row):
+    try:
+        with open(USAGE_FAILED_LOG, "a") as f:
+            f.write(json.dumps(row) + "\n")
+    except Exception as e:
+        print(f"gateway: cannot write {USAGE_FAILED_LOG} ({e}); lost {row.get('id')}", flush=True)
+
+
+async def ingest():
+    while True:
+        row = await _usage_q.get()
+        row["cost_usd"] = cost(row["prompt_tokens"], row["completion_tokens"], await get_prices())
+        for delay in RETRY_DELAYS:  # three retries, then spill to disk
+            try:
+                r = await sb.post("/usage_events", json=row, headers={"Prefer": "return=minimal"})
+                if r.status_code < 300 or r.status_code == 409:  # 409 = already inserted
+                    break
+                raise RuntimeError(f"{r.status_code} {r.text[:200]}")
+            except Exception as e:
+                if not delay:
+                    print(f"gateway: usage_events insert failed ({e}) -> {USAGE_FAILED_LOG}", flush=True)
+                    spill(row)
+                    break
+                await asyncio.sleep(delay)
+
+
+def enqueue(row):
+    global _worker
+    if _worker is None or _worker.done():
+        _worker = asyncio.create_task(ingest())
+    try:
+        _usage_q.put_nowait(row)
+    except asyncio.QueueFull:
+        print("gateway: usage queue full", flush=True)
+        spill(row)
 
 
 def probe_seconds(path):
@@ -105,8 +235,12 @@ async def models(req: Request):
 @app.post("/v1/chat/completions")
 async def chat(req: Request):
     global inflight
-    if unauthorized(req):
+    key, err = await authenticate(req)
+    if err == 401:
         return JSONResponse({"error": {"message": "invalid api key", "type": "authentication_error"}}, status_code=401)
+    if err:
+        return JSONResponse({"error": {"message": "cannot verify api key, retry", "type": "server_error"}},
+                            status_code=err, headers={"Retry-After": "5"})
     if inflight >= MAX_INFLIGHT:
         return JSONResponse({"error": {"message": "at capacity, retry", "type": "rate_limit_error"}}, status_code=429,
                             headers={"Retry-After": "2"})
@@ -140,6 +274,12 @@ async def chat(req: Request):
                       "prompt_tokens": (u or {}).get("prompt_tokens"), "completion_tokens": (u or {}).get("completion_tokens")})
         with open(USAGE_LOG, "a") as f:
             f.write(json.dumps(usage) + "\n")
+        if key:  # legacy-key requests have no org, so they stay in usage.jsonl only
+            enqueue({"id": rid, "org_id": key["org_id"], "api_key_id": key["id"], "model_id": MODEL_ID,
+                     "status": status, "stream": stream, "prompt_tokens": usage["prompt_tokens"],
+                     "completion_tokens": usage["completion_tokens"], "video_seconds": round(secs, 3),
+                     "ttft_ms": int(usage["ttft_s"] * 1000), "latency_ms": int(usage["wall_s"] * 1000),
+                     "cached": False, "cost_usd": 0})
 
     headers = {"Inference-Id": rid}
     try:
