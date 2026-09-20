@@ -5,7 +5,9 @@ read models/marlin2b/corpus/manifest.json only.
     python -m pytest models/marlin2b/tests -q
     python models/marlin2b/tests/test_corpus.py
 """
-import copy, json, os, sys
+import copy, json, os, sys, tempfile
+from hashlib import sha256
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CORPUS = os.path.join(os.path.dirname(HERE), "corpus")
@@ -128,6 +130,12 @@ def test_validator_rejects_a_mislabelled_or_mis_flagged_clip():
     m["sources"][0]["sha256"] = None                        # built clips from an unpinned source
     assert any("unpinned source" in e for e in corpus.validate_manifest(m))
 
+    m = copy.deepcopy(MANIFEST)
+    m["clips"][0]["status"] = "sha256_mismatch"             # build refused to repin drifted bytes
+    m["clips"][0]["error"] = "cached bytes sha256 aa != pinned bb"
+    assert any("cached bytes differ from the pinned sha256" in e
+               for e in corpus.validate_manifest(m))
+
 
 def test_every_source_carries_verified_licence_fields():
     for s in MANIFEST["sources"]:
@@ -172,6 +180,73 @@ def test_unbuilt_clips_are_never_counted_as_built():
     m = copy.deepcopy(MANIFEST)
     m["clips"][4]["recipe"]["duration_s"] = 300
     assert any("exceeds the API cap" in e for e in corpus.validate_manifest(m))
+
+
+def tiny_manifest(tmp):
+    """One pinned source and one pinned clip in a scratch cache, both already 'built'."""
+    src_bytes, clip_bytes = b"source-bytes", b"clip-bytes"
+    (tmp / "sources").mkdir(parents=True)
+    (tmp / "clips").mkdir(parents=True)
+    (tmp / "sources" / "s.mp4").write_bytes(src_bytes)
+    (tmp / "clips" / "c.mp4").write_bytes(clip_bytes)
+    h = lambda b: sha256(b).hexdigest()
+    return {
+        "sources": [{"id": "s", "file": "s.mp4", "url": "https://example.invalid/s.mp4",
+                     "sha256": h(src_bytes), "bytes": len(src_bytes), "status": "fetched",
+                     "expected": {"duration_s": 10.0},
+                     "probed": {"width": 1920, "height": 1080, "duration_s": 10.0}}],
+        "clips": [{"id": "c", "kind": "clip", "source": "s", "file": "clips/c.mp4",
+                   "geometry_label": "1080p-16x9", "prompt": "p00", "subset": ["full"],
+                   "recipe": {"start_s": 0.0, "duration_s": 5, "scale": [1920, 1080], "fps": 30,
+                              "transpose": None, "encode": {}},
+                   "status": "built", "derived": {"sha256": h(clip_bytes), "width": 1920,
+                                                  "height": 1080, "source_upscaled": False}}],
+        "negatives": [],
+    }
+
+
+def test_build_never_silently_repins_drifted_bytes():
+    """Cache bytes that no longer match the pin must be reported, not hashed into the
+    manifest as the new truth -- for a clip as well as for a source."""
+    saved = (corpus.CACHE, corpus.ensure_ffmpeg, corpus.probe)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        m = tiny_manifest(tmp)
+        corpus.CACHE = tmp
+        corpus.ensure_ffmpeg = lambda download=True: ("ffmpeg", "ffprobe")   # never invoked below
+        corpus.probe = lambda ffprobe, path: {"width": 1920, "height": 1080, "duration_s": 5.0}
+        try:
+            pin = m["clips"][0]["derived"]["sha256"]
+            out = corpus.build(copy.deepcopy(m))                 # unchanged bytes: still built
+            assert out["clips"][0]["status"] == "built"
+            assert out["clips"][0]["derived"]["sha256"] == pin
+
+            (tmp / "clips" / "c.mp4").write_bytes(b"tampered")   # drifted clip
+            out = corpus.build(copy.deepcopy(m))
+            clip = out["clips"][0]
+            assert clip["status"] == "sha256_mismatch", clip["status"]
+            assert clip["derived"]["sha256"] == pin, "the pin must survive the drift"
+
+            (tmp / "sources" / "s.mp4").write_bytes(b"tampered") # drifted source
+            out = corpus.build(copy.deepcopy(m))
+            assert out["sources"][0]["status"] == "sha256_mismatch"
+            assert out["sources"][0]["sha256"] == m["sources"][0]["sha256"]
+            assert out["clips"][0]["status"] == "unbuilt", "no clip may be built from it"
+        finally:
+            corpus.CACHE, corpus.ensure_ffmpeg, corpus.probe = saved
+
+
+def test_plan_keeps_the_pins_and_the_build_time_of_a_built_manifest():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "manifest.json"
+        corpus.save(copy.deepcopy(MANIFEST), path)
+        assert corpus.main(["plan", "--manifest", str(path)]) == 0
+        after = corpus.load(path)
+        assert after["built_at_utc"] == MANIFEST["built_at_utc"], "plan must not unbuild the corpus"
+        assert [s["sha256"] for s in after["sources"]] == [s["sha256"] for s in MANIFEST["sources"]]
+        assert [(c["id"], c["status"], (c["derived"] or {}).get("sha256")) for c in after["clips"]] == \
+               [(c["id"], c["status"], (c["derived"] or {}).get("sha256")) for c in MANIFEST["clips"]]
+        assert corpus.validate_manifest(after) == []
 
 
 def main():

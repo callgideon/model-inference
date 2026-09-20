@@ -393,6 +393,10 @@ def build(manifest, jobs=4, force=False):
         d = probe(ffprobe, dst)
         d["sha256"] = sha256_file(dst)
         d["source_upscaled"] = upscales(clip["recipe"], src["probed"])
+        pinned = (clip.get("derived") or {}).get("sha256")
+        if pinned and not force and d["sha256"] != pinned:   # never silently repin a clip either
+            return clip, "sha256_mismatch", clip["derived"], \
+                f"cached bytes sha256 {d['sha256']} != pinned {pinned}"
         return clip, "built", d, None
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -400,7 +404,7 @@ def build(manifest, jobs=4, force=False):
             clip["status"], clip["derived"] = status, derived
             if err:
                 clip["error"] = err
-                print(f"  clip {clip['id']} unbuilt: {err}", file=sys.stderr)
+                print(f"  clip {clip['id']} {status}: {err}", file=sys.stderr)
 
     for neg in manifest["negatives"]:
         dst, op = item_path(neg), neg["recipe"]["op"]
@@ -504,6 +508,8 @@ def validate_manifest(manifest):
             if up is not None and d.get("source_upscaled") != up:
                 e.append(f"{c['id']} source_upscaled {d.get('source_upscaled')} != {up} for recipe scale "
                          f"{c['recipe']['scale']} from source {probed.get('width')}x{probed.get('height')}")
+        elif c["status"] == "sha256_mismatch":     # the pin is kept, the drifted bytes are not
+            e.append(f"{c['id']} cached bytes differ from the pinned sha256: {c.get('error')}")
         elif c.get("derived"):
             e.append(f"{c['id']} is {c['status']} but carries derived metadata")
     for n in manifest["negatives"]:
@@ -627,6 +633,7 @@ def main(argv=None):
                 prev = old_src.get(s["id"])
                 if prev and prev.get("sha256") and prev.get("url") == s["url"]:
                     s.update({k: prev.get(k) for k in ("sha256", "bytes", "probed", "status")})
+            m["built_at_utc"] = prev_m.get("built_at_utc")   # carried pins keep their build time
         save(m, path)
         print(f"planned {len(m['clips'])} clips ({sum('fast' in c['subset'] for c in m['clips'])} fast), "
               f"{len(m['negatives'])} negatives -> {path}")

@@ -26,9 +26,10 @@ tools) and about 12 minutes of CPU at `--jobs 6` from cold. `verify --rederive`
 re-cuts clips that are missing from the cache instead of failing. `plan` keeps the
 measured fields — and the source pins — of anything whose recipe and URL did not
 change; a changed recipe or id drops back to `unbuilt` until rebuilt, and `build`
-re-derives it even when a stale file sits at that path. A cached source whose bytes
-no longer match the pinned sha256 is reported as `sha256_mismatch`, never silently
-re-pinned. A changed id leaves the old file in the cache as an unreferenced orphan;
+re-derives it even when a stale file sits at that path. A cached source or clip whose bytes
+no longer match the pinned sha256 is reported as `sha256_mismatch` (the pin is kept
+and `validate` fails), never silently re-pinned; `--force` re-derives and re-pins on
+purpose. A changed id leaves the old file in the cache as an unreferenced orphan;
 delete it or ignore it, nothing reads it.
 
 `FFMPEG_PIN.tarball_url` is upstream's unversioned "latest release" alias, so when
@@ -68,13 +69,13 @@ redistribution. The manifest records the caveat and the item page
 
 ## What the 64 clips cover
 
-- **Content:** 64 non-overlapping segments (the test asserts non-overlap), 6–24 per
-  source, so no two clips share footage.
 Every claim below is the **probed** geometry of the built files, asserted by
 `models/marlin2b/tests/test_corpus.py` against `manifest.json` (and by
 `build.py validate`), not the recipe's intent: a clip id or `geometry_label` that
 does not match the probed width/height/aspect is a validation error.
 
+- **Content:** 64 non-overlapping segments (the test asserts non-overlap), 6–24 per
+  source, so no two clips share footage.
 - **Resolutions:** 16 distinct probed geometries, 1920×1080 and 2560×1080 among
   them — 1080p decode is the measured bottleneck (notes.md finding 7).
 - **Aspect/orientation:** 16:9, 9:16 portrait (including a real 1080×1920), 1:1
