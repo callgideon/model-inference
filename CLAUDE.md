@@ -49,7 +49,7 @@ There is no build, lint or test suite; scripts are bash with
 `tokens.py` (video token budget); `apps/infrx-api/gateway.py` is the public
 OpenAI-compatible gateway (systemd + Caddy, `apps/infrx-api/deploy/`). The dev box is a
 `g6e.2xlarge` (`i-0e8449a4ffca29bab`, us-east-1d) with the DLAMI's PyTorch
-env at `/opt/pytorch` and NVMe at `/opt/dlami/nvme`; see `marlin2b/README.md`.
+env at `/opt/pytorch` and NVMe at `/opt/dlami/nvme`; see `models/marlin2b/README.md`.
 
 ## AWS access from this host
 
