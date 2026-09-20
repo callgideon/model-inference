@@ -26,7 +26,7 @@ async def media_sec__an_upload_is_owned_verified_and_immutable(factory):
     handle = ticket["upload_handle"]
     assert handle.startswith("upl_") and str(ticket["destination_ref"]).startswith("infrx-upload:")
     assert "?" not in str(ticket["destination_ref"])          # not a signed URL
-    harness.extra["put_object"](handle, b"0123456789", "video/mp4")
+    hook(harness, "put_object")(handle, b"0123456789", "video/mp4")
     ref = await harness.port.finalize_upload(b.ORG_A, handle)
     assert ref.bytes == 10 and ref.digest.startswith("sha256:") and ref.org_id == b.ORG_A
     assert await harness.port.finalize_upload(b.ORG_A, handle) == ref
@@ -38,7 +38,7 @@ async def media_sec__another_org_cannot_resolve_or_finalize(factory):
     harness = factory()
     ticket = await harness.port.create_upload(b.ORG_A, {})
     handle = ticket["upload_handle"]
-    harness.extra["put_object"](handle, b"bytes", "video/mp4")
+    hook(harness, "put_object")(handle, b"bytes", "video/mp4")
     await harness.port.finalize_upload(b.ORG_A, handle)
     for call in (harness.port.finalize_upload(b.ORG_B, handle),
                  harness.port.resolve_owned(b.ORG_B, handle)):
@@ -56,7 +56,7 @@ async def media_sec__oversize_and_unsupported_uploads_are_refused(factory):
     ticket = await harness.port.create_upload(b.ORG_A, {"max_bytes": 8,
                                                         "accepted_mime": ("video/mp4",)})
     handle = ticket["upload_handle"]
-    harness.extra["put_object"](handle, b"much too large", "video/mp4")
+    hook(harness, "put_object")(handle, b"much too large", "video/mp4")
     try:
         await harness.port.finalize_upload(b.ORG_A, handle)
     except errors.RequestTooLarge as exc:
@@ -64,7 +64,7 @@ async def media_sec__oversize_and_unsupported_uploads_are_refused(factory):
     else:
         raise AssertionError("an oversize upload was finalized")
     other = await harness.port.create_upload(b.ORG_A, {"accepted_mime": ("video/mp4",)})
-    harness.extra["put_object"](other["upload_handle"], b"tiny", "application/zip")
+    hook(harness, "put_object")(other["upload_handle"], b"tiny", "application/zip")
     try:
         await harness.port.finalize_upload(b.ORG_A, other["upload_handle"])
     except errors.UnsupportedMedia:
@@ -92,7 +92,7 @@ async def media_parity__staging_is_content_addressed_and_tenant_namespaced(facto
     staged_b = await harness.port.stage(b.ORG_B, request_b)
     assert staged_a[0].storage_ref != staged_b[0].storage_ref
     assert b.ORG_A in staged_a[0].storage_ref and b.ORG_B in staged_b[0].storage_ref
-    harness.extra["attach"]("job_stagingfixture", staged_a)
+    hook(harness, "attach")("job_stagingfixture", staged_a)
     prepared = await harness.port.prepare("job_stagingfixture", "profile-2")
     assert prepared[0].profile_version == "profile-2"
     assert prepared[0].storage_ref != staged_a[0].storage_ref
@@ -129,7 +129,7 @@ async def media_sec__staging_never_replaces_an_existing_object(factory):
     harness = factory()
     ticket = await harness.port.create_upload(b.ORG_A, {"max_bytes": 1024})
     handle = ticket["upload_handle"]
-    harness.extra["put_object"](handle, b"the original bytes", "video/mp4")
+    hook(harness, "put_object")(handle, b"the original bytes", "video/mp4")
     owned = await harness.port.finalize_upload(b.ORG_A, handle)
 
     # another tenant staging the same handle touches nothing of org A's
@@ -162,7 +162,7 @@ async def media_sec__staging_never_replaces_an_existing_object(factory):
     second = reused["upload_handle"]
     squatted = b.media(b.ORG_A, handle=second, kind=MediaKind.inline)
     staged_first = await harness.port.stage(b.ORG_A, b.request(harness, refs=(squatted,)))
-    harness.extra["put_object"](second, b"different bytes entirely", "video/mp4")
+    hook(harness, "put_object")(second, b"different bytes entirely", "video/mp4")
     try:
         finalized = await harness.port.finalize_upload(b.ORG_A, second)
     except errors.DomainError as exc:
@@ -187,14 +187,14 @@ async def media_sec__a_refused_upload_stays_refused(factory):
     harness = factory()
     ticket = await harness.port.create_upload(b.ORG_A, {"max_bytes": 8})
     handle = ticket["upload_handle"]
-    harness.extra["put_object"](handle, b"far too many bytes", "video/mp4")
+    hook(harness, "put_object")(handle, b"far too many bytes", "video/mp4")
     try:
         await harness.port.finalize_upload(b.ORG_A, handle)
     except errors.RequestTooLarge:
         pass
     else:
         raise AssertionError("an oversize upload was finalized")
-    harness.extra["put_object"](handle, b"tiny", "video/mp4")      # now within the limit
+    hook(harness, "put_object")(handle, b"tiny", "video/mp4")      # now within the limit
     try:
         await harness.port.finalize_upload(b.ORG_A, handle)
     except errors.DomainError as exc:
@@ -206,7 +206,7 @@ async def media_sec__a_refused_upload_stays_refused(factory):
     declared = await harness.port.create_upload(
         b.ORG_A, {"max_bytes": 1024, "digest": "sha256:" + "0" * 64})
     other = declared["upload_handle"]
-    harness.extra["put_object"](other, b"not what was promised", "video/mp4")
+    hook(harness, "put_object")(other, b"not what was promised", "video/mp4")
     try:
         await harness.port.finalize_upload(b.ORG_A, other)
     except errors.DomainError as exc:
@@ -231,7 +231,7 @@ async def media_sec__an_expired_upload_window_says_so(factory):
     harness = factory()
     ticket = await harness.port.create_upload(b.ORG_A, {"max_bytes": 1024})
     handle = ticket["upload_handle"]
-    harness.extra["put_object"](handle, b"in time", "video/mp4")
+    hook(harness, "put_object")(handle, b"in time", "video/mp4")
     harness.clock.advance(DEFAULTS.processing_cache_ttl_s + 1)
     try:
         await harness.port.finalize_upload(b.ORG_A, handle)
@@ -423,7 +423,7 @@ async def api_stream__canonical_events_end_with_authoritative_usage(factory):
     assert usage_events[0].usage.certainty.value == "authoritative"
     text = "".join(event.payload["content"] for event in events
                    if event.type is ChunkEventType.delta)
-    assert text == harness.extra["text"]
+    assert text == hook(harness, "text")
 
 
 async def api_stream__reasoning_delimiters_split_across_chunks(factory):
@@ -528,7 +528,7 @@ async def trace_bounds__a_content_budget_breach_discards_the_whole_content(facto
     only compares one envelope against the budget fails here."""
     harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=4096,
                                               trace_metadata_reserve_bytes=1024))
-    budget = harness.extra["content_budget"]()              # 3,072 bytes
+    budget = hook(harness, "content_budget")()              # 3,072 bytes
     for _ in range(3):
         # 1,024 each: three fit exactly, and each one alone is far inside the budget
         assert await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=1024,
@@ -538,7 +538,7 @@ async def trace_bounds__a_content_budget_breach_discards_the_whole_content(facto
     over = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=1024,
                                             metadata_bytes=16, harness=harness))
     assert over is TraceOfferResult.accepted_in_memory      # metadata survived
-    kept = harness.extra["queued"]()[-1]
+    kept = hook(harness, "queued")()[-1]
     assert kept.content_bytes == 0 and kept.content_ref is None
     assert kept.content_complete is False
     assert kept.loss_reason is TraceLossReason.memory_budget
@@ -549,7 +549,7 @@ async def trace_bounds__a_content_budget_breach_discards_the_whole_content(facto
     huge = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=99_999,
                                             metadata_bytes=16, harness=harness))
     assert huge is TraceOfferResult.accepted_in_memory
-    assert harness.extra["queued"]()[-1].content_bytes == 0
+    assert hook(harness, "queued")()[-1].content_bytes == 0
     assert (await harness.port.stats())["in_memory_content_bytes"] == budget
 
 
@@ -623,7 +623,7 @@ async def trace_bounds__concurrent_captures_share_one_budget(factory):
     content capture, the others are untouched, and the loss is counted."""
     harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=5_000,
                                               trace_metadata_reserve_bytes=1_000))
-    budget = harness.extra["content_budget"]()           # 4,000 bytes of content
+    budget = hook(harness, "content_budget")()           # 4,000 bytes of content
     first_id, second_id = harness.ids.uuid(), harness.ids.uuid()
     first = harness.port.open(first_id, b.ORG_A, TraceMode.full)
     second = harness.port.open(second_id, b.ORG_A, TraceMode.full)
@@ -645,7 +645,7 @@ async def trace_bounds__concurrent_captures_share_one_budget(factory):
                                       harness=harness))
     assert lossy is TraceOfferResult.accepted_in_memory
     assert kept is TraceOfferResult.accepted_in_memory
-    queued = {env.request_id: env for env in harness.extra["queued"]()}
+    queued = {env.request_id: env for env in hook(harness, "queued")()}
     assert queued[second_id].content_bytes == 0
     assert queued[second_id].content_ref is None
     assert queued[second_id].content_complete is False
@@ -737,7 +737,7 @@ async def trace_bounds__minimal_mode_never_carries_content(factory):
     assert await harness.port.offer(honest) is TraceOfferResult.accepted_in_memory
     stats = await harness.port.stats()
     assert stats["in_memory"] == 1 and stats["in_memory_content_bytes"] == 0
-    assert harness.extra["queued"]()[-1].content_ref is None
+    assert hook(harness, "queued")()[-1].content_ref is None
 
 
 def tracesink_cases():
@@ -759,7 +759,7 @@ def tracesink_cases():
 async def _owned_request(harness):
     from dataclasses import replace
     from .jobs import _admit
-    jobs = harness.extra["jobs"]
+    jobs = hook(harness, "jobs")
     request, admission = await _admit(replace(harness, port=jobs))
     return request, admission
 
@@ -777,7 +777,7 @@ async def feedback_ack__acceptance_is_durable_and_provenance_is_server_set(facto
     assert record.channel is FeedbackChannel.api and record.author_role is AuthorRole.customer
     assert record.feedback_id.startswith("fb_") and record.org_id == b.ORG_A
     assert record.name is FeedbackName.correction and record.calibration_set is None
-    assert harness.extra["outbox"]()                       # projection queued, not awaited
+    assert hook(harness, "outbox")()                       # projection queued, not awaited
     assert await harness.port.list_owned(b.auth(), request.request_id) == (record,)
 
 
@@ -945,11 +945,10 @@ async def feedback_ack__an_operator_may_label_a_calibration_set(factory):
             pass
         else:
             raise AssertionError(f"label {bad_label!r} with key {bad_idem.key!r} was accepted")
-    audit = harness.extra.get("audit")
-    if audit is not None:
-        entries = [entry for entry in audit() if entry.get("event") == "label_calibration"]
-        assert len(entries) == 1 and entries[0]["label"] == "golden"
-        assert entries[0]["operator"] == b.auth(role=Role.operator).principal
+    entries = [entry for entry in hook(harness, "audit")()
+               if entry.get("event") == "label_calibration"]
+    assert len(entries) == 1 and entries[0]["label"] == "golden"
+    assert entries[0]["operator"] == b.auth(role=Role.operator).principal
 
 
 def feedback_cases():
@@ -1003,9 +1002,8 @@ async def judge_budget__reservations_include_outstanding_and_ambiguous_runs(fact
     ambiguous = await harness.port.quarantine(first.run_id, "submission timeout")
     assert ambiguous.state is JudgeRunState.ambiguous
     assert ambiguous.reserved_cost == Decimal("0.60")
-    available = harness.extra.get("available")
-    if available is not None:
-        assert available() == Decimal("0.40")
+    available = hook(harness, "available")
+    assert available() == Decimal("0.40")
     try:
         await harness.port.reserve(_run(harness), b.consent(), Decimal("0.50"))
     except errors.BudgetExceeded:
@@ -1017,8 +1015,7 @@ async def judge_budget__reservations_include_outstanding_and_ambiguous_runs(fact
         first.run_id, b.auth(role=Role.operator), JudgeResolution.adopt_provider_evidence,
         "found in the provider console", external_id="batch_placeholder_1")
     assert with_id.state is JudgeRunState.collecting and with_id.reserved_cost == Decimal("0.60")
-    if available is not None:
-        assert available() == Decimal("0.40")
+    assert available() == Decimal("0.40")
     try:
         await harness.port.reserve(_run(harness), b.consent(), Decimal("0.50"))
     except errors.BudgetExceeded:
@@ -1053,7 +1050,7 @@ async def judge_budget__one_submission_intent_per_run(factory):
             pass
         else:
             raise AssertionError(f"provider batch id {empty!r} was recorded")
-    assert harness.extra["runs"]()[other.run_id].external_batch_id is None
+    assert hook(harness, "runs")()[other.run_id].external_batch_id is None
 
 
 async def judge_budget__reserving_a_run_twice_does_not_reset_it(factory):
@@ -1064,9 +1061,8 @@ async def judge_budget__reserving_a_run_twice_does_not_reset_it(factory):
     run = _run(harness)
     reserved = await harness.port.reserve(run, b.consent(), Decimal("4.00"))
     assert await harness.port.reserve(run, b.consent(), Decimal("4.00")) == reserved
-    available = harness.extra.get("available")
-    if available is not None:
-        assert available() == Decimal("6.00")          # one reservation, not two
+    available = hook(harness, "available")
+    assert available() == Decimal("6.00")              # one reservation, not two
     first = await harness.port.begin_submit(run.run_id)
     await harness.port.quarantine(run.run_id, "submission timeout")
     again = await harness.port.reserve(run, b.consent(), Decimal("4.00"))
@@ -1130,7 +1126,7 @@ async def judge_budget__revoked_or_missing_consent_is_refused_before_egress(fact
             raise AssertionError("a run without current consent was reserved")
     hook(harness, "revoke_consent")
     harness = factory(judge_mode="live", budget="1.00")   # fresh, with its own hooks
-    revoke, available = harness.extra["revoke_consent"], harness.extra.get("available")
+    revoke, available = hook(harness, "revoke_consent"), hook(harness, "available")
     run = _run(harness)
     current = b.consent()                          # nothing revoked at reservation time
     reserved = await harness.port.reserve(run, current, Decimal("0.40"))
@@ -1143,10 +1139,9 @@ async def judge_budget__revoked_or_missing_consent_is_refused_before_egress(fact
         pass
     else:
         raise AssertionError("consent revoked after the reservation still authorized egress")
-    stored = harness.extra["runs"]()[run.run_id]
+    stored = hook(harness, "runs")()[run.run_id]
     assert stored.submit_intent is None, "a revoked run minted a submission intent"
-    if available is not None:
-        assert available() == Decimal("1.00"), "the revoked run kept its reservation"
+    assert available() == Decimal("1.00"), "the revoked run kept its reservation"
     try:
         await harness.port.begin_submit(run.run_id)   # and it stays refused
     except (errors.ConsentMissing, errors.AmbiguousSubmission, errors.Conflict):
@@ -1163,7 +1158,7 @@ async def judge_budget__consent_revoked_while_submitting_holds_the_reservation(f
     running against a budget that looks free."""
     harness = factory(judge_mode="live", budget="1.00")
     revoke = hook(harness, "revoke_consent")
-    available, runs = harness.extra["available"], harness.extra["runs"]
+    available, runs = hook(harness, "available"), hook(harness, "runs")
     run = _run(harness)
     await harness.port.reserve(run, b.consent(), Decimal("0.60"))
     submitting = await harness.port.begin_submit(run.run_id)
@@ -1189,7 +1184,7 @@ async def judge_budget__consent_revoked_while_submitting_holds_the_reservation(f
     assert available() == Decimal("1.00")
     # from `reserved` (no intent yet) revocation still releases at once, per R9
     other = _run(harness)
-    harness.extra["set_consent"](b.consent())
+    hook(harness, "set_consent")(b.consent())
     await harness.port.reserve(other, b.consent(), Decimal("0.50"))
     revoke(b.ORG_A)
     try:
@@ -1214,7 +1209,7 @@ async def judge_budget__a_run_and_its_consent_belong_to_one_org(factory):
         assert errors.http_status(exc.code) in (403, 404), exc.code
     else:
         raise AssertionError("another org's consent reserved this run")
-    assert harness.extra["runs"]() == {}
+    assert hook(harness, "runs")() == {}
     # nor is a *stored* run readable by guessing its id from another organization: a
     # run id is not a capability, and the reply would carry its samples and its costs
     reserved = await harness.port.reserve(run, b.consent(b.ORG_A), Decimal("0.10"))
@@ -1226,10 +1221,8 @@ async def judge_budget__a_run_and_its_consent_belong_to_one_org(factory):
         assert errors.http_status(exc.code) in (403, 404), exc.code
     else:
         raise AssertionError(f"run {stolen.run_id} of org {stolen.org_id} was read by another org")
-    available = harness.extra.get("available")
-    if available is not None:
-        # only ORG_A's own reservation stands; the refused attempts reserved nothing
-        assert available() == Decimal("0.90")
+    # only ORG_A's own reservation stands; the refused attempts reserved nothing
+    assert hook(harness, "available")() == Decimal("0.90")
 
 
 async def judge_budget__settlement_amounts_are_validated_money(factory):
@@ -1238,7 +1231,7 @@ async def judge_budget__settlement_amounts_are_validated_money(factory):
     reservation spend money that was never granted; non-finite and over-scale amounts
     are refused at the same boundary."""
     harness = factory(judge_mode="live", budget="1.00")
-    available = harness.extra["available"]
+    available = hook(harness, "available")
     run = await harness.port.reserve(_run(harness), b.consent(), Decimal("0.40"))
     await harness.port.begin_submit(run.run_id)
     await harness.port.record_submission(run.run_id, "batch_placeholder_1")
@@ -1271,7 +1264,7 @@ async def judge_budget__an_ambiguous_run_is_resolved_only_by_an_operator(factory
     reservation (terminal `quarantined`); either way there is an audit record, the
     submission intent is unchanged and no second billable batch is ever created."""
     harness = factory(judge_mode="live", budget="1.00")
-    available, runs = harness.extra["available"], harness.extra["runs"]
+    available, runs = hook(harness, "available"), hook(harness, "runs")
     run = await harness.port.reserve(_run(harness), b.consent(), Decimal("0.40"))
     intent = (await harness.port.begin_submit(run.run_id)).submit_intent
     await harness.port.quarantine(run.run_id, "no provider id before the timeout")
@@ -1316,7 +1309,7 @@ async def judge_budget__an_ambiguous_run_is_resolved_only_by_an_operator(factory
         pass
     else:
         raise AssertionError("release_reservation accepted a provider id")
-    assert harness.extra["runs"]()[other.run_id].state is JudgeRunState.ambiguous
+    assert hook(harness, "runs")()[other.run_id].state is JudgeRunState.ambiguous
     released = await harness.port.resolve_ambiguous(other.run_id, operator,
                                                     JudgeResolution.release_reservation,
                                                     "provider has no record of it")
@@ -1331,10 +1324,8 @@ async def judge_budget__an_ambiguous_run_is_resolved_only_by_an_operator(factory
             pass
         else:
             raise AssertionError("a resolved run was reopened")
-    audit = harness.extra.get("audit")
-    if audit is not None:
-        events = [entry["event"] for entry in audit()]
-        assert events.count("resolve_ambiguous") == 2 and "quarantine" in events
+    events = [entry["event"] for entry in hook(harness, "audit")()]
+    assert events.count("resolve_ambiguous") == 2 and "quarantine" in events
 
 
 async def judge_budget__a_settled_run_is_closed(factory):
@@ -1342,7 +1333,7 @@ async def judge_budget__a_settled_run_is_closed(factory):
     put its money back among the outstanding reservations and erase the settlement
     the audit trail refers to."""
     harness = factory(judge_mode="live", budget="1.00")
-    available = harness.extra["available"]
+    available = hook(harness, "available")
     run = await harness.port.reserve(_run(harness), b.consent(), Decimal("0.40"))
     await harness.port.begin_submit(run.run_id)
     await harness.port.record_submission(run.run_id, "batch_placeholder_1")
@@ -1354,7 +1345,7 @@ async def judge_budget__a_settled_run_is_closed(factory):
         pass
     else:
         raise AssertionError("a settled run was reopened as quarantined")
-    assert harness.extra["runs"]()[run.run_id].state is JudgeRunState.settled
+    assert hook(harness, "runs")()[run.run_id].state is JudgeRunState.settled
     assert available() == before
 
 

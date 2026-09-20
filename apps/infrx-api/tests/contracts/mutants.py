@@ -19,7 +19,9 @@ list is part of the suite, not documentation of it.
 from __future__ import annotations
 
 import argparse
+import enum
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -575,14 +577,64 @@ MUTANTS: tuple[Mutant, ...] = (
 )
 
 
-def run_mutant(mutant: Mutant, *, keep: bool = False) -> tuple[bool, str]:
+class Outcome(enum.StrEnum):
+    """What one mutant run proved. Only `killed` counts."""
+
+    killed = "killed"                  # pytest failed, and only named cases failed
+    survived = "survived"              # the suite passed with the defect in place
+    broken_runner = "broken_runner"    # syntax, import, collection or usage error
+    misdeclared = "misdeclared"        # anchor missing, no case, or a case that never ran
+
+
+@dataclass(frozen=True)
+class Result:
+    outcome: Outcome
+    detail: str
+
+    @property
+    def killed(self) -> bool:
+        return self.outcome is Outcome.killed
+
+    @property
+    def ok(self) -> bool:
+        """A run the suite accepts: only a kill does."""
+        return self.killed
+
+
+# pytest exit codes: 0 all passed, 1 tests failed, 2 interrupted, 3 internal error,
+# 4 usage error, 5 no tests collected. Only 1 can mean "the case noticed".
+PYTEST_TESTS_FAILED = 1
+PYTEST_ALL_PASSED = 0
+_FAILED_LINE = re.compile(r"^(?:FAILED|ERROR) ([^\s:]+(?:::[^\s]+)?)")
+
+
+def _failing_ids(stdout: str) -> tuple[list[str], list[str]]:
+    """(failed test ids, errored test ids) from a `-q -rA`-style summary."""
+    failed, errored = [], []
+    for line in stdout.splitlines():
+        match = _FAILED_LINE.match(line.strip())
+        if match:
+            (errored if line.strip().startswith("ERROR") else failed).append(match.group(1))
+    return failed, errored
+
+
+def run_mutant(mutant: Mutant) -> Result:
     """Apply one mutant to a throwaway copy of the package and run its cases.
 
-    Returns (killed, detail). The worktree is never written to: the copy lives in a
-    temporary directory that is removed afterwards.
+    A kill requires all three of:
+
+    * pytest exited 1 (tests failed) - not 2-5, which mean the *runner* broke, and not
+      0, which means the defect went unnoticed;
+    * at least one test failed;
+    * every failing test id names one of the mutant's own cases.
+
+    That last condition is what stops a syntax error, an import-time `NameError` or a
+    collection error from counting as a kill: those fail tests the mutant never named
+    (or fail before any test exists), and they are reported as `broken_runner`, which
+    fails the run just as a survivor does. The worktree is never written to.
     """
     if not mutant.cases:
-        return False, "declares no case"
+        return Result(Outcome.misdeclared, "declares no case")
     with tempfile.TemporaryDirectory(prefix=f"mutant-{mutant.name}-") as tmp:
         root = pathlib.Path(tmp)
         shutil.copytree(API_DIR / PACKAGE, root / PACKAGE,
@@ -592,19 +644,42 @@ def run_mutant(mutant: Mutant, *, keep: bool = False) -> tuple[bool, str]:
         target = root / mutant.path
         source = target.read_text()
         if mutant.old not in source:
-            return False, f"anchor not found in {mutant.file}: {mutant.old[:60]!r}"
+            return Result(Outcome.misdeclared,
+                          f"anchor not found in {mutant.file}: {mutant.old[:60]!r}")
         target.write_text(source.replace(mutant.old, mutant.new, 1))
         selection = " or ".join(mutant.cases)
         done = subprocess.run(
-            [sys.executable, "-m", "pytest", "-x", "-q", "--no-header", "-p", "no:cacheprovider",
-             "tests/contracts/test_conformance.py", "-k", selection],
+            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
+             "-rf", "--tb=no", "tests/contracts/test_conformance.py", "-k", selection],
             cwd=root, capture_output=True, text=True,
             env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
-        tail = (done.stdout or done.stderr).strip().splitlines()
-        summary = tail[-1] if tail else "no output"
-        if "no tests ran" in summary or " 0 " in f" {summary} ":
-            return False, f"no case matched {selection!r}: {summary}"
-        return done.returncode != 0, summary
+        stdout = done.stdout or ""
+        lines = (stdout or done.stderr).strip().splitlines()
+        summary = lines[-1] if lines else "no output"
+        if done.returncode not in (PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED):
+            # 2-5: interrupted, internal error, usage error, nothing collected. The
+            # mutant may well be lethal, but this run did not prove it.
+            return Result(Outcome.broken_runner,
+                          f"pytest exit {done.returncode}: {summary}")
+        ran = re.search(r"(\d+) (?:passed|failed|skipped)", summary)
+        if not ran or "no tests ran" in summary:
+            return Result(Outcome.misdeclared, f"no case matched {selection!r}: {summary}")
+        failed, errored = _failing_ids(stdout)
+        if errored:
+            return Result(Outcome.broken_runner, f"errors outside the named cases: {errored[:3]}")
+        if done.returncode == PYTEST_ALL_PASSED or not failed:
+            return Result(Outcome.survived, summary)
+        stray = [test_id for test_id in failed
+                 if not any(f"-{case}]" in test_id or test_id.endswith(case)
+                            for case in mutant.cases)]
+        if stray:
+            # Something the mutant did not name broke: a syntax error, an import-time
+            # failure, or a defect with wider reach than the declaration claims.
+            return Result(Outcome.broken_runner,
+                          f"failures outside the named cases: {stray[:3]}")
+        if "skipped" in summary and not failed:
+            return Result(Outcome.misdeclared, f"its cases were skipped: {summary}")
+        return Result(Outcome.killed, summary)
 
 
 def main() -> int:
@@ -619,14 +694,16 @@ def main() -> int:
               f"{len({case for m in MUTANTS for case in m.cases})} named cases")
         return 0
     chosen = [m for m in MUTANTS if not args.names or m.name in args.names]
-    survivors = []
+    bad: dict[str, list[str]] = {}
     for mutant in chosen:
-        killed, detail = run_mutant(mutant)
-        print(f"[{'killed ' if killed else 'SURVIVED'}] {mutant.name}: {detail}")
-        if not killed:
-            survivors.append(mutant.name)
-    print(f"\n{len(chosen) - len(survivors)}/{len(chosen)} killed; survivors: {survivors or 'none'}")
-    return 1 if survivors else 0
+        result = run_mutant(mutant)
+        print(f"[{result.outcome:13s}] {mutant.name}: {result.detail}")
+        if not result.killed:
+            bad.setdefault(result.outcome.value, []).append(mutant.name)
+    failures = sum(len(names) for names in bad.values())
+    print(f"\n{len(chosen) - failures}/{len(chosen)} killed"
+          + "".join(f"; {outcome}: {names}" for outcome, names in sorted(bad.items())))
+    return 1 if bad else 0
 
 
 if __name__ == "__main__":

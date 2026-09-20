@@ -11,11 +11,13 @@ also pass. Green here means implemented, never integrated.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import inspect
 
 import pytest
 from infrx.contracts import ports, records
-from infrx.contracts.conformance import MissingHook, SUITES, run_cases
+from infrx.contracts.conformance import (MissingHook, OPTIONAL_HOOKS, SUITES,
+                                          run_cases)
 from infrx.contracts.fakes import FACTORIES
 
 CASES = [(name, case) for name, (cases, _runner) in SUITES.items() for case in cases()]
@@ -49,6 +51,55 @@ def test_runner_runs_the_whole_suite(port):
     refuses to treat a missing hook as a pass: without a `skipped` list it raises."""
     _cases, runner = SUITES[port]
     assert runner(FACTORIES[port]) == len(_cases())
+
+
+def test_a_hookless_factory_skips_and_never_silently_passes():
+    """r1 R32 / r4 B3: with **no** optional hook at all, every case that depends on one
+    is skipped naming it, and every case that runs really is hook-free. A case that
+    quietly asserted less would show up here as a pass it has not earned.
+
+    The report is printed so an adapter's evidence can quote it rather than claim it.
+    """
+    report: dict[str, dict[str, str]] = {}
+    for port, (cases, _runner) in SUITES.items():
+        def hookless(limits=None, _port=port, **kw):
+            harness = FACTORIES[_port](limits=limits, **kw)
+            required = set(harness.extra) - OPTIONAL_HOOKS.get(_port, frozenset())
+            return dataclasses.replace(
+                harness, failures=None,
+                extra={name: harness.extra[name] for name in required})
+
+        skipped: list[MissingHook] = []
+        ran = run_cases(cases(), hookless, skipped=skipped)
+        report[port] = {missing.case: missing.hook for missing in skipped}
+        assert ran + len(skipped) == len(cases())
+        # The streamstore and feedback suites must admit a job first, so every one of
+        # their cases depends on the `jobs` hook: a suite skipping entirely is honest,
+        # a suite *passing* entirely on no hooks would not be.
+        assert ran > 0 or port in ("streamstore", "feedback"), \
+            f"{port}: every case needed a hook"
+    print("\nhookless-factory skips:")
+    for port, skips in sorted(report.items()):
+        print(f"  {port}: {len(skips)} skipped " + (str(sorted(skips.items())) if skips else ""))
+    # the hook-dependent cases are exactly the ones that skipped: any case that reads a
+    # hook through `hook()` appears here, and no other case does
+    hook_dependent = {port: {case for case, _hook in skips.items()}
+                      for port, skips in report.items()}
+    assert hook_dependent["jobstore"], "no jobstore case reported its hooks"
+    assert "dur_admit__a_refused_admission_reserves_nothing" in hook_dependent["jobstore"]
+    assert "judge_budget__revoked_or_missing_consent_is_refused_before_egress" \
+        in hook_dependent["judge"]
+    assert "dur_output__loss_after_publication_is_a_terminal_failure" in hook_dependent["jobstore"]
+
+
+def test_the_fakes_skip_nothing():
+    """The other half: with the real factories every case runs, so the headline count
+    is what it says it is."""
+    for port, (cases, runner) in SUITES.items():
+        skipped: list[MissingHook] = []
+        ran = run_cases(cases(), FACTORIES[port], skipped=skipped)
+        assert skipped == [], f"{port} skipped {[(s.case, s.hook) for s in skipped]}"
+        assert ran == len(cases())
 
 
 def test_a_missing_hook_is_a_skip_not_a_pass():

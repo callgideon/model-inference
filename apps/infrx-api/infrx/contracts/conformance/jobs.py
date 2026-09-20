@@ -114,9 +114,8 @@ async def dur_admit__crash_after_commit_then_retry_does_not_double_reserve(facto
     """DUR-ADMIT: killed after commit, before the acknowledgment; the retry with
     the same key returns the committed acceptance and reserves nothing more."""
     harness = factory()
-    if harness.failures is None:
-        return
-    harness.failures.crash_after_commit("admit")
+    plan = hook(harness, "failures")
+    plan.crash_after_commit("admit")
     harness.extra["grant"](b.ORG_A, "25.00")
     request = b.request(harness)
     try:
@@ -207,7 +206,7 @@ async def dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction(
         pass
     else:
         raise AssertionError("a revoked key was admitted")
-    harness.extra["unrevoke_key"](b.KEY_A)
+    hook(harness, "unrevoke_key")(b.KEY_A)
     suspend(b.ORG_A)
     request = b.request(harness)
     try:
@@ -220,7 +219,7 @@ async def dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction(
     harness = factory()                            # a fresh store, with its own hooks
     harness.extra["grant"](b.ORG_A, "25.00")
     request = b.request(harness)
-    harness.extra["unentitle"](b.ORG_A, request.model_revision)
+    hook(harness, "unentitle")(b.ORG_A, request.model_revision)
     try:
         await harness.port.admit(request, b.idem(request, "k-unentitled"), (),
                                  b.hold_for(request))
@@ -230,7 +229,7 @@ async def dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction(
         raise AssertionError("an unentitled org was admitted")
     assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
     assert len(harness.extra["active_jobs"]()) == 0
-    harness.extra["entitle"](b.ORG_A, request.model_revision)
+    hook(harness, "entitle")(b.ORG_A, request.model_revision)
     admitted = await harness.port.admit(request, b.idem(request, "k-entitled"), (),
                                         b.hold_for(request))
     assert admitted.state is JobState.preparing
@@ -273,7 +272,7 @@ async def dur_admit__a_deadline_must_be_one_the_store_can_keep(factory):
     the caller likes."""
     harness = factory()
     harness.extra["grant"](b.ORG_A, "25.00")
-    journal_bytes = harness.extra.get("journal_bytes")
+    journal_bytes = hook(harness, "journal_bytes")
     horizon = b.default_deadline_s(ExecutionMode.stream)
     for deadline_s in (-1, 0, horizon + 1, horizon * 100):
         request = b.request(harness, deadline_s=deadline_s)
@@ -286,8 +285,7 @@ async def dur_admit__a_deadline_must_be_one_the_store_can_keep(factory):
             raise AssertionError(f"a deadline of {deadline_s}s was accepted")
     assert len(harness.extra["active_jobs"]()) == 0
     assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
-    if journal_bytes is not None:
-        assert journal_bytes() == 0
+    assert journal_bytes() == 0
     # the longest deadline the budgets allow is accepted
     request = b.request(harness, deadline_s=horizon)
     admitted = await harness.port.admit(request, b.idem(request, "dl-ok"), (),
@@ -325,7 +323,7 @@ async def dur_admit__a_refused_admission_reserves_nothing(factory):
     is refused the same way, as a typed domain error rather than a ValueError."""
     harness = factory()
     harness.extra["grant"](b.ORG_A, "25.00")
-    journal_bytes = harness.extra.get("journal_bytes")
+    journal_bytes = hook(harness, "journal_bytes")
     unpriced = b.request(harness).model_copy(update={"parameters": {}})
     for _ in range(3):
         try:
@@ -336,8 +334,7 @@ async def dur_admit__a_refused_admission_reserves_nothing(factory):
             raise AssertionError("an unpriced model was admitted")
     assert len(harness.extra["active_jobs"]()) == 0
     assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
-    if journal_bytes is not None:
-        assert journal_bytes() == 0, "a refused admission leaked a journal reservation"
+    assert journal_bytes() == 0, "a refused admission leaked a journal reservation"
     for bad in ("1e5", "NaN", "0.000000001", "1000000000000.00", 0.5):
         request = b.request(harness)
         try:
@@ -781,10 +778,9 @@ async def dur_output__a_late_preparation_worker_finds_a_terminal_job(factory):
     after = harness.extra["balance"](request.org_id)
     assert after["reserved"] == 0 and after["ledger"] == before["ledger"]
     assert not any(reservation.active for reservation in stored.reservations)
-    journal_bytes = harness.extra.get("journal_bytes")
-    if journal_bytes is not None:
-        # only the terminal event of the settling transaction is still stored
-        assert journal_bytes() < DEFAULTS.journal_job_reserve_bytes
+    journal_bytes = hook(harness, "journal_bytes")
+    # only the terminal event of the settling transaction is still stored
+    assert journal_bytes() < DEFAULTS.journal_job_reserve_bytes
     # and the freed preparation unit is immediately usable again
     assert len(harness.extra["active_jobs"]()) == 0
 
@@ -818,8 +814,7 @@ async def dur_output__phase_deadlines_are_persisted_at_each_transition(factory):
     first_queue_deadline = queued.queue_deadline_at
     assert first_queue_deadline == harness.clock.at(queued.budgets.queue_wait_s)
     assert queued.preparation_deadline_at == admission.preparation_deadline_at
-    if retune is not None:
-        retune(queue_wait_interactive_s=1, generation_timeout_s=1, preparation_timeout_s=1)
+    retune(queue_wait_interactive_s=1, generation_timeout_s=1, preparation_timeout_s=1)
     lease = await harness.port.claim(request.request_id, "worker-a")
     assert lease.generation_deadline_at == harness.clock.at(queued.budgets.generation_s)
     assert lease.first_token_deadline_at == harness.clock.at(queued.budgets.first_token_s)
@@ -1032,13 +1027,10 @@ async def dur_settle__unknown_usage_is_held_then_released_as_platform_absorbed(f
     request, admission = await _admit(harness)
     await harness.port.prepared(admission.job_handle, ())
     lease = await harness.port.claim(request.request_id, "worker-a")
-    if publish is not None:
-        await publish(lease)
+    await publish(lease)
     outcome = await harness.port.complete(
         lease, b.outcome(request.request_id, harness, cause=TerminalCause.client_disconnected,
                          state=JobState.failed, tokens=None, result_ref=None))
-    if publish is None:
-        return
     assert outcome.settlement_state is SettlementState.held_unknown
     assert outcome.debit == 0 and outcome.reconcile_after is not None
     held = harness.extra["balance"](request.org_id)
@@ -1303,11 +1295,10 @@ async def dur_settle__terminalization_releases_every_reservation(factory):
     assert not any(reservation.active for reservation in stored.reservations), \
         "a terminal job still reports active capacity reservations"
     assert {r.kind for r in stored.reservations} == set(ReservationKind)
-    journal_bytes = harness.extra.get("journal_bytes")
-    if journal_bytes is not None:
-        # the unused journal *reservation* went too: only the bytes actually stored
-        # (here just the terminal event) still count, until they are pruned
-        assert journal_bytes() < DEFAULTS.journal_job_reserve_bytes
+    journal_bytes = hook(harness, "journal_bytes")
+    # the unused journal *reservation* went too: only the bytes actually stored
+    # (here just the terminal event) still count, until they are pruned
+    assert journal_bytes() < DEFAULTS.journal_job_reserve_bytes
 
 
 async def dur_settle__platform_failures_are_free(factory):
@@ -1403,7 +1394,7 @@ async def dur_outbox__every_transition_emits_its_projection(factory):
     for expected in (OutboxKind.prepare_dispatch, OutboxKind.inference_dispatch,
                      OutboxKind.usage_projection, OutboxKind.trace_projection):
         assert expected in kinds, (expected, kinds)
-    events = harness.extra["outbox"](request.request_id)
+    events = hook(harness, "outbox")(request.request_id)
     assert len({event.event_id for event in events}) == len(events)   # stable, unique ids
 
 
@@ -1469,7 +1460,7 @@ def jobstore_cases():
 # StreamStore
 # ==========================================================================
 async def _stream_job(harness, **kw):
-    jobs = harness.extra["jobs"]
+    jobs = hook(harness, "jobs")
     inner = replace(harness, port=jobs)
     request, admission = await _admit(inner, **kw)
     await jobs.prepared(admission.job_handle, ())
@@ -1482,16 +1473,16 @@ async def dur_output__append_commits_before_it_relays(factory):
     nothing is relayed that is not durable."""
     harness = factory()
     request, admission, lease = await _stream_job(harness)
-    if harness.failures is not None:
-        harness.failures.crash_after_commit("append")
-        try:
-            await harness.port.append(lease, b.events("Hello"))
-        except Exception as exc:
-            assert type(exc).__name__ == "CrashAfterCommit", exc
-        else:
-            raise AssertionError("crash_after_commit did not fire")
-        chunks, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
-        assert [chunk.payload["content"] for chunk in chunks] == ["Hello"]
+    plan = hook(harness, "failures")
+    plan.crash_after_commit("append")
+    try:
+        await harness.port.append(lease, b.events("Hello"))
+    except Exception as exc:
+        assert type(exc).__name__ == "CrashAfterCommit", exc
+    else:
+        raise AssertionError("crash_after_commit did not fire")
+    chunks, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    assert [chunk.payload["content"] for chunk in chunks] == ["Hello"]
     committed = await harness.port.append(lease, b.events(" world"))
     assert all(chunk.persisted_at == harness.clock.now() for chunk in committed)
 
@@ -1499,7 +1490,7 @@ async def dur_output__append_commits_before_it_relays(factory):
 async def dur_output__the_first_append_sets_the_publication_marker(factory):
     """DUR-OUTPUT: the first committed chunk forbids regeneration for ever after."""
     harness = factory()
-    jobs = harness.extra["jobs"]
+    jobs = hook(harness, "jobs")
     request, admission, lease = await _stream_job(harness)
     await harness.port.append(lease, b.events("Hello"))
     harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
@@ -1576,8 +1567,8 @@ async def dur_output__a_worker_cannot_forge_a_terminal_event(factory):
     made - and recharge journal bytes while doing it."""
     from ..records import EngineEvent
     harness = factory()
-    jobs = harness.extra["jobs"]
-    journal_bytes = harness.extra.get("journal_bytes")
+    jobs = hook(harness, "jobs")
+    journal_bytes = hook(harness, "journal_bytes")
     request, admission, lease = await _stream_job(harness)
     forged = (EngineEvent(type=ChunkEventType.terminal,
                           payload={"state": "succeeded", "cause": "completed",
@@ -1615,8 +1606,7 @@ async def dur_output__a_worker_cannot_forge_a_terminal_event(factory):
         assert errors.http_status(exc.code) == 410, exc.code
     else:
         raise AssertionError("a terminal event was minted after the journal expired")
-    if journal_bytes is not None:
-        assert journal_bytes() == bytes_after_expiry, "finalize recharged journal bytes"
+    assert journal_bytes() == bytes_after_expiry, "finalize recharged journal bytes"
 
 
 async def dur_output__a_pruned_prefix_is_an_explicit_replay_gap(factory):
@@ -1643,7 +1633,7 @@ async def dur_output__a_pruned_prefix_is_an_explicit_replay_gap(factory):
 async def dur_output__an_expired_journal_is_gone_not_regenerated(factory):
     """DUR-OUTPUT: after the journal TTL the events are 410, and status remains."""
     harness = factory()
-    jobs = harness.extra["jobs"]
+    jobs = hook(harness, "jobs")
     request, admission, lease = await _stream_job(harness)
     await harness.port.append(lease, b.events("a"))
     await jobs.complete(lease, b.outcome(request.request_id, harness, tokens=b.usage(10, 1)))
@@ -1664,7 +1654,7 @@ async def dur_cap__stored_unexpired_bytes_keep_counting(factory):
     budget until they are pruned."""
     harness = factory()
     usage_bytes = hook(harness, "journal_bytes")
-    jobs = harness.extra["jobs"]
+    jobs = hook(harness, "jobs")
     request, admission, lease = await _stream_job(harness)
     await harness.port.append(lease, b.events("a" * 100))
     stored_before = usage_bytes()
@@ -1680,7 +1670,7 @@ async def dur_fence__a_stale_worker_cannot_append(factory):
     """DUR-FENCE: an expired or superseded lease appends nothing. (Wide queue budget
     for the same reason as `dur_fence__a_stale_generation_is_rejected`.)"""
     harness = factory(limits=DEFAULTS.replace(queue_wait_interactive_s=10_000))
-    jobs = harness.extra["jobs"]
+    jobs = hook(harness, "jobs")
     request, admission, first = await _stream_job(harness)
     harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
     try:
@@ -1735,9 +1725,8 @@ async def dur_cap__a_job_cannot_store_past_its_journal_reservation(factory):
         assert errors.http_status(exc.code) == 429 and exc.retry_after_s >= 1
     else:
         raise AssertionError("a job stored past its per-job journal reservation")
-    journal_bytes = harness.extra.get("journal_bytes")
-    if journal_bytes is not None:
-        assert journal_bytes() <= limits.journal_job_reserve_bytes
+    journal_bytes = hook(harness, "journal_bytes")
+    assert journal_bytes() <= limits.journal_job_reserve_bytes
 
 
 async def dur_settle__the_terminal_event_belongs_to_the_settling_transaction(factory):
@@ -1747,7 +1736,7 @@ async def dur_settle__the_terminal_event_belongs_to_the_settling_transaction(fac
     already show it: a crash between two writes would leave a settled job whose
     terminal event nothing ever repairs."""
     harness = factory()
-    jobs = harness.extra["jobs"]
+    jobs = hook(harness, "jobs")
     request, admission, lease = await _stream_job(harness)
     await harness.port.append(lease, b.events("a"))
     outcome = await jobs.complete(lease, b.outcome(request.request_id, harness,
@@ -1768,7 +1757,7 @@ async def dur_settle__the_terminal_event_belongs_to_the_settling_transaction(fac
 async def dur_output__the_terminal_event_is_written_once_with_the_settlement(factory):
     """DUR-OUTPUT: the terminal journal event belongs to the settling transaction."""
     harness = factory()
-    jobs = harness.extra["jobs"]
+    jobs = hook(harness, "jobs")
     request, admission, lease = await _stream_job(harness)
     await harness.port.append(lease, b.events("a"))
     proposal = b.outcome(request.request_id, harness, tokens=b.usage(10, 1))

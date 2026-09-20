@@ -23,19 +23,29 @@ class MissingHook(Exception):
 
 
 def hook(harness: "Harness", name: str):
-    """The hook, or `MissingHook` - never a silent early return."""
-    try:
-        return harness.extra[name]
-    except KeyError:
-        raise MissingHook(name) from None
+    """The hook, or `MissingHook` - never a silent early return, and never a `None`
+    a case then quietly skips assertions around.
+
+    `failures` is a `Harness` field rather than an `extra` entry, and a factory
+    without fault injection leaves it `None`; it is requested by the same name so a
+    fault case is skipped rather than silently weakened.
+    """
+    if name == "failures":
+        if harness.failures is None:
+            raise MissingHook("failures")
+        return harness.failures
+    value = harness.extra.get(name)
+    if value is None:
+        raise MissingHook(name)
+    return value
 
 
 # Which hooks a port's suite may do without, i.e. exactly the ones that can raise
 # `MissingHook`. The fakes provide all of them (`test_mutants.py` asserts that).
 OPTIONAL_HOOKS: dict[str, frozenset[str]] = {
     "jobstore": frozenset({"publish", "revoke_key", "unrevoke_key", "suspend_org", "unentitle",
-                           "entitle", "retune", "journal_bytes"}),
-    "streamstore": frozenset({"jobs", "journal_bytes"}),
+                           "entitle", "retune", "journal_bytes", "failures"}),
+    "streamstore": frozenset({"jobs", "journal_bytes", "failures"}),
     "mediastore": frozenset({"put_object", "attach"}),
     "scheduler": frozenset({"jobs"}),
     "engine": frozenset({"text"}),
@@ -49,12 +59,12 @@ OPTIONAL_HOOKS: dict[str, frozenset[str]] = {
 class Harness:
     """What a factory hands a case: the adapter plus the hooks it needs.
 
-    `extra` holds the named hooks a suite documents (for JobStore: `grant`,
-    `balance`, `active_jobs`, `outbox`, `outbox_kinds`, and optionally `publish`,
-    `revoke_key`, `unrevoke_key`, `suspend_org`, `unentitle`, `retune`,
-    `journal_bytes`; for JudgeCoordinator: `available`, `runs`, `set_consent`,
-    `revoke_consent`, `audit`). A missing optional hook makes the case return early
-    rather than fail, so an adapter can adopt the suite in steps.
+    `extra` holds the named hooks a suite documents. The required ones (for JobStore:
+    `grant`, `balance`, `active_jobs`, `outbox`, `outbox_kinds`) are read directly; the
+    optional ones - `OPTIONAL_HOOKS` below, plus the `failures` field - are read
+    through `hook()`, which raises `MissingHook`. A case that cannot be driven is
+    **skipped, naming the hook**, and never counted as a pass (r1 R32), so an adapter
+    can adopt the suite in steps without its evidence claiming more than it ran.
 
     The streamstore, scheduler and feedback factories also publish `extra["jobs"]`,
     the JobStore a case needs to admit a job first. The cases only ever call *port*

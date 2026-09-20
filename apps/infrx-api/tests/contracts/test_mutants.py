@@ -61,9 +61,69 @@ def test_every_case_is_covered_by_a_mutant():
 
 @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
 def test_mutant_is_killed(mutant):
-    killed, detail = mutation_list.run_mutant(mutant)
-    assert killed, (f"{mutant.name} survived ({mutant.invariant}): {detail}. "
-                    f"The cases {list(mutant.cases)} do not prove what they claim.")
+    result = mutation_list.run_mutant(mutant)
+    assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                           f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                           f"what they claim.")
+
+
+# --- the runner's own honesty (r4 B2) ---------------------------------------------
+# A runner that counts a syntax error as a kill would let every one of the mutants
+# above pass while proving nothing, so each outcome is exercised deliberately.
+SELF_TESTS = (
+    ("a_syntax_error_is_not_a_kill", mutation_list.Outcome.broken_runner,
+     mutation_list.Mutant(
+         name="self_syntax_error", invariant="the runner rejects a broken copy",
+         file="contracts/fakes/state.py", old="    async def admit(self",
+         new="    async def admit(self)) :::", cases=("dur_admit__a_request_uuid_is_admitted_once",))),
+    ("an_import_error_is_not_a_kill", mutation_list.Outcome.broken_runner,
+     mutation_list.Mutant(
+         name="self_import_error", invariant="the runner rejects an import-time failure",
+         file="contracts/fakes/state.py", old="MAX_READ_LIMIT = 1000",
+         new="MAX_READ_LIMIT = _undefined_name_at_import_time",
+         cases=("dur_admit__a_request_uuid_is_admitted_once",))),
+    ("a_no_op_edit_survives", mutation_list.Outcome.survived,
+     mutation_list.Mutant(
+         name="self_no_op", invariant="an edit that changes nothing is a survivor",
+         file="contracts/fakes/state.py", old="MAX_READ_LIMIT = 1000",
+         new="MAX_READ_LIMIT = 1000  # a comment changes no behaviour",
+         cases=("dur_admit__a_request_uuid_is_admitted_once",))),
+    # A real defect whose named case cannot see it is a *survivor*: the kill has to come
+    # from the case that claims the invariant, not from anywhere in the suite.
+    ("a_lethal_edit_under_the_wrong_case_name_is_not_a_kill", mutation_list.Outcome.survived,
+     mutation_list.Mutant(
+         name="self_wrong_case", invariant="a kill must come from the named case",
+         file="contracts/fakes/state.py",
+         old='raise errors.StateConflict(\n                    f"request {request.request_id} is already an admitted job")',
+         new="pass", cases=("dur_settle__one_settlement_with_exact_decimals",))),
+    ("a_missing_anchor_is_a_failure", mutation_list.Outcome.misdeclared,
+     mutation_list.Mutant(
+         name="self_missing_anchor", invariant="the list matches the code",
+         file="contracts/fakes/state.py", old="this text is not in the fake",
+         new="nor is this", cases=("dur_admit__a_request_uuid_is_admitted_once",))),
+    ("a_mutant_with_no_case_is_a_failure", mutation_list.Outcome.misdeclared,
+     mutation_list.Mutant(
+         name="self_no_case", invariant="every mutant names a case",
+         file="contracts/fakes/state.py", old="MAX_READ_LIMIT = 1000",
+         new="MAX_READ_LIMIT = 1", cases=())),
+)
+
+
+@pytest.mark.parametrize("name,expected,mutant", SELF_TESTS, ids=[t[0] for t in SELF_TESTS])
+def test_the_runner_cannot_report_a_false_kill(name, expected, mutant):
+    result = mutation_list.run_mutant(mutant)
+    assert result.outcome is expected, f"{name}: got {result.outcome} - {result.detail}"
+    assert not result.killed or expected is mutation_list.Outcome.killed
+    # and only `killed` is accepted by the suite
+    assert result.ok is (expected is mutation_list.Outcome.killed)
+
+
+def test_a_known_lethal_mutant_is_killed_for_the_right_reason():
+    """The positive control: the same machinery reports a real kill, and the failing
+    test id is the case the mutant names."""
+    mutant = next(m for m in ALL if m.name == "heartbeat_stores_the_callers_lease")
+    result = mutation_list.run_mutant(mutant)
+    assert result.killed and "1 failed" in result.detail
 
 
 def test_the_fakes_skip_no_conformance_case():
