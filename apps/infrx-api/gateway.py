@@ -40,7 +40,8 @@ Env (see deploy/install.sh, which writes /etc/marlin2b-gateway.env):
 Run:  uvicorn gateway:app --host 127.0.0.1 --port 8001
 Then put TLS in front (Caddyfile) and expose only 443.
 """
-import asyncio, base64, hashlib, ipaddress, json, os, re, socket, subprocess, tempfile, time, uuid
+import asyncio, base64, hashlib, hmac, ipaddress, json, os, re, socket, subprocess, tempfile, time, uuid
+from collections import OrderedDict
 
 import httpx
 from fastapi import FastAPI, Request
@@ -65,6 +66,7 @@ SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 MODELS_DOC = os.environ.get("MODELS_DOC", os.path.join(os.path.dirname(__file__), "openrouter", "provider-models.json"))
 FPS, MIN_FRAMES, MAX_FRAMES, PX_PER_FRAME = 2.0, 4, 240, 200704
 KEY_TTL, MISS_TTL, PRICE_TTL, LAST_USED_TTL = 60, 10, 300, 60
+KEY_CACHE_MAX, MISS_CACHE_MAX = 10_000, 1_000  # negatives are attacker-suppliable: own, smaller cap
 RETRY_DELAYS = (1, 3, 9, 0)  # usage_events insert backoff; 0 = give up and spill to disk
 
 app = FastAPI()
@@ -76,28 +78,41 @@ inflight = 0
 THINK = re.compile(r"^\s*<think>(?:.*?</think>)?\s*", re.S)
 
 # ---- auth: sha256(key) -> api_keys row, cached ------------------------------
-_keys = {}        # key_hash -> (expires_at, row or None)
-_last_used = {}   # key_hash -> ts of the last last_used_at PATCH
+# Bounded, insertion-ordered: the hash is caller-supplied, so an unbounded dict
+# is a memory-exhaustion vector. Misses live in their own small cache so a flood
+# of random keys cannot evict the real ones.
+_keys = OrderedDict()       # key_hash -> (expires_at, row); keys Supabase knows
+_misses = OrderedDict()     # key_hash -> (expires_at, None); keys it does not
+_last_used = OrderedDict()  # key_hash -> ts of the last last_used_at PATCH
+
+
+def _put(cache, k, v, cap):
+    cache[k] = v
+    cache.move_to_end(k)
+    while len(cache) > cap:
+        cache.popitem(last=False)
 
 
 async def authenticate(req):
     """Returns (api_keys row, error status). The row is None both for the legacy
     key and when nothing is configured; the status is None when the call is allowed."""
     token = req.headers.get("authorization", "").removeprefix("Bearer ").strip()
-    if LEGACY_KEY and token == LEGACY_KEY:
+    if LEGACY_KEY and hmac.compare_digest(token.encode(), LEGACY_KEY.encode()):
         return None, None
     if not SUPABASE_URL:
         return None, 401 if LEGACY_KEY else None
     if not token:
         return None, 401
     h = hashlib.sha256(token.encode()).hexdigest()
-    hit = _keys.get(h)
+    hit = _keys.get(h) or _misses.get(h)
     if hit is None or hit[0] < time.time():
         try:
             r = await sb.get("/api_keys", params={"key_hash": f"eq.{h}", "select": "id,org_id,revoked_at"})
             r.raise_for_status()
             rows = r.json()
-            hit = _keys[h] = (time.time() + (KEY_TTL if rows else MISS_TTL), rows[0] if rows else None)
+            hit = (time.time() + (KEY_TTL if rows else MISS_TTL), rows[0] if rows else None)
+            (_misses if rows else _keys).pop(h, None)   # a key only lives in one of the two
+            _put(*((_keys, h, hit, KEY_CACHE_MAX) if rows else (_misses, h, hit, MISS_CACHE_MAX)))
         except Exception as e:
             if hit is None:  # never seen this key and Supabase is down: fail closed, but retryable
                 print(f"gateway: api_keys lookup failed ({type(e).__name__}: {e})", flush=True)
@@ -106,7 +121,7 @@ async def authenticate(req):
     if row is None or row.get("revoked_at"):
         return None, 401
     if time.time() - _last_used.get(h, 0) > LAST_USED_TTL:
-        _last_used[h] = time.time()
+        _put(_last_used, h, time.time(), KEY_CACHE_MAX)
         asyncio.create_task(touch(h))
     return row, None
 
@@ -355,7 +370,8 @@ async def health():
 
 @app.get("/v1/models")
 async def models(req: Request):
-    doc = json.load(open(MODELS_DOC))
+    with open(MODELS_DOC) as f:
+        doc = json.load(f)
     # OpenAI-shaped list for ordinary clients; OpenRouter's provider document fields ride along.
     for m in doc["data"]:
         m.setdefault("object", "model")
@@ -417,10 +433,11 @@ async def chat(req: Request):
                      "cached": False, "cost_usd": 0})
 
     headers = {"Inference-Id": rid}
-    try:
-        if not stream:
+    # Exactly one `inflight -= 1` per path, in a finally: a decrement that runs
+    # early (or twice) drifts the counter negative and MAX_INFLIGHT stops firing.
+    if not stream:
+        try:
             r = await client.post("/v1/chat/completions", json=body)
-            inflight -= 1
             data = r.json()
             if r.status_code == 200:
                 for ch in data.get("choices", []):
@@ -429,53 +446,55 @@ async def chat(req: Request):
                 data["model"] = MODEL_ID
             log(r.status_code, None, data.get("usage"))
             return JSONResponse(data, status_code=r.status_code, headers=headers)
+        except Exception as e:
+            log(502)
+            return JSONResponse({"error": {"message": f"upstream error: {e}", "type": "server_error"}},
+                                status_code=502, headers=headers)
+        finally:
+            inflight -= 1
 
-        async def gen():
-            global inflight
-            first = None
-            u = None
-            status = 200
-            stripped = False
-            try:
-                async with client.stream("POST", "/v1/chat/completions", json=body) as r:
-                    status = r.status_code
-                    if status != 200:
-                        yield (await r.aread())
-                        return
-                    async for line in r.aiter_lines():
-                        if not line.startswith("data:"):
-                            if line == "":
-                                continue
-                            yield line + "\n\n"
+    async def gen():
+        global inflight
+        first = None
+        u = None
+        status = 200
+        stripped = False
+        try:
+            async with client.stream("POST", "/v1/chat/completions", json=body) as r:
+                status = r.status_code
+                if status != 200:
+                    yield (await r.aread())
+                    return
+                async for line in r.aiter_lines():
+                    if not line.startswith("data:"):
+                        if line == "":
                             continue
-                        payload = line[5:].strip()
-                        if payload == "[DONE]":
-                            yield "data: [DONE]\n\n"
-                            continue
-                        try:
-                            obj = json.loads(payload)
-                        except Exception:
-                            yield line + "\n\n"
-                            continue
-                        obj["model"] = MODEL_ID
-                        if obj.get("usage"):
-                            u = obj["usage"]
-                        for ch in obj.get("choices", []):
-                            c = ch.get("delta", {}).get("content")
-                            if c:
-                                if first is None:
-                                    first = time.time()
-                                if not stripped:
-                                    c2 = THINK.sub("", c, count=1)
-                                    stripped = not c.lstrip().startswith("<think>") or c2 != c
-                                    ch["delta"]["content"] = c2
-                        yield "data: " + json.dumps(obj) + "\n\n"
-            finally:
-                inflight -= 1
-                log(status, first, u)
+                        yield line + "\n\n"
+                        continue
+                    payload = line[5:].strip()
+                    if payload == "[DONE]":
+                        yield "data: [DONE]\n\n"
+                        continue
+                    try:
+                        obj = json.loads(payload)
+                    except Exception:
+                        yield line + "\n\n"
+                        continue
+                    obj["model"] = MODEL_ID
+                    if obj.get("usage"):
+                        u = obj["usage"]
+                    for ch in obj.get("choices", []):
+                        c = ch.get("delta", {}).get("content")
+                        if c:
+                            if first is None:
+                                first = time.time()
+                            if not stripped:
+                                c2 = THINK.sub("", c, count=1)
+                                stripped = not c.lstrip().startswith("<think>") or c2 != c
+                                ch["delta"]["content"] = c2
+                    yield "data: " + json.dumps(obj) + "\n\n"
+        finally:
+            inflight -= 1
+            log(status, first, u)
 
-        return StreamingResponse(gen(), media_type="text/event-stream", headers=headers)
-    except Exception as e:
-        inflight -= 1
-        log(502)
-        return JSONResponse({"error": {"message": f"upstream error: {e}", "type": "server_error"}}, status_code=502, headers=headers)
+    return StreamingResponse(gen(), media_type="text/event-stream", headers=headers)
