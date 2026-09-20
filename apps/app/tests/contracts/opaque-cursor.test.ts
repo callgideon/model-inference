@@ -29,7 +29,9 @@ function unwrapCursor(cursor: string | null | undefined): string | null | undefi
 }
 
 function wrapQuery<Q extends { cursor?: string | null }>(query: Q): Q {
-  if (!("cursor" in query)) return query;
+  // A caller may hand any rubbish through this wrapper — the suite checks that too — so anything
+  // that is not an object passes straight to the implementation to refuse.
+  if (typeof query !== "object" || query === null || !("cursor" in query)) return query;
   return { ...query, cursor: unwrapCursor(query.cursor) };
 }
 

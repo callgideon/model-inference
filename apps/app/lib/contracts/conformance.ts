@@ -388,6 +388,8 @@ function assertJudgeRun(run: JudgeRun): void {
 export type OperationProbe = {
   call(session: SessionContext): Promise<Result<unknown>>;
   withExtraField?(session: SessionContext): Promise<Result<unknown>>;
+  /** The same operation handed something that is not an object at all. */
+  asGiven(session: SessionContext, input: unknown): Promise<Result<unknown>>;
   /** True when the result does not depend on the caller's organization (operator-wide lists). */
   tenantIndependent?: boolean;
 };
@@ -414,30 +416,48 @@ export function operationProbes(
   };
   return {
     usage: {
+      asGiven: (session, input) => services.usage(session, input as never),
       call: (session) => services.usage(session, { limit: 2 }),
       withExtraField: (session) => services.usage(session, { limit: 2, ...extra }),
     },
     usageSummary: {
+      asGiven: (session, input) => services.usageSummary(session, input as never),
       call: (session) => services.usageSummary(session, {}),
       withExtraField: (session) => services.usageSummary(session, { ...extra }),
     },
     usageDaily: {
+      asGiven: (session, input) => services.usageDaily(session, input as never),
       call: (session) => services.usageDaily(session, {}),
       withExtraField: (session) => services.usageDaily(session, { ...extra }),
     },
-    balances: { call: (session) => services.balances(session) },
+    balances: {
+      call: (session) => services.balances(session),
+      asGiven: (session) => services.balances(session),
+    },
     ledger: {
+      asGiven: (session, input) => services.ledger(session, input as never),
       call: (session) => services.ledger(session, { limit: 2 }),
       withExtraField: (session) => services.ledger(session, { limit: 2, ...extra }),
     },
     traces: {
+      asGiven: (session, input) => services.traces(session, input as never),
       call: (session) => services.traces(session, { limit: 2 }),
       withExtraField: (session) => services.traces(session, { limit: 2, ...extra }),
     },
-    traceDetail: { call: (session) => services.traceDetail(session, ids.availableRequestId) },
-    traceContent: { call: (session) => services.traceContent(session, ids.availableRequestId) },
-    "feedback.list": { call: (session) => services.feedback.list(session, ids.availableRequestId) },
+    traceDetail: {
+      call: (session) => services.traceDetail(session, ids.availableRequestId),
+      asGiven: (session) => services.traceDetail(session, ids.availableRequestId),
+    },
+    traceContent: {
+      call: (session) => services.traceContent(session, ids.availableRequestId),
+      asGiven: (session) => services.traceContent(session, ids.availableRequestId),
+    },
+    "feedback.list": {
+      call: (session) => services.feedback.list(session, ids.availableRequestId),
+      asGiven: (session) => services.feedback.list(session, ids.availableRequestId),
+    },
     "feedback.submit": {
+      asGiven: (session, input) => services.feedback.submit(session, input as never),
       call: (session) =>
         services.feedback.submit(session, {
           request_id: ids.availableRequestId,
@@ -455,6 +475,7 @@ export function operationProbes(
         } as never),
     },
     "calibration.label": {
+      asGiven: (session, input) => services.calibration.label(session, input as never),
       call: (session) =>
         services.calibration.label(session, {
           request_id: ids.availableRequestId,
@@ -473,22 +494,32 @@ export function operationProbes(
       tenantIndependent: true,
     },
     "calibration.list": {
+      asGiven: (session, input) => services.calibration.list(session, input as never),
       call: (session) => services.calibration.list(session, { limit: 2 }),
       withExtraField: (session) => services.calibration.list(session, { limit: 2, ...extra }),
       tenantIndependent: true,
     },
-    "settings.get": { call: (session) => services.settings.get(session) },
+    "settings.get": {
+      call: (session) => services.settings.get(session),
+      asGiven: (session) => services.settings.get(session),
+    },
     "settings.update": {
+      asGiven: (session, input) => services.settings.update(session, input as never),
       call: (session) => services.settings.update(session, { trace_mode: "full" }),
       withExtraField: (session) => services.settings.update(session, { trace_mode: "full", ...extra } as never),
     },
-    "keys.list": { call: (session) => services.keys.list(session) },
+    "keys.list": {
+      call: (session) => services.keys.list(session),
+      asGiven: (session) => services.keys.list(session),
+    },
     "keys.create": {
+      asGiven: (session, input) => services.keys.create(session, input as never),
       call: (session) => services.keys.create(session, { name: `probe ${nextKey("key")}` }),
       withExtraField: (session) =>
         services.keys.create(session, { name: `probe ${nextKey("key-extra")}`, ...extra } as never),
     },
     "keys.revoke": {
+      asGiven: (session) => services.keys.revoke(session, ids.keyId),
       call: async (session) => {
         const listed = await services.keys.list(session);
         if (!listed.ok) return listed;
@@ -498,16 +529,19 @@ export function operationProbes(
       },
     },
     adminOrgs: {
+      asGiven: (session, input) => services.adminOrgs(session, input as never),
       call: (session) => services.adminOrgs(session, { limit: 2 }),
       withExtraField: (session) => services.adminOrgs(session, { limit: 2, ...extra }),
       tenantIndependent: true,
     },
     adminGrant: {
+      asGiven: (session, input) => services.adminGrant(session, input as never),
       call: (session) => services.adminGrant(session, grant(nextKey("grant"))),
       withExtraField: (session) => services.adminGrant(session, { ...grant(nextKey("grant-extra")), ...extra } as never),
       tenantIndependent: true,
     },
     adminSetSuspension: {
+      asGiven: (session, input) => services.adminSetSuspension(session, input as never),
       call: (session) =>
         services.adminSetSuspension(session, {
           target_org_id: ids.otherOrgId,
@@ -526,6 +560,7 @@ export function operationProbes(
       tenantIndependent: true,
     },
     adminSetEntitlements: {
+      asGiven: (session, input) => services.adminSetEntitlements(session, input as never),
       call: (session) =>
         services.adminSetEntitlements(session, {
           target_org_id: ids.otherOrgId,
@@ -546,11 +581,13 @@ export function operationProbes(
       tenantIndependent: true,
     },
     adminAudit: {
+      asGiven: (session, input) => services.adminAudit(session, input as never),
       call: (session) => services.adminAudit(session, { limit: 2 }),
       withExtraField: (session) => services.adminAudit(session, { limit: 2, actor: "someone" } as never),
       tenantIndependent: true,
     },
     judgeRuns: {
+      asGiven: (session, input) => services.judgeRuns(session, input as never),
       call: (session) => services.judgeRuns(session, { limit: 2 }),
       withExtraField: (session) => services.judgeRuns(session, { limit: 2, ...extra }),
     },
@@ -1181,6 +1218,24 @@ export function runConsoleServicesConformance(
       expectError(
         await services.adminGrant(sessions.operator, {
           ...input,
+          amount: "1.000000001" as Money,
+          idempotency_key: "grant-conformance-over-scale",
+        }),
+        "invalid_request",
+        "an amount with more precision than the scale can hold",
+      );
+      expectError(
+        await services.adminGrant(sessions.operator, {
+          ...input,
+          kind: "purchase" as never,
+          idempotency_key: "grant-conformance-kind",
+        }),
+        "invalid_request",
+        "a grant kind outside the free pilot's vocabulary",
+      );
+      expectError(
+        await services.adminGrant(sessions.operator, {
+          ...input,
           reason: "   ",
           idempotency_key: "grant-conformance-no-reason",
         }),
@@ -1603,6 +1658,162 @@ export function runConsoleServicesConformance(
           (item) => item.id === label.id,
         ),
         "the label is in the calibration set",
+      );
+    });
+
+    it("the three entitlement states are distinct, and the empty one is a denial (R24)", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      const entitlementsOf = async (orgId: string) => {
+        const listed = expectOk(
+          await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
+          "operator org list",
+        );
+        const row = listed.items.find((candidate) => candidate.org_id === orgId);
+        assert.ok(row !== undefined, `${orgId} must be listed`);
+        return row.entitlements;
+      };
+
+      // One organization of each kind, because "not configured" and "entitled to nothing" are
+      // different facts and a page must not render them the same way.
+      const kinds = new Set<string>();
+      for (const row of expectOk(
+        await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
+        "operator org list",
+      ).items) {
+        const list = row.entitlements.model_ids;
+        assert.ok(list === null || Array.isArray(list), "model_ids is null or a list, never undefined");
+        kinds.add(list === null ? "default" : list.length === 0 ? "none" : "explicit");
+        if (list !== null) {
+          assert.equal(new Set(list).size, list.length, "a stored entitlement list must not repeat");
+        } else {
+          assert.equal(row.entitlements.updated_at, null, "an unrecorded default has no audit stamp");
+        }
+      }
+      assert.deepEqual([...kinds].sort(), ["default", "explicit", "none"], "all three states must be present");
+
+      const none = expectOk(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: [],
+          limits: {},
+          reason: "conformance: entitle nothing",
+          idempotency_key: "entitle-none",
+        }),
+        "entitle nothing",
+      );
+      assert.deepEqual(none.model_ids, [], "an empty list is stored as an empty list");
+      assert.deepEqual((await entitlementsOf(ids.orgId)).model_ids, [], "and read back as one");
+
+      const back = expectOk(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: null,
+          limits: {},
+          reason: "conformance: restore the default",
+          idempotency_key: "entitle-default",
+        }),
+        "restore the platform default",
+      );
+      assert.equal(back.model_ids, null, "null is the platform default set, not an empty list");
+      assert.equal((await entitlementsOf(ids.orgId)).model_ids, null);
+
+      // `null` and `[]` are different decisions, so the same key cannot mean both.
+      expectError(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: [],
+          limits: {},
+          reason: "conformance: restore the default",
+          idempotency_key: "entitle-default",
+        }),
+        "idempotency_conflict",
+        "the same key switched between the default and a denial",
+      );
+      expectError(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: [ids.modelId, ids.modelId],
+          limits: {},
+          reason: "conformance",
+          idempotency_key: "entitle-duplicate",
+        }),
+        "invalid_request",
+        "a repeated model id",
+      );
+      expectError(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: ["model-nobody-serves@2026-01-01"],
+          limits: {},
+          reason: "conformance",
+          idempotency_key: "entitle-unknown-model",
+        }),
+        "invalid_request",
+        "a model the platform does not serve",
+      );
+      expectError(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: null,
+          limits: { unlimited_everything: 1 } as never,
+          reason: "conformance",
+          idempotency_key: "entitle-bad-limit",
+        }),
+        "invalid_request",
+        "an entitlement limit nobody defined",
+      );
+      expectError(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: null,
+          limits: {},
+          reason: "r".repeat(MAX_GRANT_REASON_CHARS + 1),
+          idempotency_key: "entitle-long-reason",
+        }),
+        "invalid_request",
+        "an entitlement reason past the bound",
+      );
+
+      // A recorded decision is attributed, and the named models come back sorted and intact.
+      const explicit = expectOk(
+        await services.adminSetEntitlements(sessions.operator, {
+          target_org_id: ids.orgId,
+          model_ids: [ids.modelId],
+          limits: { max_concurrent_requests: 4 },
+          reason: "conformance: entitle",
+          idempotency_key: "entitle-explicit",
+        }),
+        "entitle explicitly",
+      );
+      assert.deepEqual(explicit.model_ids, [ids.modelId]);
+      assert.equal(explicit.limits.max_concurrent_requests, 4);
+      assert.ok(explicit.updated_at !== null && explicit.updated_by === sessions.operator.email, "the write is audited");
+      assert.deepEqual((await entitlementsOf(ids.orgId)).model_ids, [ids.modelId], "the list shows what was set");
+      for (const name of ENTITLEMENT_LIMIT_NAMES) {
+        assert.equal(typeof name, "string", "the limit vocabulary is a closed list");
+      }
+    });
+
+    it("an operator suspension needs a reason within the bound", async () => {
+      const { services, sessions, ids } = await makeHarness();
+      expectError(
+        await services.adminSetSuspension(sessions.operator, {
+          target_org_id: ids.otherOrgId,
+          suspended: true,
+          reason: "r".repeat(MAX_GRANT_REASON_CHARS + 1),
+          idempotency_key: "suspension-long-reason",
+        }),
+        "invalid_request",
+        "a suspension reason past the bound",
+      );
+      expectOk(
+        await services.adminSetSuspension(sessions.operator, {
+          target_org_id: ids.otherOrgId,
+          suspended: true,
+          reason: "r".repeat(MAX_GRANT_REASON_CHARS),
+          idempotency_key: "suspension-reason-at-bound",
+        }),
+        "a suspension reason at the bound",
       );
     });
 
@@ -2450,19 +2661,25 @@ export function runMutationSafetyConformance(
       for (const entry of expectOk(await services.feedback.list(sessions.owner, ids.availableRequestId), "seeded feedback")) {
         add(entry.id, "seeded feedback");
       }
+      // Both organizations, enough times that a counter without the tenant in it must collide.
       const minted: FeedbackEntry[] = [];
-      for (let i = 0; i < 12; i += 1) {
-        minted.push(
-          expectOk(
-            await services.feedback.submit(sessions.owner, {
-              request_id: ids.availableRequestId,
-              name: "comment",
-              value: `note ${i}`,
-              idempotency_key: `id-probe-feedback-${i}`,
-            }),
-            `feedback ${i}`,
-          ),
-        );
+      for (const [session, requestId, who] of [
+        [sessions.owner, ids.availableRequestId, "first organization"],
+        [sessions.otherOwner, ids.otherOrgRequestId, "second organization"],
+      ] as [SessionContext, string, string][]) {
+        for (let i = 0; i < 12; i += 1) {
+          minted.push(
+            expectOk(
+              await services.feedback.submit(session, {
+                request_id: requestId,
+                name: "comment",
+                value: `note ${i}`,
+                idempotency_key: `id-probe-feedback-${who}-${i}`,
+              }),
+              `${who} feedback ${i}`,
+            ),
+          );
+        }
       }
       for (const entry of minted) add(entry.id, "minted feedback");
 
@@ -2752,6 +2969,25 @@ export function runMutationSafetyConformance(
         );
       }
 
+      // Nor anything that is not an object at all, where one is expected.
+      for (const [operation, probe] of Object.entries(probes)) {
+        if (probe.withExtraField === undefined) continue;
+        const session = (OPERATOR_ONLY_OPERATIONS as readonly string[]).includes(operation)
+          ? sessions.operator
+          : sessions.owner;
+        for (const [what, value] of [
+          ["a string", "nonsense"],
+          ["an array", []],
+          ["null", null],
+        ] as [string, unknown][]) {
+          expectError(
+            await settle(`${operation} given ${what}`, () => probe.asGiven(session, value)),
+            "invalid_request",
+            `${operation} must refuse ${what} where it expects an object`,
+          );
+        }
+      }
+
       // And the other organization's state is of course untouched by any of it.
       const foreign = expectOk(await services.settings.get(sessions.otherOwner), "other organization settings");
       assert.ok(inSet(TRACE_MODES, foreign.trace_mode));
@@ -2822,6 +3058,25 @@ export function runMutationSafetyConformance(
         theirBefore,
         "another organization's settings must be byte-identical after our write",
       );
+      // And the reverse direction: their write must land on *their* record, not on the first
+      // organization's. A service that always wrote the first one passes if only we ever write.
+      const ourAfterTheirWrite = expectOk(await services.settings.get(sessions.owner), "our settings before theirs");
+      const theirChanged = expectOk(
+        await services.settings.update(sessions.otherOwner, {
+          content_retention_days: theirBefore.content_retention_days === 9 ? 10 : 9,
+        }),
+        "their settings update",
+      );
+      assert.notEqual(
+        theirChanged.content_retention_days,
+        theirBefore.content_retention_days,
+        "their write must change their record",
+      );
+      assert.deepEqual(
+        expectOk(await services.settings.get(sessions.owner), "our settings after theirs"),
+        ourAfterTheirWrite,
+        "our settings must be byte-identical after their write",
+      );
       expectOk(await services.keys.create(sessions.owner, { name: "isolation probe" }), "our key");
       assert.deepEqual(
         expectOk(await services.keys.list(sessions.otherOwner), "their keys after"),
@@ -2830,8 +3085,8 @@ export function runMutationSafetyConformance(
       );
       assert.deepEqual(
         expectOk(await services.settings.get(sessions.otherOwner), "their settings after our key"),
-        theirBefore,
-        "and their settings still untouched",
+        theirChanged,
+        "and their settings still exactly as they last set them",
       );
     });
 

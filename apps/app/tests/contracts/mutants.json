@@ -1,0 +1,844 @@
+{
+  "_comment": "R32: one single-edit mutant per invariant the exported conformance suite claims. `pnpm test:mutants` applies each to a temporary copy and requires it to fail at least one case of runConsoleServicesConformance or runMutationSafetyConformance. A surviving mutant means the suite states an invariant it cannot enforce, which is the defect this list exists to prevent. Ids are this repository's; where a mutant reproduces a survivor from the round-4 review, `was` records the reviewer's id.",
+  "mutants": [
+    {
+      "id": "AUDIT-01",
+      "note": "nothing is audited",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    audit.push(entry);",
+      "replace": "    if (false) audit.push(entry);"
+    },
+    {
+      "id": "AUDIT-02",
+      "note": "a restore overwrites the earlier suspension entry instead of appending",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        appendAudit(session, \"suspension_set\", target.org_id, reason, before, {",
+      "replace": "        while (audit.length > 0 && audit[audit.length - 1].action === \"suspension_set\") audit.pop();\n        appendAudit(session, \"suspension_set\", target.org_id, reason, before, {"
+    },
+    {
+      "id": "AUDIT-03",
+      "note": "the audit entry names the organization instead of the operator who acted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      actor_principal: session.email,\n      action,",
+      "replace": "      actor_principal: session.orgName,\n      action,"
+    },
+    {
+      "id": "AUDIT-04",
+      "note": "the entitlement audit entry loses the reason",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          \"entitlements_set\",\n          target.org_id,\n          input.reason.trim(),",
+      "replace": "          \"entitlements_set\",\n          target.org_id,\n          \"\","
+    },
+    {
+      "id": "AUDIT-05",
+      "note": "the audit records no before state",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const before = { suspended: target.suspended, suspension_reason: target.suspension_reason };",
+      "replace": "        const before = { suspended: input.suspended, suspension_reason: reason };"
+    },
+    {
+      "id": "AUDIT-06",
+      "note": "adminAudit is readable by anyone",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const denied = requireOperator<Page<AuditEntry>>(session);",
+      "replace": "      const denied = null as Result<Page<AuditEntry>> | null;"
+    },
+    {
+      "id": "AUDIT-07",
+      "note": "the audit target filter does not filter",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        (entry) => query.target_org_id === undefined || entry.target_org_id === query.target_org_id,",
+      "replace": "        () => true,"
+    },
+    {
+      "id": "BAL-01",
+      "note": "the operator list reports every wallet as zero",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      balance: balance ?? { ledger_total: ZERO_MONEY, reserved_total: ZERO_MONEY, available: ZERO_MONEY },",
+      "replace": "      balance: { ledger_total: ZERO_MONEY, reserved_total: ZERO_MONEY, available: ZERO_MONEY },"
+    },
+    {
+      "id": "BOUND-01",
+      "note": "the key name bound is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (input.name.length > MAX_KEY_NAME_CHARS) {",
+      "replace": "        if (false) {"
+    },
+    {
+      "id": "BOUND-02",
+      "note": "the operator reason bound is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (reason.length > MAX_GRANT_REASON_CHARS) {",
+      "replace": "    if (false) {"
+    },
+    {
+      "id": "BOUND-03",
+      "note": "the idempotency key bound is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  if (key.length > MAX_IDEMPOTENCY_KEY_CHARS) {",
+      "replace": "  if (false) {"
+    },
+    {
+      "id": "BOUND-04",
+      "note": "the entitlement limit ceiling and whole-number rule are dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > MAX_ENTITLEMENT_LIMIT) {",
+      "replace": "      if (false) {"
+    },
+    {
+      "id": "BOUND-05",
+      "note": "an unknown entitlement limit name is accepted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (!(ENTITLEMENT_LIMIT_NAMES as readonly string[]).includes(name)) {",
+      "replace": "      if (false) {"
+    },
+    {
+      "id": "BOUND-06",
+      "note": "the retention cap is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          if (!Number.isInteger(days) || days < 1 || days > MAX_CONTENT_RETENTION_DAYS) {",
+      "replace": "          if (false) {"
+    },
+    {
+      "id": "BOUND-07",
+      "note": "the rubric version bound is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          !Number.isInteger(input.rubric_version) ||\n          input.rubric_version < 1 ||",
+      "replace": "          false ||"
+    },
+    {
+      "id": "BOUND-08",
+      "note": "the feedback text bound is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (input.value.length > MAX_FEEDBACK_TEXT_CHARS) {",
+      "replace": "    if (false) {"
+    },
+    {
+      "id": "CODE-01",
+      "note": "a code that must never carry an HTTP status gets one",
+      "file": "lib/contracts/types.ts",
+      "find": "  journal_write_failed: null,",
+      "replace": "  journal_write_failed: 500,"
+    },
+    {
+      "id": "CODE-02",
+      "note": "not_found is served as a 400",
+      "file": "lib/contracts/types.ts",
+      "find": "  not_found: 404,",
+      "replace": "  not_found: 400,"
+    },
+    {
+      "id": "CODE-03",
+      "note": "org_suspended is served as a 401",
+      "file": "lib/contracts/types.ts",
+      "find": "  org_suspended: 403,",
+      "replace": "  org_suspended: 401,"
+    },
+    {
+      "id": "CONTENT-01",
+      "note": "content is rendered whatever its availability says",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        availability === \"available\"\n          ? { ...structuredClone(template), request: { ...structuredClone(template.request), model } }\n          : null,",
+      "replace": "        { ...structuredClone(template), request: { ...structuredClone(template.request), model } },"
+    },
+    {
+      "id": "CURSOR-01",
+      "note": "the cursor is not bound to its query",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (parsed.k !== fnv1a(scope)) return null;",
+      "replace": "    if (false) return null;"
+    },
+    {
+      "id": "CURSOR-02",
+      "note": "resuming skips the first matching row",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    start = index === -1 ? rows.length : index;",
+      "replace": "    start = index === -1 ? rows.length : index + 1;"
+    },
+    {
+      "id": "CURSOR-03",
+      "note": "resuming repeats the cursor's own row",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      descending ? compareKeys(keyOf(row), after) < 0 : compareKeys(keyOf(row), after) > 0,",
+      "replace": "      descending ? compareKeys(keyOf(row), after) <= 0 : compareKeys(keyOf(row), after) >= 0,"
+    },
+    {
+      "id": "CURSOR-04",
+      "note": "the cursor ignores the tiebreak, so a group of equal timestamps is walked wrongly",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "function compareKeys(a: SortKey, b: SortKey): number {\n  if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1;\n  if (a[1] !== b[1]) return a[1] < b[1] ? -1 : 1;\n  return 0;",
+      "replace": "function compareKeys(a: SortKey, b: SortKey): number {\n  if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1;\n  return 0;"
+    },
+    {
+      "id": "CURSOR-05",
+      "note": "the last page still offers a cursor, so a walk never ends",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  const exhausted = start + items.length >= rows.length || last === undefined;",
+      "replace": "  const exhausted = last === undefined;"
+    },
+    {
+      "id": "CURSOR-06",
+      "note": "the operator list is paged in the wrong direction",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      return paginate(rows, query, \"operators|adminOrgs\", orgKey, false);",
+      "replace": "      return paginate(rows, query, \"operators|adminOrgs\", orgKey, true);"
+    },
+    {
+      "id": "ENT-01",
+      "note": "an unserved model id is accepted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          if (typeof model !== \"string\" || !KNOWN_MODEL_IDS.includes(model)) {",
+      "replace": "          if (typeof model !== \"string\") {"
+    },
+    {
+      "id": "ENT-02",
+      "note": "a repeated model id is accepted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (new Set(input.model_ids).size !== input.model_ids.length) {",
+      "replace": "        if (false) {"
+    },
+    {
+      "id": "ENT-03",
+      "note": "the platform default is stored as a denial",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const model_ids = input.model_ids === null ? null : [...input.model_ids].sort();",
+      "replace": "      const model_ids = input.model_ids === null ? [] : [...input.model_ids].sort();"
+    },
+    {
+      "id": "ENT-04",
+      "note": "the entitlement write is not attributed",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          updated_at: nextTimestamp(),\n          updated_by: session.email,",
+      "replace": "          updated_at: null,\n          updated_by: null,"
+    },
+    {
+      "id": "FILTER-01",
+      "note": "the model filter does not filter",
+      "was": "Z02",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        (query.model === undefined || row.model === query.model),\n    );\n  }\n\n  function traceRowsFor",
+      "replace": "        (query.model === undefined || true),\n    );\n  }\n\n  function traceRowsFor"
+    },
+    {
+      "id": "FILTER-02",
+      "note": "the time window does not filter",
+      "was": "Z04",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      (query.from === undefined || at >= instant(query.from)) &&",
+      "replace": "      (query.from === undefined || true) &&"
+    },
+    {
+      "id": "FILTER-03",
+      "note": "the key filter does not filter",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        (query.key_id === undefined || row.key_id === query.key_id) &&\n        (query.model === undefined || row.model === query.model),",
+      "replace": "        (query.key_id === undefined || true) &&\n        (query.model === undefined || row.model === query.model),"
+    },
+    {
+      "id": "FILTER-04",
+      "note": "the content filter does not filter",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        (query.content === undefined || row.content === query.content) &&",
+      "replace": "        (query.content === undefined || true) &&"
+    },
+    {
+      "id": "FILTER-05",
+      "note": "off-mode requests appear in the trace list again",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        row.trace_mode !== \"off\" &&",
+      "replace": "        true &&"
+    },
+    {
+      "id": "GRANT-01",
+      "note": "the ledger row does not record which operator made the grant",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          ref: input.idempotency_key,\n          actor: session.email,",
+      "replace": "          ref: input.idempotency_key,\n          actor: null,"
+    },
+    {
+      "id": "GRANT-02",
+      "note": "the grant result reports the caller's organization",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          grant_id: entry.id,\n          org_id: target.org_id,",
+      "replace": "          grant_id: entry.id,\n          org_id: session.orgId,"
+    },
+    {
+      "id": "GRANT-03",
+      "note": "a zero or negative grant is accepted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (units <= BigInt(0)) return fail(\"invalid_request\", \"a grant amount must be positive\");",
+      "replace": "      if (false) return fail(\"invalid_request\", \"a grant amount must be positive\");"
+    },
+    {
+      "id": "GRANT-04",
+      "note": "a grant that leaves the money domain is written anyway",
+      "was": "R11",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (current === null || projected === null) {",
+      "replace": "      if (false) {"
+    },
+    {
+      "id": "GRANT-05",
+      "note": "a grant kind other than promotional is accepted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (input.kind !== \"promotional\") {",
+      "replace": "      if (false) {"
+    },
+    {
+      "id": "HOLD-01",
+      "note": "every hold is counted twice",
+      "was": "H02",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    for (const row of org.usage) if (row.max_hold !== null) reservedUnits += moneyUnits(row.max_hold);",
+      "replace": "    for (const row of org.usage) if (row.max_hold !== null) reservedUnits += moneyUnits(row.max_hold) * BigInt(2);"
+    },
+    {
+      "id": "HOLD-02",
+      "note": "holds are ignored, so nothing is reserved",
+      "was": "H04",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    for (const row of org.usage) if (row.max_hold !== null) reservedUnits += moneyUnits(row.max_hold);",
+      "replace": "    for (const row of org.usage) if (false) reservedUnits += moneyUnits(row.max_hold as Money);"
+    },
+    {
+      "id": "HOLD-03",
+      "note": "pending reconciliation is a constant zero",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (row.usage_certainty === \"unknown\" && row.max_hold !== null) heldUnits += moneyUnits(row.max_hold);",
+      "replace": "        if (false) heldUnits += moneyUnits(row.max_hold as Money);"
+    },
+    {
+      "id": "HOLD-04",
+      "note": "available is the ledger total, ignoring reservations",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    const available = tryMoneyFromUnits(ledgerUnits - reservedUnits);",
+      "replace": "    const available = tryMoneyFromUnits(ledgerUnits);"
+    },
+    {
+      "id": "ID-01",
+      "note": "feedback ids are not namespaced, so two organizations collide",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      id: feedbackId(org.namespace, org.feedbackCounter),",
+      "replace": "      id: feedbackId(0, org.feedbackCounter),"
+    },
+    {
+      "id": "IDEM-01",
+      "note": "the idempotency record is not scoped to the organization",
+      "was": "I01",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    return `${session.orgId}|${operation}|${key}`;",
+      "replace": "    return `${operation}|${key}`;"
+    },
+    {
+      "id": "IDEM-02",
+      "note": "the idempotency record is not scoped to the operation",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    return `${session.orgId}|${operation}|${key}`;",
+      "replace": "    return `${session.orgId}|${key}`;"
+    },
+    {
+      "id": "IDEM-03",
+      "note": "nothing is remembered, so every retry repeats the effect",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    idempotency.set(recordName(session, operation, key), { payload, value: structuredClone(value) });",
+      "replace": "    if (false) idempotency.set(recordName(session, operation, key), { payload, value: structuredClone(value) });"
+    },
+    {
+      "id": "IDEM-04",
+      "note": "a changed payload replays instead of conflicting",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (previous.payload !== payload) {",
+      "replace": "    if (false) {"
+    },
+    {
+      "id": "IDEM-05",
+      "note": "the record is written before the effect, so a lost response loses the write",
+      "was": "V03",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    const value = apply();\n    remember(session, operation, key, payload, record(value));",
+      "replace": "    remember(session, operation, key, payload, record(undefined as never));\n    const value = apply();"
+    },
+    {
+      "id": "IDEM-06",
+      "note": "keys.revoke ignores its idempotency key",
+      "was": "I12",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const replay = replayOf<ApiKeySummary>(session, \"keys.revoke\", idempotencyKey, payload);",
+      "replace": "        const replay = replayOf<ApiKeySummary>(session, \"keys.revoke\", undefined, payload);"
+    },
+    {
+      "id": "INPUT-01",
+      "note": "unknown input fields are ignored",
+      "was": "X11",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (value !== undefined && !allowed.includes(name)) {",
+      "replace": "    if (false) {"
+    },
+    {
+      "id": "INPUT-02",
+      "note": "an out-of-vocabulary filter returns an empty page instead of a refusal",
+      "was": "X12",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (value !== undefined && !(typeof value === \"string\" && allowed.includes(value))) {\n        return `${name} must be one of ${allowed.join(\", \")}`;",
+      "replace": "      if (false) {\n        return `${name} must be one of ${allowed.join(\", \")}`;"
+    },
+    {
+      "id": "INPUT-03",
+      "note": "an unparseable timestamp filter is accepted",
+      "was": "X13",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        return `${name} must be an RFC 3339 UTC timestamp`;",
+      "replace": "        return null;"
+    },
+    {
+      "id": "INPUT-04",
+      "note": "a reversed time range is accepted",
+      "was": "X14",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (query.from !== undefined && query.to !== undefined && instant(query.from) > instant(query.to)) {",
+      "replace": "    if (false) {"
+    },
+    {
+      "id": "LABEL-01",
+      "note": "calibration.label only reaches the operator's own organization (R26 says platform-wide)",
+      "was": "I09",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const found = traceAnywhere(input.request_id);",
+      "replace": "        const own = orgs.get(session.orgId);\n        const ownTrace = own === undefined ? undefined : ownedTrace(own, input.request_id);\n        const found = own === undefined || ownTrace === undefined ? undefined : { org: own, trace: ownTrace };"
+    },
+    {
+      "id": "LABEL-02",
+      "note": "the label records the organization's owner instead of the operator who judged",
+      "was": "I10",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "              author_role: \"operator\",\n              author_principal: session.email,\n              calibration_set: true,",
+      "replace": "              author_role: \"operator\",\n              author_principal: found.org.owner_email,\n              calibration_set: true,"
+    },
+    {
+      "id": "LABEL-03",
+      "note": "a label is filed as customer feedback, so customers can see it (R35)",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (entry.name === \"calibration_label\") {\n      org.labels.push(entry);\n    } else {\n      trace.feedback.push(entry);\n      trace.feedback_count = trace.feedback.length;\n    }",
+      "replace": "    trace.feedback.push(entry);\n    trace.feedback_count = trace.feedback.length;\n    if (entry.name === \"calibration_label\") org.labels.push(entry);"
+    },
+    {
+      "id": "LABEL-04",
+      "note": "calibration.list returns every feedback entry, not only labels",
+      "was": "V06",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        for (const org of orgs.values()) rows.push(...org.labels);",
+      "replace": "        for (const org of orgs.values()) {\n          rows.push(...org.labels);\n          for (const trace of org.traces) rows.push(...trace.feedback);\n        }"
+    },
+    {
+      "id": "LABEL-05",
+      "note": "feedback.submit accepts the operator-only name",
+      "was": "V07",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  if (!(FEEDBACK_NAMES as readonly string[]).includes(input.name)) {",
+      "replace": "  if (!(FEEDBACK_ENTRY_NAMES as readonly string[]).includes(input.name)) {"
+    },
+    {
+      "id": "LIMIT-01",
+      "note": "a limit above the hard bound is clamped instead of refused",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT) {",
+      "replace": "  if (!Number.isInteger(limit) || limit < 1) {"
+    },
+    {
+      "id": "MONEY-01",
+      "note": "the money domain is widened past numeric(20, 8)",
+      "file": "lib/contracts/money.ts",
+      "find": "const MAX_UNITS = BigInt(\"100000000000000000000\");",
+      "replace": "const MAX_UNITS = BigInt(\"10000000000000000000000000\");"
+    },
+    {
+      "id": "MONEY-02",
+      "note": "more precision than the scale can hold is accepted",
+      "file": "lib/contracts/money.ts",
+      "find": "  if (fraction.length > MONEY_SCALE) return null;",
+      "replace": "  if (false) return null;"
+    },
+    {
+      "id": "MONEY-03",
+      "note": "an exponent is accepted",
+      "file": "lib/contracts/money.ts",
+      "find": "const PLAIN_DECIMAL = /^-?(?:0|[1-9][0-9]*)(\\.[0-9]+)?$/;",
+      "replace": "const PLAIN_DECIMAL = /^-?(?:0|[1-9][0-9]*)(\\.[0-9]+)?(e-?[0-9]+)?$/;"
+    },
+    {
+      "id": "MONEY-04",
+      "note": "the canonical form loses its fixed scale",
+      "file": "lib/contracts/money.ts",
+      "find": "  return `${negative ? \"-\" : \"\"}${whole}.${digits.slice(-MONEY_SCALE)}` as Money;",
+      "replace": "  return `${negative ? \"-\" : \"\"}${whole}.${digits.slice(-MONEY_SCALE).replace(/0+$/, \"\")}` as Money;"
+    },
+    {
+      "id": "MONEY-05",
+      "note": "subtraction is addition",
+      "file": "lib/contracts/money.ts",
+      "find": "export function subMoney(a: Money, b: Money): Money {\n  return moneyFromUnits(moneyUnits(a) - moneyUnits(b));",
+      "replace": "export function subMoney(a: Money, b: Money): Money {\n  return moneyFromUnits(moneyUnits(a) + moneyUnits(b));"
+    },
+    {
+      "id": "ORDER-01",
+      "note": "settings.update writes the trace mode before validating the retention",
+      "was": "C04",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (update.content_retention_days !== undefined) {\n          const days = update.content_retention_days;",
+      "replace": "        if (update.trace_mode !== undefined) resolved.org.settings.trace_mode = update.trace_mode;\n        if (update.content_retention_days !== undefined) {\n          const days = update.content_retention_days;"
+    },
+    {
+      "id": "ORDER-02",
+      "note": "adminSetSuspension writes the status before validating the reason",
+      "was": "C05",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const badReason = badAuditReason(input.reason);\n      if (badReason !== null) return fail<AdminOrgSummary>(\"invalid_request\", badReason);",
+      "replace": "      const eager = orgs.get(input.target_org_id);\n      if (eager !== undefined) eager.suspended = input.suspended;\n      const badReason = badAuditReason(input.reason);\n      if (badReason !== null) return fail<AdminOrgSummary>(\"invalid_request\", badReason);"
+    },
+    {
+      "id": "ORDER-03",
+      "note": "adminSetEntitlements writes the models before validating the limits",
+      "was": "C06",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const badLimit = badEntitlementLimits(input.limits);",
+      "replace": "      const eager = orgs.get(input.target_org_id);\n      if (eager !== undefined && Array.isArray(input.model_ids)) {\n        eager.entitlements = { ...eager.entitlements, model_ids: [...input.model_ids].sort() };\n      }\n      const badLimit = badEntitlementLimits(input.limits);"
+    },
+    {
+      "id": "ORDER-04",
+      "note": "keys.create pushes the key before validating the trace mode",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (input.trace_mode !== undefined && !(TRACE_MODES as readonly string[]).includes(input.trace_mode)) {\n          return fail(\"invalid_request\", \"trace_mode must be off, minimal or full\");\n        }\n        const name = input.name.trim();",
+      "replace": "        resolved.org.keys.push({\n          id: deterministicUuid(4242 + resolved.org.namespace, 9000),\n          name: String(input.name),\n          prefix: \"sk-infrx-eager\",\n          created_at: nextTimestamp(),\n          last_used_at: null,\n          revoked_at: null,\n          trace_mode: \"full\",\n        });\n        if (input.trace_mode !== undefined && !(TRACE_MODES as readonly string[]).includes(input.trace_mode)) {\n          return fail(\"invalid_request\", \"trace_mode must be off, minimal or full\");\n        }\n        const name = input.name.trim();"
+    },
+    {
+      "id": "ORDER-05",
+      "note": "the grant is appended before the money domain is checked",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const current = balanceOf(target);\n      const projected = balanceOf(target, units);",
+      "replace": "      target.ledger.unshift({\n        id: deterministicUuid(8080 + target.namespace, 9000),\n        created_at: nextTimestamp(),\n        delta: amount,\n        kind: \"grant\",\n        reason,\n        ref: input.idempotency_key,\n        actor: session.email,\n      });\n      const current = balanceOf(target);\n      const projected = balanceOf(target, units);"
+    },
+    {
+      "id": "ORDER-06",
+      "note": "calibration.label writes before validating the rubric version",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (\n          !Number.isInteger(input.rubric_version) ||",
+      "replace": "        const eagerFound = traceAnywhere(input.request_id);\n        if (eagerFound !== undefined) {\n          eagerFound.org.labels.push({\n            id: feedbackId(eagerFound.org.namespace, 9000),\n            request_id: input.request_id,\n            created_at: nextTimestamp(),\n            channel: \"console\",\n            author_role: \"operator\",\n            author_principal: session.email,\n            name: \"calibration_label\",\n            value: input.label,\n            comment: null,\n            calibration_set: true,\n            rubric_version: input.rubric_version,\n          });\n        }\n        if (\n          !Number.isInteger(input.rubric_version) ||"
+    },
+    {
+      "id": "PAYLOAD-01",
+      "note": "the grant payload omits the target organization",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const payload = canonicalPayload({\n        target_org_id: input.target_org_id,\n        amount,\n        kind: input.kind,\n        reason,\n      });",
+      "replace": "      const payload = canonicalPayload({ amount, kind: input.kind, reason });"
+    },
+    {
+      "id": "PAYLOAD-02",
+      "note": "the grant payload omits the amount",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        target_org_id: input.target_org_id,\n        amount,\n        kind: input.kind,\n        reason,",
+      "replace": "        target_org_id: input.target_org_id,\n        kind: input.kind,\n        reason,"
+    },
+    {
+      "id": "PAYLOAD-03",
+      "note": "the feedback payload omits the request",
+      "was": "T12",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const payload = canonicalPayload({\n          request_id: trace.request_id,\n          name: input.name,\n          value: input.value,\n          comment,\n        });",
+      "replace": "        const payload = canonicalPayload({ name: input.name, value: input.value, comment });"
+    },
+    {
+      "id": "PAYLOAD-04",
+      "note": "the feedback payload omits the value",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          request_id: trace.request_id,\n          name: input.name,\n          value: input.value,\n          comment,",
+      "replace": "          request_id: trace.request_id,\n          name: input.name,\n          comment,"
+    },
+    {
+      "id": "PAYLOAD-05",
+      "note": "the label payload omits the label itself",
+      "was": "T14",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const payload = canonicalPayload({\n          request_id: input.request_id,\n          rubric_version: input.rubric_version,\n          label: input.label,\n          comment,\n        });",
+      "replace": "        const payload = canonicalPayload({ request_id: input.request_id, rubric_version: input.rubric_version, comment });"
+    },
+    {
+      "id": "PAYLOAD-06",
+      "note": "the label payload omits the rubric version",
+      "was": "T15",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          request_id: input.request_id,\n          rubric_version: input.rubric_version,\n          label: input.label,\n          comment,",
+      "replace": "          request_id: input.request_id,\n          label: input.label,\n          comment,"
+    },
+    {
+      "id": "PAYLOAD-07",
+      "note": "the entitlement payload omits the limits",
+      "was": "T16",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        limits: canonicalPayload(limits),\n        reason: input.reason.trim(),",
+      "replace": "        reason: input.reason.trim(),"
+    },
+    {
+      "id": "PAYLOAD-08",
+      "note": "the entitlement payload cannot tell the platform default from a denial",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        model_ids: model_ids === null ? \"(platform default)\" : `[${model_ids.join(\",\")}]`,",
+      "replace": "        model_ids: model_ids === null ? \"\" : model_ids.join(\",\"),"
+    },
+    {
+      "id": "PAYLOAD-09",
+      "note": "the suspension payload omits the state being set",
+      "was": "T18",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        target_org_id: input.target_org_id,\n        suspended: input.suspended,\n        reason,",
+      "replace": "        target_org_id: input.target_org_id,\n        reason,"
+    },
+    {
+      "id": "PAYLOAD-10",
+      "note": "the suspension payload omits the reason",
+      "was": "T19",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const payload = canonicalPayload({\n        target_org_id: input.target_org_id,\n        suspended: input.suspended,\n        reason,\n      });",
+      "replace": "      const payload = canonicalPayload({ target_org_id: input.target_org_id, suspended: input.suspended });"
+    },
+    {
+      "id": "PAYLOAD-11",
+      "note": "the key payload omits the trace mode",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const payload = canonicalPayload({ name, trace_mode });",
+      "replace": "        const payload = canonicalPayload({ name });"
+    },
+    {
+      "id": "PAYLOAD-12",
+      "note": "the settings payload omits the retention",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          content_retention_days: update.content_retention_days,\n          evaluation_consent: update.evaluation_consent,",
+      "replace": "          evaluation_consent: update.evaluation_consent,"
+    },
+    {
+      "id": "PAYLOAD-13",
+      "note": "the revoke payload omits the key",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        const payload = canonicalPayload({ key_id: keyId });",
+      "replace": "        const payload = canonicalPayload({});"
+    },
+    {
+      "id": "PROV-01",
+      "note": "console feedback from an operator session is labelled operator",
+      "was": "V02",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "            author_role: \"customer\",\n            author_principal: session.email,\n            calibration_set: false,\n            rubric_version: null,",
+      "replace": "            author_role: session.isOperator ? \"operator\" : \"customer\",\n            author_principal: session.email,\n            calibration_set: false,\n            rubric_version: null,"
+    },
+    {
+      "id": "PROV-02",
+      "note": "the channel is taken from the caller rather than set by the console",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      channel: \"console\",\n      ...provenance,",
+      "replace": "      ...provenance,\n      channel: \"api\","
+    },
+    {
+      "id": "REVOKE-01",
+      "note": "a second revocation moves the timestamp of the first",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        if (key.revoked_at !== null) return fail(\"state_conflict\", \"this key is already revoked\");",
+      "replace": "        if (false) return fail(\"state_conflict\", \"this key is already revoked\");"
+    },
+    {
+      "id": "ROLE-01",
+      "note": "the owner-only check is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (session.role !== \"owner\") {",
+      "replace": "    if (false) {"
+    },
+    {
+      "id": "ROLE-02",
+      "note": "the operator check is dropped",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (!session.isOperator) {",
+      "replace": "    if (false) {"
+    },
+    {
+      "id": "ROLE-03",
+      "note": "judgeRuns loses its owner-or-operator check",
+      "was": "C09",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (session.role !== \"owner\" && !session.isOperator) {",
+      "replace": "    if (false) {"
+    },
+    {
+      "id": "ROLE-04",
+      "note": "operator authority is taken from the organization role instead of the flag",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  function requireOperator<T>(session: SessionContext): Result<T> | null {\n    if (!session.isOperator) {",
+      "replace": "  function requireOperator<T>(session: SessionContext): Result<T> | null {\n    if (session.role !== \"owner\") {"
+    },
+    {
+      "id": "SECRET-01",
+      "note": "the idempotency record keeps the whole response, so a replay returns the secret",
+      "was": "K02",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          (created) => created.id,",
+      "replace": "          (created) => created,"
+    },
+    {
+      "id": "SECRET-02",
+      "note": "a replayed creation reports itself as a first response",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          return ok({ ...structuredClone(existing), secret: null, replayed: true });",
+      "replace": "          return ok({ ...structuredClone(existing), secret: null, replayed: false });"
+    },
+    {
+      "id": "STATE-01",
+      "note": "a non-terminal row reports a settlement state",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    const settlement: SettlementState | null = (TERMINAL_JOB_STATES as readonly string[]).includes(\n      outcome.job_state,\n    )\n      ? outcome.settlement_state\n      : null;",
+      "replace": "    const settlement: SettlementState | null = outcome.settlement_state;"
+    },
+    {
+      "id": "STATE-02",
+      "note": "consent changes are not audited in the settings history",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "            settings.consent_history.push({",
+      "replace": "            if (false) settings.consent_history.push({"
+    },
+    {
+      "id": "STATE-03",
+      "note": "changing the trace mode also moves consent",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          if (update.trace_mode !== undefined) settings.trace_mode = update.trace_mode;",
+      "replace": "          if (update.trace_mode !== undefined) {\n            settings.trace_mode = update.trace_mode;\n            settings.evaluation_consent = update.trace_mode !== \"off\";\n          }"
+    },
+    {
+      "id": "SUSP-01",
+      "note": "suspension is ignored entirely",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (org.suspended && !(SUSPENDED_ALLOWED_OPERATIONS as readonly string[]).includes(operation)) {",
+      "replace": "    if (false) {"
+    },
+    {
+      "id": "SUSP-02",
+      "note": "suspension also blocks reads and keys.revoke (R33 says it must not)",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (org.suspended && !(SUSPENDED_ALLOWED_OPERATIONS as readonly string[]).includes(operation)) {",
+      "replace": "    if (org.suspended) {"
+    },
+    {
+      "id": "TARGET-01",
+      "note": "adminSetSuspension acts on the caller's organization instead of the target",
+      "was": "I19",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const badReason = badAuditReason(input.reason);\n      if (badReason !== null) return fail<AdminOrgSummary>(\"invalid_request\", badReason);\n      const target = orgs.get(input.target_org_id);",
+      "replace": "      const badReason = badAuditReason(input.reason);\n      if (badReason !== null) return fail<AdminOrgSummary>(\"invalid_request\", badReason);\n      const target = orgs.get(session.orgId);"
+    },
+    {
+      "id": "TARGET-02",
+      "note": "adminSetEntitlements acts on the caller's organization instead of the target",
+      "was": "I20",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const badLimit = badEntitlementLimits(input.limits);\n      if (badLimit !== null) return fail<OrgEntitlements>(\"invalid_request\", badLimit);\n      const target = orgs.get(input.target_org_id);",
+      "replace": "      const badLimit = badEntitlementLimits(input.limits);\n      if (badLimit !== null) return fail<OrgEntitlements>(\"invalid_request\", badLimit);\n      const target = orgs.get(session.orgId);"
+    },
+    {
+      "id": "TARGET-03",
+      "note": "adminGrant credits the caller's organization instead of the target",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const target = orgs.get(input.target_org_id);\n      if (target === undefined) return fail(\"not_found\", \"no such organization\");\n\n      const reason = input.reason.trim();",
+      "replace": "      const target = orgs.get(session.orgId);\n      if (target === undefined) return fail(\"not_found\", \"no such organization\");\n\n      const reason = input.reason.trim();"
+    },
+    {
+      "id": "TENANT-01",
+      "note": "the tenant comes from the first organization instead of the session",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    const org = orgs.get(session.orgId);",
+      "replace": "    const org = [...orgs.values()][0];"
+    },
+    {
+      "id": "TENANT-02",
+      "note": "usageSummary aggregates across every organization",
+      "was": "X02",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const rows = usageRowsFor(resolved.org, query);\n      // Units, not `addMoney`",
+      "replace": "      const rows = [...orgs.values()].flatMap((org) => usageRowsFor(org, query));\n      // Units, not `addMoney`"
+    },
+    {
+      "id": "TENANT-03",
+      "note": "usageDaily aggregates across every organization",
+      "was": "X03",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      for (const row of usageRowsFor(resolved.org, query)) {",
+      "replace": "      for (const row of [...orgs.values()].flatMap((org) => usageRowsFor(org, query))) {"
+    },
+    {
+      "id": "TENANT-04",
+      "note": "settings.get reads the first organization's settings",
+      "was": "X07",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        return ok(structuredClone(resolved.org.settings));",
+      "replace": "        return ok(structuredClone([...orgs.values()][0].settings));"
+    },
+    {
+      "id": "TENANT-05",
+      "note": "settings.update writes the first organization's settings",
+      "was": "X08",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          const settings = resolved.org.settings;",
+      "replace": "          const settings = [...orgs.values()][0].settings;"
+    },
+    {
+      "id": "TENANT-06",
+      "note": "a trace of any organization is readable by any session",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  function ownedTrace(org: OrgState, requestId: string): TraceDetail | undefined {\n    return org.traces.find((trace) => trace.request_id === requestId);",
+      "replace": "  function ownedTrace(org: OrgState, requestId: string): TraceDetail | undefined {\n    for (const candidate of orgs.values()) {\n      const found = candidate.traces.find((trace) => trace.request_id === requestId);\n      if (found !== undefined) return found;\n    }\n    return org.traces.find((trace) => trace.request_id === requestId);"
+    },
+    {
+      "id": "XHEAD-01",
+      "note": "a row arriving at the head shifts the walk, so one is repeated",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  const items = structuredClone(rows.slice(start, start + limit));",
+      "replace": "  const items = structuredClone(rows.slice(Math.max(0, start - 1), Math.max(0, start - 1) + limit));"
+    },
+    {
+      "id": "XINPUT-01",
+      "note": "a non-object input is accepted",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  if (typeof input !== \"object\" || input === null || Array.isArray(input)) {\n    return fail<T>(\"invalid_request\", \"this operation takes an object\");\n  }",
+      "replace": "  if (typeof input !== \"object\" || input === null) return null;"
+    },
+    {
+      "id": "XJUDGE-01",
+      "note": "a dry-run score is reported as a provider result",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        mode: run.mode === \"live\" ? \"live\" : \"dry_run\",",
+      "replace": "        mode: \"live\" as const,"
+    },
+    {
+      "id": "XJUDGE-02",
+      "note": "the sample count does not match the samples",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        sample_count: samples.length,",
+      "replace": "        sample_count: samples.length + 1,"
+    },
+    {
+      "id": "XPURCHASE-01",
+      "note": "a grant is written as a legacy purchase row",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          delta: amount,\n          kind: \"grant\",\n          reason,",
+      "replace": "          delta: amount,\n          kind: \"purchase\" as const,\n          reason,"
+    },
+    {
+      "id": "XREASON-01",
+      "note": "an operator write accepts a blank reason",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    if (typeof reason !== \"string\" || reason.trim() === \"\") return \"this operation needs a reason\";",
+      "replace": "    if (false) return \"this operation needs a reason\";"
+    },
+    {
+      "id": "XTENANT-01",
+      "note": "a cursor is not bound to the organization that minted it",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    return `${org.org_id}|${operation}|${JSON.stringify(parts)}`;",
+      "replace": "    return `${operation}|${JSON.stringify(parts)}`;"
+    }
+  ]
+}
