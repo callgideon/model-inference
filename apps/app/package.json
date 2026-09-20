@@ -9,7 +9,10 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test lib/*.test.ts"
+    "test": "node --test \"lib/**/*.test.ts\" \"tests/**/*.test.ts\" \"app/**/*.test.ts\" \"components/**/*.test.ts\""
+  },
+  "engines": {
+    "node": ">=22.18"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

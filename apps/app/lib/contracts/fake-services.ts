@@ -421,12 +421,16 @@ function costOf(promptTokens: number, completionTokens: number): Money {
 
 const EXECUTION_MODE_CYCLE: ExecutionMode[] = ["sync", "stream", "async"];
 
-function availabilityFor(mode: TraceMode, index: number): TraceContentAvailability {
+/**
+ * Capture mode decides what can exist; full-mode rows then cycle through the remaining
+ * states (`sequence` counts full-mode rows only, so every state is reached).
+ */
+function availabilityFor(mode: TraceMode, sequence: number): TraceContentAvailability {
   if (mode === "off") return "off";
   if (mode === "minimal") return "metadata_only";
   return pick(
     TRACE_CONTENT_AVAILABILITY,
-    traceFixture.availability_cycle[index % traceFixture.availability_cycle.length],
+    traceFixture.availability_cycle[sequence % traceFixture.availability_cycle.length],
     "availability_cycle",
   );
 }
@@ -446,6 +450,7 @@ function buildOrg(spec: OrgFixture): OrgState {
 
   const usage: UsageRow[] = [];
   const traces: TraceDetail[] = [];
+  let fullModeRows = 0;
   const content = new Map<string, TraceContentView>();
   const retentionMs = spec.settings.content_retention_days * 86400000;
 
@@ -481,7 +486,8 @@ function buildOrg(spec: OrgFixture): OrgState {
       trace_mode: key.trace_mode,
     });
 
-    const availability = availabilityFor(key.trace_mode, i);
+    const availability = availabilityFor(key.trace_mode, fullModeRows);
+    if (key.trace_mode === "full") fullModeRows += 1;
     const expired = availability === "expired";
     const list: TraceListItem = {
       request_id,
