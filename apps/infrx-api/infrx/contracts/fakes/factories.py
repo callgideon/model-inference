@@ -1,0 +1,136 @@
+"""Conformance factories for the fakes: the reference implementation of the
+`Harness` contract every real adapter's factory must also satisfy.
+
+Read one of these next to your own factory when wiring a real adapter (D to
+PostgreSQL, Q to Valkey, T to the spool, M to object storage).
+"""
+from __future__ import annotations
+
+from decimal import Decimal
+
+from .. import money
+from ..conformance import Harness
+from ..limits import DEFAULTS, PilotSettings
+from ..records import FeedbackChannel
+from .engine import EngineFault, FakeEngine
+from .feedback import FakeFeedbackService
+from .judge import FakeJudgeCoordinator
+from .media import FakeMediaStore
+from .scheduling import FakeScheduler
+from .state import FakeJobStore, FakeStreamStore
+from .support import FailurePlan, FakeClock, SequentialIds
+from .traces import FakeTraceSink
+
+
+def _jobstore(limits: PilotSettings | None = None):
+    clock, ids, failures = FakeClock(), SequentialIds(), FailurePlan()
+    jobs = FakeJobStore(clock, ids, limits=limits or DEFAULTS, failures=failures)
+    return jobs, clock, ids, failures
+
+
+def _job_hooks(jobs: FakeJobStore, stream: FakeStreamStore | None = None) -> dict:
+    from ..records import ChunkEventType, EngineEvent
+
+    async def publish(lease):
+        """Commit one chunk, i.e. set the publication marker."""
+        target = stream or FakeStreamStore(jobs)
+        return await target.append(lease, (EngineEvent(type=ChunkEventType.delta,
+                                                       payload={"content": "x"}),))
+
+    def balance(org_id):
+        wallet = jobs.wallet(org_id)
+        return {"ledger": wallet.ledger_total, "reserved": wallet.reserved_total,
+                "available": wallet.available, "zero": money.ZERO}
+
+    return {
+        "grant": jobs.grant,
+        "balance": balance,
+        "active_jobs": jobs.active_jobs,
+        "outbox": lambda aggregate_id=None: [event for event in jobs.outbox
+                                             if aggregate_id in (None, event.aggregate_id)],
+        "outbox_kinds": jobs.outbox_kinds,
+        "publish": publish,
+        "journal_bytes": jobs.journal.total,
+        "revoke_key": jobs.revoked_keys.add,
+        "unrevoke_key": jobs.revoked_keys.discard,
+        "suspend_org": jobs.suspended_orgs.add,
+    }
+
+
+def jobstore_factory(limits: PilotSettings | None = None, **_: object) -> Harness:
+    jobs, clock, ids, failures = _jobstore(limits)
+    stream = FakeStreamStore(jobs, failures=failures)
+    return Harness(port=jobs, clock=clock, ids=ids, failures=failures,
+                   extra=_job_hooks(jobs, stream))
+
+
+def streamstore_factory(limits: PilotSettings | None = None, **_: object) -> Harness:
+    jobs, clock, ids, failures = _jobstore(limits)
+    stream = FakeStreamStore(jobs, failures=failures)
+    hooks = _job_hooks(jobs, stream)
+    hooks["jobs"] = jobs
+    return Harness(port=stream, clock=clock, ids=ids, failures=failures, extra=hooks)
+
+
+def mediastore_factory(limits: PilotSettings | None = None, **_: object) -> Harness:
+    clock, ids, failures = FakeClock(), SequentialIds(), FailurePlan()
+    store = FakeMediaStore(clock, ids, limits=limits or DEFAULTS, failures=failures)
+    return Harness(port=store, clock=clock, ids=ids, failures=failures,
+                   extra={"put_object": store.put_object, "attach": store.attach})
+
+
+def scheduler_factory(limits: PilotSettings | None = None, **_: object) -> Harness:
+    jobs, clock, ids, failures = _jobstore(limits)
+    scheduler = FakeScheduler(clock, limits=limits or DEFAULTS, failures=failures)
+    hooks = _job_hooks(jobs)
+    hooks["jobs"] = jobs
+    return Harness(port=scheduler, clock=clock, ids=ids, failures=failures, extra=hooks)
+
+
+def engine_factory(limits: PilotSettings | None = None, *, fault: str = "none",
+                   **_: object) -> Harness:
+    clock, ids, failures = FakeClock(), SequentialIds(), FailurePlan()
+    engine = FakeEngine(clock=clock, limits=limits or DEFAULTS, fault=EngineFault(fault),
+                        failures=failures)
+    return Harness(port=engine, clock=clock, ids=ids, failures=failures,
+                   extra={"text": engine.text, "fault": fault})
+
+
+def tracesink_factory(limits: PilotSettings | None = None, **_: object) -> Harness:
+    clock, ids, failures = FakeClock(), SequentialIds(), FailurePlan()
+    sink = FakeTraceSink(clock, limits=limits or DEFAULTS, failures=failures)
+    return Harness(port=sink, clock=clock, ids=ids, failures=failures,
+                   extra={"queued": lambda: list(sink.queued), "crash": sink.crash})
+
+
+def feedback_factory(limits: PilotSettings | None = None, *,
+                     channel: FeedbackChannel = FeedbackChannel.api, **_: object) -> Harness:
+    jobs, clock, ids, failures = _jobstore(limits)
+    service = FakeFeedbackService(jobs, channel=channel, failures=failures)
+    hooks = _job_hooks(jobs)
+    hooks["jobs"] = jobs
+    hooks["outbox"] = lambda: list(service.outbox)
+    return Harness(port=service, clock=clock, ids=ids, failures=failures, extra=hooks)
+
+
+def judge_factory(limits: PilotSettings | None = None, *, judge_mode: str = "dry_run",
+                  budget: str = "0", **_: object) -> Harness:
+    clock, ids, failures = FakeClock(), SequentialIds(), FailurePlan()
+    limits = (limits or DEFAULTS).replace(judge_mode=judge_mode,
+                                          judge_live_budget_usd=Decimal(budget))
+    coordinator = FakeJudgeCoordinator(clock, ids, limits=limits, failures=failures)
+    return Harness(port=coordinator, clock=clock, ids=ids, failures=failures,
+                   extra={"runs": lambda: dict(coordinator.runs),
+                          "available": coordinator.available})
+
+
+FACTORIES = {
+    "jobstore": jobstore_factory,
+    "streamstore": streamstore_factory,
+    "mediastore": mediastore_factory,
+    "scheduler": scheduler_factory,
+    "engine": engine_factory,
+    "tracesink": tracesink_factory,
+    "feedback": feedback_factory,
+    "judge": judge_factory,
+}
