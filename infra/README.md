@@ -2,8 +2,10 @@
 
 Living design for **I2** to implement. I1 created nothing: every row marked
 PROPOSED does not exist. Observed state, historical claims and proposals are
-separated in the I1 inventory, `research/plan/evidence/i/I1-<sha>.md`, which is
-the factual basis for this document. Conventions per `CLAUDE.md`: `est.` stays
+separated in the I1 inventory,
+[`research/plan/evidence/i/I1-4e052f4.md`](../research/plan/evidence/i/I1-4e052f4.md)
+(one report for I1, updated in place), which is the factual basis for this
+document. Every cross-reference below names the exact row or section it means. Conventions per `CLAUDE.md`: `est.` stays
 `est.` until measured, `meas.` carries a source, unknowns are
 `⚠️ TO BE VERIFIED` with the estimation method, prices only from
 [cloud-pricing.md](../research/cross-cutting/cloud-pricing.md).
@@ -50,9 +52,9 @@ Current units are `marlin2b-vllm.service`, `marlin2b-gateway.service` and a
 only through the public endpoint). Target layout:
 
 Every unit marked PROPOSED below is created by **I2**, in `staging` then
-`pilot` (the matrix row "New systemd units" in the I1 evidence report carries the
-same assignment); the owner track named in the table owns what runs *inside* the
-unit, not the unit file.
+`pilot` (matrix row *"New systemd units (worker, preparation, trace shipper)"* in
+§5 of the I1 evidence report carries the same assignment); the owner track named
+in the table owns what runs *inside* the unit, not the unit file.
 
 | Process | Unit (PROPOSED unless noted) | Listens | Owner track | Working paths | Needs persistent EBS |
 |---|---|---|---|---|---|
@@ -72,7 +74,8 @@ Drain grace: `marlin2b-vllm.service` today has `ExecStop=docker stop` with no
 `-t`, so in-flight generation is killed after the 10 s default (OBSERVED in the
 unit file). I2 sets `docker stop -t 120` with a matching `TimeoutStopSec` on
 every unit that can hold an accepted job, so a deploy drains instead of
-truncating; the matrix row carries the owner and environment.
+truncating; matrix row *"`ExecStop=docker stop -t 120` + matching
+`TimeoutStopSec` …"* carries the owner and environment.
 
 Root volume budget on the current box: 300 GiB gp3 (OBSERVED,
 `vol-091e45c92f7426291`, 3000 IOPS / 125 MiB/s, unencrypted,
@@ -113,6 +116,15 @@ merged into the headline. Every reported number states its round-trip count;
 Also record: pooler mode (transaction vs session), pool size, whether prepared
 statements are usable through the pooler, and packet loss / retransmits during
 the run. Report p50/p95/p99 with sample counts, not means.
+
+**Probe both pooler ports.** The `:5432` above is the port HANDOFF.md line 54
+uses, which on Supavisor is **session** mode — correct for `supabase db push`,
+but a long-lived session per connection is not the worker's likely path. Port
+**`6543` is transaction mode**, which is what a many-worker journal client would
+normally use and where prepared statements may be unavailable. Both are measured
+and reported separately; if they differ materially, the mode the worker will
+actually use is the one the verdict ladder is evaluated against, and the choice
+is recorded in the evidence report.
 
 ### 3.2 Sample sizes and procedure
 
@@ -173,6 +185,18 @@ inherently multi-statement and its statements are dependent, so it costs
 `est.` 5 round trips rather than one — at the Pass `commit_rtt_ms` p95 of 50 ms
 that is ≤ 250 ms, and > 600 ms means the network, not the work, dominates the
 transaction that gates success reporting.
+
+**I2 cannot reach a Pass verdict, and that is expected.** Both the Pass and Fail
+rows contain `first_progress_ms` and `append_rate_per_s` clauses, which §3.2 shows
+are not measurable before G/Q/W are integrated. So I2's outcome is at best
+*"not Fail on the `commit_rtt_ms` and `terminal_txn_ms` clauses, two metrics not
+run"* — never "Pass" — and **E4 is the only task that can record a Pass**, on the
+full metric set. I2 writes the verdict in exactly those words; a Pass claimed
+from a partial metric set is a fabricated gate. (If the coordinator wants an
+earlier signal, a standalone script *can* measure a synthetic append rate — one
+worker, 8 concurrent writers, no engine — which bounds the database side of the
+160/s figure without proving the integrated path; it would be labelled
+`synthetic append rate`, not `append_rate_per_s`.)
 
 These thresholds are `est.` engineering limits proposed by I1; the coordinator
 confirms them — together with the §3.1 round-trip form — against contracts v1
@@ -236,7 +260,7 @@ through the instance role at install or start time.
 
 | Parameter name | State | Consumer |
 |---|---|---|
-| `/model-inference/marlin2b_api_key` | OBSERVED (SecureString) | legacy gateway key; must map to an explicit org/key or be disabled at cutover (contracts v1). **Owner: G1** for the mapping-or-disable decision and its enforcement (`handoffs/G-gateway.md`, "Reconcile legacy key mapping for pilot cutover"); **I2** for the installer half — whether `INFRX_MODE=pilot` still writes `GATEWAY_API_KEY` into the env file. Environment: staging then pilot. The matrix row in the I1 evidence report carries the same split |
+| `/model-inference/marlin2b_api_key` | OBSERVED (SecureString) | legacy gateway key; must map to an explicit org/key or be disabled at cutover (contracts v1). **Owner: G1** for the mapping-or-disable decision and its enforcement (`handoffs/G-gateway.md`, "Reconcile legacy key mapping for pilot cutover"); **I2** for the installer half — whether `INFRX_MODE=pilot` still writes `GATEWAY_API_KEY` into the env file. Environment: staging then pilot. Matrix row *"Legacy `marlin2b_api_key` cutover — map to an explicit org/key or disable"* in §5 of the I1 evidence report carries the same split |
 | `/model-inference/supabase_url` | OBSERVED (String) | gateway auth |
 | `/model-inference/supabase_service_role_key` | OBSERVED (SecureString) | gateway auth / usage rows |
 | `/model-inference/hf_token` | OBSERVED (SecureString) | weight download |
@@ -274,30 +298,68 @@ must add an explicit mode:
   systemd unit does not report `active` before that.
 
 The instance role `bootcamp-instance-role` currently grants, on
-`Resource: "*"` (OBSERVED 18:29:06Z, `iam get-role-policy … bootcamp-ops`):
-`ssm:GetParameter`, `GetParameters`, `GetParametersByPath`, **`ssm:StartSession`,
-`ssm:TerminateSession`, `ssm:DescribeSessions`**, `ec2:RunInstances`,
+`Resource: "*"` (OBSERVED 19:14:44Z, `iam get-role-policy --role-name
+bootcamp-instance-role --policy-name bootcamp-ops`; the full statement list is in
+§2 of the I1 evidence report): `ssm:GetParameter`, `GetParameters`,
+`GetParametersByPath`, **`ssm:StartSession`, `ssm:TerminateSession`,
+`ssm:DescribeSessions`**, `ec2:Describe*`, `ec2:RunInstances`,
 `TerminateInstances`, `Stop/StartInstances`, `Create/DeleteVolume`,
-`Attach/DetachVolume`, **`ec2:CreateTags`** and `ce:GetCostAndUsage`, plus
-`iam:PassRole` on itself. For the pilot role I2 must, explicitly, all four:
+`Attach/DetachVolume`, **`ec2:CreateTags`**, `servicequotas:GetServiceQuota` /
+`ListServiceQuotas` / `GetAWSDefaultServiceQuota` /
+`ListRequestedServiceQuotaChangeHistoryByQuota`, `ce:GetCostAndUsage`,
+`pricing:GetProducts` and `sts:GetCallerIdentity`, plus `iam:PassRole` on itself.
 
-1. narrow `ssm:GetParameter*` to `/model-inference/*` **only** (not a parent of
-   the staging prefix — hence the sibling `/infrx-staging/*` in §1);
-2. **remove `ssm:StartSession`/`TerminateSession`/`DescribeSessions`** — a
+**The fix is a new role, not an edit of this one.** `bootcamp-instance-role` has
+exactly one instance profile, `bootcamp-instance-profile` (OBSERVED 19:14:45Z),
+and that profile is attached to **both** `i-0e8449a4ffca29bab` (the pilot host)
+and the stopped `i-03723906646f2bb05` (`Project=llm-bootcamp`, not part of this
+project) — both OBSERVED 19:14:35Z–19:14:36Z. Stripping statements in place would
+silently change another project's permissions, the same class of mistake as the
+withdrawn Elastic-IP item. So I2:
+
+1. creates a **pilot-specific role `infrx-pilot-role` and profile
+   `infrx-pilot-profile`** carrying only what the pilot needs, and
+   `ec2:ReplaceIamInstanceProfileAssociation` on `i-0e8449a4ffca29bab` alone;
+   `bootcamp-instance-role` is left untouched for its owner;
+2. scopes `ssm:GetParameter*` in the new role to `/model-inference/*` **only**
+   (not a parent of the staging prefix — hence the sibling `/infrx-staging/*` in
+   §1), plus the two new buckets and the observability statement;
+3. grants **no** `ssm:StartSession`/`TerminateSession`/`DescribeSessions` — a
    `*`-scoped session-start grant on the serving host is remote shell into any
-   managed instance in the account, and narrowing only the parameter statement
-   leaves it in place;
-3. drop the instance-lifecycle statements (`ec2:Run/Terminate/Stop/StartInstances`,
-   `Create/DeleteVolume`, `Attach/DetachVolume`) and `ec2:CreateTags` on `*`;
-4. keep `ec2:Describe*` and the observability statement.
+   managed instance in the account;
+4. grants **no** instance-lifecycle statements
+   (`ec2:Run/Terminate/Stop/StartInstances`, `Create/DeleteVolume`,
+   `Attach/DetachVolume`), no `ec2:CreateTags` on `*`, no `iam:PassRole`, and
+   none of the cost/quota/pricing statements (they exist for the benchmark work,
+   not for serving);
+5. keeps `ec2:Describe*` and `AmazonSSMManagedInstanceCore`.
 
-Compounding these: the instance has IMDSv2 required but
-**`HttpPutResponseHopLimit=2`** (OBSERVED 18:28:03Z), so a process inside a
-docker container — including the unpinned `vllm/vllm-openai:nightly` image —
-reaches the instance-role credentials and today inherits account-wide SSM read.
-I2 sets the hop limit to 1 (or blocks IMDS egress from the container network) in
-the same change as the role narrowing; both are configuration changes for I2
-under the lock, not I1.
+An IAM role is **account-global**, so "staging then pilot" is not a meaningful
+environment for it: the role and profile are created once and the *association*
+is swapped per host — staging gets its own role scoped to `/infrx-staging/*`.
+Matrix row *"Pilot-specific instance role + profile …"* records it that way, and
+matrix row *"Set `HttpPutResponseHopLimit` to 1 …"* carries the IMDS change.
+
+Compounding these: the instance has IMDSv2 required
+(`HttpTokens=required`, `HttpEndpoint=enabled`) but
+**`HttpPutResponseHopLimit=2`** (OBSERVED 19:14:35Z), so a process inside a
+bridged docker container — including the unpinned `vllm/vllm-openai:nightly`
+image — reaches the instance-role credentials and today inherits account-wide SSM
+read. I2 sets the hop limit to 1 in the same change as the profile swap
+(`ec2 modify-instance-metadata-options`, a mutation, under the lock).
+
+**Hardening fact I2 must check first, in this order:** hop limit 1 is precisely
+what stops a *bridged* container reaching IMDS (the bridge consumes the single
+hop), and it does **not** stop a container started with `--network host`. Nothing
+on the box is known to need role credentials from inside a container — the
+installer reads SSM on the host and writes `/etc/marlin2b-gateway.env`, and the
+engine container needs only weights already on disk — but the vLLM and Caddy
+containers' network mode was not inspected (remote execution was forbidden to
+I1). So I2 verifies, under the lock, that no container fetches credentials from
+IMDS *before* flipping the hop limit; if one does, the credential path moves to
+an injected env file or the host network first. Flipping it blind can break the
+engine start, and a broken engine on the serving host is worse than the exposure
+it closes for the minutes it takes to notice.
 
 ## 6. Backup and restore per durable layer
 
@@ -362,20 +424,31 @@ scheduling index; multi-AZ or second worker. I4 starts after I3 and E4, from
 measured pilot data, per the handoff. Capacity purchases are separately
 authorized and are not implied by any design in this document.
 
-**Pre-existing resources of these kinds are not this project's.** OBSERVED
-2026-09-20T18:27Z: 9 `gideon-*` Auto Scaling groups (all desired capacity 0) and
-10 launch templates exist in the account — nine `gideon-*` plus
-`b300-deepseek-bench` (`lt-04f4c7eafa9fbf1da`, 3 versions), which belongs to the
-llm-bootcamp/DeepSeek benchmark work, not to the infrx pilot. One capacity
-reservation exists: `cr-04397f3102a3955b7`, **ReservationType=capacity-block**,
-`p6-b300.48xlarge`, us-east-1b, state `scheduled`,
-**start 2026-09-21T11:30:00Z, end 2026-09-22T11:30:00Z**, tags
-`Name=b300-bootcamp`, `Purpose=llm-bootcamp`, created 2026-09-18T18:06:31Z.
-No `ReservationType=default` on-demand capacity reservation exists. None of these
-is created, used, extended or cancelled by any task in this document; the
-Capacity Block is surfaced to the coordinator in the I1 handback because it is a
-prepaid commitment in the same project family that starts within a day, and
-acting on it is separately authorized.
+**Pre-existing resources of these kinds are not this project's.** Each fact below
+was re-observed in the third pass and is itemised with its command and UTC time in
+§Commands of the I1 evidence report:
+
+- `autoscaling describe-auto-scaling-groups` (OBSERVED 19:14:59Z): **9** Auto
+  Scaling groups, every one `gideon-{chat-agent,platform-api,voice-agent}-{dev,exp,prod}-asg`,
+  all at desired capacity 0.
+- `ec2 describe-launch-templates` (OBSERVED 19:14:56Z–19:14:57Z): **10** launch
+  templates — the nine matching `gideon-*` plus `b300-deepseek-bench`, which
+  belongs to the llm-bootcamp/DeepSeek benchmark work, not to the infrx pilot. Its
+  three versions carry **no `IamInstanceProfile`**
+  (`ec2 describe-launch-template-versions`, OBSERVED 19:15:00Z), which is why the
+  §5 profile swap has a blast radius of the two g6e instances only.
+- `ec2 describe-capacity-reservations` (OBSERVED 19:14:54Z, tags and creation date
+  19:15:10Z): exactly one reservation, `cr-04397f3102a3955b7`,
+  **ReservationType=capacity-block**, `p6-b300.48xlarge`, us-east-1b, state
+  `scheduled`, **start 2026-09-21T11:30:00Z, end 2026-09-22T11:30:00Z**, tags
+  `Name=b300-bootcamp`, `Purpose=llm-bootcamp`, created 2026-09-18T18:06:31Z. No
+  `ReservationType=default` on-demand capacity reservation exists.
+
+None of these is created, used, extended, modified or cancelled by any task in
+this document. The Capacity Block is surfaced to the coordinator as handback item
+12 of the I1 evidence report, because it is a prepaid commitment in the same
+project family that starts within a day; acting on it is separately authorized and
+nothing here proposes anything about it.
 
 ## Verification log
 
@@ -392,7 +465,9 @@ acting on it is separately authorized.
   so it is now labelled as one. §1 also records that allocating `staging` is a
   coordinator action and enabling Supabase PITR is separately authorized;
   the staging SSM prefix is `/model-inference/staging/*`, consistent with the
-  §5 role narrowing. §2 gains the `docker stop -t 120` drain-grace rule. §3.1
+  §5 role narrowing — **superseded by the third and fourth entries below: the
+  staging prefix is the sibling `/infrx-staging/*`, because a pilot role narrowed
+  to `/model-inference/*` would otherwise read staging secrets.** §2 gains the `docker stop -t 120` drain-grace rule. §3.1
   fixes the measured transaction at one client round trip (three-round-trip form
   reported separately). §3.3 is now an ordered, exhaustive Fail→Pass→Marginal
   ladder with the append-rate thresholds derived from the 50 ms window
@@ -426,3 +501,43 @@ acting on it is separately authorized.
   marked separately authorized. §2 assigns the new units to I2 with an
   environment; §6 corrects the weights row (no Marlin copy in the S3 mirror) and
   §4 labels the us-east-2 PostgreSQL location a HISTORICAL CLAIM.
+- 2026-09-20 (third review pass — consistency with the I1 evidence report; still
+  read-only, no resource created, modified or deleted, no secret value read, no
+  remote command, no HTTP request):
+  - **Every fact the second pass cited without a command is re-observed and
+    itemised.** That pass recorded "seven further `describe-*` calls" in this log
+    but listed none of them, so §5 and §9 carried OBSERVED times
+    (18:27Z, 18:28:03Z, 18:29:06Z) that no `§Commands` row backed. All of those
+    facts were re-run at 19:14:34Z–19:15:10Z, each with its command and exit code
+    now in §Commands of the evidence report, and the timestamps here were updated
+    to the re-observation. Every one confirmed unchanged.
+  - **§5 no longer edits another project's IAM role in place.**
+    `bootcamp-instance-profile` is attached to the stopped `i-03723906646f2bb05`
+    as well as to the pilot host (OBSERVED 19:14:35Z–19:14:45Z), so "narrow /
+    remove / drop statements on `bootcamp-instance-role`" would have changed the
+    llm-bootcamp box's permissions. I2 now creates `infrx-pilot-role` +
+    `infrx-pilot-profile` and swaps the association on the pilot host only; the
+    role is account-global, so the matrix row records "account-global; association
+    swapped per host" rather than "staging then pilot".
+  - §5's over-grant listing was incomplete: `servicequotas:*`,
+    `pricing:GetProducts` and `sts:GetCallerIdentity` are also on `Resource: "*"`
+    and are now named, and the new role grants none of them.
+  - §5 adds the **hop-limit hardening order** for I2: hop limit 1 blocks a bridged
+    container but not `--network host`, and no container's network mode was
+    inspected by I1, so I2 confirms no container reads IMDS credentials *before*
+    flipping it.
+  - §3.1 adds the **transaction-mode pooler port `6543`** beside HANDOFF's session-mode
+    `:5432`; both are probed and reported, and the mode the worker will use is the
+    one the ladder is evaluated against.
+  - §3.3 states explicitly that **I2 cannot reach a Pass verdict** — both Pass and
+    Fail rows contain the two metrics only the integrated path can produce — so
+    I2 records "not Fail on the measurable clauses, two metrics not run" and E4 is
+    the only task that can record a Pass. A standalone synthetic append rate is
+    offered as an optional earlier signal, labelled as synthetic.
+  - §9 restates the ASG / launch-template / Capacity Block observations as an
+    itemised list with commands and times, and points at the handback item that
+    actually carries the Capacity Block (item 12).
+  - Cross-references made resolvable: the §2 and §5 pointers now name the exact
+    evidence matrix rows (*"New systemd units (worker, preparation, trace
+    shipper)"*, *"Legacy `marlin2b_api_key` cutover …"*), which the same pass adds
+    to the evidence report, and the header links the report by its real filename.
