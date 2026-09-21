@@ -98,6 +98,80 @@ def test_f_base__an_unexpected_exception_never_reaches_the_client():
     assert "postgresql" not in response.text and "service-role" not in response.text
 
 
+# --- review r1 items 2 and 4: the error path itself --------------------------------
+def test_f_base__an_unrenderable_param_is_still_an_envelope():
+    """A parameter name that cannot be encoded used to make the guard raise and the
+    client got a bare text/plain 500 with no request id."""
+    tc, calls = client_app()
+    response = tc.post(support.CHAT_PATH, headers=support.RAW,
+                       content=rb'{"messages":[{"role":"user","content":"hi"}],"\ud800":1}')
+    assert response.status_code == 400, response.text[:200]
+    assert response.headers["content-type"].startswith("application/json")
+    error = support.error_of(response)
+    assert error["code"] == "unsupported_parameter"
+    assert "param" not in error, error          # unrenderable, so not echoed at all
+    assert error["request_id"] == response.headers[wire.HEADER_INFERENCE_ID]
+    assert calls == []
+
+
+def test_f_base__a_caller_string_is_never_reflected_or_logged(caplog):
+    """A 1 MiB parameter name produced a 1 MiB response and a forged log line. Now the
+    name is dropped from the envelope and no caller text reaches the log."""
+    name = "x" * 100_000 + "\nJan 01 00:00:00 infrx[1]: forged"
+    tc, calls = client_app()
+    with caplog.at_level("INFO", logger="infrx.gateway"):
+        response = tc.post(support.CHAT_PATH, headers=support.AUTH,
+                           json={"messages": [{"role": "user", "content": "hi"}], name: 1})
+    assert response.status_code == 400
+    assert len(response.content) < 1_024, len(response.content)
+    assert "forged" not in response.text
+    assert "forged" not in caplog.text and "xxxx" not in caplog.text
+    assert calls == []
+
+
+def test_f_base__a_parameter_name_that_is_a_name_is_still_echoed():
+    tc, _ = client_app()
+    response = tc.post(support.CHAT_PATH, headers=support.AUTH,
+                       json={"messages": [{"role": "user", "content": "hi"}], "tools": []})
+    assert support.error_of(response)["param"] == "tools"
+
+
+def test_f_base__an_internal_only_code_escaping_a_route_is_a_500_envelope():
+    """`stale_lease` has no HTTP status by design, so `http_status` raises. An
+    acceptor leaking one must not turn the error path into a crash."""
+    async def leak(*_a):
+        raise errors.StaleLease("the lease is stale")
+
+    calls, _accept = support.recorder()
+    app, _ = support.cutover_app(ingress_deps=support.deps(accept=leak))
+    response = TestClient(app).post(support.CHAT_PATH, headers=support.AUTH, json=support.BODY)
+    assert response.status_code == 500, response.text
+    error = support.error_of(response)
+    assert error["code"] == "internal_error"
+    assert error["request_id"] == response.headers[wire.HEADER_INFERENCE_ID]
+
+
+def test_f_base__a_body_that_is_not_json_is_refused():
+    tc, calls = client_app()
+    response = tc.post(support.CHAT_PATH,
+                       headers={**support.AUTH, "content-type": "text/plain"},
+                       content=b'{"messages":[{"role":"user","content":"hi"}]}')
+    error = support.error_of(response)
+    assert (response.status_code, error["code"], error["param"]) == (400, "invalid_request",
+                                                                     "Content-Type")
+    assert calls == []
+    # a charset parameter is still application/json
+    assert tc.post(support.CHAT_PATH,
+                   headers={**support.AUTH, "content-type": "application/json; charset=utf-8"},
+                   content=b'{"messages":[{"role":"user","content":"hi"}]}').status_code == 202
+
+
+def client_app():
+    calls, accept = support.recorder()
+    app, _ = support.cutover_app(ingress_deps=support.deps(accept=accept))
+    return TestClient(app), calls
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and not hasattr(fn, "pytestmark"):
