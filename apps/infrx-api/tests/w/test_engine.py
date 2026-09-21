@@ -228,7 +228,7 @@ def test_api_stream__unsupported_options_are_refused_explicitly():
         with pytest.raises(errors.UnsupportedParameter) as refused:
             asyncio.run(collect(engine.generate(held, prepared)))
         assert refused.value.code == "unsupported_parameter"
-        assert refused.value.param == (name if name != "max_tokens" else "max_tokens")
+        assert refused.value.param == name
         assert upstream.requests == [], name
     # and the supported ones are forwarded untouched
     upstream, engine, held, _prepared = drive()
