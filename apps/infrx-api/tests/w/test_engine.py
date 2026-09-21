@@ -849,7 +849,9 @@ def test_api_stream__a_line_that_never_ends_is_bounded_and_still_checked():
     assert failure is None, failure
     assert stream.stall == "generation" and stream.terminal_cause is TerminalCause.deadline_exceeded
     elapsed = (box.clock.now() - held.acquired_at).total_seconds()
-    assert 100 <= elapsed <= 160, elapsed          # stopped at the deadline, not 1,500 s later
+    # The check runs when a chunk arrives, so the honest bound is one chunk interval past
+    # the deadline (120 s here, not 100) - and not the 1,500 s the review measured before.
+    assert 100 <= elapsed <= 100 + 2 * 30, elapsed
     assert upstream.chunks_sent <= 6 < upstream.flood_chunks
 
 
