@@ -43,7 +43,10 @@ choices that are decisions rather than mechanics:
 4. **Separate streams per dispatch kind (R52),** including separate fairness state:
    preparation and inference are different worker pools, so a tenant's transcodes must
    not push it back in the GPU line. `kind=None` still takes whatever is next across
-   both; an unknown kind is `invalid_request` (R55).
+   both; an unknown kind is `invalid_request` (R55). **CORRECTED in review round 1
+   (B2):** at this SHA the *flows* were per kind but the virtual time was one shared
+   scalar, so the separation was incomplete and preparation traffic did erase the debt
+   between inference tenants. Fixed at `9fa728f`; see round 1 below.
 5. **Visibility follows the lease of the pool that was fed** (R52):
    `preparation_lease_ttl_s` (30 s) for `prepare_dispatch`, `lease_ttl_s` (120 s) for
    `inference_dispatch`, measured **from the claim**, never from the event's own
@@ -148,8 +151,10 @@ Not run, and why:
   run against this model are Q2's deliverable. Nothing here claims integration.
 - Baseline byte-identity: **not applicable** — Q1 adds only new files under
   `infrx/scheduling/` and `tests/q/`; `git diff --stat 8744418..HEAD` shows 7 files,
-  1504 insertions, 0 deletions, and no F1 path among them. Command 1 is the baseline run
-  (735 pre-existing tests still pass, plus Q1's).
+  1554 insertions, 0 deletions, and no F1 path among them. Command 1 is the baseline run.
+  **CORRECTED (B5):** the pre-existing suite is **670** tests, not 735
+  (`pytest -q --collect-only --ignore=tests/q` prints `670 tests collected`), and 670 + 66
+  was the 736 that command 1 reported.
 
 ## Results
 
@@ -217,8 +222,12 @@ recorded because they changed the deliverable rather than being quietly dropped:
    claimed. The test now re-enqueues the same event object, and the mutant is killed.
    This is R32 doing its job on a case of mine, not a tooling artefact.
 2. `an_arriving_tenant_starts_at_zero` **survived** and was **removed from the list**
-   with its reason recorded in the list and in `_flow`'s docstring, because the edit is
-   provably behaviour-preserving, not unobserved: an unserved flow's tag can only lie at
+   with its reason recorded in the list and in `_flow`'s docstring. **This paragraph is
+   WRONG and was CORRECTED in review round 1 (B1): the edit is not
+   behaviour-preserving** - the argument below misses the case where a flow sits at
+   exactly the virtual time with an older head sequence. The mutant is restored at
+   `e56223f` with a case that kills it. The refuted argument, kept because history is
+   not rewritten: an unserved flow's tag can only lie at
    or below the virtual time and `claim_candidate` clamps it back up before charging, and
    a flow created later can never hold a smaller arrival sequence than one created
    earlier (sequences are assigned at enqueue, and a flow's creation coincides with its
@@ -266,16 +275,19 @@ suites use the conformance builders' synthetic organizations and a fake engine.
 
 ## Changes
 
-Owned paths only; 7 files, +1504, −0 (`git diff --stat 8744418..HEAD`):
+Owned paths only. **CORRECTED (B5):** the block first quoted here was
+`git diff --stat 8744418..9a2ee77`, one commit short of the implementation SHA this
+report names. `git diff --stat 8744418..4e48eee` is:
 
 ```
  apps/infrx-api/infrx/scheduling/__init__.py        |   6 +
- apps/infrx-api/infrx/scheduling/memory.py          | 366 +++++++++++++
+ apps/infrx-api/infrx/scheduling/memory.py          | 366 +++++++++++++++
  apps/infrx-api/tests/q/mutants.py                  | 273 +++++++++++
  apps/infrx-api/tests/q/support.py                  |  59 +++
  apps/infrx-api/tests/q/test_fairness_properties.py | 256 ++++++++++
- apps/infrx-api/tests/q/test_memory_scheduler.py    | 466 ++++++++++++++++++
+ apps/infrx-api/tests/q/test_memory_scheduler.py    | 516 +++++++++++++++++++++
  apps/infrx-api/tests/q/test_mutants.py             |  78 ++++
+ 7 files changed, 1554 insertions(+)
 ```
 
 Nothing outside `apps/infrx-api/infrx/scheduling/`, `apps/infrx-api/tests/q/` and this
@@ -376,3 +388,174 @@ resolved above (one test strengthened, one mutant retired with a proof and a com
 - 2026-09-21: Authored from the commands above at implementation SHA `4e48eee`. Every
   count and summary line is quoted from captured output; no number in this report was
   typed by hand from memory. Nothing is claimed as integrated or live-verified.
+
+---
+
+# Review round 1 — coordinator review of `5a8a02a`: `fix_required`
+
+Appended, not rewritten: the body above is the round-0 report with the two false claims
+the review caught marked `CORRECTED` in place. This section is the disposition of B1–B5,
+the coordinator's three decisions and the nonblocking list, with the new results quoted
+from output.
+
+| Field | Value |
+|---|---|
+| Reviewed SHA | `5a8a02a` |
+| Round-1 implementation SHA | `e56223f` (`9fa728f` adapter, `e56223f` tests + mutants) |
+| Status | **implemented, not integrated** (unchanged); every finding addressed |
+| Suite | 50 tests in `tests/q` (was 34 + a 32-run mutation suite), 36 mutants, 36/36 killed |
+
+## Disposition
+
+| Item | Disposition | Where |
+|---|---|---|
+| **B1** the retired mutant is not equivalent | **Fixed.** The mutant is restored, the case the review supplied is a test, and `_flow`'s docstring now carries the counter-example instead of the false proof. Measured independently before believing it: over this suite's 300 seeded 80-step workloads the `tag = 0` variant changes the dispatch order on **109 seeds** (the review's own generator reports 154 of 300) | `test_q1_fair__a_newcomer_does_not_outrank_a_served_flow_with_an_older_head`, mutant `an_arriving_tenant_starts_at_zero` |
+| **B2** fairness state is not separate per kind | **Fixed.** `_virtual_time` is now one float **per dispatch kind**. `kind=None` compares flows by `(tag − virtual time of that flow's own kind, arrival sequence)`, which is order-identical to the tag inside a kind and comparable across kinds, and is a total order. Both review scenarios are cases with the numbers asserted exactly | `memory.py` `_select`/`claim_candidate`, `test_q1_kind__preparation_traffic_does_not_erase_the_weighted_share` (asserts `{ORG_A: 20, ORG_B: 80}` with and without preparation traffic), `test_q1_kind__preparation_traffic_does_not_erase_a_service_time_debt` (11:1 costs, share of service seconds within 0.05 of 0.50 both ways), mutant `virtual_time_is_shared_across_dispatch_kinds` |
+| **B3** (R21) vacuous rebuild dedupe | **Fixed.** The count assertion is replaced by a hand-out and a byte assertion: `rebuild((keep, keep, acked, keep)) == 2`, `stats()["bytes"] == len(compact_bytes(keep)) + len(compact_bytes(acked))`, and the drain hands each event exactly once | `test_q1_rebuild__a_duplicate_in_the_snapshot_is_indexed_and_charged_once`, mutants `rebuild_indexes_a_duplicate_twice`, `rebuild_does_not_charge_bytes` |
+| **B3** (R02/R03) vacuous tie-break | **Fixed.** The new case enqueues `ORG_A` first (its id also sorts first) and cancels its oldest candidate, so the flow created first, with the lexically smaller org, has the *newer* head: creation order and org id both point the wrong way | `test_q1_fair__ties_break_on_arrival_not_on_flow_creation_or_on_the_org_id`, mutants `tie_break_ignores_arrival_order`, `tie_break_uses_the_org_id`, `tie_break_prefers_the_newest_arrival` |
+| **B3** (R07) cost not injected | **Fixed.** An injected estimator of 7 s against a weight of 2 must move the tag by exactly 3.5, and the pool's virtual time by the dispatch's start | `test_q1_fair__one_dispatch_moves_the_tag_by_exactly_cost_over_weight`, mutant `the_tag_advance_ignores_the_estimator` |
+| **B4** failure ordering wedges a candidate | **Fixed.** The cost is computed and validated in `_service_cost` **before** any state moves, and a bad answer (`0`, negative, NaN, infinity, or a raising estimator) is a typed `internal_error`. The case asserts `stats()` and `tags()` are *identical* to before, that the candidate is still pending, that it is dispatched on the next claim (checked after +10,000 s), and that the estimator was called exactly twice | `test_q1_fair__a_bad_service_cost_is_a_typed_error_that_moves_nothing`, mutant `a_bad_service_cost_is_not_validated` |
+| **B5** evidence errors | **Fixed in place, marked `CORRECTED`.** The diffstat is now `git diff --stat 8744418..4e48eee` (1554 insertions, 516 lines in `test_memory_scheduler.py`); the baseline is **670** tests (`pytest -q --collect-only --ignore=tests/q` → `670 tests collected`), and 670 + 66 = the 736 command 1 reported; the B1 and B2 claims are corrected where they were made | §Changes, §Commands, §Results, §What was built above |
+| **Decision 1** gate the list | **Done.** `tests/q/test_mutants.py` runs a three-mutant subset plus the five runner self-tests by default and the whole list under `INFRX_MUTANTS=all`; default mutant subprocesses fell from 32 to 8. Makefile line requested below | `tests/q/test_mutants.py` |
+| **Decision 2** keep the shared runner import | **Kept**, read-only, with the note that Q switches to the parameterised runner when it is exported | `tests/q/mutants.py` |
+| **Decision 3** configuration names | **Accepted**, integration request 1 unchanged | below |
+
+## Nonblocking items
+
+| Item | Disposition |
+|---|---|
+| bytes == Σ compact bytes after a rebuild | Done, with the mutant the review predicted would survive (`rebuild_does_not_charge_bytes`) |
+| pin the visibility boundary (`>=` at exactly the TTL) | Done: `test_q1_kind__visibility_expires_at_the_ttl_not_after_it` claims at TTL − 1 µs (nothing) and at exactly the TTL (back), mutant `visibility_expires_after_the_ttl` |
+| no partial insert on a refused enqueue | Done: the caps case asserts `stats()` is byte-identical after the refusal and that no flow was created for the refused tenant |
+| stale acknowledge after a rebuild | Documented in `rebuild`'s docstring: it drops the rebuilt candidate until the next rebuild, benign under `JobStore` fencing, and Q3 should ack before it rebuilds |
+| float tags drift | Documented on `tags()` **and deliberately not fixed**: Valkey ZSET scores are IEEE doubles, so exact rationals here would create a divergence Q2 could not reproduce. The requirement on Q2 is the same operations in the same order |
+| acknowledged-id memory, global item cap | In §Limits below |
+
+## Commands and results (round 1, UTC 2026-09-21)
+
+Machine note, because it changes how the timings must be read: this host was running
+several tracks' suites in parallel during these runs (`uptime` reported
+`load average: 36.17, 28.80, 18.70` at 07:08:20Z). Wall times are therefore **not**
+comparable between round 0 and round 1; the gating effect is reported as the number of
+mutation subprocesses, which is load-independent, plus same-session timings.
+
+| # | Command | Exit | Output |
+|---|---|---|---|
+| 1 | `make api-test` | 0 | `720 passed, 2 warnings in 102.43s (0:01:42)` (an earlier run of the same command at this SHA: `720 passed, 2 warnings in 82.96s`) |
+| 2 | `uv run --frozen pytest -q tests/q` | 0 | `50 passed in 13.10s` |
+| 3 | `uv run --frozen pytest tests/q/test_memory_scheduler.py -k contract -q -s` | 0 | `scheduler conformance: 7 ran, 0 skipped []` then `9 passed, 28 deselected in 0.23s` |
+| 4 | `uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `Q mutants: 36 declared, 3 selected (default subset)` then `9 passed in 8.55s` |
+| 5 | `INFRX_MUTANTS=all uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `Q mutants: 36 declared, 36 selected (INFRX_MUTANTS=all)` then `42 passed in 43.46s` |
+| 6 | `uv run --frozen python tests/q/mutants.py` | 0 | `36/36 killed` |
+| 7 | `pytest -q --collect-only --ignore=tests/q` / `--collect-only tests/q` | 0 | `670 tests collected in 0.57s` / `50 tests collected in 0.17s` |
+| 8 | own differential measurement (B1/B2), 300 seeded workloads per variant | 0 | `seeds compared: 300` / `arrival-tag=0 differs on: 109 seeds` / `shared virtual time differs on: 239 seeds` |
+
+Test counts: 50 in `tests/q` = 9 contract (7 exported cases + the suite runner + the
+protocol shape) + 4 property + 28 behaviour/drill + 9 mutation (1 well-formedness +
+3 subset mutants + 5 runner self-tests). Under `INFRX_MUTANTS=all` the mutation file is
+42. Failures: none. Skips: none, in any command. `make console-*` and `make bench-test`
+remain not run (no console or bench file is touched); real-service tests remain Q2's.
+
+The full mutant list, quoted (command 6): every line is `killed`, and `1 failed, N
+deselected` means exactly the named case noticed the defect.
+
+```
+36/36 killed
+```
+
+## Artifacts (round 1)
+
+Raw output in the session scratch area (git-ignored, R15), sha256:
+
+| File | sha256 |
+|---|---|
+| `q1/r2-api-test.txt` | `68c8dba51f274f1b8e950787096e3771f24ca1b093e41d0a96ef2b34c69a6b51` |
+| `q1/r2-q-suite.txt` | `3d0e57d6be89e7ec2bedd8cd95373b297a5bb14b0795e244ae4fc77c728f30e3` |
+| `q1/r2-conformance.txt` | `b4ebe6538a1c2daf56dd8b6b6454bbc6f368014a048c4a812c037651141e2dc7` |
+| `q1/r2-mutants-subset.txt` | `6adfefcbe9863bfe7edb4851ec40b7631502a4f914ff68cda1397635076e4605` |
+| `q1/r2-mutants-all.txt` | `d391f6f77b38201727f0b591b5d5cfe03e12e3590a9841ced46d8dccaf6c1319` |
+| `q1/r2-mutants.txt` | `eefc4c1020b539894948da226714660806042ca48aea4a8707acf441b551d26d` |
+| `q1/differential.py` (the B1/B2 measurement of command 8) | `27e0621122140ccdb2159250a3c69f7ec4f9fdc5ec201013ac417d3fa1285de8` |
+
+The differential script is scratch, not a committed test: it applies each reviewed edit
+to a throwaway copy of the package and compares dispatch orders over the committed
+`workload(seed)` generator. The committed cases are what gate the behaviour; this only
+answered "how often does it matter" without taking the review's number on trust.
+
+## Requirement coverage added in round 1
+
+| Test id | Invariant |
+|---|---|
+| `test_q1_fair__a_newcomer_does_not_outrank_a_served_flow_with_an_older_head` | B1: `A A A B B B`, three dispatches, then a new tenant dispatches `A B A B U A B`; a newcomer starting at zero would produce `A B A U B A B` |
+| `test_q1_kind__preparation_traffic_does_not_erase_the_weighted_share` | B2: a tenant weighted 4 takes exactly 80 of 100 inference dispatches, with and without one preparation dispatch per inference dispatch |
+| `test_q1_kind__preparation_traffic_does_not_erase_a_service_time_debt` | B2: with 11 s against 1 s costs, the expensive tenant's share of service *seconds* stays within 0.05 of 0.50 under preparation traffic (0.92 with a shared virtual time) |
+| `test_q1_fair__ties_break_on_arrival_not_on_flow_creation_or_on_the_org_id` | B3: the tie-break is the candidate's arrival sequence; flow creation order and the org id both point elsewhere in this case |
+| `test_q1_fair__one_dispatch_moves_the_tag_by_exactly_cost_over_weight` | B3: 7 s of injected cost at weight 2 moves the tag by exactly 3.5, and the pool's virtual time to the dispatch's start |
+| `test_q1_fair__a_bad_service_cost_is_a_typed_error_that_moves_nothing` | B4: `0`/negative/NaN/infinity/raising estimator → typed `internal_error`, `stats()` and `tags()` unchanged, candidate still pending and dispatched on the next claim |
+| `test_q1_rebuild__a_duplicate_in_the_snapshot_is_indexed_and_charged_once` | B3/R21: a duplicate-bearing snapshot indexes once, charges the compact bytes of the distinct events once, and hands each out once |
+| `test_q1_kind__visibility_expires_at_the_ttl_not_after_it` | the `>=` boundary: nothing at TTL − 1 µs, back at exactly the TTL |
+| `test_q1_caps__a_full_index_refuses_with_a_typed_retryable_error` (extended) | a refused enqueue leaves `stats()` byte-identical and creates no flow |
+| `tests/q/test_mutants.py` (gated) | 36 mutants declared, 3 + 5 self-tests by default, all 36 under `INFRX_MUTANTS=all`; each anchor still must appear exactly once |
+
+## Limits (round 1 additions and changes)
+
+- **The per-kind virtual time is now part of the contract Q2 must reproduce**: one float
+  per dispatch kind, `kind=None` comparing `(tag − V[kind], seq)`. A Valkey port needs a
+  key per kind (`q:{kind}:v`) and the same comparison, or the two adapters will disagree
+  on an unfiltered claim. Named here because it is the first thing Q2's differential run
+  should assert.
+- **Float tags drift** (10^6 unit dispatches reach 111110.99999952753). Deliberately not
+  fixed: Valkey ZSET scores are doubles, so exact rationals in this adapter would create
+  a divergence Q2 could not reproduce. Q2 must perform the same operations in the same
+  order; the differential run is where that is proved.
+- **The ordering fix of B4 has no mutant of its own.** The validation it added does
+  (`a_bad_service_cost_is_not_validated`), and the case asserts the index is unchanged,
+  but "compute before you mutate" cannot be expressed as a single edit that dies on an
+  assertion or a typed error rather than on a `NameError`, which the list's own
+  convention excludes. Stated rather than implied.
+- **Round 0's three uncoverable invariants stand** (no cap on rebuild; claiming mutates
+  no durable state; determinism across identical input). The determinism property gained
+  nothing in round 1: it still cannot be killed by a deterministic single edit, and the
+  reviewer's `PYTHONHASHSEED` variation is the check that can.
+- **The acknowledged-id set costs about 119 bytes per id** (a 36-character UUID string in
+  a CPython set) until a `rebuild` clears it: ~1.2 MB per 10,000 acknowledged candidates.
+  Bounded in practice by Q3's reconciler, which owns pruning it against terminal jobs.
+- **The item cap is global, not per organization.** One tenant can fill 500 index slots
+  and make every other tenant's enqueue `capacity_exhausted`. Fairness applies to
+  *dispatch*, not to *admission into the index*, and admission capacity belongs to
+  PostgreSQL (`MAX_ACTIVE_JOBS_PER_ORG`), which is why this is a note and not a fix: a
+  per-org index cap would need a contract decision about what a refused index write means
+  for a job PostgreSQL has already admitted. Owner: Q3 with the coordinator.
+- **Default `make api-test` no longer runs the whole Q mutation list** (3 of 36). A
+  regression in an unselected mutant is caught by `make api-mutants` (once the Makefile
+  line below lands), by `INFRX_MUTANTS=all`, or not at all until then — the honest cost
+  of decision 1.
+
+## Integration requests (round 1)
+
+1. **Unchanged, accepted:** `max_index_items: int = 500` / `max_index_bytes: int =
+   268_435_456` in `PilotSettings` (`MAX_INDEX_ITEMS`, `MAX_INDEX_BYTES`), plus the `08`
+   §5 rows.
+2. **Unchanged:** the composition-root construction when a scheduler is first needed
+   (`MemoryScheduler(lambda: datetime.now(timezone.utc), limits=settings)` while
+   `VALKEY_URL` is unset). No router.
+3. **New, per decision 1:** add `tests/q/test_mutants.py` to the `api-mutants` target so
+   the gated list runs there, e.g.
+   `cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/q/test_mutants.py`.
+   Q has already gated its list behind the same `INFRX_MUTANTS` variable, so the target
+   picks up all 36 mutants with no further change on Q's side.
+4. **Noted, no action for Q1:** when the coordinator exports a parameterised mutation
+   runner from `tests/contracts`, Q switches `tests/q/mutants.py` to it and deletes its
+   own `run_mutant` (decision 2).
+
+## Verification log
+
+- 2026-09-21: Authored from the commands above at implementation SHA `4e48eee`. Every
+  count and summary line is quoted from captured output; no number in this report was
+  typed by hand from memory. Nothing is claimed as integrated or live-verified.
+- 2026-09-21: Review round 1 appended at `e56223f`. B1–B5 fixed, each with a case that
+  fails without its fix and a declared mutant; the two false claims of round 0 are marked
+  `CORRECTED` in place rather than removed. B1 and B2 were re-measured here (109 and 239
+  of 300 seeded workloads change order) rather than restated from the review. Mutation
+  list gated per decision 1; 36/36 killed. Timings carry a load caveat (`load average:
+  36.17`) and the gating effect is stated as subprocess counts instead.
