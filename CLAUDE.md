@@ -112,3 +112,4 @@ and ships no MTP weights.
 
 - 2026-09-20: Updated implementation entry point, worktree rules and existing-test guidance; application behavior unchanged.
 - 2026-09-21: Commands updated after F1/F2 integration (pinned environment, make targets, recursive console discovery, contracts location); application behavior unchanged.
+- 2026-09-21: Wave 2 merged on `claude/infrx-impl`; entry point for the next session is `research/plan/evidence/coordinator/2026-09-21-wave2-handoff.md`; `make check` now runs eight Python mutant lists (D's needs Docker and skips visibly) and four console lists; application behavior unchanged on `main`.

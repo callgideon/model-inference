@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "baseline_commit": "1db98e9",
-  "status": "implementation-in-progress",
+  "status": "wave-2 merged on claude/infrx-impl (2026-09-21); status vocabulary: planned | in-progress | implemented (merged, green against fakes or a local real service, integration dependencies not all integrated) | integrated (integration dependencies integrated and the real-service suite passed)",
   "dependency_semantics": {
     "start_dependencies": "Must be integrated before coding this task",
     "integration_dependencies": "Additional tasks required before marking this task integrated; fakes permitted during development"
@@ -187,7 +187,9 @@
       ],
       "track": "D",
       "handoff": "handoffs/D-durable-state.md",
-      "status": "in-progress"
+      "status": "integrated",
+      "merged_commit": "7a0d86d",
+      "integration_note": "migrations 0003-0005 + tests/d 103 passed with 82 mutants on postgres 16 + shim AND on the real supabase/postgres 17.6 image, no shim; not applied to any Supabase project"
     },
     {
       "id": "D2",
@@ -280,7 +282,9 @@
       ],
       "track": "M",
       "handoff": "handoffs/M-media.md",
-      "status": "in-progress"
+      "status": "implemented",
+      "merged_commit": "4c7a29f",
+      "integration_note": "materialization against an in-memory object store; attach at admission needs D2/G2; stage accepts never-materialized refs until F2.2"
     },
     {
       "id": "M2",
@@ -330,7 +334,9 @@
       ],
       "track": "Q",
       "handoff": "handoffs/Q-scheduling.md",
-      "status": "in-progress"
+      "status": "implemented",
+      "merged_commit": "d6f26e5",
+      "integration_note": "in-memory adapter (the deliverable); not constructed by the composition root; Q2 reproduces the 14-point list on Valkey"
     },
     {
       "id": "Q2",
@@ -378,7 +384,9 @@
       ],
       "track": "W",
       "handoff": "handoffs/W-worker.md",
-      "status": "in-progress"
+      "status": "implemented",
+      "merged_commit": "9a2eec2",
+      "integration_note": "fakes only; 'content' alias of 'raw' stays until F2.2; engine must not run with --reasoning-parser or continuous_usage_stats"
     },
     {
       "id": "W2",
@@ -433,7 +441,9 @@
       ],
       "track": "G",
       "handoff": "handoffs/G-gateway.md",
-      "status": "in-progress"
+      "status": "implemented",
+      "merged_commit": "49eafd2",
+      "integration_note": "NOT mounted: ROUTERS byte-identical; cutover at the G2/D2 integration together with I2's fail-closed installer; waits on D2"
     },
     {
       "id": "G2",
@@ -525,7 +535,9 @@
       ],
       "track": "T",
       "handoff": "handoffs/T-traces.md",
-      "status": "in-progress"
+      "status": "implemented",
+      "merged_commit": "c13fb1a",
+      "integration_note": "real spool on local disk, conformance 17/17 against it; no gateway builds the sink; SEGMENT_VERSION 2 (08 \u00a75 update pending)"
     },
     {
       "id": "T2",
@@ -574,7 +586,9 @@
       ],
       "track": "J",
       "handoff": "handoffs/J-judge.md",
-      "status": "in-progress"
+      "status": "implemented",
+      "merged_commit": "b1b84a1",
+      "integration_note": "shared fake only; live submission disabled until an approved per-MTok price row with effective_at exists"
     },
     {
       "id": "J2",
@@ -628,7 +642,9 @@
       ],
       "track": "C",
       "handoff": "handoffs/C-console-services.md",
-      "status": "in-progress"
+      "status": "implemented",
+      "merged_commit": "010b6ea",
+      "integration_note": "services against the in-memory query port; D1 is integrated, but C1 reads a real database only through C2's supabase-js QueryPort (Layer-2 tenant test with operator and service-role sessions) \u2014 waits on C2"
     },
     {
       "id": "C2",
@@ -683,7 +699,9 @@
       ],
       "track": "U",
       "handoff": "handoffs/U-administration-ui.md",
-      "status": "in-progress"
+      "status": "implemented",
+      "merged_commit": "184c5fb",
+      "integration_note": "fixture-backed UI; C1 provider swap and D5 pending; waits on C1, D5"
     },
     {
       "id": "U2",
@@ -736,7 +754,9 @@
       ],
       "track": "V",
       "handoff": "handoffs/V-trace-ui.md",
-      "status": "in-progress"
+      "status": "implemented",
+      "merged_commit": "9617a2e",
+      "integration_note": "fixture-backed UI; sidebar entry and C1/T2 wiring pending; waits on C1, T2"
     },
     {
       "id": "V2",
@@ -874,7 +894,9 @@
       ],
       "track": "E",
       "handoff": "handoffs/E-verification.md",
-      "status": "in-progress"
+      "status": "implemented",
+      "merged_commit": "cb04382",
+      "integration_note": "real compose stack (Supabase PG 17.6, Valkey, ClickHouse, MinIO) with an ownership label; RLS matrix 39 cases; engine conformance 8/8 over a socket; sound mutation runner; E3 inverts E2-RLS-01..04/44 when D1's migrations enter the harness"
     },
     {
       "id": "E3",

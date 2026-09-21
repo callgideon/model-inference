@@ -1,6 +1,6 @@
 # Implementation handoffs — free pilot and traces
 
-Status: **implementation in progress** — live status is the [pipeline board](evidence/coordinator/STATUS.md) and `tasks.json`; binding contract rulings are in [the encoding](08-contracts-v1-encoding.md) §10. Prepared 2026-09-20 for independent Claude Opus 5 sessions. This package supersedes conflicting implementation instructions in the original production API and traces research. Historical measurements remain historical measurements; this plan does not certify the live system.
+Status: **wave 2 merged on `claude/infrx-impl` (2026-09-21); wave 3 not started** — start at [the wave-2 handoff](evidence/coordinator/2026-09-21-wave2-handoff.md); live status is the [pipeline board](evidence/coordinator/STATUS.md) and `tasks.json`; binding contract rulings are in [the encoding](08-contracts-v1-encoding.md) §10. Prepared 2026-09-20 for independent Claude Opus 5 sessions. This package supersedes conflicting implementation instructions in the original production API and traces research. Historical measurements remain historical measurements; this plan does not certify the live system.
 
 ## Start here
 
@@ -41,3 +41,4 @@ The [contracts v1 encoding](08-contracts-v1-encoding.md) fixes the layout, vocab
 - 2026-09-20: Derived from repository review and explicit user decisions. Created documentation-only implementation package; planned tests and live gates are not reported as passed.
 - 2026-09-20: Implementation coordination started ([session 01](evidence/coordinator/2026-09-20-session-01.md)); added the contracts v1 encoding refinement for F2. No task is marked integrated by this entry.
 - 2026-09-21: Status line updated; F1, F2, E1 and I1 are integrated on `claude/infrx-impl` (gate G0), nothing is deployed or live-verified.
+- 2026-09-21: Wave 2 complete — all eleven module tasks (D1, M1, Q1, W1, G1, T1, J1, C1, U1, V1, E2) reviewed and merged on `claude/infrx-impl`; stage review S2 `pass`; D1 `integrated` (real PostgreSQL, both images), the other ten `implemented` behind fakes or a local real service. Nothing deployed, mounted or applied to a Supabase project. Next: F2.2 then wave 3 per the handoff.

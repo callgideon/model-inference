@@ -1,5 +1,7 @@
 # Handoff — state, plans and objectives of the platform on 2026-09-20
 
+> **2026-09-21 update:** implementation has started and wave 2 is merged on `claude/infrx-impl`. The current entry point is [research/plan/evidence/coordinator/2026-09-21-wave2-handoff.md](research/plan/evidence/coordinator/2026-09-21-wave2-handoff.md). The live-state and access sections below are historical (2026-09-20) and were not re-verified; the fail-open installer risk (`O-FAILOPEN`, `infra/README.md`) is recorded and not yet acted on.
+
 **Start implementation with [research/plan/README.md](research/plan/README.md) and the [coordinator handoff](research/plan/COORDINATOR.md).** The detailed module briefs, dependency manifest, contracts and verification gates are now ready for Claude Opus 5 sessions. Implementation has not started in this documentation update.
 
 Read `CLAUDE.md` first, then the new package and your assigned module. The package supersedes conflicting scope, architecture, sequencing and acceptance instructions in this original handoff and the older research specs. Historical measurements/access inventory below are retained for context; they are not newly verified live state. Old branch/worktree claims must be checked, not assumed.

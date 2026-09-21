@@ -915,3 +915,7 @@ not run; real-service evidence remains Q2's.
   its mutant. The Q2 reproduction list is replaced by the reviewer's corrected version and
   the level-1 service-time trade-off is recorded under Limits. Counts quoted from the
   commands above.
+
+## Coordinator correction (2026-09-21, stage review S2)
+
+The "Limits, round 1" section above still states the round-2 rule for an unfiltered claim (`kind=None` comparing `(tag − V[kind], seq)`). That rule was **withdrawn** by ruling R60 and replaced by the two-level selection described in the round-3 sections and in §"What Q2 must reproduce"; the earlier text is kept as history and is CORRECTED by this note.

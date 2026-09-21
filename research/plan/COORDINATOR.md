@@ -2,6 +2,8 @@
 
 ## Current State Summary
 
+**Updated 2026-09-21 — read [the wave-2 handoff](evidence/coordinator/2026-09-21-wave2-handoff.md) first; it supersedes the next-steps list below.** Foundations (F1, F2, F2.1, E1, I1) and all eleven wave-2 module tasks are merged on `claude/infrx-impl` after adversarial review; stage reviews S1 and S2 passed; the manifest marks D1 `integrated` and the rest `implemented`. Nothing is deployed. The paragraph that follows is the original 2026-09-20 state, kept for history.
+
 The user requested detailed implementation handoffs, documentation updates, commit and push; application implementation is delegated to later Claude Opus 5 sessions. This package contains foundation plus twelve module tracks and a machine-readable task dependency graph. All implementation tasks remain planned. Repository analysis baseline is commit `1db98e9`; use the current documentation commit as the initial implementation base after checking for newer changes.
 
 ## Important Context
@@ -11,6 +13,8 @@ The first release is a free single-GPU pilot using promotional holds/settlement,
 The complete implementation authority is [scope](00-decisions-and-scope.md), [contracts](01-contracts.md), [durable protocols](02-durable-protocols.md), then the assigned module brief. Historical research remains supporting context. Preserve research verification history; append new evidence. No secret values belong in handoffs, logs or commits.
 
 ## Immediate Next Steps
+
+**Superseded on 2026-09-21** by §5 of the wave-2 handoff (F2.2 → D2 → G2 + I2 cutover → M2/M3 → W2 → T2/T3 → Q2 → C2 → E3 → J2 → I2/I3 → E4). The original list follows for history.
 
 1. Read [execution rules](03-execution-protocol.md), [test gates](04-verification.md), [risks](05-risk-register.md) and [manifest](tasks.json).
 2. Record a coordinator integration SHA and assign F1, E1 and I1 to distinct isolated worktrees; they are the only immediately independent starting tasks. I1 is read-only inventory; E1 is corpus/benchmark tooling, not a production load test.
