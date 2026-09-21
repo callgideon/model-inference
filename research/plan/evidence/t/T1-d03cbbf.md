@@ -6,7 +6,7 @@
 | Status | **implemented** — every result below is against the real `SpoolTraceSink` in a local process. Not integrated: no track router is mounted, no ClickHouse/S3 exists yet (T2), and no gateway builds the sink (G1). |
 | Owner/session | Claude Opus 5 (1M context), session `01XbryjFN2xhdKwhuUQvbyFn` |
 | Base SHA | `8744418` |
-| Implementation SHA | `d03cbbf` (`b668ed2` sink + tests, `d03cbbf` mutation list) |
+| Implementation SHA | round 1 `d03cbbf` (`b668ed2` sink + tests, `d03cbbf` mutation list); **round 2 `f55c401`** (review round 1 addressed — see the round-2 section; this report keeps its round-1 filename, with the two false sentences corrected in place) |
 | Integrated SHA | pending (coordinator) |
 | Branch / worktree | `codex/t1-trace-capture` in `.claude/worktrees/codex-t1` |
 
@@ -28,11 +28,18 @@ that the exported suite **and** the R42 sequence lattice run green against the r
   lazily, named `infrx-trace-spool`). `add`/`offer`/`finish`/`abandon`/`reap` run on the
   event loop, touch counters only, never await and never touch disk. No lock is held
   across a filesystem call, which is what makes the slow-disk drill pass rather than
-  deadlock;
+  deadlock — **correction (round 2): "never touch disk" was true of `add`/`offer` but not
+  of the sink as a whole.** `flush` re-checked the disk limits with a `statvfs` on the loop
+  thread while paused, and `ack` was synchronous, so its `unlink` ran on the caller's
+  thread: 2,006 ms and 2,010 ms of event-loop stall respectively, measured by the reviewer.
+  Round 2 moves every syscall after construction onto the writer thread and pins it with a
+  thread-name oracle;
 - **segments, format version 1** (08 §5 "spool segment 1"): header `INFRXTRC` + uint16
-  version; per record `uint32 envelope_bytes | uint32 content_bytes | uint32 crc32 |
-  uint64 index` then the canonical envelope JSON then the raw content bytes. Rotation by
-  size (`segment_max_bytes`, default 16 MiB), and a rotation fsyncs before it seals;
+  version; per record `uint32 envelope_bytes | uint32 content_bytes | uint32 crc32` then
+  the canonical envelope JSON then the raw content bytes, with the checksum covering the
+  two length fields as well (the stored `uint64 index` of round 1 is gone; see the round-2
+  section). Rotation by size (`segment_max_bytes`, default 16 MiB), and a rotation fsyncs
+  before it seals;
 - **batched fsync at most every `TRACE_FSYNC_INTERVAL_S`** (2 s on the injected clock).
   `stats()` reports `in_memory` / `appended` / `fsynced` separately; durability is claimed
   only after fsync;
@@ -48,7 +55,14 @@ that the exported suite **and** the R42 sequence lattice run green against the r
 - **recovery**: `recover(dir)` / `scan_segment(name, bytes)` replay only checksum-valid
   frames, tolerate a torn tail, count `torn` / `poison` / `unreadable` separately, and are
   pure reads — so a double replay yields the same records with the same stable ids
-  (`(segment, index)`; segment names are never reused, including across a restart);
+  (`(segment, index)`; segment names are never reused, including across a restart)
+  — **correction (round 2): the clause after the semicolon was false.** `_next_index` came
+  from the files present, so once the shipper had acked everything and the process
+  restarted, the next segment was named `trace-000000.seg` again and `(segment, 0)` named a
+  different record; the frame also *stored* its index outside the checksum, where one
+  flipped bit produced two records under one id. Both are fixed in the round-2 section
+  below (boot id in the name, position derived from the verified frames, lengths inside the
+  checksum);
 - **drop reasons** distinguish `memory_budget`, `metadata_budget`, `queue_full`,
   `disk_budget`, `disk_error`, `shutdown`, `malformed` and `abandoned`. `close()` is the
   orderly counterpart of `crash()` and counts what it dropped as `shutdown`;
@@ -59,8 +73,9 @@ that the exported suite **and** the R42 sequence lattice run green against the r
 
 ## Requirement coverage
 
-`apps/infrx-api/tests/t/test_trace_spool.py` (32 tests with the mutation wrapper). Each
-row is the exact invariant the test id claims.
+`apps/infrx-api/tests/t/test_trace_spool.py` (42 tests after round 2; 49 in `tests/t`
+with the mutation wrapper). Each row is the exact invariant the test id claims; the cases
+round 2 added are listed in its own table rather than repeated here.
 
 | Test ID | Oracle | Invariant demonstrated |
 |---|---|---|
@@ -318,11 +333,15 @@ shipped it.
 - **`paused` is a plain bool** written by the writer thread and read by the request path.
   On CPython that is atomic enough for a pause flag, and a stale read costs one
   misrouted record, not a bound violation. It is not a lock.
-- **Single-producer assumption.** `add` is called from the event loop. Two OS threads
-  calling `add` on the same sink could overshoot the shared budget by one part each,
-  because the check and the increment are not one atomic step in the inherited
-  accounting. Documented in the module; the fix, if a threaded producer ever appears, is
-  a lock inside the accounting, which is the coordinator's file.
+- **One event loop and one writer, as a requirement rather than an assumption**
+  (rewritten in round 2; the earlier wording called it a single-producer *assumption* and
+  understated it). The accounting's check-and-charge is not one atomic step, so `add` from
+  several OS threads does not merely overshoot by one part: the reviewer drove eight
+  threads for eight seconds and finished with **133,598 bytes still charged while every
+  capture was closed**, i.e. lost updates in both directions. The sink is documented in its
+  module docstring as requiring one loop and one writer, and G1 uses it from the request
+  path of a single-loop process. A threaded producer would need a lock inside the shared
+  accounting, which is the coordinator's file.
 - **Descriptor hygiene.** A sink dropped without `close()` keeps its active segment's
   descriptor open, because a file descriptor is an integer no garbage collection closes.
   With one sink per process that is a non-issue, and `close()`/`crash()`/`ack` all close
@@ -376,6 +395,22 @@ T2 owns `infra/clickhouse/` and the DDL; nothing here writes SQL.
    shipping backlog = `spool_unacked_records`, capture halted = `spool_paused`). T3 owns
    the metric names; this is only a note that the numbers exist.
 
+5. **F2 / `contracts/conformance`, from round 2:** may the sink charge the metadata reserve
+   the **serialized** length of a row instead of the caller-declared `envelope.metadata_bytes`?
+   The declared number is what the frozen case
+   `trace_bounds__metadata_exhaustion_drops_with_counters` asserts against (64 declared
+   against a 64-byte reserve, accepted, while the real payload is ~400 bytes), so charging
+   the truth would fail the exported suite. Round 1 of review is right that the declared
+   number is a client-visible figure a caller can under-report; the fix belongs in the
+   contract, not in T1.
+6. **F2 / harness hooks:** `TraceSink.crash()` exists only for the `crash` harness hook and
+   truncates unsynced bytes. It is a public method on a production class that destroys data
+   if anybody calls it by accident. A hook name that says so (`simulate_host_loss`, mapped to
+   `extra["crash"]`) would be a one-line contract note; T1 kept `crash` so round 1's
+   reproductions keep working.
+7. **F2, when the accounting base is extracted:** make `clock` required rather than
+   defaulting to `FakeClock()`. A real sink silently using a fake clock would report a
+   durability interval that never elapses; the default is inherited, not chosen.
 **Unresolved findings:** none open against another track. Two decisions made here that a
 reviewer should see rather than discover: the capture keeps its content parts (the shared
 accounting charges bytes but keeps none, and T2 needs the bytes), and the envelope is
@@ -384,9 +419,191 @@ serialize is a counted `malformed` drop instead of a failed batch the sink had a
 reported accepted. The second one is what the lattice found: it feeds envelopes assembled
 past the record validator, whose timestamps are already serialized strings.
 
+## Round 2 — review round 1 (`fix_required` at `794b95b`) addressed
+
+Implementation SHA for this round: `f55c401`. Five commits on `codex/t1-trace-capture`.
+The review's verdict on round 1 was that the accounting held and the durability half did
+not; that is accurate, and every reproduction it shipped is quoted below re-run.
+
+### Each blocking finding, its fix and the case that fails without it
+
+| # | Finding | Commit | Case that kills it |
+|---|---|---|---|
+| B1 | `flush`'s paused re-check (`statvfs`) and `ack`'s `unlink` ran on the event loop: 2,006 ms and 2,010 ms of loop stall | `7b51558` | `test_no_filesystem_call_ever_happens_on_the_event_loop` — the oracle is the *thread name* of every syscall, so it cannot flake and cannot be satisfied by being fast |
+| B2 | a failed header write leaked the descriptor and left an orphan file, once per flush | `7b51558` | `test_a_failed_segment_open_leaks_no_descriptor_and_no_file` |
+| B3 | a cancelled flush or a non-`OSError` in the writer lost accepted records and leaked the budget for ever | `7b51558` | `test_a_cancelled_flush_still_settles_its_batch`, `test_a_writer_error_that_is_not_an_oserror_still_settles_the_batch`, `test_only_one_flush_is_ever_in_flight` |
+| B4 | `(segment, index)` was not stable: names were reused after a full ack plus restart, and the index sat outside the checksum | `7b51558` | `test_a_record_id_is_never_reused_after_an_ack_and_a_restart`, `test_a_flipped_bit_in_a_frame_header_is_the_tail_never_a_wrong_identity`, `test_a_frame_whose_lengths_were_swapped_is_the_tail` |
+| B5 | a capture already counted could be counted again by a writer-side drop | `7b51558`, `3e42046` | `test_one_capture_counts_one_loss_even_when_the_writer_refuses_it` |
+| B6 | eight mutants survived on claimed invariants | `e055579`, `510483c`, `f55c401` | `58/58 killed` (below); the new cases are listed per mutant in `tests/t/mutants.py` |
+
+Writing B5's case found **a second hole the review had not reached**: the fsync path
+counted losses by record *count*, so an fsync error unpromising a record whose capture had
+already counted a loss counted a second one. The flag now travels with the record into the
+segment (`_Segment.unsynced_counted`), because an fsync spans batches. Fixed in `3e42046`
+and covered by the same case (all three writer refusals).
+
+### Commands (exit status, output tail, 2026-09-21T17:0x–17:4xZ)
+
+`make api-test` — exit 0:
+
+```
+718 passed, 2 warnings in 101.14s (0:01:41)
+```
+
+(670 baseline + 48; `pytest -q tests/t --collect-only` → `49 tests collected`, one of which
+is the mutant-list well-formedness test that the baseline count does not include.)
+
+Focused suite, `uv run --frozen pytest -q tests/t/test_trace_spool.py -s` — exit 0:
+
+```
+tracesink conformance against SpoolTraceSink: 17/17 cases ran, 0 skipped
+spool sink sequence properties: 17724 sequences, 51828 operations (exhaustive); len 1: 14, len 2: 196, len 3: 2744; guarded invariants reached: closed_capture_holds_nothing 13344, closed_capture_stores_nothing 4044, crash_losses_are_bounded 3450, lost_content_is_counted 287, lost_content_is_marked 287, minimal_stores_no_content 944, quiet_modes_charge_nothing 11816, rows_belong_to_their_capture 1701, rows_carry_the_opened_mode 1701 in 11.4s
+truncation sweep: 3315 offsets, every prefix replayed exactly
+frame identity: 3510 single-bit flips, no wrong or duplicate id
+synthetic concurrent capture load (microbenchmark, no GPU, no network): 1100 requests, 550 concurrent, 8x64000B each, in 3.7s (293 req/s, 150 MB/s offered)
+42 passed in 27.15s
+```
+
+Mutants, `uv run --frozen python -m tests.t.mutants` — exit 0, 58 mutants (26 in round 1):
+
+```
+58/58 killed
+```
+
+Getting there took three rounds and each failure was a case that proved less than it
+claimed, so they are recorded rather than quietly fixed:
+
+- `the_checksum_ignores_the_lengths` survived against the bit-flip sweep, because a
+  single-bit change to a length field shifts the payload slice and fails the checksum
+  anyway. The corruption the length-checksum actually protects against moves the
+  envelope/content boundary *without* changing the total, so
+  `test_a_frame_whose_lengths_were_swapped_is_the_tail` was added and the mutant retargeted.
+- `rotation_ignores_the_incoming_record` survived because the rotation case used records
+  larger than the segment bound, so every one took the "too big to fit anywhere" path and
+  the threshold was never exercised. The case now mixes one oversized record with seven that
+  fit and asserts the tight bound (`bytes <= max or records == 1`) plus "no empty segment".
+- `an_oversize_record_rotates_for_ever` could not be killed at all, and the reason was that
+  the branch it edited (`or active.records == 0`) was **unreachable**: a freshly opened
+  segment is returned straight to the record that opened it, so the active segment is never
+  empty at that check. The branch is deleted and the mutant with it (`510483c`) — R40
+  forbids both keeping an unkillable claim and weakening a case to kill it.
+- `a_closed_sink_starts_a_writer` survived because `flush` returns before reaching the
+  executor; `ack` now refuses a closed sink before any bookkeeping moves, and the case
+  drives `rotate`/`ack`/`read_segment`.
+
+### The reviewer's own reproductions, re-run at `f55c401`
+
+`a1_loop.py` (event-loop watchdog, 10 ms ticks, each syscall blocked 2 s in turn):
+
+```
+block=['write'] paused_case=False: worst add+finish 3.1 ms, max loop gap 21 ms
+block=['fsync'] paused_case=False: worst add+finish 3.8 ms, max loop gap 17 ms
+block=['open'] paused_case=False: worst add+finish 3.2 ms, max loop gap 23 ms
+block=['free'] paused_case=False: worst add+finish 3.2 ms, max loop gap 25 ms
+   flush-while-paused took 2.0
+block=['free'] paused_case=True: worst add+finish 6.1 ms, max loop gap 24 ms
+sync ack() called on the loop with slow unlink: max loop gap 15 ms
+```
+
+The paused flush still *takes* 2.0 s — its writer is inside a 2-second `statvfs`, which is
+the point — while the loop gap is 24 ms instead of 2,006 ms. (`ack` is a coroutine now, so
+that line of the script no longer awaits anything; the awaited path is covered by
+`test_no_filesystem_call_ever_happens_on_the_event_loop`.)
+
+`a2_err.py` (300 flushes against a disk that fails every write, then EMFILE on open, then a
+`RuntimeError` from the writer, then a cancelled flush):
+
+```
+[ENOSPC every write (incl. header)] 300 flushes: fds 8->8, files on disk 1, tracked segments 0, spool_bytes 0, losses {'disk_error': 300}, dropped 300, accepted 300, in_mem_content 0, in_mem_md 0, flush raised=None
+[EIO every write] 300 flushes: fds 8->8, files on disk 1, tracked segments 0, spool_bytes 0, losses {'disk_error': 300}, dropped 300, accepted 300, in_mem_content 0, in_mem_md 0, flush raised=None
+[EMFILE on open] losses {'disk_error': 50} dropped 50 content 0 paused False fds 8 8
+flush returned
+   stats after: {'accepted': 5, 'dropped': 5, 'in_memory': 0, 'in_memory_content_bytes': 0, 'in_memory_metadata_bytes': 0, 'appended': 0, 'loss_reasons': {'disk_error': 5}}
+[cancelled flush] wait_for timed out (flush cancelled)
+   stats after the writer finished and two more flushes: {'accepted': 5, 'dropped': 0, 'in_memory': 0, 'in_memory_content_bytes': 0, 'in_memory_metadata_bytes': 0, 'appended': 5, 'fsynced': 5, 'loss_reasons': {}, 'spool_unacked_records': 5}
+   on disk: 5 records over 1 segments; torn tails 0, poison 0, unreadable 0, unread 0 B
+```
+
+Round 1 read `fds 7->307`, 300 orphan files, a flush that raised with five records gone and
+an empty loss table, and 5,000,000 bytes charged for ever after a cancellation. The one
+remaining file is `.writer.lock` (verified by listing the directory), not a segment.
+
+`a3_mem.py` (a stalled writer, then 300,000 metadata-only records with fire-and-forget
+flushes):
+
+```
+md=256 content=1000000 n=2000 fire_and_forget=False: rss 36->290 MiB, peak charged 260,000,000 (budget 260,046,848), in_memory 1999, in-flight behind writer 1, md bytes 512,000, results {(True, 'accepted_in_memory'): 260, (False, 'accepted_in_memory'): 1740}, losses {'memory_budget': 1740}
+md=0 content=0 n=300000 fire_and_forget=True: rss 56->60 MiB, peak charged 0 (budget 260,046,848), in_memory 10000, in-flight behind writer 1, md bytes 0, results {(False, 'accepted_in_memory'): 10001, (False, 'dropped'): 289999}, losses {'queue_full': 289999}
+```
+
+Round 1 had 299,901 records in flight and RSS 55 → 631 MiB on the last line. One flush in
+flight puts the queue ceiling back in charge: 10,000 in memory, one batch behind the writer,
+and the rest honestly `queue_full`.
+
+`a6_r42.py` (R42 across writer failures, repeated fsync rounds, an idle flush, the index
+flip):
+
+```
+ONE capture, losses: {'memory_budget': 1} sum = 1 dropped 1 accepted 1
+fsync EIO: losses {'memory_budget': 1} dropped 0 appended 1 fsynced 0 | still shippable from disk: 1 records over 1 segments; torn tails 0, poison 0, unreadable 0, unread 0 B
+3 fsync rounds on one segment: appended 3 fsynced 3
+   tail appended 4 fsynced 3
+   idle flush after interval: fsynced 4
+one bit flipped in a frame's index field: 1 records over 1 segments; torn tails 1, poison 0, unreadable 0, unread 575 B ids [('trace-18d764dc14d87c86ebf0-000000.seg', 0)] requests ['00000000']
+```
+
+Round 1: `{'memory_budget': 1, 'disk_error': 1}` for one capture on both the write and fsync
+paths, `appended 3 fsynced 6` over three rounds, no fsync on an idle tick, and two records
+under one id after the bit flip.
+
+`a5_threads.py` (eight OS threads calling `add`) still reports drift — `peak observed
+1,160,508, overshoot 0 B; residual charge with all captures closed: 1,036,880` — which is
+why round 2 states one loop and one writer as a **requirement** in the module docstring and
+in Limits, rather than calling it an assumption.
+
+### Nonblocking items taken in this pass
+
+`Scan.torn_at` / `Scan.unread_bytes` (T2 can now tell a benign tail from mid-segment
+corruption, case: `test_a_torn_tail_reports_where_it_stopped`); directory `fsync` after a
+segment is created and after an ack; `flock` on the spool directory
+(`test_two_sinks_cannot_share_one_spool_directory`); a closed state
+(`test_a_closed_sink_refuses_and_starts_no_second_writer`); one flush in flight; partial
+write bytes re-measured into `spool_bytes`; `SegmentView.adopted` so T2 scans a segment
+whose counts this process cannot know; content parts handed to the writer **unjoined**, so
+`finish` no longer memcpys up to 96 MiB on the loop (peak RSS in the microbenchmark
+322 → 301 MiB); and the reviewer's truncation sweep kept as a case.
+
+### Still open, deliberately
+
+- **The metadata reserve charges the declared `envelope.metadata_bytes`, not the serialized
+  length.** Charging the real length is what the review suggested, and it cannot be done
+  here: the exported conformance case `trace_bounds__metadata_exhaustion_drops_with_counters`
+  offers a 64-byte-declared envelope against a 64-byte reserve and requires it to be
+  *accepted*, while its real payload is ~400 bytes. Changing the charge would fail the
+  frozen suite, so it is integration request 5 (a contract question for F2) rather than a
+  local edit. The unbounded growth it was raised for is fixed by the flush guard.
+- `crash()` is still a public truncating method on the production class, used only by the
+  harness hook. Moving it into the test would mean the test owning segment internals; a
+  rename to something unmistakable is integration request 6.
+- The fsync-error path counts `disk_error` without incrementing `dropped`, because the
+  record was accepted and appended rather than refused; it may still be readable on disk.
+- `recover()` returns a **superset** of the promise: it replays every checksum-valid frame,
+  including appended-but-unsynced ones the host did not lose. The promise is that fsynced
+  records are *always* there, not that nothing else is.
+- Segment ordering across a restart follows the boot id, which is time-based: a host whose
+  wall clock jumps backwards between boots would sort a newer segment before an older one.
+  T2 dedupes by stable id and does not depend on global order.
+- `clock or FakeClock()` is inherited from the shared accounting; a real sink should be
+  handed the clock it reads (integration request 7).
+
 ## Verification log
 
 - 2026-09-21: Authored from the runs quoted above on the pinned local environment. Every
   count, timing and byte figure is copied from command output; nothing here is a claim
   about ClickHouse, S3, a gateway process or a real host crash, none of which was
   exercised.
+- 2026-09-21 (round 2): Review round 1's six blocking findings fixed at `f55c401`; two false
+  sentences corrected in place above and the single-producer note rewritten as a
+  requirement; mutants 26 → 58, all killed; one further R42 hole found while writing B5's
+  case and fixed. Three cases were strengthened and one unreachable branch deleted because
+  their mutants could not otherwise die. Nothing new is claimed about integration.
