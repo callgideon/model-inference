@@ -26,34 +26,32 @@ from ...contracts import errors, wire
 log = logging.getLogger("infrx.gateway")
 
 
-async def read_body(request, *, max_bytes: int, timeout_s: float) -> bytes:
+async def read_body(request, *, max_bytes: int, timeout_s: float, clock) -> bytes:
     """The request body, or `request_too_large` / `deadline_exceeded`.
 
-    `Content-Length` is checked first so an oversized declared body is refused
-    without reading it, and the running total is checked again per chunk because a
-    chunked body declares nothing.
+    The running total is the only size bound, deliberately: `Content-Length` is a
+    hint the caller chooses, a chunked body carries none, and refusing on the total
+    never buffers more than one chunk past the limit. A second check against the
+    declared length would only be a check the attacker controls.
+
+    The deadline is enforced twice because there are two ways to outlast it, and
+    neither mechanism catches the other. A body that arrives slowly is caught per
+    chunk against the app's injected `clock` - which is also what lets a test move
+    time instead of spending it. A peer that opens a request and then sends nothing
+    never produces a chunk to check, so the whole read also runs under
+    `asyncio.timeout`.
     """
-    declared = request.headers.get("content-length")
-    if declared is not None:
-        try:
-            announced = int(declared)
-        except ValueError:
-            raise errors.InvalidRequest("content-length is not an integer",
-                                        param="Content-Length") from None
-        if announced < 0:
-            raise errors.InvalidRequest("content-length is negative", param="Content-Length")
-        if announced > max_bytes:
-            raise errors.RequestTooLarge(f"declared {announced} bytes over the {max_bytes} limit")
     chunks: list[bytes] = []
     total = 0
+    deadline = clock() + timeout_s
     try:
-        # One deadline over the whole read, from the first byte, so neither a stalled
-        # peer nor a slow drip can outlast it. A zero timeout is already past.
         async with asyncio.timeout(timeout_s):
             async for chunk in request.stream():
                 total += len(chunk)
                 if total > max_bytes:
                     raise errors.RequestTooLarge(f"body exceeded the {max_bytes} byte limit")
+                if clock() > deadline:
+                    raise errors.DeadlineExceeded(f"the {timeout_s}s intake deadline passed")
                 chunks.append(chunk)
     except TimeoutError:
         raise errors.DeadlineExceeded(f"the {timeout_s}s intake deadline passed") from None

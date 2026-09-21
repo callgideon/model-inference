@@ -111,7 +111,7 @@ class Ingress:
         """
         limits = self.rt.settings.pilot
         raw = await intake.read_body(request, max_bytes=limits.max_request_bytes,
-                                     timeout_s=limits.intake_timeout_s)
+                                     timeout_s=limits.intake_timeout_s, clock=self.rt.clock)
         auth = await self.auth.context(request)
         body = intake.parse_object(raw)
         normalized = self.validator.normalize(body, auth, request_id, request.headers)
@@ -150,6 +150,10 @@ def register(app, rt, deps: IngressDeps | None = None):
         if deps.accept is None:
             # Nothing durable exists yet, so nothing may be reported as accepted.
             raise errors.DependencyUnavailable("durable acceptance is not wired (D2/G2)")
-        return await deps.accept(auth, normalized, idem)
+        accepted = await deps.accept(auth, normalized, idem)
+        # 01: `Inference-Id` is the request id on every answer. Set here rather than
+        # left to each acceptor, so no success path can be the one that forgets it.
+        accepted.headers.setdefault(wire.HEADER_INFERENCE_ID, request_id)
+        return accepted
 
     return ingress
