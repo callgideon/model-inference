@@ -580,3 +580,232 @@ and the killable invariant is the allowlist (`TENANT-03`).
   exported console conformance suite was run against the real services and reported case by case;
   16 of 45 pass and the other 29 are attributed to C2/C3 operations by an executable check, not by
   assertion in prose.
+
+---
+
+# Appendix — review round 1 (fix_required at `42e5669`)
+
+Appended, not rewritten. Implementation SHA of the fixes: **`b978c81`**. Same worktree, same branch
+(`codex/c1-console-repositories`), same owned paths; nothing pushed, no service contacted, no
+container created.
+
+| Commit | What |
+|---|---|
+| `e69cd5c` | B1, B2, B6 in `lib/services/**` and `lib/credits.ts` — **and** the D1 rename pass, the hard caps and the credits extraction, which its message does not name (recorded here because an amend is not allowed) |
+| `b978c81` | the cases the review found missing, the harness seeding, and the runner's classification fixes |
+
+## Per-item disposition
+
+| # | Finding | Disposition |
+|---|---|---|
+| **B1** | `feedback_by_request` returned calibration labels to owner *and* operator, with the operator's principal | **fixed.** The named query carries `calibration_set = false` as a *constant of the query* (like the trace list's off-mode exclusion), so no caller and no forgotten filter can drop it; labels are read only through the calibration listing (C3). Masking is now fail-closed — `masked()` returns true unless `by_operator === false` — so a D1 function that omits the column hides principals rather than publishing them. The harness seeds `org.labels` into the feedback relation (dropping them is exactly why the leak was invisible), and the new case drives owner, member and operator. Mutants `LABEL-01`, `MASK-01`, `PROJECT-01..03`, `ROLE-04`. |
+| **B2** | `spec.filters?.[name]` accepted `constructor`/`toString`/`valueOf`/`hasOwnProperty`/`isPrototypeOf`/`__proto__` and rendered `where undefined undefined $1` | **fixed.** `Object.hasOwn` everywhere an untrusted string indexes an object (swept `query.ts`, `console.ts` — `cell()` — and `cursor.ts`, which indexes nothing). `buildPlan` now range-checks `limit` (it is interpolated, not bound), requires a non-empty **string** tenant, refuses an organization on an operator-wide query, refuses a non-scalar filter value and a keyset that is not two strings. Both dead `RESERVED_PARAM_NAMES` checks removed; the invariant they guessed at ("no named query declares a filter under a reserved name") is a test instead. `session.isOperator === true` in the role check and in the masking decision. The evidence claim that provoked this is corrected below. Mutants `PROTO-01`, `ARG-01`, `ARG-02`, `ROLE-01`, `ROLE-04`. |
+| **B3** | the tenant proof was vacuous for three queries | **fixed.** The tenanted set is a **literal list** in the test — 14 tenant-scoped, 2 operator-wide — so `tenantColumn: null` anywhere fails on a `deepEqual` rather than being agreed with. New own case "the single-row reads are tenant-bound too, in both directions" covers `settings.get`, consent history, `feedback.list`, `traceDetail` and key ownership with `sessions.otherOwner`. Mutants `TENANT-03`, `TENANT-04`. |
+| **B4** | cursor scope proved for `usage` only; the "malformed payload" forgeries never authenticated; the over-long case died on the MAC | **fixed.** New case pairs **all six paged lists** in both directions (30 ordered pairs) and swaps filters per filtered list; the malformed payloads are signed with a **real HMAC** computed in the test (nine of them, including `"a"`, `null` and `["a",""]`), so the shape validation is what refuses them; the length bound is pinned with a genuine over-long cursor of the service's own making plus one just inside. The 15/16-character secret boundary is pinned on both sides. Mutants `CURSOR-01..05`, `SCOPE-01`, `SCOPE-02`, `SECRET-01`. |
+| **B5** | "both renderers, bounded" proved for PostgreSQL only | **fixed.** One case loops **every page query** through **both** renderers and asserts the bound, the whole-sort-key order, the row-wise keyset comparison *in its own direction*, and the tenant as the final condition and last binding. `consent_history`'s cap is asserted with 150 seeded versions. Mutants `CH-01..04`, `CAP-01`, `TENANT-02`. |
+| **B6** | nested JSON passed through unprojected; `credits.ts` had no test | **fixed.** `judgeSampleOf`/`judgeScoreOf` project field by field against the DTO (a seeded `org_id`, `provider_batch_secret` and `labelled_by` on a sample no longer reach an owner, asserted); entitlement limits come from the closed `ENTITLEMENT_LIMIT_NAMES` set with integer bounds; `json()` fails closed so a PostgreSQL array literal cannot read as `null` and invert R24; `text`/`integer`/`timestamp`/`flag`/`money` refuse instead of coercing (`String(undefined)` → blank cell, `Number("abc")` → NaN, a driver `Date` → a corrupted cursor key). The credits computation moved to `lib/services/credits.ts` (relatively importable, so `node --test` can load it) with both branches tested, `subMoney` on scaled integers, and a case a float cannot answer. **An RPC error no longer falls back**: only a missing function does (`PGRST202`, `42883`, "could not find the function"), because `org_balance` ignores holds and would report an inflated available balance. Mutants `JUDGE-01`, `ENT-01`, `STRICT-01..04`, `KEYNAME-01`, `CREDITS-01`, `CREDITS-02`. |
+| **Ruling (1)** | executor = D1's views/functions through supabase-js | **accepted and renamed** — see *D1 rename pass* below. `QueryPort` stands. |
+| **Ruling (2)** | no `server-only` dependency; static client-import test + module-scope guards | **done.** `tests/c/client-boundary.test.ts` walks every `"use client"` module's transitive imports (relative and `@/`, including `export … from` and dynamic `import()`) and fails if one reaches `lib/services/**`; it also asserts the walker finds client modules and can resolve an import, so it cannot pass by finding nothing. Module-scope `typeof window` guards in `query.ts`, `console.ts`, `cursor.ts` (and `server.ts` keeps its function-scope one). Mutant `CLIENT-01`. |
+| **Ruling (3)** | hard caps where the contract has no pagination | **partly done, one item declined with a reason.** `keys_list` 100, `feedback_by_request` 100, `consent_history` 100, `usage_daily` 400 (13 months of metadata retention), declared on the named query as `hardLimit` and asserted. **`usageSummary`/`usageDaily` still accept a missing `from`/`to`**: the exported conformance calls `usageSummary(owner, {})` and `usageDaily(suspended, {})` and requires both to succeed (cases 5, 19, and the mutation-safety filter case), so refusing would fail the frozen suite. Both are single-row/bounded-row aggregates over an indexed `(org_id, created_at)` range rather than row transfers, and `usage_daily`'s output is now capped. Making the range mandatory is a contract revision in `services.ts` + `conformance.ts`; it is in the integration requests. |
+| **Ruling (4)** | `CONSOLE_CURSOR_SECRET` | accepted, unchanged. |
+| **Cheap ones** | audit target filter, `has_feedback` both ways, identifier length, strict RFC 3339, `pending_reconciliation` certainty | **all pinned.** Audit entries are seeded (12 per organization) so `adminAudit` pages and filters for real; `has_feedback` true/false partition the list exactly; `key_id`/`model` length and emptiness; `2026-09-01`, `2026-09-01T12:00:00`, `+02:00` and `now` are all `invalid_request` (`Date.parse` accepts the first); an *authoritative* hold does not move `pending_reconciliation` and flipping the same row to `unknown` does. Mutants `AUDIT-01`, `FEEDBACK-01`, `FILTER-03`, `FILTER-04`, `SUMMARY-01`. |
+| **Runner** | a syntax error read as SURVIVED; a guard-converted throw counted as a kill | **fixed.** A failing *file* is a runner error (`did not run as a suite`); a suite that passes unchanged is a survival; a kill whose declared case failed only with the guard's fixed message requires `kills_by: "guarded"` (and declaring it wrongly is a runner error too). One more defect found while fixing it: the diagnostic block was truncated at the first `...` line, which node also emits when it **elides identical diff lines**, so a long `deepEqual` failure lost its `code: 'ERR_ASSERTION'` and was classified as a crash — `TENANT-04` was a false runner error because of it. The block now ends at the terminator indented exactly two past its own `not ok`. Four self-tests (`--self-test`) pin all of it. |
+
+### The evidence claim that was false, corrected
+
+The first report said, of `buildPlan`: *"A caller filter can reach only the column the registry names
+for it; anything else throws `QueryPlanError` before a statement exists."* That was **false** for the
+nine inherited keys of `Object.prototype`, on all eight filtered queries. It is true now, and the
+claim is backed by a case that enumerates those keys against every filtered query rather than by one
+example. The cursor row is corrected too: the first report credited "six authenticating-but-malformed
+payloads", which did not authenticate; nine now do.
+
+## D1 rename pass (done at `e69cd5c`, against `0005_console_read_surface.sql`)
+
+| Was | Now | Note |
+|---|---|---|
+| `public.usage_events e join public.api_keys k left join public.credit_holds h` | `public.console_usage u` | one view; the hold lives in `infrx`. **Verified the view LEFT JOINs `api_keys`** (`0005` line 108) and `infrx.credit_holds` (line 109), so a deleted key keeps its row — which is why the projection now renders `(deleted key)` for a null `key_name` rather than refusing the row |
+| `public.credit_ledger l` (+ `l.delta_usd as delta`) | `public.console_ledger l` (`delta` already aliased) | the view masks `actor` per viewer; C1 masks again, fail-closed |
+| `(w.ledger_total - w.reserved_total) as available` | `w.ledger_total, w.reserved_total` | the view exposes a stored `available`; this service derives it in one place so the identity the suite asserts has a single home. **D1 may drop nothing** — the column is simply unread |
+| `c.effective_at`/`c.actor` | `c.version, c.changed_at, c.changed_by` | D1's view already presents 06's names; C1's earlier guess at store column names is gone |
+| — | `f.calibration_set = false` constant | defence in depth behind the view's own exclusion |
+| `public.organizations`, `public.api_keys`, `public.org_settings`, `public.feedback`, `public.console_judge_runs`, `public.console_admin_orgs`, `public.operator_audit`, `public.wallets`, `public.org_wallet_summary(uuid)` | unchanged | already what C1 asked for |
+
+### Where D1's shape still differs from what C1 needs (for D1's fix round)
+
+1. **`console_usage.key_name` is `k.name`, nullable.** C1 renders `(deleted key)`. If D1 would rather
+   own that string, `coalesce(k.name, '(deleted key)')` in the view makes the two agree; either way the
+   row must not be dropped.
+2. **Timestamps must reach the client as full-precision RFC 3339 strings.** C1 now *refuses* a
+   non-string timestamp (a driver `Date` would corrupt the cursor key it becomes) and requires
+   `YYYY-MM-DDTHH:MM:SS(.sss)Z`. PostgREST renders `timestamptz` as `+00:00` by default in some
+   configurations; if that is what the view yields, either the view casts
+   (`to_char(… , 'YYYY-MM-DD"T"HH24:MI:SS.MSZ')`) or C1 widens the accepted form — D1's call, but it
+   has to be one of the two.
+3. **`console_admin_orgs.model_ids` must be a real array or JSON**, never a PostgreSQL array literal
+   string: C1 refuses `{a,b}` rather than reading it as `null`, because `null` *means* "platform
+   default" and the silent reading would invert R24. `limits` must be a JSON object whose keys are
+   exactly `ENTITLEMENT_LIMIT_NAMES` with integer values (`jsonb_strip_nulls` over the typed columns
+   satisfies this).
+4. **Money as strings.** `numeric(20,8)` must not arrive as a float; C1 accepts a number only via
+   `toFixed(8)`, which is exact but lossy above 2^53 units, so a string is required for large wallets.
+5. **`console_judge_runs.samples`** must carry exactly the sample/score fields of the DTO (any extra
+   field is now dropped, and a missing or out-of-vocabulary one is a typed refusal);
+   `consent_snapshot_at` must be a timestamp string.
+6. **`console_usage` exposes `settlement_regime` and `price_version`**, which C1 does not read — no
+   change needed, recorded so the difference is not mistaken for a gap.
+7. **`org_settings` exposes `version`/`effective_at`**, which C1 does not read either; `settings.get`
+   reads the three settings columns and the history separately.
+8. **`infrx.trace_metadata` is T's**, unchanged: `traces_page`/`trace_by_request` remain
+   integration-pending on T3, including whether an off-mode request keeps a metadata row (question 3
+   below).
+
+## Results (quoted from command output)
+
+```
+=== make console-test
+exit=0
+# pass 179
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1037.053072
+=== make console-lint
+exit=0
+  80:8  warning  'AuditQuery' is defined but never used  @typescript-eslint/no-unused-vars
+✖ 2 problems (0 errors, 2 warnings)
+=== make console-typecheck
+exit=0
+cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit
+Generating route types...
+✓ Types generated successfully
+=== make console-mutants
+exit=0
+144 mutants: 144 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 31.2s
+=== make api-test
+exit=0
+670 passed, 2 warnings in 34.39s
+=== node tests/c/run-mutants.mjs --jobs 6
+exit=0
+baseline: 66 cases pass unmutated, 31 fail (C2/C3 operations this task does not implement); 55 mutants, 6 at a time
+55 mutants: 55 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 18.0s
+=== node tests/c/run-mutants.mjs --self-test
+exit=0
+ok   a syntax error is a runner error, not a survival
+ok   a no-op edit survives
+ok   a kill that only the boundary guard produced is a runner error unless declared
+ok   a stale find is stale
+4 self-tests, 0 failed
+=== exported conformance vs the adapter
+exit=1
+# tests 45
+# pass 16
+# fail 29
+```
+
+UTC window `2026-09-21T07:12:04Z` – `2026-09-21T07:13:42Z`. Environment unchanged from the first
+report (Node v22.23.1, pnpm 9.15.9, no service of any kind).
+
+Counts: console suite **179 pass / 0 fail / 0 skipped** (was 150); this track's own cases **45** in
+six files; the exported conformance split is **unchanged at 16 pass / 29 fail** — every failure still
+attributable to a C2/C3 operation by `tests/c/console-conformance.test.ts`. The R35 label case the
+reviewer expected to move is still blocked *before* the label assertions, quoted from the run:
+
+```
+    not ok 8 - a calibration label is operator data a customer never sees (R35)
+      error: 'content failed: internal_error trace content resolution is not implemented in this service yet (C2 owns content access and signed references)'
+```
+
+so the leak it would have caught is now covered by this track's own case instead, and C2 will make the
+exported one meaningful. Mutants: **55 declared, 55 killed** (was 25/25); the new ones are `ARG-01/02`,
+`AUDIT-01`, `CAP-01`, `CH-01..04`, `CLIENT-01`, `CREDITS-01/02`, `ENT-01`, `FEEDBACK-01`,
+`FILTER-03/04`, `JUDGE-01`, `KEYNAME-01`, `LABEL-01`, `MASK-01`, `PROTO-01`, `ROLE-04`, `SCOPE-01/02`,
+`SECRET-01`, `STRICT-01..04`, `SUMMARY-01`, `TENANT-04`.
+
+Three of them survived or misreported on the first attempt and were fixed by strengthening the case,
+not the declaration: `STRICT-01` (no case passed a non-string through a string column — `model: 42`
+added), `ROLE-04` (no case used a truthy non-boolean `isOperator` — three added), `CREDITS-01` (the
+chosen amounts were ones float arithmetic gets right — a 12-digit total added).
+
+## Changes
+
+```
+$ git diff --numstat 42e5669..HEAD
+30	33	apps/app/lib/credits.ts
+197	52	apps/app/lib/services/console.ts
+116	0	apps/app/lib/services/credits.ts
+3	0	apps/app/lib/services/cursor.ts
+108	42	apps/app/lib/services/query.ts
+134	0	apps/app/tests/c/client-boundary.test.ts
+94	0	apps/app/tests/c/credits.test.ts
+42	8	apps/app/tests/c/cursor.test.ts
+35	0	apps/app/tests/c/harness.ts
+412	64	apps/app/tests/c/mutants.json
+285	0	apps/app/tests/c/projection.test.ts
+177	7	apps/app/tests/c/query-boundary.test.ts
+167	1	apps/app/tests/c/read-services.test.ts
+131	4	apps/app/tests/c/run-mutants.mjs
+```
+
+New files, both under owned paths: `apps/app/lib/services/credits.ts` (the pure credits computation)
+and `apps/app/tests/c/{client-boundary,credits,projection}.test.ts`. No contract change, no new
+dependency, nothing outside `apps/app/lib/services/`, `apps/app/lib/credits.ts`,
+`apps/app/tests/c/` and this report.
+
+## Limits, updated
+
+Superseding the first report's list where they overlap:
+
+1. **Still integration-pending**, now against D1's shipped names: nothing has executed the SQL. The
+   eight differences above are what a real run would find first.
+2. **`usageSummary` accepts an unbounded range** (ruling 3, declined with a reason above). The
+   aggregate is indexed and returns one row; the *scan* is still the whole retained history for an
+   organization that asks for no range. Needs a contract revision to fix properly.
+3. **Aggregate drift** (unchanged): the SQL renderer and the in-memory port interpret one declarative
+   aggregate spec; disagreement is only visible against real PostgreSQL.
+4. **`credits.ts` fallback figures** (unchanged, now documented in code with the ceiling named): on the
+   pre-D1 path `loaded`/`spent` see one page of the ledger. `available` never does.
+5. **`Credits` still crosses as `number`** for `components/credits-card.tsx`, which is not this task's
+   file. The typed boundary uses `Money` throughout.
+6. **`traceContent`, every mutation, and the write-side body bounds** remain C2/C3.
+7. **DUR-RLS's SQL half** still needs a real database: D1's views enforce `is_org_member` in SQL, and
+   C1's server-side checks are tested, but the two together are an integration test.
+8. **The client-boundary test is static.** It reads import specifiers with regular expressions, so a
+   computed `import(variable)` would slip past it; the module-scope guard is the backstop.
+9. **`adminAudit` rows are seeded by the harness**, not written by C1 — C3 owns the writes.
+
+## Handback
+
+**Next unblocked task:** C2 — it alone turns exported cases 17, 19, 20 and mutation-safety 8 green,
+and the trace-content states are the only thing standing between C1's reads and a complete read half.
+C3 remains the larger remaining share, and should lift `ownedTrace`, `ownedKey`, `tenant`,
+`requireRole`, `badInput`, `cell`/`text`/`timestamp`/`money` and `masked` from
+`lib/services/console.ts` rather than re-deriving them.
+
+**Integration requests (unchanged unless noted):**
+
+1. **Executor: settled** — D1's views and functions through the existing supabase-js client. C1 needs
+   no new dependency. The remaining work is the eight shape differences listed above plus a Layer-2
+   run of this suite against a task-local PostgreSQL once D1 merges (C1's reserved port is `55441`,
+   R48; no container has been created).
+2. **To D1:** items 1–5 of *Where D1's shape still differs*. Nothing there changes C1's code except
+   possibly the timestamp form (item 2), which is one regular expression either way.
+3. **To T3:** does `infrx.trace_metadata` keep a metadata row for an `off`-mode request? C1's
+   `traceDetail` resolves through the projection and reports `off` from the row; if T3 drops those
+   rows, C2 needs the usage-row fallback.
+4. **Contract revision (coordinator):** make `from`/`to` required on `usageSummary`/`usageDaily`, in
+   `lib/contracts/services.ts` *and* in the exported conformance cases that currently call them with
+   `{}`. C1 will implement the refusal in the same pass.
+5. **Optional:** a `console-c1-mutants` target for `node tests/c/run-mutants.mjs` (and
+   `--self-test`), alongside `console-mutants`.
+
+## Verification log
+
+- 2026-09-21: Review round 1 addressed at `b978c81`. B1–B6, all four rulings and the six cheap items
+  disposed of above; one ruling partly declined with its reason and a contract revision requested in
+  its place. The D1 rename pass was done against `0005_console_read_surface.sql` (read-only) and the
+  remaining shape differences are listed for D1's fix round. 179 console tests pass, 55 of 55 C1
+  mutants and 144 of 144 F2 mutants are killed, and the exported conformance split is unchanged with
+  every failure still attributed to C2/C3 by an executable check. No service was contacted; nothing
+  was pushed or deployed.
