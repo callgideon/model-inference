@@ -1,0 +1,195 @@
+{
+  "_comment": "R32 for track V: one single-edit mutant per invariant the V1 cases claim, each with the case names that must catch it on an assertion. Run with `node tests/v/run-mutants.mjs`. A survivor, a stale `find`, a declared case that dies by exception, or an all-cases failure fails the run. The three the brief names — filter allowlist, stale-response guard, availability mapping — are ALLOW-*/SIZE-*/CURSOR-*, STALE-*, and AVAIL-*.",
+  "mutants": [
+    {
+      "id": "ALLOW-01",
+      "note": "a filter value outside its vocabulary is accepted instead of refused",
+      "file": "app/(console)/traces/query.ts",
+      "find": "  if ((allowed as readonly string[]).includes(value)) return value as T;",
+      "replace": "  return value as T;",
+      "cases": [
+        "V1-Q02 a filter value outside its vocabulary is refused and the default stands",
+        "V1-Q03 `off` is not a list filter, and the refusal says where those requests are"
+      ]
+    },
+    {
+      "id": "ALLOW-02",
+      "note": "`off` becomes a list filter, so off-mode requests look like an empty result",
+      "file": "app/(console)/traces/query.ts",
+      "find": "export const CONTENT_FILTERS = [\"available\", \"metadata_only\", \"pending\", \"lost\", \"expired\"] as const;",
+      "replace": "export const CONTENT_FILTERS = [\"available\", \"metadata_only\", \"pending\", \"lost\", \"expired\", \"off\"] as const;",
+      "cases": ["V1-Q03 `off` is not a list filter, and the refusal says where those requests are"]
+    },
+    {
+      "id": "ALLOW-03",
+      "note": "a key id from outside the organization is forwarded to the service",
+      "file": "app/(console)/traces/query.ts",
+      "find": "  if (allowed !== null && !allowed.includes(value)) {",
+      "replace": "  if (false && allowed !== null && !allowed.includes(value)) {",
+      "cases": ["V1-Q04 a key filter must name one of this organization's keys"]
+    },
+    {
+      "id": "ALLOW-04",
+      "note": "an unrecognised parameter is swallowed instead of reported",
+      "file": "app/(console)/traces/query.ts",
+      "find": "    .filter((name) => !(TRACE_PARAMS as readonly string[]).includes(name))",
+      "replace": "    .filter(() => false)",
+      "cases": ["V1-Q01 only the parameters this page declares reach the typed query"]
+    },
+    {
+      "id": "SIZE-01",
+      "note": "an out-of-range page size is clamped instead of refused",
+      "file": "app/(console)/traces/query.ts",
+      "find": "    const parsed = /^\\d+$/.test(rawSize) ? Number(rawSize) : Number.NaN;",
+      "replace": "    const parsed = Math.min(Number(rawSize) || DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);",
+      "cases": ["V1-Q07 the page size comes from the offered set, and is never a clamp"]
+    },
+    {
+      "id": "CURSOR-01",
+      "note": "a cursor is used without the pinned window it was minted for",
+      "file": "app/(console)/traces/query.ts",
+      "find": "    } else if (!pinned) {",
+      "replace": "    } else if (false) {",
+      "cases": ["V1-Q05 the window is resolved from the range, and a page link pins it"]
+    },
+    {
+      "id": "CURSOR-02",
+      "note": "an unbounded, arbitrary cursor string is forwarded",
+      "file": "app/(console)/traces/query.ts",
+      "find": "    if ([...rawCursor].length > MAX_CURSOR_CHARS || !CURSOR_CHARS.test(rawCursor)) {",
+      "replace": "    if (false) {",
+      "cases": ["V1-Q06 a cursor is bounded and charset-checked, and otherwise opaque"]
+    },
+    {
+      "id": "HREF-01",
+      "note": "a filter change keeps the cursor, resuming a walk that no longer exists",
+      "file": "app/(console)/traces/query.ts",
+      "find": "    cursor: changesFilter ? null : (patch.cursor ?? filters.cursor),",
+      "replace": "    cursor: patch.cursor ?? filters.cursor,",
+      "cases": ["V1-Q09 changing a filter drops the cursor; a page link keeps the window"]
+    },
+    {
+      "id": "ANCHOR-01",
+      "note": "a page link drops the pinned window, so the second page slides with the clock",
+      "file": "app/(console)/traces/query.ts",
+      "find": "    params.set(\"at\", next.at);\n    params.set(\"cursor\", next.cursor);",
+      "replace": "    params.set(\"cursor\", next.cursor);",
+      "cases": [
+        "V1-Q09 changing a filter drops the cursor; a page link keeps the window",
+        "V1-V08 the next-page link carries the cursor and pins the window"
+      ]
+    },
+    {
+      "id": "AVAIL-01",
+      "note": "a metadata-only row is drawn as a capture failure",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "    label: \"Metadata only\",\n    tone: \"muted\",\n    failed: false,",
+      "replace": "    label: \"Metadata only\",\n    tone: \"muted\",\n    failed: true,",
+      "cases": [
+        "V1-V01 every content state is its own state, and only a lost capture is a failure",
+        "V1-V03 the indicators count projection lag, loss and unfinished rows on this page"
+      ]
+    },
+    {
+      "id": "AVAIL-02",
+      "note": "a lost capture is not drawn as a loss at all",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "  lost: { label: \"Lost\", tone: \"warn\", failed: true, unexpected: false },",
+      "replace": "  lost: { label: \"Lost\", tone: \"warn\", failed: false, unexpected: false },",
+      "cases": [
+        "V1-V01 every content state is its own state, and only a lost capture is a failure",
+        "V1-V02 a lost row names its reason, and a lost row with no reason says exactly that",
+        "V1-V03 the indicators count projection lag, loss and unfinished rows on this page"
+      ]
+    },
+    {
+      "id": "AVAIL-03",
+      "note": "an off row in the list passes as an ordinary state instead of a projection defect",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "    unexpected: true,",
+      "replace": "    unexpected: false,",
+      "cases": [
+        "V1-V01 every content state is its own state, and only a lost capture is a failure",
+        "V1-V03 the indicators count projection lag, loss and unfinished rows on this page"
+      ]
+    },
+    {
+      "id": "AVAIL-04",
+      "note": "a row that did not fail borrows the loss reason anyway",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "    reason: base.failed ? row.loss_reason : null,",
+      "replace": "    reason: row.loss_reason,",
+      "cases": [
+        "V1-V01 every content state is its own state, and only a lost capture is a failure",
+        "V1-V03 the indicators count projection lag, loss and unfinished rows on this page"
+      ]
+    },
+    {
+      "id": "STATUS-01",
+      "note": "a request with no status yet is drawn as a success",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "  if (httpStatus >= 200) return \"ok\";",
+      "replace": "  if (httpStatus >= 0) return \"ok\";",
+      "cases": ["V1-V05 status tone follows the class, and an unset status is not drawn as success"]
+    },
+    {
+      "id": "EMPTY-01",
+      "note": "a filtered empty page reads as \"no traffic\"",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "    if (narrowed) {",
+      "replace": "    if (false) {",
+      "cases": ["V1-V06 an empty page distinguishes filtered, capture-off and simply idle"]
+    },
+    {
+      "id": "EMPTY-02",
+      "note": "an organization capturing nothing is told there is simply no traffic",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "    const capturing = context.keys.some((key) => key.trace_mode !== \"off\" && key.revoked_at === null);",
+      "replace": "    const capturing = true;",
+      "cases": ["V1-V06 an empty page distinguishes filtered, capture-off and simply idle"]
+    },
+    {
+      "id": "ERROR-01",
+      "note": "a retry is offered for failures retrying cannot fix",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "        copy === undefined || copy.retry",
+      "replace": "        true",
+      "cases": ["V1-V07 an error offers a retry only where retrying can work"]
+    },
+    {
+      "id": "STALE-01",
+      "note": "any response is applied, so a stale one overwrites the current filters",
+      "file": "app/(console)/traces/sequence.ts",
+      "find": "  if (token !== sequence.issued || token <= sequence.applied) {",
+      "replace": "  if (false) {",
+      "cases": [
+        "V1-S02 a response that lost the race cannot put the older filter back",
+        "V1-S03 a duplicate delivery of a response already applied changes nothing"
+      ]
+    },
+    {
+      "id": "STALE-02",
+      "note": "a duplicate delivery of an applied response is applied again",
+      "file": "app/(console)/traces/sequence.ts",
+      "find": "  if (token !== sequence.issued || token <= sequence.applied) {\n    return { sequence, applied: false };\n  }",
+      "replace": "  if (token !== sequence.issued) {\n    return { sequence, applied: false };\n  }",
+      "cases": ["V1-S03 a duplicate delivery of a response already applied changes nothing"]
+    },
+    {
+      "id": "STALE-03",
+      "note": "an arrival that answers an older request is taken as the answer to the newest",
+      "file": "app/(console)/traces/sequence.ts",
+      "find": "  if (!same(sequence.query, arrived)) return { sequence, applied: false };",
+      "replace": "  if (false) return { sequence, applied: false };",
+      "cases": ["V1-S05 an arrival that does not answer the outstanding request is dropped"]
+    },
+    {
+      "id": "STALE-04",
+      "note": "the controls draw whatever page arrived, including an older one",
+      "file": "app/(console)/traces/sequence.ts",
+      "find": "  return outstanding && sequence.issued > sequence.applied ? sequence.query : arrived;",
+      "replace": "  return arrived;",
+      "cases": ["V1-S06 the controls draw the newest request while one is outstanding"]
+    }
+  ]
+}
