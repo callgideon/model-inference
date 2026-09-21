@@ -187,7 +187,7 @@
       ],
       "track": "D",
       "handoff": "handoffs/D-durable-state.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "D2",
@@ -280,7 +280,7 @@
       ],
       "track": "M",
       "handoff": "handoffs/M-media.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "M2",
@@ -330,7 +330,7 @@
       ],
       "track": "Q",
       "handoff": "handoffs/Q-scheduling.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "Q2",
@@ -378,7 +378,7 @@
       ],
       "track": "W",
       "handoff": "handoffs/W-worker.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "W2",
@@ -433,7 +433,7 @@
       ],
       "track": "G",
       "handoff": "handoffs/G-gateway.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "G2",
@@ -525,7 +525,7 @@
       ],
       "track": "T",
       "handoff": "handoffs/T-traces.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "T2",
@@ -574,7 +574,7 @@
       ],
       "track": "J",
       "handoff": "handoffs/J-judge.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "J2",
@@ -628,7 +628,7 @@
       ],
       "track": "C",
       "handoff": "handoffs/C-console-services.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "C2",
@@ -683,7 +683,7 @@
       ],
       "track": "U",
       "handoff": "handoffs/U-administration-ui.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "U2",
@@ -736,7 +736,7 @@
       ],
       "track": "V",
       "handoff": "handoffs/V-trace-ui.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "V2",
@@ -874,7 +874,7 @@
       ],
       "track": "E",
       "handoff": "handoffs/E-verification.md",
-      "status": "planned"
+      "status": "in-progress"
     },
     {
       "id": "E3",
