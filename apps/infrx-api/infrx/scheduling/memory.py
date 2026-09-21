@@ -15,15 +15,18 @@ What it adds over the fake (which is a FIFO by design, because it is the executa
   advances the tenant's virtual finish time at *enqueue*, which lets a tenant that
   enqueues a burst and then cancels it carry a penalty it never consumed. The tag is
   advanced **at dispatch** here, so it measures service actually handed out.
-* **Virtual time, not wall time.** The tag of the flow being dispatched becomes the
-  index's virtual time, and a flow that arrives (or comes back) takes that value.
+* **Virtual time, not wall time.** The tag of the flow being dispatched becomes its
+  pool's virtual time, and a flow that arrives (or comes back) takes that value.
   A tenant therefore accumulates no credit while idle and cannot hoard it, and none of
   it depends on how fast the clock moves. The injected clock is used only for
   `available_at` and for visibility timeouts, which are real durations.
-* **Separate streams per dispatch kind.** R52: preparation and inference are
-  different worker pools, so they are different flows with their own tags. A tenant's
-  transcodes never push it back in the GPU line, and `kind=None` still takes whatever
-  is next across both.
+* **Separate streams per dispatch kind, virtual time included.** R52: preparation and
+  inference are different worker pools, so they are different flows *and* different
+  virtual times. One shared virtual time (r2 B2) let preparation traffic clamp every
+  inference flow forward and erased the debt between inference tenants, turning
+  weighted fairness into round robin. A tenant's transcodes never push it back in the
+  GPU line, and `kind=None` still takes whatever is next across both - comparing each
+  flow by how far ahead of *its own* pool it is (`_select`).
 * **Bounded memory.** Queued-item and queued-byte caps (`03` §2.5, which takes them
   from llm-d's `maxRequests`/`maxBytes`), because an index is host memory. The cap is
   *not* admission capacity: PostgreSQL admits, and a refused index write is a retry
@@ -125,7 +128,16 @@ class MemoryScheduler:
         self.acknowledged: set[str] = set()
         self._bytes = 0
         self._seq = 0
-        self._virtual_time = 0.0
+        # One virtual time **per dispatch kind** (r2 B2). A single shared scalar looked
+        # harmless and was not: preparation dispatches advanced it, every inference flow
+        # was then clamped up to it at its next dispatch, and the relative debt between
+        # inference tenants was erased - weighted fairness collapsed to round robin
+        # (a tenant weighted 4 measured 0.80 of the dispatches with no preparation
+        # traffic and 0.50 with one preparation dispatch per inference dispatch), and
+        # with a service-time estimator the expensive tenant's share of service seconds
+        # went from 0.50 to 0.92, which is the very noisy-neighbour effect
+        # WFQ-by-service-time exists to prevent.
+        self._virtual_time: dict[str, float] = {kind.value: 0.0 for kind in DISPATCH_KINDS}
 
     # --- port ---------------------------------------------------------------
     async def enqueue(self, event: IndexEvent) -> bool:
@@ -176,17 +188,21 @@ class MemoryScheduler:
             return None
         flow, event_id = chosen
         entry = self._entries[event_id]
-        flow.events.remove(event_id)
-        # Start-time fair queuing: the flow starts no earlier than the index's virtual
-        # time (so an idle or delayed tenant gets no stored-up credit), that start
-        # becomes the virtual time, and the tag advances by the service this dispatch
-        # hands out (so a backlogged tenant cannot be overtaken for ever either).
-        start = max(flow.tag, self._virtual_time)
-        cost = self._cost(entry.event)
-        if not (cost > 0) or cost == float("inf"):
-            raise ValueError(f"service cost must be finite and positive: {cost!r}")
-        self._virtual_time = start
+        # r2 B4: the estimator is an injected collaborator, so its answer is computed and
+        # validated **before** any state moves. Computing it after the candidate had been
+        # taken out of its flow wedged that candidate for ever on a bad estimator: neither
+        # pending nor in flight, so never re-offered and never released, while its count
+        # and bytes stayed charged against the caps.
+        cost = self._service_cost(entry.event)
+        # Start-time fair queuing, per dispatch kind: the flow starts no earlier than its
+        # pool's virtual time (so an idle or delayed tenant gets no stored-up credit),
+        # that start becomes the pool's virtual time, and the tag advances by the service
+        # this dispatch hands out (so a backlogged tenant cannot be overtaken for ever).
+        kind_value = entry.event.kind.value
+        start = max(flow.tag, self._virtual_time[kind_value])
+        self._virtual_time[kind_value] = start
         flow.tag = start + cost / self._weight(entry.event.org_id)
+        flow.events.remove(event_id)
         entry.worker, entry.claimed_at = worker_id, now
         return entry.event
 
@@ -230,13 +246,20 @@ class MemoryScheduler:
         * **fairness state restarts.** Every flow in the snapshot begins at virtual
           time zero, so no tenant inherits a penalty or a credit from an index that no
           longer exists, and no tenant that is absent from the snapshot keeps state.
+
+        One consequence of clearing the acknowledged set, stated so nobody has to
+        rediscover it: an acknowledgment that arrives *after* a rebuild, for a candidate
+        the rebuild re-indexed, drops that candidate until the next rebuild. It is benign
+        - the job is still queued in PostgreSQL, nothing executes without
+        `JobStore.claim`, and Q3's reconciler rebuilds from the non-terminal snapshot -
+        but it is a throughput hole, not a no-op, so Q3 should ack before it rebuilds.
         """
         self._entries.clear()
         self._flows.clear()
         self.acknowledged.clear()
         self._bytes = 0
         self._seq = 0
-        self._virtual_time = 0.0
+        self._virtual_time = {kind.value: 0.0 for kind in DISPATCH_KINDS}
         for event in snapshot:
             if event.event_id in self._entries:
                 continue
@@ -280,30 +303,64 @@ class MemoryScheduler:
         }
 
     def tags(self) -> dict[tuple[str, str], float]:
-        """The live fairness state, for tests and for Q2's differential run."""
+        """The live fairness state, for tests and for Q2's differential run.
+
+        Q2 note: tags are IEEE doubles and they drift (10^6 unit dispatches land on
+        111110.99999952753, not 111111.0). Valkey ZSET scores are doubles too, so the
+        two adapters agree only if the Lua performs the **same operations in the same
+        order**; exact rationals here would create a divergence Valkey could not
+        reproduce, which is why the drift is documented rather than engineered away.
+        """
         return {key: flow.tag for key, flow in self._flows.items()}
+
+    def virtual_times(self) -> dict[str, float]:
+        """One virtual time per dispatch kind (r2 B2), for tests and Q2."""
+        return dict(self._virtual_time)
 
     # --- internals ----------------------------------------------------------
     def _weight(self, org_id: str) -> float:
         return self._weights.get(org_id, 1.0)
 
+    def _service_cost(self, event: IndexEvent) -> float:
+        """The injected estimator's answer, validated before anything moves.
+
+        A cost of zero, a negative, a NaN or an infinity is not a slow request: it stops
+        the tag advancing, poisons every comparison, or freezes the flow at infinity. The
+        estimator is *our* collaborator rather than a caller's input, so a bad answer is
+        `internal_error`, and it is raised with the index in exactly the state it was in
+        (r2 B4).
+        """
+        try:
+            cost = self._cost(event)
+        except errors.DomainError:
+            raise
+        except Exception as exc:                  # an estimator bug is ours, not a caller's
+            raise errors.InternalError("the service-cost estimator raised") from exc
+        if not (cost > 0) or cost == float("inf"):
+            raise errors.InternalError(
+                f"service cost must be finite and positive: {cost!r}")
+        return cost
+
     def _flow(self, kind: OutboxKind, org_id: str) -> _Flow:
-        """The tenant's flow for this kind, created at the current virtual time.
+        """The tenant's flow for this kind, created at its pool's current virtual time.
 
         The textbook start-time fair queuing arrival rule: an arriving flow's tag is the
-        system's virtual time, so a tenant that was absent starts level with the others
-        rather than with a credit for every dispatch it missed. It is *provably
-        redundant* with the clamp in `claim_candidate` (an unserved flow's tag can only
-        be below the virtual time, and dispatch clamps it back up; a later-created flow
-        can never hold an older arrival sequence, so the fair order comes out the same
-        either way). Kept because it is the rule the algorithm is named after and the
-        one thing that still holds the line if the clamp is ever edited; Q1's evidence
-        records that it carries no mutant of its own for exactly that reason.
+        virtual time of the kind it belongs to, so a tenant that was absent starts level
+        with the others rather than with a credit for every dispatch it missed.
+
+        r2 B1 corrected an earlier claim here that this was "provably redundant" with the
+        clamp in `claim_candidate`. It is not, and the counter-example is one line long:
+        a flow that has just been served sits at exactly the virtual time with an *older*
+        head sequence, so at tag = V it beats a newcomer on the tie-break, while at
+        tag = 0 the newcomer jumps ahead of it. `A A A B B B`, three dispatches, then a
+        new tenant, dispatches `A B A B U A B` here and `A B A U B A B` with tag = 0; the
+        two orders differ on 109 of this suite's 300 seeded workloads (154 of 300 on the
+        reviewer's). It carries its own mutant again.
         """
         key = (kind.value, org_id)
         flow = self._flows.get(key)
         if flow is None:
-            flow = self._flows[key] = _Flow(tag=self._virtual_time)
+            flow = self._flows[key] = _Flow(tag=self._virtual_time[key[0]])
         return flow
 
     def _visibility_s(self, event: IndexEvent) -> float:
@@ -317,6 +374,7 @@ class MemoryScheduler:
         for event_id, entry in self._entries.items():
             if entry.claimed_at is None:
                 continue
+            # `>=`, the boundary the fake pins: at exactly the TTL the candidate is back.
             if now >= entry.claimed_at + timedelta(seconds=self._visibility_s(entry.event)):
                 entry.worker = entry.claimed_at = None
                 flow = self._flow(entry.event.kind, entry.event.org_id)
@@ -328,9 +386,18 @@ class MemoryScheduler:
             self._flows[key].events.sort(key=lambda event_id: self._entries[event_id].seq)
 
     def _select(self, kind: OutboxKind | None, now: datetime) -> tuple[_Flow, str] | None:
-        """The fair choice: smallest `(tag, arrival sequence)` over flows with an
-        available candidate. A total order, so no dict or set iteration order can
-        change the answer."""
+        """The fair choice: smallest `(lag, arrival sequence)` over flows with an
+        available candidate, where `lag` is the flow's tag measured from **its own
+        kind's** virtual time.
+
+        Within one kind that is the same order as the tag itself (the virtual time is a
+        constant there), so a single-kind pool sees plain WFQ. Across kinds - which only
+        an unfiltered `kind=None` worker asks for - the raw tags are not comparable once
+        the two pools have done different amounts of work, so each flow is compared by
+        how far ahead of its own pool it is, and the arrival sequence breaks the tie.
+        Both components are exact: `(lag, seq)` is a total order, so no dict or set
+        iteration order, and no hash seed, can change the answer.
+        """
         best: tuple[tuple[float, int], _Flow, str] | None = None
         for (flow_kind, _org_id), flow in self._flows.items():
             if kind is not None and flow_kind != kind:
@@ -342,7 +409,7 @@ class MemoryScheduler:
                               if self._entries[event_id].event.available_at <= now), None)
             if candidate is None:
                 continue
-            order = (flow.tag, self._entries[candidate].seq)
+            order = (flow.tag - self._virtual_time[flow_kind], self._entries[candidate].seq)
             if best is None or order < best[0]:
                 best = (order, flow, candidate)
         return None if best is None else (best[1], best[2])
