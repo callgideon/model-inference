@@ -127,6 +127,14 @@ begin
   end loop;
 end $$;
 
+-- How the Python adapter must connect (measured, not assumed - see D1's evidence):
+-- the pilot relations have RLS enabled with no policy, and BYPASSRLS is a role
+-- ATTRIBUTE that is not inherited through membership. A login role created `inherit in
+-- role service_role` therefore reads zero rows and cannot insert. The adapter's pool
+-- must run `set role service_role` on each connection (psycopg's pool `configure`
+-- hook), exactly as PostgREST does, or hold BYPASSRLS itself. D1 creates no login role:
+-- that needs a password, which does not belong in a migration.
+
 -- The internal helpers a body will call are not part of the boundary.
 revoke all on function infrx.unimplemented(text, text) from public, anon, authenticated;
 revoke all on function infrx.forbid_update_delete() from public, anon, authenticated;
