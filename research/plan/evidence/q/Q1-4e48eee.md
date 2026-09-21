@@ -402,7 +402,7 @@ from output.
 |---|---|
 | Reviewed SHA | `5a8a02a` |
 | Round-1 implementation SHA | `5a5602a` (`9fa728f` adapter, `e56223f` tests + mutants, `5a5602a` runner strengthening) |
-| Status | **implemented, not integrated** (unchanged); every finding addressed |
+| Status | **implemented, not integrated** (unchanged). **CORRECTED in round 2:** "every finding addressed" was true of B1-B5 and false as a whole - the B2 fix regressed unfiltered claims (B6) and its new comparison was not exercised by any test (B7). Round 2 below. |
 | Suite | 51 tests in `tests/q` (was 34 plus a 32-subprocess mutation suite), 36 mutants, 36/36 killed |
 
 ## Disposition
@@ -410,7 +410,7 @@ from output.
 | Item | Disposition | Where |
 |---|---|---|
 | **B1** the retired mutant is not equivalent | **Fixed.** The mutant is restored, the case the review supplied is a test, and `_flow`'s docstring now carries the counter-example instead of the false proof. Measured independently before believing it: over this suite's 300 seeded 80-step workloads the `tag = 0` variant changes the dispatch order on **109 seeds** (the review's own generator reports 154 of 300) | `test_q1_fair__a_newcomer_does_not_outrank_a_served_flow_with_an_older_head`, mutant `an_arriving_tenant_starts_at_zero` |
-| **B2** fairness state is not separate per kind | **Fixed.** `_virtual_time` is now one float **per dispatch kind**. `kind=None` compares flows by `(tag − virtual time of that flow's own kind, arrival sequence)`, which is order-identical to the tag inside a kind and comparable across kinds, and is a total order. Both review scenarios are cases with the numbers asserted exactly | `memory.py` `_select`/`claim_candidate`, `test_q1_kind__preparation_traffic_does_not_erase_the_weighted_share` (asserts `{ORG_A: 20, ORG_B: 80}` with and without preparation traffic), `test_q1_kind__preparation_traffic_does_not_erase_a_service_time_debt` (11:1 costs, share of service seconds within 0.05 of 0.50 both ways), mutant `virtual_time_is_shared_across_dispatch_kinds` |
+| **B2** fairness state is not separate per kind | **Fixed for kind-filtered pools** (the review confirmed both numbers). `_virtual_time` is one float **per dispatch kind**. **CORRECTED in round 2 (B6):** the claim that `(tag − virtual time of that flow's own kind, arrival sequence)` is "comparable across kinds" is **false** - a kind's virtual time only advances when that kind is dispatched, so a flow in the quiet kind keeps its lag for ever and an unfiltered worker starves it. That comparison is withdrawn by ruling R60 and replaced by two-level selection; see round 2. Both review scenarios are cases with the numbers asserted exactly | `memory.py` `_select`/`claim_candidate`, `test_q1_kind__preparation_traffic_does_not_erase_the_weighted_share` (asserts `{ORG_A: 20, ORG_B: 80}` with and without preparation traffic), `test_q1_kind__preparation_traffic_does_not_erase_a_service_time_debt` (11:1 costs, share of service seconds within 0.05 of 0.50 both ways), mutant `virtual_time_is_shared_across_dispatch_kinds` |
 | **B3** (R21) vacuous rebuild dedupe | **Fixed.** The count assertion is replaced by a hand-out and a byte assertion: `rebuild((keep, keep, acked, keep)) == 2`, `stats()["bytes"] == len(compact_bytes(keep)) + len(compact_bytes(acked))`, and the drain hands each event exactly once | `test_q1_rebuild__a_duplicate_in_the_snapshot_is_indexed_and_charged_once`, mutants `rebuild_indexes_a_duplicate_twice`, `rebuild_does_not_charge_bytes` |
 | **B3** (R02/R03) vacuous tie-break | **Fixed.** The new case enqueues `ORG_A` first (its id also sorts first) and cancels its oldest candidate, so the flow created first, with the lexically smaller org, has the *newer* head: creation order and org id both point the wrong way | `test_q1_fair__ties_break_on_arrival_not_on_flow_creation_or_on_the_org_id`, mutants `tie_break_ignores_arrival_order`, `tie_break_uses_the_org_id`, `tie_break_prefers_the_newest_arrival` |
 | **B3** (R07) cost not injected | **Fixed.** An injected estimator of 7 s against a weight of 2 must move the tag by exactly 3.5, and the pool's virtual time by the dispatch's start | `test_q1_fair__one_dispatch_moves_the_tag_by_exactly_cost_over_weight`, mutant `the_tag_advance_ignores_the_estimator` |
@@ -570,3 +570,172 @@ answered "how often does it matter" without taking the review's number on trust.
   too, both named cases fail under the mutant, and a self-test pins the new outcome. Only
   round-1 numbers were updated; the round-0 body still says what it said, corrections
   marked in place.
+
+---
+
+# Review round 2 — coordinator review of `e56223f`/`309fb1c`: `fix_required` (B6, B7)
+
+Appended. B1, B3, B4 and B5 were confirmed fixed; B2 was fixed for kind-**filtered**
+pools and regressed kind-**unfiltered** ones, which is B6, and its new comparison turned
+out to be exercised by no test at all, which is B7. Both false claims of round 1 are
+marked `CORRECTED` where they were made.
+
+| Field | Value |
+|---|---|
+| Reviewed SHA | `309fb1c` |
+| Round-2 implementation SHA | `5b0217e` (`b762c91` R60, `a26b28e` N03/N18/B4, `2fb2a1f` docstring, `5b0217e` anchors + level-1 comparison mutant) |
+| Status | **implemented, not integrated** |
+| Suite | 59 tests in `tests/q`, 50 mutants, 50/50 killed |
+
+## What R60 changes
+
+Ruling R60 (binding, `08` §10 on the integration branch) replaces the withdrawn
+`tag − V[kind]` comparison with **two-level selection**:
+
+* **Level 1 — the kinds are flows.** Each dispatch kind has its own tag, they share one
+  top-level virtual time, their weight is 1, and **only an unfiltered claim reads or
+  writes this state**. Among kinds with an eligible candidate the smallest
+  `(kind tag, arrival sequence of the candidate that kind would hand out)` wins, then
+  `start = max(kind tag, V_top)`, `V_top = start`, `kind tag = start + cost`.
+* **Level 2 — unchanged.** Inside the chosen kind, the per-tenant rule exactly as it was,
+  and its key is back to `(tag, arrival sequence)` because within one kind the virtual
+  time is a constant.
+* **A rebuild clears level 1** with everything else.
+
+Why the r2 comparison could not work, in one line: a kind's virtual time only advances
+when that kind is dispatched, so a flow in the kind nobody is dispatching keeps its lag
+for ever. Measured on the r2 head by the reviewer: a peer that enqueued three preparation
+candidates behind N inference candidates was served at slots `[1, N+1, N+2]` for
+N = 30/1,000/10,000 (round-1 head: `[1, 3, 5]`); a peer of weight 1 in the other kind got
+one dispatch in 200,000; one org holding both kinds produced `aI aP bP` and then
+37 inference candidates in a row.
+
+## Disposition
+
+| Item | Commit | Killing case / mutant |
+|---|---|---|
+| **B6** unfiltered claims starve across kinds; R60 | `b762c91` | `test_q1_none__a_peer_in_another_kind_is_not_starved_by_a_noisy_backlog` (peer slots `[1, 3, 5]` at N = 5/30/400 **and** at noisy weight 2) — mutants `an_unfiltered_claim_ignores_the_kind_level`, `the_kind_tag_does_not_advance`, `the_kind_choice_takes_the_largest_kind_tag` |
+| **B6** one org with both kinds vs another org's single-kind work | `b762c91` | `test_q1_none__one_org_with_both_kinds_cannot_starve_another_orgs_single_kind_work` (kinds alternate `[INFER, PREPARE] × 4`; inside preparation the orgs alternate `A B A B`) — mutants `the_kind_tag_does_not_advance`, `an_unfiltered_claim_ignores_the_kind_level` |
+| **B6** mixed pools; level 1 is untouched by filtered claims | `b762c91` | `test_q1_none__a_filtered_worker_never_moves_the_kind_state` (asserts `kind_tags()`/`top_virtual_time()` unmoved by a filtered claim, then the unfiltered worker alternating) — mutant `a_filtered_claim_moves_the_kind_state` |
+| **B6** a new flow arrives at its own kind's virtual time | `b762c91` | `test_q1_none__a_new_flow_arrives_at_its_own_kinds_virtual_time` (preparation pool 50 units ahead; the newcomer still interleaves `B A B A`) — mutant `a_new_flow_arrives_at_the_highest_virtual_time` (the N05 survivor) |
+| **B6** level-1 catch-up clamp | `b762c91` | `test_q1_none__a_kind_that_waited_catches_up_once_and_cannot_hoard` (`[PREPARE, INFER, PREPARE, INFER]` after the delayed kind becomes available) — mutants `the_kind_start_is_not_clamped_to_the_top_virtual_time`, `the_top_virtual_time_never_advances` |
+| **B6** rebuild clears level 1 | `b762c91` | `test_q1_rebuild__clears_the_kind_level_state` — mutant `rebuild_keeps_the_kind_level_state` |
+| **B7** the cross-kind comparison was vacuously proven | `b762c91`, `5b0217e` | The level-1 key now has its own mutants: `the_kind_tie_breaks_on_dict_order` and `the_kind_tie_breaks_on_the_kind_name`, both killed by `test_q1_none__the_kind_tie_breaks_on_arrival_order`, whose two halves make dict order wrong in one and the kind name wrong in the other; `an_unfiltered_claim_ignores_the_kind_level` is the N12 "raw tag across kinds" survivor, now killed by three cases |
+| **N03** V set to the unclamped tag | `a26b28e` | `test_q1_fair__a_candidate_that_waited_catches_up_once_and_cannot_hoard` now asserts `virtual_times()` after the delayed flow is dispatched (4.0, not 0.0) and the exact order after it — mutant `the_virtual_time_is_the_unclamped_tag` |
+| **N18** V written before the cost is validated | `a26b28e` | new `test_q1_fair__a_bad_service_cost_after_a_dispatch_moves_no_virtual_time` (one successful dispatch first, so the tag exceeds the virtual time; both bad-cost cases now compare stats, tags, virtual times, kind tags and the top-level virtual time) — mutant `the_virtual_time_is_written_before_the_cost_is_validated` |
+| **B4 limit was wrong** | `a26b28e` | Both ordering mutants exist and are killed: `the_claim_is_recorded_before_the_cost_is_validated` (dies on the unchanged-state assertion) and `the_candidate_leaves_its_flow_before_the_cost_is_validated` (the literal r2 bug; dies on the candidate never being re-offered). The round-1 limit paragraph is corrected below |
+| Empty-flow re-arrival | `2fb2a1f` | Documented in `_forget`'s docstring and in §Limits below; no behaviour change |
+| Evidence corrections | `5b0217e` | "every finding addressed" and "comparable across kinds" marked `CORRECTED` in place |
+
+### Correction to the round-1 limit on B4
+
+Round 1 said: *"The ordering fix of B4 has no mutant of its own … 'compute before you
+mutate' cannot be expressed as a single edit that dies on an assertion or a typed error
+rather than on a `NameError`."* **That is wrong.** Two single-edit mutants express it and
+both die on assertions in the named case: inserting `entry.claimed_at = now` before the
+cost call, and inserting `flow.events.remove(event_id)` before it. The reviewer found them
+with this repository's own runner. They are in the list; the paragraph stands above as
+history with this correction attached.
+
+## Commands and results (round 2, UTC 2026-09-21, `load average: 13.93` at the start)
+
+| # | Command | Exit | Output |
+|---|---|---|---|
+| 1 | `make api-test` | 0 | `729 passed, 2 warnings in 31.85s` |
+| 2 | `uv run --frozen pytest -q tests/q` | 0 | `59 passed in 6.00s` |
+| 3 | `uv run --frozen pytest tests/q/test_memory_scheduler.py -k contract -q -s` | 0 | `scheduler conformance: 7 ran, 0 skipped []` then `9 passed, 36 deselected in 0.16s` |
+| 4 | `uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `Q mutants: 50 declared, 3 selected (default subset)` then `10 passed in 10.40s` |
+| 5 | `INFRX_MUTANTS=all uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `Q mutants: 50 declared, 50 selected (INFRX_MUTANTS=all)` then `57 passed in 45.72s` |
+| 6 | `uv run --frozen python tests/q/mutants.py` | 0 | `50/50 killed` |
+| 7 | `PYTHONHASHSEED=0/1/999 pytest -q tests/q/test_fairness_properties.py tests/q/test_memory_scheduler.py` | 0 | `49 passed` on each seed |
+
+Counts: 59 tests in `tests/q` = 9 contract (7 exported cases, 0 skips) + 4 property +
+36 behaviour/drill (7 of them new for R60) + 10 mutation (1 well-formedness + 3 subset
+mutants + 6 runner self-tests). `make api-test` = 670 baseline + 59. No failures, no
+skips in any command. `make console-*` and `make bench-test` remain not run (nothing
+console or bench is touched); real-service evidence is still Q2's.
+
+Two failures happened during the round and are recorded rather than hidden: the
+exactly-once anchor rule failed on its own account after R60 (`if best is None or
+order < best[0]:` now exists at both selection levels, and rebuild's reset block grew two
+lines), and one expectation in the N03 change was wrong on first writing (the noisy tenant
+has one candidate left at that point, so the order is `A B B B`). Both are fixed in
+`5b0217e` and `a26b28e`; the anchor rule catching a real ambiguity is the reason it exists.
+
+## Artifacts (round 2)
+
+| File | sha256 |
+|---|---|
+| `q1/r3-api-test.txt` | `c02f981e79144dd02716ca49446708e68d7f2a356acc6885459b7fd9461a7434` |
+| `q1/r3-q-suite.txt` | `cbfe7bc4c16a66bfa7c169785966cc24e5e30de87fcf0d404ab45450991d1167` |
+| `q1/r3-conformance.txt` | `a558120edb89de2735b917417c1ad03e9131f435ba602376526fdb61cfea1cb3` |
+| `q1/r3-mutants-subset.txt` | `c0fe825063c3ddf963abd3c3cc7f211a24f98dec97604fd042500f1233d2c4b7` |
+| `q1/r3-mutants-all.txt` | `949b149ac3779af538ed638b8f3b074e9f2f3f6d408577e9688bc72879b0ad72` |
+| `q1/r3-mutants.txt` | `56029e15ba1f7b0bb695b4a6814f58f83cc28f70c3ade92590885afaa7ab7788` |
+
+## Limits (round 2)
+
+- **Level-1 state is not deleted when a kind empties.** Both kind tags live for the
+  index's lifetime and are cleared only by `rebuild`. A kind that goes quiet and comes
+  back is bounded to one catch-up slot by the `max(kind tag, V_top)` clamp (the case
+  above), so the SFQ arrival rule buys nothing extra here and there is no third level of
+  state to keep in sync. If a third dispatch kind is ever added, this is the decision to
+  revisit first.
+- **Empty flows are still deleted** when a tenant's last candidate leaves, which is what
+  keeps cancelled and idle tenants from holding stale fairness state (Q1 acceptance) and
+  means a tenant that keeps at most **one** candidate indexed re-arrives at lag 0 every
+  time. The advantage is one slot per empty-to-backlogged transition, bounded by the
+  tenant's own concurrency, so it starves nobody; it is documented in `_forget` because Q3
+  owns the estimator that decides what a slot is worth.
+- **An unfiltered claim charges the same cost twice**, once at each level (weight 1 at
+  level 1, the tenant's weight at level 2). That is R60 as written and it is what makes
+  the kinds share capacity in proportion to service time rather than request count; it
+  also means level-1 tags are not comparable with level-2 tags, which only matters to
+  anybody reading `kind_tags()` next to `tags()`.
+- Everything from rounds 0 and 1 that was not superseded still stands: no real-service
+  evidence (Q2), provisional constant estimator, no per-org weight source, no priority
+  bands, float tags drift by design, the global item cap, the acknowledged-id set, and the
+  three invariants that cannot carry a mutant (no cap on rebuild, claiming mutates nothing
+  durable, determinism under identical input — `PYTHONHASHSEED` 0/1/999 all pass).
+
+## What Q2 must reproduce (the exact list)
+
+Restated here so the Valkey port has one place to work from. The memory adapter is the
+reference for every item, **not** the fake:
+
+1. One flow per `(dispatch kind, org)`, FIFO inside a flow by an **integer arrival
+   sequence**; a candidate whose visibility timed out re-enters at its **original**
+   sequence, not at the tail.
+2. An arriving flow's tag is **its own kind's** virtual time.
+3. Dispatch, in this float order: `start = max(tag, V[kind])`; `V[kind] = start`;
+   `tag = start + cost / weight`.
+4. Unfiltered claims use **R60 two-level selection**: kinds as level-1 flows (own tag,
+   one top-level virtual time, weight 1, `start = max(kind tag, V_top)`,
+   `V_top = start`, `kind tag = start + cost`), chosen by
+   `(kind tag, arrival sequence of that kind's candidate)`; level 2 unchanged; a
+   kind-filtered claim never reads or writes level-1 state.
+5. A flow is deleted when its pending **and** in-flight count reaches zero.
+6. The service cost is validated **before any write**; a bad answer is
+   `internal_error` and the index is byte-identical afterwards.
+7. Visibility: 30 s preparation, 120 s inference, timed **from the claim**, back when
+   `now >= claimed_at + TTL` (the `>=` boundary).
+8. `enqueue` is a no-op returning `False` for a pending, in-flight or acknowledged id;
+   both caps are checked **before any write**, and a refusal is `capacity_exhausted`.
+9. `remove(job_id)` drops every candidate of that job, pending or in flight, and is **not**
+   remembered — a replayed dispatch event may be re-indexed.
+10. `rebuild`: pending = the de-duplicated snapshot in snapshot order, caps not applied,
+    in-flight dropped, acknowledged cleared, **both** fairness levels reset, bytes = the
+    sum of the snapshot's compact bytes.
+11. An unknown kind is `invalid_request` (R55); `kind=None` means "anything".
+12. The differential run compares `tags()`, `virtual_times()`, `kind_tags()`,
+    `top_virtual_time()` and `stats()` after **every** operation, including unfiltered
+    claims with both kinds holding work — the case the r2 head had none of.
+
+## Verification log
+
+- 2026-09-21: Review round 2 appended at `5b0217e`. R60 implemented as ruled; seven new
+  cases and eleven new mutants for unfiltered claims, three more for N03/N18 and the two
+  B4 ordering mutants the round-1 limit wrongly said could not exist. 50 mutants declared,
+  50 killed, every named case failing under its mutant. The round-1 claims "every finding
+  addressed" and "comparable across kinds" are marked `CORRECTED` in place; the round-1
+  B4 limit is corrected in this section. Counts quoted from the commands above.
