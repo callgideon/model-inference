@@ -481,6 +481,22 @@ def test_a_hostile_subclass_cannot_make_the_validator_raise():
             raise RuntimeError("boom")
 
     assert reject(check(Exploding())).reason == "not_an_object"
+    # R3-B2: the **criterion entry** is exact-typed too. A `dict` subclass whose `keys` or
+    # `__iter__` raises reached `set(entry)` and blew up inside the loop.
+    payload = fakes.result(); payload["relevance"] = Exploding(score=4, rationale="x")
+    assert reject(check(payload)).reason == "malformed_criterion"
+    # R3-B2: and so is a **key**. A `str` subclass got past the key scan and then into the
+    # key-set arithmetic and the detail.
+    class Sly(str):
+        def __hash__(self):
+            return hash(str(self))
+
+        def __eq__(self, other):
+            raise RuntimeError("boom")
+
+    payload = fakes.result(); payload[Sly("confidence")] = {"score": 4, "rationale": "x"}
+    assert reject(check(payload)).reason == "non_string_key"
+
     payload = fakes.result(); payload["relevance"] = {"score": 4, "rationale": Weird("x")}
     assert reject(check(payload)).reason == "rationale_missing"
     payload = fakes.result(); payload["relevance"] = {"score": Sneaky(4), "rationale": "x"}

@@ -371,6 +371,48 @@ def test_a_zero_or_negative_sample_count_never_authorizes():
     assert allowed(LIVE, estimate(samples=0)) is False
 
 
+def test_a_settings_object_with_no_mode_never_authorizes():
+    """R3-B2: `getattr(settings, "judge_mode", …)` is a **fail-closed** default. With
+    `JUDGE_MODE_LIVE` as that default, a settings object that simply has no `judge_mode` - a
+    stub, a partially built config, a mock - authorized live submission on the money guard.
+    The budget here is present and funded, so only the mode can refuse."""
+    class BudgetOnly:
+        judge_live_budget_usd = Decimal("100")
+
+    settings = BudgetOnly()
+    assert not hasattr(settings, "judge_mode")
+    with pytest.raises(errors.BudgetExceeded, match="judge mode"):
+        require_live_submission(settings, estimate(), rates=fakes.TEST_RATES, at=fakes.NOW)
+    assert allowed(settings) is False
+    # ...and the same object with the mode added is allowed, so the refusal was the mode's
+    settings.judge_mode = "live"
+    assert allowed(settings) is True
+
+
+def test_a_blank_price_version_is_not_a_version():
+    """R3-B2: `priced` strips the version (r1 R51's lesson: whitespace is not
+    configuration) and that behaviour had no test. A version of spaces is no approval."""
+    correct = estimate()
+
+    def report(version):
+        return CostEstimate(model=correct.model, samples=correct.samples,
+                            ceilings=correct.ceilings, price_version=version,
+                            per_sample=correct.per_sample,
+                            worst_case_total=correct.worst_case_total)
+
+    for blank in ("", " ", "\t", "\n  \n"):
+        assert report(blank).priced is False, repr(blank)
+        with pytest.raises(errors.BudgetExceeded, match="unpriced"):
+            require_live_submission(LIVE, report(blank), rates=fakes.TEST_RATES, at=fakes.NOW)
+        assert allowed(LIVE, report(blank)) is False
+    # a version that is not text at all is not one either
+    for wrong in (1, None, b"v1"):
+        assert report(wrong).priced is False, repr(wrong)
+        assert allowed(LIVE, report(wrong)) is False
+    # and the real one is priced, so `priced` is not simply always False
+    assert report("test-rates-v1").priced is True
+
+
 def test_the_predicate_fails_closed_on_a_malformed_argument():
     """`live_submission_allowed` is documented not to raise, and it raised `AttributeError`
     on a settings object with no `judge_mode` and on `ceilings=None`. Not allowed is the
