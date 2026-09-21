@@ -29,10 +29,11 @@ console-typecheck:
 	cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit
 
 # R32/R36: exported console conformance must kill every declared mutant.
-# Track runners join here as their task merges (V1). Each exits non-zero on a survivor.
+# Track runners join here as their task merges (V1, U1). Each exits non-zero on a survivor.
 console-mutants:
 	cd apps/app && pnpm test:mutants
 	cd apps/app && node tests/v/run-mutants.mjs
+	cd apps/app && node tests/u/run-mutants.mjs
 
 # E1 owns models/marlin2b/tests. Until it exists this target reports "not run"
 # rather than pretending a pass.
