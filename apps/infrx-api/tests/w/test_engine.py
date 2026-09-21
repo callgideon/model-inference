@@ -35,7 +35,7 @@ from infrx.worker import (EngineError, EngineFailure, EngineIncomplete, EnginePr
                           EngineTransportError, EngineUnsupported, VllmEngine, cache_salt,
                           prepared_request)
 from infrx.worker.engine import (MAX_CANCEL_INTENTS, MIN_JOURNAL_EVENT_BYTES,
-                                 media_uuid)
+                                 PAYLOAD_OVERHEAD_BYTES, _delta_payload, media_uuid)
 from infrx.worker.fakes import (ERROR_BODY_CHUNK, SERVED_MODEL, FakeUpstream,
                                engine_factory)
 from infrx.worker.reasoning import filter_text
@@ -144,6 +144,19 @@ def drained(stream):
         if failure.facts.get("stage") == "adapter":
             raise
         return [], failure
+
+
+def outcome_of(engine: VllmEngine, held: Lease, prepared: PreparedRequest) -> str:
+    """How a whole generation ended, as a comparable string: a refusal code, an engine
+    failure's class, or "accepted". Comparing outcomes keeps a case honest - a *different*
+    failure is not the refusal it asked for."""
+    try:
+        asyncio.run(collect(engine.generate(held, prepared)))
+    except errors.DomainError as refused:
+        return f"refused: {refused.code}"
+    except EngineFailure as failure:
+        return f"failed: {type(failure).__name__}"
+    return "accepted"
 
 
 def refusal(engine: VllmEngine, prepared: PreparedRequest) -> str:
@@ -680,6 +693,16 @@ def test_api_stream__usage_is_authoritative_only_when_the_stream_agrees():
         assert usages(events)[0].payload["reason"] == reason, fault
         assert stream.terminal_cause is TerminalCause.engine_incomplete, fault
 
+    # the boundary: a reported prompt count of exactly the context limit is a count
+    box = Box()
+    upstream = FakeUpstream(clock=box.clock, prompt_tokens=DEFAULTS.max_context_tokens)
+    stream = upstream.engine().generate(lease(box), text_prepared(box))
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert stream.usage is not None
+    assert stream.usage.prompt_tokens == DEFAULTS.max_context_tokens
+    assert stream.terminal_cause is TerminalCause.completed
+
     # ... and the converse: the *same* usage object twice is one count, not a conflict, and
     # it yields exactly one usage event (r1 R58 as the round-2 review worded it)
     upstream, engine, held, prepared = drive("repeated_usage")
@@ -751,6 +774,9 @@ def test_api_stream__an_event_always_fits_the_journal_in_any_script():
     assert stream.held_tail == " " * 100_000
     assert max(len(compact_bytes(event.payload)) for event in events) <= 4096
     assert "".join(visibles(events)) == " " * 100_000
+
+    # the constant really does cover the payload's own keys and braces
+    assert len(compact_bytes(_delta_payload("", ""))) <= PAYLOAD_OVERHEAD_BYTES
 
     # the smallest ceiling the adapter will accept still holds, with 4-byte code points,
     # and one below it is refused at construction rather than exceeded per delta
@@ -895,6 +921,23 @@ def test_api_stream__the_splitter_handles_bytes_not_lines():
     assert stream.split_passes <= 5, stream.split_passes
 
 
+def test_api_stream__a_chunk_of_whole_frames_plus_a_partial_tail():
+    """B12: the ordinary shape of a TCP read - one or two complete frames followed by the
+    *beginning* of the next (`data: …\\n\\ndata: {"choi`). The previous case only cut inside a
+    line with no newline before it in the same chunk, so a splitter that dropped the tail, or
+    handed it on as a complete line, passed.
+    """
+    upstream, engine, held, prepared = drive("partial_tail")
+    stream = engine.generate(held, prepared)
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert "".join(raws(events)) == "alpha beta gamma", raws(events)
+    assert stream.deltas == 3 and stream.malformed_lines == 0
+    assert stream.complete and stream.usage is not None
+    # one split pass per chunk that contained a newline, not one per line
+    assert stream.split_passes <= upstream.frames_sent
+
+
 def test_api_stream__a_cancel_lands_mid_line():
     """B7 again: the cancel check runs once per **chunk**. Every other case sends chunks that
     contain a newline, which makes per-chunk and per-line indistinguishable - so here the
@@ -954,6 +997,15 @@ def test_api_stream__junk_and_stray_payloads_are_survived_not_relayed():
 
     # a byte-order mark before `data:` is a line we cannot place: counted, so it cannot end
     # the stream `completed` (it used to be dropped in silence)
+    # the other SSE field names are legal, so they are not counted - only what we cannot
+    # place at all is
+    upstream, engine, held, prepared = drive("sse_fields")
+    stream = engine.generate(held, prepared)
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert stream.malformed_lines == 0 and raws(events) == [upstream.text[:5]]
+    assert stream.terminal_cause is TerminalCause.completed
+
     upstream, engine, held, prepared = drive("bom_first")
     stream = engine.generate(held, prepared)
     events, failure = drained(stream)
@@ -1062,7 +1114,7 @@ def test_api_stream__an_unmeasured_prompt_or_duration_is_refused():
 
     upstream, engine, _lease, _prepared = drive()
     prepared = prepared_request(work, prompt_tokens=1200)
-    for duration in (None, float("inf"), float("nan"), float("-inf")):
+    for duration in (None, float("inf"), float("nan"), float("-inf"), -1.0, 0.0):
         timeless = prepared.model_copy(update={
             "media": (prepared.media[0].model_copy(update={"duration_s": duration}),)})
         assert refusal(engine, timeless) == "refused: unsupported_media", duration
@@ -1364,36 +1416,19 @@ def test_api_stream__a_cancel_intent_is_never_immortal_and_never_refuses_a_runni
         assert asyncio.run(engine.cancel(held)) is True
     fresh = leases(1, job=5)[0]
     assert asyncio.run(engine.cancel(fresh)) is False       # still live: refused
+    box.clock.advance(10)                                   # exactly at their deadline
+    assert asyncio.run(engine.cancel(fresh)) is True, "expiry is not reached at its instant"
+    engine.cancelled.clear()
+    for held in leases(MAX_CANCEL_INTENTS, at=10.0, job=41):   # deadlines from *now*
+        assert asyncio.run(engine.cancel(held)) is True
+    assert asyncio.run(engine.cancel(leases(1, job=42)[0])) is False
     box.clock.advance(11)
     assert asyncio.run(engine.cancel(fresh)) is True        # past their deadlines: evictable
     assert len(engine.cancelled) < MAX_CANCEL_INTENTS
 
-    # eviction never touches a running generation, even one whose key it remembers as
-    # finished (a re-run of the same lease): the intent it would drop is the live one
-    box = Box()
-    upstream = FakeUpstream(fault="cancellation_race", clock=box.clock)
-    engine = upstream.engine()
-    twice = lease(box)
-    asyncio.run(collect(FakeUpstream(clock=box.clock).engine().generate(
-        twice, text_prepared(box))))
-    engine._remember_finished((twice.job_id, twice.generation))   # as its first run would
-    for held in leases(MAX_CANCEL_INTENTS, at=10.0, job=7):
-        assert asyncio.run(engine.cancel(held)) is True
-
-    async def cancel_then_crowd_it_out():
-        stream = engine.generate(twice, text_prepared(box))
-        events = []
-        async for event in stream:
-            events.append(event)
-            if len(raws(events)) == 1:
-                assert await engine.cancel(twice) is True
-                box.clock.advance(11)                    # every other intent is now expired
-                assert await engine.cancel(leases(1, job=8)[0]) is True   # triggers eviction
-        return stream, events
-
-    stream, events = asyncio.run(cancel_then_crowd_it_out())
-    assert stream.cancelled, "the running generation's intent was evicted"
-    assert len(raws(events)) < upstream.long_stream_deltas
+    # (a round-4 case built a "finished and running" key to prove the eviction guard; B11
+    # makes that state unreachable - a generation runs once - so the guard went with it, and
+    # what protects a live intent is the expiry above.)
 
     # the reviewer's second route: late cancels, an ordinary race, are not immortal
     box = Box()
@@ -1408,6 +1443,44 @@ def test_api_stream__a_cancel_intent_is_never_immortal_and_never_refuses_a_runni
     assert engine.cancelled == {}
     assert len(engine.finished) <= MAX_CANCEL_INTENTS, len(engine.finished)
     assert asyncio.run(engine.cancel(lease(box))) is True
+
+
+def test_api_stream__a_generation_runs_only_once():
+    """B11 / r1 R46: one generation is one attempt, so a lease is never executed twice - and
+    the adapter refuses to, because the intent map is retired per generation. Both sequences
+    the review found lost a cancellation in silence: a cancel between two runs of the same key
+    was answered `True` as a no-op (it is over, says clause 1) and the second run then ignored
+    it. `state_conflict`, and nothing is sent.
+    """
+    # sequence 1: attempt 1 dies mid-stream, the job is cancelled, attempt 2 reuses the lease
+    box = Box()
+    upstream = FakeUpstream(fault="abrupt_exit", clock=box.clock)
+    engine = upstream.engine()
+    held = lease(box)
+    with pytest.raises(EngineTransportError):
+        asyncio.run(collect(engine.generate(held, text_prepared(box))))
+    assert asyncio.run(engine.cancel(held)) is True
+    again = FakeUpstream(clock=box.clock)
+    second = VllmEngine(again.client(), served_model=SERVED_MODEL, clock=box.clock)
+    # a *different* engine instance has no memory, so the refusal is this engine's business:
+    assert asyncio.run(collect(second.generate(held, text_prepared(box))))
+    assert outcome_of(engine, held, text_prepared(box)) == "refused: state_conflict"
+    assert len(upstream.requests) == 1, "the second attempt was sent"
+
+    # sequence 2: generate, close before the first `__anext__`, generate again, cancel
+    box = Box()
+    upstream = FakeUpstream(clock=box.clock)
+    engine = upstream.engine()
+    held = lease(box)
+
+    async def close_then_cancel():
+        first = engine.generate(held, text_prepared(box))
+        await first.aclose()
+        assert await engine.cancel(held) is True
+
+    asyncio.run(close_then_cancel())
+    assert outcome_of(engine, held, text_prepared(box)) == "refused: state_conflict"
+    assert upstream.requests == []
 
 
 def test_api_stream__a_cancellation_is_scoped_to_its_generation():

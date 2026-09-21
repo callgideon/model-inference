@@ -91,6 +91,8 @@ JOURNAL = "test_api_stream__an_event_always_fits_the_journal_in_any_script"
 FLOOD = "test_api_stream__a_line_that_never_ends_is_bounded_and_still_checked"
 BYTES = "test_api_stream__the_splitter_handles_bytes_not_lines"
 MIDLINE = "test_api_stream__a_cancel_lands_mid_line"
+TAIL_CHUNK = "test_api_stream__a_chunk_of_whole_frames_plus_a_partial_tail"
+ONCE = "test_api_stream__a_generation_runs_only_once"
 FINISH = "test_api_stream__a_finish_reason_outside_the_set_is_not_a_success"
 DROPPED = "test_api_stream__a_dropped_line_is_never_a_billable_success"
 SECOND = "test_api_stream__a_second_choice_is_a_protocol_violation"
@@ -260,6 +262,17 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("reported_prompt_unbounded", "a reported prompt count outside the context is unknown",
        E, "        elif stream.usage_candidate.prompt_tokens > self.limits.max_context_tokens:",
        "        elif False:", USAGE),
+    _m("prompt_boundary_exclusive", "a prompt count of exactly the context is a count",
+       E, "        elif stream.usage_candidate.prompt_tokens > self.limits.max_context_tokens:",
+       "        elif stream.usage_candidate.prompt_tokens >= self.limits.max_context_tokens:",
+       USAGE),
+    _m("non_positive_duration_accepted", "a duration of zero or less is not a duration",
+       E, "            if videos[0].duration_s is None or not math.isfinite(videos[0].duration_s) \\\n"
+          "                    or videos[0].duration_s <= 0:",
+       "            if videos[0].duration_s is None or not math.isfinite(videos[0].duration_s):",
+       MEASURED),
+    _m("payload_overhead_understated", "the overhead constant covers the real payload",
+       E, "PAYLOAD_OVERHEAD_BYTES = 64", "PAYLOAD_OVERHEAD_BYTES = 8", JOURNAL),
     _m("visible_never_split", "visible is split on its own account (R58)",
        E, "        for raw_piece, visible_piece in zip_longest(_split_encoded(raw, budget),\n"
           "                                                    _split_encoded(visible, budget),\n"
@@ -302,6 +315,12 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("pending_cap_always_4096", "the cap is one journal event, not one buffer",
        E, "        return max(4096, self.limits.journal_event_max_bytes)", "        return 4096",
        BYTES),
+    _m("partial_tail_discarded", "a chunk's unfinished tail survives to the next (B12)",
+       E, "                pending = lines.pop()", "                lines.pop()\n"
+          '                pending = ""', TAIL_CHUNK),
+    _m("partial_tail_yielded_as_a_line", "an unfinished tail is not a line yet (B12)",
+       E, "                pending = lines.pop()", '                pending = ""',
+       TAIL_CHUNK, BYTES),
     _m("lines_split_per_line", "one split pass per chunk, not one per line (B7)",
        E, "                stream.split_passes += 1\n"
           '                lines = pending.split("\\n")\n'
@@ -321,6 +340,9 @@ MUTANTS: tuple[Mutant, ...] = (
        '            if key in self.cancelled and "\\n" in pending:\n'
           "                stream.cancelled = True\n                return",
        MIDLINE),
+    _m("legal_sse_fields_counted", "event:/id:/retry: are legal, not junk",
+       E, "SSE_FIELDS = (\"data:\", \"event:\", \"id:\", \"retry:\")",
+       "SSE_FIELDS = (\"data:\",)", JUNK),
     _m("unplaceable_line_not_counted", "a line we cannot place is counted (BOM)",
        E, "            if line and not line.startswith(\":\") and not line.startswith(SSE_FIELDS):\n"
           "                # A line we cannot place - a BOM before `data:`, a truncated field name - is\n"
@@ -336,6 +358,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("held_tail_never_emitted", "the filter's final tail reaches the events (R58)",
        E, "        if stream.held_tail:", "        if False:", TAIL, ADAPTER_SPLITS),
     # --- usage (r1 R58) -------------------------------------------------------
+    _m("two_usage_events", "a repeated usage object is one event, not two",
+       E, "        if stream.usage_objects == 0:", "        if False:", USAGE),
     _m("first_usage_wins", "the authoritative usage is the last one (R58)",
        E, '        if obj.get("usage") is not None:\n'
           '            self._note_usage(stream, obj["usage"])',
@@ -494,6 +518,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "                return [stream.usage_event(\n"
        "                    Usage.of(stream.prepared.prompt_tokens, stream.deltas), None)]",
        CANCEL),
+    _m("finished_key_generates_again", "a generation runs once (R46/B11)",
+       E, "        if key in self.finished:\n"
+          "            # r1 R46: one generation is one attempt, so a lease is never executed twice. It",
+       "        if False:\n"
+          "            # r1 R46: one generation is one attempt, so a lease is never executed twice. It",
+       ONCE),
     _m("cancel_key_ignores_the_generation", "an intent is scoped to its generation (R58)",
        E, "        key = (lease.job_id, lease.generation)\n        inner = self._attempt(stream, key)",
        "        key = (lease.job_id, 1)\n        inner = self._attempt(stream, key)",
@@ -512,15 +542,21 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "        if key in self.running:", "        if False:", LIFECYCLE),
     _m("running_not_registered", "a generation in flight is known to be running",
        E, "        self.running.add(key)", "        pass", LIFECYCLE),
+    _m("expiry_boundary_exclusive", "an intent expires *at* its deadline, not after it",
+       E, "            if held in self.finished or now >= expires_at:",
+       "            if held in self.finished or now > expires_at:", LIFECYCLE),
     _m("pre_start_intents_immortal", "a pre-start intent expires with its lease",
        E, "            if held in self.finished or now >= expires_at:",
        "            if held in self.finished:", LIFECYCLE),
     _m("expiry_ignores_the_clock", "the expiry is the lease's own deadline",
        E, "            if held in self.finished or now >= expires_at:",
        "            if held in self.finished or True:", LIFECYCLE),
-    _m("eviction_takes_a_running_intent", "eviction never touches a running generation",
-       E, "            if held in self.running:\n                continue",
-       "            if False:\n                continue", LIFECYCLE),
+    # `eviction_takes_a_running_intent` was retired by B11: a running generation can no
+    # longer be in `finished` (a generation runs once), and an expired one is stopped by the
+    # stall check before the cancel check, so the guard it broke became dead code and was
+    # deleted with it. A live intent is protected by the expiry, which has its own two
+    # mutants above.
+
     _m("aclose_does_not_retire", "closing retires the generation (clause 2)",
        E, "        try:\n            await self._iterator.aclose()\n        finally:\n"
           "            self._engine._retire(self._key)",

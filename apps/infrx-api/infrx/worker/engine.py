@@ -142,7 +142,10 @@ ERROR_BODY_MAX_BYTES = 64 * 1024        # an engine's error body is read bounded
 # refused: the reasoning filter is boundary-independent, so splitting loses nothing, while
 # refusing would throw away an answer the engine did produce.
 PAYLOAD_COPIES = 3               # `visible`, `raw`, and the transitional `content` alias
-# `{"content":"","raw":"","visible":""}` plus the slack a `usage` payload needs; the budget
+# An empty payload - `{"content":"","raw":"","visible":""}` - measures **36 bytes** under the
+# store's own `compact_bytes` (measured here, not quoted: the round-4 review said 35, and a
+# case now asserts whatever it really is stays under this constant); 64 leaves that plus slack
+# for the keys a `usage` payload adds. The budget
 # is `(ceiling - overhead) // copies`, so a small ceiling shrinks the text rather than the
 # margin. Flooring the budget at a constant is what let a 128-byte ceiling emit 132-byte
 # events with multi-byte text.
@@ -564,12 +567,15 @@ class VllmEngine:
             **forwarded,
         }
         if videos:
-            if videos[0].duration_s is None or not math.isfinite(videos[0].duration_s):
+            if videos[0].duration_s is None or not math.isfinite(videos[0].duration_s) \
+                    or videos[0].duration_s <= 0:
                 # `or 0.0` silently asked for a four-frame budget for a two-minute clip.
                 # `inf`/`nan` reached `budget_kwargs` and surfaced as an OverflowError or a
                 # ValueError wrapped into `EngineFailure(stage="adapter")`: a refusal, typed.
-                raise errors.UnsupportedMedia("a prepared video must carry a finite duration",
-                                              param="messages")
+                # A negative duration quietly produced the *minimum* frame budget, so a
+                # two-minute clip could be sampled as four frames and answered about.
+                raise errors.UnsupportedMedia(
+                    "a prepared video must carry a positive, finite duration", param="messages")
             body["mm_processor_kwargs"] = self._media.budget_kwargs(videos[0].duration_s)
             body[MM_UUIDS_FIELD] = [media_uuid(ref, salt) for ref in videos]
         return body
@@ -628,9 +634,11 @@ class VllmEngine:
         to stop can no longer run."""
         now = self.clock.now()
         for held, expires_at in list(self.cancelled.items()):
-            if held in self.running:
-                continue
             if held in self.finished or now >= expires_at:
+                # A live, unexpired intent is never dropped, which is the whole point; and
+                # since B11 a running generation can no longer be in `finished`, so "not
+                # running" needs no separate guard (one would be dead code, and an
+                # unkillable mutant with it).
                 self.cancelled.pop(held, None)
 
     def _retire(self, key: tuple[str, int]) -> None:
@@ -824,6 +832,14 @@ class VllmEngine:
     async def _generate(self, stream: "EngineStream") -> AsyncIterator[EngineEvent]:
         lease = stream.lease
         key = (lease.job_id, lease.generation)
+        if key in self.finished:
+            # r1 R46: one generation is one attempt, so a lease is never executed twice. It
+            # matters here because the intent map is retired per generation: a cancel arriving
+            # between two runs of the same key was answered `True` as a no-op (clause 1) and
+            # then the second run ignored it. `state_conflict` rather than an engine failure -
+            # nothing was sent, and reusing a lease is a caller bug, not the engine's.
+            raise errors.StateConflict(
+                f"generation {lease.generation} of job {lease.job_id} has already run")
         inner = self._attempt(stream, key)
         self.running.add(key)
         try:

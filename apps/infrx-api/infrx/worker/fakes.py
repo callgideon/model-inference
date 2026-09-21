@@ -55,6 +55,8 @@ malformed payloads a review of the adapter found unhandled):
 | `long_legal_line` | one legal 8 KiB `data:` line straddling two chunks |
 | `bare_newlines` | a chunk of 50,000 bare newlines: many lines, one split pass |
 | `bom_first` | a byte-order mark before the first `data:` |
+| `partial_tail` | the ordinary TCP shape: whole frames plus the start of the next one |
+| `sse_fields` | `event:`/`id:`/`retry:` lines, which are legal and not junk |
 | `no_newline_flood` | `data:` with no newline in it, in 1 MiB chunks, more than the cap |
 | `slow_flood` | the same without a newline, small chunks, 30 s of clock per chunk |
 """
@@ -252,7 +254,11 @@ class FakeUpstream:
 
     async def _byte_script(self):
         """Faults that are about *bytes*, so they are yielded as chunks rather than frames:
-        where the chunk boundaries fall is the whole point."""
+        where the chunk boundaries fall is the whole point. `produced` is the number of
+        content deltas the script really sent, so the usage it reports is consistent with the
+        stream (an inconsistent one is `below_delta_count`, which is a different case).
+        """
+        produced = 1
         if self.fault == "split_utf8":
             # `ensure_ascii=False`, so the frame really carries multi-byte UTF-8 rather than
             # `\uXXXX` escapes - that is the point of the fault.
@@ -267,12 +273,27 @@ class FakeUpstream:
             body = sse(chunk("z" * 8192))
             for at in range(0, len(body), 3000):
                 yield body[at:at + 3000]
+        elif self.fault == "partial_tail":
+            produced = 3
+            # What a real read looks like: a complete frame (or two) and then the *beginning*
+            # of the next one, so the buffer holds a tail that must survive to the next chunk.
+            first, second, third = (sse(chunk(piece)) for piece in ("alpha ", "beta ", "gamma"))
+            yield first + second[:18]
+            yield second[18:] + third[:12]
+            yield third[12:]
+        elif self.fault == "sse_fields":
+            yield b"event: message\n"
+            yield b"id: 42\n"
+            yield b"retry: 3000\n\n"
+            yield sse(chunk(self.text[:5]))
         elif self.fault == "bare_newlines":
+            produced = 0
             yield b"\n" * 50_000
         elif self.fault == "bom_first":
+            produced = 0                                 # the BOM line is never content
             yield b"\xef\xbb\xbf" + sse(chunk(self.text[:4]))
         yield sse(chunk(finish_reason="stop"))
-        yield sse(chunk(usage=self.usage(1)))
+        yield sse(chunk(usage=self.usage(produced)))
         if self.fault == "no_trailing_newline":
             yield b"data: [DONE]"                        # no newline, no blank line
         else:
@@ -282,7 +303,7 @@ class FakeUpstream:
         pieces = self.deltas()
         try:
             if self.fault in ("split_utf8", "long_legal_line", "bare_newlines", "bom_first",
-                              "no_trailing_newline"):
+                              "no_trailing_newline", "partial_tail", "sse_fields"):
                 if self.fault == "no_trailing_newline":
                     yield sse(chunk(pieces[0]))
                 async for frame in self._byte_script():
