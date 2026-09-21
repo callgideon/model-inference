@@ -188,6 +188,21 @@ def test_f_base__the_envelope_of_last_resort():
     assert "retry-after" not in {key.lower() for key in response.headers}
 
 
+def test_f_base__a_parameter_name_of_65_characters_is_not_echoed():
+    """The echo bound is exact: 64 characters is a parameter name, 65 is a payload."""
+    tc, calls = client_app()
+    for length, echoed in ((64, True), (65, False)):
+        name = "p" * length
+        response = tc.post(support.CHAT_PATH, headers=support.AUTH,
+                           json={"messages": [{"role": "user", "content": "hi"}], name: 1})
+        assert response.status_code == 400
+        error = support.error_of(response)
+        assert ("param" in error) is echoed, (length, error)
+        if echoed:
+            assert error["param"] == name
+    assert calls == []
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and not hasattr(fn, "pytestmark"):
