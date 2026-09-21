@@ -51,15 +51,16 @@ All other manifest tasks: `planned`, blocked on F2 (or later dependencies) — n
 | Task | Branch | Impl | Review@head | Coord | Integrated | Post-merge |
 |---|---|---|---|---|---|---|
 | D1 | `codex/d1-durable-schema` | running | — | — | — | — |
-| M1 | `codex/m1-media-materialization` | running | — | — | — | — |
-| Q1 | `codex/q1-memory-scheduler` | running | — | — | — | — |
+| M1 | `codex/m1-media-materialization` | head `9e2c0a5` (impl `5ec51e1`; reported: tests/m 82, api-test 752, own mutants 51/51; conformance 2 of 9 run, 7 skip visibly for M2/M3) | review r1 running (SSRF attack list incl. NAT64/6to4) | — | — | — |
+| Q1 | `codex/q1-memory-scheduler` | head `5a8a02a` (impl `4e48eee`; reported: tests/q 66, api-test 736, scheduler conformance 7/7 against the real adapter, own mutants 27/27, one mutant retired as equivalent) | review r1 running | — | — | — |
 | W1 | `codex/w1-engine-adapter` | running | — | — | — | — |
 | G1 | `codex/g1-ingress-auth` | running | — | — | — | — |
 | T1 | `codex/t1-trace-capture` | running | — | — | — | — |
-| J1 | `codex/j1-judge-dryrun` | running | — | — | — | — |
+| J1 | `codex/j1-judge-dryrun` | head `7876c2c` (impl `d997be7`; reported: tests/j 101, api-test 771, own mutants 35/35; provider rate table ships EMPTY → live submission refused) | review r1 running | — | — | — |
 | C1 | `codex/c1-console-repositories` | running | — | — | — | — |
 | U1 | `codex/u1-usage-balance-ui` | head `a1b3138` (impl `9bef497`; implementer-reported: console-test 145, own mutants 24/24, build ok) | review r1 running | — | — | — |
-| V1 | `codex/v1-trace-list-ui` | running | — | — | — | — |
+| V1 | `codex/v1-trace-list-ui` | head `c316a86` (impl `785b649`; reported: console-test 151, own mutants 21/21, build ok) | review r1 running | — | — | — |
 | E2 | `codex/e2-integration-harness` | running | — | — | — | — |
 
 Integration dependencies (manifest): U1 needs C1 + D5, V1 needs C1 + T2, C1 needs D1, G1 needs D2 — those merge as *implemented* code behind fakes; `tasks.json` marks them `integrated` only when the real dependency is merged and the real-service suites pass.
+- 2026-09-22 00:40Z: Wave-2 handbacks so far: U1, V1, J1, M1, Q1 implemented; each has an independent review running at its head under the common review brief plus a task-specific attack list. Coordinator decisions recorded: `MediaStore.attach` is owned by track M (implemented by M1, maintained by M2/M3). Pending coordinator items from handbacks (to action at integration, none blocking the reviews): Makefile gating of per-track mutant lists (M, Q, U, V each ship one — add `api-mutants`/`console-mutants` coverage and gate Q's list behind `INFRX_MUTANTS`); config names `MAX_INDEX_ITEMS`/`MAX_INDEX_BYTES` for Q; sidebar entry for `/traces` and "Balance" relabel for `/billing`; V1 contract-revision requests (HTTP status-class filter, window-wide trace summary with an off-requests count) and J1's request to move `CandidateSource` into `ports.py` for T2; an approved per-MTok judge price row in `research/cross-cutting/cloud-pricing.md` before J2's live path (judge live submission stays refused until then).
