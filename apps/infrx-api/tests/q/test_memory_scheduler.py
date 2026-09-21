@@ -593,6 +593,61 @@ def test_q1_none__a_filtered_worker_never_moves_the_kind_state():
     asyncio.run(run())
 
 
+def test_q1_none__the_kind_tag_advances_by_the_service_the_kind_received():
+    """R60 / r3 B8: level 1 charges the kind `start + cost`, not `start + 1`. With
+    preparation costing 11 s and inference 1 s, an unfiltered worker must give the
+    expensive pool one slot per eleven of the cheap one - that is WFQ by service time one
+    level up. Charging a flat 1 makes the kinds alternate, which hands the expensive pool
+    eleven times its share of the machine.
+
+    Both halves are asserted: the dispatch pattern and the kind tags it leaves behind."""
+    async def run():
+        h = harness(max_items=1000,
+                    cost=lambda e: 11.0 if e.is_preparation else 1.0)
+        port = h.port
+        for _ in range(24):                     # inference first, so level-1 ties go to it
+            assert await port.enqueue(event(h, org_id=ORG_A, kind=INFER))
+        for _ in range(4):
+            assert await port.enqueue(event(h, org_id=ORG_B, kind=PREPARE))
+        pattern = "".join("P" if candidate.is_preparation else "I"
+                          for candidate in await _unfiltered(port, 26))
+        assert pattern == "IPIIIIIIIIIIIPIIIIIIIIIIIP", pattern
+        assert port.kind_tags() == {PREPARE.value: 33.0, INFER.value: 23.0}, port.kind_tags()
+    asyncio.run(run())
+
+
+def test_q1_none__the_kind_is_ranked_by_the_candidate_it_would_actually_hand_out():
+    """R60 / r3 B9: the level-1 tie-break is the arrival sequence of the candidate that
+    kind would hand out - the one its own level-2 rule picks - not the oldest candidate
+    the kind happens to hold. They differ as soon as a kind has two tenants and the
+    tenant holding the oldest candidate has already been served.
+
+    `ORG_A` holds the preparation pool's two oldest candidates and has been served once
+    by a preparation-filtered worker, so preparation's pick is `ORG_B`'s candidate at
+    sequence 4; inference holds sequence 3, and 3 < 4."""
+    async def run():
+        h = harness()
+        port = h.port
+        first = event(h, org_id=ORG_A, kind=PREPARE)          # seq 1
+        second = event(h, org_id=ORG_A, kind=PREPARE)         # seq 2
+        assert await port.enqueue(first) and await port.enqueue(second)
+        served = await port.claim_candidate("prep-a", kind=PREPARE)
+        assert served is not None and served.event_id == first.event_id
+        await port.acknowledge(served)
+        assert port.tags()[(PREPARE.value, ORG_A)] == 1.0     # ORG_A owes the pool 1 s
+        assert port.kind_tags() == {PREPARE.value: 0.0, INFER.value: 0.0}, \
+            "the filtered claim moved level-1 state"
+        inference = event(h, org_id=ORG_C, kind=INFER)        # seq 3
+        newcomer = event(h, org_id=ORG_B, kind=PREPARE)       # seq 4, arrives at tag 0
+        assert await port.enqueue(inference) and await port.enqueue(newcomer)
+        candidate = await port.claim_candidate("worker-any")
+        assert candidate is not None
+        assert candidate.event_id == inference.event_id, \
+            ("level 1 ranked preparation by a candidate it would not have handed out: "
+             f"{candidate.event_id}")
+    asyncio.run(run())
+
+
 def test_q1_none__a_kind_that_waited_catches_up_once_and_cannot_hoard():
     """R60 level 1 obeys the same clamp as level 2: a kind whose candidates were not yet
     available gets one slot of catch-up when they arrive, and is then pulled up to the
@@ -609,7 +664,14 @@ def test_q1_none__a_kind_that_waited_catches_up_once_and_cannot_hoard():
         assert early == [INFER] * 4, early
         assert port.top_virtual_time() == 3.0, port.top_virtual_time()
         h.clock.advance(60)
-        late = [candidate.kind for candidate in await _unfiltered(port, 4)]
+        first_late = await port.claim_candidate("worker-any")
+        assert first_late is not None and first_late.kind is PREPARE
+        # the top-level virtual time is the *clamped* start of that dispatch, never the
+        # arriving kind's own tag: it is state Q2's differential run compares, and taking
+        # the unclamped tag would send it backwards to 0.0
+        assert port.top_virtual_time() == 3.0, port.top_virtual_time()
+        await port.acknowledge(first_late)
+        late = [first_late.kind] + [candidate.kind for candidate in await _unfiltered(port, 3)]
         assert late == [PREPARE, INFER, PREPARE, INFER], late
     asyncio.run(run())
 

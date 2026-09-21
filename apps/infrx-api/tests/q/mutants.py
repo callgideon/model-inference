@@ -175,6 +175,28 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_q1_none__one_org_with_both_kinds_cannot_starve_another_orgs_single_kind_work",
        "test_q1_none__a_filtered_worker_never_moves_the_kind_state",
        "test_q1_none__a_kind_that_waited_catches_up_once_and_cannot_hoard"),
+    _m("the_kind_tag_advances_by_one_not_by_the_cost",
+       "R60 level 1 charges the kind the service it received, so an unfiltered worker "
+       "shares the machine by service time and not by request count (r3 T07)",
+       "            self._kind_tag[kind_value] = top_start + cost",
+       "            self._kind_tag[kind_value] = top_start + 1.0",
+       "test_q1_none__the_kind_tag_advances_by_the_service_the_kind_received"),
+    _m("the_kind_is_ranked_by_its_oldest_candidate",
+       "R60 level 1 ranks a kind by the candidate its own rule would hand out, not by "
+       "the oldest candidate it holds (r3 T22)",
+       "            order = (self._kind_tag[dispatch_kind.value], self._entries[event_id].seq)",
+       "            order = (self._kind_tag[dispatch_kind.value],\n"
+       "                     min((self._entries[other].seq\n"
+       "                          for (flow_kind, _org), other_flow in self._flows.items()\n"
+       "                          if flow_kind == dispatch_kind.value\n"
+       "                          for other in other_flow.events), default=0))",
+       "test_q1_none__the_kind_is_ranked_by_the_candidate_it_would_actually_hand_out"),
+    _m("the_top_virtual_time_is_the_unclamped_kind_tag",
+       "R60 level 1: the top-level virtual time is the clamped start of the dispatch, so "
+       "it never moves backwards when a quiet kind comes back (r3 T04)",
+       "            self._top_virtual_time = top_start",
+       "            self._top_virtual_time = self._kind_tag[kind_value]",
+       "test_q1_none__a_kind_that_waited_catches_up_once_and_cannot_hoard"),
     _m("the_kind_start_is_not_clamped_to_the_top_virtual_time",
        "R60 level 1: a kind that waited catches up once and cannot then hoard",
        "            top_start = max(self._kind_tag[kind_value], self._top_virtual_time)",
