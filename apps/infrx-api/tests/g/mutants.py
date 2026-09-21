@@ -597,6 +597,45 @@ MUTANTS: tuple[Mutant, ...] = (
        V, '                        if name in SUPPORTED - {"model", "messages"}},',
        "                        if True},",
        "test_f_base__parameters_carry_the_closed_set_and_nothing_else"),
+    # --- review r4: the parser's per-literal work, and the allowances --------------
+    _m("parse_int_unbounded", "an integer literal is bounded before it is converted",
+       I, "        body = json.loads(text, parse_constant=_no_constants,\n"
+          "                          parse_int=_bounded_int, parse_float=_bounded_float)",
+       "        body = json.loads(text, parse_constant=_no_constants,\n"
+          "                          parse_float=_bounded_float)",
+       "test_media_sec__a_body_of_huge_integers_is_refused_by_the_parser",
+       "test_media_sec__a_number_literal_is_bounded_by_its_length"),
+    _m("parse_float_unbounded", "a float literal is bounded too",
+       I, "        body = json.loads(text, parse_constant=_no_constants,\n"
+          "                          parse_int=_bounded_int, parse_float=_bounded_float)",
+       "        body = json.loads(text, parse_constant=_no_constants,\n"
+          "                          parse_int=_bounded_int)",
+       "test_media_sec__a_number_literal_is_bounded_by_its_length"),
+    _m("number_digits_off_by_one", "the digit bound is exact",
+       I, "    if len(literal.lstrip(\"-\")) > MAX_NUMBER_DIGITS:\n"
+          "        raise ValueError(f\"a number of more than {MAX_NUMBER_DIGITS} digits\")\n"
+          "    return int(literal)",
+       "    if len(literal.lstrip(\"-\")) > MAX_NUMBER_DIGITS + 1:\n"
+          "        raise ValueError(f\"a number of more than {MAX_NUMBER_DIGITS} digits\")\n"
+          "    return int(literal)",
+       "test_media_sec__a_number_literal_is_bounded_by_its_length"),
+    _m("number_sign_counted_as_a_digit", "a sign is not a digit",
+       I, '    if len(literal.lstrip("-")) > MAX_NUMBER_DIGITS:', "    if len(literal) > MAX_NUMBER_DIGITS:",
+       "test_media_sec__a_number_literal_is_bounded_by_its_length"),
+    _m("content_length_non_ascii_digits", "a non-ASCII digit never reaches int()",
+       I, "        if declared.isascii() and declared.isdigit() and len(declared) <= 19:",
+       "        if declared.isdigit() and len(declared) <= 19:",
+       "test_media_sec__a_declared_length_that_is_not_a_number_is_ignored"),
+    _m("structure_separators_halved", "the structural allowance fits a maximal body",
+       V, "STRUCTURE_SEPARATORS = (len(SUPPORTED) + MAX_MESSAGES * (2 + MAX_PARTS_PER_MESSAGE * 2)\n"
+          "                        + MAX_STOP_SEQUENCES)",
+       "STRUCTURE_SEPARATORS = (len(SUPPORTED) + MAX_MESSAGES * (2 + MAX_PARTS_PER_MESSAGE * 2)\n"
+          "                        + MAX_STOP_SEQUENCES) // 2",
+       "test_media_sec__a_maximal_structure_body_is_accepted"),
+    _m("text_beside_messages_ignored", "stop sequences and the model name are text too",
+       V, "MAX_SEPARATORS = STRUCTURE_SEPARATORS + MAX_TEXT_CODEPOINTS + TEXT_BESIDE_MESSAGES",
+       "MAX_SEPARATORS = STRUCTURE_SEPARATORS + MAX_TEXT_CODEPOINTS",
+       "test_media_sec__a_maximal_structure_body_is_accepted"),
     # --- the cases the first pass left unkillable ------------------------------
     _m("everything_is_too_large", "a body within the cap is read whole",
        I, "                if total > max_bytes:", "                if total >= 0:",
