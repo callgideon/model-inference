@@ -401,9 +401,9 @@ from output.
 | Field | Value |
 |---|---|
 | Reviewed SHA | `5a8a02a` |
-| Round-1 implementation SHA | `e56223f` (`9fa728f` adapter, `e56223f` tests + mutants) |
+| Round-1 implementation SHA | `5a5602a` (`9fa728f` adapter, `e56223f` tests + mutants, `5a5602a` runner strengthening) |
 | Status | **implemented, not integrated** (unchanged); every finding addressed |
-| Suite | 50 tests in `tests/q` (was 34 + a 32-run mutation suite), 36 mutants, 36/36 killed |
+| Suite | 51 tests in `tests/q` (was 34 plus a 32-subprocess mutation suite), 36 mutants, 36/36 killed |
 
 ## Disposition
 
@@ -441,19 +441,20 @@ mutation subprocesses, which is load-independent, plus same-session timings.
 
 | # | Command | Exit | Output |
 |---|---|---|---|
-| 1 | `make api-test` | 0 | `720 passed, 2 warnings in 102.43s (0:01:42)` (an earlier run of the same command at this SHA: `720 passed, 2 warnings in 82.96s`) |
-| 2 | `uv run --frozen pytest -q tests/q` | 0 | `50 passed in 13.10s` |
-| 3 | `uv run --frozen pytest tests/q/test_memory_scheduler.py -k contract -q -s` | 0 | `scheduler conformance: 7 ran, 0 skipped []` then `9 passed, 28 deselected in 0.23s` |
-| 4 | `uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `Q mutants: 36 declared, 3 selected (default subset)` then `9 passed in 8.55s` |
-| 5 | `INFRX_MUTANTS=all uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `Q mutants: 36 declared, 36 selected (INFRX_MUTANTS=all)` then `42 passed in 43.46s` |
+| 1 | `make api-test` | 0 | `721 passed, 2 warnings in 40.70s` (the same command earlier in the round, under load average 36: `720 passed, 2 warnings in 102.43s` and `82.96s`; the count moved 720 -> 721 with the runner self-test added at `5a5602a`) |
+| 2 | `uv run --frozen pytest -q tests/q` | 0 | `51 passed in 6.34s` (13.10s for 50 under load average 36 earlier in the round) |
+| 3 | `uv run --frozen pytest tests/q/test_memory_scheduler.py -k contract -q -s` | 0 | `scheduler conformance: 7 ran, 0 skipped []` then `9 passed, 28 deselected in 0.25s` |
+| 4 | `uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `Q mutants: 36 declared, 3 selected (default subset)` then `10 passed in 5.35s` |
+| 5 | `INFRX_MUTANTS=all uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `Q mutants: 36 declared, 36 selected (INFRX_MUTANTS=all)` then `43 passed in 49.05s` |
 | 6 | `uv run --frozen python tests/q/mutants.py` | 0 | `36/36 killed` |
-| 7 | `pytest -q --collect-only --ignore=tests/q` / `--collect-only tests/q` | 0 | `670 tests collected in 0.57s` / `50 tests collected in 0.17s` |
+| 7 | `pytest -q --collect-only --ignore=tests/q` / `--collect-only tests/q` | 0 | `670 tests collected in 0.57s` / `51 tests collected` (670 + 51 = the 721 of command 1) |
 | 8 | own differential measurement (B1/B2), 300 seeded workloads per variant | 0 | `seeds compared: 300` / `arrival-tag=0 differs on: 109 seeds` / `shared virtual time differs on: 239 seeds` |
 
-Test counts: 50 in `tests/q` = 9 contract (7 exported cases + the suite runner + the
-protocol shape) + 4 property + 28 behaviour/drill + 9 mutation (1 well-formedness +
-3 subset mutants + 5 runner self-tests). Under `INFRX_MUTANTS=all` the mutation file is
-42. Failures: none. Skips: none, in any command. `make console-*` and `make bench-test`
+Test counts: 51 in `tests/q` = 9 contract (7 exported cases + the suite runner + the
+protocol shape) + 4 property + 28 behaviour/drill + 10 mutation (1 well-formedness +
+3 subset mutants + 6 runner self-tests). Under `INFRX_MUTANTS=all` the mutation file is
+43. Default mutation subprocesses: 9 (3 mutants + 6 self-tests), down from 32. Failures:
+none. Skips: none, in any command. `make console-*` and `make bench-test`
 remain not run (no console or bench file is touched); real-service tests remain Q2's.
 
 The full mutant list, quoted (command 6): every line is `killed`, and `1 failed, N
@@ -495,7 +496,8 @@ answered "how often does it matter" without taking the review's number on trust.
 | `test_q1_rebuild__a_duplicate_in_the_snapshot_is_indexed_and_charged_once` | B3/R21: a duplicate-bearing snapshot indexes once, charges the compact bytes of the distinct events once, and hands each out once |
 | `test_q1_kind__visibility_expires_at_the_ttl_not_after_it` | the `>=` boundary: nothing at TTL − 1 µs, back at exactly the TTL |
 | `test_q1_caps__a_full_index_refuses_with_a_typed_retryable_error` (extended) | a refused enqueue leaves `stats()` byte-identical and creates no flow |
-| `tests/q/test_mutants.py` (gated) | 36 mutants declared, 3 + 5 self-tests by default, all 36 under `INFRX_MUTANTS=all`; each anchor still must appear exactly once |
+| `tests/q/test_mutants.py` (gated) | 36 mutants declared, 3 + 6 self-tests by default, all 36 under `INFRX_MUTANTS=all`; each anchor still must appear exactly once |
+| `test_the_runner_cannot_report_a_false_kill[a_named_case_that_does_not_notice_is_a_failure]` | r2: a mutant may not claim coverage from a case that cannot see it - `run_mutant` now reports `misdeclared` unless **every** named case fails. It caught one in this list on its first run (below) |
 
 ## Limits (round 1 additions and changes)
 
@@ -559,3 +561,12 @@ answered "how often does it matter" without taking the review's number on trust.
   of 300 seeded workloads change order) rather than restated from the review. Mutation
   list gated per decision 1; 36/36 killed. Timings carry a load caveat (`load average:
   36.17`) and the gating effect is stated as subprocess counts instead.
+- 2026-09-21: Round-1 counts refreshed at `5a5602a` after a late strengthening of the
+  runner: it now reports `misdeclared` unless every case a mutant names fails. The first
+  run of that rule found a mutant of mine claiming coverage it did not have -
+  `virtual_time_is_shared_across_dispatch_kinds` named the service-time case, which passed
+  because a 1 s preparation cost makes the shared scalar advance at exactly the cheap
+  tenant's rate and hides the defect. The fixture now prices the preparation tenant at 11 s
+  too, both named cases fail under the mutant, and a self-test pins the new outcome. Only
+  round-1 numbers were updated; the round-0 body still says what it said, corrections
+  marked in place.
