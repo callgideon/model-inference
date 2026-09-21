@@ -286,13 +286,15 @@ def test_the_draw_and_the_ids_it_emits_are_independent_of_the_scan_order():
 
 @pytest.mark.parametrize("field,value", [
     ("http_status", None), ("http_status", "500"), ("http_status", True), ("http_status", 5.0),
+    ("http_status", 0), ("http_status", 99), ("http_status", 600), ("http_status", 99999),
     ("started_at", datetime(2026, 9, 20, 12, 0)),                       # naive
     ("started_at", datetime(2027, 1, 1, tzinfo=timezone.utc)),          # in the future
     ("started_at", "2026-09-20T00:00:00Z"),
     ("schema_valid", "no"), ("media_available", 1), ("finish_reason", 7),
     ("trace_mode", "full"), ("content_state", "available"),
     ("request_id", ""), ("request_id", None),
-    ("model_revision", None), ("feedback", []),
+    ("model_revision", None), ("feedback", []), ("feedback", ("not a feedback row",)),
+    ("feedback", (7,)),
 ])
 def test_one_bad_row_is_excluded_and_never_interpreted(field, value):
     """A projection can hand back a row whose facts are the wrong shape. Interpreting it is
@@ -304,6 +306,16 @@ def test_one_bad_row_is_excluded_and_never_interpreted(field, value):
     selection = draw((good, bad))
     assert selection.sample_ids == (good.request_id,), f"{field}={value!r} aborted the draw"
     assert [e.reason for e in selection.excluded] == [Exclusion.malformed_row]
+
+
+def test_a_row_that_is_not_a_candidate_at_all_is_excluded():
+    """A source can hand back anything - a string from a mis-sliced answer, a dict, `None`.
+    Reading `.org_id` off it turned one bad element into an `AttributeError` that aborted the
+    whole selection, so the type gate runs before the tenant check."""
+    for junk in ("row", 7, None, {"request_id": fakes.uuid(1)}, object()):
+        selection = draw((fakes.candidate(1), junk))
+        assert selection.sample_ids == (fakes.uuid(1),), f"{junk!r} aborted the draw"
+        assert [e.reason for e in selection.excluded] == [Exclusion.malformed_row]
 
 
 def test_a_row_with_no_organization_is_not_mine():

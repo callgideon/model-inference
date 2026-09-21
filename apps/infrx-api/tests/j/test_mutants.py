@@ -30,7 +30,10 @@ SUBSET = ("consent_from_the_snapshot_only", "stratum_bound_ignored", "score_rang
           # round-3: one per blocking item the second review raised
           "recursion_error_escapes_the_parse_guard", "worst_case_uses_the_ambient_context",
           "describe_echoes_a_string", "superseded_price_version_accepted",
-          "dedupe_runs_before_the_tenant_filter", "a_malformed_row_is_interpreted")
+          "dedupe_runs_before_the_tenant_filter", "a_malformed_row_is_interpreted",
+          # round-4: one per item the third review raised
+          "any_nonblank_string_is_a_request_id", "guard_mode_getattr_default_live",
+          "b1_entry_isinstance", "source_answer_unchecked")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 SUITE_DIR = pathlib.Path(__file__).resolve().parent
@@ -109,7 +112,15 @@ def test_the_required_invariants_each_have_a_mutant():
         # R3-B1: one spelling of a request id, validated and never echoed
         "R3-B1 one id spelling": ("any_nonblank_string_is_a_request_id",
                                   "an_invalid_id_is_echoed_into_the_exclusion"),
-        "R2 one bad row": ("a_malformed_row_is_interpreted", "a_future_row_is_a_candidate"),
+        "R2 one bad row": ("a_malformed_row_is_interpreted", "a_future_row_is_a_candidate",
+                           "any_http_status_accepted", "feedback_elements_unchecked",
+                           "row_type_unchecked"),
+        # R3-B2 and the round-3 small items
+        "R3-B2 four survivors": ("guard_mode_getattr_default_live", "priced_blank_version_ok",
+                                 "b1_entry_isinstance", "b1_key_isinstance"),
+        "R3 the source shape": ("source_answer_unchecked", "source_awaitable_unchecked"),
+        "R3 the report field": ("plan_mode_is_a_literal",),
+        "R3 the ledger key": ("ledger_hash_only_catches_typeerror",),
         "R2 fail closed": ("the_predicate_reraises", "ledger_raises_on_an_unusable_sample_id"),
     }
     declared = {m.name for m in ALL}

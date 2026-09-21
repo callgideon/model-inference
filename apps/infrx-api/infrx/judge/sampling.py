@@ -188,12 +188,16 @@ class CandidateSource(Protocol):
     Contract for an adapter (the coordinator may move this and `TraceCandidate` into
     `contracts/ports.py`, so the shape stays minimal and tenant-scoped):
 
-    * return rows for **`org_id` only**, `trace_mode = full`, started at or after
-      `since`, at most `limit` of them;
-    * return them **deduplicated by `request_id` (lower-case UUID text) and in a stable
-      order** (`06` §3.1 queries `FINAL` for exactly this reason). The sampler enforces
-      both anyway - it truncates to the bound and deduplicates on the canonical id - but
-      only a stable order makes *which* rows fall inside the bound reproducible;
+    * answer a **synchronous iterable** (a tuple, a list, a generator - not an async
+      generator and not a coroutine), of rows for **`org_id` only**, `trace_mode = full`,
+      started at or after `since`, at most `limit` of them;
+    * carry `request_id` in the **frozen lower-case UUIDv4 form** every contract record
+      uses (`ids.is_request_id`): there is exactly one spelling of an id here, and a row
+      carrying any other is excluded as `malformed_row` rather than normalized (R3-B1);
+    * return rows **deduplicated by `request_id` and in a stable order** (`06` §3.1 queries
+      `FINAL` for exactly this reason). The sampler enforces both anyway - it truncates to
+      the bound and deduplicates on the exact id - but only a stable order makes *which*
+      rows fall inside the bound reproducible;
     * carry the **raw**, **typed** facts and let the sampler derive the strata:
       `http_status` an `int`, `schema_valid`/`media_available` a `bool`, `started_at` a
       UTC-aware `datetime` no later than the plan's `now`, `trace_mode`/`content_state`
@@ -385,7 +389,11 @@ def select(org_id: str, consent: ConsentSnapshot, candidates: tuple[TraceCandida
     excluded: list[Excluded] = []
     owned: list[TraceCandidate] = []
     for candidate in candidates:
-        if candidate.org_id != org_id:
+        if not isinstance(candidate, TraceCandidate):
+            # Not a row at all, so not a tenant question either: reading `.org_id` off it
+            # is what turned a bad element into an `AttributeError` mid-selection.
+            excluded.append(Excluded(_reportable_id(candidate), Exclusion.malformed_row))
+        elif candidate.org_id != org_id:
             excluded.append(Excluded(_reportable_id(candidate), Exclusion.not_owned))
         elif _malformed(candidate, now):
             excluded.append(Excluded(_reportable_id(candidate), Exclusion.malformed_row))

@@ -135,9 +135,12 @@ def test_the_worst_case_ignores_the_ambient_decimal_context(prec, rounding):
 
 
 def test_no_decimal_arithmetic_in_the_judge_escapes_the_explicit_context():
-    """The audit R2-B2 asked for, as a check rather than a claim: no bare arithmetic
-    operator between money values anywhere in `infrx/judge`. Every amount goes through
-    `money`, which works in `money.CONTEXT` (prec 40) throughout."""
+    """A **tripwire**, not an audit: it fails when a money-named operand appears beside a
+    bare arithmetic operator anywhere in `infrx/judge`, which is how R2-B2 got in. It does
+    not prove the absence of ambient-context arithmetic - an operand under any other name,
+    or one reached through a call, walks past it. The proof that the *computation* is
+    context-independent is `test_the_worst_case_ignores_the_ambient_decimal_context`; this
+    only catches the shape returning."""
     money_names = {"per_sample", "budget", "total", "amount", "input_per_million",
                    "output_per_million", "worst_case_total", "reserved_cost"}
 

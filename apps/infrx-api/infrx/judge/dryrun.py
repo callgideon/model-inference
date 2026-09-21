@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from collections.abc import Awaitable, Iterable
 from itertools import islice
 
 from ..contracts import errors, money
@@ -104,7 +105,18 @@ async def plan_dry_run(source: CandidateSource, *, org_id: str, consent: Consent
     # promise, and slicing *after* materializing copied a 100,000-row answer into this
     # process before throwing all but 200 of it away. A generator is consumed only as far
     # as the bound.
-    rows = await source.candidates(org_id, since=since, limit=limit)
+    pending = source.candidates(org_id, since=since, limit=limit)
+    if not isinstance(pending, Awaitable):
+        # An async *generator* is the shape most likely to be written by mistake, and
+        # `await`ing one raises `TypeError` from inside this function. Checked rather than
+        # caught, so a genuine `TypeError` from the adapter's own query still propagates.
+        raise errors.InvalidRequest("the candidate source must be an async function")
+    rows = await pending
+    if isinstance(rows, (str, bytes)) or not isinstance(rows, Iterable):
+        # An async generator, a coroutine somebody forgot to await, a `None` from an adapter
+        # that logged instead of returning: a typed refusal rather than a `TypeError` out of
+        # `islice`. `str`/`bytes` are iterable and would silently yield characters.
+        raise errors.InvalidRequest("the candidate source must answer a synchronous iterable")
     candidates = tuple(islice(rows, limit))
     selection = select(org_id, consent, candidates, rubric_version=rubric.version,
                        seed=seed, now=now, design=design)

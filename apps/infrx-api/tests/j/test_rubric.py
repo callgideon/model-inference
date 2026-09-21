@@ -569,8 +569,12 @@ def test_a_ledger_belongs_to_one_run_and_its_planned_samples():
 def test_a_ledger_refuses_an_unusable_sample_id_rather_than_raising():
     """An unhashable sample id cannot be a planned one and cannot be a dict key either, so
     it is a typed refusal instead of a `TypeError` out of the collector."""
+    class Explodes:
+        def __hash__(self):
+            raise RuntimeError("boom")
+
     book = ledger((SAMPLE,))
-    for unusable in ([], {}, set(), bytearray(b"x")):
+    for unusable in ([], {}, set(), bytearray(b"x"), Explodes()):
         first, refused = book.deliver(
             Rejected(run_id=RUN, sample_id=unusable, rubric_version=1, reason="r", detail="d"))
         assert first is False

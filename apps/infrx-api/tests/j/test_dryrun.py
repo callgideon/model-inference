@@ -150,6 +150,48 @@ def test_the_boundary_values_of_the_scan_bound_are_accepted():
     assert scan_bound(MAX_CANDIDATES) == MAX_CANDIDATES
 
 
+@pytest.mark.parametrize("answer", [None, 7, object(), "row", b"row"])
+def test_a_source_that_does_not_answer_an_iterable_is_refused(answer):
+    """A typed refusal, not a `TypeError` out of `islice`: a coroutine nobody awaited, a
+    `None` from an adapter that logged instead of returning. `str` and `bytes` are iterable
+    and would silently yield characters, so they are refused too."""
+    class Wrong:
+        def __init__(self):
+            self.calls: list = []
+
+        async def candidates(self, org_id, *, since, limit):
+            self.calls.append((org_id, since, limit))
+            return answer
+
+    with pytest.raises(errors.InvalidRequest, match="synchronous iterable"):
+        plan(source=Wrong())
+
+
+def test_an_async_generator_source_is_refused():
+    """The wrong shape most likely to be written by mistake, named on its own."""
+    class AsyncGen:
+        def candidates(self, org_id, *, since, limit):
+            async def rows():
+                yield fakes.candidate(1)
+            return rows()
+
+    async def call():
+        return await plan_dry_run(AsyncGen(), org_id=fakes.ORG_A, consent=fakes.consent(),
+                                  model=fakes.JUDGE_MODEL, since=fakes.SINCE, now=fakes.NOW,
+                                  seed="s")
+
+    with pytest.raises(errors.InvalidRequest, match="async function"):
+        asyncio.run(call())
+
+
+def test_the_plan_reports_the_mode_it_ran_under():
+    """The report field, pinned: `mode` is the configured `JUDGE_MODE`, not a literal. A plan
+    that always said `dry_run` would hide a live run in its own audit record."""
+    assert plan()[1].mode == "dry_run"
+    assert plan(settings=LIVE)[1].mode == "live"
+    assert plan(settings=DEFAULTS.replace(judge_mode="test"))[1].mode == "test"
+
+
 def test_unreadable_content_never_reaches_the_plan():
     candidates = (fakes.candidate(1),
                   fakes.candidate(2, content=ContentState.expired),

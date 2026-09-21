@@ -451,12 +451,13 @@ class ScoreLedger:
                                     f"this ledger is rubric version {self.rubric_version}")
         try:
             planned = result.sample_id in self.sample_ids
-        except TypeError:
-            # An unhashable sample id cannot be a planned one and cannot be a dict key
-            # either, so it is a typed refusal rather than a `TypeError` from the collector.
+        except Exception:                              # noqa: BLE001 - see the comment
+            # An id that cannot be hashed (or whose `__hash__`/`__eq__` raises anything at
+            # all) cannot be a planned sample and cannot be a dict key either, so it is a
+            # typed refusal rather than an exception out of the collector.
             return self._unexpected(result, "unexpected_sample",
                                     f"a sample id must be a usable key, not "
-                                    f"{type(result.sample_id).__name__}")
+                                    f"{describe(result.sample_id)}")
         if not planned:
             return self._unexpected(result, "unexpected_sample",
                                     "not a planned sample of this run")
