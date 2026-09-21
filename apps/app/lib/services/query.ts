@@ -107,7 +107,10 @@ export function scopedPort(port: QueryPort): QueryPort {
           throw new QueryPlanError(`${plan.name} returned a row belonging to another organization`);
         }
         // Stripped here, so the tenant column exists for the check and never reaches a DTO.
-        const { [field]: _tenant, ...rest } = row;
+        const rest: Row = {};
+        for (const key of Object.keys(row)) {
+          if (key !== field) rest[key] = row[key];
+        }
         scoped.push(rest);
       }
       return scoped;

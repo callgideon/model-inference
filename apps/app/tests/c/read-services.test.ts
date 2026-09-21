@@ -578,7 +578,10 @@ test("every port passes through the tenant check, whatever the port does", async
     async run(plan) {
       const rows = await honest.run(plan);
       return rows.map((row) => {
-        const { org_id: _dropped, ...rest } = row as Record<string, unknown>;
+        const rest: Record<string, unknown> = {};
+        for (const key of Object.keys(row)) {
+          if (key !== "org_id") rest[key] = row[key];
+        }
         return rest;
       });
     },

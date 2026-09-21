@@ -39,8 +39,8 @@
       "id": "TENANT-04",
       "note": "the settings read is untenanted, so the first organization's row answers",
       "file": "lib/services/query.ts",
-      "find": "    columns: \"s.trace_mode, s.content_retention_days, s.evaluation_consent\",\n    tenantColumn: \"s.org_id\",",
-      "replace": "    columns: \"s.trace_mode, s.content_retention_days, s.evaluation_consent\",\n    tenantColumn: null,",
+      "find": "    columns: \"s.org_id, s.trace_mode, s.content_retention_days, s.evaluation_consent\",\n    tenantColumn: \"s.org_id\",\n    tenantField: \"org_id\",",
+      "replace": "    columns: \"s.org_id, s.trace_mode, s.content_retention_days, s.evaluation_consent\",\n    tenantColumn: null,\n    tenantField: \"org_id\",",
       "cases": [
         "the tenanted set is exactly the pinned one, and nothing else is untenanted",
         "the single-row reads are tenant-bound too, in both directions"
@@ -651,7 +651,7 @@
       "id": "CREDITS-03",
       "note": "the function's name is not required, so an error text forces the fallback",
       "file": "lib/services/credits.ts",
-      "find": "    const missing = (code === \"PGRST202\" || code === \"42883\") && /org_wallet_summary/.test(message);",
+      "find": "    const missing = (code === \"PGRST202\" || code === \"42883\") && /org_wallet_summary\\s*\\(/.test(message);",
       "replace": "    const missing = code === \"PGRST202\" || code === \"42883\";",
       "cases": [
         "a missing function falls back; a broken one does not"
