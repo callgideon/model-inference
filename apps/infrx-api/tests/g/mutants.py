@@ -150,13 +150,34 @@ MUTANTS: tuple[Mutant, ...] = (
        V, "    if not isinstance(messages, list) or not messages:",
        "    if not isinstance(messages, list):",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
-    _m("unknown_role_accepted", "a message names a known role",
-       V, '        if not isinstance(message, dict) or message.get("role") not in ROLES:',
+    # --- r1 R58: the message allow-list ---------------------------------------
+    _m("message_keys_not_an_allow_list", "a message is exactly {role, content} (R58)",
+       V, "        if not isinstance(message, dict) or set(message) != MESSAGE_KEYS:",
        "        if not isinstance(message, dict):",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
+    _m("unknown_role_accepted", "a message names a known role",
+       V, '        if message["role"] not in ROLES:', "        if False:",
+       "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
+    _m("non_object_part_accepted", "a content part is an object (R58)",
+       V, "            if not isinstance(part, dict):", "            if False:",
+       "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
+    _m("text_part_keys_not_an_allow_list", "a text part is exactly {type, text} (R58)",
+       V, '                if set(part) != TEXT_PART_KEYS or not isinstance(part["text"], str):',
+       '                if not isinstance(part.get("text"), str):',
+       "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
+    _m("video_part_keys_not_an_allow_list", "a video part is exactly {type, video_url} (R58)",
+       V, "                if set(part) != VIDEO_PART_KEYS:", "                if False:",
+       "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
+    _m("part_type_case_insensitive", "part types are matched exactly (R58)",
+       V, "            if kind == TEXT_TYPE:", "            if str(kind).lower() == TEXT_TYPE:",
+       "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
+    _m("video_ref_keys_not_an_allow_list", "a video part carries exactly {url} (R58)",
+       V, "    if not isinstance(ref, dict) or set(ref) != VIDEO_REF_KEYS:",
+       "    if not isinstance(ref, dict):",
+       "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("foreign_part_type_accepted", "content parts are text or video only",
-       V, "                raise errors.UnsupportedMedia(\n"
-          "                    f\"content parts are {sorted(TEXT_PARTS | VIDEO_PARTS)}\", param=\"messages\")",
+       V, '                raise errors.UnsupportedMedia(f"content parts are {TEXT_TYPE} and {VIDEO_TYPE}",\n'
+          '                                              param="messages")',
        "                pass",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("media_scheme_unchecked", "a media source is http(s), data: or an upload handle",
@@ -165,12 +186,30 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("second_video_accepted", "one video per request",
        V, "    if videos > 1:", "    if False:",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
+    _m("parts_reordered", "normalized parts keep the caller's order (R58)",
+       V, "    return tuple(messages)",
+       '    return tuple({**m, "content": list(reversed(m["content"]))}\n'
+       '                 if isinstance(m.get("content"), list) else m for m in messages)',
+       "test_media_sec__accepted_messages_keep_their_parts_in_order"),
+    # --- sampling parameters (types and ranges, so no engine 400 is absorbed) --
+    _m("stop_bounds_unchecked", "each stop sequence is bounded and non-empty",
+       V, "        if not isinstance(item, str) or not item or len(item) > MAX_STOP_CHARS:",
+       "        if False:", "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
+    _m("presence_penalty_unranged", "presence_penalty is ranged at ingress",
+       V, '        _number(body, "presence_penalty", -2.0, 2.0)', "        pass",
+       "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
+    _m("frequency_penalty_untyped", "frequency_penalty is typed at ingress",
+       V, '        _number(body, "frequency_penalty", -2.0, 2.0)', "        pass",
+       "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
+    _m("number_range_unchecked", "a sampling range is a range",
+       V, "    if not low <= value <= high:", "    if False:",
+       "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("idempotency_key_unbounded", "the idempotency key is bounded",
        V, "    if key is not None and (not key or len(key) > MAX_IDEMPOTENCY_KEY_CHARS):",
        "    if False:", "test_f_base__an_over_long_idempotency_key_is_refused"),
     # --- startup, readiness and ordering -------------------------------------
     _m("pilot_starts_unreachable", "pilot refuses to start with an unreachable component",
-       N, '        if rt.mode == "pilot" and unavailable:', "        if False:",
+       N, '    if rt.mode == "pilot" and unavailable:', "    if False:",
        "test_f_base__pilot_refuses_to_start_when_a_component_is_unreachable"),
     _m("missing_probe_counts_as_ok", "a missing probe is not a passing probe",
        N, "            state[name] = OK if probe is not None and probe() else UNAVAILABLE",
@@ -262,6 +301,17 @@ MUTANTS: tuple[Mutant, ...] = (
 
 PYTEST_TESTS_FAILED = 1
 PYTEST_ALL_PASSED = 0
+# Generous for a handful of cases with no sleeps in them: this exists so a mutant that
+# makes a case hang cannot hang the suite, not as a performance budget.
+NESTED_TIMEOUT_S = 120
+
+
+def _pytest(root: pathlib.Path, files, selection: str):
+    return subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
+         "--import-mode=importlib", "-rf", "--tb=no", *files, "-k", selection],
+        cwd=root, capture_output=True, text=True, timeout=NESTED_TIMEOUT_S,
+        env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
 
 
 def run_mutant(mutant) -> Result:
@@ -285,12 +335,19 @@ def run_mutant(mutant) -> Result:
                           f"anchor not found in {mutant.file}: {mutant.old[:60]!r}")
         target.write_text(source.replace(mutant.old, mutant.new, 1))
         selection = " or ".join(mutant.cases)
-        done = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-             "--import-mode=importlib", "-rf", "--tb=no", SUITE,
-             f"--ignore={SUITE}/test_mutants.py", "-k", selection],
-            cwd=root, capture_output=True, text=True,
-            env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
+        # Only the files that define the named cases: collecting the whole suite for
+        # every mutant imports FastAPI and the contracts fakes 50 times over, which is
+        # most of the wall clock of a full run.
+        files = sorted(files_for(mutant.cases))
+        if not files:
+            return Result(Outcome.misdeclared, f"no file defines any of {list(mutant.cases)}")
+        try:
+            done = _pytest(root, files, selection)
+        except subprocess.TimeoutExpired:
+            # A defect that makes a case hang is real, but a hang is not the proof the
+            # contract asks for, and a runner that waits forever proves nothing at all.
+            return Result(Outcome.broken_runner,
+                          f"the named cases did not finish within {NESTED_TIMEOUT_S}s")
         stdout = done.stdout or ""
         lines = (stdout or done.stderr).strip().splitlines()
         summary = lines[-1] if lines else "no output"
@@ -312,18 +369,29 @@ def run_mutant(mutant) -> Result:
         return Result(Outcome.killed, summary)
 
 
+def _definitions() -> dict[str, str]:
+    """case name -> the suite-relative file that defines it."""
+    where = {}
+    for path in sorted((API_DIR / SUITE).glob("test_*.py")):
+        if path.name == "test_mutants.py":
+            continue
+        for name in re.findall(r"^def (test_\w+)", path.read_text(), re.M):
+            where[name] = f"{SUITE}/{path.name}"
+    return where
+
+
+def files_for(cases) -> set[str]:
+    where = _definitions()
+    return {where[case] for case in cases if case in where}
+
+
 def case_names() -> set[str]:
     """Every `test_*` function this suite defines about the ingress.
 
     `test_mutants.py` is excluded: its cases are claims about this list, not about
     the gateway, so requiring a mutant for them would be circular.
     """
-    found = set()
-    for path in sorted((API_DIR / SUITE).glob("test_*.py")):
-        if path.name == "test_mutants.py":
-            continue
-        found |= set(re.findall(r"^def (test_\w+)", path.read_text(), re.M))
-    return found
+    return set(_definitions())
 
 
 def main() -> int:

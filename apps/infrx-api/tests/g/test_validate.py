@@ -66,29 +66,61 @@ def test_f_base__only_n_equals_one_is_supported():
     assert post(message(n=1))[0].status_code == 202
 
 
+def parts(*content):
+    return {"messages": [{"role": "user", "content": list(content)}]}
+
+
+VIDEO = {"type": "video_url", "video_url": {"url": "https://cdn.test/a.mp4"}}
+
+# r1 R58: the allow-list, attacked from every side the reviews have named.
 BAD_SHAPES = (
     ("no messages", {}, "invalid_request"),
     ("empty messages", {"messages": []}, "invalid_request"),
     ("message is not an object", {"messages": ["hi"]}, "invalid_request"),
+    ("message without content", {"messages": [{"role": "user"}]}, "invalid_request"),
+    ("message with an extra key", {"messages": [{"role": "user", "content": "hi", "name": "x"}]},
+     "invalid_request"),
+    ("message with tool calls", {"messages": [{"role": "user", "content": "hi",
+                                               "tool_calls": []}]}, "invalid_request"),
     ("unknown role", {"messages": [{"role": "tool", "content": "x"}]}, "invalid_request"),
     ("empty content array", {"messages": [{"role": "user", "content": []}]}, "invalid_request"),
-    ("text part without text", {"messages": [{"role": "user", "content": [{"type": "text"}]}]},
+    ("part is not an object", parts("hi"), "unsupported_media"),
+    ("text part without text", parts({"type": "text"}), "invalid_request"),
+    ("text part with an extra key", parts({"type": "text", "text": "hi", "image_url": "x"}),
      "invalid_request"),
-    ("image part", {"messages": [{"role": "user",
-                                  "content": [{"type": "image_url", "image_url": "x"}]}]},
+    ("image part", parts({"type": "image_url", "image_url": "x"}), "unsupported_media"),
+    ("audio part", parts({"type": "input_audio", "input_audio": "x"}), "unsupported_media"),
+    ("file part", parts({"type": "file", "file": "x"}), "unsupported_media"),
+    ("untyped part", parts({"text": "hi"}), "unsupported_media"),
+    ("differently cased type", parts({"type": "Text", "text": "hi"}), "unsupported_media"),
+    ("the old input_video spelling", parts({"type": "input_video",
+                                            "input_video": "https://cdn.test/a.mp4"}),
      "unsupported_media"),
-    ("video without a url", {"messages": [{"role": "user", "content": [{"type": "video_url"}]}]},
+    ("video without a url", parts({"type": "video_url"}), "invalid_request"),
+    ("video part with an extra key", parts({**VIDEO, "detail": "high"}), "invalid_request"),
+    ("video url as a bare string", parts({"type": "video_url",
+                                          "video_url": "https://cdn.test/a.mp4"}),
      "invalid_request"),
-    ("file scheme", {"messages": [{"role": "user", "content": [
-        {"type": "video_url", "video_url": {"url": "file:///etc/passwd"}}]}]}, "unsupported_media"),
-    ("two videos", {"messages": [{"role": "user", "content": [
-        {"type": "video_url", "video_url": "https://cdn.test/a.mp4"},
-        {"type": "input_video", "input_video": "https://cdn.test/b.mp4"}]}]}, "unsupported_media"),
+    ("video ref with an extra key", parts({"type": "video_url",
+                                           "video_url": {"url": "https://cdn.test/a.mp4",
+                                                         "mime": "video/mp4"}}),
+     "invalid_request"),
+    ("file scheme", parts({"type": "video_url", "video_url": {"url": "file:///etc/passwd"}}),
+     "unsupported_media"),
+    ("two videos", parts(VIDEO, {"type": "video_url",
+                                 "video_url": {"url": "https://cdn.test/b.mp4"}}),
+     "unsupported_media"),
     ("stream is not a boolean", dict(message(stream="yes")), "invalid_request"),
     ("temperature out of range", dict(message(temperature=5)), "invalid_request"),
     ("temperature is a bool", dict(message(temperature=True)), "invalid_request"),
+    ("top_p out of range", dict(message(top_p=1.5)), "invalid_request"),
+    ("presence_penalty out of range", dict(message(presence_penalty=3)), "invalid_request"),
+    ("frequency_penalty is a string", dict(message(frequency_penalty="1")), "invalid_request"),
     ("seed is not an integer", dict(message(seed="1")), "invalid_request"),
     ("five stop sequences", dict(message(stop=["a", "b", "c", "d", "e"])), "invalid_request"),
+    ("an over-long stop sequence", dict(message(stop=["s" * 65])), "invalid_request"),
+    ("an empty stop sequence", dict(message(stop=[""])), "invalid_request"),
+    ("a non-string stop sequence", dict(message(stop=[1])), "invalid_request"),
     ("empty model", dict(message(model="")), "invalid_request"),
 )
 
@@ -103,10 +135,21 @@ def test_media_sec__a_malformed_shape_is_refused_with_a_stable_code(name, body, 
 
 def test_media_sec__an_owned_upload_handle_and_a_public_url_are_both_accepted():
     for source in ("https://cdn.test/a.mp4", "upl_" + "a" * 40, "data:video/mp4;base64,AAA"):
-        body = {"messages": [{"role": "user", "content": [
-            {"type": "text", "text": "describe"},
-            {"type": "video_url", "video_url": {"url": source}}]}]}
+        body = parts({"type": "text", "text": "describe"},
+                     {"type": "video_url", "video_url": {"url": source}})
         assert post(body)[0].status_code == 202, source
+
+
+def test_media_sec__accepted_messages_keep_their_parts_in_order():
+    """r1 R58 pairs one media part with one staged ref, in order, so the normalized
+    messages must preserve the order the caller sent - and carry nothing else."""
+    body = parts({"type": "text", "text": "describe"}, VIDEO, {"type": "text", "text": "briefly"})
+    tc, calls = client()
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=body).status_code == 202
+    content = calls[0][1].messages[0]["content"]
+    assert [part["type"] for part in content] == ["text", "video_url", "text"]
+    assert content[1] == VIDEO
+    assert set(calls[0][1].messages[0]) == {"role", "content"}
 
 
 OUTPUT_CEILINGS = ((0, 400), (-1, 400), (2_049, 400), (2_048, 202), (1, 202))

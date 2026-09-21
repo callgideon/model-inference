@@ -11,8 +11,7 @@ that the legacy entry point is still exactly what F1 left behind.
 import pytest
 from fastapi.testclient import TestClient
 
-from infrx.config import RuntimeMisconfigured, validate_runtime
-from infrx.config import Settings
+from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
 from infrx.contracts import wire
 from infrx.gateway import app as composition
 from infrx.gateway.routes import chat, health, ingress, models

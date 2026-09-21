@@ -87,7 +87,14 @@ def test_media_sec__a_peer_that_sends_nothing_hits_the_intake_deadline():
     async def send(message):
         sent.append(message)
 
-    asyncio.run(app(scope, receive, send))
+    async def drive():
+        # The test's own bound, so that a gateway which *stopped* enforcing the
+        # deadline fails this case instead of hanging the suite forever. It is never
+        # waited on while the ingress works: the answer arrives in microseconds.
+        async with asyncio.timeout(5):
+            await app(scope, receive, send)
+
+    asyncio.run(drive())
     assert sent[0]["status"] == 504, sent
     assert b"deadline_exceeded" in sent[1]["body"]
     assert calls == []

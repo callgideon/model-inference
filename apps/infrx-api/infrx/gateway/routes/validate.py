@@ -36,21 +36,35 @@ from ...contracts.records import (Budgets, ConsentSnapshot, ExecutionMode, Idemp
 # Everything a pilot request may name. `messages` and `model` become record fields;
 # the rest travel in `NormalizedRequest.parameters`.
 SUPPORTED = frozenset({"model", "messages", "stream", "max_tokens", "max_completion_tokens",
-                       "temperature", "top_p", "n", "stop", "seed"})
+                       "temperature", "top_p", "n", "stop", "seed",
+                       # r1 R58 follow-up: the engine adapter forwards these, so an
+                       # out-of-range value would come back as an engine 400 and be
+                       # absorbed as `engine_error`. They are ranged here instead.
+                       "presence_penalty", "frequency_penalty"})
 # Named so the refusal is deliberate rather than a side effect of the allow-list:
 # these are the capabilities callers most often assume, plus R45's price field.
 UNSUPPORTED = frozenset({"tools", "tool_choice", "functions", "function_call", "response_format",
                          "logit_bias", "logprobs", "top_logprobs", "parallel_tool_calls",
                          "price_snapshot"})
+# r1 R58: the allow-list for a normalized message. A message is *exactly*
+# `{role, content}` and a part is *exactly* one of the two shapes below - equality of
+# key sets, not "contains", so `tool_calls`, `name`, `mm_processor_kwargs` or an
+# `image_url` beside a `text` cannot ride along. Types are compared case-sensitively
+# with `==`: `"Text"` is not `"text"`.
 ROLES = frozenset({"system", "user", "assistant"})
-TEXT_PARTS = frozenset({"text"})
-VIDEO_PARTS = frozenset({"video_url", "input_video"})
+MESSAGE_KEYS = frozenset({"role", "content"})
+TEXT_TYPE = "text"
+VIDEO_TYPE = "video_url"
+TEXT_PART_KEYS = frozenset({"type", "text"})
+VIDEO_PART_KEYS = frozenset({"type", "video_url"})
+VIDEO_REF_KEYS = frozenset({"url"})
 # http(s) for a source M fetches during preparation, `data:` for the bounded inline
 # base64 of DEC-02, `upl_` for an owned upload handle M resolves. Anything else -
 # `file:`, `s3:`, a bare path - is a request to read something of ours.
 MEDIA_SCHEMES = ("http://", "https://", "data:")
 UPLOAD_PREFIX = "upl_"
 MAX_STOP_SEQUENCES = 4
+MAX_STOP_CHARS = 64
 
 
 def _int(body: dict, name: str) -> int | None:
@@ -74,13 +88,28 @@ def _number(body: dict, name: str, low: float, high: float) -> float | None:
     return value
 
 
-def _video_source(part: dict) -> str:
-    """The one string a video part carries, whatever spelling it used."""
-    source = part.get("video_url", part.get("input_video"))
-    if isinstance(source, dict):
-        source = source.get("url")
+def check_stop(stop: object) -> None:
+    """A string or up to four strings, each bounded. Counted in code points (R54)."""
+    if stop is None:
+        return
+    items = [stop] if isinstance(stop, str) else stop
+    if not isinstance(items, list) or len(items) > MAX_STOP_SEQUENCES:
+        raise errors.InvalidRequest(
+            f"stop must be a string or up to {MAX_STOP_SEQUENCES} strings", param="stop")
+    for item in items:
+        if not isinstance(item, str) or not item or len(item) > MAX_STOP_CHARS:
+            raise errors.InvalidRequest(
+                f"each stop sequence is 1..{MAX_STOP_CHARS} characters", param="stop")
+
+
+def check_video_ref(ref: object) -> str:
+    """r1 R58: a video part carries exactly `{url}`, and the url is a reference we
+    are willing to resolve later — never anything that would make the engine fetch."""
+    if not isinstance(ref, dict) or set(ref) != VIDEO_REF_KEYS:
+        raise errors.InvalidRequest("a video part carries exactly {url}", param="messages")
+    source = ref["url"]
     if not isinstance(source, str) or not source:
-        raise errors.InvalidRequest("a video part must carry a url", param="messages")
+        raise errors.InvalidRequest("a video url must be a non-empty string", param="messages")
     if source.startswith(UPLOAD_PREFIX):
         return source
     if not source.lower().startswith(MEDIA_SCHEMES):
@@ -92,34 +121,52 @@ def _video_source(part: dict) -> str:
 
 
 def check_messages(body: dict) -> tuple[dict, ...]:
-    """Shape only: canonical messages, at most one video, no foreign part type."""
+    """r1 R58: the allow-list for a pilot request's messages.
+
+    An allow-list, never a deny-list: the key set of a message and of a part must
+    *equal* the allowed one, so a field nobody thought of — `tool_calls`, `name`,
+    `mm_processor_kwargs`, an `image_url` smuggled beside a `text` — is refused rather
+    than ignored. Part types are compared with `==` against a literal, so casing and
+    unknown types are refused too, and the comparison can never reach an inherited
+    attribute of some container.
+    """
     messages = body.get("messages")
     if not isinstance(messages, list) or not messages:
         raise errors.InvalidRequest("messages must be a non-empty array", param="messages")
     videos = 0
     for message in messages:
-        if not isinstance(message, dict) or message.get("role") not in ROLES:
-            raise errors.InvalidRequest(f"each message needs a role in {sorted(ROLES)}",
+        if not isinstance(message, dict) or set(message) != MESSAGE_KEYS:
+            raise errors.InvalidRequest("a message is exactly {role, content}", param="messages")
+        if message["role"] not in ROLES:
+            raise errors.InvalidRequest(f"a message role is one of {sorted(ROLES)}",
                                         param="messages")
-        content = message.get("content")
+        content = message["content"]
         if isinstance(content, str):
             continue
         if not isinstance(content, list) or not content:
             raise errors.InvalidRequest("message content must be a string or a non-empty array",
                                         param="messages")
         for part in content:
-            kind = part.get("type") if isinstance(part, dict) else None
-            if kind in TEXT_PARTS:
-                if not isinstance(part.get("text"), str):
-                    raise errors.InvalidRequest("a text part must carry text", param="messages")
-            elif kind in VIDEO_PARTS:
+            if not isinstance(part, dict):
+                raise errors.UnsupportedMedia("a content part is an object with a type",
+                                              param="messages")
+            kind = part.get("type")
+            if kind == TEXT_TYPE:
+                if set(part) != TEXT_PART_KEYS or not isinstance(part["text"], str):
+                    raise errors.InvalidRequest("a text part is exactly {type, text}",
+                                                param="messages")
+            elif kind == VIDEO_TYPE:
+                if set(part) != VIDEO_PART_KEYS:
+                    raise errors.InvalidRequest("a video part is exactly {type, video_url}",
+                                                param="messages")
                 videos += 1
-                _video_source(part)
+                check_video_ref(part[VIDEO_TYPE])
             else:
-                raise errors.UnsupportedMedia(
-                    f"content parts are {sorted(TEXT_PARTS | VIDEO_PARTS)}", param="messages")
+                raise errors.UnsupportedMedia(f"content parts are {TEXT_TYPE} and {VIDEO_TYPE}",
+                                              param="messages")
     if videos > 1:
-        # The engine profile budgets one clip per request (models/marlin2b/README.md).
+        # The engine profile budgets one clip per request (models/marlin2b/README.md),
+        # and R58 pairs one media part with one staged ref.
         raise errors.UnsupportedMedia("one video per request", param="messages")
     return tuple(messages)
 
@@ -196,15 +243,15 @@ class Validator:
         count = _int(body, "n")
         if count is not None and count != 1:
             raise errors.UnsupportedParameter("only n=1 is supported", param="n")
+        # Types *and* ranges, because the engine adapter forwards these: a value the
+        # engine refuses would come back as an engine 400 and be absorbed as
+        # `engine_error` (R21), i.e. the platform paying for a bad request.
         _number(body, "temperature", 0.0, 2.0)
         _number(body, "top_p", 0.0, 1.0)
+        _number(body, "presence_penalty", -2.0, 2.0)
+        _number(body, "frequency_penalty", -2.0, 2.0)
         _int(body, "seed")
-        stop = body.get("stop")
-        if stop is not None and not (isinstance(stop, str) or (
-                isinstance(stop, list) and len(stop) <= MAX_STOP_SEQUENCES
-                and all(isinstance(item, str) for item in stop))):
-            raise errors.InvalidRequest(
-                f"stop must be a string or up to {MAX_STOP_SEQUENCES} strings", param="stop")
+        check_stop(body.get("stop"))
         model = body.get("model")
         if model is not None and (not isinstance(model, str) or not model):
             raise errors.InvalidRequest("model must be a non-empty string", param="model")
