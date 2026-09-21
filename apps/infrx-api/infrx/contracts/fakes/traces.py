@@ -127,11 +127,24 @@ class FakeTraceCapture:
             return self.result
         if self.closed:                      # abandoned or reaped first: nothing to queue
             self.finished = True
-            self.result = self.sink._drop(self.lost_reason or TraceLossReason.abandoned,
-                                          counted=self.counted)
+            # `TraceLossReason.none` is the truthy string "none", so `or` never fell
+            # through here: a drop was once counted under `none`, which is not a loss
+            # reason at all.
+            reason = (TraceLossReason.abandoned if self.lost_reason is TraceLossReason.none
+                      else self.lost_reason)
+            self.result = self.sink._drop(reason, counted=self.counted)
             return self.result
         self.closed = self.finished = True
         charged = self.content_bytes
+        if envelope.mode is not self.mode:
+            # The capture decides, on this path as on the no-op one: an envelope whose
+            # mode is not the mode this capture was opened with would file a mislabelled
+            # row - `off` or `minimal` over content that really was captured, or `full`
+            # over a request that never consented to content. Dropped, counted, charge
+            # released.
+            self._discard(TraceLossReason.malformed)
+            self.result = self.sink._drop(TraceLossReason.malformed, counted=True)
+            return self.result
         if not self.lost and envelope.content_bytes > charged:
             # The envelope claims more content than this capture charged, so those bytes
             # never went through the budget: the numbers must agree, or `add` is
@@ -191,12 +204,21 @@ class FakeTraceCapture:
         self._close(reason)
 
     def _close(self, reason: TraceLossReason) -> None:
-        if self.closed or self.no_op:
-            self.closed = True
+        """End the capture, counting its single loss if it has not been counted yet.
+
+        A no-op capture counts one too: a `full`-mode request whose trace was never
+        capturable (no deadline) has lost its content just as surely as one that breached
+        the budget, and 02 wants every loss marked *and* counted. An `off` or `minimal`
+        capture has no content to lose, so there is nothing to count.
+        """
+        if self.closed:
             return
         self.closed = True
-        if not self.lost:
-            self._discard(reason)
+        if self.lost:
+            return
+        if self.no_op and self.mode is not TraceMode.full:
+            return                      # nothing was ever going to be captured
+        self._discard(reason)
 
 
 class FakeTraceSink:
@@ -310,6 +332,7 @@ class FakeTraceSink:
     def _drop(self, reason: TraceLossReason, *, counted: bool = False) -> TraceOfferResult:
         """One dropped record. `counted=True` means this capture's loss is already in
         `loss_reasons`, so the drop is recorded without counting the loss twice."""
+        assert reason is not TraceLossReason.none, "a drop always has a reason"
         self.dropped += 1
         if not counted:
             self.loss_reasons[reason] += 1

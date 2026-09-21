@@ -694,6 +694,28 @@ MUTANTS: tuple[Mutant, ...] = (
        T, "            if envelope.mode is not TraceMode.minimal or envelope.carries_content:",
        "            if False:",
        "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
+    # both halves of that guard, separately: the mode half alone let a raw-assembled
+    # minimal envelope carry content past a customer's metadata-only consent (r7 F1, y3c)
+    _m("minimal_capture_keeps_only_the_mode_half", "a minimal capture never stores content",
+       T, "            if envelope.mode is not TraceMode.minimal or envelope.carries_content:",
+       "            if envelope.mode is not TraceMode.minimal:",
+       "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
+    _m("minimal_capture_keeps_only_the_content_half", "a minimal capture checks the mode too",
+       T, "            if envelope.mode is not TraceMode.minimal or envelope.carries_content:",
+       "            if envelope.carries_content:",
+       "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
+    _m("live_capture_trusts_the_envelope_mode", "the capture decides on the live path too (n1)",
+       T, "        if envelope.mode is not self.mode:", "        if False:",
+       "trace_bounds__a_live_capture_also_decides_its_own_mode"),
+    _m("unrecordable_capture_counts_no_loss", "a full capture that never captured counts one loss (n2)",
+       T, "        if self.no_op and self.mode is not TraceMode.full:\n            return",
+       "        if self.no_op:\n            return",
+       "trace_bounds__an_open_capture_past_its_deadline_is_reaped"),
+    _m("drop_reason_falls_back_on_truthiness", "`none` is never a drop reason (n3)",
+       T, "            reason = (TraceLossReason.abandoned if self.lost_reason is TraceLossReason.none\n"
+          "                      else self.lost_reason)",
+       "            reason = self.lost_reason or TraceLossReason.abandoned",
+       "trace_bounds__no_loss_is_ever_counted_under_none"),
     _m("no_op_full_capture_keeps_its_content", "a discarded capture finishes as metadata",
        T, '        return self.sink._enqueue(envelope.model_copy(update={\n'
           '            "content_complete": False, "content_ref": None, "content_bytes": 0,\n'

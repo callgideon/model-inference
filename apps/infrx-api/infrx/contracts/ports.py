@@ -195,10 +195,20 @@ class TraceCapture(Protocol):
         content finishes as honest metadata with its loss reason.
 
         Idempotent: calling it again returns the **first** result and queues nothing
-        more, and a capture contributes at most one loss count however it ends. On a
-        no-op capture (`off`/`minimal`) it behaves as `offer`, so a `minimal` request
-        still produces exactly the metadata row 01 requires and G needs no branch on
-        the mode."""
+        more, and a capture contributes at most one loss count however it ends.
+
+        **The capture decides, never the envelope** - otherwise the trace mode would be
+        a client-supplied field (R12). The envelope must name this capture's request and
+        organization, and its `mode` must be the mode the capture was opened with;
+        anything else is dropped and counted `malformed`, with the charge released. A
+        capture opened `off` stores nothing whatever arrives. One opened `minimal` stores
+        a metadata-only envelope and refuses any content, however the envelope is
+        labelled. One opened `full` that never accumulated - no deadline, or its content
+        discarded - finishes as honest **metadata**: content stripped, `content_complete`
+        false, and exactly one counted loss (`abandoned` for an unrecordable capture,
+        `memory_budget` for a discarded one); never `loss_reason: none`. So G opens, adds,
+        finishes and needs no branch on the mode, and a `minimal` request still produces
+        exactly the metadata row 01 requires."""
 
     async def abandon(self, reason: TraceLossReason) -> None:
         """Release this capture's bytes without queueing anything. Idempotent."""
@@ -226,9 +236,11 @@ class TraceSink(Protocol):
         hold budget until the process restarted, so an adapter that is handed `None`
         returns a no-op capture rather than one it can never reap.
 
-        `off` and `minimal` requests return a **no-op capture**: `add` is False, and
-        `finish` behaves as `offer` (a metadata row for `minimal`, nothing for `off`).
-        Callers therefore never branch on the mode, and nothing here raises."""
+        `off` and `minimal` requests - and a `full` request handed no deadline - return a
+        **no-op capture**: `add` is False, and `finish` stores what that capture's mode
+        allows (a metadata row for `minimal`, nothing for `off`, stripped metadata with
+        one counted loss for the unrecordable `full` case). Callers therefore never branch
+        on the mode, and nothing here raises."""
 
     async def offer(self, envelope: TraceEnvelope) -> TraceOfferResult:
         """A metadata-only envelope: accepted into memory or dropped with a counted
