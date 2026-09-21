@@ -210,7 +210,7 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/harness.py",
            '    name = assert_ours(container_of(service))\n    run(["docker", "pause", name]',
            '    name = container_of(service)\n    run(["docker", "pause", name]',
-           "tests/integration/test_harness.py", "pause_helper",
+           "tests/integration/test_harness.py", "namespace_checked",
            cases=("test_every_container_helper_is_namespace_checked",)),
     Mutant("e2m43", "r1 B2: the canary needle is searched in the whole output",
            "tests/integration/run.py",
@@ -364,14 +364,14 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/pgstate.py",
            "                if str(identity) != str(principal.user_id):",
            "                if False:",
-           "tests/integration/test_services.py", "vacuous or role_matrix_holds",
+           "tests/integration/test_services.py", "authenticates_nobody or role_matrix_holds",
            layer=2, cases=("test_a_matrix_that_authenticates_nobody_fails",)),
     Mutant("e2m27", "r1 R-a: the template copy is owned by postgres, or migrations cannot run",
            "tests/integration/harness.py",
            "                             f\"template {PG_TEMPLATE_SOURCE} owner {PG_USER}\")],",
            "                             f\"template {PG_TEMPLATE_SOURCE}\")],",
-           "tests/integration/test_services.py", "templated_database",
-           layer=2, cases=("test_the_target_database_is_a_template_copy_owned_by_postgres",)),
+           "tests/integration/test_run.py", "provision_database_statements",
+           cases=("test_provision_database_statements_are_the_ones_r_a_requires",)),
 )
 
 
@@ -421,7 +421,12 @@ def _verdict(mutant: Mutant, code: int, output: str) -> dict:
     """
     failed = re.search(r"(\d+) failed", output)
     errors = re.search(r"(\d+) error", output)
-    nothing_ran = "no tests ran" in output or re.search(r"^0 selected", output, re.M)
+    nothing_ran = ("no tests ran" in output
+                   or re.search(r"^0 selected", output, re.M)
+                   # `-k` that matches nothing prints only "N deselected": no test ran, so the
+                   # mutant was never exercised and calling that a survival would be a lie.
+                   or (re.search(r"\d+ deselected", output)
+                       and not re.search(r"\d+ (passed|failed)", output)))
     detail = {"id": mutant.id, "invariant": mutant.invariant, "exit": code,
               "selected_cases": mutant.cases, "must_survive": mutant.must_survive,
               "failed": int(failed.group(1)) if failed else 0,

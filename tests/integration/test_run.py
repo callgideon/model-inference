@@ -552,6 +552,40 @@ sys.exit(run.main(["--layer", "all", "--no-mutants"]))
         os.kill(server_pid, 0)
 
 
+def test_provision_database_statements_are_the_ones_r_a_requires():
+    """r1 review R-a, at layer 1: the three statements and their order, with docker stubbed.
+
+    Checked here rather than against the live database because re-provisioning to prove it
+    would drop the fixtures every later case needs. `OWNER postgres` is the one that bites:
+    `public` is owned by `pg_database_owner`, so a copy owned by `supabase_admin` refuses the
+    migration with `permission denied for schema public`.
+    """
+    issued = []
+
+    def fake_run(argv, **kwargs):
+        issued.append(argv)
+        return _Completed(0, "CREATE DATABASE")
+
+    with patched(harness, run=fake_run, assert_ours=lambda name: name):
+        detail = harness.provision_database()
+    assert len(issued) == 1, issued
+    argv = issued[0]
+    assert argv[:3] == ["docker", "exec", "-i"], argv[:3]
+    assert argv[3] == f"{harness.PREFIX}postgres"
+    assert argv[4:8] == ["psql", "-U", harness.PG_ADMIN_ROLE, "-d"], argv[4:8]
+    assert harness.PG_ADMIN_ROLE == "supabase_admin", "`postgres` is not a superuser here"
+    statements = [argv[index + 1] for index, token in enumerate(argv) if token == "-c"]
+    assert len(statements) == 3, "each in its own -c: DROP/CREATE DATABASE cannot run in a txn"
+    assert statements[0] == f"drop database if exists {harness.PG_DATABASE}"
+    assert "pg_terminate_backend" in statements[1] and harness.PG_TEMPLATE_SOURCE in statements[1]
+    assert statements[2] == (f"create database {harness.PG_DATABASE} "
+                            f"template {harness.PG_TEMPLATE_SOURCE} owner {harness.PG_USER}")
+    assert f"owner {harness.PG_USER}" in statements[2], \
+        "without OWNER postgres the migration fails: permission denied for schema public"
+    assert harness.PG_DATABASE.startswith("infrx_"), "D1 gates the test clock on this name"
+    assert detail["owner"] == harness.PG_USER and detail["template"] == "postgres"
+
+
 def test_canary_intentional_failure_is_detected_in_the_orchestration_suite():
     if os.environ.get("INFRX_E2_CANARY") == "fail":
         raise AssertionError("E2 canary: this failure is intentional (INFRX_E2_CANARY=fail)")
