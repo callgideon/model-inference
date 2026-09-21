@@ -114,10 +114,16 @@ function Row({ row }: { row: TraceRowView }) {
         <Badge variant={STATUS_VARIANT[row.statusTone]}>{row.httpStatus}</Badge>{" "}
         <span className="text-muted-foreground">{row.jobState}</span>
       </TableCell>
-      <TableCell className="whitespace-nowrap">
-        <Badge variant={CONTENT_VARIANT[row.content.tone]} title={row.content.detail}>
-          {row.content.label}
-        </Badge>
+      <TableCell className="max-w-56">
+        <Badge variant={CONTENT_VARIANT[row.content.tone]}>{row.content.label}</Badge>
+        {/* The reason is text, not a tooltip: a `title` is unreachable by keyboard and skipped by
+            most screen readers, and "why is the content gone?" is the question this column exists to
+            answer. Visible where something failed or is still coming, read out otherwise. */}
+        {row.content.failed || row.content.state === "pending" || row.content.unexpected ? (
+          <span className="mt-0.5 block text-xs text-muted-foreground">{row.content.detail}</span>
+        ) : (
+          <span className="sr-only">{row.content.detail}</span>
+        )}
       </TableCell>
       <TableCell className="whitespace-nowrap tabular-nums">
         {row.promptTokens === null || row.completionTokens === null
@@ -195,7 +201,20 @@ export function TraceTable({ view }: { view: TraceListView }) {
           </Table>
         </CardContent>
       </Card>
-      <div className="mt-4 flex justify-end">
+      <nav className="mt-4 flex items-center justify-between" aria-label="Trace list pages">
+        {/* There is no reverse cursor in v1, so the browser's back button walks backwards and this
+            link is the one way out of the middle of a walk. */}
+        {view.firstHref === null ? (
+          <span />
+        ) : (
+          <Link
+            href={view.firstHref}
+            className="text-sm text-primary underline-offset-4 hover:underline"
+            rel="first"
+          >
+            ← First page
+          </Link>
+        )}
         {view.nextHref === null ? (
           <p className="text-sm text-muted-foreground">End of this window.</p>
         ) : (
@@ -207,7 +226,7 @@ export function TraceTable({ view }: { view: TraceListView }) {
             Next page →
           </Link>
         )}
-      </div>
+      </nav>
     </>
   );
 }

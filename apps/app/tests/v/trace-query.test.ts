@@ -12,6 +12,7 @@ import test from "node:test";
 import {
   CONTENT_FILTERS,
   DEFAULT_RANGE,
+  MAX_ANCHOR_AGE_MS,
   PAGE_SIZES,
   parseTraceParams,
   traceHref,
@@ -25,6 +26,7 @@ import {
   MAX_PAGE_LIMIT,
   TRACE_QUERY_FIELDS,
   type TraceListItem,
+  type TraceQuery,
 } from "../../lib/contracts/types.ts";
 
 /** A fixed instant, so every window in these cases is exact rather than "about now". */
@@ -131,16 +133,40 @@ test("V1-Q04 a key filter must name one of this organization's keys", () => {
   assert.deepEqual(own.rejected, []);
   assert.equal(own.query.key_id, OWN_KEYS[1]);
 
-  // A model has no console catalogue to check against, so it is bounded and checked for shape only.
+  // A model has no console catalogue to check against, so it is bounded and must be *identifier
+  // shaped*: the value is echoed into the filter control and the page text as well as the query, and
+  // a control-character check misses the characters that actually matter there.
   const long = parse({ model: "m".repeat(201) });
   assert.equal(long.query.model, undefined);
   assert.equal(names(long.rejected)[0], "model");
-  const control = parse({ model: "marlin-2b\u0000" });
-  assert.equal(control.query.model, undefined);
-  assert.match(control.rejected[0].why, /control characters/);
-  const fine = parse({ model: "marlin-2b@2026-09-01" });
-  assert.deepEqual(fine.rejected, []);
-  assert.equal(fine.query.model, "marlin-2b@2026-09-01");
+  assert.deepEqual(
+    parse({ model: "m".repeat(200) }).rejected,
+    [],
+    "the bound is 200 code points, and exactly 200 is accepted",
+  );
+  for (const [what, value] of [
+    ["an ASCII control", "marlin-2b\u0000"],
+    ["a C1 control (NEL)", "marlin-2b\u0085"],
+    ["a line separator", "marlin-2b\u2028"],
+    ["a paragraph separator", "marlin-2b\u2029"],
+    ["a bidi override", "marlin-2b\u202E"],
+    ["a zero-width joiner", "marlin\u200d2b"],
+    ["an astral character", "marlin-2b\u{1f600}"],
+    ["a space", "marlin 2b"],
+    ["markup", "<script>x</script>"],
+    ["a quote", "marlin'2b"],
+  ] as const) {
+    const parsed = parse({ model: value });
+    assert.equal(parsed.query.model, undefined, `${what} must not reach the service`);
+    assert.equal(parsed.filters.model, null, `${what} must not be echoed into the page`);
+    assert.match(parsed.rejected[0].why, /identifier/);
+  }
+  // The shapes served ids actually have.
+  for (const value of ["marlin-2b@2026-09-01", "deepseek-v41-flash@2026-08-15", "a/b+c:d._-1"]) {
+    const parsed = parse({ model: value });
+    assert.deepEqual(parsed.rejected, [], `${value} is an identifier`);
+    assert.equal(parsed.query.model, value);
+  }
 });
 
 test("V1-Q05 the window is resolved from the range, and a page link pins it", () => {
@@ -173,6 +199,54 @@ test("V1-Q05 the window is resolved from the range, and a page link pins it", ()
   assert.deepEqual(names(badAnchor.rejected), ["at"]);
 });
 
+test("V1-Q11 an anchor must be a real instant inside the window the console keeps", () => {
+  // Everything downstream is computed from the anchor, so a lenient one produces a `from` the
+  // service cannot parse — `at=0000-01-01T00:00:00Z` minus a 30-day range is year -1.
+  const refused: Record<string, string> = {
+    "0000-01-01T00:00:00Z": "an anchor older than anything retained",
+    "1970-01-01T00:00:00Z": "the epoch",
+    "2026-02-30T00:00:00Z": "a date that parses as 2 March",
+    "2026-13-45T99:99:99Z": "an impossible date (NaN, and it must not throw)",
+    "2026-09-21T12:06:00Z": "beyond the forward skew",
+    "2099-01-01T00:00:00Z": "the far future",
+    "+002026-09-20T00:00:00Z": "an extended year",
+    "2026-09-20T00:00:00": "no zone",
+    "2026-09-20T00:00:00+02:00": "an offset that is not Z",
+  };
+  for (const [value, what] of Object.entries(refused)) {
+    const parsed = parse({ at: value, range: "30d" });
+    assert.equal(parsed.filters.pinned, false, `${what} must not pin a window`);
+    assert.deepEqual(names(parsed.rejected), ["at"], `${what} must be reported`);
+    // The window falls back to the reader's clock, which is always expressible.
+    assert.match(parsed.query.from ?? "", /^\d{4}-\d{2}-\d{2}T/);
+    assert.match(parsed.query.to ?? "", /^\d{4}-\d{2}-\d{2}T/);
+  }
+
+  for (const value of [
+    "2026-09-21T12:00:00Z",
+    "2026-09-21T12:04:59Z",
+    "2026-09-20T11:57:43.000Z",
+    "2025-09-01T00:00:00Z",
+    new Date(NOW - MAX_ANCHOR_AGE_MS + 1000).toISOString(),
+  ]) {
+    const parsed = parse({ at: value, range: "30d" });
+    assert.deepEqual(parsed.rejected, [], `${value} is inside the retained window`);
+    assert.equal(parsed.filters.pinned, true);
+    assert.equal(Date.parse(parsed.filters.at), Date.parse(value));
+  }
+
+  // Whatever the anchor, every `from`/`to` this page builds is an RFC 3339 UTC instant — the shape
+  // the contract's own filter check requires, which is what V1-Q10 then proves against the service.
+  const shape = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+  for (const value of [...Object.keys(refused), "2026-09-21T12:00:00Z", "2025-09-01T00:00:00Z"]) {
+    for (const range of ["5m", "24h", "30d"]) {
+      const parsed = parse({ at: value, range });
+      assert.match(parsed.query.from ?? "", shape, `from for at=${value} range=${range}`);
+      assert.match(parsed.query.to ?? "", shape, `to for at=${value} range=${range}`);
+    }
+  }
+});
+
 test("V1-Q06 a cursor is bounded and charset-checked, and otherwise opaque", () => {
   const huge = parse({ at: "2026-09-20T00:00:00.000Z", cursor: "a".repeat(1025) });
   assert.equal(huge.query.cursor, undefined);
@@ -195,7 +269,7 @@ test("V1-Q07 the page size comes from the offered set, and is never a clamp", ()
     assert.equal(parsed.query.limit, size);
     assert.ok(size <= MAX_PAGE_LIMIT, "every offered size is inside the contract's hard bound");
   }
-  for (const bad of ["1000", "101", "0", "-25", "25.5", "abc", "1e2"]) {
+  for (const bad of ["1000", "101", "0", "-25", "25.5", "abc", "1e2", " 100", "100 ", "0100", "100\n", "+100", "1_0_0"]) {
     const parsed = parse({ size: bad });
     assert.equal(parsed.query.limit, DEFAULT_PAGE_LIMIT, `size=${bad} must not become a limit`);
     assert.equal(names(parsed.rejected)[0], "size", `size=${bad} must be reported`);
@@ -251,20 +325,87 @@ test("V1-Q10 every query this page builds is one the service accepts, and its wa
   assert.ok(first.ok);
   const anchor = first.value.items[0].created_at;
 
-  const filterSets: RawParams[] = [
-    {},
-    { range: "30d", at: anchor },
-    { range: "30d", at: anchor, state: "succeeded" },
-    { range: "30d", at: anchor, content: "lost" },
-    { range: "30d", at: anchor, mode: "minimal" },
-    { range: "30d", at: anchor, feedback: "yes" },
-    { range: "30d", at: anchor, feedback: "no" },
-    { range: "30d", at: anchor, key: keyIds[0], model: "marlin-2b@2026-09-01", size: "50" },
-    // Hostile values alongside good ones: the good ones still work, nothing else is forwarded.
-    { range: "30d", at: anchor, content: "off", limit: "1000", org_id: "x", size: "999" },
+  /**
+   * Each filter, the typed query it must produce, and what every returned row must then satisfy.
+   * Asserting only that the service accepted the query is not enough: a filter dropped on the way
+   * into `TraceQuery` still produces an accepted query — and a page of rows that ignores the filter.
+   */
+  const window = { from: new Date(Date.parse(anchor) - 30 * 86_400_000).toISOString(), to: anchor };
+  const cases: {
+    raw: RawParams;
+    expect: TraceQuery;
+    satisfies?: (row: TraceListItem) => boolean;
+    expectRows?: boolean;
+  }[] = [
+    {
+      raw: { range: "30d", at: anchor },
+      expect: { limit: 25, ...window },
+      expectRows: true,
+    },
+    {
+      raw: { range: "30d", at: anchor, state: "succeeded" },
+      expect: { limit: 25, ...window, job_state: "succeeded" },
+      satisfies: (row) => row.job_state === "succeeded",
+      expectRows: true,
+    },
+    {
+      raw: { range: "30d", at: anchor, state: "cancelled" },
+      expect: { limit: 25, ...window, job_state: "cancelled" },
+      satisfies: (row) => row.job_state === "cancelled",
+      expectRows: true,
+    },
+    {
+      raw: { range: "30d", at: anchor, content: "lost" },
+      expect: { limit: 25, ...window, content: "lost" },
+      satisfies: (row) => row.content === "lost",
+      expectRows: true,
+    },
+    {
+      raw: { range: "30d", at: anchor, mode: "minimal" },
+      expect: { limit: 25, ...window, trace_mode: "minimal" },
+      satisfies: (row) => row.trace_mode === "minimal",
+      expectRows: true,
+    },
+    {
+      raw: { range: "30d", at: anchor, mode: "full" },
+      expect: { limit: 25, ...window, trace_mode: "full" },
+      satisfies: (row) => row.trace_mode === "full",
+      expectRows: true,
+    },
+    {
+      raw: { range: "30d", at: anchor, feedback: "yes" },
+      expect: { limit: 25, ...window, has_feedback: true },
+      satisfies: (row) => row.feedback_count > 0,
+      expectRows: true,
+    },
+    {
+      raw: { range: "30d", at: anchor, feedback: "no" },
+      expect: { limit: 25, ...window, has_feedback: false },
+      satisfies: (row) => row.feedback_count === 0,
+      expectRows: true,
+    },
+    {
+      raw: { range: "30d", at: anchor, key: keyIds[0], model: "marlin-2b@2026-09-01", size: "50" },
+      expect: { limit: 50, ...window, key_id: keyIds[0], model: "marlin-2b@2026-09-01" },
+      satisfies: (row) => row.key_id === keyIds[0] && row.model === "marlin-2b@2026-09-01",
+      expectRows: true,
+    },
+    {
+      // Hostile values alongside good ones: the good one still works, nothing else is forwarded.
+      raw: { range: "30d", at: anchor, state: "failed", content: "off", limit: "1000", org_id: "x", size: "999" },
+      expect: { limit: 25, ...window, job_state: "failed" },
+      satisfies: (row) => row.job_state === "failed",
+      expectRows: true,
+    },
   ];
-  for (const raw of filterSets) {
+
+  for (const { raw, expect, satisfies, expectRows } of cases) {
     const parsed = parseTraceParams(raw, { now: NOW, keyIds });
+    assert.deepEqual(
+      parsed.query,
+      expect,
+      `the typed query for ${JSON.stringify(raw)} is not the one this filter means`,
+    );
     const result = await services.traces(session, parsed.query);
     assert.ok(
       result.ok,
@@ -272,6 +413,22 @@ test("V1-Q10 every query this page builds is one the service accepts, and its wa
         result.ok ? "" : result.error.code
       }`,
     );
+    if (expectRows === true) {
+      assert.ok(
+        result.value.items.length > 0,
+        `${JSON.stringify(raw)} returned nothing, so the row check below proves nothing`,
+      );
+    }
+    for (const row of result.value.items) {
+      assert.ok(
+        Date.parse(row.created_at) >= Date.parse(window.from) &&
+          Date.parse(row.created_at) <= Date.parse(window.to),
+        `${row.request_id} is outside the window asked for`,
+      );
+      if (satisfies !== undefined) {
+        assert.ok(satisfies(row), `${row.request_id} does not satisfy ${JSON.stringify(raw)}`);
+      }
+    }
   }
 
   /** Walk the list the way a reader does: follow the page link, re-parse it, ask again. */

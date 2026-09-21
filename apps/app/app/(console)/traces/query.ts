@@ -40,7 +40,11 @@ export type FeedbackFilter = (typeof FEEDBACK_FILTERS)[number];
 /** Page sizes offered, all within the contract's hard `MAX_PAGE_LIMIT` (never a clamp of input). */
 export const PAGE_SIZES = [DEFAULT_PAGE_LIMIT, 50, MAX_PAGE_LIMIT] as const;
 
-/** An identifier filter is an identifier, not a document (mirrors the service's own bound). */
+/**
+ * An identifier filter is an identifier, not a document. 200 is the same number the service's own
+ * filter check uses, counted here in code points (R54); the allowlist below is what makes the two
+ * counts agree rather than an assumption about how the service counts.
+ */
 export const MAX_FILTER_CHARS = 200;
 
 /**
@@ -52,7 +56,31 @@ export const MAX_FILTER_CHARS = 200;
 export const MAX_CURSOR_CHARS = 1024;
 const CURSOR_CHARS = /^[A-Za-z0-9._~+/=-]+$/;
 
+/**
+ * A model id is an identifier, and this one is echoed back into the page and the filter control.
+ * The allowlist is the shape the served ids have (`marlin-2b@2026-09-01`), so a C1 control
+ * character (U+0085), a line separator (U+2028/9) or a bidi override (U+202E) cannot ride into the
+ * query or the rendered text — a `[\u0000-\u001f\u007f]` check let all three through.
+ *
+ * The length bound counts Unicode code points, as R54 requires of every shared character bound.
+ * With this allowlist the units question cannot arise (every allowed character is one UTF-16 unit),
+ * which is deliberate: the fake's own bound is written in `String.length`, so a value where the two
+ * disagree must never be constructible here. See the integration note in the V1 evidence.
+ */
+const MODEL_ID = /^[A-Za-z0-9._:@/+-]+$/;
+
 const RFC3339_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+
+/**
+ * How far back a window anchor may reach: the 13 calendar months of trace metadata the platform
+ * keeps (08 §5 `TRACE_METADATA_MONTHS`), taken generously as 403 days so a legitimate anchor at the
+ * far edge is never refused. Beyond it there is nothing to page through, and the `from` a longer
+ * reach computes stops being a timestamp the service can parse at all.
+ */
+export const MAX_ANCHOR_AGE_MS = 403 * 24 * 60 * 60 * 1000;
+
+/** Forward tolerance for a clock a few minutes ahead of this one; not a window into the future. */
+export const MAX_ANCHOR_SKEW_MS = 5 * 60 * 1000;
 
 /** Every parameter name this page understands. Anything else is ignored and reported. */
 export const TRACE_PARAMS = [
@@ -115,9 +143,11 @@ function resolveWindow(range: RangeKey, anchorMs: number): { from: string; to: s
 }
 
 /**
- * One value per name. A repeated parameter is refused rather than resolved by taking the first or
- * the last: the two conventions disagree, and a filter the reader cannot predict is worse than an
- * error they can see.
+ * One value per name, exactly as written. A repeated parameter is refused rather than resolved by
+ * taking the first or the last: the two conventions disagree, and a filter the reader cannot
+ * predict is worse than an error they can see. Nothing is trimmed either — `?size=%20100` and
+ * `?state=%20failed` are refused rather than quietly fixed, which is the same rule as everywhere
+ * else here: a value is what it says or it is reported.
  */
 function single(raw: RawParams, name: string, rejected: RejectedParam[]): string | null {
   const value = raw[name];
@@ -126,9 +156,31 @@ function single(raw: RawParams, name: string, rejected: RejectedParam[]): string
     rejected.push({ name, why: "given more than once" });
     return null;
   }
-  const trimmed = value.trim();
-  if (trimmed === "") return null;
-  return trimmed;
+  return value === "" ? null : value;
+}
+
+/**
+ * The window anchor a page link carries. Strict, because everything downstream trusts it: the
+ * `from`/`to` the service receives are computed from it, and an anchor outside the retained range
+ * produces a `from` that is not an RFC 3339 timestamp at all.
+ */
+function parseAnchor(value: string, now: number): { ms: number } | { why: string } {
+  if (!RFC3339_UTC.test(value)) {
+    return { why: "must be an RFC 3339 UTC timestamp, like 2026-09-21T12:00:00Z" };
+  }
+  const ms = Date.parse(value);
+  // An impossible date (`2026-13-45T99:99:99Z`) is NaN here, and NaN fails both comparisons — so it
+  // is refused by the same check as an out-of-range one, rather than reaching a formatter that
+  // would throw a RangeError into the render.
+  if (!(ms >= now - MAX_ANCHOR_AGE_MS && ms <= now + MAX_ANCHOR_SKEW_MS)) {
+    return { why: "is outside the 13 months of trace metadata this console keeps" };
+  }
+  // `2026-02-30T00:00:00Z` parses as 2 March. Silently showing a window the reader did not ask for
+  // is worse than refusing the link, so the instant must survive the round trip unchanged.
+  if (new Date(ms).toISOString().slice(0, 19) !== value.slice(0, 19)) {
+    return { why: "is not a real date" };
+  }
+  return { ms };
 }
 
 function fromVocabulary<T extends string>(
@@ -151,12 +203,13 @@ function identifier(
   allowed: readonly string[] | null,
 ): string | null {
   if (value === null) return null;
+  // Code points, per R54: `.length` would let an astral character count twice.
   if ([...value].length > MAX_FILTER_CHARS) {
     rejected.push({ name, why: `must be at most ${MAX_FILTER_CHARS} characters` });
     return null;
   }
-  if (/[\u0000-\u001f\u007f]/.test(value)) {
-    rejected.push({ name, why: "must not contain control characters" });
+  if (!MODEL_ID.test(value)) {
+    rejected.push({ name, why: "must be an identifier: letters, digits and . _ : @ / + -" });
     return null;
   }
   if (allowed !== null && !allowed.includes(value)) {
@@ -176,7 +229,7 @@ function identifier(
  */
 export function parseTraceParams(
   raw: RawParams,
-  context: { now: number; keyIds?: readonly string[] },
+  context: { now: number; keyIds: readonly string[] },
 ): ParsedTraceParams {
   const rejected: RejectedParam[] = [];
   const ignored = Object.keys(raw)
@@ -191,12 +244,12 @@ export function parseTraceParams(
   let anchorMs = context.now;
   let pinned = false;
   if (rawAt !== null) {
-    const parsed = Date.parse(rawAt);
-    if (RFC3339_UTC.test(rawAt) && Number.isFinite(parsed)) {
-      anchorMs = parsed;
+    const anchor = parseAnchor(rawAt, context.now);
+    if ("ms" in anchor) {
+      anchorMs = anchor.ms;
       pinned = true;
     } else {
-      rejected.push({ name: "at", why: "must be an RFC 3339 UTC timestamp" });
+      rejected.push({ name: "at", why: anchor.why });
     }
   }
 
@@ -218,9 +271,9 @@ export function parseTraceParams(
   const rawSize = single(raw, "size", rejected);
   let size: number = DEFAULT_PAGE_LIMIT;
   if (rawSize !== null) {
-    // Plain digits only: `Number("1e2")` is 100, so a value the offered set does not contain would
-    // otherwise pass the membership check in another spelling.
-    const parsed = /^\d+$/.test(rawSize) ? Number(rawSize) : Number.NaN;
+    // One spelling per size: `Number` accepts `1e2`, `0100`, ` 100` and `100\n` as 100, each of
+    // which would pass a membership check as a number the offered set does not contain as text.
+    const parsed = /^\d+$/.test(rawSize) && String(Number(rawSize)) === rawSize ? Number(rawSize) : Number.NaN;
     if ((PAGE_SIZES as readonly number[]).includes(parsed)) size = parsed;
     else rejected.push({ name: "size", why: `must be one of ${PAGE_SIZES.join(", ")}` });
   }
@@ -294,19 +347,22 @@ export function withPatch(filters: FilterState, patch: Partial<FilterState>): Fi
   const changesFilter = FILTER_KEYS.some(
     (key) => patch[key] !== undefined && patch[key] !== filters[key],
   );
+  // `"cursor" in patch` rather than `patch.cursor ?? …`: an explicit `cursor: null` is how a caller
+  // says "leave the walk", and `??` cannot express it — it falls through to the cursor already
+  // there. That was a real dead end: the way back from a bad cursor asked for `cursor: null`, got
+  // the bad cursor again because no *filter* had changed, and rendered a link to the very page the
+  // reader was stuck on.
+  const cursor = changesFilter ? null : "cursor" in patch ? (patch.cursor ?? null) : filters.cursor;
   return {
     ...filters,
     ...patch,
-    cursor: changesFilter ? null : (patch.cursor ?? filters.cursor),
-    // A filter change starts a new walk, so it also releases the pinned window: the reader asked
-    // for "the last 24 hours", not "the last 24 hours as of whenever this link was made".
-    pinned: changesFilter ? false : (patch.pinned ?? filters.pinned),
+    cursor,
+    // A filter change starts a new walk, so it also releases the pinned window: the reader asked for
+    // "the last 24 hours", not "the last 24 hours as of whenever this link was made". A caller
+    // leaving a walk another way — the way back from a bad cursor — passes `pinned: false` itself,
+    // because `at` exists only to hold a walk's window still.
+    pinned: changesFilter ? false : ("pinned" in patch ? (patch.pinned ?? false) : filters.pinned),
   };
-}
-
-/** True when two states would produce the same page: the filters and the position in the walk. */
-export function sameFilters(a: FilterState, b: FilterState): boolean {
-  return FILTER_KEYS.every((key) => a[key] === b[key]) && a.cursor === b.cursor;
 }
 
 /**

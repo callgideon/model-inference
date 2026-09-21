@@ -26,14 +26,16 @@ export default async function TracesPage({ searchParams }: PageProps<"/traces">)
   // -----------------------------------------------------------------------------------------
 
   const keysResult = await services.keys.list(session);
+  // A failed key read is not "this organization has no keys": it costs the key names and the
+  // "is anything captured?" fact, and the list says so rather than inventing either.
   const keys = keysResult.ok ? keysResult.value : [];
-
   const parsed = parseTraceParams(params, { now: currentAnchor(), keyIds: keys.map((key) => key.id) });
   const result = await services.traces(session, parsed.query);
   const view = buildTraceListView(result, {
     filters: parsed.filters,
     keys,
     narrowed: parsed.narrowed,
+    keysUnavailable: !keysResult.ok,
   });
 
   // The list row carries an opaque model id and nothing enumerates the catalogue, so the filter

@@ -15,6 +15,7 @@ import {
   buildTraceListView,
   presentContent,
   statusTone,
+  type ContentTone,
 } from "../../app/(console)/traces/view-model.ts";
 import { createFakeConsoleServices } from "../../lib/contracts/fake-services.ts";
 import { parseMoney } from "../../lib/contracts/money.ts";
@@ -31,8 +32,10 @@ import {
 } from "../../lib/contracts/types.ts";
 
 const NOW = Date.parse("2026-09-21T12:00:00.000Z");
-const FILTERS = parseTraceParams({}, { now: NOW }).filters;
-const NARROWED = parseTraceParams({ state: "failed" }, { now: NOW }).filters;
+const PARSED_IDLE = parseTraceParams({}, { now: NOW, keyIds: [] });
+const PARSED_NARROWED = parseTraceParams({ state: "failed" }, { now: NOW, keyIds: [] });
+const FILTERS = PARSED_IDLE.filters;
+const NARROWED = PARSED_NARROWED.filters;
 
 function row(over: Partial<TraceListItem> = {}): TraceListItem {
   return {
@@ -78,20 +81,27 @@ function failure(code: ErrorCode): Result<Page<TraceListItem>> {
 }
 
 test("V1-V01 every content state is its own state, and only a lost capture is a failure", () => {
-  const expected: Record<TraceContentAvailability, { failed: boolean; unexpected: boolean }> = {
-    available: { failed: false, unexpected: false },
-    metadata_only: { failed: false, unexpected: false },
-    pending: { failed: false, unexpected: false },
-    lost: { failed: true, unexpected: false },
-    expired: { failed: false, unexpected: false },
+  // The whole table, tone included: `pending` sharing `lost`'s destructive tone would tell a reader
+  // whose projection is merely a few seconds behind that their content is gone.
+  const expected: Record<
+    TraceContentAvailability,
+    { label: string; tone: ContentTone; failed: boolean; unexpected: boolean }
+  > = {
+    available: { label: "Full", tone: "ok", failed: false, unexpected: false },
+    metadata_only: { label: "Metadata only", tone: "muted", failed: false, unexpected: false },
+    pending: { label: "Pending", tone: "waiting", failed: false, unexpected: false },
+    lost: { label: "Lost", tone: "warn", failed: true, unexpected: false },
+    expired: { label: "Expired", tone: "muted", failed: false, unexpected: false },
     // An off-mode request has no trace row (R13). If one ever reaches a list it is a projection
     // defect, not a capture failure, and it must not be drawn as one.
-    off: { failed: false, unexpected: true },
+    off: { label: "Not captured", tone: "muted", failed: false, unexpected: true },
   };
   const labels = new Set<string>();
   for (const state of TRACE_CONTENT_AVAILABILITY) {
     const shown = presentContent({ content: state, loss_reason: "memory_budget" });
     assert.equal(shown.state, state);
+    assert.equal(shown.label, expected[state].label, `${state} label`);
+    assert.equal(shown.tone, expected[state].tone, `${state} tone`);
     assert.equal(shown.failed, expected[state].failed, `${state} failed flag`);
     assert.equal(shown.unexpected, expected[state].unexpected, `${state} unexpected flag`);
     assert.ok(shown.detail.length > 0, `${state} needs an explanation`);
@@ -101,6 +111,11 @@ test("V1-V01 every content state is its own state, and only a lost capture is a 
     }
   }
   assert.equal(labels.size, TRACE_CONTENT_AVAILABILITY.length, "each state reads differently");
+  // Only the failure may carry the alarming tone.
+  const alarming = TRACE_CONTENT_AVAILABILITY.filter(
+    (state) => presentContent({ content: state, loss_reason: "none" }).tone === "warn",
+  );
+  assert.deepEqual(alarming, ["lost"]);
   // Two states that are routinely mistaken for failures:
   assert.equal(presentContent({ content: "metadata_only", loss_reason: "none" }).failed, false);
   assert.equal(presentContent({ content: "expired", loss_reason: "none" }).failed, false);
@@ -158,7 +173,7 @@ test("V1-V03 the indicators count projection lag, loss and unfinished rows on th
 test("V1-V04 rows join key names, mark revoked keys, and never invent one", () => {
   const view = buildTraceListView(
     page([
-      row({ request_id: "r1" }),
+      row({ request_id: "r1", feedback_count: 2, score_count: 7 }),
       row({ request_id: "r2", key_id: "a1000000-0000-4000-8000-000000000004" }),
       row({ request_id: "r3", key_id: "a1000000-0000-4000-8000-00000000dead" }),
     ]),
@@ -183,6 +198,9 @@ test("V1-V04 rows join key names, mark revoked keys, and never invent one", () =
   );
   assert.equal(view.rows[0].href, "/traces/r1");
   assert.equal(view.rows[0].inFlight, false);
+  // Two different signal counts, so neither column can be quietly showing the other's number.
+  assert.equal(view.rows[0].feedbackCount, 2);
+  assert.equal(view.rows[0].scoreCount, 7);
   assert.deepEqual(
     ["succeeded", "failed", "cancelled", "expired", "preparing", "queued", "running"].map(
       (state) => buildTraceListViewState(state),
@@ -207,11 +225,16 @@ test("V1-V05 status tone follows the class, and an unset status is not drawn as 
   );
 });
 
-test("V1-V06 an empty page distinguishes filtered, capture-off and simply idle", () => {
+test("V1-V06 an empty page distinguishes filtered, capture-off, keys-unknown and simply idle", () => {
+  // `narrowed` comes from the parser, not from the caller: passing it by hand here would leave the
+  // page free to decide a filtered list "has no traffic" whatever the URL said.
+  assert.equal(PARSED_NARROWED.narrowed, true, "?state=failed is a narrowed list");
+  assert.equal(PARSED_IDLE.narrowed, false, "the default window is not");
+
   const filtered = buildTraceListView(page([]), {
-    filters: NARROWED,
+    filters: PARSED_NARROWED.filters,
     keys: [key()],
-    narrowed: true,
+    narrowed: PARSED_NARROWED.narrowed,
   });
   assert.equal(filtered.kind, "empty");
   if (filtered.kind === "empty") {
@@ -220,18 +243,55 @@ test("V1-V06 an empty page distinguishes filtered, capture-off and simply idle",
     assert.equal(filtered.action?.href, "/traces");
   }
 
+  // Every other narrowing the parser can report ends in the same state, from real parameters.
+  for (const raw of [
+    { state: "failed" },
+    { content: "lost" },
+    { mode: "full" },
+    { feedback: "yes" },
+    { range: "7d" },
+    { key: "a1000000-0000-4000-8000-000000000001" },
+  ]) {
+    const parsed = parseTraceParams(raw, {
+      now: NOW,
+      keyIds: ["a1000000-0000-4000-8000-000000000001"],
+    });
+    const view = buildTraceListView(page([]), {
+      filters: parsed.filters,
+      keys: [key()],
+      narrowed: parsed.narrowed,
+    });
+    assert.equal(view.kind === "empty" ? view.reason : "rows", "filtered", JSON.stringify(raw));
+  }
+
   // No filters, no rows, and every active key has tracing off: the honest reason is "nothing is
   // captured", never "nothing happened" — and the requests are still visible under Usage.
   const off = buildTraceListView(page([]), {
     filters: FILTERS,
     keys: [key({ trace_mode: "off" }), key({ id: "k2", trace_mode: "full", revoked_at: "2026-09-01T00:00:00.000Z" })],
-    narrowed: false,
+    narrowed: PARSED_IDLE.narrowed,
   });
   assert.equal(off.kind, "empty");
   if (off.kind === "empty") {
     assert.equal(off.reason, "tracing_off");
     assert.match(off.message, /Usage/);
     assert.equal(off.action?.href, "/api-keys");
+  }
+
+  // `keys.list` failed: the names are missing and so is the fact about capture, so the page must not
+  // claim tracing is off for keys it could not read.
+  const unknown = buildTraceListView(page([]), {
+    filters: FILTERS,
+    keys: [],
+    narrowed: false,
+    keysUnavailable: true,
+  });
+  assert.equal(unknown.kind, "empty");
+  if (unknown.kind === "empty") {
+    assert.equal(unknown.reason, "keys_unknown");
+    assert.ok(!/tracing is off/i.test(unknown.message), unknown.message);
+    assert.match(unknown.message, /could not be read/);
+    assert.equal(unknown.action?.label, "Try again");
   }
 
   const idle = buildTraceListView(page([]), { filters: FILTERS, keys: [key()], narrowed: false });
@@ -259,15 +319,34 @@ test("V1-V07 an error offers a retry only where retrying can work", () => {
     assert.ok(view.message.length > 0);
   }
 
-  // A cursor the service will not accept cannot be retried — the reader is sent to the first page.
-  const stale = buildTraceListView(failure("invalid_cursor"), { filters: NARROWED, keys: [] });
-  assert.equal(stale.kind, "error");
-  if (stale.kind === "error") {
-    assert.match(stale.message, /first page/);
-    assert.notEqual(stale.action?.label, "Try again");
+  // A suspended organization keeps every read (R33), so this one is worth retrying and says why.
+  const suspended = buildTraceListView(failure("org_suspended"), { filters: NARROWED, keys: [] });
+  assert.equal(suspended.kind, "error");
+  if (suspended.kind === "error") {
+    assert.equal(suspended.action?.label, "Try again");
+    assert.match(suspended.message, /readable/);
   }
 
-  for (const code of ["forbidden", "invalid_request", "not_found"] as ErrorCode[]) {
+  // A cursor the service will not accept cannot be retried — the reader is sent to the first page.
+  // The link has to *leave the walk*: with the cursor still on it, the way out is the dead end.
+  const stuck = parseTraceParams(
+    { at: "2026-09-20T00:00:00.000Z", cursor: "Zm9yZ2Vk", state: "failed" },
+    { now: NOW, keyIds: [] },
+  );
+  assert.equal(stuck.filters.cursor, "Zm9yZ2Vk", "the forged cursor is on the filters");
+  for (const code of ["invalid_cursor", "invalid_request"] as ErrorCode[]) {
+    const view = buildTraceListView(failure(code), { filters: stuck.filters, keys: [] });
+    assert.equal(view.kind, "error");
+    if (view.kind !== "error") continue;
+    const href = view.action?.href ?? "";
+    assert.notEqual(view.action?.label, "Try again", `${code} cannot be retried as it is`);
+    assert.ok(!href.includes("cursor="), `${code}: the way back still carries the cursor: ${href}`);
+    assert.ok(!href.includes("at="), `${code}: the way back still pins the window: ${href}`);
+    assert.notEqual(href, traceHref(stuck.filters), `${code}: the way back is the same page`);
+    assert.equal(href, "/traces");
+  }
+
+  for (const code of ["forbidden", "not_found"] as ErrorCode[]) {
     const view = buildTraceListView(failure(code), { filters: NARROWED, keys: [] });
     assert.equal(view.kind, "error");
     if (view.kind === "error") assert.notEqual(view.action?.label, "Try again");
@@ -286,8 +365,25 @@ test("V1-V08 the next-page link carries the cursor and pins the window", () => {
   assert.match(view.nextHref ?? "", /cursor=bmV4dA%3D%3D/);
   assert.match(view.nextHref ?? "", /at=/, "the walk's window is pinned into the link");
 
+  assert.equal(view.firstHref, null, "page one is already the first page");
+
   const last = buildTraceListView(page([row()], null), { filters: FILTERS, keys: [key()] });
   assert.equal(last.kind === "rows" ? last.nextHref : "unset", null);
+
+  // Deep in a walk there is one link that always works: back to the start. (The browser's back
+  // button is the only way to step back one page; there is no reverse cursor in v1.)
+  const deep = parseTraceParams(
+    { at: "2026-09-20T00:00:00.000Z", cursor: "cGFnZTM=", state: "failed" },
+    { now: NOW, keyIds: [] },
+  );
+  const inWalk = buildTraceListView(page([row()], "cGFnZTQ="), {
+    filters: deep.filters,
+    keys: [key()],
+  });
+  assert.equal(inWalk.kind, "rows");
+  if (inWalk.kind !== "rows") return;
+  assert.equal(inWalk.firstHref, "/traces?state=failed", "the filters stay, the walk is left");
+  assert.match(inWalk.nextHref ?? "", /cursor=cGFnZTQ%3D/);
 });
 
 test("V1-V09 built from the fake's own page: no off row, every row explained", async () => {
@@ -319,4 +415,59 @@ test("V1-V09 built from the fake's own page: no off row, every row explained", a
   });
   assert.equal(failed.kind, "error");
   if (failed.kind === "error") assert.equal(failed.action?.label, "Try again");
+});
+
+test("V1-V10 the way out of a bad page link actually loads a page of rows", async () => {
+  const services = createFakeConsoleServices();
+  const session = services.sessions.owner;
+  const keysResult = await services.keys.list(session);
+  assert.ok(keysResult.ok);
+  const ownKeys = keysResult.value;
+  const keyIds = ownKeys.map((item) => item.id);
+
+  /** What a reader has in their hands: a URL. Load it exactly as the page does. */
+  async function open(href: string) {
+    const raw = Object.fromEntries(new URL(href, "https://console.invalid").searchParams);
+    const parsed = parseTraceParams(raw, { now: NOW, keyIds });
+    const result = await services.traces(session, parsed.query);
+    return {
+      parsed,
+      result,
+      view: buildTraceListView(result, {
+        filters: parsed.filters,
+        keys: ownKeys,
+        narrowed: parsed.narrowed,
+      }),
+    };
+  }
+
+  // A stale or forged page link: a cursor minted for some other query, with its window pinned.
+  const newest = await services.traces(session, { limit: 1 });
+  assert.ok(newest.ok);
+  const dead = `/traces?range=30d&at=${encodeURIComponent(newest.value.items[0].created_at)}&cursor=Zm9yZ2VkLWN1cnNvcg%3D%3D`;
+  const stuck = await open(dead);
+  assert.equal(stuck.result.ok, false, "the service refuses a cursor it did not mint");
+  if (stuck.result.ok) return;
+  assert.equal(stuck.result.error.code, "invalid_cursor");
+  assert.equal(stuck.view.kind, "error");
+  if (stuck.view.kind !== "error") return;
+
+  const wayBack = stuck.view.action?.href ?? "";
+  // The bug this case exists for: the way back used to be the URL the reader was already on, so the
+  // only escape from a bad link was editing it by hand.
+  assert.notEqual(wayBack, dead, "the way back is a different page");
+  assert.ok(!wayBack.includes("cursor="), wayBack);
+  // No filter is set on this URL, so nothing else drops the walk: the way back has to release the
+  // pinned window itself, or it hands the reader a window frozen at whenever the link was made.
+  assert.ok(!wayBack.includes("at="), `the way back still pins the window: ${wayBack}`);
+  assert.equal(wayBack, "/traces?range=30d", "the reader's window choice survives, the walk does not");
+
+  // Following it has to produce rows, not the same error again.
+  const recovered = await open(wayBack);
+  assert.ok(recovered.result.ok, "following the way back still failed");
+  assert.equal(recovered.view.kind, "rows");
+  if (recovered.view.kind !== "rows") return;
+  assert.ok(recovered.view.rows.length > 0, "the way back loaded an empty page");
+  assert.equal(recovered.parsed.filters.cursor, null);
+  assert.deepEqual(recovered.parsed.rejected, [], "and it is a clean URL");
 });

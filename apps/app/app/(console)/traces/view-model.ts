@@ -165,7 +165,7 @@ export type TraceListIndicators = {
   unexpected: number;
 };
 
-export type EmptyReason = "filtered" | "tracing_off" | "no_traces";
+export type EmptyReason = "filtered" | "tracing_off" | "no_traces" | "keys_unknown";
 
 export type TraceListAction = { label: string; href: string };
 
@@ -176,6 +176,8 @@ export type TraceListView =
       indicators: TraceListIndicators;
       /** The next page, or null at the end of the walk. */
       nextHref: string | null;
+      /** Back to the start of the walk, or null when already there. */
+      firstHref: string | null;
     }
   | { kind: "empty"; reason: EmptyReason; message: string; action: TraceListAction | null }
   | { kind: "error"; code: ErrorCode; message: string; action: TraceListAction | null };
@@ -275,8 +277,17 @@ function indicatorsOf(rows: TraceRowView[]): TraceListIndicators {
  */
 export function buildTraceListView(
   result: Result<Page<TraceListItem>>,
-  context: { filters: FilterState; keys: readonly ApiKeySummary[]; narrowed?: boolean },
+  context: {
+    filters: FilterState;
+    keys: readonly ApiKeySummary[];
+    narrowed?: boolean;
+    /** True when `keys.list` failed: the names are missing and so is the "is anything captured?" fact. */
+    keysUnavailable?: boolean;
+  },
 ): TraceListView {
+  // The way out of a bad link: no filters, no cursor and no pinned window. `cursor: null` has to
+  // *clear* the cursor even though no filter changed, or this is a link to the error the reader is
+  // already looking at.
   const clearHref = traceHref(context.filters, {
     range: context.filters.range,
     key: null,
@@ -286,6 +297,7 @@ export function buildTraceListView(
     mode: null,
     feedback: "any",
     cursor: null,
+    pinned: false,
   });
 
   if (!result.ok) {
@@ -312,6 +324,17 @@ export function buildTraceListView(
         reason: "filtered",
         message: "No traces match these filters.",
         action: { label: "Clear filters", href: clearHref },
+      };
+    }
+    // Without the key list there is no basis for saying whether anything is captured, and saying
+    // "tracing is off for every key" on a failed read would be an invention.
+    if (context.keysUnavailable === true) {
+      return {
+        kind: "empty",
+        reason: "keys_unknown",
+        message:
+          "No traces in this window. This organization's keys could not be read, so whether tracing is on for them is unknown.",
+        action: { label: "Try again", href: traceHref(context.filters) },
       };
     }
     // No filters and no rows: either nothing has run, or nothing is being captured. The two read
@@ -341,5 +364,11 @@ export function buildTraceListView(
       result.value.next_cursor === null
         ? null
         : traceHref(context.filters, { cursor: result.value.next_cursor }),
+    // Only the browser's back button walks the cursor backwards (there is no reverse cursor in v1),
+    // so a reader deep in a walk gets one link that always works.
+    firstHref:
+      context.filters.cursor === null
+        ? null
+        : traceHref(context.filters, { cursor: null, pinned: false }),
   };
 }
