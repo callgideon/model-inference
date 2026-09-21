@@ -293,20 +293,36 @@ there is nothing to roll back in a deployed database.
 6. **RLS-only, not route-level.** `E2-RLS-70` shows the DB trusts `request.jwt.claim.sub`
    entirely. Whether the console ever sets that claim from user input is C's code and is
    untested here. Owner: C1, E3.
-7. **`make bench-test` has an intermittent wall-clock assertion.** Twice during this task's
-   runs it failed on `test_bench.py:271`
-   `assert summary["schedule_lag_s"]["max"] < 0.1, "a retry wait must not count as schedule
-   lag"` (and its sibling in
-   `test_retried_rejections_stay_visible_and_latency_covers_every_attempt`) — an open-loop
-   driver-lag bound, measured with `--rate 20`. Reproduction attempts: **2 failing occasions
-   in ~40 runs on this branch, 0 in ~30 runs of the base tree**, and not reproducible on
-   demand (10 runs of `test_bench.py` alone, 8 runs of the whole directory, 6 concurrent
+7. **`make bench-test` fails on a loaded host — a pre-existing wall-clock constant in E1's
+   suite, with the cause now measured.** `models/marlin2b/tests/test_bench.py` bounds the
+   open-loop driver lag with a literal on two lines:
+
+   | Line | Assertion | Test |
+   |---|---|---|
+   | 99 | `assert lag[tag] < 0.1, f"{tag}: sends waited for completions (lag {lag[tag]}s)"` | `test_schedule_is_deterministic_and_independent_of_latency` |
+   | 271 | `assert summary["schedule_lag_s"]["max"] < 0.1, "a retry wait must not count as schedule lag"` | `test_retried_rejections_stay_visible_and_latency_covers_every_attempt` |
+
+   **Cause (measured):** the bound is host load, not the code. This box has 16 cores
+   (`nproc`); while another session ran its own containers the 1-minute load average went
+   `20.37 → 26.33 → 45.39`, `make api-test` stretched from `27.8 s` to `65.9 s`, and line 99
+   failed with `assert 0.23425 < 0.1`. At ordinary load the same command is `40 passed in
+   8.19s` and the full `run.py` exits **0**.
+
+   **Attribution:** 3 failing occasions out of ~45 runs on this branch, all at high load,
+   versus 0 out of ~30 on the base tree at ordinary load; not reproducible on demand at
+   ordinary load (10 runs of `test_bench.py` alone, 8 of the whole directory, 6 concurrent
    current-vs-base pairs, 16 CPU-burner processes, and with the four containers up — all
-   clean). No mechanism connects it to this task's change (`secret_grams` is a pure string
-   function and the new case is pure computation), so it is reported as a **pre-existing
-   load-sensitive assertion in E1's suite**, not as fixed and not as absent. It will make
-   `make check` flaky on a busy host. Owner: E (E1 suite), to re-pin the bound from measured
-   lag or to assert on a scheduled-vs-sent difference instead of a constant.
+   clean). No mechanism connects it to this task's change: `secret_grams` is a pure string
+   function and the added case is pure computation. Reported, **not fixed and not hidden**.
+
+   **Recommendation for the owning task (E1's suite, E track):** the invariant the line
+   defends is "sends track the schedule even when the server is slow", i.e. lag must not grow
+   with server latency — and the test already measures the same scenario at `ttft=0.001` and
+   `ttft=0.25`, so the comparison between those two lags is available and is load-immune,
+   where a `0.1 s` constant is not. E2 deliberately did **not** change the threshold: widening
+   it weakens the invariant, and re-deriving the intent of an integrated task's assertion
+   belongs to a review of that assertion, not to a side edit here. Until then `make check` and
+   `make bench-test` are flaky on a shared host. Owner: E.
 8. **The console end-to-end suite is pending, not passing.** `apps/app/tests/e2e/` proves
    discovery, the canary and R48 hygiene; `CONSOLE-U1`–`U4`, `CONSOLE-E1` and `CONSOLE-C7`
    are listed as pending with the module each one waits for, and a guard fails once a pending
@@ -362,3 +378,18 @@ limit 5/6 (route-level tenant safety is untestable from SQL alone, owners C/G fo
   quoted from command output; no number here was typed by hand. Status **implemented**: the
   harness ran against real local services, and the cases that need another track's code are
   listed as pending, never as passed. Nothing is deployed and nothing is live-verified.
+- 2026-09-21: Appended after one further owned-file commit, `5bab2b8` — `FakeVllmServer.start()`
+  after a kill replaced `self._log` without closing the previous one, so the process-loss
+  drill left one temp file behind per run. Re-verified at that head: `test_fake_vllm.py`
+  `13 passed`, `mutants.py --layer 1` 15/15 killed, `run.py --canary` exit **0** with the same
+  stage counts (35 RLS cases · 8 engine conformance cases · 41 + 670 + 131 + 40 suite cases ·
+  21/21 mutants · canary detected and named in both runners · teardown clean). Branch head is
+  `5bab2b8`; the implementation SHA this report is named for is unchanged.
+- 2026-09-21: Two further full runs at head `5bab2b8` (07:00Z and 07:05Z) each exited **1**
+  with **one** failing thing: `make bench-test`, on the `schedule_lag_s < 0.1` constants of
+  limit 7, while another session drove this 16-core host to load average 26 and then 45
+  (`make api-test` stretched 27.8 s → 65.9 s; the failure reads `assert 0.23425 < 0.1`). Every
+  other stage passed identically in both runs — 35 RLS cases, 8 engine conformance cases,
+  `tests/integration` 41, `make api-test` 670, `make console-test` 131, 21/21 mutants, canary
+  detected and named in both runners, teardown clean. Limit 7 is updated with the measured
+  cause and the recommendation; nothing E2 owns is implicated, and no threshold was changed.
