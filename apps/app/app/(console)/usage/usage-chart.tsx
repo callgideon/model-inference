@@ -9,15 +9,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { compact, money, num } from "@/lib/format";
-import type { UsageDay } from "@/lib/types";
+import { compact, num } from "@/lib/format";
+import type { DayView } from "./view-model";
 
-/** Daily tokens. Pure Tailwind bars — a chart library is not worth 30 rows. */
-export function UsageChart({ days }: { days: UsageDay[] }) {
-  const rows = days.map((d) => ({
-    ...d,
-    total: Number(d.prompt_tokens) + Number(d.completion_tokens),
-  }));
+/**
+ * Daily tokens. Pure Tailwind bars — a chart library is not worth 30 rows. Every value is already
+ * formatted by `dayViews()`: money never becomes a `number` on the way to a screen.
+ */
+export function UsageChart({ days }: { days: DayView[] }) {
+  const rows = days;
   const max = Math.max(1, ...rows.map((r) => r.total));
 
   return (
@@ -71,12 +71,12 @@ export function UsageChart({ days }: { days: UsageDay[] }) {
                   <TableCell>{r.day}</TableCell>
                   <TableCell className="text-right tabular-nums">{num(r.requests)}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {compact(r.prompt_tokens)}
+                    {compact(r.promptTokens)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {compact(r.completion_tokens)}
+                    {compact(r.completionTokens)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{money(r.cost_usd)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{r.cost}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

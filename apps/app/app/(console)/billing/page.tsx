@@ -1,9 +1,6 @@
-import { CreditsCard } from "@/components/credits-card";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -12,117 +9,136 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getCredits } from "@/lib/credits";
-import { dateTime, money } from "@/lib/format";
-import { getSession } from "@/lib/session";
+import { consoleContext } from "../usage/fake-console-context";
+import { EmptyPanel, ErrorPanel, Pager } from "../usage/states";
+import {
+  firstCursorState,
+  hasPreviousPage,
+  ledgerHref,
+  nextCursorState,
+  pageNumberOf,
+  parsePageCursor,
+  previousCursorState,
+  viewStateOf,
+} from "../usage/view-model";
+import { PromotionalBalanceCard } from "./balance-card";
+import { ledgerRowView } from "./view-model";
 
-export const metadata = { title: "Billing · infrx" };
+export const metadata = { title: "Balance · infrx" };
 
-const SOON = "Coming soon — payments are not wired up yet";
+export default async function BillingPage({ searchParams }: PageProps<"/billing">) {
+  const params = await searchParams;
+  const { services, session } = consoleContext();
+  const page = parsePageCursor(params);
 
-export default async function BillingPage() {
-  const session = await getSession();
-  const credits = await getCredits(session.orgId);
+  const [balance, ledger] = await Promise.all([
+    services.balances(session),
+    services.ledger(session, { limit: 25, ...(page.cursor === null ? {} : { cursor: page.cursor }) }),
+  ]);
+
+  const walletState = viewStateOf(balance, () => false);
+  const ledgerState = viewStateOf(ledger, (value) => value.items.length === 0);
+  const here = ledgerHref(page);
+  const firstPageHref = ledgerHref(firstCursorState(page));
 
   return (
     <>
-      <PageHeader title="Billing" subtitle="Prepaid credits. Usage is drawn down per request." />
+      <PageHeader
+        title="Balance"
+        subtitle="The free pilot runs on promotional credit granted by the infrx team. There is nothing to pay."
+      />
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-        <CreditsCard credits={credits} />
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <div>Card</div>
-                <div className="text-xs text-muted-foreground">No card on file</div>
-              </div>
-              <Button variant="outline" size="sm" disabled title={SOON}>
-                Add card
-              </Button>
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <div>Auto reload</div>
-                <div className="text-xs text-muted-foreground">
-                  Top up automatically when the balance runs low
-                </div>
-              </div>
-              <Badge variant="secondary">Off</Badge>
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <div>Add credits</div>
-                <div className="text-xs text-muted-foreground">
-                  Ask an operator for a grant while payments are being built
-                </div>
-              </div>
-              <Button variant="outline" size="sm" disabled title={SOON}>
-                Add credits
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {walletState.kind === "ready" ? (
+        <PromotionalBalanceCard
+          balance={walletState.value}
+          hasHistory={ledger.ok && (ledger.value.items.length > 0 || page.cursor !== null)}
+        />
+      ) : null}
+      {walletState.kind === "error" ? (
+        <ErrorPanel
+          title="Your balance could not be loaded"
+          message={walletState.message}
+          code={walletState.code}
+          recovery={walletState.recovery}
+          href={here}
+          firstPageHref={firstPageHref}
+        />
+      ) : null}
 
       <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Invoices</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No invoices yet. Credits are granted manually until payments ship.
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardHeader>
+        <CardHeader className="grid-cols-[1fr_auto] items-center">
           <CardTitle>Ledger</CardTitle>
+          <Badge variant="outline">Newest first</Badge>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Kind</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {credits.rows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="text-muted-foreground">{dateTime(r.created_at)}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{r.kind}</Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{r.reason ?? "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {money(Number(r.delta_usd))}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {credits.rows.length === 0 ? (
+          {ledgerState.kind === "error" ? (
+            <div className="p-4">
+              <ErrorPanel
+                title="The ledger could not be loaded"
+                message={ledgerState.message}
+                code={ledgerState.code}
+                recovery={ledgerState.recovery}
+                href={here}
+                firstPageHref={firstPageHref}
+              />
+            </div>
+          ) : null}
+
+          {ledgerState.kind === "empty" ? (
+            <div className="p-4">
+              <EmptyPanel>
+                Nothing on the ledger yet. Grants, adjustments and settled requests appear here as
+                they happen.
+              </EmptyPanel>
+            </div>
+          ) : null}
+
+          {ledgerState.kind === "ready" ? (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="py-10 text-center text-sm text-muted-foreground"
-                  >
-                    Nothing on the ledger yet.
-                  </TableCell>
+                  <TableHead>When (UTC)</TableHead>
+                  <TableHead>Kind</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>By</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
                 </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {ledgerState.value.items.map(ledgerRowView).map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {row.when}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{row.kind}</Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{row.reason}</TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {row.actor}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{row.amount}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : null}
         </CardContent>
       </Card>
+
+      {ledgerState.kind === "ready" ? (
+        <Pager
+          label="Ledger pages"
+          page={pageNumberOf(page)}
+          firstHref={firstPageHref}
+          previousHref={hasPreviousPage(page) ? ledgerHref(previousCursorState(page)) : null}
+          nextHref={
+            ledgerState.value.next_cursor === null
+              ? null
+              : ledgerHref(nextCursorState(page, ledgerState.value.next_cursor))
+          }
+        />
+      ) : null}
     </>
   );
 }
