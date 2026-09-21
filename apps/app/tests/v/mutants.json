@@ -391,6 +391,16 @@
       "cases": [
         "V1-V01 every content state is its own state, and only a lost capture is a failure"
       ]
+    },
+    {
+      "id": "BOUNDARY-01",
+      "note": "the error boundary uses reset(), which replays the same errored server payload",
+      "file": "app/(console)/traces/error.tsx",
+      "find": "export default function TracesError({ retry }: { error: Error & { digest?: string }; retry: () => void }) {",
+      "replace": "export default function TracesError({ retry: reset }: { error: Error & { digest?: string }; retry: () => void }) {",
+      "cases": [
+        "V1-V11 the error boundary re-fetches, and shows nothing from the thrown error"
+      ]
     }
   ]
 }

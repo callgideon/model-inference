@@ -11,10 +11,18 @@ import { Card, CardContent } from "@/components/ui/card";
  * something threw — and a thrown render leaves the reader with a half-streamed page and no way back.
  * A trace list is read-only, so there is nothing to reconcile: offer the retry and the clean URL.
  *
- * `error.message` is deliberately not shown: it is not a message written for a reader, and on the
- * server it is redacted to a digest anyway.
+ * **`retry`, not `reset`.** This page is a Server Component, so its content comes from a server
+ * payload that already errored: `reset()` re-renders the boundary's children *without re-fetching*
+ * and therefore replays the same failure, which the U1 review reproduced in a real browser on the
+ * installed Next 16.3.5. `retry()` re-fetches and re-renders, so it can actually recover once the
+ * fault clears; the shipped docs
+ * (`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/error.md`, "In most
+ * cases, you should use retry() instead", `retry` stable since v16.3.0) say the same.
+ *
+ * `error.message` is deliberately not shown: it is not copy written for a reader, and for a Server
+ * Component error the client only receives a generic message plus a digest anyway.
  */
-export default function TracesError({ reset }: { error: Error; reset: () => void }) {
+export default function TracesError({ retry }: { error: Error & { digest?: string }; retry: () => void }) {
   return (
     <>
       <PageHeader title="Traces" />
@@ -22,7 +30,7 @@ export default function TracesError({ reset }: { error: Error; reset: () => void
         <CardContent role="alert" className="space-y-3 py-8 text-center">
           <p className="text-sm">The trace list could not be shown.</p>
           <div className="flex items-center justify-center gap-3">
-            <Button size="sm" variant="outline" onClick={reset}>
+            <Button size="sm" variant="outline" onClick={() => retry()}>
               Try again
             </Button>
             <Link href="/traces" className="text-sm text-primary underline-offset-4 hover:underline">

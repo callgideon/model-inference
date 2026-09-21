@@ -8,6 +8,7 @@
 // one that draws a lost capture quietly tells them nothing was lost. Everything else here is the
 // loading/empty/error/retry surface and the page-scoped lag and loss indicators.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { parseTraceParams, traceHref } from "../../app/(console)/traces/query.ts";
@@ -470,4 +471,25 @@ test("V1-V10 the way out of a bad page link actually loads a page of rows", asyn
   assert.ok(recovered.view.rows.length > 0, "the way back loaded an empty page");
   assert.equal(recovered.parsed.filters.cursor, null);
   assert.deepEqual(recovered.parsed.rejected, [], "and it is a clean URL");
+});
+
+test("V1-V11 the error boundary re-fetches, and shows nothing from the thrown error", () => {
+  // The one invariant here that no type and no view-model case can catch: `/traces` is a Server
+  // Component, so its content is a server payload that already errored. `reset()` re-renders the
+  // boundary's children *without re-fetching* and replays the same failure — verified in a real
+  // browser on the installed Next 16.3.5 — while `retry()` re-fetches, so it can recover once the
+  // fault clears. The shipped docs say the same
+  // (node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/error.md: "In most
+  // cases, you should use retry() instead"; `retry` stable since v16.3.0). Next's generated route
+  // types do not constrain boundary props, so this reads the source: crude, but it is the only thing
+  // that fails if someone "fixes" it back.
+  const file = readFileSync(new URL("../../app/(console)/traces/error.tsx", import.meta.url), "utf8");
+  // The comments explain *why* it is not `reset`, so they are stripped before the code is checked.
+  const source = file.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.match(file, /^"use client";/, "an error boundary is a Client Component");
+  assert.match(source, /export default function \w+\(\{ retry \}/, "the boundary takes `retry`");
+  assert.match(source, /onClick=\{\(\) => retry\(\)\}/, "and calls it");
+  assert.ok(!/\breset\b/.test(source), "`reset` cannot recover a Server Component payload");
+  // Nothing from the thrown error reaches the reader: not the message, not the digest.
+  assert.ok(!/\{error\.|error\.message|error\.digest/.test(source), "no error text is rendered");
 });
