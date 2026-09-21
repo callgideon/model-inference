@@ -33,6 +33,12 @@ MUT_DB = f"{pgharness.DATABASE}_mut"
 MUT_PRODLIKE_DB = "prodlike_d1_mut"       # deliberately not infrx_*
 
 
+KILLED = "killed"
+SURVIVED = "survived"
+APPLY_ERROR = "apply_error"
+SETUP_ERROR = "setup_error"
+
+
 @dataclass(frozen=True)
 class Mutant:
     name: str
@@ -46,6 +52,12 @@ class Mutant:
     #: tenant guard). Still a single edit; the count is stated so a stale target is
     #: still an error rather than a silent partial mutation.
     occurrences: int = 1
+    #: What this mutant must produce. Almost always a kill by the named check. One mutant
+    #: declares `APPLY_ERROR` instead: making the legacy ledger's sign rules VALID means
+    #: the migration cannot be applied to a database holding the history the deployed
+    #: console can write, and that refusal IS the observable consequence. Declaring it
+    #: keeps R40 intact - the runner still never SCORES an apply error as a kill.
+    expects: str = "killed"
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -162,9 +174,9 @@ MUTANTS: tuple[Mutant, ...] = (
            "`engine_error` is a free success"),
     Mutant("a_debit_on_any_outcome", SCHEMA,
            "  constraint jobs_debit_only_when_settled\n"
-           "    check (debit = 0 or (settlement_state = 'settled'\n"
-           "                         and outcome_cause in ('completed','client_cancelled',\n"
-           "                                               'client_disconnected'))),",
+           "    check (debit = 0 or (settlement_state is not distinct from 'settled'\n"
+           "                         and coalesce(outcome_cause in ('completed','client_cancelled',\n"
+           "                                                        'client_disconnected'), false))),",
            "  constraint jobs_debit_only_when_settled check (debit >= 0),",
            "fresh", "row_constraints",
            "our own deadline can charge the customer (R21)"),
@@ -335,14 +347,17 @@ MUTANTS: tuple[Mutant, ...] = (
            "a browser session can read the store's clock"),
 
     # --- r2: the routes the review found ---------------------------------------
-    Mutant("ledger_keeps_the_operator_principal", SCHEMA,
-           "  add column if not exists by_operator boolean not null default false,\n"
-           "  add column if not exists idempotency_key text;",
-           "  add column if not exists by_operator boolean not null default false,\n"
-           "  add column if not exists operator_principal text,\n"
-           "  add column if not exists idempotency_key text;",
+    # r3: re-adding the column no longer leaks anything, because SELECT on this table is
+    # column-scoped since N2 - so the killable edit is the GRANT, which is what decides
+    # whether `created_by` (the operator's uuid, written by the deployed console) is
+    # readable at all.
+    Mutant("ledger_select_is_table_wide_again", ROLES,
+           "grant select (id, org_id, delta_usd, kind, reason, ref, created_at)\n"
+           "  on public.credit_ledger to authenticated;",
+           "grant select on public.credit_ledger to authenticated;",
            "fresh", "no_operator_identity",
-           "an operator's address sits in a column every member may SELECT"),
+           "`select created_by from public.credit_ledger` returns the operator's user id "
+           "to any member"),
     Mutant("truncate_guard_dropped", SCHEMA,
            "    execute format('create trigger %I before truncate on %s for each statement '",
            "    continue; execute format('create trigger %I before truncate on %s for each statement '",
@@ -385,10 +400,9 @@ MUTANTS: tuple[Mutant, ...] = (
            "fresh", "row_constraints",
            "a `grant` of minus five hundred, or a `usage` that pays the customer"),
     Mutant("usage_pilot_rows_need_no_job", SCHEMA,
-           "  if new.settlement_regime = 'pilot'\n"
-           "     and not exists (select 1 from infrx.jobs j",
-           "  if false\n"
-           "     and not exists (select 1 from infrx.jobs j",
+           "    if not exists (select 1 from infrx.jobs j\n"
+           "                   where j.request_id = new.id and j.org_id = new.org_id) then",
+           "    if false then",
            "fresh", "row_constraints",
            "a settled usage row can be written under an organization that never ran it"),
     Mutant("terminal_settlement_is_rewritable", SCHEMA,
@@ -425,6 +439,126 @@ MUTANTS: tuple[Mutant, ...] = (
            "fresh", "console_read_surface",
            "one call can ask for every day since the epoch"),
 
+    # --- r3: the eighteen the reviewer's round-2 corpus left alive (N5) --------
+    Mutant("org_settings_without_a_tenant_predicate", CONSOLE,
+           "from infrx.consent_history c\nwhere c.revoked_at is null\n"
+           "  and (public.is_org_member(c.org_id) or public.is_operator() "
+           "or public.is_service_client())\n",
+           "from infrx.consent_history c\nwhere c.revoked_at is null\n",
+           "fresh", "console_read_surface",
+           "every organization's trace settings are readable by any signed-in user"),
+    Mutant("consent_history_view_without_barrier", CONSOLE,
+           "create or replace view public.consent_history with (security_barrier = true) as",
+           "create or replace view public.consent_history as",
+           "fresh", "leaky_function",
+           "a cheap function in the WHERE clause reads another tenant's consent trail"),
+    Mutant("judge_runs_view_without_barrier", CONSOLE,
+           "create or replace view public.console_judge_runs with (security_barrier = true) as",
+           "create or replace view public.console_judge_runs as",
+           "fresh", "leaky_function",
+           "a cheap function in the WHERE clause reads another tenant's judge costs"),
+    Mutant("revocation_can_be_re_dated", SCHEMA,
+           "  if old.revoked_at is not null and new.revoked_at is distinct from old.revoked_at then",
+           "  if old.revoked_at is not null and new.revoked_at is null then",
+           "fresh", "row_constraints",
+           "a revocation can be moved later, which is a revocation that did not happen "
+           "when the customer says it did"),
+    Mutant("maximum_hold_is_mutable", SCHEMA,
+           "     or new.maximum_hold is distinct from old.maximum_hold\n",
+           "",
+           "fresh", "row_constraints",
+           "the reserved envelope can be raised after admission, so a settlement can "
+           "exceed what the customer's balance was checked against (R53)"),
+    Mutant("job_key_is_mutable", SCHEMA,
+           "     or new.key_id is distinct from old.key_id\n",
+           "",
+           "fresh", "row_constraints",
+           "an admitted job can be re-attributed to another of the tenant's keys, which "
+           "is what per-key metering and rate limits are counted on"),
+    Mutant("idempotency_feedback_not_composite", SCHEMA,
+           "  add constraint idempotency_feedback_belongs_to_org\n"
+           "    foreign key (feedback_id, org_id) references infrx.feedback "
+           "(feedback_id, org_id)\n    on delete restrict;",
+           "  add constraint idempotency_feedback_belongs_to_org\n"
+           "    foreign key (feedback_id) references infrx.feedback (feedback_id)\n"
+           "    on delete restrict;",
+           "fresh", "row_constraints",
+           "one tenant's idempotency key replays another tenant's feedback"),
+    Mutant("delivery_destination_not_composite", SCHEMA,
+           "  foreign key (destination_id, org_id)\n"
+           "    references infrx.callback_destinations (destination_id, org_id) "
+           "on delete cascade,",
+           "  foreign key (destination_id)\n"
+           "    references infrx.callback_destinations (destination_id) on delete cascade,",
+           "fresh", "row_constraints",
+           "one tenant's event is delivered to another tenant's registered endpoint - "
+           "cross-tenant egress, not a bookkeeping error"),
+    Mutant("ledger_sign_rules_made_valid", SCHEMA,
+           "    check (case kind when 'grant' then delta_usd > 0\n"
+           "                     when 'purchase' then delta_usd > 0\n"
+           "                     when 'usage' then delta_usd < 0\n"
+           "                     else true end) not valid,",
+           "    check (case kind when 'grant' then delta_usd > 0\n"
+           "                     when 'purchase' then delta_usd > 0\n"
+           "                     when 'usage' then delta_usd < 0\n"
+           "                     else true end),",
+           "upgrade", "upgrade_preserved",
+           "the migration refuses to apply to a database whose history the deployed "
+           "console wrote - or, worse, somebody 'fixes' the history",
+           expects=APPLY_ERROR),
+    Mutant("pilot_usage_trigger_on_insert_only", SCHEMA,
+           "create trigger usage_events_pilot_tenant before insert or update on public.usage_events",
+           "create trigger usage_events_pilot_tenant before insert on public.usage_events",
+           "fresh", "row_constraints",
+           "a legacy row is promoted into the settlement regime by UPDATE, unchecked"),
+    Mutant("judge_money_is_a_number", CONSOLE,
+           "       r.reserved_cost::text as budget_reserved, r.actual_cost::text as budget_settled,",
+           "       r.reserved_cost as budget_reserved, r.actual_cost as budget_settled,",
+           "fresh", "console_read_surface",
+           "judge budgets reach the browser as JSON numbers and lose precision"),
+    Mutant("admin_org_money_is_a_number", CONSOLE,
+           "       o.suspension_reason, w.ledger_total::text as ledger_total,\n"
+           "       w.reserved_total::text as reserved_total,",
+           "       o.suspension_reason, w.ledger_total, w.reserved_total,",
+           "fresh", "console_read_surface",
+           "the operator's organization list shows balances as JSON numbers"),
+    Mutant("pending_reconciliation_counts_every_hold", CONSOLE,
+           "         coalesce(sum(u.max_hold::numeric(20,8))\n"
+           "                  filter (where u.usage_certainty = 'unknown'\n"
+           "                          and u.max_hold is not null), 0)::numeric(20,8)::text,",
+           "         coalesce(sum(u.max_hold::numeric(20,8)), 0)::numeric(20,8)::text,",
+           "fresh", "console_read_surface",
+           "a customer is told credit is pending reconciliation when it is simply held "
+           "for a request that is still running"),
+    Mutant("platform_absorbed_counts_everything", CONSOLE,
+           "         count(*) filter (where u.settlement_state = 'released_platform_absorbed')::bigint",
+           "         count(*)::bigint",
+           "fresh", "console_read_surface",
+           "every request looks like one the platform paid for"),
+    Mutant("failed_requests_counts_everything", CONSOLE,
+           "         count(*) filter (where u.http_status >= 400)::bigint,",
+           "         count(*)::bigint,",
+           "fresh", "console_read_surface",
+           "the usage page reports a 100% error rate"),
+    Mutant("spent_keeps_its_negative_sign", CONSOLE,
+           "                    -sum(delta_usd) filter (where delta_usd < 0) as spent",
+           "                    sum(delta_usd) filter (where delta_usd < 0) as spent",
+           "fresh", "console_read_surface",
+           "the credits card renders a negative 'spent'"),
+    Mutant("infrx_default_privileges_to_authenticated", ROLES,
+           "alter default privileges in schema infrx\n"
+           "  grant select, insert, update, delete on tables to service_role;",
+           "alter default privileges in schema infrx\n"
+           "  grant select, insert, update, delete on tables to service_role, authenticated;",
+           "fresh", "function_privileges",
+           "every relation D2-D6 adds to the pilot schema is born readable by a browser "
+           "session"),
+    Mutant("purchase_may_be_negative", SCHEMA,
+           "                     when 'purchase' then delta_usd > 0\n",
+           "",
+           "fresh", "row_constraints",
+           "a `purchase` that takes credit away"),
+
     # --- the database clock --------------------------------------------------
     Mutant("the_clock_offset_works_in_production", SCHEMA,
            "  if current_database() like 'infrx@_%' escape '@' then",
@@ -460,6 +594,7 @@ _CHECKS = {
     "privileges": checks.check_privileges,
     "truncate_refused": checks.check_truncate_refused,
     "leaky_function": checks.check_leaky_function_probe,
+    "function_privileges": checks.check_function_privileges,
     "no_operator_identity": checks.check_no_operator_identity_in_public,
     "legacy_drift": checks.check_legacy_writer_does_not_drift,
     "rpc_boundary": checks.check_rpc_boundary,
@@ -480,12 +615,6 @@ _CHECKS = {
 #: `psycopg.Error` and setup/apply failures, and reported
 #: `historical_usage_enters_the_settlement_regime` as "killed by setup: 0003 failed to
 #: apply", which is a migration that does not build, not an invariant that is defended.
-KILLED = "killed"
-SURVIVED = "survived"
-APPLY_ERROR = "apply_error"
-SETUP_ERROR = "setup_error"
-
-
 def kill(mutant: Mutant) -> tuple[str, str]:
     """Build a database from the mutated migrations and run the check that claims the
     invariant. Returns `(outcome, detail)` with `outcome` in KILLED / SURVIVED /

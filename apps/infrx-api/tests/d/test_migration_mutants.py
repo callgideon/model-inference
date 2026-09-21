@@ -36,15 +36,22 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           "infrx_tables_readable_by_authenticated",
           "entitlements_deny_everyone_by_default", "new_organizations_get_no_wallet",
           "wallet_money_is_not_the_domain", "no_pending_outbox_index",
-          # r2: one per round-2 finding, so the default run covers every B item.
+          # r2: one per round-2 finding.
           "views_writable_by_browser_roles", "ledger_actor_masking_keys_on_the_marker",
-          "ledger_keeps_the_operator_principal", "truncate_guard_dropped",
+          "ledger_select_is_table_wide_again", "truncate_guard_dropped",
           "api_keys_insert_is_table_wide", "views_without_security_barrier",
           "wallet_total_not_moved_by_the_ledger", "consent_revocation_can_be_undone",
           "holds_need_not_belong_to_the_job", "ledger_signs_unconstrained",
           "terminal_settlement_is_rewritable", "money_leaves_the_views_as_a_number",
           "console_rpcs_answer_for_any_organization",
-          "admin_orgs_duplicates_an_org_with_two_owners")
+          "admin_orgs_duplicates_an_org_with_two_owners",
+          # r3: one per round-3 finding.
+          "org_settings_without_a_tenant_predicate", "consent_history_view_without_barrier",
+          "revocation_can_be_re_dated", "maximum_hold_is_mutable",
+          "delivery_destination_not_composite", "ledger_sign_rules_made_valid",
+          "pilot_usage_trigger_on_insert_only", "judge_money_is_a_number",
+          "pending_reconciliation_counts_every_hold", "spent_keeps_its_negative_sign",
+          "infrx_default_privileges_to_authenticated", "purchase_may_be_negative")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 
@@ -75,11 +82,11 @@ def test_mutant_is_killed(mutant) -> None:
     proves nothing about the invariant.
     """
     outcome, detail = mutation_list.kill(mutant)
-    assert outcome == mutation_list.KILLED, (
-        f"mutant {mutant.name} was {outcome.upper()} (not killed): {mutant.check} on "
-        f"{mutant.file} losing `{mutant.old.strip()[:80]}` -> {detail or 'no failure'}. "
-        f"In production: {mutant.why}")
-    print(f"{mutant.name}: killed by {mutant.check} -> {detail}")
+    assert outcome == mutant.expects, (
+        f"mutant {mutant.name} was {outcome.upper()}, expected {mutant.expects.upper()}: "
+        f"{mutant.check} on {mutant.file} losing `{mutant.old.strip()[:80]}` -> "
+        f"{detail or 'no failure'}. In production: {mutant.why}")
+    print(f"{mutant.name}: {outcome} by {mutant.check} -> {detail}")
 
 
 def test_the_runner_cannot_report_a_broken_migration_as_a_kill() -> None:

@@ -354,6 +354,13 @@ def seed_fixtures(conn) -> None:
             'nemostation/marlin-2b', 503, 1, 0, 0.00000000, 'unknown', 'held_unknown'),
            ('91000000-0000-4000-8000-0000000000b2', '{ORG_B}', '{KEY_B}',
             'nemostation/marlin-2b', 503, 1, 0, 0.00000000, 'unknown', 'held_unknown');
+    -- A usage row for a request whose hold is active but whose usage IS known, so
+    -- `pending_reconciliation` has something to exclude (r3/n40): summing every hold
+    -- instead of the unknown ones would report 3.75 where the answer is 2.50.
+    insert into public.usage_events
+      (id, org_id, api_key_id, model_id, status, cost_usd, usage_certainty)
+      values ('{JOB_QUEUED}', '{ORG_A}', '{KEY_A}', 'nemostation/marlin-2b', 200,
+              0.00001000, 'authoritative');
     -- The unknown-usage hold `pending_reconciliation` sums (ORG_A 2.50, ORG_B 0.75).
     insert into infrx.credit_holds (request_id, org_id, amount, state, reconcile_after)
     values ('{UNKNOWN_A}', '{ORG_A}', 2.50000000, 'unknown', '2026-09-22T00:00:00Z'),
@@ -387,6 +394,10 @@ def seed_fixtures(conn) -> None:
     insert into public.credit_ledger
       (org_id, delta_usd, kind, reason, created_by, by_operator)
       values ('{ORG_A}', 3.00000000, 'adjustment', 'by the owner', '{USER_OWNER}', false);
+    -- A NEGATIVE row, so `spent` is a number with a sign to get wrong (r3/n44): with an
+    -- all-positive ledger both the right and the wrong expression answer zero.
+    insert into public.credit_ledger (org_id, delta_usd, kind, reason)
+      values ('{ORG_A}', -2.00000000, 'adjustment', 'a correction');
     -- `reserved_total` is the sum of the active holds the fixture seeds (the 1.25 hold on
     -- the queued job plus the unknown-usage hold below); nothing moves it automatically
     -- until D2/D5, so the fixture keeps it equal to them or the reconciliation view is
