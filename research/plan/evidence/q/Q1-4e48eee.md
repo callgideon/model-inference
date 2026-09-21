@@ -583,9 +583,9 @@ marked `CORRECTED` where they were made.
 | Field | Value |
 |---|---|
 | Reviewed SHA | `309fb1c` |
-| Round-2 implementation SHA | `5b0217e` (`b762c91` R60, `a26b28e` N03/N18/B4, `2fb2a1f` docstring, `5b0217e` anchors + level-1 comparison mutant) |
+| Round-2 implementation SHA | `f7a4743` (`b762c91` R60, `a26b28e` N03/N18/B4, `2fb2a1f` docstring, `5b0217e` anchors + level-1 comparison mutant, `f7a4743` the reviewer's third ordering mutant) |
 | Status | **implemented, not integrated** |
-| Suite | 59 tests in `tests/q`, 50 mutants, 50/50 killed |
+| Suite | 59 tests in `tests/q`, 51 mutants, 51/51 killed |
 
 ## What R60 changes
 
@@ -641,12 +641,12 @@ history with this correction attached.
 
 | # | Command | Exit | Output |
 |---|---|---|---|
-| 1 | `make api-test` | 0 | `729 passed, 2 warnings in 31.85s` |
+| 1 | `make api-test` | 0 | `729 passed, 2 warnings in 33.71s` (670 baseline + 59) |
 | 2 | `uv run --frozen pytest -q tests/q` | 0 | `59 passed in 6.00s` |
 | 3 | `uv run --frozen pytest tests/q/test_memory_scheduler.py -k contract -q -s` | 0 | `scheduler conformance: 7 ran, 0 skipped []` then `9 passed, 36 deselected in 0.16s` |
-| 4 | `uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `Q mutants: 50 declared, 3 selected (default subset)` then `10 passed in 10.40s` |
-| 5 | `INFRX_MUTANTS=all uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `Q mutants: 50 declared, 50 selected (INFRX_MUTANTS=all)` then `57 passed in 45.72s` |
-| 6 | `uv run --frozen python tests/q/mutants.py` | 0 | `50/50 killed` |
+| 4 | `uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `Q mutants: 51 declared, 3 selected (default subset)` then `10 passed in 4.92s` |
+| 5 | `INFRX_MUTANTS=all uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `Q mutants: 51 declared, 51 selected (INFRX_MUTANTS=all)` then `58 passed in 41.92s` |
+| 6 | `uv run --frozen python tests/q/mutants.py` | 0 | `51/51 killed` |
 | 7 | `PYTHONHASHSEED=0/1/999 pytest -q tests/q/test_fairness_properties.py tests/q/test_memory_scheduler.py` | 0 | `49 passed` on each seed |
 
 Counts: 59 tests in `tests/q` = 9 contract (7 exported cases, 0 skips) + 4 property +
@@ -661,6 +661,78 @@ order < best[0]:` now exists at both selection levels, and rebuild's reset block
 lines), and one expectation in the N03 change was wrong on first writing (the noisy tenant
 has one candidate left at that point, so the order is `A B B B`). Both are fixed in
 `5b0217e` and `a26b28e`; the anchor rule catching a real ambiguity is the reason it exists.
+
+## Validation against the reviewer's own attack scripts (round 2)
+
+The review named its repro scripts, so the fix was checked against **them**, not only
+against the cases written from their description. The scripts were copied into this
+session's scratch area with their `API` path repointed at this worktree (one line in
+`lib.py`); nothing else was changed, and nothing in the worktree was touched. Quoted
+output at `f7a4743`:
+
+```
+$ python none_starve.py
+equal weights, noisy depth    30: peer in SAME kind dispatched at slots [1, 3, 5]; peer in OTHER kind at slots [1, 3, 5]
+equal weights, noisy depth  1000: peer in SAME kind dispatched at slots [1, 3, 5]; peer in OTHER kind at slots [1, 3, 5]
+equal weights, noisy depth 10000: peer in SAME kind dispatched at slots [1, 3, 5]; peer in OTHER kind at slots [1, 3, 5]
+noisy weight 2, peer weight 1, depth 10000, other kind: [1, 3, 5]
+  same, same kind: [1, 4, 7]
+
+$ python none_more.py
+same org two kinds, kind=None: aI aP aI bP aI aP aI bP aI aP aI bP aI aP aI bP aI aP aI bP aI aI aI aI …
+noisy weight 2 topped up for 200,000 unfiltered dispatches; peer (weight 1, other kind) dispatched at slots: [1, 3, 5] | peer lag [0.5]
+
+$ python mixed.py
+mixed filtered+unfiltered workers: prepare peer dispatched at slots [2, 6, 10]
+
+$ python kinds.py
+prep dispatches per inference dispatch=0: B share=0.80 (weights say 0.80)  ABBBBABBBBABBBB…
+prep dispatches per inference dispatch=1: B share=0.80 (weights say 0.80)  ABBBBABBBBABBBB…
+prep dispatches per inference dispatch=3: B share=0.80 (weights say 0.80)  ABBBBABBBBABBBB…
+
+$ python kinds_cost.py
+prep dispatches per inference dispatch=0:  expensive tenant's share of GPU service seconds = 0.50 (fair = 0.50)
+prep dispatches per inference dispatch=12: expensive tenant's share of GPU service seconds = 0.50 (fair = 0.50)
+
+$ python survivor_demo.py
+N05 real: BABABAAAAAAA | arrival at max(V of any kind): AAAAAAAAAAAA
+N03 real: (4.0, 'CACAA') | V := unclamped tag: (0.0, 'CCAAA')
+
+$ python b4.py
+typed: internal_error status 500
+state identical incl. virtual_times and flow order: True
+next claim dispatches: 00000002
+
+$ PYTHONPATH=<worktree>/apps/infrx-api python b4_mutant.py
+the_candidate_leaves_its_flow_before_the_cost_is_validated (statement move = the round-1 bug) -> Result(outcome=<Outcome.killed: 'killed'>, detail='1 failed, 58 deselected in 0.38s')
+the_claim_is_stamped_before_the_cost_is_validated (pure one-line insert) -> Result(outcome=<Outcome.killed: 'killed'>, detail='1 failed, 58 deselected in 0.37s')
+the_cost_is_validated_after_the_state_moves (validation call moved below the writes) -> Result(outcome=<Outcome.killed: 'killed'>, detail='1 failed, 58 deselected in 0.36s')
+
+$ for seed in 0 1 7; do PYTHONHASHSEED=$seed python invariants.py; done
+hashseed 0 digest 72975340aa7487bb refusals 33830 dispatches 29531
+hashseed 1 digest 72975340aa7487bb refusals 33830 dispatches 29531
+hashseed 7 digest 72975340aa7487bb refusals 33830 dispatches 29531
+
+$ python test_index_only.py        # silent: every assertion held
+```
+
+Three notes, because two scripts did not simply pass:
+
+- `b4_mutant.py`'s third mutant (`cost = 1.0`, the estimator never consulted) was **not**
+  in this list. It is now (`the_estimator_is_never_consulted`, `f7a4743`), named against
+  the bad-cost case and the cost-over-weight case, and both fail under it.
+- `tiebreak.py` aborts on `assert src.count(old) == 1` for the anchor
+  `order = (flow.tag - self._virtual_time[flow_kind], …)`: that expression is what R60
+  withdrew, so the script is probing a line that no longer exists. The invariant it was
+  probing is covered by `the_kind_tie_breaks_on_dict_order` /
+  `the_kind_tie_breaks_on_the_kind_name` at level 1 and by the three level-2 tie-break
+  mutants.
+- `b4_move.py` reads the adapter from the reviewer's own tree path, which does not exist
+  here; `b4_mutant.py` covers the same two mutants and was run.
+
+The `invariants.py` digest being identical on three hash seeds is the
+`PYTHONHASHSEED` check round 1 could only promise: 29,531 dispatches and 33,830 refusals
+of a randomised operation stream, same digest each time.
 
 ## Artifacts (round 2)
 
