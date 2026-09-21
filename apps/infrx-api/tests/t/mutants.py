@@ -83,6 +83,7 @@ PARTIAL = "test_bytes_a_failed_write_left_behind_still_count_against_the_cap"
 ADOPTED = "test_an_adopted_segment_says_its_counts_are_unknown"
 UNREAD = "test_an_unreadable_segment_reports_every_byte_as_unread"
 CLOSE_RACE = "test_close_admits_nothing_once_it_has_started_and_joins_off_the_loop"
+FSYNC_RAISES = "test_an_fsync_step_that_raises_leaves_the_books_agreeing"
 
 
 @dataclass(frozen=True)
@@ -387,6 +388,18 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("an_adopted_segment_is_not_flagged", "an adopted segment says so (B8/N16)",
        "                                           sealed=True, adopted=True))",
        "                                           sealed=True, adopted=False))", ADOPTED),
+    _m("an_fsync_step_that_raises_escapes_the_writer", "every writer step is in the result",
+       "        except BaseException:                    # noqa: BLE001\n"
+       "            # An fsync step that raises is not allowed to discard",
+       "        except ZeroDivisionError:                # noqa: BLE001\n"
+       "            # An fsync step that raises is not allowed to discard",
+       FSYNC_RAISES),
+    _m("flush_raises_a_writer_failure_at_the_flusher", "one writer failure does not end tracing",
+       "        except BaseException:\n"
+       "            # A writer failure is already counted by the settlement. Raising it here",
+       "        except asyncio.TimeoutError:\n"
+       "            # A writer failure is already counted by the settlement. Raising it here",
+       WRITER_BUG),
     _m("close_marks_the_sink_closed_last", "nothing enters once close has started",
        "        self._closed = True\n        writer, self._writer = self._writer, None",
        "        writer, self._writer = self._writer, None", CLOSE_RACE),

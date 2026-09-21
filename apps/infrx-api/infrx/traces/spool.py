@@ -705,7 +705,15 @@ class SpoolTraceSink(FakeTraceSink):
         # keeps going and the callback settles the counters and the charges whichever way it
         # ends - round 1 lost five records and 5 MB of budget for ever to
         # `wait_for(flush, 0.2)`.
-        await asyncio.shield(future)
+        try:
+            await asyncio.shield(future)
+        except asyncio.CancelledError:
+            raise                                # the caller's own cancellation is its news
+        except BaseException:
+            # A writer failure is already counted by the settlement. Raising it here as well
+            # would kill the flusher task - one exception ending tracing for the process -
+            # for something the loss table has already said.
+            pass
         return await self.stats()
 
     def _apply(self, result: _WriteResult) -> None:
@@ -941,36 +949,40 @@ class SpoolTraceSink(FakeTraceSink):
                        if segment.fd is not None and not segment.fsync_failed)
 
     def _write_batch(self, batch: "list[_Row]", fsync_due: bool) -> _WriteResult:
-        """The only code that touches a file. Runs in the writer thread."""
+        """The only code that touches a file. Runs in the writer thread.
+
+        It **returns** a result for every row, whatever happens: round 2 raised a
+        `RuntimeError` out of the fsync shim after three rows had been appended and got
+        `appended 0, dropped 3` with the segment holding three records and `fsynced 3` later
+        - "the books may not lie". Every writer-side step is therefore inside the result, and
+        nothing but a `BaseException` the interpreter itself raises leaves this method.
+        """
         result = _WriteResult()
         broken = False
-        if not batch and self.paused:
-            # Nothing to write, but the pause is this thread's to re-evaluate: the flusher
-            # is the timer that lifts one when the disk comes back, and the `statvfs` that
-            # decides belongs here rather than on the event loop.
-            self._refuse_bytes(self._refused_need)
-        for row in batch:
+        for index, row in enumerate(batch):
             if broken:
                 result.dropped.append((TraceLossReason.disk_error, row.counted))
                 continue
-            crc = frame_checksum(row.payload, row.parts, row.content_bytes)
-            need = frame_size(row.payload, row.content_bytes)
-            refusal = self._refuse_bytes(need)
-            if refusal is not None:
-                result.dropped.append((refusal, row.counted))
-                continue
             try:
+                crc = frame_checksum(row.payload, row.parts, row.content_bytes)
+                need = frame_size(row.payload, row.content_bytes)
+                refusal = self._refuse_bytes(need)
+                if refusal is not None:
+                    result.dropped.append((refusal, row.counted))
+                    continue
                 segment = self._segment_for(need, result)
                 self.io.write(segment.fd, pack_frame(row.payload, crc, row.content_bytes))
                 for part in row.parts:
                     self.io.write(segment.fd, part)
-            except Exception:                    # noqa: BLE001
+            except BaseException:                # noqa: BLE001
                 # The disk refused mid-batch - or something worse than a disk did, which is
                 # a bug rather than ENOSPC but must not escape the writer either: a raised
                 # batch is records the sink has already reported accepted. Stop writing: the
                 # handle is at an arbitrary offset, so the segment is abandoned (its tail is
                 # torn, which the reader tolerates) and the rest of the batch is dropped
-                # honestly rather than appended behind unreadable bytes.
+                # honestly rather than appended behind unreadable bytes. The refusal check is
+                # inside the `try` too, because a `statvfs` that raises something other than
+                # `OSError` is still a row this sink has promised to account for.
                 result.dropped.append((TraceLossReason.disk_error, row.counted))
                 self._abandon_active(result)
                 broken = True
@@ -981,8 +993,20 @@ class SpoolTraceSink(FakeTraceSink):
                 segment.unsynced_counted.append(row.counted)
                 self.spool_bytes += need
             result.appended += 1
-        if fsync_due:
-            self._fsync_pending(result)
+        try:
+            if not batch and self.paused:
+                # Nothing to write, but the pause is this thread's to re-evaluate: the
+                # flusher is the timer that lifts one when the disk comes back, and the
+                # `statvfs` that decides belongs here rather than on the event loop.
+                self._refuse_bytes(self._refused_need)
+            if fsync_due:
+                self._fsync_pending(result)
+        except BaseException:                    # noqa: BLE001
+            # An fsync step that raises is not allowed to discard what this batch already
+            # appended: the counters have to agree with the segment either way, so the
+            # records stay appended-but-unpromised and the segment is sealed rather than
+            # appended to behind whatever the failure left.
+            self._abandon_active(result)
         return result
 
     def _fsync_pending(self, result: _WriteResult) -> None:

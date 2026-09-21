@@ -774,6 +774,39 @@ def test_a_good_fsync_clears_the_loss_flags_it_promised():
     asyncio.run(scenario())
 
 
+def test_an_fsync_step_that_raises_leaves_the_books_agreeing():
+    """Round 2: a `RuntimeError` out of the fsync shim after three rows had been appended
+    reported `appended 0, dropped 3` while the segment held three records, and a later flush
+    then reported `fsynced 3` against `appended 0`. Every writer-side step is inside the
+    result now, so the counters and the segment agree however the step ends."""
+    async def scenario():
+        class Exploding(DrillIO):
+            def fsync(self, fd: int) -> None:
+                self._seen("fsync")
+                raise RuntimeError("not an OSError at all")
+
+        io = Exploding()
+        spool = sink(io=io)
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        for index in range(3):
+            await capture_one(spool, request_id(index), b"x" * 40)
+        stats = await spool.flush(spool.clock.now())
+        appended, dropped = stats["appended"], stats["dropped"]
+        assert appended + dropped == 3, stats
+        assert stats["fsynced"] <= appended, (stats["fsynced"], appended)
+        on_disk = sum(view.records for view in spool.segments())
+        assert on_disk == appended, f"{on_disk} records on disk against {appended} appended"
+        assert all(view.sealed for view in spool.segments()), "the segment stayed open"
+        # a later flush cannot promise more than was ever appended
+        io.__class__ = DrillIO
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        stats = await spool.flush(spool.clock.now())
+        assert stats["fsynced"] <= stats["appended"], stats
+        assert len(recover(spool.spool_dir).records) <= stats["appended"]
+        await spool.close()
+    asyncio.run(scenario())
+
+
 def test_shutdown_is_a_counted_loss_not_a_silent_one():
     """`close` is the orderly half of `crash`: whatever is still in memory is dropped and
     counted `shutdown` (08 §3), because a process that stops is a loss the coverage
@@ -974,10 +1007,9 @@ def test_a_writer_error_that_is_not_an_oserror_still_settles_the_batch():
             raise RuntimeError("the writer itself failed")
 
         spool._write_batch = explode
-        try:
-            await spool.flush(spool.clock.now())
-        except RuntimeError:
-            pass                                 # the caller may see it; the books may not lie
+        # and it does **not** raise at the flusher: one exception must not end tracing for
+        # the process, and the loss table has already said what happened.
+        await spool.flush(spool.clock.now())
         stats = await spool.stats()
         assert stats["loss_reasons"]["disk_error"] == 3, stats["loss_reasons"]
         assert stats["dropped"] == 3
