@@ -284,7 +284,7 @@ def test_a_slow_redirect_chain_stops_at_the_aggregate_deadline():
     assert error.reason == "timeout"
     assert 1 <= len(transport.requests) < DEFAULTS.media_fetch_max_redirects + 1, \
         "the chain ran to the redirect limit instead of stopping at the deadline"
-    assert len(resolve.calls) <= len(transport.requests) + 1, \
+    assert len(resolve.calls) == len(transport.requests), \
         "a hop was resolved after the budget was gone"
 
 

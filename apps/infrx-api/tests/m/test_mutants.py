@@ -44,7 +44,7 @@ def test_the_mutation_list_covers_the_owned_modules():
     count is a floor on the two modules M1 wrote plus the address policy it reuses."""
     files = {mutant.file for mutant in ALL}
     assert files == {"media/fetch.py", "media/store.py", "media/video.py"}
-    assert len(ALL) >= 65, f"only {len(ALL)} mutants declared"
+    assert len(ALL) >= 78, f"only {len(ALL)} mutants declared"
 
 
 @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
