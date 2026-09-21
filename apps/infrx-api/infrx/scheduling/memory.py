@@ -25,8 +25,12 @@ What it adds over the fake (which is a FIFO by design, because it is the executa
   virtual times. One shared virtual time (r2 B2) let preparation traffic clamp every
   inference flow forward and erased the debt between inference tenants, turning
   weighted fairness into round robin. A tenant's transcodes never push it back in the
-  GPU line, and `kind=None` still takes whatever is next across both - comparing each
-  flow by how far ahead of *its own* pool it is (`_select`).
+  GPU line. `kind=None` still takes whatever is next across both, by R60's two-level
+  rule: the kinds themselves are flows (own tag, one top-level virtual time, weight 1)
+  that only unfiltered claims move, and the per-kind rule underneath is untouched. The
+  r2 attempt to compare `tag - V[kind]` across kinds is withdrawn - a kind's virtual
+  time stands still while the other kind is dispatched, so a peer in the quiet kind
+  kept its lag and waited behind the whole of a noisy backlog.
 * **Bounded memory.** Queued-item and queued-byte caps (`03` §2.5, which takes them
   from llm-d's `maxRequests`/`maxBytes`), because an index is host memory. The cap is
   *not* admission capacity: PostgreSQL admits, and a refused index write is a retry
@@ -138,6 +142,14 @@ class MemoryScheduler:
         # went from 0.50 to 0.92, which is the very noisy-neighbour effect
         # WFQ-by-service-time exists to prevent.
         self._virtual_time: dict[str, float] = {kind.value: 0.0 for kind in DISPATCH_KINDS}
+        # R60 level 1: the kinds as flows of their own, for unfiltered claims only. The
+        # first attempt compared `tag - V[kind]` across kinds; because a kind's virtual
+        # time only advances when that kind is dispatched, a flow in the kind that was not
+        # being dispatched kept its lag for ever and a peer behind a noisy backlog was
+        # served at slots [1, N+1, N+2] instead of [1, 3, 5]. Kinds are now scheduled
+        # against each other by the same rule their tenants are.
+        self._kind_tag: dict[str, float] = {kind.value: 0.0 for kind in DISPATCH_KINDS}
+        self._top_virtual_time = 0.0
 
     # --- port ---------------------------------------------------------------
     async def enqueue(self, event: IndexEvent) -> bool:
@@ -183,7 +195,8 @@ class MemoryScheduler:
                 f"{', '.join(k.value for k in DISPATCH_KINDS)}")
         now = self._now()
         self._return_expired(now)
-        chosen = self._select(kind, now)
+        chosen = (self._select_across_kinds(now) if kind is None
+                  else self._select(kind, now))
         if chosen is None:
             return None
         flow, event_id = chosen
@@ -194,11 +207,20 @@ class MemoryScheduler:
         # pending nor in flight, so never re-offered and never released, while its count
         # and bytes stayed charged against the caps.
         cost = self._service_cost(entry.event)
-        # Start-time fair queuing, per dispatch kind: the flow starts no earlier than its
-        # pool's virtual time (so an idle or delayed tenant gets no stored-up credit),
-        # that start becomes the pool's virtual time, and the tag advances by the service
-        # this dispatch hands out (so a backlogged tenant cannot be overtaken for ever).
         kind_value = entry.event.kind.value
+        if kind is None:
+            # R60 level 1: for an unfiltered worker the *kinds* are the competing flows,
+            # each with its own tag, one top-level virtual time and weight 1. Only an
+            # unfiltered claim reads or writes this state, so a kind-filtered pool can
+            # neither be charged for work it did not take nor charge anyone else.
+            top_start = max(self._kind_tag[kind_value], self._top_virtual_time)
+            self._top_virtual_time = top_start
+            self._kind_tag[kind_value] = top_start + cost
+        # R60 level 2, unchanged: start-time fair queuing inside the kind. The flow starts
+        # no earlier than its pool's virtual time (so an idle or delayed tenant gets no
+        # stored-up credit), that start becomes the pool's virtual time, and the tag
+        # advances by the service this dispatch hands out (so a backlogged tenant cannot
+        # be overtaken for ever).
         start = max(flow.tag, self._virtual_time[kind_value])
         self._virtual_time[kind_value] = start
         flow.tag = start + cost / self._weight(entry.event.org_id)
@@ -243,9 +265,11 @@ class MemoryScheduler:
           candidate was acknowledged). Replay safety after a rebuild comes from the
           snapshot itself, and duplicate execution is still impossible because the
           index never authorizes execution.
-        * **fairness state restarts.** Every flow in the snapshot begins at virtual
-          time zero, so no tenant inherits a penalty or a credit from an index that no
-          longer exists, and no tenant that is absent from the snapshot keeps state.
+        * **fairness state restarts**, both levels (R60). Every flow in the snapshot
+          begins at virtual time zero and the kind tags and top-level virtual time go
+          with it, so no tenant - and no *kind* - inherits a penalty or a credit from an
+          index that no longer exists, and no tenant absent from the snapshot keeps
+          state.
 
         One consequence of clearing the acknowledged set, stated so nobody has to
         rediscover it: an acknowledgment that arrives *after* a rebuild, for a candidate
@@ -260,6 +284,8 @@ class MemoryScheduler:
         self._bytes = 0
         self._seq = 0
         self._virtual_time = {kind.value: 0.0 for kind in DISPATCH_KINDS}
+        self._kind_tag = {kind.value: 0.0 for kind in DISPATCH_KINDS}
+        self._top_virtual_time = 0.0
         for event in snapshot:
             if event.event_id in self._entries:
                 continue
@@ -316,6 +342,15 @@ class MemoryScheduler:
     def virtual_times(self) -> dict[str, float]:
         """One virtual time per dispatch kind (r2 B2), for tests and Q2."""
         return dict(self._virtual_time)
+
+    def kind_tags(self) -> dict[str, float]:
+        """R60 level-1 state: one tag per dispatch kind, moved only by unfiltered
+        claims. Part of what Q2's differential run must reproduce."""
+        return dict(self._kind_tag)
+
+    def top_virtual_time(self) -> float:
+        """R60 level-1 virtual time, moved only by unfiltered claims."""
+        return self._top_virtual_time
 
     # --- internals ----------------------------------------------------------
     def _weight(self, org_id: str) -> float:
@@ -385,18 +420,16 @@ class MemoryScheduler:
             # queued behind it, so appending and re-sorting keeps FIFO exact.
             self._flows[key].events.sort(key=lambda event_id: self._entries[event_id].seq)
 
-    def _select(self, kind: OutboxKind | None, now: datetime) -> tuple[_Flow, str] | None:
-        """The fair choice: smallest `(lag, arrival sequence)` over flows with an
-        available candidate, where `lag` is the flow's tag measured from **its own
-        kind's** virtual time.
+    def _select(self, kind: OutboxKind | str | None, now: datetime) -> tuple[_Flow, str] | None:
+        """R60 level 2: the fair choice **inside one kind** - smallest `(tag, arrival
+        sequence)` over that kind's flows with an available candidate.
 
-        Within one kind that is the same order as the tag itself (the virtual time is a
-        constant there), so a single-kind pool sees plain WFQ. Across kinds - which only
-        an unfiltered `kind=None` worker asks for - the raw tags are not comparable once
-        the two pools have done different amounts of work, so each flow is compared by
-        how far ahead of its own pool it is, and the arrival sequence breaks the tie.
-        Both components are exact: `(lag, seq)` is a total order, so no dict or set
-        iteration order, and no hash seed, can change the answer.
+        The virtual time is a constant within a kind, so comparing tags is comparing
+        lags; the r2 attempt to make the same key work across kinds (`tag - V[kind]`) is
+        withdrawn, because a kind's virtual time stands still while the other kind is
+        being dispatched and a flow in the idle kind then keeps its lag for ever.
+        `(tag, seq)` is a total order, so no dict or set iteration order, and no hash
+        seed, can change the answer.
         """
         best: tuple[tuple[float, int], _Flow, str] | None = None
         for (flow_kind, _org_id), flow in self._flows.items():
@@ -409,9 +442,29 @@ class MemoryScheduler:
                               if self._entries[event_id].event.available_at <= now), None)
             if candidate is None:
                 continue
-            order = (flow.tag - self._virtual_time[flow_kind], self._entries[candidate].seq)
+            order = (flow.tag, self._entries[candidate].seq)
             if best is None or order < best[0]:
                 best = (order, flow, candidate)
+        return None if best is None else (best[1], best[2])
+
+    def _select_across_kinds(self, now: datetime) -> tuple[_Flow, str] | None:
+        """R60 level 1: which **kind** an unfiltered worker is served from.
+
+        Each kind is a flow in its own right, weight 1, and they are compared by
+        `(kind tag, arrival sequence of the candidate that kind would hand out)` - the
+        same rule their tenants are compared by, one level up. The per-kind choice
+        underneath is `_select`, untouched, so a tenant's standing inside its pool never
+        depends on what the other pool is doing.
+        """
+        best: tuple[tuple[float, int], _Flow, str] | None = None
+        for dispatch_kind in DISPATCH_KINDS:
+            picked = self._select(dispatch_kind.value, now)
+            if picked is None:
+                continue
+            flow, event_id = picked
+            order = (self._kind_tag[dispatch_kind.value], self._entries[event_id].seq)
+            if best is None or order < best[0]:
+                best = (order, flow, event_id)
         return None if best is None else (best[1], best[2])
 
     def _forget(self, event_id: str) -> None:

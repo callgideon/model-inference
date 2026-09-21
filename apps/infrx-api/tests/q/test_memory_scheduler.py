@@ -453,6 +453,157 @@ def test_q1_kind__returned_candidates_keep_their_arrival_order():
 
 
 # ==========================================================================
+# unfiltered claims: R60's two-level selection
+# ==========================================================================
+async def _unfiltered(port, count):
+    """Claim `count` times with no kind filter, acknowledging as we go."""
+    out = []
+    for _ in range(count):
+        candidate = await port.claim_candidate("worker-any")
+        if candidate is None:
+            return out
+        out.append(candidate)
+        await port.acknowledge(candidate)
+    return out
+
+
+def test_q1_none__a_peer_in_another_kind_is_not_starved_by_a_noisy_backlog():
+    """R60 / r2 B6: an unfiltered worker must not serve one kind to exhaustion. The
+    earlier `tag - V[kind]` comparison did exactly that - a kind's virtual time stands
+    still while the other kind is dispatched, so the quiet kind's flow kept its lag and
+    the peer was served at slots [1, N+1, N+2] for a noisy backlog of N. Under R60 the
+    kinds are scheduled against each other, so the peer's wait is bounded by the number
+    of kinds whatever N is, and whatever weight the noisy tenant carries."""
+    async def run():
+        for depth, weights in ((5, None), (30, None), (400, None), (400, {ORG_A: 2.0})):
+            h = harness(max_items=1000, weights=weights)
+            port = h.port
+            for _ in range(depth):
+                assert await port.enqueue(event(h, org_id=ORG_A, kind=INFER))
+            for _ in range(3):
+                assert await port.enqueue(event(h, org_id=ORG_B, kind=PREPARE))
+            order = [candidate.kind for candidate in await _unfiltered(port, 8)]
+            slots = [index for index, k in enumerate(order) if k is PREPARE]
+            assert slots == [1, 3, 5], (depth, weights, slots)
+    asyncio.run(run())
+
+
+def test_q1_none__the_kind_tie_breaks_on_arrival_order():
+    """R60 level 1 ties on the kind tag are broken by the arrival sequence of the
+    candidate that kind would hand out - not by the order the kinds happen to sit in a
+    dict, and not by their names. Both wrong answers are wrong in one of these halves."""
+    async def run():
+        for first, second in ((INFER, PREPARE), (PREPARE, INFER)):
+            h = harness()
+            assert await h.port.enqueue(event(h, org_id=ORG_A, kind=first))
+            assert await h.port.enqueue(event(h, org_id=ORG_B, kind=second))
+            assert h.port.kind_tags() == {INFER.value: 0.0, PREPARE.value: 0.0}
+            order = [candidate.kind for candidate in await _unfiltered(h.port, 2)]
+            assert order == [first, second], (first, order)
+    asyncio.run(run())
+
+
+def test_q1_none__one_org_with_both_kinds_cannot_starve_another_orgs_single_kind_work():
+    """R60, the case the r2 head got worst: one organization holding work in *both*
+    kinds must not crowd out an organization that only has preparation work. The r2 head
+    dispatched `aI aP bP` and then 37 inference candidates in a row."""
+    async def run():
+        h = harness()
+        port = h.port
+        for _ in range(6):
+            assert await port.enqueue(event(h, org_id=ORG_A, kind=INFER))
+        for _ in range(6):
+            assert await port.enqueue(event(h, org_id=ORG_A, kind=PREPARE))
+        for _ in range(6):
+            assert await port.enqueue(event(h, org_id=ORG_B, kind=PREPARE))
+        order = [(candidate.org_id, candidate.kind) for candidate in await _unfiltered(port, 8)]
+        kinds = [k for _org, k in order]
+        assert kinds == [INFER, PREPARE] * 4, kinds
+        # and inside the preparation pool the two organizations alternate, so ORG_B is
+        # dispatched every fourth unfiltered slot rather than after ORG_A's whole backlog
+        prep_orgs = [org for org, k in order if k is PREPARE]
+        assert prep_orgs == [ORG_A, ORG_B, ORG_A, ORG_B], prep_orgs
+    asyncio.run(run())
+
+
+def test_q1_none__a_filtered_worker_never_moves_the_kind_state():
+    """R60: kind-filtered claims neither read nor write level-1 state. A mixed pool - one
+    inference-only worker plus one unfiltered worker - must leave the unfiltered worker
+    alternating kinds, or the preparation peer waits on a pool it is not competing in."""
+    async def run():
+        h = harness()
+        port = h.port
+        for _ in range(12):
+            assert await port.enqueue(event(h, org_id=ORG_A, kind=INFER))
+        for _ in range(6):
+            assert await port.enqueue(event(h, org_id=ORG_B, kind=PREPARE))
+        before_any_unfiltered = port.kind_tags()
+        filtered = await port.claim_candidate("worker-inf", kind=INFER)
+        assert filtered is not None and filtered.kind is INFER
+        await port.acknowledge(filtered)
+        assert port.kind_tags() == before_any_unfiltered, \
+            "a kind-filtered claim moved the level-1 state"
+        assert port.top_virtual_time() == 0.0
+        unfiltered = []
+        for _ in range(6):
+            candidate = await port.claim_candidate("worker-any")
+            assert candidate is not None
+            unfiltered.append(candidate.kind)
+            await port.acknowledge(candidate)
+            more = await port.claim_candidate("worker-inf", kind=INFER)
+            assert more is not None and more.kind is INFER
+            await port.acknowledge(more)
+        assert unfiltered == [INFER, PREPARE] * 3, unfiltered
+    asyncio.run(run())
+
+
+def test_q1_none__a_kind_that_waited_catches_up_once_and_cannot_hoard():
+    """R60 level 1 obeys the same clamp as level 2: a kind whose candidates were not yet
+    available gets one slot of catch-up when they arrive, and is then pulled up to the
+    top-level virtual time instead of claiming every slot it missed."""
+    async def run():
+        h = harness()
+        port = h.port
+        for _ in range(6):
+            assert await port.enqueue(event(h, org_id=ORG_A, kind=INFER))
+        for _ in range(3):
+            assert await port.enqueue(event(h, org_id=ORG_B, kind=PREPARE,
+                                             available_in_s=60))
+        early = [candidate.kind for candidate in await _unfiltered(port, 4)]
+        assert early == [INFER] * 4, early
+        assert port.top_virtual_time() == 3.0, port.top_virtual_time()
+        h.clock.advance(60)
+        late = [candidate.kind for candidate in await _unfiltered(port, 4)]
+        assert late == [PREPARE, INFER, PREPARE, INFER], late
+    asyncio.run(run())
+
+
+def test_q1_none__a_new_flow_arrives_at_its_own_kinds_virtual_time():
+    """A flow arriving takes the virtual time of **its own kind**, never the highest of
+    any kind: a busy preparation pool must not put a new inference tenant behind the
+    inference tenant that is already being served."""
+    async def run():
+        h = harness(max_items=1000)
+        port = h.port
+        for _ in range(50):                                   # run the preparation pool
+            assert await port.enqueue(event(h, org_id=ORG_C, kind=PREPARE))
+        for _ in range(6):
+            assert await port.enqueue(event(h, org_id=ORG_A, kind=INFER))
+        for _ in range(50):
+            await port.acknowledge(await port.claim_candidate("prep-a", kind=PREPARE))
+        for _ in range(3):
+            await port.acknowledge(await port.claim_candidate("worker-a", kind=INFER))
+        assert port.virtual_times()[PREPARE.value] == 49.0, port.virtual_times()
+        assert port.virtual_times()[INFER.value] == 2.0, port.virtual_times()
+        for _ in range(6):                                    # the newcomer
+            assert await port.enqueue(event(h, org_id=ORG_B, kind=INFER))
+        order = [candidate.org_id for candidate in
+                 await drain(port, "worker-a", kind=INFER)]
+        assert order[:4] == [ORG_B, ORG_A, ORG_B, ORG_A], order
+    asyncio.run(run())
+
+
+# ==========================================================================
 # bounded memory (03 §2.5)
 # ==========================================================================
 def test_q1_caps__a_full_index_refuses_with_a_typed_retryable_error():
@@ -621,6 +772,27 @@ def test_q1_rebuild__a_duplicate_in_the_snapshot_is_indexed_and_charged_once():
         # and a plain rebuild charges exactly the compact bytes of its snapshot
         assert await port.rebuild((keep, acked)) == 2
         assert port.stats()["bytes"] == expected, port.stats()
+    asyncio.run(run())
+
+
+def test_q1_rebuild__clears_the_kind_level_state():
+    """R60: a rebuild restarts *both* levels. Keeping the kind tags would let a pool that
+    was busy before the loss be skipped after it, which is a fairness decision taken on
+    the strength of an index that no longer exists."""
+    async def run():
+        h = harness()
+        port = h.port
+        for _ in range(20):
+            assert await port.enqueue(event(h, org_id=ORG_C, kind=PREPARE))
+        await _unfiltered(port, 20)
+        assert port.kind_tags()[PREPARE.value] == 20.0, port.kind_tags()
+        snapshot = tuple([event(h, org_id=ORG_A, kind=INFER) for _ in range(3)]
+                         + [event(h, org_id=ORG_B, kind=PREPARE) for _ in range(3)])
+        assert await port.rebuild(snapshot) == 6
+        assert port.kind_tags() == {INFER.value: 0.0, PREPARE.value: 0.0}
+        assert port.top_virtual_time() == 0.0
+        order = [candidate.kind for candidate in await _unfiltered(port, 6)]
+        assert order == [INFER, PREPARE] * 3, order
     asyncio.run(run())
 
 
