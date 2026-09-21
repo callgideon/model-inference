@@ -9,6 +9,15 @@ It is a test double for the client, not a model of the real gateway's behaviour.
 """
 import asyncio, json, uuid
 
+import bench
+
+# The double waits on the SAME clock the client does (E2 r1 review): with a virtual clock in
+# `bench.SLEEP`, a test can make "the server took 250 ms" cost no real time and still be exact.
+# Mixing a virtual client clock with real server sleeps leaves the clock free to jump while a
+# request is in flight, which is what produced phantom scheduling lag.
+def _sleep(seconds):
+    return bench.SLEEP(seconds)
+
 import httpx
 
 
@@ -138,10 +147,10 @@ class FakeGateway:
         base = {"id": f"chatcmpl-{rid}", "object": "chat.completion.chunk", "model": body.get("model")}
         if self.role_chunk:                      # role-only delta: carries no content, so no TTFT
             yield frame(base | {"choices": [{"index": 0, "delta": {"role": "assistant"}}]})
-        await asyncio.sleep(self.ttft)
+        await _sleep(self.ttft)
         for i in range(self.tokens):
             if i:
-                await asyncio.sleep(self.token_gap)
+                await _sleep(self.token_gap)
             yield frame(base | {"choices": [{"index": 0, "delta": {"content": f"tok{i} "}}]})
         if self.stream_error:         # 200 headers, then an error event inside the stream
             yield frame({"error": self.stream_error})
