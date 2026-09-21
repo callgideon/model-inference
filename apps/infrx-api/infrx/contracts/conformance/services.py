@@ -712,7 +712,7 @@ async def trace_bounds__off_mode_produces_no_trace_at_all(factory):
     assert result is TraceOfferResult.dropped
     stats = await harness.port.stats()
     assert stats["accepted"] == 0 and stats["in_memory"] == 0
-    assert stats["loss_reasons"]["malformed"] == 1
+    assert stats["loss_reasons"]["malformed"] == 1      # an `offer` of one is a caller bug
     # r1 R37: an off-mode (or minimal) request gets a **no-op** capture rather than an
     # exception - the trace path may never raise into the request path, and G needs no
     # branch on the mode. It keeps nothing and charges nothing.
@@ -738,12 +738,29 @@ async def trace_bounds__off_mode_produces_no_trace_at_all(factory):
             assert kept.mode is mode and kept.carries_content is False
             assert kept.metadata_bytes == 64
         else:
+            # r1 R42: an off-mode capture is **silent**. The result says nothing was
+            # stored, but the ordinary off-mode lifecycle is not an anomaly: 02 keeps
+            # off-mode jobs out of the loss and coverage figures, so neither the `dropped`
+            # counter nor any loss reason moves. A sink that counted a `malformed` loss on
+            # every off-mode request would report a platform-wide loss rate of 100% for
+            # the customers who asked for no tracing at all.
             assert result is TraceOfferResult.dropped
-            assert stats["loss_reasons"]["malformed"] >= 1
+            assert stats["dropped"] == 0, stats
+            assert stats["loss_reasons"] == {}, stats["loss_reasons"]
         # the capture is still a context manager, and closing it changes nothing
         with capture:
             pass
         assert (await harness.port.stats())["in_memory"] == expected_rows
+        if not expected_rows:
+            assert (await harness.port.stats())["loss_reasons"] == {}
+    # only a caller *bug* - an off-mode envelope handed to `offer`, which has no capture
+    # to speak for it - is dropped and counted
+    harness = factory()
+    assert await harness.port.offer(b.trace(harness.ids.uuid(), mode=TraceMode.off,
+                                            content_bytes=0, harness=harness)) \
+        is TraceOfferResult.dropped
+    stats = await harness.port.stats()
+    assert stats["dropped"] == 1 and stats["loss_reasons"]["malformed"] == 1
 
 
 async def trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope(factory):
@@ -801,7 +818,43 @@ async def trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope(factory):
         assert outcome is TraceOfferResult.dropped, (opened, envelope_mode, content)
         assert stats["in_memory"] == 0, f"{opened} capture queued a {envelope_mode} envelope"
         assert stats["in_memory_content_bytes"] == 0
-        assert stats["loss_reasons"]["malformed"] == 1, stats["loss_reasons"]
+        if opened is TraceMode.off:
+            # r1 R42: an off-mode capture is silent whatever it is handed - it has no
+            # content and no row to lose, and 02 keeps it out of the loss figures.
+            assert stats["dropped"] == 0 and stats["loss_reasons"] == {}, stats
+        else:
+            # a `minimal` capture handed the wrong thing *is* an anomaly: counted once
+            assert stats["loss_reasons"]["malformed"] == 1, stats["loss_reasons"]
+
+    # (a2) r1 R42: **one** loss count per capture, whatever is called afterwards. G's
+    # `finally` abandons and a late `finish` follows: that ordinary order must not count
+    # two losses, queue a row for a closed capture, or answer differently than the first
+    # call did.
+    for ender in ("abandon", "context exit"):
+        harness = factory()
+        request_id = harness.ids.uuid()
+        capture = harness.port.open(request_id, b.ORG_A, TraceMode.full, None)
+        assert capture.add("x" * 1_000) is False       # no deadline: a no-op capture
+        if ender == "abandon":
+            await capture.abandon(TraceLossReason.abandoned)
+        else:
+            with capture:
+                pass
+        after_close = await harness.port.stats()
+        assert sum(after_close["loss_reasons"].values()) == 1, after_close["loss_reasons"]
+        late = await capture.finish(b.trace(request_id, content_bytes=0, metadata_bytes=32,
+                                           harness=harness))
+        stats = await harness.port.stats()
+        assert sum(stats["loss_reasons"].values()) == 1, (ender, stats["loss_reasons"])
+        assert stats["in_memory"] == 0, f"{ender}: a closed capture queued a row"
+        assert late is await capture.finish(b.trace(request_id, content_bytes=0,
+                                                   metadata_bytes=32, harness=harness))
+        # a wrong-id envelope after the close is the same story: still one loss, no row
+        assert await capture.finish(b.trace(harness.ids.uuid(), content_bytes=0,
+                                            metadata_bytes=32, harness=harness)) is late
+        stats = await harness.port.stats()
+        assert sum(stats["loss_reasons"].values()) == 1, (ender, stats["loss_reasons"])
+        assert stats["in_memory"] == 0
 
     # (b2) a *full* capture that really accumulated cannot claim more than it charged:
     # those bytes never went through the budget, so the numbers must agree or `add` is
@@ -1228,6 +1281,22 @@ async def trace_bounds__an_open_capture_past_its_deadline_is_reaped(factory):
     assert (await harness.port.stats())["in_memory_content_bytes"] == 0
 
 
+async def trace_bounds__every_bounded_capture_sequence_holds_the_invariants(factory):
+    """TRACE-BOUNDS / r1 R42: the loss-accounting invariants hold over **every** sequence
+    of capture operations, not only the paths a case was written for.
+
+    This is the lattice, not a path: r7 moved one guard to its call sites and two routes
+    out of this space promptly counted a loss twice (`abandon` then `finish`; a breach then
+    a mode-mismatched `finish`). Lengths 1-3 run here, exhaustively, so an adapter's own
+    conformance run covers them; `tests/contracts/test_trace_sequences.py` runs the full
+    product to length 4 (~136k sequences) and prints what it ran.
+    """
+    from .sequences import tracesink_sequence_properties
+    report = await tracesink_sequence_properties(factory, max_length=3)
+    assert report.sequences == (12 + 144 + 1728) * 6, report.line()
+    assert report.sampled_lengths == ()
+
+
 def tracesink_cases():
     return [trace_bounds__no_loss_is_ever_counted_under_none,
             trace_bounds__an_accepted_offer_is_in_memory_only,
@@ -1240,6 +1309,7 @@ def tracesink_cases():
             trace_bounds__a_flush_leaves_open_captures_alone,
             trace_bounds__a_dropped_finish_releases_its_charge,
             trace_bounds__an_open_capture_past_its_deadline_is_reaped,
+            trace_bounds__every_bounded_capture_sequence_holds_the_invariants,
             trace_bounds__a_content_budget_breach_discards_the_whole_content,
             trace_bounds__metadata_exhaustion_drops_with_counters,
             trace_bounds__a_full_queue_drops_and_inference_continues,

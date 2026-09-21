@@ -18,6 +18,7 @@ import asyncio
 from typing import Callable
 
 from .harness import Harness, MissingHook, OPTIONAL_HOOKS, hook
+from .sequences import run_tracesink_sequence_properties, tracesink_sequence_properties
 from .jobs import jobstore_cases, streamstore_cases
 from .services import (engine_cases, feedback_cases, judge_cases, mediastore_cases,
                        scheduler_cases, tracesink_cases)
@@ -90,4 +91,5 @@ SUITES: dict[str, tuple[Callable[[], list], Callable[..., int]]] = {
 }
 
 __all__ = ["Harness", "MissingHook", "OPTIONAL_HOOKS", "SUITES", "hook", "run_cases",
+           "run_tracesink_sequence_properties", "tracesink_sequence_properties",
            *(f"run_{name}_conformance" for name in SUITES)]

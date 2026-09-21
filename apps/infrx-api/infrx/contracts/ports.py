@@ -197,6 +197,18 @@ class TraceCapture(Protocol):
         Idempotent: calling it again returns the **first** result and queues nothing
         more, and a capture contributes at most one loss count however it ends.
 
+        An **off-mode capture is silent** (R42): `open`/`add`/`finish`/`abandon` store
+        nothing and count neither a loss nor a drop, because `02` keeps off-mode jobs out
+        of the loss and coverage figures - a sink that counted one per off-mode request
+        would report a 100% loss rate for the customers who asked for no tracing. `finish`
+        answers `dropped`, meaning "nothing stored", without moving the `dropped` counter.
+        Only an `offer` of an off-mode envelope, which has no capture to speak for it, is a
+        caller bug and is counted `malformed`.
+
+        A capture contributes **at most one** loss count however it ends and whatever is
+        called on it afterwards; counting is idempotent per capture, so `abandon` in a
+        `finally` followed by a late `finish` counts once and queues nothing.
+
         **The capture decides, never the envelope** - otherwise the trace mode would be
         a client-supplied field (R12). The envelope must name this capture's request and
         organization, and its `mode` must be the mode the capture was opened with;

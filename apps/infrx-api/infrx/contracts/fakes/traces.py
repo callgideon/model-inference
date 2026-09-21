@@ -62,10 +62,17 @@ class FakeTraceCapture:
         return self.lost_reason is not TraceLossReason.none
 
     def _count(self, reason: TraceLossReason) -> None:
-        """Record this capture's single loss. `_discard` is the only caller and runs at
-        most once per capture (it sets `lost_reason`, which every entry point checks), so
-        `counted` is not a second guard: it is what tells `_drop` the loss is already in
-        `loss_reasons` and must not be added again."""
+        """Record this capture's **single** loss (r1 R42).
+
+        Idempotent per capture, deliberately: the guard belongs here rather than at each
+        call site, because every route that ends a capture - a budget breach, a malformed
+        part, `abandon`, a context exit, `reap`, a late `finish`, and whatever route is
+        added next - must be unable to count twice. r7 moved the guard to the callers and
+        two routes promptly double counted (`abandon` then `finish`; a breach then a
+        mode-mismatched `finish`), which is exactly the class this is now closed against.
+        """
+        if self.counted:
+            return
         self.counted = True
         self.sink.loss_reasons[reason] += 1
 
@@ -116,8 +123,9 @@ class FakeTraceCapture:
             # drop must not be told the record was accepted.
             return self.result
         if self.no_op:
+            result = self._finish_no_op(envelope)
             self.closed = self.finished = True
-            self.result = self._finish_no_op(envelope)
+            self.result = result
             return self.result
         if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):
             # The single loss this capture contributes is labelled by what went wrong:
@@ -140,8 +148,9 @@ class FakeTraceCapture:
             # The capture decides, on this path as on the no-op one: an envelope whose
             # mode is not the mode this capture was opened with would file a mislabelled
             # row - `off` or `minimal` over content that really was captured, or `full`
-            # over a request that never consented to content. Dropped, counted, charge
-            # released.
+            # over a request that never consented to content. Dropped, charge released,
+            # and counted only if this capture has not already contributed its one loss
+            # (a breach or a malformed part may have got there first).
             self._discard(TraceLossReason.malformed)
             self.result = self.sink._drop(TraceLossReason.malformed, counted=True)
             return self.result
@@ -170,13 +179,26 @@ class FakeTraceCapture:
         capture opened `off` queues nothing whatever arrives. Trusting the envelope here
         would make the mode a client-supplied field, which is exactly what R12 forbids.
         """
+        if self.mode is TraceMode.off:
+            # r1 R42: an off-mode capture is **silent**. 02 keeps off-mode jobs out of the
+            # loss and coverage figures, and G is told not to branch on the mode, so the
+            # ordinary off-mode lifecycle must not look like an anomaly: nothing is stored,
+            # no loss is counted and the `dropped` counter does not move. `dropped` is the
+            # honest *result* - nothing was stored - but it is not a dropped *record*.
+            # This is checked before the closed branch below, because an off capture is
+            # silent in every state: abandoned-then-finished must count nothing either.
+            return TraceOfferResult.dropped
+        if self.closed:
+            # Already ended - abandoned, reaped, or finished. Its single loss (if any) is
+            # counted, so this call queues nothing and adds nothing; it answers what the
+            # first call answered (r1 R42; G's `finally` abandoning before a late `finish`
+            # is the ordinary order, not an edge case).
+            return self.result if self.result is not None else self.sink._drop(
+                self.lost_reason if self.lost_reason is not TraceLossReason.none
+                else TraceLossReason.abandoned, counted=True)
         if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):
             # The same identity check the accumulating path makes: one request's envelope
             # must never be filed under another's - or another tenant's.
-            self._count(TraceLossReason.malformed)
-            return self.sink._drop(TraceLossReason.malformed, counted=True)
-        if self.mode is TraceMode.off:
-            # 01: an off-mode request produces no trace row at all.
             self._count(TraceLossReason.malformed)
             return self.sink._drop(TraceLossReason.malformed, counted=True)
         if self.mode is TraceMode.minimal:
@@ -217,7 +239,10 @@ class FakeTraceCapture:
         if self.lost:
             return
         if self.no_op and self.mode is not TraceMode.full:
-            return                      # nothing was ever going to be captured
+            # r1 R42: `off` and `minimal` captures hold no content, so ending one is not a
+            # loss and must not be counted - an off-mode request is out of the loss and
+            # coverage figures entirely (02).
+            return
         self._discard(reason)
 
 

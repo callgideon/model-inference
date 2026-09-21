@@ -740,6 +740,29 @@ MUTANTS: tuple[Mutant, ...] = (
           "            if reason is TraceLossReason.queue_full:\n"
           "                self.content_bytes = max(0, self.content_bytes - charged)",
        "trace_bounds__a_dropped_finish_releases_its_charge"),
+    # --- r8 R42: loss accounting cannot regress -------------------------------
+    _m("count_is_not_idempotent", "one loss count per capture, whatever follows (R42)",
+       T, "        if self.counted:\n            return\n        self.counted = True",
+       "        self.counted = True",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("live_mode_mismatch_discards_unguarded", "a lost capture is not re-counted (R42)",
+       T, "    def _count(self, reason: TraceLossReason) -> None:\n"
+          '        """Record this capture\'s **single** loss (r1 R42).',
+       "    def _count(self, reason: TraceLossReason) -> None:\n"
+          "        self.counted = True\n"
+          "        self.sink.loss_reasons[reason] += 1\n"
+          '        """Record this capture\'s **single** loss (r1 R42).',
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("closed_no_op_capture_queues_a_row", "a closed capture never queues a row (R42)",
+       T, "        if self.closed:\n            # Already ended - abandoned, reaped, or finished.",
+       "        if False:\n            # Already ended - abandoned, reaped, or finished.",
+       "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
+    _m("off_capture_counts_a_drop", "an off-mode capture is silent (R42)",
+       T, "        if self.mode is TraceMode.off:\n"
+          "            # r1 R42: an off-mode capture is **silent**.",
+       "        if self.mode is TraceMode.off and False:\n"
+          "            # r1 R42: an off-mode capture is **silent**.",
+       "trace_bounds__off_mode_produces_no_trace_at_all"),
     # --- one per remaining case (R32: every case must be killable) -------------
     _m("replay_returns_a_new_identity", "an idempotent replay returns the original identity",
        S, "        return self._snapshot(job).model_copy(update={\"replayed\": True})",
