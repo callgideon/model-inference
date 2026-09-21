@@ -14,8 +14,9 @@ api-test:
 
 # r1 R32: the whole mutation list (one pytest process per mutant, ~75s). The default
 # suite runs a subset; a surviving mutant is a failed suite either way.
+# Track mutant lists join here as their task merges (M1); each gates on INFRX_MUTANTS.
 api-mutants:
-	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py
+	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py
 
 console-test:
 	cd apps/app && pnpm test
