@@ -7,13 +7,16 @@ Concurrency uses `asyncio.gather` and the injected clock: no sleeps, no network.
 from __future__ import annotations
 
 import asyncio
+import random
 from dataclasses import replace
+from datetime import timedelta
 from decimal import Decimal
 
 from .. import errors, money
 from ..limits import DEFAULTS
-from ..records import (ChunkEventType, Cursor, ExecutionMode, JobState, OutboxKind,
-                       ReservationKind, SettlementState, TerminalCause, states_for_cause)
+from ..records import (ChunkEventType, Cursor, ExecutionMode, IndexEvent, JobState,
+                       LeaseKind, MediaKind, OutboxKind, ReservationKind,
+                       SettlementState, TerminalCause, states_for_cause)
 from . import builders as b
 from .harness import hook
 
@@ -23,13 +26,33 @@ from .harness import hook
 
 
 async def _admit(harness, *, org_id=b.ORG_A, key_id=b.KEY_A, key="idem-1", grant="25.00",
-                 mode=ExecutionMode.stream, **kw):
-    """Fund the wallet, build a request and admit it. Returns (request, admission)."""
+                 mode=ExecutionMode.stream, price=None, **kw):
+    """Fund the wallet, build a request and admit it. Returns (request, admission).
+
+    `price` is the snapshot the store's price source is expected to answer with (r1 R45):
+    the request carries no price and, since R53, neither does the call. It is asserted
+    against what the store actually snapshotted, so a case that moves the price source and
+    passes the wrong snapshot here fails rather than agreeing with itself.
+    """
     if grant is not None:
         harness.extra["grant"](org_id, grant)
     request = b.request(harness, org_id=org_id, key_id=key_id, mode=mode, **kw)
-    admission = await harness.port.admit(request, b.idem(request, key), (), b.hold_for(request))
+    admission = await harness.port.admit(request, b.idem(request, key), ())
+    if price is not None:
+        assert admission.price_snapshot == price, "the store snapshotted a different price"
+        assert admission.maximum_hold == b.hold_for(request, price), \
+            "the store derived a hold the expected snapshot does not explain"
     return request, admission
+
+
+async def _prepare(port, job_id, *, media=(), worker="prep-a"):
+    """r1 R46: claim a preparation lease, then hand back the prepared refs under it.
+
+    `prepared` is fenced on that lease, so the two calls always travel together; a case
+    that wants to fence one of them apart does so explicitly.
+    """
+    lease = await port.claim_preparation(job_id, worker)
+    return await port.prepared(lease, media)
 
 
 async def _running(harness, jobs=None, **kw):
@@ -38,7 +61,7 @@ async def _running(harness, jobs=None, **kw):
     if jobs is not None:
         harness = replace(harness, port=jobs)
     request, admission = await _admit(harness, **kw)
-    await port.prepared(admission.job_handle, ())
+    await _prepare(port, request.request_id)
     lease = await port.claim(request.request_id, "worker-a")
     return request, admission, lease
 
@@ -71,8 +94,7 @@ async def dur_admit__idempotent_replay_returns_the_same_identity(factory):
     """DUR-ADMIT: the same key and payload return the original acceptance, once."""
     harness = factory()
     request, first = await _admit(harness)
-    again = await harness.port.admit(request, b.idem(request, "idem-1"), (),
-                                     b.hold_for(request))
+    again = await harness.port.admit(request, b.idem(request, "idem-1"), ())
     assert (again.request_id, again.job_handle) == (first.request_id, first.job_handle)
     assert again.replayed is True
     wallet = harness.extra["balance"](request.org_id)
@@ -89,7 +111,7 @@ async def dur_admit__a_request_uuid_is_admitted_once(factory):
     reserved = harness.extra["balance"](request.org_id)["reserved"]
     for key in (None, "a-late-key"):
         try:
-            await harness.port.admit(request, b.idem(request, key), (), b.hold_for(request))
+            await harness.port.admit(request, b.idem(request, key), ())
         except errors.DomainError as exc:
             assert errors.http_status(exc.code) == 409, exc.code
         else:
@@ -103,8 +125,7 @@ async def dur_admit__changed_payload_with_the_same_key_is_a_conflict(factory):
     harness = factory()
     request, _ = await _admit(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "idem-1", payload="different"), (),
-                                 b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "idem-1", payload="different"), ())
     except errors.IdempotencyConflict as exc:
         assert errors.http_status(exc.code) == 409
     else:
@@ -120,13 +141,12 @@ async def dur_admit__crash_after_commit_then_retry_does_not_double_reserve(facto
     harness.extra["grant"](b.ORG_A, "25.00")
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "idem-1"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "idem-1"), ())
     except Exception as exc:                       # the answer was lost, not the commit
         assert type(exc).__name__ == "CrashAfterCommit", exc
     else:
         raise AssertionError("crash_after_commit did not fire")
-    retried = await harness.port.admit(request, b.idem(request, "idem-1"), (),
-                                       b.hold_for(request))
+    retried = await harness.port.admit(request, b.idem(request, "idem-1"), ())
     assert retried.replayed is True
     assert harness.extra["balance"](request.org_id)["reserved"] == retried.maximum_hold
     assert len(harness.extra["active_jobs"]()) == 1
@@ -139,7 +159,7 @@ async def dur_admit__expired_mapping_is_explicit_never_a_second_billable_job(fac
     await _settle(harness, request, admission)
     harness.clock.advance(DEFAULTS.idempotency_ttl_s + 1)
     try:
-        await harness.port.admit(request, b.idem(request, "idem-1"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "idem-1"), ())
     except errors.IdempotencyExpired as exc:
         assert errors.http_status(exc.code) == 410
     else:
@@ -156,7 +176,7 @@ async def dur_admit__the_tombstone_ttl_runs_from_the_terminal_state(factory):
                                               generation_timeout_s=300,
                                               lease_ttl_s=10_000, lease_heartbeat_s=1_000))
     request, admission = await _admit(harness, deadline_s=700)
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     lease = await harness.port.claim(request.request_id, "worker-a")
     harness.clock.advance(250)                     # a long, honest attempt
     await harness.port.complete(lease, b.outcome(request.request_id, harness,
@@ -164,13 +184,12 @@ async def dur_admit__the_tombstone_ttl_runs_from_the_terminal_state(factory):
     # 86,350s after *terminal* is still inside the 24h tombstone, though it is well
     # past 24h since admission
     harness.clock.advance(DEFAULTS.idempotency_ttl_s - 50)
-    replay = await harness.port.admit(request, b.idem(request, "idem-1"), (),
-                                      b.hold_for(request))
+    replay = await harness.port.admit(request, b.idem(request, "idem-1"), ())
     assert replay.replayed is True and replay.job_handle == admission.job_handle
     assert len(harness.extra["active_jobs"]()) == 0
     harness.clock.advance(100)                     # now past it
     try:
-        await harness.port.admit(request, b.idem(request, "idem-1"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "idem-1"), ())
     except errors.IdempotencyExpired:
         pass
     else:
@@ -187,12 +206,11 @@ async def dur_admit__an_active_jobs_mapping_never_expires(factory):
                                               lease_ttl_s=10_000, lease_heartbeat_s=1_000,
                                               idempotency_ttl_s=60))
     request, admission = await _admit(harness, deadline_s=10_000)
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     lease = await harness.port.claim(request.request_id, "worker-a")
     harness.clock.advance(5_000)                   # far past the 60s tombstone TTL
     assert harness.extra["balance"](request.org_id)["reserved"] == admission.maximum_hold
-    replay = await harness.port.admit(request, b.idem(request, "idem-1"), (),
-                                      b.hold_for(request))
+    replay = await harness.port.admit(request, b.idem(request, "idem-1"), ())
     assert replay.replayed is True and replay.job_handle == admission.job_handle
     assert len(harness.extra["active_jobs"]()) == 1
     assert harness.extra["balance"](request.org_id)["reserved"] == admission.maximum_hold
@@ -201,7 +219,7 @@ async def dur_admit__an_active_jobs_mapping_never_expires(factory):
                                                  tokens=b.usage(1200, 340)))
     harness.clock.advance(61)
     try:
-        await harness.port.admit(request, b.idem(request, "idem-1"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "idem-1"), ())
     except errors.IdempotencyExpired:
         pass
     else:
@@ -214,8 +232,7 @@ async def dur_admit__tombstone_is_retained_after_the_terminal_state(factory):
     request, admission = await _admit(harness)
     await _settle(harness, request, admission)
     harness.clock.advance(DEFAULTS.idempotency_ttl_s - 60)
-    replay = await harness.port.admit(request, b.idem(request, "idem-1"), (),
-                                      b.hold_for(request))
+    replay = await harness.port.admit(request, b.idem(request, "idem-1"), ())
     assert replay.job_handle == admission.job_handle and replay.replayed is True
     assert replay.state in {JobState.succeeded, JobState.failed, JobState.cancelled,
                             JobState.expired}
@@ -232,7 +249,7 @@ async def dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction(
     revoke(b.KEY_A)
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "k-revoked"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "k-revoked"), ())
     except errors.InvalidApiKey:
         pass
     else:
@@ -241,7 +258,7 @@ async def dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction(
     suspend(b.ORG_A)
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "k-suspended"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "k-suspended"), ())
     except errors.OrgSuspended:
         pass
     else:
@@ -252,8 +269,7 @@ async def dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction(
     request = b.request(harness)
     hook(harness, "unentitle")(b.ORG_A, request.model_revision)
     try:
-        await harness.port.admit(request, b.idem(request, "k-unentitled"), (),
-                                 b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "k-unentitled"), ())
     except errors.ModelNotEntitled as exc:
         assert errors.http_status(exc.code) == 403
     else:
@@ -261,8 +277,7 @@ async def dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction(
     assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
     assert len(harness.extra["active_jobs"]()) == 0
     hook(harness, "entitle")(b.ORG_A, request.model_revision)
-    admitted = await harness.port.admit(request, b.idem(request, "k-entitled"), (),
-                                        b.hold_for(request))
+    admitted = await harness.port.admit(request, b.idem(request, "k-entitled"), ())
     assert admitted.state is JobState.preparing
 
 
@@ -276,7 +291,7 @@ async def dur_admit__an_idempotency_scope_belongs_to_the_requests_own_org(factor
     request_b = b.request(harness, org_id=b.ORG_B, key_id=b.KEY_B)
     foreign = b.idem(request_a, "shared-key").model_copy(update={"org_id": b.ORG_A})
     try:
-        await harness.port.admit(request_b, foreign, (), b.hold_for(request_b))
+        await harness.port.admit(request_b, foreign, ())
     except errors.DomainError as exc:
         assert errors.http_status(exc.code) in (403, 404), exc.code
     else:
@@ -288,8 +303,7 @@ async def dur_admit__an_idempotency_scope_belongs_to_the_requests_own_org(factor
     # and a request may not carry another tenant's media either
     foreign_media = b.request(harness, refs=(b.media(b.ORG_B),))
     try:
-        await harness.port.admit(foreign_media, b.idem(foreign_media, "foreign-media"), (),
-                                 b.hold_for(foreign_media))
+        await harness.port.admit(foreign_media, b.idem(foreign_media, "foreign-media"), ())
     except errors.DomainError as exc:
         assert errors.http_status(exc.code) in (403, 404), exc.code
     else:
@@ -308,8 +322,7 @@ async def dur_admit__a_deadline_must_be_one_the_store_can_keep(factory):
     for deadline_s in (-1, 0, horizon + 1, horizon * 100):
         request = b.request(harness, deadline_s=deadline_s)
         try:
-            await harness.port.admit(request, b.idem(request, f"dl-{deadline_s}"), (),
-                                     b.hold_for(request))
+            await harness.port.admit(request, b.idem(request, f"dl-{deadline_s}"), ())
         except errors.DomainError as exc:
             assert errors.http_status(exc.code) == 400, (deadline_s, exc.code)
         else:
@@ -319,8 +332,7 @@ async def dur_admit__a_deadline_must_be_one_the_store_can_keep(factory):
     assert journal_bytes() == 0
     # the longest deadline the budgets allow is accepted
     request = b.request(harness, deadline_s=horizon)
-    admitted = await harness.port.admit(request, b.idem(request, "dl-ok"), (),
-                                        b.hold_for(request))
+    admitted = await harness.port.admit(request, b.idem(request, "dl-ok"), ())
     assert admitted.deadline_at == request.deadline_at
 
 
@@ -350,37 +362,138 @@ async def dur_admit__a_refused_admission_reserves_nothing(factory):
     """DUR-ADMIT: nothing is reserved before everything is checked. An unpriced
     model fails closed (01: "missing model/rates reject admission"), and the refused
     attempt leaves no journal reservation, no hold and no job behind - otherwise a
-    client retrying an invalid request drains the journal budget. Bad monetary input
-    is refused the same way, as a typed domain error rather than a ValueError."""
+    client retrying an invalid request drains the journal budget.
+
+    r1 R53 removed the "bad monetary input" half: there is no caller-supplied hold left
+    to be bad. `money_input`'s boundary is still exercised by `grant`, `reserve` and
+    `settle`, which do take caller money."""
     harness = factory()
     harness.extra["grant"](b.ORG_A, "25.00")
     journal_bytes = hook(harness, "journal_bytes")
-    unpriced = b.request(harness).model_copy(update={"parameters": {}})
+    # r1 R45: "unpriced" is the price source having no row for the model, not a missing
+    # request parameter. Omitting a parameter proved nothing about a store that reads its
+    # own `price_versions` relation, which is every real store - and a store that read the
+    # parameter again would pass a case that merely left it out. So the request here
+    # *carries* one, generously priced, and it must have no influence whatsoever.
+    set_price = hook(harness, "set_price")
+    smuggled = b.price("0.00000001", "0.00000001").model_dump(mode="json")
+    unpriced_model = f"{b.MODEL}-unpriced"
+    unpriced = b.request(harness, model_revision=unpriced_model,
+                         parameters={"price_snapshot": smuggled})
     for _ in range(3):
         try:
-            await harness.port.admit(unpriced, b.idem(unpriced, "unpriced"), (), money.ZERO)
+            await harness.port.admit(unpriced, b.idem(unpriced, "unpriced"), ())
         except errors.DomainError as exc:
             assert errors.http_status(exc.code) in (400, 403, 404), exc.code
         else:
             raise AssertionError("an unpriced model was admitted")
+    # and withdrawing the price of a model that had one closes the same door, as does a
+    # price source answering with another model's rates (which would settle this job at
+    # them)
+    for label, seeded in (("withdrawn", None),
+                          ("mismatched", b.price(model_revision=unpriced_model))):
+        set_price(b.MODEL, seeded)
+        bad_price = b.request(harness)
+        try:
+            await harness.port.admit(bad_price, b.idem(bad_price, label), ())
+        except errors.DomainError as exc:
+            assert errors.http_status(exc.code) in (400, 403, 404), exc.code
+        else:
+            raise AssertionError(f"a {label} price was admitted")
+    set_price(b.MODEL, b.DEFAULT_PRICE)
     assert len(harness.extra["active_jobs"]()) == 0
     assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
     assert journal_bytes() == 0, "a refused admission leaked a journal reservation"
-    for bad in ("1e5", "NaN", "0.000000001", "1000000000000.00", 0.5):
-        request = b.request(harness)
-        try:
-            await harness.port.admit(request, b.idem(request, f"bad-{bad!r}"), (), bad)
-        except errors.DomainError as exc:
-            assert errors.http_status(exc.code) in (400, 402), exc.code
-        else:
-            raise AssertionError(f"hold {bad!r} was accepted")
-    assert len(harness.extra["active_jobs"]()) == 0
-    assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
+    # r1 R45: and a *priced* model whose request also carries a `price_snapshot` parameter
+    # ignores it completely - the snapshot and the hold both come from the price source.
+    # G1 rejects such a parameter outright as `unsupported_parameter`; the store simply
+    # does not look at it.
+    carrying = b.request(harness, parameters={"price_snapshot": smuggled})
+    admitted = await harness.port.admit(carrying, b.idem(carrying, "carrying"), ())
+    assert admitted.price_snapshot == b.DEFAULT_PRICE, \
+        "the store read a price out of the request"
+    assert admitted.maximum_hold == b.hold_for(carrying, b.DEFAULT_PRICE)
+    assert admitted.maximum_hold > 0, "the smuggled price would have made the hold zero"
+    # r1 R53: a caller cannot name money here at all, so the only remaining way for a
+    # hold to be wrong is for the store to derive it wrongly - which is what
+    # `dur_settle__a_price_change_never_undersizes_the_hold` pins. The one job now live is
+    # the `carrying` admission just above, which the store *accepted* - correctly, at its
+    # own price.
+    assert [job.request.request_id for job in harness.extra["active_jobs"]()] == \
+        [carrying.request_id]
+    assert harness.extra["balance"](b.ORG_A)["reserved"] == admitted.maximum_hold
 
 
 # --------------------------------------------------------------------------
 # DUR-CAP
 # --------------------------------------------------------------------------
+async def dur_admit__the_token_ceilings_are_range_checked(factory):
+    """DUR-ADMIT / r1 R55: the store range-checks the request's token ceilings, and a
+    refused admission changes nothing at all.
+
+    `Field(ge=0)` on the record let `0/0` through, and a zero output ceiling makes a
+    **zero hold**: the job was admitted having reserved nothing, so whatever the engine
+    produced was unmetered output against an empty reservation. `40000/4096` was admitted
+    too, although 01 caps a request at `MAX_CONTEXT_TOKENS` after preprocessing, so the
+    reserved envelope was a promise the model could not keep. The store owns the limits, so
+    the store checks them - inside the transaction, like every other admission check.
+    """
+    harness = factory()
+    harness.extra["grant"](b.ORG_A, "25.00")
+    journal_bytes = hook(harness, "journal_bytes")
+    ceiling = DEFAULTS.max_output_tokens
+    context = DEFAULTS.max_context_tokens
+    refused = (
+        (0, 0, "a zero output ceiling reserves nothing and meters nothing"),
+        (30_720, 0, "a zero output ceiling"),
+        (0, 2_048, "a zero input ceiling"),
+        (-1, 16, "a negative input ceiling"),
+        (16, -1, "a negative output ceiling"),
+        (30_720, ceiling + 1, "an output ceiling past MAX_OUTPUT_TOKENS"),
+        # t05: and one whose context sum is comfortably legal, so the **upper bound itself**
+        # is what refuses it. Every other over-ceiling row above also breaks the context
+        # cap, so dropping `<= MAX_OUTPUT_TOKENS` left them all still failing.
+        (100, ceiling + 1, "an output ceiling past MAX_OUTPUT_TOKENS with a legal context sum"),
+        (40_000, 4_096, "a request past MAX_CONTEXT_TOKENS"),
+        (context, ceiling, "input at the context cap plus any output"),
+    )
+    for max_input, max_output, what in refused:
+        before = harness.extra["balance"](b.ORG_A)
+        try:
+            request = b.request(harness, max_input_tokens=max_input,
+                                max_output_tokens=max_output)
+        except Exception:
+            # The record refuses a negative outright; the port must refuse it too when it
+            # can be built, and both answers are "not admitted".
+            continue
+        try:
+            await harness.port.admit(request, b.idem(request, f"ceil-{max_input}-{max_output}"),
+                                     ())
+        except errors.DomainError as exc:
+            assert exc.code in ("invalid_request", "context_length_exceeded"), exc.code
+            assert errors.http_status(exc.code) == 400
+        else:
+            raise AssertionError(f"admitted {what}: {max_input}/{max_output}")
+        # state exactly unchanged: no job, no hold, no journal reservation
+        assert len(harness.extra["active_jobs"]()) == 0, what
+        assert harness.extra["balance"](b.ORG_A) == before, what
+        assert journal_bytes() == 0, what
+    # and the boundary is inclusive on both sides: the largest legal request is admitted,
+    # with a hold that is not zero.
+    largest = b.request(harness, max_input_tokens=context - ceiling, max_output_tokens=ceiling)
+    admitted = await harness.port.admit(largest, b.idem(largest, "ceil-largest"), ())
+    assert admitted.maximum_hold > 0
+    # exactly at the output ceiling, with room to spare in the context: admitted.
+    at_ceiling = b.request(harness, max_input_tokens=100, max_output_tokens=ceiling)
+    admitted_at_ceiling = await harness.port.admit(
+        at_ceiling, b.idem(at_ceiling, "ceil-exact"), ())
+    assert admitted_at_ceiling.maximum_hold > 0
+    smallest_request = b.request(harness, max_input_tokens=1, max_output_tokens=1)
+    smallest = await harness.port.admit(smallest_request,
+                                        b.idem(smallest_request, "ceil-smallest"), ())
+    assert smallest.maximum_hold > 0, "even the smallest request reserves something"
+
+
 async def dur_cap__total_org_and_key_limits_reject_with_retry_guidance(factory):
     """DUR-CAP: capacity is refused with 429 and Retry-After, never oversubscribed.
     Each of the three scopes is tripped on its own, with the other two slack, so a
@@ -391,17 +504,17 @@ async def dur_cap__total_org_and_key_limits_reject_with_retry_guidance(factory):
     harness.extra["grant"](b.ORG_A, "100.00")
     for n in range(2):
         request = b.request(harness)
-        await harness.port.admit(request, b.idem(request, f"key-{n}"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, f"key-{n}"), ())
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "key-over"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "key-over"), ())
     except errors.CapacityExhausted as exc:
         assert errors.http_status(exc.code) == 429 and exc.retry_after_s >= 1
     else:
         raise AssertionError("the per-key active job limit was exceeded")
     # a different key in the same org still fits under the org limit
     request = b.request(harness, key_id=b.KEY_B)
-    await harness.port.admit(request, b.idem(request, "key-other"), (), b.hold_for(request))
+    await harness.port.admit(request, b.idem(request, "key-other"), ())
     assert len(harness.extra["active_jobs"]()) == 3
 
     # per-org: two keys, 3 of 3 for ORG_A, with the total ceiling and the per-key
@@ -411,10 +524,10 @@ async def dur_cap__total_org_and_key_limits_reject_with_retry_guidance(factory):
     harness.extra["grant"](b.ORG_A, "100.00")
     for n, key_id in enumerate((b.KEY_A, b.KEY_B, b.KEY_A)):
         request = b.request(harness, key_id=key_id)
-        await harness.port.admit(request, b.idem(request, f"org-{n}"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, f"org-{n}"), ())
     request = b.request(harness, key_id=b.KEY_B)
     try:
-        await harness.port.admit(request, b.idem(request, "org-over"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "org-over"), ())
     except errors.CapacityExhausted:
         pass
     else:
@@ -422,7 +535,7 @@ async def dur_cap__total_org_and_key_limits_reject_with_retry_guidance(factory):
     # ... while another organization is unaffected by ORG_A's ceiling
     harness.extra["grant"](b.ORG_B, "100.00")
     other = b.request(harness, org_id=b.ORG_B, key_id=b.KEY_B)
-    await harness.port.admit(other, b.idem(other, "org-b"), (), b.hold_for(other))
+    await harness.port.admit(other, b.idem(other, "org-b"), ())
     assert len(harness.extra["active_jobs"](org_id=b.ORG_A)) == 3
 
     # total: two organizations filling 4 of 4 with both per-scope ceilings slack
@@ -432,11 +545,10 @@ async def dur_cap__total_org_and_key_limits_reject_with_retry_guidance(factory):
                            (b.ORG_B, b.KEY_A), (b.ORG_B, b.KEY_B)):
         harness.extra["grant"](org_id, "100.00")
         request = b.request(harness, org_id=org_id, key_id=key_id)
-        await harness.port.admit(request, b.idem(request, f"all-{org_id}-{key_id}"), (),
-                                 b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, f"all-{org_id}-{key_id}"), ())
     request = b.request(harness, org_id=b.ORG_A, key_id=b.KEY_A)
     try:
-        await harness.port.admit(request, b.idem(request, "all-over"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "all-over"), ())
     except errors.CapacityExhausted:
         pass
     else:
@@ -454,11 +566,10 @@ async def dur_cap__admission_reserves_preparation_capacity(factory):
     admitted = []
     for n in range(2):
         request = b.request(harness)
-        admitted.append(await harness.port.admit(request, b.idem(request, f"p-{n}"), (),
-                                                 b.hold_for(request)))
+        admitted.append(await harness.port.admit(request, b.idem(request, f"p-{n}"), ()))
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "p-over"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "p-over"), ())
     except errors.CapacityExhausted as exc:
         assert errors.http_status(exc.code) == 429 and exc.retry_after_s >= 1
     else:
@@ -466,9 +577,8 @@ async def dur_cap__admission_reserves_preparation_capacity(factory):
     assert len(harness.extra["active_jobs"]()) == 2      # job slots were still free
     kinds = {r.kind for r in admitted[0].reservations if r.active}
     assert {kind.value for kind in kinds} >= {"preparation"}
-    await harness.port.prepared(admitted[0].job_handle, ())
-    after = await harness.port.admit(request, b.idem(request, "p-after"), (),
-                                     b.hold_for(request))
+    await _prepare(harness.port, admitted[0].request_id)
+    after = await harness.port.admit(request, b.idem(request, "p-after"), ())
     assert after.state is JobState.preparing
 
 
@@ -480,10 +590,10 @@ async def dur_cap__journal_reservation_must_fit_the_global_budget(factory):
     harness.extra["grant"](b.ORG_A, "100.00")
     for n in range(2):
         request = b.request(harness)
-        await harness.port.admit(request, b.idem(request, f"j-{n}"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, f"j-{n}"), ())
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "j-over"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "j-over"), ())
     except errors.JournalCapacityExhausted as exc:
         assert errors.http_status(exc.code) == 429 and exc.retry_after_s >= 1
     else:
@@ -496,7 +606,7 @@ async def dur_cap__hold_cannot_exceed_the_available_balance(factory):
     request = b.request(harness)
     harness.extra["grant"](request.org_id, "0.00000100")
     try:
-        await harness.port.admit(request, b.idem(request, "poor"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "poor"), ())
     except errors.InsufficientCredit as exc:
         assert errors.http_status(exc.code) == 402
     else:
@@ -513,14 +623,16 @@ async def dur_cap__a_hold_is_checked_against_available_not_the_ledger(factory):
     harness = factory()
     harness.extra["grant"](b.ORG_A, "0.01000000")
     first = b.request(harness, max_input_tokens=30_000, max_output_tokens=2_000)
+    # r1 R53: the expected hold, which the store derives for itself.
     hold = b.hold_for(first)
     assert hold * 2 > Decimal("0.01") >= hold, "the case needs two holds to overflow one wallet"
-    await harness.port.admit(first, b.idem(first, "avail-1"), (), hold)
+    admitted = await harness.port.admit(first, b.idem(first, "avail-1"), ())
+    assert admitted.maximum_hold == hold, "the store derived a different hold"
     balance = harness.extra["balance"](b.ORG_A)
     assert balance["reserved"] == hold and balance["available"] == Decimal("0.01") - hold
     second = b.request(harness, max_input_tokens=30_000, max_output_tokens=2_000)
     try:
-        await harness.port.admit(second, b.idem(second, "avail-2"), (), hold)
+        await harness.port.admit(second, b.idem(second, "avail-2"), ())
     except errors.InsufficientCredit as exc:
         assert errors.http_status(exc.code) == 402
     else:
@@ -531,27 +643,39 @@ async def dur_cap__a_hold_is_checked_against_available_not_the_ledger(factory):
 
 
 async def dur_cap__a_negative_maximum_hold_is_refused(factory):
-    """DUR-CAP: no negative available balance. A negative hold would reduce the
-    reserved total, fabricate credit out of an empty wallet and let the next
-    admission settle a real debit against it."""
+    """DUR-CAP / r1 R53: the hold is the **store's**, and a caller has no way to name one.
+
+    This case used to hand `admit` a negative hold and assert a typed refusal. R53 takes
+    the argument away, so that defect is unrepresentable and what needs pinning instead is
+    the property it was standing in for: the reserved total is exactly the hold the store
+    derived from its own snapshot, it is never negative, and it is what the balance gate
+    compares against. A caller that cannot supply money cannot fabricate credit.
+    """
     harness = factory()
     harness.extra["grant"](b.ORG_A, "0")
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "negative"), (),
-                                 -money.parse("10.00"))
+        await harness.port.admit(request, b.idem(request, "no-credit"), ())
     except Exception as exc:
         # A **typed** refusal: a store that let a `ValueError` or a validation error out
-        # of `admit` would answer 500 to a request it knows is invalid, so the case
-        # asserts the type and the code rather than merely that something went wrong.
+        # of `admit` would answer 500 to a request it knows it cannot fund.
         assert isinstance(exc, errors.DomainError), f"untyped refusal: {type(exc).__name__}"
-        assert exc.code in ("invalid_request", "insufficient_credit"), exc.code
-        assert errors.http_status(exc.code) in (400, 402)
+        assert exc.code == "insufficient_credit", exc.code
+        assert errors.http_status(exc.code) == 402
     else:
-        raise AssertionError("a negative maximum hold was reserved")
+        raise AssertionError("an unfunded admission reserved a hold")
     balance = harness.extra["balance"](b.ORG_A)
     assert balance["reserved"] == 0 and balance["available"] == 0
     assert len(harness.extra["active_jobs"]()) == 0
+    # funded, the derived hold is positive, is the reserved total, and is the ceiling
+    # formula applied to the admitted snapshot - not a number anybody handed the store
+    harness.extra["grant"](b.ORG_A, "25.00")
+    funded = b.request(harness)
+    admission = await harness.port.admit(funded, b.idem(funded, "funded"), ())
+    assert admission.maximum_hold > 0
+    assert admission.maximum_hold == admission.price_snapshot.maximum_hold(
+        funded.max_input_tokens, funded.max_output_tokens)
+    assert harness.extra["balance"](b.ORG_A)["reserved"] == admission.maximum_hold
 
 
 async def dur_cap__concurrent_admissions_never_oversubscribe(factory):
@@ -564,8 +688,7 @@ async def dur_cap__concurrent_admissions_never_oversubscribe(factory):
 
     async def attempt(index, request):
         try:
-            return await harness.port.admit(request, b.idem(request, f"c-{index}"), (),
-                                            b.hold_for(request))
+            return await harness.port.admit(request, b.idem(request, f"c-{index}"), ())
         except (errors.CapacityExhausted, errors.InsufficientCredit) as exc:
             return exc
 
@@ -591,7 +714,7 @@ async def dur_fence__claim_increments_the_generation_from_the_database_clock(fac
         pass
     else:
         raise AssertionError("a preparing job was claimable")
-    queued = await harness.port.prepared(admission.job_handle, ())
+    queued = await _prepare(harness.port, admission.request_id)
     assert queued.state is JobState.queued
     lease = await harness.port.claim(request.request_id, "worker-a")
     assert lease.generation == 1 and lease.worker_id == "worker-a"
@@ -603,6 +726,357 @@ async def dur_fence__claim_increments_the_generation_from_the_database_clock(fac
         pass
     else:
         raise AssertionError("a running job was claimed twice")
+
+
+async def dur_fence__preparation_is_claimed_and_fenced_like_execution(factory):
+    """DUR-FENCE / r1 R46: `prepared` is fenced on a preparation lease.
+
+    Preparation used to be addressed by job handle and needed no token at all, so a
+    superseded preparation worker returning late could queue the job with its own
+    (possibly half-written) refs. It is now the same discipline as execution: its own
+    generation counter, one live lease at a time, owner and expiry checked, and the R29
+    phase deadline enforced in the same call. The two kinds of lease are not
+    interchangeable, and nothing renews a preparation lease.
+    """
+    harness = factory()
+    request, admission = await _admit(harness)
+    lease = await harness.port.claim_preparation(request.request_id, "prep-a")
+    assert lease.kind is LeaseKind.preparation and lease.generation == 1
+    assert lease.job_id == request.request_id            # internal ops speak job ids
+    assert lease.acquired_at == harness.clock.now()      # database time
+    assert lease.generation_deadline_at == admission.preparation_deadline_at
+    assert lease.first_token_deadline_at is None, "a preparation lease has no first token"
+    # r1 R52: a preparation lease is *short* - shorter than an inference one - so a lost
+    # preparation host is reaped while the phase budget still has room for the retries R46
+    # allows. With one 120 s TTL against a 120 s budget there was never room for any.
+    assert lease.expires_at == harness.clock.at(DEFAULTS.preparation_lease_ttl_s)
+    assert DEFAULTS.preparation_lease_ttl_s < DEFAULTS.lease_ttl_s
+    assert lease.expires_at <= lease.generation_deadline_at, \
+        "a preparation lease may not outlive the phase it fences"
+    # And when the phase is *shorter* than the lease TTL, the clamp is what enforces that -
+    # the only configuration where it is observable, and the one a tight media budget
+    # produces. An unclamped lease would outlive the phase it fences, so the expiry
+    # refusal would stop firing and the phase deadline would be the only thing left.
+    short_limits = DEFAULTS.replace(preparation_timeout_s=10.0)
+    short = factory(limits=short_limits)
+    short_request, short_admission = await _admit(
+        short, key="prep-short", deadline_s=b.default_deadline_s(limits=short_limits))
+    short_lease = await short.port.claim_preparation(short_request.request_id, "prep-a")
+    assert DEFAULTS.preparation_lease_ttl_s > 10.0, "the case needs the phase to be shorter"
+    assert short_lease.expires_at == short_admission.preparation_deadline_at, \
+        "a preparation lease was granted past the phase deadline"
+    # one live preparation at a time: two workers writing prepared refs for one job is
+    # the media equivalent of two workers appending output
+    try:
+        await harness.port.claim_preparation(request.request_id, "prep-b")
+    except errors.NotClaimable:
+        pass
+    else:
+        raise AssertionError("a job was prepared by two workers at once")
+    # r1 R46/s13: a **superseded** worker's heartbeat is fenced like every other mutation.
+    # w1 holds generation 1; once w2 has claimed generation 2, w1's heartbeat must be
+    # `stale_lease` - a heartbeat that skipped the fence would renew *w2's* lease on w1's
+    # behalf, so the worker that lost the job would keep the job alive for the one that has
+    # it, and two preparations would run believing they were fenced.
+    superseded = factory()
+    s13_request, _ = await _admit(superseded, key="prep-superseded")
+    w1 = await superseded.port.claim_preparation(s13_request.request_id, "w1")
+    superseded.clock.advance(DEFAULTS.preparation_lease_ttl_s + 1)
+    await superseded.port.recover()                       # reaps w1's expired lease
+    w2 = await superseded.port.claim_preparation(s13_request.request_id, "w2")
+    assert w2.generation == w1.generation + 1
+    before_w2 = w2.expires_at
+    for forged in (w1, w1.model_copy(update={"worker_id": "w2"}),
+                   w2.model_copy(update={"generation": w1.generation})):
+        try:
+            await superseded.port.heartbeat(forged)
+        except errors.StaleLease:
+            pass
+        else:
+            raise AssertionError("a superseded preparation worker renewed a lease")
+    superseded.clock.advance(1)
+    live = await superseded.port.heartbeat(w2)
+    assert live.expires_at > before_w2, "the holder's own heartbeat still renews"
+    assert live.worker_id == "w2" and live.generation == w2.generation
+
+    # r1 R52: a preparation lease renews like any other - a worker doing 100 s of
+    # legitimate transcoding has to say so - but **never past the phase deadline**, or a
+    # renewal would buy preparation time the job was never granted.
+    harness.clock.advance(DEFAULTS.preparation_lease_ttl_s / 2)
+    renewed = await harness.port.heartbeat(lease)
+    assert renewed.kind is LeaseKind.preparation and renewed.generation == lease.generation
+    assert renewed.expires_at > lease.expires_at, "a preparation heartbeat renews nothing"
+    assert renewed.expires_at <= renewed.generation_deadline_at
+    lease = renewed
+    # Right up against the phase deadline the renewal is clamped, not extended. On its own
+    # harness, because this one has to move the clock most of the way through the phase and
+    # the fencing checks below need a lease that is still live.
+    # A worker doing a long, legitimate transcode heartbeats its way across the phase -
+    # which is the whole reason the lease may be shorter than the work - and the renewal
+    # right at the end is clamped to the phase deadline rather than extending past it.
+    clamping = factory()
+    clamp_request, clamp_admission = await _admit(clamping, key="prep-clamp")
+    clamp_lease = await clamping.port.claim_preparation(clamp_request.request_id, "prep-a")
+    step = DEFAULTS.preparation_lease_ttl_s * 0.75
+    while clamping.clock.now() + timedelta(seconds=step) < clamp_admission.preparation_deadline_at:
+        clamping.clock.advance(step)
+        beat = await clamping.port.heartbeat(clamp_lease)
+        # Strictly later until the clamp bites, then equal to the phase deadline: a
+        # renewal extends the lease, never the phase.
+        if clamp_lease.expires_at < clamp_admission.preparation_deadline_at:
+            assert beat.expires_at > clamp_lease.expires_at, "a heartbeat did not renew"
+        assert beat.expires_at <= clamp_admission.preparation_deadline_at
+        clamp_lease = beat
+    assert clamp_lease.expires_at == clamp_admission.preparation_deadline_at, \
+        "a preparation heartbeat bought time past the phase deadline"
+    assert clamping.clock.now() > clamp_request.created_at + timedelta(
+        seconds=DEFAULTS.preparation_lease_ttl_s), \
+        "the loop must outlast one lease, or nothing was renewed across it"
+    # and it cannot stand in for an inference lease
+    for call, expected in ((harness.port.complete(lease, b.outcome(request.request_id, harness)),
+                            errors.StaleLease),
+                           (harness.port.load_work(lease.model_copy(
+                               update={"kind": LeaseKind.inference,
+                                       "first_token_deadline_at":
+                                           lease.generation_deadline_at})), errors.StaleLease)):
+        try:
+            await call
+        except expected:
+            pass
+        else:
+            raise AssertionError(f"{expected.__name__} was not raised for a preparation lease")
+    # a foreign worker, a stale generation and an inference token are all fenced out of
+    # `prepared`
+    for forged in (lease.model_copy(update={"worker_id": "prep-b"}),
+                   lease.model_copy(update={"generation": lease.generation + 1}),
+                   lease.model_copy(update={"kind": LeaseKind.inference,
+                                            "first_token_deadline_at":
+                                                lease.generation_deadline_at})):
+        try:
+            await harness.port.prepared(forged, ())
+        except errors.StaleLease:
+            pass
+        else:
+            raise AssertionError("a forged preparation lease queued the job")
+    stored, _ = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert stored.state is JobState.preparing, "a fenced preparation worker moved the job"
+    # r1 R10: prepared refs are the job's own tenant's, checked at the write. A foreign
+    # ref reaching `prepared` means preparation produced an object for the wrong
+    # organization, and storing it would file another tenant's content under this job.
+    try:
+        await harness.port.prepared(lease, (b.media(b.ORG_B),))
+    except (errors.Forbidden, errors.NotFound) as exc:
+        assert errors.http_status(exc.code) in (403, 404), exc.code
+    else:
+        raise AssertionError("prepared accepted another organization's media")
+    stored_after, _ = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert stored_after.state is JobState.preparing, "a refused prepared moved the job"
+    queued = await harness.port.prepared(lease, (b.media(b.ORG_A),))
+    assert queued.state is JobState.queued
+    # and the spent lease is spent: the phase is over, so the token fences nothing
+    try:
+        await harness.port.prepared(lease, ())
+    except errors.StaleLease:
+        pass
+    else:
+        raise AssertionError("a spent preparation lease queued the job again")
+    # The sharp edge of "not interchangeable": this preparation lease names the *same*
+    # job, worker and generation as the inference lease that follows it, and is still
+    # live. Only its `kind` says it may not settle the job.
+    assert lease.generation == 1 and harness.clock.now() < lease.expires_at
+    inference = await harness.port.claim(request.request_id, lease.worker_id)
+    assert inference.generation == lease.generation and inference.kind is LeaseKind.inference
+    try:
+        await harness.port.complete(lease, b.outcome(request.request_id, harness))
+    except errors.StaleLease:
+        pass
+    else:
+        raise AssertionError("a preparation lease settled the job")
+    # An expired preparation lease is stale before anything reaps it, and before the
+    # preparation deadline it would be terminalized on: a short lease TTL separates the
+    # two, so this is the expiry check and not R29's phase deadline.
+    tight = factory()
+    expiring_request, expiring_admission = await _admit(tight, key="prep-expiry")
+    expiring = await tight.port.claim_preparation(expiring_request.request_id, "prep-a")
+    tight.clock.advance(tight_ttl := DEFAULTS.preparation_lease_ttl_s + 1)
+    assert tight_ttl < DEFAULTS.preparation_timeout_s, "the phase deadline would fire first"
+    try:
+        await tight.port.prepared(expiring, ())
+    except errors.StaleLease:
+        pass
+    else:
+        raise AssertionError("an expired preparation lease queued the job")
+    left, still_open = await tight.port.get_owned(expiring_request.org_id,
+                                                 expiring_admission.job_handle)
+    assert left.state is JobState.preparing and still_open is None, \
+        "the expired preparation worker queued the job anyway"
+
+
+async def dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise(factory):
+    """DUR-FENCE / r1 R46: `load_work` is the only way a lease holder reads what it must
+    execute, and it is fenced like a mutation.
+
+    That matters more than it looks: if a worker is handed the request out of band then
+    being fenced costs it nothing, because it still holds everything it needs to run. A
+    stale, foreign or wrong-kind lease gets a typed refusal and **no data**.
+    """
+    harness = factory()
+    refs = (b.media(b.ORG_A),)
+    request, admission = await _admit(harness, refs=refs)
+    preparation = await harness.port.claim_preparation(request.request_id, "prep-a")
+    before = await harness.port.load_work(preparation)
+    assert before.request == request and before.media_refs == refs
+    assert before.prepared_refs == (), "nothing is prepared before preparation runs"
+    assert before.price_snapshot == admission.price_snapshot
+    assert before.budgets == admission.budgets
+    prepared_refs = (b.media(b.ORG_A, kind=MediaKind.upload),)
+    await harness.port.prepared(preparation, prepared_refs)
+    lease = await harness.port.claim(request.request_id, "worker-a")
+    work = await harness.port.load_work(lease)
+    assert work.prepared_refs == prepared_refs and work.media_refs == refs
+    assert work.price_snapshot == admission.price_snapshot
+    # r1 R53/R4: and it keeps carrying them after the store is reconfigured underneath it.
+    # `load_work` reading *current* values would hand a running worker a price the customer
+    # was never quoted and budgets the job was never granted - the same mistake as pricing
+    # at settlement, one phase earlier.
+    hook(harness, "set_price")(b.MODEL, b.price("9.99", "9.99"))
+    hook(harness, "retune")(generation_timeout_s=DEFAULTS.generation_timeout_s * 3,
+                            ttft_timeout_s=DEFAULTS.ttft_timeout_s * 3,
+                            tpot_stall_s=DEFAULTS.tpot_stall_s * 3,
+                            queue_wait_interactive_s=DEFAULTS.queue_wait_interactive_s * 3)
+    after = await harness.port.load_work(lease)
+    assert after.price_snapshot == admission.price_snapshot, \
+        "load_work reported the current price, not the admitted snapshot"
+    assert after.budgets == admission.budgets, \
+        "load_work reported current budgets, not the R4 snapshot"
+    assert after.budgets.generation_s == DEFAULTS.generation_timeout_s
+    hook(harness, "set_price")(b.MODEL, b.DEFAULT_PRICE)
+    # every way of not holding the lease: another worker, a stale generation, the wrong
+    # kind, an unknown job, and an expired lease
+    forgeries = (lease.model_copy(update={"worker_id": "worker-b"}),
+                 lease.model_copy(update={"generation": lease.generation + 1}),
+                 lease.model_copy(update={"kind": LeaseKind.preparation,
+                                          "first_token_deadline_at": None}),
+                 lease.model_copy(update={"job_id": harness.ids.uuid()}))
+    for forged in forgeries:
+        try:
+            await harness.port.load_work(forged)
+        except (errors.StaleLease, errors.NotFound) as exc:
+            assert exc.code in ("stale_lease", "not_found"), exc.code
+        else:
+            raise AssertionError("load_work handed work to a lease holder it had fenced")
+    harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
+    try:
+        await harness.port.load_work(lease)
+    except (errors.StaleLease, errors.AlreadyTerminal):
+        pass
+    else:
+        raise AssertionError("an expired lease still loaded its work")
+
+
+async def dur_output__a_lost_preparation_worker_is_reaped_within_bounds(factory):
+    """DUR-OUTPUT / r1 R46 + R29: a preparation host that dies is reaped, and the job
+    stays preparable - but not for ever.
+
+    `recover` releases an expired preparation lease and leaves the job `preparing`, so a
+    worker lost with most of its budget left costs a retry rather than the request. The
+    bound is the same one the prepublication inference path uses,
+    `MAX_PREPUBLICATION_RETRIES` further claims (three in total), and
+    `preparation_deadline_at` bounds it in wall-clock terms whatever the count says.
+
+    **On default limits** (r1 R52). This used to widen `preparation_timeout_s` to 600 s and
+    shrink `lease_ttl_s` to 10 s, which made the three claims reachable in the case and
+    nowhere else: with one 120 s lease TTL against a 120 s preparation budget the first
+    reap arrived exactly as the phase expired, so a real deployment got no retries at all
+    and the case was describing a profile nobody runs. `PREPARATION_LEASE_TTL_S` = 30 is
+    what makes the bound real, and this now proves it against the shipped numbers.
+    """
+    limits = DEFAULTS
+    harness = factory()
+    request, admission = await _admit(harness)
+    assert limits.preparation_lease_ttl_s * (limits.max_prepublication_retries + 1) \
+        <= limits.preparation_timeout_s, \
+        "the default profile must leave room for every retry R46 allows"
+    outbox = harness.extra["outbox"]
+    first = await harness.port.claim_preparation(request.request_id, "prep-a")
+    dispatches = len([e for e in outbox(request.request_id)
+                      if e.kind is OutboxKind.prepare_dispatch])
+    harness.clock.advance(limits.preparation_lease_ttl_s + 1)
+    await harness.port.recover()
+    stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert stored.state is JobState.preparing and outcome is None, \
+        "a lost preparation worker cost the whole request"
+    # and the reaper puts it back on the queue: the admission's own dispatch event was
+    # consumed by the worker that died, so without a new one nothing ever tries again.
+    assert len([e for e in outbox(request.request_id)
+                if e.kind is OutboxKind.prepare_dispatch]) == dispatches + 1, \
+        "the reaped preparation was never redispatched"
+    second = await harness.port.claim_preparation(request.request_id, "prep-b")
+    assert second.generation == first.generation + 1, "the reaped attempt was not counted"
+    try:
+        await harness.port.prepared(first, ())
+    except errors.StaleLease:
+        pass
+    else:
+        raise AssertionError("the reaped worker came back and queued the job")
+    # the third claim is the last one: `max_prepublication_retries` further attempts
+    harness.clock.advance(limits.preparation_lease_ttl_s + 1)
+    await harness.port.recover()
+    third = await harness.port.claim_preparation(request.request_id, "prep-c")
+    assert third.generation == 3
+    assert third.acquired_at < admission.preparation_deadline_at, \
+        "three claims must fit inside the default preparation budget"
+    # r1 R52: after the last permitted loss the reaper settles the job itself. Emitting
+    # another `prepare_dispatch` would queue work whose only possible outcome is
+    # `claim_preparation` terminalizing it - a dispatch that exists to fail - and the hold
+    # would stay reserved until some worker happened to pick it up.
+    before_last = len([e for e in outbox(request.request_id)
+                       if e.kind is OutboxKind.prepare_dispatch])
+    harness.clock.advance(limits.preparation_lease_ttl_s + 1)
+    produced = await harness.port.recover()
+    assert any(getattr(item, "cause", None) is TerminalCause.preparation_failed
+               for item in produced), "the reaper did not settle the exhausted preparation"
+    assert len([e for e in outbox(request.request_id)
+                if e.kind is OutboxKind.prepare_dispatch]) == before_last, \
+        "the reaper redispatched work that could only terminalize"
+    try:
+        await harness.port.claim_preparation(request.request_id, "prep-d")
+    except (errors.NotClaimable, errors.AlreadyTerminal):
+        pass
+    else:
+        raise AssertionError("preparation retries were unbounded")
+    stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert outcome is not None and outcome.cause is TerminalCause.preparation_failed
+    assert harness.extra["balance"](request.org_id)["reserved"] == 0, \
+        "an exhausted preparation left the hold behind"
+    # r1 R46/q08: the count check in `claim_preparation` is observable on its own, with
+    # **no `recover` in between** - a pool whose workers simply re-claim after their lease
+    # expires must still be bounded, because nothing guarantees a reaper has run. Three
+    # claims at t=0, 30 and 60, then `not_claimable` at t=90.
+    unreaped = factory()
+    q08_request, q08 = await _admit(unreaped, key="prep-unreaped")
+    for attempt in range(limits.max_prepublication_retries + 1):
+        lease = await unreaped.port.claim_preparation(q08_request.request_id, f"w{attempt}")
+        assert lease.generation == attempt + 1
+        unreaped.clock.advance(limits.preparation_lease_ttl_s)
+    try:
+        await unreaped.port.claim_preparation(q08_request.request_id, "one-too-many")
+    except (errors.NotClaimable, errors.AlreadyTerminal) as exc:
+        assert exc.code in ("not_claimable", "already_terminal"), exc.code
+    else:
+        raise AssertionError("preparation retries were unbounded without a reaper")
+    _q08_stored, q08_outcome = await unreaped.port.get_owned(q08_request.org_id, q08.job_handle)
+    assert q08_outcome is not None and q08_outcome.cause is TerminalCause.preparation_failed
+    assert unreaped.extra["balance"](q08_request.org_id)["reserved"] == 0
+
+    # and the wall-clock bound holds independently: past the preparation instant the job
+    # is `preparation_failed` whatever the attempt count
+    fresh_request, fresh = await _admit(harness, key="prep-deadline")
+    await harness.port.claim_preparation(fresh_request.request_id, "prep-a")
+    harness.clock.advance(limits.preparation_timeout_s + 1)
+    await harness.port.recover()
+    _, overdue = await harness.port.get_owned(fresh_request.org_id, fresh.job_handle)
+    assert overdue is not None and overdue.cause is TerminalCause.preparation_failed
 
 
 async def dur_fence__an_expired_lease_can_neither_renew_nor_settle(factory):
@@ -621,6 +1095,104 @@ async def dur_fence__an_expired_lease_can_neither_renew_nor_settle(factory):
             pass
         else:
             raise AssertionError("an expired lease mutated the job")
+
+
+async def dur_fence__an_overdue_inference_lease_terminalizes_in_the_same_call(factory):
+    """DUR-FENCE / r1 R29 + R55: the ordering is claimed for **both** paths.
+
+    R29 names `heartbeat`, `append`, `prepared` and `complete`: past a phase deadline the
+    store terminalizes the job *in that same operation*, so the outcome never depends on
+    reaper timing. Only the preparation path was pinned, so putting the lease-expiry check
+    back in front of the deadline check on the inference path survived - and that is the
+    same defect B1 was: a worker whose lease and deadline have both passed gets
+    `stale_lease`, the job stays `running`, and the customer's hold stays reserved.
+
+    Three states, deliberately separated by a lease TTL shorter than the generation budget:
+
+    * lease expired **and** the deadline passed -> `already_terminal`, the job is
+      `deadline_exceeded`, and the hold is released in that call;
+    * lease expired **before** any deadline -> `stale_lease`, state unchanged;
+    * a superseded generation -> `stale_lease`, and it never terminalizes on the new
+      holder's behalf.
+    """
+    limits = DEFAULTS.replace(lease_ttl_s=120.0, generation_timeout_s=130.0)
+    deadline_s = b.default_deadline_s(ExecutionMode.stream, limits)
+
+    async def overdue(key):
+        """A running job whose lease expires at t+120 and whose generation ends at t+130."""
+        harness = factory(limits=limits)
+        request, admission = await _admit(harness, key=key, deadline_s=deadline_s)
+        await _prepare(harness.port, request.request_id)
+        lease = await harness.port.claim(request.request_id, "worker-a")
+        assert lease.expires_at == harness.clock.at(limits.lease_ttl_s)
+        assert lease.generation_deadline_at == harness.clock.at(limits.generation_timeout_s)
+        assert lease.expires_at < lease.generation_deadline_at, \
+            "the case needs the lease to expire before the deadline"
+        return harness, request, admission, lease
+
+    # 1. both passed: every fenced operation terminalizes here and releases the hold.
+    for operation in ("complete", "heartbeat", "append", "load_work"):
+        harness, request, admission, lease = await overdue(f"t02-{operation}")
+        stream = hook(harness, "stream")
+        funded = harness.extra["balance"](request.org_id)
+        assert funded["reserved"] == admission.maximum_hold > 0
+        harness.clock.advance(limits.generation_timeout_s + 1)
+        invoke = {
+            "complete": lambda: harness.port.complete(lease,
+                                                      b.outcome(request.request_id, harness)),
+            "heartbeat": lambda: harness.port.heartbeat(lease),
+            "append": lambda: stream.append(lease, b.events("late")),
+            "load_work": lambda: harness.port.load_work(lease),
+        }[operation]
+        try:
+            await invoke()
+        except errors.AlreadyTerminal:
+            pass
+        else:
+            raise AssertionError(f"{operation} past the generation deadline did not refuse")
+        stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+        assert outcome is not None, \
+            f"{operation} refused but left the job running: R29 wants it settled here"
+        assert outcome.cause is TerminalCause.deadline_exceeded, outcome.cause
+        assert outcome.debit == 0 and outcome.settlement_state in (
+            SettlementState.released_free, SettlementState.released_platform_absorbed)
+        assert not any(reservation.active for reservation in stored.reservations)
+        after = harness.extra["balance"](request.org_id)
+        assert after["reserved"] == 0, f"{operation} left the hold reserved for a reaper"
+        assert after["ledger"] == funded["ledger"], "our own deadline charges nothing (R21)"
+
+    # 2. the lease alone: expired, but the job still has deadline left. A stale worker is
+    # fenced and **nothing** changes - a lost lease is a requeue for `recover` to decide,
+    # not a terminal state this call may invent.
+    harness, request, admission, lease = await overdue("t02-lease-only")
+    harness.clock.advance(limits.lease_ttl_s + 1)
+    assert harness.clock.now() < lease.generation_deadline_at
+    try:
+        await harness.port.heartbeat(lease)
+    except errors.StaleLease as exc:
+        assert exc.code == "stale_lease", exc.code
+    else:
+        raise AssertionError("an expired lease renewed itself")
+    stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert outcome is None and stored.state is JobState.running, \
+        "an expired lease inside the deadline terminalized the job early"
+    assert harness.extra["balance"](request.org_id)["reserved"] == admission.maximum_hold
+
+    # 3. a superseded generation, past the deadline: still `stale_lease`, and it must not
+    # terminalize on the new holder's behalf.
+    harness, request, admission, lease = await overdue("t02-superseded")
+    harness.clock.advance(limits.lease_ttl_s + 1)
+    await harness.port.recover()                          # requeues; generation moves on
+    second = await harness.port.claim(request.request_id, "worker-b")
+    assert second.generation == lease.generation + 1
+    try:
+        await harness.port.heartbeat(lease)
+    except errors.StaleLease:
+        pass
+    else:
+        raise AssertionError("a superseded worker renewed a lease")
+    _stored, still_running = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert still_running is None, "a superseded worker terminalized the new holder's job"
 
 
 async def dur_fence__another_worker_at_the_same_generation_is_still_fenced(factory):
@@ -760,6 +1332,49 @@ async def dur_fence__a_stale_generation_is_rejected(factory):
 # --------------------------------------------------------------------------
 # DUR-OUTPUT (recovery side; the journal cases are in the stream suite)
 # --------------------------------------------------------------------------
+async def dur_output__every_requeued_candidate_carries_the_right_kind(factory):
+    """DUR-OUTPUT / r1 R52 + s18: what `recover` emits is labelled for the phase it belongs
+    to, for **both** lease kinds.
+
+    A requeue after a lost *inference* attempt labelled `prepare_dispatch` would be handed
+    to the preparation pool, which would call `claim_preparation` on a `queued` job, be
+    refused, and hand it back - for ever, while the index looked busy and the inference pool
+    saw nothing. The mirror mistake sends a `preparing` job to the inference pool. So the
+    kind of every event recover produces is asserted, not just its existence.
+    """
+    harness = factory()
+    outbox = harness.extra["outbox"]
+
+    # A lost inference attempt before publication: requeued as an inference candidate.
+    request, admission, lease = await _running(harness)
+    harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
+    produced = await harness.port.recover()
+    events = [item for item in produced if isinstance(item, IndexEvent)]
+    assert len(events) == 1, f"one requeue expected, got {produced}"
+    assert events[0].kind is OutboxKind.inference_dispatch, \
+        f"a lost inference attempt was requeued as {events[0].kind}"
+    assert events[0].job_id == request.request_id and not events[0].is_preparation
+    dispatches = [event.kind for event in outbox(request.request_id)]
+    assert OutboxKind.inference_dispatch in dispatches
+    assert dispatches.count(OutboxKind.prepare_dispatch) == 1, \
+        "a lost inference attempt emitted a preparation dispatch"
+
+    # A lost preparation worker: redispatched for preparation, and never as an inference
+    # candidate - the job is still `preparing`, so no inference worker can do anything.
+    other, other_admission = await _admit(harness, key="kinds-prep")
+    await harness.port.claim_preparation(other.request_id, "prep-a")
+    harness.clock.advance(DEFAULTS.preparation_lease_ttl_s + 1)
+    prep_produced = await harness.port.recover()
+    assert not [item for item in prep_produced if isinstance(item, IndexEvent)
+                and item.job_id == other.request_id], \
+        "a lost preparation worker produced an index candidate"
+    prep_dispatches = [event.kind for event in outbox(other.request_id)]
+    assert prep_dispatches.count(OutboxKind.prepare_dispatch) == 2, prep_dispatches
+    assert OutboxKind.inference_dispatch not in prep_dispatches, \
+        "a job still preparing was dispatched for inference"
+    del other_admission, admission, lease
+
+
 async def dur_output__recovery_requeues_only_before_publication(factory):
     """DUR-OUTPUT: a lost attempt with no committed output may run again."""
     harness = factory()
@@ -846,7 +1461,7 @@ async def dur_output__queue_wait_does_not_restart_on_a_requeue(factory):
     harness = factory(limits=DEFAULTS.replace(queue_wait_interactive_s=10,
                                               generation_timeout_s=10_000))
     request, admission = await _admit(harness, mode=ExecutionMode.sync, deadline_s=10_000)
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     harness.clock.advance(9)                       # 9s of a 10s queue budget spent
     await harness.port.claim(request.request_id, "worker-a")
     harness.clock.advance(DEFAULTS.lease_ttl_s + 1)
@@ -869,7 +1484,7 @@ async def dur_output__an_accepted_job_keeps_its_admission_budgets(factory):
     request, admission = await _admit(harness, mode=ExecutionMode.sync)
     assert admission.budgets.queue_wait_s == 10
     assert admission.budgets.generation_s == DEFAULTS.generation_timeout_s
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     if retune is None:
         return                                     # optional hook; adapter may skip
     retune(queue_wait_interactive_s=1)             # an operator tightens the budget
@@ -897,14 +1512,17 @@ async def dur_output__a_late_preparation_worker_finds_a_terminal_job(factory):
     assert admission.preparation_deadline_at == harness.clock.at(30)
     before = harness.extra["balance"](request.org_id)
     harness.clock.advance(31)
+    # A worker must not even be handed a lease for a job nobody is waiting for any more:
+    # the claim is refused and is itself what terminalizes the job, so the outcome never
+    # depends on when a reaper runs, and no preparation attempt is spent on a dead job.
     try:
-        await harness.port.prepared(admission.job_handle, ())
-    except (errors.AlreadyTerminal, errors.StateConflict):
+        await harness.port.claim_preparation(admission.request_id, "prep-a")
+    except (errors.AlreadyTerminal, errors.NotClaimable, errors.StateConflict):
         pass
     else:
-        raise AssertionError("a preparation worker past its deadline still queued the job")
+        raise AssertionError("a preparation lease was issued past the preparation deadline")
     stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
-    assert outcome is not None, "the late call did not terminalize the job"
+    assert outcome is not None, "the late claim did not terminalize the job"
     assert outcome.cause is TerminalCause.preparation_failed
     assert outcome.state is JobState.failed and outcome.debit == 0
     assert outcome.settlement_state is SettlementState.released_free
@@ -927,6 +1545,72 @@ async def dur_output__a_late_preparation_worker_finds_a_terminal_job(factory):
     assert reaped.cause is TerminalCause.preparation_failed and reaped.debit == 0
     assert harness.extra["balance"](other.org_id)["reserved"] == 0
 
+    # r1 R46 + R29: the same holds for a worker holding a **live** preparation lease.
+    # A long lease TTL separates the two refusals, so this is the phase deadline binding
+    # `prepared` itself rather than the lease simply having expired - which is the case
+    # where the store must terminalize in that same call.
+    # r1 R52 makes the third variant - a worker holding a **live** lease past the phase
+    # deadline - unreachable by construction: `claim_preparation` and `heartbeat` both clamp
+    # `expires_at` to `preparation_deadline_at`, so the lease can never outlive the phase and
+    # the lease-expiry refusal always fires first. `_fence_preparation` still enforces the
+    # phase deadline, as defence for an adapter that forgets to clamp, and the clamp itself
+    # is what `dur_fence__preparation_is_claimed_and_fenced_like_execution` pins.
+
+
+async def dur_output__a_heartbeating_preparation_worker_is_terminalized_on_time(factory):
+    """DUR-OUTPUT / r1 R29 + R55: past `preparation_deadline_at` the store terminalizes in
+    **that same operation**, even for a worker that did everything right.
+
+    The reviewer's reproduction, on default limits. R52 clamps every preparation lease to
+    `preparation_deadline_at`, so the lease and the phase expire together - and with the
+    expiry check ahead of the deadline check, a worker that heartbeated faithfully to
+    t=110 s and came back at t=121 s got `stale_lease`, the job stayed `preparing` with
+    `outcome=None`, and the customer's hold stayed reserved until some reaper happened to
+    run. R29 exists precisely so the outcome does not depend on reaper timing, so the
+    phase deadline is now enforced **before** lease expiry (R55) and `_enforce_deadlines`
+    stops being dead code.
+    """
+    harness = factory()
+    request, admission = await _admit(harness)
+    before = harness.extra["balance"](request.org_id)
+    assert before["reserved"] == admission.maximum_hold > 0
+    lease = await harness.port.claim_preparation(request.request_id, "prep-a")
+    # heartbeat every 10 s, as a real worker would, right up to the phase deadline
+    beats = 0
+    while harness.clock.now() + timedelta(seconds=10) < admission.preparation_deadline_at:
+        harness.clock.advance(10)
+        lease = await harness.port.heartbeat(lease)
+        beats += 1
+    assert beats >= 10, f"the case needs a long-running preparation, got {beats} beats"
+    assert lease.expires_at == admission.preparation_deadline_at, "R52: clamped to the phase"
+    # one second past the phase deadline: every fenced operation must terminalize the job
+    # in the same call, and each must be the call that does it.
+    for operation in ("prepared", "heartbeat", "load_work"):
+        fresh_request, fresh = await _admit(harness, key=f"late-{operation}")
+        fresh_lease = await harness.port.claim_preparation(fresh_request.request_id, "prep-a")
+        harness.clock.advance(DEFAULTS.preparation_timeout_s + 1)
+        funded = harness.extra["balance"](fresh_request.org_id)
+        invoke = {"prepared": lambda: harness.port.prepared(fresh_lease, ()),
+                  "heartbeat": lambda: harness.port.heartbeat(fresh_lease),
+                  "load_work": lambda: harness.port.load_work(fresh_lease)}[operation]
+        try:
+            await invoke()
+        except errors.AlreadyTerminal:
+            pass
+        else:
+            raise AssertionError(f"{operation} past the preparation deadline did not refuse")
+        stored, outcome = await harness.port.get_owned(fresh_request.org_id, fresh.job_handle)
+        assert outcome is not None, \
+            f"{operation} refused but left the job non-terminal: R29 wants it settled here"
+        assert outcome.cause is TerminalCause.preparation_failed
+        assert outcome.state is JobState.failed and outcome.debit == 0
+        assert not any(reservation.active for reservation in stored.reservations), \
+            f"{operation} left the reservations active"
+        after = harness.extra["balance"](fresh_request.org_id)
+        assert after["reserved"] == funded["reserved"] - fresh.maximum_hold, \
+            f"{operation} left the hold reserved until a reaper ran"
+        assert after["ledger"] == funded["ledger"], "a failed preparation charges nothing"
+
 
 async def dur_output__phase_deadlines_are_persisted_at_each_transition(factory):
     """DUR-OUTPUT / r1 R20: the store derives each phase instant from the database
@@ -943,7 +1627,7 @@ async def dur_output__phase_deadlines_are_persisted_at_each_transition(factory):
     assert admission.preparation_deadline_at == harness.clock.at(admission.budgets.preparation_s)
     assert admission.queue_deadline_at is None          # not queued yet
     harness.clock.advance(7)
-    queued = await harness.port.prepared(admission.job_handle, ())
+    queued = await _prepare(harness.port, admission.request_id)
     first_queue_deadline = queued.queue_deadline_at
     assert first_queue_deadline == harness.clock.at(queued.budgets.queue_wait_s)
     assert queued.preparation_deadline_at == admission.preparation_deadline_at
@@ -982,7 +1666,7 @@ async def dur_output__no_phase_deadline_outlives_the_accepted_deadline(factory):
     request, admission = await _admit(harness, deadline_s=5)
     assert admission.budgets.preparation_s > 5          # the budget is the larger one
     assert admission.preparation_deadline_at == admission.deadline_at
-    queued = await harness.port.prepared(admission.job_handle, ())
+    queued = await _prepare(harness.port, admission.request_id)
     assert queued.queue_deadline_at == admission.deadline_at
     lease = await harness.port.claim(request.request_id, "worker-a")
     assert lease.generation_deadline_at == admission.deadline_at
@@ -1024,7 +1708,7 @@ async def dur_output__queue_time_is_time_spent_queued(factory):
                                               lease_ttl_s=30, lease_heartbeat_s=10))
     request, admission = await _admit(harness, mode=ExecutionMode.sync)
     assert admission.queue_wait_used_s == 0 and admission.queue_deadline_at is None
-    queued = await harness.port.prepared(admission.job_handle, ())
+    queued = await _prepare(harness.port, admission.request_id)
     assert queued.queue_deadline_at == harness.clock.at(100)
 
     harness.clock.advance(40)                      # 40s queued
@@ -1064,7 +1748,7 @@ async def dur_output__a_job_past_its_queue_budget_is_not_claimable(factory):
     harness = factory(limits=DEFAULTS.replace(queue_wait_interactive_s=10,
                                               generation_timeout_s=10_000))
     request, admission = await _admit(harness, mode=ExecutionMode.sync, deadline_s=10_000)
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     harness.clock.advance(60)                      # six times the 10s budget
     try:
         await harness.port.claim(request.request_id, "worker-a")
@@ -1094,7 +1778,7 @@ async def dur_output__the_absolute_deadline_bounds_recovery(factory):
 # --------------------------------------------------------------------------
 async def _settle(harness, request, admission, *, tokens=None, cause=TerminalCause.completed,
                   state=JobState.succeeded):
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     lease = await harness.port.claim(request.request_id, "worker-a")
     return await harness.port.complete(
         lease, b.outcome(request.request_id, harness, cause=cause, state=state, tokens=tokens))
@@ -1120,6 +1804,11 @@ async def dur_settle__the_store_rounds_half_up_once(factory):
     whose SQL rounds up, truncates, or rounds each token line separately is caught:
     the ledger movement is asserted, not just the returned number."""
     harness = factory()
+    # r1 R45: the rate is the *store's* fact, so each round moves the injectable price
+    # source and admits at whatever it then answers. Handing four snapshots to four
+    # requests used to look like a rate test while really testing that the store echoed
+    # the client's own price back at it.
+    set_price = hook(harness, "set_price")
     # 1 prompt token at 0.005/M = 0.000000005 USD: exactly the half-up boundary, and
     # the ceiling-versus-half-up divergence the money fixtures pin.
     boundary = b.price(input_rate="0.005", output_rate="0.60")
@@ -1131,8 +1820,11 @@ async def dur_settle__the_store_rounds_half_up_once(factory):
                                         # 0.000099900 exactly: nothing to round, so a
                                         # store that rounds twice or ceilings is caught
                                         (333, 111), "0.00009990")):
-        request, admission = await _admit(harness, snapshot=snapshot, key=f"round-{expected}",
+        set_price(b.MODEL, snapshot)
+        request, admission = await _admit(harness, price=snapshot, key=f"round-{expected}",
                                           max_input_tokens=30_720, max_output_tokens=2_048)
+        assert admission.price_snapshot == snapshot, \
+            "the store settled at a price it did not snapshot from its own price source"
         before = harness.extra["balance"](request.org_id)
         outcome = await _settle(harness, request, admission, tokens=b.usage(*tokens))
         assert money.format_money(outcome.debit) == expected, (snapshot.input_rate_per_million,
@@ -1146,12 +1838,184 @@ async def dur_settle__the_store_rounds_half_up_once(factory):
             assert outcome.settlement_state is SettlementState.settled
 
 
+async def dur_settle__a_price_change_never_undersizes_the_hold(factory):
+    """DUR-SETTLE / r1 R53: the hold and the snapshot come from the same transaction.
+
+    The exact failure this closes: the gateway validates against 0.20/M, the rate moves to
+    2.00/M, and admission then snapshots 2.00 while holding what 0.20 needed. A perfectly
+    valid in-envelope completion no longer fits its own hold, so the store calls it a
+    protocol violation - `platform_error`, usage discarded, debit zero - and the platform
+    eats a request it should have charged for, or refuses one it should have run. The hold
+    is a promise about a price, so it can only be computed from the price that was taken.
+
+    Also pins the other direction (R53/R45): settlement uses the **admitted** snapshot, so
+    a rate that moves after admission does not reprice a job that is already running.
+    """
+    harness = factory()
+    set_price = hook(harness, "set_price")
+    cheap, dear = b.price("0.20", "0.60"), b.price("2.00", "6.00")
+    harness.extra["grant"](b.ORG_A, "25.00")
+
+    # The rate moves between validation and admission. Nothing the caller did changes.
+    set_price(b.MODEL, cheap)
+    request = b.request(harness, max_input_tokens=30_720, max_output_tokens=2_048)
+    validated = cheap.maximum_hold(request.max_input_tokens, request.max_output_tokens)
+    set_price(b.MODEL, dear)
+    admission = await harness.port.admit(request, b.idem(request, "moved"), ())
+
+    assert admission.price_snapshot == dear, "admission must snapshot the price it took"
+    expected = dear.maximum_hold(request.max_input_tokens, request.max_output_tokens)
+    assert admission.maximum_hold == expected, \
+        "the hold must cover the snapshot that was taken, not the one the caller saw"
+    assert admission.maximum_hold > validated, "the case needs the price to have risen"
+    assert harness.extra["balance"](b.ORG_A)["reserved"] == expected
+
+    # A completion inside the envelope therefore settles the exact debit, not a platform
+    # failure: the whole point of holding the ceiling is that the ceiling fits.
+    await _prepare(harness.port, request.request_id)
+    lease = await harness.port.claim(request.request_id, "worker-a")
+    prompt, completion = request.max_input_tokens, request.max_output_tokens
+    outcome = await harness.port.complete(
+        lease, b.outcome(request.request_id, harness, tokens=b.usage(prompt, completion)))
+    assert outcome.settlement_state is SettlementState.settled, \
+        f"an in-envelope completion settled {outcome.settlement_state}"
+    assert outcome.cause is TerminalCause.completed and outcome.usage is not None
+    assert outcome.debit == dear.debit(prompt, completion)
+    assert outcome.debit <= admission.maximum_hold, "a debit never exceeds its hold"
+
+    # And the other direction: a rate that moves *after* admission does not reprice the
+    # job. The admitted snapshot is the one the customer was quoted.
+    set_price(b.MODEL, cheap)
+    later = b.request(harness, max_input_tokens=1_000, max_output_tokens=100)
+    later_admission = await harness.port.admit(later, b.idem(later, "before-move"), ())
+    assert later_admission.price_snapshot == cheap
+    set_price(b.MODEL, dear)
+    await _prepare(harness.port, later.request_id, worker="prep-b")
+    later_lease = await harness.port.claim(later.request_id, "worker-b")
+    # `load_work` hands the worker the admitted snapshot, never the current one (R53)
+    work = await harness.port.load_work(later_lease)
+    assert work.price_snapshot == cheap, "load_work must carry the admitted snapshot"
+    settled = await harness.port.complete(
+        later_lease, b.outcome(later.request_id, harness, tokens=b.usage(800, 80)))
+    assert settled.debit == cheap.debit(800, 80), \
+        "settlement repriced the job at the current rate"
+    set_price(b.MODEL, b.DEFAULT_PRICE)
+
+
+async def dur_cap__the_hold_rounds_up_never_half_up(factory):
+    """DUR-CAP / 01 §4 + r1 R53/s01: the maximum hold rounds **up**, and a debit rounds
+    half up. Every other case used rates whose product is exact, so the two agreed and a
+    store using half-up for the hold passed them all.
+
+    Half-up on the hold under-reserves by one unit in the last place, which is the one
+    number that must never be short: `debit <= maximum_hold` is what makes an in-envelope
+    completion settleable, so an under-reserved hold turns a legitimate request into a
+    `platform_error` the platform eats.
+    """
+    # Room for the seeded table below: the property needs many admissions, and the default
+    # per-key ceiling is eight.
+    harness = factory(limits=DEFAULTS.replace(max_active_jobs=64, max_active_jobs_per_org=64,
+                                              max_active_jobs_per_key=64,
+                                              max_preparing_jobs=64))
+    set_price = hook(harness, "set_price")
+    harness.extra["grant"](b.ORG_A, "100.00")
+
+    # 1001 x 0.33333333/M + 7 x 0.77777777/M = 0.00033911110772 : ceiling gives
+    # 0.00033912 too, so the pair that separates them is the one below.
+    divergent = b.price("0.33333333", "0.77777777")
+    set_price(b.MODEL, divergent)
+    request = b.request(harness, max_input_tokens=1001, max_output_tokens=7)
+    admission = await harness.port.admit(request, b.idem(request, "s01"), ())
+    exact = (Decimal(1001) * Decimal("0.33333333")
+             + Decimal(7) * Decimal("0.77777777")) / Decimal(1_000_000)
+    assert money.format_money(admission.maximum_hold) == "0.00033912", \
+        f"the hold must round up: {money.format_money(admission.maximum_hold)}"
+    assert admission.maximum_hold >= exact, "a hold below the exact worst case under-reserves"
+    assert admission.maximum_hold == money.ceiling(exact)
+    assert money.ceiling(exact) != money.half_up(exact), \
+        "the case needs rates where ceiling and half-up differ, or it proves nothing"
+
+    # And the property, over a seeded table: whatever the rates and ceilings, the hold is
+    # never less than the worst-case debit it exists to cover. One `admit` per row, so the
+    # table is small and deterministic (seed 20260921, as the trace lattice uses).
+    rng = random.Random(20260921)
+    for row in range(24):
+        rates = (f"0.{rng.randrange(1, 10 ** 8):08d}", f"0.{rng.randrange(1, 10 ** 8):08d}")
+        max_input = rng.randrange(1, DEFAULTS.max_context_tokens - DEFAULTS.max_output_tokens)
+        max_output = rng.randrange(1, DEFAULTS.max_output_tokens + 1)
+        snapshot = b.price(*rates)
+        set_price(b.MODEL, snapshot)
+        seeded = b.request(harness, max_input_tokens=max_input, max_output_tokens=max_output)
+        try:
+            row_admission = await harness.port.admit(seeded, b.idem(seeded, f"s01-{row}"), ())
+        except errors.InsufficientCredit:
+            continue                      # a rich row: the property is about rounding
+        worst = row_admission.price_snapshot.debit(max_input, max_output)
+        assert row_admission.maximum_hold >= worst, \
+            (f"row {row}: hold {money.format_money(row_admission.maximum_hold)} is below the "
+             f"worst-case debit {money.format_money(worst)} at {rates} for "
+             f"{max_input}/{max_output}")
+    set_price(b.MODEL, b.DEFAULT_PRICE)
+
+
+async def dur_admit__a_replay_reports_the_original_hold_and_price(factory):
+    """DUR-ADMIT / r1 R53+R6/s05: an idempotent replay reports the **original** admission.
+
+    Since R53 the store derives the hold, so a replay that re-derives it from the *current*
+    price answers with a number that was never reserved. The durable hold stays right - the
+    wallet is untouched - which is exactly why this needs asserting on the **returned
+    record**: the client's retry is told a price and a reservation that do not exist, and
+    a console rendering it shows the customer a figure nothing backs.
+    """
+    harness = factory()
+    set_price = hook(harness, "set_price")
+    harness.extra["grant"](b.ORG_A, "25.00")
+    cheap, dear = b.price("0.20", "0.60"), b.price("2.00", "6.00")
+
+    set_price(b.MODEL, cheap)
+    request = b.request(harness)
+    idem = b.idem(request, "s05")
+    first = await harness.port.admit(request, idem, ())
+    assert first.price_snapshot == cheap and not first.replayed
+    reserved = harness.extra["balance"](b.ORG_A)["reserved"]
+    assert reserved == first.maximum_hold
+
+    set_price(b.MODEL, dear)
+    # t15: and the clock moves, because a retry arrives later than the original by
+    # definition - that is the whole point of a replay, and `admitted_at` refreshed to the
+    # retry's clock would report an acceptance time no deadline on the job was derived from.
+    harness.clock.advance(7)
+    replay = await harness.port.admit(request, idem, ())
+    assert replay.replayed is True
+    assert replay.price_snapshot == cheap, \
+        "a replay reported the current price, not the one the job was admitted at"
+    assert replay.maximum_hold == first.maximum_hold, \
+        (f"a replay reported {money.format_money(replay.maximum_hold)} against the "
+         f"{money.format_money(first.maximum_hold)} actually reserved")
+    # t15: field by field, not a hand-picked few. `admitted_at` is the one a store is most
+    # likely to refresh - it is "now" on every other path - and a replay reporting the
+    # retry's clock would tell a client its job was accepted at a time no deadline was
+    # derived from. `replayed` is the only field allowed to differ.
+    for field in type(first).model_fields:
+        if field == "replayed":
+            continue
+        assert getattr(replay, field) == getattr(first, field), \
+            f"a replay reported a different {field}: " \
+            f"{getattr(first, field)!r} vs {getattr(replay, field)!r}"
+    assert first.replayed is False
+    # and the wallet never moved, which is what makes the returned record the only place
+    # this defect is visible
+    assert harness.extra["balance"](b.ORG_A)["reserved"] == reserved
+    assert len(harness.extra["active_jobs"]()) == 1
+    set_price(b.MODEL, b.DEFAULT_PRICE)
+
+
 async def dur_settle__duplicate_completion_is_idempotent_then_conflicts(factory):
     """DUR-SETTLE: one winner. The identical call replays; a different one is a
     typed conflict and changes no money."""
     harness = factory()
     request, admission = await _admit(harness)
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     lease = await harness.port.claim(request.request_id, "worker-a")
     proposal = b.outcome(request.request_id, harness, tokens=b.usage(1200, 340))
     first = await harness.port.complete(lease, proposal)
@@ -1173,7 +2037,7 @@ async def dur_settle__cancel_and_complete_race_has_a_single_winner(factory):
     outcome or a typed conflict, and exactly one settlement exists."""
     harness = factory()
     request, admission = await _admit(harness)
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     lease = await harness.port.claim(request.request_id, "worker-a")
 
     async def cancel():
@@ -1206,7 +2070,7 @@ async def dur_settle__unknown_usage_is_held_then_released_as_platform_absorbed(f
     harness = factory()
     publish = hook(harness, "publish")
     request, admission = await _admit(harness)
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     lease = await harness.port.claim(request.request_id, "worker-a")
     await publish(lease)
     outcome = await harness.port.complete(
@@ -1237,7 +2101,7 @@ async def dur_settle__an_unknown_usage_hold_is_never_released_on_a_callers_clock
     harness = factory()
     publish = hook(harness, "publish")
     request, admission = await _admit(harness)
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     lease = await harness.port.claim(request.request_id, "worker-a")
     await publish(lease)
     outcome = await harness.port.complete(
@@ -1267,7 +2131,7 @@ async def dur_settle__an_outcome_settles_only_its_own_job(factory):
     harness = factory()
     request_a, admission_a = await _admit(harness, key="own-a")
     request_b, admission_b = await _admit(harness, key="own-b")
-    await harness.port.prepared(admission_a.job_handle, ())
+    await _prepare(harness.port, admission_a.request_id)
     lease = await harness.port.claim(request_a.request_id, "worker-a")
     before = harness.extra["balance"](b.ORG_A)
     try:
@@ -1291,7 +2155,7 @@ async def dur_settle__a_rejected_settlement_moves_no_money(factory):
     from ..records import TerminalOutcome
     harness = factory()
     request, admission = await _admit(harness)
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     lease = await harness.port.claim(request.request_id, "worker-a")
     before = harness.extra["balance"](request.org_id)
     # `TerminalOutcome` refuses to build this pair, so the only way one reaches a
@@ -1323,7 +2187,7 @@ async def dur_settle__a_succeeded_outcome_needs_a_result_reference(factory):
     answer 404 for a job the ledger says was delivered."""
     harness = factory()
     request, admission = await _admit(harness)
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     lease = await harness.port.claim(request.request_id, "worker-a")
     before = harness.extra["balance"](request.org_id)
     try:
@@ -1367,7 +2231,7 @@ async def dur_settle__the_winning_worker_can_always_replay_its_completion(factor
     conflict the worker cannot act on."""
     harness = factory()
     request, admission = await _admit(harness, max_output_tokens=16, max_input_tokens=32)
-    await harness.port.prepared(admission.job_handle, ())
+    await _prepare(harness.port, admission.request_id)
     lease = await harness.port.claim(request.request_id, "worker-a")
     proposal = b.outcome(request.request_id, harness, tokens=b.usage(32, 4096))
     first = await harness.port.complete(lease, proposal)
@@ -1504,7 +2368,7 @@ async def dur_settle__a_settlement_that_cannot_journal_moves_no_money(factory):
         for cause, state in causes:
             harness = factory(limits=limits)
             request, admission = await _admit(harness, key=f"r39-{reserve}-{cause.value}")
-            await harness.port.prepared(admission.job_handle, ())
+            await _prepare(harness.port, admission.request_id)
             lease = await harness.port.claim(request.request_id, "worker-a")
             before = harness.extra["balance"](request.org_id)
             usage = b.usage(1200, 340) if cause in (TerminalCause.completed,) else None
@@ -1550,11 +2414,11 @@ async def dur_settle__one_unsettleable_job_does_not_stop_the_sweep(factory):
     harness = factory(limits=limits)
     unsettleable = hook(harness, "unsettleable")
     stuck, stuck_admission = await _admit(harness, key="stuck")
-    await harness.port.prepared(stuck_admission.job_handle, ())
+    await _prepare(harness.port, stuck_admission.request_id)
     others = []
     for n in range(3):
         request, admission = await _admit(harness, key=f"reapable-{n}")
-        await harness.port.prepared(admission.job_handle, ())
+        await _prepare(harness.port, admission.request_id)
         others.append((request, admission))
     # fill the stuck job's journal so its terminal event cannot fit
     stream = hook(harness, "stream")
@@ -1596,7 +2460,7 @@ async def dur_settle__terminalization_releases_every_reservation(factory):
     harness = factory()
     request, admission = await _admit(harness)
     assert all(reservation.active for reservation in admission.reservations)
-    queued = await harness.port.prepared(admission.job_handle, ())
+    queued = await _prepare(harness.port, admission.request_id)
     preparation = {r.kind: r for r in queued.reservations}[ReservationKind.preparation]
     assert preparation.active is False, "preparation capacity was still held after prepared"
     lease = await harness.port.claim(request.request_id, "worker-a")
@@ -1641,9 +2505,12 @@ async def dur_settle__usage_beyond_the_reserved_envelope_is_a_platform_failure(f
     # ceiling while their debit still fits inside the hold, which is the case a store
     # comparing only amounts would charge for.
     inside = 0
+    # r1 R55 range-checks the ceilings, so the last row uses the largest output ceiling a
+    # request may actually carry (`MAX_OUTPUT_TOKENS`) rather than an impossible 50 000.
     for max_input, max_output, prompt, completion in ((32, 16, 32, 4096), (32, 16, 33, 16),
                                                       (30_000, 16, 1, 4096),
-                                                      (32, 50_000, 10_000, 1)):
+                                                      (1_000, DEFAULTS.max_output_tokens,
+                                                       1_001, 1)):
         request, admission = await _admit(harness, max_output_tokens=max_output,
                                           max_input_tokens=max_input,
                                           key=f"envelope-{max_input}-{max_output}-{prompt}")
@@ -1673,16 +2540,22 @@ async def dur_settle__stale_and_out_of_order_transitions_are_typed_conflicts(fac
     """DUR-SETTLE: the state machine refuses shortcuts without side effects."""
     harness = factory()
     request, admission = await _admit(harness)
-    await harness.port.prepared(admission.job_handle, ())
-    try:
-        await harness.port.prepared(admission.job_handle, ())
-    except errors.StateConflict as exc:
-        assert errors.http_status(exc.code) == 409
-    else:
-        raise AssertionError("preparing -> queued ran twice")
+    # r1 R46: hold on to the preparation lease, so replaying it after the phase is over
+    # can be checked as well as re-claiming a phase that has ended.
+    preparation = await harness.port.claim_preparation(request.request_id, "prep-a")
+    await harness.port.prepared(preparation, ())
+    for spent, expected in ((harness.port.prepared(preparation, ()), errors.StaleLease),
+                            (harness.port.claim_preparation(request.request_id, "prep-b"),
+                             errors.NotClaimable)):
+        try:
+            await spent
+        except expected as exc:
+            assert exc.code in ("stale_lease", "not_claimable"), exc.code
+        else:
+            raise AssertionError("preparing -> queued ran twice")
     lease = await harness.port.claim(request.request_id, "worker-a")
     await harness.port.complete(lease, b.outcome(request.request_id, harness))
-    for call in (harness.port.prepared(admission.job_handle, ()),
+    for call in (harness.port.claim_preparation(request.request_id, "prep-b"),
                  harness.port.claim(request.request_id, "worker-b")):
         try:
             await call
@@ -1725,6 +2598,7 @@ def jobstore_cases():
         dur_admit__an_idempotency_scope_belongs_to_the_requests_own_org,
         dur_admit__a_deadline_must_be_one_the_store_can_keep,
         dur_admit__a_refused_admission_reserves_nothing,
+        dur_admit__the_token_ceilings_are_range_checked,
         dur_cap__total_org_and_key_limits_reject_with_retry_guidance,
         dur_cap__admission_reserves_preparation_capacity,
         dur_cap__journal_reservation_must_fit_the_global_budget,
@@ -1732,14 +2606,22 @@ def jobstore_cases():
         dur_cap__a_hold_is_checked_against_available_not_the_ledger,
         dur_cap__a_negative_maximum_hold_is_refused,
         dur_cap__a_credit_grant_is_never_negative,
+        dur_cap__the_hold_rounds_up_never_half_up,
+        dur_admit__a_replay_reports_the_original_hold_and_price,
         dur_cap__concurrent_admissions_never_oversubscribe,
         dur_fence__claim_increments_the_generation_from_the_database_clock,
+        dur_fence__preparation_is_claimed_and_fenced_like_execution,
+        dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise,
+        dur_output__a_lost_preparation_worker_is_reaped_within_bounds,
+        dur_output__a_heartbeating_preparation_worker_is_terminalized_on_time,
         dur_fence__another_worker_at_the_same_generation_is_still_fenced,
         dur_fence__a_lease_is_a_fencing_token_not_a_record,
         dur_fence__a_deadline_binds_append_and_complete,
         dur_fence__an_expired_lease_can_neither_renew_nor_settle,
+        dur_fence__an_overdue_inference_lease_terminalizes_in_the_same_call,
         dur_fence__a_stale_generation_is_rejected,
         dur_output__recovery_requeues_only_before_publication,
+        dur_output__every_requeued_candidate_carries_the_right_kind,
         dur_output__loss_after_publication_is_a_terminal_failure,
         dur_output__prepublication_retries_are_bounded,
         dur_output__queue_wait_does_not_restart_on_a_requeue,
@@ -1753,6 +2635,7 @@ def jobstore_cases():
         dur_output__the_absolute_deadline_bounds_recovery,
         dur_settle__one_settlement_with_exact_decimals,
         dur_settle__the_store_rounds_half_up_once,
+        dur_settle__a_price_change_never_undersizes_the_hold,
         dur_settle__duplicate_completion_is_idempotent_then_conflicts,
         dur_settle__cancel_and_complete_race_has_a_single_winner,
         dur_settle__unknown_usage_is_held_then_released_as_platform_absorbed,
@@ -1782,7 +2665,7 @@ async def _stream_job(harness, **kw):
     jobs = hook(harness, "jobs")
     inner = replace(harness, port=jobs)
     request, admission = await _admit(inner, **kw)
-    await jobs.prepared(admission.job_handle, ())
+    await _prepare(jobs, admission.request_id)
     lease = await jobs.claim(request.request_id, "worker-a")
     return request, admission, lease
 

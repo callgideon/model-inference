@@ -8,9 +8,12 @@ from decimal import Decimal
 
 from .. import errors
 from ..limits import DEFAULTS
-from ..records import (AuthorRole, ChunkEventType, FeedbackChannel, FeedbackName,
+from ..limits import MAX_FEEDBACK_TEXT_CHARS, MAX_RUBRIC_VERSION
+from ..records import (DISPATCH_KINDS, AuthorRole, CalibrationLabel, ChunkEventType,
+                       FeedbackChannel, FeedbackName, OutboxKind,
                        JudgeResolution, JudgeRunState, MediaKind, Role, TraceLossReason,
                        TraceMode, TraceOfferResult)
+from ..wire import PLATFORM_ACTOR, FeedbackList
 from . import builders as b
 from .harness import hook
 
@@ -92,8 +95,42 @@ async def media_parity__staging_is_content_addressed_and_tenant_namespaced(facto
     staged_b = await harness.port.stage(b.ORG_B, request_b)
     assert staged_a[0].storage_ref != staged_b[0].storage_ref
     assert b.ORG_A in staged_a[0].storage_ref and b.ORG_B in staged_b[0].storage_ref
-    hook(harness, "attach")("job_stagingfixture", staged_a)
-    prepared = await harness.port.prepare("job_stagingfixture", "profile-2")
+    # r1 R46: `attach` is a port operation addressed by job id, not a test hook.
+    # r1 R52: and it checks the tenant. ORG_B's refs used to attach to an ORG_A job and
+    # were only caught two phases later by `prepared`, after `prepare` had transcoded them
+    # into ORG_A's prefix.
+    # r1 R55: the organization comes from the **job row**, not the call. `admitted()` is
+    # the fake's stand-in for the job row a real adapter joins.
+    hook(harness, "admitted")(request_a.request_id, b.ORG_A)
+    hook(harness, "admitted")(request_b.request_id, b.ORG_B)
+    try:
+        await harness.port.attach(request_a.request_id, staged_b)
+    except errors.NotFound:
+        pass
+    else:
+        raise AssertionError("another org's media attached to this org's job")
+    # r1 s15: and a refused attach stores **nothing** - `prepare` must find no media, not
+    # a half-written set it would transcode into the wrong tenant's prefix.
+    try:
+        await harness.port.prepare(request_a.request_id, "profile-2")
+    except errors.NotFound:
+        pass
+    else:
+        raise AssertionError("a refused attach left media behind for prepare")
+    # and an unknown job cannot be attached to at all: there is no row to read the org from
+    for what, refs in (("with refs", staged_a), ("with no refs at all", ())):
+        # t12: an empty tuple must not skip the job lookup. With the org read inside the
+        # loop, `attach(unknown, ())` silently created an entry for a job that does not
+        # exist, and `prepare` would then hand a worker an empty prepared set as if it were
+        # a finished preparation.
+        try:
+            await harness.port.attach(harness.ids.uuid(), refs)
+        except errors.NotFound:
+            pass
+        else:
+            raise AssertionError(f"attached to a job the store does not know, {what}")
+    await harness.port.attach(request_a.request_id, staged_a)
+    prepared = await harness.port.prepare(request_a.request_id, "profile-2")
     assert prepared[0].profile_version == "profile-2"
     assert prepared[0].storage_ref != staged_a[0].storage_ref
     # the profile version namespaces the cache (01: "tenant source digest + profile
@@ -101,6 +138,21 @@ async def media_parity__staging_is_content_addressed_and_tenant_namespaced(facto
     assert "profile-2" in prepared[0].storage_ref
     assert b.ORG_A in prepared[0].storage_ref
     assert prepared[0].digest == staged_a[0].digest            # same source content
+    # r1 R46/q23: `prepare` resolves **this job's** refs or nothing. A store that fell back
+    # to "any attached refs" would transcode one job's media for another - the same content
+    # under two jobs' prefixes, and a foreign job's media prepared into this tenant's -
+    # which no later check would catch, because the refs it returns look perfectly valid.
+    await harness.port.attach(request_b.request_id, staged_b)
+    try:
+        await harness.port.prepare(harness.ids.uuid(), "profile-2")
+    except errors.NotFound:
+        pass
+    else:
+        raise AssertionError("prepare invented media for an unknown job")
+    foreign = await harness.port.prepare(request_b.request_id, "profile-2")
+    assert [ref.org_id for ref in foreign] == [b.ORG_B], \
+        "prepare handed one job another job's media"
+    assert all(b.ORG_B in ref.storage_ref for ref in foreign)
 
 
 async def media_sec__a_foreign_media_reference_is_not_staged(factory):
@@ -318,10 +370,63 @@ def mediastore_cases():
 # ==========================================================================
 # Scheduler
 # ==========================================================================
-def _index_event(harness, *, job_id=None, attempt=0):
+async def dur_outbox__a_candidate_carries_its_dispatch_kind(factory):
+    """DUR-OUTBOX / r1 R52: the index says *what* a job wants done, so a preparation
+    worker can be fed from it.
+
+    Before this a candidate said only "this job wants something done": a preparation pool
+    would claim an inference candidate, be refused by `JobStore.claim`, and the job would
+    sit there while the index looked busy - and the preparation pool had to be fed from
+    somewhere else entirely, which is a second dispatch path nobody was indexing.
+    """
+    harness = factory()
+    prepare = _index_event(harness, kind=OutboxKind.prepare_dispatch)
+    infer = _index_event(harness, kind=OutboxKind.inference_dispatch)
+    assert prepare.is_preparation and not infer.is_preparation
+    assert await harness.port.enqueue(prepare) and await harness.port.enqueue(infer)
+
+    # A preparation pool is handed the preparation candidate and nothing else.
+    claimed = await harness.port.claim_candidate("prep-a", kind=OutboxKind.prepare_dispatch)
+    assert claimed is not None and claimed.event_id == prepare.event_id, \
+        "a preparation worker was handed an inference candidate"
+    assert await harness.port.claim_candidate("prep-b",
+                                              kind=OutboxKind.prepare_dispatch) is None, \
+        "there was only one preparation candidate"
+    # while an inference pool still gets its own, and an unfiltered worker takes anything.
+    worker = await harness.port.claim_candidate("worker-a", kind=OutboxKind.inference_dispatch)
+    assert worker is not None and worker.event_id == infer.event_id
+    await harness.port.acknowledge(worker)
+    again = _index_event(harness, kind=OutboxKind.inference_dispatch)
+    assert await harness.port.enqueue(again)
+    assert (await harness.port.claim_candidate("any")).event_id == again.event_id, \
+        "an unfiltered claim must still take whatever is next"
+    # r1 R55: an unknown kind is a typed refusal, not `None`. Answering "no candidate"
+    # reported a caller bug as an empty index, so a pool with a misspelled kind idled for
+    # ever against a full queue and looked healthy doing it.
+    for bogus in ("bogus", "prepare", OutboxKind.usage_projection, ""):
+        try:
+            await harness.port.claim_candidate("prep-a", kind=bogus)
+        except errors.InvalidRequest as exc:
+            assert errors.http_status(exc.code) == 400
+        else:
+            raise AssertionError(f"claim_candidate accepted kind {bogus!r}")
+    # and the index only ever carries dispatch kinds
+    for kind in OutboxKind:
+        if kind in DISPATCH_KINDS:
+            continue
+        try:
+            _index_event(harness, kind=kind)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"{kind} was accepted as an index event kind")
+
+
+def _index_event(harness, *, job_id=None, attempt=0, kind=OutboxKind.inference_dispatch):
     from ..records import ExecutionMode, IndexEvent
     return IndexEvent(event_id=harness.ids.event_id(), job_id=job_id or harness.ids.uuid(),
-                      org_id=b.ORG_A, key_id=b.KEY_A, execution_mode=ExecutionMode.async_,
+                      org_id=b.ORG_A, key_id=b.KEY_A, kind=kind,
+                      execution_mode=ExecutionMode.async_,
                       available_at=harness.clock.now(), attempt=attempt)
 
 
@@ -365,11 +470,11 @@ async def dur_outbox__the_index_never_authorizes_execution(factory):
     JobStore.claim decides the winner."""
     harness = factory()
     jobs = hook(harness, "jobs")
-    from .jobs import _admit
+    from .jobs import _admit, _prepare
     from dataclasses import replace
     inner = replace(harness, port=jobs)
     request, admission = await _admit(inner)
-    await jobs.prepared(admission.job_handle, ())
+    await _prepare(jobs, admission.request_id)
     await harness.port.enqueue(_index_event(harness, job_id=request.request_id))
     candidate = await harness.port.claim_candidate("worker-a")
     stored, outcome = await jobs.get_owned(request.org_id, admission.job_handle)
@@ -432,7 +537,8 @@ async def dur_outbox__rebuild_restores_every_queued_job_exactly_once(factory):
 
 
 def scheduler_cases():
-    return [dur_outbox__enqueue_is_replay_safe,
+    return [dur_outbox__a_candidate_carries_its_dispatch_kind,
+            dur_outbox__enqueue_is_replay_safe,
             dur_outbox__a_claimed_candidate_is_not_re_indexed,
             dur_outbox__the_index_never_authorizes_execution,
             dur_outbox__acknowledged_candidates_do_not_come_back,
@@ -454,7 +560,9 @@ def _lease(harness):
     """A lease as `JobStore.claim` mints one, phase instants included (r1 R20)."""
     from ..records import Lease
     now = harness.clock.now()
-    return Lease(job_id=harness.ids.uuid(), generation=1, worker_id="worker-a",
+    from ..records import LeaseKind
+    return Lease(job_id=harness.ids.uuid(), kind=LeaseKind.inference, generation=1,
+                 worker_id="worker-a",
                  acquired_at=now, expires_at=harness.clock.at(DEFAULTS.lease_ttl_s),
                  generation_deadline_at=harness.clock.at(DEFAULTS.generation_timeout_s),
                  first_token_deadline_at=harness.clock.at(DEFAULTS.ttft_timeout_s))
@@ -618,7 +726,7 @@ async def trace_bounds__an_accepted_offer_is_in_memory_only(factory):
     assert smuggled is TraceOfferResult.dropped
     stats = await harness.port.stats()
     assert stats["in_memory"] == 1 and stats["in_memory_content_bytes"] == 0
-    assert stats["loss_reasons"]["malformed"] == 1
+    assert stats["loss_reasons"].get("malformed", 0) == 1
 
 
 async def trace_bounds__a_content_budget_breach_discards_the_whole_content(factory):
@@ -648,7 +756,7 @@ async def trace_bounds__a_content_budget_breach_discards_the_whole_content(facto
     assert kept.content_complete is False
     assert kept.loss_reason is TraceLossReason.memory_budget
     stats = await harness.port.stats()
-    assert stats["loss_reasons"]["memory_budget"] == 1
+    assert stats["loss_reasons"].get("memory_budget", 0) == 1
     assert stats["in_memory_content_bytes"] == budget       # never over, never double
     huge_id = harness.ids.uuid()
     huge = harness.port.open(huge_id, b.ORG_A, TraceMode.full, harness.clock.at(600))
@@ -671,7 +779,7 @@ async def trace_bounds__metadata_exhaustion_drops_with_counters(factory):
     assert accepted is TraceOfferResult.accepted_in_memory
     assert dropped is TraceOfferResult.dropped
     stats = await harness.port.stats()
-    assert stats["dropped"] == 1 and stats["loss_reasons"]["metadata_budget"] == 1
+    assert stats["dropped"] == 1 and stats["loss_reasons"].get("metadata_budget", 0) == 1
 
 
 async def trace_bounds__a_full_queue_drops_and_inference_continues(factory):
@@ -685,7 +793,7 @@ async def trace_bounds__a_full_queue_drops_and_inference_continues(factory):
                                             metadata_bytes=8, harness=harness)) \
         is TraceOfferResult.dropped
     stats = await harness.port.stats()
-    assert stats["loss_reasons"]["queue_full"] == 1
+    assert stats["loss_reasons"].get("queue_full", 0) == 1
     assert stats["accepted"] == 2                            # the sink never blocked
 
 
@@ -712,7 +820,7 @@ async def trace_bounds__off_mode_produces_no_trace_at_all(factory):
     assert result is TraceOfferResult.dropped
     stats = await harness.port.stats()
     assert stats["accepted"] == 0 and stats["in_memory"] == 0
-    assert stats["loss_reasons"]["malformed"] == 1      # an `offer` of one is a caller bug
+    assert stats["loss_reasons"].get("malformed", 0) == 1      # an `offer` of one is a caller bug
     # r1 R37: an off-mode (or minimal) request gets a **no-op** capture rather than an
     # exception - the trace path may never raise into the request path, and G needs no
     # branch on the mode. It keeps nothing and charges nothing.
@@ -760,7 +868,7 @@ async def trace_bounds__off_mode_produces_no_trace_at_all(factory):
                                             content_bytes=0, harness=harness)) \
         is TraceOfferResult.dropped
     stats = await harness.port.stats()
-    assert stats["dropped"] == 1 and stats["loss_reasons"]["malformed"] == 1
+    assert stats["dropped"] == 1 and stats["loss_reasons"].get("malformed", 0) == 1
 
 
 async def trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope(factory):
@@ -824,7 +932,7 @@ async def trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope(factory):
             assert stats["dropped"] == 0 and stats["loss_reasons"] == {}, stats
         else:
             # a `minimal` capture handed the wrong thing *is* an anomaly: counted once
-            assert stats["loss_reasons"]["malformed"] == 1, stats["loss_reasons"]
+            assert stats["loss_reasons"].get("malformed", 0) == 1, stats["loss_reasons"]
 
     # (a2) r1 R42: **one** loss count per capture, whatever is called afterwards. G's
     # `finally` abandons and a late `finish` follows: that ordinary order must not count
@@ -868,7 +976,7 @@ async def trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope(factory):
     stats = await harness.port.stats()
     assert inflated is TraceOfferResult.dropped, "an envelope claimed content it never charged"
     assert stats["in_memory"] == 0 and stats["in_memory_content_bytes"] == 0
-    assert stats["loss_reasons"]["malformed"] == 1
+    assert stats["loss_reasons"].get("malformed", 0) == 1
     # claiming exactly what was charged is the honest case
     harness = factory()
     request_id = harness.ids.uuid()
@@ -897,7 +1005,7 @@ async def trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope(factory):
     assert outcome is TraceOfferResult.dropped, "a minimal capture stored content"
     assert stats["in_memory"] == 0, [e.model_dump() for e in hook(harness, "queued")()]
     assert stats["in_memory_content_bytes"] == 0
-    assert stats["loss_reasons"]["malformed"] == 1
+    assert stats["loss_reasons"].get("malformed", 0) == 1
 
     # (c) the honest minimal case still works: opened minimal, finished minimal, one row
     harness = factory()
@@ -917,7 +1025,7 @@ async def trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope(factory):
                                            content_bytes=0, metadata_bytes=32, harness=harness))
     stats = await harness.port.stats()
     assert foreign is TraceOfferResult.dropped, "a no-op capture filed another tenant's row"
-    assert stats["in_memory"] == 0 and stats["loss_reasons"]["malformed"] == 1
+    assert stats["in_memory"] == 0 and stats["loss_reasons"].get("malformed", 0) == 1
     other = harness.port.open(request_id, b.ORG_A, TraceMode.minimal, harness.clock.at(600))
     assert await other.finish(b.trace(harness.ids.uuid(), mode=TraceMode.minimal,
                                       content_bytes=0, metadata_bytes=32, harness=harness)) \
@@ -945,7 +1053,7 @@ async def trace_bounds__a_live_capture_also_decides_its_own_mode(factory):
         assert outcome is TraceOfferResult.dropped, f"a full capture queued a {envelope_mode} row"
         assert stats["in_memory"] == 0, "a mislabelled row was queued"
         assert stats["in_memory_content_bytes"] == 0, "the charge was not released"
-        assert stats["loss_reasons"]["malformed"] >= 1
+        assert stats["loss_reasons"].get("malformed", 0) >= 1
         assert sum(stats["loss_reasons"].values()) == before + 1, \
             "a dropped capture counted no loss, or counted two"
     # the matching mode is the honest path
@@ -978,20 +1086,20 @@ async def trace_bounds__concurrent_captures_share_one_budget(factory):
     assert second.add(part) is False, "the shared budget was overrun"
     assert second.add("x") is False                      # and it stays over
     stats = await harness.port.stats()
-    assert stats["loss_reasons"]["memory_budget"] == 1
+    assert stats["loss_reasons"].get("memory_budget", 0) == 1
     assert stats["in_memory_content_bytes"] == 3_000     # the loser released its bytes
     # one loss count per capture, whatever sequence ends it: a third capture that
     # breaches and is then abandoned contributes exactly one loss, not two, or the loss
     # metrics a capacity decision reads are inflated by an ordinary `finally`
-    breached = (await harness.port.stats())["loss_reasons"]["memory_budget"]
+    breached = (await harness.port.stats())["loss_reasons"].get("memory_budget", 0)
     third = harness.port.open(harness.ids.uuid(), b.ORG_A, TraceMode.full,
                               harness.clock.at(600))
     assert third.add(part + "x") is False            # one byte more than is left
     stats = await harness.port.stats()
-    assert stats["loss_reasons"]["memory_budget"] == breached + 1
+    assert stats["loss_reasons"].get("memory_budget", 0) == breached + 1
     await third.abandon(TraceLossReason.abandoned)
     stats = await harness.port.stats()
-    assert stats["loss_reasons"]["memory_budget"] == breached + 1, stats["loss_reasons"]
+    assert stats["loss_reasons"].get("memory_budget", 0) == breached + 1, stats["loss_reasons"]
     assert stats["loss_reasons"].get("abandoned", 0) == 0, \
         "an already-counted capture was counted a second time"
     # the loser finishes as honest metadata; the winner keeps its content
@@ -1026,11 +1134,11 @@ async def trace_bounds__an_abandoned_capture_releases_its_bytes(factory):
     stats = await harness.port.stats()
     assert stats["in_memory_content_bytes"] == 0
     assert stats["in_memory"] == 0 and stats["accepted"] == 0
-    assert stats["loss_reasons"]["abandoned"] == 1
+    assert stats["loss_reasons"].get("abandoned", 0) == 1
     assert stats["open_captures"] == 0
     # r1 R37: idempotent, and it never raises - releasing twice releases once
     await doomed.abandon(TraceLossReason.abandoned)
-    assert (await harness.port.stats())["loss_reasons"]["abandoned"] == 1
+    assert (await harness.port.stats())["loss_reasons"].get("abandoned", 0) == 1
     assert (await harness.port.stats())["in_memory_content_bytes"] == 0
     # and a capture contributes **one** loss count however it ends: finishing an already
     # abandoned capture must not count its loss a second time, or the loss metrics a
@@ -1039,7 +1147,7 @@ async def trace_bounds__an_abandoned_capture_releases_its_bytes(factory):
     late = await doomed.finish(b.trace(doomed_id, content_bytes=2_000, metadata_bytes=16,
                                        harness=harness))
     stats = await harness.port.stats()
-    assert stats["loss_reasons"]["abandoned"] == 1, stats["loss_reasons"]
+    assert stats["loss_reasons"].get("abandoned", 0) == 1, stats["loss_reasons"]
     assert stats["in_memory"] == 0 and stats["in_memory_content_bytes"] == 0
     assert late is TraceOfferResult.dropped, "an abandoned capture reported acceptance"
     assert await doomed.finish(b.trace(doomed_id, content_bytes=2_000, metadata_bytes=16,
@@ -1078,7 +1186,7 @@ async def trace_bounds__a_capture_belongs_to_its_own_request(factory):
     assert await capture.finish(foreign) is TraceOfferResult.dropped
     stats = await harness.port.stats()
     assert stats["in_memory"] == 0 and stats["in_memory_content_bytes"] == 0
-    assert stats["loss_reasons"]["malformed"] >= 1
+    assert stats["loss_reasons"].get("malformed", 0) >= 1
     # a part that is not content is dropped and counted, never a TypeError into the
     # request path (r1 R37)
     junk = harness.port.open(harness.ids.uuid(), b.ORG_A, TraceMode.full,
@@ -1087,7 +1195,7 @@ async def trace_bounds__a_capture_belongs_to_its_own_request(factory):
     for part in (12_345, None, {"not": "content"}, ["neither"]):
         assert junk.add(part) is False, part
     stats = await harness.port.stats()
-    assert stats["loss_reasons"]["malformed"] >= 1
+    assert stats["loss_reasons"].get("malformed", 0) >= 1
     assert stats["in_memory_content_bytes"] == 0, "a malformed part kept its charge"
     minimal = harness.port.open(harness.ids.uuid(), b.ORG_A, TraceMode.minimal,
                                 harness.clock.at(600))
@@ -1190,7 +1298,7 @@ async def trace_bounds__a_dropped_finish_releases_its_charge(factory):
                                           harness=harness))
     assert result is TraceOfferResult.dropped
     stats = await harness.port.stats()
-    assert stats["loss_reasons"]["queue_full"] == 1
+    assert stats["loss_reasons"].get("queue_full", 0) == 1
     assert stats["in_memory_content_bytes"] == 1_000, \
         "a dropped record kept its charge on the budget"
     assert stats["in_memory"] == 1
@@ -1213,7 +1321,7 @@ async def trace_bounds__a_dropped_finish_releases_its_charge(factory):
                                            harness=harness))
     stats = await harness.port.stats()
     assert refused is TraceOfferResult.dropped
-    assert stats["loss_reasons"]["metadata_budget"] == 1, stats["loss_reasons"]
+    assert stats["loss_reasons"].get("metadata_budget", 0) == 1, stats["loss_reasons"]
     assert stats["in_memory_content_bytes"] == 0, \
         "a metadata-budget drop kept its content charge"
     assert stats["in_memory"] == 1                      # only the filler
@@ -1247,28 +1355,28 @@ async def trace_bounds__an_open_capture_past_its_deadline_is_reaped(factory):
         assert (await harness.port.stats())["in_memory_content_bytes"] == 1_900
     stats = await harness.port.stats()
     assert stats["in_memory_content_bytes"] == 1_900
-    assert stats["loss_reasons"]["abandoned"] == before_losses + 1, \
+    assert stats["loss_reasons"].get("abandoned", 0) == before_losses + 1, \
         "an unrecordable full-mode capture ended without a counted loss"
     assert stats["in_memory"] == 0
     # ... and the same capture abandoned explicitly counts once, not twice
     orphan = harness.port.open(harness.ids.uuid(), b.ORG_A, TraceMode.full, None)
     await orphan.abandon(TraceLossReason.abandoned)
     await orphan.abandon(TraceLossReason.abandoned)
-    assert (await harness.port.stats())["loss_reasons"]["abandoned"] == before_losses + 2
+    assert (await harness.port.stats())["loss_reasons"].get("abandoned", 0) == before_losses + 2
     # an `off` or `minimal` capture has no content to lose, so it counts nothing
     quiet = sum((await harness.port.stats())["loss_reasons"].values())
     for mode in (TraceMode.off, TraceMode.minimal):
         with harness.port.open(harness.ids.uuid(), b.ORG_A, mode, None):
             pass
     assert sum((await harness.port.stats())["loss_reasons"].values()) == quiet
-    reaped_before = (await harness.port.stats())["loss_reasons"]["abandoned"]
+    reaped_before = (await harness.port.stats())["loss_reasons"].get("abandoned", 0)
     harness.clock.advance(120)
     assert reap() == 0, "reaped before the grace period"
     harness.clock.advance(60)
     assert reap() == 1
     stats = await harness.port.stats()
     assert stats["in_memory_content_bytes"] == 0 and stats["open_captures"] == 0
-    assert stats["loss_reasons"]["abandoned"] == reaped_before + 1
+    assert stats["loss_reasons"].get("abandoned", 0) == reaped_before + 1
     assert reap() == 0                              # idempotent
     # the freed budget is usable, and the reaped capture keeps nothing
     survivor = harness.port.open(harness.ids.uuid(), b.ORG_A, TraceMode.full, deadline)
@@ -1289,12 +1397,18 @@ async def trace_bounds__every_bounded_capture_sequence_holds_the_invariants(fact
     out of this space promptly counted a loss twice (`abandon` then `finish`; a breach then
     a mode-mismatched `finish`). Lengths 1-3 run here, exhaustively, so an adapter's own
     conformance run covers them; `tests/contracts/test_trace_sequences.py` runs the full
-    product to length 4 (~136k sequences) and prints what it ran.
+    product to length 4 and prints what it ran.
     """
-    from .sequences import tracesink_sequence_properties
+    from .sequences import OPERATIONS, tracesink_sequence_properties
     report = await tracesink_sequence_properties(factory, max_length=3)
-    assert report.sequences == (12 + 144 + 1728) * 6, report.line()
+    # Computed from the alphabet rather than written down, so adding an operation widens
+    # the lattice instead of breaking this line: every sequence x 3 modes x 2 deadlines.
+    alphabet = len(OPERATIONS)
+    expected = (alphabet + alphabet ** 2 + alphabet ** 3) * 3 * 2
+    assert report.sequences == expected, report.line()
     assert report.sampled_lengths == ()
+    # and every guarded invariant was actually reached, not merely written down
+    assert report.unfired() == (), f"guarded invariants never reached: {report.unfired()}"
 
 
 def tracesink_cases():
@@ -1322,7 +1436,7 @@ def tracesink_cases():
 # ==========================================================================
 async def _owned_request(harness):
     from dataclasses import replace
-    from .jobs import _admit
+    from .jobs import _admit, _prepare
     jobs = hook(harness, "jobs")
     request, admission = await _admit(replace(harness, port=jobs))
     return request, admission
@@ -1340,7 +1454,10 @@ async def feedback_ack__acceptance_is_durable_and_provenance_is_server_set(facto
                    comment="the robot is a hand truck"), idem)
     assert record.channel is FeedbackChannel.api and record.author_role is AuthorRole.customer
     assert record.feedback_id.startswith("fb_") and record.org_id == b.ORG_A
-    assert record.name is FeedbackName.correction and record.calibration_set is None
+    assert record.name is FeedbackName.correction
+    # r1 R43: `calibration_set` is a boolean, false on every customer signal, and the
+    # rubric version is null off the calibration path.
+    assert record.calibration_set is False and record.rubric_version is None
     assert hook(harness, "outbox")()                       # projection queued, not awaited
     assert await harness.port.list_owned(b.auth(), request.request_id) == (record,)
 
@@ -1363,6 +1480,14 @@ async def feedback_ack__the_body_is_one_valid_signal_with_a_required_key(factory
         b.feedback(FeedbackName.comment, False),
         {"name": "sentiment", "value": "good"},               # not a known signal
         [{"name": "thumb", "value": True}],                   # not even an object
+        # r1 R43: `calibration_label` is a *stored* entry name, never an input one.
+        # It is in the vocabulary because a row carries it, and refused here because
+        # only the operator path may author one.
+        b.feedback(FeedbackName.calibration_label, CalibrationLabel.correct.value),
+        # r1 R43: text and comment are bounded at 4000 characters, both of them, so a
+        # form cannot post a document into the feedback table.
+        b.feedback(FeedbackName.comment, "x" * (MAX_FEEDBACK_TEXT_CHARS + 1)),
+        b.feedback(FeedbackName.thumb, True, comment="y" * (MAX_FEEDBACK_TEXT_CHARS + 1)),
     )
     for n, body in enumerate(bad_bodies):
         try:
@@ -1381,11 +1506,15 @@ async def feedback_ack__the_body_is_one_valid_signal_with_a_required_key(factory
     else:
         raise AssertionError("feedback was accepted without an idempotency key")
     assert await harness.port.list_owned(b.auth(), request.request_id) == ()
-    for name, value in ((FeedbackName.thumb, True), (FeedbackName.rating, 5),
-                        (FeedbackName.comment, "clear enough")):
+    # The bound is `>`, not `>=`: exactly 4000 characters is still a note.
+    for n, (name, value) in enumerate(((FeedbackName.thumb, True), (FeedbackName.rating, 5),
+                                       (FeedbackName.comment, "clear enough"),
+                                       (FeedbackName.comment,
+                                        "z" * MAX_FEEDBACK_TEXT_CHARS))):
         record = await harness.port.accept(b.auth(), request.request_id,
                                            b.feedback(name, value),
-                                           b.idem(request, f"fb-{name}", operation="feedback"))
+                                           b.idem(request, f"fb-{n}-{name}",
+                                                  operation="feedback"))
         assert record.name is name and record.value == value
 
 
@@ -1460,70 +1589,245 @@ async def feedback_ack__a_client_cannot_forge_provenance(factory):
             pass
         else:
             raise AssertionError(f"a client set {field}")
-    # r1 R31: `calibration_set` is server-set and exists only through the operator
-    # path, so even an operator session cannot send it on `accept`
+    # r1 R31/R43: `calibration_set` and `rubric_version` are server-set and exist only
+    # through the operator path, so even an operator session cannot send them on `accept`
     for auth in (b.auth(), b.auth(role=Role.operator)):
-        try:
-            await harness.port.accept(auth, request.request_id,
-                                      {**b.feedback(), "calibration_set": "golden"},
-                                      b.idem(request, "fb-cal", operation="feedback"))
-        except errors.InvalidRequest:
-            pass
-        else:
-            raise AssertionError("a client stamped calibration membership")
+        # r1 R50: `by_operator` too. It is refused twice over - by `SERVER_SET` and by
+        # `FeedbackSubmission`'s `extra="forbid"` - and `accept` builds the row from the
+        # validated submission's own three fields, so a smuggled marker cannot reach the
+        # record by construction. Asserted rather than mutated, because no single edit
+        # changes the behaviour.
+        for stamped in ({"calibration_set": True}, {"rubric_version": 3},
+                        {"by_operator": True}):
+            try:
+                await harness.port.accept(auth, request.request_id,
+                                          {**b.feedback(), **stamped},
+                                          b.idem(request, "fb-cal", operation="feedback"))
+            except errors.InvalidRequest:
+                pass
+            else:
+                raise AssertionError(f"a client stamped {sorted(stamped)}")
     # and an operator session on the customer path is still a customer signal
     operator_says = await harness.port.accept(b.auth(role=Role.operator), request.request_id,
                                               b.feedback(FeedbackName.thumb, True),
                                               b.idem(request, "fb-op-customer",
                                                      operation="feedback"))
     assert operator_says.author_role is AuthorRole.customer
-    assert operator_says.calibration_set is None
+    assert operator_says.calibration_set is False and operator_says.rubric_version is None
 
 
 async def feedback_ack__an_operator_may_label_a_calibration_set(factory):
-    """FEEDBACK-ACK / r1 R31+R19+R26: operator provenance exists only through
+    """FEEDBACK-ACK / r1 R31+R19+R26+R43: operator provenance exists only through
     `label_calibration`. It is operator-only, idempotent, audited, and platform-wide:
-    the organization comes from the labelled row, not from the operator's session."""
+    the organization comes from the labelled row, not from the operator's session.
+
+    R43 fixes the persisted shape: one `Feedback` row with
+    `name=calibration_label`, a closed-vocabulary `value`, `calibration_set=True`
+    (a boolean) and a required integer `rubric_version`.
+    """
     harness = factory()
     request, _ = await _owned_request(harness)
     idem = b.idem(request, "cal-1", operation="calibration.label")
+    label = CalibrationLabel.partially_correct.value
     try:
-        await harness.port.label_calibration(b.auth(), request.request_id, "golden", idem)
+        await harness.port.label_calibration(b.auth(), request.request_id, label, 3, idem)
     except errors.Forbidden:
         pass
     else:
         raise AssertionError("a customer labelled a calibration set")
     record = await harness.port.label_calibration(b.auth(role=Role.operator),
-                                                  request.request_id, "golden", idem)
-    assert record.calibration_set == "golden" and record.author_role is AuthorRole.operator
+                                                  request.request_id, label, 3, idem)
+    assert record.name is FeedbackName.calibration_label and record.value == label
+    assert record.calibration_set is True and record.author_role is AuthorRole.operator
+    assert record.rubric_version == 3
     assert record.org_id == request.org_id          # the row's tenant, not the operator's
     assert await harness.port.label_calibration(b.auth(role=Role.operator), request.request_id,
-                                                "golden", idem) == record      # idempotent
-    for bad_label, bad_idem in (("", idem), ("   ", idem),
-                                ("golden", b.idem(request, None,
-                                                  operation="calibration.label"))):
+                                                label, 3, idem) == record       # idempotent
+    # A label outside the vocabulary, a rubric version that is not a bounded integer,
+    # and a missing idempotency key are all 400s. "golden" used to be accepted as free
+    # text, which made the calibration set unaggregatable across operators.
+    keyless = b.idem(request, None, operation="calibration.label")
+    for bad_label, bad_version, bad_idem in (
+        ("golden", 3, idem), ("", 3, idem), ("   ", 3, idem),
+        (label, 0, idem), (label, MAX_RUBRIC_VERSION + 1, idem), (label, True, idem),
+        (label, "3", idem), (label, 1.5, idem), (label, None, idem),
+        (label, 3, keyless),
+    ):
         try:
             await harness.port.label_calibration(b.auth(role=Role.operator), request.request_id,
-                                                 bad_label, bad_idem)
+                                                 bad_label, bad_version, bad_idem)
         except errors.InvalidRequest:
             pass
         else:
-            raise AssertionError(f"label {bad_label!r} with key {bad_idem.key!r} was accepted")
+            raise AssertionError(f"label {bad_label!r} rubric {bad_version!r} with key "
+                                 f"{bad_idem.key!r} was accepted")
+    # r1 R43: a label's own comment is bounded like any other feedback text.
+    try:
+        await harness.port.label_calibration(
+            b.auth(role=Role.operator), request.request_id, label, 3,
+            b.idem(request, "cal-long", operation="calibration.label"),
+            comment="c" * (MAX_FEEDBACK_TEXT_CHARS + 1))
+    except errors.InvalidRequest:
+        pass
+    else:
+        raise AssertionError("a calibration comment over the text bound was accepted")
     # r1 R26: platform-wide. An operator whose own session names another organization
     # still labels this row, and the label belongs to the *row's* tenant - a store
     # using `auth.org_id` would file it under the operator's org, where the customer
     # who owns the trace could never see it and the calibration set would be split.
     foreign_operator = b.auth(org_id=b.ORG_B, key_id=b.KEY_B, role=Role.operator)
     cross = await harness.port.label_calibration(
-        foreign_operator, request.request_id, "golden",
+        foreign_operator, request.request_id, label, 7,
         b.idem(request, "cal-cross", operation="calibration.label"))
     assert cross.org_id == request.org_id, "the label was filed under the operator's org"
-    assert cross.author_role is AuthorRole.operator and cross.calibration_set == "golden"
+    assert cross.author_role is AuthorRole.operator and cross.calibration_set is True
+    assert cross.rubric_version == 7
     entries = [entry for entry in hook(harness, "audit")()
                if entry.get("event") == "label_calibration"]
-    assert len(entries) == 2 and {entry["label"] for entry in entries} == {"golden"}
+    assert len(entries) == 2 and {entry["label"] for entry in entries} == {label}
+    assert {entry["rubric_version"] for entry in entries} == {3, 7}
     assert entries[0]["operator"] == b.auth(role=Role.operator).principal
     assert all(entry["org_id"] == request.org_id for entry in entries)
+
+
+async def feedback_ack__calibration_labels_are_operator_data(factory):
+    """FEEDBACK-ACK / r1 R35+R41+R49+R50: a calibration label is read through
+    `list_calibration` and nowhere else, and no customer view names an operator.
+
+    The label is filed under the customer's own organization (R26), so "the caller owns
+    the row" is not the filter that protects it. R49: `list_owned` excludes labels for
+    **every** caller, operators included, so no viewer has to remember which list it is
+    reading. R50: the masking keys on the server-set `by_operator` marker, not on
+    `author_role` - `accept` always stores `customer` (R31), so a branch on the role was
+    dead code and an operator submitting on a customer's behalf left its address in the
+    customer's own feedback list.
+    """
+    harness = factory()
+    request, _ = await _owned_request(harness)
+    # A principal of its own, so "the customer never sees it" is about the operator's
+    # identity rather than about a key both sessions happen to share.
+    operator = b.auth(key_id=b.KEY_B, role=Role.operator)
+    mine = await harness.port.accept(b.auth(), request.request_id,
+                                     b.feedback(FeedbackName.rating, 4),
+                                     b.idem(request, "fb-mine", operation="feedback"))
+    assert mine.by_operator is False, "a customer's own entry is not an operator's"
+    # r1 R50: an operator pressing the same button is still a customer *signal*, but the
+    # row records that the platform made it.
+    on_behalf = await harness.port.accept(operator, request.request_id,
+                                          b.feedback(FeedbackName.comment, "from support"),
+                                          b.idem(request, "fb-onbehalf", operation="feedback"))
+    assert on_behalf.author_role is AuthorRole.customer, "R31: still a customer signal"
+    assert on_behalf.by_operator is True, "R50: but the platform is recorded as having acted"
+    label = await harness.port.label_calibration(
+        operator, request.request_id, CalibrationLabel.incorrect.value, 2,
+        b.idem(request, "cal-1", operation="calibration.label"))
+
+    customer_view = await harness.port.list_owned(b.auth(), request.request_id)
+    assert [row.feedback_id for row in customer_view] == [mine.feedback_id,
+                                                          on_behalf.feedback_id], \
+        "a customer was shown a calibration label"
+    assert all(not row.calibration_set for row in customer_view)
+    assert all(row.author_principal != operator.principal for row in customer_view)
+    # the entry the operator submitted reads `platform`, not the operator's address
+    masked = next(row for row in customer_view if row.feedback_id == on_behalf.feedback_id)
+    assert masked.author_principal == PLATFORM_ACTOR, \
+        "an operator-made entry must read `platform` to a customer (R41/R50)"
+    assert customer_view[0].author_principal == b.auth().principal, \
+        "the organization's own entry keeps its own principal"
+
+    # r1 R49: the operator's `list_owned` has no labels in it either, but it does name the
+    # real principal on an ordinary entry.
+    operator_view = await harness.port.list_owned(operator, request.request_id)
+    assert label.feedback_id not in {row.feedback_id for row in operator_view}, \
+        "R49: labels are read through list_calibration, not list_owned"
+    assert all(not row.calibration_set for row in operator_view)
+    assert any(row.author_principal == operator.principal for row in operator_view), \
+        "an operator sees the real principal of an ordinary entry"
+    only_labels = await harness.port.list_calibration(operator, request.request_id)
+    assert [row.feedback_id for row in only_labels] == [label.feedback_id]
+    assert only_labels[0].author_principal == operator.principal
+    try:
+        await harness.port.list_calibration(b.auth(), request.request_id)
+    except errors.Forbidden:
+        pass
+    else:
+        raise AssertionError("a customer read the calibration list")
+
+    # r1 R49/R50 for the body, and R54: a list is built only through the projection.
+    stored = (mine, label, on_behalf)
+    published = FeedbackList.for_viewer(stored, operator=False)
+    assert [row.id for row in published.items] == [mine.feedback_id, on_behalf.feedback_id], \
+        "a published list carried a calibration label"
+    assert published.items[1].author_principal == PLATFORM_ACTOR
+    assert published.items[1].author_role is AuthorRole.customer
+    as_operator = FeedbackList.for_viewer(stored, operator=True)
+    assert [row.id for row in as_operator.items] == [mine.feedback_id, on_behalf.feedback_id]
+    assert as_operator.items[1].author_principal == operator.principal
+    # r1 R50: the marker never leaves the service - it is not a field of the public entry
+    assert "by_operator" not in type(published.items[0]).model_fields
+    # r1 R54: the raw constructor refuses, so the projection cannot be skipped
+    try:
+        FeedbackList(items=())
+    except Exception:
+        pass
+    else:
+        raise AssertionError("a FeedbackList was built without the viewer projection")
+
+    # r1 R54: a replay is projected like a read, and never returns a row of another kind.
+    label_key = b.idem(request, "cal-shared", operation="calibration.label")
+    labelled = await harness.port.label_calibration(
+        operator, request.request_id, CalibrationLabel.correct.value, 4, label_key)
+    try:
+        await harness.port.accept(b.auth(), request.request_id, b.feedback(), label_key)
+    except errors.IdempotencyConflict:
+        pass
+    else:
+        raise AssertionError("a customer replayed an operator's calibration key through accept")
+    accept_key = b.idem(request, "fb-shared", operation="feedback")
+    plain = await harness.port.accept(operator, request.request_id,
+                                      b.feedback(FeedbackName.thumb, True), accept_key)
+    try:
+        await harness.port.label_calibration(
+            operator, request.request_id, CalibrationLabel.correct.value, 4, accept_key)
+    except errors.IdempotencyConflict:
+        pass
+    else:
+        raise AssertionError("a customer feedback key was replayed as a calibration label")
+    # and the replay a customer *is* entitled to is masked exactly as the read was
+    replayed = await harness.port.accept(b.auth(), request.request_id,
+                                         b.feedback(FeedbackName.comment, "from support"),
+                                         b.idem(request, "fb-onbehalf", operation="feedback"))
+    assert replayed.feedback_id == on_behalf.feedback_id, "the replay returns the original row"
+    assert replayed.author_principal == PLATFORM_ACTOR, \
+        "a replay must mask the operator exactly as a read does (R54)"
+    assert (await harness.port.accept(operator, request.request_id,
+                                      b.feedback(FeedbackName.thumb, True),
+                                      accept_key)).author_principal == operator.principal, \
+        "an operator replaying its own entry still sees itself"
+    assert labelled.rubric_version == 4 and plain.by_operator is True
+
+
+async def feedback_ack__a_suspended_organization_cannot_submit_but_can_read(factory):
+    """FEEDBACK-ACK / r1 R33: suspension gates new work and configuration changes.
+
+    `accept` is `org_suspended`; every read keeps working, because a suspended tenant
+    still has to be able to see what it submitted (and, in the console, revoke a leaked
+    key). Existing rows are never altered.
+    """
+    harness = factory()
+    request, _ = await _owned_request(harness)
+    before = await harness.port.accept(b.auth(), request.request_id, b.feedback(),
+                                       b.idem(request, "fb-before", operation="feedback"))
+    hook(harness, "suspend_org")(b.ORG_A)
+    try:
+        await harness.port.accept(b.auth(), request.request_id,
+                                  b.feedback(FeedbackName.thumb, True),
+                                  b.idem(request, "fb-after", operation="feedback"))
+    except errors.OrgSuspended as exc:
+        assert errors.http_status(exc.code) == 403
+    else:
+        raise AssertionError("a suspended organization submitted feedback")
+    assert await harness.port.list_owned(b.auth(), request.request_id) == (before,)
 
 
 def feedback_cases():
@@ -1532,7 +1836,9 @@ def feedback_cases():
             feedback_ack__ownership_does_not_wait_for_the_projection,
             feedback_ack__replay_is_idempotent_and_a_changed_payload_conflicts,
             feedback_ack__a_client_cannot_forge_provenance,
-            feedback_ack__an_operator_may_label_a_calibration_set]
+            feedback_ack__an_operator_may_label_a_calibration_set,
+            feedback_ack__calibration_labels_are_operator_data,
+            feedback_ack__a_suspended_organization_cannot_submit_but_can_read]
 
 
 # ==========================================================================
@@ -1541,7 +1847,7 @@ def feedback_cases():
 def _run(harness, org_id=b.ORG_A):
     from ..records import JudgeRun
     return JudgeRun(run_id=harness.ids.uuid(), org_id=org_id, sample_ids=(harness.ids.uuid(),),
-                    consent=b.consent(org_id), rubric_version="rubric_v1",
+                    consent=b.consent(org_id), rubric_version=1,     # r1 R43: an integer
                     model_revision="claude-opus-5", state=JudgeRunState.dry_run,
                     created_at=harness.clock.now())
 

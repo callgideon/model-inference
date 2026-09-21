@@ -59,8 +59,30 @@ T = "contracts/fakes/traces.py"
 F = "contracts/fakes/feedback.py"
 Q = "contracts/fakes/scheduling.py"
 R = "contracts/records.py"
+W = "contracts/wire.py"                 # public bodies: projections and input bounds
 MONEY = "contracts/money.py"
 
+# --- how a mutant is allowed to die (r1 round-3 review) --------------------------------
+# A port is a trust boundary, so a kill that depends on an *untyped* exception is a case a
+# real adapter could fail for the wrong reason: a store answering the typed `DomainError`
+# the contract promises must not crash the case. Every committed mutant now dies on an
+# assertion or on a typed `DomainError`, with exactly **two** deliberate exceptions, both
+# of which are guards whose entire purpose is to stop an untyped error escaping:
+#
+# * `mime_string_accepted` - `create_upload`'s allow-list check. Removing it lets
+#   `tuple(5)` raise `TypeError` out of the port, which *is* the defect; adding a second
+#   defensive conversion would make the first guard unkillable, because the port would
+#   then answer `invalid_request` either way. The case asserts the typed code on the
+#   unmutated path.
+# * `add_raises_on_a_non_byte_part` - R37 says `TraceCapture.add` **never raises into the
+#   request path**. The invariant is the absence of an exception, so the only way to break
+#   it is to raise one, and the only honest kill is the raise.
+#
+# The six `ValidationError` kills the review found are gone: `FakeFeedbackService._row`
+# maps a record-validation failure to `internal_error`, because the row's fields are
+# server-chosen and a bad one is our bug rather than the caller's. The two `KeyError`
+# kills are gone too - the trace cases read `loss_reasons` with `.get(..., 0)`, so a
+# missing count is an assertion about a number and not a dictionary lookup that explodes.
 MUTANTS: tuple[Mutant, ...] = (
     # --- identity, idempotency and tenancy -----------------------------------
     _m("admit_replays_any_org", "an idempotency scope belongs to the request's own org",
@@ -98,20 +120,69 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("admit_skips_entitlement", "entitlement is rechecked in the transaction (R10)",
        S, 'raise errors.ModelNotEntitled(\n                    f"org {request.org_id} is not entitled to {request.model_revision}")',
        "pass", "dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction"),
-    _m("admit_trusts_an_unpriced_model", "an unpriced model fails closed",
+    _m("admit_trusts_an_unpriced_model", "an unpriced model fails closed (R45)",
        S, 'raise errors.InvalidRequest("no price snapshot for the requested model")',
-       'snapshot = {"price_version": "pv_mutant", "model_revision": request.model_revision,\n'
-       '                        "input_rate_per_million": "0", "output_rate_per_million": "0",\n'
-       '                        "token_rules_version": "tr_v1", "captured_at": self.clock.now()}',
+       'snapshot = PriceSnapshot(price_version="pv_mutant",\n'
+       '                                     model_revision=request.model_revision,\n'
+       '                                     input_rate_per_million=money.ZERO,\n'
+       '                                     output_rate_per_million=money.ZERO,\n'
+       '                                     token_rules_version="tr_v1",\n'
+       '                                     captured_at=now)',
+       "dur_admit__a_refused_admission_reserves_nothing"),
+    # r1 R45: the price is the store's fact. This is the shape the fake used to have.
+    _m("admit_prices_from_the_request", "the price never comes from the request (R45)",
+       S, "        snapshot = self.price_for(request.model_revision, now)",
+       "        snapshot = request.parameters.get(\"price_snapshot\") if request.parameters else None\n"
+       "        snapshot = PriceSnapshot.model_validate(snapshot) if snapshot else None",
+       "dur_settle__the_store_rounds_half_up_once",
+       "dur_admit__a_refused_admission_reserves_nothing"),
+    _m("admit_prices_another_model", "a price snapshot names the requested model (R45)",
+       S, "        if snapshot.model_revision != request.model_revision:",
+       "        if False:",
        "dur_admit__a_refused_admission_reserves_nothing"),
     _m("admit_reserves_before_validating", "a refused admission reserves nothing",
-       S, "            price = self._price(request)\n            self.journal.reserve(request.request_id)",
-       "            self.journal.reserve(request.request_id)\n            price = self._price(request)",
+       S, "            price = self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price)\n"
+          "            self._check_balance(request.org_id, hold)\n"
+          "            self.journal.reserve(request.request_id)",
+       "            self.journal.reserve(request.request_id)\n"
+          "            price = self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price)\n"
+          "            self._check_balance(request.org_id, hold)",
        "dur_admit__a_refused_admission_reserves_nothing"),
-    _m("admit_accepts_a_negative_hold", "a negative maximum hold is refused (R11)",
-       S, 'hold = money_input(hold, "the maximum hold")', "hold = money.parse(hold)",
-       "dur_cap__a_negative_maximum_hold_is_refused",
-       "dur_admit__a_refused_admission_reserves_nothing"),
+    # r1 R53: the hold is the store's, from the snapshot it took in the same
+    # transaction. These are the two ways to get that wrong.
+    _m("admit_uses_a_caller_supplied_hold", "no caller-supplied hold (R53)",
+       S, "            hold = self._derive_hold(request, price)",
+       '            hold = money.parse(request.parameters.get("hold", "0.00070000"))',
+       "dur_settle__a_price_change_never_undersizes_the_hold",
+       "dur_cap__a_negative_maximum_hold_is_refused"),
+    _m("admit_holds_for_the_wrong_ceilings", "the hold covers the validated ceilings (R53)",
+       S, "        return price.maximum_hold(request.max_input_tokens, request.max_output_tokens)",
+       "        return price.maximum_hold(request.max_input_tokens, 0)",
+       "dur_settle__a_price_change_never_undersizes_the_hold",
+       "dur_cap__a_hold_is_checked_against_available_not_the_ledger"),
+    _m("admit_checks_the_balance_before_pricing", "the balance gate sees the derived hold (R53)",
+       S, "            price = self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price)\n"
+          "            self._check_balance(request.org_id, hold)",
+       "            self._check_balance(request.org_id, money.ZERO)\n"
+          "            price = self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price)",
+       "dur_cap__hold_cannot_exceed_the_available_balance",
+       "dur_cap__a_hold_is_checked_against_available_not_the_ledger"),
+    _m("settlement_prices_at_the_current_rate", "settlement uses the admitted snapshot (R53)",
+       S, "            candidate = job.admission.price_snapshot.debit(usage.prompt_tokens,",
+       "            candidate = (self.price_for(job.request.model_revision, now)\n"
+          "                         or job.admission.price_snapshot).debit(usage.prompt_tokens,",
+       "dur_settle__a_price_change_never_undersizes_the_hold"),
+    _m("load_work_reports_the_current_price", "load_work carries the admitted snapshot (R53)",
+       S, "                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets)",
+       "                        price_snapshot=(self.price_for(job.request.model_revision,\n"
+          "                                                     self.clock.now())\n"
+          "                                        or job.admission.price_snapshot),\n"
+          "                        budgets=job.budgets)",
+       "dur_settle__a_price_change_never_undersizes_the_hold"),
     _m("admit_ignores_the_balance", "a hold cannot exceed the available balance",
        S, 'raise errors.InsufficientCredit(\n                f"maximum hold exceeds available balance for org {org_id}")', "pass",
        "dur_cap__hold_cannot_exceed_the_available_balance",
@@ -171,12 +242,21 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "            job.lease = job.lease.model_copy(update={",
        "            job.lease = lease.model_copy(update={",
        "dur_fence__a_lease_is_a_fencing_token_not_a_record"),
+    # R46 split the fence in two, so each enforcement point has its own anchor: the
+    # shared two-line form matched both and the mutant edited whichever came first.
     _m("deadlines_do_not_bind_mutations", "deadlines bind every fenced mutation (R29)",
-       S, "        self._enforce_deadlines(job)\n        return job", "        return job",
+       S, "        self._enforce_deadlines(job)\n"
+          "        if self.clock.now() >= job.lease.expires_at:\n"
+          '            raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")\n'
+          "        return job",
+       "        if self.clock.now() >= job.lease.expires_at:\n"
+          '            raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")\n'
+          "        return job",
        "dur_fence__a_lease_is_a_fencing_token_not_a_record"),
     _m("preparation_deadline_unenforced", "a dead preparation worker frees its job (R29)",
-       S, "            self._enforce_deadlines(job)\n            for ref in media:",
-       "            for ref in media:",
+       S, "            # worker cannot pick up something nobody is waiting for any more.\n"
+          "            self._enforce_deadlines(job)",
+       "            # worker cannot pick up something nobody is waiting for any more.",
        "dur_output__a_late_preparation_worker_finds_a_terminal_job"),
     # --- phase deadlines (R20) ------------------------------------------------
     _m("phase_deadline_uncapped", "no phase instant outlives deadline_at (R20)",
@@ -419,6 +499,54 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("fsync_claimed_at_flush", "durability begins at fsync",
        T, "        if (now - self._last_fsync).total_seconds() >= self.limits.trace_fsync_interval_s:",
        "        if True:", "trace_bounds__in_memory_appended_and_fsynced_are_separate_states"),
+    # --- r1 R46: preparation fencing and work loading --------------------------
+    _m("prepared_is_unfenced", "prepared is fenced on the preparation lease (R46)",
+       S, "            job = self._fence_preparation(lease)\n"
+          "            for ref in media:",
+       "            job = self.jobs[lease.job_id]\n"
+          "            for ref in media:",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("preparation_generation_ignored", "a stale preparation generation is fenced (R46)",
+       S, "        if job.preparation_generation != lease.generation:",
+       "        if False:",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("preparation_owner_ignored", "a preparation lease names its worker (R46)",
+       S, "        if job.preparation_lease.worker_id != lease.worker_id:",
+       "        if False:",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("preparation_expiry_ignored", "an expired preparation lease fences nothing (R46)",
+       S, "        if self.clock.now() >= job.preparation_lease.expires_at:",
+       "        if False:",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("preparation_lease_kind_ignored", "the two lease kinds are not interchangeable (R46)",
+       S, "        if lease.kind is not LeaseKind.preparation:\n"
+          "            raise errors.StaleLease(f\"{lease.kind} lease cannot fence preparation\")",
+       "        pass",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("inference_lease_kind_ignored", "a preparation lease cannot fence execution (R46)",
+       S, "        if lease.kind is not LeaseKind.inference:\n"
+          "            # r1 R46: the two attempt sequences have separate counters, so a preparation\n"
+          "            # lease at generation 1 would otherwise pass as inference generation 1.\n"
+          "            raise errors.StaleLease(f\"{lease.kind} lease cannot fence execution\")",
+       "        pass",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("two_preparation_workers_at_once", "one live preparation lease per job (R46)",
+       S, "            if live is not None and now < live.expires_at:",
+       "            if False:",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("lost_preparation_is_never_reaped", "recover reaps a lost preparation worker (R46)",
+       S, "        if (job.state is JobState.preparing and job.preparation_lease is not None\n"
+          "                and now >= job.preparation_lease.expires_at):",
+       "        if False:",
+       "dur_output__a_lost_preparation_worker_is_reaped_within_bounds"),
+    _m("load_work_is_unfenced", "load_work hands out nothing to a fenced lease (R46)",
+       S, "            job = (self._fence_preparation(lease) if lease.kind is LeaseKind.preparation\n"
+          "                   else self._fence(lease))",
+       "            job = self.jobs[lease.job_id]",
+       "dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise"),
+    _m("load_work_hides_the_prepared_refs", "load_work carries what preparation produced (R46)",
+       S, "                        prepared_refs=job.prepared,", "                        prepared_refs=(),",
+       "dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise"),
     # --- feedback -------------------------------------------------------------
     _m("feedback_operator_role_from_session", "accept always records customer (R31)",
        F, "            author_role=AuthorRole.customer,",
@@ -428,12 +556,318 @@ MUTANTS: tuple[Mutant, ...] = (
        F, '            raise errors.Forbidden("labelling a calibration set requires a platform operator")',
        "            pass", "feedback_ack__an_operator_may_label_a_calibration_set"),
     _m("calibration_not_idempotent", "a calibration label is idempotent",
-       F, "        existing = self.idem.get(idem.scope)\n        if existing is not None:\n"
-          "            payload_hash, feedback_id = existing\n"
-          "            if payload_hash != idem.payload_hash:\n"
-          "                raise errors.IdempotencyConflict(\"same label key, different payload\")\n"
-          "            return self.items[feedback_id]",
-       "        existing = None", "feedback_ack__an_operator_may_label_a_calibration_set"),
+       F, "        replay = self._replay(idem, LABEL, auth)\n        if replay is not None:\n"
+          "            return replay",
+       "        pass", "feedback_ack__an_operator_may_label_a_calibration_set"),
+    # --- B4: the eight invariants whose mutants the reviewer found surviving --------
+    _m("price_read_from_the_request_again", "the price is never read from the request (q30)",
+       S, "        snapshot = self.price_for(request.model_revision, now)",
+       "        carried = (request.parameters or {}).get(\"price_snapshot\")\n"
+       "        snapshot = (PriceSnapshot.model_validate(carried) if carried\n"
+       "                    else self.price_for(request.model_revision, now))",
+       "dur_admit__a_refused_admission_reserves_nothing"),
+    _m("prepared_takes_foreign_media", "prepared refs are the job's own tenant's (q22)",
+       S, '                    raise errors.Forbidden("prepared media must belong to the job\'s org")',
+       "                    pass",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("prepare_falls_back_to_any_job", "prepare resolves this job's refs or nothing (q23)",
+       M, "        sources = self.by_job.get(job_id)\n"
+          "        if sources is None:\n"
+          '            raise errors.NotFound(f"no staged media for job {job_id}")',
+       "        sources = self.by_job.get(job_id)\n"
+          "        if sources is None:\n"
+          "            sources = next(iter(self.by_job.values()), None)\n"
+          "        if sources is None:\n"
+          '            raise errors.NotFound(f"no staged media for job {job_id}")',
+       "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
+    _m("load_work_reports_current_budgets", "load_work carries the R4 budgets (q16)",
+       S, "                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets)",
+       "                        price_snapshot=job.admission.price_snapshot,\n"
+          "                        budgets=Budgets.of(self.limits, job.request.execution_mode))",
+       "dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise"),
+    # Three mutants were **removed** in the R52/R54 pass rather than forced, because the
+    # defects they described stopped being representable:
+    #
+    # * `heartbeat_renews_a_preparation_lease` - R52 makes `heartbeat` renew one, so
+    #   "nothing renews it" is no longer the contract. `preparation_heartbeat_does_not_renew`
+    #   and `preparation_heartbeat_buys_phase_time` replace it.
+    # * `prepared_ignores_the_phase_deadline` - R52 clamps a preparation lease to
+    #   `preparation_deadline_at`, so a live lease can never be past it and the lease-expiry
+    #   refusal always fires first. `preparation_lease_outlives_its_phase` kills the clamp.
+    # * `preparation_retries_unbounded` - R52 has `recover` terminalize after the last
+    #   permitted loss, so the count check in `claim_preparation` is now the second line of
+    #   defence and no case can observe its absence.
+    #   `exhausted_preparation_is_redispatched` kills the reaper's own decision.
+    #
+    # Keeping an unkillable mutant would fail the run; keeping it *and* weakening a case to
+    # kill it would be the false kill R40 forbids.
+    # --- r1 round-3: the six non-equivalent survivors the reviewer found -----------
+    _m("preparation_heartbeat_skips_the_fence", "a superseded worker renews nothing (s13)",
+       S, "                job = self._fence_preparation(lease)\n"
+          "                job.preparation_lease = job.preparation_lease.model_copy(update={",
+       "                job = self.jobs[lease.job_id]\n"
+          "                job.preparation_lease = job.preparation_lease.model_copy(update={",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("hold_rounds_half_up", "the maximum hold rounds up, never half up (s01)",
+       MONEY, "def maximum_hold(max_input_tokens: int, max_output_tokens: int, input_rate: Decimal, output_rate: Decimal) -> Decimal:",
+       "def maximum_hold(max_input_tokens: int, max_output_tokens: int, input_rate: Decimal, output_rate: Decimal) -> Decimal:\n"
+       "    return half_up(cost(max_input_tokens, max_output_tokens, input_rate, output_rate))",
+       "dur_cap__the_hold_rounds_up_never_half_up"),
+    _m("replay_rederives_the_hold", "a replay reports the original hold and price (s05)",
+       S, "        job = self.jobs[record.request_id]\n"
+          '        return self._snapshot(job).model_copy(update={"replayed": True})',
+       "        job = self.jobs[record.request_id]\n"
+          "        current = self.price_for(job.request.model_revision, now)\n"
+          '        return self._snapshot(job).model_copy(update={"replayed": True,\n'
+          '            "price_snapshot": current or job.admission.price_snapshot,\n'
+          "            \"maximum_hold\": self._derive_hold(job.request,\n"
+          "                                              current or job.admission.price_snapshot)})",
+       "dur_admit__a_replay_reports_the_original_hold_and_price"),
+    _m("replay_refreshes_the_admitted_at", "a replay reports the original admission (t15)",
+       S, "        job = self.jobs[record.request_id]\n"
+          '        return self._snapshot(job).model_copy(update={"replayed": True})',
+       "        job = self.jobs[record.request_id]\n"
+          '        return self._snapshot(job).model_copy(update={"replayed": True,\n'
+          '                                                     "admitted_at": now})',
+       "dur_admit__a_replay_reports_the_original_hold_and_price"),
+    _m("preparation_retries_unbounded", "preparation retries are bounded (q08)",
+       S, "            if job.preparation_attempts > self.limits.max_prepublication_retries:",
+       "            if False:",
+       "dur_output__a_lost_preparation_worker_is_reaped_within_bounds"),
+    _m("requeue_labelled_for_the_wrong_phase", "a requeue carries its own phase's kind (s18)",
+       S, "                               kind=OutboxKind.inference_dispatch,\n"
+          "                               execution_mode=job.request.execution_mode, available_at=now,",
+       "                               kind=OutboxKind.prepare_dispatch,\n"
+          "                               execution_mode=job.request.execution_mode, available_at=now,",
+       "dur_output__every_requeued_candidate_carries_the_right_kind"),
+    _m("lost_inference_emits_a_prepare_dispatch", "a lost attempt dispatches for its own phase (s18)",
+       S, '            self._emit(job.id, OutboxKind.inference_dispatch, now, {"request_id": job.id,\n'
+          '                                                                    "attempt": job.attempts})',
+       '            self._emit(job.id, OutboxKind.prepare_dispatch, now, {"request_id": job.id,\n'
+          '                                                               "attempt": job.attempts})',
+       "dur_output__every_requeued_candidate_carries_the_right_kind"),
+    # --- r1 R55: untrusted store inputs -----------------------------------------
+    _m("attach_trusts_a_caller_supplied_org", "attach reads the org from the job row (R55)",
+       M, "        org_id = self.job_org(job_id)", '        org_id = refs[0].org_id if refs else ""',
+       "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
+    _m("attach_stores_before_validating", "a refused attach stores nothing (R55/s15)",
+       M, "        org_id = self.job_org(job_id)\n        for ref in refs:",
+       "        org_id = self.job_org(job_id)\n        self.by_job[job_id] = tuple(refs)\n"
+       "        for ref in refs:",
+       "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
+    _m("admit_accepts_a_zero_output_ceiling", "a zero ceiling never means a free request (R55)",
+       S, "        if not 1 <= request.max_output_tokens <= limits.max_output_tokens:",
+       "        if request.max_output_tokens > limits.max_output_tokens:",
+       "dur_admit__the_token_ceilings_are_range_checked"),
+    _m("admit_drops_the_output_ceiling_upper_bound", "the output ceiling has an upper bound (t05)",
+       S, "        if not 1 <= request.max_output_tokens <= limits.max_output_tokens:",
+       "        if not 1 <= request.max_output_tokens:",
+       "dur_admit__the_token_ceilings_are_range_checked"),
+    _m("admit_accepts_a_zero_input_ceiling", "an input ceiling is at least one (R55)",
+       S, "        if request.max_input_tokens < 1:", "        if False:",
+       "dur_admit__the_token_ceilings_are_range_checked"),
+    _m("admit_accepts_a_request_past_the_context_cap", "the ceilings fit the context (R55)",
+       S, "        if total > limits.max_context_tokens:", "        if False:",
+       "dur_admit__the_token_ceilings_are_range_checked"),
+    _m("claim_candidate_swallows_an_unknown_kind", "an unknown kind is typed (R55)",
+       Q, "        if kind is not None and kind not in DISPATCH_KINDS:", "        if False:",
+       "dur_outbox__a_candidate_carries_its_dispatch_kind"),
+    _m("operator_author_without_the_marker", "an operator author is marked (R55)",
+       F, "            author_principal=auth.principal, author_role=AuthorRole.operator,\n"
+          "            by_operator=True,                # r1 R50: a label is always an operator's",
+       "            author_principal=auth.principal, author_role=AuthorRole.operator,\n"
+          "            by_operator=bool(auth.role and False),  # r1 R50",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    # --- r1 R55 / B1: the phase deadline is enforced before lease expiry -----------
+    # `prepared_ignores_the_phase_deadline` was removed in the R52 pass as
+    # "unrepresentable". It was not: R52's clamp made the *expiry* check fire first, so
+    # `_enforce_deadlines` became dead code and the invariant regressed. That is what made
+    # the mutant unkillable, and it is restored here with the case that shows the
+    # difference - deleting the call must fail, and so must putting expiry back in front.
+    _m("prepared_ignores_the_phase_deadline", "the phase deadline binds prepared itself (R29/R55)",
+       S, "        # r1 R55/R29: the phase first, because a clamped lease expires with it.\n"
+          "        self._enforce_deadlines(job)\n"
+          "        if self.clock.now() >= job.preparation_lease.expires_at:",
+       "        if self.clock.now() >= job.preparation_lease.expires_at:",
+       "dur_output__a_heartbeating_preparation_worker_is_terminalized_on_time"),
+    _m("inference_expiry_checked_before_the_deadline", "the deadline goes first, both paths (t02)",
+       S, "        self._enforce_deadlines(job)\n"
+          "        if self.clock.now() >= job.lease.expires_at:\n"
+          '            raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")\n'
+          "        return job",
+       "        if self.clock.now() >= job.lease.expires_at:\n"
+          '            raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")\n'
+          "        self._enforce_deadlines(job)\n        return job",
+       "dur_fence__an_overdue_inference_lease_terminalizes_in_the_same_call"),
+    _m("preparation_expiry_checked_before_the_deadline", "the deadline goes first (R55)",
+       S, "        # r1 R55/R29: the phase first, because a clamped lease expires with it.\n"
+          "        self._enforce_deadlines(job)\n"
+          "        if self.clock.now() >= job.preparation_lease.expires_at:\n"
+          '            raise errors.StaleLease(f"preparation lease expired at "\n'
+          '                                    f"{job.preparation_lease.expires_at}")\n'
+          "        return job",
+       "        if self.clock.now() >= job.preparation_lease.expires_at:\n"
+          '            raise errors.StaleLease(f"preparation lease expired at "\n'
+          '                                    f"{job.preparation_lease.expires_at}")\n'
+          "        self._enforce_deadlines(job)\n        return job",
+       "dur_output__a_heartbeating_preparation_worker_is_terminalized_on_time"),
+    # --- r1 R52: the preparation lease, the tenant check and the dispatch kind ---
+    _m("preparation_lease_uses_the_inference_ttl", "preparation has its own short TTL (R52)",
+       S, "                expires_at=min(now + timedelta(seconds=self.limits.preparation_lease_ttl_s),\n"
+          "                               job.admission.preparation_deadline_at),",
+       "                expires_at=min(now + timedelta(seconds=self.limits.lease_ttl_s),\n"
+          "                               job.admission.preparation_deadline_at),",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution",
+       "dur_output__a_lost_preparation_worker_is_reaped_within_bounds"),
+    _m("preparation_lease_outlives_its_phase", "a preparation lease never outlives the phase (R52)",
+       S, "                expires_at=min(now + timedelta(seconds=self.limits.preparation_lease_ttl_s),\n"
+          "                               job.admission.preparation_deadline_at),",
+       "                expires_at=now + timedelta(seconds=self.limits.preparation_lease_ttl_s),",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("preparation_heartbeat_does_not_renew", "a preparation lease renews (R52)",
+       S, "                job.preparation_lease = job.preparation_lease.model_copy(update={\n"
+          '                    "expires_at": min(\n'
+          "                        now + timedelta(seconds=self.limits.preparation_lease_ttl_s),\n"
+          "                        job.admission.preparation_deadline_at)})",
+       "                pass",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("preparation_heartbeat_buys_phase_time", "a renewal never extends the phase (R52)",
+       S, '                    "expires_at": min(\n'
+          "                        now + timedelta(seconds=self.limits.preparation_lease_ttl_s),\n"
+          "                        job.admission.preparation_deadline_at)})",
+       '                    "expires_at": now + timedelta(\n'
+          "                        seconds=self.limits.preparation_lease_ttl_s)})",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("exhausted_preparation_is_redispatched", "a spent preparation is settled, not requeued (R52)",
+       S, "            if job.preparation_attempts > self.limits.max_prepublication_retries:\n"
+          "                # r1 R52: but once the retries are spent, redispatching would queue work",
+       "            if False:\n"
+          "                # r1 R52: but once the retries are spent, redispatching would queue work",
+       "dur_output__a_lost_preparation_worker_is_reaped_within_bounds"),
+    _m("attach_ignores_the_tenant", "attached media belongs to the job's org (R52)",
+       M, "            if ref.org_id != org_id:\n"
+          '                raise errors.NotFound("media attached to a job must belong to its org")',
+       "            pass",
+       "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
+    _m("candidates_ignore_the_dispatch_kind", "a candidate carries its kind (R52)",
+       Q, "            if event.available_at <= now and kind in (None, event.kind):",
+       "            if event.available_at <= now:",
+       "dur_outbox__a_candidate_carries_its_dispatch_kind"),
+    _m("index_accepts_any_outbox_kind", "the index carries dispatch kinds only (R52)",
+       R, "        if self.kind not in DISPATCH_KINDS:",
+       "        if False:",
+       "dur_outbox__a_candidate_carries_its_dispatch_kind"),
+    # --- r1 R49/R50/R54: replays, the operator marker and the projection --------
+    _m("replay_returns_a_row_of_another_kind", "a replay never crosses operations (R54)",
+       F, "        if entry.made_by != operation:\n"
+          "            raise errors.IdempotencyConflict(\n"
+          '                f"idempotency key {idem.key!r} already belongs to another operation")',
+       "        pass",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("replay_is_not_projected", "a replay is projected like a read (R54)",
+       F, "        projected = visible_feedback((stored,), operator=bool(auth.is_operator))\n"
+          '        assert len(projected) == 1, "accept never stores a label, so nothing is filtered"\n'
+          "        return projected[0]",
+       "        return stored",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("accept_does_not_mark_the_operator", "by_operator is server-set on accept (R50)",
+       F, "            by_operator=bool(auth.is_operator),", "            by_operator=False,",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("masking_keys_on_the_author_role", "masking keys on by_operator, not the role (R50)",
+       R, "        if not operator and item.by_operator:",
+       "        if not operator and item.author_role is AuthorRole.operator:",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("operator_list_owned_returns_labels", "no list_owned returns a label (R49)",
+       R, "        if item.calibration_set:\n            continue",
+       "        if item.calibration_set and not operator:\n            continue",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("wire_list_skips_the_projection", "a viewer list is built only through it (R54)",
+       W, '        raise ValueError("build a FeedbackList through FeedbackList.for_viewer(...), so the "\n'
+          '                         "R35/R41/R49/R50 projection cannot be skipped")',
+       "        return data",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("public_entry_carries_the_marker", "the marker never leaves the service (R50)",
+       W, "    calibration_set: bool = False\n    rubric_version: int | None = None\n\n"
+          "    @classmethod\n    def of(cls, record: Feedback) -> FeedbackEntry:",
+       "    calibration_set: bool = False\n    rubric_version: int | None = None\n"
+          "    by_operator: bool = False\n\n"
+          "    @classmethod\n    def of(cls, record: Feedback) -> FeedbackEntry:",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    # The record's author/marker clauses: the fake never builds an inconsistent row, so
+    # each is made reachable by a fake that stores one. The record must refuse it, which
+    # is what the conformance case sees.
+    _m("label_stored_as_a_customer", "a label is an operator's verdict (R54)",
+       F, "            author_principal=auth.principal, author_role=AuthorRole.operator,",
+       "            author_principal=auth.principal, author_role=AuthorRole.customer,",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    _m("label_stored_without_the_marker", "a label is made by an operator (R50)",
+       F, "            by_operator=True,                # r1 R50: a label is always an operator's",
+       "            by_operator=False,               # r1 R50: a label is always an operator's",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    # --- r1 R43: one persisted calibration shape, and who may read it ----------
+    _m("accept_takes_a_calibration_label_name", "calibration_label is not an input name (R43)",
+       W, "        if self.name not in FEEDBACK_INPUT_NAMES:\n"
+          "            raise ValueError(f\"{self.name} is set by the server, not submitted by a client\")",
+       "        pass",
+       "feedback_ack__the_body_is_one_valid_signal_with_a_required_key"),
+    _m("feedback_text_unbounded", "feedback text is bounded at 4000 characters (R43)",
+       R, "    if isinstance(value, str) and len(value) > limits.MAX_FEEDBACK_TEXT_CHARS:",
+       "    if False:",
+       "feedback_ack__the_body_is_one_valid_signal_with_a_required_key"),
+    _m("calibration_label_is_free_text", "a label comes from a closed vocabulary (R43)",
+       F, "        if label not in tuple(CalibrationLabel):",
+       "        if not isinstance(label, str) or not label.strip():",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    _m("calibration_rubric_unchecked", "a label carries a bounded integer rubric version (R43)",
+       F, "        if isinstance(rubric_version, bool) or not isinstance(rubric_version, int) \\\n"
+          "                or not MIN_RUBRIC_VERSION <= rubric_version <= MAX_RUBRIC_VERSION:",
+       "        if False:",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    _m("calibration_comment_unbounded", "a label's comment is bounded too (R43)",
+       F, "        if comment is not None and (not isinstance(comment, str)\n"
+          "                                   or len(comment) > MAX_FEEDBACK_TEXT_CHARS):",
+       "        if False:",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    # The record's coupling validator (`records.Feedback`) is load-bearing: these two
+    # store a row whose calibration fields disagree, which the record must refuse.
+    _m("label_stored_without_membership", "the three calibration fields are one fact (R43)",
+       F, "            value=label, comment=comment, calibration_set=True,",
+       "            value=label, comment=comment, calibration_set=False,",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    _m("label_stored_without_a_rubric", "a label without a rubric version is refused (R43)",
+       F, "            rubric_version=rubric_version, created_at=now)",
+       "            rubric_version=None, created_at=now)",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    _m("customer_list_shows_labels", "a customer never receives a calibration label (R35)",
+       F, "        return visible_feedback(rows, operator=bool(auth.is_operator))",
+       "        return rows",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("customer_list_shows_the_operator", "an operator principal is projected to platform (R41)",
+       R, "            item = item.model_copy(update={\"author_principal\": PLATFORM_ACTOR})",
+       "            item = item",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("wire_list_publishes_labels", "the wire list applies the same projection (R35/R49)",
+       W, "        visible = visible_feedback(tuple(items), operator=operator)",
+       "        visible = tuple(items)",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("calibration_list_open_to_customers", "the calibration list is operator only (R35)",
+       F, '            raise errors.Forbidden("calibration labels are operator data")', "            pass",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("suspended_org_may_submit_feedback", "feedback from a suspended org is refused (R33)",
+       F, '            raise errors.OrgSuspended(f"org {auth.org_id} is suspended")', "            pass",
+       "feedback_ack__a_suspended_organization_cannot_submit_but_can_read"),
+    _m("suspension_blocks_the_read_too", "a suspended org keeps every read (R33)",
+       F, "        job = self.jobs.jobs.get(request_id)\n"
+          "        if job is None or job.request.org_id != auth.org_id:\n"
+          "            raise errors.NotFound(f\"no request {request_id} owned by org {auth.org_id}\")\n"
+          "        rows = tuple(item for item in self.items.values()",
+       "        job = self.jobs.jobs.get(request_id)\n"
+          "        if job is None or job.request.org_id != auth.org_id:\n"
+          "            raise errors.NotFound(f\"no request {request_id} owned by org {auth.org_id}\")\n"
+          "        if self.is_suspended(auth.org_id):\n"
+          "            raise errors.OrgSuspended(\"suspended\")\n"
+          "        rows = tuple(item for item in self.items.values()",
+       "feedback_ack__a_suspended_organization_cannot_submit_but_can_read"),
     _m("feedback_body_unvalidated", "one valid signal per body (R3)",
        F, '            raise errors.InvalidRequest("a feedback submission needs a name and a value")',
        "            body = {\"name\": \"comment\", \"value\": \"empty\"}",
@@ -450,7 +884,9 @@ MUTANTS: tuple[Mutant, ...] = (
           "        if False:",
        "feedback_ack__ownership_does_not_wait_for_the_projection"),
     _m("feedback_replay_makes_a_second_row", "a replayed submission survives once",
-       F, "        existing = self.idem.get(idem.scope)", "        existing = None",
+       F, "        replay = self._replay(idem, ACCEPT, auth)\n        if replay is not None:\n"
+          "            return replay",
+       "        pass",
        "feedback_ack__replay_is_idempotent_and_a_changed_payload_conflicts"),
     # --- judge ----------------------------------------------------------------
     _m("judge_settle_negative", "a judge cost is validated money (R11)",
@@ -690,19 +1126,24 @@ MUTANTS: tuple[Mutant, ...] = (
        "            pass\n        if self.closed:",
        "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope",
        "trace_bounds__off_mode_produces_no_trace_at_all"),
+    # P18 split the no-op path's combined guard - `envelope.mode is not minimal or
+    # carries_content` - into a general mode check that applies to **every** mode and a
+    # content check for `minimal`. The two halves the r7 pass tested separately are now two
+    # separate guards, so each has its own mutant and the third (which edited the combined
+    # form) is gone. The mode check is edited here against the no-op *case* as well as
+    # against the lattice, because both must be able to see it.
     _m("minimal_capture_trusts_the_envelope_mode", "the capture's mode decides, not the envelope",
-       T, "            if envelope.mode is not TraceMode.minimal or envelope.carries_content:",
-       "            if False:",
+       T, "        if envelope.mode is not self.mode:\n"
+          "            # r1 R12/R37, the same rule the accumulating path enforces: **the capture",
+       "        if False:\n"
+          "            # r1 R12/R37, the same rule the accumulating path enforces: **the capture",
        "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
-    # both halves of that guard, separately: the mode half alone let a raw-assembled
-    # minimal envelope carry content past a customer's metadata-only consent (r7 F1, y3c)
     _m("minimal_capture_keeps_only_the_mode_half", "a minimal capture never stores content",
-       T, "            if envelope.mode is not TraceMode.minimal or envelope.carries_content:",
-       "            if envelope.mode is not TraceMode.minimal:",
-       "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
-    _m("minimal_capture_keeps_only_the_content_half", "a minimal capture checks the mode too",
-       T, "            if envelope.mode is not TraceMode.minimal or envelope.carries_content:",
-       "            if envelope.carries_content:",
+       T, "            if envelope.carries_content:\n"
+          "                self._count(TraceLossReason.malformed)\n"
+          "                return self.sink._drop(TraceLossReason.malformed, counted=True)\n"
+          "            return self.sink._enqueue(envelope, charged=0, capture=self)",
+       "            return self.sink._enqueue(envelope, charged=0, capture=self)",
        "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
     _m("live_capture_trusts_the_envelope_mode", "the capture decides on the live path too (n1)",
        T, "        if envelope.mode is not self.mode:", "        if False:",
@@ -738,6 +1179,67 @@ MUTANTS: tuple[Mutant, ...] = (
           "            if reason is TraceLossReason.queue_full:\n"
           "                self.content_bytes = max(0, self.content_bytes - charged)",
        "trace_bounds__a_dropped_finish_releases_its_charge"),
+    _m("minimal_capture_accumulates", "a quiet mode charges nothing (P08)",
+       T, "        no_op = mode is not TraceMode.full or deadline_at is None",
+       "        no_op = mode is TraceMode.off or deadline_at is None",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    # --- P17/P18: identity and mode, now observable inside the lattice ------------
+    _m("noop_capture_trusts_the_envelope_mode", "the capture decides its own mode (P18)",
+       T, "        if envelope.mode is not self.mode:\n"
+          "            # r1 R12/R37, the same rule the accumulating path enforces: **the capture",
+       "        if False:\n"
+          "            # r1 R12/R37, the same rule the accumulating path enforces: **the capture",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("noop_capture_files_a_foreign_identity", "a row belongs to its capture (P17)",
+       T, "        if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):\n"
+          "            # The same identity check the accumulating path makes: one request's envelope",
+       "        if False:\n"
+          "            # The same identity check the accumulating path makes: one request's envelope",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("live_capture_files_a_foreign_identity", "a live capture checks identity too (P17)",
+       T, "        if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):\n"
+          "            # The single loss this capture contributes is labelled by what went wrong:",
+       "        if False:\n"
+          "            # The single loss this capture contributes is labelled by what went wrong:",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    # --- P08/P10/P11: the guarded lattice invariants that now fire ---------------
+    _m("minimal_capture_stores_content", "a minimal capture never stores content (P08)",
+       T, "            if envelope.carries_content:\n"
+          "                self._count(TraceLossReason.malformed)\n"
+          "                return self.sink._drop(TraceLossReason.malformed, counted=True)\n"
+          "            return self.sink._enqueue(envelope, charged=0, capture=self)",
+       "            return self.sink._enqueue(envelope, charged=0, capture=self)",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("no_deadline_capture_loses_silently", "declared content that is missing says why (P10)",
+       T, '            "content_complete": False, "content_ref": None, "content_bytes": 0,\n'
+          '            "loss_reason": TraceLossReason.abandoned}), charged=0, capture=self)',
+       '            "content_complete": False, "content_ref": None, "content_bytes": 0,\n'
+          '            "loss_reason": TraceLossReason.none}), charged=0, capture=self)',
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("no_deadline_capture_counts_no_loss", "the missing content is counted (P11)",
+       T, "        self.lost_reason = TraceLossReason.abandoned\n"
+          "        self._count(TraceLossReason.abandoned)\n"
+          "        return self.sink._enqueue(envelope.model_copy(update={",
+       "        self.lost_reason = TraceLossReason.abandoned\n"
+          "        return self.sink._enqueue(envelope.model_copy(update={",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    # --- F2.1: the lattice assertions the S1 review found vacuous --------------
+    _m("shutdown_counted_for_nothing", "only a real loss names a reason (R42)",
+       T, "        if lost:\n            # Only a real loss names a reason.",
+       "        if True:\n            # Only a real loss names a reason.",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("closed_capture_still_queues", "a capture closed before any finish stores nothing (R42)",
+       T, "        if self.closed:                      # abandoned or reaped first: nothing to queue",
+       "        if self.closed and self.lost_reason is TraceLossReason.memory_budget:"
+       "  # abandoned or reaped first: nothing to queue",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("flush_drops_instead_of_appending", "a flush appends what it takes out of memory",
+       T, "        self.appended.extend(self.queued)\n        self.queued.clear()",
+       "        self.queued.clear()",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("raw_content_envelope_is_trusted", "the capture decides its mode, never the envelope (R12)",
+       T, "        if envelope.mode is not self.mode:", "        if False:",
+       "trace_bounds__a_live_capture_also_decides_its_own_mode"),
     # --- r8 R42: loss accounting cannot regress -------------------------------
     _m("count_is_not_idempotent", "one loss count per capture, whatever follows (R42)",
        T, "        if self.counted:\n            return\n        self.counted = True",

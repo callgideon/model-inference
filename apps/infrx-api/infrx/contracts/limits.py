@@ -15,14 +15,42 @@ from dataclasses import dataclass, fields
 from decimal import Decimal
 
 MODES = ("dev", "test", "pilot")
+# r1 R44: `INFRX_MODE` has **no default**. The empty string is "the variable is not
+# set", which `config.validate_runtime` maps to the legacy F1 behaviour F1 preserved by
+# rule; G1 replaces "unset -> legacy" with "unset -> refuse" at cutover, in the same
+# change in which I2's installer writes `INFRX_MODE=pilot`.
+MODE_UNSET = ""
 JUDGE_MODES = ("dry_run", "live")
+
+# --- shared input bounds (R17, R43) ------------------------------------------
+# Contract data, not tunables: these are the *same numbers* in both halves, and
+# `tests/contracts/test_parity_console.py` parses the console's constants and
+# compares them here. They are deliberately not `PilotSettings` fields, because
+# no environment variable may widen a bound another language enforces.
+MAX_IDEMPOTENCY_KEY_CHARS = 255          # 08 §3
+MAX_PAGE_LIMIT = 100                     # 08 §9: a hard bound, not a clamp
+MAX_KEY_NAME_CHARS = 200                 # R17
+MAX_GRANT_REASON_CHARS = 500             # R17
+MAX_FEEDBACK_TEXT_CHARS = 4_000          # R43
+MIN_RUBRIC_VERSION = 1                   # R43: an integer everywhere
+MAX_RUBRIC_VERSION = 1_000
+MIN_CONTENT_RETENTION_DAYS = 1           # R43: retention is 1..90, never 0
+MAX_CONTENT_RETENTION_DAYS = 90
+MAX_ENTITLEMENT_LIMIT = 1_000_000        # so a typo cannot mean "unlimited"
+
+# R24: the closed set of per-organization entitlement limit names. An unknown
+# name is `invalid_request`, never a silently ignored control.
+ENTITLEMENT_LIMIT_NAMES = ("max_concurrent_requests", "max_requests_per_minute",
+                           "max_video_seconds")
 
 
 @dataclass(frozen=True)
 class PilotSettings:
     """Provisional engineering limits until measured; values are contracts v1's."""
 
-    infrx_mode: str = "dev"                      # pilot refuses to start unmetered
+    # r1 R44: no default. Unset is unset, not `dev`, because a mode with a default is a
+    # production host that silently runs in whatever the default happens to be.
+    infrx_mode: str = MODE_UNSET
     database_url: str = ""                       # required in pilot
 
     # intake and media
@@ -52,6 +80,11 @@ class PilotSettings:
     ttft_timeout_s: float = 60.0
     tpot_stall_s: float = 20.0
     lease_ttl_s: float = 120.0
+    # r1 R52: preparation gets a **shorter** lease than inference. With one
+    # 120 s TTL and a 120 s preparation budget, a lost preparation worker was
+    # only reaped as the phase deadline passed, so R46's bounded retries could
+    # never actually happen on the default profile. 30 s leaves room for three.
+    preparation_lease_ttl_s: float = 30.0
     lease_heartbeat_s: float = 40.0
     max_prepublication_retries: int = 2
 

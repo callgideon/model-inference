@@ -18,7 +18,9 @@ from infrx.contracts import limits, tasklocal
 # 08 §5, name by name. A rename or a changed default is a contract revision, so it
 # must fail here first.
 EXPECTED = {
-    "INFRX_MODE": "dev", "DATABASE_URL": "",
+    # r1 R44: no default. The empty string is "unset", which `validate_runtime` maps to
+    # the legacy F1 behaviour; `dev` was a default that let a production host run in it.
+    "INFRX_MODE": "", "DATABASE_URL": "",
     "MAX_REQUEST_BYTES": 100663296, "INTAKE_TIMEOUT_S": 30.0,
     "MAX_MEDIA_BYTES": 67108864, "MAX_VIDEO_SECONDS": 120.0,
     # r1 R2: the pilot fetch limits are MEDIA_FETCH_*; F1's FETCH_TIMEOUT_S (30)
@@ -33,6 +35,9 @@ EXPECTED = {
     "QUEUE_WAIT_INTERACTIVE_S": 10.0, "QUEUE_WAIT_ASYNC_S": 600.0,
     "GENERATION_TIMEOUT_S": 300.0, "TTFT_TIMEOUT_S": 60.0, "TPOT_STALL_S": 20.0,
     "LEASE_TTL_S": 120.0, "LEASE_HEARTBEAT_S": 40.0, "MAX_PREPUBLICATION_RETRIES": 2,
+    # r1 R52: preparation leases are shorter than inference ones, so a lost
+    # preparation worker is reaped while its phase budget still has room in it.
+    "PREPARATION_LEASE_TTL_S": 30.0,
     "SSE_KEEPALIVE_S": 10.0, "STREAM_BATCH_MS": 50,
     "JOURNAL_EVENT_MAX_BYTES": 1048576, "JOURNAL_JOB_RESERVE_BYTES": 16777216,
     "JOURNAL_TOTAL_BYTES": 1073741824, "JOURNAL_CHUNK_TTL_S": 3600.0,
@@ -132,6 +137,143 @@ def test_bounds_a_zero_would_disable_are_refused(name):
         config.validate_pilot(pilot)
 
 
+# --- r1 R44: the runtime mode, through the composition root ---------------------
+# These build apps with `create_app()` and injected settings. They never import the
+# legacy `gateway` shim: it mutates process state at import and directories collect
+# before the top-level legacy files, so importing it here would reorder the suite (R48).
+def _app(env, **clients):
+    from infrx.gateway.app import create_app
+    return create_app(config.from_env(env), client=object(), sb=object(), **clients)
+
+
+AUTHENTICATED = {"SUPABASE_URL": "https://example.supabase.co",
+                 "SUPABASE_SERVICE_ROLE_KEY": "not-a-real-key"}
+METERED = {"DATABASE_URL": "postgresql:///x"}
+
+
+def test_an_unset_mode_is_the_legacy_f1_behaviour():
+    """R44: while `INFRX_MODE` is unset the app starts exactly as F1's did, and says so.
+
+    F1 preserved behaviour by rule, so the legacy entry point cannot start refusing;
+    G1 replaces this branch with "unset -> refuse" at cutover.
+    """
+    assert config.runtime_mode(config.from_env({})) == ""
+    assert config.validate_runtime(config.from_env({})) == "legacy"
+    app = _app({})
+    assert app.state.runtime.mode == "legacy"
+    # and the F1 routes are mounted, i.e. "legacy" is the whole app, not a stub
+    paths = {route.path for route in app.routes}
+    assert {"/health", "/v1/models", "/v1/chat/completions"} <= paths
+
+
+def test_pilot_refuses_to_start_unauthenticated_or_unmetered():
+    """R44: `pilot` needs a per-organization identity source *and* a durable store, and
+    the error names the missing settings and nothing else."""
+    for env, expected in (({"INFRX_MODE": "pilot"},
+                           ("DATABASE_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")),
+                          ({"INFRX_MODE": "pilot", **METERED},
+                           ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")),
+                          ({"INFRX_MODE": "pilot", **AUTHENTICATED}, ("DATABASE_URL",))):
+        with pytest.raises(config.RuntimeMisconfigured) as caught:
+            _app(env)
+        assert caught.value.missing == expected, env.get("INFRX_MODE")
+        for name in expected:
+            assert name in str(caught.value)
+
+
+def test_a_pilot_startup_error_never_echoes_a_value():
+    """R44: the message names setting *names*. DATABASE_URL and the service-role key are
+    credentials, and a startup error is the most widely pasted line a process emits."""
+    secret = "postgresql://user:hunter2@db.internal/infrx"
+    with pytest.raises(config.RuntimeMisconfigured) as caught:
+        _app({"INFRX_MODE": "pilot", "DATABASE_URL": secret})
+    message = str(caught.value)
+    assert "hunter2" not in message and secret not in message and "db.internal" not in message
+    assert "SUPABASE_URL" in message
+
+
+def test_pilot_starts_with_authentication_and_metering():
+    app = _app({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED})
+    assert app.state.runtime.mode == "pilot"
+
+
+def test_pilot_refuses_the_shared_legacy_key(caplog):
+    """R51: `pilot` refuses to start with `GATEWAY_API_KEY` set, **even fully configured**.
+
+    `Auth.authenticate` answers `(None, None)` - allowed, with no row - for a request
+    bearing the shared key, so it has no organization, no key id and nothing to meter,
+    entitle or suspend. That is not a fallback, it is an unmetered anonymous door into a
+    metered pilot, and it used to open while validation reported everything in order.
+    """
+    with pytest.raises(config.RuntimeMisconfigured) as caught:
+        _app({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED,
+              "GATEWAY_API_KEY": "one-shared-key"})
+    assert caught.value.forbidden == ("GATEWAY_API_KEY",)
+    assert caught.value.missing == ()
+    # the name, never the value
+    assert "GATEWAY_API_KEY" in str(caught.value) and "one-shared-key" not in str(caught.value)
+    # and the same answer through the settings-only entry point a track uses
+    with pytest.raises(ValueError, match="GATEWAY_API_KEY"):
+        config.validate_pilot(
+            config.pilot_from_env({"INFRX_MODE": "pilot", **METERED}),
+            config.from_env({**AUTHENTICATED, "GATEWAY_API_KEY": "one-shared-key"}))
+
+
+def test_the_allow_all_path_is_unreachable_in_pilot():
+    """R51: with `SUPABASE_URL` required, the other anonymous path is closed too - with
+    no Supabase and no legacy key, `authenticate` also answers "allowed, no row"."""
+    with pytest.raises(config.RuntimeMisconfigured) as caught:
+        _app({"INFRX_MODE": "pilot", **METERED})
+    assert "SUPABASE_URL" in caught.value.missing
+
+
+WHITESPACE = ["", " ", "  ", "\t", "\n", " \t "]
+
+
+@pytest.mark.parametrize("blank", WHITESPACE, ids=[repr(v) for v in WHITESPACE])
+@pytest.mark.parametrize("name", ["DATABASE_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"])
+def test_a_whitespace_only_setting_is_not_configuration(name, blank):
+    """R51: `SUPABASE_URL=" "` passed a truthiness test and then built a client pointed at
+    `" /rest/v1"`, so the pilot started "authenticated" against nothing. A unit file makes
+    a stray space easy to write and impossible to see."""
+    env = {"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED, name: blank}
+    with pytest.raises(config.RuntimeMisconfigured) as caught:
+        _app(env)
+    assert name in caught.value.missing, caught.value.missing
+
+
+def test_a_whitespace_only_legacy_key_is_not_a_legacy_key():
+    """The same rule on the forbidden side: `GATEWAY_API_KEY=" "` is unset, not a shared
+    key, so it must not block a correctly configured pilot."""
+    app = _app({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED, "GATEWAY_API_KEY": "  "})
+    assert app.state.runtime.mode == "pilot"
+
+
+@pytest.mark.parametrize("mode", ["pilo", "PILOT", "production", "legacy", "dev "])
+def test_an_unrecognised_mode_refuses_to_start(mode):
+    """A typo in a unit file is not a mode. `legacy` is spelled by *absence*, so it is
+    refused as a value too."""
+    with pytest.raises(config.RuntimeMisconfigured):
+        _app({"INFRX_MODE": mode})
+
+
+@pytest.mark.parametrize("mode", ["dev", "test"])
+def test_dev_and_test_are_explicit_and_need_nothing_else(mode):
+    app = _app({"INFRX_MODE": mode})
+    assert app.state.runtime.mode == mode
+
+
+def test_the_router_list_is_fixed_and_uses_the_register_protocol():
+    """R44: track routers are modules exposing `register(app, rt)`, added to this literal
+    by the coordinator on an integration request. A discovery walk would let a
+    half-finished track mount itself on the public gateway."""
+    from infrx.gateway import app as composition_root
+    assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
+        ["health", "models", "chat"]
+    for module in composition_root.ROUTERS:
+        assert callable(getattr(module, "register"))
+
+
 def test_f1_gateway_settings_are_untouched():
     """F-BASE: the pilot names are additive; the F1 gateway defaults do not move."""
     gateway = config.from_env({})
@@ -172,20 +314,64 @@ def test_contracts_import_pulls_in_no_track_dependency():
 
 
 def test_the_extras_are_installed_so_the_check_is_meaningful():
-    """Otherwise the test above would pass by accident in a core-only environment."""
+    """Otherwise the test above would pass by accident in a core-only environment.
+
+    A **failure**, not a skip. This used to skip, which meant the one test that gives the
+    import-boundary check its meaning could go quiet and `make api-test` would still print
+    a clean pass: an environment without the extras cannot prove that importing `infrx`
+    leaves them unimported, because there is nothing to leave unimported. `make api-env`
+    (`uv sync --frozen --all-extras`) is what the canonical command depends on, and
+    `uv run --frozen` keeps them, so this failing means the environment is wrong rather
+    than the code.
+    """
     import importlib.util
     missing = [name for name in HEAVY if importlib.util.find_spec(name) is None]
-    if missing:
-        pytest.skip(f"not installed (run uv sync --all-extras): {', '.join(missing)}")
+    assert missing == [], (
+        f"the import-boundary check cannot run: {', '.join(missing)} not installed. "
+        f"Run `make api-env` (uv sync --frozen --all-extras) - a skip here would let "
+        f"`make api-test` report a pass for a check that never ran.")
 
 
 def test_task_local_services_never_collide_across_worktrees():
     """08 §8: one container name, port, database and object prefix per task."""
-    assert tasklocal.all_host_ports()[55432] == "d/postgres"
+    assert tasklocal.all_host_ports()[55432] == "d1/postgres"
     d1 = tasklocal.local_services("D1")["postgres"]
     assert (d1.container, d1.host_port, d1.database, d1.object_prefix) == \
         ("infrx-d1-postgres", 55432, "infrx_d1", "test/d1/")
     assert tasklocal.local_services("d2")["postgres"].container == "infrx-d2-postgres"
+
+
+# r1 R48: PostgreSQL is per **task**. More than one of these is open at once in practice -
+# a coordinator running D2's migration while C1's console suite holds a database - and
+# they all used to be handed 55432, so the second one silently talked to the first's data.
+R48_POSTGRES_PORTS = {"d1": 55432, "d2": 55433, "d3": 55434, "d5": 55436, "d4": 55435,
+                      "d6": 55437, "c1": 55441}
+
+
+@pytest.mark.parametrize("task,port", sorted(R48_POSTGRES_PORTS.items()))
+def test_each_database_task_has_its_own_postgres_port(task, port):
+    service = tasklocal.local_services(task)["postgres"]
+    assert service.host_port == port
+    assert service.container == f"infrx-{task}-postgres"
+    assert service.database == f"infrx_{task}"
+
+
+def test_no_two_tasks_share_a_postgres_port():
+    ports = {task: tasklocal.local_services(task)["postgres"].host_port
+             for task in R48_POSTGRES_PORTS}
+    assert len(set(ports.values())) == len(ports), ports
+    reserved = tasklocal.all_host_ports()
+    for task, port in ports.items():
+        assert reserved[port] == f"{task}/postgres"
+    # and the whole table is still collision-free, which `all_host_ports` enforces
+    assert len(reserved) == len(set(reserved))
+
+
+def test_c1_is_the_only_console_task_with_a_database():
+    """R48 grants C1 a port; the rest of C, and U/V, build against the fakes."""
+    assert tasklocal.local_services("c1")["postgres"].host_port == 55441
+    assert tasklocal.local_services("c2") == {}
+    assert tasklocal.local_services("u1") == {} and tasklocal.local_services("v1") == {}
     assert sorted(tasklocal.local_services("t")) == ["clickhouse", "s3"]
     assert tasklocal.local_services("t")["s3"].host_port != \
         tasklocal.local_services("m")["s3"].host_port

@@ -73,9 +73,16 @@ contract revision, not a track-local edit.
 
 ## U and V: build against the fake
 
+A module reachable from `node --test` imports its siblings by **relative `.ts` path**
+(R48). The `@/` alias is a bundler feature: Node's type stripping resolves nothing, so an
+aliased import fails at run time in exactly the tests that exist to catch that — and the
+example below used to show the aliased form, which is how the rule got broken in the one
+place people copy from. Never `.tsx` either: Node strips types, it does not compile JSX.
+A page component may of course use `@/`; a module a test loads may not.
+
 ```ts
-import { createFakeConsoleServices } from "@/lib/contracts/fake-services.ts";
-import type { ConsoleServices } from "@/lib/contracts/services.ts";
+import { createFakeConsoleServices } from "./fake-services.ts";
+import type { ConsoleServices } from "./services.ts";
 
 const services: ConsoleServices = createFakeConsoleServices();
 const page = await services.usage(services.sessions.owner, { limit: 25 });

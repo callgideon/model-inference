@@ -1,5 +1,5 @@
 {
-  "_comment": "R32/R40: one single-edit mutant per invariant the exported conformance suite claims. `pnpm test:mutants` applies each to a temporary copy and requires it to be killed by a NAMED case listed in its `cases` \u2014 a non-zero exit alone is not a kill, and a load, syntax, stripping or timeout failure is a runner error that fails the run. `kills_by: \"throw\"` marks the mutants whose thrown error IS the defect (an accepted out-of-domain value that then throws); every other mutant must die on an assertion. Ids are this repository's; `was` records the round-4 reviewer's id where their description identified the mutant. A claimed invariant with no mutant, or a mutant with no case, is the defect this list exists to prevent.",
+  "_comment": "R32/R40: one single-edit mutant per invariant the exported conformance suite claims. `pnpm test:mutants` applies each to a temporary copy and requires it to be killed by a NAMED case listed in its `cases` — a non-zero exit alone is not a kill, and a load, syntax, stripping or timeout failure is a runner error that fails the run. `kills_by: \"throw\"` marks the mutants whose thrown error IS the defect (an accepted out-of-domain value that then throws); every other mutant must die on an assertion. Ids are this repository's; `was` records the round-4 reviewer's id where their description identified the mutant. A claimed invariant with no mutant, or a mutant with no case, is the defect this list exists to prevent.",
   "mutants": [
     {
       "id": "AUDIT-01",
@@ -126,7 +126,7 @@
       "id": "BOUND-01",
       "note": "the key name bound is dropped",
       "file": "lib/contracts/fake-services.ts",
-      "find": "        if (input.name.length > MAX_KEY_NAME_CHARS) {",
+      "find": "        if (codePoints(input.name) > MAX_KEY_NAME_CHARS) {",
       "replace": "        if (false) {",
       "cases": [
         "the provisional input bounds hold"
@@ -136,7 +136,7 @@
       "id": "BOUND-02",
       "note": "the operator reason bound is dropped",
       "file": "lib/contracts/fake-services.ts",
-      "find": "    if (reason.length > MAX_GRANT_REASON_CHARS) {",
+      "find": "    if (codePoints(reason) > MAX_GRANT_REASON_CHARS) {",
       "replace": "    if (false) {",
       "cases": [
         "the three entitlement states are distinct, and the empty one is a denial (R24)",
@@ -147,7 +147,7 @@
       "id": "BOUND-03",
       "note": "the idempotency key bound is dropped",
       "file": "lib/contracts/fake-services.ts",
-      "find": "  if (key.length > MAX_IDEMPOTENCY_KEY_CHARS) {",
+      "find": "  if (codePoints(key) > MAX_IDEMPOTENCY_KEY_CHARS) {",
       "replace": "  if (false) {",
       "cases": [
         "feedback follows the R3 body, appears immediately, and has provenance the client cannot set"
@@ -197,7 +197,7 @@
       "id": "BOUND-08",
       "note": "the feedback text bound is dropped",
       "file": "lib/contracts/fake-services.ts",
-      "find": "    if (input.value.length > MAX_FEEDBACK_TEXT_CHARS) {",
+      "find": "    if (codePoints(input.value) > MAX_FEEDBACK_TEXT_CHARS) {",
       "replace": "    if (false) {",
       "cases": [
         "feedback follows the R3 body, appears immediately, and has provenance the client cannot set"
@@ -210,7 +210,7 @@
       "find": "  journal_write_failed: null,",
       "replace": "  journal_write_failed: 500,",
       "cases": [
-        "the HTTP status table is the one 08 \u00a73 freezes, code for code"
+        "the HTTP status table is the one 08 §3 freezes, code for code"
       ]
     },
     {
@@ -220,7 +220,7 @@
       "find": "  not_found: 404,",
       "replace": "  not_found: 400,",
       "cases": [
-        "the HTTP status table is the one 08 \u00a73 freezes, code for code"
+        "the HTTP status table is the one 08 §3 freezes, code for code"
       ]
     },
     {
@@ -230,7 +230,7 @@
       "find": "  org_suspended: 403,",
       "replace": "  org_suspended: 401,",
       "cases": [
-        "the HTTP status table is the one 08 \u00a73 freezes, code for code"
+        "the HTTP status table is the one 08 §3 freezes, code for code"
       ]
     },
     {
@@ -1449,6 +1449,56 @@
       "replace": "    return `${operation}|${JSON.stringify(parts)}`;",
       "cases": [
         "a filter or cursor from another organization never widens the tenant"
+      ]
+    },
+    {
+      "id": "R41-08",
+      "note": "a replayed settings.update returns the stored row unprojected, so the customer who retries an operator's key learns the operator's identity (Q18)",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          return replay.ok ? ok(visibleSettings(replay.value, session)) : replay;",
+      "replace": "          return replay.ok ? ok(replay.value as unknown as ConsoleSettings) : replay;",
+      "cases": [
+        "no customer view ever names an operator (R41)"
+      ]
+    },
+    {
+      "id": "Q16-01",
+      "note": "the consent-history DTO keeps the stored `by_operator` flag, so a customer learns that the platform made the change even while the principal is masked",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      consent_history: settings.consent_history.map(({ by_operator: byOperator, ...entry }) => ({",
+      "replace": "      consent_history: settings.consent_history.map(({ by_operator: byOperator, ...entry }) => ({\n        by_operator: byOperator,",
+      "cases": [
+        "retention is capped and evaluation consent is a separate control"
+      ]
+    },
+    {
+      "id": "Q16-02",
+      "note": "a feedback entry carries the stored `by_operator` flag into the DTO",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    const { by_operator: byOperator, ...row } = structuredClone(entry);\n    if (!byOperator || session.isOperator) return row;",
+      "replace": "    const byOperator = entry.by_operator;\n    const row = structuredClone(entry) as unknown as FeedbackEntry;\n    if (!byOperator || session.isOperator) return row;",
+      "cases": [
+        "an operator label is the only path to operator authorship and calibration membership"
+      ]
+    },
+    {
+      "id": "R54-01",
+      "note": "shared character bounds count UTF-16 code units, so an astral string is twice its length and the console is stricter than Python",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "function codePoints(text: string): number {\n  return [...text].length;\n}",
+      "replace": "function codePoints(text: string): number {\n  return text.length;\n}",
+      "cases": [
+        "the provisional input bounds hold"
+      ]
+    },
+    {
+      "id": "R52-01",
+      "note": "an entitlement limit accepts a boolean, so `true` is a concurrency cap of one",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > MAX_ENTITLEMENT_LIMIT) {",
+      "replace": "      if (typeof value === \"boolean\") continue;\n      if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > MAX_ENTITLEMENT_LIMIT) {",
+      "cases": [
+        "the provisional input bounds hold"
       ]
     }
   ]

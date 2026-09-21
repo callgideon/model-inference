@@ -45,13 +45,18 @@ def hook(harness: "Harness", name: str):
 OPTIONAL_HOOKS: dict[str, frozenset[str]] = {
     "jobstore": frozenset({"publish", "revoke_key", "unrevoke_key", "suspend_org", "unentitle",
                            "entitle", "retune", "journal_bytes", "failures", "stream",
-                           "unsettleable"}),
+                           "unsettleable", "set_price"}),
     "streamstore": frozenset({"jobs", "journal_bytes", "failures"}),
-    "mediastore": frozenset({"put_object", "attach"}),
+    # r1 R46: `attach` is a port operation now. The optional hooks left are the one that
+    # stands for a client uploading bytes and, since R55, the job row `attach` reads a
+    # job's organization from.
+    "mediastore": frozenset({"put_object", "admitted"}),
     "scheduler": frozenset({"jobs"}),
     "engine": frozenset({"text"}),
     "tracesink": frozenset({"queued", "crash", "content_budget", "reap"}),
-    "feedback": frozenset({"jobs", "outbox", "audit"}),
+    # r1 R33: `suspend_org` is the same injectable suspension source the JobStore uses,
+    # so one organization cannot be suspended for admission and live for feedback.
+    "feedback": frozenset({"jobs", "outbox", "audit", "suspend_org"}),
     "judge": frozenset({"runs", "available", "set_consent", "revoke_consent", "audit"}),
 }
 
@@ -71,7 +76,10 @@ class Harness:
     as `reap()` and as `reap(-100.0)`, so it must accept an optional grace period and
     clamp a negative one; `journal_bytes() -> int`; `balance(org_id) -> dict` with
     `ledger`/`reserved`/`available`; `retune(**limit_changes)`; `unsettleable() -> dict`
-    of job id to error code; `content_budget() -> int`; `queued() -> list`.
+    of job id to error code; `content_budget() -> int`; `queued() -> list`;
+    `set_price(model_revision: str, snapshot: PriceSnapshot | None)` writes the store's
+    injectable price source and `None` withdraws the price, so a case can price one model
+    at four rates and make another unpriced without the request carrying either (r1 R45).
 
     The streamstore, scheduler and feedback factories also publish `extra["jobs"]`,
     the JobStore a case needs to admit a job first. The cases only ever call *port*

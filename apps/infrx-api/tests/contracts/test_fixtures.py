@@ -30,6 +30,96 @@ def test_fixture_round_trips_byte_stably(name):
     assert canonical_bytes(parsed) == fixtures.load_bytes(name)
 
 
+# r1 R47: field names that mean "an object key", plus the credentialed forms of one.
+# `wire.py` claims none of its bodies carries a storage key; this is what makes the
+# claim checkable instead of a docstring, and it walks every wire fixture (and every
+# model in `wire`) rather than the one the ruling happened to name.
+STORAGE_KEY_FIELDS = frozenset({
+    "storage_ref", "content_ref", "storage_key", "object_key", "s3_key", "s3_uri",
+    "bucket", "key_prefix", "signed_url", "presigned_url", "download_url", "object_path",
+})
+# `destination_ref` on `UploadCreated` is deliberately not a key: it is a constrained
+# server-issued reference (`infrx-upload:<org>:<handle>`), and the test below asserts
+# that shape rather than trusting the name.
+WIRE_FIXTURES = tuple(sorted(name for name, model in fixtures.MODELS.items()
+                             if model.__module__.endswith("contracts.wire")))
+
+
+def _field_names(data, into=None):
+    into = set() if into is None else into
+    if isinstance(data, dict):
+        for key, value in data.items():
+            into.add(key)
+            _field_names(value, into)
+    elif isinstance(data, (list, tuple)):
+        for item in data:
+            _field_names(item, into)
+    return into
+
+
+def test_the_wire_fixtures_are_the_public_bodies():
+    """The grep below is only worth its coverage: every `wire` model with a fixture is
+    in it, and the trace export - the body R47 is about - is one of them."""
+    assert "trace_export.json" in WIRE_FIXTURES
+    assert len(WIRE_FIXTURES) >= 10, WIRE_FIXTURES
+
+
+@pytest.mark.parametrize("name", WIRE_FIXTURES)
+def test_no_wire_fixture_carries_a_storage_key(name):
+    """r1 R47: no public body carries an object key or a signed URL, at any depth.
+
+    The trace export is the case the ruling names - `content_ref` is an S3 key, so the
+    export carries `content_state` plus an opaque `content_handle` instead - but the rule
+    is the whole module's, so every wire fixture is checked.
+    """
+    found = _field_names(fixtures.load(name)) & STORAGE_KEY_FIELDS
+    assert found == set(), f"{name} carries storage-key-shaped field(s) {sorted(found)}"
+
+
+@pytest.mark.parametrize("name", WIRE_FIXTURES)
+def test_no_wire_model_declares_a_storage_key(name):
+    """The same rule on the model, so a field nobody put in a fixture cannot slip in."""
+    model = fixtures.MODELS[name]
+    found = set(model.model_fields) & STORAGE_KEY_FIELDS
+    assert found == set(), f"{model.__name__} declares {sorted(found)}"
+
+
+def test_the_trace_export_replaces_the_content_ref_with_availability_and_a_handle():
+    """r1 R47: the export is a projection of the envelope, not the envelope."""
+    export = fixtures.model("trace_export.json")
+    envelope = fixtures.model("trace_envelope.json")
+    assert envelope.content_ref, "the internal envelope does carry the object key"
+    assert export.content_state is records.ContentState.available
+    # r1 R54: opaque and prefixed, so a storage key cannot pass for a handle.
+    assert export.content_handle and envelope.content_ref not in export.content_handle
+    assert export.content_handle.startswith(ids.TRACE_CONTENT_PREFIX)
+    for forged in (envelope.content_ref, "tc_short", "", "fb_" + "a" * 30,
+                   "tc_/etc/passwd", "s3://bucket/key"):
+        with pytest.raises(ValueError):
+            wire.TraceExport.of(envelope, records.ContentState.available,
+                                export.content, content_handle=forged)
+    # and resolved content is reached *through* a handle, never handed over without one
+    with pytest.raises(ValueError):
+        wire.TraceExport.of(envelope, records.ContentState.available, export.content)
+    assert export.content_bytes == envelope.content_bytes
+    # the content object is `{v: 1, request, response}` (research/traces/04 §3.1)
+    assert export.content is not None and export.content.v == 1
+    assert export.content.response.status == 200
+    assert set(fixtures.load("trace_export.json")["content"]) == {"v", "request", "response"}
+    # and `of()` never copies the key across, whatever it is handed
+    projected = wire.TraceExport.of(envelope, records.ContentState.metadata_only)
+    assert projected.content_handle is None and projected.content is None
+    assert envelope.content_ref not in canonical_bytes(projected).decode()
+
+
+def test_an_upload_destination_is_a_constrained_reference_not_a_url():
+    """The one `*_ref` a public body does carry: a server-issued upload destination.
+    It is asserted by shape, so a signed URL cannot arrive under an innocent name."""
+    created = fixtures.model("upload_created.json")
+    assert created.destination_ref.startswith("infrx-upload:")
+    assert "://" not in created.destination_ref and "?" not in created.destination_ref
+
+
 @pytest.mark.parametrize("name", sorted(fixtures.LIST_MODELS))
 def test_list_fixture_round_trips_byte_stably(name):
     model = fixtures.LIST_MODELS[name]
@@ -85,7 +175,11 @@ EXPECTED_ENUMS = {
     records.FeedbackChannel: ["api", "console"],
     records.AuthorRole: ["customer", "operator", "judge"],
     # r1 R3 / R8 additions to 08 §3
-    records.FeedbackName: ["thumb", "rating", "correction", "comment"],
+    # r1 R43: the entry names. The submittable subset is FEEDBACK_INPUT_NAMES.
+    records.FeedbackName: ["thumb", "rating", "correction", "comment",
+                           "calibration_label"],
+    records.CalibrationLabel: ["correct", "partially_correct", "incorrect",
+                               "unusable"],
     records.JudgeResolution: ["adopt_provider_evidence", "release_reservation"],
     records.JudgeRunState: ["dry_run", "reserved", "submitting", "submitted", "ambiguous",
                             "collecting", "settled", "quarantined", "cancelled"],
@@ -393,6 +487,141 @@ def test_the_feedback_name_fixes_the_value_type(name, value, valid):
             records.Feedback.model_validate(raw)
         with pytest.raises(ValueError):
             wire.FeedbackSubmission.model_validate(body)
+
+
+# r1 R43/R50/R54: the calibration fields are one fact, and the **record** is what
+# enforces it. The fake never builds an inconsistent row, so without these the validator
+# was unkillable: a mutant deleting a clause survived every conformance case.
+def _label_row():
+    return fixtures.load("feedback_calibration_label.json")
+
+
+def _plain_row():
+    return fixtures.load("feedback.json")
+
+
+INCONSISTENT_FEEDBACK = [
+    # a label missing any one of the three facts that make it a label
+    ("label without membership", {**_label_row(), "calibration_set": False}),
+    ("label without a rubric version", {k: v for k, v in _label_row().items()
+                                        if k != "rubric_version"}),
+    ("label authored by a customer", {**_label_row(), "author_role": "customer"}),
+    ("label not made by an operator", {**_label_row(), "by_operator": False}),
+    # r1 R55: the converse, on any row. `author_role=operator` without the marker was
+    # constructible, and the marker is what the masking keys on - so the row would be
+    # operator-authored and read to a customer with the operator's principal intact.
+    ("operator author without the marker",
+     {**_plain_row(), "author_role": "operator", "by_operator": False}),
+    # an ordinary entry claiming any one of them
+    ("plain row claiming membership", {**_plain_row(), "calibration_set": True}),
+    ("plain row carrying a rubric version", {**_plain_row(), "rubric_version": 3}),
+    ("plain row named a label", {**_plain_row(), "name": "calibration_label"}),
+    # and a label whose value is not a label
+    ("label with a free-text verdict", {**_label_row(), "value": "golden"}),
+    ("label with a numeric verdict", {**_label_row(), "value": 3}),
+]
+
+
+@pytest.mark.parametrize("what,raw", INCONSISTENT_FEEDBACK, ids=[c[0] for c in INCONSISTENT_FEEDBACK])
+def test_the_record_refuses_every_inconsistent_calibration_row(what, raw):
+    with pytest.raises(ValueError):
+        records.Feedback.model_validate(raw)
+
+
+def test_a_consistent_calibration_row_is_accepted():
+    """The other half: the nine refusals above mean nothing if the valid row is refused
+    too."""
+    assert records.Feedback.model_validate(_label_row()).calibration_set is True
+    assert records.Feedback.model_validate(_plain_row()).rubric_version is None
+
+
+# r1 R54: strict where the ports are. Pydantic's lax mode read `True` as 1 and `"3"` as
+# three, so the record was looser than `label_calibration` - and a caller reaching the
+# record directly (D's adapter, a projection) got the loose behaviour.
+STRICT_INTEGER_FIELDS = [
+    ("rubric_version", True), ("rubric_version", "3"), ("rubric_version", 3.0),
+    ("rubric_version", 3.5),
+]
+
+
+@pytest.mark.parametrize("field,value", STRICT_INTEGER_FIELDS,
+                         ids=[f"{f}={v!r}" for f, v in STRICT_INTEGER_FIELDS])
+def test_a_rubric_version_is_a_strict_integer(field, value):
+    with pytest.raises(ValueError):
+        records.Feedback.model_validate({**_label_row(), field: value})
+    with pytest.raises(ValueError):
+        raw = fixtures.load("judge_runs.json")[0]
+        records.JudgeRun.model_validate({**raw, field: value})
+
+
+@pytest.mark.parametrize("value", [True, False, "8", 8.0, 8.5])
+def test_an_entitlement_limit_is_a_strict_integer(value):
+    """r1 R52/R54: booleans are rejected in both halves. `True` as a limit of 1 is a
+    concurrency cap of one request, silently."""
+    raw = fixtures.load("org_entitlements.json")
+    with pytest.raises(ValueError):
+        records.OrgEntitlements.model_validate(
+            {**raw, "limits": {**raw["limits"], "max_concurrent_requests": value}})
+
+
+# The store mints these freshly on every admission, so a fixture cannot pin them; every
+# other field of `admission.json` is the store's own derivation and is compared exactly.
+FRESHLY_MINTED = ("job_handle", "outbox")
+
+
+def test_the_request_fixture_is_one_the_store_would_admit():
+    """F-CONTRACT: `admission.json` is what `admit` returns for `normalized_request.json`.
+
+    It used to be asserted by eye, and two things had drifted: the request's `deadline_at`
+    was `created_at + 450 s` where a **stream** request's bound is 120 + 10 + 300 = 430 s,
+    so the store would have refused the very request the admission fixture claims it
+    admitted; and `maximum_hold` was `0.00768000` where the ceiling formula on the
+    fixture's own rates and ceilings gives `0.00629760`. Both are the kind of drift only a
+    real call can find, so this one makes the call - on the fake, with the clock at the
+    fixture's `created_at` and its own price snapshot seeded - and compares the returned
+    record field by field.
+    """
+    request = fixtures.model("normalized_request.json")
+    expected = fixtures.model("admission.json")
+    # r1 R55: inside the ceiling ranges, which is the cheap half of the check
+    assert 1 <= request.max_output_tokens <= limits.DEFAULTS.max_output_tokens
+    assert request.max_input_tokens >= 1
+    assert (request.max_input_tokens + request.max_output_tokens
+            <= limits.DEFAULTS.max_context_tokens)
+    prepared = fixtures.model("prepared_request.json")
+    assert 1 <= prepared.max_output_tokens <= limits.DEFAULTS.max_output_tokens
+
+    admission = _admit_the_fixture(request, expected)
+    for field in records.Admission.model_fields:
+        if field in FRESHLY_MINTED:
+            continue
+        assert getattr(admission, field) == getattr(expected, field), \
+            f"admission.json disagrees with the store on {field}: " \
+            f"{getattr(expected, field)!r} vs {getattr(admission, field)!r}"
+    # the two a fixture cannot pin are still checked for shape
+    assert ids.JOB_HANDLE_RE.fullmatch(admission.job_handle)
+    assert [event.kind for event in admission.outbox] == \
+        [event.kind for event in expected.outbox]
+    assert [event.payload["request_id"] for event in admission.outbox] == \
+        [request.request_id for _ in expected.outbox]
+
+
+def _admit_the_fixture(request, expected):
+    """Admit `normalized_request.json` on the fake, at its own `created_at`."""
+    import asyncio
+    from infrx.contracts.fakes.state import FakeJobStore
+    from infrx.contracts.fakes.support import FakeClock, SequentialIds
+
+    async def run():
+        store = FakeJobStore(FakeClock(request.created_at), SequentialIds(),
+                             prices={request.model_revision: expected.price_snapshot})
+        store.grant(request.org_id, "25.00")
+        idem = records.IdempotencyRef(org_id=request.org_id, operation=expected.operation,
+                                      key=expected.idempotency_key,
+                                      payload_hash=expected.payload_hash)
+        return await store.admit(request, idem, ())
+
+    return asyncio.run(run())
 
 
 def test_client_feedback_submission_cannot_set_provenance():

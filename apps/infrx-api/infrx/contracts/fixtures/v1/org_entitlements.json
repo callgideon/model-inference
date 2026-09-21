@@ -1,0 +1,14 @@
+{
+  "limits": {
+    "max_concurrent_requests": 8,
+    "max_requests_per_minute": 120,
+    "max_video_seconds": 120
+  },
+  "model_ids": [
+    "nemostation/marlin-2b@2026-09-01"
+  ],
+  "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+  "schema_version": 1,
+  "updated_at": "2026-09-20T12:00:00Z",
+  "updated_by": "operator@infrx.example"
+}

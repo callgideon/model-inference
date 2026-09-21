@@ -268,9 +268,13 @@ const SELF_TESTS = [
     expect: "stale",
   },
   {
-    name: "a real defect attributed to the wrong case survives",
+    // Named for what it actually does: the declared case does not exist, so nothing can
+    // run it and the defect survives. "attributed to the wrong case" described a
+    // different check — a real case that cannot see the defect — which is what
+    // SELF-NO-CASES and the Python `self_wrong_case` cover.
+    name: "a real defect declared against a case the suite does not have survives",
     mutant: {
-      id: "SELF-WRONG-CASE",
+      id: "SELF-UNKNOWN-CASE",
       file: "lib/contracts/fake-services.ts",
       find: TENANT,
       replace: "    const org = [...orgs.values()][0];",

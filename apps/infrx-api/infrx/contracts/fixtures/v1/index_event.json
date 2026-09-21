@@ -5,6 +5,7 @@
   "execution_mode": "stream",
   "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
   "key_id": "3c3c3c3c-0000-4000-8000-000000000003",
+  "kind": "inference_dispatch",
   "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
   "schema_version": 1
 }

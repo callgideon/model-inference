@@ -9,7 +9,8 @@ from __future__ import annotations
 from datetime import timedelta
 
 from ..limits import DEFAULTS, PilotSettings
-from ..records import IndexEvent
+from .. import errors
+from ..records import DISPATCH_KINDS, IndexEvent, OutboxKind
 from .support import FailurePlan, FakeClock, failure_hooks
 
 
@@ -37,10 +38,25 @@ class FakeScheduler:
         self.pending[event.event_id] = event
         return True
 
-    async def claim_candidate(self, worker_id: str) -> IndexEvent | None:
+    async def claim_candidate(self, worker_id: str, *,
+                              kind: OutboxKind | None = None) -> IndexEvent | None:
         """A hint, not an authorization. Visibility times out so a lost worker's
-        candidate returns to the index without touching PostgreSQL."""
+        candidate returns to the index without touching PostgreSQL.
+
+        r1 R52: `kind` selects a dispatch kind, so a **preparation** worker can be fed
+        from the index instead of from a side channel. Without it a candidate said only
+        "this job wants something done": a preparation pool would claim an inference
+        candidate, be refused by `claim`, and the job would sit there while the index
+        looked busy. `None` means "anything", which is what a single-pool worker asks for.
+        """
         self.failures.before("claim_candidate")
+        if kind is not None and kind not in DISPATCH_KINDS:
+            # r1 R55: an unknown kind is a caller bug, and answering `None` reported it as
+            # "the index is empty" - a preparation pool asking for a misspelled kind would
+            # idle for ever against a full queue and look perfectly healthy.
+            raise errors.InvalidRequest(
+                f"{kind!r} is not a dispatch kind; the index carries "
+                f"{', '.join(k.value for k in DISPATCH_KINDS)}")
         now = self.clock.now()
         for event_id, (event, _owner, claimed_at) in list(self.inflight.items()):
             if now >= claimed_at + timedelta(seconds=self.limits.lease_ttl_s):
@@ -48,7 +64,7 @@ class FakeScheduler:
                 self.pending[event_id] = event
         for event_id, event in sorted(self.pending.items(),
                                       key=lambda item: (item[1].available_at, item[0])):
-            if event.available_at <= now:
+            if event.available_at <= now and kind in (None, event.kind):
                 del self.pending[event_id]
                 self.inflight[event_id] = (event, worker_id, now)
                 return event

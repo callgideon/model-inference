@@ -38,12 +38,18 @@ def digest(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode()).hexdigest()
 
 
-def price(input_rate: str = "0.20", output_rate: str = "0.60", *, captured_at=None) -> PriceSnapshot:
-    return PriceSnapshot(price_version="pv_test", model_revision=MODEL,
+def price(input_rate: str = "0.20", output_rate: str = "0.60", *, captured_at=None,
+          model_revision: str = MODEL, version: str = "pv_test") -> PriceSnapshot:
+    """The price the harness's `set_price` hook seeds for `MODEL`. `DEFAULT_PRICE` is
+    exactly what a factory seeds, so `hold_for` and the store agree on the rates."""
+    return PriceSnapshot(price_version=version, model_revision=model_revision,
                          input_rate_per_million=Decimal(input_rate),
                          output_rate_per_million=Decimal(output_rate),
                          token_rules_version="tr_v1",
                          captured_at=captured_at or "2026-09-01T00:00:00Z")
+
+
+DEFAULT_PRICE = price()
 
 
 def consent(org_id: str = ORG_A, *, mode: TraceMode = TraceMode.full, evaluation: bool = True,
@@ -67,24 +73,24 @@ def media(org_id: str = ORG_A, handle: str = "upl_conformancefixture000000000000
 
 def request(harness, *, org_id: str = ORG_A, key_id: str = KEY_A,
             mode: ExecutionMode = ExecutionMode.stream, max_input_tokens: int = 30_720,
-            max_output_tokens: int = 2_048, snapshot: PriceSnapshot | None = None,
+            max_output_tokens: int = 2_048, model_revision: str = MODEL,
             refs: tuple[MediaRef, ...] = (), deadline_s: float | None = None,
             parameters: dict[str, Any] | None = None) -> NormalizedRequest:
     """A normalized request on the harness's clock and id sequence.
 
-    The price snapshot travels in `parameters["price_snapshot"]` so a fake can
-    snapshot it without a price table; an adapter with a real `price_versions`
-    relation may ignore it and seed its own, because the cases assert against
-    `admission.price_snapshot`, never against this builder's copy.
+    r1 R45: the request carries **no price**. It used to travel in
+    `parameters["price_snapshot"]` for the fake's convenience, which made the rule the
+    contract cares most about - the client does not set the price - unobservable. The
+    store reads its injectable price source instead, which a case moves with the
+    `set_price` hook.
     """
-    snapshot = snapshot or price()
     deadline_s = default_deadline_s(mode) if deadline_s is None else deadline_s
     now = harness.clock.now()
     request_id = harness.ids.uuid()
     return NormalizedRequest(
-        request_id=request_id, org_id=org_id, key_id=key_id, model_revision=MODEL,
+        request_id=request_id, org_id=org_id, key_id=key_id, model_revision=model_revision,
         messages=({"role": "user", "content": "Describe this clip."},),
-        parameters={"price_snapshot": snapshot.model_dump(mode="json"), **(parameters or {})},
+        parameters=dict(parameters or {}),
         payload_ref=f"payloads/{org_id}/{request_id}.json", payload_digest=digest(request_id),
         media=refs, execution_mode=mode, max_input_tokens=max_input_tokens,
         max_output_tokens=max_output_tokens, created_at=now,
@@ -98,6 +104,12 @@ def idem(req: NormalizedRequest, key: str | None = "idem-1", *,
 
 
 def hold_for(req: NormalizedRequest, snapshot: PriceSnapshot | None = None) -> Decimal:
+    """The hold a case **expects** the store to derive (r1 R53).
+
+    No longer an argument to `admit`: the store computes the hold from the snapshot it
+    takes, so this exists only to say what that ought to be. A case that moves the price
+    source passes the snapshot it moved it to.
+    """
     snapshot = snapshot or price()
     return snapshot.maximum_hold(req.max_input_tokens, req.max_output_tokens)
 

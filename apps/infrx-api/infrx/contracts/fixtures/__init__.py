@@ -58,6 +58,10 @@ MODELS: dict[str, type[BaseModel]] = {
     "trace_envelope_lossy.json": records.TraceEnvelope,
     "trace_envelope_abandoned.json": records.TraceEnvelope,
     "feedback.json": records.Feedback,
+    # r1 R43: the one shape a calibration label takes - the same record, with
+    # `name=calibration_label`, `calibration_set=true` and an integer rubric version.
+    "feedback_calibration_label.json": records.Feedback,
+    "org_entitlements.json": records.OrgEntitlements,       # r1 R24
     # wire
     "chat_stream_interrupted_sse.json": wire.SseTranscript,
     "chat_stream_sse.json": wire.SseTranscript,
@@ -78,8 +82,11 @@ LIST_MODELS: dict[str, type[BaseModel]] = {
     "judge_runs.json": records.JudgeRun,
 }
 
+# r1 R54: `text_bounds.json` is the third cross-language parity table - boundary
+# strings both halves must classify identically, in **code points**. It is
+# byte-identical to the console copy at `apps/app/tests/contracts/text_bounds.json`.
 TABLES = ("error_envelopes.json", "error_codes.json", "money_cases.json",
-          "money_tables.json")
+          "money_tables.json", "text_bounds.json")
 
 
 def names() -> tuple[str, ...]:

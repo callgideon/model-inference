@@ -26,9 +26,10 @@ from ..codec import compact_bytes
 from ..limits import DEFAULTS, PilotSettings
 from ..records import (Admission, BILLABLE_CAUSES, Budgets, CapacityReservation, Chunk,
                        ChunkEventType, Cursor, EngineEvent, HoldState, IdempotencyRef, IndexEvent,
-                       JobState, Lease, MediaRef, NormalizedRequest, OutboxEvent, OutboxKind,
-                       PriceSnapshot, ReservationKind, SettlementState, TERMINAL_STATES, TerminalCause,
-                       TerminalOutcome, Usage, UsageCertainty, states_for_cause)
+                       JobState, Lease, LeaseKind, MediaRef, NormalizedRequest, OutboxEvent,
+                       OutboxKind, PriceSnapshot, ReservationKind, SettlementState,
+                       TERMINAL_STATES, TerminalCause, TerminalOutcome, Usage, UsageCertainty,
+                       Work, states_for_cause)
 from .support import FailurePlan, FakeClock, SequentialIds, failure_hooks, money_input
 
 MAX_READ_LIMIT = 1000           # refinement: the bound on one replay page
@@ -90,6 +91,11 @@ class _Job:
     lease: Lease | None = None
     published: bool = False                  # first committed chunk
     attempts: int = 0                        # prepublication requeues used
+    # r1 R46: preparation is its own fenced attempt sequence, on its own counter, so a
+    # preparation claim never moves the inference generation a worker is fenced on.
+    preparation_generation: int = 0
+    preparation_lease: Lease | None = None
+    preparation_attempts: int = 0
     prepared: tuple[MediaRef, ...] = ()
     queued_at: datetime | None = None         # start of the current queued interval
     outcome: TerminalOutcome | None = None
@@ -200,7 +206,8 @@ class FakeJobStore:
 
     def __init__(self, clock: FakeClock | None = None, ids: SequentialIds | None = None, *,
                  limits: PilotSettings = DEFAULTS, failures: FailurePlan | None = None,
-                 journal: _Journal | None = None) -> None:
+                 journal: _Journal | None = None,
+                 prices: dict[str, PriceSnapshot] | None = None) -> None:
         self.clock = clock or FakeClock()
         self.ids = ids or SequentialIds()
         self.limits = limits
@@ -225,6 +232,14 @@ class FakeJobStore:
         self.unentitled: set[tuple[str, str]] = set()
         self.is_entitled = lambda org_id, model_revision: (org_id, model_revision) \
             not in self.unentitled
+        # r1 R45: the injectable **price source**, mirroring the entitlement source. A
+        # price never comes from the request: a client that could name its own rates
+        # could name zero. A real adapter replaces the callable with its
+        # `price_versions` lookup (`price_for(model_revision, at)`, the effective row at
+        # that instant); the fake reads a table `set_price` writes, and an unpriced
+        # model is refused (02: "unknown/unpriced models fail closed").
+        self.prices: dict[str, PriceSnapshot] = dict(prices or {})
+        self.price_for = lambda model_revision, at: self.prices.get(model_revision)
         self._lock = asyncio.Lock()
 
     # --- test helpers (not part of the port) ---------------------------------
@@ -244,6 +259,14 @@ class FakeJobStore:
     def entitle(self, org_id: str, model_revision: str) -> None:
         self.unentitled.discard((org_id, model_revision))
 
+    def set_price(self, model_revision: str, snapshot: PriceSnapshot | None) -> None:
+        """r1 R45: what the price source answers for a model. `None` withdraws the
+        price, which is how a test makes a model unpriced without touching a request."""
+        if snapshot is None:
+            self.prices.pop(model_revision, None)
+        else:
+            self.prices[model_revision] = snapshot
+
     def wallet(self, org_id: str) -> _Wallet:
         return self.wallets.setdefault(org_id, _Wallet())
 
@@ -258,11 +281,9 @@ class FakeJobStore:
 
     # --- port ---------------------------------------------------------------
     async def admit(self, request: NormalizedRequest, idem: IdempotencyRef,
-                    caps: tuple[object, ...] = (), hold: Decimal | str = money.ZERO) -> Admission:
+                    caps: tuple[object, ...] = ()) -> Admission:
+        """r1 R53: the store derives the hold. See `_derive_hold`."""
         self.failures.before("admit")
-        # money.parse allows negatives for ledger deltas; a reservation is never
-        # one. A negative hold would inflate `available` (DUR-CAP, r1 R11).
-        hold = money_input(hold, "the maximum hold")
         for kind in caps:
             if kind not in tuple(ReservationKind):
                 raise errors.InvalidRequest(f"{kind!r} is not a reservation kind")
@@ -295,16 +316,37 @@ class FakeJobStore:
                 raise errors.ModelNotEntitled(
                     f"org {request.org_id} is not entitled to {request.model_revision}")
             self._check_deadline(request, now)
+            self._check_ceilings(request)
             self._check_capacity(request)
-            self._check_balance(request.org_id, hold)
             # Everything that can refuse the admission runs before anything is
             # reserved: a rejected admission leaves no journal bytes, no hold and
             # no job behind (`_price` fails closed on an unpriced model).
-            price = self._price(request)
+            #
+            # r1 R53: the price is taken **first**, then the hold is derived from it, then
+            # the balance is checked against that hold. Since R45 only the store knows the
+            # rates, so a caller-computed hold was a number from before the price it is
+            # meant to cover: a rate moving 0.20 -> 2.00 between gateway validation and
+            # admission left a job admitted at 2.00 holding a tenth of what it needed, and
+            # a perfectly valid in-envelope completion then settled `platform_error` with
+            # a zero debit. Deriving both in one transaction makes that unrepresentable.
+            price = self._price(request, now)
+            hold = self._derive_hold(request, price)
+            self._check_balance(request.org_id, hold)
             self.journal.reserve(request.request_id)
             admission = self._insert(request, idem, hold, now, price)
         self.failures.after_commit("admit")
         return admission
+
+    @staticmethod
+    def _derive_hold(request: NormalizedRequest, price: PriceSnapshot) -> Decimal:
+        """r1 R53 / 01: the maximum hold, from the admitted snapshot and the request's
+        **validated** token ceilings, rounded **up** (§4).
+
+        The ceilings arrive on the `NormalizedRequest` because that is where validation
+        put them; passing them again beside it would only create two numbers that can
+        disagree. Nothing a caller sends is money.
+        """
+        return price.maximum_hold(request.max_input_tokens, request.max_output_tokens)
 
     def _replay(self, idem: IdempotencyRef, now: datetime) -> Admission | None:
         if idem.key is None:
@@ -336,6 +378,27 @@ class FakeJobStore:
             if count >= ceiling:
                 raise errors.CapacityExhausted(f"{scope} active job limit {ceiling} reached",
                                                retry_after_s=5)
+
+    def _check_ceilings(self, request: NormalizedRequest) -> None:
+        """r1 R55: the token ceilings are range-checked **inside the transaction**.
+
+        `Field(ge=0)` on the record allowed `0/0`, which admitted with a **zero hold** and
+        therefore unmetered output - the request then settled whatever the engine produced
+        against nothing reserved. And `40000/4096` admitted although 01 caps a request at
+        `MAX_CONTEXT_TOKENS` after preprocessing, so the reserved envelope was a promise the
+        model could not keep. The store owns the limits, so the store checks them.
+        """
+        limits = self.limits
+        if not 1 <= request.max_output_tokens <= limits.max_output_tokens:
+            raise errors.InvalidRequest(
+                f"max_output_tokens must be in 1..{limits.max_output_tokens}")
+        if request.max_input_tokens < 1:
+            raise errors.InvalidRequest("max_input_tokens must be at least 1")
+        total = request.max_input_tokens + request.max_output_tokens
+        if total > limits.max_context_tokens:
+            raise errors.ContextLengthExceeded(
+                f"max_input_tokens + max_output_tokens ({total}) exceeds "
+                f"MAX_CONTEXT_TOKENS {limits.max_context_tokens}")
 
     def _check_deadline(self, request: NormalizedRequest, now: datetime) -> None:
         """r1 R29: a deadline is a promise the store can keep. One already past is a
@@ -396,13 +459,24 @@ class FakeJobStore:
             self.idem[idem.scope] = _Idem(idem.payload_hash, request.request_id)
         return admission
 
-    def _price(self, request: NormalizedRequest):
-        """Admission snapshots the price; an unpriced model fails closed. The fake
-        carries the snapshot on the request's parameters for test convenience."""
-        snapshot = request.parameters.get("price_snapshot") if request.parameters else None
+    def _price(self, request: NormalizedRequest, now: datetime) -> PriceSnapshot:
+        """r1 R45: admission snapshots the price from the **price source**, never from
+        the request, and an unpriced model fails closed.
+
+        The request used to carry `parameters["price_snapshot"]` for the fake's
+        convenience, which made the contract's most important pricing rule - the client
+        does not set the price - unobservable, and left a parameter in the shape that G1
+        has to reject. A client-supplied `price_snapshot` parameter is
+        `unsupported_parameter`.
+        """
+        snapshot = self.price_for(request.model_revision, now)
         if snapshot is None:
             raise errors.InvalidRequest("no price snapshot for the requested model")
-        return PriceSnapshot.model_validate(snapshot)
+        if snapshot.model_revision != request.model_revision:
+            # A price source answering for a different model would settle this job at
+            # another model's rates.
+            raise errors.InvalidRequest("the price snapshot names another model revision")
+        return snapshot
 
     def _emit(self, aggregate_id: str, kind: OutboxKind, now: datetime,
               payload: dict[str, object]) -> OutboxEvent:
@@ -431,21 +505,64 @@ class FakeJobStore:
             raise errors.NotFound(f"no job {job_handle} owned by org {org_id}")
         return job
 
-    async def prepared(self, job_handle: str, media: tuple[MediaRef, ...] = ()) -> Admission:
+    # r1 R46: the preparation attempt bound. The first claim plus this many further
+    # attempts, i.e. three claims in total on the default profile - the same bound the
+    # prepublication inference path uses, because it is the same question (how many times
+    # may a phase be retried after a worker is lost) and one number is easier to reason
+    # about than two. `preparation_deadline_at` bounds it in wall-clock terms as well, so
+    # a job cannot be retried for ever even below the count.
+    async def claim_preparation(self, job_id: str, worker_id: str) -> Lease:
+        """r1 R46: a fenced preparation lease, addressed by `job_id` like every other
+        internal operation."""
+        self.failures.before("claim_preparation")
+        async with self._lock:
+            job = self.jobs.get(job_id)
+            if job is None:
+                raise errors.NotFound(f"no job {job_id}")
+            if job.terminal:
+                raise errors.AlreadyTerminal(f"job {job_id} is {job.state}")
+            if job.state is not JobState.preparing:
+                raise errors.NotClaimable(f"job {job_id} is {job.state}, not preparing")
+            # Past the preparation instant the job is terminalized here (R29), so a
+            # worker cannot pick up something nobody is waiting for any more.
+            self._enforce_deadlines(job)
+            now = self.clock.now()
+            live = job.preparation_lease
+            if live is not None and now < live.expires_at:
+                # Two preparation workers writing prepared refs for one job is the media
+                # equivalent of two workers appending output.
+                raise errors.NotClaimable(f"job {job_id} is already being prepared by "
+                                          f"{live.worker_id}")
+            if job.preparation_attempts > self.limits.max_prepublication_retries:
+                outcome = self._terminalize(job, TerminalCause.preparation_failed, None, None,
+                                            JobState.failed)
+                raise errors.NotClaimable(
+                    f"job {job_id} exhausted its {self.limits.max_prepublication_retries} "
+                    f"preparation retries and is {outcome.state}")
+            job.preparation_attempts += 1
+            job.preparation_generation += 1
+            job.preparation_lease = Lease(
+                job_id=job_id, kind=LeaseKind.preparation,
+                generation=job.preparation_generation, worker_id=worker_id, acquired_at=now,
+                # r1 R52: a preparation lease is short (`PREPARATION_LEASE_TTL_S`), and
+                # never outlives the phase it fences.
+                expires_at=min(now + timedelta(seconds=self.limits.preparation_lease_ttl_s),
+                               job.admission.preparation_deadline_at),
+                # The preparation phase has one deadline, and it is already persisted.
+                generation_deadline_at=job.admission.preparation_deadline_at)
+            lease = job.preparation_lease
+        self.failures.after_commit("claim_preparation")
+        return lease
+
+    async def prepared(self, lease: Lease, media: tuple[MediaRef, ...] = ()) -> Admission:
         self.failures.before("prepared")
         async with self._lock:
-            request_id = self.by_handle.get(job_handle)
-            job = self.jobs.get(request_id) if request_id else None
-            if job is None:
-                raise errors.NotFound(f"no job {job_handle}")
-            if job.terminal:
-                raise errors.AlreadyTerminal(f"job {job_handle} is {job.state}")
-            if job.state is not JobState.preparing:
-                raise errors.StateConflict(f"prepared requires preparing, not {job.state}")
-            # r1 R29: a preparation worker that comes back late finds the job already
-            # terminal, and its own call is what terminalized it: a dead preparation
-            # must not pin a preparation unit, a journal reservation and a hold.
-            self._enforce_deadlines(job)
+            # r1 R46: fenced on the preparation lease. `_fence_preparation` also runs
+            # R29's deadline check, so a preparation worker that comes back late finds
+            # the job already terminal and its own call is what terminalized it: a dead
+            # preparation must not pin a preparation unit, a journal reservation and a
+            # hold.
+            job = self._fence_preparation(lease)
             for ref in media:
                 if ref.org_id != job.request.org_id:
                     raise errors.Forbidden("prepared media must belong to the job's org")
@@ -453,13 +570,59 @@ class FakeJobStore:
             job.prepared = tuple(media)
             job.state = JobState.queued
             job.queued_at = now
+            job.preparation_lease = None          # the phase is over; nothing to fence
             self._enter_queued(job, now)
             self._release(job, ReservationKind.preparation)
             self._emit(job.id, OutboxKind.inference_dispatch, now,
-                       {"job_handle": job_handle, "request_id": job.id})
+                       {"job_handle": job.admission.job_handle, "request_id": job.id})
             admission = self._snapshot(job)
         self.failures.after_commit("prepared")
         return admission
+
+    async def load_work(self, lease: Lease) -> Work:
+        """r1 R46: fenced like a mutation. A stale, foreign or wrong-kind lease gets a
+        typed refusal and no data, because this is the only thing that hands a worker the
+        request, the media, the price and the budgets."""
+        self.failures.before("load_work")
+        async with self._lock:
+            job = (self._fence_preparation(lease) if lease.kind is LeaseKind.preparation
+                   else self._fence(lease))
+            return Work(request=job.request, media_refs=job.request.media,
+                        prepared_refs=job.prepared,
+                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets)
+
+    def _fence_preparation(self, lease: Lease) -> _Job:
+        """The preparation half of `_fence`: its own generation counter, and the lease
+        kind checked first so an inference token can never stand in for one.
+
+        r1 R55: **the phase deadline is enforced before lease expiry.** R52 clamps every
+        preparation lease to `preparation_deadline_at`, so the two instants coincide and
+        expiry-first meant `_enforce_deadlines` was dead code: past the deadline a worker
+        got `stale_lease`, the job stayed `preparing` with `outcome=None`, and the
+        customer's hold stayed reserved until a reaper happened to run. R29 requires the
+        store to terminalize in that same operation, so the deadline goes first.
+        """
+        if lease.kind is not LeaseKind.preparation:
+            raise errors.StaleLease(f"{lease.kind} lease cannot fence preparation")
+        job = self.jobs.get(lease.job_id)
+        if job is None:
+            raise errors.NotFound(f"no job {lease.job_id}")
+        if job.terminal:
+            raise errors.AlreadyTerminal(f"job {job.id} is already {job.state}")
+        if job.state is not JobState.preparing or job.preparation_lease is None:
+            raise errors.StaleLease(f"job {job.id} is {job.state} with no preparation lease")
+        if job.preparation_generation != lease.generation:
+            raise errors.StaleLease(f"preparation generation {lease.generation} "
+                                    f"!= {job.preparation_generation}")
+        if job.preparation_lease.worker_id != lease.worker_id:
+            raise errors.StaleLease(f"preparation lease belongs to "
+                                    f"{job.preparation_lease.worker_id}")
+        # r1 R55/R29: the phase first, because a clamped lease expires with it.
+        self._enforce_deadlines(job)
+        if self.clock.now() >= job.preparation_lease.expires_at:
+            raise errors.StaleLease(f"preparation lease expired at "
+                                    f"{job.preparation_lease.expires_at}")
+        return job
 
     def _enter_queued(self, job: _Job, now: datetime) -> None:
         """r1 R38: entering `queued` recomputes the deadline from what is left of the
@@ -522,7 +685,8 @@ class FakeJobStore:
             generation_deadline_at = _phase_deadline(now, job.budgets.generation_s,
                                                      job.request.deadline_at)
             job.lease = Lease(
-                job_id=job_id, generation=job.generation, worker_id=worker_id, acquired_at=now,
+                job_id=job_id, kind=LeaseKind.inference,
+                generation=job.generation, worker_id=worker_id, acquired_at=now,
                 expires_at=now + timedelta(seconds=self.limits.lease_ttl_s),
                 # r1 R20: the generation phase starts at the claim, so both instants
                 # are derived here and handed to the worker with its lease.
@@ -539,8 +703,21 @@ class FakeJobStore:
         acquisition time by handing back an edited record."""
         self.failures.before("heartbeat")
         async with self._lock:
-            job = self._fence(lease)
             now = self.clock.now()
+            if lease.kind is LeaseKind.preparation:
+                # r1 R52: a preparation lease renews like any other - it is short
+                # (`PREPARATION_LEASE_TTL_S`), so a worker doing 100 s of legitimate
+                # transcoding has to say so - but **never past the phase deadline**, or a
+                # renewal would buy preparation time the job was never granted.
+                job = self._fence_preparation(lease)
+                job.preparation_lease = job.preparation_lease.model_copy(update={
+                    "expires_at": min(
+                        now + timedelta(seconds=self.limits.preparation_lease_ttl_s),
+                        job.admission.preparation_deadline_at)})
+                renewed = job.preparation_lease
+                self.failures.after_commit("heartbeat")
+                return renewed
+            job = self._fence(lease)
             job.lease = job.lease.model_copy(update={
                 "expires_at": now + timedelta(seconds=self.limits.lease_ttl_s)})
             renewed = job.lease
@@ -550,6 +727,10 @@ class FakeJobStore:
     def _fence(self, lease: Lease) -> _Job:
         """Generation, owner, state and lease expiry, compared against durable
         state and the database clock. A fenced worker mutates nothing."""
+        if lease.kind is not LeaseKind.inference:
+            # r1 R46: the two attempt sequences have separate counters, so a preparation
+            # lease at generation 1 would otherwise pass as inference generation 1.
+            raise errors.StaleLease(f"{lease.kind} lease cannot fence execution")
         job = self.jobs.get(lease.job_id)
         if job is None:
             raise errors.NotFound(f"no job {lease.job_id}")
@@ -563,9 +744,13 @@ class FakeJobStore:
             # A different worker at the same generation is still the wrong worker: two
             # processes that both believe they own generation N must not both append.
             raise errors.StaleLease(f"lease belongs to {job.lease.worker_id}")
+        # r1 R55/R29: the phase deadline first here too. An inference lease is not clamped,
+        # but `generation_deadline_at` is itself clamped by `deadline_at`, so a job whose
+        # absolute deadline lands inside the lease TTL has the two instants coincide - and
+        # expiry-first would again leave the job non-terminal with its hold reserved.
+        self._enforce_deadlines(job)
         if self.clock.now() >= job.lease.expires_at:
             raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")
-        self._enforce_deadlines(job)
         return job
 
     def _fence_without_deadlines(self, lease: Lease) -> _Job:
@@ -797,6 +982,26 @@ class FakeJobStore:
             # reservation and the customer's hold until the absolute deadline.
             return [self._terminalize(job, TerminalCause.preparation_failed, None, None,
                                       JobState.failed)]
+        if (job.state is JobState.preparing and job.preparation_lease is not None
+                and now >= job.preparation_lease.expires_at):
+            # r1 R46: reap a lost preparation worker. The job stays `preparing` and
+            # claimable - within `preparation_deadline_at` (checked above, so this branch
+            # only runs while the phase is still live) and within
+            # `MAX_PREPUBLICATION_RETRIES` further claims. Terminalizing on the first loss
+            # would fail a job whose only problem is that one host died with most of its
+            # budget left.
+            job.preparation_lease = None
+            if job.preparation_attempts > self.limits.max_prepublication_retries:
+                # r1 R52: but once the retries are spent, redispatching would queue work
+                # whose only possible outcome is `claim_preparation` terminalizing it - a
+                # dispatch that exists to fail. The reaper settles it here instead, so the
+                # hold and the reservations are freed now rather than when some worker
+                # happens to pick the job up.
+                return [self._terminalize(job, TerminalCause.preparation_failed, None, None,
+                                          JobState.failed)]
+            self._emit(job.id, OutboxKind.prepare_dispatch, now,
+                       {"request_id": job.id, "attempt": job.preparation_attempts})
+            return []
         # No separate absolute-deadline branch: every phase instant is already capped
         # by `deadline_at` (r1 R20), so the phase that is running is the one that
         # expires, with the cause that phase deserves.
@@ -826,6 +1031,9 @@ class FakeJobStore:
             self._enter_queued(job, now)          # r1 R38: only the remainder is left
             event = IndexEvent(event_id=self.ids.event_id(), job_id=job.id,
                                org_id=job.request.org_id, key_id=job.request.key_id,
+                               # r1 R52: a requeue after a lost inference attempt is an
+                               # inference candidate, and says so.
+                               kind=OutboxKind.inference_dispatch,
                                execution_mode=job.request.execution_mode, available_at=now,
                                attempt=job.attempts)
             self._emit(job.id, OutboxKind.inference_dispatch, now, {"request_id": job.id,

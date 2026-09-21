@@ -391,6 +391,20 @@ function canonicalPayload(value: Record<string, unknown>): string {
   );
 }
 
+/**
+ * r1 R54: the length a shared character bound counts, in **Unicode code points**.
+ *
+ * `"".length` counts UTF-16 code units, so one astral character (an emoji, a musical
+ * symbol, most of CJK Extension B) counts as two - which made every shared bound
+ * *stricter* here than in Python, where `len()` counts code points. A 4000-code-point
+ * correction of emoji was a 400 from the console and a stored row from the API: the two
+ * halves disagreed about the same contract number, which is exactly what a shared bound
+ * is for. `[...text]` iterates code points.
+ */
+function codePoints(text: string): number {
+  return [...text].length;
+}
+
 /** R3: one named signal per submission, with the value type the name implies. */
 function badFeedbackBody(input: { name: FeedbackName; value: FeedbackValue; comment?: string | null }): string | null {
   if (!(FEEDBACK_NAMES as readonly string[]).includes(input.name)) {
@@ -411,14 +425,14 @@ function badFeedbackBody(input: { name: FeedbackName; value: FeedbackValue; comm
     if (typeof input.value !== "string" || input.value.trim() === "") {
       return `a ${input.name} value is non-empty text`;
     }
-    if (input.value.length > MAX_FEEDBACK_TEXT_CHARS) {
+    if (codePoints(input.value) > MAX_FEEDBACK_TEXT_CHARS) {
       return `a ${input.name} value must be at most ${MAX_FEEDBACK_TEXT_CHARS} characters`;
     }
   }
   const comment = input.comment;
   if (comment !== undefined && comment !== null) {
     if (typeof comment !== "string" || comment.trim() === "") return "comment must be non-empty text when present";
-    if (comment.length > MAX_FEEDBACK_TEXT_CHARS) {
+    if (codePoints(comment) > MAX_FEEDBACK_TEXT_CHARS) {
       return `comment must be at most ${MAX_FEEDBACK_TEXT_CHARS} characters`;
     }
   }
@@ -430,7 +444,7 @@ function badIdempotencyKey(key: unknown, required: boolean): string | null {
     return required ? "an idempotency key is required" : null;
   }
   if (typeof key !== "string" || key.trim() === "") return "the idempotency key must be a non-empty string";
-  if (key.length > MAX_IDEMPOTENCY_KEY_CHARS) {
+  if (codePoints(key) > MAX_IDEMPOTENCY_KEY_CHARS) {
     return `the idempotency key must be at most ${MAX_IDEMPOTENCY_KEY_CHARS} characters`;
   }
   return null;
@@ -1403,7 +1417,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
   /** Every operator write is audited, so each one needs a reason a person actually typed. */
   function badAuditReason(reason: unknown): string | null {
     if (typeof reason !== "string" || reason.trim() === "") return "this operation needs a reason";
-    if (reason.length > MAX_GRANT_REASON_CHARS) {
+    if (codePoints(reason) > MAX_GRANT_REASON_CHARS) {
       return `the reason must be at most ${MAX_GRANT_REASON_CHARS} characters`;
     }
     return null;
@@ -1805,7 +1819,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (comment !== null && (typeof comment !== "string" || comment.trim() === "")) {
           return fail("invalid_request", "comment must be non-empty text when present");
         }
-        if (comment !== null && comment.length > MAX_FEEDBACK_TEXT_CHARS) {
+        if (comment !== null && codePoints(comment) > MAX_FEEDBACK_TEXT_CHARS) {
           return fail("invalid_request", `comment must be at most ${MAX_FEEDBACK_TEXT_CHARS} characters`);
         }
         // An operator labels a request of *some* organization, so the trace is looked up across
@@ -1966,7 +1980,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         if (typeof input.name !== "string" || input.name.trim() === "") {
           return fail("invalid_request", "a key needs a name");
         }
-        if (input.name.length > MAX_KEY_NAME_CHARS) {
+        if (codePoints(input.name) > MAX_KEY_NAME_CHARS) {
           return fail("invalid_request", `a key name must be at most ${MAX_KEY_NAME_CHARS} characters`);
         }
         if (input.trace_mode !== undefined && !(TRACE_MODES as readonly string[]).includes(input.trace_mode)) {
@@ -2079,7 +2093,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (typeof input.reason !== "string" || input.reason.trim() === "") {
         return fail("invalid_request", "a grant needs a reason");
       }
-      if (input.reason.length > MAX_GRANT_REASON_CHARS) {
+      if (codePoints(input.reason) > MAX_GRANT_REASON_CHARS) {
         return fail("invalid_request", `a grant reason must be at most ${MAX_GRANT_REASON_CHARS} characters`);
       }
       if (input.kind !== "promotional") {

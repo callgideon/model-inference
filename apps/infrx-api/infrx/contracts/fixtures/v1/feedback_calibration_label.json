@@ -1,0 +1,16 @@
+{
+  "author_principal": "operator@infrx.example",
+  "author_role": "operator",
+  "by_operator": true,
+  "calibration_set": true,
+  "channel": "console",
+  "comment": "the second clip is described, the first is not",
+  "created_at": "2026-09-20T12:00:19Z",
+  "feedback_id": "fb_7hK2mQ4pR9tY1uI3oP5aS8dF0gH6jL2zX4cV7bN9mQ1",
+  "name": "calibration_label",
+  "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+  "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+  "rubric_version": 3,
+  "schema_version": 1,
+  "value": "partially_correct"
+}

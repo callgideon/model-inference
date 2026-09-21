@@ -1,39 +1,56 @@
 {
+  "completed_at": "2026-09-20T12:00:09Z",
   "content": {
-    "input": {
+    "request": {
       "messages": [
         {
-          "content": "Describe what happens in this clip.",
+          "content": [
+            {
+              "type": "video_url",
+              "video_url": {
+                "source": "upload",
+                "url": "infrx://media/sha256:2222222222222222222222222222222222222222"
+              }
+            },
+            {
+              "text": "Describe what happens in this clip.",
+              "type": "text"
+            }
+          ],
           "role": "user"
         }
-      ]
-    },
-    "media": [
-      {
-        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-        "duration_s": 12.5
+      ],
+      "model": "nemostation/marlin-2b",
+      "params": {
+        "max_tokens": 2048,
+        "stream": true,
+        "temperature": 0.2
       }
-    ],
-    "output": {
-      "content": "Two people unload boxes from a van onto a trolley."
-    }
+    },
+    "response": {
+      "choices": [
+        {
+          "content": "Two people unload boxes from a van onto a trolley.",
+          "finish_reason": "stop",
+          "index": 0
+        }
+      ],
+      "status": 200
+    },
+    "v": 1
   },
+  "content_bytes": 8214,
+  "content_complete": true,
+  "content_handle": "tc_Nf8sQ2mR6vY1uJ3pK5aD9gH4bL7zX0cV2nM6qT8wE1r",
   "content_state": "available",
-  "envelope": {
-    "completed_at": "2026-09-20T12:00:09Z",
-    "content_bytes": 8214,
-    "content_complete": true,
-    "content_ref": "traces/1a1a1a1a/2026/09/20/4d4d4d4d.json.zst",
-    "key_id": "3c3c3c3c-0000-4000-8000-000000000003",
-    "loss_reason": "none",
-    "metadata_bytes": 512,
-    "mode": "full",
-    "model_revision": "nemostation/marlin-2b@2026-09-01",
-    "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
-    "price_version": "pv_2026_09_01",
-    "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
-    "request_schema_version": 1,
-    "schema_version": 1,
-    "started_at": "2026-09-20T12:00:00Z"
-  }
+  "key_id": "3c3c3c3c-0000-4000-8000-000000000003",
+  "loss_reason": "none",
+  "metadata_bytes": 512,
+  "mode": "full",
+  "model_revision": "nemostation/marlin-2b@2026-09-01",
+  "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+  "price_version": "pv_2026_09_01",
+  "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+  "started_at": "2026-09-20T12:00:00Z",
+  "trace_schema_version": 1
 }

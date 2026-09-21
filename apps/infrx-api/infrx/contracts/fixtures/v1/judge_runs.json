@@ -13,7 +13,7 @@
     "model_revision": "claude-opus-5",
     "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
     "reserved_cost": "0.00000000",
-    "rubric_version": "rubric_v1",
+    "rubric_version": 1,
     "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
     "sample_ids": [
       "4d4d4d4d-0000-4000-8000-000000000004"
@@ -35,7 +35,7 @@
     "model_revision": "claude-opus-5",
     "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
     "reserved_cost": "0.42000000",
-    "rubric_version": "rubric_v1",
+    "rubric_version": 1,
     "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
     "sample_ids": [
       "4d4d4d4d-0000-4000-8000-000000000004"
@@ -57,7 +57,7 @@
     "model_revision": "claude-opus-5",
     "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
     "reserved_cost": "0.42000000",
-    "rubric_version": "rubric_v1",
+    "rubric_version": 1,
     "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
     "sample_ids": [
       "4d4d4d4d-0000-4000-8000-000000000004"
@@ -81,7 +81,7 @@
     "model_revision": "claude-opus-5",
     "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
     "reserved_cost": "0.42000000",
-    "rubric_version": "rubric_v1",
+    "rubric_version": 1,
     "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
     "sample_ids": [
       "4d4d4d4d-0000-4000-8000-000000000004"
@@ -104,7 +104,7 @@
     "model_revision": "claude-opus-5",
     "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
     "reserved_cost": "0.42000000",
-    "rubric_version": "rubric_v1",
+    "rubric_version": 1,
     "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
     "sample_ids": [
       "4d4d4d4d-0000-4000-8000-000000000004"
@@ -128,7 +128,7 @@
     "model_revision": "claude-opus-5",
     "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
     "reserved_cost": "0.42000000",
-    "rubric_version": "rubric_v1",
+    "rubric_version": 1,
     "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
     "sample_ids": [
       "4d4d4d4d-0000-4000-8000-000000000004"
@@ -154,7 +154,7 @@
     "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
     "reconciled_at": "2026-09-20T12:00:09Z",
     "reserved_cost": "0.42000000",
-    "rubric_version": "rubric_v1",
+    "rubric_version": 1,
     "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
     "sample_ids": [
       "4d4d4d4d-0000-4000-8000-000000000004"
@@ -177,7 +177,7 @@
     "model_revision": "claude-opus-5",
     "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
     "reserved_cost": "0.42000000",
-    "rubric_version": "rubric_v1",
+    "rubric_version": 1,
     "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
     "sample_ids": [
       "4d4d4d4d-0000-4000-8000-000000000004"
@@ -200,7 +200,7 @@
     "model_revision": "claude-opus-5",
     "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
     "reserved_cost": "0.00000000",
-    "rubric_version": "rubric_v1",
+    "rubric_version": 1,
     "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
     "sample_ids": [
       "4d4d4d4d-0000-4000-8000-000000000004"

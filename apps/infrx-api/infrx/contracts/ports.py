@@ -32,9 +32,10 @@ from typing import Any, AsyncIterator, Protocol, runtime_checkable
 
 from .records import (Admission, AuthContext, Chunk, ConsentSnapshot, Cursor, EngineEvent,
                       Feedback, IdempotencyRef, IndexEvent, JudgeResolution, JudgeRun, Lease,
+                      OutboxKind,
                       MediaRef, NormalizedRequest, PreparedRequest, ReservationKind,
                       TerminalOutcome, TraceEnvelope, TraceLossReason, TraceMode,
-                      TraceOfferResult)
+                      TraceOfferResult, Work)
 
 
 @runtime_checkable
@@ -42,7 +43,7 @@ class JobStore(Protocol):
     """D. Durable authority: acceptance, fencing, terminal settlement."""
 
     async def admit(self, request: NormalizedRequest, idem: IdempotencyRef,
-                    caps: tuple[ReservationKind, ...], hold: Decimal) -> Admission:
+                    caps: tuple[ReservationKind, ...] = ()) -> Admission:
         """One transaction: recheck authorization, capacity and balance, reserve
         preparation/inference/journal capacity and the maximum hold, insert the
         `preparing` job and its dispatch outbox. An idempotent replay returns the
@@ -52,8 +53,16 @@ class JobStore(Protocol):
 
         `caps` names *extra* reservation kinds beyond the three every admission
         takes; amounts come from the store's own limits, never from the caller. The
-        request UUID is the job key, so re-admitting one raises `StateConflict`
-        (R6), and a negative `hold` raises `InvalidRequest` (R11).
+        request UUID is the job key, so re-admitting one raises `StateConflict` (R6).
+
+        **r1 R53: no caller-supplied hold.** Since R45 only the store knows the rates,
+        the store takes the price snapshot and computes `Admission.maximum_hold` from
+        it and the request's validated token ceilings in the **same transaction**,
+        rounding up (§4). A hold a caller computed is a number from before the price it
+        is meant to cover: a rate moving between gateway validation and admission left
+        a job admitted at the new price holding for the old one, and a valid
+        in-envelope completion then settled `platform_error` with a zero debit.
+        `Admission.maximum_hold` is the store's answer, never an echo of the caller's.
 
         The transaction rechecks key revocation, org suspension *and* current
         entitlement (`ModelNotEntitled`), reserves a `preparation` unit against
@@ -63,15 +72,45 @@ class JobStore(Protocol):
     async def get_owned(self, org_id: str, job_handle: str) -> tuple[Admission, TerminalOutcome | None]:
         """Ownership-checked lookup. Possession of a handle is never enough."""
 
-    async def prepared(self, job_handle: str, media: tuple[MediaRef, ...]) -> Admission:
+    async def claim_preparation(self, job_id: str, worker_id: str) -> Lease:
+        """r1 R46: `Lease(kind=preparation)` for a `preparing` job, fenced exactly like
+        an inference lease (own generation counter, owner, state, expiry).
+
+        At most one live preparation lease per job: a second claim while one is unexpired
+        is `not_claimable`, because two preparation workers writing prepared refs for the
+        same job is the media equivalent of two workers appending output. `recover`
+        reaps an expired one and the job stays preparable, bounded by
+        `MAX_PREPUBLICATION_RETRIES` further attempts (so three claims in total) and by
+        `preparation_deadline_at`, past which the job is `preparation_failed` (R29)."""
+
+    async def prepared(self, lease: Lease, media: tuple[MediaRef, ...]) -> Admission:
         """Store immutable prepared refs, then atomically `preparing -> queued`
-        with the inference dispatch outbox; releases preparation capacity."""
+        with the inference dispatch outbox; releases preparation capacity.
+
+        r1 R46: fenced on the **preparation lease** (`02` §3), like every other
+        execution mutation: generation, owner, state, expiry and the R29 phase
+        deadlines. A superseded preparation worker returning late mutates nothing;
+        it used to be addressed by job handle and therefore needed no token at all."""
+
+    async def load_work(self, lease: Lease) -> Work:
+        """r1 R46: the only way a lease holder reads what it must execute.
+
+        Fenced like a mutation: a stale, foreign or wrong-kind lease gets a typed
+        refusal (`stale_lease`/`not_found`/`already_terminal`) and **no data**. Nothing
+        else hands a worker the request, the media refs, the price snapshot or the
+        budgets, so losing the fence loses the work."""
 
     async def claim(self, job_id: str, worker_id: str) -> Lease:
-        """`queued -> running`, generation incremented from the database clock."""
+        """`queued -> running`, generation incremented from the database clock.
+        Returns `Lease(kind=inference)`."""
 
     async def heartbeat(self, lease: Lease) -> Lease:
-        """Renew a lease fenced on generation, owner, state and expiry."""
+        """Renew an **inference** lease fenced on generation, owner, state and expiry.
+
+        A preparation lease is refused (`invalid_request`): the preparation budget and
+        the lease TTL are both bounded and equal by default, so there is no renewal to
+        make, and a silent no-op would let a preparation worker believe it still held a
+        fence it had lost."""
 
     async def cancel(self, org_id: str, job_handle: str) -> TerminalOutcome:
         """Durable cancellation of any nonterminal state, serialized against
@@ -120,12 +159,36 @@ class StreamStore(Protocol):
 
 @runtime_checkable
 class MediaStore(Protocol):
-    """M. Immutable tenant-scoped content; callers never choose a path."""
+    """M. Immutable tenant-scoped content; callers never choose a path.
+
+    r1 R46 fixes the addressing: **internal** operations take `job_id` (the request
+    UUID), **tenant-facing** ones take the caller's org plus an opaque handle. So
+    `attach`/`prepare` here, `claim_preparation`/`claim`/`load_work` and `IndexEvent`
+    on the JobStore all say `job_id`, while `get_owned`/`cancel`/`read_owned` and
+    `resolve_owned` say `(org_id, handle)`. A handle is a customer-facing lookup key
+    that must be ownership-checked on sight; a job id is the internal identity every
+    durable row is keyed by, and no internal caller should have to resolve one to the
+    other (or be tempted to skip the ownership check when it does).
+    """
 
     async def stage(self, org_id: str, request: NormalizedRequest) -> tuple[MediaRef, ...]:
         """Durably stage the canonical payload and inline media before acceptance."""
 
-    async def prepare(self, job_handle: str, profile: str) -> tuple[MediaRef, ...]:
+    async def attach(self, job_id: str, refs: tuple[MediaRef, ...]) -> None:
+        """r1 R46: bind staged refs to an admitted job, as the job row does in
+        PostgreSQL. A real port operation rather than a test-only hook, because
+        `prepare` cannot work without it and M's adapter has to implement it.
+
+        r1 R52: every ref must belong to the **job's** organization, or `not_found`. A
+        foreign ref used to attach and be caught two phases later by `prepared`, after
+        `prepare` had transcoded it into this tenant's prefix.
+
+        r1 R55: that organization is read from the **job row**. With an `org_id` argument
+        `attach(jobA, ORG_B, (refB,))` satisfied its own check, because the caller named
+        the tenant its refs belonged to - and 06 is explicit that server-derived identity
+        is never taken from an untrusted argument. A refused attach stores nothing."""
+
+    async def prepare(self, job_id: str, profile: str) -> tuple[MediaRef, ...]:
         """Produce immutable prepared refs for a profile version."""
 
     async def create_upload(self, org_id: str, constraints: dict[str, Any]) -> dict[str, Any]:
@@ -145,8 +208,18 @@ class Scheduler(Protocol):
     async def enqueue(self, event: IndexEvent) -> bool:
         """Replay-safe: the same event id twice indexes one candidate."""
 
-    async def claim_candidate(self, worker_id: str) -> IndexEvent | None:
-        """A candidate to try; the winner is decided by `JobStore.claim`."""
+    async def claim_candidate(self, worker_id: str, *,
+                              kind: OutboxKind | None = None) -> IndexEvent | None:
+        """A candidate to try; the winner is decided by `JobStore.claim`.
+
+        r1 R52: `kind` selects `prepare_dispatch` or `inference_dispatch`, so a
+        preparation worker can be fed from the index rather than from a side channel.
+        `None` means "anything". A candidate of the wrong kind is not a refusal a pool
+        should have to discover through `claim`.
+
+        r1 R55: an **unknown** kind is `invalid_request`, not `None`. Answering "no
+        candidate" for a misspelled kind reports a caller bug as an empty index, so a pool
+        idles for ever against a full queue and looks healthy while it does it."""
 
     async def acknowledge(self, event: IndexEvent) -> None: ...
 
@@ -260,7 +333,28 @@ class TraceSink(Protocol):
         raises into it** - an off-mode envelope is dropped and counted `malformed`."""
 
     async def stats(self) -> dict[str, Any]:
-        """In-memory, appended and fsynced counts plus loss reasons, separately."""
+        """In-memory, appended and fsynced counts plus loss reasons, separately.
+
+        The exported suites read these keys, so an adapter that omits one skips an
+        assertion silently. They are the contract:
+
+        | Key | Meaning |
+        |---|---|
+        | `accepted` | records taken into memory (`offer`/`finish` answered `accepted_in_memory`) |
+        | `dropped` | records refused, each with a counted `loss_reasons` entry |
+        | `in_memory` | records held in memory, not yet appended |
+        | `in_memory_content_bytes` | content bytes currently charged to the process budget |
+        | `in_memory_metadata_bytes` | metadata bytes currently charged |
+        | `open_captures` | captures opened and not yet finished or abandoned |
+        | `appended` | records written to the spool but not necessarily fsynced |
+        | `fsynced` | records fsynced, i.e. the only ones durability is claimed for |
+        | `loss_reasons` | `{reason_value: count}`, **non-zero counts only** - a reason with
+          nothing behind it is not a loss, and reporting `shutdown: 0` made a silent
+          off-mode process look lossy (R42) |
+
+        02 requires the three durability states separately, so a caller can never read
+        "appended" as "safe".
+        """
 
     async def flush(self, deadline: datetime) -> dict[str, Any]: ...
 
@@ -284,15 +378,40 @@ class FeedbackService(Protocol):
         body is `invalid_request` and `idem.key` is required, so every submission is
         replay-safe. `idem` must name the caller's organization (R10). R31: the author
         role is always `customer` here, whatever the session - a client may not send
-        provenance at all, and `calibration_set` is refused."""
+        provenance at all, and `calibration_set` is refused.
+
+        R43: `name=calibration_label` is refused as input (it is a stored-entry name
+        only), text and comment are bounded at 4000 characters, and a **suspended**
+        organization is `org_suspended` (R33): suspension gates new work and
+        configuration changes, so a submission is refused while every read still
+        works."""
 
     async def label_calibration(self, auth: AuthContext, request_id: str, label: str,
-                                idem: IdempotencyRef) -> Feedback:
-        """R31/R19: the only path to `author_role=operator` with calibration
+                                rubric_version: int, idem: IdempotencyRef, *,
+                                comment: str | None = None) -> Feedback:
+        """R31/R19/R43: the only path to `author_role=operator` with calibration
         membership. Operator only and platform-wide (R26): the tenant comes from the
-        labelled row, not from the operator's session. Idempotent and audited."""
+        labelled row, not from the operator's session. Idempotent and audited.
 
-    async def list_owned(self, auth: AuthContext, request_id: str) -> tuple[Feedback, ...]: ...
+        `label` is one of `records.CalibrationLabel`; `rubric_version` is a required
+        integer in 1..1000 (R43: an integer everywhere, as `research/traces/04` stores
+        it). The stored row is an ordinary `Feedback` with `name=calibration_label`,
+        `calibration_set=True` and that rubric version - there is no second shape."""
+
+    async def list_owned(self, auth: AuthContext, request_id: str) -> tuple[Feedback, ...]:
+        """The viewer's own feedback for one request.
+
+        R35/R41 bind the Python half too: for a **non-operator** `AuthContext` this
+        excludes calibration labels entirely and reports an operator-authored
+        principal as the literal `platform` (`wire.PLATFORM_ACTOR`); an operator
+        `AuthContext` sees the rows as stored. `wire.FeedbackList.for_viewer` applies
+        the same projection to a body built from any other source."""
+
+    async def list_calibration(self, auth: AuthContext, request_id: str) -> tuple[Feedback, ...]:
+        """R35, mirroring the console's `calibration.list`: operator-only, the one view
+        that shows calibration labels and the operator principals that authored them.
+        A non-operator caller is `forbidden`, not an empty list, and the labels are
+        platform-wide (R26) because a calibration set spans tenants."""
 
 
 @runtime_checkable

@@ -47,6 +47,11 @@ class FakeMediaStore:
         # never name, replace or shadow another org's object.
         self.objects: dict[tuple[str, str], MediaRef] = {}
         self.by_job: dict[str, tuple[MediaRef, ...]] = {}
+        # r1 R55: where `attach` reads a job's organization. A real adapter joins the job
+        # row; the fake is given the same lookup, and refuses a job it does not know rather
+        # than trusting a caller to name the tenant.
+        self.job_orgs: dict[str, str] = {}
+        self.job_org = lambda job_id: self._job_org(job_id)
 
     # --- test hooks (not part of the port) -----------------------------------
     def put_object(self, upload_handle: str, data: bytes, mime: str = "video/mp4") -> None:
@@ -54,11 +59,43 @@ class FakeMediaStore:
         upload = self.uploads[upload_handle]
         upload.data, upload.mime = data, mime
 
-    def attach(self, job_handle: str, refs: tuple[MediaRef, ...]) -> None:
-        """Bind staged refs to an admitted job, as the job row does in PostgreSQL."""
-        self.by_job[job_handle] = refs
+    def _job_org(self, job_id: str) -> str:
+        org_id = self.job_orgs.get(job_id)
+        if org_id is None:
+            raise errors.NotFound(f"no job {job_id}")
+        return org_id
+
+    def admitted(self, job_id: str, org_id: str) -> None:
+        """Test hook standing in for the job row `attach` joins (r1 R55)."""
+        self.job_orgs[job_id] = org_id
 
     # --- port ---------------------------------------------------------------
+    async def attach(self, job_id: str, refs: tuple[MediaRef, ...]) -> None:
+        """r1 R46: bind staged refs to an admitted job, as the job row does in
+        PostgreSQL. A port operation, not a test hook: `prepare` cannot work without
+        it, so leaving it out of the port left M free to invent its own way in.
+
+        r1 R52: **every ref must belong to the job's organization.** ORG_B's refs used to
+        attach happily to an ORG_A job and were only caught much later, by `prepared`,
+        after `prepare` had already transcoded them and written objects under ORG_A's
+        prefix. The tenant check belongs at the write, not two phases downstream.
+
+        r1 R55: and the organization comes from **the job row**, not from the caller. With
+        an `org_id` argument, `attach(jobA, ORG_B, (refB,))` passed its own check - the
+        caller simply named the tenant its refs belonged to, which is the one thing a
+        tenant check may not take on trust (06: "server-derived identity is never accepted
+        from untrusted body fields"). All or nothing: nothing is stored unless every ref
+        checks out (r1 s15).
+        """
+        self.failures.before("attach")
+        org_id = self.job_org(job_id)
+        for ref in refs:
+            if ref.org_id != org_id:
+                raise errors.NotFound("media attached to a job must belong to its org")
+        # Validated in full first: a refused attach must leave `prepare` with nothing,
+        # rather than a half-written set the next phase would transcode.
+        self.by_job[job_id] = tuple(refs)
+
     async def stage(self, org_id: str, request: NormalizedRequest) -> tuple[MediaRef, ...]:
         """Durable, immutable staging before acceptance. The storage key is built from
         the tenant, the source digest and the profile version; the caller has no say
@@ -119,17 +156,18 @@ class FakeMediaStore:
         # so two orgs with identical bytes never share an object.
         return f"media/{org_id}/{profile_version}/{digest.split(':')[1][:16]}/{part}"
 
-    async def prepare(self, job_handle: str, profile: str) -> tuple[MediaRef, ...]:
+    async def prepare(self, job_id: str, profile: str) -> tuple[MediaRef, ...]:
+        """r1 R46: addressed by `job_id`, like every internal operation."""
         self.failures.before("prepare")
-        sources = self.by_job.get(job_handle)
+        sources = self.by_job.get(job_id)
         if sources is None:
-            raise errors.NotFound(f"no staged media for {job_handle}")
+            raise errors.NotFound(f"no staged media for job {job_id}")
         prepared = tuple(
             ref.model_copy(update={"profile_version": profile,
                                    "storage_ref": self._key(ref.org_id, ref.digest, profile,
                                                             "prepared")})
             for ref in sources)
-        self.by_job[job_handle] = prepared
+        self.by_job[job_id] = prepared
         return prepared
 
     async def create_upload(self, org_id: str, constraints: dict[str, object]) -> dict[str, object]:

@@ -13,12 +13,17 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import (BaseModel, ConfigDict, Field, PlainSerializer, model_validator)
+from pydantic import (BaseModel, ConfigDict, Field, PlainSerializer, StrictInt,
+                      model_validator)
 from pydantic.functional_validators import BeforeValidator
 
-from . import errors, ids, money
+from . import errors, ids, limits, money
 
 SCHEMA_VERSION = 1
+
+# r1 R41: what a customer session reads in place of an operator's identity. It lives
+# beside the records because the *port* projection needs it, not only the wire one.
+PLATFORM_ACTOR = "platform"
 
 
 # --- vocabulary (08 §3) ------------------------------------------------------
@@ -114,6 +119,15 @@ class ReservationKind(enum.StrEnum):
     journal_bytes = "journal_bytes"
 
 
+class LeaseKind(enum.StrEnum):
+    """r1 R46: which phase a lease fences. Preparation and inference are separate
+    attempts on separate counters, so a superseded preparation worker cannot pass
+    its token off as an inference lease (or the reverse)."""
+
+    preparation = "preparation"
+    inference = "inference"
+
+
 class ChunkEventType(enum.StrEnum):
     progress = "progress"
     delta = "delta"
@@ -152,6 +166,9 @@ class TraceLossReason(enum.StrEnum):
 
 class TraceOfferResult(enum.StrEnum):
     accepted_in_memory = "accepted_in_memory"
+    # `dropped` means "nothing was stored", not "a loss was counted": an off-mode capture
+    # answers `dropped` while counting neither a loss nor a drop (R42), so a caller must
+    # not read this value as an error to report or retry.
     dropped = "dropped"
 
 
@@ -167,12 +184,37 @@ class AuthorRole(enum.StrEnum):
 
 
 class FeedbackName(enum.StrEnum):
-    """r1 R3, from `research/traces/06` §2: the name fixes the value's type."""
+    """Every name a *stored* feedback entry may carry (r1 R3, R43).
+
+    The first four are the signals a client may submit and the name fixes the
+    value's type (`research/traces/06` §2). `calibration_label` is a stored-only
+    name: `FeedbackService.accept` refuses it as input, and only the operator path
+    `label_calibration` creates one, which mirrors the console's
+    `FEEDBACK_NAMES` / `FEEDBACK_ENTRY_NAMES` split (R43). Keeping the two lists
+    apart is what makes "a client cannot author an operator label" a property of
+    the vocabulary rather than one more check somebody has to remember.
+    """
 
     thumb = "thumb"
     rating = "rating"
     correction = "correction"
     comment = "comment"
+    calibration_label = "calibration_label"
+
+
+# The submittable subset, in the console's order. `FeedbackName` is the entry set.
+FEEDBACK_INPUT_NAMES: tuple[FeedbackName, ...] = (
+    FeedbackName.thumb, FeedbackName.rating, FeedbackName.correction, FeedbackName.comment,
+)
+
+
+class CalibrationLabel(enum.StrEnum):
+    """r1 R43: the verdict an operator records against a rubric version."""
+
+    correct = "correct"
+    partially_correct = "partially_correct"
+    incorrect = "incorrect"
+    unusable = "unusable"
 
 
 class JudgeResolution(enum.StrEnum):
@@ -272,11 +314,54 @@ class AuthContext(Record):
         return self.role is Role.operator
 
 
+class OrgEntitlements(Record):
+    """r1 R24: what an organization may run, stated so the default cannot be read
+    as a denial.
+
+    * `model_ids is None` - the platform default set; no per-org decision recorded.
+    * `model_ids == ()` - **nothing entitled**: every admission is
+      `model_not_entitled`. A deliberate fail-closed state, not an empty field.
+    * a non-empty tuple - exactly those models, and nothing else.
+
+    `limits` keys come from the closed `ENTITLEMENT_LIMIT_NAMES` set, so an unknown
+    control is `invalid_request` rather than a silently ignored one.
+    """
+
+    org_id: UuidStr
+    model_ids: tuple[str, ...] | None = None
+    # r1 R52/R54: strict. `True` is not a limit of 1, and `"8"` is not eight.
+    limits: dict[str, StrictInt] = Field(default_factory=dict)
+    updated_at: Timestamp | None = None
+    updated_by: str | None = None
+
+    @model_validator(mode="after")
+    def _limits_are_known_and_bounded(self) -> OrgEntitlements:
+        unknown = sorted(set(self.limits) - set(limits.ENTITLEMENT_LIMIT_NAMES))
+        if unknown:
+            raise ValueError(f"unknown entitlement limits: {unknown}")
+        for name, value in self.limits.items():
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"entitlement limit {name} must be an integer")
+            if not 0 <= value <= limits.MAX_ENTITLEMENT_LIMIT:
+                raise ValueError(f"entitlement limit {name} must be in "
+                                 f"0..{limits.MAX_ENTITLEMENT_LIMIT}")
+        return self
+
+    def allows(self, model_revision: str) -> bool | None:
+        """True/False for a recorded decision, `None` for "use the platform default"."""
+        if self.model_ids is None:
+            return None
+        return model_revision in self.model_ids
+
+
 class ConsentSnapshot(Record):
     org_id: UuidStr
     consent_version: int
     trace_mode: TraceMode
-    content_retention_days: int = Field(ge=0, le=90)
+    # r1 R43: retention is 1..90 days wherever it is validated. Zero days is not a
+    # retention policy - "keep nothing" is `TraceMode.off`.
+    content_retention_days: int = Field(ge=limits.MIN_CONTENT_RETENTION_DAYS,
+                                        le=limits.MAX_CONTENT_RETENTION_DAYS)
     evaluation_consent: bool
     effective_at: Timestamp
     revoked_at: Timestamp | None = None
@@ -388,7 +473,7 @@ class IdempotencyRef(Record):
 
     org_id: UuidStr
     operation: str
-    key: str | None = Field(default=None, max_length=255)
+    key: str | None = Field(default=None, max_length=limits.MAX_IDEMPOTENCY_KEY_CHARS)
     payload_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
     @property
@@ -450,20 +535,31 @@ class Admission(Record):
 # --- execution ---------------------------------------------------------------
 class Lease(Record):
     job_id: UuidStr
+    # r1 R46: which phase this token fences, and therefore which generation counter it
+    # is compared against. A job has one preparation attempt sequence and one inference
+    # attempt sequence; `generation` is the ordinal within this lease's own kind.
+    kind: LeaseKind
     generation: int = Field(ge=1)
     worker_id: str
     acquired_at: Timestamp              # database clock
     expires_at: Timestamp
     # r1 R20: derived at claim from the database clock and the job's budgets, capped
-    # by `deadline_at`. The worker enforces them: it stops generating at
-    # `generation_deadline_at` and gives up on a first token at
-    # `first_token_deadline_at` instead of timing a budget locally.
+    # by `deadline_at`. The worker enforces them: it stops working at
+    # `generation_deadline_at` - which on a **preparation** lease is the job's
+    # `preparation_deadline_at`, that phase having one deadline - and gives up on a
+    # first token at `first_token_deadline_at` instead of timing a budget locally.
     generation_deadline_at: Timestamp
-    first_token_deadline_at: Timestamp
+    first_token_deadline_at: Timestamp | None = None
 
     @model_validator(mode="after")
     def _phase_deadlines_are_ordered(self) -> Lease:
-        if self.first_token_deadline_at > self.generation_deadline_at:
+        if self.kind is LeaseKind.inference and self.first_token_deadline_at is None:
+            raise ValueError("an inference lease carries a first-token deadline")
+        if self.kind is LeaseKind.preparation and self.first_token_deadline_at is not None:
+            # There is no first token to wait for before the job has even been queued.
+            raise ValueError("a preparation lease has no first-token deadline")
+        if self.first_token_deadline_at is not None \
+                and self.first_token_deadline_at > self.generation_deadline_at:
             raise ValueError("the first-token deadline cannot outlast the generation deadline")
         return self
 
@@ -532,6 +628,26 @@ class TerminalOutcome(Record):
         return self
 
 
+class Work(Record):
+    """r1 R46: everything a lease holder must execute, and nothing else.
+
+    `JobStore.load_work(lease)` is the only way to get one, and it is fenced like a
+    mutation: a stale, foreign or wrong-kind lease gets a typed refusal and **no data**.
+    Before this existed a worker had to be handed the request out of band, which meant
+    nothing stopped a fenced worker from still holding everything it needed to run.
+
+    `media_refs` are the staged sources, `prepared_refs` what preparation produced (empty
+    on a preparation lease, which is what fills them). The price is the admission's
+    snapshot, never re-read at execution time, and `budgets` is the R4 snapshot.
+    """
+
+    request: NormalizedRequest
+    media_refs: tuple[MediaRef, ...] = ()
+    prepared_refs: tuple[MediaRef, ...] = ()
+    price_snapshot: PriceSnapshot
+    budgets: Budgets
+
+
 class PreparedRequest(Record):
     """Refinement: what the engine port receives after preparation."""
 
@@ -553,16 +669,38 @@ class EngineEvent(Record):
     usage: Usage | None = None
 
 
+DISPATCH_KINDS = (OutboxKind.prepare_dispatch, OutboxKind.inference_dispatch)
+
+
 class IndexEvent(Record):
-    """Scheduling index membership. Never authorizes execution by itself."""
+    """Scheduling index membership. Never authorizes execution by itself.
+
+    r1 R52: the event carries its **kind**, so a preparation worker can be fed from the
+    index rather than from a side channel. Without it a candidate said only "this job
+    wants something done", and Q had no way to hand it to the right pool - a preparation
+    worker would claim an inference candidate, be refused by `claim`, and the job would
+    sit there while the index looked busy.
+    """
 
     event_id: UuidStr
     job_id: UuidStr
     org_id: UuidStr
     key_id: UuidStr
+    kind: OutboxKind = OutboxKind.inference_dispatch
     execution_mode: ExecutionMode
     available_at: Timestamp
     attempt: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def _is_a_dispatch(self) -> IndexEvent:
+        if self.kind not in DISPATCH_KINDS:
+            raise ValueError(f"{self.kind} is not a dispatch kind; the index carries "
+                             f"{', '.join(k.value for k in DISPATCH_KINDS)}")
+        return self
+
+    @property
+    def is_preparation(self) -> bool:
+        return self.kind is OutboxKind.prepare_dispatch
 
 
 # --- observability -----------------------------------------------------------
@@ -620,13 +758,28 @@ def check_feedback_value(name: FeedbackName, value: object) -> None:
             raise ValueError("a rating value is an integer")
         if not 1 <= value <= 5:
             raise ValueError("a rating value is between 1 and 5")
+    elif name is FeedbackName.calibration_label:
+        # r1 R43: a label's value is one of a closed vocabulary, not free text.
+        if isinstance(value, bool) or value not in tuple(CalibrationLabel):
+            raise ValueError("a calibration_label value is one of "
+                             f"{', '.join(label.value for label in CalibrationLabel)}")
     else:                                # correction, comment
         if isinstance(value, bool) or not isinstance(value, str) or not value.strip():
             raise ValueError(f"a {name} value is nonempty text")
+    if isinstance(value, str) and len(value) > limits.MAX_FEEDBACK_TEXT_CHARS:
+        # r1 R43: a comment is a note, not an upload channel.
+        raise ValueError(f"a feedback value is at most {limits.MAX_FEEDBACK_TEXT_CHARS} characters")
 
 
 class Feedback(Record):
-    """r1 R3: one signal per record — `name` fixes the type of `value`."""
+    """r1 R3/R43: one signal per record — `name` fixes the type of `value`.
+
+    A calibration label is *this* record with `name=calibration_label`,
+    `calibration_set=True` and an integer `rubric_version`; there is no second
+    shape and no free-text calibration set. `calibration_set` is a boolean because
+    membership is one fact, and the rubric it was labelled against is the integer
+    `research/traces/04` stores as a `UInt16`.
+    """
 
     feedback_id: str
     request_id: UuidStr
@@ -636,8 +789,18 @@ class Feedback(Record):
     channel: FeedbackChannel            # server-set
     name: FeedbackName
     value: bool | int | str
-    comment: str | None = None
-    calibration_set: str | None = None  # operator authorization required
+    comment: str | None = Field(default=None, max_length=limits.MAX_FEEDBACK_TEXT_CHARS)
+    calibration_set: bool = False       # operator authorization required
+    # r1 R54: **strict**. Under pydantic's lax mode `True` validated as 1, so a boolean
+    # was a rubric version and `"3"` was three - the record was looser than the port.
+    rubric_version: StrictInt | None = Field(default=None, ge=limits.MIN_RUBRIC_VERSION,
+                                             le=limits.MAX_RUBRIC_VERSION)
+    # r1 R50: server-set, never client-settable, and it **never leaves the service** -
+    # the public projection is `wire.FeedbackEntry`, which has no such field. It records
+    # that a *platform operator* made this entry, which is what R41's masking keys on;
+    # `author_role` cannot, because `accept` always stores `customer` (R31), so a branch
+    # on the role was dead code and a customer read the operator's address.
+    by_operator: bool = False
     created_at: Timestamp
 
     @model_validator(mode="before")
@@ -648,7 +811,53 @@ class Feedback(Record):
     @model_validator(mode="after")
     def _value_matches_the_name(self) -> Feedback:
         check_feedback_value(self.name, self.value)
+        # r1 R43: the three calibration fields are one fact, so they cannot disagree.
+        # A `calibration_set` customer signal would be an unauthorized label, and a
+        # label with no rubric version is a verdict against nothing.
+        label = self.name is FeedbackName.calibration_label
+        if label != self.calibration_set:
+            raise ValueError("calibration_set is true exactly on a calibration_label entry")
+        if label != (self.rubric_version is not None):
+            raise ValueError("rubric_version is required on a calibration_label entry "
+                             "and null on every other entry")
+        # r1 R54: a label is an operator's verdict. A `calibration_label` row attributed
+        # to a customer would be operator data with a customer's provenance, which is
+        # exactly the forgery R31 exists to prevent.
+        if label and self.author_role is not AuthorRole.operator:
+            raise ValueError("a calibration_label entry is authored by an operator")
+        if label and not self.by_operator:
+            raise ValueError("a calibration_label entry is made by an operator (R50)")
+        # r1 R55: and the converse, for *any* row. An `operator` author role without the
+        # marker was constructible, and the marker is what R41's masking keys on - so such
+        # a row would be operator-authored and read to a customer with the operator's
+        # principal intact, which is the leak R50 exists to close.
+        if self.author_role is AuthorRole.operator and not self.by_operator:
+            raise ValueError("an operator-authored entry is marked by_operator (R55)")
         return self
+
+
+def visible_feedback(items: tuple[Feedback, ...], *, operator: bool) -> tuple[Feedback, ...]:
+    """The one feedback visibility rule, applied at the port and again at the wire.
+
+    * **R35/R49: a feedback list never carries a calibration label, for anyone.** Labels
+      are operator data read only through `list_calibration`/`calibration.list`. An
+      operator listing a request's feedback sees its ordinary entries, with their real
+      principals; it does not see labels there, so no viewer has to remember which list
+      it is reading.
+    * **R41/R50: a non-operator viewer reads `platform` as the principal of any
+      `by_operator` entry.** A tenant learns that the platform acted, never who at the
+      platform did it.
+
+    One function because two copies of a visibility rule is one copy that gets fixed.
+    """
+    visible = []
+    for item in items:
+        if item.calibration_set:
+            continue
+        if not operator and item.by_operator:
+            item = item.model_copy(update={"author_principal": PLATFORM_ACTOR})
+        visible.append(item)
+    return tuple(visible)
 
 
 class JudgeRun(Record):
@@ -656,7 +865,10 @@ class JudgeRun(Record):
     org_id: UuidStr
     sample_ids: tuple[str, ...] = ()
     consent: ConsentSnapshot
-    rubric_version: str
+    # r1 R43: an integer everywhere - runs, samples, scores and calibration labels -
+    # matching `research/traces/04`'s `UInt16` and the console's `rubric_version`.
+    rubric_version: StrictInt = Field(ge=limits.MIN_RUBRIC_VERSION,
+                                      le=limits.MAX_RUBRIC_VERSION)
     model_revision: str
     reserved_cost: Money = Field(default=money.ZERO, ge=0)
     actual_cost: Money | None = None
