@@ -87,6 +87,7 @@ ADAPTER_SPLITS = "test_api_stream__every_chunk_split_reaches_the_customer_throug
 EMPTY = "test_api_stream__an_empty_first_delta_is_not_a_token"
 USAGE = "test_api_stream__usage_is_authoritative_only_when_the_stream_agrees"
 BOUNDS = "test_api_stream__one_event_and_the_whole_output_are_bounded"
+JOURNAL = "test_api_stream__an_event_always_fits_the_journal_in_any_script"
 JUNK = "test_api_stream__junk_and_stray_payloads_are_survived_not_relayed"
 FAILURES = "test_api_stream__transport_engine_and_incomplete_failures_are_distinct"
 TYPED = "test_api_stream__every_engine_failure_is_typed"
@@ -215,8 +216,30 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("surrogate_emitted", "every emitted event must serialise",
        E, "        if not _encodable(content):", "        if False:", TYPED),
     _m("event_bytes_unbounded", "one event fits the journal (R58)",
-       E, "        for piece in _pieces(content, self.event_text_limit()):",
-       "        for piece in (content,):", BOUNDS),
+       E, "        for raw_piece, visible_piece in zip_longest(_split_encoded(raw, budget),\n"
+          "                                                    _split_encoded(visible, budget),\n"
+          "                                                    fillvalue=\"\"):",
+       "        for raw_piece, visible_piece in ((raw, visible),):", BOUNDS, JOURNAL),
+    _m("event_bytes_sized_for_ascii", "an event is sized in bytes, not code points (R58)",
+       E, "PAYLOAD_COPIES_DIVISOR = 4", "PAYLOAD_COPIES_DIVISOR = 2", JOURNAL),
+    _m("json_escape_cost_ignored", "a control character costs six bytes in JSON",
+       E, '        cost = len(json.dumps(char, ensure_ascii=False).encode()) - 2     # minus the quotes',
+       "        cost = 1", JOURNAL),
+    _m("visible_never_split", "visible is split on its own account (R58)",
+       E, "        for raw_piece, visible_piece in zip_longest(_split_encoded(raw, budget),\n"
+          "                                                    _split_encoded(visible, budget),\n"
+          "                                                    fillvalue=\"\"):",
+       "        for raw_piece, visible_piece in zip_longest(_split_encoded(raw, budget),\n"
+          "                                                    [visible],\n"
+          "                                                    fillvalue=\"\"):",
+       JOURNAL),
+    _m("held_tail_never_split", "the held tail is split like any other delta (R58)",
+       E, "            for event in self._delta_events(stream, \"\", stream.held_tail):\n"
+          "                yield event",
+       "            stream.events += 1\n"
+          "            yield EngineEvent(type=ChunkEventType.delta,\n"
+          '                              payload=_delta_payload("", stream.held_tail))',
+       JOURNAL),
     _m("output_bytes_unbounded", "the accumulated output is bounded (R58)",
        E, "        if len(stream.raw_text) + len(content) > budget:", "        if False:", BOUNDS),
     _m("visible_and_raw_collapsed", "visible is filtered, raw is not (R58)",

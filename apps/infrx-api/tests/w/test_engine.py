@@ -23,6 +23,7 @@ import pytest
 from pydantic import ValidationError
 from infrx.config import Settings
 from infrx.contracts import errors, ports
+from infrx.contracts.codec import compact_bytes
 from infrx.contracts.conformance import MissingHook, OPTIONAL_HOOKS, SUITES, run_cases
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.support import FakeClock, SequentialIds
@@ -665,21 +666,89 @@ def test_api_stream__usage_is_authoritative_only_when_the_stream_agrees():
         assert stream.terminal_cause is TerminalCause.engine_incomplete, fault
 
 
+def test_api_stream__an_event_always_fits_the_journal_in_any_script():
+    """r1 R58 by the **store's own rule** (`StreamStore.event_bytes` =
+    `len(compact_bytes(payload))`): a code point costs up to 4 bytes in UTF-8 and up to 6 as
+    a JSON escape, and a delta carries its text three times, so sizing by code points held
+    only for ASCII - 131072 code points of CJK measured 1.18 MB against a 1 MiB ceiling and
+    W2's `append` would have refused an ordinary answer.
+    """
+    for label, filler in (("ascii", "x"), ("cjk", "日"), ("emoji", "😀"),
+                          ("control", "\x01"), ("mixed", "a日😀\x01")):
+        for limit in (DEFAULTS.journal_event_max_bytes, 4096, 512):
+            tuned = DEFAULTS.replace(journal_event_max_bytes=limit)
+            box = Box()
+            points = min(limit, 131_072)
+            upstream = FakeUpstream(fault="huge_delta", clock=box.clock, limits=tuned,
+                                   filler=filler, huge_delta_points=points)
+            engine = upstream.engine()
+            prepared = text_prepared(box, max_output_tokens=DEFAULTS.max_output_tokens,
+                                     prompt_tokens=0)
+            stream = engine.generate(lease(box), prepared)
+            events, failure = drained(stream)
+            assert failure is None, (label, limit, failure)
+            sizes = [len(compact_bytes(event.payload)) for event in events]
+            assert max(sizes) <= limit, (label, limit, max(sizes))
+            assert "".join(raws(events)) == upstream.deltas()[0] == stream.raw_text
+            assert "".join(visibles(events)) == stream.visible_text
+
+    # the held tail is split too: it is the whitespace the filter was holding, and 100k
+    # spaces is one event too many
+    box = Box()
+    tuned = DEFAULTS.replace(journal_event_max_bytes=4096)
+    upstream = FakeUpstream(fault="held_tail_flood", clock=box.clock, limits=tuned,
+                           huge_delta_points=100_000)
+    stream = upstream.engine().generate(lease(box), text_prepared(
+        box, max_output_tokens=DEFAULTS.max_output_tokens, prompt_tokens=0))
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert stream.held_tail == " " * 100_000
+    assert max(len(compact_bytes(event.payload)) for event in events) <= 4096
+    assert "".join(visibles(events)) == " " * 100_000
+
+    # and a `visible` longer than its own delta (the filter releases held whitespace with
+    # the character that decided it) is split on its own account
+    box = Box()
+
+    async def held_then_one():
+        body = json.dumps({"choices": [{"index": 0, "delta": {"content": " " * 400}}]})
+        yield f"data: {body}\n\n".encode()
+        body = json.dumps({"choices": [{"index": 0, "delta": {"content": "a"}}]})
+        yield f"data: {body}\n\n".encode()
+        yield b'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n'
+        yield (b'data: {"choices":[],"usage":{"prompt_tokens":1,"completion_tokens":2,'
+               b'"total_tokens":3}}\n\n')
+        yield b"data: [DONE]\n\n"
+
+    small = VllmEngine(httpx.AsyncClient(base_url="http://engine.invalid",
+                                         transport=httpx.MockTransport(
+                                             lambda request: httpx.Response(200,
+                                                                            content=held_then_one()))),
+                       served_model=SERVED_MODEL, clock=box.clock,
+                       limits=DEFAULTS.replace(journal_event_max_bytes=128))
+    stream = small.generate(lease(box), text_prepared(box))
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert "".join(visibles(events)) == " " * 400 + "a"
+    assert max(len(compact_bytes(event.payload)) for event in events) <= 128
+
+
 def test_api_stream__one_event_and_the_whole_output_are_bounded():
     """r1 R58: one event must fit `JOURNAL_EVENT_MAX_BYTES`, so a huge delta is split
     across events (the filter is boundary-independent, so nothing is lost), and the whole
     accumulated output is bounded, so a runaway engine cannot grow the adapter's memory."""
     # a 4 KiB journal event, so the split is observable inside the output budget
     tuned = DEFAULTS.replace(journal_event_max_bytes=4096)
-    upstream, engine, held, prepared = drive("huge_delta", limits=tuned)
+    box = Box()
+    upstream = FakeUpstream(fault="huge_delta", clock=box.clock, limits=tuned,
+                           huge_delta_points=4096)
+    engine, held, prepared = upstream.engine(), lease(box), text_prepared(box)
     stream = engine.generate(held, prepared)
     events = asyncio.run(collect(stream))
-    limit = engine.event_text_limit()
-    assert stream.deltas == 1 and len(raws(events)) == 4
-    assert max(len(piece) for piece in raws(events)) <= limit
+    assert stream.deltas == 1 and len(raws(events)) > 1
     assert "".join(raws(events)) == upstream.deltas()[0] == stream.raw_text
     for event in events:
-        assert len(event.model_dump_json()) < tuned.journal_event_max_bytes
+        assert len(compact_bytes(event.payload)) <= tuned.journal_event_max_bytes
 
     upstream, engine, held, prepared = drive("runaway_output")
     small = text_prepared(Box(), max_output_tokens=64)

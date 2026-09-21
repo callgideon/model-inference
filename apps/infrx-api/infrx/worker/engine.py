@@ -57,6 +57,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timedelta
+from itertools import zip_longest
 from types import SimpleNamespace
 from typing import Any, AsyncIterator
 
@@ -107,13 +108,21 @@ MM_UUIDS_FIELD = "mm_uuids"
 
 DETAIL_MAX_CHARS = 500          # operator-only text, bounded so a log line stays a log line
 ERROR_BODY_MAX_BYTES = 64 * 1024        # an engine's error body is read bounded, never whole
-# r1 R58: one event must fit the journal (`JOURNAL_EVENT_MAX_BYTES`, 1 MiB). A delta
-# carries its text up to three times (`visible`, `raw`, the transitional `content`), each
-# character costing up to 4 bytes and JSON escaping up to 6, so an eighth of the journal
-# ceiling *in characters* is a safe bound. A long delta is **split** across events rather
-# than refused: the reasoning filter is boundary-independent, so splitting loses nothing,
-# whereas refusing would throw away an answer the engine did produce.
-EVENT_TEXT_DIVISOR = 8
+# r1 R58: one event must fit the journal, measured by the **store's own rule**
+# (`StreamStore.event_bytes` = `len(compact_bytes(event.payload))`, `JOURNAL_EVENT_MAX_BYTES`
+# = 1 MiB). Sizing by code points was wrong for anything but ASCII: a delta carries its
+# text three times today (`visible`, `raw`, and the transitional `content` alias), a code
+# point costs up to 4 bytes in UTF-8 and up to 6 as a JSON escape (`\u0001`), so 131072
+# code points of `日` measured 1,179,684 B and of `😀` 1,572,900 B against a 1,048,576 B
+# ceiling - and W2's `append` would answer `journal_write_failed` for an ordinary CJK
+# answer. Pieces are therefore measured in **encoded JSON bytes** and each copy gets a
+# quarter of the ceiling, which leaves the keys, the braces and the other fields room to
+# spare. When the coordinator removes the `content` alias a delta will carry two copies
+# instead of three and this divisor can become 3; the test measures the real payload either
+# way, so nothing else has to change. A long delta is **split** across events rather than
+# refused: the reasoning filter is boundary-independent, so splitting loses nothing, while
+# refusing would throw away an answer the engine did produce.
+PAYLOAD_COPIES_DIVISOR = 4
 # The accumulated output bound, in code points (a lower bound on bytes). 64 per output
 # token is ~16x real text (`est.`, provisional like every limit in 08 §5); it exists so a
 # runaway engine cannot grow `raw_text` without limit, not to police normal answers.
@@ -240,8 +249,38 @@ def _encodable(text: str) -> bool:
     return True
 
 
-def _pieces(text: str, size: int) -> list[str]:
-    return [text[at:at + size] for at in range(0, len(text), size)] or [text]
+_JSON_COST: dict[str, int] = {}
+
+
+def _json_cost(char: str) -> int:
+    """What one code point costs inside a JSON string: 6 bytes for a control character
+    (`\u0001`), 2 for an escaped quote or backslash, otherwise its UTF-8 length."""
+    cost = _JSON_COST.get(char)
+    if cost is None:
+        cost = len(json.dumps(char, ensure_ascii=False).encode()) - 2     # minus the quotes
+        _JSON_COST[char] = cost
+    return cost
+
+
+def _split_encoded(text: str, budget: int) -> list[str]:
+    """`text` in pieces whose JSON-escaped encoded size is at most `budget` bytes.
+
+    Cut only at code-point boundaries, so an emoji is never halved into an unpaired
+    surrogate (Python slices strings by code point, which is what makes that true), and a
+    single code point costing more than the budget is a piece of its own rather than an
+    infinite loop.
+    """
+    if not text:
+        return []
+    pieces, start, cost = [], 0, 0
+    for index, char in enumerate(text):
+        char_cost = _json_cost(char)
+        if cost and cost + char_cost > budget:
+            pieces.append(text[start:index])
+            start, cost = index, 0
+        cost += char_cost
+    pieces.append(text[start:])
+    return pieces
 
 
 def _delta_payload(raw: str, visible: str) -> dict[str, str]:
@@ -510,9 +549,28 @@ class VllmEngine:
         return httpx.Timeout(read, connect=self.limits.media_fetch_connect_timeout_s,
                              write=read, pool=read)
 
-    def event_text_limit(self) -> int:
-        """How much text one event may carry, so a chunk fits `JOURNAL_EVENT_MAX_BYTES`."""
-        return max(1, self.limits.journal_event_max_bytes // EVENT_TEXT_DIVISOR)
+    def event_byte_budget(self) -> int:
+        """Encoded JSON bytes one copy of the text may occupy in a single event."""
+        return max(16, self.limits.journal_event_max_bytes // PAYLOAD_COPIES_DIVISOR)
+
+    def _delta_events(self, stream: "EngineStream", raw: str, visible: str) -> list[EngineEvent]:
+        """Delta events whose payloads each fit the journal.
+
+        `raw` and `visible` are split **independently**: they are two texts, not two halves
+        of one, and `visible` can be the longer of the two (the filter releases the
+        whitespace it was holding all at once). What a consumer reassembles is each
+        concatenation, so a delta that needs three events for its raw text and one for its
+        visible text is four events with three empty `visible` fields.
+        """
+        budget = self.event_byte_budget()
+        events = []
+        for raw_piece, visible_piece in zip_longest(_split_encoded(raw, budget),
+                                                    _split_encoded(visible, budget),
+                                                    fillvalue=""):
+            stream.events += 1
+            events.append(EngineEvent(type=ChunkEventType.delta,
+                                      payload=_delta_payload(raw_piece, visible_piece)))
+        return events
 
     def _overdue(self, stream: "EngineStream", now: datetime) -> str | None:
         """Which bound, if any, this stream has passed.
@@ -618,9 +676,10 @@ class VllmEngine:
             stream.visible_text += stream.held_tail
         # Only the paths that did not raise reach here.
         if stream.held_tail:
-            stream.events += 1
-            yield EngineEvent(type=ChunkEventType.delta,
-                              payload=_delta_payload("", stream.held_tail))
+            # Split like any other delta: the held tail is whatever whitespace the filter
+            # was holding, and 200k spaces is one event too many.
+            for event in self._delta_events(stream, "", stream.held_tail):
+                yield event
         if stream.stall is None and not stream.complete and not stream.cancelled:
             stream.stall = self._overdue(stream, self.clock.now())
         for event in self._final_usage(stream, ceiling):
@@ -699,15 +758,10 @@ class VllmEngine:
         if len(stream.raw_text) + len(content) > budget:
             raise EngineProtocolViolation(f"output exceeds {budget} code points",
                                           produced=len(stream.raw_text))
-        events = []
-        for piece in _pieces(content, self.event_text_limit()):
-            stream.raw_text += piece
-            visible = reasoning.feed(piece)
-            stream.visible_text += visible
-            stream.events += 1
-            events.append(EngineEvent(type=ChunkEventType.delta,
-                                      payload=_delta_payload(piece, visible)))
-        return events
+        stream.raw_text += content
+        visible = reasoning.feed(content)
+        stream.visible_text += visible
+        return self._delta_events(stream, content, visible)
 
     def _note_usage(self, stream: "EngineStream", raw: object) -> None:
         """Remember a usage object; the decision is made once the stream has ended."""

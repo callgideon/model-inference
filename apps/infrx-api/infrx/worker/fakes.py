@@ -56,7 +56,7 @@ from ..contracts.conformance import Harness
 from ..contracts.fakes.engine import DEFAULT_TEXT, SPLIT_REASONING
 from ..contracts.fakes.support import FakeClock, SequentialIds
 from ..contracts.limits import DEFAULTS, PilotSettings
-from .engine import EVENT_TEXT_DIVISOR, VllmEngine
+from .engine import VllmEngine
 
 SERVED_MODEL = "marlin2b"           # vLLM's `--served-model-name`, as F1 sends it
 ENGINE_VERSION = "0.11.0"
@@ -113,6 +113,8 @@ class FakeUpstream:
     keepalive_s: float = KEEPALIVE_S
     max_keepalives: int = 40
     long_stream_deltas: int = 200
+    filler: str = "x"                   # what `huge_delta` is made of: ASCII, CJK, emoji…
+    huge_delta_points: int = 0          # code points in that delta (0 = derive from limits)
     health_status: int = 200
     health_unreachable: bool = False
     requests: list = field(default_factory=list)
@@ -132,8 +134,15 @@ class FakeUpstream:
         if self.fault == "surrogate_delta":
             return ("ok", "\ud83d")
         if self.fault == "huge_delta":
-            # Three journal events' worth of text plus a remainder, in one delta.
-            return ("x" * (self.limits.journal_event_max_bytes // EVENT_TEXT_DIVISOR * 3 + 5),)
+            # A delta whose *encoded* size needs several events, in whatever script the
+            # case chose: the bound is bytes, not code points.
+            points = self.huge_delta_points or self.limits.journal_event_max_bytes
+            # exactly `points` code points, whatever the filler's length
+            return ((self.filler * points)[:points],)
+        if self.fault == "held_tail_flood":
+            # All whitespace: the filter holds every character until the stream ends, so the
+            # whole answer arrives as the final tail event.
+            return (" " * (self.huge_delta_points or 200_000),)
         if self.fault == "runaway_output":
             return tuple("y" * 4096 for _ in range(64))
         return tuple(self.text[i:i + self.chunk_size]
