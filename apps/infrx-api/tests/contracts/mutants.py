@@ -186,12 +186,30 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "            job.lease = job.lease.model_copy(update={",
        "            job.lease = lease.model_copy(update={",
        "dur_fence__a_lease_is_a_fencing_token_not_a_record"),
+    # R46 split the fence in two, so each enforcement point has its own anchor: the
+    # shared two-line form matched both and the mutant edited whichever came first.
     _m("deadlines_do_not_bind_mutations", "deadlines bind every fenced mutation (R29)",
-       S, "        self._enforce_deadlines(job)\n        return job", "        return job",
+       S, '        if self.clock.now() >= job.lease.expires_at:\n'
+          '            raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")\n'
+          "        self._enforce_deadlines(job)\n        return job",
+       '        if self.clock.now() >= job.lease.expires_at:\n'
+          '            raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")\n'
+          "        return job",
        "dur_fence__a_lease_is_a_fencing_token_not_a_record"),
     _m("preparation_deadline_unenforced", "a dead preparation worker frees its job (R29)",
-       S, "            self._enforce_deadlines(job)\n            for ref in media:",
-       "            for ref in media:",
+       S, "            # worker cannot pick up something nobody is waiting for any more.\n"
+          "            self._enforce_deadlines(job)",
+       "            # worker cannot pick up something nobody is waiting for any more.",
+       "dur_output__a_late_preparation_worker_finds_a_terminal_job"),
+    _m("prepared_ignores_the_phase_deadline", "the phase deadline binds prepared itself (R29/R46)",
+       S, '        if self.clock.now() >= job.preparation_lease.expires_at:\n'
+          '            raise errors.StaleLease(f"preparation lease expired at "\n'
+          '                                    f"{job.preparation_lease.expires_at}")\n'
+          "        self._enforce_deadlines(job)\n        return job",
+       '        if self.clock.now() >= job.preparation_lease.expires_at:\n'
+          '            raise errors.StaleLease(f"preparation lease expired at "\n'
+          '                                    f"{job.preparation_lease.expires_at}")\n'
+          "        return job",
        "dur_output__a_late_preparation_worker_finds_a_terminal_job"),
     # --- phase deadlines (R20) ------------------------------------------------
     _m("phase_deadline_uncapped", "no phase instant outlives deadline_at (R20)",

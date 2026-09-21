@@ -1139,14 +1139,17 @@ async def dur_output__a_late_preparation_worker_finds_a_terminal_job(factory):
     assert admission.preparation_deadline_at == harness.clock.at(30)
     before = harness.extra["balance"](request.org_id)
     harness.clock.advance(31)
+    # A worker must not even be handed a lease for a job nobody is waiting for any more:
+    # the claim is refused and is itself what terminalizes the job, so the outcome never
+    # depends on when a reaper runs, and no preparation attempt is spent on a dead job.
     try:
-        await _prepare(harness.port, admission.request_id)
-    except (errors.AlreadyTerminal, errors.StateConflict):
+        await harness.port.claim_preparation(admission.request_id, "prep-a")
+    except (errors.AlreadyTerminal, errors.NotClaimable, errors.StateConflict):
         pass
     else:
-        raise AssertionError("a preparation worker past its deadline still queued the job")
+        raise AssertionError("a preparation lease was issued past the preparation deadline")
     stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
-    assert outcome is not None, "the late call did not terminalize the job"
+    assert outcome is not None, "the late claim did not terminalize the job"
     assert outcome.cause is TerminalCause.preparation_failed
     assert outcome.state is JobState.failed and outcome.debit == 0
     assert outcome.settlement_state is SettlementState.released_free
@@ -1168,6 +1171,27 @@ async def dur_output__a_late_preparation_worker_finds_a_terminal_job(factory):
     assert reaped is not None, "an abandoned preparation was never reaped"
     assert reaped.cause is TerminalCause.preparation_failed and reaped.debit == 0
     assert harness.extra["balance"](other.org_id)["reserved"] == 0
+
+    # r1 R46 + R29: the same holds for a worker holding a **live** preparation lease.
+    # A long lease TTL separates the two refusals, so this is the phase deadline binding
+    # `prepared` itself rather than the lease simply having expired - which is the case
+    # where the store must terminalize in that same call.
+    live_limits = limits.replace(lease_ttl_s=300.0)
+    live = factory(limits=live_limits)
+    holder, held = await _admit(live, key="live-lease",
+                                deadline_s=b.default_deadline_s(ExecutionMode.stream, live_limits))
+    lease = await live.port.claim_preparation(holder.request_id, "prep-a")
+    live.clock.advance(31)
+    assert live.clock.now() < lease.expires_at, "the lease must still be live"
+    try:
+        await live.port.prepared(lease, ())
+    except errors.AlreadyTerminal:
+        pass
+    else:
+        raise AssertionError("a live preparation lease past the phase deadline queued the job")
+    _held, overdue = await live.port.get_owned(holder.org_id, held.job_handle)
+    assert overdue is not None and overdue.cause is TerminalCause.preparation_failed
+    assert live.extra["balance"](holder.org_id)["reserved"] == 0
 
 
 async def dur_output__phase_deadlines_are_persisted_at_each_transition(factory):

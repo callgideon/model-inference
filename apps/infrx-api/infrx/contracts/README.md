@@ -7,8 +7,12 @@ Coordinator-owned. This directory is the single Python spelling of
 A change here is a contract revision: update the fixtures, the conformance suites
 and every consumer in the same review.
 
-**Revision r1** (08 §10, rulings R1–R15) is implemented here: read that section
-before changing anything below, because most of the refinement rows now quote it.
+**Revision r1** (08 §10) is implemented here through the **latest ruling row**, which
+at the time of writing is R48; read that section before changing anything below,
+because most of the refinement rows quote it. The rulings are not numbered here,
+because a range in prose goes stale the moment one is added — `grep -o 'R[0-9]\+'` over
+this file against 08 §10's table is the check, and F2.1's evidence records the
+measured counts (fixtures, mutants, cases) rather than repeating them in this file.
 
 Passing a conformance suite against the fakes means **implemented**. Only the same
 suite against the real service means integrated.
@@ -24,7 +28,7 @@ suite against the real service means integrated.
 | `limits.py` | The 08 §5 names and frozen defaults as pure data (`PilotSettings`) |
 | `tasklocal.py` | Task-local container names, host ports, databases and object prefixes (08 §8) |
 | `codec.py` | The one canonical JSON form: sorted keys, 2-space indent, no nulls |
-| `fixtures/v1/` | 38 serialized fixtures, byte-stable through their models; `money_cases.json` and `error_codes.json` are the cross-language parity tables |
+| `fixtures/v1/` | Serialized fixtures, byte-stable through their models (`fixtures.names()` is the list, and `test_fixtures.py` fails on any file nobody claims); `money_cases.json` and `error_codes.json` are the cross-language parity tables |
 | `fakes/` | In-memory adapters with the real durable semantics, plus clock/ids/failure injection |
 | `conformance/` | Importable suites `run_<port>_conformance(factory)` |
 
@@ -114,7 +118,7 @@ suite against the real service means integrated.
 | R38 queue wait is time queued | The queue budget is cumulative time **in** `queued`. `Admission.queue_wait_used_s` is persisted; entering `queued` sets `queue_deadline_at = min(now + budget − used, deadline_at)`, leaving it adds the interval to `used`. Time spent `running` belongs to the generation budget, so an interactive job can still be retried after a lease loss within its absolute deadline - which is why the three retry cases no longer need a widened queue budget. |
 | R39 terminalize-then-refuse | `_terminalize` asks `check_terminal_capacity` **before** any wallet, outcome or reservation mutation, so a `JournalCapacityExhausted` can never leave a debited ledger with active reservations. For D: when R29 makes an operation terminalize and then refuse the caller, **commit the terminalization and return the typed refusal**; do not raise inside the transaction that would roll it back. The refusal is information, the terminalization is the fact. |
 | R42 trace loss accounting | Counting is **idempotent per capture**: `_count` returns once a capture has contributed its single loss, so no route - `abandon`, a context exit, `reap`, a late `finish`, a breach followed by a mode-mismatched finish, or whatever route is added next - can count twice. A closed capture never queues a row and answers what the first call answered. An **off-mode capture is silent**: nothing stored, no loss, no drop counted (02 keeps off-mode jobs out of the loss and coverage figures); only an `offer` of an off-mode envelope is a counted caller bug. `conformance/sequences.py` ships the property test this rests on - every capture operation sequence to length 4 x 3 modes x 2 deadline states, exhaustively - exported as `run_tracesink_sequence_properties(factory)` so T1's spool sink runs the same lattice, and as the conformance case `trace_bounds__every_bounded_capture_sequence_holds_the_invariants` (lengths 1-3) so every adapter's ordinary run covers it. |
-| R32 conformance strength | `tests/contracts/mutants.py` declares 132 single-edit mutants, one or more per invariant a case names; `test_mutants.py` runs a subset in the default suite and `make api-mutants` runs all of them, each against a copy of the package in a temporary directory. A surviving mutant fails the suite, and `test_every_case_is_covered_by_a_mutant` refuses a case no mutant can break. Optional-hook skips raise `MissingHook`, which pytest reports as a skip naming the hook; `run_cases` refuses to call one a pass. |
+| R32 conformance strength | `tests/contracts/mutants.py` declares one or more single-edit mutants per invariant a case names (`python tests/contracts/mutants.py --list` prints them; the count lives in evidence, not here); `test_mutants.py` runs a subset in the default suite and `make api-mutants` runs all of them, each against a copy of the package in a temporary directory. A surviving mutant fails the suite, and `test_every_case_is_covered_by_a_mutant` refuses a case no mutant can break. Optional-hook skips raise `MissingHook`, which pytest reports as a skip naming the hook; `run_cases` refuses to call one a pass. |
 | R23 `resolve_ambiguous` shape | `external_id` stays a keyword: required for `adopt_provider_evidence`, `invalid_request` for `release_reservation`. Releasing a reservation while naming a batch would discard the one fact that says the batch may still be running. |
 | R43 feedback, calibration and rubric coherence | One persisted shape. `FeedbackName` is the **entry** vocabulary and now includes `calibration_label`; `records.FEEDBACK_INPUT_NAMES` is the submittable subset and `wire.FeedbackSubmission` refuses anything outside it, which mirrors the console's `FEEDBACK_NAMES`/`FEEDBACK_ENTRY_NAMES` split. A label is `Feedback` with `name=calibration_label`, `value` in `records.CalibrationLabel` (`correct`/`partially_correct`/`incorrect`/`unusable`), `calibration_set=True` (a **boolean**) and an integer `rubric_version` in 1..1000; a record validator refuses any disagreement between the three, and `rubric_version` is `int` on `JudgeRun` too (`research/traces/04` stores a `UInt16`). `FeedbackService.label_calibration(auth, request_id, label, rubric_version, idem, comment=None)`. R35/R41 bind Python: `list_owned` for a non-operator `AuthContext` drops every label and reports an operator-authored principal as `wire.PLATFORM_ACTOR`, through the same `wire.FeedbackList.for_viewer` a body uses, and operator-only `list_calibration` is the view that shows them. R33: `accept` for a suspended organization is `org_suspended` (the injectable suspension source is the JobStore's, so one organization cannot be suspended for admission and live for feedback) while every read keeps working. Text and comment are bounded at `limits.MAX_FEEDBACK_TEXT_CHARS` (4000) and retention at 1..90 days. `records.OrgEntitlements` is R24's record. |
 | R45 price source | `FakeJobStore(prices=…)` plus `price_for(model_revision, at) -> PriceSnapshot \| None`, mirroring `is_entitled`; `set_price(model_revision, snapshot)` is the harness hook (`None` withdraws a price). `admit` snapshots from the source and refuses an unpriced model or one whose snapshot names another model revision. `request.parameters["price_snapshot"]` is **gone** from the contract: **G1 rejects a client-supplied `price_snapshot` parameter as `unsupported_parameter`**, because a caller that can name its rates can name zero. |
@@ -160,12 +164,21 @@ Rules for a factory:
 - `ids` supplies `uuid()`/`event_id()`;
 - `failures` is optional. Without it the crash-after-commit cases return early
   instead of failing, so a suite can be adopted in steps;
-- optional hooks behave the same way: absent means the case returns early, and the
-  evidence report must say so rather than claim a pass. JobStore: `publish`,
-  `revoke_key`, `unrevoke_key`, `suspend_org`, `unentitle`, `entitle`, `retune`,
-  `journal_bytes`. JudgeCoordinator: `available`, `runs`, `set_consent`,
-  `revoke_consent`, `audit`. `retune` reconfigures the live adapter, so a case can
-  prove an accepted job keeps its own budgets;
+- optional hooks raise `MissingHook`, which is a reported **skip** and never a pass;
+  the evidence report must say what it skipped. `conformance.OPTIONAL_HOOKS` is the
+  authoritative per-port set - read it rather than a list in this file, which is how the
+  list here came to name `attach` after R46 made it a port operation. `retune`
+  reconfigures the live adapter, so a case can prove an accepted job keeps its own
+  budgets, and `set_price` writes the injectable price source (`None` withdraws a price);
+- every factory takes `limits` and **ignores unknown keywords** (`**_`), so the same call
+  works for every port. Three of them take more, and a real adapter's factory must accept
+  the same keywords or those cases cannot be driven:
+  `engine_factory(fault=...)` selects an `EngineFault` script (`none`, prefill stall,
+  mid-stream stall, malformed usage, abrupt exit, cancellation race);
+  `judge_factory(judge_mode=..., budget=...)` sets `JUDGE_MODE` and
+  `JUDGE_LIVE_BUDGET_USD` (the dry-run default is what makes "a pricing estimate cannot
+  authorize a submission" observable); `feedback_factory(channel=...)` chooses the
+  `FeedbackChannel` the service stamps, because G and C each have one instance;
 - the `streamstore`, `scheduler` and `feedback` factories also publish
   `extra["jobs"]`, because those cases must admit a job first. The suites only call
   *port* operations on it and never read a fake's attributes, so a real adapter can
@@ -219,6 +232,14 @@ revision r1, so the schema has to carry them:
 | `Lease` (the attempt row) | `generation_deadline_at`, `first_token_deadline_at` | R20: written at claim with the generation; `first_token_deadline_at <= generation_deadline_at`. Renewal reads the stored row: a worker's copy is a fencing token (R29). |
 | `Feedback` | `calibration_set` is written only by `label_calibration` | R31: `accept` never sets it and always stores `author_role=customer`; the operator path needs its own idempotency scope and audit row. |
 | `Feedback` | `name`, `value`, `comment` replace `rating` and `correction` | R3: one signal per row, `name` fixing the value's type, as `research/traces/06` §2 §1's `scores` table does (`value_bool`/`value_num`/`value_text` or a checked variant column). |
+| `Feedback` | `calibration_set` is **boolean**; `name` gains `calibration_label`; `rubric_version` is a nullable **integer** | R43: one persisted shape. `calibration_set boolean not null default false`, `rubric_version int null check (rubric_version between 1 and 1000)`, and a row check that the three agree — `calibration_set` true exactly when `name = 'calibration_label'`, `rubric_version` not null exactly then. The old free-text calibration set is gone, so a migration maps a non-null text value to `(true, 'calibration_label', <rubric>)` and needs a rubric version decided per row, not defaulted silently. Text columns are bounded at 4000 characters (value and comment). |
+| `judge_runs` / `judge_samples` / score rows | `rubric_version` is an **integer** everywhere | R43: `research/traces/04` stores `UInt16`; `"rubric_v1"` is gone from every fixture. |
+| `consent_history` | `content_retention_days` is 1..90, not 0..90 | R43: zero days is not a retention policy — "keep nothing" is `trace_mode = off`. A `check` constraint, and a migration must decide what an existing 0 means. |
+| `org_entitlements` | `records.OrgEntitlements`: `model_ids` nullable array, `limits` keyed by the closed `ENTITLEMENT_LIMIT_NAMES` set | R24: **null is the platform default and `[]` entitles nothing**, so the column must be nullable *and* distinguish an empty array — a `not null default '{}'` column would silently deny every organization. An unknown limit name is `invalid_request`, so either a check constraint or three typed columns, not a free JSON bag. |
+| `price_versions` | is now on the read path of `admit` | R45: the price never comes from the request. `admit` looks up the effective row for `(model_revision, at)` inside its transaction and refuses an unpriced model; the request carries no `price_snapshot` parameter, and G1 rejects a client-supplied one as `unsupported_parameter`. |
+| `Lease` (the attempt row) | `kind` (`preparation` \| `inference`), and a **separate generation counter per kind** | R46: two attempt sequences per job, so `attempts` is keyed by `(job, kind, generation)` rather than `(job, generation)`. `first_token_deadline_at` is null on a preparation lease and `generation_deadline_at` is the job's `preparation_deadline_at`. `prepared` is fenced on the preparation lease like every other mutation. |
+| jobs | a preparation attempt count | R46: `recover` reaps an expired preparation lease and the job stays preparable, bounded by `MAX_PREPUBLICATION_RETRIES` further claims (three in total) and by `preparation_deadline_at`; past either it is `preparation_failed`. The reaper also re-emits `prepare_dispatch`, because the dispatch event the dead worker consumed is gone. |
+| trace export | no storage key crosses the boundary | R47: `traces.content_ref` stays an object key in the row, but the public export replaces it with availability plus an opaque handle the server resolves after ownership and logical expiry. Nothing persisted changes; what changes is what may be selected into a response. |
 | `TerminalOutcome` | no new field, but `BILLABLE_CAUSES` changed | R21: `sync_deadline`, `deadline_exceeded` and `queue_wait_expired` never carry a debit, and `held_unknown` now also covers `lost_after_publication`. Historical rows are outside the new settlement regime (02) and must not be replayed into debits. |
 | error codes | `upload_expired` | R22: a new 410 code the gateway must map; nothing persisted changes. |
 
@@ -230,7 +251,45 @@ revision r1, so the schema has to carry them:
 | **G1** | Always pass `deadline_at` to `TraceSink.open` - it is required, and it is what makes a capture reapable; a sink handed `None` returns a no-op capture rather than a leak. Hold the capture in a `with`/`finally`: its exit abandons an unfinished one. Never branch on the trace mode: `open` on `off`/`minimal` (or on a `full` request with no deadline) returns a no-op capture, and `finish` on it stores what that mode allows - the metadata row 01 requires for `minimal`, nothing for `off`, stripped metadata with one counted loss for an unrecordable `full` capture. Pass the envelope whose `mode` **matches the mode you opened with**: the capture decides, so a mismatch (or content on a `minimal` capture) is dropped and counted, never stored. And never fall back to `offer()` for a `full`-mode request whose capture failed - finish the capture instead, so the loss is marked and counted; `offer` refuses content anyway. Derive `deadline_at` for `admit` from the budgets (admission refuses one it cannot keep). |
 | **W1** | `first_token_deadline_at` is **persisted by the store and enforced by W**: nothing in `JobStore` or `StreamStore` compares against it. Expect `already_terminal` from `append`/`heartbeat`/`complete` once a phase deadline has passed - the store terminalizes the job in that same call (R29) and the refusal is information, not a reason to retry. |
 | **Q1** | `rebuild(snapshot)` replaces the index: `pending` becomes the snapshot and `inflight`/`acknowledged` are cleared, so a candidate in flight before the rebuild is a candidate again after it (PostgreSQL decides the winner, so a duplicate hand-out costs throughput, never correctness). The clears themselves are **not** pinned by a conformance case - the index is keyed by event id, so no exported case can tell the difference; if Valkey's semantics differ here, say so in Q1's evidence rather than assuming these are equivalent. |
-| **D1** | R39's ordering, plus: one job the sweep cannot settle must not abort `recover` - continue, and report it (the fake exposes `unsettleable` for exactly that). The terminal event's reserved bytes are computed over **every** `TerminalCause x JobState x SettlementState`, not a hand-picked cause. |
+| **D1** | R39's ordering, plus: one job the sweep cannot settle must not abort `recover` - continue, and report it (the fake exposes `unsettleable` for exactly that). The terminal event's reserved bytes are computed over **every** `TerminalCause x JobState x SettlementState`, not a hand-picked cause. Four more, from the S1 stage review - see **D1: four things the fakes cannot tell you** below. |
+| **M1** | `MediaStore.attach(job_id, refs)` is a **port operation**, not a test hook: `prepare` cannot work without it, and leaving it out of the port left M free to invent its own way in. `attach` and `prepare` take a **job id**, not a job handle (R46): internal operations speak the request UUID every durable row is keyed by, tenant-facing ones take `(org_id, handle)` and check ownership on sight. `wire.UploadCompleted` carries `wire.MediaSummary`, not a whole `MediaRef` - `storage_ref` is a server-built object key and never leaves the server (R47). |
+| **G1** (also) | `INFRX_MODE` has no default and `create_app` calls `config.validate_runtime` (R44). At cutover G1 replaces "unset → legacy" with "unset → refuse", in the same change in which I2's installer writes `INFRX_MODE=pilot`; until then an unset mode is the F1 behaviour, logged once as `legacy`. A client-supplied `price_snapshot` parameter is `unsupported_parameter` (R45). A track router is a module exposing `register(app, rt)` that the coordinator adds to `gateway/app.py:ROUTERS` on an integration request - the list is a literal, never a discovery walk. The trace export carries `content_state` plus an opaque `content_handle`, never `content_ref` (R47), and the content object is `{v: 1, request, response}`. |
+| **J1** | `rubric_version` is an **integer** in 1..1000 on runs, samples and scores (R43), matching `research/traces/04`'s `UInt16`. A calibration label is a `Feedback` row with `name=calibration_label`, so J's projection reads the same table the customer's feedback lives in and must filter on `calibration_set` rather than on author role alone. The fake's judge budget is **one global budget**, not per organization and period as `06` specifies - see the D1/D6 note below. |
+| **C1** | `FeedbackService.list_owned` already applies R35/R41 for a non-operator caller, and `wire.FeedbackList.for_viewer` is the same projection for a body built anywhere else - call one of them rather than repeating the rule. Operator labels are read through `list_calibration` only. `accept` for a suspended organization is `org_suspended` while every read keeps working (R33). The shared input bounds live in `contracts/limits.py` and the console parity test compares them, so a console-side bound may not be widened alone. |
+
+### D1: four things the fakes cannot tell you (from the S1 stage review)
+
+These are gaps between the executable spec and a real PostgreSQL adapter. None is a
+contract change; all four will cost D1 time if they are discovered at the keyboard.
+
+1. **`0001_init.sql` will not apply to plain PostgreSQL.** It references `auth.*`,
+   `authenticated` and `service_role`, which are Supabase's, not PostgreSQL's. D1 needs a
+   pinned Supabase-compatible image, or a shim migration that creates those roles and the
+   `auth` schema before the existing migrations run. Decide which, and pin it, before
+   writing `0003`: a task-local database that does not resemble production is worse than
+   none, because it makes the migration test pass.
+2. **The factories and hooks are synchronous and are called inside a running event
+   loop.** `factory()`, `grant`, `balance`, `set_price`, `retune` and friends are ordinary
+   functions the cases call without awaiting, and the case that calls them is already
+   inside `asyncio.run`. A psycopg adapter therefore wants a **sync connection for the
+   hooks** and a lazily opened async pool for the port operations; creating the pool in
+   the factory, or making a hook a coroutine, breaks the suite rather than the adapter.
+3. **Database time must be movable, and only in a test.** Every case drives
+   `harness.clock`, and R7 says the adapter reads the *database* clock inside its
+   transaction. Both hold only if the adapter's notion of now is a test-settable offset
+   (a session GUC, or a function the migration installs that falls back to `now()`),
+   **which production cannot set**. A clock a deployed process can move is a way to
+   release an unknown-usage hold early.
+4. **`judge_budgets` are per organization and period; the fake has one global budget.**
+   `06` keys them `org/budget period`, while `FakeJudgeCoordinator.budget` is the single
+   `JUDGE_LIVE_BUDGET_USD` setting and `available()` takes no organization. Making the fake
+   per-org-per-period is **not** a small change - it needs a per-org limit *source*
+   (06's rows, not one setting), a period key nothing in `01`/`02`/`06` defines
+   (calendar month? rolling window?), and the four budget cases reworked - so the gap is
+   recorded here for **D6** to close when it implements the relation, and D6 owns the
+   period definition. Until then the exported `judge` suite proves budget *accounting*
+   (outstanding and ambiguous runs count, settlement cannot exceed the reservation) and
+   not budget *scoping*; D6's evidence must say so rather than citing a suite pass.
 
 **G derives the deadline.** `admit` refuses a `deadline_at` that is in the past or
 beyond `accepted_at + preparation + queue + generation` (R29), so G computes the
@@ -269,3 +328,18 @@ neither ruling spells them out and both are visible to D and the console:
   `released_platform_absorbed` ("we did the work and ate the cost") while
   `queue_wait_expired` and invalid input stay `released_free` ("never going to be
   charged"). Either way the debit is zero, and the conformance case accepts both.
+
+Three more from the F2.1 pass (R43–R48), decided here because no ruling spells them out:
+
+- **A preparation lease reuses `generation_deadline_at`.** R46 gives a lease a `kind` but
+  names no new deadline field, so on a preparation lease `generation_deadline_at` is the
+  job's `preparation_deadline_at` and `first_token_deadline_at` is null. A worker can
+  therefore treat `lease.generation_deadline_at` as "my phase ends here" whichever kind it
+  holds, which is one rule instead of two.
+- **The preparation retry bound is `MAX_PREPUBLICATION_RETRIES`.** R46 says the retries are
+  bounded but not by what. Reusing the prepublication bound answers the same question -
+  how many times may a phase be retried after its worker is lost - with one number rather
+  than two, and `preparation_deadline_at` bounds it in wall-clock terms independently.
+- **`heartbeat` refuses a preparation lease.** Nothing renews one: the preparation budget
+  and the lease TTL are both bounded and equal on the default profile, so there is no
+  renewal to make. Refusing beats a silent no-op that leaves a fenced worker confident.
