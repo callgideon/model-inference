@@ -278,6 +278,21 @@ def test_only_a_staged_ref_can_be_attached_to_a_job():
     assert adapter.by_job == {}
 
 
+def test_the_attach_lookup_is_inside_the_jobs_tenant():
+    """Review B-R2-1.3: the ref a job gets is looked up **in the job's org**, never by
+    handle anywhere. A lookup by handle alone accepted a copy of another tenant's ref
+    relabelled with this org, and then stored the original - that tenant's org_id and
+    storage_ref - as this job's media."""
+    adapter = staging(transport=support.Transport(support.response(body=MP4)))
+    theirs = asyncio.run(adapter.materialize(b.ORG_B, URL))
+    relabelled = theirs.model_copy(update={"org_id": b.ORG_A})
+    job = "55555555-0000-4000-8000-000000000005"
+    adapter.jobs[job] = b.ORG_A
+    with pytest.raises(errors.NotFound):
+        asyncio.run(adapter.attach(job, (relabelled,)))
+    assert adapter.by_job == {}, "another tenant's object was bound to this job"
+
+
 def test_an_unsupported_source_is_refused_before_anything_is_stored():
     """A source that is not an http(s) or `data:` URL is refused by the store, without
     handing it to the fetcher at all: `file:///etc/passwd` must not become a fetch."""

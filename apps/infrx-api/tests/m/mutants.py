@@ -357,6 +357,12 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "        org_id = self.job_org(job_id)\n        owned: list[MediaRef] = []",
        "        org_id = refs[0].org_id if refs else None\n        owned: list[MediaRef] = []",
        "test_attach_takes_the_tenant_from_the_job_row"),
+    _m("attach_lookup_is_not_tenant_scoped",
+       "the ref a job gets is looked up in the job's own org (B-R2-1.3)",
+       S, "            indexed = self.refs.get((org_id, ref.handle))",
+       "            indexed = next((m for (_o, h), m in self.refs.items() if h == ref.handle),\n"
+       "                           None)",
+       "test_the_attach_lookup_is_inside_the_jobs_tenant"),
     _m("attach_accepts_an_unstaged_ref",
        "a job executes only on media this store staged, as the store described it",
        S, "            if indexed is None or indexed.digest != ref.digest:\n"
