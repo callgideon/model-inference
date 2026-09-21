@@ -1,0 +1,1270 @@
+### make console-test   (2026-09-21T06:19:38Z)
+cd apps/app && pnpm test
+
+> infrx-app@0.1.0 test /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app
+> node --test "lib/**/*.test.ts" "tests/**/*.test.ts" "app/**/*.test.ts" "components/**/*.test.ts"
+
+TAP version 13
+# (node:3780556) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/lib/keys.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: keys look like keys and are unique
+ok 1 - keys look like keys and are unique
+  ---
+  duration_ms: 13.913381
+  type: 'test'
+  ...
+# Subtest: every base62 character can appear (rejection sampling is not truncating the alphabet)
+ok 2 - every base62 character can appear (rejection sampling is not truncating the alphabet)
+  ---
+  duration_ms: 5.564168
+  type: 'test'
+  ...
+# Subtest: hash is the sha256 hex the gateway computes
+ok 3 - hash is the sha256 hex the gateway computes
+  ---
+  duration_ms: 8.894683
+  type: 'test'
+  ...
+# (node:3780558) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/lib/utils.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: safeNext keeps same-site paths and rejects everything else
+ok 4 - safeNext keeps same-site paths and rejects everything else
+  ---
+  duration_ms: 1.158239
+  type: 'test'
+  ...
+# (node:3780564) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/tests/contracts/discovery.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: the test script declares the four directory patterns of 08 §7
+ok 5 - the test script declares the four directory patterns of 08 §7
+  ---
+  duration_ms: 2.28022
+  type: 'test'
+  ...
+# Subtest: every test file in the tree is matched by a declared pattern
+ok 6 - every test file in the tree is matched by a declared pattern
+  ---
+  duration_ms: 9.836076
+  type: 'test'
+  ...
+# Subtest: a test hidden in a directory named like build output, or behind a dot, is still flagged
+ok 7 - a test hidden in a directory named like build output, or behind a dot, is still flagged
+  ---
+  duration_ms: 13.223261
+  type: 'test'
+  ...
+# Subtest: nested suites and the pre-existing library tests are both discovered
+ok 8 - nested suites and the pre-existing library tests are both discovered
+  ---
+  duration_ms: 16.341741
+  type: 'test'
+  ...
+# Subtest: the console pins a Node version that strips types
+ok 9 - the console pins a Node version that strips types
+  ---
+  duration_ms: 0.423341
+  type: 'test'
+  ...
+# (node:3780565) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/tests/contracts/fixtures.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: every fixture file is one the contract knows about
+ok 10 - every fixture file is one the contract knows about
+  ---
+  duration_ms: 1.457422
+  type: 'test'
+  ...
+# Subtest: the organization fixtures match the contract vocabulary
+ok 11 - the organization fixtures match the contract vocabulary
+  ---
+  duration_ms: 1.140144
+  type: 'test'
+  ...
+# Subtest: the trace fixtures are renderable content with no storage reference
+ok 12 - the trace fixtures are renderable content with no storage reference
+  ---
+  duration_ms: 0.391455
+  type: 'test'
+  ...
+# Subtest: the judge fixtures keep dry-run, live and ambiguous runs honest
+ok 13 - the judge fixtures keep dry-run, live and ambiguous runs honest
+  ---
+  duration_ms: 0.344731
+  type: 'test'
+  ...
+# (node:3780572) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/tests/contracts/money.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: the shared case list is the accept/reject domain, and both halves must agree on it
+ok 14 - the shared case list is the accept/reject domain, and both halves must agree on it
+  ---
+  duration_ms: 5.84802
+  type: 'test'
+  ...
+# Subtest: no number ever becomes money, however innocent it looks
+ok 15 - no number ever becomes money, however innocent it looks
+  ---
+  duration_ms: 0.5773
+  type: 'test'
+  ...
+# Subtest: a value that is canonical but not eight digits is not money
+ok 16 - a value that is canonical but not eight digits is not money
+  ---
+  duration_ms: 0.237681
+  type: 'test'
+  ...
+# Subtest: addition, subtraction, comparison and sums are exact at the eighth digit
+ok 17 - addition, subtraction, comparison and sums are exact at the eighth digit
+  ---
+  duration_ms: 0.469626
+  type: 'test'
+  ...
+# Subtest: negative and zero are distinguishable, and negative zero does not exist
+ok 18 - negative and zero are distinguishable, and negative zero does not exist
+  ---
+  duration_ms: 0.374458
+  type: 'test'
+  ...
+# Subtest: scaled units are 1e-8 USD and stop at the twentieth significant digit
+ok 19 - scaled units are 1e-8 USD and stop at the twentieth significant digit
+  ---
+  duration_ms: 0.322077
+  type: 'test'
+  ...
+# Subtest: an absurdly long numeral is refused on its length, before the regex or BigInt
+ok 20 - an absurdly long numeral is refused on its length, before the regex or BigInt
+  ---
+  duration_ms: 0.30921
+  type: 'test'
+  ...
+# Subtest: a prospective total can be tested for the domain without throwing
+ok 21 - a prospective total can be tested for the domain without throwing
+  ---
+  duration_ms: 0.225954
+  type: 'test'
+  ...
+# Subtest: leading zeros are rejected, as they are on the Python side
+ok 22 - leading zeros are rejected, as they are on the Python side
+  ---
+  duration_ms: 0.495406
+  type: 'test'
+  ...
+# Subtest: the charge and hold fixtures agree across languages and stay canonical
+ok 23 - the charge and hold fixtures agree across languages and stay canonical
+  ---
+  duration_ms: 0.689844
+  type: 'test'
+  ...
+# Subtest: display never routes the value through Number
+ok 24 - display never routes the value through Number
+  ---
+  duration_ms: 0.536591
+  type: 'test'
+  ...
+# (node:3780577) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/tests/contracts/opaque-cursor.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: the wrapper really does make cursors unreadable to the implementation
+ok 25 - the wrapper really does make cursors unreadable to the implementation
+  ---
+  duration_ms: 10.700679
+  type: 'test'
+  ...
+# Subtest: ConsoleServices with opaque cursors
+    # Subtest: usage pages walk every row exactly once, newest first
+    ok 1 - usage pages walk every row exactly once, newest first
+      ---
+      duration_ms: 13.067299
+      type: 'test'
+      ...
+    # Subtest: ledger and trace pages walk every row exactly once
+    ok 2 - ledger and trace pages walk every row exactly once
+      ---
+      duration_ms: 22.24857
+      type: 'test'
+      ...
+    # Subtest: rejects a limit above the hard bound and a limit that is not a positive integer
+    ok 3 - rejects a limit above the hard bound and a limit that is not a positive integer
+      ---
+      duration_ms: 3.377623
+      type: 'test'
+      ...
+    # Subtest: rejects a cursor it did not issue for this query
+    ok 4 - rejects a cursor it did not issue for this query
+      ---
+      duration_ms: 3.286657
+      type: 'test'
+      ...
+    # Subtest: balance is the ledger total minus reservations, and holds reduce what is available
+    ok 5 - balance is the ledger total minus reservations, and holds reduce what is available
+      ---
+      duration_ms: 6.59473
+      type: 'test'
+      ...
+    # Subtest: a new organization starts at zero with no ledger history
+    ok 6 - a new organization starts at zero with no ledger history
+      ---
+      duration_ms: 2.110779
+      type: 'test'
+      ...
+    # Subtest: identifiers from another organization are not_found, in both directions
+    ok 7 - identifiers from another organization are not_found, in both directions
+      ---
+      duration_ms: 2.826041
+      type: 'test'
+      ...
+    # Subtest: a filter or cursor from another organization never widens the tenant
+    ok 8 - a filter or cursor from another organization never widens the tenant
+      ---
+      duration_ms: 4.415364
+      type: 'test'
+      ...
+    # Subtest: a filter outside its vocabulary is invalid_request, not an empty page
+    ok 9 - a filter outside its vocabulary is invalid_request, not an empty page
+      ---
+      duration_ms: 2.309492
+      type: 'test'
+      ...
+    # Subtest: a member can read but cannot mutate settings or keys
+    ok 10 - a member can read but cannot mutate settings or keys
+      ---
+      duration_ms: 2.55782
+      type: 'test'
+      ...
+    # Subtest: a non-operator can neither grant nor see other organizations
+    ok 11 - a non-operator can neither grant nor see other organizations
+      ---
+      duration_ms: 2.360855
+      type: 'test'
+      ...
+    # Subtest: feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+    ok 12 - feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+      ---
+      duration_ms: 10.295729
+      type: 'test'
+      ...
+    # Subtest: retention is capped and evaluation consent is a separate control
+    ok 13 - retention is capped and evaluation consent is a separate control
+      ---
+      duration_ms: 2.257852
+      type: 'test'
+      ...
+    # Subtest: an operator grant is idempotent per key and conflicts on a changed payload
+    ok 14 - an operator grant is idempotent per key and conflicts on a changed payload
+      ---
+      duration_ms: 2.644016
+      type: 'test'
+      ...
+    # Subtest: every amount the money domain rejects is rejected by the grant boundary too
+    ok 15 - every amount the money domain rejects is rejected by the grant boundary too
+      ---
+      duration_ms: 5.788863
+      type: 'test'
+      ...
+    # Subtest: the provisional input bounds hold
+    ok 16 - the provisional input bounds hold
+      ---
+      duration_ms: 3.464646
+      type: 'test'
+      ...
+    # Subtest: content availability decides the payload and never leaks a storage reference
+    ok 17 - content availability decides the payload and never leaks a storage reference
+      ---
+      duration_ms: 8.307795
+      type: 'test'
+      ...
+    # Subtest: the HTTP status table is the one 08 §3 freezes, code for code
+    ok 18 - the HTTP status table is the one 08 §3 freezes, code for code
+      ---
+      duration_ms: 0.39095
+      type: 'test'
+      ...
+    # Subtest: suspension gates new work and configuration, and nothing else (R33)
+    ok 19 - suspension gates new work and configuration, and nothing else (R33)
+      ---
+      duration_ms: 3.182416
+      type: 'test'
+      ...
+    # Subtest: the role and suspension matrix holds for every operation
+    ok 20 - the role and suspension matrix holds for every operation
+      ---
+      duration_ms: 13.734478
+      type: 'test'
+      ...
+    # Subtest: an operator acts on the organization it names, not on its own (R26)
+    ok 21 - an operator acts on the organization it names, not on its own (R26)
+      ---
+      duration_ms: 4.270391
+      type: 'test'
+      ...
+    # Subtest: a suspension can be lifted, and lifting it restores exactly what it gated
+    ok 22 - a suspension can be lifted, and lifting it restores exactly what it gated
+      ---
+      duration_ms: 2.764741
+      type: 'test'
+      ...
+    # Subtest: suspending and restoring an organization with real accounting changes none of it
+    ok 23 - suspending and restoring an organization with real accounting changes none of it
+      ---
+      duration_ms: 10.708593
+      type: 'test'
+      ...
+    # Subtest: entitlement limits are replaced, not merged
+    ok 24 - entitlement limits are replaced, not merged
+      ---
+      duration_ms: 3.649996
+      type: 'test'
+      ...
+    # Subtest: the operator's own lists page at a small limit too
+    ok 25 - the operator's own lists page at a small limit too
+      ---
+      duration_ms: 2.850458
+      type: 'test'
+      ...
+    # Subtest: a fresh read of the ledger puts a new grant in its place
+    ok 26 - a fresh read of the ledger puts a new grant in its place
+      ---
+      duration_ms: 3.363011
+      type: 'test'
+      ...
+    # Subtest: the three entitlement states are distinct, and the empty one is a denial (R24)
+    ok 27 - the three entitlement states are distinct, and the empty one is a denial (R24)
+      ---
+      duration_ms: 2.928692
+      type: 'test'
+      ...
+    # Subtest: an operator suspension needs a reason within the bound
+    ok 28 - an operator suspension needs a reason within the bound
+      ---
+      duration_ms: 2.020563
+      type: 'test'
+      ...
+    # Subtest: no customer view ever names an operator (R41)
+    ok 29 - no customer view ever names an operator (R41)
+      ---
+      duration_ms: 10.705217
+      type: 'test'
+      ...
+    # Subtest: an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+    ok 30 - an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+      ---
+      duration_ms: 3.532224
+      type: 'test'
+      ...
+    # Subtest: an operator label is the only path to operator authorship and calibration membership
+    ok 31 - an operator label is the only path to operator authorship and calibration membership
+      ---
+      duration_ms: 2.545723
+      type: 'test'
+      ...
+    # Subtest: a created key's secret is shown once and never again, to anybody
+    ok 32 - a created key's secret is shown once and never again, to anybody
+      ---
+      duration_ms: 4.26431
+      type: 'test'
+      ...
+    # Subtest: judge runs separate estimates, limited evaluations and held budgets
+    ok 33 - judge runs separate estimates, limited evaluations and held budgets
+      ---
+      duration_ms: 2.037262
+      type: 'test'
+      ...
+    1..33
+ok 26 - ConsoleServices with opaque cursors
+  ---
+  duration_ms: 172.746188
+  type: 'suite'
+  ...
+# Subtest: ConsoleServices with opaque cursors: mutations validate before they write
+    # Subtest: an amount that would leave the money domain is refused, and nothing is written
+    ok 1 - an amount that would leave the money domain is refused, and nothing is written
+      ---
+      duration_ms: 8.207135
+      type: 'test'
+      ...
+    # Subtest: every mutating operation validates before it writes, whichever field is bad
+    ok 2 - every mutating operation validates before it writes, whichever field is bad
+      ---
+      duration_ms: 75.823917
+      type: 'test'
+      ...
+    # Subtest: an idempotency key is scoped to its operation, its organization and its payload
+    ok 3 - an idempotency key is scoped to its operation, its organization and its payload
+      ---
+      duration_ms: 4.396539
+      type: 'test'
+      ...
+    # Subtest: generated identifiers never collide, within an organization or across two
+    ok 4 - generated identifiers never collide, within an organization or across two
+      ---
+      duration_ms: 2.805406
+      type: 'test'
+      ...
+    # Subtest: a list walked while rows arrive at its head still returns every row exactly once
+    ok 5 - a list walked while rows arrive at its head still returns every row exactly once
+      ---
+      duration_ms: 33.233214
+      type: 'test'
+      ...
+    # Subtest: a filtered walk survives the cursor's own row leaving the filter, and stays complete
+    ok 6 - a filtered walk survives the cursor's own row leaving the filter, and stays complete
+      ---
+      duration_ms: 4.648573
+      type: 'test'
+      ...
+    # Subtest: nothing creates a legacy purchase entry
+    ok 7 - nothing creates a legacy purchase entry
+      ---
+      duration_ms: 5.464381
+      type: 'test'
+      ...
+    # Subtest: a calibration label is operator data a customer never sees (R35)
+    ok 8 - a calibration label is operator data a customer never sees (R35)
+      ---
+      duration_ms: 5.192809
+      type: 'test'
+      ...
+    # Subtest: no operation accepts a field the caller invented
+    ok 9 - no operation accepts a field the caller invented
+      ---
+      duration_ms: 3.205571
+      type: 'test'
+      ...
+    # Subtest: reads and writes never cross the tenant boundary, in either direction
+    ok 10 - reads and writes never cross the tenant boundary, in either direction
+      ---
+      duration_ms: 4.256098
+      type: 'test'
+      ...
+    # Subtest: a filter filters, and an absent filter does not
+    ok 11 - a filter filters, and an absent filter does not
+      ---
+      duration_ms: 7.777798
+      type: 'test'
+      ...
+    # Subtest: the operator list pages like every other list
+    ok 12 - the operator list pages like every other list
+      ---
+      duration_ms: 2.964663
+      type: 'test'
+      ...
+    1..12
+ok 27 - ConsoleServices with opaque cursors: mutations validate before they write
+  ---
+  duration_ms: 158.57013
+  type: 'suite'
+  ...
+# (node:3780585) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/tests/contracts/services.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: fixture-backed ConsoleServices
+    # Subtest: usage pages walk every row exactly once, newest first
+    ok 1 - usage pages walk every row exactly once, newest first
+      ---
+      duration_ms: 18.986553
+      type: 'test'
+      ...
+    # Subtest: ledger and trace pages walk every row exactly once
+    ok 2 - ledger and trace pages walk every row exactly once
+      ---
+      duration_ms: 19.606319
+      type: 'test'
+      ...
+    # Subtest: rejects a limit above the hard bound and a limit that is not a positive integer
+    ok 3 - rejects a limit above the hard bound and a limit that is not a positive integer
+      ---
+      duration_ms: 5.031239
+      type: 'test'
+      ...
+    # Subtest: rejects a cursor it did not issue for this query
+    ok 4 - rejects a cursor it did not issue for this query
+      ---
+      duration_ms: 5.988226
+      type: 'test'
+      ...
+    # Subtest: balance is the ledger total minus reservations, and holds reduce what is available
+    ok 5 - balance is the ledger total minus reservations, and holds reduce what is available
+      ---
+      duration_ms: 5.580464
+      type: 'test'
+      ...
+    # Subtest: a new organization starts at zero with no ledger history
+    ok 6 - a new organization starts at zero with no ledger history
+      ---
+      duration_ms: 3.321214
+      type: 'test'
+      ...
+    # Subtest: identifiers from another organization are not_found, in both directions
+    ok 7 - identifiers from another organization are not_found, in both directions
+      ---
+      duration_ms: 3.518527
+      type: 'test'
+      ...
+    # Subtest: a filter or cursor from another organization never widens the tenant
+    ok 8 - a filter or cursor from another organization never widens the tenant
+      ---
+      duration_ms: 3.746514
+      type: 'test'
+      ...
+    # Subtest: a filter outside its vocabulary is invalid_request, not an empty page
+    ok 9 - a filter outside its vocabulary is invalid_request, not an empty page
+      ---
+      duration_ms: 3.298297
+      type: 'test'
+      ...
+    # Subtest: a member can read but cannot mutate settings or keys
+    ok 10 - a member can read but cannot mutate settings or keys
+      ---
+      duration_ms: 2.770704
+      type: 'test'
+      ...
+    # Subtest: a non-operator can neither grant nor see other organizations
+    ok 11 - a non-operator can neither grant nor see other organizations
+      ---
+      duration_ms: 2.406817
+      type: 'test'
+      ...
+    # Subtest: feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+    ok 12 - feedback follows the R3 body, appears immediately, and has provenance the client cannot set
+      ---
+      duration_ms: 10.745486
+      type: 'test'
+      ...
+    # Subtest: retention is capped and evaluation consent is a separate control
+    ok 13 - retention is capped and evaluation consent is a separate control
+      ---
+      duration_ms: 3.986621
+      type: 'test'
+      ...
+    # Subtest: an operator grant is idempotent per key and conflicts on a changed payload
+    ok 14 - an operator grant is idempotent per key and conflicts on a changed payload
+      ---
+      duration_ms: 2.585334
+      type: 'test'
+      ...
+    # Subtest: every amount the money domain rejects is rejected by the grant boundary too
+    ok 15 - every amount the money domain rejects is rejected by the grant boundary too
+      ---
+      duration_ms: 3.534579
+      type: 'test'
+      ...
+    # Subtest: the provisional input bounds hold
+    ok 16 - the provisional input bounds hold
+      ---
+      duration_ms: 4.633169
+      type: 'test'
+      ...
+    # Subtest: content availability decides the payload and never leaks a storage reference
+    ok 17 - content availability decides the payload and never leaks a storage reference
+      ---
+      duration_ms: 8.654897
+      type: 'test'
+      ...
+    # Subtest: the HTTP status table is the one 08 §3 freezes, code for code
+    ok 18 - the HTTP status table is the one 08 §3 freezes, code for code
+      ---
+      duration_ms: 0.599161
+      type: 'test'
+      ...
+    # Subtest: suspension gates new work and configuration, and nothing else (R33)
+    ok 19 - suspension gates new work and configuration, and nothing else (R33)
+      ---
+      duration_ms: 3.708142
+      type: 'test'
+      ...
+    # Subtest: the role and suspension matrix holds for every operation
+    ok 20 - the role and suspension matrix holds for every operation
+      ---
+      duration_ms: 13.726115
+      type: 'test'
+      ...
+    # Subtest: an operator acts on the organization it names, not on its own (R26)
+    ok 21 - an operator acts on the organization it names, not on its own (R26)
+      ---
+      duration_ms: 5.523303
+      type: 'test'
+      ...
+    # Subtest: a suspension can be lifted, and lifting it restores exactly what it gated
+    ok 22 - a suspension can be lifted, and lifting it restores exactly what it gated
+      ---
+      duration_ms: 2.686547
+      type: 'test'
+      ...
+    # Subtest: suspending and restoring an organization with real accounting changes none of it
+    ok 23 - suspending and restoring an organization with real accounting changes none of it
+      ---
+      duration_ms: 12.45058
+      type: 'test'
+      ...
+    # Subtest: entitlement limits are replaced, not merged
+    ok 24 - entitlement limits are replaced, not merged
+      ---
+      duration_ms: 3.538029
+      type: 'test'
+      ...
+    # Subtest: the operator's own lists page at a small limit too
+    ok 25 - the operator's own lists page at a small limit too
+      ---
+      duration_ms: 3.284456
+      type: 'test'
+      ...
+    # Subtest: a fresh read of the ledger puts a new grant in its place
+    ok 26 - a fresh read of the ledger puts a new grant in its place
+      ---
+      duration_ms: 7.014028
+      type: 'test'
+      ...
+    # Subtest: the three entitlement states are distinct, and the empty one is a denial (R24)
+    ok 27 - the three entitlement states are distinct, and the empty one is a denial (R24)
+      ---
+      duration_ms: 4.684347
+      type: 'test'
+      ...
+    # Subtest: an operator suspension needs a reason within the bound
+    ok 28 - an operator suspension needs a reason within the bound
+      ---
+      duration_ms: 3.058542
+      type: 'test'
+      ...
+    # Subtest: no customer view ever names an operator (R41)
+    ok 29 - no customer view ever names an operator (R41)
+      ---
+      duration_ms: 14.758197
+      type: 'test'
+      ...
+    # Subtest: an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+    ok 30 - an operator write is audited, and a restore adds an entry instead of erasing one (R34)
+      ---
+      duration_ms: 6.372576
+      type: 'test'
+      ...
+    # Subtest: an operator label is the only path to operator authorship and calibration membership
+    ok 31 - an operator label is the only path to operator authorship and calibration membership
+      ---
+      duration_ms: 2.599131
+      type: 'test'
+      ...
+    # Subtest: a created key's secret is shown once and never again, to anybody
+    ok 32 - a created key's secret is shown once and never again, to anybody
+      ---
+      duration_ms: 4.256756
+      type: 'test'
+      ...
+    # Subtest: judge runs separate estimates, limited evaluations and held budgets
+    ok 33 - judge runs separate estimates, limited evaluations and held budgets
+      ---
+      duration_ms: 2.204542
+      type: 'test'
+      ...
+    1..33
+ok 28 - fixture-backed ConsoleServices
+  ---
+  duration_ms: 201.320798
+  type: 'suite'
+  ...
+# Subtest: fixture-backed ConsoleServices: mutations validate before they write
+    # Subtest: an amount that would leave the money domain is refused, and nothing is written
+    ok 1 - an amount that would leave the money domain is refused, and nothing is written
+      ---
+      duration_ms: 6.540174
+      type: 'test'
+      ...
+    # Subtest: every mutating operation validates before it writes, whichever field is bad
+    ok 2 - every mutating operation validates before it writes, whichever field is bad
+      ---
+      duration_ms: 63.39012
+      type: 'test'
+      ...
+    # Subtest: an idempotency key is scoped to its operation, its organization and its payload
+    ok 3 - an idempotency key is scoped to its operation, its organization and its payload
+      ---
+      duration_ms: 3.739605
+      type: 'test'
+      ...
+    # Subtest: generated identifiers never collide, within an organization or across two
+    ok 4 - generated identifiers never collide, within an organization or across two
+      ---
+      duration_ms: 2.926368
+      type: 'test'
+      ...
+    # Subtest: a list walked while rows arrive at its head still returns every row exactly once
+    ok 5 - a list walked while rows arrive at its head still returns every row exactly once
+      ---
+      duration_ms: 34.275473
+      type: 'test'
+      ...
+    # Subtest: a filtered walk survives the cursor's own row leaving the filter, and stays complete
+    ok 6 - a filtered walk survives the cursor's own row leaving the filter, and stays complete
+      ---
+      duration_ms: 6.228579
+      type: 'test'
+      ...
+    # Subtest: nothing creates a legacy purchase entry
+    ok 7 - nothing creates a legacy purchase entry
+      ---
+      duration_ms: 7.953604
+      type: 'test'
+      ...
+    # Subtest: a calibration label is operator data a customer never sees (R35)
+    ok 8 - a calibration label is operator data a customer never sees (R35)
+      ---
+      duration_ms: 4.719836
+      type: 'test'
+      ...
+    # Subtest: no operation accepts a field the caller invented
+    ok 9 - no operation accepts a field the caller invented
+      ---
+      duration_ms: 3.25864
+      type: 'test'
+      ...
+    # Subtest: reads and writes never cross the tenant boundary, in either direction
+    ok 10 - reads and writes never cross the tenant boundary, in either direction
+      ---
+      duration_ms: 3.614283
+      type: 'test'
+      ...
+    # Subtest: a filter filters, and an absent filter does not
+    ok 11 - a filter filters, and an absent filter does not
+      ---
+      duration_ms: 6.676821
+      type: 'test'
+      ...
+    # Subtest: the operator list pages like every other list
+    ok 12 - the operator list pages like every other list
+      ---
+      duration_ms: 2.730143
+      type: 'test'
+      ...
+    1..12
+ok 29 - fixture-backed ConsoleServices: mutations validate before they write
+  ---
+  duration_ms: 146.74158
+  type: 'suite'
+  ...
+# Subtest: the fixtures are deterministic and each instance has its own state
+ok 30 - the fixtures are deterministic and each instance has its own state
+  ---
+  duration_ms: 5.100139
+  type: 'test'
+  ...
+# Subtest: the fixture set covers what U and V need to build against
+ok 31 - the fixture set covers what U and V need to build against
+  ---
+  duration_ms: 4.111886
+  type: 'test'
+  ...
+# Subtest: the exact overflow the review found is refused, and the fake stays usable afterwards
+ok 32 - the exact overflow the review found is refused, and the fake stays usable afterwards
+  ---
+  duration_ms: 4.97015
+  type: 'test'
+  ...
+# Subtest: many submissions never reuse a feedback id, and two organizations never share one
+ok 33 - many submissions never reuse a feedback id, and two organizations never share one
+  ---
+  duration_ms: 14.454406
+  type: 'test'
+  ...
+# Subtest: an operator label leaves the fake's customer-visible sequences untouched
+ok 34 - an operator label leaves the fake's customer-visible sequences untouched
+  ---
+  duration_ms: 3.544117
+  type: 'test'
+  ...
+# Subtest: the fake's own cursor shape cannot be forged
+ok 35 - the fake's own cursor shape cannot be forged
+  ---
+  duration_ms: 2.398477
+  type: 'test'
+  ...
+# Subtest: a failure after the write replays instead of repeating, for every mutating operation
+ok 36 - a failure after the write replays instead of repeating, for every mutating operation
+  ---
+  duration_ms: 5.115464
+  type: 'test'
+  ...
+# Subtest: a key secret is retained nowhere in the fake's state
+ok 37 - a key secret is retained nowhere in the fake's state
+  ---
+  duration_ms: 4.394789
+  type: 'test'
+  ...
+# Subtest: every operation can be made to fail on demand, and recovers on the next call
+ok 38 - every operation can be made to fail on demand, and recovers on the next call
+  ---
+  duration_ms: 4.33989
+  type: 'test'
+  ...
+# (node:3780590) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/tests/contracts/text-bounds.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: the shared bound table is the one both halves read
+ok 39 - the shared bound table is the one both halves read
+  ---
+  duration_ms: 3.080901
+  type: 'test'
+  ...
+# Subtest: every shared bound is enforced in code points by the services that carry it
+ok 40 - every shared bound is enforced in code points by the services that carry it
+  ---
+  duration_ms: 27.839885
+  type: 'test'
+  ...
+# (node:3780598) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/tests/v/trace-query.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1-Q01 only the parameters this page declares reach the typed query
+ok 41 - V1-Q01 only the parameters this page declares reach the typed query
+  ---
+  duration_ms: 3.094831
+  type: 'test'
+  ...
+# Subtest: V1-Q02 a filter value outside its vocabulary is refused and the default stands
+ok 42 - V1-Q02 a filter value outside its vocabulary is refused and the default stands
+  ---
+  duration_ms: 0.304388
+  type: 'test'
+  ...
+# Subtest: V1-Q03 `off` is not a list filter, and the refusal says where those requests are
+ok 43 - V1-Q03 `off` is not a list filter, and the refusal says where those requests are
+  ---
+  duration_ms: 0.588898
+  type: 'test'
+  ...
+# Subtest: V1-Q04 a key filter must name one of this organization's keys
+ok 44 - V1-Q04 a key filter must name one of this organization's keys
+  ---
+  duration_ms: 0.499183
+  type: 'test'
+  ...
+# Subtest: V1-Q05 the window is resolved from the range, and a page link pins it
+ok 45 - V1-Q05 the window is resolved from the range, and a page link pins it
+  ---
+  duration_ms: 0.673737
+  type: 'test'
+  ...
+# Subtest: V1-Q06 a cursor is bounded and charset-checked, and otherwise opaque
+ok 46 - V1-Q06 a cursor is bounded and charset-checked, and otherwise opaque
+  ---
+  duration_ms: 0.277113
+  type: 'test'
+  ...
+# Subtest: V1-Q07 the page size comes from the offered set, and is never a clamp
+ok 47 - V1-Q07 the page size comes from the offered set, and is never a clamp
+  ---
+  duration_ms: 0.571813
+  type: 'test'
+  ...
+# Subtest: V1-Q08 a repeated parameter is refused rather than silently resolved
+ok 48 - V1-Q08 a repeated parameter is refused rather than silently resolved
+  ---
+  duration_ms: 0.225088
+  type: 'test'
+  ...
+# Subtest: V1-Q09 changing a filter drops the cursor; a page link keeps the window
+ok 49 - V1-Q09 changing a filter drops the cursor; a page link keeps the window
+  ---
+  duration_ms: 1.149362
+  type: 'test'
+  ...
+# Subtest: V1-Q10 every query this page builds is one the service accepts, and its walk is stable
+ok 50 - V1-Q10 every query this page builds is one the service accepts, and its walk is stable
+  ---
+  duration_ms: 29.558653
+  type: 'test'
+  ...
+# (node:3780604) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/tests/v/trace-sequence.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1-S01 the response to the newest request is applied
+ok 51 - V1-S01 the response to the newest request is applied
+  ---
+  duration_ms: 1.275572
+  type: 'test'
+  ...
+# Subtest: V1-S02 a response that lost the race cannot put the older filter back
+ok 52 - V1-S02 a response that lost the race cannot put the older filter back
+  ---
+  duration_ms: 0.251232
+  type: 'test'
+  ...
+# Subtest: V1-S03 a duplicate delivery of a response already applied changes nothing
+ok 53 - V1-S03 a duplicate delivery of a response already applied changes nothing
+  ---
+  duration_ms: 0.200439
+  type: 'test'
+  ...
+# Subtest: V1-S04 an arrival with nothing outstanding is the truth, whoever navigated
+ok 54 - V1-S04 an arrival with nothing outstanding is the truth, whoever navigated
+  ---
+  duration_ms: 0.332973
+  type: 'test'
+  ...
+# Subtest: V1-S05 an arrival that does not answer the outstanding request is dropped
+ok 55 - V1-S05 an arrival that does not answer the outstanding request is dropped
+  ---
+  duration_ms: 0.30241
+  type: 'test'
+  ...
+# Subtest: V1-S06 the controls draw the newest request while one is outstanding
+ok 56 - V1-S06 the controls draw the newest request while one is outstanding
+  ---
+  duration_ms: 0.224193
+  type: 'test'
+  ...
+# (node:3780610) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/tests/v/trace-view-model.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1-V01 every content state is its own state, and only a lost capture is a failure
+ok 57 - V1-V01 every content state is its own state, and only a lost capture is a failure
+  ---
+  duration_ms: 1.551913
+  type: 'test'
+  ...
+# Subtest: V1-V02 a lost row names its reason, and a lost row with no reason says exactly that
+ok 58 - V1-V02 a lost row names its reason, and a lost row with no reason says exactly that
+  ---
+  duration_ms: 0.521757
+  type: 'test'
+  ...
+# Subtest: V1-V03 the indicators count projection lag, loss and unfinished rows on this page
+ok 59 - V1-V03 the indicators count projection lag, loss and unfinished rows on this page
+  ---
+  duration_ms: 2.443031
+  type: 'test'
+  ...
+# Subtest: V1-V04 rows join key names, mark revoked keys, and never invent one
+ok 60 - V1-V04 rows join key names, mark revoked keys, and never invent one
+  ---
+  duration_ms: 1.190127
+  type: 'test'
+  ...
+# Subtest: V1-V05 status tone follows the class, and an unset status is not drawn as success
+ok 61 - V1-V05 status tone follows the class, and an unset status is not drawn as success
+  ---
+  duration_ms: 0.273571
+  type: 'test'
+  ...
+# Subtest: V1-V06 an empty page distinguishes filtered, capture-off and simply idle
+ok 62 - V1-V06 an empty page distinguishes filtered, capture-off and simply idle
+  ---
+  duration_ms: 0.36728
+  type: 'test'
+  ...
+# Subtest: V1-V07 an error offers a retry only where retrying can work
+ok 63 - V1-V07 an error offers a retry only where retrying can work
+  ---
+  duration_ms: 0.721333
+  type: 'test'
+  ...
+# Subtest: V1-V08 the next-page link carries the cursor and pins the window
+ok 64 - V1-V08 the next-page link carries the cursor and pins the window
+  ---
+  duration_ms: 0.337771
+  type: 'test'
+  ...
+# Subtest: V1-V09 built from the fake's own page: no off row, every row explained
+ok 65 - V1-V09 built from the fake's own page: no off row, every row explained
+  ---
+  duration_ms: 12.297993
+  type: 'test'
+  ...
+1..65
+# tests 151
+# suites 4
+# pass 151
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 777.00516
+exit=0
+
+### make console-lint   (2026-09-21T06:19:39Z)
+cd apps/app && pnpm lint
+
+> infrx-app@0.1.0 lint /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app
+> eslint
+
+
+/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/lib/contracts/conformance.ts
+  3924:35  warning  'ids' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/lib/contracts/fake-services.ts
+  80:8  warning  'AuditQuery' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+
+exit=0
+
+### make console-typecheck   (2026-09-21T06:19:44Z)
+cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit
+Generating route types...
+✓ Types generated successfully
+exit=0
+
+### cd apps/app && pnpm build   (2026-09-21T06:19:47Z)
+
+> infrx-app@0.1.0 build /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app
+> next build
+
+▲ Next.js 16.3.5 (Turbopack)
+✓ Running next.config.ts took 23ms
+
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
+
+  To migrate automatically, run:
+  npx @next/codemod@canary middleware-to-proxy .
+
+  Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+  Creating an optimized production build ...
+✓ Compiled successfully in 486ms
+  Running TypeScript ...
+  Finished TypeScript in 2.1s ...
+  Collecting page data using 15 workers ...
+  Generating static pages using 15 workers (0/7) ...
+  Generating static pages using 15 workers (1/7) 
+  Generating static pages using 15 workers (3/7) 
+  Generating static pages using 15 workers (5/7) 
+✓ Generating static pages using 15 workers (7/7) in 346ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /admin
+├ ƒ /api-keys
+├ ƒ /auth/callback
+├ ƒ /billing
+├ ƒ /dedicated
+├ ƒ /docs
+├ ○ /forgot-password
+├ ƒ /login
+├ ƒ /models
+├ ƒ /teams
+├ ƒ /traces
+├ ○ /update-password
+└ ƒ /usage
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+exit=0
+
+### cd apps/app && node --test --test-reporter=tap tests/v/   (2026-09-21T06:19:53Z)
+TAP version 13
+# (node:3786222) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/tests/v/trace-query.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1-Q01 only the parameters this page declares reach the typed query
+ok 1 - V1-Q01 only the parameters this page declares reach the typed query
+  ---
+  duration_ms: 3.166927
+  type: 'test'
+  ...
+# Subtest: V1-Q02 a filter value outside its vocabulary is refused and the default stands
+ok 2 - V1-Q02 a filter value outside its vocabulary is refused and the default stands
+  ---
+  duration_ms: 0.388847
+  type: 'test'
+  ...
+# Subtest: V1-Q03 `off` is not a list filter, and the refusal says where those requests are
+ok 3 - V1-Q03 `off` is not a list filter, and the refusal says where those requests are
+  ---
+  duration_ms: 0.938889
+  type: 'test'
+  ...
+# Subtest: V1-Q04 a key filter must name one of this organization's keys
+ok 4 - V1-Q04 a key filter must name one of this organization's keys
+  ---
+  duration_ms: 0.537465
+  type: 'test'
+  ...
+# Subtest: V1-Q05 the window is resolved from the range, and a page link pins it
+ok 5 - V1-Q05 the window is resolved from the range, and a page link pins it
+  ---
+  duration_ms: 0.703401
+  type: 'test'
+  ...
+# Subtest: V1-Q06 a cursor is bounded and charset-checked, and otherwise opaque
+ok 6 - V1-Q06 a cursor is bounded and charset-checked, and otherwise opaque
+  ---
+  duration_ms: 0.30152
+  type: 'test'
+  ...
+# Subtest: V1-Q07 the page size comes from the offered set, and is never a clamp
+ok 7 - V1-Q07 the page size comes from the offered set, and is never a clamp
+  ---
+  duration_ms: 0.616072
+  type: 'test'
+  ...
+# Subtest: V1-Q08 a repeated parameter is refused rather than silently resolved
+ok 8 - V1-Q08 a repeated parameter is refused rather than silently resolved
+  ---
+  duration_ms: 0.228961
+  type: 'test'
+  ...
+# Subtest: V1-Q09 changing a filter drops the cursor; a page link keeps the window
+ok 9 - V1-Q09 changing a filter drops the cursor; a page link keeps the window
+  ---
+  duration_ms: 1.102728
+  type: 'test'
+  ...
+# Subtest: V1-Q10 every query this page builds is one the service accepts, and its walk is stable
+ok 10 - V1-Q10 every query this page builds is one the service accepts, and its walk is stable
+  ---
+  duration_ms: 18.206705
+  type: 'test'
+  ...
+# (node:3786223) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/tests/v/trace-sequence.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1-S01 the response to the newest request is applied
+ok 11 - V1-S01 the response to the newest request is applied
+  ---
+  duration_ms: 1.261792
+  type: 'test'
+  ...
+# Subtest: V1-S02 a response that lost the race cannot put the older filter back
+ok 12 - V1-S02 a response that lost the race cannot put the older filter back
+  ---
+  duration_ms: 0.262484
+  type: 'test'
+  ...
+# Subtest: V1-S03 a duplicate delivery of a response already applied changes nothing
+ok 13 - V1-S03 a duplicate delivery of a response already applied changes nothing
+  ---
+  duration_ms: 0.202608
+  type: 'test'
+  ...
+# Subtest: V1-S04 an arrival with nothing outstanding is the truth, whoever navigated
+ok 14 - V1-S04 an arrival with nothing outstanding is the truth, whoever navigated
+  ---
+  duration_ms: 0.331047
+  type: 'test'
+  ...
+# Subtest: V1-S05 an arrival that does not answer the outstanding request is dropped
+ok 15 - V1-S05 an arrival that does not answer the outstanding request is dropped
+  ---
+  duration_ms: 0.284916
+  type: 'test'
+  ...
+# Subtest: V1-S06 the controls draw the newest request while one is outstanding
+ok 16 - V1-S06 the controls draw the newest request while one is outstanding
+  ---
+  duration_ms: 0.232777
+  type: 'test'
+  ...
+# (node:3786231) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/tests/v/trace-view-model.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-v1/apps/app/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V1-V01 every content state is its own state, and only a lost capture is a failure
+ok 17 - V1-V01 every content state is its own state, and only a lost capture is a failure
+  ---
+  duration_ms: 1.003403
+  type: 'test'
+  ...
+# Subtest: V1-V02 a lost row names its reason, and a lost row with no reason says exactly that
+ok 18 - V1-V02 a lost row names its reason, and a lost row with no reason says exactly that
+  ---
+  duration_ms: 0.307393
+  type: 'test'
+  ...
+# Subtest: V1-V03 the indicators count projection lag, loss and unfinished rows on this page
+ok 19 - V1-V03 the indicators count projection lag, loss and unfinished rows on this page
+  ---
+  duration_ms: 1.591526
+  type: 'test'
+  ...
+# Subtest: V1-V04 rows join key names, mark revoked keys, and never invent one
+ok 20 - V1-V04 rows join key names, mark revoked keys, and never invent one
+  ---
+  duration_ms: 0.722057
+  type: 'test'
+  ...
+# Subtest: V1-V05 status tone follows the class, and an unset status is not drawn as success
+ok 21 - V1-V05 status tone follows the class, and an unset status is not drawn as success
+  ---
+  duration_ms: 0.168468
+  type: 'test'
+  ...
+# Subtest: V1-V06 an empty page distinguishes filtered, capture-off and simply idle
+ok 22 - V1-V06 an empty page distinguishes filtered, capture-off and simply idle
+  ---
+  duration_ms: 0.275953
+  type: 'test'
+  ...
+# Subtest: V1-V07 an error offers a retry only where retrying can work
+ok 23 - V1-V07 an error offers a retry only where retrying can work
+  ---
+  duration_ms: 0.489501
+  type: 'test'
+  ...
+# Subtest: V1-V08 the next-page link carries the cursor and pins the window
+ok 24 - V1-V08 the next-page link carries the cursor and pins the window
+  ---
+  duration_ms: 0.202661
+  type: 'test'
+  ...
+# Subtest: V1-V09 built from the fake's own page: no off row, every row explained
+ok 25 - V1-V09 built from the fake's own page: no off row, every row explained
+  ---
+  duration_ms: 7.050583
+  type: 'test'
+  ...
+1..25
+# tests 25
+# suites 0
+# pass 25
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 190.679924
+exit=0
+
+### cd apps/app && node tests/v/run-mutants.mjs   (2026-09-21T06:19:53Z)
+killed       ALLOW-01  by "V1-Q03 `off` is not a list filter, and the refusal says where those requests are"
+killed       ALLOW-02  by "V1-Q03 `off` is not a list filter, and the refusal says where those requests are"
+killed       ALLOW-03  by "V1-Q04 a key filter must name one of this organization's keys"
+killed       ALLOW-04  by "V1-Q01 only the parameters this page declares reach the typed query"
+killed       SIZE-01  by "V1-Q07 the page size comes from the offered set, and is never a clamp"
+killed       CURSOR-01  by "V1-Q05 the window is resolved from the range, and a page link pins it"
+killed       CURSOR-02  by "V1-Q06 a cursor is bounded and charset-checked, and otherwise opaque"
+killed       HREF-01  by "V1-Q09 changing a filter drops the cursor; a page link keeps the window"
+killed       ANCHOR-01  by "V1-Q09 changing a filter drops the cursor; a page link keeps the window"
+killed       AVAIL-01  by "V1-V01 every content state is its own state, and only a lost capture is a failure"
+killed       AVAIL-02  by "V1-V01 every content state is its own state, and only a lost capture is a failure"
+killed       AVAIL-03  by "V1-V01 every content state is its own state, and only a lost capture is a failure"
+killed       AVAIL-04  by "V1-V01 every content state is its own state, and only a lost capture is a failure"
+killed       STATUS-01  by "V1-V05 status tone follows the class, and an unset status is not drawn as success"
+killed       EMPTY-01  by "V1-V06 an empty page distinguishes filtered, capture-off and simply idle"
+killed       EMPTY-02  by "V1-V06 an empty page distinguishes filtered, capture-off and simply idle"
+killed       ERROR-01  by "V1-V07 an error offers a retry only where retrying can work"
+killed       STALE-01  by "V1-S02 a response that lost the race cannot put the older filter back"
+killed       STALE-02  by "V1-S03 a duplicate delivery of a response already applied changes nothing"
+killed       STALE-03  by "V1-S05 an arrival that does not answer the outstanding request is dropped"
+killed       STALE-04  by "V1-S06 the controls draw the newest request while one is outstanding"
+
+21/21 mutants killed by a declared case.
+exit=0
