@@ -503,10 +503,16 @@ class SpoolTraceSink(FakeTraceSink):
     ever needs parallel writers, that is where to start.
     """
 
-    def __init__(self, clock=None, *, limits: PilotSettings = DEFAULTS, failures=None,
+    def __init__(self, clock, *, limits: PilotSettings = DEFAULTS, failures=None,
                  spool_dir: Path | str | None = None, io: SpoolIO | None = None,
                  segment_max_bytes: int = SEGMENT_MAX_BYTES,
                  boot_id: str | None = None, lock_dir: bool = True) -> None:
+        if clock is None:
+            # Ruling 7. The shared accounting defaults to a `FakeClock` because a fake needs
+            # one; a durable sink on a clock that never advances never fsyncs and never
+            # reaps, and would report a batch interval that has not elapsed for ever. The
+            # clock is the caller's to supply, and G supplies the real one.
+            raise ValueError("a spool sink needs the clock it reads; None is not one")
         super().__init__(clock, limits=limits, failures=failures)
         configured = str(spool_dir if spool_dir is not None else limits.trace_spool_dir).strip()
         if not configured:

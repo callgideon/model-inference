@@ -228,6 +228,19 @@ def test_the_spool_sink_satisfies_the_declared_protocols():
         assert inspect.iscoroutinefunction(getattr(capture, name)), name
 
 
+def test_a_sink_without_a_clock_refuses_to_exist():
+    """Ruling 7. The shared accounting defaults to a `FakeClock`, which is right for a fake
+    and wrong for a durable sink: on a clock that never advances the batch interval never
+    elapses, so nothing is ever fsynced and no capture is ever reaped. The clock is the
+    caller's to supply."""
+    try:
+        SpoolTraceSink(None, limits=DEFAULTS, spool_dir=_dir("clockless"))
+    except ValueError as error:
+        assert "clock" in str(error)
+    else:
+        raise AssertionError("a sink was built with no clock")
+
+
 def test_a_sink_without_a_spool_directory_refuses_to_exist():
     """08 §5: `TRACE_SPOOL_DIR` unset *disables capture*. A sink with nowhere to spool
     would have to pretend, so it refuses at construction and G builds none."""
