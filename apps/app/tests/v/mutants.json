@@ -381,6 +381,16 @@
       "cases": [
         "V1-V08 the next-page link carries the cursor and pins the window"
       ]
+    },
+    {
+      "id": "TONE-01",
+      "note": "a projection still catching up is drawn in the colour of a lost capture",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "    label: \"Pending\",\n    tone: \"waiting\",",
+      "replace": "    label: \"Pending\",\n    tone: \"warn\",",
+      "cases": [
+        "V1-V01 every content state is its own state, and only a lost capture is a failure"
+      ]
     }
   ]
 }
