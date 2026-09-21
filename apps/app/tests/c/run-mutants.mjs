@@ -83,8 +83,9 @@ function failingCases(out) {
       isFile: /\.(ts|mjs|tsx)$/.test(name),
       // guarded() turns any escaped exception into `internal_error`. A mutant that merely made some
       // read throw would then "kill" a case that asserts a successful read — which says nothing about
-      // the invariant the case names, so it has to be declared.
-      viaGuard: /this console operation failed unexpectedly/.test(diagnostic),
+      // the invariant the case names, so it has to be declared. Keyed on the *code* an ok-expectation
+      // reported, not on the guard's prose, so rewording the message cannot change a classification.
+      viaGuard: /(?:expected success, got|failed:) internal_error/.test(diagnostic),
     });
   }
   return cases;

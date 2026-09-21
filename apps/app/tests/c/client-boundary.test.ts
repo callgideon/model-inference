@@ -123,7 +123,7 @@ test("no client component reaches lib/services, however indirectly", () => {
 });
 
 test("the server-only modules carry their run-time guard as well", () => {
-  for (const name of ["query.ts", "console.ts", "cursor.ts", "server.ts"]) {
+  for (const name of ["query.ts", "console.ts", "cursor.ts", "server.ts", "credits.ts"]) {
     const source = readFileSync(join(SERVER_ONLY, name), "utf8");
     assert.match(
       source,

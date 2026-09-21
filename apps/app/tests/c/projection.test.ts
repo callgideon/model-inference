@@ -36,7 +36,7 @@ async function walkUsage(
   session: unknown,
 ): Promise<ListResult> {
   let cursor: string | null = null;
-  const items: ListResult extends { ok: true; value: { items: infer T } } ? T : never = [] as never;
+  const items: UsageLike[] = [];
   for (let pages = 0; pages < 100; pages += 1) {
     const page = await services.usage(session as never, { limit: MAX_PAGE_LIMIT, cursor } as never);
     if (!page.ok) return page;
@@ -47,8 +47,10 @@ async function walkUsage(
   throw new Error("pagination did not terminate");
 }
 
+type UsageLike = { request_id: string; created_at: string; cost: string; key_id: string; key_name: string };
+
 type ListResult =
-  | { ok: true; value: { items: { request_id: string; created_at: string; cost: string; key_id: string; key_name: string }[]; next_cursor: string | null } }
+  | { ok: true; value: { items: UsageLike[]; next_cursor: string | null } }
   | { ok: false; error: { code: string; message: string } };
 
 test("a calibration label never reaches a feedback list or a trace detail, for anyone (R49/R35)", async () => {
@@ -162,6 +164,12 @@ test("a stored value that is not what the DTO says is a typed refusal, not a bla
   const original = { ...usage };
   for (const [column, value, what] of [
     ["prompt_tokens", "abc", "a token count that is not a number"],
+    ["http_status", "", "an empty status, which Number() reads as 0"],
+    ["http_status", true, "a boolean status, which Number() reads as 1"],
+    ["http_status", ["500"], "a one-element list, which Number() unwraps"],
+    ["http_status", "0x10", "a hexadecimal status"],
+    ["http_status", "1e2", "an exponent"],
+    ["prompt_tokens", 1.5, "a fractional token count"],
     ["model", 42, "a model id that is not a string"],
     ["job_state", { state: "running" }, "an enum that arrived as an object"],
     ["created_at", new Date("2026-09-20T12:00:00Z"), "a driver Date where a timestamp string was promised"],
@@ -197,7 +205,9 @@ test("both UTC timestamp forms are accepted and normalised, microseconds and all
   let cursor: string | null = null;
   const seen: string[] = [];
   for (let pages = 0; pages < 100; pages += 1) {
-    const next = expectOk(await services.usage(sessions.owner, { limit: 7, cursor }));
+    const next: { items: { request_id: string }[]; next_cursor: string | null } = expectOk(
+      await services.usage(sessions.owner, { limit: 7, cursor }),
+    );
     seen.push(...next.items.map((item) => item.request_id));
     if (next.next_cursor === null) break;
     cursor = next.next_cursor;
@@ -408,6 +418,18 @@ test("a judge sample is projected field by field, so a stored blob cannot widen 
   samples[0].limited_reason = null;
   (samples[0].scores as Record<string, unknown>[])[0].kind = "vibes";
   expectError(await services.judgeRuns(sessions.owner, { limit: 20 }), "internal_error", "an unknown score kind");
+  (samples[0].scores as Record<string, unknown>[])[0].kind = "numeric";
+  for (const bad of ["", true, [4], "abc", {}]) {
+    (samples[0].scores as Record<string, unknown>[])[0].value_num = bad;
+    expectError(
+      await services.judgeRuns(sessions.owner, { limit: 20 }),
+      "internal_error",
+      `a score value of ${JSON.stringify(bad)} must not be coerced`,
+    );
+  }
+  (samples[0].scores as Record<string, unknown>[])[0].value_num = 4.5;
+  const fine = expectOk(await services.judgeRuns(sessions.owner, { limit: 20 }));
+  assert.equal(fine.items.flatMap((item) => item.samples)[0].scores[0].value_num, 4.5, "a real number is kept");
 });
 
 test("consent history is capped, and the cap is the documented one", async () => {

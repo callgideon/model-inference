@@ -445,16 +445,6 @@
       ]
     },
     {
-      "id": "STRICT-02",
-      "note": "a token count that is not a number becomes NaN",
-      "file": "lib/services/console.ts",
-      "find": "  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {\n    throw new TypeError(`${column} must be an integer`);\n  }",
-      "replace": "  if (false) {\n    throw new TypeError(`${column} must be an integer`);\n  }",
-      "cases": [
-        "a stored value that is not what the DTO says is a typed refusal, not a blank"
-      ]
-    },
-    {
       "id": "STRICT-03",
       "note": "a timestamp is whatever the driver handed over",
       "file": "lib/services/console.ts",
@@ -734,6 +724,36 @@
       "replace": "const ROW_TIMESTAMP = /^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?)(?:Z|[+-]\\d{2}:\\d{2}| .*)$/;",
       "cases": [
         "both UTC timestamp forms are accepted and normalised, microseconds and all"
+      ]
+    },
+    {
+      "id": "STRICT-02",
+      "note": "an integer column is read with Number(), which accepts \"\", true, [5], 0x10 and 1e2",
+      "file": "lib/services/console.ts",
+      "find": "  if (typeof value !== \"string\" || !INTEGER_TEXT.test(value)) {\n    throw new TypeError(`${column} must be an integer`);\n  }\n  return Number(value);",
+      "replace": "  return Number(value);",
+      "cases": [
+        "a stored value that is not what the DTO says is a typed refusal, not a blank"
+      ]
+    },
+    {
+      "id": "STRICT-06",
+      "note": "a judge score's numeric value is coerced rather than read",
+      "file": "lib/services/console.ts",
+      "find": "  if (typeof value === \"number\" && Number.isFinite(value)) return value;\n  if (typeof value === \"string\" && /^-?\\d+(\\.\\d+)?$/.test(value)) return Number(value);\n  throw new TypeError(`${column} must be a number`);",
+      "replace": "  return Number(value);",
+      "cases": [
+        "a judge sample is projected field by field, so a stored blob cannot widen it"
+      ]
+    },
+    {
+      "id": "CLIENT-02",
+      "note": "the credits module loses its server-only guard",
+      "file": "lib/services/credits.ts",
+      "find": "if (typeof window !== \"undefined\") throw new Error(\"lib/services/credits.ts is server-only\");",
+      "replace": "// guard removed",
+      "cases": [
+        "the server-only modules carry their run-time guard as well"
       ]
     }
   ]

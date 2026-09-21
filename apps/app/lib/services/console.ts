@@ -252,13 +252,21 @@ function optionalText(row: Row, column: string): string | null {
   return value;
 }
 
+/** Digits, optionally signed — nothing `Number()` would also accept: `""`, `true`, `[5]`, `0x10`, `1e2`. */
+const INTEGER_TEXT = /^-?\d+$/;
+
 function integer(row: Row, column: string): number {
   const value = cell(row, column);
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+  if (typeof value === "number") {
+    if (!Number.isInteger(value)) throw new TypeError(`${column} must be an integer`);
+    return value;
+  }
+  // `Number(x)` reads null and "" as 0, true as 1, ["5"] as 5 and "0x10" as 16. A null `http_status`
+  // that renders as 200-with-a-zero is the kind of wrong number a page shows without anyone noticing.
+  if (typeof value !== "string" || !INTEGER_TEXT.test(value)) {
     throw new TypeError(`${column} must be an integer`);
   }
-  return parsed;
+  return Number(value);
 }
 
 function optionalInteger(row: Row, column: string): number | null {
@@ -535,7 +543,7 @@ function judgeScoreOf(value: unknown): JudgeScore {
   return {
     name: text(row, "name"),
     kind: kind as JudgeScore["kind"],
-    value_num: cell(row, "value_num") === null ? null : Number(cell(row, "value_num")),
+    value_num: numericOrNull(row, "value_num"),
     value_bool: cell(row, "value_bool") === null ? null : flag(row, "value_bool"),
     value_label: optionalText(row, "value_label"),
     value_text: optionalText(row, "value_text"),
@@ -545,6 +553,15 @@ function judgeScoreOf(value: unknown): JudgeScore {
     judge_model_version: text(row, "judge_model_version"),
     estimated: flag(row, "estimated"),
   };
+}
+
+/** A score may be fractional, so it is not `integer()` — but it is still a number and not a coercion. */
+function numericOrNull(row: Row, column: string): number | null {
+  const value = cell(row, column);
+  if (value === null) return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value)) return Number(value);
+  throw new TypeError(`${column} must be a number`);
 }
 
 function judgeSampleOf(value: unknown): JudgeSample {

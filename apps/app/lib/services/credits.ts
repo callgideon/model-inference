@@ -17,6 +17,9 @@ import {
   type Money,
 } from "../contracts/money.ts";
 
+/** Server only, at module scope; see the note in `./query.ts`. */
+if (typeof window !== "undefined") throw new Error("lib/services/credits.ts is server-only");
+
 export type WalletSummaryRow = {
   ledger_total: number | string | null;
   reserved_total: number | string | null;
