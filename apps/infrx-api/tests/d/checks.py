@@ -245,6 +245,17 @@ def seed_fixtures(conn) -> None:
     insert into infrx.judge_reservations
       (run_id, org_id, period_start, amount, state)
       values ('{RUN_ID}', '{ORG_A}', '{PERIOD}', 2.00000000, 'held');
+    -- r3 (N1): four runs with 0, 1, 50 and 75 samples, so `sample_count` is checked
+    -- against a real count and the 50-element cap is visible at the same time.
+    insert into infrx.judge_runs
+      (run_id, org_id, consent_version, rubric_version, model_revision, state)
+    select ('61000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid, '{ORG_A}', 1, 3,
+           'claude-opus', 'dry_run'
+    from (values (0), (1), (50), (75)) as g(n);
+    insert into infrx.judge_samples (run_id, org_id, sample_id, rubric_version)
+    select ('61000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid, '{ORG_A}',
+           's' || lpad(i::text, 4, '0'), 3
+    from (values (1), (50), (75)) as g(n), generate_series(1, g.n) as s(i);
     insert into infrx.callback_destinations
       (destination_id, org_id, url, signing_key_ref)
       values ('{DEST_ID}', '{ORG_A}', 'https://hooks.example.com/infrx', 'kms:key/1');
@@ -1778,6 +1789,19 @@ def check_console_read_surface(conn) -> str:
     assert labels[0][0] == 0, "a calibration label appeared in a feedback list (R49)"
     assert read_rows(conn, "operator",
                      "select id from public.calibration_labels")
+
+    # r3 (N1): the sample count is the real count, and the array is capped at 50.
+    counts = {n: (c, len(s)) for n, c, s in read_rows(
+        conn, "owner",
+        "select id, sample_count, samples from public.console_judge_runs "
+        "where id::text like '61000000-%' order by id")}
+    expected = {"61000000-0000-4000-8000-000000000000": (0, 0),
+                "61000000-0000-4000-8000-000000000001": (1, 1),
+                "61000000-0000-4000-8000-000000000050": (50, 50),
+                "61000000-0000-4000-8000-000000000075": (75, 50)}
+    observed = {str(run): value for run, value in counts.items()}
+    assert observed == expected, \
+        f"sample_count/len(samples) is {observed}, expected {expected}"
 
     # One row per organization, however many owners it has (B1).
     orgs = read_rows(conn, "operator",

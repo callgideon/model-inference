@@ -220,21 +220,28 @@ where f.calibration_set and (public.is_operator() or public.is_service_client())
 create or replace view public.console_judge_runs with (security_barrier = true) as
 select r.run_id as id, r.org_id, r.created_at, r.state, r.mode, r.rubric_version,
        r.model_revision as judge_model, r.judge_model_version,
-       coalesce(s.sample_count, 0) as sample_count, r.limited_evaluation_count,
+       coalesce(n.sample_count, 0) as sample_count, r.limited_evaluation_count,
        r.reserved_cost::text as budget_reserved, r.actual_cost::text as budget_settled,
        c.effective_at as consent_snapshot_at, r.external_batch_id, r.quarantine_reason,
        coalesce(s.samples, '[]'::jsonb) as samples
 from infrx.judge_runs r
 left join infrx.consent_history c
   on c.org_id = r.org_id and c.consent_version = r.consent_version
+-- r3 (N1): the count is its OWN aggregate. `count(*) over ()` sat above `jsonb_agg`,
+-- which had already collapsed the samples into one row, so every run reported
+-- `sample_count = 1` - including a run with no samples at all, and a run with 75 (whose
+-- `samples` array correctly held the newest 50). A count that is always 1 is worse than
+-- no count: the console renders it.
 left join lateral (
-  select count(*) over () as sample_count, capped.samples
-  from (select jsonb_agg(jsonb_build_object('sample_id', j.sample_id,
-                                            'rubric_version', j.rubric_version,
-                                            'request_id', j.request_id,
-                                            'scores', j.scores)) as samples
-        from (select * from infrx.judge_samples j0 where j0.run_id = r.run_id
-              order by j0.sample_id desc limit 50) j) capped
+  select count(*) as sample_count from infrx.judge_samples j1 where j1.run_id = r.run_id
+) n on true
+left join lateral (
+  select jsonb_agg(jsonb_build_object('sample_id', j.sample_id,
+                                      'rubric_version', j.rubric_version,
+                                      'request_id', j.request_id,
+                                      'scores', j.scores)) as samples
+  from (select * from infrx.judge_samples j0 where j0.run_id = r.run_id
+        order by j0.sample_id desc limit 50) j
 ) s on true
 where public.is_org_owner(r.org_id) or public.is_operator() or public.is_service_client();
 
