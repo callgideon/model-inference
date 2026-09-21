@@ -74,11 +74,21 @@ def test_evaluation_consent_is_not_retroactive():
 
     # A revocation dated in the future leaves the record current now, but a trace made
     # after that instant is still outside the window.
+    revoked_at = datetime(2026, 12, 1, tzinfo=timezone.utc)
     future_revocation = fakes.consent(revoked_at="2026-12-01T00:00:00Z")
     later = fakes.candidate(4, started_at=datetime(2027, 1, 1, tzinfo=timezone.utc))
     selection = draw((inside, later), consent=future_revocation)
     assert selection.sample_ids == (inside.request_id,)
     assert reasons(selection) == [(later.request_id, Exclusion.outside_consent_window)]
+
+    # R2-B4: **at** the revocation instant is out, one microsecond before is in. Tested
+    # only against a far-future trace, `<` and `<=` were indistinguishable - and the end
+    # of a consent window is an instant the customer picked.
+    at_revocation = fakes.candidate(5, started_at=revoked_at)
+    just_before = fakes.candidate(6, started_at=revoked_at - timedelta(microseconds=1))
+    selection = draw((at_revocation, just_before), consent=future_revocation)
+    assert selection.sample_ids == (just_before.request_id,)
+    assert reasons(selection) == [(at_revocation.request_id, Exclusion.outside_consent_window)]
 
 
 # --- exclusions -------------------------------------------------------------------

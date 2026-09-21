@@ -130,7 +130,17 @@ NEWER_RATE = ProviderRate(price_version="test-rates-v2", model=JUDGE_MODEL,
                           input_per_million=Decimal("10"), output_per_million=Decimal("50"),
                           source="tests/j/fakes.py - test input, not an approved price",
                           effective_at=datetime(2026, 9, 15, tzinfo=timezone.utc))
+#: The **same rates** under a different price version, effective later. The only thing it
+#: changes is the version, which is what isolates "the estimate's version must still be
+#: the effective one" from every amount check (R2-B4).
+RENAMED_RATE = ProviderRate(price_version="test-rates-v1-renamed", model=JUDGE_MODEL,
+                            input_per_million=Decimal("5"), output_per_million=Decimal("25"),
+                            source="tests/j/fakes.py - test input, not an approved price",
+                            effective_at=datetime(2026, 9, 16, tzinfo=timezone.utc))
 TEST_RATES = StaticRateTable((TEST_RATE,))
+#: A price history whose newer row takes effect **between** `SINCE` and `NOW`, so "the plan
+#: prices at `now`, not at `since`" is observable (R2-B4).
+RATE_HISTORY = StaticRateTable((TEST_RATE, NEWER_RATE))
 
 
 def result(*, groundedness: int | None = 4, relevance: int = 4, completeness: int = 4,

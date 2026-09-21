@@ -290,6 +290,45 @@ def test_a_pricing_estimate_without_a_hard_maximum_cannot_authorize_a_submission
     assert allowed(LIVE, unpriced, rates=APPROVED_RATES) is False
 
 
+def test_an_estimate_priced_at_a_superseded_version_is_refused_even_at_the_same_amount():
+    """R2-B4: the version check was untested at an *equal* total, so dropping it survived.
+    `RENAMED_RATE` carries the same rates under a later version, which is exactly the
+    rate-card edit that changes nothing about the money and everything about which
+    approval a submission is running under."""
+    priced = estimate(fakes.TEST_RATES)
+    superseded = StaticRateTable((fakes.TEST_RATE, fakes.RENAMED_RATE))
+    effective = superseded.rate_for(fakes.JUDGE_MODEL, fakes.NOW)
+    assert effective is fakes.RENAMED_RATE
+    assert worst_case(effective, priced.ceilings, priced.samples) == priced.worst_case_total, \
+        "the amounts must be equal, so only the version can refuse"
+    with pytest.raises(errors.BudgetExceeded, match="re-estimate"):
+        require_live_submission(LIVE, priced, rates=superseded, at=fakes.NOW)
+    assert allowed(LIVE, priced, rates=superseded) is False
+    # and the same estimate against its own table still authorizes
+    assert allowed(LIVE, priced, rates=fakes.TEST_RATES) is True
+
+
+def test_an_estimate_with_no_price_version_is_not_priced():
+    """R2-B4: `priced` dropping the version requirement survived, because an estimate with
+    the correct amounts and **no version** was never tried. It authorizes nothing: the
+    version is the approval the submission runs under, and `None` is not one."""
+    correct = estimate()
+    versionless = CostEstimate(model=correct.model, samples=correct.samples,
+                               ceilings=correct.ceilings, price_version=None,
+                               per_sample=correct.per_sample,
+                               worst_case_total=correct.worst_case_total)
+    assert versionless.priced is False
+    with pytest.raises(errors.BudgetExceeded, match="unpriced"):
+        require_live_submission(LIVE, versionless, rates=fakes.TEST_RATES, at=fakes.NOW)
+    assert allowed(LIVE, versionless) is False
+    for empty in ("", " "):
+        blank = CostEstimate(model=correct.model, samples=correct.samples,
+                            ceilings=correct.ceilings, price_version=empty,
+                            per_sample=correct.per_sample,
+                            worst_case_total=correct.worst_case_total)
+        assert allowed(LIVE, blank) is False, empty
+
+
 def test_a_withdrawn_rate_disables_submission_even_for_a_priced_estimate():
     """The estimate is a report from a moment ago; the guard asks the table again. A rate
     withdrawn in between is exactly the state in which nothing may be submitted."""

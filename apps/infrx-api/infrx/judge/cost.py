@@ -187,7 +187,9 @@ class CostEstimate:
 
     @property
     def priced(self) -> bool:
-        return (isinstance(self.price_version, str) and bool(self.price_version)
+        # A blank version is not configuration (r1 R51's lesson in this currency), so it
+        # is `strip()`ed rather than merely truthiness-tested.
+        return (isinstance(self.price_version, str) and bool(self.price_version.strip())
                 and _positive_money(self.per_sample) is not None
                 and _positive_money(self.worst_case_total) is not None)
 

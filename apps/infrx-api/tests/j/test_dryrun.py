@@ -70,6 +70,24 @@ def test_a_priced_dry_run_states_the_worst_case_and_can_be_authorized():
     assert plan(rates=fakes.TEST_RATES)[1].live_submission_enabled is False
 
 
+def test_the_plan_prices_at_now_not_at_the_lookback_start():
+    """R2-B4: `at=since` survived twice, because the suite only ever used a single-row rate
+    table. `RATE_HISTORY`'s newer, dearer row takes effect **between** `SINCE` and `NOW`, so
+    pricing at the wrong instant is now a different number - and under-reserving by a rate
+    change that has already happened is exactly what R57 exists to stop."""
+    assert fakes.SINCE < fakes.NEWER_RATE.effective_at < fakes.NOW
+    assert fakes.RATE_HISTORY.rate_for(fakes.JUDGE_MODEL, fakes.SINCE) is fakes.TEST_RATE
+    assert fakes.RATE_HISTORY.rate_for(fakes.JUDGE_MODEL, fakes.NOW) is fakes.NEWER_RATE
+
+    _, dry = plan(rates=fakes.RATE_HISTORY, settings=LIVE)
+    assert dry.cost.price_version == "test-rates-v2", "the plan priced at `since`, not `now`"
+    cheaper = plan(rates=fakes.TEST_RATES, settings=LIVE)[1]
+    assert dry.cost.worst_case_total > cheaper.cost.worst_case_total
+    # ...and the guard is asked at the same instant, so the estimate and the authorization
+    # agree. Asked at `since` it would find v1, refuse the version and disable submission.
+    assert dry.live_submission_enabled is True
+
+
 # --- consent and ownership are checked before anything is read (B5) -----------------
 def test_a_refusal_never_reads_the_traces():
     """A refusal that queries the trace store first has already touched the data it was
