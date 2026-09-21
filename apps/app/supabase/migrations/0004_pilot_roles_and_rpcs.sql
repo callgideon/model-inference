@@ -104,7 +104,23 @@ grant update (name, revoked_at) on public.api_keys to authenticated;
 -- usage_events, credit_ledger: read-only. Every write is the service role's, and
 -- TRUNCATE is refused for every role by the statement trigger in 0003.
 grant select on public.usage_events to authenticated;
-grant select on public.credit_ledger to authenticated;
+
+-- credit_ledger: SELECT is **column-scoped** (r3, N2). `created_by` is the one column on
+-- this table that can hold a platform-side identity - the deployed console's `addCredit`
+-- writes the operator's user id into it - and 0001 gives every member SELECT on the
+-- table, so a table-wide grant hands the operator's uuid to any member who asks for that
+-- column. Removing the *column* is not an option: it is 0001's, the operator grant's only
+-- link to who made it, and `public.console_ledger` resolves it per viewer through
+-- `visible_principal`. So the column stays and the grant does not include it.
+--
+-- These seven are exactly what the console reads with a user session
+-- (`apps/app/lib/credits.ts`: id, delta_usd, kind, reason, ref, created_at; `org_id` for
+-- its own filter). `reason` is deliberately included: it is the customer-facing
+-- description in the ledger DTO. Operator-internal prose lives in `infrx.audit_entries`,
+-- which no browser role can read - R59-2 is about the operator's identity and internal
+-- notes, not about the description the customer is meant to see.
+grant select (id, org_id, delta_usd, kind, reason, ref, created_at)
+  on public.credit_ledger to authenticated;
 
 -- ========================================================= mutation boundary ===
 -- 06: "Expose narrow service/RPC operations for admit, prepare, claim, heartbeat,

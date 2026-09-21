@@ -707,6 +707,7 @@ ATTACKS = (
                                        "where calibration_set"),
     ("platform role", f"update public.profiles set is_operator = true "
                       f"where id = '{USER_MEMBER}'"),
+    ("ledger: the operator's user id", "select created_by from public.credit_ledger"),
     ("ledger: insert", f"insert into public.credit_ledger (org_id, delta_usd, kind) "
                        f"values ('{ORG_A}', 1000, 'grant')"),
     ("ledger: edit history", "update public.credit_ledger set delta_usd = 0"),
@@ -1423,7 +1424,9 @@ EXPECTED_PRIVILEGES = {
         "INSERT": {"org_id", "created_by", "name", "prefix", "key_hash"},
         "UPDATE": {"name", "revoked_at"}},
     ("authenticated", "usage_events"): {"SELECT": None},
-    ("authenticated", "credit_ledger"): {"SELECT": None},
+    # r3 (N2): column-scoped, because `created_by` can hold the operator's user id.
+    ("authenticated", "credit_ledger"): {
+        "SELECT": {"id", "org_id", "delta_usd", "kind", "reason", "ref", "created_at"}},
     # The console read surface: read-only, by name.
     **{("authenticated", view.split(".", 1)[1]): {"SELECT": None}
        for view, _kind in (
@@ -1504,11 +1507,17 @@ def check_privileges(conn) -> str:
             f"infrx unreachable")
 
 
-#: Ruling 2: an operator's identity or free text must not live in a relation a customer
-#: can SELECT. These are the column names that carry one.
+#: Ruling 2: a PLATFORM-side identity or note must not be readable by a customer. These
+#: column names carry one by definition, whatever relation they turn up on.
 OPERATOR_IDENTITY_COLUMNS = ("operator_principal", "suspended_by", "actor_principal",
-                             "author_principal", "created_by", "updated_by",
-                             "changed_by", "owner_email")
+                             "changed_by", "updated_by")
+
+#: `created_by` is 0001's, and what it holds depends on who writes it:
+#: * `credit_ledger` - the deployed console's `addCredit` writes the OPERATOR's uuid, so
+#:   the column must exist (the grant's only link to its audit entry) and not be readable;
+#: * `api_keys`, `organizations` - written by the member who acted, so a customer may read
+#:   it. That is an assertion about the DATA, checked below, not a hope.
+MEMBER_WRITTEN_CREATED_BY = ("api_keys", "organizations")
 
 
 def check_no_operator_identity_in_public(conn) -> str:
@@ -1523,25 +1532,48 @@ def check_no_operator_identity_in_public(conn) -> str:
     """
     # pg_catalog, not information_schema: the oid form of `has_table_privilege` cannot
     # be handed the name of something that no longer exists.
+    # Per COLUMN, not per table: a column-scoped grant is the whole point of N2's fix,
+    # so `has_table_privilege` would report the table as readable and miss which columns.
     readable = [(table, column) for table, column in conn.execute("""
         select c.relname, a.attname
         from pg_class c
         join pg_namespace n on n.oid = c.relnamespace
         join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
         where n.nspname = 'public' and c.relkind = 'r'
-          and has_table_privilege('authenticated', c.oid, 'select')
+          and has_column_privilege('authenticated', c.oid, a.attname, 'select')
         order by 1, 2""").fetchall()]
+    # r3 (N2): no filter. The round-2 version dropped `created_by` from the comparison
+    # and then the evidence claimed "84 customer-readable columns hold no operator
+    # identity" - which was true only because the check looked away from the one column
+    # the deployed console writes an operator's uuid into.
     offending = [f"public.{table}.{column}" for table, column in readable
                  if column in OPERATOR_IDENTITY_COLUMNS
-                 and not (table, column) in (("profiles", "created_by"),)]
-    # `created_by` is 0001's own column on api_keys/organizations/credit_ledger: it names
-    # a *member* for tenant rows, and the masked views are what decide whether a viewer
-    # may resolve it to a person. What must not exist is a column carrying the platform
-    # side's identity or prose.
-    offending = [name for name in offending
-                 if name.endswith(("operator_principal", "suspended_by"))]
+                 or (column == "created_by" and table not in MEMBER_WRITTEN_CREATED_BY)]
     assert not offending, \
-        f"an operator identity is stored where customers can read it: {offending}"
+        f"an operator identity is READABLE where customers can reach it: {offending}"
+    # `created_by` on `credit_ledger` must be exactly the case above: the column exists
+    # (0001's, and the operator grant's only link to who made it) and is not selectable.
+    assert not conn.execute("""
+        select has_column_privilege('authenticated', 'public.credit_ledger',
+                                    'created_by', 'select')""").fetchone()[0], \
+        "authenticated may read credit_ledger.created_by, which holds an operator uuid"
+    assert conn.execute("""
+        select count(*) from pg_attribute
+        where attrelid = 'public.credit_ledger'::regclass and attname = 'created_by'
+          and not attisdropped""").fetchone()[0] == 1, \
+        "credit_ledger.created_by was dropped instead of being made unreadable"
+    # The two `created_by` columns a customer MAY read must in fact only ever name a
+    # member of the row's organization. If an operator flow ever writes one, this fails
+    # and the column joins the unreadable list.
+    for relation, org_column in (("api_keys", "org_id"), ("organizations", "id")):
+        strangers = conn.execute(f"""
+            select r.created_by from public.{relation} r
+            where r.created_by is not null
+              and not exists (select 1 from public.org_members m
+                              where m.org_id = r.{org_column} and m.user_id = r.created_by)
+            """).fetchall()
+        assert not strangers, (f"public.{relation}.created_by names a non-member "
+                               f"(an operator?): {strangers[:4]}")
     # And the customer-safe suspension reason is a code, not prose.
     codes = conn.execute("""
         select pg_get_constraintdef(oid) from pg_constraint
