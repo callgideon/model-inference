@@ -82,7 +82,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_an_ipv6_answer_is_pinned_as_a_bracketed_literal"),
     _m("no_sni_for_the_original_host",
        "TLS still verifies the certificate against the host the caller named",
-       F, "extensions={\"sni_hostname\": target.host}", "extensions={}",
+       F, "extensions={\"sni_hostname\": host, \"timeout\": self._budget(remaining)}",
+       "extensions={\"timeout\": self._budget(remaining)}",
        "test_the_connection_is_pinned_to_the_validated_address"),
     _m("host_header_from_the_pinned_url", "the origin still sees the host it was asked for",
        F, "headers={\"Host\": target.netloc.decode(\"ascii\"),",
@@ -100,36 +101,79 @@ MUTANTS: tuple[Mutant, ...] = (
        "connect=self.limits.media_fetch_timeout_s)",
        "test_the_client_follows_nothing_and_trusts_no_environment"),
 
+    _m("transport_logs_not_silenced",
+       "httpx and httpcore never write a request line (the pinned IP and the query)",
+       F, "silence_transport_logs()\n\nALLOWED_MIME", "ALLOWED_MIME",
+       "test_no_logger_in_the_process_writes_a_url_an_ip_or_a_location"),
+    _m("hop_deadline_not_checked",
+       "the budget is checked at the start of every hop, before resolving or connecting",
+       F, "                if remaining <= 0:\n                    raise refused(\"timeout\", host=host)",
+       "                pass", "test_a_slow_redirect_chain_stops_at_the_aggregate_deadline"),
+    _m("request_budget_is_the_whole_budget",
+       "each request carries what is left of the aggregate budget, not all of it",
+       F, "        connect = min(self.limits.media_fetch_connect_timeout_s, remaining)\n"
+          "        return {\"connect\": connect, \"read\": remaining, \"write\": remaining, \"pool\": remaining}",
+       "        whole = self.limits.media_fetch_timeout_s\n"
+       "        return {\"connect\": self.limits.media_fetch_connect_timeout_s, \"read\": whole,\n"
+       "                \"write\": whole, \"pool\": whole}",
+       "test_each_request_carries_what_is_left_of_the_budget"),
+    _m("resolution_not_bounded", "resolution happens inside the remaining budget",
+       F, "            addresses = await asyncio.wait_for(self.resolve(host), max(remaining, 0.001))",
+       "            addresses = await self.resolve(host)",
+       "test_a_resolver_that_never_answers_is_bounded"),
+    _m("no_real_clock_backstop",
+       "the aggregate limit also holds on the real clock, for a phase the fetcher cannot see",
+       F, "            async with asyncio.timeout(self.limits.media_fetch_timeout_s + BACKSTOP_GRACE_S):\n"
+          "                return await self._fetch(url)",
+       "            return await self._fetch(url)",
+       "test_a_body_that_stalls_for_ever_is_bounded_by_the_backstop"),
+    _m("asks_for_compression", "the request asks for no content coding",
+       F, "\"Accept-Encoding\": \"identity\"", "\"Accept-Encoding\": \"gzip, br\"",
+       "test_a_compressed_body_is_refused_outright"),
+    _m("a_redirect_may_downgrade", "an https fetch never continues in plaintext",
+       F, "                elif secure and target.scheme != \"https\":\n"
+          "                    # A redirect must not downgrade: the signed query string of the\n"
+          "                    # `Location` would then travel in plaintext.\n"
+          "                    raise refused(\"insecure-redirect\", host=host)",
+       "                elif False:\n                    pass",
+       "test_a_redirect_may_not_downgrade_to_plaintext"),
+    _m("cookies_carried_between_hops", "no cookie from one hop reaches the next",
+       F, "                client.cookies.clear()", "                pass",
+       "test_a_redirect_carries_no_cookie_from_the_hop_before"),
+    _m("decoded_host_used_instead_of_the_wire_form",
+       "one spelling of the host for the resolver, SNI and Host (IDNA2003 vs 2008)",
+       F, "    return url.raw_host.decode(\"ascii\")", "    return url.host",
+       "test_the_resolver_and_the_wire_agree_on_one_spelling_of_the_host"),
+
     # --- the URL and its hops -------------------------------------------------
     _m("any_scheme_fetched", "only http(s) URLs are fetched",
        F, "    if target.scheme not in (\"http\", \"https\"):", "    if False:",
        "test_only_http_urls_with_a_host_are_fetched",
        "test_a_redirect_to_another_scheme_or_to_credentials_is_refused"),
     _m("credentials_in_the_url_accepted", "a URL carrying credentials is refused",
-       F, "        raise refused(\"credentials-in-url\", host=target.host)", "        pass",
+       F, "        raise refused(\"credentials-in-url\", host=raw_host_of(target))", "        pass",
        "test_credentials_in_the_url_are_refused"),
     _m("hostless_url_accepted", "a URL with no host has no destination to validate",
-       F, "    if not target.host:\n        raise refused(\"no-host\")", "    pass",
+       F, "    if not target.raw_host:\n        raise refused(\"no-host\")", "    pass",
        "test_only_http_urls_with_a_host_are_fetched"),
     _m("later_hops_unvalidated", "every hop is validated, not only the first",
-       F, "                target = parse_source(url)\n"
-          "                if self.monotonic() >= expires_at:",
-       "                target = parse_source(url) if _hop == 0 else httpx.URL(url)\n"
-       "                if self.monotonic() >= expires_at:",
+       F, "                target = parse_source(url)\n                host = raw_host_of(target)",
+       "                target = parse_source(url) if hop == 0 else httpx.URL(url)\n"
+       "                host = raw_host_of(target)",
        "test_a_redirect_to_another_scheme_or_to_credentials_is_refused"),
     _m("later_hops_unresolved", "every hop is resolved and re-pinned",
-       F, "                address = await self._pin(target.host)",
-       "                address = await self._pin(target.host) if _hop == 0 else target.host",
+       F, "                address = await self._pin(host, remaining)",
+       "                address = await self._pin(host, remaining) if hop == 0 else host",
        "test_every_redirect_hop_is_validated_and_repinned",
        "test_a_rebinding_resolver_cannot_reach_an_internal_address"),
     _m("redirect_budget_ignored", "the redirect budget is MEDIA_FETCH_MAX_REDIRECTS",
-       F, "            for _hop in range(limits.media_fetch_max_redirects + 1):",
-       "            for _hop in range(100):",
+       F, "            for hop in range(limits.media_fetch_max_redirects + 1):",
+       "            for hop in range(100):",
        "test_a_redirect_chain_over_the_budget_is_refused"),
     _m("a_redirect_without_a_destination_is_content",
        "a 3xx with no Location is refused, not read as a body",
        F, "                        if not location:\n"
-          "                            raise refused(\"bad-redirect\", host=target.host)",
+          "                            raise refused(\"bad-redirect\", host=host)",
        "                        if not location:\n                            location = \"/\"",
        "test_a_redirect_without_a_location_is_refused"),
 
@@ -142,7 +186,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_a_compressed_body_is_refused_outright"),
     _m("any_type_is_a_video", "the response type is on an allow-list",
        F, "                    if mime is None:\n"
-          "                        raise refused(\"unsupported-type\", host=target.host,\n"
+          "                        raise refused(\"unsupported-type\", host=host,\n"
           "                                      exc=errors.UnsupportedMedia)",
        "                    mime = mime or \"video/mp4\"",
        "test_a_non_video_response_is_refused",
@@ -156,13 +200,13 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("aggregate_deadline_not_checked_between_chunks",
        "the aggregate time limit stops a slow body",
        F, "                        if self.monotonic() >= expires_at:\n"
-          "                            raise refused(\"timeout\", host=target.host)\n"
+          "                            raise refused(\"timeout\", host=host)\n"
           "                    if not body:",
        "                    if not body:",
        "test_a_slow_body_stops_at_the_aggregate_deadline"),
     _m("an_empty_body_is_a_video", "an empty body is not media",
        F, "                    if not body:\n"
-          "                        raise refused(\"empty-body\", host=target.host)", "                    pass",
+          "                        raise refused(\"empty-body\", host=host)", "                    pass",
        "test_an_empty_body_is_not_a_video"),
     _m("upstream_text_echoed", "no upstream exception text reaches the caller or the log",
        F, "            self.log.warning(\"media fetch failed: type=%s\", type(exc).__name__)\n"
@@ -171,10 +215,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "            raise refused(\"fetch-failed\") from exc",
        "test_a_refusal_tells_the_caller_and_the_log_nothing_about_the_url"),
     _m("a_timeout_is_an_unknown_failure", "a transport timeout is reported as a timeout",
-       F, "        except httpx.TimeoutException:\n"
+       F, "        except (TimeoutError, httpx.TimeoutException):\n"
           "            self.log.warning(\"media fetch refused: reason=%s\", \"timeout\")\n"
           "            raise refused(\"timeout\") from None",
-       "        except httpx.TimeoutException:\n            raise",
+       "        except (TimeoutError, httpx.TimeoutException):\n            raise",
        "test_a_transport_timeout_is_a_timeout_refusal"),
 
     # --- data: URLs -----------------------------------------------------------
@@ -187,7 +231,7 @@ MUTANTS: tuple[Mutant, ...] = (
           "        raise refused(\"too-large\", exc=errors.RequestTooLarge)", "    pass",
        "test_an_oversize_data_url_is_refused_before_it_is_decoded"),
     _m("any_data_url_type_accepted", "a data: URL's type is on the same allow-list",
-       F, "    if mime not in ALLOWED_MIME:\n"
+       F, "    if mime not in allowed:\n"
           "        raise refused(\"unsupported-type\", exc=errors.UnsupportedMedia)", "    pass",
        "test_a_data_url_must_be_base64_and_an_allowed_video_type"),
     _m("a_plain_data_url_is_decoded_as_base64", "only base64 is a bounded encoding",
@@ -209,6 +253,23 @@ MUTANTS: tuple[Mutant, ...] = (
           "                if owned.digest != ref.digest:",
        "                owned = ref\n                if False:",
        "test_an_upload_reference_is_resolved_not_trusted"),
+    _m("stage_returns_the_callers_ref",
+       "an owned object is staged as the store has it, not as the request describes it",
+       S, "                resolved.append(existing)", "                resolved.append(ref)",
+       "test_a_known_handle_is_staged_as_the_object_the_store_has"),
+    _m("materialize_indexes_before_the_write",
+       "no ref is indexed without an object behind it",
+       S, "        await self._write_once(ref.storage_ref, fetched.data, fetched.mime)\n"
+          "        self.refs[(org_id, ref.handle)] = ref",
+       "        self.refs[(org_id, ref.handle)] = ref\n"
+       "        await self._write_once(ref.storage_ref, fetched.data, fetched.mime)",
+       "test_no_ref_is_indexed_without_an_object_behind_it"),
+    _m("handle_clash_ignored", "a handle never comes to name different content",
+       S, "            raise errors.Conflict(f\"handle {ref.handle} already names different content\")",
+       "            pass", "test_a_handle_that_already_names_other_content_is_a_conflict"),
+    _m("digest_taken_from_the_fetcher", "the stored object's digest is measured here",
+       S, "        digest = digest_of(fetched.data)", "        digest = fetched.digest",
+       "test_the_digest_is_measured_not_taken_from_the_fetcher"),
     _m("stage_replaces_an_existing_object", "a staged handle keeps the content it has",
        S, "                    raise errors.Conflict(\n"
           "                        f\"media handle {ref.handle} already holds different content\")",
@@ -223,7 +284,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "            self.refs[(org_id, staged.handle)] = staged",
        "test_a_refused_request_stages_nothing_at_all"),
     _m("payload_key_from_the_request", "the caller never names the payload's path",
-       S, "        key = f\"payloads/{org_id}/{request.request_id}.json\"",
+       S, "        key = f\"payloads/{valid_org(org_id)}/{request.request_id}.json\"",
        "        key = request.payload_ref",
        "test_staging_makes_the_canonical_payload_durable_with_a_digest_and_a_size"),
     _m("index_before_the_payload",
@@ -245,22 +306,29 @@ MUTANTS: tuple[Mutant, ...] = (
        "                                                          bytes=0)",
        "test_staging_makes_the_canonical_payload_durable_with_a_digest_and_a_size"),
     _m("an_object_can_be_replaced", "content already at a key is immutable",
-       S, "        if stored != digest_of(data):\n"
+       S, "        if await self.objects.head(key) != digest_of(data):\n"
           "            raise errors.Conflict(f\"an object already exists at {key} with different content\")",
-       "        await self.objects.put(key, data, content_type)",
+       "        pass",
        "test_an_object_is_never_replaced_by_different_content",
        "test_a_second_payload_for_one_request_id_cannot_replace_the_first"),
 
     # --- keys, materialization and attach -------------------------------------
     _m("key_without_the_tenant", "two orgs never share an object",
-       S, "        return f\"media/{org_id}/{profile_version}/{digest.split(':')[1][:16]}/{part}\"",
-       "        return f\"media/{profile_version}/{digest.split(':')[1][:16]}/{part}\"",
+       S, "        return (f\"media/{valid_org(org_id)}/{valid_profile(profile_version)}\"",
+       "        return (f\"media/{valid_profile(profile_version)}\"",
        "test_two_organizations_never_share_an_object"),
     _m("key_without_the_profile_version",
        "the profile version namespaces the cache key (01)",
-       S, "        return f\"media/{org_id}/{profile_version}/{digest.split(':')[1][:16]}/{part}\"",
-       "        return f\"media/{org_id}/{digest.split(':')[1][:16]}/{part}\"",
+       S, "        return (f\"media/{valid_org(org_id)}/{valid_profile(profile_version)}\"",
+       "        return (f\"media/{valid_org(org_id)}\"",
        "test_a_fetched_source_becomes_a_tenant_scoped_content_addressed_object"),
+    _m("profile_version_unvalidated",
+       "a profile version is an identifier, not a path (cross-track hazard)",
+       S, "    if not isinstance(version, str) or not PROFILE_VERSION_RE.fullmatch(version):",
+       "    if False:", "test_a_profile_version_cannot_escape_the_tenants_prefix"),
+    _m("org_unvalidated", "the tenant every key is namespaced by is validated first",
+       S, "    if not isinstance(org_id, str) or not UUID_RE.fullmatch(org_id):",
+       "    if False:", "test_a_malformed_tenant_is_refused_before_anything_is_fetched"),
     _m("any_source_materialized", "a media source is an http(s) or data: URL",
        S, "            raise errors.InvalidRequest(\"a media source must be an http(s) or data: URL\")",
        "            fetched, kind = await self.fetcher.fetch(source), MediaKind.url",
@@ -273,9 +341,17 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "                raise errors.NotFound(\"media attached to a job must belong to its org\")",
        "                pass", "test_attach_takes_the_tenant_from_the_job_row"),
     _m("attach_without_a_job_row", "the org comes from the job row, and there must be one",
-       S, "        org_id = self.job_org(job_id)\n        for ref in refs:",
-       "        org_id = refs[0].org_id if refs else None\n        for ref in refs:",
+       S, "        org_id = self.job_org(job_id)\n        owned: list[MediaRef] = []",
+       "        org_id = refs[0].org_id if refs else None\n        owned: list[MediaRef] = []",
        "test_attach_takes_the_tenant_from_the_job_row"),
+    _m("attach_accepts_an_unstaged_ref",
+       "a job executes only on media this store staged, as the store described it",
+       S, "            if indexed is None or indexed.digest != ref.digest:\n"
+          "                raise errors.NotFound(f\"media {ref.handle} was not staged for org {org_id}\")\n"
+          "            owned.append(indexed)",
+       "            owned.append(ref)",
+       "test_only_a_staged_ref_can_be_attached_to_a_job",
+       "test_a_known_handle_is_staged_as_the_object_the_store_has"),
     _m("resolve_ignores_the_tenant", "a handle is resolved inside its own tenant only",
        S, "        media = self.refs.get((org_id, ref))",
        "        media = next((m for (_o, h), m in self.refs.items() if h == ref), None)",

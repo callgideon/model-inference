@@ -18,10 +18,12 @@ Two rules run through all of it, and they are the same two the fake encodes:
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from ..contracts import codec, errors
+from ..contracts.ids import UUID_RE
 from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import MediaKind, MediaRef, NormalizedRequest
 from .fetch import DATA_PREFIX, HTTP_PREFIXES, MediaFetcher, decode_data_url, digest_of
@@ -29,18 +31,41 @@ from .fetch import DATA_PREFIX, HTTP_PREFIXES, MediaFetcher, decode_data_url, di
 HANDLE_PREFIX = "med_"
 HANDLE_DIGEST_CHARS = 40          # 160 bits of the content digest: opaque enough, and
                                   # content-addressed, so restaging is idempotent
+# A profile version ends up *in an object key*, so it is an identifier and nothing else:
+# `profile_version="../../payloads/<another org>"` turned a tenant-scoped key into a path
+# into another tenant's prefix (review, cross-track hazard).
+PROFILE_VERSION_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+
+
+def valid_org(org_id: object) -> str:
+    """The tenant every key is namespaced by, checked before anything is fetched or
+    written: a malformed one then costs no outbound request and raises a typed error
+    instead of surfacing as a record-validation failure two steps later."""
+    if not isinstance(org_id, str) or not UUID_RE.fullmatch(org_id):
+        raise errors.InvalidRequest("org_id must be a lowercase UUID")
+    return org_id
+
+
+def valid_profile(version: object) -> str:
+    if not isinstance(version, str) or not PROFILE_VERSION_RE.fullmatch(version):
+        raise errors.InvalidRequest("a profile version must match ^[a-z0-9][a-z0-9._-]{0,63}$")
+    return version
 
 
 class ObjectStore(Protocol):
     """The injectable object-store client. Deliberately two operations wide, both of
-    which an S3-compatible store answers directly (HeadObject, PutObject), so the real
-    adapter adds credentials and nothing else."""
+    which an S3-compatible store answers directly (HeadObject, and PutObject with
+    `If-None-Match: *`), so the real adapter adds credentials and nothing else."""
 
     async def head(self, key: str) -> str | None:
         """The digest of the stored object, or None if there is none."""
 
-    async def put(self, key: str, data: bytes, content_type: str) -> None:
-        """Store bytes at a server-built key."""
+    async def put_if_absent(self, key: str, data: bytes, content_type: str) -> bool:
+        """Store bytes at a server-built key only if nothing is there; True if written.
+
+        Write-once is this store's most important property, so it is one atomic operation
+        rather than a read and a write a concurrent staging can interleave with.
+        """
 
 
 class InMemoryObjectStore:
@@ -53,7 +78,15 @@ class InMemoryObjectStore:
         stored = self.objects.get(key)
         return stored[0] if stored else None
 
-    async def put(self, key: str, data: bytes, content_type: str) -> None:
+    async def put_if_absent(self, key: str, data: bytes, content_type: str) -> bool:
+        if key in self.objects:
+            return False
+        self.objects[key] = (digest_of(data), bytes(data), content_type)
+        return True
+
+    def seed(self, key: str, data: bytes, content_type: str = "video/mp4") -> None:
+        """Not part of the port: how a test puts something at a key behind the store's
+        back, to prove the store will not replace it."""
         self.objects[key] = (digest_of(data), bytes(data), content_type)
 
 
@@ -97,16 +130,17 @@ class MediaStaging:
     def _key(self, org_id: str, digest: str, profile_version: str, part: str) -> str:
         # The tenant, the source digest and the profile version namespace the cache
         # (01: "tenant source digest + profile version namespace both media cache keys").
-        return f"media/{org_id}/{profile_version}/{digest.split(':')[1][:16]}/{part}"
+        # Both parts a caller can influence are validated *here*, so every key M builds -
+        # source, prepared, or whatever M2 adds - goes through the same guard.
+        return (f"media/{valid_org(org_id)}/{valid_profile(profile_version)}"
+                f"/{digest.split(':')[1][:16]}/{part}")
 
     async def _write_once(self, key: str, data: bytes, content_type: str) -> None:
         """Immutable content: the same bytes twice is a no-op, different bytes under a
         key that already exists is a conflict, never a replacement."""
-        stored = await self.objects.head(key)
-        if stored is None:
-            await self.objects.put(key, data, content_type)
+        if await self.objects.put_if_absent(key, data, content_type):
             return
-        if stored != digest_of(data):
+        if await self.objects.head(key) != digest_of(data):
             raise errors.Conflict(f"an object already exists at {key} with different content")
 
     # --- materialization (M1's own operation, not a port one) ----------------
@@ -117,19 +151,29 @@ class MediaStaging:
         the content digest, so the same source materialized twice is one object and one
         ref rather than two rows pointing at the same bytes.
         """
+        org_id = valid_org(org_id)          # before any outbound request is made
         if source.startswith(DATA_PREFIX):
-            fetched, kind = decode_data_url(source, self.limits), MediaKind.inline
+            fetched, kind = decode_data_url(source, self.limits, self.fetcher.allowed_mime), \
+                MediaKind.inline
         elif source.startswith(HTTP_PREFIXES):
             fetched, kind = await self.fetcher.fetch(source), MediaKind.url
         else:
             raise errors.InvalidRequest("a media source must be an http(s) or data: URL")
         if len(fetched.data) > self.limits.max_media_bytes:
             raise errors.RequestTooLarge(f"{len(fetched.data)} bytes exceeds MAX_MEDIA_BYTES")
-        ref = MediaRef(org_id=org_id, handle=media_handle(fetched.digest), kind=kind,
-                       digest=fetched.digest, bytes=len(fetched.data), mime=fetched.mime,
-                       storage_ref=self._key(org_id, fetched.digest, self.profile_version,
-                                             "source"),
+        # Measured here rather than taken from the fetcher: the digest is the object's
+        # identity, its key and its handle, so it is computed from the bytes being stored.
+        digest = digest_of(fetched.data)
+        ref = MediaRef(org_id=org_id, handle=media_handle(digest), kind=kind,
+                       digest=digest, bytes=len(fetched.data), mime=fetched.mime,
+                       storage_ref=self._key(org_id, digest, self.profile_version, "source"),
                        profile_version=self.profile_version)
+        clash = self.refs.get((org_id, ref.handle))
+        if clash is not None and clash.digest != digest:
+            # The handle is a prefix of the digest, so this cannot happen by chance; if it
+            # ever does (a shorter handle, a different scheme) it must not silently
+            # replace the tenant's ref with one pointing at other content.
+            raise errors.Conflict(f"handle {ref.handle} already names different content")
         await self._write_once(ref.storage_ref, fetched.data, fetched.mime)
         self.refs[(org_id, ref.handle)] = ref
         return ref
@@ -173,6 +217,9 @@ class MediaStaging:
                 if existing.digest != ref.digest:
                     raise errors.Conflict(
                         f"media handle {ref.handle} already holds different content")
+                # The **indexed** ref, never the caller's copy of it: the request's
+                # `bytes`, `mime`, `duration_s` and `storage_ref` are claims, and the
+                # object's own facts are what a job must carry (review B4/S03).
                 resolved.append(existing)
                 continue
             staged = ref.model_copy(update={
@@ -188,7 +235,7 @@ class MediaStaging:
         payload = codec.canonical_bytes(request)
         # A server-built key from server-known identity; `request.payload_ref` is not read,
         # because a caller-named path is exactly what a media store must never accept.
-        key = f"payloads/{org_id}/{request.request_id}.json"
+        key = f"payloads/{valid_org(org_id)}/{request.request_id}.json"
         await self._write_once(key, payload, "application/json")
         # One visible step: nothing above wrote to `self.refs`.
         self.refs.update(pending)
@@ -201,10 +248,19 @@ class MediaStaging:
         from the job row and every ref checked against it. All or nothing: a refused
         attach leaves `prepare` with nothing rather than a half-written set."""
         org_id = self.job_org(job_id)
+        owned: list[MediaRef] = []
         for ref in refs:
             if ref.org_id != org_id:
                 raise errors.NotFound("media attached to a job must belong to its org")
-        self.by_job[job_id] = tuple(refs)
+            # And it must be a ref this store staged for that org: a job may only execute
+            # on media the store itself put somewhere, described as the store described it.
+            # Attaching an own-org ref that was never staged used to bind a job to an
+            # object that does not exist, with fields the caller chose (review).
+            indexed = self.refs.get((org_id, ref.handle))
+            if indexed is None or indexed.digest != ref.digest:
+                raise errors.NotFound(f"media {ref.handle} was not staged for org {org_id}")
+            owned.append(indexed)
+        self.by_job[job_id] = tuple(owned)
 
     async def resolve_owned(self, org_id: str, ref: str) -> MediaRef:
         # Keyed by tenant: another org's handle simply is not in this org's namespace.

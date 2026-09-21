@@ -164,10 +164,118 @@ def test_an_object_is_never_replaced_by_different_content():
     conflict, never an overwrite - that is how an owner's video disappears."""
     adapter = staging(transport=support.Transport(support.response(body=MP4)))
     key = store.MediaStaging(adapter.objects)._key(b.ORG_A, fetch.digest_of(MP4), "v1", "source")
-    asyncio.run(adapter.objects.put(key, b"squatted", "video/mp4"))
+    adapter.objects.seed(key, b"squatted")
     with pytest.raises(errors.Conflict):
         asyncio.run(adapter.materialize(b.ORG_A, URL))
     assert adapter.objects.objects[key][1] == b"squatted"
+    assert adapter.refs == {}, "a ref was indexed for an object the store does not own"
+
+
+def test_no_ref_is_indexed_without_an_object_behind_it():
+    """Review B4/S01: the object is written first. A ref indexed before the write would
+    survive a storage fault as a handle resolving to bytes nobody has."""
+    objects = store.InMemoryObjectStore()
+    adapter = staging(objects=Breaks(objects, on="media/"),
+                      transport=support.Transport(support.response(body=MP4)))
+    with pytest.raises(errors.DependencyUnavailable):
+        asyncio.run(adapter.materialize(b.ORG_A, URL))
+    assert adapter.refs == {} and objects.objects == {}
+
+
+def test_different_content_gets_a_different_handle_and_a_different_key():
+    adapter = staging(transport=support.Transport(support.response(body=MP4),
+                                                 support.response(body=MP4 + b"more")))
+    first = asyncio.run(adapter.materialize(b.ORG_A, URL))
+    second = asyncio.run(adapter.materialize(b.ORG_A, URL))
+    assert first.digest != second.digest
+    assert first.handle != second.handle and first.storage_ref != second.storage_ref
+    assert len(adapter.objects.objects) == 2
+
+
+def test_a_handle_that_already_names_other_content_is_a_conflict():
+    """Defence in depth: the handle is a prefix of the digest, so a collision cannot happen
+    by chance - but if the scheme ever changes it must not replace the tenant's ref with
+    one pointing at other bytes. Seeded directly; a real 160-bit collision is not
+    constructible."""
+    adapter = staging(transport=support.Transport(support.response(body=MP4)))
+    handle = store.media_handle(fetch.digest_of(MP4))
+    other = b.media(b.ORG_A, handle=handle).model_copy(
+        update={"digest": b.digest("entirely different bytes")})
+    adapter.refs[(b.ORG_A, handle)] = other
+    with pytest.raises(errors.Conflict):
+        asyncio.run(adapter.materialize(b.ORG_A, URL))
+    assert adapter.refs[(b.ORG_A, handle)] == other
+
+
+def test_the_digest_is_measured_not_taken_from_the_fetcher():
+    """Review nonblocking: the digest is the object's identity, its key and its handle, so
+    it is computed from the bytes being stored rather than reported by whatever produced
+    them."""
+    class Lies:
+        allowed_mime = frozenset({"video/mp4"})
+
+        async def fetch(self, url):
+            return fetch.Fetched(mime="video/mp4", data=MP4, digest=b.digest("not this"),
+                                 host="example.com")
+
+    adapter = store.MediaStaging(store.InMemoryObjectStore(), fetcher=Lies())
+    ref = asyncio.run(adapter.materialize(b.ORG_A, URL))
+    assert ref.digest == fetch.digest_of(MP4)
+    assert ref.handle == store.media_handle(fetch.digest_of(MP4))
+    assert ref.storage_ref.split("/")[3] == fetch.digest_of(MP4).split(":")[1][:16]
+
+
+def test_a_malformed_tenant_is_refused_before_anything_is_fetched():
+    """Review nonblocking: a bad org used to cost one outbound fetch and then surface as a
+    record-validation error rather than a typed refusal."""
+    resolve = support.resolver([support.PUBLIC])
+    adapter = staging(resolve=resolve, transport=support.Transport(support.response(body=MP4)))
+    for org in ("../../etc", "", "ORG", b.ORG_A.upper(), None, "1a1a1a1a-0000-4000-8000"):
+        with pytest.raises(errors.InvalidRequest):
+            asyncio.run(adapter.materialize(org, URL))
+    assert resolve.calls == [] and adapter.objects.objects == {}
+
+
+def test_a_profile_version_cannot_escape_the_tenants_prefix():
+    """Review, cross-track hazard: `profile_version` goes into the object key, so it is an
+    identifier and nothing else. `../../payloads/<other org>` turned a tenant-scoped key
+    into a path into another tenant's prefix."""
+    adapter = staging()
+    for version in ("../../payloads/" + b.ORG_B, "v1/../v2", "V1", "", "a" * 65, "-v1",
+                    "v1 2", "v1\n"):
+        hostile = b.media(b.ORG_A).model_copy(update={"profile_version": version})
+        with pytest.raises(errors.InvalidRequest):
+            asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(hostile,))))
+        assert adapter.refs == {} and adapter.payloads == {}
+    good = b.media(b.ORG_A).model_copy(update={"profile_version": "v2.1_beta-3"})
+    staged = asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(good,))))
+    assert staged[0].storage_ref.startswith(f"media/{b.ORG_A}/v2.1_beta-3/")
+
+
+def test_a_known_handle_is_staged_as_the_object_the_store_has():
+    """Review B4/S03: for a handle the store already has, the size, type, duration and key
+    are the *object's* facts, never the request's claims about them."""
+    adapter = staging(transport=support.Transport(support.response(body=MP4)))
+    ref = asyncio.run(adapter.materialize(b.ORG_A, URL))
+    forged = ref.model_copy(update={"bytes": 1, "mime": "video/webm", "duration_s": 999.0,
+                                    "storage_ref": f"media/{b.ORG_B}/v1/deadbeef/source"})
+    staged = asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(forged,))))
+    assert staged == (ref,), "the caller's claims about an owned object were staged"
+    job = "33333333-0000-4000-8000-000000000003"
+    adapter.jobs[job] = b.ORG_A
+    asyncio.run(adapter.attach(job, (forged,)))
+    assert adapter.by_job[job] == (ref,), "the caller's claims reached the job"
+
+
+def test_only_a_staged_ref_can_be_attached_to_a_job():
+    """Review, cross-track hazard: an own-org ref that was never staged used to bind a job
+    to an object that does not exist, with every field chosen by the caller."""
+    adapter = staging()
+    job = "44444444-0000-4000-8000-000000000004"
+    adapter.jobs[job] = b.ORG_A
+    with pytest.raises(errors.NotFound):
+        asyncio.run(adapter.attach(job, (b.media(b.ORG_A),)))
+    assert adapter.by_job == {}
 
 
 def test_an_unsupported_source_is_refused_before_anything_is_stored():
@@ -317,11 +425,11 @@ class Breaks:
     async def head(self, key):
         return await self.inner.head(key)
 
-    async def put(self, key, data, content_type):
+    async def put_if_absent(self, key, data, content_type):
         if self.on in key:
             self.attempts += 1
             raise errors.DependencyUnavailable("the object store is unavailable")
-        await self.inner.put(key, data, content_type)
+        return await self.inner.put_if_absent(key, data, content_type)
 
 
 def test_a_fault_at_the_payload_write_stages_nothing_and_the_retry_completes_it():

@@ -19,7 +19,8 @@ ALL = mutation_list.MUTANTS
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # One per mutated file, plus the two pins the whole path rests on.
 SUBSET = ("one_answer_is_enough", "connects_to_the_name_not_the_address",
-          "reserved_addresses_allowed", "stage_indexes_as_it_goes", "key_without_the_tenant")
+          "denied_networks_not_checked", "stage_indexes_as_it_goes", "key_without_the_tenant",
+          "transport_logs_not_silenced", "attach_accepts_an_unstaged_ref")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
@@ -38,12 +39,12 @@ def test_the_list_is_well_formed():
             assert case in names, f"{mutant.name} names unknown test {case}"
 
 
-def test_every_guard_in_the_owned_modules_has_a_mutant():
+def test_the_mutation_list_covers_the_owned_modules():
     """R32 from the other side: a guard nothing can break is a guard nothing proves. The
     count is a floor on the two modules M1 wrote plus the address policy it reuses."""
     files = {mutant.file for mutant in ALL}
     assert files == {"media/fetch.py", "media/store.py", "media/video.py"}
-    assert len(ALL) >= 50, f"only {len(ALL)} mutants declared"
+    assert len(ALL) >= 65, f"only {len(ALL)} mutants declared"
 
 
 @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])

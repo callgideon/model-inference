@@ -44,18 +44,39 @@ from .video import address_allowed
 
 LOG = logging.getLogger(__name__)
 
+# httpx logs one request line per request at INFO - "HTTP Request: GET <url> ..." - and
+# httpcore logs the same target at DEBUG. For a pinned fetch that line carries the
+# validated IP *and* the caller's query string (a signed URL, a capability token) into the
+# process log, on every hop, which is exactly what this module takes care never to write
+# itself. Stated at import so no logging configuration elsewhere can raise a level and
+# turn it back on (review B2); the process's own logging config is an integration note.
+TRANSPORT_LOGGERS = ("httpx", "httpcore")
+
+
+def silence_transport_logs(names=TRANSPORT_LOGGERS, level=logging.WARNING):
+    for name in names:
+        logging.getLogger(name).setLevel(level)
+
+
+silence_transport_logs()
+
 ALLOWED_MIME = frozenset(m.strip().lower()
                          for m in DEFAULT_ALLOWED_VIDEO_MIME.split(",") if m.strip())
 UNDECLARED_TYPES = ("", "application/octet-stream", "binary/octet-stream")
+# How long after the aggregate limit the real-clock backstop fires. The fetcher's own
+# checks run on the injected clock and produce a typed refusal naming the host and the
+# reason; this exists only for the phases no injected clock can see, so it must not win
+# the race against them.
+BACKSTOP_GRACE_S = 1.0
 DATA_PREFIX = "data:"
 HTTP_PREFIXES = ("http://", "https://")
 
 # The closed vocabulary of refusal reasons. Operator-only: a customer sees the fixed
 # message of the error code, never one of these.
-REASONS = ("malformed-url", "unsupported-scheme", "credentials-in-url", "no-host", "dns",
-           "blocked-address", "bad-redirect", "too-many-redirects", "http-status",
-           "encoded-body", "unsupported-type", "too-large", "empty-body", "timeout",
-           "bad-data-url", "bad-base64", "unsupported-source", "fetch-failed")
+REASONS = ("malformed-url", "unsupported-scheme", "insecure-redirect", "credentials-in-url",
+           "no-host", "dns", "blocked-address", "bad-redirect", "too-many-redirects",
+           "http-status", "encoded-body", "unsupported-type", "too-large", "empty-body",
+           "timeout", "bad-data-url", "bad-base64", "unsupported-source", "fetch-failed")
 
 
 def digest_of(data: bytes) -> str:
@@ -81,18 +102,29 @@ def refused(reason: str, *, host: str = "",
     return error
 
 
-def video_mime(content_type: str | None, url: httpx.URL) -> str | None:
+def video_mime(content_type: str | None, url: httpx.URL, allowed=ALLOWED_MIME) -> str | None:
     """An allow-listed type for this response, or None. The URL's extension is used
     only when the server declines to say what it sent."""
     declared = (content_type or "").split(";")[0].strip().lower()
-    if declared in ALLOWED_MIME:
+    if declared in allowed:
         return declared
     if declared in UNDECLARED_TYPES:
         path = url.path
         dot = path.rfind(".")
         guess = EXT_MIME.get(path[dot:].lower()) if dot >= 0 else None
-        return guess if guess in ALLOWED_MIME else None
+        return guess if guess in allowed else None
     return None
+
+
+def raw_host_of(url: httpx.URL) -> str:
+    """The host in the form that goes on the wire.
+
+    `url.host` is the decoded, unicode form, and handing that to `getaddrinfo` resolves it
+    through IDNA2003 while the `Host` header and SNI carry httpx's IDNA2008 encoding:
+    `faß.de` would be *resolved* as `fass.de` and *addressed* as `xn--fa-hia.de`, which is
+    a validated destination that is not the one connected to. One spelling everywhere.
+    """
+    return url.raw_host.decode("ascii")
 
 
 def parse_source(url: str) -> httpx.URL:
@@ -102,13 +134,15 @@ def parse_source(url: str) -> httpx.URL:
     except Exception:
         raise refused("malformed-url") from None
     if target.scheme not in ("http", "https"):
+        # `file:`, `gopher:`, `data:` and `javascript:` all arrive here, from a caller or
+        # from a `Location` header.
         raise refused("unsupported-scheme")
+    if not target.raw_host:
+        raise refused("no-host")
     if target.userinfo:
         # Credentials in the URL would be sent to the pinned address and logged by
         # anything that echoes the source; they are never a legitimate video source.
-        raise refused("credentials-in-url", host=target.host)
-    if not target.host:
-        raise refused("no-host")
+        raise refused("credentials-in-url", host=raw_host_of(target))
     return target
 
 
@@ -118,7 +152,7 @@ async def resolve_all(host: str) -> list[str]:
     return [info[4][0] for info in infos]
 
 
-def decode_data_url(url: str, limits: PilotSettings = DEFAULTS) -> Fetched:
+def decode_data_url(url: str, limits: PilotSettings = DEFAULTS, allowed=ALLOWED_MIME) -> Fetched:
     """Strict, bounded base64.
 
     The bound is applied to the *encoded* text before anything is decoded, so a
@@ -133,7 +167,7 @@ def decode_data_url(url: str, limits: PilotSettings = DEFAULTS) -> Fetched:
     if "base64" not in parameters[1:]:
         raise refused("bad-data-url")            # only base64 is a bounded encoding
     mime = parameters[0]
-    if mime not in ALLOWED_MIME:
+    if mime not in allowed:
         raise refused("unsupported-type", exc=errors.UnsupportedMedia)
     cap = limits.max_media_bytes
     if len(payload) > (cap + 2) // 3 * 4:
@@ -155,12 +189,16 @@ class MediaFetcher:
     microseconds and never sleeps."""
 
     def __init__(self, limits: PilotSettings = DEFAULTS, *, resolve=None, transport=None,
-                 monotonic=time.monotonic, log: logging.Logger = LOG) -> None:
+                 monotonic=time.monotonic, log: logging.Logger = LOG,
+                 allowed_mime=ALLOWED_MIME) -> None:
         self.limits = limits
         self.resolve = resolve or resolve_all
         self.transport = transport
         self.monotonic = monotonic
         self.log = log
+        # Configurable like the legacy path's ALLOWED_VIDEO_MIME, without this module
+        # reading the environment: G passes the setting in.
+        self.allowed_mime = frozenset(allowed_mime)
 
     def client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
@@ -178,13 +216,18 @@ class MediaFetcher:
     async def fetch(self, url: str) -> Fetched:
         """Materialize an http(s) source once. Raises a typed `DomainError`."""
         try:
-            return await self._fetch(url)
+            # The backstop on the real clock: the injected `monotonic` bounds the phases
+            # this module can see, and this bounds the ones it cannot (a resolver or a
+            # transport that never returns at all). It deliberately fires a moment *after*
+            # the per-phase budgets, so a refusal that can name its host and reason does.
+            async with asyncio.timeout(self.limits.media_fetch_timeout_s + BACKSTOP_GRACE_S):
+                return await self._fetch(url)
         except errors.DomainError as refusal:
             self.log.warning("media fetch refused: host=%s reason=%s",
                              getattr(refusal, "host", "") or "-",
                              getattr(refusal, "reason", "unknown"))
             raise
-        except httpx.TimeoutException:
+        except (TimeoutError, httpx.TimeoutException):
             self.log.warning("media fetch refused: reason=%s", "timeout")
             raise refused("timeout") from None
         except Exception as exc:
@@ -198,12 +241,24 @@ class MediaFetcher:
         cap = limits.max_media_bytes
         expires_at = self.monotonic() + limits.media_fetch_timeout_s
         body = bytearray()
+        secure = False
         async with self.client() as client:
-            for _hop in range(limits.media_fetch_max_redirects + 1):
+            for hop in range(limits.media_fetch_max_redirects + 1):
                 target = parse_source(url)
-                if self.monotonic() >= expires_at:
-                    raise refused("timeout", host=target.host)
-                address = await self._pin(target.host)
+                host = raw_host_of(target)
+                if hop == 0:
+                    secure = target.scheme == "https"
+                elif secure and target.scheme != "https":
+                    # A redirect must not downgrade: the signed query string of the
+                    # `Location` would then travel in plaintext.
+                    raise refused("insecure-redirect", host=host)
+                remaining = expires_at - self.monotonic()
+                if remaining <= 0:
+                    raise refused("timeout", host=host)
+                address = await self._pin(host, remaining)
+                # No Set-Cookie from one hop reaches the next, and nothing from a previous
+                # fetch reaches this one: a cookie is ambient authority we never want.
+                client.cookies.clear()
                 response = await client.send(
                     client.build_request(
                         # copy_with keeps the raw path, query and port exactly as they
@@ -215,54 +270,68 @@ class MediaFetcher:
                                  "Accept-Encoding": "identity"},
                         # Pinned address, original name: the TLS handshake and the
                         # certificate check still happen against the host the caller
-                        # asked for, so pinning does not weaken verification.
-                        extensions={"sni_hostname": target.host}),
+                        # asked for, so pinning does not weaken verification. The timeout
+                        # is what is *left* of the aggregate budget, so one stalled read
+                        # cannot double the total (review B3).
+                        extensions={"sni_hostname": host, "timeout": self._budget(remaining)}),
                     stream=True)
                 try:
                     if response.is_redirect:
                         location = response.headers.get("location", "")
                         if not location:
-                            raise refused("bad-redirect", host=target.host)
+                            raise refused("bad-redirect", host=host)
                         url = str(target.join(location))
                         continue              # re-parsed, re-resolved and re-pinned above
                     if response.status_code != 200:
-                        raise refused("http-status", host=target.host)
+                        raise refused("http-status", host=host)
                     coding = response.headers.get("content-encoding", "").strip().lower()
                     if coding not in ("", "identity"):
-                        raise refused("encoded-body", host=target.host)
-                    mime = video_mime(response.headers.get("content-type"), target)
+                        raise refused("encoded-body", host=host)
+                    mime = video_mime(response.headers.get("content-type"), target,
+                                      self.allowed_mime)
                     if mime is None:
-                        raise refused("unsupported-type", host=target.host,
+                        raise refused("unsupported-type", host=host,
                                       exc=errors.UnsupportedMedia)
                     declared = response.headers.get("content-length", "")
                     if declared.isdigit() and int(declared) > cap:
-                        raise refused("too-large", host=target.host, exc=errors.RequestTooLarge)
+                        raise refused("too-large", host=host, exc=errors.RequestTooLarge)
                     async for chunk in response.aiter_raw():
                         body += chunk
                         if len(body) > cap:
                             # Aborted mid-body: the rest is never read, so a lying
                             # Content-Length buys an attacker nothing.
-                            raise refused("too-large", host=target.host,
-                                          exc=errors.RequestTooLarge)
+                            raise refused("too-large", host=host, exc=errors.RequestTooLarge)
                         if self.monotonic() >= expires_at:
-                            raise refused("timeout", host=target.host)
+                            raise refused("timeout", host=host)
                     if not body:
-                        raise refused("empty-body", host=target.host)
+                        raise refused("empty-body", host=host)
                     return Fetched(mime=mime, data=bytes(body), digest=digest_of(bytes(body)),
-                                   host=target.host)
+                                   host=host)
                 finally:
                     await response.aclose()
             raise refused("too-many-redirects")
 
-    async def _pin(self, host: str) -> str:
-        """Resolve once and validate every answer.
+    def _budget(self, remaining: float) -> dict[str, float]:
+        """What is left of the aggregate limit, as httpx's per-phase timeouts."""
+        connect = min(self.limits.media_fetch_connect_timeout_s, remaining)
+        return {"connect": connect, "read": remaining, "write": remaining, "pool": remaining}
+
+    async def _pin(self, host: str, remaining: float) -> str:
+        """Resolve once, within the remaining budget, and validate every answer.
 
         One private answer among many is a rebinding attempt, not a fallback; and the
         address returned here is the one the connection uses, so the name is never
-        resolved a second time.
+        resolved a second time. Resolution is inside the budget because a name server
+        that never answers is as effective a way to hold a worker as a body that never
+        ends (review B3).
         """
         try:
-            addresses = await self.resolve(host)
+            # The caller guarantees `remaining > 0` (the hop-start check), so the floor
+            # only ever applies when that check is missing: a non-positive `wait_for`
+            # timeout would otherwise refuse by accident and make the real guard invisible.
+            addresses = await asyncio.wait_for(self.resolve(host), max(remaining, 0.001))
+        except TimeoutError:
+            raise refused("timeout", host=host) from None
         except Exception:
             raise refused("dns", host=host) from None
         if not addresses:

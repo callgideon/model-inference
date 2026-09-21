@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 
+import httpx as httpx_module
 import pytest
 from infrx.contracts import errors
 from infrx.contracts.limits import DEFAULTS
@@ -134,13 +135,28 @@ def test_a_dns_failure_or_an_empty_answer_is_a_refusal_not_a_crash():
 def test_every_redirect_hop_is_validated_and_repinned():
     """MEDIA-SEC: a public first hop redirecting to an internal name. The hop is parsed,
     resolved and validated again; only the name changed, which is the whole attack."""
-    transport = support.Transport(support.response(302, location="http://internal.test/v.mp4"),
+    # https on both hops, so the *address* is what refuses this one and not the scheme
+    transport = support.Transport(support.response(302, location="https://internal.test/v.mp4"),
                                  support.response(body=MP4))
     resolve = support.resolver([support.PUBLIC], [support.METADATA])
     error = refusal(fetcher(resolve=resolve, transport=transport))
     assert error.reason == "blocked-address"
     assert resolve.calls == ["example.com", "internal.test"]
     assert len(transport.requests) == 1
+
+
+def test_a_redirect_may_not_downgrade_to_plaintext():
+    """Review nonblocking: the `Location` of an https fetch carries the caller's query
+    string, so a hop to http would put a signed URL on the wire in the clear. A fetch that
+    *started* as http is unchanged - it was never confidential."""
+    transport = support.Transport(support.response(302, location="http://example.com/v.mp4"),
+                                  support.response(body=MP4))
+    error = refusal(fetcher(transport=transport))
+    assert error.reason == "insecure-redirect"
+    assert len(transport.requests) == 1
+    plain = support.Transport(support.response(302, location="http://example.com/v.mp4"),
+                              support.response(body=MP4))
+    assert asyncio.run(fetcher(transport=plain).fetch("http://example.com/v.mp4")).data == MP4
 
 
 def test_a_relative_redirect_is_resolved_against_the_hop_it_came_from():
@@ -226,8 +242,11 @@ def test_a_compressed_body_is_refused_outright():
         error = refusal(fetcher(transport=transport, limits=SMALL))
         assert error.reason == "encoded-body", coding
         assert stream.read == 0
-    # and the request asked for no coding in the first place
-    assert support.Transport().requests == []
+    # and the request asked for no coding in the first place: on the request the transport
+    # actually received, not on a fresh one (review B4/R10)
+    asked = support.Transport(support.response(body=MP4))
+    asyncio.run(fetcher(transport=asked).fetch(URL))
+    assert [r.headers["accept-encoding"] for r in asked.requests] == ["identity"]
 
 
 def test_a_slow_body_stops_at_the_aggregate_deadline():
@@ -240,6 +259,106 @@ def test_a_slow_body_stops_at_the_aggregate_deadline():
     error = refusal(fetcher(transport=transport, monotonic=clock))
     assert error.reason == "timeout"
     assert stream.read < 400, "the whole slow body was read"
+
+
+def test_a_slow_redirect_chain_stops_at_the_aggregate_deadline():
+    """MEDIA-SEC (review B4/R13): the budget is checked at the *start* of every hop, so a
+    chain of slow redirects inside the budget stops resolving and connecting the moment it
+    is gone, rather than running to the redirect limit."""
+    clock = support.Ticker(step=DEFAULTS.media_fetch_timeout_s * 0.4)
+    transport = support.Transport(support.response(302, location=URL))
+    resolve = support.resolver([support.PUBLIC])
+    error = refusal(fetcher(transport=transport, resolve=resolve, monotonic=clock))
+    assert error.reason == "timeout"
+    assert len(transport.requests) == 2 < DEFAULTS.media_fetch_max_redirects + 1
+    assert resolve.calls == ["example.com", "example.com"], \
+        "a hop was resolved after the budget was gone"
+
+
+def test_each_request_carries_what_is_left_of_the_budget():
+    """MEDIA-SEC (review B3): without this the per-read timeout stays the whole budget on
+    every hop, so one stalled read after a passing check doubles the total."""
+    clock = support.Ticker(step=1.0)
+    transport = support.Transport(support.response(302, location="/second/v.mp4"),
+                                  support.response(body=MP4))
+    asyncio.run(fetcher(transport=transport, monotonic=clock).fetch(URL))
+    budgets = [request.extensions["timeout"] for request in transport.requests]
+    assert len(budgets) == 2
+    assert budgets[0]["read"] < DEFAULTS.media_fetch_timeout_s
+    assert budgets[1]["read"] < budgets[0]["read"], "the second hop got the whole budget again"
+    for budget in budgets:
+        assert budget["connect"] <= DEFAULTS.media_fetch_connect_timeout_s
+        assert budget["read"] == budget["write"] == budget["pool"]
+
+
+def test_a_resolver_that_never_answers_is_bounded():
+    """MEDIA-SEC (review B3): a name server that never replies holds a worker as
+    effectively as a body that never ends. Resolution is therefore inside the hop's
+    remaining budget - which is also why the refusal names the host: the real-clock
+    backstop cannot, because it does not know which hop it interrupted."""
+    budget = DEFAULTS.replace(media_fetch_timeout_s=0.05, media_fetch_connect_timeout_s=0.05)
+    log = support.Records()
+
+    async def never(host):
+        await asyncio.get_running_loop().create_future()
+
+    stuck = fetch.MediaFetcher(budget, resolve=never, monotonic=support.Ticker(),
+                               transport=support.Transport().transport, log=log)
+    with pytest.raises(errors.MediaFetchFailed) as caught:
+        asyncio.run(stuck.fetch(URL))
+    assert caught.value.reason == "timeout"
+    assert "host=example.com reason=timeout" in log.text, log.text
+
+
+def test_a_body_that_stalls_for_ever_is_bounded_by_the_backstop():
+    """MEDIA-SEC (review B3): the injected clock only advances when the fetcher reads, so a
+    body that stalls *between* chunks advances nothing and none of this module's own checks
+    can fire. The aggregate limit therefore also holds on the real clock. The outer bound is
+    the test's own: without the backstop this hangs rather than failing."""
+    budget = DEFAULTS.replace(media_fetch_timeout_s=0.05)
+
+    class Stalls(httpx_module.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"x" * 8
+            await asyncio.get_running_loop().create_future()
+
+    transport = support.Transport(support.response(stream=Stalls()))
+    stalled = fetch.MediaFetcher(budget, resolve=support.resolver([support.PUBLIC]),
+                                 monotonic=support.Ticker(),
+                                 transport=transport.transport, log=support.Records())
+
+    async def go():
+        with pytest.raises(errors.MediaFetchFailed) as caught:
+            await stalled.fetch(URL)
+        return caught.value.reason
+
+    assert asyncio.run(asyncio.wait_for(go(), 2.0)) == "timeout"
+
+
+def test_a_redirect_carries_no_cookie_from_the_hop_before():
+    """Review nonblocking: a `Set-Cookie` on hop 1 is ambient authority we never want to
+    replay onto hop 2 - and with one client per fetch it would also survive a redirect
+    back to the origin that issued it."""
+    transport = support.Transport(
+        support.response(302, location="https://example.com/second/v.mp4",
+                         headers={"set-cookie": "session=deadbeefsession; Path=/"}),
+        support.response(body=MP4))
+    asyncio.run(fetcher(transport=transport).fetch(URL))
+    assert len(transport.requests) == 2
+    assert [r.headers.get("cookie") for r in transport.requests] == [None, None]
+
+
+def test_the_resolver_and_the_wire_agree_on_one_spelling_of_the_host():
+    """Review nonblocking: `url.host` is the decoded form. Resolving that goes through
+    IDNA2003 (`faß.de` -> `fass.de`) while the `Host` header and SNI carry httpx's
+    IDNA2008 encoding, so the address validated would not belong to the name addressed."""
+    transport = support.Transport(support.response(body=MP4))
+    resolve = support.resolver([support.PUBLIC])
+    asyncio.run(fetcher(resolve=resolve, transport=transport).fetch("https://faß.de/v.mp4"))
+    wire = "xn--fa-hia.de"
+    assert resolve.calls == [wire]
+    assert transport.hosts == [wire]
+    assert [r.extensions["sni_hostname"] for r in transport.requests] == [wire]
 
 
 def test_an_empty_body_is_not_a_video():
@@ -325,6 +444,47 @@ def test_a_refusal_tells_the_caller_and_the_log_nothing_about_the_url():
     assert caught.value.reason == "fetch-failed" and caught.value.__cause__ is None
     assert "10.0.0.1" not in log.text and "10.0.0.1" not in str(caught.value)
     assert "type=RuntimeError" in log.text
+
+
+def test_no_logger_in_the_process_writes_a_url_an_ip_or_a_location(caplog):
+    """MEDIA-SEC (review B2): reading only the injected logger proved nothing about the
+    process log. httpx writes `HTTP Request: GET <pinned url>` at INFO and httpcore writes
+    the same target at DEBUG, so a signed URL and the validated IP would be in the log of
+    every hop. This captures **every** logger at DEBUG, over the success, redirect and
+    refusal paths, and emits the exact lines httpx and httpcore would."""
+    import logging
+
+    caplog.set_level(logging.DEBUG)                      # root: every propagating logger
+    signed = ("https://example.com/clips/v.mp4?X-Amz-Signature=deadbeefsig"
+              "&X-Amz-Credential=AKIAEXAMPLE")
+    # the module states the transports' levels itself, so those calls produce no record
+    logging.getLogger("httpx").info('HTTP Request: GET https://%s/clips/v.mp4'
+                                    '?X-Amz-Signature=deadbeefsig "HTTP/1.1 200 OK"',
+                                    support.PUBLIC)
+    logging.getLogger("httpcore.http11").debug(
+        "send_request_headers.started request=<Request [b'GET'] %s>", signed)
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
+    assert logging.getLogger("httpcore").getEffectiveLevel() >= logging.WARNING
+
+    live = fetch.MediaFetcher(DEFAULTS, resolve=support.resolver([support.PUBLIC]),
+                              monotonic=support.Ticker(), log=fetch.LOG,
+                              transport=support.Transport(support.response(body=MP4)).transport)
+    asyncio.run(live.fetch(signed))                                    # success
+    redirected = support.Transport(
+        support.response(302, location="https://example.com/other/v.mp4?token=redirectsecret"),
+        support.response(body=MP4))
+    asyncio.run(fetch.MediaFetcher(DEFAULTS, resolve=support.resolver([support.PUBLIC]),
+                                   monotonic=support.Ticker(), log=fetch.LOG,
+                                   transport=redirected.transport).fetch(signed))
+    with pytest.raises(errors.DomainError):                             # refusal
+        asyncio.run(fetch.MediaFetcher(DEFAULTS, resolve=support.resolver([support.METADATA]),
+                                       monotonic=support.Ticker(), log=fetch.LOG,
+                                       transport=support.Transport().transport).fetch(signed))
+    for leak in ("deadbeefsig", "AKIAEXAMPLE", "X-Amz-Signature", "redirectsecret",
+                 "/clips/v.mp4", "/other/v.mp4", support.PUBLIC, support.METADATA, "?"):
+        assert leak not in caplog.text, (leak, caplog.text)
+    # the one thing the log does say is the host and the reason class
+    assert "host=example.com reason=blocked-address" in caplog.text
 
 
 def test_a_transport_timeout_is_a_timeout_refusal():
