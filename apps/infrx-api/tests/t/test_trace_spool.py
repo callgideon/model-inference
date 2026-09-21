@@ -425,8 +425,8 @@ def test_a_poison_record_does_not_stop_the_scan():
     junk = b'{"not":"an envelope"}'
     good = codec.compact_bytes(b.trace(ID_A, content_bytes=0, metadata_bytes=16))
     data = (segment_header()
-            + FRAME.pack(len(junk), 0, frame_checksum(junk, (), 0)) + junk
-            + FRAME.pack(len(good), 0, frame_checksum(good, (), 0)) + good)
+            + FRAME.pack(len(junk), 0, frame_checksum(junk, (), 0, 0)) + junk
+            + FRAME.pack(len(good), 0, frame_checksum(good, (), 0, 1)) + good)
     scan = scan_segment(name, data)
     assert scan.poison == 1 and scan.torn == 0
     assert [row.request_id for row in scan.records] == [ID_A]
@@ -440,7 +440,7 @@ def test_a_frame_claiming_more_than_a_frame_may_hold_is_the_tail():
     a poison record instead - a corrupt length field silently promoted to a bad row."""
     payload = b"j" * (MAX_ENVELOPE_BYTES + 1)
     data = (segment_header()
-            + FRAME.pack(len(payload), 0, frame_checksum(payload, (), 0)) + payload)
+            + FRAME.pack(len(payload), 0, frame_checksum(payload, (), 0, 0)) + payload)
     scan = scan_segment("trace-000000.seg", data)
     assert scan.torn == 1 and scan.poison == 0 and scan.records == []
 
@@ -507,8 +507,50 @@ def test_a_frame_whose_lengths_were_swapped_is_the_tail():
     asyncio.run(scenario())
 
 
+def test_a_frame_excised_or_duplicated_mid_segment_is_the_tail():
+    """Round 2. Deriving a record's position from the frames before it means nothing on disk
+    can corrupt an id - but removing or repeating a whole frame *shifts* every record after
+    it onto someone else's identity, which is the same collision from the other side. The
+    position is inside the checksum, so a segment whose frames have moved is torn at the
+    first one that is not where it was written."""
+    async def scenario():
+        spool = sink()
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        for index in range(4):
+            await capture_one(spool, request_id(index), bytes([65 + index]) * 120)
+        await spool.flush(spool.clock.now())
+        name = spool.segments()[0].name
+        await spool.close()
+        data = (spool.spool_dir / name).read_bytes()
+        whole = scan_segment(name, data)
+        assert len(whole.records) == 4
+        frames, offset = [], HEADER.size
+        for record, content in zip(whole.records, whole.contents):
+            size = FRAME.size + len(codec.compact_bytes(record)) + len(content)
+            frames.append(data[offset:offset + size])
+            offset += size
+        head = data[:HEADER.size]
+        # the second frame is excised: the third record would slide into position 1
+        excised = scan_segment(name, head + frames[0] + frames[2] + frames[3])
+        assert [row.request_id for row in excised.records] == [whole.records[0].request_id]
+        assert excised.torn == 1, excised.line()
+        # the first frame is repeated: the same record would be filed twice, under two ids
+        duplicated = scan_segment(name, head + frames[0] + frames[0] + frames[1])
+        assert [row.request_id for row in duplicated.records] == [whole.records[0].request_id]
+        assert duplicated.torn == 1, duplicated.line()
+        # and the honest segment still reads whole
+        assert len(scan_segment(name, head + b"".join(frames)).records) == 4
+    asyncio.run(scenario())
+
+
 def test_an_unknown_segment_version_is_never_half_parsed():
-    """A segment a future writer produced is left alone rather than guessed at."""
+    """A segment a future writer produced - or the previous *format* of this one - is left
+    alone rather than guessed at. Round 2 changed what the checksum covers, so a version-1
+    segment must be classed `unreadable` (a format this reader does not know) and never
+    `torn` (a file it half understands)."""
+    older = HEADER.pack(SEGMENT_MAGIC, 1) + b"whatever a version-1 writer left"
+    assert scan_segment("trace-000000.seg", older).unreadable == 1
+    assert scan_segment("trace-000000.seg", older).torn == 0
     scan = scan_segment("trace-000000.seg", HEADER.pack(b"INFRXTRC", 99) + b"whatever")
     assert scan.unreadable == 1 and scan.records == []
     assert scan_segment("trace-000000.seg", b"tiny").unreadable == 1

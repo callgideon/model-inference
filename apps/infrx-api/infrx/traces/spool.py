@@ -36,12 +36,14 @@ OS) -> `fsynced` (the only records durability is claimed for). A record's charge
 the memory budget is released once the writer has appended it, not when `flush` takes it,
 so the process bound stays one budget instead of one budget plus an in-flight batch.
 
-Segment format, version 1 (08 §5 "spool segment 1"):
+Segment format, **version 2** (08 §5 pins "spool segment 1" - an integration request asks
+the coordinator to update that number; a version-1 segment is classed `unreadable`, never
+misread, and none exists outside this task's own tests):
 
     header : magic b"INFRXTRC" + uint16 version
     frame  : uint32 envelope_bytes | uint32 content_bytes | uint32 crc32
              followed by the canonical envelope JSON and then the raw content bytes
-    crc32  : over (envelope_bytes, content_bytes) + envelope JSON + content
+    crc32  : over (envelope_bytes, content_bytes, position) + envelope JSON + content
 
 A crash tears at most the last frame, and the reader stops at the first frame that is
 short or fails its checksum. Nothing is ever rewritten or truncated in place: a shipped
@@ -76,13 +78,17 @@ from ..contracts.fakes.traces import FakeTraceCapture, FakeTraceSink
 from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import TraceEnvelope, TraceLossReason, TraceMode, TraceOfferResult
 
-SEGMENT_VERSION = 1
+SEGMENT_VERSION = 2
 SEGMENT_MAGIC = b"INFRXTRC"
 SEGMENT_PREFIX = "trace-"
 SEGMENT_SUFFIX = ".seg"
 HEADER = struct.Struct("!8sH")          # magic, version
 FRAME = struct.Struct("!III")           # envelope bytes, content bytes, crc32
-LENGTHS = struct.Struct("!II")          # the part of the frame header the crc32 covers
+# What the crc32 covers besides the bytes: the two lengths and the record's position in its
+# segment. The position is *derived* by the reader, not stored, but it is checksummed, so a
+# frame excised from or duplicated inside a segment cannot silently renumber the records
+# after it - it is a torn segment instead (round 2).
+LENGTHS = struct.Struct("!IIQ")
 # A metadata row is a few KiB. A torn tail can claim any length at all, so an envelope
 # length past this is corruption rather than a record we are missing bytes for.
 MAX_ENVELOPE_BYTES = 1 << 20
@@ -196,16 +202,19 @@ def segment_header() -> bytes:
     return HEADER.pack(SEGMENT_MAGIC, SEGMENT_VERSION)
 
 
-def frame_checksum(payload: bytes, parts, content_bytes: int) -> int:
-    """The checksum over a frame's **lengths**, its envelope and its content.
+def frame_checksum(payload: bytes, parts, content_bytes: int, position: int) -> int:
+    """The checksum over a frame's **lengths and position**, its envelope and its content.
 
     The lengths are inside the checksum because a corrupt length field is how a reader
     silently mis-frames a record; round 1 of review found a single flipped bit turning one
-    record into two with a wrong identity. `parts` is chained through `crc32` rather than
-    joined, so a 96 MiB content part is never copied into a third buffer just to be hashed
-    - nor, since round 2, joined at all.
+    record into two with a wrong identity. The position joined them in round 2: it is derived
+    rather than stored, so nothing on disk can corrupt it, but a frame *excised* from or
+    *duplicated* inside a segment shifts every record after it onto someone else's identity,
+    and checksumming the position is what turns that into a torn segment. `parts` is chained
+    through `crc32` rather than joined, so a 96 MiB content part is never copied into a third
+    buffer just to be hashed - nor, since round 2, joined at all.
     """
-    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes))
+    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes, position))
     crc = binascii.crc32(payload, crc)
     for part in parts:
         crc = binascii.crc32(part, crc)
@@ -283,7 +292,7 @@ def scan_segment(name: str, data: bytes, into: Scan | None = None) -> Scan:
             break
         payload = data[body:body + envelope_bytes]
         content = data[body + envelope_bytes:body + envelope_bytes + content_bytes]
-        if frame_checksum(payload, (content,), content_bytes) != crc:
+        if frame_checksum(payload, (content,), content_bytes, index) != crc:
             _torn(scan, name, offset, len(data))
             break
         offset = body + envelope_bytes + content_bytes
@@ -989,13 +998,15 @@ class SpoolTraceSink(FakeTraceSink):
                 result.dropped.append((TraceLossReason.disk_error, row.counted))
                 continue
             try:
-                crc = frame_checksum(row.payload, row.parts, row.content_bytes)
                 need = frame_size(row.payload, row.content_bytes)
                 refusal = self._refuse_bytes(need)
                 if refusal is not None:
                     result.dropped.append((refusal, row.counted))
                     continue
                 segment = self._segment_for(need, result)
+                # The position this record will have when the reader counts its way here.
+                crc = frame_checksum(row.payload, row.parts, row.content_bytes,
+                                     segment.records)
                 self.io.write(segment.fd, pack_frame(row.payload, crc, row.content_bytes))
                 for part in row.parts:
                     self.io.write(segment.fd, part)

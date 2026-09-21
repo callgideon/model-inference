@@ -85,6 +85,7 @@ UNREAD = "test_an_unreadable_segment_reports_every_byte_as_unread"
 CLOSE_RACE = "test_close_admits_nothing_once_it_has_started_and_joins_off_the_loop"
 FSYNC_RAISES = "test_an_fsync_step_that_raises_leaves_the_books_agreeing"
 OWNERSHIP = "test_a_failed_ack_keeps_the_segment_and_a_failed_boot_keeps_no_lock"
+MOVED_FRAME = "test_a_frame_excised_or_duplicated_mid_segment_is_the_tail"
 
 
 @dataclass(frozen=True)
@@ -113,9 +114,18 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if frame_checksum(payload, (content,), content_bytes) != crc:",
        "        if False:", CORRUPT),
     _m("the_checksum_ignores_the_lengths", "a frame's lengths are inside its checksum",
-       "    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes))\n"
+       "    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes, position))\n"
        "    crc = binascii.crc32(payload, crc)",
        "    crc = binascii.crc32(payload)", SWAPPED),
+    _m("the_checksum_ignores_the_position", "a moved frame is not another record's id",
+       "    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes, position))",
+       "    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes, 0))",
+       MOVED_FRAME),
+    _m("the_writer_checksums_the_wrong_position", "the writer and reader agree on position",
+       "                crc = frame_checksum(row.payload, row.parts, row.content_bytes,\n"
+       "                                     segment.records)",
+       "                crc = frame_checksum(row.payload, row.parts, row.content_bytes, 0)",
+       TWICE, MOVED_FRAME),
     _m("the_reader_numbers_records_by_hand", "a record's id is its verified position",
        "        position, index = index, index + 1", "        position, index = 0, index + 1",
        BITFLIP),
