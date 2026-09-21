@@ -84,6 +84,7 @@ ADOPTED = "test_an_adopted_segment_says_its_counts_are_unknown"
 UNREAD = "test_an_unreadable_segment_reports_every_byte_as_unread"
 CLOSE_RACE = "test_close_admits_nothing_once_it_has_started_and_joins_off_the_loop"
 FSYNC_RAISES = "test_an_fsync_step_that_raises_leaves_the_books_agreeing"
+OWNERSHIP = "test_a_failed_ack_keeps_the_segment_and_a_failed_boot_keeps_no_lock"
 
 
 @dataclass(frozen=True)
@@ -400,6 +401,24 @@ MUTANTS: tuple[Mutant, ...] = (
        "        except asyncio.TimeoutError:\n"
        "            # A writer failure is already counted by the settlement. Raising it here",
        WRITER_BUG),
+    _m("ack_forgets_the_segment_before_deleting_it", "a failed ack keeps its segment",
+       "        await self._run(self._unlink_acked, segment.path)\n        with self._lock:\n"
+       "            if segment in self._segments:",
+       "        with self._lock:\n"
+       "            if segment in self._segments:", OWNERSHIP),
+    _m("a_failed_boot_keeps_the_directory_lock", "a sink that failed to start holds nothing",
+       "            if self._dir_lock is not None:\n"
+       "                self.io.unlock_dir(self._dir_lock)\n                self._dir_lock = None\n"
+       "            raise",
+       "            raise", OWNERSHIP),
+    _m("a_reused_boot_id_is_accepted", "a boot id already on disk is refused",
+       '                raise ValueError(f"boot id {boot_id!r} already has segments in {self.spool_dir}")',
+       "                pass", OWNERSHIP),
+    _m("the_boot_id_is_time_only", "two processes in one nanosecond differ (B4a)",
+       '        self.boot_id = boot_id or (f"{time.time_ns():016x}"\n'
+       '                                   f"{int.from_bytes(os.urandom(4), \'big\'):08x}")',
+       '        self.boot_id = boot_id or f"{time.time_ns():016x}"',
+       ID_REUSE),
     _m("close_marks_the_sink_closed_last", "nothing enters once close has started",
        "        self._closed = True\n        writer, self._writer = self._writer, None",
        "        writer, self._writer = self._writer, None", CLOSE_RACE),

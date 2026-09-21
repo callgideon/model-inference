@@ -1189,6 +1189,23 @@ def test_a_record_id_is_never_reused_after_an_ack_and_a_restart():
         assert before.ids != after.ids, "two different records were filed under one id"
         assert second.boot_id != first.boot_id
         await second.close()
+
+        # ... and two processes that start in the *same nanosecond* - a supervisor restarting
+        # a crashed one - still differ, because the id carries random bits as well as the
+        # clock. The clock is frozen here rather than raced against.
+        frozen = traces.spool.time
+        class Stopped:
+            time_ns = staticmethod(lambda: 1_700_000_000_000_000_000)
+        traces.spool.time = Stopped
+        try:
+            twins = [SpoolTraceSink(FakeClock(), limits=DEFAULTS, spool_dir=_dir("twin"),
+                                    io=DrillIO()) for _ in range(2)]
+            assert twins[0].boot_id != twins[1].boot_id, \
+                f"two sinks born in one nanosecond share an id: {twins[0].boot_id}"
+            for twin in twins:
+                await twin.close()
+        finally:
+            traces.spool.time = frozen
     asyncio.run(scenario())
 
 
@@ -1443,6 +1460,69 @@ def test_close_admits_nothing_once_it_has_started_and_joins_off_the_loop():
         offenders = [(op, thread) for op, thread in io.threads
                      if not thread.startswith("infrx-trace-spool")]
         assert offenders == [], f"filesystem calls off the writer thread: {offenders}"
+    asyncio.run(scenario())
+
+
+def test_a_failed_ack_keeps_the_segment_and_a_failed_boot_keeps_no_lock():
+    """Three round-2 details that all end in a file nobody owns.
+
+    A failing `unlink` used to raise to the shipper with the segment already removed from the
+    accounting, so it stayed on disk outside the host cap until a restart adopted it. A
+    constructor whose adoption failed used to keep the directory lock, so the retry in the
+    same process was refused with "another process already spools traces here" - false and
+    unactionable. And a caller-supplied boot id that already has segments on disk would
+    reissue those records' identities.
+    """
+    async def scenario():
+        class NoUnlink(DrillIO):
+            def unlink(self, path: Path) -> None:
+                self._seen("unlink")
+                raise OSError(5, "unlink failed")
+
+        spool = sink(io=NoUnlink())
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        await capture_one(spool, ID_A, b"a" * 50)
+        await spool.flush(spool.clock.now())
+        name = await spool.rotate()
+        before = (await spool.stats())["spool_bytes"]
+        try:
+            await spool.ack(name)
+        except OSError:
+            pass
+        else:
+            raise AssertionError("a failing unlink was reported as a successful ack")
+        stats = await spool.stats()
+        assert [view.name for view in spool.segments()] == [name], \
+            "a segment that could not be deleted was forgotten anyway"
+        assert stats["spool_bytes"] == before, "its bytes left the cap while the file remains"
+        assert (spool.spool_dir / name).exists()
+        await spool.close()
+
+        # a constructor that cannot read the directory releases the lock it took
+        class NoStat(DrillIO):
+            def size(self, path: Path) -> int:
+                raise OSError(5, "stat failed")
+
+        directory = spool.spool_dir
+        try:
+            SpoolTraceSink(FakeClock(), limits=DEFAULTS, spool_dir=directory, io=NoStat())
+        except OSError:
+            pass
+        else:
+            raise AssertionError("adoption failed without saying so")
+        retry = SpoolTraceSink(FakeClock(), limits=DEFAULTS, spool_dir=directory,
+                               io=DrillIO())
+        await retry.close()
+
+        # and a boot id whose segments are already there is refused, not collided with
+        used = name[len(traces.spool.SEGMENT_PREFIX):].rsplit("-", 1)[0]
+        try:
+            SpoolTraceSink(FakeClock(), limits=DEFAULTS, spool_dir=directory, io=DrillIO(),
+                           boot_id=used)
+        except ValueError as error:
+            assert "boot id" in str(error)
+        else:
+            raise AssertionError("a boot id already on disk was accepted")
     asyncio.run(scenario())
 
 

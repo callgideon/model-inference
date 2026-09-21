@@ -532,7 +532,12 @@ class SpoolTraceSink(FakeTraceSink):
         # rather than only while the previous file still exists. `_next_index` alone made
         # `(segment, position)` repeat after the shipper had acked everything and the
         # process restarted - which is the steady state: drain, then deploy.
-        self.boot_id = boot_id or f"{time.time_ns():016x}{os.getpid() & 0xffff:04x}"
+        # Time first so segment names still sort in creation order across restarts, then
+        # random bits: two processes starting in the same nanosecond (a supervisor restarting
+        # a crashed one, containers from one image) would otherwise pick the same id and
+        # reissue record identities, which is B4a again by another route.
+        self.boot_id = boot_id or (f"{time.time_ns():016x}"
+                                   f"{int.from_bytes(os.urandom(4), 'big'):08x}")
         self._lock = threading.Lock()
         self._writer: ThreadPoolExecutor | None = None
         self._segments: list[_Segment] = []
@@ -562,9 +567,18 @@ class SpoolTraceSink(FakeTraceSink):
         # other record into memory just to be refused by the writer.
         self._refused_need = 0
         self._prune_at = CAPTURE_PRUNE_AT
-        self._adopt_existing_segments()
+        try:
+            self._adopt_existing_segments(boot_id)
+        except BaseException:
+            # Round 2: a `stat` that fails left the directory lock held by a sink that does
+            # not exist, and the retry in the same process was refused with "another process
+            # already spools traces here", which was both false and unactionable.
+            if self._dir_lock is not None:
+                self.io.unlock_dir(self._dir_lock)
+                self._dir_lock = None
+            raise
 
-    def _adopt_existing_segments(self) -> None:
+    def _adopt_existing_segments(self, boot_id: str | None = None) -> None:
         """Segments a previous process left behind are still the shipper's to ack, so they
         count against the host cap. They are sealed: a restarted process must never append
         behind a tail it did not write, because the reader stops at a torn frame and would
@@ -580,6 +594,11 @@ class SpoolTraceSink(FakeTraceSink):
             self._segments.append(_Segment(name=name, path=path, written=size, synced=size,
                                            sealed=True, adopted=True))
             self.spool_bytes += size
+            if boot_id is not None and name.startswith(f"{SEGMENT_PREFIX}{boot_id}-"):
+                # A caller-chosen boot id is for tests and for a caller that knows what it is
+                # doing; one that is already on disk would reissue the identities of the
+                # records in that file (B4a). Refuse rather than collide.
+                raise ValueError(f"boot id {boot_id!r} already has segments in {self.spool_dir}")
 
     # --- the request path -------------------------------------------------------------
     def open(self, request_id: str, org_id: str, mode: TraceMode,
@@ -795,9 +814,15 @@ class SpoolTraceSink(FakeTraceSink):
             segment = next((s for s in self._segments if s.name == name), None)
             if segment is None or not segment.sealed:
                 return False
-            self._segments.remove(segment)
-            self.spool_bytes = max(0, self.spool_bytes - segment.written)
+        # The unlink goes first and the bookkeeping follows it: round 2 pointed out that a
+        # failing unlink otherwise raised to the shipper with the segment already forgotten,
+        # so the file stayed on disk, outside the host cap, until a restart adopted it. A
+        # segment that could not be deleted stays listed and stays the shipper's.
         await self._run(self._unlink_acked, segment.path)
+        with self._lock:
+            if segment in self._segments:
+                self._segments.remove(segment)
+                self.spool_bytes = max(0, self.spool_bytes - segment.written)
         return True
 
     def _unlink_acked(self, path: Path) -> None:
