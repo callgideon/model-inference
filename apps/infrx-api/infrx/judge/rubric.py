@@ -22,6 +22,7 @@ Three invariants here are not shape checks:
 """
 from __future__ import annotations
 
+import decimal
 import json
 from dataclasses import dataclass
 from typing import Iterable, Mapping
@@ -36,18 +37,35 @@ RESERVED_NAMES = frozenset({OVERALL_PASS, NOTES})
 MAX_DETAIL_CHARS = 200
 
 
-def _brief(value: object, limit: int = 60) -> str:
-    """A bounded, non-raising rendering of untrusted input.
+def describe(value: object) -> str:
+    """What an untrusted value *is*, never what it says (R2-B3).
 
-    `repr` of a 5,000-digit integer raises `ValueError` under Python's int/str
-    conversion limit, and `repr` of an arbitrary object can raise anything, so the one
-    place we render untrusted values catches both instead of every caller remembering.
+    A rejection detail is a log field. Judge output quotes the customer's request and the
+    model's answer, so echoing any of it - a key, a string, an out-of-range number - puts
+    customer content into operator logs: a fuzz run found 909 echoes in 30,000 payloads,
+    including a key spelled like a social-security number appearing verbatim. So this
+    reports the type and the size and nothing else.
+
+    It also never raises: `repr` of a 5,000-digit integer raises `ValueError` under
+    Python's int/str conversion limit, and `len`/`repr` of a hostile object can raise
+    anything, so the one place we render untrusted values catches it here instead of
+    every caller remembering.
     """
     try:
-        text = repr(value)
+        if type(value) is str:
+            return f"str of {len(value)} characters"
+        if type(value) is int:
+            # `str(value)` raises past 4,300 digits; `Decimal` counts them exactly
+            # without going through text.
+            digits = 1 if value == 0 else decimal.Decimal(value).adjusted() + 1
+            return f"{'negative' if value < 0 else 'positive'} int of {digits} digits"
+        if type(value) in (list, tuple, dict, set):
+            return f"{type(value).__name__} of {len(value)} items"
+        return type(value).__name__
     except Exception:                                  # noqa: BLE001 - see docstring
-        return f"<unprintable {type(value).__name__}>"
-    return text if len(text) <= limit else text[:limit] + "..."
+        # A fixed string, because the fallback cannot itself touch the value or its type:
+        # a metaclass whose `__name__` raises would make the handler raise too.
+        return "<undescribable>"
 
 
 def is_storable_text(value: str) -> bool:
@@ -230,8 +248,11 @@ class Rejected:
     detail: str
 
     def __post_init__(self) -> None:
+        # R2-B3: **total** length at most MAX_DETAIL_CHARS. The old cap produced 203,
+        # because the ellipsis was added after the slice rather than inside the budget.
         if len(self.detail) > MAX_DETAIL_CHARS:
-            object.__setattr__(self, "detail", self.detail[:MAX_DETAIL_CHARS] + "...")
+            object.__setattr__(self, "detail",
+                               self.detail[:MAX_DETAIL_CHARS - 3] + "...")
 
     @property
     def accepted(self) -> bool:
@@ -254,7 +275,7 @@ def _no_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
     seen: set[str] = set()
     for key, _ in pairs:
         if key in seen:
-            raise DuplicateKey(f"duplicate key {_brief(key)}")
+            raise DuplicateKey(f"a key appears twice ({describe(key)})")
         seen.add(key)
     return dict(pairs)
 
@@ -319,7 +340,7 @@ def validate_output(rubric: Rubric, payload: object, *, run_id: str, sample_id: 
         # Not reachable from JSON, but `validate_output` also takes a dict built in
         # process, and a non-string key made the key-set arithmetic raise `TypeError`
         # out of a function documented never to raise.
-        return reject("non_string_key", f"keys must be text: {_brief(unnamed[0])}")
+        return reject("non_string_key", f"keys must be text, not {describe(unnamed[0])}")
     keys = set(payload)
     scorable = rubric.criteria_for(media=media_available)
     if limited:
@@ -335,7 +356,9 @@ def validate_output(rubric: Rubric, payload: object, *, run_id: str, sample_id: 
         return reject("missing_field", f"missing {', '.join(missing)}")
     unexpected = sorted(keys - required)
     if unexpected:
-        return reject("unexpected_field", f"unexpected {_brief(unexpected[0])}")
+        return reject("unexpected_field",
+                      f"{len(unexpected)} unexpected key(s), the first a "
+                      f"{describe(unexpected[0])}")
 
     scores: list[Score] = []
     for criterion in scorable:
@@ -350,7 +373,7 @@ def validate_output(rubric: Rubric, payload: object, *, run_id: str, sample_id: 
             return reject("score_not_an_integer", f"{criterion.name} score must be an integer")
         if not criterion.min_score <= score <= criterion.max_score:
             return reject("score_out_of_range",
-                          f"{criterion.name} score {_brief(score)} is outside "
+                          f"{criterion.name} score ({describe(score)}) is outside "
                           f"{criterion.min_score}..{criterion.max_score}")
         rationale = entry["rationale"]
         if type(rationale) is not str or not rationale.strip():

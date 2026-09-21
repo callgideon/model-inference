@@ -10,12 +10,13 @@ duplicate delivery, the no-media rule, and "never raises, whatever arrives".
 from __future__ import annotations
 
 import json
+import random
 
 import pytest
 from infrx.contracts import limits
 from infrx.judge import (MARLIN_VIDEO_V1, MAX_DETAIL_CHARS, Criterion, DuplicateKey, JudgeScores,
-                         Rejected, Rubric, ScoreLedger, dedupe_key, is_storable_text,
-                         parse_judge_json, validate_json, validate_output)
+                         Rejected, Rubric, ScoreLedger, dedupe_key, describe,
+                         is_storable_text, parse_judge_json, validate_json, validate_output)
 from infrx.judge.rubric import NOTES
 
 from . import fakes
@@ -157,8 +158,15 @@ def test_a_missing_or_extra_field_is_rejected_by_name():
     assert reject(check(short)).reason == "missing_field"
     assert "refusal" in reject(check(short)).detail
     wide = fakes.result(); wide["confidence"] = {"score": 5, "rationale": "sure"}
-    assert reject(check(wide)).reason == "unexpected_field"
-    assert "confidence" in reject(check(wide)).detail
+    rejected = reject(check(wide))
+    assert rejected.reason == "unexpected_field"
+    # R2-B3: the *count and type*, never the key itself - an unexpected key is the
+    # judge's text and the judge's text quotes the customer's.
+    assert rejected.detail == "1 unexpected key(s), the first a str of 10 characters"
+    assert "confidence" not in rejected.detail
+    # a missing field names *our* criterion, which comes from the rubric and not the
+    # payload, so it stays: that is the one thing an operator needs to see.
+    assert "refusal" in reject(check(short)).detail
 
 
 def test_a_criterion_needs_exactly_a_score_and_a_rationale():
@@ -285,13 +293,113 @@ def test_a_hostile_payload_is_rejected_rather_than_raised():
     enormous = fakes.result(); enormous["k" * 5_000_000] = 1
     rejected = reject(check(enormous))
     assert rejected.reason == "unexpected_field"
-    assert len(rejected.detail) <= MAX_DETAIL_CHARS + 3, "a rejection detail is a log field"
+    assert len(rejected.detail) <= MAX_DETAIL_CHARS, "a rejection detail is a log field"
 
 
 def test_every_rejection_detail_is_bounded():
     rejected = Rejected(run_id=RUN, sample_id=SAMPLE, rubric_version=1, reason="r",
                         detail="d" * 10_000)
-    assert len(rejected.detail) == MAX_DETAIL_CHARS + 3
+    assert len(rejected.detail) == MAX_DETAIL_CHARS
+    assert rejected.detail.endswith("...")
+
+
+def test_describe_reports_what_a_value_is_never_what_it_says():
+    """R2-B3: the one renderer for untrusted values. Type and size, nothing else - and it
+    never raises, including on the integer whose `repr` Python refuses to build."""
+    marker = "CUSTOMER-SSN-123-45-6789"
+    assert describe(marker) == f"str of {len(marker)} characters"
+    assert marker not in describe(marker)
+    assert describe(0) == "positive int of 1 digits"
+    assert describe(-12345) == "negative int of 5 digits"
+    assert describe(10 ** 5000) == "positive int of 5001 digits"
+    assert describe([1, 2]) == "list of 2 items" and describe({"a": 1}) == "dict of 1 items"
+    assert describe(None) == "NoneType" and describe(4.5) == "float"
+
+    class Hostile:
+        def __repr__(self):
+            raise RuntimeError("boom")
+
+        def __len__(self):
+            raise RuntimeError("boom")
+
+    assert describe(Hostile()) == "Hostile"
+
+    class Meta(type):
+        @property
+        def __name__(cls):                             # noqa: A003 - that is the point
+            raise RuntimeError("boom")
+
+    class Nameless(metaclass=Meta):
+        pass
+
+    # The last resort: even the *type name* can raise, so the fallback is a constant.
+    assert describe(Nameless()) == "<undescribable>"
+    payload = fakes.result(); payload["relevance"] = {"score": 4, "rationale": Nameless()}
+    assert reject(check(payload)).reason == "rationale_missing"
+
+
+def _fuzz_payloads(marker: str):
+    """Every shape that reaches a `reject(...)` with a value from the payload in it."""
+    rng = random.Random(0)
+    shapes = []
+    for width in (1, 3, 40, 300):
+        text = (marker * width)[: max(len(marker), width)]
+        shapes.append({**fakes.result(), text: 1})                       # unexpected_field
+        shapes.append({**fakes.result(), text: 1, "also" + text: 2})
+        shapes.append({**fakes.result(), NOTES: text * 40})              # notes_out_of_bounds
+        bad = fakes.result(); bad["relevance"] = {"score": 4, "rationale": text * 40}
+        shapes.append(bad)                                               # rationale bounds
+        bad = fakes.result(); bad["relevance"] = {"score": 4, "rationale": text + "\ud800"}
+        shapes.append(bad)                                               # unstorable_text
+        bad = fakes.result(); bad["relevance"] = {"score": 4, "rationale": ""}
+        bad[text] = text
+        shapes.append(bad)
+        bad = fakes.result(); bad["relevance"] = {text: 4, "rationale": text}
+        shapes.append(bad)                                               # malformed_criterion
+    for score in (0, 6, -(10 ** 40), 10 ** 400, int(marker.replace("-", "").encode().hex(), 16)):
+        bad = fakes.result(); bad["relevance"] = {"score": score, "rationale": marker}
+        shapes.append(bad)                                               # score_out_of_range
+    for key in (7, 1.5, True, None):
+        bad = fakes.result(); bad[key] = marker
+        shapes.append(bad)                                               # non_string_key
+    for _ in range(400):                                                 # random recombinations
+        base = dict(rng.choice(shapes))
+        if rng.random() < 0.5:
+            base.pop(rng.choice(sorted(k for k in base if isinstance(k, str))), None)
+        if rng.random() < 0.5:
+            base[marker + str(rng.randrange(1000))] = marker
+        shapes.append(base)
+    return shapes
+
+
+def test_no_rejection_ever_echoes_the_payload():
+    """R2-B3, the fuzz the review asked for. Judge output quotes the customer's request and
+    the model's answer, so a detail that echoes any of it puts customer content in operator
+    logs - a key spelled `CUSTOMER-SSN-…` appeared verbatim in 909 of 30,000 payloads."""
+    marker = "CUSTOMER-SSN-123-45-6789"
+    checked = 0
+    for media in (True, False):
+        for payload in _fuzz_payloads(marker):
+            answer = check(payload, media=media)
+            checked += 1
+            if isinstance(answer, JudgeScores):
+                continue
+            assert marker not in answer.detail, answer.reason
+            assert marker not in answer.reason
+            assert len(answer.detail) <= MAX_DETAIL_CHARS, answer.reason
+            # no fragment of it either: eight characters is already an identifier
+            assert marker[:8] not in answer.detail, answer.reason
+    assert checked >= 800, f"the fuzz only ran {checked} payloads"
+
+    # the JSON door too, including the duplicate-key and parse paths
+    for text in (json.dumps({marker: 1}), '{"' + marker + '": 1, "' + marker + '": 2}',
+                 '{"relevance": ' + json.dumps(marker), json.dumps(fakes.result()) + marker,
+                 marker, '{"notes": "' + marker + '"'):
+        answer = validate_json(RUBRIC, text, run_id=RUN, sample_id=SAMPLE, media_available=True)
+        if isinstance(answer, JudgeScores):
+            continue
+        assert marker not in answer.detail and marker[:8] not in answer.detail, answer.reason
+        assert len(answer.detail) <= MAX_DETAIL_CHARS
 
 
 # --- parsing ------------------------------------------------------------------------
@@ -315,7 +423,7 @@ def test_parsing_refuses_malformed_json_without_raising():
                                         media_available=True))
         assert rejected.reason == "malformed_json", text
     assert len(reject(validate_json(RUBRIC, "x" * 10_000, run_id=RUN, sample_id=SAMPLE,
-                                    media_available=True)).detail) <= MAX_DETAIL_CHARS + 3
+                                    media_available=True)).detail) <= MAX_DETAIL_CHARS
 
 
 def test_a_deeply_nested_payload_is_rejected_rather_than_raised():
