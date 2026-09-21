@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from .. import money
 from ..conformance import Harness
+from ..conformance import builders as b
 from ..limits import DEFAULTS, PilotSettings
 from ..records import FeedbackChannel
 from .engine import EngineFault, FakeEngine
@@ -24,7 +25,12 @@ from .traces import FakeTraceSink
 
 def _jobstore(limits: PilotSettings | None = None):
     clock, ids, failures = FakeClock(), SequentialIds(), FailurePlan()
-    jobs = FakeJobStore(clock, ids, limits=limits or DEFAULTS, failures=failures)
+    jobs = FakeJobStore(clock, ids, limits=limits or DEFAULTS, failures=failures,
+                        # r1 R45: a store starts with the price table the builders' model
+                        # is priced at, because the price is the *store's* fact and a
+                        # request no longer carries one. A real factory seeds its
+                        # `price_versions` rows here instead; `set_price` moves them.
+                        prices={b.MODEL: b.DEFAULT_PRICE})
     return jobs, clock, ids, failures
 
 
@@ -69,6 +75,10 @@ def _job_hooks(jobs: FakeJobStore, stream: FakeStreamStore | None = None) -> dic
         # r1 R10: the injectable entitlement source, rechecked inside admit.
         "unentitle": jobs.unentitle,
         "entitle": jobs.entitle,
+        # r1 R45: the injectable price source. `set_price(model_revision, snapshot)`
+        # writes one; `snapshot=None` withdraws it, which is how a case makes a model
+        # unpriced without inventing a request field.
+        "set_price": jobs.set_price,
         # r1 R4: change the store's *current* configuration, to prove an accepted
         # job keeps the budgets snapshotted at admission.
         "retune": retune,

@@ -200,7 +200,8 @@ class FakeJobStore:
 
     def __init__(self, clock: FakeClock | None = None, ids: SequentialIds | None = None, *,
                  limits: PilotSettings = DEFAULTS, failures: FailurePlan | None = None,
-                 journal: _Journal | None = None) -> None:
+                 journal: _Journal | None = None,
+                 prices: dict[str, PriceSnapshot] | None = None) -> None:
         self.clock = clock or FakeClock()
         self.ids = ids or SequentialIds()
         self.limits = limits
@@ -225,6 +226,14 @@ class FakeJobStore:
         self.unentitled: set[tuple[str, str]] = set()
         self.is_entitled = lambda org_id, model_revision: (org_id, model_revision) \
             not in self.unentitled
+        # r1 R45: the injectable **price source**, mirroring the entitlement source. A
+        # price never comes from the request: a client that could name its own rates
+        # could name zero. A real adapter replaces the callable with its
+        # `price_versions` lookup (`price_for(model_revision, at)`, the effective row at
+        # that instant); the fake reads a table `set_price` writes, and an unpriced
+        # model is refused (02: "unknown/unpriced models fail closed").
+        self.prices: dict[str, PriceSnapshot] = dict(prices or {})
+        self.price_for = lambda model_revision, at: self.prices.get(model_revision)
         self._lock = asyncio.Lock()
 
     # --- test helpers (not part of the port) ---------------------------------
@@ -243,6 +252,14 @@ class FakeJobStore:
 
     def entitle(self, org_id: str, model_revision: str) -> None:
         self.unentitled.discard((org_id, model_revision))
+
+    def set_price(self, model_revision: str, snapshot: PriceSnapshot | None) -> None:
+        """r1 R45: what the price source answers for a model. `None` withdraws the
+        price, which is how a test makes a model unpriced without touching a request."""
+        if snapshot is None:
+            self.prices.pop(model_revision, None)
+        else:
+            self.prices[model_revision] = snapshot
 
     def wallet(self, org_id: str) -> _Wallet:
         return self.wallets.setdefault(org_id, _Wallet())
@@ -300,7 +317,7 @@ class FakeJobStore:
             # Everything that can refuse the admission runs before anything is
             # reserved: a rejected admission leaves no journal bytes, no hold and
             # no job behind (`_price` fails closed on an unpriced model).
-            price = self._price(request)
+            price = self._price(request, now)
             self.journal.reserve(request.request_id)
             admission = self._insert(request, idem, hold, now, price)
         self.failures.after_commit("admit")
@@ -396,13 +413,24 @@ class FakeJobStore:
             self.idem[idem.scope] = _Idem(idem.payload_hash, request.request_id)
         return admission
 
-    def _price(self, request: NormalizedRequest):
-        """Admission snapshots the price; an unpriced model fails closed. The fake
-        carries the snapshot on the request's parameters for test convenience."""
-        snapshot = request.parameters.get("price_snapshot") if request.parameters else None
+    def _price(self, request: NormalizedRequest, now: datetime) -> PriceSnapshot:
+        """r1 R45: admission snapshots the price from the **price source**, never from
+        the request, and an unpriced model fails closed.
+
+        The request used to carry `parameters["price_snapshot"]` for the fake's
+        convenience, which made the contract's most important pricing rule - the client
+        does not set the price - unobservable, and left a parameter in the shape that G1
+        has to reject. A client-supplied `price_snapshot` parameter is
+        `unsupported_parameter`.
+        """
+        snapshot = self.price_for(request.model_revision, now)
         if snapshot is None:
             raise errors.InvalidRequest("no price snapshot for the requested model")
-        return PriceSnapshot.model_validate(snapshot)
+        if snapshot.model_revision != request.model_revision:
+            # A price source answering for a different model would settle this job at
+            # another model's rates.
+            raise errors.InvalidRequest("the price snapshot names another model revision")
+        return snapshot
 
     def _emit(self, aggregate_id: str, kind: OutboxKind, now: datetime,
               payload: dict[str, object]) -> OutboxEvent:

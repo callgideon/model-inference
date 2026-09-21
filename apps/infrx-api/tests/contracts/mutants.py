@@ -99,15 +99,29 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("admit_skips_entitlement", "entitlement is rechecked in the transaction (R10)",
        S, 'raise errors.ModelNotEntitled(\n                    f"org {request.org_id} is not entitled to {request.model_revision}")',
        "pass", "dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction"),
-    _m("admit_trusts_an_unpriced_model", "an unpriced model fails closed",
+    _m("admit_trusts_an_unpriced_model", "an unpriced model fails closed (R45)",
        S, 'raise errors.InvalidRequest("no price snapshot for the requested model")',
-       'snapshot = {"price_version": "pv_mutant", "model_revision": request.model_revision,\n'
-       '                        "input_rate_per_million": "0", "output_rate_per_million": "0",\n'
-       '                        "token_rules_version": "tr_v1", "captured_at": self.clock.now()}',
+       'snapshot = PriceSnapshot(price_version="pv_mutant",\n'
+       '                                     model_revision=request.model_revision,\n'
+       '                                     input_rate_per_million=money.ZERO,\n'
+       '                                     output_rate_per_million=money.ZERO,\n'
+       '                                     token_rules_version="tr_v1",\n'
+       '                                     captured_at=now)',
+       "dur_admit__a_refused_admission_reserves_nothing"),
+    # r1 R45: the price is the store's fact. This is the shape the fake used to have.
+    _m("admit_prices_from_the_request", "the price never comes from the request (R45)",
+       S, "        snapshot = self.price_for(request.model_revision, now)",
+       "        snapshot = request.parameters.get(\"price_snapshot\") if request.parameters else None\n"
+       "        snapshot = PriceSnapshot.model_validate(snapshot) if snapshot else None",
+       "dur_settle__the_store_rounds_half_up_once",
+       "dur_admit__a_refused_admission_reserves_nothing"),
+    _m("admit_prices_another_model", "a price snapshot names the requested model (R45)",
+       S, "        if snapshot.model_revision != request.model_revision:",
+       "        if False:",
        "dur_admit__a_refused_admission_reserves_nothing"),
     _m("admit_reserves_before_validating", "a refused admission reserves nothing",
-       S, "            price = self._price(request)\n            self.journal.reserve(request.request_id)",
-       "            self.journal.reserve(request.request_id)\n            price = self._price(request)",
+       S, "            price = self._price(request, now)\n            self.journal.reserve(request.request_id)",
+       "            self.journal.reserve(request.request_id)\n            price = self._price(request, now)",
        "dur_admit__a_refused_admission_reserves_nothing"),
     _m("admit_accepts_a_negative_hold", "a negative maximum hold is refused (R11)",
        S, 'hold = money_input(hold, "the maximum hold")', "hold = money.parse(hold)",

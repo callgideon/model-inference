@@ -23,12 +23,18 @@ from .harness import hook
 
 
 async def _admit(harness, *, org_id=b.ORG_A, key_id=b.KEY_A, key="idem-1", grant="25.00",
-                 mode=ExecutionMode.stream, **kw):
-    """Fund the wallet, build a request and admit it. Returns (request, admission)."""
+                 mode=ExecutionMode.stream, price=None, **kw):
+    """Fund the wallet, build a request and admit it. Returns (request, admission).
+
+    `price` is the snapshot the store's price source is expected to answer with (r1
+    R45), used only to compute the caller's maximum hold; the request itself carries no
+    price. A case that moves the price source passes the same snapshot here.
+    """
     if grant is not None:
         harness.extra["grant"](org_id, grant)
     request = b.request(harness, org_id=org_id, key_id=key_id, mode=mode, **kw)
-    admission = await harness.port.admit(request, b.idem(request, key), (), b.hold_for(request))
+    admission = await harness.port.admit(request, b.idem(request, key), (),
+                                         b.hold_for(request, price))
     return request, admission
 
 
@@ -355,7 +361,12 @@ async def dur_admit__a_refused_admission_reserves_nothing(factory):
     harness = factory()
     harness.extra["grant"](b.ORG_A, "25.00")
     journal_bytes = hook(harness, "journal_bytes")
-    unpriced = b.request(harness).model_copy(update={"parameters": {}})
+    # r1 R45: "unpriced" is the price source having no row for the model, not a missing
+    # request parameter. Omitting a parameter proved nothing about a store that reads its
+    # own `price_versions` relation, which is every real store.
+    set_price = hook(harness, "set_price")
+    unpriced_model = f"{b.MODEL}-unpriced"
+    unpriced = b.request(harness, model_revision=unpriced_model)
     for _ in range(3):
         try:
             await harness.port.admit(unpriced, b.idem(unpriced, "unpriced"), (), money.ZERO)
@@ -363,6 +374,20 @@ async def dur_admit__a_refused_admission_reserves_nothing(factory):
             assert errors.http_status(exc.code) in (400, 403, 404), exc.code
         else:
             raise AssertionError("an unpriced model was admitted")
+    # and withdrawing the price of a model that had one closes the same door, as does a
+    # price source answering with another model's rates (which would settle this job at
+    # them)
+    for label, seeded in (("withdrawn", None),
+                          ("mismatched", b.price(model_revision=unpriced_model))):
+        set_price(b.MODEL, seeded)
+        bad_price = b.request(harness)
+        try:
+            await harness.port.admit(bad_price, b.idem(bad_price, label), (), money.ZERO)
+        except errors.DomainError as exc:
+            assert errors.http_status(exc.code) in (400, 403, 404), exc.code
+        else:
+            raise AssertionError(f"a {label} price was admitted")
+    set_price(b.MODEL, b.DEFAULT_PRICE)
     assert len(harness.extra["active_jobs"]()) == 0
     assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
     assert journal_bytes() == 0, "a refused admission leaked a journal reservation"
@@ -1120,6 +1145,11 @@ async def dur_settle__the_store_rounds_half_up_once(factory):
     whose SQL rounds up, truncates, or rounds each token line separately is caught:
     the ledger movement is asserted, not just the returned number."""
     harness = factory()
+    # r1 R45: the rate is the *store's* fact, so each round moves the injectable price
+    # source and admits at whatever it then answers. Handing four snapshots to four
+    # requests used to look like a rate test while really testing that the store echoed
+    # the client's own price back at it.
+    set_price = hook(harness, "set_price")
     # 1 prompt token at 0.005/M = 0.000000005 USD: exactly the half-up boundary, and
     # the ceiling-versus-half-up divergence the money fixtures pin.
     boundary = b.price(input_rate="0.005", output_rate="0.60")
@@ -1131,8 +1161,11 @@ async def dur_settle__the_store_rounds_half_up_once(factory):
                                         # 0.000099900 exactly: nothing to round, so a
                                         # store that rounds twice or ceilings is caught
                                         (333, 111), "0.00009990")):
-        request, admission = await _admit(harness, snapshot=snapshot, key=f"round-{expected}",
+        set_price(b.MODEL, snapshot)
+        request, admission = await _admit(harness, price=snapshot, key=f"round-{expected}",
                                           max_input_tokens=30_720, max_output_tokens=2_048)
+        assert admission.price_snapshot == snapshot, \
+            "the store settled at a price it did not snapshot from its own price source"
         before = harness.extra["balance"](request.org_id)
         outcome = await _settle(harness, request, admission, tokens=b.usage(*tokens))
         assert money.format_money(outcome.debit) == expected, (snapshot.input_rate_per_million,

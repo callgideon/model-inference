@@ -45,7 +45,7 @@ def hook(harness: "Harness", name: str):
 OPTIONAL_HOOKS: dict[str, frozenset[str]] = {
     "jobstore": frozenset({"publish", "revoke_key", "unrevoke_key", "suspend_org", "unentitle",
                            "entitle", "retune", "journal_bytes", "failures", "stream",
-                           "unsettleable"}),
+                           "unsettleable", "set_price"}),
     "streamstore": frozenset({"jobs", "journal_bytes", "failures"}),
     "mediastore": frozenset({"put_object", "attach"}),
     "scheduler": frozenset({"jobs"}),
@@ -73,7 +73,10 @@ class Harness:
     as `reap()` and as `reap(-100.0)`, so it must accept an optional grace period and
     clamp a negative one; `journal_bytes() -> int`; `balance(org_id) -> dict` with
     `ledger`/`reserved`/`available`; `retune(**limit_changes)`; `unsettleable() -> dict`
-    of job id to error code; `content_budget() -> int`; `queued() -> list`.
+    of job id to error code; `content_budget() -> int`; `queued() -> list`;
+    `set_price(model_revision: str, snapshot: PriceSnapshot | None)` writes the store's
+    injectable price source and `None` withdraws the price, so a case can price one model
+    at four rates and make another unpriced without the request carrying either (r1 R45).
 
     The streamstore, scheduler and feedback factories also publish `extra["jobs"]`,
     the JobStore a case needs to admit a job first. The cases only ever call *port*
