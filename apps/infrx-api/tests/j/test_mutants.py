@@ -26,7 +26,11 @@ SUBSET = ("consent_from_the_snapshot_only", "stratum_bound_ignored", "score_rang
           "dedupe_key_drops_the_rubric_version", "limited_flag_lost", "duplicates_sampled_twice",
           "feedback_org_not_checked", "guard_trusts_the_estimates_total",
           "rate_lookup_takes_the_first_row", "scan_bound_not_enforced",
-          "consent_checked_after_the_read")
+          "consent_checked_after_the_read",
+          # round-3: one per blocking item the second review raised
+          "recursion_error_escapes_the_parse_guard", "worst_case_uses_the_ambient_context",
+          "describe_echoes_a_string", "superseded_price_version_accepted",
+          "dedupe_runs_before_the_tenant_filter", "a_malformed_row_is_interpreted")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 SUITE_DIR = pathlib.Path(__file__).resolve().parent
@@ -86,6 +90,27 @@ def test_the_required_invariants_each_have_a_mutant():
         "the refusal ordering": ("consent_checked_after_the_read",),
         "the JudgeRun projection": ("judge_run_is_not_a_dry_run", "judge_run_reserves_money"),
         "no provider SDK": ("provider_sdk_imported_on_the_dry_run_path",),
+        # round 3
+        "R2-B1 the parse guard": ("recursion_error_escapes_the_parse_guard",
+                                  "lone_surrogate_accepted", "payload_type_checked_loosely",
+                                  "score_type_checked_loosely",
+                                  "rationale_type_checked_loosely"),
+        "R2-B2 the explicit context": ("worst_case_uses_the_ambient_context",
+                                       "worst_case_takes_any_ceilings"),
+        "R2-B3 no payload echo": ("describe_echoes_a_string", "describe_echoes_an_integer",
+                                  "unexpected_key_echoed", "duplicate_key_echoed",
+                                  "json_error_echoes_the_document", "detail_cap_overshoots"),
+        "R2-B4 the five survivors": ("superseded_price_version_accepted",
+                                     "priced_without_a_version",
+                                     "consent_window_end_is_inclusive",
+                                     "the_plan_prices_at_the_lookback_start",
+                                     "the_guard_is_asked_at_the_lookback_start"),
+        "R2 the tenant filter first": ("dedupe_runs_before_the_tenant_filter",
+                                       "dedupe_on_the_raw_request_id",
+                                       "canonical_id_keeps_the_case",
+                                       "a_respelled_duplicate_is_a_conflict"),
+        "R2 one bad row": ("a_malformed_row_is_interpreted", "a_future_row_is_a_candidate"),
+        "R2 fail closed": ("the_predicate_reraises", "ledger_raises_on_an_unusable_sample_id"),
     }
     declared = {m.name for m in ALL}
     for invariant, names in required.items():
@@ -136,9 +161,9 @@ SELF_TESTS = (
     ("an_undeclared_exception_death_is_not_a_kill", mutation_list.Outcome.broken_runner,
      mutation_list.Mutant(name="self_crash", invariant="a kill is assertion-shaped",
                           file="judge/rubric.py",
-                          old='        return f"<unprintable {type(value).__name__}>"',
+                          old='        return "<undescribable>"',
                           new="        raise",
-                          cases=("test_a_hostile_payload_is_rejected_rather_than_raised",))),
+                          cases=("test_describe_reports_what_a_value_is_never_what_it_says",))),
     ("a_missing_anchor_is_a_failure", mutation_list.Outcome.misdeclared,
      mutation_list.Mutant(name="self_missing_anchor", invariant="the list matches the code",
                           file="judge/cost.py", old="this text is not in the module",
@@ -161,8 +186,8 @@ def test_the_same_defect_is_a_kill_once_its_exception_is_declared():
     """The other half of the classification: an invariant whose honest kill *is* an
     exception (`validate_output` never raises) declares it, and then the *same edit* is a
     kill rather than a runner error - the self-test above runs it undeclared."""
-    declared = next(m for m in ALL if m.name == "brief_lets_an_unprintable_value_raise")
-    assert declared.dies_by == ("ValueError",)
+    declared = next(m for m in ALL if m.name == "describe_lets_an_undescribable_value_raise")
+    assert declared.dies_by == ("RuntimeError",)
     assert declared.old == SELF_TESTS[3][2].old and declared.new == SELF_TESTS[3][2].new
     assert mutation_list.run_mutant(declared).killed
 
