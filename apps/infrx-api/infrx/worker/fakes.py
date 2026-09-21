@@ -113,11 +113,12 @@ class FakeUpstream:
     **pulled** - the honest measure of "it stopped reading"), `completed` (whether the
     script ran to its end), `error_bytes` (how much of an oversized error body was read).
 
-    `closed` is deliberately **not** proof of anything: with `MockTransport` httpx does not
-    close the content iterator when the response closes, so `closed` only becomes true when
-    the event loop finalises the abandoned generator at shutdown (measured: after
-    `asyncio.run` returns, never before). Whether the real socket closes - which is what
-    stops generation in vLLM - is a Layer-3 fact for W3, not something a mock can show.
+    `closed` **is** proof now: the body is an `httpx.AsyncByteStream` with its own `aclose`,
+    which httpx calls when the response closes, so a case can assert - inside the coroutine -
+    that the adapter closed its side. (Passing an async generator as `content=` does not give
+    this: httpx never closes it, and `closed` only flipped when the loop finalised the
+    abandoned generator at shutdown, which is why the round-2 assertion proved nothing.)
+    Whether the real socket closing stops generation in vLLM is still a Layer-3 fact for W3.
     """
 
     fault: str = "none"
@@ -233,14 +234,21 @@ class FakeUpstream:
             self.chunks_sent += 1
             yield b"y" * self.flood_chunk_bytes
 
-    async def _counted(self, frames):
-        """Count what the adapter pulls, and note when the generator is finalised."""
-        try:
-            async for frame in frames:
-                self.frames_sent += 1
-                yield frame
-        finally:
-            self.closed = True
+    def _body(self, frames) -> httpx.AsyncByteStream:
+        """The response body as a real `AsyncByteStream`, so `aclose` is observable."""
+        upstream = self
+
+        class _CountedBody(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                async for frame in frames:
+                    upstream.frames_sent += 1
+                    yield frame
+
+            async def aclose(self) -> None:
+                upstream.closed = True
+                await frames.aclose()
+
+        return _CountedBody()
 
     async def _byte_script(self):
         """Faults that are about *bytes*, so they are yielded as chunks rather than frames:
@@ -397,9 +405,9 @@ class FakeUpstream:
             raise httpx.ConnectTimeout("the engine did not accept the connection",
                                        request=request)
         if self.fault == "engine_error_pre_headers":
-            return httpx.Response(500, content=self._error_body())
+            return httpx.Response(500, stream=self._body(self._error_body()))
         return httpx.Response(200, headers={"content-type": "text/event-stream"},
-                              content=self._counted(self._stream()))
+                              stream=self._body(self._stream()))
 
     def client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(base_url="http://engine.invalid",

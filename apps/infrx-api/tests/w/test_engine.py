@@ -1263,10 +1263,11 @@ def test_api_stream__cancellation_closes_the_upstream_stream():
 
     events = asyncio.run(cancel_after_two())
     assert len(raws(events)) < upstream.long_stream_deltas
-    # "it stopped reading" is the honest measure: the script had 200 deltas to give and the
-    # adapter pulled a handful, and it closed its side of the response.
+    # Two independent measures: the script had 200 deltas to give and the adapter pulled a
+    # handful, and httpx called `aclose` on the body when the adapter left its `async with`
+    # (the body is a real `AsyncByteStream`, so that call is observable).
     assert upstream.frames_sent < upstream.long_stream_deltas // 4, upstream.frames_sent
-    assert not upstream.completed and stream.upstream_closed
+    assert upstream.closed and not upstream.completed and stream.upstream_closed
     assert stream.cancelled and len(usages(events)) == 1
     assert usages(events)[0].usage is None and stream.usage is None
     assert usages(events)[0].payload["certainty"] == "unknown"
@@ -1438,6 +1439,7 @@ def test_api_stream__a_cancellation_is_scoped_to_its_generation():
         # who stopped the read. `frames_sent` and `upstream_closed` are what do.
         pulled = upstream.frames_sent
         assert stream.upstream_closed, "aclose did not close the response"
+        assert upstream.closed, "httpx never closed the body"
         assert not upstream.completed and pulled <= 3, pulled
         with pytest.raises(StopAsyncIteration):
             await stream.__anext__()

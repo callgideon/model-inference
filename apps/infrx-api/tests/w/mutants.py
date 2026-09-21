@@ -529,8 +529,23 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "        while len(self.finished) > MAX_CANCEL_INTENTS:", "        while False:",
        LIFECYCLE),
     _m("intent_outlives_the_stream", "an intent is cleared on every exit path (R58)",
-       E, "            self.cancelled.pop(key, None)\n            self._remember_finished(key)",
-       "            self._remember_finished(key)", CANCEL),
+       E, "            self._retire(key)", "            pass", CANCEL, LIFECYCLE),
+    _m("retire_keeps_the_intent", "retiring clears the intent, not just the key",
+       E, "        self.cancelled.pop(key, None)\n        self._remember_finished(key)",
+       "        self._remember_finished(key)", LIFECYCLE),
+    _m("inner_generator_not_closed", "a consumer that stops reading closes the engine now",
+       E, "            await inner.aclose()\n"
+          "            # Every exit path, including `upstream_body` refusing before a request was ever",
+       "            # Every exit path, including `upstream_body` refusing before a request was ever",
+       CANCEL_SCOPE),
+    _m("run_does_not_close_its_inner", "the generate boundary closes what it delegated to",
+       E, "            # Deterministic cleanup: a consumer that stops iterating (or closes this\n"
+          "            # generator) must close the upstream stream *now*, not whenever the event\n"
+          "            # loop finalises an abandoned async generator.\n"
+          "            await inner.aclose()",
+       "            pass", CANCEL_SCOPE),
+    _m("response_not_closed", "leaving the stream closes the response",
+       E, "            stream.upstream_closed = True", "            pass", CANCEL_SCOPE),
     # --- readiness ------------------------------------------------------------
     _m("drain_is_not_observable", "drain stops reporting ready",
        E, '        if self.drained:\n            return {"ready": False, "drained": True,',
