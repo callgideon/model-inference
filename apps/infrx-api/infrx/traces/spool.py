@@ -724,6 +724,7 @@ class SpoolTraceSink(FakeTraceSink):
         on the loop thread they were a 2-second event-loop stall on a slow disk. The list
         bookkeeping stays on the loop (it is the loop's data); only the syscalls move.
         """
+        self._executor()          # refuses a closed sink before any bookkeeping moves
         with self._lock:
             segment = next((s for s in self._segments if s.name == name), None)
             if segment is None or not segment.sealed:

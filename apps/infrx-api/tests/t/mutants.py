@@ -41,6 +41,7 @@ RECOVER = "test_recovery_replays_only_fsynced_records_and_tolerates_a_torn_tail"
 TWICE = "test_replaying_twice_yields_each_record_exactly_once"
 CORRUPT = "test_a_corrupt_record_is_not_replayed_and_stops_the_tail"
 VERSION = "test_an_unknown_segment_version_is_never_half_parsed"
+POISON = "test_a_poison_record_does_not_stop_the_scan"
 CEILING = "test_a_frame_claiming_more_than_a_frame_may_hold_is_the_tail"
 ROTATE = "test_rotation_seals_by_size_and_keeps_every_record"
 ACK = "test_the_shipper_acks_whole_segments_and_nothing_is_ever_truncated"
@@ -54,6 +55,22 @@ SHUTDOWN = "test_shutdown_is_a_counted_loss_not_a_silent_one"
 AGREE = "test_the_declared_content_and_the_charged_bytes_must_agree"
 OVERSIZE = "test_an_envelope_too_large_for_a_frame_is_refused_not_written"
 PRUNE = "test_the_capture_list_is_pruned_so_reap_stays_bounded"
+# round 2
+LOOP = "test_no_filesystem_call_ever_happens_on_the_event_loop"
+OPEN_FAIL = "test_a_failed_segment_open_leaks_no_descriptor_and_no_file"
+CANCELLED = "test_a_cancelled_flush_still_settles_its_batch"
+WRITER_BUG = "test_a_writer_error_that_is_not_an_oserror_still_settles_the_batch"
+ONE_FLUSH = "test_only_one_flush_is_ever_in_flight"
+ID_REUSE = "test_a_record_id_is_never_reused_after_an_ack_and_a_restart"
+BITFLIP = "test_a_flipped_bit_in_a_frame_header_is_the_tail_never_a_wrong_identity"
+ONE_LOSS = "test_one_capture_counts_one_loss_even_when_the_writer_refuses_it"
+PARTS = "test_retained_content_is_released_with_its_charge"
+METADATA = "test_the_metadata_reserve_is_released_as_rows_are_written"
+FSYNC_ROUNDS = "test_repeated_fsync_rounds_count_each_record_once"
+IDLE_FSYNC = "test_an_idle_flush_fsyncs_the_appended_tail"
+TWO_SINKS = "test_two_sinks_cannot_share_one_spool_directory"
+CLOSED = "test_a_closed_sink_refuses_and_starts_no_second_writer"
+TORN_AT = "test_a_torn_tail_reports_where_it_stopped"
 
 
 @dataclass(frozen=True)
@@ -79,11 +96,24 @@ def _m(name, invariant, old, new, *cases) -> Mutant:
 MUTANTS: tuple[Mutant, ...] = (
     # --- the segment format and its reader -------------------------------------
     _m("checksum_not_verified", "a corrupt record is never replayed",
-       "        if binascii.crc32(content, binascii.crc32(payload)) != crc:",
+       "        if frame_checksum(payload, (content,), content_bytes) != crc:",
        "        if False:", CORRUPT),
+    _m("the_checksum_ignores_the_lengths", "a frame's lengths are inside its checksum",
+       "    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes))\n"
+       "    crc = binascii.crc32(payload, crc)",
+       "    crc = binascii.crc32(payload)", BITFLIP),
+    _m("the_reader_numbers_records_by_hand", "a record's id is its verified position",
+       "        position, index = index, index + 1", "        position, index = 0, index + 1",
+       BITFLIP),
+    _m("a_poison_record_shifts_the_ids_after_it", "a poison row does not renumber the rest",
+       "            scan.poison += 1\n            continue",
+       "            scan.poison += 1\n            index -= 1\n            continue",
+       POISON),
     _m("torn_tail_crashes_the_reader", "a torn tail is tolerated, not raised",
-       "        if len(data) - offset < FRAME.size:\n            scan.torn += 1\n            break",
-       "        if False:\n            scan.torn += 1\n            break",
+       "        if len(data) - offset < FRAME.size:\n"
+       "            _torn(scan, name, offset, len(data))\n            break",
+       "        if False:\n"
+       "            _torn(scan, name, offset, len(data))\n            break",
        RECOVER),
     _m("a_frame_past_the_reader_ceiling_is_read", "the reader's frame ceiling is the writer's",
        "        if envelope_bytes > MAX_ENVELOPE_BYTES or len(data) - body",
@@ -104,8 +134,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "    for name in segment_names(directory, reader) * 2:", TWICE),
     # --- the fsync boundary ----------------------------------------------------
     _m("fsync_claimed_at_every_flush", "durability begins at fsync, not at append",
-       "        fsync_due = (now - self._last_fsync).total_seconds() >= self.limits.trace_fsync_interval_s",
-       "        fsync_due = True", CONFORMANCE),
+       "            fsync_due = ((now - self._last_fsync).total_seconds()\n"
+       "                         >= self.limits.trace_fsync_interval_s)",
+       "            fsync_due = True", CONFORMANCE),
     _m("stats_reports_appended_as_fsynced", "appended and fsynced are separate states",
        '            "fsynced": self.fsynced_records,', '            "fsynced": self.appended_records,',
        CONFORMANCE, RECOVER, FSYNC_ERROR),
@@ -152,19 +183,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "                       or False)",
        FLOOR),
     _m("a_paused_sink_still_takes_records", "at the cap a record is refused, not queued",
-       "        if self.paused:\n            # Nowhere for this record to land",
-       "        if False:\n            # Nowhere for this record to land",
+       "        elif self.paused:\n            # Nowhere for this record to land",
+       "        elif False:\n            # Nowhere for this record to land",
        FULL_SPOOL),
-    _m("the_pause_never_lifts", "a freed disk resumes capture",
-       "            self._refuse_bytes(self._refused_need)\n"
-       "        assert len(self.queued) == len(self._pending)",
-       "            pass\n"
-       "        assert len(self.queued) == len(self._pending)",
-       FLOOR),
     # --- the request path never pays -------------------------------------------
     _m("the_writer_runs_on_the_event_loop", "the request path never waits for the disk",
-       "        result = await self._run(self._write_batch, batch, fsync_due)",
-       "        result = self._write_batch(batch, fsync_due)", SLOW),
+       "            future = self._submit(self._write_batch, batch, fsync_due)",
+       "            future = asyncio.get_running_loop().create_future()\n"
+       "            future.set_result(self._write_batch(batch, fsync_due))", SLOW, LOOP),
     _m("an_unserializable_envelope_raises", "nothing in the trace path raises into the request",
        "            except Exception:                 # noqa: BLE001 - R37: never raise into the",
        "            except ZeroDivisionError:         # noqa: BLE001 - R37: never raise into the",
@@ -173,7 +199,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "                if len(payload) > MAX_ENVELOPE_BYTES:", "                if False:",
        OVERSIZE),
     _m("understated_content_is_accepted", "the bytes held and the bytes declared agree",
-       "        elif len(content) != envelope.content_bytes:", "        elif False:",
+       "        elif content_bytes != envelope.content_bytes:", "        elif False:",
        AGREE),
     _m("shutdown_is_a_silent_loss", "a process that stops counts what it dropped",
        "            self.loss_reasons[TraceLossReason.shutdown] += lost\n"
@@ -182,6 +208,126 @@ MUTANTS: tuple[Mutant, ...] = (
        SHUTDOWN),
     _m("the_capture_list_grows_for_ever", "the capture list is bounded",
        "        if len(self.captures) >= self._prune_at:", "        if False:", PRUNE),
+
+    # --- round 1 of review: the request path never waits for a syscall --------------
+    _m("the_pause_recheck_runs_on_the_loop", "no syscall on the event loop (B1)",
+       "        if not batch and self.paused:\n"
+       "            # Nothing to write, but the pause is this thread's to re-evaluate",
+       "        if False:\n"
+       "            # Nothing to write, but the pause is this thread's to re-evaluate",
+       LOOP, FLOOR),
+    _m("ack_unlinks_on_the_callers_thread", "an ack's syscalls belong to the writer (B1)",
+       "        await self._run(self._unlink_acked, segment.path)",
+       "        self._unlink_acked(segment.path)", LOOP),
+    _m("the_shipper_reads_on_the_loop", "a segment read belongs to the writer (B1)",
+       "        return await self._run(self._read_segment, name)",
+       "        return self._read_segment(name)", LOOP),
+    # --- the descriptor and the orphan ----------------------------------------------
+    _m("a_failed_open_keeps_its_descriptor", "a failed segment open closes its fd (B2)",
+       "            self._close_segment(segment)\n            try:\n"
+       "                self.io.unlink(path)",
+       "            try:\n"
+       "                self.io.unlink(path)", OPEN_FAIL),
+    _m("a_failed_open_leaves_the_file", "a header-less segment is not left behind (B2)",
+       "                self.io.unlink(path)\n            except OSError:\n                pass\n"
+       "            raise",
+       "                pass\n            except OSError:\n                pass\n"
+       "            raise", OPEN_FAIL),
+    # --- the batch is always settled --------------------------------------------------
+    _m("a_cancelled_flush_strands_its_batch", "the batch is settled by the future (B3)",
+       "            future.add_done_callback(settled)", "            pass",
+       CANCELLED, WRITER_BUG),
+    _m("the_writer_only_catches_oserror", "a writer bug does not eat accepted records (B3)",
+       "            except Exception:                    # noqa: BLE001", "            except OSError:",
+       WRITER_BUG),
+    _m("settlement_ignores_a_failed_writer", "a failed writer batch is counted (B3)",
+       "            result = _WriteResult(dropped=[(TraceLossReason.disk_error, row.counted)\n"
+       "                                           for row in self.batch])",
+       "            result = _WriteResult()", WRITER_BUG),
+    _m("flushes_run_concurrently", "one flush in flight bounds what memory holds (B3)",
+       "        async with self._flush_lock:", "        if True:", ONE_FLUSH),
+    # --- stable ids -------------------------------------------------------------------
+    _m("segment_names_forget_the_boot", "a segment name is unique for all time (B4)",
+       'name = (f"{SEGMENT_PREFIX}{self.boot_id}-"\n'
+       '                        f"{self._next_index:06d}{SEGMENT_SUFFIX}")',
+       'name = f"{SEGMENT_PREFIX}{self._next_index:06d}{SEGMENT_SUFFIX}"',
+       ID_REUSE),
+    # --- R42 across the writer --------------------------------------------------------
+    _m("writer_drops_forget_the_capture", "one loss per capture, writer included (B5)",
+       "            self._drop(reason, counted=counted)", "            self._drop(reason)",
+       ONE_LOSS),
+    _m("the_row_forgets_its_loss", "the loss flag travels with the row (B5)",
+       "        counted = capture.counted if capture is not None else False",
+       "        counted = False", ONE_LOSS),
+    _m("fsync_losses_counted_per_record", "an fsync error counts first losses only (B5)",
+       "            result.fsync_losses += sum(1 for counted in flags if not counted)",
+       "            result.fsync_losses += len(flags)", ONE_LOSS),
+    # --- the surviving invariants of round 1 ------------------------------------------
+    _m("discard_keeps_the_content_parts", "a discarded capture releases its bytes (R20)",
+       "        self.parts.clear()\n        super()._discard(reason)",
+       "        super()._discard(reason)", PARTS),
+    _m("take_content_keeps_the_parts", "a handed-over capture keeps no copy (R21)",
+       "        parts = tuple(self.parts) if declared else ()\n"
+       "        total = sum(len(part) for part in parts)\n        self.parts.clear()",
+       "        parts = tuple(self.parts) if declared else ()\n"
+       "        total = sum(len(part) for part in parts)", PARTS),
+    _m("the_metadata_charge_is_never_released", "a written row frees its metadata (R24)",
+       "        sink.metadata_bytes = max(0, sink.metadata_bytes\n"
+       "                                  - sum(row.metadata_bytes for row in self.batch))",
+       "        sink.metadata_bytes = sink.metadata_bytes", METADATA),
+    _m("synced_records_never_advance", "fsynced counts each record once (R03)",
+       "        segment.synced_records = segment.records\n        segment.unsynced_counted = []",
+       "        segment.unsynced_counted = []", FSYNC_ROUNDS),
+    _m("an_idle_flush_never_fsyncs", "the appended tail becomes durable on a quiet host (R35)",
+       "            if not batch and not self.paused and not (fsync_due and self._unsynced()):",
+       "            if not batch:", IDLE_FSYNC),
+    _m("rotation_ignores_the_incoming_record", "a segment's size bound includes the record (R06)",
+       "            if active.written + need <= self.segment_max_bytes or active.records == 0:",
+       "            if active.written <= self.segment_max_bytes or active.records == 0:",
+       ROTATE),
+    _m("an_oversize_record_rotates_for_ever", "a record too big for a segment still lands (R07)",
+       "            if active.written + need <= self.segment_max_bytes or active.records == 0:",
+       "            if active.written + need <= self.segment_max_bytes:", ROTATE),
+    _m("the_rest_of_the_batch_is_written_anyway", "a broken handle writes nothing more (R19)",
+       "            if broken:\n                result.dropped.append((TraceLossReason.disk_error, row.counted))\n"
+       "                continue",
+       "            if False:\n                result.dropped.append((TraceLossReason.disk_error, row.counted))\n"
+       "                continue", WRITE_ERROR),
+    _m("shutdown_is_not_a_dropped_record", "a shutdown loss is a dropped record (R25)",
+       "            self.dropped += lost\n            self.loss_reasons[TraceLossReason.shutdown] += lost",
+       "            self.loss_reasons[TraceLossReason.shutdown] += lost", SHUTDOWN),
+    _m("close_does_not_seal", "an orderly close promises what it can (R42)",
+       "            _name, result = await self._run(self._seal_active)\n            self._apply(result)",
+       "            result = _WriteResult()\n            self._apply(result)", SHUTDOWN),
+    _m("crash_keeps_the_record_count", "a crash's bookkeeping follows its truncation (R40)",
+       "                segment.records = segment.synced_records\n"
+       "                segment.unsynced_counted = []",
+       "                segment.unsynced_counted = []", RECOVER),
+    _m("a_checksum_failure_discards_the_segment", "a torn tail keeps what came before (R41)",
+       "        if frame_checksum(payload, (content,), content_bytes) != crc:\n"
+       "            _torn(scan, name, offset, len(data))\n            break",
+       "        if frame_checksum(payload, (content,), content_bytes) != crc:\n"
+       "            _torn(scan, name, offset, len(data))\n            return Scan()",
+       CORRUPT),
+    _m("an_unmeasurable_disk_is_an_empty_one", "a disk that cannot be measured fails closed (R14)",
+       "        except OSError:\n            free = 0", "        except OSError:\n            free = 1 << 62",
+       FLOOR),
+    _m("the_floor_ignores_the_incoming_record", "the free-disk floor includes the record (R13)",
+       "                       or free - need < self.limits.trace_spool_min_free_bytes)",
+       "                       or free < self.limits.trace_spool_min_free_bytes)", FLOOR),
+    # --- what round 1 asked for beyond the blocking list -------------------------------
+    _m("two_sinks_share_a_directory", "one writer per spool directory", 
+       "        self._dir_lock: int | None = self.io.lock_dir(self.spool_dir) if lock_dir else None",
+       "        self._dir_lock: int | None = None", TWO_SINKS),
+    _m("a_closed_sink_still_accepts", "a closed sink keeps nothing", 
+       "        if self._closed:\n            # A closed sink keeps nothing",
+       "        if False:\n            # A closed sink keeps nothing", CLOSED),
+    _m("a_closed_sink_starts_a_writer", "a closed sink starts no second writer",
+       '        if self._closed:\n            # A closed sink does not quietly start a second writer thread for a late call.\n'
+       '            raise RuntimeError("this trace sink is closed")',
+       '        if False:\n            raise RuntimeError("this trace sink is closed")', CLOSED),
+    _m("a_torn_tail_says_nothing_about_itself", "a torn tail reports where it stopped",
+       "    scan.unread_bytes += size - offset", "    scan.unread_bytes += 0", TORN_AT),
 )
 
 

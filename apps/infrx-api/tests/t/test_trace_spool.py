@@ -394,6 +394,31 @@ def test_a_frame_claiming_more_than_a_frame_may_hold_is_the_tail():
     assert scan.torn == 1 and scan.poison == 0 and scan.records == []
 
 
+def test_a_frame_whose_lengths_were_swapped_is_the_tail():
+    """The checksum covers the two length fields, not only the bytes after them.
+
+    A corruption that moves the envelope/content boundary without changing the total -
+    one byte more envelope, one byte less content - leaves the checksummed *bytes*
+    identical, so a checksum over the payload alone still agrees while the reader frames a
+    different record: a truncated envelope (poison, at best) and content missing a byte.
+    """
+    async def scenario():
+        spool = sink()
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        await capture_one(spool, ID_A, b"content whose last byte must not go missing")
+        await spool.flush(spool.clock.now())
+        name = spool.segments()[0].name
+        await spool.close()
+        data = bytearray((spool.spool_dir / name).read_bytes())
+        envelope_bytes, content_bytes, crc = FRAME.unpack_from(data, HEADER.size)
+        FRAME.pack_into(data, HEADER.size, envelope_bytes + 1, content_bytes - 1, crc)
+        scan = scan_segment(name, bytes(data))
+        assert scan.records == [] and scan.contents == [], \
+            "a moved frame boundary was read as a record"
+        assert scan.torn == 1 and scan.poison == 0, scan.line()
+    asyncio.run(scenario())
+
+
 def test_an_unknown_segment_version_is_never_half_parsed():
     """A segment a future writer produced is left alone rather than guessed at."""
     scan = scan_segment("trace-000000.seg", HEADER.pack(b"INFRXTRC", 99) + b"whatever")
@@ -406,24 +431,30 @@ def test_rotation_seals_by_size_and_keeps_every_record():
     """Segments rotate by size, and a rotation fsyncs before it closes: sealing an
     unsynced tail would quietly unpromise records this process had already appended."""
     async def scenario():
-        spool = sink(segment_max_bytes=512)
+        # The bound has to be bigger than a record, or every record takes the "too big to
+        # fit anywhere" escape and the threshold itself is never exercised. Five that fit,
+        # one that cannot, two more that fit.
+        spool = sink(segment_max_bytes=2_048)
         spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
-        for index in range(6):
+        for index in range(5):
+            await capture_one(spool, request_id(index), b"y" * 200)
+        await capture_one(spool, request_id(5), b"Y" * 4_000)      # larger than a segment
+        for index in range(6, 8):
             await capture_one(spool, request_id(index), b"y" * 200)
         await spool.flush(spool.clock.now())
         views = spool.segments()
         assert len(views) > 1, "no rotation happened at all"
-        assert sum(view.records for view in views) == 6
+        assert sum(view.records for view in views) == 8
         # The bound is the configured one, not a generous multiple of it: a segment may
         # only exceed it when it holds a single record too big to fit anywhere (and then it
         # holds exactly that one). A loose bound here let rotation ignore the incoming
         # record's size entirely.
-        assert all(view.bytes <= 512 or view.records == 1 for view in views), \
+        assert all(view.bytes <= 2_048 or view.records == 1 for view in views), \
             [(v.bytes, v.records) for v in views]
         assert all(view.records >= 1 for view in views), "an empty segment was created"
         stats = await spool.stats()
-        assert stats["appended"] == 6 and stats["fsynced"] == 6, stats
-        assert len(recover(spool.spool_dir).records) == 6
+        assert stats["appended"] == 8 and stats["fsynced"] == 8, stats
+        assert len(recover(spool.spool_dir).records) == 8
         await spool.close()
     asyncio.run(scenario())
 
@@ -1098,6 +1129,19 @@ def test_a_closed_sink_refuses_and_starts_no_second_writer():
         assert stats["loss_reasons"]["shutdown"] == 1
         assert threading.active_count() <= threads_before, "a closed sink started a writer"
         assert stats["appended"] == 1
+        # the shipper's calls are refused too, rather than quietly starting a thread.
+        # Built lazily: a coroutine created and never awaited is its own warning.
+        sealed = spool.segments()[0].name
+        for late_call in (lambda: spool.rotate(), lambda: spool.ack(sealed),
+                          lambda: spool.read_segment(sealed)):
+            try:
+                await late_call()
+            except RuntimeError as error:
+                assert "closed" in str(error), error
+            else:
+                raise AssertionError("a closed sink served a late call")
+        assert spool.segments()[0].name == sealed, "a refused ack still dropped the segment"
+        assert threading.active_count() <= threads_before
     asyncio.run(scenario())
 
 
