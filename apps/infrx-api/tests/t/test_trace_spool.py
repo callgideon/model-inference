@@ -1054,11 +1054,15 @@ def test_a_writer_error_that_is_not_an_oserror_still_settles_the_batch():
     records the sink has already reported accepted. Both layers are checked - a non-OSError
     from the filesystem, and the whole call failing."""
     async def scenario():
-        spool = sink(io=DrillIO(fail_write_on=2, write_error=RuntimeError("boom")))
+        # The failure lands on the *second* row (header, r0 head, r0 content, r1 head, boom),
+        # so the row that was already appended must survive it: a non-OSError caught only at
+        # the settlement would cost the whole batch instead of the rest of it.
+        spool = sink(io=DrillIO(fail_write_on=5, write_error=RuntimeError("boom")))
         for index in range(5):
             await capture_one(spool, request_id(index), b"z" * 1_000)
         stats = await spool.flush(spool.clock.now())
-        assert stats["appended"] + stats["dropped"] == 5, stats
+        assert stats["appended"] == 1, stats
+        assert stats["dropped"] == 4, stats
         assert stats["loss_reasons"]["disk_error"] == stats["dropped"]
         assert stats["in_memory_content_bytes"] == 0, "a RuntimeError kept the charge"
         await spool.close()

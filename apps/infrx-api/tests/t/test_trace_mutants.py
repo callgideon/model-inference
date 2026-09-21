@@ -61,8 +61,8 @@ def test_the_runner_cannot_report_a_false_kill():
                               old="class SpoolIO:", new="class SpoolIO:::", cases=(case,))),
         (mutation_list.Outcome.survived,
          mutation_list.Mutant(name="self_no_op", invariant="an edit that changes nothing survives",
-                              old="SEGMENT_VERSION = 1",
-                              new="SEGMENT_VERSION = 1  # a comment changes no behaviour",
+                              old="SEGMENT_VERSION = 2",
+                              new="SEGMENT_VERSION = 2  # a comment changes no behaviour",
                               cases=(case,))),
         (mutation_list.Outcome.misdeclared,
          mutation_list.Mutant(name="self_missing_anchor", invariant="the list matches the code",
@@ -70,7 +70,7 @@ def test_the_runner_cannot_report_a_false_kill():
                               cases=(case,))),
         (mutation_list.Outcome.misdeclared,
          mutation_list.Mutant(name="self_no_case", invariant="every mutant names a case",
-                              old="SEGMENT_VERSION = 1", new="SEGMENT_VERSION = 2", cases=())),
+                              old="SEGMENT_VERSION = 2", new="SEGMENT_VERSION = 3", cases=())),
     )
     for expected, mutant in checks:
         result = mutation_list.run_mutant(mutant)

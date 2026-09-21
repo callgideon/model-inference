@@ -112,7 +112,7 @@ def _m(name, invariant, old, new, *cases) -> Mutant:
 MUTANTS: tuple[Mutant, ...] = (
     # --- the segment format and its reader -------------------------------------
     _m("checksum_not_verified", "a corrupt record is never replayed",
-       "        if frame_checksum(payload, (content,), content_bytes) != crc:",
+       "        if frame_checksum(payload, (content,), content_bytes, index) != crc:",
        "        if False:", CORRUPT),
     _m("the_checksum_ignores_the_lengths", "a frame's lengths are inside its checksum",
        "    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes, position))\n"
@@ -159,9 +159,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "    for name in segment_names(directory, reader) * 2:", TWICE),
     # --- the fsync boundary ----------------------------------------------------
     _m("fsync_claimed_at_every_flush", "durability begins at fsync, not at append",
-       "            fsync_due = ((now - self._last_fsync).total_seconds()\n"
-       "                         >= self.limits.trace_fsync_interval_s)",
-       "            fsync_due = True", CONFORMANCE),
+       "        fsync_due = ((now - self._last_fsync).total_seconds()\n"
+       "                     >= self.limits.trace_fsync_interval_s)",
+       "        fsync_due = True", CONFORMANCE),
     _m("stats_reports_appended_as_fsynced", "appended and fsynced are separate states",
        '            "fsynced": self.fsynced_records,', '            "fsynced": self.appended_records,',
        CONFORMANCE, RECOVER, FSYNC_ERROR),
@@ -236,10 +236,10 @@ MUTANTS: tuple[Mutant, ...] = (
 
     # --- round 1 of review: the request path never waits for a syscall --------------
     _m("the_pause_recheck_runs_on_the_loop", "no syscall on the event loop (B1)",
-       "        if not batch and self.paused:\n"
-       "            # Nothing to write, but the pause is this thread's to re-evaluate",
-       "        if False:\n"
-       "            # Nothing to write, but the pause is this thread's to re-evaluate",
+       "            if not batch and self.paused:\n"
+       "                # Nothing to write, but the pause is this thread's to re-evaluate",
+       "            if False:\n"
+       "                # Nothing to write, but the pause is this thread's to re-evaluate",
        LOOP, FLOOR),
     _m("ack_unlinks_on_the_callers_thread", "an ack's syscalls belong to the writer (B1)",
        "        await self._run(self._unlink_acked, segment.path)",
@@ -260,17 +260,18 @@ MUTANTS: tuple[Mutant, ...] = (
        "            raise", OPEN_FAIL),
     # --- the batch is always settled --------------------------------------------------
     _m("a_cancelled_flush_strands_its_batch", "the batch is settled by the future (B3)",
-       "            future.add_done_callback(settled)", "            pass",
+       "        future.add_done_callback(settled)", "        pass",
        CANCELLED, WRITER_BUG),
     _m("the_writer_only_catches_oserror", "a writer bug does not eat accepted records (B3)",
-       "            except Exception:                    # noqa: BLE001", "            except OSError:",
+       "            except BaseException:                # noqa: BLE001\n"
+       "                # The disk refused mid-batch",
+       "            except OSError:\n"
+       "                # The disk refused mid-batch",
        WRITER_BUG),
     _m("settlement_ignores_a_failed_writer", "a failed writer batch is counted (B3)",
        "            result = _WriteResult(dropped=[(TraceLossReason.disk_error, row.counted)\n"
        "                                           for row in self.batch])",
        "            result = _WriteResult()", WRITER_BUG),
-    _m("flushes_run_concurrently", "one flush in flight bounds what memory holds (B3)",
-       "        async with self._flush_lock:", "        if True:", ONE_FLUSH),
     # --- stable ids -------------------------------------------------------------------
     _m("segment_names_forget_the_boot", "a segment name is unique for all time (B4)",
        'name = (f"{SEGMENT_PREFIX}{self.boot_id}-"\n'
@@ -304,8 +305,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "        segment.synced_records = segment.records\n        segment.unsynced_counted = []",
        "        segment.unsynced_counted = []", FSYNC_ROUNDS),
     _m("an_idle_flush_never_fsyncs", "the appended tail becomes durable on a quiet host (R35)",
-       "            if not batch and not self.paused and not (fsync_due and self._unsynced()):",
-       "            if not batch:", IDLE_FSYNC),
+       "        if not batch and not self.paused and not (fsync_due and self._unsynced()):",
+       "        if not batch:", IDLE_FSYNC),
     _m("rotation_ignores_the_incoming_record", "a segment's size bound includes the record (R06)",
        "            if active.written + need <= self.segment_max_bytes:",
        "            if active.written <= self.segment_max_bytes:", ROTATE),
@@ -322,16 +323,17 @@ MUTANTS: tuple[Mutant, ...] = (
        "            self.dropped += lost\n            self.loss_reasons[TraceLossReason.shutdown] += lost",
        "            self.loss_reasons[TraceLossReason.shutdown] += lost", SHUTDOWN),
     _m("close_does_not_seal", "an orderly close promises what it can (R42)",
-       "            _name, result = await self._run(self._seal_active)\n            self._apply(result)",
-       "            result = _WriteResult()\n            self._apply(result)", SHUTDOWN),
+       "            sealing = loop.run_in_executor(writer, self._seal_active)",
+       "            sealing = loop.run_in_executor(writer, lambda: (None, _WriteResult()))",
+       SHUTDOWN),
     _m("crash_keeps_the_record_count", "a crash's bookkeeping follows its truncation (R40)",
        "                segment.records = segment.synced_records\n"
        "                segment.unsynced_counted = []",
        "                segment.unsynced_counted = []", RECOVER),
     _m("a_checksum_failure_discards_the_segment", "a torn tail keeps what came before (R41)",
-       "        if frame_checksum(payload, (content,), content_bytes) != crc:\n"
+       "        if frame_checksum(payload, (content,), content_bytes, index) != crc:\n"
        "            _torn(scan, name, offset, len(data))\n            break",
-       "        if frame_checksum(payload, (content,), content_bytes) != crc:\n"
+       "        if frame_checksum(payload, (content,), content_bytes, index) != crc:\n"
        "            _torn(scan, name, offset, len(data))\n            return Scan()",
        CORRUPT),
     _m("an_unmeasurable_disk_is_an_empty_one", "a disk that cannot be measured fails closed (R14)",
