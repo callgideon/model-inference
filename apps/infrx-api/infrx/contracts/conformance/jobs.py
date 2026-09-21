@@ -27,15 +27,19 @@ async def _admit(harness, *, org_id=b.ORG_A, key_id=b.KEY_A, key="idem-1", grant
                  mode=ExecutionMode.stream, price=None, **kw):
     """Fund the wallet, build a request and admit it. Returns (request, admission).
 
-    `price` is the snapshot the store's price source is expected to answer with (r1
-    R45), used only to compute the caller's maximum hold; the request itself carries no
-    price. A case that moves the price source passes the same snapshot here.
+    `price` is the snapshot the store's price source is expected to answer with (r1 R45):
+    the request carries no price and, since R53, neither does the call. It is asserted
+    against what the store actually snapshotted, so a case that moves the price source and
+    passes the wrong snapshot here fails rather than agreeing with itself.
     """
     if grant is not None:
         harness.extra["grant"](org_id, grant)
     request = b.request(harness, org_id=org_id, key_id=key_id, mode=mode, **kw)
-    admission = await harness.port.admit(request, b.idem(request, key), (),
-                                         b.hold_for(request, price))
+    admission = await harness.port.admit(request, b.idem(request, key), ())
+    if price is not None:
+        assert admission.price_snapshot == price, "the store snapshotted a different price"
+        assert admission.maximum_hold == b.hold_for(request, price), \
+            "the store derived a hold the expected snapshot does not explain"
     return request, admission
 
 
@@ -88,8 +92,7 @@ async def dur_admit__idempotent_replay_returns_the_same_identity(factory):
     """DUR-ADMIT: the same key and payload return the original acceptance, once."""
     harness = factory()
     request, first = await _admit(harness)
-    again = await harness.port.admit(request, b.idem(request, "idem-1"), (),
-                                     b.hold_for(request))
+    again = await harness.port.admit(request, b.idem(request, "idem-1"), ())
     assert (again.request_id, again.job_handle) == (first.request_id, first.job_handle)
     assert again.replayed is True
     wallet = harness.extra["balance"](request.org_id)
@@ -106,7 +109,7 @@ async def dur_admit__a_request_uuid_is_admitted_once(factory):
     reserved = harness.extra["balance"](request.org_id)["reserved"]
     for key in (None, "a-late-key"):
         try:
-            await harness.port.admit(request, b.idem(request, key), (), b.hold_for(request))
+            await harness.port.admit(request, b.idem(request, key), ())
         except errors.DomainError as exc:
             assert errors.http_status(exc.code) == 409, exc.code
         else:
@@ -120,8 +123,7 @@ async def dur_admit__changed_payload_with_the_same_key_is_a_conflict(factory):
     harness = factory()
     request, _ = await _admit(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "idem-1", payload="different"), (),
-                                 b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "idem-1", payload="different"), ())
     except errors.IdempotencyConflict as exc:
         assert errors.http_status(exc.code) == 409
     else:
@@ -137,13 +139,12 @@ async def dur_admit__crash_after_commit_then_retry_does_not_double_reserve(facto
     harness.extra["grant"](b.ORG_A, "25.00")
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "idem-1"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "idem-1"), ())
     except Exception as exc:                       # the answer was lost, not the commit
         assert type(exc).__name__ == "CrashAfterCommit", exc
     else:
         raise AssertionError("crash_after_commit did not fire")
-    retried = await harness.port.admit(request, b.idem(request, "idem-1"), (),
-                                       b.hold_for(request))
+    retried = await harness.port.admit(request, b.idem(request, "idem-1"), ())
     assert retried.replayed is True
     assert harness.extra["balance"](request.org_id)["reserved"] == retried.maximum_hold
     assert len(harness.extra["active_jobs"]()) == 1
@@ -156,7 +157,7 @@ async def dur_admit__expired_mapping_is_explicit_never_a_second_billable_job(fac
     await _settle(harness, request, admission)
     harness.clock.advance(DEFAULTS.idempotency_ttl_s + 1)
     try:
-        await harness.port.admit(request, b.idem(request, "idem-1"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "idem-1"), ())
     except errors.IdempotencyExpired as exc:
         assert errors.http_status(exc.code) == 410
     else:
@@ -181,13 +182,12 @@ async def dur_admit__the_tombstone_ttl_runs_from_the_terminal_state(factory):
     # 86,350s after *terminal* is still inside the 24h tombstone, though it is well
     # past 24h since admission
     harness.clock.advance(DEFAULTS.idempotency_ttl_s - 50)
-    replay = await harness.port.admit(request, b.idem(request, "idem-1"), (),
-                                      b.hold_for(request))
+    replay = await harness.port.admit(request, b.idem(request, "idem-1"), ())
     assert replay.replayed is True and replay.job_handle == admission.job_handle
     assert len(harness.extra["active_jobs"]()) == 0
     harness.clock.advance(100)                     # now past it
     try:
-        await harness.port.admit(request, b.idem(request, "idem-1"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "idem-1"), ())
     except errors.IdempotencyExpired:
         pass
     else:
@@ -208,8 +208,7 @@ async def dur_admit__an_active_jobs_mapping_never_expires(factory):
     lease = await harness.port.claim(request.request_id, "worker-a")
     harness.clock.advance(5_000)                   # far past the 60s tombstone TTL
     assert harness.extra["balance"](request.org_id)["reserved"] == admission.maximum_hold
-    replay = await harness.port.admit(request, b.idem(request, "idem-1"), (),
-                                      b.hold_for(request))
+    replay = await harness.port.admit(request, b.idem(request, "idem-1"), ())
     assert replay.replayed is True and replay.job_handle == admission.job_handle
     assert len(harness.extra["active_jobs"]()) == 1
     assert harness.extra["balance"](request.org_id)["reserved"] == admission.maximum_hold
@@ -218,7 +217,7 @@ async def dur_admit__an_active_jobs_mapping_never_expires(factory):
                                                  tokens=b.usage(1200, 340)))
     harness.clock.advance(61)
     try:
-        await harness.port.admit(request, b.idem(request, "idem-1"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "idem-1"), ())
     except errors.IdempotencyExpired:
         pass
     else:
@@ -231,8 +230,7 @@ async def dur_admit__tombstone_is_retained_after_the_terminal_state(factory):
     request, admission = await _admit(harness)
     await _settle(harness, request, admission)
     harness.clock.advance(DEFAULTS.idempotency_ttl_s - 60)
-    replay = await harness.port.admit(request, b.idem(request, "idem-1"), (),
-                                      b.hold_for(request))
+    replay = await harness.port.admit(request, b.idem(request, "idem-1"), ())
     assert replay.job_handle == admission.job_handle and replay.replayed is True
     assert replay.state in {JobState.succeeded, JobState.failed, JobState.cancelled,
                             JobState.expired}
@@ -249,7 +247,7 @@ async def dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction(
     revoke(b.KEY_A)
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "k-revoked"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "k-revoked"), ())
     except errors.InvalidApiKey:
         pass
     else:
@@ -258,7 +256,7 @@ async def dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction(
     suspend(b.ORG_A)
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "k-suspended"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "k-suspended"), ())
     except errors.OrgSuspended:
         pass
     else:
@@ -269,8 +267,7 @@ async def dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction(
     request = b.request(harness)
     hook(harness, "unentitle")(b.ORG_A, request.model_revision)
     try:
-        await harness.port.admit(request, b.idem(request, "k-unentitled"), (),
-                                 b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "k-unentitled"), ())
     except errors.ModelNotEntitled as exc:
         assert errors.http_status(exc.code) == 403
     else:
@@ -278,8 +275,7 @@ async def dur_admit__revocation_and_suspension_are_rechecked_in_the_transaction(
     assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
     assert len(harness.extra["active_jobs"]()) == 0
     hook(harness, "entitle")(b.ORG_A, request.model_revision)
-    admitted = await harness.port.admit(request, b.idem(request, "k-entitled"), (),
-                                        b.hold_for(request))
+    admitted = await harness.port.admit(request, b.idem(request, "k-entitled"), ())
     assert admitted.state is JobState.preparing
 
 
@@ -293,7 +289,7 @@ async def dur_admit__an_idempotency_scope_belongs_to_the_requests_own_org(factor
     request_b = b.request(harness, org_id=b.ORG_B, key_id=b.KEY_B)
     foreign = b.idem(request_a, "shared-key").model_copy(update={"org_id": b.ORG_A})
     try:
-        await harness.port.admit(request_b, foreign, (), b.hold_for(request_b))
+        await harness.port.admit(request_b, foreign, ())
     except errors.DomainError as exc:
         assert errors.http_status(exc.code) in (403, 404), exc.code
     else:
@@ -305,8 +301,7 @@ async def dur_admit__an_idempotency_scope_belongs_to_the_requests_own_org(factor
     # and a request may not carry another tenant's media either
     foreign_media = b.request(harness, refs=(b.media(b.ORG_B),))
     try:
-        await harness.port.admit(foreign_media, b.idem(foreign_media, "foreign-media"), (),
-                                 b.hold_for(foreign_media))
+        await harness.port.admit(foreign_media, b.idem(foreign_media, "foreign-media"), ())
     except errors.DomainError as exc:
         assert errors.http_status(exc.code) in (403, 404), exc.code
     else:
@@ -325,8 +320,7 @@ async def dur_admit__a_deadline_must_be_one_the_store_can_keep(factory):
     for deadline_s in (-1, 0, horizon + 1, horizon * 100):
         request = b.request(harness, deadline_s=deadline_s)
         try:
-            await harness.port.admit(request, b.idem(request, f"dl-{deadline_s}"), (),
-                                     b.hold_for(request))
+            await harness.port.admit(request, b.idem(request, f"dl-{deadline_s}"), ())
         except errors.DomainError as exc:
             assert errors.http_status(exc.code) == 400, (deadline_s, exc.code)
         else:
@@ -336,8 +330,7 @@ async def dur_admit__a_deadline_must_be_one_the_store_can_keep(factory):
     assert journal_bytes() == 0
     # the longest deadline the budgets allow is accepted
     request = b.request(harness, deadline_s=horizon)
-    admitted = await harness.port.admit(request, b.idem(request, "dl-ok"), (),
-                                        b.hold_for(request))
+    admitted = await harness.port.admit(request, b.idem(request, "dl-ok"), ())
     assert admitted.deadline_at == request.deadline_at
 
 
@@ -367,8 +360,11 @@ async def dur_admit__a_refused_admission_reserves_nothing(factory):
     """DUR-ADMIT: nothing is reserved before everything is checked. An unpriced
     model fails closed (01: "missing model/rates reject admission"), and the refused
     attempt leaves no journal reservation, no hold and no job behind - otherwise a
-    client retrying an invalid request drains the journal budget. Bad monetary input
-    is refused the same way, as a typed domain error rather than a ValueError."""
+    client retrying an invalid request drains the journal budget.
+
+    r1 R53 removed the "bad monetary input" half: there is no caller-supplied hold left
+    to be bad. `money_input`'s boundary is still exercised by `grant`, `reserve` and
+    `settle`, which do take caller money."""
     harness = factory()
     harness.extra["grant"](b.ORG_A, "25.00")
     journal_bytes = hook(harness, "journal_bytes")
@@ -380,7 +376,7 @@ async def dur_admit__a_refused_admission_reserves_nothing(factory):
     unpriced = b.request(harness, model_revision=unpriced_model)
     for _ in range(3):
         try:
-            await harness.port.admit(unpriced, b.idem(unpriced, "unpriced"), (), money.ZERO)
+            await harness.port.admit(unpriced, b.idem(unpriced, "unpriced"), ())
         except errors.DomainError as exc:
             assert errors.http_status(exc.code) in (400, 403, 404), exc.code
         else:
@@ -393,7 +389,7 @@ async def dur_admit__a_refused_admission_reserves_nothing(factory):
         set_price(b.MODEL, seeded)
         bad_price = b.request(harness)
         try:
-            await harness.port.admit(bad_price, b.idem(bad_price, label), (), money.ZERO)
+            await harness.port.admit(bad_price, b.idem(bad_price, label), ())
         except errors.DomainError as exc:
             assert errors.http_status(exc.code) in (400, 403, 404), exc.code
         else:
@@ -402,14 +398,9 @@ async def dur_admit__a_refused_admission_reserves_nothing(factory):
     assert len(harness.extra["active_jobs"]()) == 0
     assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
     assert journal_bytes() == 0, "a refused admission leaked a journal reservation"
-    for bad in ("1e5", "NaN", "0.000000001", "1000000000000.00", 0.5):
-        request = b.request(harness)
-        try:
-            await harness.port.admit(request, b.idem(request, f"bad-{bad!r}"), (), bad)
-        except errors.DomainError as exc:
-            assert errors.http_status(exc.code) in (400, 402), exc.code
-        else:
-            raise AssertionError(f"hold {bad!r} was accepted")
+    # r1 R53: a caller cannot name money here at all, so the only remaining way for a
+    # hold to be wrong is for the store to derive it wrongly - which is what
+    # `dur_settle__a_price_change_never_undersizes_the_hold` pins.
     assert len(harness.extra["active_jobs"]()) == 0
     assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
 
@@ -427,17 +418,17 @@ async def dur_cap__total_org_and_key_limits_reject_with_retry_guidance(factory):
     harness.extra["grant"](b.ORG_A, "100.00")
     for n in range(2):
         request = b.request(harness)
-        await harness.port.admit(request, b.idem(request, f"key-{n}"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, f"key-{n}"), ())
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "key-over"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "key-over"), ())
     except errors.CapacityExhausted as exc:
         assert errors.http_status(exc.code) == 429 and exc.retry_after_s >= 1
     else:
         raise AssertionError("the per-key active job limit was exceeded")
     # a different key in the same org still fits under the org limit
     request = b.request(harness, key_id=b.KEY_B)
-    await harness.port.admit(request, b.idem(request, "key-other"), (), b.hold_for(request))
+    await harness.port.admit(request, b.idem(request, "key-other"), ())
     assert len(harness.extra["active_jobs"]()) == 3
 
     # per-org: two keys, 3 of 3 for ORG_A, with the total ceiling and the per-key
@@ -447,10 +438,10 @@ async def dur_cap__total_org_and_key_limits_reject_with_retry_guidance(factory):
     harness.extra["grant"](b.ORG_A, "100.00")
     for n, key_id in enumerate((b.KEY_A, b.KEY_B, b.KEY_A)):
         request = b.request(harness, key_id=key_id)
-        await harness.port.admit(request, b.idem(request, f"org-{n}"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, f"org-{n}"), ())
     request = b.request(harness, key_id=b.KEY_B)
     try:
-        await harness.port.admit(request, b.idem(request, "org-over"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "org-over"), ())
     except errors.CapacityExhausted:
         pass
     else:
@@ -458,7 +449,7 @@ async def dur_cap__total_org_and_key_limits_reject_with_retry_guidance(factory):
     # ... while another organization is unaffected by ORG_A's ceiling
     harness.extra["grant"](b.ORG_B, "100.00")
     other = b.request(harness, org_id=b.ORG_B, key_id=b.KEY_B)
-    await harness.port.admit(other, b.idem(other, "org-b"), (), b.hold_for(other))
+    await harness.port.admit(other, b.idem(other, "org-b"), ())
     assert len(harness.extra["active_jobs"](org_id=b.ORG_A)) == 3
 
     # total: two organizations filling 4 of 4 with both per-scope ceilings slack
@@ -468,11 +459,10 @@ async def dur_cap__total_org_and_key_limits_reject_with_retry_guidance(factory):
                            (b.ORG_B, b.KEY_A), (b.ORG_B, b.KEY_B)):
         harness.extra["grant"](org_id, "100.00")
         request = b.request(harness, org_id=org_id, key_id=key_id)
-        await harness.port.admit(request, b.idem(request, f"all-{org_id}-{key_id}"), (),
-                                 b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, f"all-{org_id}-{key_id}"), ())
     request = b.request(harness, org_id=b.ORG_A, key_id=b.KEY_A)
     try:
-        await harness.port.admit(request, b.idem(request, "all-over"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "all-over"), ())
     except errors.CapacityExhausted:
         pass
     else:
@@ -490,11 +480,10 @@ async def dur_cap__admission_reserves_preparation_capacity(factory):
     admitted = []
     for n in range(2):
         request = b.request(harness)
-        admitted.append(await harness.port.admit(request, b.idem(request, f"p-{n}"), (),
-                                                 b.hold_for(request)))
+        admitted.append(await harness.port.admit(request, b.idem(request, f"p-{n}"), ()))
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "p-over"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "p-over"), ())
     except errors.CapacityExhausted as exc:
         assert errors.http_status(exc.code) == 429 and exc.retry_after_s >= 1
     else:
@@ -503,8 +492,7 @@ async def dur_cap__admission_reserves_preparation_capacity(factory):
     kinds = {r.kind for r in admitted[0].reservations if r.active}
     assert {kind.value for kind in kinds} >= {"preparation"}
     await _prepare(harness.port, admitted[0].request_id)
-    after = await harness.port.admit(request, b.idem(request, "p-after"), (),
-                                     b.hold_for(request))
+    after = await harness.port.admit(request, b.idem(request, "p-after"), ())
     assert after.state is JobState.preparing
 
 
@@ -516,10 +504,10 @@ async def dur_cap__journal_reservation_must_fit_the_global_budget(factory):
     harness.extra["grant"](b.ORG_A, "100.00")
     for n in range(2):
         request = b.request(harness)
-        await harness.port.admit(request, b.idem(request, f"j-{n}"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, f"j-{n}"), ())
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "j-over"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "j-over"), ())
     except errors.JournalCapacityExhausted as exc:
         assert errors.http_status(exc.code) == 429 and exc.retry_after_s >= 1
     else:
@@ -532,7 +520,7 @@ async def dur_cap__hold_cannot_exceed_the_available_balance(factory):
     request = b.request(harness)
     harness.extra["grant"](request.org_id, "0.00000100")
     try:
-        await harness.port.admit(request, b.idem(request, "poor"), (), b.hold_for(request))
+        await harness.port.admit(request, b.idem(request, "poor"), ())
     except errors.InsufficientCredit as exc:
         assert errors.http_status(exc.code) == 402
     else:
@@ -549,14 +537,16 @@ async def dur_cap__a_hold_is_checked_against_available_not_the_ledger(factory):
     harness = factory()
     harness.extra["grant"](b.ORG_A, "0.01000000")
     first = b.request(harness, max_input_tokens=30_000, max_output_tokens=2_000)
+    # r1 R53: the expected hold, which the store derives for itself.
     hold = b.hold_for(first)
     assert hold * 2 > Decimal("0.01") >= hold, "the case needs two holds to overflow one wallet"
-    await harness.port.admit(first, b.idem(first, "avail-1"), (), hold)
+    admitted = await harness.port.admit(first, b.idem(first, "avail-1"), ())
+    assert admitted.maximum_hold == hold, "the store derived a different hold"
     balance = harness.extra["balance"](b.ORG_A)
     assert balance["reserved"] == hold and balance["available"] == Decimal("0.01") - hold
     second = b.request(harness, max_input_tokens=30_000, max_output_tokens=2_000)
     try:
-        await harness.port.admit(second, b.idem(second, "avail-2"), (), hold)
+        await harness.port.admit(second, b.idem(second, "avail-2"), ())
     except errors.InsufficientCredit as exc:
         assert errors.http_status(exc.code) == 402
     else:
@@ -567,27 +557,39 @@ async def dur_cap__a_hold_is_checked_against_available_not_the_ledger(factory):
 
 
 async def dur_cap__a_negative_maximum_hold_is_refused(factory):
-    """DUR-CAP: no negative available balance. A negative hold would reduce the
-    reserved total, fabricate credit out of an empty wallet and let the next
-    admission settle a real debit against it."""
+    """DUR-CAP / r1 R53: the hold is the **store's**, and a caller has no way to name one.
+
+    This case used to hand `admit` a negative hold and assert a typed refusal. R53 takes
+    the argument away, so that defect is unrepresentable and what needs pinning instead is
+    the property it was standing in for: the reserved total is exactly the hold the store
+    derived from its own snapshot, it is never negative, and it is what the balance gate
+    compares against. A caller that cannot supply money cannot fabricate credit.
+    """
     harness = factory()
     harness.extra["grant"](b.ORG_A, "0")
     request = b.request(harness)
     try:
-        await harness.port.admit(request, b.idem(request, "negative"), (),
-                                 -money.parse("10.00"))
+        await harness.port.admit(request, b.idem(request, "no-credit"), ())
     except Exception as exc:
         # A **typed** refusal: a store that let a `ValueError` or a validation error out
-        # of `admit` would answer 500 to a request it knows is invalid, so the case
-        # asserts the type and the code rather than merely that something went wrong.
+        # of `admit` would answer 500 to a request it knows it cannot fund.
         assert isinstance(exc, errors.DomainError), f"untyped refusal: {type(exc).__name__}"
-        assert exc.code in ("invalid_request", "insufficient_credit"), exc.code
-        assert errors.http_status(exc.code) in (400, 402)
+        assert exc.code == "insufficient_credit", exc.code
+        assert errors.http_status(exc.code) == 402
     else:
-        raise AssertionError("a negative maximum hold was reserved")
+        raise AssertionError("an unfunded admission reserved a hold")
     balance = harness.extra["balance"](b.ORG_A)
     assert balance["reserved"] == 0 and balance["available"] == 0
     assert len(harness.extra["active_jobs"]()) == 0
+    # funded, the derived hold is positive, is the reserved total, and is the ceiling
+    # formula applied to the admitted snapshot - not a number anybody handed the store
+    harness.extra["grant"](b.ORG_A, "25.00")
+    funded = b.request(harness)
+    admission = await harness.port.admit(funded, b.idem(funded, "funded"), ())
+    assert admission.maximum_hold > 0
+    assert admission.maximum_hold == admission.price_snapshot.maximum_hold(
+        funded.max_input_tokens, funded.max_output_tokens)
+    assert harness.extra["balance"](b.ORG_A)["reserved"] == admission.maximum_hold
 
 
 async def dur_cap__concurrent_admissions_never_oversubscribe(factory):
@@ -600,8 +602,7 @@ async def dur_cap__concurrent_admissions_never_oversubscribe(factory):
 
     async def attempt(index, request):
         try:
-            return await harness.port.admit(request, b.idem(request, f"c-{index}"), (),
-                                            b.hold_for(request))
+            return await harness.port.admit(request, b.idem(request, f"c-{index}"), ())
         except (errors.CapacityExhausted, errors.InsufficientCredit) as exc:
             return exc
 
@@ -1420,6 +1421,70 @@ async def dur_settle__the_store_rounds_half_up_once(factory):
             assert outcome.settlement_state is SettlementState.settled
 
 
+async def dur_settle__a_price_change_never_undersizes_the_hold(factory):
+    """DUR-SETTLE / r1 R53: the hold and the snapshot come from the same transaction.
+
+    The exact failure this closes: the gateway validates against 0.20/M, the rate moves to
+    2.00/M, and admission then snapshots 2.00 while holding what 0.20 needed. A perfectly
+    valid in-envelope completion no longer fits its own hold, so the store calls it a
+    protocol violation - `platform_error`, usage discarded, debit zero - and the platform
+    eats a request it should have charged for, or refuses one it should have run. The hold
+    is a promise about a price, so it can only be computed from the price that was taken.
+
+    Also pins the other direction (R53/R45): settlement uses the **admitted** snapshot, so
+    a rate that moves after admission does not reprice a job that is already running.
+    """
+    harness = factory()
+    set_price = hook(harness, "set_price")
+    cheap, dear = b.price("0.20", "0.60"), b.price("2.00", "6.00")
+    harness.extra["grant"](b.ORG_A, "25.00")
+
+    # The rate moves between validation and admission. Nothing the caller did changes.
+    set_price(b.MODEL, cheap)
+    request = b.request(harness, max_input_tokens=30_720, max_output_tokens=2_048)
+    validated = cheap.maximum_hold(request.max_input_tokens, request.max_output_tokens)
+    set_price(b.MODEL, dear)
+    admission = await harness.port.admit(request, b.idem(request, "moved"), ())
+
+    assert admission.price_snapshot == dear, "admission must snapshot the price it took"
+    expected = dear.maximum_hold(request.max_input_tokens, request.max_output_tokens)
+    assert admission.maximum_hold == expected, \
+        "the hold must cover the snapshot that was taken, not the one the caller saw"
+    assert admission.maximum_hold > validated, "the case needs the price to have risen"
+    assert harness.extra["balance"](b.ORG_A)["reserved"] == expected
+
+    # A completion inside the envelope therefore settles the exact debit, not a platform
+    # failure: the whole point of holding the ceiling is that the ceiling fits.
+    await _prepare(harness.port, request.request_id)
+    lease = await harness.port.claim(request.request_id, "worker-a")
+    prompt, completion = request.max_input_tokens, request.max_output_tokens
+    outcome = await harness.port.complete(
+        lease, b.outcome(request.request_id, harness, tokens=b.usage(prompt, completion)))
+    assert outcome.settlement_state is SettlementState.settled, \
+        f"an in-envelope completion settled {outcome.settlement_state}"
+    assert outcome.cause is TerminalCause.completed and outcome.usage is not None
+    assert outcome.debit == dear.debit(prompt, completion)
+    assert outcome.debit <= admission.maximum_hold, "a debit never exceeds its hold"
+
+    # And the other direction: a rate that moves *after* admission does not reprice the
+    # job. The admitted snapshot is the one the customer was quoted.
+    set_price(b.MODEL, cheap)
+    later = b.request(harness, max_input_tokens=1_000, max_output_tokens=100)
+    later_admission = await harness.port.admit(later, b.idem(later, "before-move"), ())
+    assert later_admission.price_snapshot == cheap
+    set_price(b.MODEL, dear)
+    await _prepare(harness.port, later.request_id, worker="prep-b")
+    later_lease = await harness.port.claim(later.request_id, "worker-b")
+    # `load_work` hands the worker the admitted snapshot, never the current one (R53)
+    work = await harness.port.load_work(later_lease)
+    assert work.price_snapshot == cheap, "load_work must carry the admitted snapshot"
+    settled = await harness.port.complete(
+        later_lease, b.outcome(later.request_id, harness, tokens=b.usage(800, 80)))
+    assert settled.debit == cheap.debit(800, 80), \
+        "settlement repriced the job at the current rate"
+    set_price(b.MODEL, b.DEFAULT_PRICE)
+
+
 async def dur_settle__duplicate_completion_is_idempotent_then_conflicts(factory):
     """DUR-SETTLE: one winner. The identical call replays; a different one is a
     typed conflict and changes no money."""
@@ -2036,6 +2101,7 @@ def jobstore_cases():
         dur_output__the_absolute_deadline_bounds_recovery,
         dur_settle__one_settlement_with_exact_decimals,
         dur_settle__the_store_rounds_half_up_once,
+        dur_settle__a_price_change_never_undersizes_the_hold,
         dur_settle__duplicate_completion_is_idempotent_then_conflicts,
         dur_settle__cancel_and_complete_race_has_a_single_winner,
         dur_settle__unknown_usage_is_held_then_released_as_platform_absorbed,

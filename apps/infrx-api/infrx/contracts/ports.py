@@ -42,7 +42,7 @@ class JobStore(Protocol):
     """D. Durable authority: acceptance, fencing, terminal settlement."""
 
     async def admit(self, request: NormalizedRequest, idem: IdempotencyRef,
-                    caps: tuple[ReservationKind, ...], hold: Decimal) -> Admission:
+                    caps: tuple[ReservationKind, ...] = ()) -> Admission:
         """One transaction: recheck authorization, capacity and balance, reserve
         preparation/inference/journal capacity and the maximum hold, insert the
         `preparing` job and its dispatch outbox. An idempotent replay returns the
@@ -52,8 +52,16 @@ class JobStore(Protocol):
 
         `caps` names *extra* reservation kinds beyond the three every admission
         takes; amounts come from the store's own limits, never from the caller. The
-        request UUID is the job key, so re-admitting one raises `StateConflict`
-        (R6), and a negative `hold` raises `InvalidRequest` (R11).
+        request UUID is the job key, so re-admitting one raises `StateConflict` (R6).
+
+        **r1 R53: no caller-supplied hold.** Since R45 only the store knows the rates,
+        the store takes the price snapshot and computes `Admission.maximum_hold` from
+        it and the request's validated token ceilings in the **same transaction**,
+        rounding up (§4). A hold a caller computed is a number from before the price it
+        is meant to cover: a rate moving between gateway validation and admission left
+        a job admitted at the new price holding for the old one, and a valid
+        in-envelope completion then settled `platform_error` with a zero debit.
+        `Admission.maximum_hold` is the store's answer, never an echo of the caller's.
 
         The transaction rechecks key revocation, org suspension *and* current
         entitlement (`ModelNotEntitled`), reserves a `preparation` unit against

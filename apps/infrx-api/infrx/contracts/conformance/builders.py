@@ -104,6 +104,12 @@ def idem(req: NormalizedRequest, key: str | None = "idem-1", *,
 
 
 def hold_for(req: NormalizedRequest, snapshot: PriceSnapshot | None = None) -> Decimal:
+    """The hold a case **expects** the store to derive (r1 R53).
+
+    No longer an argument to `admit`: the store computes the hold from the snapshot it
+    takes, so this exists only to say what that ought to be. A case that moves the price
+    source passes the snapshot it moved it to.
+    """
     snapshot = snapshot or price()
     return snapshot.maximum_hold(req.max_input_tokens, req.max_output_tokens)
 

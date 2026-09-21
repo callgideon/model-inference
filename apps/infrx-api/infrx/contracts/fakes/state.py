@@ -281,11 +281,9 @@ class FakeJobStore:
 
     # --- port ---------------------------------------------------------------
     async def admit(self, request: NormalizedRequest, idem: IdempotencyRef,
-                    caps: tuple[object, ...] = (), hold: Decimal | str = money.ZERO) -> Admission:
+                    caps: tuple[object, ...] = ()) -> Admission:
+        """r1 R53: the store derives the hold. See `_derive_hold`."""
         self.failures.before("admit")
-        # money.parse allows negatives for ledger deltas; a reservation is never
-        # one. A negative hold would inflate `available` (DUR-CAP, r1 R11).
-        hold = money_input(hold, "the maximum hold")
         for kind in caps:
             if kind not in tuple(ReservationKind):
                 raise errors.InvalidRequest(f"{kind!r} is not a reservation kind")
@@ -319,15 +317,35 @@ class FakeJobStore:
                     f"org {request.org_id} is not entitled to {request.model_revision}")
             self._check_deadline(request, now)
             self._check_capacity(request)
-            self._check_balance(request.org_id, hold)
             # Everything that can refuse the admission runs before anything is
             # reserved: a rejected admission leaves no journal bytes, no hold and
             # no job behind (`_price` fails closed on an unpriced model).
+            #
+            # r1 R53: the price is taken **first**, then the hold is derived from it, then
+            # the balance is checked against that hold. Since R45 only the store knows the
+            # rates, so a caller-computed hold was a number from before the price it is
+            # meant to cover: a rate moving 0.20 -> 2.00 between gateway validation and
+            # admission left a job admitted at 2.00 holding a tenth of what it needed, and
+            # a perfectly valid in-envelope completion then settled `platform_error` with
+            # a zero debit. Deriving both in one transaction makes that unrepresentable.
             price = self._price(request, now)
+            hold = self._derive_hold(request, price)
+            self._check_balance(request.org_id, hold)
             self.journal.reserve(request.request_id)
             admission = self._insert(request, idem, hold, now, price)
         self.failures.after_commit("admit")
         return admission
+
+    @staticmethod
+    def _derive_hold(request: NormalizedRequest, price: PriceSnapshot) -> Decimal:
+        """r1 R53 / 01: the maximum hold, from the admitted snapshot and the request's
+        **validated** token ceilings, rounded **up** (§4).
+
+        The ceilings arrive on the `NormalizedRequest` because that is where validation
+        put them; passing them again beside it would only create two numbers that can
+        disagree. Nothing a caller sends is money.
+        """
+        return price.maximum_hold(request.max_input_tokens, request.max_output_tokens)
 
     def _replay(self, idem: IdempotencyRef, now: datetime) -> Admission | None:
         if idem.key is None:

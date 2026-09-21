@@ -123,10 +123,39 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "            price = self._price(request, now)\n            self.journal.reserve(request.request_id)",
        "            self.journal.reserve(request.request_id)\n            price = self._price(request, now)",
        "dur_admit__a_refused_admission_reserves_nothing"),
-    _m("admit_accepts_a_negative_hold", "a negative maximum hold is refused (R11)",
-       S, 'hold = money_input(hold, "the maximum hold")', "hold = money.parse(hold)",
-       "dur_cap__a_negative_maximum_hold_is_refused",
-       "dur_admit__a_refused_admission_reserves_nothing"),
+    # r1 R53: the hold is the store's, from the snapshot it took in the same
+    # transaction. These are the two ways to get that wrong.
+    _m("admit_uses_a_caller_supplied_hold", "no caller-supplied hold (R53)",
+       S, "            hold = self._derive_hold(request, price)",
+       '            hold = money.parse(request.parameters.get("hold", "0.00070000"))',
+       "dur_settle__a_price_change_never_undersizes_the_hold",
+       "dur_cap__a_negative_maximum_hold_is_refused"),
+    _m("admit_holds_for_the_wrong_ceilings", "the hold covers the validated ceilings (R53)",
+       S, "        return price.maximum_hold(request.max_input_tokens, request.max_output_tokens)",
+       "        return price.maximum_hold(request.max_input_tokens, 0)",
+       "dur_settle__a_price_change_never_undersizes_the_hold",
+       "dur_cap__a_hold_is_checked_against_available_not_the_ledger"),
+    _m("admit_checks_the_balance_before_pricing", "the balance gate sees the derived hold (R53)",
+       S, "            price = self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price)\n"
+          "            self._check_balance(request.org_id, hold)",
+       "            self._check_balance(request.org_id, money.ZERO)\n"
+          "            price = self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price)",
+       "dur_cap__hold_cannot_exceed_the_available_balance",
+       "dur_cap__a_hold_is_checked_against_available_not_the_ledger"),
+    _m("settlement_prices_at_the_current_rate", "settlement uses the admitted snapshot (R53)",
+       S, "            candidate = job.admission.price_snapshot.debit(usage.prompt_tokens,",
+       "            candidate = (self.price_for(job.request.model_revision, now)\n"
+          "                         or job.admission.price_snapshot).debit(usage.prompt_tokens,",
+       "dur_settle__a_price_change_never_undersizes_the_hold"),
+    _m("load_work_reports_the_current_price", "load_work carries the admitted snapshot (R53)",
+       S, "                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets)",
+       "                        price_snapshot=(self.price_for(job.request.model_revision,\n"
+          "                                                     self.clock.now())\n"
+          "                                        or job.admission.price_snapshot),\n"
+          "                        budgets=job.budgets)",
+       "dur_settle__a_price_change_never_undersizes_the_hold"),
     _m("admit_ignores_the_balance", "a hold cannot exceed the available balance",
        S, 'raise errors.InsufficientCredit(\n                f"maximum hold exceeds available balance for org {org_id}")', "pass",
        "dur_cap__hold_cannot_exceed_the_available_balance",
