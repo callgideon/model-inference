@@ -61,9 +61,13 @@ Full documentation in [`tests/integration/README.md`](../../../../tests/integrat
 | S3-compatible | `quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e` (tag `RELEASE.2025-09-07T16-13-09Z`) → `MinIO` |
 | Namespace | project `infrx-e2`; containers `infrx-e2-{postgres,valkey,clickhouse,s3}`; host ports 55532 / 55579 / 55523+55590 / 55500 / 55580 (fake vLLM), all on `127.0.0.1`; ClickHouse db `infrx_e2`; Valkey prefix `infrx_e2:`; objects `test/e2/` in bucket `infrx-e2`; SQL schema `infrx_e2_test`; run state `$TMPDIR/infrx-e2-state.json` |
 | Credentials | fixed local literals in `compose.yaml` (`infrx-e2-local`, `infrx-e2-local-secret`). **No production credential is needed or present.** Classification: **local only** |
-| Seed | `--seed 20260921` (default); the same seed gives the same uuids and rows |
+| Seed | `--seed 20260921` (default). **Corrected in round 2 (r1 B4):** the seed fixes the four `auth.users` ids, the two api-key ids and secrets and the 17 usage-event ids; organization ids and slugs come from `0001_init.sql`'s trigger (`gen_random_uuid()`) and are **not** seed-derived. `pgstate.seeded_ids()` is the single definition and `test_exactly_the_seeded_ids_are_in_the_database_recomputed_from_the_seed` recomputes it. |
 
-### Why `supabase/postgres`, and why the database is `postgres`
+### Why `supabase/postgres`, and why the database is `postgres` — **SUPERSEDED in round 2 (R-a)**
+
+> The database is now **`infrx_e2`**, created `TEMPLATE postgres OWNER postgres`, so D1's
+> `current_database() like 'infrx\_%'` clock gate works. The measurements below stand; what
+> changed is the conclusion. See "Round 2" at the end of this report.
 
 `08 §10` ("D1: four things the fakes cannot tell you", item 1) is confirmed: `0001_init.sql`
 references `auth.users`, `auth.uid()`, `authenticated` and `service_role`. No D1 evidence
@@ -121,7 +125,9 @@ network beyond the public registries during the one image pull.
 ## R32 mutation results
 
 `tests/integration/mutants.py` — one single-edit mutant per claimed invariant, applied to a
-temporary copy of the owned trees. **21 declared, 21 killed, 0 survived.** Layer-2 mutants
+temporary copy of the owned trees. **21 declared, 21 killed, 0 survived** — but see round 2:
+the runner was counting a `ModuleNotFoundError` in the fake-vLLM child as a kill, so the kills
+for e2m01–e2m07 were **unearned** (r1 B3). They are now killed by assertion. Layer-2 mutants
 report `pending` (never `killed`) without a live stack.
 
 | id | Invariant | Layer | Result |
@@ -393,3 +399,159 @@ limit 5/6 (route-level tenant safety is untestable from SQL alone, owners C/G fo
   `tests/integration` 41, `make api-test` 670, `make console-test` 131, 21/21 mutants, canary
   detected and named in both runners, teardown clean. Limit 7 is updated with the measured
   cause and the recommendation; nothing E2 owns is implicated, and no threshold was changed.
+
+---
+
+# Round 2 — review r1 `fix_required` addressed at `bbf686b`
+
+| Field | Value |
+|---|---|
+| Round-2 head SHA | **`bbf686b`** (round-1 head was `de70190`) |
+| Status | **implemented**; every blocking finding and every ruling addressed, each with a killing test and a mutant |
+| Commits | `425ae66` B1+R-a+R-b+R-c+B4 · `8102929` B3 path + fake vLLM same-pass + SIGTERM · `a4cbb9d` E1's injected clock · `39d2d19` B2 + honest verdicts + new mutants · `d95669c` README + loopback case · `fc87b89` three selector misses · `be101e6` one verdict definition · `bbf686b` mutant context |
+
+## Headline run (2026-09-21 18:14:56Z → 18:17:04Z, 127.7 s)
+
+`apps/infrx-api/.venv/bin/python tests/integration/run.py --canary` → **exit 0, all stages PASS**
+
+| Stage | Measured |
+|---|---|
+| preflight | docker `29.6.2`; four digest-pinned images; no foreign container/volume/network; no orphaned fake server; no busy port |
+| services | four containers; `PostgreSQL 17.6`, Valkey `8.1.10`, ClickHouse `25.8.33.6`, MinIO; database `{"database": "infrx_e2", "template": "postgres", "created_by": "supabase_admin", "owner": "postgres", "attempts": 1}` |
+| migrate | both migrations by sha256; clock `infrx_e2_test.now()` offset probe `3600.0 s`; balances `alpha-e2 23.746875`, `beta-e2 23.746875` |
+| rls | **39** cases, `failed: null`, roles `anon, authenticated, postgres, service_role`; **29** cases assert `auth.uid()`; **12** qualify their 42501 by message |
+| engine | `run_engine_conformance` 8/8 over HTTP, `skipped_hooks: []` |
+| suites | `tests/integration` **83 passed** · `make api-test` **670 passed** · `make console-test` **# pass 131 / # fail 0** · `make bench-test` **40 passed** |
+| mutants | `{"mutants": 46, "killed": 44, "controls_survived": 2, "not_killed": 0, "pending": 0, "problems": null}` |
+| canary | python `exit 1`, `4 failed`, named; console `exit 1`, `# fail 1`, named |
+| teardown | removed the four containers; `still_named_ours_but_not_ours: []`; no project volume left |
+
+`make console-lint` 0 errors (2 pre-existing warnings in `lib/contracts/`), `make console-typecheck` clean.
+
+## Each item → commit + killing test/mutant
+
+| Item | Commit | Killing test | Mutant |
+|---|---|---|---|
+| **B1.1** another checkout's live stack | `425ae66` | `test_a_stack_labelled_for_another_checkout_is_refused_not_destroyed`, `test_up_and_down_refuse_while_anything_foreign_exists_and_call_no_compose` | `e2m22`, `e2m19` |
+| **B1.2** `down -v` deleting a same-named volume | `425ae66` | `test_an_unlabelled_volume_with_our_name_is_refused_not_deleted` | `e2m23` |
+| **B2** run.py unguarded (7 + 8 claims) | `39d2d19` | `tests/integration/test_run.py`, 32 cases | `e2m30`–`e2m45` |
+| **B3** false kills | `39d2d19`, `8102929`, `fc87b89`, `be101e6`, `bbf686b` | controls `e2c01`/`e2c02` must SURVIVE; `test_the_mutation_stage_and_the_cli_count_the_verdict_the_same_way` | `e2m46` |
+| **B4** seed reproducibility | `425ae66` | `test_exactly_the_seeded_ids_are_in_the_database_recomputed_from_the_seed` | `e2m24` |
+| **R-a** `infrx_e2` TEMPLATE postgres | `425ae66` | `test_the_target_database_is_a_template_copy_owned_by_postgres`, `test_provision_database_statements_are_the_ones_r_a_requires` | `e2m27` |
+| **R-b** both JWT forms + non-NULL `auth.uid()` | `425ae66` | `test_both_jwt_claim_forms_are_set_for_an_impersonated_principal`, `test_a_matrix_that_authenticates_nobody_fails`, cases `E2-RLS-05`–`08` | `e2m25`, `e2m26` |
+| **R-c** retry a bind failure once, then PENDING | `425ae66`, `8102929` | `test_a_bind_failure_is_retried_once_and_then_refused` | `e2m44` |
+| SIGTERM teardown + orphaned server | `8102929` | `test_sigterm_tears_down_and_orphans_no_fake_server`, `test_preflight_fails_on_an_orphaned_fake_server_this_harness_owns` | `e2m45` |
+| label-only container wedging preflight | `8102929` | `test_preflight_turns_a_harness_error_into_a_reported_failure` | (covered by `e2m22`'s FAIL path) |
+| fake vLLM 4xx / loopback / cancel-after-delta / seedable | `8102929`, `d95669c` | `test_an_unknown_fault_is_a_4xx_not_a_500`, `test_the_fake_server_binds_loopback_unless_explicitly_allowed`, `test_a_cancel_that_arrives_after_the_first_delta_bills_only_what_was_produced`, `test_chunk_ids_and_created_are_seedable`, `test_a_per_request_fault_precedence_is_header_then_body_then_default` | `e2m41`, `e2m06` |
+| RLS `rolbypassrls` + message fragments | `425ae66` | cases `E2-RLS-05`/`06`; `test_a_check_that_should_fail_does_fail` (wrong-SQLSTATE control) | `e2m17` |
+| `testids.py` docstring | `39d2d19` | `test_namespacing_actually_resolves_the_collisions_it_exists_for` | `e2m12`, `e2m13` |
+| E1's wall-clock bench bounds (owner E) | `a4cbb9d` | `test_schedule_is_deterministic_and_independent_of_latency`, `test_retried_rejections_stay_visible_and_latency_covers_every_attempt` | (E1 suite; bounded by `make bench-test` in the run above) |
+
+## B1 reproductions, re-run
+
+| Drill | Before (reviewer) | Now (measured) |
+|---|---|---|
+| Copy `tests/integration` elsewhere, `run.py --layer 2 --keep` while a stack is up | exit 0, all PASS, the first run's four containers and volumes **gone** | `[FAIL] preflight: refusing to touch resources this checkout did not create` naming each container with the owning checkout; **exit 1**. First stack intact afterwards: `infrx-e2-clickhouse infrx-e2-postgres infrx-e2-s3 infrx-e2-valkey`, volumes `infrx-e2_clickhouse-data infrx-e2_postgres-data infrx-e2_s3-data`, data `models: 4 / usage: 17 / orgs: 4` |
+| `docker volume create --label reviewer=e2 infrx-e2_postgres-data`, then `harness.down()` | the volume was **removed** | `refusing to provision or tear down: these carry this project's names or label but were not created by this checkout`; the reviewer's volume **survived** |
+
+## R-a: the template copy, measured
+
+`CREATE DATABASE infrx_e2 TEMPLATE postgres OWNER postgres` succeeds on the pinned image, first
+attempt. Three things were needed, each discovered by a failing run and recorded:
+
+| Obstacle | Message | Resolution |
+|---|---|---|
+| the template's background sessions | `source database "postgres" is being accessed by other users … 2 other sessions` (`pg_net 0.20.4`, `pg_cron scheduler`) | terminate them immediately before the copy; the race with their reconnect is retried (4 attempts) rather than reported as a refusal |
+| `postgres` is not a superuser here | `permission denied to terminate process … Only roles with the SUPERUSER attribute may terminate processes of roles with the SUPERUSER attribute` | run the statements as `supabase_admin` (`usesuper` true) through `docker exec` — it has no TCP password in this image |
+| psql wraps a multi-statement `-c` | `DROP DATABASE cannot run inside a transaction block` | one `-c` per statement |
+| copy owned by `supabase_admin` | `permission denied for schema public` on `0001_init.sql` | `OWNER postgres`: `public` is owned by `pg_database_owner` |
+
+Verified in the copy: `auth.users` present, `auth.uid/role/email` present, `anon`/`authenticated`/
+`service_role` present, `current_database() like 'infrx\_%'` true, both migrations apply, 4 models.
+The image was **not** asked to do anything it refused, so nothing was worked around and D1's clock
+gate is untouched.
+
+## R-b: the vacuous-matrix hazard, closed
+
+`impersonate()` sets `request.jwt.claim.sub`, `request.jwt.claim.role` **and** the JSON
+`request.jwt.claims`. Every principal-bearing case then asserts `auth.uid()` equals the principal
+before its statement runs — 29 of the 39 cases — and a mismatch is reported `no-identity` with
+`passed=False`. Measured with `impersonate` replaced by a no-op: the same cross-tenant case still
+answers 0 rows (the vacuous pass) and the run reports `outcome: no-identity`, `passed: False`.
+
+New premise cases: `E2-RLS-05` `service_role` `rolbypassrls` true, `E2-RLS-06` anon/authenticated
+false, `E2-RLS-07` `auth.uid()` is the impersonated principal, `E2-RLS-08` no claim means no identity.
+
+## B3: what a kill means now
+
+| Before | Now |
+|---|---|
+| `killed = returncode != 0 and selected` | a kill is pytest **`failed`** with **no `error`** (R40) |
+| a `ModuleNotFoundError` in the fake-vLLM child counted as a kill for e2m01–e2m07 | `fake_vllm.py` resolves `apps/infrx-api` from `INFRX_E2_REPO_ROOT`, so the child imports in a temp copy; a collection error is reported `setup-error`, never a kill |
+| a comment-only edit was "killed" | two CONTROLS (`e2c01`, `e2c02`) must **SURVIVE**; `CONTROL-KILLED` is a failure of the list |
+| `-k` matching nothing counted as a survival | "N deselected" with no passed and no failed is `no-cases` |
+| each false kill leaked `infrx-e2-fake-vllm-*.log` | `start()` drops its log when it raises |
+| the stage and the CLI counted differently | `mutants.summarise()` is the one definition, pinned by a test and `e2m46` |
+
+Round-2 mutation run: **46 mutants, 44 killed, 2 controls survived, 0 not-killed, 0 pending.**
+Selector misses found and fixed on the way (three mutants that had been "surviving" a test that
+never ran), and one mutant moved to layer 1 because against the live database it was unkillable:
+the case reads the database the *unmutated* code created, and re-provisioning to prove it would
+drop the fixtures every later case needs.
+
+## E1's wall-clock bounds (owner E, done in this pass)
+
+`bench.py` takes `CLOCK`/`SLEEP` hooks (real ones in production); the drivers, the retry wait and
+the attempt timestamps go through them, and `fake_gateway.py` waits on the same hook so a virtual
+clock is never mixed with real server sleeps. `test_bench.py` gains an **event-driven**
+`virtual_time()`: a sleep registers a wake-up and blocks; the pump advances to the *earliest*
+pending wake-up only once the loop's ready queue is empty. An additive clock is wrong here — a 1 s
+Retry-After would push the shared clock past every later arrival and invent **1.156 s** of phantom
+lag (measured while writing it).
+
+| Assertion | Before | Now |
+|---|---|---|
+| `test_bench.py:271` retry case | `schedule_lag_s.max < 0.1` | `== 0.0`, exact |
+| `test_bench.py:99` fast/slow case | `lag[tag] < 0.1` | `lag[tag] <= widest arrival slot` per tag, plus the review's signed relative invariant `lag["slow"] - lag["fast"] <= 1e-6` |
+
+Equality between the two lags is **not** claimed: `send_s` is stamped after media preparation
+(E1's coordinated-omission measure), so on a virtual clock which slot a send lands in depends on
+the interleaving. A closed-loop driver would be seconds late, not one slot.
+
+| Check | Result |
+|---|---|
+| `models/marlin2b/tests`, idle | **40 passed** 3/3, 9.4 s (was 26 s: the ttft waits are virtual now) |
+| same, with 24 CPU burners at load average 30 on 16 cores | **40 passed** 4/4 — the condition that produced `assert 0.23425 < 0.1` |
+
+Limit 7 of round 1 is therefore **closed**, and corrected in place above.
+
+## Limits after round 2
+
+1. **Harness runs are serialized host-wide** (R-c). One compose project name is shared by every
+   checkout; the ownership label makes a second run refuse rather than destroy, but it still
+   refuses. A per-checkout project suffix and port block would remove the restriction and is the
+   obvious follow-up if two E sessions ever need to run at once.
+2. **`INFRX_E2_CHECKOUT` and `INFRX_E2_REPO_ROOT` are test-runner seams.** Setting the first lets
+   a process claim another checkout's resources; only `mutants.py` does, and only so a temp copy
+   can see the stack it was asked to mutate against. Documented in `working_dir()`.
+3. **`provision_database` shells out through `docker exec`** because `supabase_admin` has no TCP
+   password in this image. That couples the migration runner to docker; if D1 prefers a shim
+   migration to the template copy, this is the piece that changes.
+4. Round-1 limits 1–6 and 8–12 stand unchanged (fake ≠ vLLM; a stall is declared; the role matrix
+   is today's console schema; `service_role` bypasses RLS so route-side tenant safety is C/G's;
+   `tests/integration` is in no canonical `make` target → `make integration` is still the
+   integration request; one image pull on a fresh host; digests are current, not eternal; no PERF,
+   no live, no GPU).
+5. **The 20 ms inter-delta gap on the cancellation path** is the only real delay in `fake_vllm.py`.
+   Without it the body is emitted before any client could cancel and the race cannot exist; it is
+   not a timeout being waited out, and no other fault path has it.
+
+## Verification log (round 2)
+
+- 2026-09-21: Round-2 fixes at `bbf686b`. Every count above is quoted from command output. The
+  three false round-1 claims are corrected in place and marked (`SUPERSEDED in round 2`,
+  `Corrected in round 2`, `unearned`). Both B1 reproductions were re-run and now refuse instead of
+  destroying, with the first stack's data intact afterwards. All containers, volumes, networks and
+  processes created during this pass were removed; `docker ps -a`/`docker volume ls` show no
+  `infrx-e2` resource. Nothing was pushed, and no `infrx-d1-*` or other session's resource was
+  touched at any point.
