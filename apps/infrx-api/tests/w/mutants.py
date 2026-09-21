@@ -256,8 +256,8 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "        if limits.journal_event_max_bytes < MIN_JOURNAL_EVENT_BYTES:",
        "        if False:", JOURNAL),
     _m("duration_not_finite", "a duration must be finite",
-       E, "            if videos[0].duration_s is None or not math.isfinite(videos[0].duration_s):",
-       "            if videos[0].duration_s is None:", MEASURED,
+       E, "            if videos[0].duration_s is None or not math.isfinite(videos[0].duration_s) \\\n                    or videos[0].duration_s <= 0:",
+       "            if videos[0].duration_s is None or videos[0].duration_s <= 0:", MEASURED,
        allowed_errors=("TypeError", "OverflowError", "ValueError")),
     _m("reported_prompt_unbounded", "a reported prompt count outside the context is unknown",
        E, "        elif stream.usage_candidate.prompt_tokens > self.limits.max_context_tokens:",
@@ -525,8 +525,8 @@ MUTANTS: tuple[Mutant, ...] = (
           "            # r1 R46: one generation is one attempt, so a lease is never executed twice. It",
        ONCE),
     _m("cancel_key_ignores_the_generation", "an intent is scoped to its generation (R58)",
-       E, "        key = (lease.job_id, lease.generation)\n        inner = self._attempt(stream, key)",
-       "        key = (lease.job_id, 1)\n        inner = self._attempt(stream, key)",
+       E, "        key = (lease.job_id, lease.generation)\n        if key in self.finished:",
+       "        key = (lease.job_id, 1)\n        if key in self.finished:",
        CANCEL_SCOPE),
     _m("cancel_intents_unbounded", "intents for work that never runs are bounded (R58)",
        E, "        if len(self.cancelled) >= MAX_CANCEL_INTENTS:\n"
@@ -633,8 +633,9 @@ MUTANTS: tuple[Mutant, ...] = (
     # (`budget_kwargs(None)`), which is the defect - `or 0.0` silently asked for a four-frame
     # budget instead, and either way the case's refusal never happens.
     _m("missing_duration_is_zero", "a prepared video carries its duration",
-       E, "            if videos[0].duration_s is None or not math.isfinite(videos[0].duration_s):",
-       "            if False:", MEASURED, allowed_errors=("TypeError",)),
+       E, "            if videos[0].duration_s is None or not math.isfinite(videos[0].duration_s) \\\n                    or videos[0].duration_s <= 0:",
+       "            if not math.isfinite(videos[0].duration_s) or videos[0].duration_s <= 0:",
+       MEASURED, allowed_errors=("TypeError",)),
     _m("roles_widened", "the role vocabulary is closed (R58)",
        E, 'ALLOWED_ROLES = ("system", "user", "assistant")',
        'ALLOWED_ROLES = ("system", "user", "assistant", "tool")', PINNED, ALLOW),
