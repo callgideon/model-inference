@@ -468,7 +468,17 @@ class MemoryScheduler:
         return None if best is None else (best[1], best[2])
 
     def _forget(self, event_id: str) -> None:
-        """Drop one entry and, with it, any fairness state it was the last reason for."""
+        """Drop one entry and, with it, any fairness state it was the last reason for.
+
+        The known cost of deleting an empty flow (standard SFQ, worth saying out loud
+        because Q3 owns the estimator that makes it matter): a tenant that keeps at most
+        one candidate indexed at a time empties its flow on every dispatch and therefore
+        re-arrives at lag 0 for the next one, while a tenant that keeps a backlog carries
+        its tag. The advantage is bounded by the tenant's own concurrency - one slot per
+        empty-to-backlogged transition - so it cannot starve anyone; it is a reason to
+        keep the flow if a future cost model makes a slot expensive, not a reason to keep
+        stale fairness state now, which the Q1 acceptance criteria forbid.
+        """
         entry = self._entries.pop(event_id, None)
         if entry is None:
             return
