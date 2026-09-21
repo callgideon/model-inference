@@ -54,6 +54,15 @@ def test_the_pass_rule_belongs_to_the_rubric_version():
         assert RUBRIC.passes({**good, name: 3}, media=True) is False
     assert RUBRIC.passes({**good, "format": 2}, media=True) is False
     assert RUBRIC.passes({**good, "completeness": 1}, media=True) is True
+    # A criterion in the rule with **no score** fails it, which is the general form of
+    # "no media, no groundedness pass": the criterion it needs was never scored.
+    for name in ("relevance", "groundedness", "format", "refusal"):
+        assert RUBRIC.passes({k: v for k, v in good.items() if k != name}, media=True) is False
+    assert RUBRIC.passes({k: v for k, v in good.items() if k != "completeness"},
+                         media=True) is True
+    # And a media-dependent criterion cannot pass without media, whatever a caller's
+    # dictionary claims - J3 calls this on its own rows, not only through the validator.
+    assert RUBRIC.passes(good, media=False) is False
 
 
 # --- structure --------------------------------------------------------------------

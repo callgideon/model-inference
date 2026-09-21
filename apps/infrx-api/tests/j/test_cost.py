@@ -131,14 +131,16 @@ def test_the_defaults_can_never_authorize_a_submission():
     """08 §5: `JUDGE_MODE=dry_run`, `JUDGE_LIVE_BUDGET_USD=0`. Both refuse on their
     own, so flipping one setting is not enough to spend money."""
     priced = estimate()
-    with pytest.raises(errors.BudgetExceeded):
+    # The message matters: each condition must refuse on its *own* account, or removing
+    # one of the three guards would still look refused because another one fired.
+    with pytest.raises(errors.BudgetExceeded, match="judge mode"):
         require_live_submission(DEFAULTS, priced)
     assert live_submission_allowed(DEFAULTS, priced) is False
     # live mode with the default zero budget
-    with pytest.raises(errors.BudgetExceeded):
+    with pytest.raises(errors.BudgetExceeded, match="JUDGE_LIVE_BUDGET_USD"):
         require_live_submission(DEFAULTS.replace(judge_mode="live"), priced)
     # a budget without live mode
-    with pytest.raises(errors.BudgetExceeded):
+    with pytest.raises(errors.BudgetExceeded, match="judge mode"):
         require_live_submission(DEFAULTS.replace(judge_live_budget_usd=Decimal("100")), priced)
     # both, and it is allowed
     assert live_submission_allowed(LIVE, priced) is True
