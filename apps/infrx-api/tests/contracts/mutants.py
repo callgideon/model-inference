@@ -551,6 +551,32 @@ MUTANTS: tuple[Mutant, ...] = (
           "                raise errors.IdempotencyConflict(\"same label key, different payload\")\n"
           "            return self.items[feedback_id]",
        "        existing = None", "feedback_ack__an_operator_may_label_a_calibration_set"),
+    # --- B4: the eight invariants whose mutants the reviewer found surviving --------
+    _m("price_read_from_the_request_again", "the price is never read from the request (q30)",
+       S, "        snapshot = self.price_for(request.model_revision, now)",
+       "        carried = (request.parameters or {}).get(\"price_snapshot\")\n"
+       "        snapshot = (PriceSnapshot.model_validate(carried) if carried\n"
+       "                    else self.price_for(request.model_revision, now))",
+       "dur_admit__a_refused_admission_reserves_nothing"),
+    _m("prepared_takes_foreign_media", "prepared refs are the job's own tenant's (q22)",
+       S, '                    raise errors.Forbidden("prepared media must belong to the job\'s org")',
+       "                    pass",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("prepare_falls_back_to_any_job", "prepare resolves this job's refs or nothing (q23)",
+       M, "        sources = self.by_job.get(job_id)\n"
+          "        if sources is None:\n"
+          '            raise errors.NotFound(f"no staged media for job {job_id}")',
+       "        sources = self.by_job.get(job_id)\n"
+          "        if sources is None:\n"
+          "            sources = next(iter(self.by_job.values()), None)\n"
+          "        if sources is None:\n"
+          '            raise errors.NotFound(f"no staged media for job {job_id}")',
+       "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
+    _m("load_work_reports_current_budgets", "load_work carries the R4 budgets (q16)",
+       S, "                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets)",
+       "                        price_snapshot=job.admission.price_snapshot,\n"
+          "                        budgets=Budgets.of(self.limits, job.request.execution_mode))",
+       "dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise"),
     # --- r1 R52: the preparation lease, the tenant check and the dispatch kind ---
     _m("preparation_lease_uses_the_inference_ttl", "preparation has its own short TTL (R52)",
        S, "                expires_at=min(now + timedelta(seconds=self.limits.preparation_lease_ttl_s),\n"

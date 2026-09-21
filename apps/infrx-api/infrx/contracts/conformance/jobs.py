@@ -371,10 +371,14 @@ async def dur_admit__a_refused_admission_reserves_nothing(factory):
     journal_bytes = hook(harness, "journal_bytes")
     # r1 R45: "unpriced" is the price source having no row for the model, not a missing
     # request parameter. Omitting a parameter proved nothing about a store that reads its
-    # own `price_versions` relation, which is every real store.
+    # own `price_versions` relation, which is every real store - and a store that read the
+    # parameter again would pass a case that merely left it out. So the request here
+    # *carries* one, generously priced, and it must have no influence whatsoever.
     set_price = hook(harness, "set_price")
+    smuggled = b.price("0.00000001", "0.00000001").model_dump(mode="json")
     unpriced_model = f"{b.MODEL}-unpriced"
-    unpriced = b.request(harness, model_revision=unpriced_model)
+    unpriced = b.request(harness, model_revision=unpriced_model,
+                         parameters={"price_snapshot": smuggled})
     for _ in range(3):
         try:
             await harness.port.admit(unpriced, b.idem(unpriced, "unpriced"), ())
@@ -399,11 +403,24 @@ async def dur_admit__a_refused_admission_reserves_nothing(factory):
     assert len(harness.extra["active_jobs"]()) == 0
     assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
     assert journal_bytes() == 0, "a refused admission leaked a journal reservation"
+    # r1 R45: and a *priced* model whose request also carries a `price_snapshot` parameter
+    # ignores it completely - the snapshot and the hold both come from the price source.
+    # G1 rejects such a parameter outright as `unsupported_parameter`; the store simply
+    # does not look at it.
+    carrying = b.request(harness, parameters={"price_snapshot": smuggled})
+    admitted = await harness.port.admit(carrying, b.idem(carrying, "carrying"), ())
+    assert admitted.price_snapshot == b.DEFAULT_PRICE, \
+        "the store read a price out of the request"
+    assert admitted.maximum_hold == b.hold_for(carrying, b.DEFAULT_PRICE)
+    assert admitted.maximum_hold > 0, "the smuggled price would have made the hold zero"
     # r1 R53: a caller cannot name money here at all, so the only remaining way for a
     # hold to be wrong is for the store to derive it wrongly - which is what
-    # `dur_settle__a_price_change_never_undersizes_the_hold` pins.
-    assert len(harness.extra["active_jobs"]()) == 0
-    assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
+    # `dur_settle__a_price_change_never_undersizes_the_hold` pins. The one job now live is
+    # the `carrying` admission just above, which the store *accepted* - correctly, at its
+    # own price.
+    assert [job.request.request_id for job in harness.extra["active_jobs"]()] == \
+        [carrying.request_id]
+    assert harness.extra["balance"](b.ORG_A)["reserved"] == admitted.maximum_hold
 
 
 # --------------------------------------------------------------------------
@@ -749,7 +766,18 @@ async def dur_fence__preparation_is_claimed_and_fenced_like_execution(factory):
             raise AssertionError("a forged preparation lease queued the job")
     stored, _ = await harness.port.get_owned(request.org_id, admission.job_handle)
     assert stored.state is JobState.preparing, "a fenced preparation worker moved the job"
-    queued = await harness.port.prepared(lease, ())
+    # r1 R10: prepared refs are the job's own tenant's, checked at the write. A foreign
+    # ref reaching `prepared` means preparation produced an object for the wrong
+    # organization, and storing it would file another tenant's content under this job.
+    try:
+        await harness.port.prepared(lease, (b.media(b.ORG_B),))
+    except (errors.Forbidden, errors.NotFound) as exc:
+        assert errors.http_status(exc.code) in (403, 404), exc.code
+    else:
+        raise AssertionError("prepared accepted another organization's media")
+    stored_after, _ = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert stored_after.state is JobState.preparing, "a refused prepared moved the job"
+    queued = await harness.port.prepared(lease, (b.media(b.ORG_A),))
     assert queued.state is JobState.queued
     # and the spent lease is spent: the phase is over, so the token fences nothing
     try:
@@ -813,6 +841,22 @@ async def dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise(factory
     work = await harness.port.load_work(lease)
     assert work.prepared_refs == prepared_refs and work.media_refs == refs
     assert work.price_snapshot == admission.price_snapshot
+    # r1 R53/R4: and it keeps carrying them after the store is reconfigured underneath it.
+    # `load_work` reading *current* values would hand a running worker a price the customer
+    # was never quoted and budgets the job was never granted - the same mistake as pricing
+    # at settlement, one phase earlier.
+    hook(harness, "set_price")(b.MODEL, b.price("9.99", "9.99"))
+    hook(harness, "retune")(generation_timeout_s=DEFAULTS.generation_timeout_s * 3,
+                            ttft_timeout_s=DEFAULTS.ttft_timeout_s * 3,
+                            tpot_stall_s=DEFAULTS.tpot_stall_s * 3,
+                            queue_wait_interactive_s=DEFAULTS.queue_wait_interactive_s * 3)
+    after = await harness.port.load_work(lease)
+    assert after.price_snapshot == admission.price_snapshot, \
+        "load_work reported the current price, not the admitted snapshot"
+    assert after.budgets == admission.budgets, \
+        "load_work reported current budgets, not the R4 snapshot"
+    assert after.budgets.generation_s == DEFAULTS.generation_timeout_s
+    hook(harness, "set_price")(b.MODEL, b.DEFAULT_PRICE)
     # every way of not holding the lease: another worker, a stale generation, the wrong
     # kind, an unknown job, and an expired lease
     forgeries = (lease.model_copy(update={"worker_id": "worker-b"}),

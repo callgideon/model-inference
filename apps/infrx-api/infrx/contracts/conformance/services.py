@@ -114,6 +114,21 @@ async def media_parity__staging_is_content_addressed_and_tenant_namespaced(facto
     assert "profile-2" in prepared[0].storage_ref
     assert b.ORG_A in prepared[0].storage_ref
     assert prepared[0].digest == staged_a[0].digest            # same source content
+    # r1 R46/q23: `prepare` resolves **this job's** refs or nothing. A store that fell back
+    # to "any attached refs" would transcode one job's media for another - the same content
+    # under two jobs' prefixes, and a foreign job's media prepared into this tenant's -
+    # which no later check would catch, because the refs it returns look perfectly valid.
+    await harness.port.attach(request_b.request_id, b.ORG_B, staged_b)
+    try:
+        await harness.port.prepare(harness.ids.uuid(), "profile-2")
+    except errors.NotFound:
+        pass
+    else:
+        raise AssertionError("prepare invented media for an unknown job")
+    foreign = await harness.port.prepare(request_b.request_id, "profile-2")
+    assert [ref.org_id for ref in foreign] == [b.ORG_B], \
+        "prepare handed one job another job's media"
+    assert all(b.ORG_B in ref.storage_ref for ref in foreign)
 
 
 async def media_sec__a_foreign_media_reference_is_not_staged(factory):
