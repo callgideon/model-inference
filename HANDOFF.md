@@ -64,7 +64,7 @@ models/common/            download.sh + env.sh (shared)
 models/<exp>/             deepseek41f, deepseek41fnvfp4, qwen3827b, kimik3, marlin2b (model.env, download.sh; marlin2b also serve.sh, smoke.py, bench.py, reference.py, tokens.py, results/)
 apps/README.md            console + gateway spec (requirements F1–F10, data model, deployment)
 apps/app/                 Next.js console; supabase/migrations; README with run/deploy notes
-apps/infrx-api/           gateway.py (500 lines), tests/ (auth + media, pytest or plain python), deploy/ (systemd units, Caddyfile, install.sh, replay_usage.py), openrouter/ (provider document + listing plan), client_example.py
+apps/infrx-api/           gateway.py (compatibility entry point; the gateway code was extracted to infrx/ by task F1), infrx/ (auth, media, usage, gateway app factory, contracts v1), tests/ (legacy gateway tests + tests/contracts + per-track suites), deploy/ (systemd units, Caddyfile, install.sh, replay_usage.py), openrouter/ (provider document + listing plan), client_example.py
 research/                 METHODOLOGY.md (formulas, units, pinned inputs) and the trees below, each with a README index
   gpus/, cross-cutting/, models/<exp>/, matrix/   per-GPU × per-model sizing, costs, recommendations (the 8×B300 destination)
   scaling/                bare-metal cluster serving research + blueprint (10) + playbook (11) + providers (12)
@@ -383,8 +383,8 @@ $A ssm get-command-invocation --command-id $CMD --instance-id i-0e8449a4ffca29ba
 # call the API
 KEY=$($A ssm get-parameter --name /model-inference/marlin2b_api_key --with-decryption --query Parameter.Value --output text)
 MARLIN_API_KEY=$KEY python3 apps/infrx-api/client_example.py --raw --find "a white bus drives past"
-# gateway tests
-python3 -m venv /tmp/gw && /tmp/gw/bin/pip install -q fastapi uvicorn httpx pytest && /tmp/gw/bin/python -m pytest apps/infrx-api/tests -q
+# gateway + contract tests (pinned environment; see the root Makefile)
+make api-env && make api-test        # `make check` runs every canonical target
 # console
 cd apps/app && pnpm install && cp .env.example .env.local && pnpm dev   # fill keys from SSM
 # benchmark through the gateway (Phase 0 of both programs)
@@ -394,3 +394,4 @@ BASE_URL=https://marlin2b.callbill.ai/v1 MARLIN_API_KEY=$KEY python3 models/marl
 ## Documentation update log
 
 - 2026-09-20: Added authoritative implementation package, incorporated review decisions, removed plaintext account password from this file and retained historical source context. No live infrastructure or application implementation changed.
+- 2026-09-21: Repository map and test command refreshed after F1/F2 integration on `claude/infrx-impl`; live-state sections above remain historical and were not re-verified by this edit. The I1 inventory (`research/plan/evidence/i/`) and `infra/README.md` hold the re-observed state, including the installer fail-open hazard (`O-FAILOPEN`).

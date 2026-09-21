@@ -46,15 +46,21 @@ free space in bytes on purpose (`SIZE_GB` is decimal GB, `df` reports GiB).
 account approved. `S3_DIR` in `model.env` deliberately differs from the
 directory name; the mirror predates the names.
 
-Existing checks: `python -m pytest apps/infrx-api/tests -q`; in `apps/app`,
-`pnpm test`, `pnpm lint` and `pnpm build` as appropriate. F2 in the handoff package
-will pin the Python environment and expand console test discovery; do not assume
-new nested tests are discovered by the current top-level glob. Scripts also use
+Checks: run the canonical targets from the repo root — `make api-env` (pinned
+`uv sync --frozen` into `apps/infrx-api/.venv`), `make api-test`, `make api-mutants`,
+`make console-test`, `make console-lint`, `make console-typecheck` (`next typegen`
+then `tsc`), `make console-mutants`, `make bench-test`, or `make check` for all.
+Console tests are discovered recursively (`lib/`, `tests/`, `app/`, `components/`);
+track suites live in `apps/infrx-api/tests/<track>/` and `apps/app/tests/<track>/`.
+Track tests never import the legacy `gateway` shim; they build apps with
+`infrx.gateway.app.create_app()`. The shared contracts are frozen in
+`apps/infrx-api/infrx/contracts/` and `apps/app/lib/contracts/`; binding rulings are
+`research/plan/08-contracts-v1-encoding.md` §10. Scripts also use
 `set -euo pipefail` plus small Python clients. Marlin tools:
 `./models/marlin2b/serve.sh` (vLLM in docker), `models/marlin2b/smoke.py`
 (one request), `bench.py` (load test), `reference.py` (transformers path),
-`tokens.py` (video token budget); `apps/infrx-api/gateway.py` is the public
-OpenAI-compatible gateway (systemd + Caddy, `apps/infrx-api/deploy/`). The dev box is a
+`tokens.py` (video token budget); `apps/infrx-api/gateway.py` is the compatibility entry point of the public
+OpenAI-compatible gateway (the code lives in `apps/infrx-api/infrx/`) (systemd + Caddy, `apps/infrx-api/deploy/`). The dev box is a
 `g6e.2xlarge` (`i-0e8449a4ffca29bab`, us-east-1d) with the DLAMI's PyTorch
 env at `/opt/pytorch` and NVMe at `/opt/dlami/nvme`; see `models/marlin2b/README.md`.
 
@@ -105,3 +111,4 @@ and ships no MTP weights.
 ## Verification log
 
 - 2026-09-20: Updated implementation entry point, worktree rules and existing-test guidance; application behavior unchanged.
+- 2026-09-21: Commands updated after F1/F2 integration (pinned environment, make targets, recursive console discovery, contracts location); application behavior unchanged.

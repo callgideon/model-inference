@@ -1,6 +1,6 @@
 # Implementation handoffs — free pilot and traces
 
-Status: **documentation ready; implementation not started**. Prepared 2026-09-20 for independent Claude Opus 5 sessions. This package supersedes conflicting implementation instructions in the original production API and traces research. Historical measurements remain historical measurements; this plan does not certify the live system.
+Status: **implementation in progress** — live status is the [pipeline board](evidence/coordinator/STATUS.md) and `tasks.json`; binding contract rulings are in [the encoding](08-contracts-v1-encoding.md) §10. Prepared 2026-09-20 for independent Claude Opus 5 sessions. This package supersedes conflicting implementation instructions in the original production API and traces research. Historical measurements remain historical measurements; this plan does not certify the live system.
 
 ## Start here
 
@@ -40,3 +40,4 @@ The [contracts v1 encoding](08-contracts-v1-encoding.md) fixes the layout, vocab
 
 - 2026-09-20: Derived from repository review and explicit user decisions. Created documentation-only implementation package; planned tests and live gates are not reported as passed.
 - 2026-09-20: Implementation coordination started ([session 01](evidence/coordinator/2026-09-20-session-01.md)); added the contracts v1 encoding refinement for F2. No task is marked integrated by this entry.
+- 2026-09-21: Status line updated; F1, F2, E1 and I1 are integrated on `claude/infrx-impl` (gate G0), nothing is deployed or live-verified.

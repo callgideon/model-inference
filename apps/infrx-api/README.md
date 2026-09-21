@@ -69,7 +69,7 @@ fetched **once, in the gateway**, and handed to vLLM inline as a base64
 `data:` URL, so the engine never fetches from the internet — one download
 instead of two, and no second SSRF surface behind ours.
 
-Policy (`prepare_video` / `fetch_video` in `gateway.py`):
+Policy (`prepare_video` / `fetch_video` in `infrx/media/video.py`; `gateway.py` re-exports them):
 
 - **scheme**: `http`/`https` only; anything else is rejected before a socket
   is opened;
