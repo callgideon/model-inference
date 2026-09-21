@@ -1149,3 +1149,129 @@ Round-2's list stands, with two changes:
   runner's self-tests pass, and the conformance split is unchanged. Three earlier statements in this
   report were wrong and are corrected in place, marked: the port check's reach, the TS-03 rationale, and
   the loose "±2^26". No service was contacted; nothing was pushed or deployed.
+
+---
+
+# Appendix — review round 4 (one regression at `f534531`)
+
+Appended. Implementation SHA: **`35bcfb1`**. Same worktree and branch, owned paths only, nothing pushed,
+no service contacted.
+
+## The regression, and why nothing caught it
+
+`c57841f` (round 3) made `usage_summary` group by the tenant so the row it returns says whose totals
+these are. A grouped aggregate over zero matching rows returns **zero rows** — in PostgreSQL and in the
+in-memory double alike — and `usageSummary` read `found[0] ?? {}`, so `money()` reached `cell()` on an
+empty object, `cell()` threw, and the boundary guard turned it into `internal_error`.
+
+What that meant in practice: every filter that matches nothing (`model`, `key_id`, a future `from`, an
+empty range) and **every newly signed-up organization opening its usage page**. Before round 3 the
+statement was ungrouped, so PostgreSQL returned one all-zero row and the code happened to work.
+
+Nothing in this suite caught it because every fixture organization has usage rows, and no case asked for
+a window with nothing in it. The gap was in the *fixtures' shape*, not in the assertions — which is the
+kind of hole a conformance suite built on one dataset leaves, and worth remembering for C2 and C3.
+
+| Item | Commit | Killing test / mutants |
+|---|---|---|
+| Empty aggregate → `internal_error` | `35bcfb1` | `an empty window is zeros, not a failure` — the three no-match filters, an empty range, an organization emptied of usage, and deep equality with the fixture-backed fake's own zero summary; plus "more than one grouped row for one tenant is a refusal" through a doubling port → **ZERO-01** (read the empty aggregate as a row, `kills_by: "guarded"`), **ZERO-02** (report something other than zero), **ZERO-03** (average over more than one row) |
+| Optional: the bare-ok scan was not itself killable | `35bcfb1` | the scan now runs over an in-memory offender and an in-memory allowed form before it walks the tree → **SCAN-01** |
+
+Verified the case fails without the fix, by removing the branch and re-running:
+
+```
+$ node --test --test-reporter=tap tests/c/read-services.test.ts   # with the zero branch deleted
+not ok 18 - an empty window is zeros, not a failure
+# fail 1
+```
+
+**Zero rows is safe to answer as zeros**, which is why the branch is a `return` and not a refusal: nothing
+came back for `scopedPort` to inspect, and a port that had returned a foreign row would have been refused
+before this line. More than one grouped row for one tenant is the opposite case — the totals cannot be
+attributed — and is refused.
+
+## Results (quoted)
+
+```
+=== make console-test
+exit=0
+# tests 189
+# pass 189
+# fail 0
+# skipped 0
+=== make console-lint
+exit=0
+✖ 2 problems (0 errors, 2 warnings)
+=== make console-typecheck
+exit=0
+✓ Types generated successfully
+=== make console-mutants
+exit=0
+144 mutants: 144 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 29.9s
+=== make api-test
+exit=0
+670 passed, 2 warnings in 35.88s
+=== node tests/c/run-mutants.mjs --jobs 6
+exit=0
+baseline: 76 cases pass unmutated, 31 fail (C2/C3 operations this task does not implement); 88 mutants, 6 at a time
+88 mutants: 88 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 35.1s
+=== node tests/c/run-mutants.mjs --self-test
+exit=0
+4 self-tests, 0 failed
+=== exported conformance
+exit=1
+# tests 45
+# pass 16
+# fail 29
+```
+
+UTC window `2026-09-21T17:46:39Z` – `2026-09-21T17:48:35Z`. Track cases, counted per file:
+
+```
+tests/c/client-boundary.test.ts: 4
+tests/c/console-conformance.test.ts: 3
+tests/c/credits.test.ts: 5
+tests/c/cursor.test.ts: 5
+tests/c/projection.test.ts: 11
+tests/c/query-boundary.test.ts: 14
+tests/c/read-services.test.ts: 21
+```
+
+**63 cases in seven files.** The two lint warnings are the pre-existing ones in coordinator-owned
+`lib/contracts/*`; the conformance split is unchanged at 16 / 29.
+
+## Changes
+
+```
+$ git diff --numstat f534531..HEAD
+30	1	apps/app/lib/services/console.ts
+20	13	apps/app/tests/c/client-boundary.test.ts
+41	0	apps/app/tests/c/mutants.json
+52	0	apps/app/tests/c/read-services.test.ts
+```
+
+## Limits (delta)
+
+- **New:** `usageSummary` accepts **either** shape for an empty window — zero rows, or one all-zero row
+  labelled with the tenant (which is what D1's `console_usage_summary` returns for a guarded `p_org`).
+  Both are answered as zeros; a second row of any kind is refused.
+- Round-3's residual stands: the row label is checkable, an aggregate's arithmetic is not, and that is a
+  Layer-2 assertion against real PostgreSQL.
+
+## Integration requests (delta)
+
+1. **To C2 / the supabase-js port (added detail):** an empty window may come back as **zero rows** from a
+   grouped aggregate or as **one zero row** from D1's guarded function. The port must pass both through
+   unchanged — it must not invent a row, and it must not drop one.
+2. Everything else from rounds 1–3 is unchanged (`org_id` on every view and RPC result; the keyset
+   compares instants; the log sink; F2.2's three items; money and timestamps as text).
+
+## Verification log
+
+- 2026-09-21: Round-4 regression fixed at `35bcfb1`. A grouped aggregate over an empty window returns no
+  rows, and reading `found[0]` made every empty usage page an `internal_error` — including every new
+  organization's. Answered as zeros, with more than one row refused; the case covers the three no-match
+  filters, an empty range, an emptied organization and agreement with the shared fake, and it fails
+  without the branch. 189 console tests pass, 88 of 88 C1 mutants and 144 of 144 F2 mutants are killed,
+  the runner's self-tests pass. Recorded why the suite missed it: every fixture organization has usage
+  rows, so no case asked for a window with nothing in it. No service was contacted; nothing was pushed.
