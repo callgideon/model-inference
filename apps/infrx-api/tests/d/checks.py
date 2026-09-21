@@ -39,6 +39,10 @@ JOB_TERMINAL = "50000000-0000-4000-8000-000000000003"
 JOB_B = "50000000-0000-4000-8000-0000000000bb"
 UNKNOWN_A = "91000000-0000-4000-8000-000000000001"
 UNKNOWN_B = "91000000-0000-4000-8000-0000000000b1"
+# An organization the wallet-grant control creates and removes again.
+SPARE_ORG = "0d000000-0000-4000-8000-00000000000d"
+# A legacy usage row whose stored key belongs to ANOTHER organization.
+FOREIGN_KEY_USAGE = "92000000-0000-4000-8000-000000000001"
 RUN_ID = "60000000-0000-4000-8000-000000000001"
 EVENT_ID = "70000000-0000-4000-8000-000000000001"
 DEST_ID = "80000000-0000-4000-8000-000000000001"
@@ -354,6 +358,19 @@ def seed_fixtures(conn) -> None:
             'nemostation/marlin-2b', 503, 1, 0, 0.00000000, 'unknown', 'held_unknown'),
            ('91000000-0000-4000-8000-0000000000b2', '{ORG_B}', '{KEY_B}',
             'nemostation/marlin-2b', 503, 1, 0, 0.00000000, 'unknown', 'held_unknown');
+    -- r4 (t33): a LEGACY usage row whose stored key belongs to another organization. The
+    -- pilot trigger only guards pilot rows, so such a row can exist (and may already, from
+    -- before these rules); `console_usage` must show no key for it rather than another
+    -- tenant's key name.
+    insert into public.usage_events
+      (id, org_id, api_key_id, model_id, status, cost_usd)
+      values ('{FOREIGN_KEY_USAGE}', '{ORG_A}', '{KEY_B}', 'nemostation/marlin-2b', 200,
+              0.00000100);
+    -- r4 (s15): exactly 400, the boundary `failed_requests` counts from.
+    insert into public.usage_events
+      (id, org_id, api_key_id, model_id, status, cost_usd)
+      values ('92000000-0000-4000-8000-000000000002', '{ORG_A}', '{KEY_A}',
+              'nemostation/marlin-2b', 400, 0.00000000);
     -- A usage row for a request whose hold is active but whose usage IS known, so
     -- `pending_reconciliation` has something to exclude (r3/n40): summing every hold
     -- instead of the unknown ones would report 3.75 where the answer is 2.50.
@@ -851,6 +868,12 @@ ALLOWED = (
      "member", "select count(*) from public.usage_events"),
     ("member reads their organization's ledger",
      "member", "select count(*) from public.credit_ledger"),
+    # r4 (t02): the exact select list `apps/app/lib/credits.ts` sends. `count(*)` needs no
+    # column privilege at all, so dropping one column from the grant - `reason`, say - would
+    # break the deployed console and pass every check.
+    ("the console's own ledger select list", "member",
+     f"select id, delta_usd, kind, reason, ref, created_at from public.credit_ledger "
+     f"where org_id = '{ORG_A}' order by created_at desc"),
     # The console's own key actions must keep working (R33: a leaked key is always
     # revocable), which is what the narrowed column grant is for.
     ("owner renames a key",
@@ -1268,17 +1291,23 @@ VIOLATIONS = (
     ("a delivery to another tenant's registered endpoint",
      f"insert into infrx.callback_deliveries (event_id, destination_id, org_id, state) "
      f"values ('70000000-0000-4000-8000-0000000000bb', '{DEST_ID}', '{ORG_B}', 'failed')"),
+    # r4 (F2): JOB_RUNNING, which has no usage row. JOB_QUEUED gained one in round 3, so
+    # the primary key refused this before the trigger ever ran and a mutant that dropped
+    # the key's tenant branch survived.
     ("a pilot usage row naming another tenant's api key",
      f"insert into public.usage_events (id, org_id, api_key_id, model_id, status, "
      f"settlement_regime, outcome, settlement_state, settlement_version) values "
-     f"('{JOB_QUEUED}', '{ORG_A}', '{KEY_B}', 'nemostation/marlin-2b', 200, 'pilot', "
+     f"('{JOB_RUNNING}', '{ORG_A}', '{KEY_B}', 'nemostation/marlin-2b', 200, 'pilot', "
      f"'completed', 'settled', 1)"),
     ("an outbox event naming another tenant's job",
      f"insert into infrx.outbox (event_id, aggregate_id, org_id, kind, available_at) "
      f"values ('70000000-0000-4000-8000-0000000000fc', '{JOB_B}', '{ORG_A}', "
      f"'usage_projection', now())"),
+    # r4 (t31): ORG_B's event, which no `callback_deliveries` row references - EVENT_ID has
+    # one, so the composite delivery key refused the move before the trigger saw it.
     ("moving an outbox event to another tenant",
-     f"update infrx.outbox set org_id = '{ORG_B}' where event_id = '{EVENT_ID}'"),
+     f"update infrx.outbox set org_id = '{ORG_A}' "
+     f"where event_id = '70000000-0000-4000-8000-0000000000bb'"),
     ("an outbox event with no organization",
      f"insert into infrx.outbox (event_id, aggregate_id, kind, available_at) values "
      f"('70000000-0000-4000-8000-0000000000fd', '{JOB_QUEUED}', 'usage_projection', "
@@ -1995,15 +2024,32 @@ def check_legacy_writer_does_not_drift(conn) -> str:
     # move `reserved_total` (D2/D5 reserve), and can neither set the total nor delete the
     # row - a settlement that did both would double-move, and a delete would let the next
     # delta become the whole balance.
+    # r4 (F1): an organization that EXISTS and whose wallet row has been removed, so the
+    # funded insert is refused by the column grant (42501) rather than by the foreign key.
+    # The round-3 version named an organization that did not exist, so the FK refused it
+    # whatever the grant said and a mutant that granted `ledger_total` survived.
+    conn.execute(f"""
+        insert into public.organizations (id, name, slug)
+          values ('{SPARE_ORG}', 'spare', 'spare-org') on conflict (id) do nothing;
+        delete from infrx.wallets where org_id = '{SPARE_ORG}';""")
     for label, sql in (
             ("set ledger_total", f"update infrx.wallets set ledger_total = 1 "
                                  f"where org_id = '{ORG_A}'"),
             ("delete a wallet", f"delete from infrx.wallets where org_id = '{ORG_A}'"),
             ("insert a funded wallet",
-             "insert into infrx.wallets (org_id, ledger_total) values "
-             "('0d000000-0000-4000-8000-00000000000d', 500)")):
+             f"insert into infrx.wallets (org_id, ledger_total) values "
+             f"('{SPARE_ORG}', 500)")):
         refusal = _attempt(conn, "service", sql)
         assert refusal is not None, f"the platform role may {label}"
+        assert refusal.startswith("42501"), \
+            f"the platform role was refused `{label}` by something other than the grant: "\
+            f"{refusal}"
+    # ...and the columns it MUST be able to write, on the same row, so the refusals above
+    # are about `ledger_total` and not about the insert being impossible.
+    allowed = _attempt(conn, "service", f"insert into infrx.wallets (org_id, reserved_total)"
+                                        f" values ('{SPARE_ORG}', 1)")
+    assert allowed is None, f"the platform role may not open a wallet: {allowed}"
+    conn.execute(f"delete from public.organizations where id = '{SPARE_ORG}'")
     allowed = _attempt(conn, "service", f"update infrx.wallets set reserved_total = 2 "
                                         f"where org_id = '{ORG_A}'")
     assert allowed is None, f"the platform role may not reserve credit: {allowed}"
@@ -2186,6 +2232,20 @@ def check_console_read_surface(conn) -> str:
     assert kinds["key_id"] == "uuid", kinds
     pairs = read_rows(conn, "member", "select key_id, key_name from public.console_usage")
     assert all((key_id is None) == (name is None) for key_id, name in pairs), pairs
+    # r4 (t33): a row whose STORED key belongs to another organization shows no key at all -
+    # the join is on `(id, org_id)`, so it cannot surface that tenant's key name.
+    foreign = read_rows(conn, "member", "select key_id, key_name from public.console_usage "
+                                       f"where request_id = '{FOREIGN_KEY_USAGE}'")
+    assert foreign == [(None, None)], \
+        f"a usage row naming another tenant's key showed it: {foreign}"
+    assert conn.execute("select api_key_id from public.usage_events where id = %s",
+                        (FOREIGN_KEY_USAGE,)).fetchone()[0] is not None, \
+        "the fixture row for this check no longer stores a foreign key"
+
+    # r4 (s15): the `>= 400` boundary is a row, not an assumption.
+    assert conn.execute("select count(*) from public.usage_events where status = 400 "
+                        "and org_id = %s", (ORG_A,)).fetchone()[0] == 1, \
+        "the status-400 boundary row is missing, so `failed_requests` is untested there"
 
     # The two aggregates C cannot express over a view (ruling 10).
     summary = read_rows(conn, "member",

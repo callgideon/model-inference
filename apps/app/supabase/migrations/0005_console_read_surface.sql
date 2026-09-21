@@ -87,6 +87,10 @@ returns text language sql stable security invoker set search_path = public, pg_t
     -- customer. Masking it to `platform` told a tenant the platform had written their own
     -- feedback. Another organization's key id stays masked, which the check asserts in
     -- both directions.
+    -- `k.org_id = p_org` is the readable rule, but it is not what makes this safe: the
+    -- function is SECURITY INVOKER, so 0001's `api_keys_select` policy applies to this
+    -- lookup and a caller can only ever match a key of an organization it belongs to.
+    -- RLS is the barrier; the predicate is the statement of intent.
     when exists (select 1 from public.api_keys k
                  where k.org_id = p_org and k.id = public.principal_uuid(p_subject))
       then coalesce(p_display, p_subject)

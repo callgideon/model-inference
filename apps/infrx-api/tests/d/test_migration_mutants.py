@@ -51,7 +51,12 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           "delivery_destination_not_composite", "ledger_sign_rules_made_valid",
           "pilot_usage_trigger_on_insert_only", "judge_money_is_a_number",
           "pending_reconciliation_counts_every_hold", "spent_keeps_its_negative_sign",
-          "infrx_default_privileges_to_authenticated", "purchase_may_be_negative")
+          "infrx_default_privileges_to_authenticated", "purchase_may_be_negative",
+          # r4: one per round-4 finding.
+          "wallet_insert_may_fund_the_row", "pilot_usage_key_tenant_unchecked",
+          "console_usage_joins_any_key", "outbox_tenant_trigger_on_insert_only",
+          "ledger_grant_drops_the_description",
+          "failed_requests_excludes_the_boundary")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 
@@ -86,6 +91,9 @@ def test_mutant_is_killed(mutant) -> None:
         f"mutant {mutant.name} was {outcome.upper()}, expected {mutant.expects.upper()}: "
         f"{mutant.check} on {mutant.file} losing `{mutant.old.strip()[:80]}` -> "
         f"{detail or 'no failure'}. In production: {mutant.why}")
+    assert mutant.expects_detail in detail, (
+        f"mutant {mutant.name} was {outcome} but for the wrong reason: expected the "
+        f"detail to name `{mutant.expects_detail}`, got {detail!r}")
     print(f"{mutant.name}: {outcome} by {mutant.check} -> {detail}")
 
 

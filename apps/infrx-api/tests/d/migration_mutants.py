@@ -58,6 +58,10 @@ class Mutant:
     #: console can write, and that refusal IS the observable consequence. Declaring it
     #: keeps R40 intact - the runner still never SCORES an apply error as a kill.
     expects: str = "killed"
+    #: r4: a substring the outcome's detail must contain. Without it, ANY apply error
+    #: satisfied the one mutant that declares `apply_error` - including a typo in the
+    #: mutant's own replacement text.
+    expects_detail: str = ""
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -505,7 +509,7 @@ MUTANTS: tuple[Mutant, ...] = (
            "upgrade", "upgrade_preserved",
            "the migration refuses to apply to a database whose history the deployed "
            "console wrote - or, worse, somebody 'fixes' the history",
-           expects=APPLY_ERROR),
+           expects=APPLY_ERROR, expects_detail="credit_ledger_sign_matches_kind"),
     Mutant("pilot_usage_trigger_on_insert_only", SCHEMA,
            "create trigger usage_events_pilot_tenant before insert or update on public.usage_events",
            "create trigger usage_events_pilot_tenant before insert on public.usage_events",
@@ -558,6 +562,44 @@ MUTANTS: tuple[Mutant, ...] = (
            "",
            "fresh", "row_constraints",
            "a `purchase` that takes credit away"),
+
+    # --- r4: the six the round-3 corpus left alive (F1, F2 and four minor) ----
+    Mutant("wallet_insert_may_fund_the_row", ROLES,
+           "grant insert (org_id, reserved_total) on infrx.wallets to service_role;",
+           "grant insert (org_id, reserved_total, ledger_total) on infrx.wallets "
+           "to service_role;",
+           "fresh", "legacy_drift",
+           "a settlement opens a wallet with a balance of its own choosing, and the "
+           "ledger never said so"),
+    Mutant("pilot_usage_key_tenant_unchecked", SCHEMA,
+           "    if new.api_key_id is not null\n"
+           "       and not exists (select 1 from public.api_keys k\n"
+           "                       where k.id = new.api_key_id and k.org_id = new.org_id) then",
+           "    if false then",
+           "fresh", "row_constraints",
+           "a metered row is attributed to another tenant's key, which is what per-key "
+           "metering and rate limits are counted on"),
+    Mutant("console_usage_joins_any_key", CONSOLE,
+           "left join public.api_keys k on k.id = e.api_key_id and k.org_id = e.org_id",
+           "left join public.api_keys k on k.id = e.api_key_id",
+           "fresh", "console_read_surface",
+           "the usage page shows another organization's key NAME beside this tenant's "
+           "request"),
+    Mutant("outbox_tenant_trigger_on_insert_only", SCHEMA,
+           "create trigger outbox_aggregate_tenant before insert or update on infrx.outbox",
+           "create trigger outbox_aggregate_tenant before insert on infrx.outbox",
+           "fresh", "row_constraints",
+           "an event is moved to another organization by UPDATE, unchecked"),
+    Mutant("ledger_grant_drops_the_description", ROLES,
+           "grant select (id, org_id, delta_usd, kind, reason, ref, created_at)",
+           "grant select (id, org_id, delta_usd, kind, ref, created_at)",
+           "fresh", "role_matrix",
+           "the deployed console's ledger query fails outright: it selects `reason`"),
+    Mutant("failed_requests_excludes_the_boundary", CONSOLE,
+           "         count(*) filter (where u.http_status >= 400)::bigint,",
+           "         count(*) filter (where u.http_status > 400)::bigint,",
+           "fresh", "console_read_surface",
+           "a 400 - the commonest client error - is not counted as a failure"),
 
     # --- the database clock --------------------------------------------------
     Mutant("the_clock_offset_works_in_production", SCHEMA,
