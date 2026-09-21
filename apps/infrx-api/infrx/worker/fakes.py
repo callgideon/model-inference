@@ -10,25 +10,38 @@ The content pieces are imported from the shared fake, so the same bytes exercise
 adapters and the exported conformance assertions (`text`, the split `<think>`
 delimiters, "Two people unload boxes.") mean the same thing here.
 
-Fault modes (04-verification.md's list, plus the ones only an HTTP adapter has):
+Fault modes (04-verification.md's list, plus the ones only an HTTP adapter has and the
+malformed payloads a review of the adapter found unhandled):
 
 | `fault` | What the upstream does |
 |---|---|
-| `none` | progress, deltas, one authoritative usage, `[DONE]` |
+| `none` | progress, deltas, finish, one authoritative usage, `[DONE]` |
 | `split_reasoning_delimiters` | the same, with `<think>` split across deltas |
 | `split_tokens` | one character per delta, so every boundary is exercised |
+| `role_first` | vLLM's real first chunk: `{"role": "assistant", "content": ""}` |
+| `slow_deltas` | deltas spaced under the stall budget: a slow answer is not a stall |
 | `prefill_stall` | headers, then keepalive comments that advance the clock past TTFT |
 | `midstream_stall` | one delta, then the same past the inter-event budget |
 | `missing_usage` | deltas and `[DONE]`, no usage object |
 | `malformed_usage` | a usage object with a string and a null |
 | `inconsistent_usage` | a usage object whose `total_tokens` does not add up |
-| `string_usage` | token counts as strings, which vLLM has been known to do |
+| `string_usage` / `negative_usage` / `bool_usage` / `nondict_usage` | counts that are not counts |
+| `usage_then_delta` | usage, then more content: the count cannot be authoritative |
+| `usage_below_deltas` | a usage object reporting fewer tokens than there were deltas |
+| `conflicting_usage` | two different usage objects in one stream |
 | `over_ceiling` | usage claiming more completion tokens than were allowed |
-| `engine_error_pre_headers` | HTTP 500 with an error body, before any event |
+| `runaway_output` | more output than the envelope can hold |
+| `huge_delta` | one delta far larger than a journal event |
+| `surrogate_delta` | content that cannot be serialised (an unpaired surrogate) |
+| `bad_choices` / `bad_choice` / `bad_delta` / `bad_content` | answer-carrying fields of the wrong type |
+| `null_error_message` | `{"error": {"message": null}}`, a plausible real shape |
+| `stray_object` | a JSON object that is neither content, usage nor error |
+| `engine_error_pre_headers` | HTTP 500 with a streamed, oversized error body |
 | `engine_error_post_headers` | 200, one delta, then an SSE error object |
 | `abrupt_exit` | 200, one delta, then the connection dies (`httpx.ReadError`) |
 | `read_timeout` | 200, one delta, then `httpx.ReadTimeout` |
-| `transport_error` | the connection is refused before any response |
+| `transport_error` / `connect_timeout` | refused / timed out before any response |
+| `os_error` | a non-httpx exception mid-stream |
 | `cancellation_race` | a long stream, so a cancellation lands mid-generation |
 | `truncated` | deltas, then a clean end with no `[DONE]` and no finish reason |
 """
@@ -43,7 +56,7 @@ from ..contracts.conformance import Harness
 from ..contracts.fakes.engine import DEFAULT_TEXT, SPLIT_REASONING
 from ..contracts.fakes.support import FakeClock, SequentialIds
 from ..contracts.limits import DEFAULTS, PilotSettings
-from .engine import VllmEngine
+from .engine import EVENT_TEXT_DIVISOR, VllmEngine
 
 SERVED_MODEL = "marlin2b"           # vLLM's `--served-model-name`, as F1 sends it
 ENGINE_VERSION = "0.11.0"
@@ -51,6 +64,10 @@ ENGINE_VERSION = "0.11.0"
 # conformance case asserts that *more* than the budget elapsed, and a keepalive
 # landing exactly on the deadline would make that comparison an equality.
 KEEPALIVE_S = 7.0
+# A delta every 7 s is a slow engine, not a stalled one (the budget is 20 s).
+SLOW_DELTA_S = 7.0
+ERROR_BODY_CHUNK = 64 * 1024
+ERROR_BODY_CHUNKS = 32              # 2 MiB: an adapter that reads it whole is unbounded
 
 
 def sse(obj: dict) -> bytes:
@@ -58,12 +75,16 @@ def sse(obj: dict) -> bytes:
 
 
 def chunk(content: str | None = None, *, finish_reason: str | None = None,
-          usage: object = None) -> dict:
+          usage: object = None, role: bool = False) -> dict:
     """One OpenAI-shaped streaming chunk, as vLLM emits it."""
-    choice: dict = {"index": 0, "delta": {} if content is None else {"content": content},
-                    "finish_reason": finish_reason}
+    delta: dict = {}
+    if role:
+        delta["role"] = "assistant"
+    if content is not None:
+        delta["content"] = content
+    choice = {"index": 0, "delta": delta, "finish_reason": finish_reason}
     body = {"id": "chatcmpl-fake", "object": "chat.completion.chunk", "model": SERVED_MODEL,
-            "choices": [] if content is None and finish_reason is None else [choice]}
+            "choices": [] if (not delta and finish_reason is None) else [choice]}
     if usage is not None:
         body["usage"] = usage
     return body
@@ -76,7 +97,8 @@ class FakeUpstream:
     Observable afterwards: `requests` (every body the adapter sent, for translation
     assertions), `pings` (how many keepalives the adapter waited through before its
     timer fired), `closed`/`completed` (whether the adapter closed the stream early,
-    which is how cancellation is proved to reach the engine).
+    which is how cancellation is proved to reach the engine), `error_bytes` (how much of
+    an oversized error body the adapter actually read).
     """
 
     fault: str = "none"
@@ -91,11 +113,13 @@ class FakeUpstream:
     keepalive_s: float = KEEPALIVE_S
     max_keepalives: int = 40
     long_stream_deltas: int = 200
+    health_status: int = 200
+    health_unreachable: bool = False
     requests: list = field(default_factory=list)
     pings: int = 0
     closed: bool = False
     completed: bool = False
-    health_status: int = 200
+    error_bytes: int = 0
 
     # --- the script -----------------------------------------------------------
     def deltas(self) -> tuple[str, ...]:
@@ -105,6 +129,13 @@ class FakeUpstream:
             return tuple(self.text)
         if self.fault == "cancellation_race":
             return tuple("tok " for _ in range(self.long_stream_deltas))
+        if self.fault == "surrogate_delta":
+            return ("ok", "\ud83d")
+        if self.fault == "huge_delta":
+            # Three journal events' worth of text plus a remainder, in one delta.
+            return ("x" * (self.limits.journal_event_max_bytes // EVENT_TEXT_DIVISOR * 3 + 5),)
+        if self.fault == "runaway_output":
+            return tuple("y" * 4096 for _ in range(64))
         return tuple(self.text[i:i + self.chunk_size]
                      for i in range(0, len(self.text), self.chunk_size))
 
@@ -112,14 +143,22 @@ class FakeUpstream:
         if self.fault == "malformed_usage":
             return {"prompt_tokens": "1200", "completion_tokens": None}
         if self.fault == "string_usage":
-            return {"prompt_tokens": self.prompt_tokens, "completion_tokens": str(produced),
-                    "total_tokens": self.prompt_tokens + produced}
+            return {"prompt_tokens": self.prompt_tokens, "completion_tokens": str(produced)}
+        if self.fault == "negative_usage":
+            return {"prompt_tokens": self.prompt_tokens, "completion_tokens": -produced}
+        if self.fault == "bool_usage":
+            return {"prompt_tokens": self.prompt_tokens, "completion_tokens": True}
+        if self.fault == "nondict_usage":
+            return 5
         if self.fault == "inconsistent_usage":
             return {"prompt_tokens": self.prompt_tokens, "completion_tokens": produced,
                     "total_tokens": self.prompt_tokens + produced + 4}
         if self.fault == "over_ceiling":
             return {"prompt_tokens": self.prompt_tokens, "completion_tokens": 100_000,
                     "total_tokens": self.prompt_tokens + 100_000}
+        if self.fault == "usage_below_deltas":
+            return {"prompt_tokens": self.prompt_tokens, "completion_tokens": 1,
+                    "total_tokens": self.prompt_tokens + 1}
         return {"prompt_tokens": self.prompt_tokens, "completion_tokens": produced,
                 "total_tokens": self.prompt_tokens + produced}
 
@@ -132,16 +171,48 @@ class FakeUpstream:
             self.pings += 1
             yield b": keepalive\n\n"
 
+    def _misshapen(self) -> dict | None:
+        """The payloads whose answer-carrying fields have the wrong type, plus the two
+        that must simply be survived."""
+        return {
+            "bad_choices": {"choices": 5},
+            "bad_choice": {"choices": [5]},
+            "bad_delta": {"choices": [{"index": 0, "delta": "abc"}]},
+            "bad_content": {"choices": [{"index": 0, "delta": {"content": ["abc"]}}]},
+            "null_error_message": {"error": {"message": None}},
+            "stray_object": {"message": 123},
+        }.get(self.fault)
+
     async def _stream(self):
         pieces = self.deltas()
         try:
+            if self.fault == "role_first":
+                yield sse(chunk("", role=True))
             if self.fault == "prefill_stall":
                 async for frame in self._keepalives():
                     yield frame
                 self.completed = True
                 return
+            misshapen = self._misshapen()
+            if misshapen is not None:
+                yield sse(chunk(pieces[0]))
+                yield sse(misshapen)
+                if self.fault == "stray_object":
+                    # Nothing to act on, so the stream must still complete normally.
+                    yield sse(chunk(finish_reason="stop"))
+                    yield sse(chunk(usage=self.usage(1)))
+                    yield b"data: [DONE]\n\n"
+                self.completed = True
+                return
             for index, piece in enumerate(pieces):
+                if self.fault == "slow_deltas":
+                    self.clock.advance(SLOW_DELTA_S)
                 yield sse(chunk(piece))
+                if self.fault == "usage_then_delta" and index == 0:
+                    # A count arriving before the answer is finished cannot be the count.
+                    yield sse(chunk(usage={"prompt_tokens": self.prompt_tokens,
+                                           "completion_tokens": 1,
+                                           "total_tokens": self.prompt_tokens + 1}))
                 if self.fault == "midstream_stall" and index == 0:
                     async for frame in self._keepalives():
                         yield frame
@@ -155,21 +226,46 @@ class FakeUpstream:
                     raise httpx.ReadError("engine process exited")
                 if index == 0 and self.fault == "read_timeout":
                     raise httpx.ReadTimeout("no tokens within the read timeout")
+                if index == 0 and self.fault == "os_error":
+                    raise OSError("the socket is gone")
             if self.fault == "truncated":
                 self.completed = True
                 return                                  # no [DONE], no finish_reason
             yield sse(chunk(finish_reason="stop"))
-            if self.fault != "missing_usage":
+            if self.fault not in ("missing_usage", "usage_then_delta"):
+                # `usage_then_delta` sends its only usage object mid-stream, so the
+                # inconsistency under test is the delta that followed it, not a second
+                # object (which is `conflicting_usage`).
                 yield sse(chunk(usage=self.usage(len(pieces))))
+            if self.fault == "conflicting_usage":
+                yield sse(chunk(usage={"prompt_tokens": self.prompt_tokens + 7,
+                                       "completion_tokens": len(pieces),
+                                       "total_tokens": self.prompt_tokens + 7 + len(pieces)}))
             yield b"data: [DONE]\n\n"
             self.completed = True
         finally:
             self.closed = True
 
+    async def _error_body(self):
+        """A 2 MiB error body, streamed: an adapter that reads it whole is unbounded, and
+        `error_bytes` says how much it actually took."""
+        head = b'{"error": {"message": "engine died: /dev/nvidia0 '
+        self.error_bytes += len(head)
+        yield head
+        for _ in range(ERROR_BODY_CHUNKS):
+            part = b"trace " * (ERROR_BODY_CHUNK // 6)
+            self.error_bytes += len(part)
+            yield part
+        tail = b'", "type": "server_error"}}'
+        self.error_bytes += len(tail)
+        yield tail
+
     # --- transport ------------------------------------------------------------
     def handle(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path == "/health":
+            if self.health_unreachable:
+                raise httpx.ConnectError("connection refused", request=request)
             return httpx.Response(self.health_status, json={"status": "ok"})
         if path == "/version":
             return httpx.Response(200, json={"version": self.version})
@@ -180,12 +276,11 @@ class FakeUpstream:
         self.requests.append(json.loads(request.content))
         if self.fault == "transport_error":
             raise httpx.ConnectError("connection refused", request=request)
+        if self.fault == "connect_timeout":
+            raise httpx.ConnectTimeout("the engine did not accept the connection",
+                                       request=request)
         if self.fault == "engine_error_pre_headers":
-            # Long on purpose: an engine's error body carries a stack trace and internal
-            # paths, so the adapter's bound on operator detail has something to bound.
-            return httpx.Response(500, json={"error": {
-                "message": "engine died: /dev/nvidia0 " + "trace " * 400,
-                "type": "server_error"}})
+            return httpx.Response(500, content=self._error_body())
         return httpx.Response(200, headers={"content-type": "text/event-stream"},
                               content=self._stream())
 

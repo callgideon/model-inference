@@ -17,24 +17,32 @@ from . import mutants as mutation_list
 
 ALL = mutation_list.MUTANTS
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
-# One mutant per area: the wire body, the tenant salt, the usage parser, a timer and
-# the delimiter filter. `INFRX_MUTANTS=all` runs every one of them.
-SUBSET = ("body_sends_the_model_revision", "salt_ignores_the_tenant",
-          "usage_estimated_from_deltas", "first_token_deadline_ignored",
-          "close_delimiter_tail_forgotten")
+# One mutant per area: the message allow-list (the r1 R58 security rule), the wire body,
+# the tenant salt, the usage rule, a timer and the delimiter filter. `INFRX_MUTANTS=all`
+# runs every one of them.
+SUBSET = ("unknown_parts_forwarded", "body_sends_the_model_revision",
+          "salt_ignores_the_tenant", "unknown_usage_estimated_from_deltas",
+          "first_token_deadline_ignored", "close_delimiter_tail_forgotten")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
 def test_the_list_is_well_formed():
     """Every mutant names an invariant and at least one case, and no name repeats: a
     typo would make a mutant unkillable by construction."""
-    assert len(ALL) >= 40, f"only {len(ALL)} mutants declared"
+    assert len(ALL) >= 80, f"only {len(ALL)} mutants declared"
     assert len({m.name for m in ALL}) == len(ALL), "duplicate mutant names"
     for mutant in ALL:
         assert mutant.cases, f"{mutant.name} names no case"
         assert mutant.invariant, f"{mutant.name} states no invariant"
         assert mutant.file in ("worker/engine.py", "worker/reasoning.py"), mutant.file
+        # a declared kill mode is an exception name, never a blanket "anything goes"
+        for name in mutant.allowed_errors:
+            assert name.isidentifier() and name not in mutation_list.KILL_ERRORS, name
     assert set(SUBSET) <= {m.name for m in ALL}
+    # the declared-failure-mode escape hatch stays rare: it is a documented kill, and a
+    # list where most mutants need one is a list of broken mutants
+    declared = [m.name for m in ALL if m.allowed_errors]
+    assert len(declared) <= len(ALL) // 5, declared
 
 
 def test_every_owned_case_is_covered_by_a_mutant():
@@ -54,8 +62,7 @@ def test_every_owned_case_is_covered_by_a_mutant():
               "test_f_contract__the_adapter_satisfies_the_engine_protocol",
               "test_api_stream__the_raw_text_is_never_modified",
               "test_api_stream__split_tokens_are_reassembled_whatever_the_boundaries",
-              "test_api_stream__canonical_events_are_progress_deltas_and_one_usage",
-              "test_api_stream__deltas_carry_the_raw_text_and_the_visible_text"}
+              "test_api_stream__canonical_events_are_progress_deltas_and_one_usage"}
     uncovered = cases - covered - exempt
     assert uncovered == set(), f"cases no mutant can break: {sorted(uncovered)}"
     assert exempt <= cases, sorted(exempt - cases)
@@ -96,6 +103,22 @@ SELF_TESTS = (
                           file="worker/engine.py", old="this text is not in the adapter",
                           new="nor is this",
                           cases=("test_api_stream__junk_lines_are_counted_and_never_relayed",))),
+    # the rule the review added: a runtime error nobody declared is not a kill
+    ("an_undeclared_runtime_error_is_not_a_kill", mutation_list.Outcome.broken_runner,
+     mutation_list.Mutant(name="self_undeclared_error",
+                          invariant="a NameError is not evidence",
+                          file="worker/engine.py",
+                          old="        if not isinstance(choice, dict):",
+                          new="        if _undefined_name_at_runtime(choice):",
+                          cases=("test_api_stream__every_engine_failure_is_typed",))),
+    ("the_same_error_declared_is_a_kill", mutation_list.Outcome.killed,
+     mutation_list.Mutant(name="self_declared_error",
+                          invariant="a declared kill mode is accepted",
+                          file="worker/engine.py",
+                          old="        if not isinstance(choice, dict):",
+                          new="        if _undefined_name_at_runtime(choice):",
+                          cases=("test_api_stream__every_engine_failure_is_typed",),
+                          allowed_errors=("NameError",))),
     ("a_mutant_with_no_case_is_a_failure", mutation_list.Outcome.misdeclared,
      mutation_list.Mutant(name="self_no_case", invariant="every mutant names a case",
                           file="worker/engine.py", old="DETAIL_MAX_CHARS = 500",

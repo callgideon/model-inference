@@ -8,9 +8,13 @@ wherever it likes: `<th` + `ink>the van is` is the same stream.
 
 So the filter is a small state machine over the concatenation, fed piece by piece:
 
-* `feed(piece)` returns the visible part *of that piece*, holding back only what
-  might still turn out to be a delimiter (at most six characters);
-* `close()` returns whatever was held back and turned out not to be one;
+* `feed(piece)` returns the visible part *of that piece*, holding back only what might
+  still turn out to be a delimiter: the leading whitespace plus at most six characters of
+  a possible `<think>`, or at most seven of a possible `</think>` (one short of the
+  delimiter, since a complete one is recognised immediately);
+* `close()` returns whatever was held back and turned out not to be one, and r1 R58 makes
+  that tail part of the customer's text: the adapter emits it as a final delta, so a
+  streaming consumer sees the whole answer and not only `EngineStream.visible_text`;
 * the raw text is never modified - the caller keeps it for trace capture.
 
 The property that matters is that the chunk boundaries cannot be observed:
@@ -26,6 +30,8 @@ Deliberate semantics, each one a case in that test:
   whitespace right after `</think>` (F1's trailing `\\s*`).
 * **The first `</think>` closes it**, so a nested `<think>` inside the block is
   just more reasoning (F1's non-greedy `.*?</think>`).
+* **The delimiter is case sensitive**, exactly as F1's regex was: `<THINK>` is answer
+  text, because it is not the token the model was trained to emit.
 * **An unclosed block never becomes visible.** If the stream ends inside the
   reasoning the answer is empty - honest, and usually paired with
   `finish_reason=length`. F1's non-stream regex leaks the remainder instead; that

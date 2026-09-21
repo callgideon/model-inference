@@ -11,9 +11,29 @@ looks like.
 """
 from __future__ import annotations
 
+import re
 from itertools import combinations
 
 from infrx.worker.reasoning import ReasoningFilter, filter_text
+
+
+def oracle(text: str) -> str:
+    """An **independent** implementation of the same rule: F1's leading-block regex plus
+    the two rules the streaming filter adds (an unclosed block never becomes visible; the
+    whitespace around the block goes with it).
+
+    Independent on purpose - a property test whose oracle is the code under test only
+    proves the code is deterministic. This one is a regex and a `find`, not a state
+    machine, so a bug would have to occur twice in two shapes to hide here.
+    """
+    opened = re.match(r"^\s*<think>", text)
+    if opened is None:
+        return text
+    rest = text[opened.end():]
+    closed = rest.find("</think>")
+    if closed < 0:
+        return ""
+    return rest[closed + len("</think>"):].lstrip()
 
 # Nasty on purpose: delimiters at the start, in the middle, nested, unclosed, split
 # into their own characters, and text that merely contains the word.
@@ -36,6 +56,9 @@ CORPUS = (
     "no delimiter here at all",
     "< think>x</think>y",
     "<think>r</think>a<think>b</think>",
+    "<THINK>x</THINK>y",
+    "<think>r</think><think>b</think>c",
+    "\t<think>r</think>\t\tanswer",
 )
 # All 2**(n-1) splits for texts up to `EXHAUSTIVE_MAX` characters; for the longer ones
 # every split into at most four pieces (three cuts), which still puts a boundary inside
@@ -61,11 +84,13 @@ def filtered(pieces) -> str:
 
 
 def test_api_stream__every_chunk_split_filters_to_the_same_text():
-    """API-STREAM: the filtered stream equals the filter applied to the unsplit text,
-    for every split of every corpus entry. Chunk boundaries are unobservable."""
+    """API-STREAM: for every split of every corpus entry the filtered stream equals what
+    an **independent** oracle makes of the unsplit text. Chunk boundaries are
+    unobservable, and the rule itself is checked against a second implementation."""
     total = 0
     for text in CORPUS:
-        expected = filter_text(text)
+        expected = oracle(text)
+        assert filter_text(text) == expected, text
         for pieces in splits(text):
             total += 1
             assert "".join(pieces) == text, pieces          # the corpus itself is intact
@@ -98,6 +123,8 @@ def test_api_stream__only_a_leading_block_is_a_delimiter():
     assert filter_text("</think>x") == "</think>x"
     assert filter_text("< think>x</think>y") == "< think>x</think>y"
     assert filter_text("hello") == "hello"
+    # the delimiter is case sensitive, exactly as F1's regex was
+    assert filter_text("<THINK>x</THINK>y") == "<THINK>x</THINK>y"
     assert filter_text("  ") == "  "
     assert filter_text("") == ""
 
