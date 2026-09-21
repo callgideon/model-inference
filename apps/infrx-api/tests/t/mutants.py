@@ -72,6 +72,16 @@ IDLE_FSYNC = "test_an_idle_flush_fsyncs_the_appended_tail"
 TWO_SINKS = "test_two_sinks_cannot_share_one_spool_directory"
 CLOSED = "test_a_closed_sink_refuses_and_starts_no_second_writer"
 TORN_AT = "test_a_torn_tail_reports_where_it_stopped"
+# round 3
+CANCELLING = "test_a_cancelling_flusher_cannot_take_a_second_batch"
+PAYLOAD_CAP = "test_the_queue_is_bounded_in_bytes_as_well_as_in_rows"
+CLOCK = "test_a_sink_without_a_clock_refuses_to_exist"
+MULTI_PART = "test_a_multi_part_capture_spools_its_parts_in_order_and_byte_exact"
+FSYNC_FLAGS = "test_a_good_fsync_clears_the_loss_flags_it_promised"
+DIR_FSYNC = "test_a_segment_and_its_deletion_are_both_committed_to_the_directory"
+PARTIAL = "test_bytes_a_failed_write_left_behind_still_count_against_the_cap"
+ADOPTED = "test_an_adopted_segment_says_its_counts_are_unknown"
+UNREAD = "test_an_unreadable_segment_reports_every_byte_as_unread"
 
 
 @dataclass(frozen=True)
@@ -329,6 +339,58 @@ MUTANTS: tuple[Mutant, ...] = (
        '        if False:\n            raise RuntimeError("this trace sink is closed")', CLOSED),
     _m("a_torn_tail_says_nothing_about_itself", "a torn tail reports where it stopped",
        "    scan.unread_bytes += size - offset", "    scan.unread_bytes += 0", TORN_AT),
+
+    # --- round 2 of review ------------------------------------------------------------
+    _m("a_cancelled_flush_releases_the_guard", "the guard is the batch's lifetime (B7)",
+       "        if self._in_flight is not None:\n"
+       "            # A batch is still with the writer.",
+       "        if False:\n"
+       "            # A batch is still with the writer.", CANCELLING, ONE_FLUSH),
+    _m("the_settlement_keeps_the_guard", "the settlement releases the guard (B7)",
+       "        if sink._in_flight is self:", "        if False:", CANCELLING),
+    _m("the_queue_counts_only_rows", "the queue is bounded in bytes too (ruling 5)",
+       "                elif (self.queued_payload_bytes + len(payload)\n"
+       "                      > QUEUED_PAYLOAD_MAX_BYTES):",
+       "                elif False:", PAYLOAD_CAP),
+    _m("queued_payload_bytes_never_released", "a written row frees its payload bound",
+       "        sink.queued_payload_bytes = max(0, sink.queued_payload_bytes\n"
+       "                                        - sum(len(row.payload) for row in self.batch))",
+       "        sink.queued_payload_bytes = sink.queued_payload_bytes", PAYLOAD_CAP),
+    _m("a_clockless_sink_is_built", "a durable sink needs a real clock (ruling 7)",
+       '            raise ValueError("a spool sink needs the clock it reads; None is not one")',
+       "            pass", CLOCK),
+    _m("only_the_first_content_part_is_written", "every part is written (B8/N22)",
+       "                for part in row.parts:\n                    self.io.write(segment.fd, part)",
+       "                for part in row.parts[:1]:\n                    self.io.write(segment.fd, part)",
+       MULTI_PART),
+    _m("content_parts_are_written_in_reverse", "the parts are written in order (B8/N23)",
+       "                for part in row.parts:\n                    self.io.write(segment.fd, part)",
+       "                for part in row.parts[::-1]:\n                    self.io.write(segment.fd, part)",
+       MULTI_PART),
+    _m("a_part_is_not_copied", "a part the caller reuses is already ours (B8/N31)",
+       "            self.parts.append(part.encode() if isinstance(part, str) else bytes(part))",
+       "            self.parts.append(part.encode() if isinstance(part, str) else part)",
+       MULTI_PART),
+    _m("a_good_fsync_keeps_the_flags", "a promised record is not counted again (B8/N26)",
+       "        segment.synced_records = segment.records\n        segment.unsynced_counted = []",
+       "        segment.synced_records = segment.records", FSYNC_FLAGS),
+    _m("a_new_segment_is_not_committed", "a segment's name is fsynced (B8/N13)",
+       "            self.io.fsync_dir(self.spool_dir)\n        except BaseException:",
+       "            pass\n        except BaseException:", DIR_FSYNC),
+    _m("a_deletion_is_not_committed", "an ack is fsynced (B8/N14)",
+       "        self.io.fsync_dir(self.spool_dir)        # the deletion, not just the data",
+       "        pass", DIR_FSYNC),
+    _m("partial_write_bytes_escape_the_cap", "bytes on disk count against the cap (B8/N15)",
+       "            self.spool_bytes += max(0, landed - active.written)",
+       "            self.spool_bytes += 0", PARTIAL),
+    _m("an_adopted_segment_is_not_flagged", "an adopted segment says so (B8/N16)",
+       "                                           sealed=True, adopted=True))",
+       "                                           sealed=True, adopted=False))", ADOPTED),
+    _m("an_unreadable_segment_reports_no_unread_bytes", "unreadable means all unread (B8/N19)",
+       "        scan.unreadable += 1\n        scan.unread_bytes += len(data)\n"
+       "        return scan\n    offset = HEADER.size",
+       "        scan.unreadable += 1\n        return scan\n    offset = HEADER.size",
+       UNREAD),
 )
 
 

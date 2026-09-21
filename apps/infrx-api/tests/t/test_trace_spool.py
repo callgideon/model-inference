@@ -38,7 +38,8 @@ from infrx.contracts.fakes.support import FailurePlan, FakeClock, SequentialIds
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import (TraceEnvelope, TraceLossReason, TraceMode,
                                      TraceOfferResult)
-from infrx.traces.spool import (FRAME, HEADER, MAX_ENVELOPE_BYTES, SpoolIO,
+from infrx.traces.spool import (FRAME, HEADER, MAX_ENVELOPE_BYTES, SEGMENT_MAGIC,
+                                SEGMENT_VERSION, SpoolIO,
                                 SpoolTraceSink, frame_checksum, recover, scan_segment,
                                 segment_header)
 
@@ -292,6 +293,43 @@ def test_a_captured_request_round_trips_through_the_segment_reader():
         assert scan.records[0].content_bytes == len(content)
         assert scan.torn == 0 and scan.poison == 0 and scan.unreadable == 0
         assert scan.ids == [(spool.segments()[0].name, 0)]
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_a_multi_part_capture_spools_its_parts_in_order_and_byte_exact():
+    """B8 / N22, N23, N31. The parts are handed to the writer **unjoined** - that is round
+    2's central new mechanism, and nothing spooled a multi-part capture and read it back.
+    A streaming request is many `add` calls of whatever buffer type the caller has, so the
+    spooled content must be the concatenation, in order, of exactly the bytes that were
+    charged.
+
+    It also pins **ownership**: `add` copies, so a caller reusing its buffer after `add` -
+    which a streaming gateway does - cannot rewrite a record already accounted for.
+    """
+    async def scenario():
+        spool = sink()
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        reused = bytearray(b"THIRD-PART-FROM-A-REUSED-BUFFER")
+        parts = [b"first-part:", "second-part(text)", memoryview(b"MIDDLE"), reused,
+                 b"last-part!"]
+        expected = b"".join(bytes(part.encode() if isinstance(part, str) else part)
+                            for part in parts)
+        with spool.open(ID_A, b.ORG_A, TraceMode.full, spool.clock.at(600)) as capture:
+            for part in parts:
+                assert capture.add(part) is True
+            reused[:] = b"OVERWRITTEN-AFTER-ADD-RETURNED"   # the caller reuses its buffer
+            assert await capture.finish(
+                b.trace(ID_A, content_bytes=len(expected), metadata_bytes=64)) \
+                is TraceOfferResult.accepted_in_memory
+        await spool.flush(spool.clock.now())
+        scan = recover(spool.spool_dir)
+        assert len(scan.records) == 1, scan.line()
+        assert scan.contents[0] == expected, "the spooled content is not what was charged"
+        assert scan.records[0].content_bytes == len(expected)
+        # and through the shipper's own reader, which is the path T2 uses
+        shipped = await spool.read_segment(spool.segments()[0].name)
+        assert shipped.contents == [expected]
         await spool.close()
     asyncio.run(scenario())
 
@@ -712,6 +750,30 @@ def test_an_fsync_error_never_claims_durability():
     asyncio.run(scenario())
 
 
+def test_a_good_fsync_clears_the_loss_flags_it_promised():
+    """B8 / N26. The per-segment loss flags exist so that an fsync error does not count a
+    second loss for a capture that already has one (B5). They have to be **cleared by a
+    successful fsync**: otherwise a good fsync followed by a failing one on the same segment
+    counts `disk_error` for records that are already durable."""
+    async def scenario():
+        io = DrillIO()
+        spool = sink(io=io)
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        await capture_one(spool, ID_A, b"promised by the first fsync")
+        stats = await spool.flush(spool.clock.now())
+        assert (stats["appended"], stats["fsynced"]) == (1, 1)
+        io.fail_fsync_on = io.calls["fsync"] + 1          # the *next* fsync fails
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        await capture_one(spool, ID_B, b"unpromised by the second")
+        stats = await spool.flush(spool.clock.now())
+        assert stats["appended"] == 2
+        assert stats["fsynced"] == 1
+        assert stats["loss_reasons"]["disk_error"] == 1, \
+            f"a durable record was counted lost again: {stats['loss_reasons']}"
+        await spool.close()
+    asyncio.run(scenario())
+
+
 def test_shutdown_is_a_counted_loss_not_a_silent_one():
     """`close` is the orderly half of `crash`: whatever is still in memory is dropped and
     counted `shutdown` (08 §3), because a process that stops is a loss the coverage
@@ -984,20 +1046,28 @@ def test_a_cancelling_flusher_cannot_take_a_second_batch():
             pass
         else:
             raise AssertionError("the flush was not cancelled")
-        # ... and now the flusher ticks again, several times, while the writer is still out
+        # ... and now the flusher ticks again, several times, while the writer is still out.
+        # Each tick's flush is allowed to *run* before it is cancelled - a task cancelled
+        # before it starts would prove nothing, which is how the first version of this case
+        # let the mutant live.
         for tick in range(5):
             for index in range(4):
                 await capture_one(spool, request_id(tick * 10 + index), b"more")
             ticking = asyncio.create_task(spool.flush(spool.clock.now()))
+            await asyncio.sleep(0)               # it runs: with the guard, straight back out
             ticking.cancel()
             try:
                 await ticking
             except asyncio.CancelledError:
                 pass
             stats = await spool.stats()
-            assert stats["in_memory"] <= 4, f"tick {tick}: {stats['in_memory']} rows queued"
+            assert stats["in_memory"] == 4, \
+                f"tick {tick} took a batch instead of leaving it queued: {stats['in_memory']}"
             assert stats["appended"] == 0, "the blocked writer appended something"
+            assert spool._writer._work_queue.qsize() <= 1, \
+                f"tick {tick}: {spool._writer._work_queue.qsize()} batches behind the writer"
         stats = await spool.stats()
+        # the queue filled once and every later record was refused, which is the bound
         assert stats["loss_reasons"]["queue_full"] == 16, stats["loss_reasons"]
         block.set()
         stats = await spool.drain()              # the first batch settles: one record
@@ -1044,8 +1114,15 @@ def test_the_queue_is_bounded_in_bytes_as_well_as_in_rows():
         # in flight plus queued, never more than two capfuls
         assert accepted * 20_000 <= 2 * cap + 20_000
         block.set()
-        await spool.drain()
-        assert (await spool.stats())["queued_payload_bytes"] < cap, "the cap never released"
+        await spool.drain()                      # the batch in flight settles
+        stats = await spool.flush(spool.clock.now())          # and the queue drains
+        assert stats["queued_payload_bytes"] == 0, \
+            f"the byte bound was never released: {stats['queued_payload_bytes']}"
+        assert stats["appended"] == accepted, stats
+        # and the room is usable again
+        assert await spool.offer(b.trace(ID_B, mode=TraceMode.minimal, content_bytes=0,
+                                         metadata_bytes=0)) \
+            is TraceOfferResult.accepted_in_memory
         print(f"\nqueued payload bound: {accepted:,} of 4,000 under-declared 20 KB "
               f"envelopes accepted against a {cap:,} B cap")
         await spool.close()
@@ -1325,6 +1402,90 @@ def test_a_torn_tail_reports_where_it_stopped():
         assert corrupt.unread_bytes >= 4 * record, (corrupt.unread_bytes, record)
         assert corrupt.torn_at[name] == HEADER.size
     asyncio.run(scenario())
+
+
+def test_a_segment_and_its_deletion_are_both_committed_to_the_directory():
+    """B8 / N13, N14. An fsynced record inside a file whose *directory entry* was never
+    committed is not a record anybody can find after a power loss, and an acked segment that
+    comes back from the dead is a record shipped twice. Both are one `fsync` on the
+    directory; the oracle is that they happen."""
+    async def scenario():
+        io = DrillIO()
+        spool = sink(io=io)
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        await capture_one(spool, ID_A, b"x" * 50)
+        await spool.flush(spool.clock.now())
+        assert io.calls["fsync_dir"] == 1, "the new segment's name was never committed"
+        name = await spool.rotate()
+        assert await spool.ack(name) is True
+        assert io.calls["fsync_dir"] == 2, "the deletion was never committed"
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_bytes_a_failed_write_left_behind_still_count_against_the_cap():
+    """B8 / N15. A write that fails part way may still have landed some of its bytes. They
+    are on the disk whatever the writer thinks, so the host cap has to see them - otherwise a
+    disk that fails mid-record repeatedly is a spool that grows while reporting that it has
+    not."""
+    async def scenario():
+        io = DrillIO()
+        spool = sink(io=io)
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        await capture_one(spool, ID_A, b"a" * 100)
+        await spool.flush(spool.clock.now())          # one good record, one open segment
+        # now fail *between* a frame header and its content: the header has landed
+        io.fail_write_on = io.calls["write"] + 2
+        await capture_one(spool, ID_B, b"b" * 100)
+        await spool.flush(spool.clock.now())
+        stats = await spool.stats()
+        on_disk = sum((spool.spool_dir / view.name).stat().st_size
+                      for view in spool.segments())
+        assert stats["loss_reasons"]["disk_error"] == 1
+        assert stats["spool_bytes"] == on_disk, \
+            f"the cap sees {stats['spool_bytes']} of {on_disk} bytes on disk"
+        assert on_disk > 0
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_an_adopted_segment_says_its_counts_are_unknown():
+    """B8 / N16. A segment this process found on disk has record counts it cannot know
+    without reading up to 10 GiB at boot, so it reports zero and says `adopted`. T2 scans
+    those; a shipper that trusted `records == 0` would skip every record the previous process
+    left behind."""
+    async def scenario():
+        first = sink(tag="adopt")
+        first.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        await capture_one(first, ID_A, b"written by the first process")
+        await first.flush(first.clock.now())
+        assert first.segments()[0].adopted is False, "a segment this process wrote is not adopted"
+        assert first.segments()[0].records == 1
+        await first.close()
+        second = SpoolTraceSink(FakeClock(), limits=DEFAULTS, spool_dir=first.spool_dir,
+                                io=DrillIO())
+        view = second.segments()[0]
+        assert view.adopted is True, "an adopted segment did not say so"
+        assert view.records == 0 and view.fsynced_records == 0
+        assert len(recover(second.spool_dir).records) == 1, "the record is there to be scanned"
+        await second.close()
+    asyncio.run(scenario())
+
+
+def test_an_unreadable_segment_reports_every_byte_as_unread():
+    """B8 / N19. `unread_bytes` is how T2 tells a routine tail from a segment it must
+    quarantine, so a segment whose header is foreign or from a newer writer has to report
+    *all* of it as unread - reporting zero would look like nothing was missed."""
+    empty = scan_segment("trace-x.seg", b"")
+    assert empty.unreadable == 1 and empty.unread_bytes == 0
+    short = scan_segment("trace-x.seg", b"tiny")
+    assert short.unreadable == 1 and short.unread_bytes == 4
+    future = HEADER.pack(SEGMENT_MAGIC, SEGMENT_VERSION + 1) + b"z" * 900
+    scan = scan_segment("trace-x.seg", future)
+    assert scan.unreadable == 1 and scan.records == []
+    assert scan.unread_bytes == len(future), scan.line()
+    foreign = HEADER.pack(b"NOTOURS!", SEGMENT_VERSION) + b"z" * 40
+    assert scan_segment("trace-x.seg", foreign).unread_bytes == len(foreign)
 
 
 # ======================================================================================
