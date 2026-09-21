@@ -678,6 +678,12 @@ class VllmEngine:
         if content is None or content == "":
             # vLLM's first chunk is `{"role": "assistant", "content": ""}`: a real event
             # (it is liveness) but not a token, so it is neither a delta nor counted.
+            #
+            # Only `content` is read, which is why the pinned engine must **not** run with
+            # `--reasoning-parser`: that moves the reasoning into `reasoning_content`, which
+            # this adapter would drop - and `raw` is what trace capture keeps, so the trace
+            # would silently lose it. `reasoning.py` separates the block instead, and W3
+            # owns the engine flags.
             return []
         if not isinstance(content, str):
             raise EngineProtocolViolation("delta content is not text", got=type(content).__name__)
