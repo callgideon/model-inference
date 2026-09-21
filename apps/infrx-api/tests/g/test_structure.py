@@ -362,3 +362,80 @@ def test_dur_admit__the_payload_digest_covers_the_media_payload_by_hash():
     assert list(media.values())[0].startswith(v.MEDIA_TOKEN)
     again, _ = digest_for("data:video/mp4;base64," + "A" * 4096)
     assert a == again
+
+
+# --- review r2 B2: the text cap counts code points, whatever the encoding ----------
+# Every row is within `MAX_TEXT_CODEPOINTS` and must be ACCEPTED. The bound this
+# replaced assumed one byte per code point and no JSON escaping, so each of these was
+# a 413 against a documented 96 MiB cap.
+WITHIN_THE_CAP = (
+    ("35,000 CJK characters, escaped as an ordinary client sends them",
+     json.dumps({"messages": [{"role": "user", "content": "漢" * 35_000}]},
+                ensure_ascii=True).encode()),
+    ("70,000 CJK characters as UTF-8",
+     json.dumps({"messages": [{"role": "user", "content": "漢" * 70_000}]},
+                ensure_ascii=False).encode()),
+    ("110,000 newlines",
+     json.dumps({"messages": [{"role": "user", "content": "\n" * 110_000}]}).encode()),
+    ("131,072 astral code points",
+     json.dumps({"messages": [{"role": "user", "content": "𝄞" * 131_072}]},
+                ensure_ascii=False).encode()),
+    ("300 KB of insignificant whitespace",
+     b'{\n' + b' ' * 300_000 + b'"messages":[{"role":"user","content":"hi"}]}'),
+    ("the cap exactly, in ASCII",
+     json.dumps({"messages": [{"role": "user", "content": "a" * 131_072}]}).encode()),
+)
+
+
+@pytest.mark.parametrize("name,raw", WITHIN_THE_CAP, ids=[row[0] for row in WITHIN_THE_CAP])
+def test_media_sec__text_within_the_code_point_cap_is_accepted_in_every_form(name, raw):
+    tc, accepted = client()
+    response = tc.post(support.CHAT_PATH, headers=support.RAW, content=raw)
+    assert response.status_code == 202, (len(raw), response.text[:200])
+    assert len(accepted) == 1
+
+
+PAST_THE_CAP = (
+    ("one code point past, in ASCII", "a" * (validate.MAX_TEXT_CODEPOINTS + 1)),
+    ("one code point past, in CJK", "漢" * (validate.MAX_TEXT_CODEPOINTS + 1)),
+    ("one code point past, astral", "𝄞" * (validate.MAX_TEXT_CODEPOINTS + 1)),
+)
+
+
+@pytest.mark.parametrize("name,content", PAST_THE_CAP, ids=[row[0] for row in PAST_THE_CAP])
+def test_media_sec__one_code_point_past_the_cap_is_refused(name, content):
+    tc, accepted = client()
+    response = tc.post(support.CHAT_PATH, headers=support.RAW, content=json.dumps(
+        {"messages": [{"role": "user", "content": content}]}, ensure_ascii=False).encode())
+    assert response.status_code == 400, response.text[:200]
+    assert support.error_of(response)["code"] == "invalid_request"
+    assert accepted == []
+
+
+def test_media_sec__the_text_cap_counts_across_parts_and_messages():
+    """Not only string content: the cap is the whole request's text, so it cannot be
+    evaded by splitting it over parts."""
+    half = validate.MAX_TEXT_CODEPOINTS // 2
+    tc, accepted = client()
+    over = {"messages": [{"role": "user", "content": [
+        {"type": "text", "text": "a" * half}, {"type": "text", "text": "b" * (half + 1)}]}]}
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=over).status_code == 400
+    across = {"messages": [{"role": "user", "content": [{"type": "text", "text": "a" * half}]},
+                           {"role": "user", "content": "b" * (half + 1)}]}
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=across).status_code == 400
+    assert accepted == []
+    under = {"messages": [{"role": "user", "content": [
+        {"type": "text", "text": "a" * half}, {"type": "text", "text": "b" * half}]}]}
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=under).status_code == 202
+
+
+def test_media_sec__the_url_cap_is_exact():
+    tc, accepted = client()
+    for length, status in ((validate.MAX_URL_CHARS, 202), (validate.MAX_URL_CHARS + 1, 400)):
+        url = "https://cdn.test/" + "a" * (length - len("https://cdn.test/"))
+        assert len(url) == length
+        response = tc.post(support.CHAT_PATH, headers=support.AUTH, json={
+            "messages": [{"role": "user", "content": [
+                {"type": "video_url", "video_url": {"url": url}}]}]})
+        assert response.status_code == status, (length, response.text[:120])
+    assert len(accepted) == 1
