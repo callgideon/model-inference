@@ -552,6 +552,36 @@ sys.exit(run.main(["--layer", "all", "--no-mutants"]))
         os.kill(server_pid, 0)
 
 
+def test_the_mutation_stage_and_the_cli_count_the_verdict_the_same_way():
+    """A control that must SURVIVE is a PASS. The stage used to apply its own rule and report
+    both controls as survivors, failing a run whose mutation list was perfectly healthy - so
+    `mutants.summarise` is now the single definition and this pins it."""
+    import mutants
+    healthy = [{"id": "e2c01", "status": "SURVIVED", "must_survive": True},
+               {"id": "e2m01", "status": "killed", "must_survive": False}]
+    summary = mutants.summarise(healthy)
+    assert summary["problems"] is None and summary["controls_survived"] == 1
+    assert summary["killed"] == 1 and summary["not_killed"] == 0
+
+    for broken in ({"id": "e2m02", "status": "SURVIVED", "must_survive": False},
+                   {"id": "e2c01", "status": "CONTROL-KILLED", "must_survive": True},
+                   {"id": "e2m03", "status": "stale", "must_survive": False},
+                   {"id": "e2m04", "status": "setup-error", "must_survive": False},
+                   {"id": "e2m05", "status": "no-cases", "must_survive": False}):
+        assert mutants.summarise([broken])["problems"] == [broken["id"]], broken
+
+    pending = mutants.summarise([{"id": "e2m16", "status": "pending", "must_survive": False}])
+    assert pending["problems"] is None and pending["pending"] == 1, \
+        "a layer-2 mutant with no stack is pending, neither killed nor survived"
+
+    report = fresh_report()
+    with patched(mutants, run_one=lambda mutant, stack_available: {
+            "id": mutant.id, "status": "SURVIVED" if mutant.must_survive else "killed",
+            "must_survive": mutant.must_survive}):
+        runner.mutation(report, layer="1")
+    assert report.stages[-1]["status"] == runner.PASS, report.stages[-1]["detail"]
+
+
 def test_provision_database_statements_are_the_ones_r_a_requires():
     """r1 review R-a, at layer 1: the three statements and their order, with docker stubbed.
 

@@ -338,13 +338,15 @@ def mutation(report: Report, *, layer: str) -> None:
     stack = bool(harness.load_state())
     results = [mutants.run_one(mutant, stack_available=stack) for mutant in mutants.MUTANTS
                if layer == "all" or mutant.layer == 1]
-    survived = [r for r in results if r["status"] in ("SURVIVED", "stale")]
-    pending = [r for r in results if r["status"] == "pending"]
-    status = FAIL if survived else (PENDING if pending else PASS)
+    # `mutants.summarise` is the ONE place the verdict is counted: this stage used to apply its
+    # own rule and reported the two controls - which MUST survive - as survivors, failing a run
+    # whose mutation list was perfectly healthy.
+    summary = mutants.summarise(results)
+    status = FAIL if summary["problems"] else (PENDING if summary["pending"] else PASS)
     report.add("mutants", status,
-               {"mutants": len(results), "killed": len(results) - len(survived) - len(pending),
-                "survived": [r["id"] for r in survived] or None,
-                "pending": [r["id"] for r in pending] or None}, results=results)
+               {key: summary[key] for key in
+                ("mutants", "killed", "controls_survived", "not_killed", "pending", "problems")},
+               results=results)
 
 
 def canary(report: Report) -> None:

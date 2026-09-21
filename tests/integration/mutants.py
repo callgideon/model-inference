@@ -226,6 +226,12 @@ MUTANTS: tuple[Mutant, ...] = (
            "        raise",
            "tests/integration/test_run.py", "bind_failure",
            cases=("test_a_bind_failure_is_retried_once_and_then_refused",)),
+    Mutant("e2m46", "r1 B3: a control that must survive is not counted as a problem",
+           "tests/integration/mutants.py",
+           '           and ((r["status"] != "killed" and not r.get("must_survive"))',
+           '           and ((r["status"] != "killed")',
+           "tests/integration/test_run.py", "count_the_verdict_the_same_way",
+           cases=("test_the_mutation_stage_and_the_cli_count_the_verdict_the_same_way",)),
     Mutant("e2m45", "same pass: SIGTERM is handled like SIGINT so teardown still runs",
            "tests/integration/run.py",
            "    for signum in (signal.SIGINT, signal.SIGTERM):",
@@ -448,6 +454,26 @@ def _verdict(mutant: Mutant, code: int, output: str) -> dict:
     return {**detail, "status": "killed" if killed else "SURVIVED"}
 
 
+def summarise(results: list[dict]) -> dict:
+    """The one place the verdict is counted, so `run.py`'s stage and this CLI cannot disagree.
+
+    A control that SURVIVED is a pass; anything else that survived, or that could not be driven
+    at all, is a failure of this list rather than of the code (R40 / r1 B3). A `pending` layer-2
+    mutant is neither.
+    """
+    pending = [r for r in results if r["status"] == "pending"]
+    bad = [r for r in results
+           if r not in pending
+           and ((r["status"] != "killed" and not r.get("must_survive"))
+                or r["status"] in ("CONTROL-KILLED", "stale", "setup-error", "no-cases"))]
+    controls = [r for r in results if r.get("must_survive") and r["status"] == "SURVIVED"]
+    return {"mutants": len(results),
+            "killed": sum(1 for r in results if r["status"] == "killed"),
+            "controls_survived": len(controls), "not_killed": len(bad),
+            "pending": len(pending), "problems": [r["id"] for r in bad] or None,
+            "results": results}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -473,19 +499,8 @@ def main(argv: list[str] | None = None) -> int:
     results = [run_one(mutant, stack_available=stack) for mutant in wanted]
     for result in results:
         print(f"[{result['status']:>13}] {result['id']}  {result['invariant']}", flush=True)
-    # A control that survived is a PASS; anything else that survived, or that could not be
-    # driven at all, is a failure of this list rather than of the code (R40/B3).
-    bad = [r for r in results
-           if (r["status"] != "killed" and not r.get("must_survive"))
-           or r["status"] in ("CONTROL-KILLED", "stale", "setup-error", "no-cases")]
-    pending = [r for r in results if r["status"] == "pending"]
-    bad = [r for r in bad if r not in pending]
-    controls = [r for r in results if r.get("must_survive") and r["status"] == "SURVIVED"]
-    summary = {"mutants": len(results),
-               "killed": sum(1 for r in results if r["status"] == "killed"),
-               "controls_survived": len(controls), "not_killed": len(bad),
-               "pending": len(pending), "problems": [r["id"] for r in bad] or None,
-               "results": results}
+    summary = summarise(results)
+    bad = [r for r in results if r["id"] in (summary["problems"] or ())]
     print(json.dumps(summary, indent=2))
     if args.report:
         args.report.write_text(json.dumps(summary, indent=2))
