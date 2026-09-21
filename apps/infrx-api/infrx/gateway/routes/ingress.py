@@ -40,7 +40,7 @@ from ...auth.context import AuthResolver
 from ...config import RuntimeMisconfigured
 from ...contracts import errors, ids, wire
 from . import intake
-from .validate import MAX_OPENERS, Validator, idempotency
+from .validate import MAX_OPENERS, MAX_SEPARATORS, Validator, idempotency
 
 CHAT_PATH = "/v1/chat/completions"
 HEALTH_PATH = "/healthz"
@@ -138,8 +138,11 @@ class Ingress:
             raw = await intake.read_body(request, max_bytes=limits.max_request_bytes,
                                          timeout_s=limits.intake_timeout_s,
                                          clock=self.rt.clock, large=large)
-            intake.check_structure(raw, MAX_OPENERS)
-            body = intake.parse_object(raw)
+            # Decode before counting: `json.loads` on bytes sniffs UTF-16/32, so a
+            # byte-level count would measure something other than what gets parsed.
+            text = intake.decode_utf8(raw)
+            intake.check_structure(text, MAX_OPENERS, MAX_SEPARATORS)
+            body = intake.parse_object(text)
             normalized = self.validator.normalize(body, auth, request_id, request.headers)
             idem = idempotency(auth, request.headers, normalized.payload_digest, CHAT_OPERATION)
             return auth, normalized, idem

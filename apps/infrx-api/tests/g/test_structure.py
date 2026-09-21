@@ -388,6 +388,18 @@ def test_dur_admit__the_payload_digest_covers_the_media_payload_by_hash():
     again, _ = digest_for("data:video/mp4;base64," + "A" * 4096)
     assert a == again
 
+    # and the rest of the body still counts: same key, same video, different sampling
+    # is a different payload, so it must conflict rather than replay.
+    payload = "data:video/mp4;base64," + "A" * 4096
+    digests = set()
+    for extra in ({}, {"temperature": 0.5}, {"temperature": 0.6}, {"max_tokens": 7},
+                  {"model": support.PUBLIC_MODEL}):
+        body = {"messages": [{"role": "user", "content": [
+            {"type": "video_url", "video_url": {"url": payload}}]}], **extra}
+        messages, media = v.check_messages(body, {"video/mp4"})
+        digests.add(v.payload_digest(body, messages, media))
+    assert len(digests) == 5, "a parameter beside the media did not change the digest"
+
 
 # --- review r2 B2: the text cap counts code points, whatever the encoding ----------
 # Every row is within `MAX_TEXT_CODEPOINTS` and must be ACCEPTED. The bound this
@@ -496,3 +508,115 @@ def test_media_sec__a_declared_large_body_claims_its_slot_before_it_is_read():
     assert sent[0]["status"] == 429, sent[0]
     assert read == [], "the body was read for a request that had no slot"
     assert calls == []
+
+
+# --- review r3 B1: one opener is enough, so count the separators too ---------------
+# Every one of these has ONE opener and cost seconds of parsing and more than a
+# gigabyte before the separator count existed. `n` is sized so the body is ~4 MiB.
+OPENER_FREE = (
+    ("nine million distinct keys",
+     lambda n: b'{"' + b'":1,"'.join(b"%08x" % i for i in range(n)) + b'":1}'),
+    ("a flat array of floats", lambda n: b'{"messages":[' + b"1.5," * (n - 1) + b"1.5]}"),
+    ("a flat array of short strings", lambda n: b'["ab"' + b',"ab"' * (n - 1) + b"]"),
+    ("a flat array of integers", lambda n: b'{"messages":[' + b"1," * (n - 1) + b"1]}"),
+)
+
+
+@pytest.mark.parametrize("name,build", OPENER_FREE, ids=[row[0] for row in OPENER_FREE])
+def test_media_sec__an_opener_free_body_is_refused_without_parsing_it(name, build):
+    raw = build(400_000)
+    assert raw.count(b"{") + raw.count(b"[") <= 2, "this body is supposed to evade the opener cap"
+    tc, accepted = client()
+    calls, restore = parse_spy()
+    try:
+        response = tc.post(support.CHAT_PATH, headers=support.RAW, content=raw)
+    finally:
+        restore()
+    assert response.status_code == 413, response.text[:200]
+    assert support.error_of(response)["code"] == "request_too_large"
+    assert calls == [], f"the parser ran on {calls} bytes"
+    assert accepted == []
+
+
+def test_media_sec__the_separator_cap_is_exact():
+    """At the cap, in text, accepted; one past, refused - so the bound is the count and
+    not the shape."""
+    tc, accepted = client()
+    at_the_cap = "," * validate.MAX_TEXT_CODEPOINTS
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json={
+        "messages": [{"role": "user", "content": at_the_cap}]}).status_code == 202
+    response = tc.post(support.CHAT_PATH, headers=support.AUTH, json={
+        "messages": [{"role": "user", "content": at_the_cap + ","}]})
+    assert response.status_code in (400, 413), response.text[:160]
+    assert len(accepted) == 1
+
+
+def test_media_sec__an_inline_video_costs_one_separator():
+    """The count must not price a legitimate media body out: base64 has no comma, and
+    the `data:` prefix has exactly one."""
+    payload = "data:video/mp4;base64," + "A" * (2 * 1024 * 1024)
+    assert payload.count(",") == 1
+    tc, accepted = client()
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=parts_body(
+        {"type": "video_url", "video_url": {"url": payload}})).status_code == 202
+    assert len(accepted) == 1
+
+
+NOT_UTF8 = (
+    ("UTF-16 with a BOM", lambda: '{"messages":[{"role":"user","content":"孛"}]}'.encode("utf-16")),
+    ("UTF-32", lambda: '{"messages":[{"role":"user","content":"hi"}]}'.encode("utf-32")),
+    ("a UTF-8 BOM", lambda: b"\xef\xbb\xbf" + b'{"messages":[{"role":"user","content":"hi"}]}'),
+    ("latin-1 bytes", lambda: b'{"messages":[{"role":"user","content":"caf\xe9"}]}'),
+    ("a truncated code point", lambda: b'{"messages":[{"role":"user","content":"\xe5\xad"}]}'),
+)
+
+
+@pytest.mark.parametrize("name,build", NOT_UTF8, ids=[row[0] for row in NOT_UTF8])
+def test_media_sec__a_body_that_is_not_utf8_is_refused(name, build):
+    """RFC 8259: the body is UTF-8. `json.loads` on bytes would sniff UTF-16 and
+    UTF-32 instead, which also makes every byte-level count measure the wrong thing."""
+    tc, accepted = client()
+    calls, restore = parse_spy()
+    try:
+        response = tc.post(support.CHAT_PATH, headers=support.RAW, content=build())
+    finally:
+        restore()
+    assert response.status_code == 400, response.text[:200]
+    assert support.error_of(response)["code"] == "invalid_request"
+    assert calls == [], "a non-UTF-8 body reached the parser"
+    assert accepted == []
+
+
+def test_media_sec__utf16_text_is_not_a_413_it_is_a_400():
+    """The byte count would call 100,000 CJK characters in UTF-16 oversized; they are
+    simply not UTF-8, and the answer says so."""
+    raw = ("{" + '"messages":[{"role":"user","content":"' + "孛" * 100_000 + '"}]}').encode("utf-16")
+    tc, _accepted = client()
+    response = tc.post(support.CHAT_PATH, headers=support.RAW, content=raw)
+    assert response.status_code == 400, response.text[:160]
+
+
+# --- review r3 B2: the payload skips `storable`, so it needs its own checks --------
+BAD_PAYLOADS = (
+    ("a lone surrogate", "data:video/mp4;base64,AAAA\\ud800"),
+    ("a NUL", "data:video/mp4;base64,AA\\u0000AA"),
+    ("CJK", "data:video/mp4;base64,AAAA\\u5b5b"),
+    ("a C1 control", "data:video/mp4;base64,AAAA\\u0085"),
+)
+
+
+@pytest.mark.parametrize("name,payload", BAD_PAYLOADS, ids=[row[0] for row in BAD_PAYLOADS])
+def test_media_sec__an_inline_payload_that_is_not_base64_ascii_is_refused(name, payload):
+    """118 bytes used to be a 500 with a logged stack: the payload deliberately skips
+    `storable`, so `sha256(source.encode())` raised `UnicodeEncodeError`."""
+    raw = ('{"messages":[{"role":"user","content":[{"type":"video_url",'
+           '"video_url":{"url":"%s"}}]}]}' % payload).encode()
+    tc, accepted = client()
+    response = tc.post(support.CHAT_PATH, headers=support.RAW, content=raw)
+    assert response.status_code == 400, response.text[:200]
+    assert support.error_of(response)["code"] == "unsupported_media"
+    assert accepted == []
+
+
+def parts_body(*content):
+    return {"messages": [{"role": "user", "content": list(content)}]}

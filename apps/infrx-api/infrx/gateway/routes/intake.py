@@ -85,8 +85,11 @@ async def read_body(request, *, max_bytes: int, timeout_s: float, clock, large=N
     total = 0
     deadline = clock() + timeout_s
     if large is not None:
-        declared = request.headers.get("content-length")
-        if declared is not None and declared.isdigit():
+        declared = request.headers.get("content-length") or ""
+        # `isdigit()` is true for "²" and for a 5,000-digit number; the first raises out
+        # of `int()` on some inputs and the second is a pointless big-int conversion.
+        # Anything else is simply not used - the running total is the real bound.
+        if declared.isascii() and declared.isdigit() and len(declared) <= 19:
             large.account(int(declared))
     try:
         async with asyncio.timeout(timeout_s):
@@ -115,41 +118,69 @@ def _no_constants(name: str) -> None:
     raise ValueError(f"{name} is not valid JSON")
 
 
-OPENERS = (b"{", b"[")
+OPENERS = ("{", "[")
+SEPARATOR = ","
+BOM = "﻿"
 
 
-def check_structure(raw: bytes, max_openers: int) -> None:
+def decode_utf8(raw: bytes) -> str:
+    """The body is UTF-8 (RFC 8259), decoded once, strictly, by us.
+
+    `json.loads` on **bytes** sniffs the encoding and will happily decode UTF-16 and
+    UTF-32 - outside the JSON interchange rule, and a way to make every byte-level
+    count measure something other than what will be parsed. Decoding here and handing
+    `json.loads` a `str` removes that detection entirely, and a BOM, which RFC 8259
+    forbids, is refused rather than silently skipped.
+    """
+    try:
+        text = raw.decode()
+    except UnicodeDecodeError:
+        raise errors.InvalidRequest("the request body must be UTF-8") from None
+    if text.startswith(BOM):
+        raise errors.InvalidRequest("the request body must not start with a byte order mark")
+    return text
+
+
+def check_structure(text: str, max_openers: int, max_separators: int) -> None:
     """Refuse hostile structure **before** `json.loads` materialises it.
 
-    The count caps in `validate` run on the parsed tree, so a 95 MiB body of 3.4
-    million empty messages was parsed in full - 1.9 s of stalled event loop, +1.1 GiB
-    resident - and only then refused. This counts the bytes that can open an object or
-    an array first, with `bytes.count`: one C scan per byte value, no Python loop, and
-    no allocation.
+    The count caps in `validate` run on the parsed tree, so a 95 MiB body was parsed in
+    full - seconds of stalled event loop, more than a gigabyte resident - and only then
+    refused. Two C-speed counts stop that, with no Python loop and no allocation:
 
-    The cap is the structure the caps allow plus one opener per permitted code point of
-    text, because `{` inside a string is legitimate text. Base64 contains neither byte,
-    so an inline media payload costs nothing against it.
+    * **openers.** `{` and `[` bound how many collections a body can open.
+    * **separators.** Counting openers alone is evadable, because one collection needs
+      exactly one opener however many elements it holds: `{"<hex>":1, …}` with nine
+      million keys, `[1.5, 1.5, …]` and `["ab", "ab", …]` each have one, and each of
+      them cost seconds of parsing and more than a gigabyte. Every element needs a
+      comma, so this is the count that bounds the *size* of the tree rather than its
+      shape. Base64 contains no comma (a `data:` URL's prefix has exactly one), so an
+      inline media payload still costs nothing here.
+
+    Both caps allow one per permitted code point of text, because a brace or a comma
+    inside a string is legitimate text.
     """
-    openers = sum(raw.count(byte) for byte in OPENERS)
-    if openers > max_openers:
-        raise errors.RequestTooLarge(f"the body opens more than {max_openers} objects")
+    if sum(text.count(opener) for opener in OPENERS) > max_openers:
+        raise errors.RequestTooLarge(f"the body opens more than {max_openers} collections")
+    if text.count(SEPARATOR) > max_separators:
+        raise errors.RequestTooLarge(f"the body has more than {max_separators} separators")
 
 
-def parse_object(raw: bytes) -> dict:
+def parse_object(text: str) -> dict:
     """JSON parsing, after the bounds. The parser's own message never leaves.
 
     `RecursionError` is caught with `ValueError` because that is what deep nesting
     raises (`[`×100k), and it is a malformed request, not a server fault.
 
-    Deliberately *not* run in a thread: `json.loads` is one C call holding the GIL, so
+    Takes the already-decoded `str`, so no encoding detection happens here, and is
+    deliberately *not* run in a thread: `json.loads` is one C call holding the GIL, so
     `asyncio.to_thread` moves the stall without shortening it (measured: 1.91 s of
     parsing, 1.83 s of it with the loop blocked). What keeps the loop live is refusing
     hostile bodies before this runs (`check_structure`) and bounding how many large
     ones are in flight at once (`LargeBodies`).
     """
     try:
-        body = json.loads(raw, parse_constant=_no_constants)
+        body = json.loads(text, parse_constant=_no_constants)
     except (ValueError, RecursionError):
         raise errors.InvalidRequest("the request body is not valid JSON") from None
     if not isinstance(body, dict):

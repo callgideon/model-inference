@@ -107,6 +107,15 @@ MAX_SEED = 2 ** 63 - 1
 # inline media payload costs nothing against it.
 STRUCTURE_OPENERS = 2 + MAX_MESSAGES * (2 + MAX_PARTS_PER_MESSAGE * 2) + 2
 MAX_OPENERS = STRUCTURE_OPENERS + MAX_TEXT_CODEPOINTS
+# Openers alone are evadable: one collection needs one opener however many elements it
+# holds, so `{"<hex>":1, …}` with nine million keys has exactly one. Every element needs
+# a separator, so this is the count that bounds the size of the tree: the top-level
+# parameters, the messages, each message's two keys, each part and its two keys, and the
+# stop list - plus one per permitted code point of text, since a comma inside a string is
+# text. A `data:` URL's prefix contains exactly one and base64 contains none.
+STRUCTURE_SEPARATORS = (len(SUPPORTED) + MAX_MESSAGES * (2 + MAX_PARTS_PER_MESSAGE * 2)
+                        + MAX_STOP_SEQUENCES)
+MAX_SEPARATORS = STRUCTURE_SEPARATORS + MAX_TEXT_CODEPOINTS
 # r1 R7: `admit` derives its ceiling from the *database* clock. Without a margin a
 # store clock a millisecond behind the gateway refuses every request, and the first
 # review's tests could not see it because they pinned the fake's clock to
@@ -177,6 +186,18 @@ def check_data_url(source: str, allowed_mime) -> None:
     and the length are the whole check here; M validates the payload when it decodes
     it against `MAX_MEDIA_BYTES`.
     """
+    # Two C-speed whole-string checks, because this string is the one that skips
+    # `storable`: a lone surrogate in the payload reached `sha256(source.encode())`
+    # and raised `UnicodeEncodeError` - a 500 with a logged stack, from 118 bytes.
+    # Base64 is ASCII by definition, so `isascii()` refuses every non-base64 character
+    # class at once (surrogates, CJK, C1); NUL is ASCII, so it is named separately.
+    # M validates that what is left decodes as base64.
+    if not source.isascii():
+        raise errors.UnsupportedMedia("an inline video payload must be base64 ASCII",
+                                      param="messages")
+    if "\x00" in source:
+        raise errors.UnsupportedMedia("an inline video payload contains a NUL",
+                                      param="messages")
     match = DATA_URL.match(source[:MAX_DATA_PREFIX_CHARS])
     if match is None:
         raise errors.UnsupportedMedia("an inline video is data:<video mime>;base64,",
