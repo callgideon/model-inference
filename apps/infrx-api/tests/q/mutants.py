@@ -47,9 +47,18 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_q1_fair__tenants_alternate_and_ties_break_on_arrival"),
     _m("the_fair_choice_takes_the_largest_virtual_time",
        "dispatch serves the smallest virtual finish time, so a peer is never starved",
+       "            order = (flow.tag, self._entries[candidate].seq)\n"
        "            if best is None or order < best[0]:",
+       "            order = (flow.tag, self._entries[candidate].seq)\n"
        "            if best is None or order > best[0]:",
        "test_q1_fair__a_noisy_tenant_cannot_delay_a_peer_past_one_round"),
+    _m("the_kind_choice_takes_the_largest_kind_tag",
+       "R60 level 1 serves the smallest kind tag, so the other kind is never starved",
+       "            order = (self._kind_tag[dispatch_kind.value], self._entries[event_id].seq)\n"
+       "            if best is None or order < best[0]:",
+       "            order = (self._kind_tag[dispatch_kind.value], self._entries[event_id].seq)\n"
+       "            if best is None or order > best[0]:",
+       "test_q1_none__a_peer_in_another_kind_is_not_starved_by_a_noisy_backlog"),
     _m("the_tag_does_not_advance_at_dispatch",
        "the virtual finish time advances by the service a dispatch hands out",
        "        flow.tag = start + cost / self._weight(entry.event.org_id)",
@@ -305,8 +314,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_q1_rebuild__clears_in_flight_and_acknowledged_and_keeps_no_stale_tenant"),
     _m("rebuild_does_not_restart_the_fairness_epoch",
        "rebuild o enqueue is idempotent: a running index and a rebuilt one are equal",
-       "        self._virtual_time = {kind.value: 0.0 for kind in DISPATCH_KINDS}\n        for event in snapshot:",
-       "        for event in snapshot:",
+       "        self._virtual_time = {kind.value: 0.0 for kind in DISPATCH_KINDS}\n"
+       "        self._kind_tag = {kind.value: 0.0 for kind in DISPATCH_KINDS}",
+       "        self._kind_tag = {kind.value: 0.0 for kind in DISPATCH_KINDS}",
        "test_q1_property__rebuild_after_enqueue_is_the_same_index_as_rebuild_alone"),
     # --- shape ---------------------------------------------------------------
     _m("acknowledge_is_synchronous",
