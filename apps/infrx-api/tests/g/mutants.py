@@ -526,7 +526,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("separator_cap_excludes_text", "commas inside text are text",
        V, "MAX_SEPARATORS = STRUCTURE_SEPARATORS + MAX_TEXT_CODEPOINTS",
        "MAX_SEPARATORS = STRUCTURE_SEPARATORS",
-       "test_media_sec__the_separator_cap_is_exact"),
+       "test_media_sec__commas_inside_text_are_text"),
     _m("separator_cap_off_by_one", "the separator cap is exact",
        I, "    if text.count(SEPARATOR) > max_separators:",
        "    if text.count(SEPARATOR) > max_separators + 1:",

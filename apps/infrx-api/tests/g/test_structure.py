@@ -561,6 +561,18 @@ def test_media_sec__the_separator_cap_is_exact():
     assert accepted == []
 
 
+def test_media_sec__commas_inside_text_are_text():
+    """A comma in a string is text, not structure: 131,072 of them in one message is a
+    legitimate request. (Sized from the *text* cap, not from the separator cap, so the
+    case cannot move with the bound it is checking.)"""
+    tc, accepted = client()
+    prose = "," * validate.MAX_TEXT_CODEPOINTS
+    response = tc.post(support.CHAT_PATH, headers=support.AUTH, json={
+        "messages": [{"role": "user", "content": prose}]})
+    assert response.status_code == 202, response.text[:200]
+    assert len(accepted) == 1
+
+
 def test_media_sec__an_inline_video_costs_one_separator():
     """The count must not price a legitimate media body out: base64 has no comma, and
     the `data:` prefix has exactly one."""

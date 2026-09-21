@@ -149,6 +149,13 @@ class Ingress:
         finally:
             # Every exit path, refusals included: a slot that is not released is a slot
             # nobody gets again.
+            #
+            # For G2/G3: the slot is released *here*, before `accept` runs, because it
+            # bounds parsing rather than the request's lifetime. The `NormalizedRequest`
+            # returned can still carry a 96 MiB inline payload inside `messages`, so a
+            # synchronous wait that keeps that record alive keeps the payload resident
+            # with nothing accounting for it. Stage the payload and drop the reference
+            # (M's job) before waiting, or carry the slot through staging.
             large.release()
 
 
