@@ -29,9 +29,11 @@ import argparse
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -41,6 +43,50 @@ import harness                                    # noqa: E402
 import pgstate                                    # noqa: E402
 
 PASS, FAIL, PENDING, SKIP = "PASS", "FAIL", "PENDING", "SKIP"
+
+# Fake servers this process started, so a signal handler can take them down. r1 review, same
+# pass: a SIGTERM used to kill run.py with exit 143, no teardown and an orphaned fake vLLM
+# holding a task-local port.
+LIVE_SERVERS: list = []
+
+
+class Interrupted(BaseException):
+    """A signal asked us to stop. A BaseException so no `except Exception` swallows it, and
+    an exception rather than an exit so `main`'s `finally` still tears the stack down."""
+
+    def __init__(self, signum: int) -> None:
+        self.signum = signum
+        super().__init__(f"interrupted by signal {signum}")
+
+
+def _on_signal(signum, _frame):
+    for server in list(LIVE_SERVERS):
+        try:
+            server.stop()
+        except Exception:                          # noqa: BLE001 - we are already dying
+            pass
+        finally:
+            if server in LIVE_SERVERS:
+                LIVE_SERVERS.remove(server)
+    raise Interrupted(signum)
+
+
+@contextmanager
+def signals_handled():
+    """SIGTERM as well as SIGINT: the reviewer killed run.py with SIGTERM and got exit 143,
+    no teardown and an orphaned server. Both now raise into `main`, whose `finally` tears the
+    stack down; the previous handlers are restored on the way out."""
+    previous = {}
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        try:
+            previous[signum] = signal.signal(signum, _on_signal)
+        except ValueError:                         # not the main thread: nothing to install
+            pass
+    try:
+        yield
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
 
 
 class Report:
@@ -255,6 +301,7 @@ def engine(report: Report) -> None:
     import fake_vllm
     from infrx.contracts.conformance import run_engine_conformance
     server = fake_vllm.FakeVllmServer(harness.PORTS["fake_vllm"])
+    LIVE_SERVERS.append(server)
     try:
         server.start()
         ran = run_engine_conformance(fake_vllm.engine_factory(server))
@@ -265,6 +312,8 @@ def engine(report: Report) -> None:
         report.add("engine", FAIL, f"{type(exc).__name__}: {exc}")
     finally:
         server.stop()
+        if server in LIVE_SERVERS:
+            LIVE_SERVERS.remove(server)
 
 
 def suites(report: Report, *, own_only: bool) -> None:
@@ -361,7 +410,13 @@ def main(argv: list[str] | None = None) -> int:
 
     report = Report()
     want_services = args.layer in ("2", "all")
+    with signals_handled():
+        return _run(report, args, want_services)
+
+
+def _run(report: Report, args, want_services: bool) -> int:
     have_services = preflight(report, want_services=want_services)
+    interrupted = None
     try:
         if have_services and services(report, pull=args.pull):
             fixtures = migrate(report, args.seed)
@@ -377,6 +432,9 @@ def main(argv: list[str] | None = None) -> int:
                 mutation(report, layer="all" if have_services else "1")
             if args.canary:
                 canary(report)
+    except Interrupted as stop:
+        interrupted = stop
+        report.add("interrupted", FAIL, f"signal {stop.signum}: tearing the stack down")
     finally:
         if have_services and not args.keep:
             teardown(report)
@@ -389,6 +447,10 @@ def main(argv: list[str] | None = None) -> int:
     print(payload)
     print(f"\nexit {report.exit_code} "
           f"({'all stages passed' if report.exit_code == 0 else 'see the stages above'})")
+    if interrupted is not None:
+        # 128 + signal is what a shell reports for a signalled process, and the teardown above
+        # has already run - which is the whole point of catching it.
+        return 128 + interrupted.signum
     return report.exit_code
 
 

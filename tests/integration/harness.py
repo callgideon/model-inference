@@ -194,8 +194,15 @@ CHECKOUT_LABEL = "ai.infrx.e2.checkout"
 
 def working_dir() -> str:
     """This checkout's identity: the compose file's directory. A second checkout of the same
-    repository has a different one, which is the whole point (r1 B1)."""
-    return str(COMPOSE_FILE.parent)
+    repository has a different one, which is the whole point (r1 B1).
+
+    `INFRX_E2_CHECKOUT` overrides it for exactly one caller, `mutants.py`, whose temporary
+    copy has to claim the identity of the checkout that provisioned the stack - otherwise the
+    copy correctly sees that stack as foreign and every layer-2 mutant is skipped rather than
+    killed. It is the same kind of seam as `INFRX_E2_REPO_ROOT`; nothing else sets it, and
+    `compose_env()` round-trips whatever it returns, so the label and the check cannot drift.
+    """
+    return os.environ.get("INFRX_E2_CHECKOUT") or str(COMPOSE_FILE.parent)
 
 
 def compose_env() -> dict[str, str]:

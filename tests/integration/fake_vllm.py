@@ -45,10 +45,16 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from random import Random
 from typing import AsyncIterator
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parents[1] / "apps" / "infrx-api"))
+# r1 review B3: `HERE.parents[1]` is wrong inside a mutation runner's temporary copy - there is
+# no `apps/infrx-api` beside it, so the server child died with ModuleNotFoundError in
+# setup_module and the runner counted that as a kill (a comment-only edit "died" too). The
+# repository root is the same override `harness.py` reads, so a copy points at the real tree.
+REPO_ROOT = Path(os.environ.get("INFRX_E2_REPO_ROOT") or HERE.parents[1])
+sys.path.insert(0, str(REPO_ROOT / "apps" / "infrx-api"))
 
 from infrx.contracts.fakes.engine import DEFAULT_TEXT, SPLIT_REASONING, EngineFault  # noqa: E402
 from infrx.contracts.fakes.support import FakeClock  # noqa: E402
@@ -59,6 +65,25 @@ from infrx.contracts.records import (ChunkEventType, EngineEvent, Lease,  # noqa
 STALL_COMMENT = ": infrx-stall "
 DONE = "data: [DONE]\n\n"
 CHUNK_SIZE = 12
+
+
+SEEDED_CREATED = 1_758_000_000     # a fixed `created` base when --seed is given
+# Milliseconds between deltas on the cancellation path only, so a cancel can actually arrive
+# mid-stream. Without it the whole body is emitted before any client could send one.
+CANCEL_GAP_S = 0.02
+
+
+class UnknownFault(ValueError):
+    """A caller asked for a fault that does not exist. A 4xx, never a 500 (r1 review)."""
+
+    def __init__(self, named: str) -> None:
+        self.named = named
+        super().__init__(named)
+
+    def envelope(self) -> dict:
+        return {"error": {"message": f"unknown fault {self.named!r}", "type":
+                          "invalid_request_error", "code": "unsupported_parameter",
+                          "known": [fault.value for fault in EngineFault]}}
 
 
 class EngineProcessExited(RuntimeError):
@@ -77,10 +102,14 @@ class FakeVllmApp:
 
     def __init__(self, *, fault: str = "none", text: str = DEFAULT_TEXT,
                  prompt_tokens: int = 1200, model: str = "infrx-e2/fake-vllm",
-                 limits: PilotSettings = DEFAULTS, stall_real_s: float = 0.0) -> None:
+                 limits: PilotSettings = DEFAULTS, stall_real_s: float = 0.0,
+                 seed: int | None = None, delta_gap_s: float = 0.0) -> None:
         self.default_fault = EngineFault(fault)
         self.text, self.prompt_tokens, self.model = text, prompt_tokens, model
         self.limits, self.stall_real_s = limits, stall_real_s
+        self.delta_gap_s = delta_gap_s
+        self.rng = Random(seed) if seed is not None else None
+        self.emitted = 0
         self.drained = False
         self.cancelled: set[str] = set()
         self.seen: list[dict] = []
@@ -93,43 +122,63 @@ class FakeVllmApp:
         return tuple(self.text[i:i + CHUNK_SIZE] for i in range(0, len(self.text), CHUNK_SIZE))
 
     def _chunk(self, delta: dict, *, finish: str | None = None, usage: object = None) -> str:
-        body = {"id": f"chatcmpl-{uuid.uuid4()}", "object": "chat.completion.chunk",
-                "created": int(time.time()), "model": self.model,
+        body = {"id": self._next_id(), "object": "chat.completion.chunk",
+                "created": self._created(), "model": self.model,
                 "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
         if usage is not None:
             body["usage"] = usage
         return f"data: {json.dumps(body, separators=(',', ':'))}\n\n"
 
+    def _next_id(self) -> str:
+        """Seedable (same pass): with `--seed` the chunk ids and `created` are a function of
+        the seed, so a captured transcript is comparable between runs. Without one they are
+        random and wall-clock, as a real engine's are."""
+        if self.rng is None:
+            return f"chatcmpl-{uuid.uuid4()}"
+        self.emitted += 1
+        return f"chatcmpl-{uuid.UUID(int=self.rng.getrandbits(128), version=4)}"
+
+    def _created(self) -> int:
+        return SEEDED_CREATED + self.emitted if self.rng is not None else int(time.time())
+
     def _usage(self, completion_tokens: int) -> dict:
         return {"prompt_tokens": self.prompt_tokens, "completion_tokens": completion_tokens,
                 "total_tokens": self.prompt_tokens + completion_tokens}
 
-    def script(self, fault: EngineFault, job_id: str) -> list[str | float]:
-        """The SSE lines for one request, floats standing for a declared stall.
+    def script(self, fault: EngineFault, job_id: str) -> list[tuple[str, object]]:
+        """What to do, step by step: `("line", sse)`, `("delta", sse)`, `("stall", seconds)`,
+        `("abort", None)`. Deltas are a step of their own so the streaming loop can count what
+        it has really produced and answer a cancel with that number.
 
-        A cancelled job answers with usage only, for the work actually done - the shape
-        `api_stream__a_cancellation_race_reports_what_was_produced` pins.
+        A job cancelled BEFORE the stream starts answers with usage only, for zero work - the
+        shape `api_stream__a_cancellation_race_reports_what_was_produced` pins. A cancel that
+        arrives mid-stream is handled by `_chat`, not here, because a precomputed script cannot
+        see it (r1 review, same pass).
         """
         if job_id and job_id in self.cancelled:
-            return [self._chunk({}, finish="cancelled", usage=self._usage(0)), DONE]
-        role = self._chunk({"role": "assistant"})
+            return [("line", self._chunk({}, finish="cancelled", usage=self._usage(0))),
+                    ("line", DONE)]
+        role = ("line", self._chunk({"role": "assistant"}))
         pieces = self.deltas(fault)
-        body = [self._chunk({"content": piece}) for piece in pieces]
+        body = [("delta", self._chunk({"content": piece})) for piece in pieces]
         if fault is EngineFault.prefill_stall:
-            return [role, float(self.limits.ttft_timeout_s + 1), DONE]
+            return [role, ("stall", float(self.limits.ttft_timeout_s + 1)), ("line", DONE)]
         if fault is EngineFault.midstream_stall:
-            return [role, body[0], float(self.limits.tpot_stall_s + 1), DONE]
+            return [role, body[0], ("stall", float(self.limits.tpot_stall_s + 1)),
+                    ("line", DONE)]
         if fault is EngineFault.abrupt_exit:
-            return [role, body[0], "ABORT"]
-        tail_usage = self._usage(len(pieces))
+            return [role, body[0], ("abort", None)]
         if fault is EngineFault.missing_usage:
-            return [role, *body, self._chunk({}, finish="stop"), DONE]
+            return [role, *body, ("line", self._chunk({}, finish="stop")), ("line", DONE)]
         if fault is EngineFault.malformed_usage:
             # Structurally wrong on purpose: counts as a string and a null. A client that
             # coerces these into integers invents authoritative usage out of nothing.
             bad = {"prompt_tokens": str(self.prompt_tokens), "completion_tokens": None}
-            return [role, *body, self._chunk({}, finish="stop", usage=bad), DONE]
-        return [role, *body, self._chunk({}, finish="stop", usage=tail_usage), DONE]
+            return [role, *body, ("line", self._chunk({}, finish="stop", usage=bad)),
+                    ("line", DONE)]
+        return [role, *body,
+                ("line", self._chunk({}, finish="stop", usage=self._usage(len(pieces)))),
+                ("line", DONE)]
 
     # ---------------------------------------------------------- ASGI
 
@@ -151,7 +200,10 @@ class FakeVllmApp:
         if path == "/_control" and method == "GET":
             return await self._json(send, 200, self.state())
         if path == "/_control" and method == "POST":
-            return await self._json(send, 200, self.control(self._body_json(body)))
+            try:
+                return await self._json(send, 200, self.control(self._body_json(body)))
+            except UnknownFault as bad:
+                return await self._json(send, 400, bad.envelope())
         if path == "/_control/cancel" and method == "POST":
             job_id = str(self._body_json(body).get("job_id", ""))
             if job_id:
@@ -205,7 +257,10 @@ class FakeVllmApp:
         """Set the process-wide default. Used when the client under test cannot be made to
         send a fault header - a gateway, for instance."""
         if "fault" in payload:
-            self.default_fault = EngineFault(str(payload["fault"]))
+            try:
+                self.default_fault = EngineFault(str(payload["fault"]))
+            except ValueError:
+                raise UnknownFault(str(payload["fault"])) from None
         if "drained" in payload:
             self.drained = bool(payload["drained"])
         if "text" in payload:
@@ -218,15 +273,24 @@ class FakeVllmApp:
         return self.state()
 
     def _fault_for(self, scope, request: dict) -> EngineFault:
-        """Header beats body beats process default, so one request can be scripted
-        without disturbing a concurrent one."""
+        """Header beats body beats process default, so one request can be scripted without
+        disturbing a concurrent one. An unknown name is the CALLER's error: `UnknownFault`,
+        which the routes turn into a 4xx, never a 500 (r1 review, same pass)."""
         headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
         named = headers.get("x-infrx-fault") or request.get("infrx_fault")
-        return EngineFault(str(named)) if named else self.default_fault
+        if not named:
+            return self.default_fault
+        try:
+            return EngineFault(str(named))
+        except ValueError:
+            raise UnknownFault(str(named)) from None
 
     async def _chat(self, scope, body: bytes, send) -> None:
         request = self._body_json(body)
-        fault = self._fault_for(scope, request)
+        try:
+            fault = self._fault_for(scope, request)
+        except UnknownFault as bad:
+            return await self._json(send, 400, bad.envelope())
         job_id = str(request.get("infrx_job_id", ""))
         self.seen.append({"fault": fault.value, "job_id": job_id,
                           "stream": bool(request.get("stream")),
@@ -237,18 +301,40 @@ class FakeVllmApp:
         await send({"type": "http.response.start", "status": 200,
                     "headers": [(b"content-type", b"text/event-stream"),
                                 (b"cache-control", b"no-cache")]})
-        for line in self.script(fault, job_id):
-            if line == "ABORT":
+        produced = 0
+        gap = CANCEL_GAP_S if fault is EngineFault.cancellation_race else self.delta_gap_s
+        for kind, payload in self.script(fault, job_id):
+            # A cancel that arrives WHILE the stream is running: the precomputed script cannot
+            # see it, so the loop checks between sends and answers with usage for the deltas
+            # actually emitted. W2/E3 depend on this shape, and the old code ignored a
+            # mid-stream cancel entirely (seven chunks, completion_tokens 5).
+            if produced and job_id and job_id in self.cancelled:
+                for line in (self._chunk({}, finish="cancelled", usage=self._usage(produced)),
+                             DONE):
+                    await send({"type": "http.response.body", "body": line.encode(),
+                                "more_body": True})
+                break
+            if kind == "abort":
                 # The engine process dies mid-body: no terminator, no [DONE]. Raising here
                 # makes the server tear the connection down, which is what the client must
                 # survive; a clean close would be indistinguishable from a finished stream.
                 raise EngineProcessExited("fake vLLM aborted the response body")
-            if isinstance(line, float):
+            if kind == "stall":
                 if self.stall_real_s:
                     import asyncio
                     await asyncio.sleep(self.stall_real_s)
-                line = f"{STALL_COMMENT}{line}\n\n"
-            await send({"type": "http.response.body", "body": line.encode(), "more_body": True})
+                payload = f"{STALL_COMMENT}{payload}\n\n"
+            elif kind == "delta":
+                produced += 1
+            await send({"type": "http.response.body", "body": str(payload).encode(),
+                        "more_body": True})
+            if kind == "delta" and gap:
+                # The ONE real delay in this file, and only on the cancellation path: without
+                # a gap between deltas the whole body is emitted before any client could
+                # possibly cancel, so the race the fault exists to model cannot happen. It is
+                # a few milliseconds of yielding, not a timeout being waited out.
+                import asyncio
+                await asyncio.sleep(gap)
         await send({"type": "http.response.body", "body": b"", "more_body": False})
 
     def _non_stream(self, fault: EngineFault) -> dict:
@@ -293,21 +379,31 @@ class FakeVllmServer:
         # and "exited 3" with no reason costs whoever reads it an afternoon.
         self._log = tempfile.NamedTemporaryFile(prefix="infrx-e2-fake-vllm-", suffix=".log",
                                                 delete=False)
+        # r1 review, same pass: its OWN process group, so a signal handler can take the whole
+        # server down with one `killpg` and a SIGTERM to run.py cannot leave it orphaned on a
+        # task-local port for the next run to trip over.
         self.process = subprocess.Popen(argv, stdout=self._log, stderr=subprocess.STDOUT,
-                                        env={**os.environ, "PYTHONUNBUFFERED": "1"})
+                                        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                                        start_new_session=True)
         import httpx
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             if self.process.poll() is not None:
+                # r1 review B3 side effect: a raise here used to leak the log file, because
+                # only `stop()` dropped it and a caller that never started has nothing to stop.
+                reason = self._tail()
+                self._drop_log()
                 raise RuntimeError(f"fake vLLM exited {self.process.returncode} during startup "
-                                   f"on port {self.port}: {self._tail()}")
+                                   f"on port {self.port}: {reason}")
             try:
                 if httpx.get(f"{self.base_url}/health", timeout=1.0).status_code == 200:
                     return self
             except Exception:                        # noqa: BLE001 - not listening yet
                 time.sleep(0.05)
+        reason = self._tail()
+        self.stop()
         raise RuntimeError(f"fake vLLM did not answer /health within {timeout}s "
-                           f"on port {self.port}: {self._tail()}")
+                           f"on port {self.port}: {reason}")
 
     def _tail(self, lines: int = 6) -> str:
         log = getattr(self, "_log", None)
@@ -336,13 +432,20 @@ class FakeVllmServer:
         return self.process is not None and self.process.poll() is None
 
     def stop(self) -> None:
+        """Take the whole process GROUP down: uvicorn may have children, and a survivor holds
+        a task-local port that the next run's preflight then reports as busy."""
         if self.process is not None:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait(timeout=10)
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                if self.process.poll() is not None:
+                    break
+                try:
+                    os.killpg(os.getpgid(self.process.pid), sig)
+                except (ProcessLookupError, PermissionError):
+                    self.process.send_signal(sig)
+                try:
+                    self.process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    continue
             self.process = None
         self._drop_log()
 
@@ -496,17 +599,37 @@ def engine_factory(server: FakeVllmServer):
 
 # ============================================================== standalone
 
-def main(argv: list[str] | None = None) -> int:
+LOOPBACK = ("127.0.0.1", "::1", "localhost")
+
+
+def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="controllable fake vLLM for E2")
     parser.add_argument("--port", type=int, default=55580)
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="loopback only unless --allow-non-loopback is given")
+    parser.add_argument("--allow-non-loopback", action="store_true",
+                        help="explicitly permit a non-loopback bind (nothing in this task "
+                             "needs it; a scripted engine reachable from the network is a "
+                             "hazard, not a feature)")
     parser.add_argument("--fault", default="none",
                         choices=[fault.value for fault in EngineFault])
     parser.add_argument("--stall-real-s", type=float, default=0.0,
                         help="also sleep this long at a declared stall")
-    args = parser.parse_args(argv)
+    parser.add_argument("--seed", type=int,
+                        help="make chunk ids and `created` a function of this seed")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    # Same pass: refuse a non-loopback bind unless it was asked for in so many words. Every
+    # port this task uses is published on 127.0.0.1; a fake engine answering on 0.0.0.0 is
+    # something anyone on the network can script.
+    if args.host not in LOOPBACK and not args.allow_non_loopback:
+        raise SystemExit(f"refusing to bind {args.host}: pass --allow-non-loopback to mean it "
+                         f"(loopback is {', '.join(LOOPBACK)})")
     import uvicorn
-    app = FakeVllmApp(fault=args.fault, stall_real_s=args.stall_real_s)
+    app = FakeVllmApp(fault=args.fault, stall_real_s=args.stall_real_s, seed=args.seed)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0
 
