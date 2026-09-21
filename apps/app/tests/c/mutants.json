@@ -446,12 +446,13 @@
     },
     {
       "id": "STRICT-03",
-      "note": "a timestamp is whatever the driver handed over",
+      "note": "a timestamp is whatever the row handed over, unchecked",
       "file": "lib/services/console.ts",
-      "find": "  if (!RFC3339.test(value)) throw new TypeError(`${column} must be an RFC 3339 UTC timestamp`);",
-      "replace": "  if (false) throw new TypeError(`${column} must be an RFC 3339 UTC timestamp`);",
+      "find": "  if (match === null) throw new TypeError(`${column} must be an RFC 3339 UTC timestamp`);",
+      "replace": "  if (match === null) return value;",
       "cases": [
-        "a stored value that is not what the DTO says is a typed refusal, not a blank"
+        "a stored value that is not what the DTO says is a typed refusal, not a blank",
+        "both UTC timestamp forms are accepted and normalised, microseconds and all"
       ]
     },
     {
