@@ -12,6 +12,7 @@ environment. Nothing in the F1 path reads them, so adding them changes no
 existing behaviour.
 """
 import dataclasses
+import logging
 import math
 import os
 from dataclasses import dataclass, field
@@ -19,7 +20,7 @@ from decimal import Decimal, InvalidOperation
 
 from .contracts import money
 from .contracts.limits import DEFAULTS as PILOT_DEFAULTS
-from .contracts.limits import JUDGE_MODES, MODES, PilotSettings, env_name
+from .contracts.limits import JUDGE_MODES, MODE_UNSET, MODES, PilotSettings, env_name
 
 # gateway.py's directory, i.e. apps/infrx-api: MODELS_DOC used to be resolved
 # against it, and that is this package's parent, not the package itself.
@@ -66,6 +67,11 @@ class Settings:
     key_cache_max: int = 10_000
     miss_cache_max: int = 1_000
     retry_delays: tuple = (1, 3, 9, 0)  # usage_events insert backoff; 0 = give up and spill to disk
+    # r1 R44: the contracts-v1 settings travel with the gateway's own, so
+    # `create_app(settings=...)` can be handed a whole runtime configuration and
+    # `validate_runtime` needs no second argument and no environment read of its own.
+    # Defaulting to `PILOT_DEFAULTS` means `INFRX_MODE` is unset, i.e. legacy.
+    pilot: PilotSettings = PILOT_DEFAULTS
 
     def __post_init__(self):
         # only unset derives; USAGE_FAILED_LOG="" stayed "" in the old gateway
@@ -92,6 +98,7 @@ def from_env(env=None):
         supabase_url=e.get("SUPABASE_URL", "").rstrip("/"),
         supabase_key=e.get("SUPABASE_SERVICE_ROLE_KEY", ""),
         models_doc=e.get("MODELS_DOC", DEFAULT_MODELS_DOC),
+        pilot=pilot_from_env(e),
     )
 
 
@@ -140,11 +147,74 @@ MUST_BE_POSITIVE = (
 )
 
 
+class RuntimeMisconfigured(ValueError):
+    """r1 R44: a typed startup error. It names the missing *setting names* and never a
+    value, because `DATABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` carry credentials and a
+    startup error is the most widely copied line of text a process ever emits.
+
+    A `ValueError` subclass so every existing `pytest.raises(ValueError)` around
+    `validate_pilot` still holds; callers that want the distinction catch this.
+    """
+
+    def __init__(self, mode: str, missing=(), detail: str = "") -> None:
+        self.mode = mode
+        self.missing = tuple(missing)
+        message = f"INFRX_MODE={mode!r}: " + (detail or "requires " + ", ".join(self.missing))
+        super().__init__(message)
+
+
+# r1 R44: what `pilot` needs before it may serve one request. Authentication is a
+# per-organization identity source, so the allow-all path (no Supabase, no key mapping)
+# and the shared `GATEWAY_API_KEY` both fail: neither can say *which* tenant called.
+# Metering is a durable store, because an unmetered pilot is a free-for-all.
+PILOT_AUTH_SETTINGS = ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
+PILOT_METERING_SETTINGS = ("DATABASE_URL",)
+
+
+def runtime_mode(settings) -> str:
+    """The mode a `Settings` is running in: `""` when `INFRX_MODE` is unset (legacy)."""
+    return getattr(settings, "pilot", PILOT_DEFAULTS).infrx_mode
+
+
+def validate_runtime(settings):
+    """r1 R44: the one hook `create_app` calls. Returns the mode it validated.
+
+    * unset (`INFRX_MODE` absent) - **legacy F1 behaviour, exactly as before**, logged
+      once as `legacy`. F1 preserved behaviour by rule, so the legacy `gateway:app`
+      entry point must keep working untouched; G1 replaces this branch with a refusal at
+      cutover, in the same change in which I2's installer writes `INFRX_MODE=pilot`.
+    * `dev` / `test` - explicit, and no further requirement.
+    * `pilot` - requires authentication **and** metering configuration, or a typed
+      `RuntimeMisconfigured` naming the missing setting names.
+    * anything else - refuses to start. A typo in a unit file is not a mode.
+    """
+    pilot = getattr(settings, "pilot", PILOT_DEFAULTS)
+    mode = pilot.infrx_mode
+    if mode == MODE_UNSET:
+        logging.getLogger("infrx").info(
+            "INFRX_MODE is unset: serving legacy F1 behaviour (mode=legacy)")
+        return "legacy"
+    if mode not in MODES:
+        raise RuntimeMisconfigured(mode, detail="must be one of " + ", ".join(MODES))
+    if mode == "pilot":
+        missing = [name for name in PILOT_METERING_SETTINGS if not pilot.database_url]
+        missing += [name for name in PILOT_AUTH_SETTINGS
+                   if not (settings.supabase_url and settings.supabase_key)]
+        if missing:
+            raise RuntimeMisconfigured(mode, missing)
+    return mode
+
+
 def validate_pilot(pilot, gateway=None):
     """Fail closed at startup: `pilot` mode refuses to run unmetered (no durable
     store) or unauthenticated (no per-key identity source), and live judging
-    refuses to run without an explicit budget."""
-    if pilot.infrx_mode not in MODES:
+    refuses to run without an explicit budget.
+
+    The limit-by-limit half of R44's check. `validate_runtime` is what `create_app`
+    calls; this one validates a `PilotSettings` on its own and is what a track uses
+    when it has no gateway `Settings` to hand.
+    """
+    if pilot.infrx_mode not in MODES and pilot.infrx_mode != MODE_UNSET:
         raise ValueError(f"INFRX_MODE must be one of {', '.join(MODES)}")
     if pilot.judge_mode not in JUDGE_MODES:
         raise ValueError(f"JUDGE_MODE must be one of {', '.join(JUDGE_MODES)}")

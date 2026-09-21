@@ -15,6 +15,11 @@ from dataclasses import dataclass, fields
 from decimal import Decimal
 
 MODES = ("dev", "test", "pilot")
+# r1 R44: `INFRX_MODE` has **no default**. The empty string is "the variable is not
+# set", which `config.validate_runtime` maps to the legacy F1 behaviour F1 preserved by
+# rule; G1 replaces "unset -> legacy" with "unset -> refuse" at cutover, in the same
+# change in which I2's installer writes `INFRX_MODE=pilot`.
+MODE_UNSET = ""
 JUDGE_MODES = ("dry_run", "live")
 
 # --- shared input bounds (R17, R43) ------------------------------------------
@@ -43,7 +48,9 @@ ENTITLEMENT_LIMIT_NAMES = ("max_concurrent_requests", "max_requests_per_minute",
 class PilotSettings:
     """Provisional engineering limits until measured; values are contracts v1's."""
 
-    infrx_mode: str = "dev"                      # pilot refuses to start unmetered
+    # r1 R44: no default. Unset is unset, not `dev`, because a mode with a default is a
+    # production host that silently runs in whatever the default happens to be.
+    infrx_mode: str = MODE_UNSET
     database_url: str = ""                       # required in pilot
 
     # intake and media

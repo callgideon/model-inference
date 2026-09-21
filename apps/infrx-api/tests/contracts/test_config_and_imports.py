@@ -18,7 +18,9 @@ from infrx.contracts import limits, tasklocal
 # 08 §5, name by name. A rename or a changed default is a contract revision, so it
 # must fail here first.
 EXPECTED = {
-    "INFRX_MODE": "dev", "DATABASE_URL": "",
+    # r1 R44: no default. The empty string is "unset", which `validate_runtime` maps to
+    # the legacy F1 behaviour; `dev` was a default that let a production host run in it.
+    "INFRX_MODE": "", "DATABASE_URL": "",
     "MAX_REQUEST_BYTES": 100663296, "INTAKE_TIMEOUT_S": 30.0,
     "MAX_MEDIA_BYTES": 67108864, "MAX_VIDEO_SECONDS": 120.0,
     # r1 R2: the pilot fetch limits are MEDIA_FETCH_*; F1's FETCH_TIMEOUT_S (30)
@@ -130,6 +132,98 @@ def test_bounds_a_zero_would_disable_are_refused(name):
     pilot = config.pilot_from_env({limits.env_name(name): "0"})
     with pytest.raises(ValueError, match=limits.env_name(name)):
         config.validate_pilot(pilot)
+
+
+# --- r1 R44: the runtime mode, through the composition root ---------------------
+# These build apps with `create_app()` and injected settings. They never import the
+# legacy `gateway` shim: it mutates process state at import and directories collect
+# before the top-level legacy files, so importing it here would reorder the suite (R48).
+def _app(env, **clients):
+    from infrx.gateway.app import create_app
+    return create_app(config.from_env(env), client=object(), sb=object(), **clients)
+
+
+AUTHENTICATED = {"SUPABASE_URL": "https://example.supabase.co",
+                 "SUPABASE_SERVICE_ROLE_KEY": "not-a-real-key"}
+METERED = {"DATABASE_URL": "postgresql:///x"}
+
+
+def test_an_unset_mode_is_the_legacy_f1_behaviour():
+    """R44: while `INFRX_MODE` is unset the app starts exactly as F1's did, and says so.
+
+    F1 preserved behaviour by rule, so the legacy entry point cannot start refusing;
+    G1 replaces this branch with "unset -> refuse" at cutover.
+    """
+    assert config.runtime_mode(config.from_env({})) == ""
+    assert config.validate_runtime(config.from_env({})) == "legacy"
+    app = _app({})
+    assert app.state.runtime.mode == "legacy"
+    # and the F1 routes are mounted, i.e. "legacy" is the whole app, not a stub
+    paths = {route.path for route in app.routes}
+    assert {"/health", "/v1/models", "/v1/chat/completions"} <= paths
+
+
+def test_pilot_refuses_to_start_unauthenticated_or_unmetered():
+    """R44: `pilot` needs a per-organization identity source *and* a durable store, and
+    the error names the missing settings and nothing else."""
+    for env, expected in (({"INFRX_MODE": "pilot"},
+                           ("DATABASE_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")),
+                          ({"INFRX_MODE": "pilot", **METERED},
+                           ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")),
+                          ({"INFRX_MODE": "pilot", **AUTHENTICATED}, ("DATABASE_URL",))):
+        with pytest.raises(config.RuntimeMisconfigured) as caught:
+            _app(env)
+        assert caught.value.missing == expected, env.get("INFRX_MODE")
+        for name in expected:
+            assert name in str(caught.value)
+
+
+def test_a_pilot_startup_error_never_echoes_a_value():
+    """R44: the message names setting *names*. DATABASE_URL and the service-role key are
+    credentials, and a startup error is the most widely pasted line a process emits."""
+    secret = "postgresql://user:hunter2@db.internal/infrx"
+    with pytest.raises(config.RuntimeMisconfigured) as caught:
+        _app({"INFRX_MODE": "pilot", "DATABASE_URL": secret})
+    message = str(caught.value)
+    assert "hunter2" not in message and secret not in message and "db.internal" not in message
+    assert "SUPABASE_URL" in message
+
+
+def test_pilot_starts_with_authentication_and_metering():
+    app = _app({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED})
+    assert app.state.runtime.mode == "pilot"
+
+
+def test_a_shared_legacy_key_is_not_authentication():
+    """R44: never the allow-all path, and never a single shared key either - neither can
+    say which organization called, which is the whole point of metering a pilot."""
+    with pytest.raises(config.RuntimeMisconfigured):
+        _app({"INFRX_MODE": "pilot", **METERED, "GATEWAY_API_KEY": "one-shared-key"})
+
+
+@pytest.mark.parametrize("mode", ["pilo", "PILOT", "production", "legacy", "dev "])
+def test_an_unrecognised_mode_refuses_to_start(mode):
+    """A typo in a unit file is not a mode. `legacy` is spelled by *absence*, so it is
+    refused as a value too."""
+    with pytest.raises(config.RuntimeMisconfigured):
+        _app({"INFRX_MODE": mode})
+
+
+@pytest.mark.parametrize("mode", ["dev", "test"])
+def test_dev_and_test_are_explicit_and_need_nothing_else(mode):
+    app = _app({"INFRX_MODE": mode})
+    assert app.state.runtime.mode == mode
+
+
+def test_the_router_list_is_fixed_and_uses_the_register_protocol():
+    """R44: track routers are modules exposing `register(app, rt)`, added to this literal
+    by the coordinator on an integration request. A discovery walk would let a
+    half-finished track mount itself on the public gateway."""
+    from infrx.gateway import app as composition_root
+    assert [module.__name__.rsplit(".", 1)[-1] for module in composition_root.ROUTERS] == \
+        ["health", "models", "chat"]
+    for module in composition_root.ROUTERS:
+        assert callable(getattr(module, "register"))
 
 
 def test_f1_gateway_settings_are_untouched():
