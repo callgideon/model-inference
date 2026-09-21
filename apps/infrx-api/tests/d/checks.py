@@ -37,6 +37,8 @@ JOB_QUEUED = "50000000-0000-4000-8000-000000000001"
 JOB_RUNNING = "50000000-0000-4000-8000-000000000002"
 JOB_TERMINAL = "50000000-0000-4000-8000-000000000003"
 JOB_B = "50000000-0000-4000-8000-0000000000bb"
+UNKNOWN_A = "91000000-0000-4000-8000-000000000001"
+UNKNOWN_B = "91000000-0000-4000-8000-0000000000b1"
 RUN_ID = "60000000-0000-4000-8000-000000000001"
 EVENT_ID = "70000000-0000-4000-8000-000000000001"
 DEST_ID = "80000000-0000-4000-8000-000000000001"
@@ -110,6 +112,11 @@ def seed_legacy(conn) -> dict:
       values ('{KEY_A}', '{org_a}', '{USER_OWNER}', 'legacy', 'sk-infrx-aaaaaaaa',
               'hash-a');
     insert into public.credit_ledger (org_id, delta_usd, kind, reason) values
+      -- r3 (n61): history the new sign rules REJECT. The deployed console can write a
+      -- negative `grant` today, so this is what production may hold; it is why those
+      -- constraints are NOT VALID, and with this row a mutant that makes them VALID
+      -- cannot apply the migration at all.
+      ('{org_a}',   -3.000000, 'grant', 'legacy negative grant'),
       ('{org_a}',  100.500000, 'grant', 'pilot credit'),
       ('{org_a}',   -0.123456, 'usage', 'legacy usage'),
       ('{org_a}',   -0.000001, 'adjustment', 'rounding'),
@@ -191,6 +198,12 @@ def seed_fixtures(conn) -> None:
         + ", 'infrx-result:x', 'completed', 'settled', 'authoritative', 0.00050000,"
           " '2026-09-21T00:05:00Z')")
     conn.execute(_job_values(JOB_B, "job_b", org=ORG_B) + ")")
+    # r3: the two requests whose usage is unknown and whose hold is still reserved - the
+    # figures `console_usage_summary.pending_reconciliation` must sum. They are jobs,
+    # because a hold belongs to one (the composite key of ruling 7).
+    conn.execute(_job_values(UNKNOWN_A, "job_unknown_a", state="preparing") + ")")
+    conn.execute(_job_values(UNKNOWN_B, "job_unknown_b", org=ORG_B,
+                             state="preparing") + ")")
     conn.execute(f"""
     insert into infrx.credit_holds (request_id, org_id, key_id, amount, state)
       values ('{JOB_QUEUED}', '{ORG_A}', '{KEY_A}', 1.25000000, 'held');
@@ -273,9 +286,15 @@ def seed_fixtures(conn) -> None:
     select ('61000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid, '{ORG_A}',
            's' || lpad(i::text, 4, '0'), 3
     from (values (1), (50), (75)) as g(n), generate_series(1, g.n) as s(i);
-    insert into infrx.callback_destinations
-      (destination_id, org_id, url, signing_key_ref)
-      values ('{DEST_ID}', '{ORG_A}', 'https://hooks.example.com/infrx', 'kms:key/1');
+    insert into infrx.callback_destinations (destination_id, org_id, url, signing_key_ref)
+    values ('{DEST_ID}', '{ORG_A}', 'https://hooks.example.com/infrx', 'kms:key/1'),
+           ('80000000-0000-4000-8000-0000000000bb', '{ORG_B}', 'https://b.example.com',
+            'kms:key/2');
+    -- ORG_B's own event, so "this tenant's event to that tenant's destination" can be
+    -- refused by the DESTINATION key rather than incidentally by the event's (r3/n50).
+    insert into infrx.outbox (event_id, aggregate_id, org_id, kind, available_at)
+      values ('70000000-0000-4000-8000-0000000000bb', '{JOB_B}', '{ORG_B}',
+              'usage_projection', '2026-09-21T00:02:00Z');
     insert into infrx.callback_deliveries
       (event_id, destination_id, org_id, state, next_attempt_at)
       values ('{EVENT_ID}', '{DEST_ID}', '{ORG_A}', 'pending', '2026-09-21T00:03:00Z');
@@ -288,9 +307,16 @@ def seed_fixtures(conn) -> None:
       (org_id, consent_version, trace_mode, content_retention_days, evaluation_consent,
        actor_principal, effective_at)
       values ('{ORG_B}', 1, 'minimal', 7, false, '{USER_OTHER}', '2026-01-01T00:00:00Z');
-    -- Revoked, so "a revocation cannot be undone" (ruling 9) has something to undo.
+    -- Revoked, so "a revocation cannot be undone" (ruling 9) has something to undo...
     update infrx.consent_history set revoked_at = '2026-03-01T00:00:00Z'
       where org_id = '{ORG_B}' and consent_version = 1;
+    -- ...and a LIVE version too (r3/n32): with only a revoked one, ORG_B had no
+    -- `public.org_settings` row at all and the cross-tenant check on that view was
+    -- vacuous - a mutant that removed its tenant predicate survived.
+    insert into infrx.consent_history
+      (org_id, consent_version, trace_mode, content_retention_days, evaluation_consent,
+       actor_principal, effective_at)
+      values ('{ORG_B}', 2, 'minimal', 14, false, '{USER_OTHER}', '2026-04-01T00:00:00Z');
     insert into public.credit_ledger (org_id, delta_usd, kind, reason)
       values ('{ORG_B}', 5.00000000, 'grant', 'org b credit');
     insert into public.usage_events (id, org_id, model_id, status, cost_usd)
@@ -312,6 +338,27 @@ def seed_fixtures(conn) -> None:
       (id, org_id, api_key_id, model_id, status, prompt_tokens, completion_tokens, cost_usd)
       values ('90000000-0000-4000-8000-000000000001', '{ORG_A}', '{KEY_A}',
               'nemostation/marlin-2b', 200, 1000, 250, 0.00012345);
+    -- r3 (n40/n41/n42/n44): rows with figures the RPC assertions can recompute - a failed
+    -- request, an unknown-usage row whose hold is still reserved, and a platform-absorbed
+    -- one. ORG_B gets DIFFERENT totals, so an aggregate that ignored its tenant predicate
+    -- would not match either organization's expected numbers.
+    insert into public.usage_events
+      (id, org_id, api_key_id, model_id, status, prompt_tokens, completion_tokens, cost_usd,
+       usage_certainty, settlement_state)
+    values ('91000000-0000-4000-8000-000000000001', '{ORG_A}', '{KEY_A}',
+            'nemostation/marlin-2b', 500, 10, 0, 0.00000000, 'unknown', 'held_unknown'),
+           ('91000000-0000-4000-8000-000000000002', '{ORG_A}', '{KEY_A}',
+            'nemostation/marlin-2b', 200, 20, 5, 0.00002000, 'authoritative',
+            'released_platform_absorbed'),
+           ('91000000-0000-4000-8000-0000000000b1', '{ORG_B}', '{KEY_B}',
+            'nemostation/marlin-2b', 503, 1, 0, 0.00000000, 'unknown', 'held_unknown'),
+           ('91000000-0000-4000-8000-0000000000b2', '{ORG_B}', '{KEY_B}',
+            'nemostation/marlin-2b', 503, 1, 0, 0.00000000, 'unknown', 'held_unknown');
+    -- The unknown-usage hold `pending_reconciliation` sums (ORG_A 2.50, ORG_B 0.75).
+    insert into infrx.credit_holds (request_id, org_id, amount, state, reconcile_after)
+    values ('{UNKNOWN_A}', '{ORG_A}', 2.50000000, 'unknown', '2026-09-22T00:00:00Z'),
+           ('{UNKNOWN_B}', '{ORG_B}', 0.75000000, 'unknown', '2026-09-22T00:00:00Z');
+
     -- 450 distinct UTC days, so `console_usage_daily`'s 400-row bound is a bound this
     -- fixture can actually reach (ruling 10).
     insert into public.usage_events
@@ -340,7 +387,12 @@ def seed_fixtures(conn) -> None:
     insert into public.credit_ledger
       (org_id, delta_usd, kind, reason, created_by, by_operator)
       values ('{ORG_A}', 3.00000000, 'adjustment', 'by the owner', '{USER_OWNER}', false);
-    update infrx.wallets set reserved_total = 1.25000000 where org_id = '{ORG_A}';
+    -- `reserved_total` is the sum of the active holds the fixture seeds (the 1.25 hold on
+    -- the queued job plus the unknown-usage hold below); nothing moves it automatically
+    -- until D2/D5, so the fixture keeps it equal to them or the reconciliation view is
+    -- right to complain.
+    update infrx.wallets set reserved_total = 3.75000000 where org_id = '{ORG_A}';
+    update infrx.wallets set reserved_total = 0.75000000 where org_id = '{ORG_B}';
     """)
 
 
@@ -1085,6 +1137,9 @@ VIOLATIONS = (
     # thing that can refuse the delete.
     ("deleting consent history",
      f"delete from infrx.consent_history where org_id = '{ORG_A}' and consent_version = 2"),
+    ("re-dating a consent revocation (ruling 9)",
+     f"update infrx.consent_history set revoked_at = '2026-06-01T00:00:00Z' "
+     f"where org_id = '{ORG_B}' and consent_version = 1"),
     ("undoing a consent revocation (ruling 9)",
      f"update infrx.consent_history set revoked_at = null where org_id = '{ORG_B}'"),
     ("rewriting a consent row's created_at",
@@ -1185,6 +1240,9 @@ VIOLATIONS = (
     ("an idempotency row pointing at another tenant's job",
      f"insert into infrx.idempotency (org_id, operation, key, payload_digest, request_id) "
      f"values ('{ORG_B}', 'chat.completions', 'k3', '{DIGEST}', '{JOB_QUEUED}')"),
+    ("an idempotency row pointing at another tenant's feedback",
+     f"insert into infrx.idempotency (org_id, operation, key, payload_digest, "
+     f"feedback_id) values ('{ORG_B}', 'feedback.submit', 'k4', '{DIGEST}', 'fb_1')"),
     ("a judge reservation against another tenant's budget",
      f"insert into infrx.judge_reservations (run_id, org_id, period_start, amount, state) "
      f"values ('60000000-0000-4000-8000-0000000000bb', '{ORG_A}', '{PERIOD}', 1, 'held')"),
@@ -1194,6 +1252,11 @@ VIOLATIONS = (
     ("a callback delivery of one tenant's event to another's destination",
      f"insert into infrx.callback_deliveries (event_id, destination_id, org_id, state) "
      f"values ('{EVENT_ID}', '{DEST_ID}', '{ORG_B}', 'failed')"),
+    # Refused by the DESTINATION key rather than the event's: ORG_B's own event, sent to
+    # ORG_A's registered endpoint (r3/n50 - cross-tenant egress).
+    ("a delivery to another tenant's registered endpoint",
+     f"insert into infrx.callback_deliveries (event_id, destination_id, org_id, state) "
+     f"values ('70000000-0000-4000-8000-0000000000bb', '{DEST_ID}', '{ORG_B}', 'failed')"),
     ("a pilot usage row naming another tenant's api key",
      f"insert into public.usage_events (id, org_id, api_key_id, model_id, status, "
      f"settlement_regime, outcome, settlement_state, settlement_version) values "
@@ -1209,6 +1272,10 @@ VIOLATIONS = (
      f"insert into infrx.outbox (event_id, aggregate_id, kind, available_at) values "
      f"('70000000-0000-4000-8000-0000000000fd', '{JOB_QUEUED}', 'usage_projection', "
      f"now())"),
+    ("promoting a legacy usage row into the pilot regime (UPDATE path)",
+     "update public.usage_events set settlement_regime = 'pilot', outcome = 'completed', "
+     "settlement_state = 'settled', settlement_version = 1 "
+     "where id = '90000000-0000-4000-8000-000000000001'"),
     ("a pilot usage row under another tenant",
      f"insert into public.usage_events (id, org_id, model_id, status, "
      f"settlement_regime, outcome, settlement_state, settlement_version) values "
@@ -1221,6 +1288,9 @@ VIOLATIONS = (
     ("a negative grant",
      f"insert into public.credit_ledger (org_id, delta_usd, kind) values "
      f"('{ORG_A}', -5, 'grant')"),
+    ("a negative purchase",
+     f"insert into public.credit_ledger (org_id, delta_usd, kind) values "
+     f"('{ORG_A}', -5, 'purchase')"),
     ("a positive usage debit",
      f"insert into public.credit_ledger (org_id, delta_usd, kind) values "
      f"('{ORG_A}', 5, 'usage')"),
@@ -1281,6 +1351,47 @@ VIOLATIONS = (
     ("queue time spent beyond the queue budget",
      f"update infrx.jobs set queue_wait_used_s = 9999 "
      f"where request_id = '{JOB_QUEUED}'"),
+    # r3 (n21/n24): ONE violation per column `jobs_guard` claims to freeze. Only
+    # `price_snapshot` and the output ceiling had one, so a mutant that dropped
+    # `maximum_hold` or `key_id` from the list survived.
+    ("rewriting an admitted job: the job handle",
+     f"update infrx.jobs set job_handle = 'job_other' where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the api key",
+     f"update infrx.jobs set key_id = null where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the payload digest",
+     f"update infrx.jobs set payload_digest = 'sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef' where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the price version",
+     f"update infrx.jobs set price_version = 'pv-other' where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the maximum hold",
+     f"update infrx.jobs set maximum_hold = 99.00000000 where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the model revision",
+     f"update infrx.jobs set model_revision = 'other/model' where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the execution mode",
+     f"update infrx.jobs set execution_mode = 'sync' where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the input ceiling",
+     f"update infrx.jobs set max_input_tokens = 1 where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the consent version",
+     f"update infrx.jobs set consent_version = 2 where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the trace mode",
+     f"update infrx.jobs set trace_mode = 'off' where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the operation",
+     f"update infrx.jobs set operation = 'other' where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the idempotency key",
+     f"update infrx.jobs set idempotency_key = 'forged' where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the admission time",
+     f"update infrx.jobs set admitted_at = '2026-09-20T00:00:00Z' where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the absolute deadline",
+     f"update infrx.jobs set deadline_at = '2026-09-22T00:00:00Z' where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the preparation deadline",
+     f"update infrx.jobs set preparation_deadline_at = '2026-09-21T00:03:00Z' where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the queue budget",
+     f"update infrx.jobs set budget_queue_wait_s = 9999 where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the first-token budget",
+     f"update infrx.jobs set budget_first_token_s = 9999 where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the stall budget",
+     f"update infrx.jobs set budget_stall_s = 9999 where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted job: the preparation budget",
+     f"update infrx.jobs set budget_preparation_s = 9999 where request_id = '{JOB_QUEUED}'"),
     ("rewriting an admitted price snapshot (R53)",
      f"update infrx.jobs set price_snapshot = '{{}}'::jsonb "
      f"where request_id = '{JOB_QUEUED}'"),
@@ -1808,11 +1919,9 @@ def check_leaky_function_probe(conn) -> str:
     # Every probe reports the row's ORGANIZATION, so "did it see a row it must not" is
     # an exact question: the only ids it may report are the ones this session is a
     # member of (which includes the personal organization the signup trigger made).
-    probes = (("public.wallets", "coalesce(org_id::text, '-')"),
-              ("public.feedback", "coalesce(org_id::text, '-')"),
-              ("public.console_ledger", "coalesce(org_id::text, '-')"),
-              ("public.console_usage", "coalesce(org_id::text, '-')"),
-              ("public.operator_audit", "coalesce(target_org_id::text, '-')"))
+    # r3 (n28/n29): ALL ten views. Five of them were unprobed, and removing the barrier
+    # from `consent_history` or `console_judge_runs` leaked a member's probe.
+    probes = tuple((view, "coalesce(org_id::text, '-')") for view, _kind in READ_VIEWS)
     try:
         for relation, expression in probes:
             # As ORG_B's owner: everything the probe sees must belong to ORG_B.
@@ -1830,8 +1939,16 @@ def check_leaky_function_probe(conn) -> str:
                   "(did the notice handler or the function cost change?)")
     assert not leaked, ("a leaky function in the WHERE clause saw another tenant's "
                         f"rows: {leaked[:8]}")
+    # And the declaration itself, so a view added later cannot quietly arrive without it.
+    unbarriered = [view for view, _kind in READ_VIEWS
+                   if not conn.execute(
+                       "select coalesce(array_to_string(reloptions, ','), '') "
+                       "like '%%security_barrier=true%%' from pg_class "
+                       "where oid = %s::regclass", (view,)).fetchone()[0]]
+    assert not unbarriered, f"customer-readable views without security_barrier: {unbarriered}"
     return (f"{len(probes)} views probed with a cheap stable leaky function "
-            f"({len(seen)} evaluations); nothing foreign seen")
+            f"({len(seen)} evaluations) and all declared security_barrier; "
+            f"nothing foreign seen")
 
 
 def check_legacy_writer_does_not_drift(conn) -> str:
@@ -2034,10 +2151,25 @@ def check_console_read_surface(conn) -> str:
     assert all(isinstance(value, str) for value in money), \
         f"money left a view as something other than text: {money}"
     assert money[0].endswith(".00000000") or "." in money[0], money
+    # r3 (n35/n36): EVERY money column on the surface, not just `console_usage`'s two -
+    # `console_judge_runs.budget_*` and `console_admin_orgs.*_total` were unchecked.
+    money_columns = {
+        "wallets": ("ledger_total", "reserved_total", "available"),
+        "console_ledger": ("delta",), "console_usage": ("cost", "max_hold"),
+        "console_judge_runs": ("budget_reserved", "budget_settled"),
+        "console_admin_orgs": ("ledger_total", "reserved_total"),
+    }
+    wrong = []
+    for relation, columns in money_columns.items():
+        kinds = dict(conn.execute("""
+            select column_name, data_type from information_schema.columns
+            where table_schema = 'public' and table_name = %s""", (relation,)).fetchall())
+        wrong += [f"public.{relation}.{column} is {kinds.get(column)}"
+                  for column in columns if kinds.get(column) != "text"]
+    assert not wrong, f"money must leave the surface as text (ruling 10): {wrong}"
     kinds = dict(conn.execute("""
         select column_name, data_type from information_schema.columns
         where table_schema = 'public' and table_name = 'console_usage'""").fetchall())
-    assert kinds["cost"] == "text" and kinds["max_hold"] == "text", kinds
     assert kinds["created_at"] == "timestamp with time zone", kinds
     # `key_id` is null exactly when `key_name` is (a deleted key keeps its usage row).
     assert kinds["key_id"] == "uuid", kinds
@@ -2053,6 +2185,27 @@ def check_console_read_surface(conn) -> str:
     assert summary[1] >= 1, f"the usage summary counted nothing: {summary}"
     assert isinstance(summary[2], str) and isinstance(summary[3], str), \
         f"the summary returned money as a number: {summary}"
+    # r3 (n40/n41/n42/n44): every figure against an independently computed one, for BOTH
+    # organizations - ORG_B's totals differ, so an aggregate that lost its tenant predicate
+    # matches neither.
+    for org, session in ((ORG_A, "member"), (ORG_B, "other")):
+        got = read_rows(conn, session,
+                        f"select requests, failed_requests, prompt_tokens, "
+                        f"completion_tokens, cost, pending_reconciliation, "
+                        f"platform_absorbed_requests from public.console_usage_summary("
+                        f"'{org}', '2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')")[0]
+        want = conn.execute("""
+            select count(*), count(*) filter (where e.status >= 400),
+                   coalesce(sum(e.prompt_tokens), 0), coalesce(sum(e.completion_tokens), 0),
+                   coalesce(sum(e.cost_usd), 0)::numeric(20,8)::text,
+                   coalesce((select sum(h.amount) from infrx.credit_holds h
+                             join public.usage_events u on u.id = h.request_id
+                             where u.org_id = %s and u.usage_certainty = 'unknown'
+                               and h.state in ('held','unknown')), 0)::numeric(20,8)::text,
+                   count(*) filter (where e.settlement_state = 'released_platform_absorbed')
+            from public.usage_events e where e.org_id = %s""", (org, org)).fetchone()
+        assert tuple(got) == tuple(want), \
+            f"console_usage_summary for {org} is {tuple(got)}, computed {tuple(want)}"
     # An empty window still answers zero rather than "no rows": a grouped aggregate
     # would hand C nothing to render.
     empty = read_rows(conn, "member",
@@ -2086,6 +2239,17 @@ def check_console_read_surface(conn) -> str:
         f"org_wallet_summary returned numbers, not Money strings: {summary}"
     assert Decimal(summary[1]) == conn.execute(
         "select ledger_total from infrx.wallets where org_id = %s", (ORG_A,)).fetchone()[0]
+    # r3 (n44): `loaded` and `spent` are both POSITIVE magnitudes (credits.ts renders them
+    # as "loaded" and "spent"), and their difference is the total.
+    loaded, spent = Decimal(summary[3]), Decimal(summary[4])
+    want_loaded, want_spent = conn.execute("""
+        select coalesce(sum(delta_usd) filter (where delta_usd > 0), 0),
+               coalesce(-sum(delta_usd) filter (where delta_usd < 0), 0)
+        from public.credit_ledger where org_id = %s""", (ORG_A,)).fetchone()
+    assert (loaded, spent) == (want_loaded, want_spent), \
+        f"loaded/spent is {(loaded, spent)}, computed {(want_loaded, want_spent)}"
+    assert spent >= 0, f"`spent` must be a positive magnitude, not {spent}"
+    assert loaded - spent == Decimal(summary[1]), "loaded - spent is not the total"
     return (f"{len(READ_VIEWS)} views tenant- and role-scoped on their computed columns; "
             f"principals masked by membership; money is text; 3 RPCs guarded")
 
