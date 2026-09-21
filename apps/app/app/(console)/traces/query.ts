@@ -218,7 +218,9 @@ export function parseTraceParams(
   const rawSize = single(raw, "size", rejected);
   let size: number = DEFAULT_PAGE_LIMIT;
   if (rawSize !== null) {
-    const parsed = Number(rawSize);
+    // Plain digits only: `Number("1e2")` is 100, so a value the offered set does not contain would
+    // otherwise pass the membership check in another spelling.
+    const parsed = /^\d+$/.test(rawSize) ? Number(rawSize) : Number.NaN;
     if ((PAGE_SIZES as readonly number[]).includes(parsed)) size = parsed;
     else rejected.push({ name: "size", why: `must be one of ${PAGE_SIZES.join(", ")}` });
   }
