@@ -588,3 +588,20 @@ Final state at `2fc036e`: `docker ps -a`, `docker volume ls` and `docker network
 `infrx-e2` resource, no fake vLLM process survives, `/tmp` holds no `infrx-e2-*` path, and the
 only other container on the host (`gideon-migration-order-test-…`, plus the `infrx-d1-*` and
 `infrx-review-*` containers that came and went during this pass) was never touched.
+
+### Round-2 final state at `c7977a0`
+
+One more leak found by checking the host rather than trusting the code: 28
+`infrx-e2-fake-vllm-*.log` files in `$TMPDIR`. The server's log was a
+`NamedTemporaryFile(delete=False)` removed only by `stop()`, so any path that kills the
+*owning* process leaks one - which is what the SIGTERM drill does to itself under the mutant
+that removes the handler. It is now a `TemporaryFile`, unlinked at creation and freed when the
+last fd closes, so it cannot be leaked at all; `_tail()` seeks the fd instead of a path, and the
+drill reads its marker before `finally` removes it.
+
+Final run at `c7977a0` (18:28:54Z -> 18:31:13Z): **exit 0, all stages** - 39 RLS cases,
+8 engine conformance cases, `tests/integration` 83 passed, `make api-test` 670 passed,
+`make console-test` # pass 131 / # fail 0, `make bench-test` 40 passed, 46 mutants /
+44 killed / 2 controls survived / 0 problems, canary detected and named in both runners,
+teardown clean. Afterwards: no `infrx-e2` container, volume or network; no fake vLLM process;
+no `infrx-e2-*` path in `$TMPDIR`.
