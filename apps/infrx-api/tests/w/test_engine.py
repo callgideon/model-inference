@@ -34,7 +34,8 @@ from infrx.worker import (EngineError, EngineFailure, EngineIncomplete, EnginePr
                           EngineTransportError, EngineUnsupported, VllmEngine, cache_salt,
                           prepared_request)
 from infrx.worker.engine import MAX_CANCEL_INTENTS, media_uuid
-from infrx.worker.fakes import SERVED_MODEL, FakeUpstream, engine_factory
+from infrx.worker.fakes import (ERROR_BODY_CHUNK, SERVED_MODEL, FakeUpstream,
+                               engine_factory)
 from infrx.worker.reasoning import filter_text
 
 EVIL = "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
@@ -114,6 +115,32 @@ def drive(fault: str = "none", *, limits=DEFAULTS, prepared=None, **engine_kw):
     box = Box()
     upstream = FakeUpstream(fault=fault, clock=box.clock, limits=limits)
     return upstream, upstream.engine(**engine_kw), lease(box), prepared or text_prepared(box)
+
+
+def accepted(engine: VllmEngine, prepared: PreparedRequest):
+    """The body, or the refusal code as text, so "this request is accepted" is an
+    assertion rather than an exception escaping the case (and a mutant that starts
+    refusing it is killed by that assertion, not by a stray traceback)."""
+    try:
+        return engine.upstream_body(prepared)
+    except errors.DomainError as refused:
+        return f"refused: {refused.code}"
+
+
+def drained(stream):
+    """(events, failure). A stall or a cancellation must *not* raise, so "no failure"
+    is something a case can assert."""
+    try:
+        return asyncio.run(collect(stream)), None
+    except EngineFailure as failure:
+        return [], failure
+
+
+def refusal(engine: VllmEngine, prepared: PreparedRequest) -> str:
+    """The error code a refused body produces, or the absence of one. Comparing codes
+    keeps a case honest: another refusal for another reason is not the same refusal."""
+    outcome = accepted(engine, prepared)
+    return outcome if isinstance(outcome, str) else "accepted"
 
 
 def streamed(box: Box, script) -> VllmEngine:
@@ -258,6 +285,15 @@ def test_api_stream__messages_are_rebuilt_from_an_allow_list():
     with pytest.raises(ValidationError):
         text_prepared(Box(), messages=("not a message",))
 
+    # an extra key on a *matched* video part is refused for that reason alone: with no ref
+    # to match, the count check would have refused it anyway and proved nothing
+    upstream, engine, held, _prepared = drive()
+    matched = prepared_request(video_work(Box()), prompt_tokens=1200)
+    detailed = matched.model_copy(update={"messages": (
+        {"role": "user", "content": [{"type": "video_url", "video_url": {"url": EVIL},
+                                      "detail": "high"}]},)})
+    assert refusal(engine, detailed) == "refused: invalid_request"
+
     # and the two shapes that are allowed survive, rebuilt to exactly {role, content}
     upstream, engine, held, _prepared = drive()
     prepared = prepared_request(video_work(Box()), prompt_tokens=1200)
@@ -300,6 +336,10 @@ def test_api_stream__prepared_media_replaces_the_customers_url():
         "url": work.prepared_refs[0].storage_ref}
     assert EVIL not in json.dumps(body)
 
+    # a prepared ref with no media part at all: only the count check can refuse this
+    assert refusal(engine, prepared.model_copy(update={"messages": (
+        {"role": "user", "content": "no video here"},)})) == "refused: invalid_request"
+
     # two video parts, one prepared ref: refused (the count)
     two_parts = prepared.model_copy(update={"messages": (
         {"role": "user", "content": [{"type": "video_url", "video_url": {"url": "a"}},
@@ -307,16 +347,18 @@ def test_api_stream__prepared_media_replaces_the_customers_url():
     with pytest.raises(errors.InvalidRequest) as refused:
         engine.upstream_body(two_parts)
     assert refused.value.code == "invalid_request"
-    # one part, two refs: one video too many, refused the other way round
-    with pytest.raises(errors.UnsupportedParameter):
-        engine.upstream_body(prepared.model_copy(update={
-            "media": (b.media(), b.media(handle="upl_conformancefixture0000000000000000002"))}))
+    # two parts *and* two refs: the counts agree and the kinds match, so the only rule
+    # left to refuse it is "one video per request"
+    two_videos = prepared.model_copy(update={
+        "media": (b.media(), b.media(handle="upl_conformancefixture0000000000000000002")),
+        "messages": two_parts.messages})
+    assert refusal(engine, two_videos) == "refused: unsupported_parameter"
     # a video part paired with a ref that is not video: refused by kind, in order
     picture = b.media().model_copy(update={"mime": "image/png"})
     with pytest.raises(errors.InvalidRequest):
         engine.messages_for(prepared.model_copy(update={"media": (picture,)}))
-    with pytest.raises(errors.UnsupportedParameter):
-        engine.upstream_body(prepared.model_copy(update={"media": (picture,)}))
+    assert refusal(engine, prepared.model_copy(update={
+        "media": (picture,)})) == "refused: unsupported_parameter"
 
 
 def test_api_stream__media_belongs_to_the_requests_tenant():
@@ -328,11 +370,13 @@ def test_api_stream__media_belongs_to_the_requests_tenant():
                                       "media_refs": (b.media(b.ORG_B),)})
     with pytest.raises(errors.NotFound):
         prepared_request(foreign, prompt_tokens=1200)
-    mixed = prepared_request(work, prompt_tokens=1200).model_copy(update={
-        "media": (b.media(b.ORG_A), b.media(b.ORG_B))})
+    prepared = prepared_request(work, prompt_tokens=1200)
+    mixed = prepared.model_copy(update={"media": (b.media(b.ORG_A), b.media(b.ORG_B)),
+                                       "messages": (
+        {"role": "user", "content": [{"type": "video_url", "video_url": {"url": "a"}},
+                                     {"type": "video_url", "video_url": {"url": "b"}}]},)})
     upstream, engine, _lease, _prepared = drive()
-    with pytest.raises(errors.NotFound):
-        engine.upstream_body(mixed)
+    assert refusal(engine, mixed) == "refused: not_found"
 
 
 def test_api_stream__the_video_token_budget_is_f1s_own_function():
@@ -436,13 +480,15 @@ def test_api_stream__the_output_ceiling_is_validated_and_enforced():
                                            max_output_tokens=256))
     exactly_fits = text_prepared(Box(), max_output_tokens=256,
                                  prompt_tokens=DEFAULTS.max_context_tokens - 256)
-    assert engine.upstream_body(exactly_fits)["max_tokens"] == 256
+    fits = accepted(engine, exactly_fits)
+    assert isinstance(fits, dict) and fits["max_tokens"] == 256, fits
 
     # usage exactly at the ceiling is legitimate: it is how `finish_reason=length` ends
     upstream, engine, held, _prepared = drive()
     at_ceiling = text_prepared(Box(), max_output_tokens=len(upstream.deltas()))
     stream = engine.generate(held, at_ceiling)
-    asyncio.run(collect(stream))
+    events, failure = drained(stream)
+    assert failure is None, failure
     assert stream.usage is not None
     assert stream.usage.completion_tokens == at_ceiling.max_output_tokens
 
@@ -685,12 +731,13 @@ def test_api_stream__transport_engine_and_incomplete_failures_are_distinct():
 
     upstream, engine, held, prepared = drive("engine_error_pre_headers")
     stream = engine.generate(held, prepared)
-    with pytest.raises(EngineError) as failed:
+    with pytest.raises(EngineFailure) as failed:
         asyncio.run(collect(stream))
+    assert isinstance(failed.value, EngineError), type(failed.value)
     assert failed.value.facts == {"stage": "pre_headers", "status": 500}
     assert not stream.started and stream.deltas == 0
     assert len(failed.value.detail) == 500
-    assert 0 < upstream.error_bytes < 2 * 1024 * 1024, "the error body was read whole"
+    assert 0 < upstream.error_bytes <= 2 * ERROR_BODY_CHUNK, "the error body was read whole"
 
     upstream, engine, held, prepared = drive("engine_error_post_headers")
     stream = engine.generate(held, prepared)
@@ -749,7 +796,8 @@ def test_api_stream__a_stall_ends_the_stream_and_says_which_bound_it_passed():
     upstream, engine, held, prepared = drive("prefill_stall")
     started = upstream.clock.now()
     stream = engine.generate(held, prepared)
-    events = asyncio.run(collect(stream))
+    events, failure = drained(stream)
+    assert failure is None, failure          # the engine stopped; that is not an error
     assert [event.type for event in events] == [ChunkEventType.progress]
     assert stream.stall == "first_token" and stream.usage is None and not stream.complete
     assert 0 < upstream.pings < upstream.max_keepalives
@@ -760,7 +808,8 @@ def test_api_stream__a_stall_ends_the_stream_and_says_which_bound_it_passed():
     upstream, engine, held, prepared = drive("midstream_stall")
     started = upstream.clock.now()
     stream = engine.generate(held, prepared)
-    events = asyncio.run(collect(stream))
+    events, failure = drained(stream)
+    assert failure is None, failure
     assert raws(events) and usages(events) == []
     assert stream.stall == "inter_event" and 0 < upstream.pings < upstream.max_keepalives
     assert (upstream.clock.now() - started).total_seconds() > DEFAULTS.tpot_stall_s
@@ -768,7 +817,8 @@ def test_api_stream__a_stall_ends_the_stream_and_says_which_bound_it_passed():
     # a read timeout after the headers is the same stall by another route
     upstream, engine, held, prepared = drive("read_timeout")
     stream = engine.generate(held, prepared)
-    events = asyncio.run(collect(stream))
+    events, failure = drained(stream)
+    assert failure is None, failure
     assert stream.stall == "inter_event" and raws(events) and usages(events) == []
 
 
@@ -784,7 +834,8 @@ def test_api_stream__the_generation_deadline_is_its_own_outcome():
     held = lease(box, first_token_deadline_at=box.clock.at(5),
                  generation_deadline_at=box.clock.at(10))
     stream = engine.generate(held, text_prepared(box))
-    events = asyncio.run(collect(stream))
+    events, failure = drained(stream)
+    assert failure is None, failure
     assert len(raws(events)) == 1 and stream.stall == "generation"
     assert stream.terminal_cause is TerminalCause.deadline_exceeded
     assert 0 < upstream.pings < upstream.max_keepalives
@@ -807,7 +858,8 @@ def test_api_stream__a_slow_but_steady_stream_is_not_a_stall():
     upstream, engine, held, prepared = drive("slow_deltas")
     started = upstream.clock.now()
     stream = engine.generate(held, prepared)
-    events = asyncio.run(collect(stream))
+    events, failure = drained(stream)
+    assert failure is None, failure
     assert "".join(raws(events)) == upstream.text
     assert stream.stall is None and stream.complete and stream.usage is not None
     elapsed = (upstream.clock.now() - started).total_seconds()

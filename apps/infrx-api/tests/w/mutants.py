@@ -39,8 +39,10 @@ API_DIR = pathlib.Path(__file__).resolve().parents[2]
 PACKAGE = "infrx"
 SUITE = ("tests/w/test_engine.py", "tests/w/test_reasoning.py")
 # The only ways a case may legitimately notice a mutant: its own assertion, or the
-# absence of an exception it demanded.
-KILL_ERRORS = ("AssertionError", "Failed")
+# absence of an exception it demanded. A rewritten assert reports as the bare expression
+# (`path:12: assert 3 == 4`) rather than as `AssertionError`, so both spellings are the
+# same outcome; `Failed` is `pytest.raises` reporting DID NOT RAISE.
+KILL_ERRORS = ("AssertionError", "assert", "Failed")
 
 E = "worker/engine.py"
 R = "worker/reasoning.py"
@@ -254,10 +256,11 @@ MUTANTS: tuple[Mutant, ...] = (
        "            return [stream.usage_event(\n"
        "                Usage.of(stream.prepared.prompt_tokens, stream.deltas), reason)]",
        USAGE),
-    _m("malformed_usage_becomes_a_zero_count", "a usage we cannot read is unknown",
-       E, "        if usage is None:\n            stream.malformed_usage = True\n            return",
-       "        if usage is None:\n            stream.malformed_usage = True\n"
-       "            usage = Usage.of(0, 0)", USAGE),
+    # `malformed_usage_becomes_a_zero_count` was removed rather than forced: the flag and
+    # the absent candidate are the same fact (`_final_usage` treats either as malformed),
+    # so no single edit to it changes the outcome. "A usage we cannot read is unknown"
+    # stays covered by `usage_booleans_trusted`, `usage_nonints_trusted`,
+    # `usage_nondict_trusted` and `usage_totals_not_checked`.
     _m("usage_booleans_trusted", "True is not a token count",
        E, "        if isinstance(value, bool) or not isinstance(value, int) or value < 0:",
        "        if not isinstance(value, int) or value < 0:", USAGE),
@@ -319,8 +322,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("pre_header_timeout_is_stall", "a timeout before the headers is a transport failure",
        E, "            if not stream.started:", "            if False:", FAILURES),
     _m("post_header_timeout_is_a_failure", "silence after the headers is a stall",
-       E, "            if not stream.started:", "            if True:", STALL,
-       allowed_errors=("EngineTransportError",)),
+       E, "            if not stream.started:", "            if True:", STALL),
     _m("junk_relayed_as_content", "a line that is not JSON is never relayed",
        E, "        except ValueError:\n            stream.malformed_lines += 1\n            return []",
        "        except ValueError:\n            stream.malformed_lines += 1\n"
@@ -342,7 +344,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("inter_event_budget_ignored", "the inter-event budget binds the worker",
        E, "        if stream.last_event_at is not None and stream.deltas > 0 \\\n"
           "                and now >= stream.last_event_at + timedelta(seconds=self.limits.tpot_stall_s):",
-       "        if False:", STALL, allowed_errors=("EngineIncomplete",)),
+       "        if False:", STALL),
     _m("last_event_not_updated", "the inter-event budget is measured from the last event",
        E, "        stream.last_event_at = now", "        pass", SLOW),
     _m("keepalives_count_as_progress", "a keepalive is not an event",
@@ -350,7 +352,7 @@ MUTANTS: tuple[Mutant, ...] = (
           "            return []                                    # blank separator, or a `:` keepalive",
        '        if not line.startswith("data:"):\n'
           "            stream.last_event_at = now\n            return []",
-       STALL, allowed_errors=("EngineIncomplete",)),
+       STALL),
     _m("generation_deadline_ignored", "the attempt's absolute deadline ends it (R20)",
        E, '        if now >= lease.generation_deadline_at:\n            return "generation"',
        '        if False:\n            return "generation"', DEADLINE),
@@ -383,7 +385,8 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "        while len(self.cancelled) > MAX_CANCEL_INTENTS:", "        while False:",
        CANCEL_SCOPE),
     _m("intent_outlives_the_stream", "an intent is cleared on every exit path (R58)",
-       E, "            self.cancelled.pop(key, None)", "            pass", CANCEL),
+       E, "        finally:\n            self.cancelled.pop(key, None)",
+       "        finally:\n            pass", CANCEL),
     # --- readiness ------------------------------------------------------------
     _m("drain_is_not_observable", "drain stops reporting ready",
        E, '        if self.drained:\n            return {"ready": False, "drained": True,',

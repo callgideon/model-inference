@@ -731,7 +731,8 @@ class VllmEngine:
                 return [stream.usage_event(None, "cancelled")]
             return []
         reason = None
-        if stream.malformed_usage:
+        if stream.malformed_usage or stream.usage_candidate is None:
+            # The same fact twice: a usage object we could not read leaves no candidate.
             reason = "malformed"
         elif len(stream.usage_candidates) > 1:
             reason = "conflicting"
