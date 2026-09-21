@@ -38,10 +38,24 @@ def _m(name, invariant, file, old, new, *cases) -> Mutant:
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- the address policy ---------------------------------------------------
-    _m("reserved_addresses_allowed",
-       "reserved space is refused, which is what stops NAT64 and v4-compatible forms",
-       V, "or a.is_reserved or a.is_unspecified", "or a.is_unspecified",
+    # Review B1: the policy states the tunnel and special-purpose ranges itself, so the
+    # decisive guards are these three plus `is_global`. The interpreter's `is_reserved`
+    # stays as depth and has no mutant: on this build it also covers NAT64, so removing it
+    # changes no answer (see the evidence report).
+    _m("site_local_allowed", "deprecated site-local fec0::/10 is refused (is_global says True)",
+       V, "    if a.version == 6 and a.is_site_local:\n        return False", "    pass",
+       "test_the_address_policy_does_not_depend_on_the_interpreters_tables",
        "test_no_internal_address_form_is_reachable"),
+    _m("denied_networks_not_checked",
+       "the explicit deny-list is checked (6to4 relay anycast, RFC 9637 documentation)",
+       V, "    if any(a in net for net in DENIED_NETWORKS if net.version == a.version):\n"
+          "        return False", "    pass",
+       "test_the_address_policy_does_not_depend_on_the_interpreters_tables",
+       "test_no_internal_address_form_is_reachable"),
+    _m("mapped_address_not_unwrapped", "a v4-mapped address is judged as the v4 it names",
+       V, "    if a.version == 6 and a.ipv4_mapped:\n        a = a.ipv4_mapped", "    pass",
+       "test_a_v4_mapped_public_address_is_judged_as_the_v4_it_names",
+       "test_the_address_policy_does_not_depend_on_the_interpreters_tables"),
     _m("cgnat_allowed", "only globally routable space is allowed (so not CGNAT)",
        V, "    return a.is_global", "    return True",
        "test_no_internal_address_form_is_reachable"),

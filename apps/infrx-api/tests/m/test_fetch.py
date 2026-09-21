@@ -100,6 +100,30 @@ def test_no_internal_address_form_is_reachable(address):
     assert transport.requests == []
 
 
+def test_the_address_policy_does_not_depend_on_the_interpreters_tables():
+    """MEDIA-SEC (review B1): `ipaddress` disagrees with itself across builds. Deprecated
+    site-local `fec0::/10` reports `is_global` True, and upstream CPython 3.12.0-3.12.3
+    does not carry the 6to4/NAT64 ranges this host's build has, so the policy states them
+    itself instead of inheriting whatever the interpreter happens to know."""
+    from infrx.media.video import address_allowed
+
+    for address in support.INTERNAL:
+        assert not address_allowed(address), address
+    for address in (support.PUBLIC, support.PUBLIC_V6, support.PUBLIC_MAPPED,
+                    "1.1.1.1", "8.8.8.8", "2620:fe::fe"):
+        assert address_allowed(address), address
+
+
+def test_a_v4_mapped_public_address_is_judged_as_the_v4_it_names():
+    """The other half of B1: the mapped unwrap is a decision, not decoration. Without it
+    every `::ffff:` form is refused as reserved space, so this is the case that dies."""
+    transport = support.Transport(support.response(body=MP4))
+    resolve = support.resolver([support.PUBLIC_MAPPED])
+    got = asyncio.run(fetcher(resolve=resolve, transport=transport).fetch(URL))
+    assert got.data == MP4
+    assert transport.pinned == [support.PUBLIC_MAPPED] and transport.hosts == ["example.com"]
+
+
 def test_a_dns_failure_or_an_empty_answer_is_a_refusal_not_a_crash():
     for resolve in (support.resolver(OSError("no such host")), support.resolver([])):
         error = refusal(fetcher(resolve=resolve, transport=support.Transport()))

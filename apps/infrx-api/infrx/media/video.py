@@ -15,10 +15,35 @@ import tempfile
 import httpx
 
 
+DENIED_NETWORKS = tuple(ipaddress.ip_network(cidr) for cidr in (
+    # Tunnels and translations whose payload is an address of the caller's choosing:
+    # the outer address looks global and the packet arrives at the embedded v4.
+    "2002::/16",            # 6to4
+    "64:ff9b::/96",         # NAT64, well-known prefix
+    "64:ff9b:1::/48",       # NAT64, local use
+    "2001::/32",            # Teredo
+    "192.88.99.0/24",       # 6to4 relay anycast
+    # Special-purpose space that is never a video host.
+    "2001:20::/28",         # ORCHIDv2
+    "3fff::/20",            # documentation (RFC 9637)
+    "198.18.0.0/15",        # benchmarking (RFC 2544)
+    "192.0.0.0/24",         # IETF protocol assignments
+))
+
+
 def address_allowed(ip):
     """False for anything not a routable public address: loopback, private,
     link-local (169.254.0.0/16 and fe80::/10, so the EC2 metadata endpoint),
-    CGNAT, multicast, reserved, unspecified — v4 and v6, and v4-mapped v6."""
+    CGNAT, multicast, reserved, unspecified — v4 and v6, and v4-mapped v6.
+
+    Track M tightened this (M1 review B1) so the answer does not depend on the
+    interpreter's own tables: deprecated site-local `fec0::/10` reports
+    `is_global` True, and upstream CPython 3.12.0-3.12.3 does not carry the
+    6to4/NAT64/Teredo ranges this host's patched build happens to have. The
+    site-local check and `DENIED_NETWORKS` are therefore explicit. Every change
+    is in the refusing direction, so nothing this used to allow has stopped
+    working.
+    """
     try:
         a = ipaddress.ip_address(ip)
     except ValueError:
@@ -26,6 +51,10 @@ def address_allowed(ip):
     if a.version == 6 and a.ipv4_mapped:
         a = a.ipv4_mapped
     if a.is_private or a.is_loopback or a.is_link_local or a.is_multicast or a.is_reserved or a.is_unspecified:
+        return False
+    if a.version == 6 and a.is_site_local:
+        return False
+    if any(a in net for net in DENIED_NETWORKS if net.version == a.version):
         return False
     return a.is_global  # also drops 100.64.0.0/10 and the v6 special-purpose ranges
 

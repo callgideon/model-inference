@@ -14,13 +14,26 @@ import httpx
 # documentation address; the rest are the ranges MEDIA-SEC names.
 PUBLIC = "93.184.216.34"
 PUBLIC_V6 = "2606:4700:4700::1111"
+# A v4-mapped *public* address is allowed, because the v4 it names is. It is here so the
+# mapped unwrap in `address_allowed` is killable: without the unwrap this form is refused
+# as reserved space, along with every other mapped address.
+PUBLIC_MAPPED = "::ffff:93.184.216.34"
 METADATA = "169.254.169.254"
 INTERNAL = (METADATA, "127.0.0.1", "10.0.0.7", "192.168.1.1", "100.64.0.1", "0.0.0.0",
             "::1", "fe80::1", "fc00::1", "::",
             "::ffff:169.254.169.254",          # v4-mapped metadata
-            "64:ff9b::a9fe:a9fe",              # NAT64 well-known prefix
-            "2002:a9fe:a9fe::",                # 6to4
+            "::ffff:10.0.0.7",                 # v4-mapped private
+            "64:ff9b::a9fe:a9fe",              # NAT64, well-known prefix
+            "64:ff9b:1::a9fe:a9fe",            # NAT64, local use
+            "2002:a9fe:a9fe::",                # 6to4 to the metadata address
+            "2002:5db8:d822::",                # 6to4 with a public embedded v4
+            "192.88.99.1",                     # 6to4 relay anycast
             "2001:0:4136:e378:8000:63bf:3fff:fdd2",   # Teredo
+            "fec0::1",                         # deprecated site-local: is_global says True
+            "2001:20::1",                      # ORCHIDv2
+            "3fff::1",                         # documentation (RFC 9637)
+            "198.18.0.1",                      # benchmarking (RFC 2544)
+            "192.0.0.1",                       # IETF protocol assignments
             "not an address", "", "169.254.169.254%eth0")
 
 
