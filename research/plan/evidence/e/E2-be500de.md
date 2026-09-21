@@ -605,3 +605,81 @@ Final run at `c7977a0` (18:28:54Z -> 18:31:13Z): **exit 0, all stages** - 39 RLS
 44 killed / 2 controls survived / 0 problems, canary detected and named in both runners,
 teardown clean. Afterwards: no `infrx-e2` container, volume or network; no fake vLLM process;
 no `infrx-e2-*` path in `$TMPDIR`.
+
+---
+
+# Round 3 — review r2 `fix_required` (PROOF only) addressed at `4108e70`
+
+The r2 review re-verified every behaviour and failed the task on **proof**: eight claims had no
+test that caught their loss. Each now has a case and a mutant, and writing them found **three
+real defects** in code the r2 review had signed off as working.
+
+| Field | Value |
+|---|---|
+| Round-3 head SHA | **`4108e70`** (r2 head was `5f1552d`) |
+| Status | **implemented**; all eight claims proved, three defects fixed |
+
+## The three defects the new tests found
+
+| Defect | How it showed | Fix |
+|---|---|---|
+| **`fake_server_orphans()` never worked.** `ps -eo args=` truncates each line to the terminal width — 80 columns under pytest, shorter than this repository's absolute paths — so the marker never matched and preflight could not have reported an orphan. The r1 note "preflight catches them" was wrong. | B5's first real test of it: a spawned server's pid was missing from a scan that had just been asked for it (`found []`). | reads `/proc/<pid>/cmdline`, so there is no width to truncate |
+| **`_verdict` read its counts from the whole pytest output**, so a traceback quoting the failing test's own source was read as the run's verdict. The case that guards `_verdict` necessarily contains the literals `1 error in 0.37s` and `no tests ran` — and both turned genuine kills into `setup-error` / `no-cases` (measured: e2m47 and e2m50 reported `no-cases` while their own summary said `1 failed`). | the new B2 case, immediately | counts **and** `nothing_ran` come from pytest's summary LINE (`_summary()`), never from the body |
+| **`FakeVllmServer` relied on the CLI's `--host` default**, so changing that default took every server down at `setup_module` — 17 collection errors instead of the one case that guards it, which the review's own criterion then read as "not a kill". | the V7 mutant: `killed → SURVIVED, errors=17` | `start()` passes `--host 127.0.0.1` explicitly |
+
+## Each claim → test + mutant
+
+| r2 finding | Test | Mutant | Result |
+|---|---|---|---|
+| **B1** P4 "each check runs in its own rolled-back transaction" | `test_the_role_matrix_holds_for_every_role` now snapshots `api_keys`, `usage_events`, `credit_ledger`, `org_members`, revocations, renames, operator flags and exact `balances()` either side of `run_role_matrix` and asserts equality | `e2m56` | killed; the mutant leaves exactly the residue the reviewer measured (`api_keys 3`, `usage_events 18`, `revoked 1`) |
+| **B2** `mutants._verdict` untested | `test_the_verdict_reads_pytests_own_summary_and_not_the_exit_code` — canned summaries: `1 failed, 12 deselected` → killed; `1 error` → setup-error; `5 deselected` → no-cases; exit 2 with no summary → setup-error; **exit 1 with `30 passed` and nothing failed → SURVIVED** (the shape that discriminates "a kill needs a reported failure" from "non-zero exit"); plus two tracebacks that quote pytest's own phrases | `e2m47`, `e2m48`, `e2m49`, `e2m50` | all killed |
+| **B3** mutation stage only ever driven with a healthy list | `test_the_mutation_stage_and_the_cli_count_the_verdict_the_same_way` now also drives a **surviving non-control** (FAIL, problems named, exit 1) and an all-pending list (PENDING, exit 3) | `e2m57` | killed |
+| **B4** "12 cases qualify their 42501 by message" | `test_a_check_that_should_fail_does_fail` adds the right SQLSTATE with a message it never emits (`passed is False`, observed `42501`, real message present) and the same case with the fragment it does emit (`passed is True`) | `e2m58` | killed |
+| **B5** unlabelled NETWORK not a candidate | `test_an_unlabelled_network_with_our_name_is_refused_not_removed` — a decoy network reported foreign, the gate refusing, the network surviving, and the project's own network still owned | `e2m51` | killed |
+| **B5** real `fake_server_orphans` | `test_a_real_orphaned_fake_server_is_found_by_its_command_line` — spawns this checkout's `fake_vllm.py` on a free task-local port, asserts its pid is listed, that the scanner is never its own orphan, and that a dead server is not an orphan | `e2m52` | killed |
+| **minor M12** `assert_ours` in `provision_database` | `test_provision_database_refuses_a_container_outside_the_namespace` — a stub `container_of` returning `infrx-d1-postgres`, and one carrying our name with another checkout's label; both refused with **no** `docker exec` reaching either | `e2m53` | killed |
+| **minor M43** leaked server logs | `test_the_server_log_is_never_left_behind_in_the_temp_directory` — no `infrx-e2-fake-vllm-*` visible in `$TMPDIR` while running, after `stop()`, or after `SIGKILL`, while `_tail()` stays readable | `e2m54` | killed |
+| **minor V7** default host | `test_the_fake_server_binds_loopback_unless_explicitly_allowed` asserts the default on its own (`127.0.0.1`, in `LOOPBACK`, `allow_non_loopback is False`) | `e2m55` | killed |
+
+`Mutant.dirties_database` is new: e2m56 can only be proved by letting the un-rolled-back writes
+commit, so the runner **re-provisions** the database afterwards (`database infrx_e2 recreated and
+reseeded (seed 20260921)`). Without it every later layer-2 mutant fails on the residue and the
+failures look like broken policies — which is exactly how the reviewer found B1.
+
+## Commands
+
+| # | Command | Exit | Result |
+|---|---|---|---|
+| 1 | `run.py --canary` (2026-09-21 21:40:16Z → 21:42:59Z, 163.0 s) | **0** | every stage PASS |
+| 2 | `pytest -q tests/integration` **with** the stack | 0 | **88 passed** |
+| 3 | `pytest -q tests/integration` **without** the stack | 0 | **67 passed, 21 skipped**, each skip naming `run.py` |
+| 4 | `mutants.py --layer all` | 0 | `{"mutants": 58, "killed": 56, "controls_survived": 2, "not_killed": 0, "pending": 0, "problems": null}` |
+
+Run 1's stages: 39 RLS cases (`failed: null`) · engine conformance 8/8, `skipped_hooks: []` ·
+suites `tests/integration` **88** / `make api-test` **670** / `make console-test`
+**# pass 131 / # fail 0** / `make bench-test` **40** · mutants as above · canary python
+`exit 1, 4 failed, named` and console `exit 1, # fail 1, named` · teardown removed the four
+containers with `still_named_ours_but_not_ours: []`.
+
+## Limits recorded, not changed (r2 review)
+
+1. **The ownership label is the checkout path**, which is guessable: a deliberate copier that
+   sets `INFRX_E2_CHECKOUT` to another checkout's path is mis-classified as the owner. It stops
+   the accident it exists for and nothing forges it in practice; a per-run random id in the state
+   file is the upgrade if two E sessions ever share a host.
+2. **A fake vLLM started by the test suite is orphaned if `run.py` is interrupted during the
+   `suites` stage** — the signal handler only knows the servers `run.py` itself started. The next
+   run's preflight now genuinely reports it (defect 1 above was why that claim had been hollow).
+3. **D1's `infrx.now()` is declared STABLE**, so within one statement it returns the value it had
+   before an `advance()` in that same statement. Move the clock in its own statement, then read.
+4. For the coordinator, already agreed: when D1's migrations are in the harness, `E2-RLS-01`–`04`
+   and `E2-RLS-44` flip to error expectations (D1 revokes `anon` outright) and E2 drops its
+   private clock for `infrx_test`. Both are noted in `tests/integration/README.md`.
+
+## Verification log (round 3)
+
+- 2026-09-21: r2's eight proof gaps closed at `4108e70`; every count above quoted from output.
+  Writing the proofs found three defects in already-reviewed code (the orphan scan, the verdict's
+  output parsing, the server's reliance on a CLI default) and each is fixed with the case that
+  found it. Test files plus three one-line code fixes; no behaviour was added. All containers,
+  volumes, networks, processes and temp files created during this pass were removed.
