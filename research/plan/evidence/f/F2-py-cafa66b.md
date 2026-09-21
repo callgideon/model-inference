@@ -136,3 +136,19 @@ None.
   135 conformance cases, 40 fixtures, 27 HTTP codes. Two mutant anchors were reported
   `misdeclared` after the n2 rewrite and re-aimed in the same pass. No cloud, GPU,
   container, paid provider or production resource was touched.
+
+## Corrections (r8 review, fixed in the following pass)
+
+This pass introduced a regression it did not notice: moving the "one loss per capture"
+guard out of `_count` into its call sites let two routes count a capture's loss **twice** -
+`abandon` (or a context exit) followed by a late `finish`, which is G's ordinary `finally`
+order, and a budget breach followed by a mode-mismatched `finish`. The reviewer measured
+3,914 of 124,416 sequences affected. `ports.py` said "a capture contributes at most one
+loss count however it ends" throughout, so the port was right and the code was wrong.
+
+Fixed in `F2-py-459233f.md` by putting the guard back where every route passes through it
+(`_count` is idempotent per capture), together with R42's ruling that an off-mode capture is
+silent - this pass counted a `malformed` loss on every ordinary off-mode request, which
+would have reported a 100% loss rate for customers who asked for no tracing at all. The
+same pass ships the exhaustive bounded-sequence property test that makes this class
+non-regressable.
