@@ -489,6 +489,7 @@ def test_sigterm_tears_down_and_orphans_no_fake_server():
     SIGTERM, then check the process group is gone and teardown was reported.
     """
     import json as _json
+    import signal
     import subprocess as _subprocess
     import time as _time
     marker = Path(os.environ.get("TMPDIR", "/tmp")) / "infrx-e2-sigterm-drill.json"
@@ -520,10 +521,10 @@ def engine(rep):
 run.engine = engine
 sys.exit(run.main(["--layer", "all", "--no-mutants"]))
 """
+    server_pid = None
     child = _subprocess.Popen([sys.executable, "-c", driver], stdout=_subprocess.PIPE,
                               stderr=_subprocess.STDOUT, text=True)
     try:
-        server_pid = None
         deadline = _time.monotonic() + 60
         while _time.monotonic() < deadline:
             if marker.exists():
@@ -543,6 +544,15 @@ sys.exit(run.main(["--layer", "all", "--no-mutants"]))
     finally:
         if child.poll() is None:
             child.kill()
+        # The drill's own cleanup: under a mutant that removes the SIGTERM handler the child
+        # dies without stopping its server, and the orphan would hold a task-local port for
+        # every later run. Killing the group here is this test tidying up after itself, not
+        # part of what it asserts - the assertion below is that it should not have been needed.
+        if server_pid:
+            try:
+                os.killpg(os.getpgid(server_pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
     assert code == 128 + 15, f"expected 143 through the handler, got {code}\n{output[-2000:]}"
     state = _json.loads(marker.read_text())
     assert state.get("teardown") is True, f"teardown never ran: {state}"
