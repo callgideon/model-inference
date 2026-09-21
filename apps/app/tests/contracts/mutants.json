@@ -1450,6 +1450,36 @@
       "cases": [
         "a filter or cursor from another organization never widens the tenant"
       ]
+    },
+    {
+      "id": "R41-08",
+      "note": "a replayed settings.update returns the stored row unprojected, so the customer who retries an operator's key learns the operator's identity (Q18)",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          return replay.ok ? ok(visibleSettings(replay.value, session)) : replay;",
+      "replace": "          return replay.ok ? ok(replay.value as unknown as ConsoleSettings) : replay;",
+      "cases": [
+        "no customer view ever names an operator (R41)"
+      ]
+    },
+    {
+      "id": "Q16-01",
+      "note": "the consent-history DTO keeps the stored `by_operator` flag, so a customer learns that the platform made the change even while the principal is masked",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      consent_history: settings.consent_history.map(({ by_operator: byOperator, ...entry }) => ({",
+      "replace": "      consent_history: settings.consent_history.map(({ by_operator: byOperator, ...entry }) => ({\n        by_operator: byOperator,",
+      "cases": [
+        "retention is capped and evaluation consent is a separate control"
+      ]
+    },
+    {
+      "id": "Q16-02",
+      "note": "a feedback entry carries the stored `by_operator` flag into the DTO",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    const { by_operator: byOperator, ...row } = structuredClone(entry);\n    if (!byOperator || session.isOperator) return row;",
+      "replace": "    const byOperator = entry.by_operator;\n    const row = structuredClone(entry) as unknown as FeedbackEntry;\n    if (!byOperator || session.isOperator) return row;",
+      "cases": [
+        "an operator label is the only path to operator authorship and calibration membership"
+      ]
     }
   ]
 }

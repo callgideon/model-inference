@@ -50,6 +50,7 @@ import {
   type AdminOrgSummary,
   type AuditEntry,
   type AuditQuery,
+  type ConsentHistoryEntry,
   type FeedbackEntry,
   type JudgeRun,
   type LedgerEntry,
@@ -164,7 +165,10 @@ async function walkAll<T>(
     assert.ok(page.items.length > 0, `${what}: a non-final page must not be empty`);
     cursor = page.next_cursor;
   }
-  throw new Error(`${what}: pagination did not terminate`);
+  // `assert.fail` keeps a pagination bug a *failed assertion* rather than an exception:
+  // the mutation runner classifies an exception as a runner error and refuses the kill,
+  // so a mutant that broke cursor termination would have been reported as unkillable.
+  return assert.fail(`${what}: pagination did not terminate`);
 }
 
 /**
@@ -232,7 +236,50 @@ function assertHasTimestampTie(rows: { at: string; id: string }[], what: string)
 }
 
 /** R19: an operator label is the only entry that may claim operator authorship or membership. */
+/**
+ * Q16: the exact field set of a DTO, not a subset.
+ *
+ * Every assertion that only checks the fields it names passes just as happily on a row
+ * carrying extra ones — and the fake's own stored shapes carry `by_operator`, which is
+ * precisely what R41 says a customer must never receive. Pinning the set is what turns
+ * "the projection dropped it" into something a test can see.
+ */
+function assertExactFields(row: object, expected: readonly string[], what: string): void {
+  assert.deepEqual(
+    Object.keys(row).sort(),
+    [...expected].sort(),
+    `${what}: the DTO must carry exactly these fields, no more and no fewer`,
+  );
+}
+
+const FEEDBACK_ENTRY_FIELDS = [
+  "id",
+  "request_id",
+  "created_at",
+  "channel",
+  "author_role",
+  "author_principal",
+  "name",
+  "value",
+  "comment",
+  "calibration_set",
+  "rubric_version",
+] as const;
+
+const CONSENT_HISTORY_ENTRY_FIELDS = ["changed_at", "evaluation_consent", "changed_by"] as const;
+
+const LEDGER_ENTRY_FIELDS = ["id", "created_at", "delta", "kind", "reason", "ref", "actor"] as const;
+
+function assertConsentHistoryEntry(entry: ConsentHistoryEntry, what: string): void {
+  // The stored entry carries `by_operator`; the DTO must not (R41).
+  assertExactFields(entry, CONSENT_HISTORY_ENTRY_FIELDS, what);
+  assert.match(entry.changed_at, RFC3339, `${what}: changed_at`);
+  assert.equal(typeof entry.evaluation_consent, "boolean", `${what}: evaluation_consent`);
+  assert.ok(entry.changed_by.length > 0, `${what}: changed_by`);
+}
+
 function assertFeedbackEntry(entry: FeedbackEntry, what: string): void {
+  assertExactFields(entry, FEEDBACK_ENTRY_FIELDS, what);
   assert.ok(inSet(FEEDBACK_ENTRY_NAMES, entry.name), `${what}: unknown feedback name ${entry.name}`);
   assert.ok(inSet(FEEDBACK_CHANNELS, entry.channel), `${what}: feedback channel`);
   assert.ok(inSet(AUTHOR_ROLES, entry.author_role), `${what}: feedback author role`);
@@ -286,6 +333,7 @@ function assertUsageRow(row: UsageRow): void {
 }
 
 function assertLedgerEntry(entry: LedgerEntry): void {
+  assertExactFields(entry, LEDGER_ENTRY_FIELDS, `ledger ${entry.id}`);
   assert.match(entry.created_at, RFC3339, "ledger created_at");
   assert.ok(inSet(LEDGER_ENTRY_KINDS, entry.kind), "ledger kind");
   assert.ok(isMoney(entry.delta), `ledger delta is not canonical money: ${entry.delta}`);
@@ -1161,7 +1209,9 @@ export function runConsoleServicesConformance(
       const latest = toggled.consent_history[toggled.consent_history.length - 1];
       assert.equal(latest.evaluation_consent, toggled.evaluation_consent);
       assert.equal(latest.changed_by, sessions.owner.email);
-      assert.match(latest.changed_at, RFC3339);
+      // Q16: the exact field set. The stored entry carries `by_operator`, so a body built
+      // from it without projecting would leak whether the platform made the change.
+      for (const entry of toggled.consent_history) assertConsentHistoryEntry(entry, "consent history");
     });
 
     it("an operator grant is idempotent per key and conflicts on a changed payload", async () => {
@@ -2341,6 +2391,47 @@ export function runConsoleServicesConformance(
       );
       const ownerEntry = byOwner.consent_history[byOwner.consent_history.length - 1];
       assert.equal(ownerEntry.changed_by, sessions.owner.email, "an organization's own action keeps its own principal");
+
+      // A *replay* of a settings.update an operator made must mask exactly as a read does.
+      // The idempotency scope is (organization, operation, key), so a customer of the same
+      // organization can reach the stored operator result by retrying that key: a store
+      // that returns its stored row unprojected hands over the operator's address on that
+      // one path while masking it everywhere else.
+      const q18 = {
+        evaluation_consent: !ownerEntry.evaluation_consent,
+        idempotency_key: "r41-settings-replay",
+      };
+      const byOperator = expectOk(
+        await services.settings.update(sessions.operator, q18),
+        "an operator changing the organization's consent",
+      );
+      const operatorChange = byOperator.consent_history[byOperator.consent_history.length - 1];
+      assert.equal(
+        operatorChange.changed_by,
+        sessions.operator.email,
+        "an operator's own view of its own change names the operator",
+      );
+      const customerReplay = expectOk(
+        await services.settings.update(sessions.owner, q18),
+        "the customer replaying the operator's settings key",
+      );
+      const replayedChange = customerReplay.consent_history[customerReplay.consent_history.length - 1];
+      assert.equal(
+        replayedChange.changed_at,
+        operatorChange.changed_at,
+        "the replay returns the original consent entry, not a second one",
+      );
+      assert.equal(
+        replayedChange.changed_by,
+        PLATFORM_ACTOR,
+        "a replayed settings.update must mask the operator exactly as a read does",
+      );
+      for (const change of customerReplay.consent_history) {
+        assert.ok(
+          !operatorPrincipals.includes(change.changed_by),
+          "no entry in a replayed settings body may name an operator",
+        );
+      }
 
       // The customer's own views of those entries must not name the operator who submitted them, and
       // neither must an *idempotent replay* the customer triggers with the same key.
