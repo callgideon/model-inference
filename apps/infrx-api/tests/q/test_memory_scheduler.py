@@ -181,9 +181,18 @@ def test_q1_fair__a_candidate_that_waited_catches_up_once_and_cannot_hoard():
             assert candidate is not None
             served.append(candidate.org_id)
         assert served == [ORG_A] * 5, served      # B is not available yet
+        assert port.virtual_times()[INFER.value] == 4.0, port.virtual_times()
         h.clock.advance(60)
+        first_back = await port.claim_candidate("worker-a")
+        assert first_back is not None and first_back.org_id == ORG_B
+        # the pool's virtual time is the *clamped* start of that dispatch, never the
+        # arriving flow's own tag: taking the unclamped tag moves virtual time
+        # backwards, and B then hoards every remaining slot
+        assert port.virtual_times()[INFER.value] == 4.0, port.virtual_times()
+        await port.acknowledge(first_back)
         catching_up = [c.org_id for c in await drain(port)]
-        assert catching_up[:3] == [ORG_B, ORG_A, ORG_B], catching_up
+        # A's last candidate first (it is level with B and arrived earlier), then B's
+        assert catching_up == [ORG_A, ORG_B, ORG_B, ORG_B], catching_up
     asyncio.run(run())
 
 
@@ -281,17 +290,44 @@ def test_q1_fair__a_bad_service_cost_is_a_typed_error_that_moves_nothing():
             h = harness(cost=estimator)
             port = h.port
             assert await port.enqueue(event(h, org_id=ORG_A))
-            before, before_tags = port.stats(), port.tags()
+            before = (port.stats(), port.tags(), port.virtual_times(),
+                      port.kind_tags(), port.top_virtual_time())
             with pytest.raises(errors.DomainError) as caught:
                 await port.claim_candidate("worker-a")
             assert caught.value.code == "internal_error", (bad, caught.value.code)
-            assert port.stats() == before and port.tags() == before_tags, bad
+            assert (port.stats(), port.tags(), port.virtual_times(),
+                    port.kind_tags(), port.top_virtual_time()) == before, bad
             assert port.stats()["pending"] == 1 and port.stats()["inflight"] == 0, bad
             # not wedged: the candidate is still there, and the next claim gets it
             h.clock.advance(10_000)
             candidate = await port.claim_candidate("worker-b")
             assert candidate is not None, bad
             assert estimator.calls == 2, (bad, estimator.calls)
+    asyncio.run(run())
+
+
+def test_q1_fair__a_bad_service_cost_after_a_dispatch_moves_no_virtual_time():
+    """r3 N18: the same rule one dispatch later, where the flow's tag is already above
+    its pool's virtual time. Writing the virtual time before the estimator is validated
+    leaves the index changed by a call that raised, and only a flow whose tag exceeds the
+    virtual time can see it."""
+    async def run():
+        estimator = _Estimator(1.0, -1.0, 1.0)
+        h = harness(cost=estimator)
+        port = h.port
+        for _ in range(3):
+            assert await port.enqueue(event(h, org_id=ORG_A))
+        first = await port.claim_candidate("worker-a")
+        assert first is not None
+        assert port.tags()[(INFER.value, ORG_A)] == 1.0 > port.virtual_times()[INFER.value]
+        before = (port.stats(), port.tags(), port.virtual_times(),
+                  port.kind_tags(), port.top_virtual_time())
+        with pytest.raises(errors.DomainError) as caught:
+            await port.claim_candidate("worker-b")
+        assert caught.value.code == "internal_error", caught.value.code
+        assert (port.stats(), port.tags(), port.virtual_times(),
+                port.kind_tags(), port.top_virtual_time()) == before
+        assert await port.claim_candidate("worker-b") is not None
     asyncio.run(run())
 
 
