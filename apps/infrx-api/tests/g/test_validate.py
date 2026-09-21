@@ -123,15 +123,90 @@ BAD_SHAPES = (
     ("an empty stop sequence", dict(message(stop=[""])), "invalid_request"),
     ("a non-string stop sequence", dict(message(stop=[1])), "invalid_request"),
     ("empty model", dict(message(model="")), "invalid_request"),
+    # Survivors the first review's mutant corpus found: a boolean is not an integer,
+    # `null` is not "absent", and a number JSON does not have is not a number.
+    ("n is true", dict(message(n=True)), "invalid_request"),
+    ("max_tokens is true", dict(message(max_tokens=True)), "invalid_request"),
+    ("temperature is null", dict(message(temperature=None)), "invalid_request"),
+    ("stop is null", dict(message(stop=None)), "invalid_request"),
+    ("seed is negative", dict(message(seed=-1)), "invalid_request"),
+    ("seed is 2**63", dict(message(seed=2 ** 63)), "invalid_request"),
+    ("a text part's text is null", parts({"type": "text", "text": None}), "invalid_request"),
+    ("content is a number", {"messages": [{"role": "user", "content": 5}]}, "invalid_request"),
+    ("content is null", {"messages": [{"role": "user", "content": None}]}, "invalid_request"),
+    ("a role that cannot be hashed",
+     {"messages": [{"role": ["user"], "content": "hi"}]}, "invalid_request"),
+    ("a video url of null", parts({"type": "video_url", "video_url": {"url": None}}),
+     "invalid_request"),
+    ("stop is a number", dict(message(stop=5)), "invalid_request"),
+    ("a bare upload handle",
+     parts({"type": "video_url", "video_url": {"url": "upl_" + "a" * 43}}), "unsupported_media"),
+    ("an upload handle that is not one",
+     parts({"type": "video_url", "video_url": {"url": "infrx-upload:upl_short"}}),
+     "unsupported_media"),
+    ("a data url that is not video base64",
+     parts({"type": "video_url", "video_url": {"url": "data:text/plain,hello"}}),
+     "unsupported_media"),
+    ("a url with a newline in it",
+     parts({"type": "video_url", "video_url": {"url": "https://cdn.test/a\nHost: x"}}),
+     "unsupported_media"),
+    ("an over-long model name", dict(message(model="m" * 129)), "invalid_request"),
+    ("stream with respond-async", dict(message(stream=True)), "invalid_request"),
 )
 
 
 @pytest.mark.parametrize("name,body,code", BAD_SHAPES, ids=[n for n, _, _ in BAD_SHAPES])
 def test_media_sec__a_malformed_shape_is_refused_with_a_stable_code(name, body, code):
-    response, calls = post(body)
+    headers = {"Prefer": "respond-async"} if name == "stream with respond-async" else None
+    response, calls = post(body, headers=headers)
     assert response.status_code == 400, response.text
     assert support.error_of(response)["code"] == code, support.error_of(response)
     assert calls == []
+
+
+def test_media_sec__a_number_json_does_not_have_is_refused():
+    """`1e400` parses as `inf`, which no range check catches by comparison and no
+    HTTP client will even serialise; it travels as raw JSON text."""
+    tc, calls = client()
+    for raw in (b'{"messages":[{"role":"user","content":"hi"}],"temperature":1e400}',
+                b'{"messages":[{"role":"user","content":"hi"}],"temperature":-1e400}'):
+        response = tc.post(support.CHAT_PATH, headers=support.RAW, content=raw)
+        assert response.status_code == 400, response.text
+        assert support.error_of(response)["code"] == "invalid_request"
+    assert calls == []
+
+
+def test_media_sec__a_megabyte_model_name_never_reaches_the_store():
+    """It is refused by the non-media byte bound before the length check even runs -
+    which is the point: the first bound that catches it is enough."""
+    tc, calls = client()
+    response = tc.post(support.CHAT_PATH, headers=support.AUTH,
+                       json=dict(message(model="m" * 1_048_576)))
+    assert response.status_code in (400, 413), response.text
+    assert calls == []
+
+
+def test_f_base__an_unserved_model_is_refused_without_naming_what_is_served():
+    """The public id is mapped to a revision; an unknown one is refused with the
+    table's model code, and the message says nothing about which ids exist."""
+    response, calls = post(message(model="someone/else"))
+    error = support.error_of(response)
+    assert (response.status_code, error["code"]) == (403, "model_not_entitled")
+    assert error["message"] == "The organization is not entitled to this model."
+    assert calls == []
+
+
+def test_f_base__prefer_is_parsed_as_tokens_not_as_a_substring():
+    """`x-no-respond-async` is not `respond-async`, and a parameter is not a token."""
+    for prefer, mode in (("x-no-respond-async", ExecutionMode.sync),
+                         ("wait=100", ExecutionMode.sync),
+                         ("respond-async", ExecutionMode.async_),
+                         ("handling=lenient, respond-async", ExecutionMode.async_)):
+        tc, calls = client()
+        response = tc.post(support.CHAT_PATH, headers={**support.AUTH, "Prefer": prefer},
+                           json=message())
+        assert response.status_code == 202, (prefer, response.text)
+        assert calls[0][1].execution_mode is mode, (prefer, mode)
 
 
 def test_media_sec__an_owned_upload_handle_and_a_public_url_are_both_accepted():
@@ -262,6 +337,93 @@ def test_dur_admit__an_async_request_gets_the_async_queue_budget():
     assert admission.budgets.queue_wait_s == 600.0
     assert (admission.deadline_at - admission.admitted_at).total_seconds() == (
         1_020.0 - validate.DEADLINE_SKEW_MARGIN_S)
+
+
+# --- survivors the first review named, each now killable ---------------------------
+def test_dur_admit__the_payload_digest_is_canonical():
+    """The digest is over the canonical re-serialisation, so key order and whitespace
+    do not change it and a value does. Idempotent replay is decided by this hash."""
+    tc, calls = client()
+    reordered = ('{"messages":[{"content":"hi","role":"user"}],"model":"%s","temperature":0.2}'
+                 % support.PUBLIC_MODEL).encode()
+    spaced = ('{ "model" : "%s" ,\n "temperature" : 0.2 , "messages" : '
+              '[ { "role" : "user" , "content" : "hi" } ] }' % support.PUBLIC_MODEL).encode()
+    changed = ('{"messages":[{"content":"HI","role":"user"}],"model":"%s","temperature":0.2}'
+               % support.PUBLIC_MODEL).encode()
+    for raw in (reordered, spaced, changed):
+        assert tc.post(support.CHAT_PATH, headers=support.RAW, content=raw).status_code == 202
+    first, second, third = [call[1].payload_digest for call in calls]
+    assert first == second, "key order or whitespace changed the digest"
+    assert first != third, "a changed value did not change the digest"
+
+
+def test_trace_tenant__the_trace_policy_defaults_to_off():
+    """Privacy-critical and previously untested: with no consent source wired, an
+    accepted request captures nothing - no trace row, no content, no evaluation."""
+    tc, calls = client()
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=message()).status_code == 202
+    policy = calls[0][1].trace_policy
+    assert policy.trace_mode.value == "off"
+    assert policy.evaluation_consent is False
+    assert policy.org_id == support.ORG
+
+
+def test_trace_tenant__an_injected_consent_source_is_used_as_given():
+    from infrx.contracts.records import ConsentSnapshot, TraceMode
+
+    def consent_for(org_id, now):
+        return ConsentSnapshot(org_id=org_id, consent_version=3, trace_mode=TraceMode.full,
+                               content_retention_days=30, evaluation_consent=True,
+                               effective_at=now)
+
+    calls, accept = support.recorder()
+    app, _ = support.cutover_app(ingress_deps=support.deps(accept=accept,
+                                                          consent_for=consent_for))
+    assert TestClient(app).post(support.CHAT_PATH, headers=support.AUTH,
+                                json=message()).status_code == 202
+    assert calls[0][1].trace_policy.trace_mode.value == "full"
+
+
+def test_f_base__there_is_no_second_clock():
+    """`created_at` comes from the app's injected clock, so a test can place a request
+    anywhere in time and nothing reads the wall clock behind its back."""
+    fixed = 1_700_000_000.0
+    calls, accept = support.recorder()
+    app, _ = support.cutover_app(clock=lambda: fixed,
+                                 ingress_deps=support.deps(accept=accept))
+    assert TestClient(app).post(support.CHAT_PATH, headers=support.AUTH,
+                                json=message()).status_code == 202
+    request = calls[0][1]
+    assert request.created_at.timestamp() == fixed
+    assert request.created_at.tzinfo is not None
+    assert (request.deadline_at - request.created_at).total_seconds() == (
+        120.0 + 10.0 + 300.0 - validate.DEADLINE_SKEW_MARGIN_S)
+
+
+SKEWS = ((0.0, 202), (0.001, 202), (validate.DEADLINE_SKEW_MARGIN_S - 0.001, 202),
+         (validate.DEADLINE_SKEW_MARGIN_S + 1.0, 400), (-5.0, 202))
+
+
+@pytest.mark.parametrize("behind_s,expected", SKEWS, ids=[str(s[0]) for s in SKEWS])
+def test_dur_admit__the_deadline_survives_clock_skew(behind_s, expected):
+    """r1 R7: `admit` measures its ceiling from the database clock. Everything inside
+    the margin is admitted; past it the store is right to refuse, and the gateway's
+    own answer is what a caller sees."""
+    harness = FACTORIES["jobstore"]()
+    harness.extra["grant"](support.ORG, "1.00")
+    tc, calls = client()
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH,
+                   json=message(model=support.PUBLIC_MODEL)).status_code == 202
+    request = calls[0][1]
+    # the store's clock, `behind_s` behind the gateway's
+    harness.clock.advance((request.created_at - harness.clock.now()).total_seconds() - behind_s)
+    if expected == 202:
+        admission = asyncio.run(harness.port.admit(request, calls[0][2]))
+        assert admission.state.value == "preparing"
+    else:
+        with pytest.raises(Exception) as raised:
+            asyncio.run(harness.port.admit(request, calls[0][2]))
+        assert raised.value.code == "invalid_request"
 
 
 if __name__ == "__main__":

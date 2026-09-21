@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from infrx.config import RuntimeMisconfigured, Settings, validate_runtime
-from infrx.contracts import wire
+from infrx.contracts import errors, wire
 from infrx.gateway import app as composition
 from infrx.gateway.routes import chat, health, ingress, models
 
@@ -128,6 +128,41 @@ def test_f_base__registering_the_ingress_never_replaces_the_legacy_chat_route():
     tc = TestClient(app)
     assert tc.post("/v1/chat/completions", json=support.BODY).status_code == 200   # legacy
     assert tc.get(support.HEALTH_PATH).json() == {"status": "ok"}                  # new routes live
+
+
+# --- what FastAPI would answer by itself (review r1 item 7) ------------------------
+def test_f_base__an_unknown_path_and_a_wrong_method_are_envelopes():
+    """Without `install_error_handlers` these are FastAPI's `{"detail": …}`: no code,
+    no request id, and nothing a client can branch on."""
+    app, _ = support.cutover_app()
+    tc = TestClient(app)
+    # A wrong method answers `not_found` too: the alternative confirms the path
+    # exists, and 405 is not in the contract's status table.
+    for response, status, code in ((tc.get("/v1/nope"), 404, "not_found"),
+                                  (tc.get(support.CHAT_PATH), 404, "not_found"),
+                                  (tc.post(support.READY_PATH), 404, "not_found")):
+        assert response.status_code == status, response.text
+        error = support.error_of(response)
+        assert error["code"] == code, error
+        assert error["request_id"] == response.headers[wire.HEADER_INFERENCE_ID]
+        assert error["message"] == errors.MESSAGES[code]
+
+
+def test_f_base__an_unhandled_error_outside_a_route_is_still_an_envelope():
+    """The app-level handler, not the per-route guard: a dependency raising before the
+    handler runs must not produce a bare 500."""
+    app, _ = support.cutover_app()
+
+    @app.get("/boom")
+    async def boom():
+        raise RuntimeError("postgresql://infrx:service-role@db/infrx is unreachable")
+
+    response = TestClient(app, raise_server_exceptions=False).get("/boom")
+    assert response.status_code == 500, response.text
+    error = support.error_of(response)
+    assert error["code"] == "internal_error"
+    assert "postgresql" not in response.text and "service-role" not in response.text
+    assert response.headers[wire.HEADER_INFERENCE_ID]
 
 
 if __name__ == "__main__":

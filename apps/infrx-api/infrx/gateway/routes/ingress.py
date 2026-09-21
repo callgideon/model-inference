@@ -143,7 +143,10 @@ def install_error_handlers(app, mint_request_id=ids.new_request_id) -> None:
     """
 
     async def http_exception(request: Request, exc: StarletteHTTPException):
-        code = "not_found" if exc.status_code == 404 else "invalid_request"
+        # Only statuses the contract's table has (08 §3). A 405 becomes `not_found`
+        # deliberately: "that method is not allowed here" confirms the path exists,
+        # and 405 is not a status this API promises anywhere else.
+        code = "not_found" if exc.status_code in (404, 405) else "invalid_request"
         if exc.status_code >= 500:
             code = "internal_error"
         return intake.response(errors.DomainError(code=code), mint_request_id())

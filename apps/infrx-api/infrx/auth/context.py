@@ -79,5 +79,11 @@ class AuthResolver:
         org_id, key_id = row.get("org_id"), row.get("id")
         if not org_id or not key_id:
             raise errors.InvalidApiKey("the api_keys row names no organization")
-        return AuthContext(org_id=org_id, key_id=key_id, principal=key_id, role=API_KEY_ROLE,
-                           entitlement_version=self.entitlement_version(org_id))
+        try:
+            return AuthContext(org_id=org_id, key_id=key_id, principal=key_id, role=API_KEY_ROLE,
+                               entitlement_version=self.entitlement_version(org_id))
+        except ValueError:
+            # A row that is not a valid identity (a non-UUID or uppercase organization)
+            # is our bug, not the caller's, and a pydantic message would quote the row.
+            # Fail closed, typed, and without the row in the text.
+            raise errors.InternalError("the api_keys row is not a valid identity") from None

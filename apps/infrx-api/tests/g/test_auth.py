@@ -199,6 +199,82 @@ def test_dur_rls__admission_rechecks_revocation_on_the_identity_we_pass():
         asyncio.run(harness.port.admit(request, idem))
 
 
+# --- ported from the F1 legacy cases, which retire with the shim (review r1 item 6) --
+def test_dur_rls__a_cached_key_expires_and_is_looked_up_again():
+    """The TTL is what makes a revocation take effect without a restart. Time moves
+    because the injected clock says so, not because the test waits."""
+    now, seen = [1_790_000_000.0], []
+    rt = support.runtime(support.settings(), sb=support.supabase(seen=seen),
+                         clock=lambda: now[0])
+    resolved = AuthResolver(rt)
+    context(resolved)
+    assert len(seen) == 1
+    now[0] += rt.settings.key_ttl - 1                 # inside the TTL: served cached
+    context(resolved)
+    assert len(seen) == 1
+    now[0] += 2                                      # past it: looked up again
+    context(resolved)
+    assert len(seen) == 2
+
+
+def test_dur_rls__a_miss_expires_on_its_own_shorter_ttl():
+    now, seen = [1_790_000_000.0], []
+    rt = support.runtime(support.settings(), sb=support.supabase(rows=(), seen=seen),
+                         clock=lambda: now[0])
+    resolved = AuthResolver(rt)
+    for _ in range(2):
+        with pytest.raises(errors.InvalidApiKey):
+            context(resolved)
+    assert len(seen) == 1, seen                      # the miss was cached
+    now[0] += rt.settings.miss_ttl + 1
+    with pytest.raises(errors.InvalidApiKey):
+        context(resolved)
+    assert len(seen) == 2
+
+
+def test_dur_rls__a_revocation_takes_effect_when_the_cache_expires():
+    now = [1_790_000_000.0]
+    rows = [dict(support.ROW)]
+    rt = support.runtime(support.settings(),
+                         sb=httpx.AsyncClient(
+                             base_url="https://fake.supabase.co/rest/v1",
+                             transport=httpx.MockTransport(
+                                 lambda request: httpx.Response(200, json=list(rows)))),
+                         clock=lambda: now[0])
+    resolved = AuthResolver(rt)
+    assert context(resolved).key_id == support.KEY
+    rows[0]["revoked_at"] = "2026-01-01T00:00:00Z"
+    assert context(resolved).key_id == support.KEY            # still cached, by design
+    now[0] += rt.settings.key_ttl + 1
+    with pytest.raises(errors.InvalidApiKey):
+        context(resolved)
+
+
+ORGLESS = (("no org_id", {"id": support.KEY, "revoked_at": None}),
+           ("a null org_id", {"id": support.KEY, "org_id": None, "revoked_at": None}),
+           ("no key id", {"org_id": support.ORG, "revoked_at": None}))
+
+
+@pytest.mark.parametrize("name,row", ORGLESS, ids=[r[0] for r in ORGLESS])
+def test_dur_rls__an_identity_row_without_a_tenant_is_not_an_identity(name, row):
+    resolved, _rt = resolver(rows=(row,))
+    with pytest.raises(errors.InvalidApiKey):
+        context(resolved)
+
+
+def test_dur_rls__a_malformed_identity_row_fails_closed_without_a_trace():
+    """A non-UUID or uppercase organization is our bug, not the caller's: it is a
+    typed internal error, and no pydantic validation text reaches anyone."""
+    from infrx.contracts import errors as contract_errors
+
+    resolved, _rt = resolver(rows=({"id": support.KEY, "org_id": "NOT-A-UUID",
+                                    "revoked_at": None},))
+    with pytest.raises(contract_errors.InternalError) as raised:
+        context(resolved)
+    assert raised.value.code == "internal_error"
+    assert "NOT-A-UUID" not in str(raised.value)
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and not hasattr(fn, "pytestmark"):
