@@ -6,12 +6,23 @@ proves it must not be able to lie.
 """
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from . import mutants as mutation_list
 
 ALL = mutation_list.MUTANTS
 CASES = mutation_list.case_names()
+FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
+# One pytest process per mutant, so the default suite runs one mutant per mutated
+# file plus the two that decide whether a secret can leak; the whole list runs with
+# `INFRX_MUTANTS=all`, as the contracts list does. A survivor fails the suite either
+# way - the subset only changes how long `make api-test` takes.
+SUBSET = ("body_cap_removed", "anonymous_request_accepted", "unhandled_exception_text_leaks",
+          "unsupported_parameters_ignored", "pilot_starts_unreachable", "key_cache_unbounded",
+          "input_ceiling_ignores_the_output", "admit_skips_revocation", "unset_mode_refuses")
+SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
 def test_the_list_is_well_formed():
@@ -23,6 +34,7 @@ def test_the_list_is_well_formed():
         assert mutant.invariant, f"{mutant.name} states no invariant"
         for case in mutant.cases:
             assert case in CASES, f"{mutant.name} names unknown case {case}"
+    assert set(SUBSET) <= {m.name for m in ALL}
 
 
 def test_every_case_is_covered_by_a_mutant():
@@ -32,7 +44,7 @@ def test_every_case_is_covered_by_a_mutant():
     assert uncovered == set(), f"cases no mutant can break: {sorted(uncovered)}"
 
 
-@pytest.mark.parametrize("mutant", ALL, ids=[m.name for m in ALL])
+@pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
 def test_mutant_is_killed(mutant):
     result = mutation_list.run_mutant(mutant)
     assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
