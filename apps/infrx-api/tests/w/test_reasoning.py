@@ -11,9 +11,11 @@ looks like.
 """
 from __future__ import annotations
 
+import json
 import re
 from itertools import combinations
 
+from infrx.worker.engine import _json_cost
 from infrx.worker.reasoning import ReasoningFilter, filter_text
 
 
@@ -97,6 +99,25 @@ def test_api_stream__every_chunk_split_filters_to_the_same_text():
             assert filtered(pieces) == expected, (text, pieces, expected)
     print(f"\nreasoning property: {total} splits over {len(CORPUS)} corpus entries")
     assert total > 10_000, total
+
+
+def test_api_stream__one_code_point_costs_what_json_says_it_costs():
+    """B6's arithmetic, against `json.dumps` itself over every branch: the per-code-point
+    cost used to be a process-global memo table bounded only by Unicode (a million entries
+    after enough varied text), and the four cases below are what the encoder really does
+    under `ensure_ascii=False`, which is how the store's `compact_bytes` serializes."""
+    points = [*range(0x00, 0x100), 0x2028, 0x2029, 0x7FF, 0x800, 0xFFFF, 0x1F600, 0x10FFFF,
+              ord("日"), ord('"'), ord("\\")]
+    for code in points:
+        char = chr(code)
+        expected = len(json.dumps(char, ensure_ascii=False).encode()) - 2   # minus the quotes
+        assert _json_cost(char) == expected, (hex(code), _json_cost(char), expected)
+    # and the whole of the BMP agrees, not only the interesting corners
+    for code in range(0x20, 0x10000, 97):
+        char = chr(code)
+        if 0xD800 <= code <= 0xDFFF:                 # lone surrogates are not encodable
+            continue
+        assert _json_cost(char) == len(json.dumps(char, ensure_ascii=False).encode()) - 2
 
 
 def test_api_stream__the_raw_text_is_never_modified():

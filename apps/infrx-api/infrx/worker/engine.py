@@ -57,6 +57,7 @@ from __future__ import annotations
 import codecs
 import hashlib
 import json
+import math
 import re
 from datetime import datetime, timedelta
 from itertools import zip_longest
@@ -140,7 +141,15 @@ ERROR_BODY_MAX_BYTES = 64 * 1024        # an engine's error body is read bounded
 # way, so nothing else has to change. A long delta is **split** across events rather than
 # refused: the reasoning filter is boundary-independent, so splitting loses nothing, while
 # refusing would throw away an answer the engine did produce.
-PAYLOAD_COPIES_DIVISOR = 4
+PAYLOAD_COPIES = 3               # `visible`, `raw`, and the transitional `content` alias
+# `{"content":"","raw":"","visible":""}` plus the slack a `usage` payload needs; the budget
+# is `(ceiling - overhead) // copies`, so a small ceiling shrinks the text rather than the
+# margin. Flooring the budget at a constant is what let a 128-byte ceiling emit 132-byte
+# events with multi-byte text.
+PAYLOAD_OVERHEAD_BYTES = 64
+# The smallest ceiling that can carry one astral code point in each copy. Below it the
+# adapter cannot keep its promise, so it says so at construction rather than at the delta.
+MIN_JOURNAL_EVENT_BYTES = PAYLOAD_OVERHEAD_BYTES + PAYLOAD_COPIES * 4
 # The accumulated output bound, in code points (a lower bound on bytes). 64 per output
 # token is ~16x real text (`est.`, provisional like every limit in 08 §5); it exists so a
 # runaway engine cannot grow `raw_text` without limit, not to police normal answers.
@@ -292,17 +301,33 @@ def _encodable(text: str) -> bool:
     return True
 
 
-_JSON_COST: dict[str, int] = {}
+# The short escapes Python's encoder uses for these control characters (`\n`, `\t`, …);
+# every other character below 0x20 becomes a six-byte `\\uXXXX` escape.
+_SHORT_ESCAPES = "\b\f\n\r\t"
 
 
 def _json_cost(char: str) -> int:
-    """What one code point costs inside a JSON string: 6 bytes for a control character
-    (`\u0001`), 2 for an escaped quote or backslash, otherwise its UTF-8 length."""
-    cost = _JSON_COST.get(char)
-    if cost is None:
-        cost = len(json.dumps(char, ensure_ascii=False).encode()) - 2     # minus the quotes
-        _JSON_COST[char] = cost
-    return cost
+    """What one code point costs inside a JSON string, computed rather than remembered.
+
+    A memo table keyed by character was bounded only by Unicode - a process serving varied
+    text would have grown it to a million entries - and the arithmetic is the same four
+    cases the encoder itself uses (`ensure_ascii=False`, which is what the store's
+    `compact_bytes` serializes with): a short escape, a six-byte escape, an escaped quote or
+    backslash, or the code point's own UTF-8 length. `test_reasoning`'s sweep checks every
+    branch against `json.dumps` itself.
+    """
+    code = ord(char)
+    if code < 0x20:
+        return 2 if char in _SHORT_ESCAPES else 6
+    if char in '"\\':
+        return 2
+    if code < 0x80:
+        return 1
+    if code < 0x800:
+        return 2
+    if code < 0x10000:
+        return 3
+    return 4
 
 
 def _split_encoded(text: str, budget: int) -> list[str]:
@@ -375,6 +400,12 @@ class VllmEngine:
         self.limits = limits
         self.path = path
         self.require_version = require_version
+        if limits.journal_event_max_bytes < MIN_JOURNAL_EVENT_BYTES:
+            # Refused here, not silently exceeded per delta: an adapter that cannot fit one
+            # code point per copy inside a journal event cannot keep R58's bound at all.
+            raise ValueError(f"JOURNAL_EVENT_MAX_BYTES must be at least "
+                             f"{MIN_JOURNAL_EVENT_BYTES} bytes, not "
+                             f"{limits.journal_event_max_bytes}")
         self.drained = False
         # r1 R58: keyed by `(job_id, generation)`. Keyed by job alone, a stale intent for a
         # fenced generation 1 would cancel the live generation 2 of the same job.
@@ -533,9 +564,11 @@ class VllmEngine:
             **forwarded,
         }
         if videos:
-            if videos[0].duration_s is None:
+            if videos[0].duration_s is None or not math.isfinite(videos[0].duration_s):
                 # `or 0.0` silently asked for a four-frame budget for a two-minute clip.
-                raise errors.UnsupportedMedia("a prepared video must carry its duration",
+                # `inf`/`nan` reached `budget_kwargs` and surfaced as an OverflowError or a
+                # ValueError wrapped into `EngineFailure(stage="adapter")`: a refusal, typed.
+                raise errors.UnsupportedMedia("a prepared video must carry a finite duration",
                                               param="messages")
             body["mm_processor_kwargs"] = self._media.budget_kwargs(videos[0].duration_s)
             body[MM_UUIDS_FIELD] = [media_uuid(ref, salt) for ref in videos]
@@ -660,7 +693,7 @@ class VllmEngine:
 
     def event_byte_budget(self) -> int:
         """Encoded JSON bytes one copy of the text may occupy in a single event."""
-        return max(16, self.limits.journal_event_max_bytes // PAYLOAD_COPIES_DIVISOR)
+        return (self.limits.journal_event_max_bytes - PAYLOAD_OVERHEAD_BYTES) // PAYLOAD_COPIES
 
     def _delta_events(self, stream: "EngineStream", raw: str, visible: str) -> list[EngineEvent]:
         """Delta events whose payloads each fit the journal.
@@ -997,6 +1030,11 @@ class VllmEngine:
             reason = "delta_after_usage"
         elif stream.usage_candidate.completion_tokens < stream.deltas:
             reason = "below_delta_count"
+        elif stream.usage_candidate.prompt_tokens > self.limits.max_context_tokens:
+            # The engine's own *report*: 40,000 prompt tokens against a 32,768 context, or
+            # 10**30, is not a number anything measured, and settling it authoritatively
+            # would charge for it. Unknown, so D reconciles instead.
+            reason = "out_of_range"
         if reason is not None:
             return [stream.usage_event(None, reason)]
         if stream.usage_candidate.completion_tokens > ceiling:

@@ -28,6 +28,7 @@ malformed payloads a review of the adapter found unhandled):
 | `string_usage` / `negative_usage` / `bool_usage` / `nondict_usage` | counts that are not counts |
 | `usage_then_delta` | usage, then more content: the count cannot be authoritative |
 | `usage_below_deltas` | a usage object reporting fewer tokens than there were deltas |
+| `prompt_out_of_range` | a reported prompt count larger than the whole context |
 | `conflicting_usage` | two different usage objects in one stream |
 | `valid_then_malformed` / `malformed_then_valid` | one of each, in both orders |
 | `repeated_usage` | the *same* usage object twice: authoritative, and one event |
@@ -190,6 +191,9 @@ class FakeUpstream:
         if self.fault == "over_ceiling":
             return {"prompt_tokens": self.prompt_tokens, "completion_tokens": 100_000,
                     "total_tokens": self.prompt_tokens + 100_000}
+        if self.fault == "prompt_out_of_range":
+            return {"prompt_tokens": self.limits.max_context_tokens + 7_000,
+                    "completion_tokens": produced}
         if self.fault == "usage_below_deltas":
             return {"prompt_tokens": self.prompt_tokens, "completion_tokens": 1,
                     "total_tokens": self.prompt_tokens + 1}

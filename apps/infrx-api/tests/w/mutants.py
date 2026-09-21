@@ -96,6 +96,7 @@ DROPPED = "test_api_stream__a_dropped_line_is_never_a_billable_success"
 SECOND = "test_api_stream__a_second_choice_is_a_protocol_violation"
 REF = "test_api_stream__a_prepared_reference_must_be_one_the_store_could_have_made"
 MEASURED = "test_api_stream__an_unmeasured_prompt_or_duration_is_refused"
+COST = "test_api_stream__one_code_point_costs_what_json_says_it_costs"
 PINNED = "test_api_stream__the_roles_and_the_timer_boundaries_are_pinned"
 JUNK = "test_api_stream__junk_and_stray_payloads_are_survived_not_relayed"
 FAILURES = "test_api_stream__transport_engine_and_incomplete_failures_are_distinct"
@@ -232,10 +233,33 @@ MUTANTS: tuple[Mutant, ...] = (
           "                                                    fillvalue=\"\"):",
        "        for raw_piece, visible_piece in ((raw, visible),):", BOUNDS, JOURNAL),
     _m("event_bytes_sized_for_ascii", "an event is sized in bytes, not code points (R58)",
-       E, "PAYLOAD_COPIES_DIVISOR = 4", "PAYLOAD_COPIES_DIVISOR = 2", JOURNAL),
+       E, "PAYLOAD_COPIES = 3               # `visible`, `raw`, and the transitional `content` alias",
+       "PAYLOAD_COPIES = 1", JOURNAL),
     _m("json_escape_cost_ignored", "a control character costs six bytes in JSON",
-       E, '        cost = len(json.dumps(char, ensure_ascii=False).encode()) - 2     # minus the quotes',
-       "        cost = 1", JOURNAL),
+       E, "    if code < 0x20:\n        return 2 if char in _SHORT_ESCAPES else 6",
+       "    if code < 0x20:\n        return 1", JOURNAL, COST),
+    _m("short_escapes_cost_six", "a newline is two bytes, not six",
+       E, "        return 2 if char in _SHORT_ESCAPES else 6", "        return 6", COST),
+    _m("quote_escape_ignored", "an escaped quote costs two bytes",
+       E, "    if char in '\"\\\\':\n        return 2", "    if False:\n        return 2", COST),
+    _m("astral_cost_three", "an astral code point costs four bytes in UTF-8",
+       E, "    if code < 0x10000:\n        return 3\n    return 4",
+       "    return 3", COST, JOURNAL),
+    _m("cost_ignores_utf8_width", "a code point costs its UTF-8 length",
+       E, "    if code < 0x800:\n        return 2", "    if code < 0x800:\n        return 1",
+       COST),
+    _m("event_overhead_ignored", "the payload's own braces and keys count too",
+       E, "PAYLOAD_OVERHEAD_BYTES = 64", "PAYLOAD_OVERHEAD_BYTES = 0", JOURNAL),
+    _m("tiny_ceiling_accepted", "a ceiling too small to keep the bound is refused",
+       E, "        if limits.journal_event_max_bytes < MIN_JOURNAL_EVENT_BYTES:",
+       "        if False:", JOURNAL),
+    _m("duration_not_finite", "a duration must be finite",
+       E, "            if videos[0].duration_s is None or not math.isfinite(videos[0].duration_s):",
+       "            if videos[0].duration_s is None:", MEASURED,
+       allowed_errors=("TypeError", "OverflowError", "ValueError")),
+    _m("reported_prompt_unbounded", "a reported prompt count outside the context is unknown",
+       E, "        elif stream.usage_candidate.prompt_tokens > self.limits.max_context_tokens:",
+       "        elif False:", USAGE),
     _m("visible_never_split", "visible is split on its own account (R58)",
        E, "        for raw_piece, visible_piece in zip_longest(_split_encoded(raw, budget),\n"
           "                                                    _split_encoded(visible, budget),\n"

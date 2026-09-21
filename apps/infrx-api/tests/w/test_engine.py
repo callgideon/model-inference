@@ -34,7 +34,8 @@ from infrx.media.video import Media
 from infrx.worker import (EngineError, EngineFailure, EngineIncomplete, EngineProtocolViolation,
                           EngineTransportError, EngineUnsupported, VllmEngine, cache_salt,
                           prepared_request)
-from infrx.worker.engine import MAX_CANCEL_INTENTS, media_uuid
+from infrx.worker.engine import (MAX_CANCEL_INTENTS, MIN_JOURNAL_EVENT_BYTES,
+                                 media_uuid)
 from infrx.worker.fakes import (ERROR_BODY_CHUNK, SERVED_MODEL, FakeUpstream,
                                engine_factory)
 from infrx.worker.reasoning import filter_text
@@ -664,6 +665,7 @@ def test_api_stream__usage_is_authoritative_only_when_the_stream_agrees():
                           ("bool_usage", "malformed"), ("nondict_usage", "malformed"),
                           ("usage_then_delta", "delta_after_usage"),
                           ("usage_below_deltas", "below_delta_count"),
+                          ("prompt_out_of_range", "out_of_range"),
                           ("conflicting_usage", "conflicting")):
         upstream, engine, held, prepared = drive(fault)
         stream = engine.generate(held, prepared)
@@ -746,6 +748,23 @@ def test_api_stream__an_event_always_fits_the_journal_in_any_script():
     assert stream.held_tail == " " * 100_000
     assert max(len(compact_bytes(event.payload)) for event in events) <= 4096
     assert "".join(visibles(events)) == " " * 100_000
+
+    # the smallest ceiling the adapter will accept still holds, with 4-byte code points,
+    # and one below it is refused at construction rather than exceeded per delta
+    box = Box()
+    smallest = DEFAULTS.replace(journal_event_max_bytes=MIN_JOURNAL_EVENT_BYTES)
+    upstream = FakeUpstream(fault="huge_delta", clock=box.clock, limits=smallest,
+                           filler="😀", huge_delta_points=64)
+    stream = upstream.engine().generate(lease(box), text_prepared(
+        box, max_output_tokens=DEFAULTS.max_output_tokens, prompt_tokens=0))
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert max(len(compact_bytes(event.payload)) for event in events) <= MIN_JOURNAL_EVENT_BYTES
+    assert "".join(raws(events)) == "😀" * 64
+    with pytest.raises(ValueError):
+        FakeUpstream(clock=box.clock,
+                     limits=DEFAULTS.replace(
+                         journal_event_max_bytes=MIN_JOURNAL_EVENT_BYTES - 1)).engine()
 
     # and a `visible` longer than its own delta (the filter releases held whitespace with
     # the character that decided it) is split on its own account
@@ -1038,9 +1057,10 @@ def test_api_stream__an_unmeasured_prompt_or_duration_is_refused():
 
     upstream, engine, _lease, _prepared = drive()
     prepared = prepared_request(work, prompt_tokens=1200)
-    timeless = prepared.model_copy(update={
-        "media": (prepared.media[0].model_copy(update={"duration_s": None}),)})
-    assert refusal(engine, timeless) == "refused: unsupported_media"
+    for duration in (None, float("inf"), float("nan"), float("-inf")):
+        timeless = prepared.model_copy(update={
+            "media": (prepared.media[0].model_copy(update={"duration_s": duration}),)})
+        assert refusal(engine, timeless) == "refused: unsupported_media", duration
 
 
 def test_api_stream__the_roles_and_the_timer_boundaries_are_pinned():
