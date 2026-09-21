@@ -228,8 +228,14 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_a_bind_failure_is_retried_once_and_then_refused",)),
     Mutant("e2m46", "r1 B3: a control that must survive is not counted as a problem",
            "tests/integration/mutants.py",
-           '           and ((r["status"] != "killed" and not r.get("must_survive"))',
-           '           and ((r["status"] != "killed")',
+           # Multi-line on purpose: a single line of this expression also appears above as
+           # this mutant's own data, and `occurrences` would then refuse it as stale.
+           "    bad = [r for r in results\n"
+           "           if r not in pending\n"
+           "           and ((r[\"status\"] != \"killed\" and not r.get(\"must_survive\"))",
+           "    bad = [r for r in results\n"
+           "           if r not in pending\n"
+           "           and ((r[\"status\"] != \"killed\")",
            "tests/integration/test_run.py", "count_the_verdict_the_same_way",
            cases=("test_the_mutation_stage_and_the_cli_count_the_verdict_the_same_way",)),
     Mutant("e2m45", "same pass: SIGTERM is handled like SIGINT so teardown still runs",
