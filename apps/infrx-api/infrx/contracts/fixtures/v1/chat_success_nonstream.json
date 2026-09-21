@@ -1,0 +1,21 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Two people unload boxes from a van onto a trolley.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1789905600,
+  "id": "chatcmpl-4d4d4d4d-0000-4000-8000-000000000004",
+  "model": "nemostation/marlin-2b@2026-09-01",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 340,
+    "prompt_tokens": 1200,
+    "total_tokens": 1540
+  }
+}

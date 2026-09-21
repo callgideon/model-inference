@@ -1,0 +1,94 @@
+{
+  "frames": [
+    {
+      "comment": "keepalive"
+    },
+    {
+      "data": {
+        "job_handle": "job_Ck1hQeTdJ6WwWVQe4LnPXe9kM0bF1sAqTgYn2R7xVpU",
+        "phase": "running",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004"
+      },
+      "event": "infrx.progress",
+      "event_type": "progress",
+      "id": "1-1"
+    },
+    {
+      "data": {
+        "choices": [
+          {
+            "delta": {
+              "content": "",
+              "role": "assistant"
+            },
+            "index": 0
+          }
+        ],
+        "created": 1789905600,
+        "id": "chatcmpl-4d4d4d4d-0000-4000-8000-000000000004",
+        "model": "nemostation/marlin-2b@2026-09-01",
+        "object": "chat.completion.chunk"
+      },
+      "event_type": "delta",
+      "id": "1-2"
+    },
+    {
+      "data": {
+        "choices": [
+          {
+            "delta": {
+              "content": "Two people unload boxes"
+            },
+            "index": 0
+          }
+        ],
+        "created": 1789905600,
+        "id": "chatcmpl-4d4d4d4d-0000-4000-8000-000000000004",
+        "model": "nemostation/marlin-2b@2026-09-01",
+        "object": "chat.completion.chunk"
+      },
+      "event_type": "delta",
+      "id": "1-3"
+    },
+    {
+      "data": {
+        "choices": [
+          {
+            "delta": {
+              "content": " from a van onto a trolley."
+            },
+            "index": 0
+          }
+        ],
+        "created": 1789905600,
+        "id": "chatcmpl-4d4d4d4d-0000-4000-8000-000000000004",
+        "model": "nemostation/marlin-2b@2026-09-01",
+        "object": "chat.completion.chunk"
+      },
+      "event_type": "delta",
+      "id": "1-4"
+    },
+    {
+      "data": {
+        "choices": [],
+        "created": 1789905600,
+        "id": "chatcmpl-4d4d4d4d-0000-4000-8000-000000000004",
+        "model": "nemostation/marlin-2b@2026-09-01",
+        "object": "chat.completion.chunk",
+        "usage": {
+          "completion_tokens": 340,
+          "prompt_tokens": 1200,
+          "total_tokens": 1540
+        }
+      },
+      "event_type": "usage",
+      "id": "1-5"
+    },
+    {
+      "data": "[DONE]",
+      "event_type": "terminal",
+      "id": "1-6"
+    }
+  ],
+  "request_id": "4d4d4d4d-0000-4000-8000-000000000004"
+}

@@ -1,0 +1,211 @@
+[
+  {
+    "consent": {
+      "consent_version": 3,
+      "content_retention_days": 30,
+      "effective_at": "2026-09-01T00:00:00Z",
+      "evaluation_consent": true,
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "schema_version": 1,
+      "trace_mode": "full"
+    },
+    "created_at": "2026-09-20T12:00:00Z",
+    "model_revision": "claude-opus-5",
+    "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+    "reserved_cost": "0.00000000",
+    "rubric_version": "rubric_v1",
+    "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
+    "sample_ids": [
+      "4d4d4d4d-0000-4000-8000-000000000004"
+    ],
+    "schema_version": 1,
+    "state": "dry_run"
+  },
+  {
+    "consent": {
+      "consent_version": 3,
+      "content_retention_days": 30,
+      "effective_at": "2026-09-01T00:00:00Z",
+      "evaluation_consent": true,
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "schema_version": 1,
+      "trace_mode": "full"
+    },
+    "created_at": "2026-09-20T12:00:00Z",
+    "model_revision": "claude-opus-5",
+    "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+    "reserved_cost": "0.42000000",
+    "rubric_version": "rubric_v1",
+    "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
+    "sample_ids": [
+      "4d4d4d4d-0000-4000-8000-000000000004"
+    ],
+    "schema_version": 1,
+    "state": "reserved"
+  },
+  {
+    "consent": {
+      "consent_version": 3,
+      "content_retention_days": 30,
+      "effective_at": "2026-09-01T00:00:00Z",
+      "evaluation_consent": true,
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "schema_version": 1,
+      "trace_mode": "full"
+    },
+    "created_at": "2026-09-20T12:00:00Z",
+    "model_revision": "claude-opus-5",
+    "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+    "reserved_cost": "0.42000000",
+    "rubric_version": "rubric_v1",
+    "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
+    "sample_ids": [
+      "4d4d4d4d-0000-4000-8000-000000000004"
+    ],
+    "schema_version": 1,
+    "state": "submitting",
+    "submit_intent": "7a7a7a7a-0000-4000-8000-000000000007"
+  },
+  {
+    "consent": {
+      "consent_version": 3,
+      "content_retention_days": 30,
+      "effective_at": "2026-09-01T00:00:00Z",
+      "evaluation_consent": true,
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "schema_version": 1,
+      "trace_mode": "full"
+    },
+    "created_at": "2026-09-20T12:00:00Z",
+    "external_batch_id": "msgbatch_placeholder_0001",
+    "model_revision": "claude-opus-5",
+    "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+    "reserved_cost": "0.42000000",
+    "rubric_version": "rubric_v1",
+    "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
+    "sample_ids": [
+      "4d4d4d4d-0000-4000-8000-000000000004"
+    ],
+    "schema_version": 1,
+    "state": "submitted",
+    "submit_intent": "7a7a7a7a-0000-4000-8000-000000000007"
+  },
+  {
+    "consent": {
+      "consent_version": 3,
+      "content_retention_days": 30,
+      "effective_at": "2026-09-01T00:00:00Z",
+      "evaluation_consent": true,
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "schema_version": 1,
+      "trace_mode": "full"
+    },
+    "created_at": "2026-09-20T12:00:00Z",
+    "model_revision": "claude-opus-5",
+    "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+    "reserved_cost": "0.42000000",
+    "rubric_version": "rubric_v1",
+    "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
+    "sample_ids": [
+      "4d4d4d4d-0000-4000-8000-000000000004"
+    ],
+    "schema_version": 1,
+    "state": "ambiguous",
+    "submit_intent": "7a7a7a7a-0000-4000-8000-000000000007"
+  },
+  {
+    "consent": {
+      "consent_version": 3,
+      "content_retention_days": 30,
+      "effective_at": "2026-09-01T00:00:00Z",
+      "evaluation_consent": true,
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "schema_version": 1,
+      "trace_mode": "full"
+    },
+    "created_at": "2026-09-20T12:00:00Z",
+    "external_batch_id": "msgbatch_placeholder_0001",
+    "model_revision": "claude-opus-5",
+    "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+    "reserved_cost": "0.42000000",
+    "rubric_version": "rubric_v1",
+    "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
+    "sample_ids": [
+      "4d4d4d4d-0000-4000-8000-000000000004"
+    ],
+    "schema_version": 1,
+    "state": "collecting",
+    "submit_intent": "7a7a7a7a-0000-4000-8000-000000000007"
+  },
+  {
+    "actual_cost": "0.31500000",
+    "consent": {
+      "consent_version": 3,
+      "content_retention_days": 30,
+      "effective_at": "2026-09-01T00:00:00Z",
+      "evaluation_consent": true,
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "schema_version": 1,
+      "trace_mode": "full"
+    },
+    "created_at": "2026-09-20T12:00:00Z",
+    "external_batch_id": "msgbatch_placeholder_0001",
+    "model_revision": "claude-opus-5",
+    "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+    "reconciled_at": "2026-09-20T12:00:09Z",
+    "reserved_cost": "0.42000000",
+    "rubric_version": "rubric_v1",
+    "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
+    "sample_ids": [
+      "4d4d4d4d-0000-4000-8000-000000000004"
+    ],
+    "schema_version": 1,
+    "state": "settled",
+    "submit_intent": "7a7a7a7a-0000-4000-8000-000000000007"
+  },
+  {
+    "consent": {
+      "consent_version": 3,
+      "content_retention_days": 30,
+      "effective_at": "2026-09-01T00:00:00Z",
+      "evaluation_consent": true,
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "schema_version": 1,
+      "trace_mode": "full"
+    },
+    "created_at": "2026-09-20T12:00:00Z",
+    "model_revision": "claude-opus-5",
+    "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+    "reserved_cost": "0.42000000",
+    "rubric_version": "rubric_v1",
+    "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
+    "sample_ids": [
+      "4d4d4d4d-0000-4000-8000-000000000004"
+    ],
+    "schema_version": 1,
+    "state": "quarantined",
+    "submit_intent": "7a7a7a7a-0000-4000-8000-000000000007"
+  },
+  {
+    "consent": {
+      "consent_version": 3,
+      "content_retention_days": 30,
+      "effective_at": "2026-09-01T00:00:00Z",
+      "evaluation_consent": true,
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "schema_version": 1,
+      "trace_mode": "full"
+    },
+    "created_at": "2026-09-20T12:00:00Z",
+    "model_revision": "claude-opus-5",
+    "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+    "reserved_cost": "0.00000000",
+    "rubric_version": "rubric_v1",
+    "run_id": "6f6f6f6f-0000-4000-8000-000000000006",
+    "sample_ids": [
+      "4d4d4d4d-0000-4000-8000-000000000004"
+    ],
+    "schema_version": 1,
+    "state": "cancelled"
+  }
+]

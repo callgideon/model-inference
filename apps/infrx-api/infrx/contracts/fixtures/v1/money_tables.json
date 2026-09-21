@@ -1,0 +1,92 @@
+{
+  "debits": [
+    {
+      "completion_tokens": 340,
+      "expected": "0.00044400",
+      "input_rate": "0.20000000",
+      "name": "typical_video_request",
+      "output_rate": "0.60000000",
+      "prompt_tokens": 1200
+    },
+    {
+      "completion_tokens": 0,
+      "expected": "0.00000000",
+      "input_rate": "0.20000000",
+      "name": "zero_tokens",
+      "output_rate": "0.60000000",
+      "prompt_tokens": 0
+    },
+    {
+      "completion_tokens": 0,
+      "expected": "0.00000001",
+      "input_rate": "0.00500000",
+      "name": "half_up_boundary_rounds_away_from_zero",
+      "note": "raw cost 0.000000005 USD; half up is the one rounding a debit gets",
+      "output_rate": "0.60000000",
+      "prompt_tokens": 1
+    },
+    {
+      "completion_tokens": 0,
+      "expected": "0.00000000",
+      "input_rate": "0.00400000",
+      "name": "below_half_boundary_rounds_down",
+      "note": "raw cost 0.000000004; the matching hold in holds[] ceilings to 1e-8",
+      "output_rate": "0.60000000",
+      "prompt_tokens": 1
+    },
+    {
+      "completion_tokens": 2048,
+      "expected": "0.00737280",
+      "input_rate": "0.20000000",
+      "name": "pilot_envelope_maximum",
+      "output_rate": "0.60000000",
+      "prompt_tokens": 30720
+    }
+  ],
+  "holds": [
+    {
+      "expected": "0.00000001",
+      "input_rate": "0.00400000",
+      "max_input_tokens": 1,
+      "max_output_tokens": 0,
+      "name": "ceiling_diverges_from_half_up",
+      "note": "same inputs as below_half_boundary_rounds_down, which debits 0.00000000",
+      "output_rate": "0.60000000"
+    },
+    {
+      "expected": "0.00737280",
+      "input_rate": "0.20000000",
+      "max_input_tokens": 30720,
+      "max_output_tokens": 2048,
+      "name": "pilot_envelope_hold",
+      "output_rate": "0.60000000"
+    },
+    {
+      "expected": "0.00000000",
+      "input_rate": "0.20000000",
+      "max_input_tokens": 0,
+      "max_output_tokens": 0,
+      "name": "zero_ceilings",
+      "output_rate": "0.60000000"
+    }
+  ],
+  "ledger_deltas": [
+    {
+      "amount": "25.00000000",
+      "name": "operator_grant"
+    },
+    {
+      "amount": "-0.00044400",
+      "name": "request_debit_is_negative"
+    },
+    {
+      "amount": "123456789012.34567890",
+      "name": "twenty_digit_total",
+      "note": "numeric(20, 8): twelve integral and eight fractional digits"
+    },
+    {
+      "amount": "0.00000001",
+      "name": "smallest_representable"
+    }
+  ]
+}

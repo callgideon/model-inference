@@ -1,0 +1,413 @@
+#!/usr/bin/env python3
+"""F-CONTRACT: the serialized contract. Every fixture parses into its model and
+serializes back to the identical bytes, every enum matches 08 §3 exactly, and the
+error table maps codes to the documented status/type with safe messages only.
+
+    uv run --frozen pytest -q tests/contracts/test_fixtures.py
+"""
+from __future__ import annotations
+
+import json
+from datetime import timedelta
+
+import pytest
+from infrx.contracts import errors, fixtures, ids, limits, records, wire
+from infrx.contracts.codec import canonical_bytes
+
+ALL_FIXTURES = fixtures.names()
+
+
+def test_every_fixture_is_claimed_by_exactly_one_group():
+    claimed = set(fixtures.MODELS) | set(fixtures.LIST_MODELS) | set(fixtures.TABLES)
+    assert set(ALL_FIXTURES) == claimed, set(ALL_FIXTURES) ^ claimed
+    assert not set(fixtures.MODELS) & set(fixtures.LIST_MODELS)
+
+
+@pytest.mark.parametrize("name", sorted(fixtures.MODELS))
+def test_fixture_round_trips_byte_stably(name):
+    """F-CONTRACT: file -> model -> file is the identity."""
+    parsed = fixtures.MODELS[name].model_validate(fixtures.load(name))
+    assert canonical_bytes(parsed) == fixtures.load_bytes(name)
+
+
+@pytest.mark.parametrize("name", sorted(fixtures.LIST_MODELS))
+def test_list_fixture_round_trips_byte_stably(name):
+    model = fixtures.LIST_MODELS[name]
+    items = [model.model_validate(item) for item in fixtures.load(name)]
+    assert canonical_bytes([item.model_dump(mode="json", exclude_none=True) for item in items]) \
+        == fixtures.load_bytes(name)
+
+
+@pytest.mark.parametrize("name", sorted(fixtures.MODELS))
+def test_fixture_rejects_an_unknown_field(name):
+    """extra="forbid": a producer cannot add a field without a contract revision."""
+    payload = fixtures.load(name)
+    payload["definitely_not_a_contract_field"] = 1
+    with pytest.raises(Exception):
+        fixtures.MODELS[name].model_validate(payload)
+
+
+def test_no_fixture_leaks_a_secret_or_a_signed_url():
+    """Fixtures ship in the repository: no credentials, no signed URLs."""
+    forbidden = ("x-amz-signature", "X-Amz-Credential", "?Signature=", "sk-", "eyJhbGciOi",
+                 "service_role", "SUPABASE", "https://s3.", "AKIA")
+    for name in ALL_FIXTURES:
+        text = fixtures.load_bytes(name).decode()
+        for needle in forbidden:
+            assert needle not in text, f"{name} contains {needle!r}"
+
+
+# --- vocabulary (08 §3) ------------------------------------------------------
+EXPECTED_ENUMS = {
+    records.JobState: ["preparing", "queued", "running", "succeeded", "failed", "cancelled",
+                       "expired"],
+    records.ExecutionMode: ["sync", "stream", "async"],
+    records.TerminalCause: ["completed", "client_cancelled", "client_disconnected", "sync_deadline",
+                            "queue_wait_expired", "deadline_exceeded", "invalid_media",
+                            "preparation_failed", "engine_error", "engine_incomplete",
+                            "lost_after_publication", "journal_write_failed", "retries_exhausted",
+                            "platform_error"],
+    records.UsageCertainty: ["authoritative", "unknown"],
+    records.SettlementState: ["settled", "released_free", "held_unknown",
+                              "released_platform_absorbed"],
+    records.HoldState: ["held", "settled", "released", "unknown"],
+    records.ReservationKind: ["preparation", "inference", "journal_bytes"],
+    records.ChunkEventType: ["progress", "delta", "usage", "error", "terminal"],
+    records.OutboxKind: ["prepare_dispatch", "inference_dispatch", "usage_projection",
+                         "trace_projection", "feedback_projection", "judge_projection",
+                         "callback_delivery"],
+    records.TraceMode: ["off", "minimal", "full"],
+    records.TraceLossReason: ["none", "memory_budget", "metadata_budget", "queue_full",
+                              "disk_budget", "disk_error", "shutdown", "malformed",
+                              # r1 R37
+                              "abandoned"],
+    records.TraceOfferResult: ["accepted_in_memory", "dropped"],
+    records.FeedbackChannel: ["api", "console"],
+    records.AuthorRole: ["customer", "operator", "judge"],
+    # r1 R3 / R8 additions to 08 §3
+    records.FeedbackName: ["thumb", "rating", "correction", "comment"],
+    records.JudgeResolution: ["adopt_provider_evidence", "release_reservation"],
+    records.JudgeRunState: ["dry_run", "reserved", "submitting", "submitted", "ambiguous",
+                            "collecting", "settled", "quarantined", "cancelled"],
+    records.UploadState: ["created", "finalized", "aborted", "expired"],
+    records.Role: ["owner", "member", "operator", "service"],
+    records.ContentState: ["available", "metadata_only", "pending", "lost", "expired", "off"],
+}
+
+
+@pytest.mark.parametrize("enum_type", list(EXPECTED_ENUMS), ids=lambda e: e.__name__)
+def test_enum_values_are_frozen(enum_type):
+    assert [member.value for member in enum_type] == EXPECTED_ENUMS[enum_type]
+
+
+def test_public_identifier_shapes():
+    request_id = ids.new_request_id()
+    assert ids.is_request_id(request_id)
+    assert ids.chat_completion_id(request_id) == f"chatcmpl-{request_id}"
+    handle = ids.new_job_handle()
+    assert handle.startswith("job_") and handle[4:] not in request_id
+    assert ids.require_handle(handle, ids.JOB_HANDLE_RE) == handle
+    assert ids.new_job_handle() != ids.new_job_handle()      # random, not derived
+    for bad in ["not-a-uuid", request_id.upper(), "", None,
+                request_id + "\n", request_id + " ", request_id + "x"]:
+        assert not ids.is_request_id(bad), bad
+    for bad in (handle + "\n", handle + "/../other"):
+        with pytest.raises(ValueError):
+            ids.require_handle(bad, ids.JOB_HANDLE_RE)
+
+
+def test_cursor_token_round_trips_and_rejects_garbage():
+    cursor = records.Cursor(generation=3, sequence=17)
+    assert cursor.token == "3-17"
+    assert records.Cursor.parse("3-17") == cursor
+    for bad in ["3", "3-", "-3", "a-b", "3-17-2", "", "3 - 17", None]:
+        with pytest.raises(errors.InvalidCursor):
+            records.Cursor.parse(bad)
+
+
+# --- error envelopes ---------------------------------------------------------
+ENVELOPES = fixtures.load("error_envelopes.json")
+
+
+def test_error_fixture_covers_every_public_code():
+    assert set(ENVELOPES) == set(errors.HTTP_ERRORS) | set(errors.STREAM_CODES)
+
+
+@pytest.mark.parametrize("code", sorted(ENVELOPES))
+def test_error_envelope_matches_the_table(code):
+    entry = ENVELOPES[code]
+    body = entry["envelope"]["error"]
+    assert body["code"] == code
+    assert body["message"] == errors.MESSAGES[code]
+    assert body["type"] == errors.error_type(code)
+    if code in errors.HTTP_ERRORS:
+        assert entry["http_status"] == errors.http_status(code)
+        assert entry["in_stream_only"] is False
+    else:
+        assert entry["http_status"] is None and entry["in_stream_only"] is True
+    if code in errors.RETRY_AFTER_CODES:
+        assert body["infrx"]["retry_after_s"] >= 1
+    # the envelope itself is the frozen model and round-trips
+    envelope = errors.ErrorEnvelope.model_validate(entry["envelope"])
+    assert json.loads(canonical_bytes(envelope)) == entry["envelope"]
+
+
+def test_error_code_table_fixture_is_the_python_table():
+    """r1 R13: `ERROR_CODE_HTTP_STATUS` in the console must equal this table, and the
+    G0 parity test compares both halves against this one file."""
+    table = fixtures.load("error_codes.json")
+    assert set(table) == {"http", "in_stream_only", "internal_only", "retry_after_required"}
+    assert set(table["http"]) == set(errors.HTTP_ERRORS)
+    for code, entry in table["http"].items():
+        assert entry == {"status": errors.http_status(code), "type": errors.error_type(code)}
+    assert set(table["in_stream_only"]) == set(errors.STREAM_CODES)
+    for code, entry in table["in_stream_only"].items():
+        assert entry == {"type": errors.error_type(code)}
+    assert set(table["internal_only"]) == set(errors.INTERNAL_CODES)
+    assert set(table["retry_after_required"]) == set(errors.RETRY_AFTER_CODES)
+    assert not set(table["http"]) & set(table["internal_only"])
+
+
+def test_error_messages_are_fixed_and_safe():
+    assert set(errors.MESSAGES) == errors.ALL_CODES
+    for code, message in errors.MESSAGES.items():
+        assert message and message[0].isupper() and message.endswith(("." , "?")), code
+        lowered = message.lower()
+        for leak in ("traceback", "psycopg", "select ", "s3://", "http://", "https://", "token"):
+            assert leak not in lowered, (code, leak)
+
+
+def test_internal_codes_have_no_http_mapping():
+    """A route that lets stale_lease escape has a bug; it must not become a 500."""
+    for code in errors.INTERNAL_CODES:
+        with pytest.raises(LookupError):
+            errors.http_status(code)
+        with pytest.raises(LookupError):
+            errors.envelope(errors.DomainError(code=code))
+
+
+def test_retry_after_is_mandatory_where_the_table_says_so():
+    with pytest.raises(ValueError):
+        errors.envelope(errors.DomainError(code="rate_limited"))
+    assert errors.envelope(errors.RateLimited(retry_after_s=2)).error.infrx == {"retry_after_s": 2}
+
+
+def test_domain_error_detail_never_reaches_the_envelope():
+    err = errors.NotFound("job 4d4d… belongs to org 1a1a… not 2b2b…")
+    envelope = errors.envelope(err, "4d4d4d4d-0000-4000-8000-000000000004")
+    assert envelope.error.message == errors.MESSAGES["not_found"]
+    assert "1a1a" not in canonical_bytes(envelope).decode()
+
+
+# --- streams -----------------------------------------------------------------
+def test_sse_transcript_renders_keepalive_delta_usage_and_sentinel():
+    """API-STREAM: the wire form of an accepted stream, keepalives included."""
+    transcript = wire.SseTranscript.model_validate(fixtures.load("chat_stream_sse.json"))
+    rendered = transcript.render()
+    assert rendered.startswith(": keepalive\n\n")
+    assert "\nid: 1-3\ndata: {" in rendered
+    assert rendered.endswith("id: 1-6\ndata: [DONE]\n\n")
+    types = [frame.event_type for frame in transcript.frames if frame.event_type]
+    assert types == [records.ChunkEventType.progress, records.ChunkEventType.delta,
+                     records.ChunkEventType.delta, records.ChunkEventType.delta,
+                     records.ChunkEventType.usage, records.ChunkEventType.terminal]
+    usage = [f for f in transcript.frames if f.event_type == records.ChunkEventType.usage][0]
+    assert usage.data["usage"]["total_tokens"] == 1540
+    ids_seen = [f.id for f in transcript.frames if f.id]
+    assert ids_seen == [f"1-{n}" for n in range(1, 7)]       # generation-sequence, monotonic
+
+
+def test_interrupted_stream_is_honest_about_its_outcome():
+    """A terminal error event may precede [DONE]; the outcome stays a failure."""
+    transcript = wire.SseTranscript.model_validate(
+        fixtures.load("chat_stream_interrupted_sse.json"))
+    error_frames = [f for f in transcript.frames
+                    if f.event_type == records.ChunkEventType.error]
+    assert len(error_frames) == 1
+    envelope = errors.ErrorEnvelope.model_validate(error_frames[0].data)
+    assert envelope.error.code == "stream_interrupted"
+    assert transcript.frames[-1].data == wire.DONE
+
+
+def test_terminal_outcome_invariants():
+    """Unknown usage is usage=None with held_unknown and a reconcile deadline."""
+    unknown = fixtures.model("terminal_unknown_usage.json")
+    assert unknown.usage is None
+    assert unknown.settlement_state is records.SettlementState.held_unknown
+    assert unknown.reconcile_after is not None and unknown.debit == 0
+
+    success = fixtures.model("terminal_success.json")
+    price = fixtures.model("price_snapshot.json")
+    assert success.usage.certainty is records.UsageCertainty.authoritative
+    assert success.debit == price.debit(success.usage.prompt_tokens,
+                                       success.usage.completion_tokens)
+    assert fixtures.model("terminal_platform_error.json").debit == 0
+
+    with pytest.raises(ValueError):       # a debit without a settlement
+        records.TerminalOutcome(job_id=unknown.job_id, state=records.JobState.succeeded,
+                                cause=records.TerminalCause.completed,
+                                settlement_state=records.SettlementState.released_free,
+                                debit="0.00000100", settled_at=unknown.settled_at)
+    with pytest.raises(ValueError):       # usage that is not authoritative
+        records.TerminalOutcome(job_id=unknown.job_id, state=records.JobState.succeeded,
+                                cause=records.TerminalCause.completed,
+                                usage=records.Usage.of(1, 1, records.UsageCertainty.unknown),
+                                settlement_state=records.SettlementState.settled,
+                                debit="0.00000100", settled_at=unknown.settled_at)
+    with pytest.raises(ValueError):       # a nonterminal state in a terminal outcome
+        records.TerminalOutcome(job_id=unknown.job_id, state=records.JobState.running,
+                                cause=records.TerminalCause.completed,
+                                settlement_state=records.SettlementState.released_free,
+                                settled_at=unknown.settled_at)
+
+
+def test_cause_and_state_must_agree():
+    """The pair is one fact: a succeeded job whose cause is `engine_error` would be
+    a free success, and a failed job whose cause is `completed` would lose a debit."""
+    settled = fixtures.model("terminal_success.json")
+    for state, cause in ((records.JobState.succeeded, records.TerminalCause.engine_error),
+                         (records.JobState.failed, records.TerminalCause.completed),
+                         (records.JobState.succeeded, records.TerminalCause.client_cancelled),
+                         (records.JobState.cancelled, records.TerminalCause.queue_wait_expired)):
+        with pytest.raises(ValueError):
+            records.TerminalOutcome(job_id=settled.job_id, state=state, cause=cause,
+                                    settlement_state=records.SettlementState.released_free,
+                                    settled_at=settled.settled_at)
+    assert records.states_for_cause(records.TerminalCause.platform_error) == \
+        frozenset({records.JobState.failed})
+
+
+def test_price_rates_are_never_negative():
+    """A negative rate would turn a settlement debit into a credit."""
+    raw = fixtures.load("price_snapshot.json")
+    with pytest.raises(ValueError):
+        records.PriceSnapshot(**{**raw, "input_rate_per_million": "-0.20000000"})
+    with pytest.raises(ValueError):
+        records.PriceSnapshot(**{**raw, "output_rate_per_million": "-0.60000000"})
+
+
+def test_usage_totals_must_add_up():
+    with pytest.raises(ValueError):
+        records.Usage(prompt_tokens=10, completion_tokens=5, total_tokens=16)
+
+
+def test_trace_envelope_cannot_claim_complete_content_after_loss():
+    lossy = fixtures.model("trace_envelope_lossy.json")
+    assert lossy.content_complete is False
+    assert lossy.loss_reason is records.TraceLossReason.memory_budget and lossy.content_ref is None
+    with pytest.raises(ValueError):
+        records.TraceEnvelope(**{**fixtures.load("trace_envelope.json"),
+                                 "loss_reason": "memory_budget"})
+
+
+def test_an_abandoned_capture_is_an_honest_envelope():
+    """r1 R37: a reaped or abandoned capture keeps no content and says why."""
+    raw = fixtures.load("trace_envelope_abandoned.json")
+    envelope = records.TraceEnvelope.model_validate(raw)
+    assert envelope.loss_reason is records.TraceLossReason.abandoned
+    assert envelope.content_bytes == 0 and envelope.content_ref is None
+    assert envelope.content_complete is False and envelope.carries_content is False
+    with pytest.raises(ValueError):          # an abandoned capture is never complete
+        records.TraceEnvelope(**{**raw, "content_complete": True,
+                                 "content_ref": "traces/x.json.zst"})
+
+
+def test_only_full_mode_carries_trace_content():
+    """r1 R12: `minimal` is metadata only and `off` has no row at all, so content
+    tied to anything but `full` is a malformed envelope."""
+    full = fixtures.load("trace_envelope.json")
+    for mode in ("minimal", "off"):
+        with pytest.raises(ValueError):
+            records.TraceEnvelope(**{**full, "mode": mode})
+        metadata_only = records.TraceEnvelope(**{**full, "mode": mode, "content_bytes": 0,
+                                                 "content_complete": False, "content_ref": None})
+        assert metadata_only.carries_content is False
+    assert records.TraceEnvelope(**full).carries_content is True
+
+
+def test_admission_carries_the_budgets_it_was_accepted_with():
+    """r1 R4: a configuration change after acceptance cannot move an accepted job's
+    deadlines, so the budgets are on the record."""
+    admission = fixtures.model("admission.json")
+    assert admission.budgets.queue_wait_s == limits.DEFAULTS.queue_wait_interactive_s
+    assert admission.budgets.generation_s == limits.DEFAULTS.generation_timeout_s
+    assert admission.budgets.first_token_s == limits.DEFAULTS.ttft_timeout_s
+    asynchronous = records.Budgets.of(limits.DEFAULTS, records.ExecutionMode.async_)
+    assert asynchronous.queue_wait_s == limits.DEFAULTS.queue_wait_async_s
+    with pytest.raises(ValueError):
+        records.Budgets(**{**admission.budgets.model_dump(), "queue_wait_s": -1})
+    raw = fixtures.load("admission.json")
+    raw.pop("budgets")
+    with pytest.raises(ValueError):          # not optional: an accepted job has them
+        records.Admission.model_validate(raw)
+
+
+def test_phase_deadline_instants_live_on_the_records():
+    """r1 R20: the store derives each phase instant at the transition into that phase
+    and hands it to whoever enforces it — the reaper on the admission, the worker on
+    its lease — and no phase instant outlives `deadline_at`."""
+    admission = fixtures.model("admission.json")
+    assert admission.preparation_deadline_at == admission.admitted_at + timedelta(
+        seconds=admission.budgets.preparation_s)
+    assert admission.preparation_deadline_at <= admission.deadline_at
+    assert admission.queue_deadline_at is None, "a preparing job has no queue instant yet"
+    queued = fixtures.model("admission_replay.json")
+    assert queued.queue_deadline_at is not None and queued.queue_deadline_at <= queued.deadline_at
+    raw = fixtures.load("admission.json")
+    raw.pop("preparation_deadline_at")
+    with pytest.raises(ValueError):          # every accepted job has one
+        records.Admission.model_validate(raw)
+
+    lease = fixtures.model("lease.json")
+    assert lease.first_token_deadline_at <= lease.generation_deadline_at
+    raw = fixtures.load("lease.json")
+    with pytest.raises(ValueError):          # a first token cannot outlast generation
+        records.Lease.model_validate({**raw,
+                                      "first_token_deadline_at": raw["generation_deadline_at"],
+                                      "generation_deadline_at": raw["first_token_deadline_at"]})
+    for field in ("generation_deadline_at", "first_token_deadline_at"):
+        with pytest.raises(ValueError):
+            records.Lease.model_validate({k: v for k, v in raw.items() if k != field})
+
+
+FEEDBACK_VALUES = [("thumb", True, True), ("thumb", False, True), ("thumb", 1, False),
+                   ("rating", 1, True), ("rating", 5, True), ("rating", 0, False),
+                   ("rating", 6, False), ("rating", True, False), ("rating", 1.0, False),
+                   ("correction", "two people", True), ("correction", "", False),
+                   ("correction", "  ", False), ("comment", "fine", True),
+                   ("comment", 3, False)]
+
+
+@pytest.mark.parametrize("name,value,valid", FEEDBACK_VALUES,
+                         ids=[f"{n}-{v!r}" for n, v, _ in FEEDBACK_VALUES])
+def test_the_feedback_name_fixes_the_value_type(name, value, valid):
+    """r1 R3 / `research/traces/06` §2: thumb is boolean, rating is an integer 1-5,
+    correction and comment are nonempty text. A JSON float is never a rating."""
+    raw = {**fixtures.load("feedback.json"), "name": name, "value": value}
+    body = {"request_id": raw["request_id"], "name": name, "value": value}
+    if valid:
+        assert records.Feedback.model_validate(raw).value == value
+        assert wire.FeedbackSubmission.model_validate(body).value == value
+    else:
+        with pytest.raises(ValueError):
+            records.Feedback.model_validate(raw)
+        with pytest.raises(ValueError):
+            wire.FeedbackSubmission.model_validate(body)
+
+
+def test_client_feedback_submission_cannot_set_provenance():
+    """FEEDBACK-ACK: channel, author role and calibration are server-set, and an
+    empty body is not a submission (r1 R3)."""
+    with pytest.raises(Exception):
+        wire.FeedbackSubmission.model_validate(
+            {**fixtures.load("feedback_accepted.json"), "author_role": "operator"})
+    accepted = wire.FeedbackAccepted.model_validate(fixtures.load("feedback_accepted.json"))
+    assert accepted.channel is records.FeedbackChannel.api
+    feedback = fixtures.model("feedback.json")
+    for body in ({}, {"request_id": feedback.request_id},
+                 {"request_id": feedback.request_id, "name": "rating"},
+                 {"request_id": feedback.request_id, "value": 3},
+                 {"request_id": feedback.request_id, "name": "rating", "value": 3,
+                  "calibration_set": "golden"}):
+        with pytest.raises(Exception):
+            wire.FeedbackSubmission.model_validate(body)

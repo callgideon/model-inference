@@ -1,0 +1,15 @@
+{
+  "content_bytes": 0,
+  "content_complete": false,
+  "key_id": "3c3c3c3c-0000-4000-8000-000000000003",
+  "loss_reason": "abandoned",
+  "metadata_bytes": 512,
+  "mode": "full",
+  "model_revision": "nemostation/marlin-2b@2026-09-01",
+  "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+  "price_version": "pv_2026_09_01",
+  "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+  "request_schema_version": 1,
+  "schema_version": 1,
+  "started_at": "2026-09-20T12:00:00Z"
+}

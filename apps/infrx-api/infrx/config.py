@@ -3,9 +3,23 @@
 Field names mirror the original gateway module's globals (UPSTREAM -> upstream,
 MAX_VIDEO_MB -> max_video_mb, ...) so the legacy shim in gateway.py forwards
 assignments straight here, and so a config change is one place, not two.
+
+`Settings`/`from_env` are the F1 gateway's own configuration and keep their exact
+defaults. The pilot settings of contracts v1 (08 §5) are a separate object:
+`contracts.limits.PilotSettings` holds the frozen names and defaults as pure
+data, and `pilot_from_env` below is the only place they are read from the
+environment. Nothing in the F1 path reads them, so adding them changes no
+existing behaviour.
 """
+import dataclasses
+import math
 import os
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
+
+from .contracts import money
+from .contracts.limits import DEFAULTS as PILOT_DEFAULTS
+from .contracts.limits import JUDGE_MODES, MODES, PilotSettings, env_name
 
 # gateway.py's directory, i.e. apps/infrx-api: MODELS_DOC used to be resolved
 # against it, and that is this package's parent, not the package itself.
@@ -79,3 +93,70 @@ def from_env(env=None):
         supabase_key=e.get("SUPABASE_SERVICE_ROLE_KEY", ""),
         models_doc=e.get("MODELS_DOC", DEFAULT_MODELS_DOC),
     )
+
+
+def _coerce(name, raw):
+    """Coerce by the default's type; error messages name the variable, never its
+    value, because DATABASE_URL and friends carry credentials.
+
+    Numbers must be finite and nonnegative: `nan`, `inf` and `-5` are limits that
+    would silently disable a bound, and money goes through `money.parse`, which
+    rejects exponents and `NaN` outright.
+    """
+    kind = type(getattr(PILOT_DEFAULTS, name))
+    try:
+        if kind is bool:
+            return raw.strip().lower() in ("1", "true", "yes", "on")
+        value = money.parse(raw.strip()) if kind is Decimal else kind(raw)
+    except (ValueError, ArithmeticError, InvalidOperation):
+        raise ValueError(f"{env_name(name)} is not a valid {kind.__name__}") from None
+    if kind is float and not math.isfinite(value):
+        raise ValueError(f"{env_name(name)} must be a finite {kind.__name__}")
+    if kind in (int, float, Decimal) and value < 0:
+        raise ValueError(f"{env_name(name)} must not be negative")
+    return value
+
+
+def pilot_from_env(env=None):
+    """PilotSettings from the environment: every 08 §5 name, defaults frozen in
+    contracts.limits. An empty value means unset, i.e. the default."""
+    e = os.environ if env is None else env
+    values = {}
+    for f in dataclasses.fields(PilotSettings):
+        raw = e.get(env_name(f.name))
+        if raw is None or raw == "":
+            continue
+        values[f.name] = _coerce(f.name, raw)
+    return PilotSettings(**values)
+
+
+# Bounds a zero would disable rather than tighten (a zero journal budget admits
+# nothing; a zero lease TTL fences every worker instantly).
+MUST_BE_POSITIVE = (
+    "max_request_bytes", "max_media_bytes", "journal_event_max_bytes",
+    "journal_job_reserve_bytes", "journal_total_bytes", "lease_ttl_s", "lease_heartbeat_s",
+    "max_active_jobs", "max_active_jobs_per_org", "max_active_jobs_per_key",
+    "max_preparing_jobs", "idempotency_ttl_s", "unknown_usage_reconcile_s",
+)
+
+
+def validate_pilot(pilot, gateway=None):
+    """Fail closed at startup: `pilot` mode refuses to run unmetered (no durable
+    store) or unauthenticated (no per-key identity source), and live judging
+    refuses to run without an explicit budget."""
+    if pilot.infrx_mode not in MODES:
+        raise ValueError(f"INFRX_MODE must be one of {', '.join(MODES)}")
+    if pilot.judge_mode not in JUDGE_MODES:
+        raise ValueError(f"JUDGE_MODE must be one of {', '.join(JUDGE_MODES)}")
+    if pilot.judge_mode == "live" and pilot.judge_live_budget_usd <= 0:
+        raise ValueError("JUDGE_MODE=live requires a positive JUDGE_LIVE_BUDGET_USD")
+    for name in MUST_BE_POSITIVE:
+        if getattr(pilot, name) <= 0:
+            raise ValueError(f"{env_name(name)} must be positive")
+    if pilot.infrx_mode == "pilot":
+        if not pilot.database_url:
+            raise ValueError("INFRX_MODE=pilot requires DATABASE_URL: admission must be metered")
+        if gateway is not None and not (gateway.supabase_url and gateway.supabase_key):
+            raise ValueError("INFRX_MODE=pilot requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY: "
+                             "a shared legacy key is not authenticated per organization")
+    return pilot

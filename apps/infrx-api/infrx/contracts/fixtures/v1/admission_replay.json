@@ -1,0 +1,82 @@
+{
+  "admitted_at": "2026-09-20T12:00:00Z",
+  "budgets": {
+    "first_token_s": 60.0,
+    "generation_s": 300.0,
+    "preparation_s": 120.0,
+    "queue_wait_s": 10.0,
+    "schema_version": 1,
+    "stall_s": 20.0
+  },
+  "deadline_at": "2026-09-20T12:07:30Z",
+  "idempotency_key": "client-key-0001",
+  "job_handle": "job_Ck1hQeTdJ6WwWVQe4LnPXe9kM0bF1sAqTgYn2R7xVpU",
+  "key_id": "3c3c3c3c-0000-4000-8000-000000000003",
+  "maximum_hold": "0.00768000",
+  "operation": "chat.completions",
+  "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+  "outbox": [
+    {
+      "aggregate_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "available_at": "2026-09-20T12:00:00Z",
+      "event_id": "5e5e5e5e-0000-4000-8000-000000000001",
+      "kind": "prepare_dispatch",
+      "payload": {
+        "job_handle": "job_Ck1hQeTdJ6WwWVQe4LnPXe9kM0bF1sAqTgYn2R7xVpU",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004"
+      },
+      "schema_version": 1,
+      "version": 1
+    }
+  ],
+  "payload_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "preparation_deadline_at": "2026-09-20T12:02:00Z",
+  "price_snapshot": {
+    "captured_at": "2026-09-01T00:00:00Z",
+    "currency": "USD",
+    "input_rate_per_million": "0.20000000",
+    "model_revision": "nemostation/marlin-2b@2026-09-01",
+    "output_rate_per_million": "0.60000000",
+    "price_version": "pv_2026_09_01",
+    "schema_version": 1,
+    "token_rules_version": "tr_v1"
+  },
+  "queue_deadline_at": "2026-09-20T12:00:11Z",
+  "queue_wait_used_s": 1.0,
+  "replayed": true,
+  "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+  "reservations": [
+    {
+      "active": true,
+      "amount": 1,
+      "key_id": "3c3c3c3c-0000-4000-8000-000000000003",
+      "kind": "preparation",
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "reserved_at": "2026-09-20T12:00:00Z",
+      "schema_version": 1
+    },
+    {
+      "active": true,
+      "amount": 1,
+      "key_id": "3c3c3c3c-0000-4000-8000-000000000003",
+      "kind": "inference",
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "reserved_at": "2026-09-20T12:00:00Z",
+      "schema_version": 1
+    },
+    {
+      "active": true,
+      "amount": 16777216,
+      "key_id": "3c3c3c3c-0000-4000-8000-000000000003",
+      "kind": "journal_bytes",
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+      "reserved_at": "2026-09-20T12:00:00Z",
+      "schema_version": 1
+    }
+  ],
+  "schema_version": 1,
+  "state": "preparing"
+}

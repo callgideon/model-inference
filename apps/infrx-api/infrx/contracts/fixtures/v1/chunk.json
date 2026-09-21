@@ -1,0 +1,24 @@
+{
+  "bytes": 148,
+  "event_type": "delta",
+  "expires_at": "2026-09-20T13:00:02Z",
+  "generation": 1,
+  "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+  "payload": {
+    "choices": [
+      {
+        "delta": {
+          "content": "Hello"
+        },
+        "index": 0
+      }
+    ],
+    "created": 1789905600,
+    "id": "chatcmpl-4d4d4d4d-0000-4000-8000-000000000004",
+    "model": "nemostation/marlin-2b@2026-09-01",
+    "object": "chat.completion.chunk"
+  },
+  "persisted_at": "2026-09-20T12:00:02Z",
+  "schema_version": 1,
+  "sequence": 2
+}

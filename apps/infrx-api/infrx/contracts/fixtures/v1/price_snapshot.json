@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-09-01T00:00:00Z",
+  "currency": "USD",
+  "input_rate_per_million": "0.20000000",
+  "model_revision": "nemostation/marlin-2b@2026-09-01",
+  "output_rate_per_million": "0.60000000",
+  "price_version": "pv_2026_09_01",
+  "schema_version": 1,
+  "token_rules_version": "tr_v1"
+}

@@ -1,0 +1,34 @@
+[project]
+name = "infrx-api"
+version = "0.1.0"
+description = "InferenceX pilot API: gateway, durable state and shared contracts"
+requires-python = "==3.12.*"
+# Core = what the request path imports. Everything a single track needs lives in
+# an extra, so a gateway process never imports psycopg, valkey, boto3 or anthropic.
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "httpx>=0.27,<1",
+    "pydantic>=2.9,<3",
+]
+
+[project.optional-dependencies]
+state = ["psycopg[binary,pool]>=3.2,<4"]
+scheduling = ["valkey>=6,<7"]
+traces = ["clickhouse-connect>=0.8,<1", "boto3>=1.35,<2"]
+judge = ["anthropic>=0.40,<1"]
+
+[dependency-groups]
+dev = ["pytest>=8.3,<9"]
+
+[tool.uv]
+# gateway.py and infrx/ are used from the source tree (pythonpath below), the
+# deployment unit is the checkout itself; there is nothing to build or install.
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+# importlib import mode: tests/<track>/ directories may hold same-named files
+# (tests/d/test_admit.py and tests/g/test_admit.py) without a basename collision.
+addopts = "--import-mode=importlib"

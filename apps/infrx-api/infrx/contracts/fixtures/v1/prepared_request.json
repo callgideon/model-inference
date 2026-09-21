@@ -1,0 +1,31 @@
+{
+  "max_output_tokens": 256,
+  "media": [
+    {
+      "bytes": 4194304,
+      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "duration_s": 12.5,
+      "handle": "upl_9Zt4hLmQ2sVbXeR7nKdJ0oPyWcA5uF1gHi8jTlB3vNs",
+      "kind": "upload",
+      "mime": "video/mp4",
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "profile_version": "v1",
+      "schema_version": 1,
+      "storage_ref": "media/1a1a1a1a/22/source.mp4"
+    }
+  ],
+  "messages": [
+    {
+      "content": "Describe what happens in this clip.",
+      "role": "user"
+    }
+  ],
+  "model_revision": "nemostation/marlin-2b@2026-09-01",
+  "parameters": {
+    "max_tokens": 256
+  },
+  "profile_version": "v1",
+  "prompt_tokens": 1200,
+  "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+  "schema_version": 1
+}

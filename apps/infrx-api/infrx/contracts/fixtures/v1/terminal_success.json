@@ -1,0 +1,17 @@
+{
+  "cause": "completed",
+  "debit": "0.00044400",
+  "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+  "result_ref": "results/1a1a1a1a/4d4d4d4d/result.json",
+  "schema_version": 1,
+  "settled_at": "2026-09-20T12:00:09Z",
+  "settlement_state": "settled",
+  "state": "succeeded",
+  "usage": {
+    "certainty": "authoritative",
+    "completion_tokens": 340,
+    "prompt_tokens": 1200,
+    "schema_version": 1,
+    "total_tokens": 1540
+  }
+}

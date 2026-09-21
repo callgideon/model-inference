@@ -1,0 +1,60 @@
+{
+  "created_at": "2026-09-20T12:00:00Z",
+  "deadline_at": "2026-09-20T12:07:30Z",
+  "execution_mode": "stream",
+  "key_id": "3c3c3c3c-0000-4000-8000-000000000003",
+  "max_input_tokens": 30720,
+  "max_output_tokens": 256,
+  "media": [
+    {
+      "bytes": 4194304,
+      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "duration_s": 12.5,
+      "handle": "upl_9Zt4hLmQ2sVbXeR7nKdJ0oPyWcA5uF1gHi8jTlB3vNs",
+      "kind": "upload",
+      "mime": "video/mp4",
+      "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+      "profile_version": "v1",
+      "schema_version": 1,
+      "storage_ref": "media/1a1a1a1a/22/source.mp4"
+    }
+  ],
+  "messages": [
+    {
+      "content": [
+        {
+          "text": "Describe what happens in this clip.",
+          "type": "text"
+        },
+        {
+          "type": "video_url",
+          "video_url": {
+            "url": "infrx-upload:upl_9Zt4hLmQ2sVbXeR7nKdJ0oPyWcA5uF1gHi8jTlB3vNs"
+          }
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "model_revision": "nemostation/marlin-2b@2026-09-01",
+  "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+  "parameters": {
+    "max_tokens": 256,
+    "n": 1,
+    "stream": true,
+    "temperature": 0.2
+  },
+  "payload_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "payload_ref": "payloads/1a1a1a1a/11/request.json",
+  "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+  "schema_version": 1,
+  "trace_policy": {
+    "consent_version": 3,
+    "content_retention_days": 30,
+    "effective_at": "2026-09-01T00:00:00Z",
+    "evaluation_consent": true,
+    "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
+    "schema_version": 1,
+    "trace_mode": "full"
+  }
+}

@@ -1,0 +1,347 @@
+[
+  {
+    "input": "",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "\t1.00",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": " ",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": " 1.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "$1.00",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "+.5",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "+0",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "+1.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "--1",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-.5",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-0",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-0.0",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-0.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-0.00000001",
+    "valid": true,
+    "canonical": "-0.00000001"
+  },
+  {
+    "input": "-01.5",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-1.5",
+    "valid": true,
+    "canonical": "-1.50000000"
+  },
+  {
+    "input": "-1.50000000",
+    "valid": true,
+    "canonical": "-1.50000000"
+  },
+  {
+    "input": "-1000000000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-1000000000000.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "-999999999999.99999999",
+    "valid": true,
+    "canonical": "-999999999999.99999999"
+  },
+  {
+    "input": "-Infinity",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": ".",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": ".5",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "0",
+    "valid": true,
+    "canonical": "0.00000000"
+  },
+  {
+    "input": "0.0",
+    "valid": true,
+    "canonical": "0.00000000"
+  },
+  {
+    "input": "0.00000000",
+    "valid": true,
+    "canonical": "0.00000000"
+  },
+  {
+    "input": "0.000000001",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "0.00000001",
+    "valid": true,
+    "canonical": "0.00000001"
+  },
+  {
+    "input": "0.1",
+    "valid": true,
+    "canonical": "0.10000000"
+  },
+  {
+    "input": "0.10000000",
+    "valid": true,
+    "canonical": "0.10000000"
+  },
+  {
+    "input": "0.100000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "0.1e1",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "0.99999999",
+    "valid": true,
+    "canonical": "0.99999999"
+  },
+  {
+    "input": "00",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "00.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "007.5",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "01.5",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "0x10",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1",
+    "valid": true,
+    "canonical": "1.00000000"
+  },
+  {
+    "input": "1 000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1,000.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.0\r",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.00\n",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.00000000",
+    "valid": true,
+    "canonical": "1.00000000"
+  },
+  {
+    "input": "1.00000000 ",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.123456789",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.2.3",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1.5E2",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1000000000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1000000000000.00000000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "123456789012.3456789",
+    "valid": true,
+    "canonical": "123456789012.34567890"
+  },
+  {
+    "input": "1234567890123.45678900",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "12345678901234567890",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1E-8",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1_000",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1e+3",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "1e3",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "5.",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "7.5",
+    "valid": true,
+    "canonical": "7.50000000"
+  },
+  {
+    "input": "999999999999.99999998",
+    "valid": true,
+    "canonical": "999999999999.99999998"
+  },
+  {
+    "input": "999999999999.99999999",
+    "valid": true,
+    "canonical": "999999999999.99999999"
+  },
+  {
+    "input": "999999999999.999999999",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "Infinity",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "NaN",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "inf",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "nan",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "input": "one",
+    "valid": false,
+    "canonical": null
+  }
+]

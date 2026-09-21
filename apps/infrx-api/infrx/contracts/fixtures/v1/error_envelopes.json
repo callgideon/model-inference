@@ -1,0 +1,369 @@
+{
+  "capacity_exhausted": {
+    "envelope": {
+      "error": {
+        "code": "capacity_exhausted",
+        "infrx": {
+          "retry_after_s": 5
+        },
+        "message": "Capacity is exhausted; retry later.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "rate_limit_error"
+      }
+    },
+    "http_status": 429,
+    "in_stream_only": false
+  },
+  "context_length_exceeded": {
+    "envelope": {
+      "error": {
+        "code": "context_length_exceeded",
+        "message": "The request exceeds the model context limit.",
+        "param": "messages",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "invalid_request_error"
+      }
+    },
+    "http_status": 400,
+    "in_stream_only": false
+  },
+  "deadline_exceeded": {
+    "envelope": {
+      "error": {
+        "code": "deadline_exceeded",
+        "message": "The request exceeded its deadline.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "server_error"
+      }
+    },
+    "http_status": 504,
+    "in_stream_only": false
+  },
+  "dependency_unavailable": {
+    "envelope": {
+      "error": {
+        "code": "dependency_unavailable",
+        "infrx": {
+          "retry_after_s": 5
+        },
+        "message": "A required dependency is unavailable; retry later.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "server_error"
+      }
+    },
+    "http_status": 503,
+    "in_stream_only": false
+  },
+  "forbidden": {
+    "envelope": {
+      "error": {
+        "code": "forbidden",
+        "message": "This action is not permitted.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "permission_error"
+      }
+    },
+    "http_status": 403,
+    "in_stream_only": false
+  },
+  "idempotency_conflict": {
+    "envelope": {
+      "error": {
+        "code": "idempotency_conflict",
+        "message": "This idempotency key was used with a different request payload.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "conflict_error"
+      }
+    },
+    "http_status": 409,
+    "in_stream_only": false
+  },
+  "idempotency_expired": {
+    "envelope": {
+      "error": {
+        "code": "idempotency_expired",
+        "message": "This idempotency key has expired; submit a new request.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "gone_error"
+      }
+    },
+    "http_status": 410,
+    "in_stream_only": false
+  },
+  "insufficient_credit": {
+    "envelope": {
+      "error": {
+        "code": "insufficient_credit",
+        "message": "The organization does not have enough available credit.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "insufficient_quota"
+      }
+    },
+    "http_status": 402,
+    "in_stream_only": false
+  },
+  "internal_error": {
+    "envelope": {
+      "error": {
+        "code": "internal_error",
+        "message": "An internal error occurred.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "server_error"
+      }
+    },
+    "http_status": 500,
+    "in_stream_only": false
+  },
+  "invalid_api_key": {
+    "envelope": {
+      "error": {
+        "code": "invalid_api_key",
+        "message": "The API key is missing, malformed or revoked.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "authentication_error"
+      }
+    },
+    "http_status": 401,
+    "in_stream_only": false
+  },
+  "invalid_cursor": {
+    "envelope": {
+      "error": {
+        "code": "invalid_cursor",
+        "message": "The event cursor is not valid.",
+        "param": "Last-Event-ID",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "invalid_request_error"
+      }
+    },
+    "http_status": 400,
+    "in_stream_only": false
+  },
+  "invalid_request": {
+    "envelope": {
+      "error": {
+        "code": "invalid_request",
+        "message": "The request is not valid.",
+        "param": "messages",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "invalid_request_error"
+      }
+    },
+    "http_status": 400,
+    "in_stream_only": false
+  },
+  "journal_capacity_exhausted": {
+    "envelope": {
+      "error": {
+        "code": "journal_capacity_exhausted",
+        "infrx": {
+          "retry_after_s": 30
+        },
+        "message": "Output journal capacity is exhausted; retry later.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "rate_limit_error"
+      }
+    },
+    "http_status": 429,
+    "in_stream_only": false
+  },
+  "journal_expired": {
+    "envelope": {
+      "error": {
+        "code": "journal_expired",
+        "message": "The event journal for this job has expired.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "gone_error"
+      }
+    },
+    "http_status": 410,
+    "in_stream_only": false
+  },
+  "media_fetch_failed": {
+    "envelope": {
+      "error": {
+        "code": "media_fetch_failed",
+        "message": "The media source could not be retrieved.",
+        "param": "messages[0].content[1]",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "invalid_request_error"
+      }
+    },
+    "http_status": 400,
+    "in_stream_only": false
+  },
+  "model_not_entitled": {
+    "envelope": {
+      "error": {
+        "code": "model_not_entitled",
+        "message": "The organization is not entitled to this model.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "permission_error"
+      }
+    },
+    "http_status": 403,
+    "in_stream_only": false
+  },
+  "not_found": {
+    "envelope": {
+      "error": {
+        "code": "not_found",
+        "message": "The requested resource was not found.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "not_found_error"
+      }
+    },
+    "http_status": 404,
+    "in_stream_only": false
+  },
+  "org_suspended": {
+    "envelope": {
+      "error": {
+        "code": "org_suspended",
+        "message": "The organization is suspended.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "permission_error"
+      }
+    },
+    "http_status": 403,
+    "in_stream_only": false
+  },
+  "rate_limited": {
+    "envelope": {
+      "error": {
+        "code": "rate_limited",
+        "infrx": {
+          "retry_after_s": 1
+        },
+        "message": "Too many requests; retry later.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "rate_limit_error"
+      }
+    },
+    "http_status": 429,
+    "in_stream_only": false
+  },
+  "replay_gap": {
+    "envelope": {
+      "error": {
+        "code": "replay_gap",
+        "message": "The requested events are no longer available for replay.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "gone_error"
+      }
+    },
+    "http_status": 410,
+    "in_stream_only": false
+  },
+  "request_too_large": {
+    "envelope": {
+      "error": {
+        "code": "request_too_large",
+        "message": "The request body is too large.",
+        "param": "body",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "invalid_request_error"
+      }
+    },
+    "http_status": 413,
+    "in_stream_only": false
+  },
+  "result_expired": {
+    "envelope": {
+      "error": {
+        "code": "result_expired",
+        "message": "The result is no longer available.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "gone_error"
+      }
+    },
+    "http_status": 410,
+    "in_stream_only": false
+  },
+  "result_pending": {
+    "envelope": {
+      "error": {
+        "code": "result_pending",
+        "message": "The result is not available yet.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "conflict_error"
+      }
+    },
+    "http_status": 409,
+    "in_stream_only": false
+  },
+  "state_conflict": {
+    "envelope": {
+      "error": {
+        "code": "state_conflict",
+        "message": "The job is not in a state that allows this operation.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "conflict_error"
+      }
+    },
+    "http_status": 409,
+    "in_stream_only": false
+  },
+  "status_unknown": {
+    "envelope": {
+      "error": {
+        "code": "status_unknown",
+        "message": "The final status of this request is unknown; check the job status.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "server_error"
+      }
+    },
+    "http_status": null,
+    "in_stream_only": true
+  },
+  "stream_interrupted": {
+    "envelope": {
+      "error": {
+        "code": "stream_interrupted",
+        "message": "The stream was interrupted.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "server_error"
+      }
+    },
+    "http_status": null,
+    "in_stream_only": true
+  },
+  "unsupported_media": {
+    "envelope": {
+      "error": {
+        "code": "unsupported_media",
+        "message": "The media type is not supported.",
+        "param": "messages[0].content[1]",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "invalid_request_error"
+      }
+    },
+    "http_status": 400,
+    "in_stream_only": false
+  },
+  "unsupported_parameter": {
+    "envelope": {
+      "error": {
+        "code": "unsupported_parameter",
+        "message": "A requested parameter is not supported.",
+        "param": "tools",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "invalid_request_error"
+      }
+    },
+    "http_status": 400,
+    "in_stream_only": false
+  },
+  "upload_expired": {
+    "envelope": {
+      "error": {
+        "code": "upload_expired",
+        "message": "The upload window has expired.",
+        "request_id": "4d4d4d4d-0000-4000-8000-000000000004",
+        "type": "gone_error"
+      }
+    },
+    "http_status": 410,
+    "in_stream_only": false
+  }
+}
