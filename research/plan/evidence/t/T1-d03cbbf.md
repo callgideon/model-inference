@@ -584,7 +584,14 @@ whose counts this process cannot know; content parts handed to the writer **unjo
   offers a 64-byte-declared envelope against a 64-byte reserve and requires it to be
   *accepted*, while its real payload is ~400 bytes. Changing the charge would fail the
   frozen suite, so it is integration request 5 (a contract question for F2) rather than a
-  local edit. The unbounded growth it was raised for is fixed by the flush guard.
+  local edit. The unbounded growth it was raised for is fixed by the flush guard —
+  **correction (round 3): that was wrong twice over.** The guard was an `asyncio.Lock`,
+  which a cancelled flush releases, so a flusher using `wait_for` took a fresh batch every
+  tick (600,000 accepted, RSS 26 → 373 MiB); and even with the guard fixed, a caller may
+  under-declare `metadata_bytes` for a 20 KB envelope, so the row ceiling alone let 435 MiB
+  of payloads into memory. Round 3 makes the guard the batch's own lifetime and adds a byte
+  bound on queued plus in-flight serialized payloads (`QUEUED_PAYLOAD_MAX_BYTES`, 32 MiB).
+  The declared-`metadata_bytes` question itself is unchanged and stays with F2.2.
 - `crash()` is still a public truncating method on the production class, used only by the
   harness hook. Moving it into the test would mean the test owning segment internals; a
   rename to something unmistakable is integration request 6.
@@ -599,12 +606,128 @@ whose counts this process cannot know; content parts handed to the writer **unjo
 - `clock or FakeClock()` is inherited from the shared accounting; a real sink should be
   handed the clock it reads (integration request 7).
 
+## Round 3 — review round 2 (`fix_required` at `0e52ab9`) addressed
+
+Implementation SHA for this round: `97a96f0`. Eleven commits, one per item, because two
+sessions in this task have been cut by rate limits. Round 2 confirmed all six round-1
+findings fixed under attack and found two more; both are below with the case that kills them.
+
+### Each item, its commit and its oracle
+
+| Item | Commit | Killing test / mutant |
+|---|---|---|
+| **B7** a cancelled flush released the one-flush guard, so a `wait_for` flusher took a fresh batch every tick (600,000 accepted, RSS 26 → 373 MiB) | `8d00383` | `test_a_cancelling_flusher_cannot_take_a_second_batch`; mutants `a_cancelled_flush_releases_the_guard`, `the_settlement_keeps_the_guard`. The guard is now the in-flight `_Settlement`, released by the settlement callback |
+| **Ruling 5** interim byte bound on queued + in-flight serialized payloads | `f7894ee` | `test_the_queue_is_bounded_in_bytes_as_well_as_in_rows`; mutants `the_queue_counts_only_rows`, `queued_payload_bytes_never_released` |
+| **Ruling 7** the constructor refuses `clock=None` | `4d83447` | `test_a_sink_without_a_clock_refuses_to_exist`; mutant `a_clockless_sink_is_built` |
+| **B8** multi-part content, buffer ownership, fsync flags, directory fsync ×2, partial-write bytes, `adopted`, `unread_bytes` | `31071ca` | `test_a_multi_part_capture_spools_its_parts_in_order_and_byte_exact` (N22/N23/N31), `test_a_good_fsync_clears_the_loss_flags_it_promised` (N26), `test_a_segment_and_its_deletion_are_both_committed_to_the_directory` (N13/N14), `test_bytes_a_failed_write_left_behind_still_count_against_the_cap` (N15), `test_an_adopted_segment_says_its_counts_are_unknown` (N16), `test_an_unreadable_segment_reports_every_byte_as_unread` (N19) |
+| `close()` racing a request or the flusher; the writer join on the loop | `d3dacfc` | `test_close_admits_nothing_once_it_has_started_and_joins_off_the_loop`; mutant `close_marks_the_sink_closed_last` |
+| settlement outside the write `try`; `flush` raising a writer error | `5c0d548` | `test_an_fsync_step_that_raises_leaves_the_books_agreeing`, `test_a_writer_error_that_is_not_an_oserror_still_settles_the_batch`; mutants `an_fsync_step_that_raises_escapes_the_writer`, `flush_raises_a_writer_failure_at_the_flusher`, `the_writer_only_catches_oserror` |
+| `ack` bookkeeping before the unlink; constructor lock-fd leak; boot id | `9fc72d8` | `test_a_failed_ack_keeps_the_segment_and_a_failed_boot_keeps_no_lock`; mutants `ack_forgets_the_segment_before_deleting_it`, `a_failed_boot_keeps_the_directory_lock`, `a_reused_boot_id_is_accepted`, `the_boot_id_is_time_only` |
+| the position inside the checksum; `SEGMENT_VERSION` 2 | `ee1e6b1` | `test_a_frame_excised_or_duplicated_mid_segment_is_the_tail`, the version-1 assertion in `test_an_unknown_segment_version_is_never_half_parsed`; mutants `the_checksum_ignores_the_position`, `the_writer_checksums_the_wrong_position` |
+| minor survivors N03, N25, N27, N29 | `8c09685` | `settlement_forgets_the_counted_flag`, `a_stripped_capture_spools_its_content`, `the_unpromised_count_is_not_reported`, `a_failed_open_cleans_up_only_on_oserror` |
+| no wall clock in the cancellation case | `efd4f5e` | the case now waits on the writer's event and cancels the task directly; no `wait_for` is left in the suite outside prose |
+| anchors this round's edits invalidated | `97a96f0` | nine refreshed, one (`flushes_run_concurrently`) deleted with the lock it named |
+
+### Commands (exit status and output tail)
+
+`make api-test` — exit 0, 2026-09-21T18:2xZ:
+
+```
+732 passed, 2 warnings in 54.41s
+```
+
+670 + 62 = 732 (`pytest -q --ignore=tests/t` → `670 passed`; `pytest -q tests/t --collect-only`
+→ `62 tests collected`).
+
+Focused suite, `pytest -q tests/t/test_trace_spool.py -s` — exit 0, `55 passed in 30.55s`:
+
+```
+tracesink conformance against SpoolTraceSink: 17/17 cases ran, 0 skipped
+spool sink sequence properties: 17724 sequences, 51828 operations (exhaustive); … in 13.0s
+truncation sweep: 3315 offsets, every prefix replayed exactly
+queued payload bound: 1,646 of 4,000 under-declared 20 KB envelopes accepted against a 33,554,432 B cap
+frame identity: 3510 single-bit flips, no wrong or duplicate id
+synthetic concurrent capture load (microbenchmark, no GPU, no network): 1100 requests, 550 concurrent, 8x64000B each, in 4.5s (243 req/s, 124 MB/s offered)
+```
+
+Mutants, `python -m tests.t.mutants` — exit 0, 84 mutants (58 in round 2):
+
+```
+84/84 killed
+```
+
+Four survived on the first pass of this round and every one was a **vacuous assertion of
+mine**, recorded here rather than quietly fixed: the B7 case cancelled each tick's flush
+*before it ran*; the payload-cap case asserted `< cap` where only `== 0 after the queue
+drains` distinguishes anything; `the_writer_only_catches_oserror` failed on the first row,
+where "the rest of the batch" is empty; and `the_boot_id_is_time_only` cannot be seen behind
+a monotonic clock, so the case now freezes `time_ns` and asserts two sinks born in one
+nanosecond differ. One mutant has no oracle and is deleted with the reason recorded in
+`mutants.py`: with the seal awaited through the executor, the writer is idle by the time
+`close` joins it, so moving the join back onto the loop changes nothing a non-stopwatch
+oracle can see.
+
+### The reviewer's reproductions at `97a96f0`
+
+`a8_md.py`, the memory table (B7 and ruling 5):
+
+```
+serial flusher, default-size envelope, metadata_bytes=0: accepted 20,000 of 300,000; in_memory 10000; writer backlog 0 batches; rss 26->54 MiB; losses {'queue_full': 280000}
+serial flusher, 20 KB envelope, metadata_bytes=0: accepted 1,646 of 300,000; in_memory 0; writer backlog 0 batches; rss 26->63 MiB; losses {'queue_full': 298354}
+wait_for(flush,10ms) flusher, default-size envelope, metadata_bytes=0: accepted 20,000 of 600,000; in_memory 10000; writer backlog 0 batches; rss 26->54 MiB; losses {'queue_full': 580000}
+```
+
+Round 2 read `600,000 of 600,000 accepted, 59 batches behind the writer, losses {}, RSS
+26 → 373 MiB` on the last line and `435 MiB` on the second.
+
+`a1_loop.py` (every syscall blocked 2 s in turn): `max loop gap 10–12 ms` across all six
+cases, `worst add+finish 0.1–1.1 ms`. `a2_err.py`: fds `8→8` over 300 flushes on a dead
+disk, cancelled flush settles `appended 5, fsynced 5, 0 B charged`. `a6_r42.py`: one loss
+per capture on both writer paths, `appended 3 fsynced 3` over three rounds, idle flush
+promotes the tail, and the old index-flip attack now reports one record with the right id
+and a torn tail.
+
+### Integration requests added this round
+
+8. **08 §5 / the coordinator:** `SEGMENT_VERSION` is **2**. The pinned number in 08 §5 says
+   "spool segment 1"; round 2 ruled the layout change in (the position is now inside the
+   checksum), so the pinned number needs updating. A version-1 segment is classed
+   `unreadable` and never misread, and none exists outside this task's tests.
+9. **F2.2, when the accounting base is extracted:** `crash()` moves to a test-only
+   subclass at that point (round 2 accepted it here for now), and the metadata charge
+   becomes `max(declared, len(payload))` once the frozen case is revised — at which point
+   `QUEUED_PAYLOAD_MAX_BYTES` can be reconsidered, since it exists only because the
+   declared number can be a fiction.
+
+### For T2's shipper (carried verbatim from the reviewer)
+
+`ack`/`read_segment`/`rotate` are coroutines; `recover()`/`scan_segment()` are synchronous
+and belong in a `to_thread`; scan `adopted` segments rather than trusting `records == 0`;
+before acking a segment with `torn > 0`, compare `torn_at`/`unread_bytes` with one frame —
+larger means quarantine, never ack; `ack` may raise (the segment stays listed and stays
+yours); the dedupe key is `(segment name, position)`; segment order is not guaranteed across
+a restart; and a record counted `disk_error` on an fsync failure may still be on disk and
+ship.
+
+### For G's lifespan wiring (carried verbatim from the reviewer)
+
+One sink per process, built with the **real** clock and **no** `boot_id`, constructed off
+the loop at startup; a single flusher task awaiting `flush` serially inside `try`/`except`;
+`reap` on the same tick; shutdown is stop the flusher → final `flush` → `close`; and
+`metadata_bytes` on the envelope should be the **serialized length**, since that is what the
+reserve is meant to be charging.
+
 ## Verification log
 
 - 2026-09-21: Authored from the runs quoted above on the pinned local environment. Every
   count, timing and byte figure is copied from command output; nothing here is a claim
   about ClickHouse, S3, a gateway process or a real host crash, none of which was
   exercised.
+- 2026-09-21 (round 3): Review round 2's two blocking findings and every same-pass item
+  fixed at `97a96f0`, one commit each; the flush-guard sentence corrected in place above;
+  mutants 58 → 84, all killed; four first-pass survivors were vacuous assertions of mine and
+  one mutant was deleted for having no non-stopwatch oracle. Nothing new is claimed about
+  integration.
 - 2026-09-21 (round 2): Review round 1's six blocking findings fixed at `f55c401`; two false
   sentences corrected in place above and the single-producer note rewritten as a
   requirement; mutants 26 → 58, all killed; one further R42 hole found while writing B5's
