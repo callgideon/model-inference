@@ -19,6 +19,35 @@ def client(clock=None, **pilot):
     return TestClient(app), calls
 
 
+def asgi_post(app, *, body_chunks, limit, headers=None):
+    """Drive the app as its peer: an endless body, and a count of what it consumed.
+
+    Returns (messages sent by the app, chunks the app asked for). `limit` is the
+    test's own stop, so a gateway that never stops reading fails instead of hanging.
+    """
+    import asyncio
+
+    asked = 0
+    scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST",
+             "path": support.CHAT_PATH, "raw_path": support.CHAT_PATH.encode(), "query_string": b"",
+             "root_path": "", "scheme": "http", "client": ("127.0.0.1", 1), "server": ("t", 80),
+             "headers": [(key.encode(), value.encode())
+                         for key, value in (headers or support.RAW).items()]}
+    sent = []
+
+    async def receive():
+        nonlocal asked
+        asked += 1
+        assert asked <= limit, f"the gateway read {asked} chunks without stopping"
+        return {"type": "http.request", "body": body_chunks(), "more_body": True}
+
+    async def send(message):
+        sent.append(message)
+
+    asyncio.run(app(scope, receive, send))
+    return sent, asked
+
+
 def test_media_sec__an_oversized_body_is_refused_before_it_is_parsed():
     """413 `request_too_large`, and *not* 400: a body over the cap is never parsed,
     so an oversized body that is also invalid JSON still answers 413."""
@@ -41,6 +70,31 @@ def test_media_sec__a_chunked_body_is_bounded_by_the_running_total():
     response = tc.post(support.CHAT_PATH, headers=support.RAW, content=drip())
     assert response.status_code == 413, response.text
     assert calls == []
+
+
+def test_media_sec__the_cap_counts_the_whole_stream_not_one_chunk():
+    """The claim the first review found untestable through a test client, which
+    delivers the body as a single chunk: with a 4,096-byte cap and an *endless*
+    stream of 1 KiB chunks, the read stops after exactly five - four accepted, the
+    fifth crossing the cap - and the parser is never reached.
+
+    Driven as raw ASGI, because only there can a test be the peer.
+    """
+    sent, chunks = asgi_post(client(max_request_bytes=4096)[0].app,
+                             body_chunks=lambda: b"a" * 1024, limit=64)
+    assert sent[0]["status"] == 413, sent
+    assert chunks == 5, chunks
+
+
+def test_media_sec__the_cap_is_an_upper_bound_not_an_off_by_one():
+    """Exactly at the cap is accepted; one byte more is not."""
+    at_the_cap = b'{"messages":[{"role":"user","content":"' + b"a" * 41 + b'"}]}'
+    tc, calls = client(max_request_bytes=len(at_the_cap))
+    assert tc.post(support.CHAT_PATH, headers=support.RAW,
+                   content=at_the_cap).status_code == 202, at_the_cap
+    assert tc.post(support.CHAT_PATH, headers=support.RAW,
+                   content=at_the_cap + b" ").status_code == 413
+    assert len(calls) == 1
 
 
 def test_media_sec__a_body_within_the_cap_is_read_whole():
