@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes import FACTORIES
 from infrx.contracts.records import ExecutionMode
+from infrx.gateway.routes import validate
 
 from . import support
 
@@ -134,7 +135,8 @@ def test_media_sec__a_malformed_shape_is_refused_with_a_stable_code(name, body, 
 
 
 def test_media_sec__an_owned_upload_handle_and_a_public_url_are_both_accepted():
-    for source in ("https://cdn.test/a.mp4", "upl_" + "a" * 40, "data:video/mp4;base64,AAA"):
+    for source in ("https://cdn.test/a.mp4", "infrx-upload:upl_" + "a" * 43,
+                   "data:video/mp4;base64,AAA"):
         body = parts({"type": "text", "text": "describe"},
                      {"type": "video_url", "video_url": {"url": source}})
         assert post(body)[0].status_code == 202, source
@@ -175,13 +177,14 @@ def test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor():
     tc, calls = client()
     response = tc.post(support.CHAT_PATH,
                        headers={**support.AUTH, "Idempotency-Key": "idem-1"},
-                       json=message(model=b.MODEL, max_tokens=512))
+                       json=message(model=support.PUBLIC_MODEL, max_tokens=512))
     assert response.status_code == 202, response.text
     auth, request, idem = calls[0]
     assert (auth.org_id, auth.key_id, auth.principal) == (support.ORG, support.KEY, support.KEY)
     assert (request.org_id, request.key_id) == (support.ORG, support.KEY)
     assert (request.max_output_tokens, request.max_input_tokens) == (512, 32_768 - 512)
-    assert request.model_revision == b.MODEL != support.settings().model_id
+    assert request.model_revision == support.MODEL_REVISION == b.MODEL
+    assert request.model_revision != support.PUBLIC_MODEL
     assert request.execution_mode is ExecutionMode.sync
     assert request.payload_digest.startswith("sha256:")
     assert (idem.org_id, idem.operation, idem.key) == (support.ORG, "chat.completions", "idem-1")
@@ -214,7 +217,7 @@ def admitted(body=None, **pilot):
     harness.extra["grant"](support.ORG, "1.00")
     tc, calls = client(**pilot)
     response = tc.post(support.CHAT_PATH, headers=support.AUTH,
-                       json=body or message(model=b.MODEL))
+                       json=body or message(model=support.PUBLIC_MODEL))
     assert response.status_code == 202, response.text
     _auth, request, idem = calls[0]
     # The gateway validated at its own instant; the store decides at the database
@@ -241,23 +244,24 @@ def test_dur_admit__the_ingress_deadline_is_one_the_store_can_keep():
     assert admission.budgets.queue_wait_s == 10.0            # sync: interactive budget
     assert (admission.deadline_at - admission.admitted_at).total_seconds() == (
         admission.budgets.preparation_s + admission.budgets.queue_wait_s
-        + admission.budgets.generation_s)
+        + admission.budgets.generation_s - validate.DEADLINE_SKEW_MARGIN_S)
 
 
 def test_dur_admit__an_async_request_gets_the_async_queue_budget():
     _harness, admission = admitted({"messages": [{"role": "user", "content": "hi"}],
-                                    "model": b.MODEL, "stream": False})
+                                    "model": support.PUBLIC_MODEL, "stream": False})
     assert admission.budgets.queue_wait_s == 10.0
     harness = FACTORIES["jobstore"]()
     harness.extra["grant"](support.ORG, "1.00")
     tc, calls = client()
     tc.post(support.CHAT_PATH, headers={**support.AUTH, "Prefer": "respond-async"},
-            json=message(model=b.MODEL))
+            json=message(model=support.PUBLIC_MODEL))
     _auth, request, idem = calls[0]
     harness.clock.advance((request.created_at - harness.clock.now()).total_seconds())
     admission = asyncio.run(harness.port.admit(request, idem))
     assert admission.budgets.queue_wait_s == 600.0
-    assert (admission.deadline_at - admission.admitted_at).total_seconds() == 1_020.0
+    assert (admission.deadline_at - admission.admitted_at).total_seconds() == (
+        1_020.0 - validate.DEADLINE_SKEW_MARGIN_S)
 
 
 if __name__ == "__main__":

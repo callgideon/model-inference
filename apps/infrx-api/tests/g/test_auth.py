@@ -188,7 +188,7 @@ def test_dur_rls__admission_rechecks_revocation_on_the_identity_we_pass():
     calls, accept = support.recorder()
     app, mounted = support.cutover_app(ingress_deps=support.deps(accept=accept))
     tc = TestClient(app)
-    body = {"model": b.MODEL, "messages": [{"role": "user", "content": "hi"}]}
+    body = {"model": support.PUBLIC_MODEL, "messages": [{"role": "user", "content": "hi"}]}
     assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=body).status_code == 202
     # the ingress still holds a valid cache entry ...
     assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=body).status_code == 202

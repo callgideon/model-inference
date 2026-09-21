@@ -13,6 +13,8 @@ Two app shapes, both built without importing the legacy `gateway` shim (r1 R48):
 from __future__ import annotations
 
 import dataclasses
+import pathlib
+import tempfile
 
 import httpx
 from fastapi import FastAPI
@@ -31,8 +33,18 @@ KEY = "3c3c3c3c-0000-4000-8000-000000000003"
 ROW = {"id": KEY, "org_id": ORG, "revoked_at": None}
 TOKEN = "sk-infrx-g1-test"
 AUTH = {"authorization": f"Bearer {TOKEN}"}
-BODY = {"model": "nemostation/marlin-2b", "messages": [{"role": "user", "content": "hi"}]}
-USAGE_LOG = "/tmp/g1-test-usage.jsonl"
+# A raw `content=` post carries no content type of its own and the ingress requires
+# one; `json=` sets it.
+RAW = {**AUTH, "content-type": "application/json"}
+# The public model id a caller names, and the revision the store prices. Deliberately
+# different strings: copying one into the other is the defect the served-model map
+# exists to prevent, and the revision is the one the contracts fake prices.
+PUBLIC_MODEL = "nemostation/marlin-2b"
+MODEL_REVISION = "nemostation/marlin-2b@2026-09-01"
+SERVED_MODELS = {PUBLIC_MODEL: MODEL_REVISION}
+BODY = {"model": PUBLIC_MODEL, "messages": [{"role": "user", "content": "hi"}]}
+# Per-run, not a fixed /tmp path shared with every other session on the host.
+USAGE_LOG = str(pathlib.Path(tempfile.mkdtemp(prefix="infrx-g1-")) / "usage.jsonl")
 
 
 def supabase(rows=(ROW,), down=False, seen=None):
@@ -77,8 +89,10 @@ def runtime(config=None, *, sb=None, clock=None, seen=None):
 
 
 def deps(**kw):
-    """`IngressDeps` with both startup probes answering, unless overridden."""
+    """`IngressDeps` with both startup probes answering and the served model mapped,
+    unless overridden."""
     kw.setdefault("checks", {"price_source": lambda: True, "journal": lambda: True})
+    kw.setdefault("served_models", SERVED_MODELS)
     return ingress.IngressDeps(**kw)
 
 

@@ -23,7 +23,7 @@ def test_media_sec__an_oversized_body_is_refused_before_it_is_parsed():
     """413 `request_too_large`, and *not* 400: a body over the cap is never parsed,
     so an oversized body that is also invalid JSON still answers 413."""
     tc, calls = client(max_request_bytes=32)
-    response = tc.post(support.CHAT_PATH, headers=support.AUTH,
+    response = tc.post(support.CHAT_PATH, headers=support.RAW,
                        content=b"{not json at all" + b"x" * 64)
     assert response.status_code == 413, response.text
     assert support.error_of(response)["code"] == "request_too_large"
@@ -38,7 +38,7 @@ def test_media_sec__a_chunked_body_is_bounded_by_the_running_total():
         for _ in range(8):
             yield b"0123456789"
 
-    response = tc.post(support.CHAT_PATH, headers=support.AUTH, content=drip())
+    response = tc.post(support.CHAT_PATH, headers=support.RAW, content=drip())
     assert response.status_code == 413, response.text
     assert calls == []
 
@@ -60,7 +60,7 @@ def test_media_sec__a_slow_body_hits_the_intake_deadline():
             now[0] += 20            # 20s per chunk: the second one is past 30s
             yield b'{"messages":[]}'
 
-    response = tc.post(support.CHAT_PATH, headers=support.AUTH, content=drip())
+    response = tc.post(support.CHAT_PATH, headers=support.RAW, content=drip())
     assert response.status_code == 504, response.text
     assert support.error_of(response)["code"] == "deadline_exceeded"
     assert calls == []
@@ -102,7 +102,7 @@ def test_media_sec__a_peer_that_sends_nothing_hits_the_intake_deadline():
 
 def test_media_sec__malformed_json_is_a_400_with_no_parser_text():
     tc, _ = client()
-    response = tc.post(support.CHAT_PATH, headers=support.AUTH, content=b'{"messages": [}')
+    response = tc.post(support.CHAT_PATH, headers=support.RAW, content=b'{"messages": [}')
     assert response.status_code == 400, response.text
     error = support.error_of(response)
     assert error["code"] == "invalid_request"
@@ -111,7 +111,7 @@ def test_media_sec__malformed_json_is_a_400_with_no_parser_text():
 
 def test_media_sec__a_non_object_body_is_refused():
     tc, _ = client()
-    response = tc.post(support.CHAT_PATH, headers=support.AUTH, content=b"[1, 2, 3]")
+    response = tc.post(support.CHAT_PATH, headers=support.RAW, content=b"[1, 2, 3]")
     assert response.status_code == 400
     assert support.error_of(response)["code"] == "invalid_request"
 
@@ -120,7 +120,7 @@ def test_dur_rls__identity_is_checked_before_the_body_is_parsed():
     """Malformed JSON with no key answers 401, not 400: an unauthenticated caller
     cannot use the parser as an oracle, and the parse happens for a known tenant."""
     tc, _ = client()
-    response = tc.post(support.CHAT_PATH, content=b"{not json")
+    response = tc.post(support.CHAT_PATH, headers={"content-type": "application/json"}, content=b"{not json")
     assert response.status_code == 401, response.text
     assert support.error_of(response)["code"] == "invalid_api_key"
 

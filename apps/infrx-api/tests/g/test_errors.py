@@ -40,8 +40,8 @@ def call(content=None, json=None, *, auth=True, down=False, accept=True, boom=Fa
     app, _ = support.cutover_app(support.settings(**(pilot or {})),
                                  sb=support.supabase(down=down), ingress_deps=deps)
     tc = TestClient(app)
-    return tc.post(support.CHAT_PATH, headers=support.AUTH if auth else {},
-                   content=content, json=json), calls
+    headers = (support.RAW if content is not None else support.AUTH) if auth else {}
+    return tc.post(support.CHAT_PATH, headers=headers, content=content, json=json), calls
 
 
 @pytest.mark.parametrize("name,kw,status,code", MATRIX, ids=[row[0] for row in MATRIX])

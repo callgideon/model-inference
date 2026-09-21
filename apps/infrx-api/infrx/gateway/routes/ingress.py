@@ -34,11 +34,14 @@ from typing import Callable
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
 from ...auth.context import AuthResolver
 from ...config import RuntimeMisconfigured
 from ...contracts import errors, ids, wire
 from . import intake
-from .validate import Validator, idempotency
+from .validate import PARSE_OFFLOAD_BYTES, Validator, idempotency
 
 CHAT_PATH = "/v1/chat/completions"
 HEALTH_PATH = "/healthz"
@@ -55,12 +58,18 @@ UNAVAILABLE = "unavailable"
 
 @dataclass
 class IngressDeps:
-    """Everything the ingress needs from outside itself. Defaults fail safe."""
+    """Everything the ingress needs from outside itself. Defaults fail safe.
+
+    The composition root puts one of these on the runtime as `rt.ingress`;
+    `register(app, rt)` reads it there, so a track router keeps the one calling
+    convention `ROUTERS` uses (r1 R44). The explicit third argument exists for tests.
+    """
 
     accept: Callable | None = None
     checks: dict[str, Callable[[], bool]] = field(default_factory=dict)
     consent_for: Callable | None = None
     entitlement_version: Callable[[str], int] | None = None
+    served_models: dict[str, str] | None = None
     new_request_id: Callable[[], str] = ids.new_request_id
 
 
@@ -98,32 +107,74 @@ class Ingress:
         # Built before the routes exist: in `pilot` a shared legacy key or a missing
         # identity source raises here (r1 R51), so the app never serves one request.
         self.auth = AuthResolver(rt, entitlement_version=self.deps.entitlement_version)
-        self.validator = Validator(rt, consent_for=self.deps.consent_for)
+        self.validator = Validator(rt, consent_for=self.deps.consent_for,
+                                   served_models=self.deps.served_models)
         self.startup_state = assert_startup(rt, self.deps)
 
     async def validated(self, request: Request, request_id: str):
-        """Bounded body, then tenant, then shape. In that order, always.
+        """Tenant, then bounded body, then shape. In that order, always.
 
-        The bounds come first because they are the only defence that has to work
-        before anything is trusted; identity comes before the parse so that an
-        unauthenticated caller cannot use parser behaviour as an oracle and so the
-        body is parsed on behalf of a known tenant.
+        Identity comes **first**, from the headers alone: an unauthenticated caller
+        must never be able to make this process buffer 96 MiB, and the body we do
+        read is read on behalf of a known tenant. The byte and time bounds come
+        before the parse because they are the only defence that has to work before
+        anything is trusted, and the structure caps come immediately after it,
+        before any record is built.
         """
         limits = self.rt.settings.pilot
+        auth = await self.auth.context(request)
+        intake.check_content_type(request)
         raw = await intake.read_body(request, max_bytes=limits.max_request_bytes,
                                      timeout_s=limits.intake_timeout_s, clock=self.rt.clock)
-        auth = await self.auth.context(request)
-        body = intake.parse_object(raw)
-        normalized = self.validator.normalize(body, auth, request_id, request.headers)
+        body = await intake.parse_body(raw, offload_over_bytes=PARSE_OFFLOAD_BYTES)
+        normalized = self.validator.normalize(body, auth, request_id, request.headers,
+                                              body_bytes=len(raw))
         idem = idempotency(auth, request.headers, normalized.payload_digest, CHAT_OPERATION)
         return auth, normalized, idem
 
 
+def install_error_handlers(app, mint_request_id=ids.new_request_id) -> None:
+    """Everything FastAPI would answer by itself, in the contract's envelope.
+
+    Without these, a 404 for an unknown path, a 405 for the wrong method and an
+    unhandled exception leave as `{"detail": …}` with no code, no request id and -
+    for the last one - a stack trace. `register` installs them, so the composition
+    root gets them by mounting the router; it can also call this directly.
+    """
+
+    async def http_exception(request: Request, exc: StarletteHTTPException):
+        code = "not_found" if exc.status_code == 404 else "invalid_request"
+        if exc.status_code >= 500:
+            code = "internal_error"
+        return intake.response(errors.DomainError(code=code), mint_request_id())
+
+    async def validation_error(request: Request, exc: RequestValidationError):
+        # FastAPI's own body/query validation. Its `errors()` quote the caller's
+        # input, so none of it is echoed.
+        return intake.response(errors.InvalidRequest("request validation failed"),
+                               mint_request_id())
+
+    async def unhandled(request: Request, exc: Exception):
+        request_id = mint_request_id()
+        intake.log.exception("%s: unhandled error on request %s", request.url.path, request_id)
+        return intake.response(errors.InternalError(), request_id)
+
+    app.add_exception_handler(StarletteHTTPException, http_exception)
+    app.add_exception_handler(RequestValidationError, validation_error)
+    app.add_exception_handler(Exception, unhandled)
+
+
 def register(app, rt, deps: IngressDeps | None = None):
-    """Mount the ingress. Returns the `Ingress` so a test can drive it directly."""
-    ingress = Ingress(rt, deps)
+    """Mount the ingress. Returns the `Ingress` so a test can drive it directly.
+
+    `deps` comes from `rt.ingress` when it is not passed, so the coordinator's
+    `ROUTERS` protocol - `register(app, rt)` - is the only calling convention the
+    composition root needs (r1 R44).
+    """
+    ingress = Ingress(rt, deps if deps is not None else getattr(rt, "ingress", None))
     deps = ingress.deps
     guarded = intake.guard(deps.new_request_id)
+    install_error_handlers(app, deps.new_request_id)
 
     @app.get(HEALTH_PATH)
     async def healthz():
