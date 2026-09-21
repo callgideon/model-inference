@@ -444,16 +444,19 @@ and covered by the same case (all three writer refusals).
 
 ### Commands (exit status, output tail, 2026-09-21T17:0x–17:4xZ)
 
-`make api-test` — exit 0:
+`make api-test` — exit 0, on the final tree (`dd3b68f`), 2026-09-21T17:12Z:
 
 ```
-718 passed, 2 warnings in 101.14s (0:01:41)
+719 passed, 2 warnings in 54.37s
 ```
 
-(670 baseline + 48; `pytest -q tests/t --collect-only` → `49 tests collected`, one of which
-is the mutant-list well-formedness test that the baseline count does not include.)
+670 + 49 = 719: `pytest -q --ignore=tests/t` still reports `670 passed` and
+`pytest -q tests/t --collect-only` reports `49 tests collected` (42 in
+`test_trace_spool.py`, 7 in the mutation wrapper). An earlier run in this round read `718`;
+that was before the truncation sweep was added as a case, and the number above replaces it.
 
-Focused suite, `uv run --frozen pytest -q tests/t/test_trace_spool.py -s` — exit 0:
+Focused suite, `uv run --frozen pytest -q tests/t/test_trace_spool.py -s` — exit 0,
+`42 passed in 27.15s`, with what it measured:
 
 ```
 tracesink conformance against SpoolTraceSink: 17/17 cases ran, 0 skipped
