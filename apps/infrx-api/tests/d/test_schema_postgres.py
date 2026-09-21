@@ -34,7 +34,7 @@ def _fresh():
     if "fresh" not in _state:
         pgharness.ensure()
         pgharness.recreate(pgharness.DATABASE)
-        pgharness.apply(pgharness.DATABASE, migrations.sql_for())
+        pgharness.apply(pgharness.DATABASE, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
         conn = pgharness.connect(pgharness.DATABASE)
         checks.seed_fixtures(conn)
         _state["fresh"] = conn
@@ -46,13 +46,13 @@ def _upgraded():
     if "upgraded" not in _state:
         pgharness.ensure()
         pgharness.recreate(UPGRADE_DB)
-        current = tuple(f for f in migrations.sql_for()
+        current = tuple(f for f in migrations.sql_for(shim=pgharness.NEEDS_SHIM)
                         if f[0] in ("supabase_shim.sql", "0001_init.sql",
                                     "0002_seed_models.sql"))
         pgharness.apply(UPGRADE_DB, current)
         conn = pgharness.connect(UPGRADE_DB)
         before = checks.seed_legacy(conn)
-        pilot = tuple(f for f in migrations.sql_for() if f[0] not in
+        pilot = tuple(f for f in migrations.sql_for(shim=pgharness.NEEDS_SHIM) if f[0] not in
                       ("supabase_shim.sql", "0001_init.sql", "0002_seed_models.sql"))
         pgharness.apply(UPGRADE_DB, pilot)
         _state["upgraded"] = (conn, before)
@@ -180,6 +180,6 @@ def test_database_clock_moves_only_in_a_task_local_database() -> None:
     the fixture installed - so no deployed process can move the store's clock."""
     print(checks.check_test_clock(_fresh(), pgharness.connect))
     pgharness.recreate(PRODLIKE_DB)
-    pgharness.apply(PRODLIKE_DB, migrations.sql_for())
+    pgharness.apply(PRODLIKE_DB, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
     with pgharness.connect(PRODLIKE_DB) as prod:
         print(checks.check_production_clock(prod))

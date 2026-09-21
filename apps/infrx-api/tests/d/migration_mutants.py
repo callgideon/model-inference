@@ -411,9 +411,17 @@ MUTANTS: tuple[Mutant, ...] = (
            "fresh", "console_read_surface",
            "PostgREST renders numeric unquoted and the browser parses it into a double "
            "- money stops being exact (ruling 10)"),
+    Mutant("aggregates_hide_their_tenant", CONSOLE,
+           "  select u.org_id,\n"
+           "         (u.created_at at time zone 'utc')::date as day,",
+           "  select null::uuid,\n"
+           "         (u.created_at at time zone 'utc')::date as day,",
+           "fresh", "console_read_surface",
+           "C's tenant check has nothing to check: a row with no org_id passes through "
+           "to a DTO unverified"),
     Mutant("usage_daily_is_unbounded", CONSOLE,
-           "  order by 1 desc\n  limit 400;",
-           "  order by 1 desc;",
+           "  order by 2 desc\n  limit 400;",
+           "  order by 2 desc;",
            "fresh", "console_read_surface",
            "one call can ask for every day since the epoch"),
 
@@ -486,7 +494,7 @@ def kill(mutant: Mutant) -> tuple[str, str]:
     with TemporaryDirectory(prefix=f"infrx-d1-{mutant.name}-") as tmp:
         directory = Path(tmp)
         _mutate(directory, mutant)
-        files = migrations.sql_for(directory=directory)
+        files = migrations.sql_for(shim=pgharness.NEEDS_SHIM, directory=directory)
         database = MUT_PRODLIKE_DB if mutant.scenario == "prodlike" else MUT_DB
         current = tuple(f for f in files if f[0] in (
             "supabase_shim.sql", "0001_init.sql", "0002_seed_models.sql"))

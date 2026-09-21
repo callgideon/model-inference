@@ -17,6 +17,7 @@ vacuously (contracts README, "four things the fakes cannot tell you", note 1).
 from __future__ import annotations
 
 import atexit
+import os
 import shutil
 import subprocess
 import time
@@ -24,15 +25,25 @@ import time
 from infrx.contracts.tasklocal import local_services
 
 SERVICE = local_services("d1")["postgres"]
-CONTAINER = SERVICE.container                       # infrx-d1-postgres
 PORT = SERVICE.host_port                           # 55432
 DATABASE = SERVICE.database                        # infrx_d1
 PASSWORD = "infrx-d1-local"
 
 # postgres:16.14-bookworm, the digest present on this host. Pinned so a rerun cannot
 # silently move to another server version (08 §8: pin every service image by digest).
-IMAGE = ("postgres@sha256:"
-         "33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20")
+PLAIN_IMAGE = ("postgres@sha256:"
+               "33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20")
+# The real thing E2 provisions (tag 17.6.1.173), which stage review S2 will require:
+# `INFRX_D1_IMAGE=supabase make api-test` runs this suite against it with NO shim, in
+# D1's own container on D1's own port. The digest is E2's, read from its harness.
+SUPABASE_IMAGE = ("supabase/postgres@sha256:"
+                  "7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd")
+
+#: Which image this run uses, and therefore whether the shim is needed at all.
+ON_SUPABASE = os.environ.get("INFRX_D1_IMAGE", "").lower() in ("supabase", "real")
+IMAGE = SUPABASE_IMAGE if ON_SUPABASE else PLAIN_IMAGE
+NEEDS_SHIM = not ON_SUPABASE
+CONTAINER = f"{SERVICE.container}-supabase" if ON_SUPABASE else SERVICE.container
 
 _started = False
 
@@ -62,9 +73,14 @@ def ensure() -> None:
         return
     state = _docker("inspect", "-f", "{{.State.Running}}", CONTAINER, check=False)
     if state.returncode != 0:
+        # The Supabase image initialises its own roles (`supabase_admin` and the rest)
+        # and refuses to start if `POSTGRES_USER`/`POSTGRES_DB` are forced, so it gets
+        # the password alone - the same environment E2's compose file uses.
+        env = ["-e", f"POSTGRES_PASSWORD={PASSWORD}"]
+        if not ON_SUPABASE:
+            env += ["-e", "POSTGRES_USER=postgres", "-e", "POSTGRES_DB=postgres"]
         run = _docker("run", "-d", "--name", CONTAINER, "-p", f"{PORT}:5432",
-                      "-e", f"POSTGRES_PASSWORD={PASSWORD}", "-e", "POSTGRES_USER=postgres",
-                      "-e", "POSTGRES_DB=postgres", IMAGE, check=False)
+                      *env, IMAGE, check=False)
         if run.returncode != 0:
             raise RuntimeError(f"could not start {CONTAINER}: {run.stderr.strip()}")
     elif state.stdout.strip() != "true":
@@ -107,9 +123,61 @@ def connect(database: str = DATABASE, *, autocommit: bool = True):
 
 
 def recreate(database: str) -> None:
-    with connect("postgres") as admin:
-        admin.execute(f'drop database if exists "{database}" with (force)')
-        admin.execute(f'create database "{database}"')
+    """A fresh database for this task.
+
+    On the real Supabase image it is created FROM TEMPLATE postgres, because that is the
+    database whose entrypoint created `auth.users`, `auth.uid()` and the three roles;
+    a virgin database would need the shim after all. The name still has to match the
+    clock gate (`infrx_<task>`), which is why E2 does the same thing for `infrx_e2`.
+    """
+    if not ON_SUPABASE:
+        with connect("postgres") as admin:
+            admin.execute(f'drop database if exists "{database}" with (force)')
+            admin.execute(f'create database "{database}"')
+        return
+    # On the real image the task database is a COPY of `postgres`, because that is where
+    # the entrypoint created `auth.users`, `auth.uid()` and - the part that matters most -
+    # the `alter default privileges` entries that hand `anon`/`authenticated` ALL on
+    # everything in `public`. A virgin database would silently lack them, which is the
+    # one difference that would make the whole role matrix vacuous.
+    #
+    # Two things make it awkward, and both are measured facts about this image rather
+    # than choices: `create database … template postgres` refuses while anything is
+    # connected to the template, and Supabase's `postgres` role is NOT a superuser, so it
+    # cannot close pg_cron's launcher (which runs as `supabase_admin`). The work is
+    # therefore done through the container's own unix socket as `supabase_admin`, which
+    # needs no password locally. It is this task's own container.
+    # One `-c` per statement: psql wraps a multi-statement `-c` in a transaction block,
+    # and CREATE/DROP DATABASE cannot run in one. The terminate-and-create pair is
+    # retried, because pg_cron and pg_net reconnect to `postgres` within milliseconds and
+    # the copy refuses while they are attached.
+    _sb("template1", f'drop database if exists "{database}" with (force)')
+    last = ""
+    for _attempt in range(5):
+        _sb("template1", "select pg_terminate_backend(pid) from pg_stat_activity "
+                         "where datname = 'postgres' and pid <> pg_backend_pid()")
+        done = _sb("template1",
+                   f'create database "{database}" template postgres owner postgres',
+                   check=False)
+        if done.returncode == 0:
+            return
+        last = done.stderr.strip()[-300:]
+        time.sleep(0.3)
+    raise AssertionError(f"could not copy the postgres template into {database}: {last}")
+
+
+def _sb(database: str, statement: str, *, check: bool = True):
+    """A statement as `supabase_admin` over the container's unix socket.
+
+    Supabase's `postgres` role is not a superuser on this image (measured), so the
+    database copy has to be done by one - and locally it needs no password.
+    """
+    done = _docker("exec", CONTAINER, "psql", "-U", "supabase_admin", "-d", database,
+                   "-v", "ON_ERROR_STOP=1", "-c", statement, check=False)
+    if check and done.returncode != 0:
+        raise AssertionError(f"supabase_admin could not run `{statement[:50]}…`: "
+                             f"{done.stderr.strip()[-300:]}")
+    return done
 
 
 def apply(database: str, files: tuple[tuple[str, str], ...]) -> None:

@@ -1712,6 +1712,11 @@ def check_console_read_surface(conn) -> str:
     problems = []
     for view, kind in READ_VIEWS:
         columns = _view_columns(conn, view)
+        # C wraps every port in a tenant check that refuses a row without `org_id` or
+        # with a foreign one, because these views hand an operator or the platform key
+        # every organization's rows. So the column has to be on every relation.
+        if "org_id" not in columns:
+            problems.append(f"{view}: no org_id column for C's tenant check")
         projection = ", ".join(columns)
         # `anon` holds no SELECT at all after ruling 4, so the read is refused rather
         # than empty. Both are "sees nothing"; refused is the stronger one.
@@ -1799,17 +1804,28 @@ def check_console_read_surface(conn) -> str:
 
     # The two aggregates C cannot express over a view (ruling 10).
     summary = read_rows(conn, "member",
-                        f"select * from public.console_usage_summary('{ORG_A}', "
+                        f"select org_id, requests, cost, pending_reconciliation from "
+                        f"public.console_usage_summary('{ORG_A}', "
                         f"'2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')")[0]
-    assert summary[0] >= 1, f"the usage summary counted nothing: {summary}"
-    assert isinstance(summary[4], str) and isinstance(summary[5], str), \
+    assert str(summary[0]) == ORG_A, f"the summary row carries no tenant: {summary}"
+    assert summary[1] >= 1, f"the usage summary counted nothing: {summary}"
+    assert isinstance(summary[2], str) and isinstance(summary[3], str), \
         f"the summary returned money as a number: {summary}"
+    # An empty window still answers zero rather than "no rows": a grouped aggregate
+    # would hand C nothing to render.
+    empty = read_rows(conn, "member",
+                      f"select org_id, requests from public.console_usage_summary("
+                      f"'{ORG_A}', '1999-01-01T00:00:00Z', '1999-01-02T00:00:00Z')")
+    assert len(empty) == 1 and empty[0][1] == 0, f"an empty window returned {empty}"
     daily = read_rows(conn, "member",
-                      f"select * from public.console_usage_daily('{ORG_A}', "
+                      f"select org_id, day, requests, cost from "
+                      f"public.console_usage_daily('{ORG_A}', "
                       f"'2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')")
     # The fixture seeds 450 distinct days, so the bound is reachable and exact.
     assert len(daily) == 400, f"the daily bucket bound is not held: {len(daily)} rows"
-    assert isinstance(daily[0][4], str), f"daily cost is not text: {daily[0]}"
+    assert all(str(row[0]) == ORG_A for row in daily), \
+        f"a daily bucket carries no tenant: {daily[0]}"
+    assert isinstance(daily[0][3], str), f"daily cost is not text: {daily[0]}"
     for rpc in (f"select * from public.console_usage_summary('{ORG_B}', "
                 f"'2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')",
                 f"select * from public.console_usage_daily('{ORG_B}', "
@@ -1823,9 +1839,10 @@ def check_console_read_surface(conn) -> str:
 
     summary = read_rows(conn, "member",
                         f"select * from public.org_wallet_summary('{ORG_A}')")[0]
-    assert all(isinstance(value, str) for value in summary), \
+    assert str(summary[0]) == ORG_A, f"the wallet summary carries no tenant: {summary}"
+    assert all(isinstance(value, str) for value in summary[1:]), \
         f"org_wallet_summary returned numbers, not Money strings: {summary}"
-    assert Decimal(summary[0]) == conn.execute(
+    assert Decimal(summary[1]) == conn.execute(
         "select ledger_total from infrx.wallets where org_id = %s", (ORG_A,)).fetchone()[0]
     return (f"{len(READ_VIEWS)} views tenant- and role-scoped on their computed columns; "
             f"principals masked by membership; money is text; 3 RPCs guarded")

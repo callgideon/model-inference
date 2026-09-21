@@ -275,8 +275,11 @@ where public.is_operator() or public.is_service_client();
 
 -- admin_audit_page (R34). Operator only; immutable at the table.
 create or replace view public.operator_audit with (security_barrier = true) as
-select a.id, a.at, a.actor_principal, a.action, a.target_org_id, a.reason, a.before,
-       a.after, a.idempotency_key
+-- `org_id` as well as `target_org_id`: C's port refuses any row that does not carry the
+-- tenant column, because an owner's-rights view hands an operator or the platform key
+-- every organization's rows and the check has to be uniform across the surface.
+select a.id, a.at, a.actor_principal, a.action, a.target_org_id,
+       a.target_org_id as org_id, a.reason, a.before, a.after, a.idempotency_key
 from infrx.audit_entries a
 where public.is_operator() or public.is_service_client();
 
@@ -309,6 +312,9 @@ grant select on public.wallets, public.console_ledger, public.console_usage,
 -- parse them into doubles, which is exactly how a money column stops being exact.
 create or replace function public.org_wallet_summary(p_org uuid)
 returns table (
+  -- Every row of the console surface carries its tenant, aggregates included: it is
+  -- `p_org`, which the guard above has already proved the caller may read.
+  org_id uuid,
   ledger_total text,
   reserved_total text,
   loaded text,
@@ -324,7 +330,8 @@ begin
   end if;
 
   return query
-  select coalesce(w.total, 0::numeric(20,8))::text,
+  select p_org,
+         coalesce(w.total, 0::numeric(20,8))::text,
          coalesce(w.reserved, 0::numeric(20,8))::text,
          coalesce(l.loaded, 0)::numeric(20,8)::text,
          coalesce(l.spent, 0)::numeric(20,8)::text
@@ -356,6 +363,11 @@ create or replace function public.console_usage_summary(
   p_model text default null,
   p_key uuid default null)
 returns table (
+  -- The tenant column on an aggregate row. It is `p_org` rather than a `group by`,
+  -- because a summary must still answer "zero requests" for an empty window and a
+  -- grouped aggregate would answer "no rows at all"; the guard above has already
+  -- proved the caller may read this organization, so the value cannot be foreign.
+  org_id uuid,
   requests bigint,
   failed_requests bigint,
   prompt_tokens bigint,
@@ -370,7 +382,8 @@ begin
     raise exception 'not a member of organization %', p_org using errcode = '42501';
   end if;
   return query
-  select count(*)::bigint,
+  select p_org,
+         count(*)::bigint,
          count(*) filter (where u.http_status >= 400)::bigint,
          coalesce(sum(u.prompt_tokens), 0)::bigint,
          coalesce(sum(u.completion_tokens), 0)::bigint,
@@ -397,6 +410,7 @@ create or replace function public.console_usage_daily(
   p_model text default null,
   p_key uuid default null)
 returns table (
+  org_id uuid,
   day date,
   requests bigint,
   prompt_tokens bigint,
@@ -409,7 +423,8 @@ begin
     raise exception 'not a member of organization %', p_org using errcode = '42501';
   end if;
   return query
-  select (u.created_at at time zone 'utc')::date as day,
+  select u.org_id,
+         (u.created_at at time zone 'utc')::date as day,
          count(*)::bigint,
          coalesce(sum(u.prompt_tokens), 0)::bigint,
          coalesce(sum(u.completion_tokens), 0)::bigint,
@@ -419,8 +434,8 @@ begin
     and u.created_at >= p_from and u.created_at <= p_to
     and (p_model is null or u.model = p_model)
     and (p_key is null or u.key_id = p_key)
-  group by 1
-  order by 1 desc
+  group by 1, 2
+  order by 2 desc
   limit 400;
 end $$;
 
