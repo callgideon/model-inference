@@ -383,8 +383,12 @@ MUTANTS: tuple[Mutant, ...] = (
        T, "            self._discard(TraceLossReason.memory_budget)\n            return False",
        "            return True", "trace_bounds__concurrent_captures_share_one_budget"),
     _m("abandon_keeps_its_bytes", "abandon releases its bytes (R27)",
-       T, "        if not self.lost:\n            self._discard(reason)", "        pass",
-       "trace_bounds__an_abandoned_capture_releases_its_bytes"),
+       T, "        if self.no_op and self.mode is not TraceMode.full:\n"
+          "            return                      # nothing was ever going to be captured\n"
+          "        self._discard(reason)",
+       "        return",
+       "trace_bounds__an_abandoned_capture_releases_its_bytes",
+       "trace_bounds__an_open_capture_past_its_deadline_is_reaped"),
     _m("capture_accepts_any_envelope", "a capture belongs to its own request",
        T, "        if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):",
        "        if False:", "trace_bounds__a_capture_belongs_to_its_own_request"),
@@ -619,10 +623,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "dur_settle__a_settlement_that_cannot_journal_moves_no_money"),
     # --- r5 F1/F2/F3 ----------------------------------------------------------
     _m("capture_counts_its_loss_twice", "a capture contributes at most one loss count",
-       T, "            self.result = self.sink._drop(self.lost_reason or TraceLossReason.abandoned,\n"
-          "                                          counted=self.counted)",
-       "            self.result = self.sink._drop(self.lost_reason or TraceLossReason.abandoned,\n"
-          "                                          counted=False)",
+       T, "            self.result = self.sink._drop(reason, counted=self.counted)",
+       "            self.result = self.sink._drop(reason, counted=False)",
        "trace_bounds__an_abandoned_capture_releases_its_bytes"),
     _m("finish_forgets_its_first_result", "finish returns the first result",
        T, "        if self.result is not None:\n"
