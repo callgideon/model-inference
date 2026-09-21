@@ -9,6 +9,7 @@ import { addMoney, compareMoney, subMoney, ZERO_MONEY, type Money } from "../../
 import { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, PLATFORM_ACTOR } from "../../lib/contracts/types.ts";
 import { createConsoleServices } from "../../lib/services/console.ts";
 import { buildPlan, namedQuery, scopedPort, type QueryPort } from "../../lib/services/query.ts";
+import { createFakeConsoleServices } from "../../lib/contracts/fake-services.ts";
 import { createMemoryPort, makeConsoleHarness, TEST_CURSOR_SECRET } from "./harness.ts";
 
 function expectOk<T>(result: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }): T {
@@ -625,6 +626,57 @@ test("every port passes through the tenant check, whatever the port does", async
   // The operator-wide reads are the exception the contract allows, and they still run.
   await counting.run(buildPlan("admin_orgs_page", { limit: 5 }));
   assert.equal(reached, 1);
+});
+
+test("an empty window is zeros, not a failure", async () => {
+  const { services, sessions, ids, data } = makeConsoleHarness();
+  const zero = {
+    requests: 0,
+    failed_requests: 0,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    cost: ZERO_MONEY,
+    pending_reconciliation: ZERO_MONEY,
+    platform_absorbed_requests: 0,
+  };
+
+  // The statement groups by the tenant, and a grouped aggregate over nothing returns NO rows — in
+  // PostgreSQL and in the double alike. Each of these is a window a console page asks for every day.
+  for (const [query, what] of [
+    [{ model: "no-such-model" }, "a filter that matches no model"],
+    [{ from: "2031-01-01T00:00:00Z" }, "a window that has not happened yet"],
+    [{ key_id: "no-such-key" }, "a filter that matches no key"],
+    [{ from: "2031-01-01T00:00:00Z", to: "2031-02-01T00:00:00Z" }, "an empty range"],
+  ] as [Record<string, string>, string][]) {
+    const summary = expectOk(await services.usageSummary(sessions.owner, query));
+    assert.deepEqual(summary, zero, `${what} must read as no traffic`);
+    // And the daily rows for the same window are simply empty.
+    assert.deepEqual(expectOk(await services.usageDaily(sessions.owner, query)), [], `${what}: no days`);
+  }
+
+  // The same page for an organization that has never sent a request — every newly signed-up pilot org.
+  data.usage = data.usage.filter((row) => row.org_id !== ids.orgId);
+  assert.deepEqual(expectOk(await services.usageSummary(sessions.owner, {})), zero, "an organization with no usage");
+  assert.deepEqual(expectOk(await services.usageDaily(sessions.owner, {})), []);
+  expectOk(await services.usage(sessions.owner, { limit: 5 }));
+
+  // The contract's own fake answers the same way, so the two halves agree on what "nothing" is.
+  const fake = createFakeConsoleServices();
+  const fakeZero = await fake.usageSummary(fake.sessions.owner, { model: "no-such-model" });
+  assert.ok(fakeZero.ok, "the fake answers an empty window");
+  const fresh = makeConsoleHarness();
+  const mine = expectOk(await fresh.services.usageSummary(fresh.sessions.owner, { model: "no-such-model" }));
+  assert.deepEqual(mine, fakeZero.value, "the real service and the fixture-backed fake agree");
+
+  // More than one row for one tenant is not something to average over: it is a refusal.
+  const doubled: QueryPort = {
+    async run(plan) {
+      const rows = await createMemoryPort(fresh.data).run(plan);
+      return plan.name === "usage_summary" ? [...rows, ...rows] : rows;
+    },
+  };
+  const confused = createConsoleServices({ pg: doubled, ch: doubled, cursorSecret: TEST_CURSOR_SECRET });
+  expectError(await confused.usageSummary(sessions.owner, {}), "internal_error");
 });
 
 test("usageDaily is bounded by its documented cap, not by the fixture", async () => {

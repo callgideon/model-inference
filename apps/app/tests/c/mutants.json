@@ -857,6 +857,47 @@
       "cases": [
         "a missing function falls back; a broken one does not"
       ]
+    },
+    {
+      "id": "ZERO-01",
+      "note": "an empty aggregate is read as a row, so every empty window fails",
+      "file": "lib/services/console.ts",
+      "find": "      if (found.length === 0) return ok(ZERO_USAGE_SUMMARY);",
+      "replace": "      if (false) return ok(ZERO_USAGE_SUMMARY);",
+      "cases": [
+        "an empty window is zeros, not a failure"
+      ],
+      "kills_by": "guarded"
+    },
+    {
+      "id": "ZERO-02",
+      "note": "an empty window reports something other than zero",
+      "file": "lib/services/console.ts",
+      "find": "const ZERO_USAGE_SUMMARY: UsageSummary = {\n  requests: 0,",
+      "replace": "const ZERO_USAGE_SUMMARY: UsageSummary = {\n  requests: 1,",
+      "cases": [
+        "an empty window is zeros, not a failure"
+      ]
+    },
+    {
+      "id": "ZERO-03",
+      "note": "more than one grouped row for one tenant is averaged over instead of refused",
+      "file": "lib/services/console.ts",
+      "find": "      if (found.length > 1) {\n        return fail<UsageSummary>(\"internal_error\", \"a usage summary returned more than one row\");\n      }",
+      "replace": "      if (false) {\n        return fail<UsageSummary>(\"internal_error\", \"a usage summary returned more than one row\");\n      }",
+      "cases": [
+        "an empty window is zeros, not a failure"
+      ]
+    },
+    {
+      "id": "SCAN-01",
+      "note": "the bare-ok scan stops finding the shape it forbids",
+      "file": "tests/c/client-boundary.test.ts",
+      "find": "      if (bare.test(code)) found.push(`${label}:${index + 1}: ${line.trim()}`);",
+      "replace": "      if (false) found.push(`${label}:${index + 1}: ${line.trim()}`);",
+      "cases": [
+        "every case in this track asserts success through a helper, never as a bare ok check"
+      ]
     }
   ]
 }

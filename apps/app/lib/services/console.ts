@@ -122,6 +122,17 @@ const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|\+00:00)$/;
 export const DELETED_KEY_ID = "";
 export const DELETED_KEY_NAME = "(deleted key)";
 
+/** No traffic in the window: every figure zero, which is what an empty aggregate means. */
+const ZERO_USAGE_SUMMARY: UsageSummary = {
+  requests: 0,
+  failed_requests: 0,
+  prompt_tokens: 0,
+  completion_tokens: 0,
+  cost: ZERO_MONEY,
+  pending_reconciliation: ZERO_MONEY,
+  platform_absorbed_requests: 0,
+};
+
 function ok<T>(value: T): Result<T> {
   return { ok: true, value };
 }
@@ -814,7 +825,25 @@ export function createConsoleServices(config: ConsoleServicesConfig): ConsoleSer
       const resolved = await tenant<UsageSummary>(session, "usageSummary");
       if (isFailure(resolved)) return resolved;
       const found = await rows("usage_summary", { orgId: resolved.orgId, filters: usageFilters(query) });
-      const row = found[0] ?? {};
+      /**
+       * No rows is no traffic, not a failure.
+       *
+       * The statement groups by the tenant (so the row it returns says whose totals these are), and a
+       * grouped aggregate over zero matching rows returns **zero rows** — in PostgreSQL and in the
+       * in-memory double alike. Reading `found[0] ?? {}` therefore turned every empty window into an
+       * `internal_error`: a filter that matches nothing, and every newly signed-up organization opening
+       * its usage page. Zero rows is safe to answer as zeros: there is nothing for `scopedPort` to check
+       * because nothing came back, and a port that had returned a foreign row would have been refused
+       * before this line. D1's `console_usage_summary` answers an empty window with one zero row
+       * labelled with the guarded organization instead, so both shapes are accepted.
+       */
+      if (found.length === 0) return ok(ZERO_USAGE_SUMMARY);
+      // One tenant, one grouped row. More than one means the grouping or the scoping is not what this
+      // service thinks it is, and the totals cannot be attributed.
+      if (found.length > 1) {
+        return fail<UsageSummary>("internal_error", "a usage summary returned more than one row");
+      }
+      const row = found[0];
       // A total outside the money domain is caught by the boundary guard below, which turns it
       // into a `Result` error: a read never throws, whatever the rows add up to (N8).
       const cost = money(row, "cost");

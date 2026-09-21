@@ -131,29 +131,36 @@ test("no client component reaches lib/services, however indirectly", () => {
  */
 test("every case in this track asserts success through a helper, never as a bare ok check", () => {
   const bare = /assert\.ok\(\s*[^,()]*\.ok\s*\)/;
-  const offenders: string[] = [];
-  for (const file of sourceFiles(join(appRoot, "tests", "c"))) {
-    const source = readFileSync(file, "utf8");
-    source.split("\n").forEach((line, index) => {
+  const scan = (lines: string[], label: string): string[] => {
+    const found: string[] = [];
+    lines.forEach((line, index) => {
       const code = line.replace(/\/\/.*$/, "").replace(/^\s*\*.*$/, "");
       // Not the rule's own text: a comment, a doc line or the string literals that demonstrate it.
-      if (code.includes("bare.test(") || code.includes("bare =")) return;
+      if (code.includes("bare.test(") || code.includes("bare =") || code.includes("scan(")) return;
       // `assert.ok(<something>.ok)` with no message: nothing in the output says which code came back.
-      if (bare.test(code)) offenders.push(`${relative(appRoot, file)}:${index + 1}: ${line.trim()}`);
+      if (bare.test(code)) found.push(`${label}:${index + 1}: ${line.trim()}`);
     });
+    return found;
+  };
+
+  // The scan over a known offender, so switching the scan off is a failure rather than an empty result.
+  assert.deepEqual(
+    scan(["    assert" + ".ok(result.ok);"], "in-memory"),
+    ["in-memory:1: assert" + ".ok(result.ok);"],
+    "the scan must actually find the shape it forbids",
+  );
+  assert.deepEqual(scan(["    assert" + '.ok(result.ok, "named");'], "in-memory"), [], "and allow the named form");
+
+  const offenders: string[] = [];
+  for (const file of sourceFiles(join(appRoot, "tests", "c"))) {
+    offenders.push(...scan(readFileSync(file, "utf8").split("\n"), relative(appRoot, file)));
   }
   assert.deepEqual(
     offenders,
     [],
     `use expectOk/expectError (or pass a message naming the code) so a guard-only failure cannot be\ncounted as a kill:\n${offenders.join("\n")}`,
   );
-  // The rule is not vacuous: the first shape is the one it forbids, the second is the one it allows.
-  assert.equal(bare.test("    assert" + ".ok(result.ok);"), true, "the pattern matches the bare form");
-  assert.equal(
-    bare.test("    assert" + '.ok(result.ok, "usage page");'),
-    false,
-    "and not the form that names what failed",
-  );
+
 });
 
 test("the server-only modules carry their run-time guard as well", () => {
