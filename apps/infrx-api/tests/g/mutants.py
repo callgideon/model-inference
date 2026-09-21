@@ -135,13 +135,22 @@ MUTANTS: tuple[Mutant, ...] = (
        I, "    if len(raw) > offload_over_bytes:\n        return await asyncio.to_thread(parse_object, raw)",
        "    if False:\n        return await asyncio.to_thread(parse_object, raw)",
        "test_media_sec__a_large_body_is_parsed_off_the_event_loop"),
-    _m("body_read_before_identity", "an unauthenticated caller never makes us buffer",
+    # The real-world defect this pair guards against is the *order*, so the mutant is
+    # the reorder: read and parse first, authenticate after. It is typed behaviour
+    # (400/413 instead of 401), not a NameError, and it kills both claims at once.
+    _m("identity_after_the_body", "identity is resolved before the body is read or parsed",
        N, "        auth = await self.auth.context(request)\n"
           "        intake.check_content_type(request)\n"
-          "        raw = await intake.read_body(",
+          "        raw = await intake.read_body(request, max_bytes=limits.max_request_bytes,\n"
+          "                                     timeout_s=limits.intake_timeout_s, clock=self.rt.clock)\n"
+          "        body = await intake.parse_body(raw, offload_over_bytes=PARSE_OFFLOAD_BYTES)",
        "        intake.check_content_type(request)\n"
-          "        raw = await intake.read_body(",
-       "test_dur_rls__an_unauthenticated_caller_never_makes_us_buffer"),
+          "        raw = await intake.read_body(request, max_bytes=limits.max_request_bytes,\n"
+          "                                     timeout_s=limits.intake_timeout_s, clock=self.rt.clock)\n"
+          "        body = await intake.parse_body(raw, offload_over_bytes=PARSE_OFFLOAD_BYTES)\n"
+          "        auth = await self.auth.context(request)",
+       "test_dur_rls__an_unauthenticated_caller_never_makes_us_buffer",
+       "test_dur_rls__identity_is_checked_before_the_body_is_parsed"),
     _m("unstorable_text_accepted", "text the database cannot store is refused",
        V, "    try:\n        text.encode()\n    except UnicodeEncodeError:",
        "    try:\n        text.encode(errors=\"replace\")\n    except UnicodeEncodeError:",
@@ -396,16 +405,6 @@ MUTANTS: tuple[Mutant, ...] = (
        N, '        return JSONResponse({"status": OK})',
        '        return JSONResponse({"status": OK, "components": component_state(deps.checks)})',
        "test_f_base__public_health_is_generic"),
-    _m("parse_before_identity", "identity is checked before the body is parsed",
-       N, "        raw = await intake.read_body(request, max_bytes=limits.max_request_bytes,\n"
-          "                                     timeout_s=limits.intake_timeout_s, clock=self.rt.clock)\n"
-          "        body = await intake.parse_body(raw, offload_over_bytes=PARSE_OFFLOAD_BYTES)",
-       "        body = await intake.parse_body(\n"
-       "            await intake.read_body(request, max_bytes=limits.max_request_bytes,\n"
-       "                                   timeout_s=limits.intake_timeout_s, clock=self.rt.clock),\n"
-       "            offload_over_bytes=PARSE_OFFLOAD_BYTES)\n"
-       "        raw = b''",
-       "test_dur_rls__identity_is_checked_before_the_body_is_parsed"),
     _m("success_omits_the_inference_id", "a success answer names its request too",
        N, "        accepted.headers.setdefault(wire.HEADER_INFERENCE_ID, request_id)", "        pass",
        "test_f_base__every_answer_carries_a_freshly_minted_inference_id"),
