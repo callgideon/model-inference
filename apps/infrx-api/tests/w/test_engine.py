@@ -253,12 +253,13 @@ def test_api_stream__the_output_ceiling_is_validated_and_enforced():
     with pytest.raises(EngineProtocolViolation) as broke:
         asyncio.run(collect(engine.generate(held, _prepared)))
     assert broke.value.terminal_cause is TerminalCause.platform_error
-    # ... and even if it says nothing, more nonempty deltas than the ceiling is proof
-    upstream, engine, held, _prepared = drive()
+    # ... and even when it reports no usage at all, more nonempty deltas than the
+    # ceiling is proof on its own: every delta carries at least one token.
+    upstream, engine, held, _prepared = drive("missing_usage")
     tiny = text_prepared(Box(), max_output_tokens=2)
-    with pytest.raises(EngineProtocolViolation):
+    with pytest.raises(EngineProtocolViolation) as broke:
         asyncio.run(collect(engine.generate(held, tiny)))
-    assert upstream.requests[0]["max_tokens"] == 2
+    assert broke.value.facts["deltas"] == 3 and upstream.requests[0]["max_tokens"] == 2
 
 
 # --- events, usage, text ------------------------------------------------------
@@ -312,7 +313,7 @@ def test_api_stream__missing_or_malformed_usage_is_explicitly_unknown():
     stream = engine.generate(held, prepared)
     events = asyncio.run(collect(stream))
     assert usages(events) == [] and stream.usage is None and stream.complete
-    for fault in ("malformed_usage", "inconsistent_usage"):
+    for fault in ("malformed_usage", "inconsistent_usage", "string_usage"):
         upstream, engine, held, prepared = drive(fault)
         stream = engine.generate(held, prepared)
         events = asyncio.run(collect(stream))
@@ -358,7 +359,10 @@ def test_api_stream__transport_engine_and_incomplete_failures_are_distinct():
         asyncio.run(collect(stream))
     assert failed.value.facts == {"stage": "pre_headers", "status": 500}
     assert not stream.started and stream.deltas == 0
-    assert len(failed.value.detail) <= 500
+    # the engine's body is a stack trace with internal paths in it: operator-only, and
+    # bounded, because a failure detail is not a log sink
+    assert len(failed.value.detail) == 500 < len(upstream.handle(
+        httpx.Request("POST", "http://engine.invalid/v1/chat/completions", json={})).content)
 
     upstream, engine, held, prepared = drive("engine_error_post_headers")
     stream = engine.generate(held, prepared)

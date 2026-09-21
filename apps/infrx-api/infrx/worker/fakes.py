@@ -22,6 +22,7 @@ Fault modes (04-verification.md's list, plus the ones only an HTTP adapter has):
 | `missing_usage` | deltas and `[DONE]`, no usage object |
 | `malformed_usage` | a usage object with a string and a null |
 | `inconsistent_usage` | a usage object whose `total_tokens` does not add up |
+| `string_usage` | token counts as strings, which vLLM has been known to do |
 | `over_ceiling` | usage claiming more completion tokens than were allowed |
 | `engine_error_pre_headers` | HTTP 500 with an error body, before any event |
 | `engine_error_post_headers` | 200, one delta, then an SSE error object |
@@ -110,6 +111,9 @@ class FakeUpstream:
     def usage(self, produced: int) -> object:
         if self.fault == "malformed_usage":
             return {"prompt_tokens": "1200", "completion_tokens": None}
+        if self.fault == "string_usage":
+            return {"prompt_tokens": self.prompt_tokens, "completion_tokens": str(produced),
+                    "total_tokens": self.prompt_tokens + produced}
         if self.fault == "inconsistent_usage":
             return {"prompt_tokens": self.prompt_tokens, "completion_tokens": produced,
                     "total_tokens": self.prompt_tokens + produced + 4}
@@ -177,8 +181,11 @@ class FakeUpstream:
         if self.fault == "transport_error":
             raise httpx.ConnectError("connection refused", request=request)
         if self.fault == "engine_error_pre_headers":
-            return httpx.Response(500, json={"error": {"message": "engine died: /dev/nvidia0",
-                                                       "type": "server_error"}})
+            # Long on purpose: an engine's error body carries a stack trace and internal
+            # paths, so the adapter's bound on operator detail has something to bound.
+            return httpx.Response(500, json={"error": {
+                "message": "engine died: /dev/nvidia0 " + "trace " * 400,
+                "type": "server_error"}})
         return httpx.Response(200, headers={"content-type": "text/event-stream"},
                               content=self._stream())
 
