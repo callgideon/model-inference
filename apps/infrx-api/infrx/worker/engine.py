@@ -98,6 +98,10 @@ INTERNAL_PARAMETERS = frozenset({"tenant_salt"})
 
 # r1 R58: the pilot request is text plus video, and nothing else exists.
 ALLOWED_ROLES = ("system", "user", "assistant")
+# The SSE field names a server may legally send (`event:`/`id:`/`retry:` are never sent by
+# vLLM, but they are not junk either). Anything else that is not blank and not a comment is
+# counted as malformed.
+SSE_FIELDS = ("data:", "event:", "id:", "retry:")
 TEXT_PART = "text"
 VIDEO_PART = "video_url"
 VIDEO_MIME_PREFIX = "video/"
@@ -728,12 +732,17 @@ class VllmEngine:
                 stream.cancelled = True
                 return
             pending += decoder.decode(chunk)
-            while True:
-                line, separator, rest = pending.partition("\n")
-                if not separator:
-                    break
-                pending = rest
-                yield line.rstrip("\r"), now
+            if "\n" in pending:
+                # One split per chunk, not one `partition` per line: a 1 MiB chunk of bare
+                # newlines is 50k lines, and re-slicing the tail for each of them made the
+                # loop quadratic (the review measured 25 s for one such chunk, during which
+                # nothing else ran). `split_passes` counts the passes so a case can assert
+                # there is one per chunk.
+                stream.split_passes += 1
+                lines = pending.split("\n")
+                pending = lines.pop()
+                for line in lines:
+                    yield line.rstrip("\r"), now
             if len(pending) > self.pending_cap():
                 raise EngineProtocolViolation(
                     f"an SSE line exceeded {self.pending_cap()} characters",
@@ -859,7 +868,12 @@ class VllmEngine:
                 ceiling: int, now: datetime) -> list[EngineEvent]:
         """One SSE line into canonical events, by the table in the module docstring."""
         if not line.startswith("data:"):
-            return []                                    # blank separator, or a `:` keepalive
+            if line and not line.startswith(":") and not line.startswith(SSE_FIELDS):
+                # A line we cannot place - a BOM before `data:`, a truncated field name - is
+                # content we may be dropping, so it is counted and can no longer end the
+                # stream `completed` (R21). A comment (`:`) and a blank separator are not.
+                stream.malformed_lines += 1
+            return []
         payload = line[len("data:"):].strip()
         if payload == "[DONE]":
             stream.complete = True
@@ -1016,6 +1030,7 @@ class EngineStream:
         self.started = False                     # response headers arrived
         self.upstream_closed = False             # the adapter stopped reading the engine
         self.malformed_lines = 0
+        self.split_passes = 0                    # line-splitting passes: one per chunk
         self.malformed_usage = False
         self.last_event_at: datetime | None = None
         self._iterator = engine._run(self)

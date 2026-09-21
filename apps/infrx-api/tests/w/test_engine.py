@@ -831,6 +831,77 @@ def test_api_stream__a_line_that_never_ends_is_bounded_and_still_checked():
     assert upstream.chunks_sent <= 6 < upstream.flood_chunks
 
 
+def test_api_stream__the_splitter_handles_bytes_not_lines():
+    """B7's splitter, at the byte level - everything `aiter_lines()` used to do for us:
+
+    * a multi-byte character cut **between chunks** must survive (an incremental decoder;
+      decoding each chunk on its own turns CJK and emoji into U+FFFD);
+    * a final line with **no trailing newline** is still an event (real servers do this);
+    * a legal line longer than 4 KiB straddling two chunks is **not** a cap breach (the cap
+      is one journal event, not one buffer's worth);
+    * many lines in one chunk cost **one** split pass, not one per line.
+    """
+    upstream, engine, held, prepared = drive("split_utf8")
+    stream = engine.generate(held, prepared)
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert "".join(raws(events)) == "日本語です😀" and "\ufffd" not in stream.raw_text
+    assert stream.complete and stream.usage is not None
+
+    upstream, engine, held, prepared = drive("no_trailing_newline")
+    stream = engine.generate(held, prepared)
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert stream.complete, "the last line was dropped because it had no newline"
+    assert stream.terminal_cause is TerminalCause.completed
+
+    upstream, engine, held, prepared = drive("long_legal_line")
+    stream = engine.generate(held, prepared)
+    events, failure = drained(stream)
+    assert failure is None, failure          # 8 KiB in one line is legal: the cap is 1 MiB
+    assert "".join(raws(events)) == "z" * 8192 and stream.complete
+
+    upstream, engine, held, prepared = drive("bare_newlines")
+    stream = engine.generate(held, prepared)
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert stream.complete and stream.malformed_lines == 0
+    # 50,000 lines arrived in one chunk; the splitter looked at the buffer once for it
+    assert stream.split_passes <= upstream.frames_sent, stream.split_passes
+    assert stream.split_passes <= 5, stream.split_passes
+
+
+def test_api_stream__a_cancel_lands_mid_line():
+    """B7 again: the cancel check runs once per **chunk**. Every other case sends chunks that
+    contain a newline, which makes per-chunk and per-line indistinguishable - so here the
+    cancel arrives while a single long legal line is still being received, and the stream must
+    stop before that line ever completes."""
+    box = Box()
+    upstream = FakeUpstream(fault="slow_flood", clock=box.clock, flood_chunk_bytes=4096,
+                           flood_chunks=200)
+    engine = upstream.engine()
+    held = lease(box)
+
+    async def cancel_on_the_progress_event():
+        stream = engine.generate(held, text_prepared(box))
+        events = []
+        try:
+            async for event in stream:
+                events.append(event)
+                if event.type is ChunkEventType.progress:
+                    assert await engine.cancel(held) is True
+        except EngineFailure as failure:
+            return stream, events, failure
+        return stream, events, None
+
+    stream, events, failure = asyncio.run(cancel_on_the_progress_event())
+    assert failure is None, failure          # a cancellation is not an error
+    assert [event.type for event in events] == [ChunkEventType.progress,
+                                                ChunkEventType.usage]
+    assert stream.cancelled and raws(events) == []          # no line ever completed
+    assert upstream.chunks_sent <= 3 < upstream.flood_chunks, upstream.chunks_sent
+
+
 def test_api_stream__junk_and_stray_payloads_are_survived_not_relayed():
     """API-STREAM: a line that is not JSON, or not an object, is the engine misbehaving
     and not content: it is counted and never relayed. A well-formed object that carries
@@ -856,6 +927,15 @@ def test_api_stream__junk_and_stray_payloads_are_survived_not_relayed():
     stream = engine.generate(held, prepared)
     events = asyncio.run(collect(stream))
     assert raws(events) == [upstream.deltas()[0]] and stream.complete
+
+    # a byte-order mark before `data:` is a line we cannot place: counted, so it cannot end
+    # the stream `completed` (it used to be dropped in silence)
+    upstream, engine, held, prepared = drive("bom_first")
+    stream = engine.generate(held, prepared)
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert raws(events) == [] and stream.malformed_lines == 1
+    assert stream.complete and stream.terminal_cause is TerminalCause.engine_incomplete
 
 
 def test_api_stream__a_dropped_line_is_never_a_billable_success():

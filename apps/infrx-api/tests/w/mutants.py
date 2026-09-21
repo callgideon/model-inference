@@ -89,6 +89,8 @@ USAGE = "test_api_stream__usage_is_authoritative_only_when_the_stream_agrees"
 BOUNDS = "test_api_stream__one_event_and_the_whole_output_are_bounded"
 JOURNAL = "test_api_stream__an_event_always_fits_the_journal_in_any_script"
 FLOOD = "test_api_stream__a_line_that_never_ends_is_bounded_and_still_checked"
+BYTES = "test_api_stream__the_splitter_handles_bytes_not_lines"
+MIDLINE = "test_api_stream__a_cancel_lands_mid_line"
 FINISH = "test_api_stream__a_finish_reason_outside_the_set_is_not_a_success"
 DROPPED = "test_api_stream__a_dropped_line_is_never_a_billable_success"
 SECOND = "test_api_stream__a_second_choice_is_a_protocol_violation"
@@ -268,6 +270,40 @@ MUTANTS: tuple[Mutant, ...] = (
        "            if False:\n"
           "                stream.cancelled = True\n                return",
        CANCEL),
+    _m("decoder_not_incremental", "a code point split across chunks survives (B7)",
+       E, "            pending += decoder.decode(chunk)",
+       '            pending += chunk.decode("utf-8", "replace")', BYTES),
+    _m("trailing_line_dropped", "a last line with no newline is still an event",
+       E, "        if pending.strip():", "        if False:", BYTES),
+    _m("pending_cap_always_4096", "the cap is one journal event, not one buffer",
+       E, "        return max(4096, self.limits.journal_event_max_bytes)", "        return 4096",
+       BYTES),
+    _m("lines_split_per_line", "one split pass per chunk, not one per line (B7)",
+       E, "                stream.split_passes += 1\n"
+          '                lines = pending.split("\\n")\n'
+          "                pending = lines.pop()\n"
+          "                for line in lines:\n"
+          '                    yield line.rstrip("\\r"), now',
+       "                while True:\n"
+          "                    stream.split_passes += 1\n"
+          '                    line, separator, rest = pending.partition("\\n")\n'
+          "                    if not separator:\n                        break\n"
+          "                    pending = rest\n"
+          '                    yield line.rstrip("\\r"), now',
+       BYTES),
+    _m("cancel_checked_only_with_newline", "the cancel check runs per chunk, not per line",
+       E, "            if key in self.cancelled:\n"
+          "                stream.cancelled = True\n                return",
+       '            if key in self.cancelled and "\\n" in pending:\n'
+          "                stream.cancelled = True\n                return",
+       MIDLINE),
+    _m("unplaceable_line_not_counted", "a line we cannot place is counted (BOM)",
+       E, "            if line and not line.startswith(\":\") and not line.startswith(SSE_FIELDS):\n"
+          "                # A line we cannot place - a BOM before `data:`, a truncated field name - is\n"
+          "                # content we may be dropping, so it is counted and can no longer end the\n"
+          "                # stream `completed` (R21). A comment (`:`) and a blank separator are not.\n"
+          "                stream.malformed_lines += 1",
+       "            if False:\n                stream.malformed_lines += 1", JUNK),
     _m("output_bytes_unbounded", "the accumulated output is bounded (R58)",
        E, "        if len(stream.raw_text) + len(content) > budget:", "        if False:", BOUNDS),
     _m("visible_and_raw_collapsed", "visible is filtered, raw is not (R58)",

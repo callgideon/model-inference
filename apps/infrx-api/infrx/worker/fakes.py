@@ -49,6 +49,11 @@ malformed payloads a review of the adapter found unhandled):
 | `os_error` | a non-httpx exception mid-stream |
 | `cancellation_race` | a long stream, so a cancellation lands mid-generation |
 | `truncated` | deltas, then a clean end with no `[DONE]` and no finish reason |
+| `split_utf8` | a CJK/emoji delta whose bytes are cut mid-character between chunks |
+| `no_trailing_newline` | a well-formed stream whose last line has no `\n` |
+| `long_legal_line` | one legal 8 KiB `data:` line straddling two chunks |
+| `bare_newlines` | a chunk of 50,000 bare newlines: many lines, one split pass |
+| `bom_first` | a byte-order mark before the first `data:` |
 | `no_newline_flood` | `data:` with no newline in it, in 1 MiB chunks, more than the cap |
 | `slow_flood` | the same without a newline, small chunks, 30 s of clock per chunk |
 """
@@ -233,9 +238,45 @@ class FakeUpstream:
         finally:
             self.closed = True
 
+    async def _byte_script(self):
+        """Faults that are about *bytes*, so they are yielded as chunks rather than frames:
+        where the chunk boundaries fall is the whole point."""
+        if self.fault == "split_utf8":
+            # `ensure_ascii=False`, so the frame really carries multi-byte UTF-8 rather than
+            # `\uXXXX` escapes - that is the point of the fault.
+            body = (f"data: {json.dumps(chunk('日本語です😀'), ensure_ascii=False)}\n\n"
+                    ).encode()
+            cut = body.index("日".encode()) + 1            # mid-character, deliberately
+            yield body[:cut]
+            yield body[cut:]
+        elif self.fault == "long_legal_line":
+            # 8 KiB in one line, in 3 KiB chunks: the pending buffer passes 4 KiB - which a
+            # cap of "one buffer's worth" would refuse - while the line is perfectly legal.
+            body = sse(chunk("z" * 8192))
+            for at in range(0, len(body), 3000):
+                yield body[at:at + 3000]
+        elif self.fault == "bare_newlines":
+            yield b"\n" * 50_000
+        elif self.fault == "bom_first":
+            yield b"\xef\xbb\xbf" + sse(chunk(self.text[:4]))
+        yield sse(chunk(finish_reason="stop"))
+        yield sse(chunk(usage=self.usage(1)))
+        if self.fault == "no_trailing_newline":
+            yield b"data: [DONE]"                        # no newline, no blank line
+        else:
+            yield b"data: [DONE]\n\n"
+
     async def _stream(self):
         pieces = self.deltas()
         try:
+            if self.fault in ("split_utf8", "long_legal_line", "bare_newlines", "bom_first",
+                              "no_trailing_newline"):
+                if self.fault == "no_trailing_newline":
+                    yield sse(chunk(pieces[0]))
+                async for frame in self._byte_script():
+                    yield frame
+                self.completed = True
+                return
             if self.fault in ("no_newline_flood", "slow_flood"):
                 async for frame in self._flood():
                     yield frame
