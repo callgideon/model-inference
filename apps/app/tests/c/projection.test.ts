@@ -157,6 +157,38 @@ test("a stored value that is not what the DTO says is a typed refusal, not a bla
   expectError(await walkUsage(), "internal_error", "a missing column");
 });
 
+test("money arrives as text: a number is accepted only where a double still holds eight digits", async () => {
+  const { services, sessions, ids, data } = makeConsoleHarness();
+  const usage = data.usage.find((row) => row.org_id === ids.orgId);
+  assert.ok(usage !== undefined);
+
+  // A double holds 2^53 units of 1e-8, so past ~2^26 dollars `toFixed(8)` invents the last digits:
+  // 123456789012.12345678 came back as …12345886 — digits the customer never spent.
+  for (const value of [123456789012.12345678, 2 ** 26, -(2 ** 26), 1e20, Number.NaN, Number.POSITIVE_INFINITY]) {
+    usage.cost = value;
+    expectError(
+      await services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT }),
+      "internal_error",
+      `${String(value)} cannot be a money value as a number`,
+    );
+  }
+  // Just inside the bound a number is exact, and that is the only path that still hands one over.
+  usage.cost = 2 ** 26 - 1;
+  const inside = expectOk(await services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT }));
+  assert.equal(
+    inside.items.find((row) => row.request_id === usage.request_id)?.cost,
+    "67108863.00000000",
+  );
+  // Text is the contract, at any magnitude the domain allows.
+  usage.cost = "123456789012.12345678";
+  const text = expectOk(await services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT }));
+  assert.equal(
+    text.items.find((row) => row.request_id === usage.request_id)?.cost,
+    "123456789012.12345678",
+    "a decimal string keeps every digit it was given",
+  );
+});
+
 test("a boolean column is a boolean: a suspension flag is never guessed at", async () => {
   const { services, sessions, ids, data } = makeConsoleHarness();
   const org = data.orgs.find((row) => row.org_id === ids.orgId);

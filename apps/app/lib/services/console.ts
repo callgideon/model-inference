@@ -268,10 +268,27 @@ function masked(row: Row, session: SessionContext): boolean {
   return row.by_operator !== false;
 }
 
+/**
+ * Money crosses as **text** (`numeric(20, 8)` rendered as a string; R59-9, and D1 emits it that way).
+ *
+ * A JSON number is accepted only below `SAFE_MONEY_NUMBER`, because `toFixed(8)` on a double does not
+ * convert — it *fabricates*: a double holds at most 2^53 units of 1e-8, so from about 2^26 dollars the
+ * eighth digit is whatever the binary representation happened to round to, and
+ * `123456789012.12345678` comes back as `…12345886`. The only path that still hands over a number is
+ * the legacy `org_balance` fallback, whose values are far below the bound.
+ */
+const SAFE_MONEY_NUMBER = Math.pow(2, 26);
+
 function money(row: Row, column: string): Money {
   const value = cell(row, column);
   if (value === null) return ZERO_MONEY;
-  return parseMoney(typeof value === "number" ? value.toFixed(8) : value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || Math.abs(value) >= SAFE_MONEY_NUMBER) {
+      throw new TypeError(`${column} must be a decimal string: a number this large cannot hold eight digits`);
+    }
+    return parseMoney(value.toFixed(8));
+  }
+  return parseMoney(value);
 }
 
 function optionalMoney(row: Row, column: string): Money | null {

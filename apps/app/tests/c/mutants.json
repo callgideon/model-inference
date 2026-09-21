@@ -625,6 +625,36 @@
       "cases": [
         "a usage row survives a deleted key, and says so"
       ]
+    },
+    {
+      "id": "MONEY-01",
+      "note": "a JSON number of any size is accepted as money, fabricating its last digits",
+      "file": "lib/services/console.ts",
+      "find": "    if (!Number.isFinite(value) || Math.abs(value) >= SAFE_MONEY_NUMBER) {\n      throw new TypeError(`${column} must be a decimal string: a number this large cannot hold eight digits`);\n    }",
+      "replace": "    if (false) {\n      throw new TypeError(`${column} must be a decimal string: a number this large cannot hold eight digits`);\n    }",
+      "cases": [
+        "money arrives as text: a number is accepted only where a double still holds eight digits"
+      ]
+    },
+    {
+      "id": "MONEY-02",
+      "note": "the same, on the credits card's own reader",
+      "file": "lib/services/credits.ts",
+      "find": "    if (!Number.isFinite(value) || Math.abs(value) >= SAFE_MONEY_NUMBER) {\n      throw new TypeError(\"a wallet amount this large must arrive as a decimal string, not a number\");\n    }",
+      "replace": "    if (false) {\n      throw new TypeError(\"a wallet amount this large must arrive as a decimal string, not a number\");\n    }",
+      "cases": [
+        "a wallet amount that arrives as a number is bounded by what a double can hold"
+      ]
+    },
+    {
+      "id": "MONEY-03",
+      "note": "the bound is raised past what a double can hold",
+      "file": "lib/services/console.ts",
+      "find": "const SAFE_MONEY_NUMBER = Math.pow(2, 26);",
+      "replace": "const SAFE_MONEY_NUMBER = Math.pow(2, 53);",
+      "cases": [
+        "money arrives as text: a number is accepted only where a double still holds eight digits"
+      ]
     }
   ]
 }

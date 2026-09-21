@@ -59,6 +59,28 @@ test("the pre-D1 fallback answers from the ledger, where no hold exists", () => 
   assert.equal(figures.spent, "2.75000000");
 });
 
+test("a wallet amount that arrives as a number is bounded by what a double can hold", () => {
+  // The same rule as the services' reader: `toFixed(8)` does not convert above ~2^26, it fabricates.
+  assert.throws(
+    () => creditsFromSummary({ ledger_total: 123456789012.12345678, reserved_total: "0", loaded: "0", spent: "0" }),
+    /decimal string/,
+    "a large float would have reported digits the organization never had",
+  );
+  assert.throws(
+    () => creditsFromSummary({ ledger_total: 2 ** 26, reserved_total: "0", loaded: "0", spent: "0" }),
+    /decimal string/,
+  );
+  const inside = creditsFromSummary({ ledger_total: 2 ** 26 - 1, reserved_total: 0.5, loaded: 1.25, spent: -0.25 });
+  assert.equal(inside.ledger_total, "67108863.00000000");
+  assert.equal(inside.available, "67108862.50000000");
+  assert.equal(inside.spent, "0.25000000");
+  // The legacy fallback path is the one that still hands over numbers, and it is far below the bound.
+  const fallback = creditsFromLedgerPage(12.5, [{ delta_usd: 20 }, { delta_usd: -7.5 }]);
+  assert.equal(fallback.available, "12.50000000");
+  assert.equal(fallback.loaded, "20.00000000");
+  assert.equal(fallback.spent, "7.50000000");
+});
+
 test("a missing function falls back; a broken one does not", () => {
   // Pre-D1 the function does not exist, and the ledger balance is the available balance.
   for (const error of [

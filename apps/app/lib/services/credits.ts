@@ -7,7 +7,15 @@
  * `Money` strings through the contract's BigInt helpers, never on `Number` subtraction.
  */
 
-import { moneyUnits, parseMoney, subMoney, tryParseMoneyUnits, ZERO_MONEY, type Money } from "../contracts/money.ts";
+import {
+  moneyFromUnits,
+  moneyUnits,
+  parseMoney,
+  subMoney,
+  tryParseMoneyUnits,
+  ZERO_MONEY,
+  type Money,
+} from "../contracts/money.ts";
 
 export type WalletSummaryRow = {
   ledger_total: number | string | null;
@@ -26,11 +34,22 @@ export type CreditsFigures = {
   spent: Money;
 };
 
+/**
+ * See `lib/services/console.ts`: a double holds at most 2^53 units of 1e-8, so above about 2^26
+ * dollars `toFixed(8)` invents the last digits rather than converting them. Money crosses as text
+ * (R59-9); the only number that still arrives is the legacy `org_balance` fallback's, far below this.
+ */
+const SAFE_MONEY_NUMBER = Math.pow(2, 26);
+
 function money(value: number | string | null | undefined): Money {
   if (value === null || value === undefined) return ZERO_MONEY;
-  // A driver that hands back a float for `numeric` is a defect, but the fixed scale is known, so the
-  // conversion is exact rather than a silent reinterpretation.
-  return parseMoney(typeof value === "number" ? value.toFixed(8) : value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || Math.abs(value) >= SAFE_MONEY_NUMBER) {
+      throw new TypeError("a wallet amount this large must arrive as a decimal string, not a number");
+    }
+    return parseMoney(value.toFixed(8));
+  }
+  return parseMoney(value);
 }
 
 function absolute(value: Money): Money {
@@ -67,7 +86,12 @@ export function creditsFromLedgerPage(total: number | string | null, rows: reado
   let loadedUnits = BigInt(0);
   let spentUnits = BigInt(0);
   for (const row of rows) {
-    const units = tryParseMoneyUnits(typeof row.delta_usd === "number" ? row.delta_usd.toFixed(8) : row.delta_usd);
+    const units =
+      typeof row.delta_usd === "number"
+        ? Math.abs(row.delta_usd) < SAFE_MONEY_NUMBER
+          ? tryParseMoneyUnits(row.delta_usd.toFixed(8))
+          : null
+        : tryParseMoneyUnits(row.delta_usd);
     if (units === null) continue;
     if (units >= BigInt(0)) loadedUnits += units;
     else spentUnits -= units;
@@ -77,16 +101,11 @@ export function creditsFromLedgerPage(total: number | string | null, rows: reado
     ledger_total: ledgerTotal,
     reserved: ZERO_MONEY,
     available: ledgerTotal,
-    loaded: summed(loadedUnits),
-    spent: summed(spentUnits),
+    loaded: moneyFromUnits(loadedUnits),
+    spent: moneyFromUnits(spentUnits),
   };
 }
 
-function summed(units: bigint): Money {
-  const negative = units < BigInt(0);
-  const magnitude = (negative ? -units : units).toString().padStart(9, "0");
-  return parseMoney(`${negative ? "-" : ""}${magnitude.slice(0, -8)}.${magnitude.slice(-8)}`);
-}
 
 /**
  * What to do with the summary call's outcome.
