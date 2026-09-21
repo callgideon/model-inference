@@ -292,6 +292,10 @@ def scan_segment(name: str, data: bytes, into: Scan | None = None) -> Scan:
     return scan
 
 
+def _nothing() -> None:
+    """Submitted to the writer thread to serialise behind whatever it is doing."""
+
+
 def _torn(scan: Scan, name: str, offset: int, size: int) -> None:
     scan.torn += 1
     scan.torn_at[name] = offset
@@ -394,15 +398,22 @@ class _Settlement:
         self.sink, self.batch, self.now, self.done = sink, batch, now, False
 
     def __call__(self, future) -> None:
-        if self.done:
-            return
-        self.done = True
-        sink = self.sink
         try:
             result = future.result()
         except BaseException:                    # noqa: BLE001 - a writer bug, not a disk
             result = _WriteResult(dropped=[(TraceLossReason.disk_error, row.counted)
                                            for row in self.batch])
+        self.settle(result)
+
+    def settle(self, result: _WriteResult) -> None:
+        if self.done:
+            return
+        self.done = True
+        sink = self.sink
+        if sink._in_flight is self:
+            # Releasing the flush guard is this callback's job, not the awaiting caller's:
+            # the caller may have been cancelled long ago (B7).
+            sink._in_flight = None
         sink._apply(result)
         # The charge is released now, not when the batch was taken: until the writer has
         # appended these bytes they are still in this process, and the budget says so.
@@ -509,10 +520,13 @@ class SpoolTraceSink(FakeTraceSink):
         self._segments: list[_Segment] = []
         self._next_index = 0
         self._closed = False
-        # At most one flush in flight: a caller that fires flushes without awaiting them
-        # otherwise piles up batches behind a blocked writer, outside the queue ceiling
-        # that is supposed to bound memory (round 1 measured 299,901 records in flight).
-        self._flush_lock = asyncio.Lock()
+        # The batch currently with the writer, or None. At most one is out at a time: a
+        # caller that fires flushes without awaiting them - or times each one out - would
+        # otherwise pile batches up behind a blocked writer, outside the queue ceiling that
+        # is supposed to bound memory (round 1: 299,901 records in flight; round 2: 600,000
+        # through a cancelling flusher, because a lock is released by cancellation and this
+        # is not).
+        self._in_flight: _Settlement | None = None
         # One `_Row` per queued record, in lockstep with the inherited `queued`.
         self._pending: list[_Row] = []
         # Counters, not the inherited `appended`/`fsynced` lists: a spool exists so that a
@@ -632,24 +646,39 @@ class SpoolTraceSink(FakeTraceSink):
         self.failures.before("flush")
         if self._closed:
             return await self.stats()
-        async with self._flush_lock:
-            assert len(self.queued) == len(self._pending), "the queue and its bytes diverged"
-            batch, self.queued, self._pending = self._pending, [], []
-            now = self.clock.now()
-            fsync_due = ((now - self._last_fsync).total_seconds()
-                         >= self.limits.trace_fsync_interval_s)
-            if not batch and not self.paused and not (fsync_due and self._unsynced()):
-                return await self.stats()
-            future = self._submit(self._write_batch, batch, fsync_due)
-            settled = _Settlement(self, batch, now)
-            future.add_done_callback(settled)
-            # `shield`: a caller that times this flush out (its only bound, since the
-            # deadline argument is a database instant) must not leave the batch in limbo.
-            # The writer keeps going and the callback settles the counters and the charges
-            # whichever way it ends - round 1 lost five records and 5 MB of budget for ever
-            # to `wait_for(flush, 0.2)`.
-            await asyncio.shield(future)
+        if self._in_flight is not None:
+            # A batch is still with the writer. **Not** a lock: round 2 found that an
+            # `async with` releases the moment the awaiting flush is cancelled, while the
+            # shielded batch is still out - so a flusher built exactly as this docstring
+            # describes (`wait_for(flush, …)` on a tick) took a fresh 10,000-row batch every
+            # tick and accepted 600,000 records with nothing to bound them. The guard is the
+            # batch's own lifetime, cleared by its settlement, and it does not matter which
+            # caller is waiting or whether anybody still is.
             return await self.stats()
+        assert len(self.queued) == len(self._pending), "the queue and its bytes diverged"
+        batch, self.queued, self._pending = self._pending, [], []
+        now = self.clock.now()
+        fsync_due = ((now - self._last_fsync).total_seconds()
+                     >= self.limits.trace_fsync_interval_s)
+        if not batch and not self.paused and not (fsync_due and self._unsynced()):
+            return await self.stats()
+        settled = _Settlement(self, batch, now)
+        self._in_flight = settled
+        try:
+            future = self._submit(self._write_batch, batch, fsync_due)
+        except BaseException:
+            # Nothing was handed over, so nothing will settle it but this.
+            settled.settle(_WriteResult(dropped=[(TraceLossReason.disk_error, row.counted)
+                                                 for row in batch]))
+            raise
+        future.add_done_callback(settled)
+        # `shield`: a caller that times this flush out (its only bound, since the deadline
+        # argument is a database instant) must not leave the batch in limbo. The writer
+        # keeps going and the callback settles the counters and the charges whichever way it
+        # ends - round 1 lost five records and 5 MB of budget for ever to
+        # `wait_for(flush, 0.2)`.
+        await asyncio.shield(future)
+        return await self.stats()
 
     def _apply(self, result: _WriteResult) -> None:
         """Writer-thread outcome -> the counters the request path reads."""
@@ -741,6 +770,18 @@ class SpoolTraceSink(FakeTraceSink):
         if self.paused:
             # recomputed against the freed disk, for the record that was refused
             self._refuse_bytes(self._refused_need)
+
+    async def drain(self) -> dict[str, object]:
+        """Wait for the batch currently with the writer to settle, and report stats.
+
+        The honest way for a caller to observe that a *cancelled* flush has landed: the
+        no-op queues behind the batch on the single writer thread, and the batch's
+        settlement callback is scheduled before this one's, so it has run by the time this
+        returns. G's shutdown path wants the same guarantee before it stops flushing.
+        """
+        if not self._closed and self._in_flight is not None:
+            await self._run(_nothing)
+        return await self.stats()
 
     async def rotate(self) -> str | None:
         """Seal the active segment so the shipper can ack it; returns its name.

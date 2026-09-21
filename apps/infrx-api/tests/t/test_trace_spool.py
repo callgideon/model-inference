@@ -861,16 +861,17 @@ def test_a_cancelled_flush_still_settles_its_batch():
             raise AssertionError("the flush was not cancelled")
         assert entered.is_set(), "the writer never started"
         block.set()
-        # A second flush *carrying a record* queues behind the first on the single writer
-        # thread, so awaiting it is a deterministic "the cancelled batch has landed" - no
-        # polling, no sleep. (An empty flush would return without queueing anything.)
-        await capture_one(spool, ID_C, b"the flush after the cancelled one")
-        await spool.flush(spool.clock.now())
-        stats = await spool.stats()
-        assert stats["appended"] == 6, stats
+        # `drain()` queues a no-op behind the batch on the single writer thread, so it is a
+        # deterministic "the cancelled batch has landed" with no polling and no sleep. A
+        # flush would not do: while a batch is in flight it returns without taking one (B7).
+        stats = await spool.drain()
+        assert stats["appended"] == 5, stats
         assert stats["in_memory_content_bytes"] == 0, "the cancelled batch kept its charge"
         assert stats["in_memory"] == 0
-        assert len(recover(spool.spool_dir).records) == 6
+        assert len(recover(spool.spool_dir).records) == 5
+        # and the queue is usable again, because the guard was released by the settlement
+        await capture_one(spool, ID_C, b"the flush after the cancelled one")
+        assert (await spool.flush(spool.clock.now()))["appended"] == 6
         await spool.close()
     asyncio.run(scenario())
 
@@ -934,8 +935,64 @@ def test_only_one_flush_is_ever_in_flight():
         block.set()
         await first
         await second
+        # The second flush found a batch in flight and returned without taking one, so the
+        # queue is still there for the next tick to drain. That is the bound: rows wait in
+        # the queue, where the ceiling can see them, instead of piling up behind the writer.
+        stats = await spool.stats()
+        assert stats["appended"] == 1 and stats["in_memory"] == 4
+        await spool.flush(spool.clock.now())
         stats = await spool.stats()
         assert stats["appended"] == 5 and stats["in_memory"] == 0
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_a_cancelling_flusher_cannot_take_a_second_batch():
+    """B7. `flush` documents a caller timeout as its only bound, and round 2 built exactly
+    that: `wait_for(flush, …)` on a tick with a stalled writer. An `async with` lock is
+    released by the cancellation, so every tick took a fresh batch of up to
+    `TRACE_QUEUE_MAX` rows - 600,000 records accepted, nothing counted, RSS 26 → 373 MiB.
+    The guard has to be the batch's lifetime, not the awaiting task's.
+
+    Event-driven: the writer parks on an event and every wait is on an event, so there is no
+    wall clock in here to be flaky under load.
+    """
+    async def scenario():
+        block, entered = threading.Event(), threading.Event()
+        spool = sink(DEFAULTS.replace(trace_queue_max=4),
+                     io=DrillIO(block=block, entered=entered))
+        await capture_one(spool, ID_A, b"the first batch")
+        first = asyncio.create_task(spool.flush(spool.clock.now()))
+        await asyncio.to_thread(entered.wait, 5)          # the writer is inside the disk
+        first.cancel()
+        try:
+            await first
+        except asyncio.CancelledError:
+            pass
+        else:
+            raise AssertionError("the flush was not cancelled")
+        # ... and now the flusher ticks again, several times, while the writer is still out
+        for tick in range(5):
+            for index in range(4):
+                await capture_one(spool, request_id(tick * 10 + index), b"more")
+            ticking = asyncio.create_task(spool.flush(spool.clock.now()))
+            ticking.cancel()
+            try:
+                await ticking
+            except asyncio.CancelledError:
+                pass
+            stats = await spool.stats()
+            assert stats["in_memory"] <= 4, f"tick {tick}: {stats['in_memory']} rows queued"
+            assert stats["appended"] == 0, "the blocked writer appended something"
+        stats = await spool.stats()
+        assert stats["loss_reasons"]["queue_full"] == 16, stats["loss_reasons"]
+        block.set()
+        stats = await spool.drain()              # the first batch settles: one record
+        assert stats["appended"] == 1, stats
+        # ... and only now can a flush take the queue the ticks left behind
+        stats = await spool.flush(spool.clock.now())
+        assert stats["appended"] == 5, stats
+        assert stats["in_memory"] == 0 and stats["in_memory_content_bytes"] == 0
         await spool.close()
     asyncio.run(scenario())
 
