@@ -248,14 +248,28 @@ test("U1-T28 the billing page model states every branch, and page sizes are name
   assert.equal(lastModel.ledger.value.nextHref, null, "the last ledger page offers no Next");
 
   // A later page whose items happen to be empty is still not a new organization: the cursor says
-  // there is history behind it.
-  const onLaterPage = balanceCardState(balance, emptyLedger, { cursor: "c1", trail: [] });
-  assert.ok(onLaterPage.kind === "ready");
-  assert.notEqual(
-    onLaterPage.value.state.kind,
+  // there is history behind it. This has to be asserted on the ZERO wallet — the funded one is never
+  // "new" whatever the history says, so asserting it there passes however the state is computed and
+  // says nothing about whether the page cursor was consulted at all.
+  const zeroWallet = await fake.balances(fake.sessions.otherOwner);
+  assert.ok(zeroWallet.ok && zeroWallet.value.ledger_total === ZERO_MONEY, "a wallet that can be new");
+
+  const firstPage = balanceCardState(zeroWallet, emptyLedger, { cursor: null, trail: [] });
+  assert.ok(firstPage.kind === "ready");
+  assert.equal(
+    firstPage.value.state.kind,
     "new",
-    "being on a later page is history, whatever this page holds",
+    "an empty first page of a zero wallet is a new organization",
   );
+
+  const onLaterPage = balanceCardState(zeroWallet, emptyLedger, { cursor: "c1", trail: [] });
+  assert.ok(onLaterPage.kind === "ready");
+  assert.equal(
+    onLaterPage.value.state.kind,
+    "exhausted",
+    "but on a later page the cursor is history, so the same wallet is not new",
+  );
+  assert.notEqual(onLaterPage.value.state.kind, firstPage.value.state.kind, "the cursor decides");
 });
 
 test("U1-T23 no customer-facing balance wording offers payment or calls the credit revenue", () => {
@@ -355,6 +369,9 @@ test("U1-T25 every ledger kind renders, and an operator's entry names the platfo
     assert.equal(typeof label, "string", `${key} must not yield a non-string label`);
     assert.equal(label, UNKNOWN_KIND_LABEL, `${key} is not a ledger kind`);
   }
+  // Compared against the constant AND its value: `UNKNOWN_KIND_LABEL = ""` is exactly the blank cell
+  // the guard exists to prevent, and a constant-only comparison accepts it.
+  assert.equal(UNKNOWN_KIND_LABEL, "Other");
   assert.equal(ledgerKindLabel("refund" as LedgerEntry["kind"]), UNKNOWN_KIND_LABEL);
   const strange = ledgerRowView({ ...grant, kind: "constructor" as LedgerEntry["kind"] });
   assert.equal(strange.kind, UNKNOWN_KIND_LABEL, "and a row carrying one still renders");

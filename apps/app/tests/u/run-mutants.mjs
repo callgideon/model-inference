@@ -541,6 +541,51 @@ const MUTANTS = [
     replace: "    false\n",
     cases: [T.tokens],
   },
+  // --- review round 3: the edits that survived the suite as written ----------
+  // The reviewer's ids are given so a kill can be cross-checked against their corpus.
+  {
+    id: "U1-M57",
+    what: "the balance card ignores the page cursor when deciding history (reviewer N34)",
+    file: BILLING,
+    find: "    balanceCardModel(wallet, hasLedgerHistory(ledger, state)),",
+    replace: "    balanceCardModel(wallet, hasLedgerHistory(ledger)),",
+    cases: [T.billingModel],
+  },
+  {
+    id: "U1-M58",
+    what: "the unknown-kind label becomes the blank cell the guard exists to prevent (reviewer K02)",
+    file: BILLING,
+    find: 'export const UNKNOWN_KIND_LABEL = "Other";',
+    replace: 'export const UNKNOWN_KIND_LABEL = "";',
+    cases: [T.ledger],
+  },
+  {
+    id: "U1-M59",
+    what: "the boundary copy's scope guard is removed, so an unknown scope interpolates an object (reviewer E07)",
+    file: BOUNDARY,
+    find: '  const known: BoundaryScope = Object.hasOwn(UNAFFECTED, scope) ? scope : "usage";',
+    replace: "  const known: BoundaryScope = scope;",
+    cases: [T.boundary],
+  },
+  {
+    id: "U1-M60",
+    what: "the boundary puts the thrown error's own digest on the page (reviewer E04)",
+    file: USAGE_ERROR,
+    find: "        <p className=\"text-sm text-muted-foreground\">{copy.detail}</p>",
+    replace:
+      "        <p className=\"text-sm text-muted-foreground\">{copy.detail}</p>\n        <p>{String(error)}</p>",
+    cases: [T.boundary],
+  },
+  {
+    id: "U1-M61",
+    what: "clearing the key filter clears the model filter with it (reviewer P04)",
+    file: USAGE,
+    find:
+      "      filters.keyId === null ? null : usageHref(withFilter(filters, { keyId: null })),",
+    replace:
+      "      filters.keyId === null ? null : usageHref(withFilter(filters, { keyId: null, model: null })),",
+    cases: [T.pageHrefs],
+  },
 ];
 
 /**

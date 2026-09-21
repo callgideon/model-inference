@@ -29,13 +29,18 @@ const UNAFFECTED: Record<BoundaryScope, string> = {
   balance: "Your ledger and your grants are unaffected — nothing here changes accounting.",
 };
 
+/**
+ * An unrecognised scope falls back to the usage copy **whole**, not to the usage sentence inside a
+ * "your balance" frame: half a fallback is a sentence nobody wrote. It also makes the guard testable
+ * as an equality — without it, `boundaryCopy("__proto__")` interpolates `[object Object]`, which a
+ * "does it contain the word undefined" check happily accepts.
+ */
 export function boundaryCopy(scope: BoundaryScope): BoundaryCopy {
-  const what = scope === "usage" ? "your usage" : "your balance";
+  const known: BoundaryScope = Object.hasOwn(UNAFFECTED, scope) ? scope : "usage";
+  const what = known === "usage" ? "your usage" : "your balance";
   return {
     headline: "This page could not be displayed",
-    detail: `Something went wrong while rendering ${what}. ${
-      Object.hasOwn(UNAFFECTED, scope) ? UNAFFECTED[scope] : UNAFFECTED.usage
-    }`,
+    detail: `Something went wrong while rendering ${what}. ${UNAFFECTED[known]}`,
     action: "Try again",
   };
 }

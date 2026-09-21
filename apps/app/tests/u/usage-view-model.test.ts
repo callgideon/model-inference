@@ -63,6 +63,7 @@ import {
 import {
   BOUNDARY_RECOVERY_PROP,
   boundaryCopy,
+  type BoundaryScope,
 } from "../../app/(console)/usage/boundary.ts";
 
 const NOW = new Date("2026-09-20T12:00:00.000Z");
@@ -728,12 +729,24 @@ test("U1-T16 the page model computes every href and page number the markup rende
     "and the retry target carries the cursor of the page being shown",
   );
 
-  // Clearing the key filter is a link the notice can point at, and it resets the walk.
-  const filtered = usagePageModel(await pageInput({ ...second, keyId: "some-key" }));
+  // Clearing the key filter is a link the notice can point at. It clears the key and resets the walk
+  // — and keeps every filter it was not asked to clear, or "clear the key filter" would silently
+  // widen the range and the model too.
+  const filtered = usagePageModel(
+    await pageInput({ ...second, range: "7d", keyId: "some-key", model: "marlin-2b@2026-09-01" }),
+  );
   assert.ok(filtered.clearKeyFilterHref !== null);
   assert.ok(
     !filtered.clearKeyFilterHref.includes("key=") && !filtered.clearKeyFilterHref.includes("cursor="),
     "clearing a filter drops the filter and the cursor",
+  );
+  assert.ok(!filtered.clearKeyFilterHref.includes("trail="), "and the trail with it");
+  assert.deepEqual(
+    parseUsageFilters(
+      Object.fromEntries(new URLSearchParams(filtered.clearKeyFilterHref.split("?")[1] ?? "")),
+    ),
+    { range: "7d", keyId: null, model: "marlin-2b@2026-09-01", cursor: null, trail: [] },
+    "the range and the model survive clearing the key",
   );
   assert.equal(usagePageModel(await pageInput(WIDE)).clearKeyFilterHref, null, "nothing to clear");
 });
@@ -755,8 +768,20 @@ test("U1-T19 the error boundaries wire up the recovery that can actually recover
       /reset/,
       `${file}: reset() cannot recover a Server Component throw`,
     );
-    // The thrown error's own text never reaches the page: it can carry internals.
-    assert.doesNotMatch(source, /\{error\.(message|stack|digest)\}/, `${file}: shows no thrown text`);
+    // The thrown error's own text never reaches the page: it can carry internals. Checking for the
+    // literal `{error.message}` only catches the spelling we happened to think of, so strip the
+    // comments and the props type and require that the word does not appear in the code at all.
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const withoutPropsType = code.replace(
+      /\{\s*error: Error & \{ digest\?: string \};\s*retry: \(\) => void\s*\}/g,
+      "{ /* props type */ }",
+    );
+    assert.match(code, /error: Error & \{ digest\?: string \}/, `${file}: still declares the prop`);
+    assert.doesNotMatch(
+      withoutPropsType,
+      /\berror\b/,
+      `${file}: the thrown error must not be referenced outside the props type`,
+    );
   }
 
   for (const scope of ["usage", "balance"] as const) {
@@ -770,11 +795,19 @@ test("U1-T19 the error boundaries wire up the recovery that can actually recover
     );
   }
   assert.notEqual(boundaryCopy("usage").detail, boundaryCopy("balance").detail, "each route says what it is");
-  assert.equal(
-    boundaryCopy("__proto__" as "usage").detail.includes("undefined"),
-    false,
-    "and an unknown scope still produces a sentence",
-  );
+
+  // An unrecognised scope falls back to the usage copy exactly. Asserted as an equality, because
+  // without the `Object.hasOwn` guard the lookup yields `Object.prototype` and interpolates
+  // "[object Object]" — a string that contains neither "undefined" nor anything else a loose check
+  // would notice.
+  for (const weird of ["__proto__", "constructor", "toString", "nope"]) {
+    assert.deepEqual(
+      boundaryCopy(weird as BoundaryScope),
+      boundaryCopy("usage"),
+      `${weird} must fall back to the usage copy, whole`,
+    );
+    assert.doesNotMatch(boundaryCopy(weird as BoundaryScope).detail, /object Object|undefined/);
+  }
 });
 
 test("U1-T17 a key filter naming a key of another organization is explained, not shown as silence", async () => {
