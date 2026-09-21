@@ -383,10 +383,8 @@ MUTANTS: tuple[Mutant, ...] = (
        T, "            self._discard(TraceLossReason.memory_budget)\n            return False",
        "            return True", "trace_bounds__concurrent_captures_share_one_budget"),
     _m("abandon_keeps_its_bytes", "abandon releases its bytes (R27)",
-       T, "        if self.no_op and self.mode is not TraceMode.full:\n"
-          "            return                      # nothing was ever going to be captured\n"
-          "        self._discard(reason)",
-       "        return",
+       T, "            # coverage figures entirely (02).\n            return\n        self._discard(reason)",
+       "            # coverage figures entirely (02).\n            return\n        return",
        "trace_bounds__an_abandoned_capture_releases_its_bytes",
        "trace_bounds__an_open_capture_past_its_deadline_is_reaped"),
     _m("capture_accepts_any_envelope", "a capture belongs to its own request",
@@ -688,10 +686,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if False:\n            # The same identity check the accumulating path makes",
        "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
     _m("off_capture_queues_the_envelope", "an off-mode capture queues nothing (01)",
-       T, "        if self.mode is TraceMode.off:\n"
-          "            # 01: an off-mode request produces no trace row at all.",
-       "        if False:\n            # 01: an off-mode request produces no trace row at all.",
-       "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
+       T, "            return TraceOfferResult.dropped\n        if self.closed:",
+       "            pass\n        if self.closed:",
+       "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope",
+       "trace_bounds__off_mode_produces_no_trace_at_all"),
     _m("minimal_capture_trusts_the_envelope_mode", "the capture's mode decides, not the envelope",
        T, "            if envelope.mode is not TraceMode.minimal or envelope.carries_content:",
        "            if False:",
@@ -710,8 +708,8 @@ MUTANTS: tuple[Mutant, ...] = (
        T, "        if envelope.mode is not self.mode:", "        if False:",
        "trace_bounds__a_live_capture_also_decides_its_own_mode"),
     _m("unrecordable_capture_counts_no_loss", "a full capture that never captured counts one loss (n2)",
-       T, "        if self.no_op and self.mode is not TraceMode.full:\n            return",
-       "        if self.no_op:\n            return",
+       T, "        if self.no_op and self.mode is not TraceMode.full:",
+       "        if self.no_op:",
        "trace_bounds__an_open_capture_past_its_deadline_is_reaped"),
     _m("drop_reason_falls_back_on_truthiness", "`none` is never a drop reason (n3)",
        T, "            reason = (TraceLossReason.abandoned if self.lost_reason is TraceLossReason.none\n"
