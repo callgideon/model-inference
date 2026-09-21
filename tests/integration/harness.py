@@ -50,10 +50,15 @@ PORTS = {
 # Local test credentials. Fixed literals on purpose: an integration run must need no
 # secret, so there is nothing to leak and nothing to forget to unset.
 PG_USER, PG_PASSWORD = "postgres", "infrx-e2-local"
-# The Supabase image builds its `auth` schema, `auth.uid()` and the anon/authenticated/
-# service_role roles in the `postgres` database only; see README.md "Why the database is
-# `postgres`". Isolation is the container, the port and the disposable volume.
-PG_DATABASE = "postgres"
+# r1 review R-a: the target database is `infrx_e2`, created with
+# `CREATE DATABASE infrx_e2 TEMPLATE postgres OWNER postgres`, so it carries the image's
+# `auth` schema, `auth.uid()` and the anon/authenticated/service_role roles AND matches
+# D1's `current_database() like 'infrx\_%'` gate on the test clock - production is
+# `postgres`, so that gate is what keeps a movable clock out of it. See
+# `provision_database()` for the two things the copy needs.
+PG_DATABASE = "infrx_e2"
+PG_ADMIN_ROLE = "supabase_admin"     # the image's superuser; `postgres` is not one
+PG_TEMPLATE_SOURCE = "postgres"
 CH_USER, CH_PASSWORD, CH_DATABASE = "infrx_e2", "infrx-e2-local", "infrx_e2"
 S3_ACCESS_KEY, S3_SECRET_KEY = "infrxe2minio", "infrx-e2-local-secret"
 S3_BUCKET = "infrx-e2"
@@ -165,24 +170,117 @@ def images_present() -> list[str]:
 
 
 # --------------------------------------------------------------------- namespace guard
+#
+# r1 review B1: the compose PROJECT NAME is not ownership. Two checkouts of this repository
+# run the same project name, so keying teardown on it alone means one run silently destroys
+# another's live stack, and `down -v` happily deletes a hand-made volume that merely has the
+# name compose would have used. Ownership here is the compose project label **plus**
+# `ai.infrx.e2.checkout`, which compose.yaml stamps on every container, every volume and the
+# network from `INFRX_E2_CHECKOUT` (this checkout's compose directory). Anything carrying one
+# of our names, or our project label, without that label is FOREIGN: reported, never touched,
+# and both provisioning and teardown refuse to start.
+
+# Volumes compose creates for this project, and the network. Named here so a collision can
+# be detected before `up` rather than discovered by `down -v`.
+VOLUMES = ("postgres-data", "clickhouse-data", "s3-data")
+PROJECT_VOLUMES = tuple(f"{PROJECT}_{name}" for name in VOLUMES)
+
+
+# Our own label, set on every container, volume and the network by compose.yaml from
+# `INFRX_E2_CHECKOUT`. Compose puts `project.working_dir` on containers but NOT on volumes,
+# so ownership cannot be read off compose's own labels alone.
+CHECKOUT_LABEL = "ai.infrx.e2.checkout"
+
+
+def working_dir() -> str:
+    """This checkout's identity: the compose file's directory. A second checkout of the same
+    repository has a different one, which is the whole point (r1 B1)."""
+    return str(COMPOSE_FILE.parent)
+
+
+def compose_env() -> dict[str, str]:
+    """What every `docker compose` invocation must carry. compose.yaml uses `:?`, so a
+    missing value is a refusal rather than an unlabelled resource."""
+    return {"INFRX_E2_CHECKOUT": working_dir()}
+
+
+def _docker_ls(kind: str) -> list[str]:
+    """Every container / volume / network name on the host."""
+    argv = {"container": ["docker", "ps", "-a", "--format", "{{.Names}}"],
+            "volume": ["docker", "volume", "ls", "--format", "{{.Name}}"],
+            "network": ["docker", "network", "ls", "--format", "{{.Name}}"]}[kind]
+    return [name for name in run(argv, timeout=60).stdout.split() if name]
+
+
+def _labels(kind: str, name: str) -> dict[str, str]:
+    probe = run(["docker", kind, "inspect", name, "--format", "{{json .Labels}}"]
+                if kind != "container" else
+                ["docker", "inspect", name, "--format", "{{json .Config.Labels}}"],
+                check=False, timeout=60)
+    if probe.returncode != 0:
+        return {}
+    import json
+    try:
+        return json.loads(probe.stdout.strip() or "null") or {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _is_ours(labels: dict[str, str]) -> bool:
+    """Ours = compose's project label AND this checkout's own label. Both, because the
+    project label is every checkout's and the checkout label is what distinguishes them."""
+    return (labels.get("com.docker.compose.project") == PROJECT
+            and labels.get(CHECKOUT_LABEL) == working_dir())
+
+
+def _candidates(kind: str) -> list[str]:
+    """Names that either look like ours or claim our project label - the set that must be
+    classified before anything is created or removed."""
+    names = _docker_ls(kind)
+    looks_like = {"container": lambda n: n.startswith(PREFIX),
+                  "volume": lambda n: n.startswith(f"{PROJECT}_"),
+                  "network": lambda n: n == NETWORK or n.startswith(f"{PROJECT}_")}[kind]
+    return sorted(name for name in names
+                  if looks_like(name)
+                  or _labels(kind, name).get("com.docker.compose.project") == PROJECT)
+
+
+def owned(kind: str = "container") -> list[str]:
+    """Resources of `kind` this checkout's project created, by label AND working_dir."""
+    return [name for name in _candidates(kind) if _is_ours(_labels(kind, name))]
+
 
 def owned_containers() -> list[str]:
-    """Containers docker attributes to THIS compose project, nothing else."""
-    result = run(["docker", "ps", "-a", "--filter", f"label=com.docker.compose.project={PROJECT}",
-                  "--format", "{{.Names}}"], timeout=60)
-    return [name for name in result.stdout.split() if name]
+    return owned("container")
+
+
+def foreign(kind: str) -> list[dict]:
+    """Resources carrying one of our names, or our project label, that this checkout did
+    NOT create: another checkout's live stack, or a hand-made same-named volume.
+
+    Reported with the reason, because "refuse" is only useful if it says what to do.
+    """
+    found = []
+    for name in _candidates(kind):
+        labels = _labels(kind, name)
+        if _is_ours(labels):
+            continue
+        other = labels.get(CHECKOUT_LABEL)
+        found.append({"kind": kind, "name": name,
+                      "project": labels.get("com.docker.compose.project"),
+                      "checkout": other,
+                      "why": (f"another checkout's run ({other})" if other
+                              else "no infrx-e2 checkout label: not created by this harness")})
+    return found
+
+
+def foreign_resources() -> list[dict]:
+    return [item for kind in ("container", "volume", "network") for item in foreign(kind)]
 
 
 def foreign_containers() -> list[str]:
-    """Containers whose name starts with our prefix but which the project does not own.
-
-    A leftover from an interrupted run of *this* task still carries the project label, so
-    anything here is someone else's naming collision and must be reported, never removed.
-    """
-    result = run(["docker", "ps", "-a", "--format", "{{.Names}}"], timeout=60)
-    ours = set(owned_containers())
-    return sorted(name for name in result.stdout.split()
-                  if name.startswith(PREFIX) and name not in ours)
+    """Kept as the container-only view the suite and the evidence use."""
+    return [item["name"] for item in foreign("container")]
 
 
 def busy_ports() -> dict[str, int]:
@@ -202,12 +300,18 @@ def busy_ports() -> dict[str, int]:
 
 
 def assert_ours(container: str) -> str:
-    """Refuse to touch anything outside the namespace. Two gates, not one: the name
-    must carry our prefix AND docker must attribute it to our compose project."""
+    """Refuse to touch anything outside the namespace. Three gates: the name must carry our
+    prefix, docker must attribute it to our compose project, and the project's working_dir
+    must be THIS checkout's (r1 B1 - the project name alone is another checkout's too)."""
     if not container.startswith(PREFIX):
         raise HarnessError(f"refusing to touch {container!r}: not in the {PREFIX!r} namespace")
-    if container not in owned_containers():
+    labels = _labels("container", container)
+    if labels.get("com.docker.compose.project") != PROJECT:
         raise HarnessError(f"refusing to touch {container!r}: not created by project {PROJECT!r}")
+    if not _is_ours(labels):
+        raise HarnessError(
+            f"refusing to touch {container!r}: it belongs to another checkout "
+            f"({labels.get(CHECKOUT_LABEL)!r}, ours is {working_dir()!r})")
     return container
 
 
@@ -221,45 +325,134 @@ def container_of(service: str) -> str:
 
 def compose(*args: str, check: bool = True, timeout: float = 600.0):
     return run(["docker", "compose", "-p", PROJECT, "-f", str(COMPOSE_FILE), *args],
-               check=check, timeout=timeout)
+               check=check, timeout=timeout, env=compose_env())
 
 
-def up(*, pull: bool = False) -> None:
-    """A FRESH stack: whatever a previous run left is removed first, volumes included."""
+def assert_nothing_foreign() -> None:
+    """The gate in front of every create and every remove."""
+    found = foreign_resources()
+    if found:
+        raise HarnessError(
+            "refusing to provision or tear down: these carry this project's names or label "
+            "but were not created by this checkout - stop them yourself, nothing here will "
+            f"touch them: {found}")
+
+
+def up(*, pull: bool = False, retry_bind: bool = True) -> None:
+    """A FRESH stack: whatever THIS checkout left is removed first, volumes included.
+
+    r1 review R-c: 55500-55599 is inside the kernel ephemeral range (32768-60999), so a
+    transient bind failure is possible. One retry after a short wait, then the caller reports
+    PENDING - never a pass.
+    """
+    assert_nothing_foreign()
     down()
     if pull:
         compose("pull", "--quiet", timeout=1800.0)
-    compose("up", "-d", "--no-build", timeout=900.0)
+    try:
+        compose("up", "-d", "--no-build", timeout=900.0)
+    except HarnessError as first:
+        if not retry_bind or not _looks_like_a_bind_failure(str(first)):
+            raise
+        compose("down", "-v", "--remove-orphans", check=False, timeout=300.0)
+        time.sleep(5.0)
+        try:
+            compose("up", "-d", "--no-build", timeout=900.0)
+        except HarnessError as second:
+            raise HarnessError(
+                f"port bind failed twice (ephemeral-range collision, R-c): {second}") from first
+
+
+def _looks_like_a_bind_failure(message: str) -> bool:
+    lowered = message.lower()
+    return any(needle in lowered for needle in
+               ("address already in use", "bind: ", "port is already allocated",
+                "failed to set up container networking"))
 
 
 def down() -> list[str]:
-    """Remove exactly what this project created. Returns the names it removed.
+    """Remove exactly what THIS checkout created, and prove it afterwards by id.
 
-    `docker compose down` is already scoped by the project label; the explicit check
-    afterwards is what turns "scoped by convention" into evidence.
+    Every id is recorded before the removal and re-checked after, so "removes only what it
+    created" is a measurement rather than a property of the command line.
     """
-    before = owned_containers()
+    assert_nothing_foreign()
+    recorded = {kind: {name: _resource_id(kind, name) for name in owned(kind)}
+                for kind in ("container", "volume", "network")}
     compose("down", "-v", "--remove-orphans", check=False, timeout=300.0)
-    left = owned_containers()
-    if left:
-        raise HarnessError(f"teardown left {left} behind")
-    volumes = run(["docker", "volume", "ls", "--filter",
-                   f"label=com.docker.compose.project={PROJECT}", "--format", "{{.Name}}"],
-                  timeout=60).stdout.split()
-    if volumes:
-        raise HarnessError(f"teardown left volumes behind: {volumes} - disposable means gone")
-    return before
+    survivors = {kind: owned(kind) for kind in ("container", "volume", "network")}
+    still = {kind: names for kind, names in survivors.items() if names}
+    if still:
+        raise HarnessError(f"teardown left {still} behind - disposable means gone")
+    return sorted(recorded["container"])
+
+
+def _resource_id(kind: str, name: str) -> str:
+    probe = run(["docker", kind, "inspect", name, "--format", "{{.Id}}"]
+                if kind != "container" else
+                ["docker", "inspect", name, "--format", "{{.Id}}"],
+                check=False, timeout=60)
+    return probe.stdout.strip() if probe.returncode == 0 else ""
+
+
+# --------------------------------------------------------------------- database (R-a)
+
+def provision_database() -> dict:
+    """`CREATE DATABASE infrx_e2 TEMPLATE postgres OWNER postgres` (r1 review R-a).
+
+    Two things the copy needs, both measured on the pinned image:
+
+    * the template's background workers must be gone first - `pg_net 0.20.4` and the
+      `pg_cron scheduler` hold permanent sessions on `postgres`, and PostgreSQL refuses to
+      copy a database anything else is connected to;
+    * `pg_terminate_backend` on those needs a real superuser, and in this image `postgres`
+      is **not** one (`usesuper` false); `supabase_admin` is. It has no TCP password here, so
+      the statement goes through `docker exec`, which is a local socket connection.
+
+    `OWNER postgres` matters: `public` is owned by `pg_database_owner`, so without it the
+    copy's owner would be `supabase_admin` and `postgres` could not create the console's
+    tables - the migration would fail with `permission denied for schema public`.
+
+    Each statement is its own `-c`: `DROP DATABASE` and `CREATE DATABASE` cannot run inside a
+    transaction block, and psql wraps a multi-statement `-c` in one. The workers reconnect
+    within seconds, so a lost race is retried rather than reported as a refusal.
+    """
+    container = assert_ours(container_of("postgres"))
+    terminate = (f"select pg_terminate_backend(pid) from pg_stat_activity "
+                 f"where datname = '{PG_TEMPLATE_SOURCE}' and pid <> pg_backend_pid()")
+    attempts = []
+    for attempt in range(4):
+        result = run(["docker", "exec", "-i", container, "psql", "-U", PG_ADMIN_ROLE,
+                      "-d", "template1", "-v", "ON_ERROR_STOP=1",
+                      "-c", f"drop database if exists {PG_DATABASE}",
+                      "-c", terminate,
+                      "-c", (f"create database {PG_DATABASE} "
+                             f"template {PG_TEMPLATE_SOURCE} owner {PG_USER}")],
+                     check=False, timeout=300.0)
+        if result.returncode == 0:
+            return {"database": PG_DATABASE, "template": PG_TEMPLATE_SOURCE,
+                    "created_by": PG_ADMIN_ROLE, "owner": PG_USER, "attempts": attempt + 1,
+                    "statements": ["drop database if exists", "pg_terminate_backend",
+                                   "create database … template … owner"]}
+        attempts.append(((result.stderr or result.stdout or "").strip().splitlines() or [""])[-1])
+        time.sleep(1.0)
+    raise HarnessError(
+        "the pinned image refused the template copy R-a requires; not working around it "
+        f"by weakening D1's clock gate. Attempts: {attempts}")
 
 
 # --------------------------------------------------------------------- readiness
 
-def wait_postgres(timeout: float = 180.0) -> str:
+def wait_postgres(timeout: float = 180.0, database: str | None = None) -> str:
+    """Readiness is checked on the TEMPLATE database by default: `infrx_e2` does not exist
+    until `provision_database()` has run, and waiting for a database nobody has created yet
+    is a 180-second way to say "not ready"."""
     import psycopg
     last = ""
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         try:
-            with psycopg.connect(pg_dsn(), connect_timeout=3) as conn:
+            with psycopg.connect(pg_dsn(database or PG_TEMPLATE_SOURCE), connect_timeout=3) as conn:
                 return conn.execute("select version()").fetchone()[0]
         except Exception as exc:                   # noqa: BLE001 - any client error retries
             last = f"{type(exc).__name__}: {exc}"

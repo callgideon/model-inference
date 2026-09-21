@@ -121,45 +121,80 @@ def shell(argv: list[str], *, cwd: Path, env: dict | None = None, timeout: float
 # --------------------------------------------------------------------- stages
 
 def preflight(report: Report, *, want_services: bool) -> bool:
-    usable, why = harness.docker_available()
+    """Every failure here is a REPORTED stage, never a traceback (r1 review, same pass:
+    a label-only foreign container used to wedge the run with an uncaught HarnessError)."""
     if not want_services:
         report.add("preflight", SKIP, "layer 1 only: no container needed")
         return False
-    if not usable:
-        report.add("preflight", PENDING, f"docker unusable: {why}")
-        return False
-    foreign = harness.foreign_containers()
-    if foreign:
-        report.add("preflight", FAIL,
-                   f"containers named {harness.PREFIX}* exist that this project does not own: "
-                   f"{foreign} - refusing to touch them")
-        return False
-    missing = harness.images_present()
-    # Whatever a previous run left is ours and goes first: "provisions FRESH services" is the
-    # acceptance criterion, and a leftover stack would otherwise look like a busy port below.
-    if harness.owned_containers():
-        harness.down()
-    busy = harness.busy_ports()
-    if busy:
-        report.add("preflight", FAIL,
-                   f"these task-local ports are already in use: {busy} - stop whatever holds "
-                   f"them (a previous `--keep` run, or `docker compose -p infrx-e2 down -v`)")
+    try:
+        usable, why = harness.docker_available()
+        if not usable:
+            report.add("preflight", PENDING, f"docker unusable: {why}")
+            return False
+        # r1 B1: containers, volumes AND networks, classified by project label plus
+        # `project.working_dir`, so another checkout's live stack and a hand-made same-named
+        # volume are both reported instead of destroyed.
+        strangers = harness.foreign_resources()
+        if strangers:
+            report.add("preflight", FAIL,
+                       {"refusing to touch resources this checkout did not create": strangers,
+                        "ours": harness.working_dir()})
+            return False
+        orphans = fake_server_orphans()
+        if orphans:
+            report.add("preflight", FAIL,
+                       f"a fake vLLM this harness owns is still running from an earlier run: "
+                       f"{orphans} - kill it (the run.py that started it was killed before it "
+                       f"could)")
+            return False
+        missing = harness.images_present()
+        # Whatever a previous run of THIS checkout left is ours and goes first: "provisions
+        # FRESH services" is the acceptance criterion, and a leftover stack would otherwise
+        # look like a busy port below.
+        if harness.owned_containers():
+            harness.down()
+        busy = harness.busy_ports()
+        if busy:
+            report.add("preflight", FAIL,
+                       f"these task-local ports are already in use: {busy} - stop whatever holds "
+                       f"them (a previous `--keep` run, or `docker compose -p infrx-e2 down -v`)")
+            return False
+    except harness.HarnessError as exc:
+        report.add("preflight", FAIL, str(exc))
         return False
     report.add("preflight", PASS, {"docker": why, "images": harness.compose_images(),
-                                   "not_yet_pulled": missing,
-                                   "ports": harness.PORTS})
+                                   "not_yet_pulled": missing, "ports": harness.PORTS,
+                                   "working_dir": harness.working_dir()})
     return True
+
+
+def fake_server_orphans() -> list[int]:
+    """PIDs of a fake vLLM this harness started and never stopped.
+
+    Only processes whose command line names *this* checkout's `fake_vllm.py` count: another
+    checkout's server is not ours to report as our leak, and nothing here kills anything.
+    """
+    marker = str((harness.HERE / "fake_vllm.py").resolve())
+    listing = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True,
+                             timeout=30)
+    pids = []
+    for line in listing.stdout.splitlines():
+        pid, _, args = line.strip().partition(" ")
+        if marker in args and pid.isdigit() and int(pid) != os.getpid():
+            pids.append(int(pid))
+    return pids
 
 
 def services(report: Report, *, pull: bool) -> bool:
     try:
         harness.up(pull=pull)
         versions = harness.wait_all()
+        database = harness.provision_database()
     except harness.HarnessError as exc:
         report.add("services", PENDING, f"could not provision: {exc}")
         return False
     report.add("services", PASS, {"containers": harness.owned_containers(),
-                                 "versions": versions})
+                                  "versions": versions, "database": database})
     return True
 
 

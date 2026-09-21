@@ -78,6 +78,12 @@ def install_test_clock(conn) -> str:
     every conformance case drives `harness.clock`. Both hold only if the database's notion
     of now is a settable offset that production cannot have - so it lives in a schema no
     migration creates, keyed off a custom GUC nothing in production sets.
+
+    r1 review R-a: D1's own `infrx.now()` gates the offset on
+    `current_database() like 'infrx\\_%'`, which is why E2 now targets a database called
+    `infrx_e2` (production is `postgres`). This private clock is the interim one and is
+    dropped in favour of D1's `infrx_test` clock once D1 merges; both are then gated the
+    same way and neither can exist in a deployed database.
     """
     conn.execute(f"create schema if not exists {CLOCK_SCHEMA}")
     conn.execute(f"""
@@ -107,8 +113,20 @@ class Principal:
 
 @dataclass
 class Fixtures:
-    """Everything a check may name. Deterministic in `seed`: the same integer gives the
-    same uuids, so a failing case is reproducible from the seed alone."""
+    """Everything a check may name.
+
+    **What is deterministic in `seed`, precisely** (r1 review B4 - the earlier blanket claim
+    "the same seed gives the same uuids and rows" was partly false):
+
+    * deterministic, minted here from `Random(seed)` in a fixed order: the four `auth.users`
+      ids, the two api-key ids, the key secrets, and the usage-event row ids. `seeded_ids()`
+      recomputes them from the seed alone, which is how the claim is checked.
+    * **not** deterministic: organization ids and slugs. They come from `0001_init.sql`'s
+      signup trigger, which calls `gen_random_uuid()` inside the database, so they differ
+      between runs by construction. That is why they are carried in the state file rather
+      than recomputed, and why a case names them through `Fixtures`.
+    * row *contents* (counts, amounts, timestamps) are fixed constants, not random.
+    """
 
     seed: int
     principals: dict[str, Principal] = field(default_factory=dict)
@@ -158,6 +176,34 @@ PEOPLE = (
     ("owner_beta", "owner-beta", False),
     ("operator", "operator", True),
 )
+TENANTS = (("alpha", "owner_alpha"), ("beta", "owner_beta"))
+USAGE_ROWS = {"alpha": 12, "beta": 5}
+# A grant, a usage debit and a negative adjustment. 01 requires decimal arithmetic, so every
+# assertion on these is on an exact Decimal, never a float.
+LEDGER_DELTAS = ((Decimal("25.000000"), "grant"), (Decimal("-1.250000"), "usage"),
+                 (Decimal("-0.003125"), "adjustment"))
+SEED_EPOCH = datetime(2026, 9, 1, tzinfo=timezone.utc)
+
+
+def seeded_ids(seed: int = 20260921) -> dict:
+    """Every id this harness mints, from the seed alone (r1 review B4).
+
+    This is the ONE place the `Random(seed)` consumption order lives: `seed_fixtures` reads
+    it instead of drawing from the generator itself, and `test_services.py` recomputes it to
+    check the reproducibility claim. Two copies of a consumption order drift; one cannot.
+
+    Organization ids are deliberately absent: `0001_init.sql`'s signup trigger mints them
+    with `gen_random_uuid()` inside the database, so they are NOT a function of this seed.
+    """
+    rng = Random(seed)
+    ids = {"users": {handle: _uuid(rng) for handle, _, _ in PEOPLE},
+           "keys": {}, "secrets": {}, "usage": {}, "ledger": {}}
+    for org_name, _creator in TENANTS:
+        ids["keys"][org_name] = _uuid(rng)
+        ids["secrets"][org_name] = f"e2-{org_name}-{rng.getrandbits(64):016x}"
+        ids["usage"][org_name] = [_uuid(rng) for _ in range(USAGE_ROWS[org_name])]
+        ids["ledger"][org_name] = [_uuid(rng) for _ in LEDGER_DELTAS]
+    return ids
 
 
 def seed_fixtures(conn, seed: int = 20260921) -> Fixtures:
@@ -169,15 +215,15 @@ def seed_fixtures(conn, seed: int = 20260921) -> Fixtures:
     (so operator reach is not membership in disguise), and a ledger whose exact total is
     asserted rather than approximated.
     """
-    rng = Random(seed)
+    ids = seeded_ids(seed)
     fixtures = Fixtures(seed=seed)
-    base = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    base = SEED_EPOCH
 
     # auth.users is GoTrue's table; the 0001 trigger turns each insert into a profile, a
     # personal organization and an owner membership. Seeding through it exercises the
     # trigger instead of writing the rows it is supposed to write.
     for handle, local, is_operator in PEOPLE:
-        user_id = _uuid(rng)
+        user_id = ids["users"][handle]
         email = f"{local}@infrx-e2.invalid"
         conn.execute(
             "insert into auth.users (id, email, raw_user_meta_data) values (%s, %s, %s)",
@@ -209,9 +255,9 @@ def seed_fixtures(conn, seed: int = 20260921) -> Fixtures:
         raise MigrationError("no models seeded; 0002_seed_models.sql did not run")
     model_id = model_id[0]
 
-    for org_name, creator in (("alpha", "owner_alpha"), ("beta", "owner_beta")):
-        key_id = _uuid(rng)
-        secret = f"e2-{org_name}-{rng.getrandbits(64):016x}"
+    for org_name, creator in TENANTS:
+        key_id = ids["keys"][org_name]
+        secret = ids["secrets"][org_name]
         conn.execute(
             "insert into public.api_keys (id, org_id, created_by, name, prefix, key_hash)"
             " values (%s, %s, %s, %s, %s, %s)",
@@ -219,31 +265,25 @@ def seed_fixtures(conn, seed: int = 20260921) -> Fixtures:
              "sk-infrx-" + secret[:8], hashlib.sha256(secret.encode()).hexdigest()))
         fixtures.keys[org_name] = key_id
 
-        rows = 0
-        for index in range(12 if org_name == "alpha" else 5):
+        for index, row_id in enumerate(ids["usage"][org_name]):
             conn.execute(
                 "insert into public.usage_events (id, org_id, api_key_id, model_id, status,"
                 " stream, prompt_tokens, completion_tokens, video_seconds, ttft_ms, latency_ms,"
                 " cached, cost_usd, created_at)"
                 " values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                (_uuid(rng), fixtures.org(org_name), key_id, model_id,
+                (row_id, fixtures.org(org_name), key_id, model_id,
                  200 if index % 5 else 429, bool(index % 2), 1200 + index * 7, 64 + index,
                  Decimal("12.500"), 800 + index, 4200 + index * 3, index % 3 == 0,
                  Decimal("0.00031250") * (index + 1), base + timedelta(hours=index)))
-            rows += 1
-        fixtures.usage_rows[org_name] = rows
+        fixtures.usage_rows[org_name] = USAGE_ROWS[org_name]
 
-        # Exact decimals: a grant, a usage debit and a negative adjustment. 01 requires
-        # decimal arithmetic, so the assertion is on an exact Decimal, never a float.
-        deltas = [(Decimal("25.000000"), "grant"), (Decimal("-1.250000"), "usage"),
-                  (Decimal("-0.003125"), "adjustment")]
-        for delta, kind in deltas:
+        for row_id, (delta, kind) in zip(ids["ledger"][org_name], LEDGER_DELTAS):
             conn.execute(
                 "insert into public.credit_ledger (id, org_id, delta_usd, kind, reason, ref,"
                 " created_by, created_at) values (%s,%s,%s,%s,%s,%s,%s,%s)",
-                (_uuid(rng), fixtures.org(org_name), delta, kind, f"e2 seed {kind}",
+                (row_id, fixtures.org(org_name), delta, kind, f"e2 seed {kind}",
                  f"e2:{org_name}:{kind}", fixtures.user(creator), base))
-        fixtures.ledger_totals[org_name] = sum(delta for delta, _ in deltas)
+        fixtures.ledger_totals[org_name] = sum(delta for delta, _ in LEDGER_DELTAS)
     return fixtures
 
 
@@ -280,6 +320,9 @@ class Check:
     expect: tuple
     why: str
     params: tuple = ()
+    # For an ("error", "42501") case: a fragment the server's message must contain, so a
+    # missing GRANT and an RLS/RPC refusal are not the same observation (r1 review).
+    message_contains: str | None = None
 
 
 def _sql(fixtures: Fixtures, template: str) -> tuple[str, tuple]:
@@ -305,6 +348,22 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
     columns/RPC" with "tenant/role enforcement in DB as well as route"."""
     alpha_keys, beta_keys = 1, 1
     return [
+        # -------- the premises the rest of the matrix rests on (r1 review R-b)
+        Check("E2-RLS-05", "postgres", None,
+              "select rolbypassrls from pg_roles where rolname = 'service_role'",
+              ("value", True),
+              "service_role really does bypass RLS - asserted, not assumed, because every "
+              "claim about route-side tenant safety depends on it"),
+        Check("E2-RLS-06", "postgres", None,
+              "select bool_or(rolbypassrls) from pg_roles where rolname in ('anon','authenticated')",
+              ("value", False), "and the two browser roles really do not"),
+        Check("E2-RLS-07", "authenticated", "member_alpha", "select auth.uid() = {member_alpha}",
+              ("value", True),
+              "the impersonated principal is who the database thinks it is: a matrix where "
+              "auth.uid() is NULL passes every deny-case vacuously"),
+        Check("E2-RLS-08", "authenticated", None, "select auth.uid() is null",
+              ("value", True), "and with no claim set there is no identity at all"),
+
         # -------- anon: a browser with no session reaches nothing
         Check("E2-RLS-01", "anon", None, "select count(*) from public.organizations",
               ("value", 0), "an unauthenticated browser sees no organization"),
@@ -336,14 +395,16 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
         Check("E2-RLS-20", "authenticated", "member_alpha",
               "insert into public.api_keys (org_id, created_by, name, prefix, key_hash)"
               " values ({alpha}, {member_alpha}, 'no', 'sk-infrx-x', 'deadbeef')",
-              ("error", PERMISSION_DENIED), "only an owner may mint a key"),
+              ("error", PERMISSION_DENIED), "only an owner may mint a key",
+              message_contains="violates row-level security policy"),
         Check("E2-RLS-21", "authenticated", "member_alpha",
               "update public.api_keys set revoked_at = now() where org_id = {alpha}",
               ("rowcount", 0), "a member's revoke is filtered to zero rows by the owner policy"),
         Check("E2-RLS-22", "authenticated", "member_alpha",
               "update public.profiles set is_operator = true where id = {member_alpha}",
               ("error", PERMISSION_DENIED),
-              "the column grant, not RLS, is what stops self-promotion to operator"),
+              "the column grant, not RLS, is what stops self-promotion to operator",
+              message_contains="permission denied for table"),
         Check("E2-RLS-23", "authenticated", "member_alpha",
               "update public.profiles set full_name = 'Renamed' where id = {member_alpha}",
               ("rowcount", 1), "a member may still rename themselves"),
@@ -352,18 +413,22 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
               ("rowcount", 0), "another tenant's profile is not writable"),
         Check("E2-RLS-25", "authenticated", "member_alpha",
               "insert into public.credit_ledger (org_id, delta_usd, kind) values ({alpha}, 1, 'grant')",
-              ("error", PERMISSION_DENIED), "credit is service-role only: no self-granting"),
+              ("error", PERMISSION_DENIED), "credit is service-role only: no self-granting",
+              message_contains="permission denied for table"),
         Check("E2-RLS-26", "authenticated", "member_alpha",
               "insert into public.usage_events (id, org_id, model_id, status)"
               " values (gen_random_uuid(), {alpha}, 'nemostation/marlin-2b', 200)",
-              ("error", PERMISSION_DENIED), "usage is service-role only: no self-metering"),
+              ("error", PERMISSION_DENIED), "usage is service-role only: no self-metering",
+              message_contains="permission denied for table"),
         Check("E2-RLS-27", "authenticated", "member_alpha",
               "delete from public.api_keys where org_id = {alpha}",
-              ("error", PERMISSION_DENIED), "keys are revoked, never deleted"),
+              ("error", PERMISSION_DENIED), "keys are revoked, never deleted",
+              message_contains="permission denied for table"),
         Check("E2-RLS-28", "authenticated", "member_alpha",
               "insert into public.org_members (org_id, user_id, role)"
               " values ({beta}, {member_alpha}, 'owner')",
-              ("error", PERMISSION_DENIED), "nobody joins a tenant by writing the table"),
+              ("error", PERMISSION_DENIED), "nobody joins a tenant by writing the table",
+              message_contains="permission denied for table"),
 
         # -------- owner of alpha
         Check("E2-RLS-30", "authenticated", "owner_alpha",
@@ -373,12 +438,14 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
         Check("E2-RLS-31", "authenticated", "owner_alpha",
               "insert into public.api_keys (org_id, created_by, name, prefix, key_hash)"
               " values ({beta}, {owner_alpha}, 'cross', 'sk-infrx-c', 'crosshash')",
-              ("error", PERMISSION_DENIED), "an owner of alpha is nobody in beta"),
+              ("error", PERMISSION_DENIED), "an owner of alpha is nobody in beta",
+              message_contains="violates row-level security policy"),
         Check("E2-RLS-32", "authenticated", "owner_alpha",
               "insert into public.api_keys (org_id, created_by, name, prefix, key_hash)"
               " values ({alpha}, {member_alpha}, 'forged', 'sk-infrx-f', 'forgedhash')",
               ("error", PERMISSION_DENIED),
-              "created_by must be the caller: no forging another member's authorship"),
+              "created_by must be the caller: no forging another member's authorship",
+              message_contains="violates row-level security policy"),
         Check("E2-RLS-33", "authenticated", "owner_alpha",
               "update public.api_keys set revoked_at = now() where id = {alpha_key}",
               ("rowcount", 1), "an owner revokes their own key"),
@@ -389,18 +456,24 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
         # -------- RPC guards (the reporting functions are security invoker + explicit check)
         Check("E2-RLS-40", "authenticated", "member_alpha",
               "select public.org_balance({beta})",
-              ("error", PERMISSION_DENIED), "the balance RPC refuses a foreign org outright"),
+              ("error", PERMISSION_DENIED), "the balance RPC refuses a foreign org outright",
+              message_contains="not a member of organization"),
         Check("E2-RLS-41", "authenticated", "member_alpha",
               "select public.org_balance({alpha})",
               ("value", Decimal("23.746875")), "and returns the exact seeded total for its own"),
         Check("E2-RLS-42", "authenticated", "member_alpha",
               "select count(*) from public.org_usage_summary({beta}, '2026-01-01Z', '2027-01-01Z')",
-              ("error", PERMISSION_DENIED), "the usage RPC refuses a foreign org"),
+              ("error", PERMISSION_DENIED), "the usage RPC refuses a foreign org",
+              message_contains="not a member of organization"),
         Check("E2-RLS-43", "authenticated", "member_alpha",
               "select requests from public.org_usage_summary({alpha}, '2026-01-01Z', '2027-01-01Z')",
               ("value", 12), "and counts exactly the seeded rows for its own"),
         Check("E2-RLS-44", "anon", None, "select public.org_balance({alpha})",
-              ("error", PERMISSION_DENIED), "anon cannot reach the RPC either"),
+              ("error", PERMISSION_DENIED),
+              "anon is refused by the function BODY, not by a grant: PUBLIC keeps EXECUTE on "
+              "a function by default, so the explicit membership check is the only thing "
+              "standing there - measured message, not assumed",
+              message_contains="not a member of organization"),
 
         # -------- operator: platform-wide reads, still not a free write
         Check("E2-RLS-50", "authenticated", "operator",
@@ -412,7 +485,8 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
         Check("E2-RLS-52", "authenticated", "operator",
               "insert into public.credit_ledger (org_id, delta_usd, kind) values ({alpha}, 5, 'grant')",
               ("error", PERMISSION_DENIED),
-              "an operator grant is a server action, not a table write (R34 audits it)"),
+              "an operator grant is a server action, not a table write (R34 audits it)",
+              message_contains="permission denied for table"),
         Check("E2-RLS-53", "authenticated", "operator",
               "select public.org_balance({beta})",
               ("value", Decimal("23.746875")), "the RPC lets an operator read any tenant"),
@@ -446,15 +520,22 @@ def run_check(conn, check: Check, fixtures: Fixtures) -> dict:
     statement, params = _sql(fixtures, check.sql)
     observed: object
     outcome = "ok"
+    identity = None
+    message = ""
     try:
         with conn.transaction() as _tx:
             conn.execute(f"set local role {check.role}")
             if check.principal:
                 principal = fixtures.principals[check.principal]
-                conn.execute("select set_config('request.jwt.claim.sub', %s, true)",
-                             (str(principal.user_id),))
-                conn.execute("select set_config('request.jwt.claim.role', %s, true)",
-                             (check.role,))
+                impersonate(conn, principal.user_id, check.role)
+                # r1 review R-b: a matrix in which `auth.uid()` is NULL proves nothing - every
+                # policy that reads it denies everybody, so every "0 rows" case passes
+                # vacuously. The identity is therefore checked on EVERY principal-bearing
+                # case, not once, and a mismatch fails the case whatever the statement said.
+                identity = conn.execute("select auth.uid()").fetchone()[0]
+                if str(identity) != str(principal.user_id):
+                    raise _NoIdentity(f"auth.uid() is {identity!r}, expected "
+                                      f"{principal.user_id} - the JWT claim did not take")
             cursor = conn.execute(statement, params)
             kind = check.expect[0]
             if kind == "value":
@@ -470,9 +551,12 @@ def run_check(conn, check: Check, fixtures: Fixtures) -> dict:
             raise _Rollback
     except _Rollback:
         pass
+    except _NoIdentity as lost:
+        observed, outcome, message = str(lost), "no-identity", str(lost)
     except psycopg.errors.Error as exc:
         observed = exc.sqlstate
         outcome = "error"
+        message = (exc.diag.message_primary or "")[:200]
     try:
         conn.execute("reset role")
     except psycopg.errors.Error:                 # a failed transaction already reset it
@@ -480,11 +564,17 @@ def run_check(conn, check: Check, fixtures: Fixtures) -> dict:
 
     expected_kind, expected = check.expect
     if expected_kind == "error":
-        passed = outcome == "error" and observed == expected
+        passed = (outcome == "error" and observed == expected
+                  # r1 review, same pass: 42501 is both "no grant" and "RLS/RPC refused you".
+                  # Where a case distinguishes them, the message fragment is the distinction.
+                  and (check.message_contains is None
+                       or check.message_contains.lower() in message.lower()))
     else:
         passed = outcome == "ok" and _same(observed, expected)
     return {"case": check.case, "role": check.role, "principal": check.principal,
-            "expected": f"{expected_kind}={expected}", "observed": observed,
+            "expected": f"{expected_kind}={expected}"
+                        + (f" message~{check.message_contains!r}" if check.message_contains else ""),
+            "observed": observed, "message": message, "auth_uid": str(identity) if identity else None,
             "outcome": outcome, "passed": passed, "why": check.why}
 
 
@@ -494,8 +584,27 @@ def _same(observed: object, expected: object) -> bool:
     return observed == expected
 
 
+def impersonate(conn, user_id, role: str) -> None:
+    """Set BOTH JWT claim forms (r1 review R-b).
+
+    The pinned image's `auth.uid()` reads the legacy per-claim GUC `request.jwt.claim.sub`;
+    hosted Supabase / PostgREST >= 10 set the JSON `request.jwt.claims` instead. A harness
+    that sets only one is correct against exactly one of them, and silently authenticates
+    nobody against the other - which makes every deny-case pass for the wrong reason.
+    """
+    import json
+    conn.execute("select set_config('request.jwt.claim.sub', %s, true)", (str(user_id),))
+    conn.execute("select set_config('request.jwt.claim.role', %s, true)", (role,))
+    conn.execute("select set_config('request.jwt.claims', %s, true)",
+                 (json.dumps({"sub": str(user_id), "role": role}),))
+
+
 class _Rollback(Exception):
     """Ends a check's transaction without committing. Not an error."""
+
+
+class _NoIdentity(Exception):
+    """`auth.uid()` did not come back as the principal the case impersonated."""
 
 
 def run_role_matrix(conn, fixtures: Fixtures) -> list[dict]:

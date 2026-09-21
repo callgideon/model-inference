@@ -132,13 +132,22 @@ def test_the_role_matrix_covers_every_role_and_every_expectation_kind():
         fixtures.principals[handle] = pgstate.Principal(handle, _fake_uuid(10 + index),
                                                         f"{handle}@x.invalid")
     checks = pgstate.role_matrix(fixtures)
-    assert {check.role for check in checks} == {"anon", "authenticated", "service_role"}
+    assert {check.role for check in checks} == {"anon", "authenticated", "service_role",
+                                                "postgres"}
     assert {check.expect[0] for check in checks} == {"value", "rowcount", "error"}
     assert len({check.case for check in checks}) == len(checks), "duplicate case id"
     assert all(check.why for check in checks), "every case states the invariant it pins"
     assert sum(1 for check in checks if check.expect == ("error", pgstate.PERMISSION_DENIED)) >= 8
     assert sum(1 for check in checks if check.expect[0] == "rowcount"
                and check.expect[1] == 1) >= 2, "an allowed write must be proved too"
+    # r1 review: every 42501 case must say WHICH 42501 it means - a missing grant, an RLS
+    # policy refusal and an RPC's own guard are three different facts behind one SQLSTATE.
+    denials = [check for check in checks if check.expect == ("error", pgstate.PERMISSION_DENIED)]
+    unqualified = [check.case for check in denials if not check.message_contains]
+    assert unqualified == [], f"these 42501 cases do not distinguish the cause: {unqualified}"
+    assert {check.message_contains for check in denials} == {
+        "permission denied for table", "violates row-level security policy",
+        "not a member of organization"}, "all three causes must be represented"
     # Every statement must be renderable: an unbound placeholder is a case that never runs.
     for check in checks:
         statement, _ = pgstate._sql(fixtures, check.sql)

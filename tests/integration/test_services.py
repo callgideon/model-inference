@@ -100,7 +100,7 @@ def test_the_signup_trigger_and_not_the_harness_created_the_tenants():
         assert member[0] == "member", "the matrix needs a non-owner member of someone's org"
 
 
-def test_balances_are_exact_decimals_and_the_seed_is_reproducible():
+def test_balances_are_exact_decimals():
     """DUR-RLS: "migrations preserve existing balances". The anchor is an exact Decimal, so
     a float round-trip anywhere in the stack would show up as a mismatch."""
     fixtures = stack_or_skip()
@@ -108,7 +108,45 @@ def test_balances_are_exact_decimals_and_the_seed_is_reproducible():
         totals = pgstate.balances(conn)
     assert totals["alpha-e2"] == Decimal("23.746875") == fixtures.ledger_totals["alpha"]
     assert totals["beta-e2"] == Decimal("23.746875")
-    assert fixtures.seed == harness.load_state()["seed"]
+
+
+def test_exactly_the_seeded_ids_are_in_the_database_recomputed_from_the_seed():
+    """r1 review B4: "the same seed gives the same uuids and rows" is now CHECKED, by
+    recomputing every minted id from `Random(seed)` and comparing it with what is stored.
+
+    The previous test only compared the saved seed integer with itself, so `Random(seed)` ->
+    `Random()` survived as a mutant. It cannot now: an unseeded generator mints different
+    uuids and every set below differs.
+    """
+    fixtures = stack_or_skip()
+    expected = pgstate.seeded_ids(fixtures.seed)
+    with connect() as conn:
+        users = {row[0] for row in conn.execute("select id from public.profiles").fetchall()}
+        keys = {row[0] for row in conn.execute("select id from public.api_keys").fetchall()}
+        usage = {row[0] for row in conn.execute("select id from public.usage_events").fetchall()}
+        ledger = {row[0] for row in conn.execute(
+            "select id from public.credit_ledger").fetchall()}
+        hashes = dict(conn.execute(
+            "select o.slug, k.key_hash from public.api_keys k"
+            " join public.organizations o on o.id = k.org_id").fetchall())
+
+    assert users == set(expected["users"].values()), "the four auth.users ids are seed-derived"
+    assert keys == set(expected["keys"].values())
+    assert usage == {row for rows in expected["usage"].values() for row in rows}
+    assert ledger == {row for rows in expected["ledger"].values() for row in rows}
+    assert len(usage) == sum(pgstate.USAGE_ROWS.values()) == 17
+    # The key SECRET is seed-derived too, which is only demonstrable through its hash.
+    import hashlib
+    for org_name, slug in (("alpha", "alpha-e2"), ("beta", "beta-e2")):
+        assert hashes[slug] == hashlib.sha256(
+            expected["secrets"][org_name].encode()).hexdigest(), org_name
+
+    # And the honest other half: organization ids are NOT a function of the seed. They come
+    # from the trigger's gen_random_uuid(), so asserting them against a recomputation would be
+    # asserting a falsehood - they are carried in the state file instead.
+    assert "orgs" not in expected and "slugs" not in expected, \
+        "seeded_ids must not pretend to know an id the database mints"
+    assert fixtures.org("alpha") not in users, "an org id is not a user id"
 
 
 # ------------------------------------------------------------------ DUR-RLS
