@@ -287,6 +287,7 @@ class FakeVllmServer:
     def start(self, timeout: float = 30.0) -> "FakeVllmServer":
         argv = [sys.executable, str(Path(__file__).resolve()), "--port", str(self.port),
                 "--fault", self.fault, "--stall-real-s", str(self.stall_real_s)]
+        self._drop_log()        # a restart after a kill would otherwise orphan the old one
         # The child's stderr goes to a temporary file, not to DEVNULL: a server that dies on
         # startup (a busy port is the obvious one) otherwise reports only its exit status,
         # and "exited 3" with no reason costs whoever reads it an afternoon.
@@ -343,11 +344,14 @@ class FakeVllmServer:
                 self.process.kill()
                 self.process.wait(timeout=10)
             self.process = None
+        self._drop_log()
+
+    def _drop_log(self) -> None:
         log = getattr(self, "_log", None)
         if log is not None:
             log.close()
             Path(log.name).unlink(missing_ok=True)
-            self._log = None
+        self._log = None
 
     def __enter__(self) -> "FakeVllmServer":
         return self.start()
