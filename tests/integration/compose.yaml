@@ -1,0 +1,83 @@
+# E2 task-local integration services (research/plan/04-verification.md layer 2).
+#
+# EVERY image is pinned by digest, never by tag alone: a tag is a moving target and a
+# "pinned version" that moves is not evidence. The tag beside each digest is the tag the
+# digest was resolved from (recorded in this task's evidence with the resolving command),
+# and is a comment only - Docker uses the digest.
+#
+# Names, ports and lifetime (research/plan/08-contracts-v1-encoding.md §8, R48):
+#   - project `infrx-e2`, every container `infrx-e2-<service>`, so a teardown can prove it
+#     removed only what it created and never touches another session's containers;
+#   - host ports only in 55500-55599 (E's range), bound to 127.0.0.1 so nothing is exposed;
+#   - volumes are project-scoped and disposable (`down -v` removes them);
+#   - credentials are fixed local test strings. No production credential is ever needed,
+#     and nothing here may be pointed at Supabase production or AWS.
+#
+# There is no healthcheck block on purpose: readiness is polled from the host in
+# `harness.py`, one mechanism for four images instead of four guesses about which client
+# binary each image happens to ship.
+name: infrx-e2
+
+services:
+  # Supabase-compatible PostgreSQL. apps/app/supabase/migrations/0001_init.sql references
+  # `auth.users`, `auth.uid()` and the `anon`/`authenticated`/`service_role` roles, which
+  # plain postgres does not have; this image's entrypoint creates all of them in the
+  # `postgres` database before our migrations run (see tests/integration/README.md for the
+  # measurement and for why the database is `postgres` rather than `infrx_e2`).
+  postgres:
+    image: supabase/postgres@sha256:7768d0d1d377250b718a9ad07f4661d008ebe6c96ecbbc4c08f3c5e53553e8fd  # 17.6.1.173
+    container_name: infrx-e2-postgres
+    environment:
+      POSTGRES_PASSWORD: infrx-e2-local
+    ports:
+      - "127.0.0.1:55532:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    stop_grace_period: 5s
+
+  valkey:
+    image: valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1  # 8.1-alpine
+    container_name: infrx-e2-valkey
+    # Disposable by construction: no RDB snapshot, no AOF. A restart is an empty index,
+    # which is what DUR-OUTBOX's "lose Valkey data" injection wants to be cheap.
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:55579:6379"
+    stop_grace_period: 5s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server@sha256:87e0a5b72f5465b18eacca7c76850e7ff551c9795c50e451f5646299e5e24146  # 25.8.33.6-alpine
+    container_name: infrx-e2-clickhouse
+    environment:
+      CLICKHOUSE_DB: infrx_e2
+      CLICKHOUSE_USER: infrx_e2
+      CLICKHOUSE_PASSWORD: infrx-e2-local
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "127.0.0.1:55523:8123"
+      - "127.0.0.1:55590:9000"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    stop_grace_period: 5s
+
+  s3:
+    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e  # RELEASE.2025-09-07T16-13-09Z
+    container_name: infrx-e2-s3
+    command: ["server", "/data", "--address", ":9000"]
+    environment:
+      MINIO_ROOT_USER: infrxe2minio
+      MINIO_ROOT_PASSWORD: infrx-e2-local-secret
+    ports:
+      - "127.0.0.1:55500:9000"
+    volumes:
+      - s3-data:/data
+    stop_grace_period: 5s
+
+volumes:
+  postgres-data:
+  clickhouse-data:
+  s3-data:

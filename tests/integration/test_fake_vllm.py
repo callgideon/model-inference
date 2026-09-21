@@ -1,0 +1,274 @@
+"""Layer 1: the fake vLLM and its engine adapter, over real HTTP, no container needed.
+
+The suite the contract cares about is the *exported* one
+(`infrx.contracts.conformance.run_engine_conformance`): the same cases the in-memory fake
+passes, run against an adapter that decodes SSE off a socket. Everything else here pins the
+wire behaviour a conformance case cannot see - that a stall is declared rather than slept,
+that a torn connection is distinguishable from a finished one, that cancellation is keyed
+by job.
+
+No sleeps, no wall-clock assertions: the stall is a clock advance (08 §2).
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import signal
+import sys
+import uuid
+from pathlib import Path
+
+import httpx
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import harness                                          # noqa: E402
+
+harness.api_on_path()
+
+import fake_vllm                                        # noqa: E402
+from fake_vllm import EngineProcessExited, FakeVllmServer, HttpEngine, engine_factory  # noqa: E402
+from infrx.contracts.conformance import MissingHook, run_engine_conformance  # noqa: E402
+from infrx.contracts.fakes.engine import DEFAULT_TEXT, EngineFault  # noqa: E402
+from infrx.contracts.fakes.support import FakeClock  # noqa: E402
+from infrx.contracts.limits import DEFAULTS  # noqa: E402
+from infrx.contracts.records import (ChunkEventType, LeaseKind, Lease,  # noqa: E402
+                                     PreparedRequest)
+
+# A port inside E's range that the compose stack does not use, so this file can run while
+# the stack is up.
+TEST_PORT = harness.PORTS["fake_vllm"] + 1
+SERVER: FakeVllmServer | None = None
+
+
+def setup_module(module) -> None:                        # noqa: ARG001 - pytest hook
+    global SERVER
+    SERVER = FakeVllmServer(TEST_PORT).start()
+
+
+def teardown_module(module) -> None:                     # noqa: ARG001 - pytest hook
+    if SERVER is not None:
+        SERVER.stop()
+
+
+def adapter(fault: str = "none", clock: FakeClock | None = None) -> HttpEngine:
+    SERVER.reset()
+    return HttpEngine(SERVER.base_url, clock=clock or FakeClock(), fault=fault)
+
+
+def lease(job_id: str | None = None, clock: FakeClock | None = None) -> Lease:
+    clock = clock or FakeClock()
+    now = clock.now()
+    return Lease(job_id=job_id or str(uuid.uuid4()), kind=LeaseKind.inference, generation=1,
+                 worker_id="e2-worker", acquired_at=now,
+                 expires_at=clock.at(DEFAULTS.lease_ttl_s),
+                 generation_deadline_at=clock.at(DEFAULTS.generation_timeout_s),
+                 first_token_deadline_at=clock.at(DEFAULTS.ttft_timeout_s))
+
+
+def prepared() -> PreparedRequest:
+    return PreparedRequest(request_id=str(uuid.uuid4()), model_revision="infrx-e2/fake-vllm",
+                           messages=({"role": "user", "content": "Describe this clip."},),
+                           max_output_tokens=256, prompt_tokens=1200)
+
+
+async def drain(engine: HttpEngine, the_lease: Lease) -> list:
+    return [event async for event in engine.generate(the_lease, prepared())]
+
+
+# ------------------------------------------------------------------ F-CONTRACT
+
+def test_the_exported_engine_conformance_suite_passes_over_http():
+    """F-CONTRACT: the same suite the in-memory fake passes, against an HTTP adapter.
+
+    A conformance case skipped for a missing hook is a skip, never a pass (R32), so the
+    factory's hooks are asserted present before the suite runs.
+    """
+    factory = engine_factory(SERVER)
+    harness_obj = factory()
+    assert harness_obj.extra.get("text") == DEFAULT_TEXT, "the only optional engine hook"
+    ran = run_engine_conformance(factory)
+    assert ran == 8, f"expected the eight exported engine cases, ran {ran}"
+
+
+def test_every_fault_mode_04_requires_is_implemented():
+    """04 §Test environments: prefill stall, midstream stall, malformed usage,
+    cancellation race, abrupt exit, plus 08 §2's split reasoning delimiters."""
+    required = {"prefill_stall", "midstream_stall", "malformed_usage", "missing_usage",
+                "cancellation_race", "abrupt_exit", "split_reasoning_delimiters"}
+    assert required <= {fault.value for fault in EngineFault}
+    for name in sorted(required):
+        state = SERVER.control(fault=name)
+        assert state["fault"] == name, name
+    SERVER.reset()
+
+
+# ------------------------------------------------------------------ wire behaviour
+
+def test_a_stall_is_declared_not_slept_and_moves_only_the_injected_clock():
+    """The stall comment is the whole mechanism: the adapter advances its clock and the
+    suite needs no sleep. A test that waited 61 real seconds would be deleted by the first
+    person in a hurry."""
+    clock = FakeClock()
+    engine = adapter("prefill_stall", clock)
+    started = clock.now()
+    events = asyncio.run(drain(engine, lease(clock=clock)))
+    assert [event.type for event in events] == [ChunkEventType.progress]
+    advanced = (clock.now() - started).total_seconds()
+    assert advanced > DEFAULTS.ttft_timeout_s, advanced
+    assert engine.stalled_s == advanced
+
+    raw = httpx.post(f"{SERVER.base_url}/v1/chat/completions",
+                     json={"stream": True, "model": "m", "messages": [],
+                           "infrx_fault": "prefill_stall"}, timeout=10.0).text
+    assert fake_vllm.STALL_COMMENT in raw, "the stall must be visible on the wire"
+    assert raw.rstrip().endswith("[DONE]"), "a stall ends the stream cleanly"
+
+
+def test_a_midstream_stall_delivers_a_delta_and_then_no_usage():
+    clock = FakeClock()
+    engine = adapter("midstream_stall", clock)
+    events = asyncio.run(drain(engine, lease(clock=clock)))
+    assert any(event.type is ChunkEventType.delta for event in events)
+    assert not any(event.type is ChunkEventType.usage for event in events)
+    assert engine.stalled_s > DEFAULTS.tpot_stall_s
+
+
+def test_an_abrupt_exit_tears_the_connection_and_is_not_a_domain_error():
+    """An engine process dying is not a customer error. It must also not look like a
+    finished stream: a 200 whose body stops is exactly how a truncated generation becomes
+    an accepted, billable request."""
+    from infrx.contracts import errors
+    engine = adapter("abrupt_exit")
+    with pytest.raises(EngineProcessExited) as raised:
+        asyncio.run(drain(engine, lease()))
+    assert not isinstance(raised.value, errors.DomainError)
+    assert SERVER.alive(), "only the response is aborted; the server itself survives"
+
+
+def test_a_stream_without_its_terminator_is_a_failure_not_a_success():
+    """The same rule from the client's side: no `[DONE]`, no success. This is the shape
+    E1 measured on the bench client (`truncated_stream`), asserted here at the port."""
+    truncated = ("data: " + json.dumps({"choices": [{"index": 0, "delta": {"role": "assistant"}}]})
+                 + "\n\ndata: "
+                 + json.dumps({"choices": [{"index": 0, "delta": {"content": "hi"}}]}) + "\n\n")
+
+    def handler(request):                                # noqa: ARG001
+        return httpx.Response(200, text=truncated,
+                              headers={"content-type": "text/event-stream"})
+
+    engine = HttpEngine(SERVER.base_url, clock=FakeClock(),
+                        client_factory=lambda **kw: httpx.AsyncClient(
+                            transport=httpx.MockTransport(handler), **kw))
+    with pytest.raises(EngineProcessExited, match="without \\[DONE\\]"):
+        asyncio.run(drain(engine, lease()))
+
+
+def test_malformed_and_missing_usage_never_become_authoritative_tokens():
+    """R21/§5: unknown usage is the ABSENCE of usage. A client that coerces `"1200"` into
+    an integer invents an authoritative token count, and an invented count is a debit."""
+    for fault in ("malformed_usage", "missing_usage"):
+        events = asyncio.run(drain(adapter(fault), lease()))
+        assert all(event.usage is None for event in events), fault
+    assert HttpEngine._usage({"prompt_tokens": "1200", "completion_tokens": None}) is None
+    assert HttpEngine._usage({"prompt_tokens": 1200, "completion_tokens": True}) is None
+    assert HttpEngine._usage({"prompt_tokens": 1200, "completion_tokens": -1}) is None
+    assert HttpEngine._usage({"prompt_tokens": 1.0, "completion_tokens": 2}) is None
+    good = HttpEngine._usage({"prompt_tokens": 1200, "completion_tokens": 7})
+    assert good is not None and good.completion_tokens == 7
+    assert good.certainty.value == "authoritative"
+
+
+def test_split_reasoning_delimiters_never_appear_whole_in_one_chunk():
+    events = asyncio.run(drain(adapter("split_reasoning_delimiters"), lease()))
+    deltas = [event.payload["content"] for event in events
+              if event.type is ChunkEventType.delta]
+    joined = "".join(deltas)
+    assert joined.count("<think>") == 1 and joined.count("</think>") == 1
+    assert not any("<think>" in delta or "</think>" in delta for delta in deltas)
+
+
+def test_cancellation_is_keyed_by_job_and_leaves_other_jobs_alone():
+    """A cancel that cancelled everything would pass a single-job case and be useless."""
+    engine = adapter("cancellation_race")
+    cancelled, untouched = lease(), lease()
+    assert asyncio.run(engine.cancel(cancelled)) is True
+
+    events = asyncio.run(drain(engine, cancelled))
+    usage = [event for event in events if event.type is ChunkEventType.usage]
+    assert len(usage) == 1 and usage[0].usage.completion_tokens == 0
+
+    other = asyncio.run(drain(engine, untouched))
+    assert any(event.type is ChunkEventType.delta for event in other), \
+        "cancelling one job must not cancel another"
+
+
+def test_a_per_request_fault_header_beats_the_process_default():
+    """So one scripted request cannot disturb a concurrent one, and a client that cannot
+    send a header (a gateway under test) still has the /_control default."""
+    SERVER.control(fault="missing_usage")
+    try:
+        response = httpx.post(f"{SERVER.base_url}/v1/chat/completions",
+                              json={"stream": True, "model": "m", "messages": []},
+                              headers={"X-Infrx-Fault": "split_reasoning_delimiters"},
+                              timeout=10.0)
+        assert "<th" in response.text and "ink>" in response.text
+        default = httpx.post(f"{SERVER.base_url}/v1/chat/completions",
+                             json={"stream": True, "model": "m", "messages": []},
+                             timeout=10.0).text
+        assert '"usage"' not in default, "the process default still applies with no header"
+    finally:
+        SERVER.reset()
+
+
+def test_health_and_drain_and_the_non_stream_path_answer():
+    engine = adapter()
+    assert asyncio.run(engine.health())["ready"] is True
+    asyncio.run(engine.drain())
+    assert asyncio.run(engine.health())["ready"] is False
+    SERVER.reset()
+    body = httpx.post(f"{SERVER.base_url}/v1/chat/completions",
+                      json={"stream": False, "model": "m", "messages": []}, timeout=10.0).json()
+    assert body["choices"][0]["message"]["content"] == DEFAULT_TEXT
+    assert body["usage"]["completion_tokens"] > 0
+    assert httpx.get(f"{SERVER.base_url}/v1/models", timeout=5.0).json()["data"][0]["id"]
+    assert httpx.get(f"{SERVER.base_url}/nope", timeout=5.0).status_code == 404
+
+
+# ------------------------------------------------------------------ process-kill fault
+
+def test_killing_the_engine_process_is_a_transport_failure_and_it_restarts():
+    """Fault injection: process loss. SIGKILL, not SIGTERM - no flush, no goodbye. The
+    client must see a transport failure rather than an empty success, and the harness must
+    be able to put the engine back."""
+    victim = FakeVllmServer(TEST_PORT + 1).start()
+    engine = HttpEngine(victim.base_url, clock=FakeClock(), timeout=5.0)
+    assert asyncio.run(engine.health())["ready"] is True
+    assert victim.kill(signal.SIGKILL) != 0
+    assert not victim.alive()
+    with pytest.raises(httpx.HTTPError):
+        asyncio.run(engine.health())
+    with pytest.raises(EngineProcessExited):
+        asyncio.run(drain(engine, lease()))
+    victim.start()
+    try:
+        assert asyncio.run(engine.health())["ready"] is True
+    finally:
+        victim.stop()
+
+
+# ------------------------------------------------------------------ canary
+
+def test_canary_intentional_failure_is_detected():
+    """E2 acceptance: "intentional failure is detected rather than skipped".
+
+    Off by default. `INFRX_E2_CANARY=fail` makes this case fail on purpose; run.py runs it
+    that way and treats a green result as the failure, because a green result would mean the
+    runner cannot see a broken test. It is a failure, deliberately NOT a skip: a skip is
+    what we are proving does not happen.
+    """
+    if os.environ.get("INFRX_E2_CANARY") == "fail":
+        raise AssertionError("E2 canary: this failure is intentional (INFRX_E2_CANARY=fail)")
+    assert os.environ.get("INFRX_E2_CANARY") in (None, "", "off")
