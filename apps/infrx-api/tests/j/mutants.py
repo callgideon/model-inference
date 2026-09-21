@@ -185,8 +185,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_a_trace_already_labelled_at_this_rubric_version_is_excluded"),
     _m("judge_scores_count_as_customer_feedback",
        "the feedback stratum is customer signal, not the judge's own output",
-       S, "return any(entry.author_role is AuthorRole.customer and not entry.calibration_set",
-       "return any(not entry.calibration_set and (True",
+       S, "        return any(entry.author_role is AuthorRole.customer and not entry.calibration_set\n"
+          "                   and not entry.by_operator for entry in self.own_feedback)",
+       "        return any(not entry.calibration_set\n"
+       "                   and not entry.by_operator for entry in self.own_feedback)",
        "test_a_judges_own_score_is_not_customer_feedback"),
     _m("calibration_keys_on_by_operator",
        "calibration membership is calibration_set, not the by_operator marker (R56)",
@@ -336,9 +338,13 @@ MUTANTS: tuple[Mutant, ...] = (
        C, "    if settings.judge_mode != JUDGE_MODE_LIVE:",
        '    if settings.judge_mode == "dry_run":',
        "test_only_the_exact_mode_live_authorizes"),
+    # Not "remove the raise": with `budget` left as `None` the later comparison dies with a
+    # `TypeError`, which is a crash rather than a refusal and tells us nothing about the
+    # case. Treating a non-positive budget as an unlimited one is the same defect with the
+    # types intact, so the kill is an assertion.
     _m("zero_budget_can_submit", "a live submission needs a positive budget",
-       C, '        raise errors.BudgetExceeded("a live submission needs a positive JUDGE_LIVE_BUDGET_USD")',
-       "        pass",
+       C, "    budget = _positive_money(settings.judge_live_budget_usd)",
+       "    budget = _positive_money(settings.judge_live_budget_usd) or money.MAX_VALUE",
        "test_the_defaults_can_never_authorize_a_submission",
        "test_a_budget_that_is_not_positive_never_authorizes"),
     _m("unpriced_estimate_can_submit",
@@ -386,10 +392,10 @@ MUTANTS: tuple[Mutant, ...] = (
        'APPROVED_RATES = StaticRateTable((ProviderRate(price_version="guess", model="claude-opus-5",\n'
        '                                              input_per_million="5", output_per_million="25",\n'
        '                                              source="guessed",\n'
-       '                                              effective_at=datetime(2026, 1, 1, tzinfo=timezone.utc)),))',
+       '                                              effective_at=datetime.fromisoformat(\n'
+       '                                                  "2026-01-01T00:00:00+00:00")),))',
        "test_the_shipped_rate_table_is_empty_and_says_why",
-       "test_a_dry_run_reports_samples_costs_and_why_it_will_not_submit",
-       dies_by=("NameError",)),
+       "test_a_dry_run_reports_samples_costs_and_why_it_will_not_submit"),
     _m("rate_lookup_takes_the_first_row", "the row effective at the clock is used (R57)",
        C, "        return max(effective, key=lambda row: row.effective_at)",
        "        return effective[0]",

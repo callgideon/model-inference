@@ -158,6 +158,10 @@ def rejection(value: Result) -> Rejected:
     something it should have refused" into an `AttributeError` in the test body, which is
     a test that crashed rather than a test that failed - and a mutation runner cannot
     tell that from an honest assertion.
+
+    The message names the *type* rather than repr-ing the value, because these cases feed
+    the validator hostile input: `repr` of an accepted result carrying a 5,000-digit score
+    raises `ValueError`, which would turn this assertion into a crash of its own.
     """
-    assert isinstance(value, Rejected), f"expected a rejection, got {value!r}"
+    assert isinstance(value, Rejected), f"expected a rejection, got {type(value).__name__}"
     return value

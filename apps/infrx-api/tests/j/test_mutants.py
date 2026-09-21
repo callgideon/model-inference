@@ -130,12 +130,14 @@ SELF_TESTS = (
                           old="return (result.run_id, result.sample_id, result.rubric_version)",
                           new="return (result.run_id, result.sample_id)",
                           cases=("test_a_sample_without_media_is_marked_limited",))),
-    # The new one: a test that *crashed* is not a test that noticed.
+    # The new one: a test that *crashed* is not a test that noticed. This is the declared
+    # `brief_lets_an_unprintable_value_raise` mutant with its declaration removed, so the
+    # only difference between a kill and a runner error is the declaration.
     ("an_undeclared_exception_death_is_not_a_kill", mutation_list.Outcome.broken_runner,
      mutation_list.Mutant(name="self_crash", invariant="a kill is assertion-shaped",
                           file="judge/rubric.py",
-                          old="    unnamed = [key for key in payload if not isinstance(key, str)]",
-                          new="    unnamed = []",
+                          old='        return f"<unprintable {type(value).__name__}>"',
+                          new="        raise",
                           cases=("test_a_hostile_payload_is_rejected_rather_than_raised",))),
     ("a_missing_anchor_is_a_failure", mutation_list.Outcome.misdeclared,
      mutation_list.Mutant(name="self_missing_anchor", invariant="the list matches the code",
@@ -157,10 +159,11 @@ def test_the_runner_cannot_report_a_false_kill(name, expected, mutant):
 
 def test_the_same_defect_is_a_kill_once_its_exception_is_declared():
     """The other half of the classification: an invariant whose honest kill *is* an
-    exception (`validate_output` never raises) declares it, and then the same edit is a
-    kill rather than a runner error."""
-    declared = next(m for m in ALL if m.name == "non_string_key_reaches_the_key_arithmetic")
-    assert declared.dies_by == ("TypeError",)
+    exception (`validate_output` never raises) declares it, and then the *same edit* is a
+    kill rather than a runner error - the self-test above runs it undeclared."""
+    declared = next(m for m in ALL if m.name == "brief_lets_an_unprintable_value_raise")
+    assert declared.dies_by == ("ValueError",)
+    assert declared.old == SELF_TESTS[3][2].old and declared.new == SELF_TESTS[3][2].new
     assert mutation_list.run_mutant(declared).killed
 
 

@@ -274,7 +274,9 @@ def test_a_hostile_payload_is_rejected_rather_than_raised():
     huge = fakes.result(); huge["relevance"] = {"score": 10 ** 5000, "rationale": "x"}
     assert reject(check(huge)).reason == "score_out_of_range"
 
-    keyed = fakes.result(); keyed[7] = "not a name"
+    # A non-string key **beside** a string one, because that is the shape that made the
+    # key-set arithmetic raise: `sorted({7, "confidence"})` cannot order the two.
+    keyed = fakes.result(); keyed[7] = "not a name"; keyed["confidence"] = 1
     assert reject(check(keyed)).reason == "non_string_key"
 
     enormous = fakes.result(); enormous["k" * 5_000_000] = 1

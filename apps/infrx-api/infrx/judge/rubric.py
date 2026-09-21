@@ -347,9 +347,15 @@ def validate_output(rubric: Rubric, payload: object, *, run_id: str, sample_id: 
         return reject("overall_pass_inconsistent",
                       f"overall_pass {claimed} contradicts rubric {rubric.rubric_id} "
                       f"v{rubric.version}")
-    return JudgeScores(run_id=run_id, sample_id=sample_id, rubric_version=rubric.version,
-                       scores=tuple(scores), overall_pass=claimed, notes=notes, limited=limited,
-                       media_required=rubric.requires_media)
+    try:
+        return JudgeScores(run_id=run_id, sample_id=sample_id, rubric_version=rubric.version,
+                           scores=tuple(scores), overall_pass=claimed, notes=notes,
+                           limited=limited, media_required=rubric.requires_media)
+    except ValueError as exc:
+        # The record's own invariants (R56's no-media floor) are the last line, and a
+        # function documented never to raise has to answer with a rejection even when they
+        # fire - otherwise a checked-twice invariant becomes a 500 on the collect path.
+        return reject("inconsistent_result", str(exc))
 
 
 class ScoreLedger:
