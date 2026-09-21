@@ -213,10 +213,23 @@ preflight rather than surfacing as a failure to bind.
 `Faults` is a context manager that reverts in reverse order even when the body raises, and
 every container helper is namespace-checked first.
 
+When D1's migrations are in the harness, two things change and are already agreed with the
+coordinator: `E2-RLS-01`..`04` and `E2-RLS-44` flip from "zero rows" to error expectations
+(D1 revokes `anon` outright rather than relying on a policy that matches nothing), and E2 drops
+its private clock in favour of D1's `infrx_test`.
+
 The database clock lives in schema `infrx_e2_test` behind the GUC `infrx_e2.clock_offset_s`.
 **No migration creates either**, which is checked against the migration files rather than
 asserted — a clock a deployed process can move is a way to release an unknown-usage hold
 early (08 §10, item 3).
+
+## Known limits of the isolation (r2 review, recorded deliberately)
+
+| Limit | Why it is acceptable here |
+|---|---|
+| **The ownership label is the checkout path**, which is guessable. A deliberate copier that sets `INFRX_E2_CHECKOUT` to another checkout's path is mis-classified as the owner. | It stops the accident this exists for - a second checkout of the same repository running the same project name - and no path *in practice* forges it. A per-run random id, written into the state file, would close it; that is the upgrade if two E sessions ever share a host. |
+| **A fake vLLM started by the test suite is orphaned if `run.py` is interrupted during the `suites` stage.** The signal handler only knows about servers `run.py` itself started. | The next run's preflight reports it by name and refuses, so it costs a message rather than a mystery. `pytest` started it, so `pytest`'s own teardown is the right owner. |
+| **`infrx.now()` (D1's clock) is declared STABLE**, so within one statement it returns the value it had before `advance()` in that same statement. | Postgres is entitled to fold a stable function once per statement. Move the clock in its own statement, then read it. |
 
 ## Honesty rules this harness follows
 

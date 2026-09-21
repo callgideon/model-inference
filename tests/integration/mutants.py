@@ -50,6 +50,11 @@ class Mutant:
     # r1 review B3: a CONTROL that must SURVIVE. If a no-op edit comes back "killed", the
     # runner is measuring its own setup and every other kill it reports is worthless.
     must_survive: bool = False
+    # r2 review B1: proving "every check is rolled back" REQUIRES letting the un-rolled-back
+    # writes commit, so this mutant dirties the shared database on purpose. The runner
+    # re-provisions afterwards; without that, every later layer-2 mutant and the suite itself
+    # fail on the residue and the failures look like broken policies.
+    dirties_database: bool = False
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -245,6 +250,91 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/test_run.py", "sigterm",
            cases=("test_sigterm_tears_down_and_orphans_no_fake_server",)),
 
+    # ---------------- the r2 review's eight unproven claims
+    Mutant("e2m47", "r2 B2: a kill needs a reported failure, not just a non-zero exit",
+           "tests/integration/mutants.py",
+           # Multi-line: the single line also appears above as this mutant's own data, and
+           # `occurrences` would refuse it as stale.
+           '    killed = code != 0 and detail["failed"] > 0\n'
+           "    if mutant.must_survive:",
+           '    killed = code != 0\n'
+           "    if mutant.must_survive:",
+           "tests/integration/test_run.py", "verdict_reads_pytests_own_summary",
+           cases=("test_the_verdict_reads_pytests_own_summary_and_not_the_exit_code",)),
+    Mutant("e2m48", "r2 B2: a collection error is setup-error, never a kill",
+           "tests/integration/mutants.py",
+           '    if detail["errors"] or (code != 0 and not summary):\n'
+           '        return {**detail, "status": "setup-error",',
+           '    if code != 0 and not summary:\n'
+           '        return {**detail, "status": "setup-error",',
+           "tests/integration/test_run.py", "verdict_reads_pytests_own_summary",
+           cases=("test_the_verdict_reads_pytests_own_summary_and_not_the_exit_code",)),
+    Mutant("e2m49", "r2 B2: a selector that matched nothing is no-cases",
+           "tests/integration/mutants.py",
+           '    if nothing_ran:\n        return {**detail, "status": "no-cases",',
+           '    if False:\n        return {**detail, "status": "no-cases",',
+           "tests/integration/test_run.py", "verdict_reads_pytests_own_summary",
+           cases=("test_the_verdict_reads_pytests_own_summary_and_not_the_exit_code",)),
+    Mutant("e2m50", "r2 B2: the counts come from the summary line, not the whole output",
+           "tests/integration/mutants.py",
+           '    summary = _summary(output)\n'
+           '    failed = re.search(r"(\\d+) failed", summary)',
+           '    summary = output\n'
+           '    failed = re.search(r"(\\d+) failed", summary)',
+           "tests/integration/test_run.py", "verdict_reads_pytests_own_summary",
+           cases=("test_the_verdict_reads_pytests_own_summary_and_not_the_exit_code",)),
+    Mutant("e2m51", "r2 B5: a same-named unlabelled network is a candidate",
+           "tests/integration/harness.py",
+           '                  "network": lambda n: n == NETWORK or n.startswith(f"{PROJECT}_")}[kind]',
+           '                  "network": lambda n: False}[kind]',
+           "tests/integration/test_services.py", "unlabelled_network",
+           layer=2,
+           cases=("test_an_unlabelled_network_with_our_name_is_refused_not_removed",)),
+    Mutant("e2m52", "r2 B5: the orphan scan really reads the process table",
+           "tests/integration/run.py",
+           "        if marker in cmdline:",
+           "        if False:",
+           "tests/integration/test_run.py", "real_orphaned_fake_server",
+           cases=("test_a_real_orphaned_fake_server_is_found_by_its_command_line",)),
+    Mutant("e2m53", "r2 minor M12: provision_database only talks to our own container",
+           "tests/integration/harness.py",
+           '    container = assert_ours(container_of("postgres"))',
+           '    container = container_of("postgres")',
+           "tests/integration/test_run.py", "provision_database_refuses",
+           cases=("test_provision_database_refuses_a_container_outside_the_namespace",)),
+    Mutant("e2m54", "r2 minor M43: the server log cannot be left in the temp directory",
+           "tests/integration/fake_vllm.py",
+           '        self._log = tempfile.TemporaryFile(prefix="infrx-e2-fake-vllm-", suffix=".log")',
+           '        self._log = tempfile.NamedTemporaryFile(prefix="infrx-e2-fake-vllm-", delete=False)',
+           "tests/integration/test_fake_vllm.py", "log_is_never_left_behind",
+           cases=("test_the_server_log_is_never_left_behind_in_the_temp_directory",)),
+    Mutant("e2m55", "r2 minor V7: the CLI default host is loopback",
+           "tests/integration/fake_vllm.py",
+           '    parser.add_argument("--host", default="127.0.0.1",',
+           '    parser.add_argument("--host", default="0.0.0.0",',
+           "tests/integration/test_run.py", "binds_loopback",
+           cases=("test_the_fake_server_binds_loopback_unless_explicitly_allowed",)),
+    Mutant("e2m56", "r2 B1 (P4): every matrix check is rolled back, leaving no residue",
+           "tests/integration/pgstate.py",
+           "            raise _Rollback\n",
+           "            pass\n",
+           "tests/integration/test_services.py", "role_matrix_holds",
+           layer=2, dirties_database=True,
+           cases=("test_the_role_matrix_holds_for_every_role",)),
+    Mutant("e2m57", "r2 B3: a surviving non-control fails the mutation stage",
+           "tests/integration/run.py",
+           '    status = FAIL if summary["problems"] else (PENDING if summary["pending"] else PASS)',
+           "    status = PASS",
+           "tests/integration/test_run.py", "count_the_verdict_the_same_way",
+           cases=("test_the_mutation_stage_and_the_cli_count_the_verdict_the_same_way",)),
+    Mutant("e2m58", "r2 B4: a 42501 case is qualified by the message it really emits",
+           "tests/integration/pgstate.py",
+           "                  and (check.message_contains is None\n"
+           "                       or check.message_contains.lower() in message.lower()))",
+           "                  and True)",
+           "tests/integration/test_services.py", "should_fail",
+           layer=2, cases=("test_a_check_that_should_fail_does_fail",)),
+
     # ---------------- namespace and pinning guards
     Mutant("e2m08", "a destructive helper refuses a name outside the namespace",
            "tests/integration/harness.py",
@@ -419,7 +509,36 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
                  "INFRX_E2_CHECKOUT": harness.working_dir(),
                  "INFRX_E2_CANARY": "off", "PYTHONDONTWRITEBYTECODE": "1"})
         output = result.stdout + result.stderr
-        return _verdict(mutant, result.returncode, output)
+        verdict = _verdict(mutant, result.returncode, output)
+    if mutant.dirties_database:
+        verdict["reprovisioned"] = _reprovision()
+    return verdict
+
+
+def _reprovision() -> str:
+    """Put the shared database back after a mutant that was allowed to commit (r2 B1).
+
+    Only `dirties_database` mutants reach this, and only they can: every other check runs in
+    its own rolled-back transaction, which is the invariant e2m56 exists to prove.
+    """
+    import run as runner
+    state = harness.load_state() or {}
+    harness.provision_database()
+    report = runner.Report()
+    fixtures = runner.migrate(report, int(state.get("seed", 20260921)))
+    if fixtures is None:
+        raise RuntimeError(f"could not re-provision after a dirtying mutant: {report.stages}")
+    return f"database {harness.PG_DATABASE} recreated and reseeded (seed {fixtures.seed})"
+
+
+# pytest's own terminal summary, e.g. `1 failed, 30 passed in 1.23s` or `1 error in 0.4s`.
+# The LAST such line is the run's verdict; anything else in the output is a traceback.
+SUMMARY_LINE = re.compile(r"^(?:(?:\d+ [a-z]+(?:, )?)+|no tests ran) in [\d.]+s.*$", re.M)
+
+
+def _summary(output: str) -> str:
+    matches = SUMMARY_LINE.findall(output)
+    return matches[-1] if matches else ""
 
 
 def _verdict(mutant: Mutant, code: int, output: str) -> dict:
@@ -431,26 +550,35 @@ def _verdict(mutant: Mutant, code: int, output: str) -> dict:
     therefore only counts as a kill when pytest reports `failed` and no `error`, and a run
     that selected nothing is neither a kill nor a survival but a broken selector.
     """
-    failed = re.search(r"(\d+) failed", output)
-    errors = re.search(r"(\d+) error", output)
-    nothing_ran = ("no tests ran" in output
-                   or re.search(r"^0 selected", output, re.M)
+    # Counts come from pytest's SUMMARY LINE, never from anywhere in the output: a traceback
+    # quotes the failing test's own source, and a test that necessarily carries canned pytest
+    # output in it (`test_the_verdict_reads_pytests_own_summary_and_not_the_exit_code` does)
+    # would otherwise be read as "1 error" and misclassified `setup-error` (r2 review B2).
+    summary = _summary(output)
+    failed = re.search(r"(\d+) failed", summary)
+    errors = re.search(r"(\d+) errors?\b", summary)
+    # ALSO read off the summary line only. A traceback quotes the failing test's source, and
+    # the case that guards this function necessarily contains the literal "no tests ran" - so
+    # scanning the whole output turned a genuine kill into `no-cases` (measured: e2m47 and
+    # e2m50 reported no-cases while their summary said "1 failed").
+    nothing_ran = ("no tests ran" in summary
                    # `-k` that matches nothing prints only "N deselected": no test ran, so the
                    # mutant was never exercised and calling that a survival would be a lie.
-                   or (re.search(r"\d+ deselected", output)
-                       and not re.search(r"\d+ (passed|failed)", output)))
+                   or (re.search(r"\d+ deselected", summary)
+                       and not re.search(r"\d+ (passed|failed)", summary)))
     detail = {"id": mutant.id, "invariant": mutant.invariant, "exit": code,
               "selected_cases": mutant.cases, "must_survive": mutant.must_survive,
+              "summary": summary,
               "failed": int(failed.group(1)) if failed else 0,
               "errors": int(errors.group(1)) if errors else 0,
               "tail": "\n".join(output.strip().splitlines()[-6:])}
     if nothing_ran:
         return {**detail, "status": "no-cases",
                 "why": f"the selector {mutant.select!r} matched nothing: not a kill"}
-    if detail["errors"]:
+    if detail["errors"] or (code != 0 and not summary):
         return {**detail, "status": "setup-error",
-                "why": "pytest reported an ERROR, not a failure: the suite could not run, so "
-                       "this says nothing about the invariant"}
+                "why": "pytest reported an ERROR, or no summary at all, rather than a failure: "
+                       "the suite could not run, so this says nothing about the invariant"}
     killed = code != 0 and detail["failed"] > 0
     if mutant.must_survive:
         return {**detail, "status": "SURVIVED" if not killed else "CONTROL-KILLED",

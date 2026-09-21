@@ -49,6 +49,25 @@ def connect(**kw):
     return psycopg.connect(harness.pg_dsn(), autocommit=True, **kw)
 
 
+def _durable_snapshot() -> dict:
+    """Everything the role matrix could commit if a check were not rolled back: the row counts
+    it inserts into, the revocations it attempts, the profile name it renames and the exact
+    balances. Compared before and after (r2 review B1)."""
+    with connect() as conn:
+        counts = conn.execute(
+            "select (select count(*) from public.api_keys),"
+            "       (select count(*) from public.usage_events),"
+            "       (select count(*) from public.credit_ledger),"
+            "       (select count(*) from public.org_members),"
+            "       (select count(*) from public.api_keys where revoked_at is not null),"
+            "       (select count(*) from public.profiles where full_name in"
+            "               ('Renamed', 'Hijacked')),"
+            "       (select count(*) from public.profiles where is_operator)").fetchone()
+        return {"api_keys": counts[0], "usage_events": counts[1], "credit_ledger": counts[2],
+                "org_members": counts[3], "revoked": counts[4], "renamed": counts[5],
+                "operators": counts[6], "balances": pgstate.balances(conn)}
+
+
 # ------------------------------------------------------------------ F-CONTRACT: schema
 
 def test_the_console_migrations_applied_to_a_supabase_compatible_database():
@@ -159,8 +178,17 @@ def test_the_role_matrix_holds_for_every_role():
     same stack and leaves nothing behind.
     """
     fixtures = stack_or_skip()
+    before = _durable_snapshot()
     with connect() as conn:
         rows = pgstate.run_role_matrix(conn, fixtures)
+    after = _durable_snapshot()
+    # r2 review B1: this is the assertion that makes "each check runs in its own rolled-back
+    # transaction" true rather than stated. Without the rollback the matrix's own writes commit
+    # (measured by the reviewer: api_keys 3/2, usage_events 18/17, a revoked key) and the NEXT
+    # run of the unmutated matrix fails E2-RLS-14 and E2-RLS-30 on the residue - a failure that
+    # looks like a broken policy and is really a dirty fixture.
+    assert before == after, f"the matrix left residue: {before} -> {after}"
+
     failed = [row for row in rows if not row["passed"]]
     assert failed == [], failed
     assert len(rows) >= 30, f"the matrix shrank to {len(rows)} cases"
@@ -188,12 +216,32 @@ def test_a_check_that_should_fail_does_fail():
                                    "select public.org_balance({beta})",
                                    ("error", "42P01"),
                                    "the right refusal, checked against the wrong SQLSTATE")
+    # r2 review B4: and the RIGHT SQLSTATE with the WRONG message must fail too, or the 12
+    # message-qualified cases are decoration - dropping the comparison would keep them green.
+    wrong_message = pgstate.Check("E2-RLS-MUTANT4", "authenticated", "member_alpha",
+                                  "select public.org_balance({beta})",
+                                  ("error", pgstate.PERMISSION_DENIED),
+                                  "the right refusal, qualified by a message it never emits",
+                                  message_contains="no such text in any postgres message")
+    right_message = pgstate.Check("E2-RLS-MUTANT5", "authenticated", "member_alpha",
+                                  "select public.org_balance({beta})",
+                                  ("error", pgstate.PERMISSION_DENIED),
+                                  "and the same case with the fragment it really emits",
+                                  message_contains="not a member of organization")
     with connect() as conn:
         assert pgstate.run_check(conn, wrong, fixtures)["passed"] is False
         assert pgstate.run_check(conn, wrong_error, fixtures)["passed"] is False
         observed = pgstate.run_check(conn, wrong_sqlstate, fixtures)
         assert observed["observed"] == pgstate.PERMISSION_DENIED, observed
         assert observed["passed"] is False, "a mismatched SQLSTATE must not pass"
+
+        mismatched = pgstate.run_check(conn, wrong_message, fixtures)
+        assert mismatched["observed"] == pgstate.PERMISSION_DENIED, mismatched
+        assert "not a member of organization" in mismatched["message"], mismatched
+        assert mismatched["passed"] is False, \
+            "the right SQLSTATE with the wrong message must not pass, or the message " \
+            "qualification on the 12 denial cases proves nothing"
+        assert pgstate.run_check(conn, right_message, fixtures)["passed"] is True
 
 
 # ------------------------------------------------------------------ the movable clock
@@ -421,6 +469,28 @@ def test_an_unlabelled_volume_with_our_name_is_refused_not_deleted():
         assert victim not in harness.owned("volume")
     finally:
         harness.run(["docker", "volume", "rm", "-f", victim], check=False, timeout=60)
+    harness.assert_nothing_foreign()
+
+
+def test_an_unlabelled_network_with_our_name_is_refused_not_removed():
+    """r2 review B5: the volume case had a sibling for networks and it was missing, so
+    "a same-named unlabelled network is a candidate" survived mutation. Same shape: a network
+    named as compose would name ours, created by someone else, must be reported and survive."""
+    stack_or_skip()
+    victim = f"{harness.PROJECT}_reviewer-probe"
+    harness.run(["docker", "network", "create", "--label", "reviewer=e2", victim], timeout=120)
+    try:
+        reported = [item for item in harness.foreign("network") if item["name"] == victim]
+        assert reported and "no infrx-e2 checkout label" in reported[0]["why"], reported
+        assert victim not in harness.owned("network")
+        with pytest.raises(harness.HarnessError, match="refusing to provision or tear down"):
+            harness.assert_nothing_foreign()
+        survived = harness.run(["docker", "network", "inspect", victim], check=False, timeout=60)
+        assert survived.returncode == 0, "a network this harness did not create must survive"
+        # And the project's own network IS ours, so the check is not simply refusing everything.
+        assert harness.NETWORK in harness.owned("network"), harness.owned("network")
+    finally:
+        harness.run(["docker", "network", "rm", victim], check=False, timeout=120)
     harness.assert_nothing_foreign()
 
 

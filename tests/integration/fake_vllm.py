@@ -371,7 +371,11 @@ class FakeVllmServer:
         return f"http://127.0.0.1:{self.port}"
 
     def start(self, timeout: float = 30.0) -> "FakeVllmServer":
+        # `--host` explicitly, never the CLI default: a change to that default would otherwise
+        # take every server in the suite down at `setup_module` (17 collection errors, measured
+        # against the reviewer's V7 mutant) instead of failing the one case that guards it.
         argv = [sys.executable, str(Path(__file__).resolve()), "--port", str(self.port),
+                "--host", "127.0.0.1",
                 "--fault", self.fault, "--stall-real-s", str(self.stall_real_s)]
         self._drop_log()        # a restart after a kill would otherwise orphan the old one
         # The child's stderr goes to a temporary file, not to DEVNULL: a server that dies on

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -465,7 +466,12 @@ def test_the_fake_server_binds_loopback_unless_explicitly_allowed():
     scripted engine cannot be reachable from the network by a typo."""
     import fake_vllm
     parsed = fake_vllm.parse_args([])
-    assert parsed.host == "127.0.0.1"
+    # r2 review minor V7: the DEFAULT, asserted on its own. A default of 0.0.0.0 would make
+    # every `run.py` server reachable from the network while the guard below stayed green,
+    # because the guard only ever sees the host it is given.
+    assert parsed.host == "127.0.0.1", f"the default host must be loopback, not {parsed.host!r}"
+    assert parsed.host in fake_vllm.LOOPBACK
+    assert parsed.allow_non_loopback is False, "and nothing is permitted by default"
     served = []
     # `SERVE` is stubbed so this case can never open a socket: with the guard mutated away it
     # would otherwise bind every interface and block until the runner's timeout.
@@ -565,6 +571,143 @@ sys.exit(run.main(["--layer", "all", "--no-mutants"]))
         os.kill(server_pid, 0)
 
 
+def test_a_real_orphaned_fake_server_is_found_by_its_command_line():
+    """r2 review B5: every preflight case stubbed `fake_server_orphans`, so disabling the real
+    one survived. This spawns THIS checkout's `fake_vllm.py` and asserts the function finds its
+    pid - and that a process naming a different checkout's copy is not reported as ours.
+    """
+    import signal
+    import subprocess as _subprocess
+    marker = str((harness.HERE / "fake_vllm.py").resolve())
+    assert Path(marker).exists(), marker
+    # A free task-local port, in its own session, killed in `finally`: the assertion is about
+    # what `ps` shows, but the process has to live long enough to be seen.
+    port = harness.PORTS["fake_vllm"] + 9
+    assert port in harness.PORT_RANGE, port
+    child = _subprocess.Popen([sys.executable, marker, "--port", str(port), "--fault", "none"],
+                              stdout=_subprocess.DEVNULL, stderr=_subprocess.DEVNULL,
+                              start_new_session=True)
+    try:
+        found = []
+        for _ in range(100):
+            found = runner.fake_server_orphans()
+            if child.pid in found:
+                break
+            time.sleep(0.05)
+        assert child.pid in found, \
+            f"the real scan missed pid {child.pid} running {marker}; found {found}"
+        assert os.getpid() not in found, "the scanning process is never its own orphan"
+        # Another checkout's server is not ours to report.
+        assert all(str(pid).isdigit() for pid in found)
+    finally:
+        try:
+            os.killpg(os.getpgid(child.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            child.kill()
+        child.wait(timeout=15)
+    for _ in range(100):
+        if child.pid not in runner.fake_server_orphans():
+            break
+        time.sleep(0.05)
+    assert child.pid not in runner.fake_server_orphans(), "a dead server is not an orphan"
+
+
+def test_provision_database_refuses_a_container_outside_the_namespace():
+    """r2 review minor M12: `assert_ours` in `provision_database` had no test, so dropping it
+    survived. A stubbed `container_of` handing back a stranger must be refused BEFORE any
+    `docker exec` - the statements it issues are superuser statements."""
+    reached = []
+    with patched(harness, container_of=lambda service: "infrx-d1-postgres",
+                 _labels=lambda kind, name: {},
+                 run=lambda argv, **kwargs: reached.append(argv)):
+        with pytest.raises(harness.HarnessError, match="namespace"):
+            harness.provision_database()
+    assert reached == [], f"a superuser statement reached a foreign container: {reached}"
+
+    # Same for one that carries our name but another checkout's label.
+    with patched(harness, container_of=lambda service: f"{harness.PREFIX}postgres",
+                 _labels=lambda kind, name: {"com.docker.compose.project": harness.PROJECT,
+                                             harness.CHECKOUT_LABEL: "/somewhere/else"},
+                 run=lambda argv, **kwargs: reached.append(argv)):
+        with pytest.raises(harness.HarnessError, match="another checkout"):
+            harness.provision_database()
+    assert reached == []
+
+
+def test_the_verdict_reads_pytests_own_summary_and_not_the_exit_code():
+    """r2 review B2: `_verdict` had no test, so three of its branches survived mutation.
+
+    Canned pytest output, because what the function is FOR is reading that output: a
+    non-zero exit is not a kill (a collection error, a syntax error and a usage error all
+    exit non-zero), a reported ERROR is `setup-error`, and a selector that matched nothing is
+    `no-cases`. Each line below is a real pytest summary shape.
+    """
+    import mutants
+    mutant = mutants.MUTANTS[2]                  # any ordinary (non-control) mutant
+    assert mutant.must_survive is False
+
+    killed = mutants._verdict(mutant, 1, "F\n1 failed, 12 deselected in 0.31s\n")
+    assert killed["status"] == "killed" and killed["failed"] == 1 and killed["errors"] == 0
+
+    # A collection ERROR says nothing about the invariant: the suite never ran. This is the
+    # exact shape that made e2m01-e2m07's kills unearned in round 1 (ModuleNotFoundError in
+    # setup_module), and `code != 0` alone would call it a kill.
+    setup = mutants._verdict(mutant, 1, "E\n1 error in 0.37s\n")
+    assert setup["status"] == "setup-error", setup
+    assert "reported an ERROR" in setup["why"]
+
+    # A selector miss: everything deselected, nothing passed and nothing failed.
+    missed = mutants._verdict(mutant, 5, "5 deselected in 0.02s\n")
+    assert missed["status"] == "no-cases", missed
+    assert mutant.select in missed["why"]
+    assert mutants._verdict(mutant, 5, "no tests ran in 0.02s\n")["status"] == "no-cases"
+
+    # A usage error in the mutated copy: exit 2, no summary line at all. Not a kill either -
+    # nothing was asserted - and reported as `setup-error` because the suite never ran.
+    broken = mutants._verdict(mutant, 2, "ERROR: file or directory not found\n")
+    assert broken["status"] == "setup-error", broken
+    assert broken["failed"] == 0 and broken["errors"] == 0 and broken["summary"] == ""
+
+    # The counts come from the SUMMARY LINE, not from the traceback: a failing test quotes its
+    # own source, and this very test necessarily contains the string "1 error in 0.37s". Read
+    # anywhere-in-the-output, a genuine kill here would be misread as `setup-error`.
+    with_traceback = ("    setup = mutants._verdict(mutant, 1, \"1 error in 0.37s\")\n"
+                      "E   AssertionError\n"
+                      "1 failed, 87 passed in 40.10s\n")
+    assert mutants._summary(with_traceback) == "1 failed, 87 passed in 40.10s"
+    verdict = mutants._verdict(mutant, 1, with_traceback)
+    assert verdict["status"] == "killed" and verdict["errors"] == 0, verdict
+
+    # The same trap for `no-cases`: this very test contains the literal "no tests ran" and
+    # "5 deselected", and a whole-output scan turned a genuine kill into `no-cases`.
+    quoting = ('    missed = mutants._verdict(mutant, 5, "no tests ran in 0.02s")\n'
+               '    assert mutants._verdict(mutant, 5, "5 deselected in 0.02s")\n'
+               "E   AssertionError\n"
+               "1 failed, 34 deselected in 0.14s\n")
+    assert mutants._verdict(mutant, 1, quoting)["status"] == "killed", \
+        "a traceback quoting pytest's own phrases must not be read as the verdict"
+    # And the real thing still reads as no-cases, because its SUMMARY says so.
+    assert mutants._verdict(mutant, 5, "no tests ran in 0.02s\n")["status"] == "no-cases"
+
+    # Exit 0 with passes is a plain survival.
+    survived = mutants._verdict(mutant, 0, "..\n2 passed in 0.10s\n")
+    assert survived["status"] == "SURVIVED" and survived["failed"] == 0
+
+    # THE discriminating shape for "a kill needs a reported failure, not just a non-zero exit":
+    # pytest can exit non-zero with a summary that shows no failure at all (a warning promoted
+    # to an error in teardown, a plugin unhappy after the run). `code != 0` alone calls that a
+    # kill; nothing was asserted, so it is a survival.
+    late = mutants._verdict(mutant, 1, "..\n30 passed in 2.00s\n")
+    assert late["status"] == "SURVIVED", late
+    assert late["failed"] == 0 and late["errors"] == 0 and late["summary"]
+
+    # And the control arm: the same inputs, must_survive flipped.
+    control = next(m for m in mutants.MUTANTS if m.must_survive)
+    assert mutants._verdict(control, 0, "2 passed in 0.1s")["status"] == "SURVIVED"
+    scored = mutants._verdict(control, 1, "1 failed in 0.1s")
+    assert scored["status"] == "CONTROL-KILLED" and "measuring its own" in scored["why"]
+
+
 def test_the_mutation_stage_and_the_cli_count_the_verdict_the_same_way():
     """A control that must SURVIVE is a PASS. The stage used to apply its own rule and report
     both controls as survivors, failing a run whose mutation list was perfectly healthy - so
@@ -593,6 +736,27 @@ def test_the_mutation_stage_and_the_cli_count_the_verdict_the_same_way():
             "must_survive": mutant.must_survive}):
         runner.mutation(report, layer="1")
     assert report.stages[-1]["status"] == runner.PASS, report.stages[-1]["detail"]
+
+    # r2 review B3: the stage had only ever been driven with a HEALTHY list, so `status = PASS`
+    # survived. A surviving NON-control must fail it.
+    failing = fresh_report()
+    with patched(mutants, run_one=lambda mutant, stack_available: {
+            "id": mutant.id, "status": "SURVIVED",
+            "must_survive": mutant.must_survive}):
+        runner.mutation(failing, layer="1")
+    entry = failing.stages[-1]
+    assert entry["status"] == runner.FAIL, entry["detail"]
+    assert entry["detail"]["problems"], "the surviving mutants must be named"
+    assert entry["detail"]["not_killed"] >= 1
+    assert failing.exit_code == 1
+
+    # And a list that could not be driven at all is PENDING, never PASS.
+    waiting = fresh_report()
+    with patched(mutants, run_one=lambda mutant, stack_available: {
+            "id": mutant.id, "status": "pending", "must_survive": mutant.must_survive}):
+        runner.mutation(waiting, layer="1")
+    assert waiting.stages[-1]["status"] == runner.PENDING
+    assert waiting.exit_code == 3
 
 
 def test_provision_database_statements_are_the_ones_r_a_requires():

@@ -221,14 +221,20 @@ def fake_server_orphans() -> list[int]:
     checkout's server is not ours to report as our leak, and nothing here kills anything.
     """
     marker = str((harness.HERE / "fake_vllm.py").resolve())
-    listing = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True,
-                             timeout=30)
+    # `/proc`, not `ps`: `ps -eo args=` truncates each line to the terminal width, and under
+    # pytest that is 80 columns - shorter than this repository's absolute paths, so the scan
+    # silently found nothing. The r2 review's first real test of it caught that immediately.
     pids = []
-    for line in listing.stdout.splitlines():
-        pid, _, args = line.strip().partition(" ")
-        if marker in args and pid.isdigit() and int(pid) != os.getpid():
-            pids.append(int(pid))
-    return pids
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            cmdline = (entry / "cmdline").read_bytes().decode(errors="replace")
+        except OSError:
+            continue                    # it exited, or it is not ours to read
+        if marker in cmdline:
+            pids.append(int(entry.name))
+    return sorted(pids)
 
 
 def services(report: Report, *, pull: bool) -> bool:
