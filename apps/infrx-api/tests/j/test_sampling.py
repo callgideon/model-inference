@@ -5,13 +5,14 @@
 """
 from __future__ import annotations
 
+import random
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from infrx.contracts import errors
+from infrx.contracts import errors, ids
 from infrx.contracts.records import AuthorRole, ContentState, FeedbackName, TraceMode
 from infrx.judge import (CalibrationDesign, DEFAULT_DESIGN, Exclusion, Stratum, TraceCandidate,
-                         canonical_id, deduplicate, select, within_consent_window)
+                         deduplicate, select, within_consent_window)
 
 from . import fakes
 
@@ -201,17 +202,86 @@ def test_another_orgs_row_cannot_exclude_my_trace_as_a_duplicate():
     assert selection.sample_ids == (mine.request_id,)
 
 
-def test_deduplication_is_on_the_canonical_request_id():
-    """A UUID's hex is case-insensitive, so two spellings are one trace. Grouping by the raw
-    string let the same trace through twice."""
-    assert canonical_id(" AB-CD ") == "ab-cd" and canonical_id(7) == "7"
-    lower = fakes.candidate(0xABCDEF)               # an id with hex *letters* in it
-    assert lower.request_id != lower.request_id.upper(), "the id must differ by case"
-    upper = TraceCandidate(**{**lower.__dict__, "request_id": lower.request_id.upper()})
-    padded = TraceCandidate(**{**lower.__dict__, "request_id": f"  {lower.request_id}  "})
-    selection = draw((lower, upper, padded))
-    assert selection.sample_ids == (lower.request_id,)
-    assert reasons(selection) == [(lower.request_id, Exclusion.duplicate_row)] * 2
+RESPELLINGS = ("upper", "padded", "not-a-uuid'; DROP TABLE--", "megabyte", "empty", "nil")
+
+
+def _respell(candidate, how: str):
+    raw = {"upper": candidate.request_id.upper(),
+           "padded": f"  {candidate.request_id}  ",
+           "not-a-uuid'; DROP TABLE--": "not-a-uuid'; DROP TABLE--",
+           "megabyte": "a" * 1_000_000,
+           "empty": "",
+           "nil": None}[how]
+    return TraceCandidate(**{**candidate.__dict__, "request_id": raw})
+
+
+@pytest.mark.parametrize("how", RESPELLINGS)
+def test_an_id_that_is_not_the_frozen_request_id_form_is_malformed(how):
+    """R3-B1: `request_id` must be the lower-case UUIDv4 every contract record uses
+    (`ids.is_request_id`). An earlier pass canonicalized it *for grouping only*, which left
+    the raw spelling deciding the sample id, the seeded rank and which feedback rows
+    matched - so an UPPER-case row carrying its own label was sampled again, and an
+    upper-case row with its own customer feedback landed in `uniform`."""
+    valid = fakes.candidate(0xABCDEF)
+    assert ids.is_request_id(valid.request_id)
+    bad = _respell(valid, how)
+    assert not ids.is_request_id(bad.request_id)
+    selection = draw((bad,))
+    assert selection.samples == (), f"a {how} id was sampled"
+    assert [e.reason for e in selection.excluded] == [Exclusion.malformed_row]
+
+
+@pytest.mark.parametrize("how", RESPELLINGS)
+def test_an_invalid_id_is_described_in_the_exclusion_not_echoed(how):
+    """R3-B1: an invalid id is attacker-shaped data - SQL-ish text, a megabyte - and an
+    exclusion row is a log row, so it is described like a rejection detail."""
+    bad = _respell(fakes.candidate(0xABCDEF), how)
+    selection = draw((bad,))
+    assert len(selection.excluded) == 1 and selection.samples == ()
+    excluded = selection.excluded[0]
+    assert excluded.request_id.startswith("<invalid request_id:")
+    assert len(excluded.request_id) <= 80
+    if isinstance(bad.request_id, str) and bad.request_id:
+        assert bad.request_id not in excluded.request_id
+        assert bad.request_id[:12] not in excluded.request_id
+
+
+@pytest.mark.parametrize("how", ("upper", "padded"))
+def test_a_respelled_row_can_never_be_sampled_twice(how):
+    """The two repros the review named, now answered by exclusion rather than by
+    normalization: a respelled row carrying its own label is not a second chance at that
+    trace, and a respelled row with its own feedback is not a `uniform` sample."""
+    labelled = fakes.candidate(0xABCDEF, entries=(fakes.label(fakes.uuid(0xABCDEF)),))
+    respelled = _respell(labelled, how)
+    assert draw((respelled,), rubric_version=1).samples == ()
+    # and the valid spelling is still excluded as already calibrated, not sampled
+    assert [e.reason for e in draw((labelled,), rubric_version=1).excluded] == \
+        [Exclusion.already_calibrated]
+
+    with_feedback = fakes.candidate(0xABCDEF, entries=(fakes.feedback(fakes.uuid(0xABCDEF)),))
+    assert [s.stratum for s in draw((with_feedback,)).samples] == [Stratum.feedback]
+    assert draw((_respell(with_feedback, how),)).samples == ()
+
+
+def test_the_draw_and_the_ids_it_emits_are_independent_of_the_scan_order():
+    """"The seed decides, not the scan order" - as a property over seeds and shuffles, which
+    is how the review caught it: with 40 candidates plus 10 respelled duplicates the
+    selection changed with input order in 28 of 40 trials, because the *raw* spelling reached
+    `rank` and `sample_id`."""
+    rng = random.Random(7)
+    population = [fakes.candidate(n) for n in range(0x100, 0x128)]
+    population += [_respell(c, "upper") for c in population[:10]]
+    for trial in range(40):
+        seed = f"order-{trial}"
+        first = draw(population, seed=seed)
+        shuffled = list(population)
+        rng.shuffle(shuffled)
+        again = draw(shuffled, seed=seed)
+        assert again.sample_ids == first.sample_ids, f"trial {trial}: the draw moved"
+        assert again.counts == first.counts
+        assert sorted(e.reason for e in again.excluded) == \
+            sorted(e.reason for e in first.excluded)
+        assert all(ids.is_request_id(sample_id) for sample_id in first.sample_ids)
 
 
 @pytest.mark.parametrize("field,value", [

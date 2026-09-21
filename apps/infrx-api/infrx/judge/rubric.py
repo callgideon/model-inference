@@ -57,7 +57,9 @@ def describe(value: object) -> str:
         if type(value) is int:
             # `str(value)` raises past 4,300 digits; `Decimal` counts them exactly
             # without going through text.
-            digits = 1 if value == 0 else decimal.Decimal(value).adjusted() + 1
+            if value == 0:
+                return "int zero"
+            digits = decimal.Decimal(value).adjusted() + 1
             return f"{'negative' if value < 0 else 'positive'} int of {digits} digits"
         if type(value) in (list, tuple, dict, set):
             return f"{type(value).__name__} of {len(value)} items"
@@ -333,8 +335,8 @@ def validate_output(rubric: Rubric, payload: object, *, run_id: str, sample_id: 
     # `keys` raises would otherwise get past the door of a function documented never to
     # raise, and `True` is not a score of 1. JSON only ever produces the exact types.
     if type(payload) is not dict:
-        return reject("not_an_object",
-                      f"a judge result is a JSON object, not {type(payload).__name__}")
+        return reject("not_an_object", f"a judge result is a JSON object, not "
+                                      f"{describe(payload)}")
     unnamed = [key for key in payload if type(key) is not str]
     if unnamed:
         # Not reachable from JSON, but `validate_output` also takes a dict built in

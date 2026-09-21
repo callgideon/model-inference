@@ -105,10 +105,10 @@ def test_the_required_invariants_each_have_a_mutant():
                                      "consent_window_end_is_inclusive",
                                      "the_plan_prices_at_the_lookback_start",
                                      "the_guard_is_asked_at_the_lookback_start"),
-        "R2 the tenant filter first": ("dedupe_runs_before_the_tenant_filter",
-                                       "dedupe_on_the_raw_request_id",
-                                       "canonical_id_keeps_the_case",
-                                       "a_respelled_duplicate_is_a_conflict"),
+        "R2 the tenant filter first": ("dedupe_runs_before_the_tenant_filter",),
+        # R3-B1: one spelling of a request id, validated and never echoed
+        "R3-B1 one id spelling": ("any_nonblank_string_is_a_request_id",
+                                  "an_invalid_id_is_echoed_into_the_exclusion"),
         "R2 one bad row": ("a_malformed_row_is_interpreted", "a_future_row_is_a_candidate"),
         "R2 fail closed": ("the_predicate_reraises", "ledger_raises_on_an_unusable_sample_id"),
     }

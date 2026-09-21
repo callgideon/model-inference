@@ -30,17 +30,20 @@ from __future__ import annotations
 
 import enum
 import hashlib
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
-from ..contracts import errors, limits
+from ..contracts import errors, ids, limits
 from ..contracts.records import AuthorRole, ConsentSnapshot, ContentState, Feedback, TraceMode
+from .rubric import describe
 
 #: `research/traces/06` §3.1: a truncated answer is the failure stratum's first member.
 FINISH_REASON_LENGTH = "length"
 #: R56: a 5xx produced no answer to grade.
 NO_OUTPUT_STATUS = 500
+#: The range a gateway can actually have produced.
+MIN_HTTP_STATUS, MAX_HTTP_STATUS = 100, 599
 
 
 class Stratum(enum.StrEnum):
@@ -240,20 +243,17 @@ class Selection:
         return tuple(sample for sample in self.samples if sample.limited)
 
 
-def canonical_id(request_id: object) -> str:
-    """The form two rows are compared by: trimmed and lower-case.
-
-    A UUID's hex is case-insensitive, so `"AB…"` and `"ab…"` are one trace. Grouping by
-    the raw string let the same trace through twice under two spellings, which is the
-    duplicate R56 exists to stop.
-    """
-    return request_id.strip().lower() if isinstance(request_id, str) else repr(request_id)
-
-
 def _reportable_id(candidate: TraceCandidate) -> str:
-    """The id for an exclusion row, safe even on a malformed candidate."""
-    request_id = candidate.request_id
-    return request_id if isinstance(request_id, str) else f"<{type(request_id).__name__}>"
+    """What an exclusion row may carry as an id.
+
+    A valid id is itself; anything else is **described, not echoed** (R3-B1). An invalid id
+    is attacker-shaped data - `"not-a-uuid'; DROP TABLE--"`, a megabyte of text - and an
+    exclusion row is a log row, so it gets the same treatment as a rejection detail.
+    """
+    request_id = getattr(candidate, "request_id", None)
+    if ids.is_request_id(request_id):
+        return request_id
+    return f"<invalid request_id: {describe(request_id)}>"
 
 
 def rank(seed: str, request_id: str) -> int:
@@ -292,42 +292,34 @@ def deduplicate(candidates: tuple[TraceCandidate, ...]
     copies. A repeated row that **disagrees** (one says the answer was truncated, the
     other does not) is excluded outright: we cannot tell which is true, and sampling
     both would put one trace in two strata and grade it twice.
+
+    Grouping is on the **exact** id, which is safe because `_malformed` has already excluded
+    every row whose id is not the frozen lower-case UUIDv4 form: there is no second spelling
+    of a valid id to reconcile (R3-B1). An earlier pass canonicalized the id for grouping
+    only, which left the *raw* spelling deciding the sample id, the seeded rank and which
+    feedback rows matched - so the draw changed with the scan order.
     """
     order: list[str] = []
     groups: dict[str, list[TraceCandidate]] = {}
     for candidate in candidates:
-        key = canonical_id(candidate.request_id)
-        rows = groups.get(key)
+        rows = groups.get(candidate.request_id)
         if rows is None:
-            groups[key] = [candidate]
-            order.append(key)
+            groups[candidate.request_id] = [candidate]
+            order.append(candidate.request_id)
         else:
             rows.append(candidate)
     kept: list[TraceCandidate] = []
     excluded: list[Excluded] = []
-    for key in order:
-        rows = groups[key]
-        request_id = rows[0].request_id
+    for request_id in order:
+        rows = groups[request_id]
         if len(rows) == 1:
             kept.append(rows[0])
-        elif all(_same_facts(row, rows[0]) for row in rows[1:]):
+        elif all(row == rows[0] for row in rows[1:]):
             kept.append(rows[0])
             excluded.extend(Excluded(request_id, Exclusion.duplicate_row) for _ in rows[1:])
         else:
             excluded.extend(Excluded(request_id, Exclusion.conflicting_duplicate) for _ in rows)
     return kept, excluded
-
-
-def _same_facts(one: TraceCandidate, other: TraceCandidate) -> bool:
-    """Whether two rows for the same trace agree, ignoring how the id was spelled.
-
-    They are grouped by the canonical id, so two rows differing *only* in the case or
-    padding of `request_id` are the same trace reported twice - a duplicate, not a
-    conflict. Comparing the records whole made that spelling difference look like
-    disagreement and excluded the trace outright.
-    """
-    blank = {"request_id": ""}
-    return replace(one, **blank) == replace(other, **blank)
 
 
 def _malformed(candidate: TraceCandidate, now: datetime) -> bool:
@@ -338,8 +330,16 @@ def _malformed(candidate: TraceCandidate, now: datetime) -> bool:
     a naive `started_at` cannot be compared with the consent window, and a trace stamped in
     the future is a clock or a bug rather than a candidate. Each is excluded on its own with
     `malformed_row` and the rest of the draw goes on.
+
+    **`request_id` must be the frozen lower-case UUIDv4 form** (`ids.is_request_id`,
+    R3-B1). That is the one identity every contract record uses, so anything else - an
+    upper-case respelling, padding, a non-UUID string, a megabyte of text - is not an id we
+    can match feedback rows against, rank by, or put in `JudgeRun.sample_ids`. Validating it
+    here means there is exactly one spelling downstream and no normalization to keep in step.
     """
-    if not isinstance(candidate.request_id, str) or not candidate.request_id.strip():
+    if not isinstance(candidate, TraceCandidate):
+        return True
+    if not ids.is_request_id(candidate.request_id):
         return True
     if not isinstance(candidate.org_id, str) or not candidate.org_id.strip():
         return True
@@ -348,6 +348,10 @@ def _malformed(candidate: TraceCandidate, now: datetime) -> bool:
     if not isinstance(candidate.content_state, ContentState):
         return True
     if type(candidate.http_status) is not int:
+        return True
+    if not MIN_HTTP_STATUS <= candidate.http_status <= MAX_HTTP_STATUS:
+        # 0 or 99999 is not a status a gateway produced, and `>= 500` would read one of
+        # them as an outage and the other as a success.
         return True
     if candidate.finish_reason is not None and type(candidate.finish_reason) is not str:
         return True
@@ -359,6 +363,10 @@ def _malformed(candidate: TraceCandidate, now: datetime) -> bool:
     if not isinstance(started, datetime) or started.tzinfo is None:
         return True
     if not isinstance(candidate.feedback, tuple):
+        return True
+    if not all(isinstance(entry, Feedback) for entry in candidate.feedback):
+        # A non-`Feedback` element aborted the whole selection with an `AttributeError`
+        # from `own_feedback`, which is the one thing a bad row must never do.
         return True
     return started > now
 

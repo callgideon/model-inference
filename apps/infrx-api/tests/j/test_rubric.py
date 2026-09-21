@@ -309,7 +309,8 @@ def test_describe_reports_what_a_value_is_never_what_it_says():
     marker = "CUSTOMER-SSN-123-45-6789"
     assert describe(marker) == f"str of {len(marker)} characters"
     assert marker not in describe(marker)
-    assert describe(0) == "positive int of 1 digits"
+    # zero is neither positive nor negative; "positive int of 1 digits" was simply wrong
+    assert describe(0) == "int zero"
     assert describe(-12345) == "negative int of 5 digits"
     assert describe(10 ** 5000) == "positive int of 5001 digits"
     assert describe([1, 2]) == "list of 2 items" and describe({"a": 1}) == "dict of 1 items"
