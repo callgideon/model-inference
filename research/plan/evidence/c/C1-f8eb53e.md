@@ -809,3 +809,184 @@ C3 remains the larger remaining share, and should lift `ownedTrace`, `ownedKey`,
   mutants and 144 of 144 F2 mutants are killed, and the exported conformance split is unchanged with
   every failure still attributed to C2/C3 by an executable check. No service was contacted; nothing
   was pushed or deployed.
+
+---
+
+# Appendix — review round 2 (fix_required, narrow, at `e91b288`)
+
+Appended. Implementation SHA of these fixes: **`db5f1e8`** (see the table; the head at hand-back is the
+evidence commit on top of it). Same worktree and branch, same owned paths, nothing pushed, no service
+contacted. One commit per item, because sessions have been cut by rate limits.
+
+## Correction to the round-1 appendix
+
+It said "this track's own cases **45** in six files". That was wrong then and is wrong now. Counted
+from the runner, per file:
+
+```
+$ for f in tests/c/*.test.ts; do node --test --test-reporter=tap "$f" | grep -cE "^ok [0-9]+ - "; done
+tests/c/client-boundary.test.ts: 3
+tests/c/console-conformance.test.ts: 3
+tests/c/credits.test.ts: 5
+tests/c/cursor.test.ts: 5
+tests/c/projection.test.ts: 10
+tests/c/query-boundary.test.ts: 14
+tests/c/read-services.test.ts: 20
+```
+
+**60 cases in seven files** at this round's head (53 in seven at the round-1 head, which is the figure
+the reviewer corrected to; the difference is this round's new cases).
+
+## Item → commit → killing test
+
+| Item | Commit | Killing test (and mutants) |
+|---|---|---|
+| **B1** `isOperator === true` unpinned on the authorization path; adminAudit filter swap untested; `flag()` refusal unpinned | `30bdc29` | `a truthy isOperator is not authority on the authorization path either` (six spoofed values × adminOrgs, adminAudit, adminGrant, and judgeRuns as a member, with the genuine flag still passing) → **ROLE-05**, **ROLE-06**; `a cursor does not survive a change of filter, on every filtered list` extended with `target_org_id` → **SCOPE-03**; `a boolean column is a boolean: a suspension flag is never guessed at` → **STRICT-05** |
+| **B2** NULL `key_id` denied the whole usage page | `90b8c75` | `a usage row survives a deleted key, and says so` — both columns null → sentinel `""` + `(deleted key)`; the empty key filter is `invalid_request`; a real key filter never matches the sentinel; one column null alone is a malformed row → **KEYNAME-01** (deny the page again, `kills_by: "guarded"`), **KEYNAME-02** (paper over a half-null pair), **KEYNAME-03** (a sentinel a caller could filter for) |
+| **B3** JSON-number money fabricated digits from 2^26 | `d64a58e` | `money arrives as text: a number is accepted only where a double still holds eight digits` (123456789012.12345678, ±2^26, 1e20, NaN, Infinity refused; 2^26−1 exact; the same value as text keeps every digit) and `a wallet amount that arrives as a number is bounded by what a double can hold` → **MONEY-01**, **MONEY-02**, **MONEY-03** |
+| **B4** missing-function detection forced by an error string | `a6afa15` | `a missing function falls back; a broken one does not` — the two real repros (`42883` from *inside* the function, `P0001` naming it) now raise, plus a pair differing only in the code → **CREDITS-03** (drop the name requirement), **CREDITS-04** (drop the code requirement), alongside **CREDITS-02** |
+| **Rulings**: both UTC timestamp forms; the tenant check every port passes through; the real `usageDaily` cap | `973ce79` | `both UTC timestamp forms are accepted and normalised, microseconds and all` → **TS-01**, **TS-02**, **STRICT-03**; `every port passes through the tenant check, whatever the port does` → **PORT-01**, **PORT-02**, **PORT-03**; `usageDaily is bounded by its documented cap, not by the fixture` (401 days, and a port that ignores `limit`) → **CAP-02** |
+| **Nonblocking**: `integer()` coercion, `value_num` coercion, credits guard, runner `viaGuard` | `a083e92` | the strict-row case extended with `""`, `true`, `["500"]`, `0x10`, `1e2` and a fractional count → **STRICT-02**; the judge case extended with five coercible score values → **STRICT-06**; the guard-presence list now includes `credits.ts` → **CLIENT-02** |
+| stale mutant refresh | `db5f1e8` | **STRICT-03** repointed at the normaliser's refusal |
+
+### Ruling details as implemented
+
+- **NULL key_id (B2 ruling).** Both columns NULL is the truth D1's LEFT JOIN produces; C1 projects
+  `DELETED_KEY_ID = ""` with `(deleted key)` until the contract revision makes `UsageRow.key_id`
+  nullable (F2.2). The empty string is chosen *because* a `key_id` filter must be identifier-shaped
+  (non-empty, ≤ 200), so the sentinel is unreachable from a filter — asserted both ways. One column
+  NULL without the other is refused as a malformed row.
+- **Money (B3 ruling).** Text is the contract. A number is accepted only when finite and
+  `< 2**26`, which is the legacy `org_balance` fallback's range; the false "the conversion is exact"
+  comment is gone.
+- **Timestamps (R59-9).** `Z` or `+00:00`, fractional up to microseconds, normalised to `Z` **without
+  losing the fraction**; the cursor key is normalised the same way so the DTO and the cursor agree.
+  Refused: driver `Date`, `::text` form, date-only, non-UTC offsets, more than microsecond precision.
+- **Blast radius.** A malformed row remains a page-level `internal_error` (loud in the pilot), recorded
+  as a limit below. The refusal names the relation and the column and never the value — e.g.
+  `http_status must be an integer`, `model_ids must be a JSON array or null` — and the boundary guard
+  replaces it with one fixed safe message before it leaves the service, so nothing reaches a client.
+  **Server-side logging of which relation/column failed is not implemented**: the console has no
+  logger of its own and adding one is a composition-root change. It is an integration request.
+- **The tenant check every port passes through.** `scopedPort` wraps *both* injected ports inside
+  `createConsoleServices`, so no implementation can skip it: it refuses a tenant-scoped plan with no
+  tenant before calling the executor, and refuses any returned row whose tenant field is not the bound
+  one. This matters because D1's views return every organization's rows to an operator or service-role
+  session, so for those sessions C1's predicate is the only scoping there is.
+- **`usageDaily` cap.** Real on both sides: the memory port honours `plan.limit` for grouped aggregates
+  (the rendered statement always carried `limit 400`) and the service slices to the named query's cap,
+  so an executor that ignores a LIMIT cannot produce an unbounded response. `usageSummary` stays
+  unbounded pending the from/to contract revision, and stays listed as a limit.
+- **The real executor.** Stated plainly: **the supabase-js `QueryPort` is unwritten.** Under "D1 views
+  via supabase-js" the rendered SQL in this report is not what will run — it is the specification of
+  what each named query must fetch, and the port that turns a `QueryPlan` into a PostgREST call is
+  C2's first deliverable, together with a Layer-2 tenant test on task-local port `55441` once D1
+  merges. Nothing in this repository executes SQL today.
+
+## Results (quoted)
+
+```
+=== make console-test
+exit=0
+# tests 186
+# pass 186
+# fail 0
+# skipped 0
+=== make console-lint
+exit=0
+✖ 2 problems (0 errors, 2 warnings)
+=== make console-typecheck
+exit=0
+✓ Types generated successfully
+=== make console-mutants
+exit=0
+144 mutants: 144 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 28.1s
+=== make api-test
+exit=0
+670 passed, 2 warnings in 29.70s
+=== node tests/c/run-mutants.mjs --jobs 6
+exit=0
+baseline: 73 cases pass unmutated, 31 fail (C2/C3 operations this task does not implement); 74 mutants, 6 at a time
+74 mutants: 74 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 24.1s
+=== node tests/c/run-mutants.mjs --self-test
+exit=0
+4 self-tests, 0 failed
+=== exported conformance
+exit=1
+# tests 45
+# pass 16
+# fail 29
+```
+
+UTC window `2026-09-21T16:57:34Z` – `2026-09-21T16:59:10Z` (the mutant totals re-run after the stale
+refresh at `db5f1e8`). The two lint warnings remain the pre-existing ones in coordinator-owned
+`lib/contracts/*`. The exported conformance split is unchanged at **16 / 29**, every failure still
+attributed to a C2/C3 operation by `tests/c/console-conformance.test.ts`.
+
+One invariant was deliberately **not** claimed: `TS-03` (the cursor key keeping a row's raw timestamp
+form) is unobservable through a port that compares the same values it returns, and in PostgreSQL both
+forms are one instant — so a case for it could not fail. The normalisation stays for consistency
+between the DTO and the cursor; the mutant is not in the list.
+
+## Changes
+
+```
+$ git diff --numstat e91b288..HEAD
+102	17	apps/app/lib/services/console.ts
+46	14	apps/app/lib/services/credits.ts
+37	0	apps/app/lib/services/query.ts
+1	1	apps/app/tests/c/client-boundary.test.ts
+52	3	apps/app/tests/c/credits.test.ts
+2	1	apps/app/tests/c/harness.ts
+216	25	apps/app/tests/c/mutants.json
+168	4	apps/app/tests/c/projection.test.ts
+125	2	apps/app/tests/c/read-services.test.ts
+3	2	apps/app/tests/c/run-mutants.mjs
+```
+
+## Limits, updated again
+
+Replacing the round-1 list where they overlap:
+
+1. **The supabase-js `QueryPort` is unwritten** (C2's first deliverable). No SQL has executed; the
+   rendered statements are the specification of each named query, not the text that will run.
+2. **A malformed row fails the whole page** (`internal_error`), by ruling — a D/C shape break is loud in
+   the pilot. Server-side logging of the failing relation and column is **not implemented** (no logger
+   in the console); integration request below.
+3. **`usageSummary` accepts an unbounded range** until the from/to contract revision (F2.2).
+4. **`UsageRow.key_id` is not nullable in the frozen contract**, so a deleted key reads as the
+   documented sentinel `""`. The revision is F2.2's.
+5. **Money as a JSON number is accepted below 2^26** for the legacy `org_balance` fallback path only;
+   everything else must be text.
+6. **`Credits` still crosses as `number`** for `components/credits-card.tsx`, which is not this task's
+   file.
+7. **Aggregate drift** between the SQL renderer and the in-memory port is still only visible against
+   real PostgreSQL.
+8. **`traceContent`, every mutation and the write-side body bounds** remain C2/C3; `adminAudit` rows are
+   seeded by the harness because C3 owns the writes.
+9. **The client-boundary test is static** (regex import scan), so a computed `import(variable)` would
+   slip past it; the module-scope guards are the backstop.
+10. **DUR-RLS's SQL half** needs a real database and D1's grants.
+
+## Integration requests (delta)
+
+Unchanged from round 1, plus:
+
+1. **A server-side log sink for the console** (coordinator): a one-line hook the services can call with
+   the relation and column that failed shape validation, never the value. Without it a shape break is
+   visible only as an `internal_error` in the page.
+2. **F2.2 contract revision** now covers three items: `UsageRow.key_id: string | null`, `from`/`to`
+   required on `usageSummary`/`usageDaily`, and (from round 1) nothing else in `ConsoleServices`.
+3. **To D1:** money and timestamps as text, `model_ids` as a real array — as listed in round 1 — plus a
+   note that `console_usage` leaves `key_name` and `key_id` both NULL for a deleted key, which C1 now
+   handles; if D1 would rather `coalesce` the name in the view, C1's sentinel pair still applies to the
+   id.
+
+## Verification log
+
+- 2026-09-21: Review round 2 addressed. B1–B4, the four rulings and the six nonblocking items each got
+  a commit and a killing test; 186 console tests pass, 74 of 74 C1 mutants and 144 of 144 F2 mutants
+  are killed, the runner's four self-tests pass, and the exported conformance split is unchanged with
+  every failure still attributed to C2 or C3 by an executable check. The round-1 case count was
+  corrected from the runner's own output rather than restated. No service was contacted; nothing was
+  pushed or deployed.
