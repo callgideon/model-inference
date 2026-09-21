@@ -16,7 +16,7 @@ from typing import Annotated, Any, Literal
 from pydantic import (BaseModel, ConfigDict, Field, PlainSerializer, model_validator)
 from pydantic.functional_validators import BeforeValidator
 
-from . import errors, ids, money
+from . import errors, ids, limits, money
 
 SCHEMA_VERSION = 1
 
@@ -167,12 +167,37 @@ class AuthorRole(enum.StrEnum):
 
 
 class FeedbackName(enum.StrEnum):
-    """r1 R3, from `research/traces/06` §2: the name fixes the value's type."""
+    """Every name a *stored* feedback entry may carry (r1 R3, R43).
+
+    The first four are the signals a client may submit and the name fixes the
+    value's type (`research/traces/06` §2). `calibration_label` is a stored-only
+    name: `FeedbackService.accept` refuses it as input, and only the operator path
+    `label_calibration` creates one, which mirrors the console's
+    `FEEDBACK_NAMES` / `FEEDBACK_ENTRY_NAMES` split (R43). Keeping the two lists
+    apart is what makes "a client cannot author an operator label" a property of
+    the vocabulary rather than one more check somebody has to remember.
+    """
 
     thumb = "thumb"
     rating = "rating"
     correction = "correction"
     comment = "comment"
+    calibration_label = "calibration_label"
+
+
+# The submittable subset, in the console's order. `FeedbackName` is the entry set.
+FEEDBACK_INPUT_NAMES: tuple[FeedbackName, ...] = (
+    FeedbackName.thumb, FeedbackName.rating, FeedbackName.correction, FeedbackName.comment,
+)
+
+
+class CalibrationLabel(enum.StrEnum):
+    """r1 R43: the verdict an operator records against a rubric version."""
+
+    correct = "correct"
+    partially_correct = "partially_correct"
+    incorrect = "incorrect"
+    unusable = "unusable"
 
 
 class JudgeResolution(enum.StrEnum):
@@ -272,11 +297,53 @@ class AuthContext(Record):
         return self.role is Role.operator
 
 
+class OrgEntitlements(Record):
+    """r1 R24: what an organization may run, stated so the default cannot be read
+    as a denial.
+
+    * `model_ids is None` - the platform default set; no per-org decision recorded.
+    * `model_ids == ()` - **nothing entitled**: every admission is
+      `model_not_entitled`. A deliberate fail-closed state, not an empty field.
+    * a non-empty tuple - exactly those models, and nothing else.
+
+    `limits` keys come from the closed `ENTITLEMENT_LIMIT_NAMES` set, so an unknown
+    control is `invalid_request` rather than a silently ignored one.
+    """
+
+    org_id: UuidStr
+    model_ids: tuple[str, ...] | None = None
+    limits: dict[str, int] = Field(default_factory=dict)
+    updated_at: Timestamp | None = None
+    updated_by: str | None = None
+
+    @model_validator(mode="after")
+    def _limits_are_known_and_bounded(self) -> OrgEntitlements:
+        unknown = sorted(set(self.limits) - set(limits.ENTITLEMENT_LIMIT_NAMES))
+        if unknown:
+            raise ValueError(f"unknown entitlement limits: {unknown}")
+        for name, value in self.limits.items():
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"entitlement limit {name} must be an integer")
+            if not 0 <= value <= limits.MAX_ENTITLEMENT_LIMIT:
+                raise ValueError(f"entitlement limit {name} must be in "
+                                 f"0..{limits.MAX_ENTITLEMENT_LIMIT}")
+        return self
+
+    def allows(self, model_revision: str) -> bool | None:
+        """True/False for a recorded decision, `None` for "use the platform default"."""
+        if self.model_ids is None:
+            return None
+        return model_revision in self.model_ids
+
+
 class ConsentSnapshot(Record):
     org_id: UuidStr
     consent_version: int
     trace_mode: TraceMode
-    content_retention_days: int = Field(ge=0, le=90)
+    # r1 R43: retention is 1..90 days wherever it is validated. Zero days is not a
+    # retention policy - "keep nothing" is `TraceMode.off`.
+    content_retention_days: int = Field(ge=limits.MIN_CONTENT_RETENTION_DAYS,
+                                        le=limits.MAX_CONTENT_RETENTION_DAYS)
     evaluation_consent: bool
     effective_at: Timestamp
     revoked_at: Timestamp | None = None
@@ -388,7 +455,7 @@ class IdempotencyRef(Record):
 
     org_id: UuidStr
     operation: str
-    key: str | None = Field(default=None, max_length=255)
+    key: str | None = Field(default=None, max_length=limits.MAX_IDEMPOTENCY_KEY_CHARS)
     payload_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
     @property
@@ -620,13 +687,28 @@ def check_feedback_value(name: FeedbackName, value: object) -> None:
             raise ValueError("a rating value is an integer")
         if not 1 <= value <= 5:
             raise ValueError("a rating value is between 1 and 5")
+    elif name is FeedbackName.calibration_label:
+        # r1 R43: a label's value is one of a closed vocabulary, not free text.
+        if isinstance(value, bool) or value not in tuple(CalibrationLabel):
+            raise ValueError("a calibration_label value is one of "
+                             f"{', '.join(label.value for label in CalibrationLabel)}")
     else:                                # correction, comment
         if isinstance(value, bool) or not isinstance(value, str) or not value.strip():
             raise ValueError(f"a {name} value is nonempty text")
+    if isinstance(value, str) and len(value) > limits.MAX_FEEDBACK_TEXT_CHARS:
+        # r1 R43: a comment is a note, not an upload channel.
+        raise ValueError(f"a feedback value is at most {limits.MAX_FEEDBACK_TEXT_CHARS} characters")
 
 
 class Feedback(Record):
-    """r1 R3: one signal per record — `name` fixes the type of `value`."""
+    """r1 R3/R43: one signal per record — `name` fixes the type of `value`.
+
+    A calibration label is *this* record with `name=calibration_label`,
+    `calibration_set=True` and an integer `rubric_version`; there is no second
+    shape and no free-text calibration set. `calibration_set` is a boolean because
+    membership is one fact, and the rubric it was labelled against is the integer
+    `research/traces/04` stores as a `UInt16`.
+    """
 
     feedback_id: str
     request_id: UuidStr
@@ -636,8 +718,10 @@ class Feedback(Record):
     channel: FeedbackChannel            # server-set
     name: FeedbackName
     value: bool | int | str
-    comment: str | None = None
-    calibration_set: str | None = None  # operator authorization required
+    comment: str | None = Field(default=None, max_length=limits.MAX_FEEDBACK_TEXT_CHARS)
+    calibration_set: bool = False       # operator authorization required
+    rubric_version: int | None = Field(default=None, ge=limits.MIN_RUBRIC_VERSION,
+                                       le=limits.MAX_RUBRIC_VERSION)
     created_at: Timestamp
 
     @model_validator(mode="before")
@@ -648,6 +732,15 @@ class Feedback(Record):
     @model_validator(mode="after")
     def _value_matches_the_name(self) -> Feedback:
         check_feedback_value(self.name, self.value)
+        # r1 R43: the three calibration fields are one fact, so they cannot disagree.
+        # A `calibration_set` customer signal would be an unauthorized label, and a
+        # label with no rubric version is a verdict against nothing.
+        label = self.name is FeedbackName.calibration_label
+        if label != self.calibration_set:
+            raise ValueError("calibration_set is true exactly on a calibration_label entry")
+        if label != (self.rubric_version is not None):
+            raise ValueError("rubric_version is required on a calibration_label entry "
+                             "and null on every other entry")
         return self
 
 
@@ -656,7 +749,9 @@ class JudgeRun(Record):
     org_id: UuidStr
     sample_ids: tuple[str, ...] = ()
     consent: ConsentSnapshot
-    rubric_version: str
+    # r1 R43: an integer everywhere - runs, samples, scores and calibration labels -
+    # matching `research/traces/04`'s `UInt16` and the console's `rubric_version`.
+    rubric_version: int = Field(ge=limits.MIN_RUBRIC_VERSION, le=limits.MAX_RUBRIC_VERSION)
     model_revision: str
     reserved_cost: Money = Field(default=money.ZERO, ge=0)
     actual_cost: Money | None = None

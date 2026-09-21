@@ -51,7 +51,9 @@ OPTIONAL_HOOKS: dict[str, frozenset[str]] = {
     "scheduler": frozenset({"jobs"}),
     "engine": frozenset({"text"}),
     "tracesink": frozenset({"queued", "crash", "content_budget", "reap"}),
-    "feedback": frozenset({"jobs", "outbox", "audit"}),
+    # r1 R33: `suspend_org` is the same injectable suspension source the JobStore uses,
+    # so one organization cannot be suspended for admission and live for feedback.
+    "feedback": frozenset({"jobs", "outbox", "audit", "suspend_org"}),
     "judge": frozenset({"runs", "available", "set_consent", "revoke_consent", "audit"}),
 }
 

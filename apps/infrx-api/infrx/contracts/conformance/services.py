@@ -8,9 +8,11 @@ from decimal import Decimal
 
 from .. import errors
 from ..limits import DEFAULTS
-from ..records import (AuthorRole, ChunkEventType, FeedbackChannel, FeedbackName,
+from ..limits import MAX_FEEDBACK_TEXT_CHARS, MAX_RUBRIC_VERSION
+from ..records import (AuthorRole, CalibrationLabel, ChunkEventType, FeedbackChannel, FeedbackName,
                        JudgeResolution, JudgeRunState, MediaKind, Role, TraceLossReason,
                        TraceMode, TraceOfferResult)
+from ..wire import PLATFORM_ACTOR, FeedbackList
 from . import builders as b
 from .harness import hook
 
@@ -1340,7 +1342,10 @@ async def feedback_ack__acceptance_is_durable_and_provenance_is_server_set(facto
                    comment="the robot is a hand truck"), idem)
     assert record.channel is FeedbackChannel.api and record.author_role is AuthorRole.customer
     assert record.feedback_id.startswith("fb_") and record.org_id == b.ORG_A
-    assert record.name is FeedbackName.correction and record.calibration_set is None
+    assert record.name is FeedbackName.correction
+    # r1 R43: `calibration_set` is a boolean, false on every customer signal, and the
+    # rubric version is null off the calibration path.
+    assert record.calibration_set is False and record.rubric_version is None
     assert hook(harness, "outbox")()                       # projection queued, not awaited
     assert await harness.port.list_owned(b.auth(), request.request_id) == (record,)
 
@@ -1363,6 +1368,14 @@ async def feedback_ack__the_body_is_one_valid_signal_with_a_required_key(factory
         b.feedback(FeedbackName.comment, False),
         {"name": "sentiment", "value": "good"},               # not a known signal
         [{"name": "thumb", "value": True}],                   # not even an object
+        # r1 R43: `calibration_label` is a *stored* entry name, never an input one.
+        # It is in the vocabulary because a row carries it, and refused here because
+        # only the operator path may author one.
+        b.feedback(FeedbackName.calibration_label, CalibrationLabel.correct.value),
+        # r1 R43: text and comment are bounded at 4000 characters, both of them, so a
+        # form cannot post a document into the feedback table.
+        b.feedback(FeedbackName.comment, "x" * (MAX_FEEDBACK_TEXT_CHARS + 1)),
+        b.feedback(FeedbackName.thumb, True, comment="y" * (MAX_FEEDBACK_TEXT_CHARS + 1)),
     )
     for n, body in enumerate(bad_bodies):
         try:
@@ -1381,11 +1394,15 @@ async def feedback_ack__the_body_is_one_valid_signal_with_a_required_key(factory
     else:
         raise AssertionError("feedback was accepted without an idempotency key")
     assert await harness.port.list_owned(b.auth(), request.request_id) == ()
-    for name, value in ((FeedbackName.thumb, True), (FeedbackName.rating, 5),
-                        (FeedbackName.comment, "clear enough")):
+    # The bound is `>`, not `>=`: exactly 4000 characters is still a note.
+    for n, (name, value) in enumerate(((FeedbackName.thumb, True), (FeedbackName.rating, 5),
+                                       (FeedbackName.comment, "clear enough"),
+                                       (FeedbackName.comment,
+                                        "z" * MAX_FEEDBACK_TEXT_CHARS))):
         record = await harness.port.accept(b.auth(), request.request_id,
                                            b.feedback(name, value),
-                                           b.idem(request, f"fb-{name}", operation="feedback"))
+                                           b.idem(request, f"fb-{n}-{name}",
+                                                  operation="feedback"))
         assert record.name is name and record.value == value
 
 
@@ -1460,70 +1477,178 @@ async def feedback_ack__a_client_cannot_forge_provenance(factory):
             pass
         else:
             raise AssertionError(f"a client set {field}")
-    # r1 R31: `calibration_set` is server-set and exists only through the operator
-    # path, so even an operator session cannot send it on `accept`
+    # r1 R31/R43: `calibration_set` and `rubric_version` are server-set and exist only
+    # through the operator path, so even an operator session cannot send them on `accept`
     for auth in (b.auth(), b.auth(role=Role.operator)):
-        try:
-            await harness.port.accept(auth, request.request_id,
-                                      {**b.feedback(), "calibration_set": "golden"},
-                                      b.idem(request, "fb-cal", operation="feedback"))
-        except errors.InvalidRequest:
-            pass
-        else:
-            raise AssertionError("a client stamped calibration membership")
+        for stamped in ({"calibration_set": True}, {"rubric_version": 3}):
+            try:
+                await harness.port.accept(auth, request.request_id,
+                                          {**b.feedback(), **stamped},
+                                          b.idem(request, "fb-cal", operation="feedback"))
+            except errors.InvalidRequest:
+                pass
+            else:
+                raise AssertionError(f"a client stamped {sorted(stamped)}")
     # and an operator session on the customer path is still a customer signal
     operator_says = await harness.port.accept(b.auth(role=Role.operator), request.request_id,
                                               b.feedback(FeedbackName.thumb, True),
                                               b.idem(request, "fb-op-customer",
                                                      operation="feedback"))
     assert operator_says.author_role is AuthorRole.customer
-    assert operator_says.calibration_set is None
+    assert operator_says.calibration_set is False and operator_says.rubric_version is None
 
 
 async def feedback_ack__an_operator_may_label_a_calibration_set(factory):
-    """FEEDBACK-ACK / r1 R31+R19+R26: operator provenance exists only through
+    """FEEDBACK-ACK / r1 R31+R19+R26+R43: operator provenance exists only through
     `label_calibration`. It is operator-only, idempotent, audited, and platform-wide:
-    the organization comes from the labelled row, not from the operator's session."""
+    the organization comes from the labelled row, not from the operator's session.
+
+    R43 fixes the persisted shape: one `Feedback` row with
+    `name=calibration_label`, a closed-vocabulary `value`, `calibration_set=True`
+    (a boolean) and a required integer `rubric_version`.
+    """
     harness = factory()
     request, _ = await _owned_request(harness)
     idem = b.idem(request, "cal-1", operation="calibration.label")
+    label = CalibrationLabel.partially_correct.value
     try:
-        await harness.port.label_calibration(b.auth(), request.request_id, "golden", idem)
+        await harness.port.label_calibration(b.auth(), request.request_id, label, 3, idem)
     except errors.Forbidden:
         pass
     else:
         raise AssertionError("a customer labelled a calibration set")
     record = await harness.port.label_calibration(b.auth(role=Role.operator),
-                                                  request.request_id, "golden", idem)
-    assert record.calibration_set == "golden" and record.author_role is AuthorRole.operator
+                                                  request.request_id, label, 3, idem)
+    assert record.name is FeedbackName.calibration_label and record.value == label
+    assert record.calibration_set is True and record.author_role is AuthorRole.operator
+    assert record.rubric_version == 3
     assert record.org_id == request.org_id          # the row's tenant, not the operator's
     assert await harness.port.label_calibration(b.auth(role=Role.operator), request.request_id,
-                                                "golden", idem) == record      # idempotent
-    for bad_label, bad_idem in (("", idem), ("   ", idem),
-                                ("golden", b.idem(request, None,
-                                                  operation="calibration.label"))):
+                                                label, 3, idem) == record       # idempotent
+    # A label outside the vocabulary, a rubric version that is not a bounded integer,
+    # and a missing idempotency key are all 400s. "golden" used to be accepted as free
+    # text, which made the calibration set unaggregatable across operators.
+    keyless = b.idem(request, None, operation="calibration.label")
+    for bad_label, bad_version, bad_idem in (
+        ("golden", 3, idem), ("", 3, idem), ("   ", 3, idem),
+        (label, 0, idem), (label, MAX_RUBRIC_VERSION + 1, idem), (label, True, idem),
+        (label, "3", idem), (label, 1.5, idem), (label, None, idem),
+        (label, 3, keyless),
+    ):
         try:
             await harness.port.label_calibration(b.auth(role=Role.operator), request.request_id,
-                                                 bad_label, bad_idem)
+                                                 bad_label, bad_version, bad_idem)
         except errors.InvalidRequest:
             pass
         else:
-            raise AssertionError(f"label {bad_label!r} with key {bad_idem.key!r} was accepted")
+            raise AssertionError(f"label {bad_label!r} rubric {bad_version!r} with key "
+                                 f"{bad_idem.key!r} was accepted")
+    # r1 R43: a label's own comment is bounded like any other feedback text.
+    try:
+        await harness.port.label_calibration(
+            b.auth(role=Role.operator), request.request_id, label, 3,
+            b.idem(request, "cal-long", operation="calibration.label"),
+            comment="c" * (MAX_FEEDBACK_TEXT_CHARS + 1))
+    except errors.InvalidRequest:
+        pass
+    else:
+        raise AssertionError("a calibration comment over the text bound was accepted")
     # r1 R26: platform-wide. An operator whose own session names another organization
     # still labels this row, and the label belongs to the *row's* tenant - a store
     # using `auth.org_id` would file it under the operator's org, where the customer
     # who owns the trace could never see it and the calibration set would be split.
     foreign_operator = b.auth(org_id=b.ORG_B, key_id=b.KEY_B, role=Role.operator)
     cross = await harness.port.label_calibration(
-        foreign_operator, request.request_id, "golden",
+        foreign_operator, request.request_id, label, 7,
         b.idem(request, "cal-cross", operation="calibration.label"))
     assert cross.org_id == request.org_id, "the label was filed under the operator's org"
-    assert cross.author_role is AuthorRole.operator and cross.calibration_set == "golden"
+    assert cross.author_role is AuthorRole.operator and cross.calibration_set is True
+    assert cross.rubric_version == 7
     entries = [entry for entry in hook(harness, "audit")()
                if entry.get("event") == "label_calibration"]
-    assert len(entries) == 2 and {entry["label"] for entry in entries} == {"golden"}
+    assert len(entries) == 2 and {entry["label"] for entry in entries} == {label}
+    assert {entry["rubric_version"] for entry in entries} == {3, 7}
     assert entries[0]["operator"] == b.auth(role=Role.operator).principal
     assert all(entry["org_id"] == request.org_id for entry in entries)
+
+
+async def feedback_ack__calibration_labels_are_operator_data(factory):
+    """FEEDBACK-ACK / r1 R35+R41: a customer never receives a calibration label, and
+    never an operator principal.
+
+    The label is filed under the customer's own organization (R26), so "the caller owns
+    the row" is not the filter that protects it: the port has to exclude labels from
+    `list_owned` for a non-operator caller and report an operator-authored principal as
+    `platform`. `wire.FeedbackList.for_viewer` is the same projection for a body built
+    anywhere else, and the operator view is `list_calibration`.
+    """
+    harness = factory()
+    request, _ = await _owned_request(harness)
+    # A principal of its own, so "the customer never sees it" is about the operator's
+    # identity rather than about a key both sessions happen to share.
+    operator = b.auth(key_id=b.KEY_B, role=Role.operator)
+    mine = await harness.port.accept(b.auth(), request.request_id,
+                                     b.feedback(FeedbackName.rating, 4),
+                                     b.idem(request, "fb-mine", operation="feedback"))
+    label = await harness.port.label_calibration(
+        operator, request.request_id, CalibrationLabel.incorrect.value, 2,
+        b.idem(request, "cal-1", operation="calibration.label"))
+
+    customer_view = await harness.port.list_owned(b.auth(), request.request_id)
+    assert [row.feedback_id for row in customer_view] == [mine.feedback_id], \
+        "a customer was shown a calibration label"
+    assert all(not row.calibration_set for row in customer_view)
+    assert all(row.author_role is not AuthorRole.operator for row in customer_view)
+    assert all(row.author_principal != operator.principal for row in customer_view)
+
+    # The operator sees the label and its author.
+    operator_view = await harness.port.list_owned(operator, request.request_id)
+    assert label.feedback_id in {row.feedback_id for row in operator_view}
+    assert any(row.author_principal == operator.principal for row in operator_view)
+    only_labels = await harness.port.list_calibration(operator, request.request_id)
+    assert [row.feedback_id for row in only_labels] == [label.feedback_id]
+    assert only_labels[0].author_principal == operator.principal
+    try:
+        await harness.port.list_calibration(b.auth(), request.request_id)
+    except errors.Forbidden:
+        pass
+    else:
+        raise AssertionError("a customer read the calibration list")
+
+    # r1 R41 for the body: an operator-authored *customer* signal keeps its role and
+    # loses only the principal, so a tenant learns the platform acted, not who did.
+    stored = (mine, label,
+              label.model_copy(update={"name": FeedbackName.comment, "value": "by an operator",
+                                       "calibration_set": False, "rubric_version": None}))
+    published = FeedbackList.for_viewer(stored, operator=False)
+    assert [row.feedback_id for row in published.items] == [mine.feedback_id,
+                                                            stored[2].feedback_id]
+    assert published.items[1].author_principal == PLATFORM_ACTOR
+    assert published.items[1].author_role is AuthorRole.operator
+    assert FeedbackList.for_viewer(stored, operator=True).items == stored
+
+
+async def feedback_ack__a_suspended_organization_cannot_submit_but_can_read(factory):
+    """FEEDBACK-ACK / r1 R33: suspension gates new work and configuration changes.
+
+    `accept` is `org_suspended`; every read keeps working, because a suspended tenant
+    still has to be able to see what it submitted (and, in the console, revoke a leaked
+    key). Existing rows are never altered.
+    """
+    harness = factory()
+    request, _ = await _owned_request(harness)
+    before = await harness.port.accept(b.auth(), request.request_id, b.feedback(),
+                                       b.idem(request, "fb-before", operation="feedback"))
+    hook(harness, "suspend_org")(b.ORG_A)
+    try:
+        await harness.port.accept(b.auth(), request.request_id,
+                                  b.feedback(FeedbackName.thumb, True),
+                                  b.idem(request, "fb-after", operation="feedback"))
+    except errors.OrgSuspended as exc:
+        assert errors.http_status(exc.code) == 403
+    else:
+        raise AssertionError("a suspended organization submitted feedback")
+    assert await harness.port.list_owned(b.auth(), request.request_id) == (before,)
 
 
 def feedback_cases():
@@ -1532,7 +1657,9 @@ def feedback_cases():
             feedback_ack__ownership_does_not_wait_for_the_projection,
             feedback_ack__replay_is_idempotent_and_a_changed_payload_conflicts,
             feedback_ack__a_client_cannot_forge_provenance,
-            feedback_ack__an_operator_may_label_a_calibration_set]
+            feedback_ack__an_operator_may_label_a_calibration_set,
+            feedback_ack__calibration_labels_are_operator_data,
+            feedback_ack__a_suspended_organization_cannot_submit_but_can_read]
 
 
 # ==========================================================================
@@ -1541,7 +1668,7 @@ def feedback_cases():
 def _run(harness, org_id=b.ORG_A):
     from ..records import JudgeRun
     return JudgeRun(run_id=harness.ids.uuid(), org_id=org_id, sample_ids=(harness.ids.uuid(),),
-                    consent=b.consent(org_id), rubric_version="rubric_v1",
+                    consent=b.consent(org_id), rubric_version=1,     # r1 R43: an integer
                     model_revision="claude-opus-5", state=JudgeRunState.dry_run,
                     created_at=harness.clock.now())
 

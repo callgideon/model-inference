@@ -85,7 +85,11 @@ EXPECTED_ENUMS = {
     records.FeedbackChannel: ["api", "console"],
     records.AuthorRole: ["customer", "operator", "judge"],
     # r1 R3 / R8 additions to 08 §3
-    records.FeedbackName: ["thumb", "rating", "correction", "comment"],
+    # r1 R43: the entry names. The submittable subset is FEEDBACK_INPUT_NAMES.
+    records.FeedbackName: ["thumb", "rating", "correction", "comment",
+                           "calibration_label"],
+    records.CalibrationLabel: ["correct", "partially_correct", "incorrect",
+                               "unusable"],
     records.JudgeResolution: ["adopt_provider_evidence", "release_reservation"],
     records.JudgeRunState: ["dry_run", "reserved", "submitting", "submitted", "ambiguous",
                             "collecting", "settled", "quarantined", "cancelled"],

@@ -12,10 +12,12 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .codec import compact_bytes
-from .records import (ChunkEventType, ContentState, ExecutionMode, Feedback, FeedbackChannel,
-                      FeedbackName, JobState, JsonObject, MediaRef, TerminalCause, Timestamp,
-                      TraceEnvelope, UploadState, Usage, UuidStr, check_feedback_value,
-                      no_float_value)
+from . import errors
+from .limits import MAX_FEEDBACK_TEXT_CHARS, MAX_IDEMPOTENCY_KEY_CHARS, MAX_PAGE_LIMIT
+from .records import (FEEDBACK_INPUT_NAMES, AuthorRole, ChunkEventType, ContentState,
+                      ExecutionMode, Feedback, FeedbackChannel, FeedbackName, JobState, JsonObject,
+                      MediaRef, TerminalCause, Timestamp, TraceEnvelope, TraceLossReason,
+                      TraceMode, UploadState, Usage, UuidStr, check_feedback_value, no_float_value)
 
 DONE = "[DONE]"
 
@@ -31,7 +33,11 @@ HEADER_RETRY_AFTER = "Retry-After"
 HEADER_IDEMPOTENCY_REPLAYED = "Idempotency-Replayed"
 HEADER_SERVER_TIMING = "Server-Timing"
 PREFER_RESPOND_ASYNC = "respond-async"
-IDEMPOTENCY_KEY_MAX_LEN = 255
+IDEMPOTENCY_KEY_MAX_LEN = MAX_IDEMPOTENCY_KEY_CHARS
+
+# What a customer session sees in place of an operator's identity (r1 R41). A tenant
+# learns that the platform acted, never which person at the platform did it.
+PLATFORM_ACTOR = "platform"
 
 
 class WireModel(BaseModel):
@@ -189,12 +195,17 @@ class FeedbackSubmission(WireModel):
 
     r1 R3: `name` and `value` are both required, so an empty body is a 400 rather
     than a row that says nothing; `comment` is the only optional field.
+
+    r1 R43: `calibration_label` is a stored-entry name, not an input one. It is in
+    `FeedbackName` because a row carries it, and refused here because only
+    `label_calibration` may author one - the same `FEEDBACK_NAMES` versus
+    `FEEDBACK_ENTRY_NAMES` split the console makes.
     """
 
     request_id: UuidStr
     name: FeedbackName
     value: bool | int | str
-    comment: str | None = None
+    comment: str | None = Field(default=None, max_length=MAX_FEEDBACK_TEXT_CHARS)
 
     @model_validator(mode="before")
     @classmethod
@@ -203,21 +214,115 @@ class FeedbackSubmission(WireModel):
 
     @model_validator(mode="after")
     def _value_matches_the_name(self) -> FeedbackSubmission:
+        if self.name not in FEEDBACK_INPUT_NAMES:
+            raise ValueError(f"{self.name} is set by the server, not submitted by a client")
         check_feedback_value(self.name, self.value)
         return self
 
 
+class TraceContentRequest(WireModel):
+    model: str
+    messages: tuple[JsonObject, ...] = ()
+    params: JsonObject = Field(default_factory=dict)
+
+
+class TraceContentError(WireModel):
+    type: str
+    code: str
+    message: str
+
+    @model_validator(mode="after")
+    def _code_is_a_known_code(self) -> TraceContentError:
+        if self.code not in errors.ALL_CODES:
+            raise ValueError(f"{self.code} is not a contracts-v1 error code")
+        return self
+
+
+class TraceContentChoice(WireModel):
+    index: int = Field(ge=0)
+    finish_reason: str | None = None
+    content: str | None = None
+    reasoning_content: str | None = None
+
+
+class TraceContentResponse(WireModel):
+    status: int = Field(ge=100, le=599)
+    choices: tuple[TraceContentChoice, ...] = ()
+    error: TraceContentError | None = None
+
+
+class TraceContentBody(WireModel):
+    """r1 R47: the content object is `{v, request, response}`, exactly the shape
+    `research/traces/04` §3.1 stores and the console's `TraceContentBody` renders.
+    Media parts inside `request.messages` are references, never bytes."""
+
+    v: Literal[1] = 1
+    request: TraceContentRequest
+    response: TraceContentResponse
+
+
 class TraceExport(WireModel):
-    envelope: TraceEnvelope
+    """r1 R47: the public export of one trace.
+
+    It carries **no storage key**. `content_ref` on the internal `TraceEnvelope` is
+    an object key, so the export replaces it with `content_state` (availability) plus
+    an opaque `content_handle` the server resolves after ownership and logical expiry
+    - which is what makes wire.py's "none of them carries a storage key" true rather
+    than aspirational. `test_fixtures.py` greps every wire fixture for a
+    storage-key-shaped field.
+    """
+
+    request_id: UuidStr
+    org_id: UuidStr
+    key_id: UuidStr
+    mode: TraceMode
+    started_at: Timestamp
+    completed_at: Timestamp | None = None
+    content_complete: bool = False
     content_state: ContentState
-    content: JsonObject | None = None
+    content_handle: str | None = None       # opaque; resolved server-side, never a key
+    content_bytes: int = Field(default=0, ge=0)
+    metadata_bytes: int = Field(default=0, ge=0)
+    loss_reason: TraceLossReason = TraceLossReason.none
+    model_revision: str
+    price_version: str
+    trace_schema_version: int = 1
+    content: TraceContentBody | None = None
 
     @classmethod
     def of(cls, envelope: TraceEnvelope, content_state: ContentState,
-           content: dict[str, Any] | None = None) -> TraceExport:
-        return cls(envelope=envelope, content_state=content_state, content=content)
+           content: TraceContentBody | dict[str, Any] | None = None,
+           content_handle: str | None = None) -> TraceExport:
+        """Project an envelope. `envelope.content_ref` is deliberately dropped."""
+        return cls(request_id=envelope.request_id, org_id=envelope.org_id,
+                   key_id=envelope.key_id, mode=envelope.mode,
+                   started_at=envelope.started_at, completed_at=envelope.completed_at,
+                   content_complete=envelope.content_complete, content_state=content_state,
+                   content_handle=content_handle, content_bytes=envelope.content_bytes,
+                   metadata_bytes=envelope.metadata_bytes, loss_reason=envelope.loss_reason,
+                   model_revision=envelope.model_revision, price_version=envelope.price_version,
+                   trace_schema_version=envelope.request_schema_version, content=content)
 
 
 class FeedbackList(WireModel):
     items: tuple[Feedback, ...] = ()
     next_cursor: str | None = None
+
+    @classmethod
+    def for_viewer(cls, items: tuple[Feedback, ...], *, operator: bool,
+                   next_cursor: str | None = None) -> FeedbackList:
+        """r1 R35/R41: what a viewer may be shown.
+
+        A non-operator viewer gets no calibration labels at all (they are operator
+        data) and never an operator principal: an operator-authored row reads
+        `platform`. An operator viewer gets the rows as stored. Publishing the port's
+        tuple straight into a body is how a customer ends up reading the name of the
+        person who labelled their trace, so the projection lives here, once.
+        """
+        if operator:
+            return cls(items=tuple(items), next_cursor=next_cursor)
+        visible = tuple(
+            item if item.author_role is not AuthorRole.operator
+            else item.model_copy(update={"author_principal": PLATFORM_ACTOR})
+            for item in items if not item.calibration_set)
+        return cls(items=visible, next_cursor=next_cursor)

@@ -59,6 +59,7 @@ T = "contracts/fakes/traces.py"
 F = "contracts/fakes/feedback.py"
 Q = "contracts/fakes/scheduling.py"
 R = "contracts/records.py"
+W = "contracts/wire.py"                 # public bodies: projections and input bounds
 MONEY = "contracts/money.py"
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -434,6 +435,70 @@ MUTANTS: tuple[Mutant, ...] = (
           "                raise errors.IdempotencyConflict(\"same label key, different payload\")\n"
           "            return self.items[feedback_id]",
        "        existing = None", "feedback_ack__an_operator_may_label_a_calibration_set"),
+    # --- r1 R43: one persisted calibration shape, and who may read it ----------
+    _m("accept_takes_a_calibration_label_name", "calibration_label is not an input name (R43)",
+       W, "        if self.name not in FEEDBACK_INPUT_NAMES:\n"
+          "            raise ValueError(f\"{self.name} is set by the server, not submitted by a client\")",
+       "        pass",
+       "feedback_ack__the_body_is_one_valid_signal_with_a_required_key"),
+    _m("feedback_text_unbounded", "feedback text is bounded at 4000 characters (R43)",
+       R, "    if isinstance(value, str) and len(value) > limits.MAX_FEEDBACK_TEXT_CHARS:",
+       "    if False:",
+       "feedback_ack__the_body_is_one_valid_signal_with_a_required_key"),
+    _m("calibration_label_is_free_text", "a label comes from a closed vocabulary (R43)",
+       F, "        if label not in tuple(CalibrationLabel):",
+       "        if not isinstance(label, str) or not label.strip():",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    _m("calibration_rubric_unchecked", "a label carries a bounded integer rubric version (R43)",
+       F, "        if isinstance(rubric_version, bool) or not isinstance(rubric_version, int) \\\n"
+          "                or not MIN_RUBRIC_VERSION <= rubric_version <= MAX_RUBRIC_VERSION:",
+       "        if False:",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    _m("calibration_comment_unbounded", "a label's comment is bounded too (R43)",
+       F, "        if comment is not None and (not isinstance(comment, str)\n"
+          "                                   or len(comment) > MAX_FEEDBACK_TEXT_CHARS):",
+       "        if False:",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    # The record's coupling validator (`records.Feedback`) is load-bearing: these two
+    # store a row whose calibration fields disagree, which the record must refuse.
+    _m("label_stored_without_membership", "the three calibration fields are one fact (R43)",
+       F, "            value=label, comment=comment, calibration_set=True,",
+       "            value=label, comment=comment, calibration_set=False,",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    _m("label_stored_without_a_rubric", "a label without a rubric version is refused (R43)",
+       F, "            rubric_version=rubric_version, created_at=now)",
+       "            rubric_version=None, created_at=now)",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    _m("customer_list_shows_labels", "a customer never receives a calibration label (R35)",
+       F, "        return FeedbackList.for_viewer(rows, operator=auth.is_operator).items",
+       "        return rows",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("customer_list_shows_the_operator", "an operator principal is projected to platform (R41)",
+       W, "            else item.model_copy(update={\"author_principal\": PLATFORM_ACTOR})",
+       "            else item",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("wire_list_publishes_labels", "the wire list applies the same projection (R35/R41)",
+       W, "        if operator:\n            return cls(items=tuple(items), next_cursor=next_cursor)",
+       "        if True:\n            return cls(items=tuple(items), next_cursor=next_cursor)",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("calibration_list_open_to_customers", "the calibration list is operator only (R35)",
+       F, '            raise errors.Forbidden("calibration labels are operator data")', "            pass",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("suspended_org_may_submit_feedback", "feedback from a suspended org is refused (R33)",
+       F, '            raise errors.OrgSuspended(f"org {auth.org_id} is suspended")', "            pass",
+       "feedback_ack__a_suspended_organization_cannot_submit_but_can_read"),
+    _m("suspension_blocks_the_read_too", "a suspended org keeps every read (R33)",
+       F, "        job = self.jobs.jobs.get(request_id)\n"
+          "        if job is None or job.request.org_id != auth.org_id:\n"
+          "            raise errors.NotFound(f\"no request {request_id} owned by org {auth.org_id}\")\n"
+          "        rows = tuple(item for item in self.items.values()",
+       "        job = self.jobs.jobs.get(request_id)\n"
+          "        if job is None or job.request.org_id != auth.org_id:\n"
+          "            raise errors.NotFound(f\"no request {request_id} owned by org {auth.org_id}\")\n"
+          "        if self.is_suspended(auth.org_id):\n"
+          "            raise errors.OrgSuspended(\"suspended\")\n"
+          "        rows = tuple(item for item in self.items.values()",
+       "feedback_ack__a_suspended_organization_cannot_submit_but_can_read"),
     _m("feedback_body_unvalidated", "one valid signal per body (R3)",
        F, '            raise errors.InvalidRequest("a feedback submission needs a name and a value")',
        "            body = {\"name\": \"comment\", \"value\": \"empty\"}",

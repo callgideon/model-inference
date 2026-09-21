@@ -17,6 +17,27 @@ from decimal import Decimal
 MODES = ("dev", "test", "pilot")
 JUDGE_MODES = ("dry_run", "live")
 
+# --- shared input bounds (R17, R43) ------------------------------------------
+# Contract data, not tunables: these are the *same numbers* in both halves, and
+# `tests/contracts/test_parity_console.py` parses the console's constants and
+# compares them here. They are deliberately not `PilotSettings` fields, because
+# no environment variable may widen a bound another language enforces.
+MAX_IDEMPOTENCY_KEY_CHARS = 255          # 08 §3
+MAX_PAGE_LIMIT = 100                     # 08 §9: a hard bound, not a clamp
+MAX_KEY_NAME_CHARS = 200                 # R17
+MAX_GRANT_REASON_CHARS = 500             # R17
+MAX_FEEDBACK_TEXT_CHARS = 4_000          # R43
+MIN_RUBRIC_VERSION = 1                   # R43: an integer everywhere
+MAX_RUBRIC_VERSION = 1_000
+MIN_CONTENT_RETENTION_DAYS = 1           # R43: retention is 1..90, never 0
+MAX_CONTENT_RETENTION_DAYS = 90
+MAX_ENTITLEMENT_LIMIT = 1_000_000        # so a typo cannot mean "unlimited"
+
+# R24: the closed set of per-organization entitlement limit names. An unknown
+# name is `invalid_request`, never a silently ignored control.
+ENTITLEMENT_LIMIT_NAMES = ("max_concurrent_requests", "max_requests_per_minute",
+                           "max_video_seconds")
+
 
 @dataclass(frozen=True)
 class PilotSettings:

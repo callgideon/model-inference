@@ -284,15 +284,40 @@ class FeedbackService(Protocol):
         body is `invalid_request` and `idem.key` is required, so every submission is
         replay-safe. `idem` must name the caller's organization (R10). R31: the author
         role is always `customer` here, whatever the session - a client may not send
-        provenance at all, and `calibration_set` is refused."""
+        provenance at all, and `calibration_set` is refused.
+
+        R43: `name=calibration_label` is refused as input (it is a stored-entry name
+        only), text and comment are bounded at 4000 characters, and a **suspended**
+        organization is `org_suspended` (R33): suspension gates new work and
+        configuration changes, so a submission is refused while every read still
+        works."""
 
     async def label_calibration(self, auth: AuthContext, request_id: str, label: str,
-                                idem: IdempotencyRef) -> Feedback:
-        """R31/R19: the only path to `author_role=operator` with calibration
+                                rubric_version: int, idem: IdempotencyRef, *,
+                                comment: str | None = None) -> Feedback:
+        """R31/R19/R43: the only path to `author_role=operator` with calibration
         membership. Operator only and platform-wide (R26): the tenant comes from the
-        labelled row, not from the operator's session. Idempotent and audited."""
+        labelled row, not from the operator's session. Idempotent and audited.
 
-    async def list_owned(self, auth: AuthContext, request_id: str) -> tuple[Feedback, ...]: ...
+        `label` is one of `records.CalibrationLabel`; `rubric_version` is a required
+        integer in 1..1000 (R43: an integer everywhere, as `research/traces/04` stores
+        it). The stored row is an ordinary `Feedback` with `name=calibration_label`,
+        `calibration_set=True` and that rubric version - there is no second shape."""
+
+    async def list_owned(self, auth: AuthContext, request_id: str) -> tuple[Feedback, ...]:
+        """The viewer's own feedback for one request.
+
+        R35/R41 bind the Python half too: for a **non-operator** `AuthContext` this
+        excludes calibration labels entirely and reports an operator-authored
+        principal as the literal `platform` (`wire.PLATFORM_ACTOR`); an operator
+        `AuthContext` sees the rows as stored. `wire.FeedbackList.for_viewer` applies
+        the same projection to a body built from any other source."""
+
+    async def list_calibration(self, auth: AuthContext, request_id: str) -> tuple[Feedback, ...]:
+        """R35, mirroring the console's `calibration.list`: operator-only, the one view
+        that shows calibration labels and the operator principals that authored them.
+        A non-operator caller is `forbidden`, not an empty list, and the labels are
+        platform-wide (R26) because a calibration set spans tenants."""
 
 
 @runtime_checkable
