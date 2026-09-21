@@ -1,0 +1,903 @@
+{
+  "_comment": "R32 for C1: one single-edit mutant per invariant this task's cases claim. `node tests/c/run-mutants.mjs` applies each to a temporary copy and requires a case the mutant DECLARES to fail on an assertion; the cases come from the exported conformance functions run against C1's services and from this track's own tests. A kill that arrives only because the boundary guard turned a thrown error into `internal_error` must say so with `kills_by: \"guarded\"`, a file-level failure is a runner error, and a suite that passes unchanged is a survival. A claimed invariant with no mutant, or a mutant with no case, is the defect this list exists to prevent.",
+  "mutants": [
+    {
+      "id": "TENANT-01",
+      "note": "the plan carries no tenant at all",
+      "file": "lib/services/query.ts",
+      "find": "    tenant: spec.tenantColumn === null ? null : { column: spec.tenantColumn, value: orgId as string },",
+      "replace": "    tenant: null,",
+      "cases": [
+        "every tenant-scoped named query binds the tenant last, under the reserved name",
+        "a filter or cursor from another organization never widens the tenant",
+        "identifiers from another organization are not_found, in both directions"
+      ]
+    },
+    {
+      "id": "TENANT-02",
+      "note": "the tenant condition is placed before the caller's filters instead of after them",
+      "file": "lib/services/query.ts",
+      "find": "  if (plan.tenant !== null) conditions.push(`${plan.tenant.column} = ${bind(TENANT_PARAM, plan.tenant.value)}`);\n\n  let text = `select ${selected.join(\", \")}",
+      "replace": "  if (plan.tenant !== null) conditions.unshift(`${plan.tenant.column} = ${bind(TENANT_PARAM, plan.tenant.value)}`);\n\n  let text = `select ${selected.join(\", \")}",
+      "cases": [
+        "the tenant predicate is the last condition, after every caller filter",
+        "every page query is ordered, bounded and keyset-resumable in BOTH renderers"
+      ]
+    },
+    {
+      "id": "TENANT-03",
+      "note": "the trace lookup is untenanted, so another organization's request id resolves",
+      "file": "lib/services/query.ts",
+      "find": "  trace_by_request: {\n    engine: \"clickhouse\",\n    source: \"traces\",\n    from: \"infrx.trace_metadata\",\n    columns: TRACE_COLUMNS,\n    tenantColumn: \"org_id\",",
+      "replace": "  trace_by_request: {\n    engine: \"clickhouse\",\n    source: \"traces\",\n    from: \"infrx.trace_metadata\",\n    columns: TRACE_COLUMNS,\n    tenantColumn: null,",
+      "cases": [
+        "identifiers from another organization are not_found, in both directions",
+        "the tenanted set is exactly the pinned one, and nothing else is untenanted"
+      ]
+    },
+    {
+      "id": "TENANT-04",
+      "note": "the settings read is untenanted, so the first organization's row answers",
+      "file": "lib/services/query.ts",
+      "find": "    columns: \"s.org_id, s.trace_mode, s.content_retention_days, s.evaluation_consent\",\n    tenantColumn: \"s.org_id\",\n    tenantField: \"org_id\",",
+      "replace": "    columns: \"s.org_id, s.trace_mode, s.content_retention_days, s.evaluation_consent\",\n    tenantColumn: null,\n    tenantField: \"org_id\",",
+      "cases": [
+        "the tenanted set is exactly the pinned one, and nothing else is untenanted",
+        "the single-row reads are tenant-bound too, in both directions"
+      ]
+    },
+    {
+      "id": "TENANT-05",
+      "note": "the trace list drops the projection's own off-mode predicate",
+      "file": "lib/services/query.ts",
+      "find": "    constants: [{ field: \"trace_mode\", column: \"trace_mode\", op: \"ne\", value: \"off\" }],",
+      "replace": "    constants: [],",
+      "cases": [
+        "a ClickHouse parameter map cannot lose its tenant to a caller parameter",
+        "an off-mode request has no trace row but still has a detail to open (R13)"
+      ]
+    },
+    {
+      "id": "PROTO-01",
+      "note": "an untrusted filter name is looked up with brackets, so a prototype key passes",
+      "file": "lib/services/query.ts",
+      "find": "    if (spec.filters === undefined || !Object.hasOwn(spec.filters, filterName)) {",
+      "replace": "    if (spec.filters === undefined || spec.filters[filterName] === undefined) {",
+      "cases": [
+        "a prototype key is not a filter, on any query that has filters"
+      ]
+    },
+    {
+      "id": "ARG-01",
+      "note": "a row limit is not checked before it is interpolated into the statement",
+      "file": "lib/services/query.ts",
+      "find": "  if (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > MAX_PLAN_ROWS)) {",
+      "replace": "  if (limit !== null && false) {",
+      "cases": [
+        "buildPlan validates its own arguments, because it is exported"
+      ]
+    },
+    {
+      "id": "ARG-02",
+      "note": "the tenant is accepted as whatever the caller passed",
+      "file": "lib/services/query.ts",
+      "find": "  if (spec.tenantColumn !== null && (typeof orgId !== \"string\" || orgId === \"\")) {",
+      "replace": "  if (spec.tenantColumn !== null && orgId === null) {",
+      "cases": [
+        "buildPlan validates its own arguments, because it is exported"
+      ]
+    },
+    {
+      "id": "CAP-01",
+      "note": "a read with no cursor in the contract loses its documented cap",
+      "file": "lib/services/query.ts",
+      "find": "  const limit = options.limit ?? spec.hardLimit ?? null;",
+      "replace": "  const limit = options.limit ?? null;",
+      "cases": [
+        "a read with no cursor in the contract still has a documented cap",
+        "consent history is capped, and the cap is the documented one"
+      ]
+    },
+    {
+      "id": "LABEL-01",
+      "note": "the feedback read stops excluding calibration labels (R49)",
+      "file": "lib/services/query.ts",
+      "find": "    constants: [{ field: \"calibration_set\", column: \"f.calibration_set\", op: \"eq\", value: false }],",
+      "replace": "    constants: [],",
+      "cases": [
+        "a calibration label never reaches a feedback list or a trace detail, for anyone (R49/R35)"
+      ]
+    },
+    {
+      "id": "CH-01",
+      "note": "the ClickHouse statement is unbounded",
+      "file": "lib/services/query.ts",
+      "find": "  if (plan.limit !== null) text += `\\n limit ${plan.limit}`;\n  return { text, paramNames, params };\n}\n\n/** The reserved tenant parameter must be the last binding of every tenant-scoped statement. */",
+      "replace": "  return { text, paramNames, params };\n}\n\n/** The reserved tenant parameter must be the last binding of every tenant-scoped statement. */",
+      "cases": [
+        "every page query is ordered, bounded and keyset-resumable in BOTH renderers"
+      ]
+    },
+    {
+      "id": "CH-02",
+      "note": "the ClickHouse statement has no order, so its keyset means nothing",
+      "file": "lib/services/query.ts",
+      "find": "  if (spec.sort !== undefined) {\n    text += `\\n order by ${spec.sort.at.column} ${spec.sort.direction}, ${spec.sort.id.column} ${spec.sort.direction}`;\n  }\n  if (plan.limit !== null) text += `\\n limit ${plan.limit}`;\n  return { text, paramNames, params };",
+      "replace": "  if (plan.limit !== null) text += `\\n limit ${plan.limit}`;\n  return { text, paramNames, params };",
+      "cases": [
+        "every page query is ordered, bounded and keyset-resumable in BOTH renderers"
+      ]
+    },
+    {
+      "id": "CH-03",
+      "note": "the ClickHouse keyset resumes in the wrong direction",
+      "file": "lib/services/query.ts",
+      "find": "  if (plan.keyset !== null && spec.sort !== undefined) {\n    const comparison = spec.sort.direction === \"desc\" ? \"<\" : \">\";\n    conditions.push(\n      `(${spec.sort.at.column}, ${spec.sort.id.column}) ${comparison} (${bind(\"k_at\", plan.keyset.at)}, ${bind(\"k_id\", plan.keyset.id)})`,\n    );\n  }\n  if (plan.tenant !== null) conditions.push(`${plan.tenant.column} = ${bind(TENANT_PARAM, plan.tenant.value)}`);\n\n  let text = `select ${spec.columns ?? \"*\"}",
+      "replace": "  if (plan.keyset !== null && spec.sort !== undefined) {\n    const comparison = spec.sort.direction === \"desc\" ? \">\" : \"<\";\n    conditions.push(\n      `(${spec.sort.at.column}, ${spec.sort.id.column}) ${comparison} (${bind(\"k_at\", plan.keyset.at)}, ${bind(\"k_id\", plan.keyset.id)})`,\n    );\n  }\n  if (plan.tenant !== null) conditions.push(`${plan.tenant.column} = ${bind(TENANT_PARAM, plan.tenant.value)}`);\n\n  let text = `select ${spec.columns ?? \"*\"}",
+      "cases": [
+        "every page query is ordered, bounded and keyset-resumable in BOTH renderers",
+        "ledger and trace pages walk every row exactly once"
+      ]
+    },
+    {
+      "id": "CH-04",
+      "note": "the ClickHouse tenant condition is written before the caller's filters",
+      "file": "lib/services/query.ts",
+      "find": "  if (plan.tenant !== null) conditions.push(`${plan.tenant.column} = ${bind(TENANT_PARAM, plan.tenant.value)}`);\n\n  let text = `select ${spec.columns ?? \"*\"}",
+      "replace": "  if (plan.tenant !== null) conditions.unshift(`${plan.tenant.column} = ${bind(TENANT_PARAM, plan.tenant.value)}`);\n\n  let text = `select ${spec.columns ?? \"*\"}",
+      "cases": [
+        "every page query is ordered, bounded and keyset-resumable in BOTH renderers"
+      ]
+    },
+    {
+      "id": "ROLE-01",
+      "note": "operator authority is read from the organization role instead of the flag",
+      "file": "lib/services/console.ts",
+      "find": "    if ((OPERATOR_ONLY_OPERATIONS as readonly string[]).includes(operation) && session.isOperator !== true) {",
+      "replace": "    if ((OPERATOR_ONLY_OPERATIONS as readonly string[]).includes(operation) && session.role !== \"owner\") {",
+      "cases": [
+        "a non-operator can neither grant nor see other organizations"
+      ]
+    },
+    {
+      "id": "ROLE-02",
+      "note": "the operator flag stands in for the owner role on an owner-only operation",
+      "file": "lib/services/console.ts",
+      "find": "    if ((OWNER_ONLY_OPERATIONS as readonly string[]).includes(operation) && session.role !== \"owner\") {",
+      "replace": "    if ((OWNER_ONLY_OPERATIONS as readonly string[]).includes(operation) && session.role !== \"owner\" && !session.isOperator) {",
+      "cases": [
+        "operator authority is the flag and never a substitute for the organization role"
+      ]
+    },
+    {
+      "id": "ROLE-03",
+      "note": "a member can read the evaluation runs that are the owner's and the platform's",
+      "file": "lib/services/console.ts",
+      "find": "      (OWNER_OR_OPERATOR_OPERATIONS as readonly string[]).includes(operation) &&\n      session.role !== \"owner\" &&\n      session.isOperator !== true",
+      "replace": "      false",
+      "cases": [
+        "a member can read but cannot mutate settings or keys"
+      ]
+    },
+    {
+      "id": "ROLE-04",
+      "note": "a truthy value passes for operator authority",
+      "file": "lib/services/console.ts",
+      "find": "  if (session.isOperator === true) return false;",
+      "replace": "  if (session.isOperator) return false;",
+      "cases": [
+        "a principal is masked unless the row says explicitly that no operator was involved"
+      ]
+    },
+    {
+      "id": "LIMIT-01",
+      "note": "a limit above the hard bound is accepted instead of refused",
+      "file": "lib/services/console.ts",
+      "find": "    return `limit must be an integer between 1 and ${MAX_PAGE_LIMIT}`;",
+      "replace": "    return null;",
+      "cases": [
+        "rejects a limit above the hard bound and a limit that is not a positive integer"
+      ]
+    },
+    {
+      "id": "SUSPEND-01",
+      "note": "the suspension gate never fires",
+      "file": "lib/services/console.ts",
+      "find": "    if (flag(row, \"suspended\") && !(SUSPENDED_ALLOWED_OPERATIONS as readonly string[]).includes(operation)) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "a suspended organization reads everything and is refused only new work (R33)"
+      ]
+    },
+    {
+      "id": "SUSPEND-02",
+      "note": "suspension gates every operation, including the reads R33 keeps",
+      "file": "lib/services/console.ts",
+      "find": "    if (flag(row, \"suspended\") && !(SUSPENDED_ALLOWED_OPERATIONS as readonly string[]).includes(operation)) {",
+      "replace": "    if (flag(row, \"suspended\")) {",
+      "cases": [
+        "a suspended organization reads everything and is refused only new work (R33)"
+      ]
+    },
+    {
+      "id": "FIELD-01",
+      "note": "an invented input field is ignored instead of refused",
+      "file": "lib/services/console.ts",
+      "find": "    if (value !== undefined && !allowed.includes(name)) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "no operation accepts a field the caller invented"
+      ]
+    },
+    {
+      "id": "FILTER-01",
+      "note": "a filter value outside its vocabulary returns an empty page instead of refusing",
+      "file": "lib/services/console.ts",
+      "find": "    if (value !== undefined && !allowed.includes(value as string)) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "a filter outside its vocabulary is invalid_request, not an empty page"
+      ]
+    },
+    {
+      "id": "FILTER-02",
+      "note": "a reversed range is accepted",
+      "file": "lib/services/console.ts",
+      "find": "  if (query.from !== undefined && query.to !== undefined && instant(query.from) > instant(query.to)) {",
+      "replace": "  if (query.from !== undefined && query.to !== undefined && false) {",
+      "cases": [
+        "a filter outside its vocabulary is invalid_request, not an empty page"
+      ]
+    },
+    {
+      "id": "FILTER-03",
+      "note": "a timestamp filter is whatever Date.parse accepts, not RFC 3339",
+      "file": "lib/services/console.ts",
+      "find": "    if (value !== undefined && !(typeof value === \"string\" && RFC3339.test(value) && !Number.isNaN(instant(value)))) {",
+      "replace": "    if (value !== undefined && !(typeof value === \"string\" && !Number.isNaN(instant(value)))) {",
+      "cases": [
+        "a filter value is checked before it is bound: vocabulary, length and timestamp form"
+      ]
+    },
+    {
+      "id": "FILTER-04",
+      "note": "an identifier filter has no length bound",
+      "file": "lib/services/console.ts",
+      "find": "    if (value !== undefined && !(typeof value === \"string\" && value.length > 0 && value.length <= 200)) {",
+      "replace": "    if (value !== undefined && !(typeof value === \"string\")) {",
+      "cases": [
+        "a filter value is checked before it is bound: vocabulary, length and timestamp form"
+      ]
+    },
+    {
+      "id": "FEEDBACK-01",
+      "note": "has_feedback selects the wrong half",
+      "file": "lib/services/query.ts",
+      "find": "  return hasFeedback\n    ? { field: \"feedback_count\", column: \"feedback_count\", op: \"gt\", value: 0 }\n    : { field: \"feedback_count\", column: \"feedback_count\", op: \"eq\", value: 0 };",
+      "replace": "  return hasFeedback\n    ? { field: \"feedback_count\", column: \"feedback_count\", op: \"eq\", value: 0 }\n    : { field: \"feedback_count\", column: \"feedback_count\", op: \"gt\", value: 0 };",
+      "cases": [
+        "has_feedback filters in both directions, and the two halves add up"
+      ]
+    },
+    {
+      "id": "SUMMARY-01",
+      "note": "pending_reconciliation counts every hold, not only the unknown ones",
+      "file": "lib/services/query.ts",
+      "find": "        filters: [\n          { field: \"usage_certainty\", column: \"u.usage_certainty\", op: \"eq\", value: \"unknown\" },\n          { field: \"max_hold\", column: \"u.max_hold\", op: \"not_null\", value: null },\n        ],",
+      "replace": "        filters: [\n          { field: \"max_hold\", column: \"u.max_hold\", op: \"not_null\", value: null },\n        ],",
+      "cases": [
+        "pending_reconciliation counts held unknown usage and nothing else",
+        "balance is the ledger total minus reservations, and holds reduce what is available"
+      ]
+    },
+    {
+      "id": "AUDIT-01",
+      "note": "the audit list ignores the target organization it was asked for",
+      "file": "lib/services/console.ts",
+      "find": "        query.target_org_id === undefined ? {} : { target_org_id: query.target_org_id },",
+      "replace": "        {},",
+      "cases": [
+        "adminAudit filters by target organization and pages like every other list"
+      ]
+    },
+    {
+      "id": "CURSOR-01",
+      "note": "the cursor MAC is not verified",
+      "file": "lib/services/cursor.ts",
+      "find": "  if (presented.length !== expected.length || !timingSafeEqual(presented, expected)) return null;",
+      "replace": "  if (presented.length !== expected.length && false) return null;",
+      "cases": [
+        "rejects a cursor it did not issue for this query",
+        "a caller who knows the format still cannot mint or edit a cursor"
+      ]
+    },
+    {
+      "id": "CURSOR-02",
+      "note": "the MAC covers the key but not the query scope",
+      "file": "lib/services/cursor.ts",
+      "find": "  return base64url(createHmac(\"sha256\", secret).update(`${scope}\\u0000${payload}`).digest());",
+      "replace": "  return base64url(createHmac(\"sha256\", secret).update(payload).digest());",
+      "cases": [
+        "rejects a cursor it did not issue for this query",
+        "a cursor round-trips only under its own scope and secret",
+        "a cursor belongs to the list that minted it, across every paged list"
+      ]
+    },
+    {
+      "id": "CURSOR-03",
+      "note": "the page size joins the cursor scope, so a walk cannot change it",
+      "file": "lib/services/cursor.ts",
+      "find": "    .filter(([name, value]) => name !== \"cursor\" && name !== \"limit\" && value !== undefined)",
+      "replace": "    .filter(([name, value]) => name !== \"cursor\" && value !== undefined)",
+      "cases": [
+        "the page size is not part of the scope, so it may change mid-walk",
+        "a cursor does not survive a change of filter, on every filtered list"
+      ]
+    },
+    {
+      "id": "CURSOR-04",
+      "note": "a cursor has no length bound, so an arbitrarily long one is hashed",
+      "file": "lib/services/cursor.ts",
+      "find": "  if (typeof cursor !== \"string\" || cursor.length === 0 || cursor.length > MAX_CURSOR_CHARS) return null;",
+      "replace": "  if (typeof cursor !== \"string\" || cursor.length === 0) return null;",
+      "cases": [
+        "an over-long cursor is refused before it is hashed, even when it authenticates"
+      ]
+    },
+    {
+      "id": "CURSOR-05",
+      "note": "an authenticated payload is trusted without checking its shape",
+      "file": "lib/services/cursor.ts",
+      "find": "    if (!Array.isArray(decoded) || decoded.length !== 2) return null;\n    const [at, id] = decoded as unknown[];\n    if (typeof at !== \"string\" || at === \"\" || typeof id !== \"string\" || id === \"\") return null;\n    return { at, id };",
+      "replace": "    const [at, id] = decoded as unknown[];\n    return { at: at as string, id: id as string };",
+      "cases": [
+        "a caller who knows the format still cannot mint or edit a cursor"
+      ]
+    },
+    {
+      "id": "SCOPE-01",
+      "note": "the ledger cursor is minted under the usage list's scope",
+      "file": "lib/services/console.ts",
+      "find": "        cursorScope(resolved.orgId, \"ledger\", query),",
+      "replace": "        cursorScope(resolved.orgId, \"usage\", query),",
+      "cases": [
+        "a cursor belongs to the list that minted it, across every paged list"
+      ]
+    },
+    {
+      "id": "SCOPE-02",
+      "note": "the trace cursor ignores the filters it was minted under",
+      "file": "lib/services/console.ts",
+      "find": "        cursorScope(resolved.orgId, \"traces\", query),",
+      "replace": "        cursorScope(resolved.orgId, \"traces\", {}),",
+      "cases": [
+        "a cursor does not survive a change of filter, on every filtered list"
+      ]
+    },
+    {
+      "id": "SECRET-01",
+      "note": "a weak or absent cursor secret is accepted",
+      "file": "lib/services/console.ts",
+      "find": "  if (typeof cursorSecret !== \"string\" || cursorSecret.length < 16) {",
+      "replace": "  if (false) {",
+      "cases": [
+        "the services hold no secret and no client: a cursor secret is required and never echoed"
+      ]
+    },
+    {
+      "id": "PROJECT-01",
+      "note": "a ledger row shows the operator who made it to the customer (R41)",
+      "file": "lib/services/console.ts",
+      "find": "    actor: actor === null ? null : masked(row, session) ? PLATFORM_ACTOR : actor,",
+      "replace": "    actor: actor,",
+      "cases": [
+        "an operator's identity never reaches a customer view, in any actor field (R41)"
+      ]
+    },
+    {
+      "id": "PROJECT-02",
+      "note": "a feedback entry names the operator who submitted it to the customer (R41)",
+      "file": "lib/services/console.ts",
+      "find": "    author_principal: masked(row, session) ? PLATFORM_ACTOR : text(row, \"author_principal\"),",
+      "replace": "    author_principal: text(row, \"author_principal\"),",
+      "cases": [
+        "the same masking covers feedback and consent history, which only a write can create"
+      ]
+    },
+    {
+      "id": "PROJECT-03",
+      "note": "a consent history entry names the operator who changed the setting (R41)",
+      "file": "lib/services/console.ts",
+      "find": "    changed_by: masked(row, session) ? PLATFORM_ACTOR : text(row, \"changed_by\"),",
+      "replace": "    changed_by: text(row, \"changed_by\"),",
+      "cases": [
+        "the same masking covers feedback and consent history, which only a write can create"
+      ]
+    },
+    {
+      "id": "PROJECT-04",
+      "note": "a trace list row carries the stored row instead of the list shape",
+      "file": "lib/services/console.ts",
+      "find": "function traceListItemOf(row: Row): TraceListItem {\n  return {\n    request_id: text(row, \"request_id\"),",
+      "replace": "function traceListItemOf(row: Row): TraceListItem {\n  return {\n    ...(row as unknown as TraceListItem),\n    request_id: text(row, \"request_id\"),",
+      "cases": [
+        "ledger and trace pages walk every row exactly once"
+      ]
+    },
+    {
+      "id": "MASK-01",
+      "note": "masking is not fail-closed: a row without the marker publishes its principal",
+      "file": "lib/services/console.ts",
+      "find": "  return row.by_operator !== false;",
+      "replace": "  return row.by_operator === true;",
+      "cases": [
+        "a principal is masked unless the row says explicitly that no operator was involved"
+      ]
+    },
+    {
+      "id": "STRICT-01",
+      "note": "a stored value is coerced to a string instead of refused",
+      "file": "lib/services/console.ts",
+      "find": "  if (typeof value !== \"string\") throw new TypeError(`${column} must be a string`);\n  return value;",
+      "replace": "  return String(value ?? \"\");",
+      "cases": [
+        "a stored value that is not what the DTO says is a typed refusal, not a blank"
+      ]
+    },
+    {
+      "id": "STRICT-03",
+      "note": "a timestamp is whatever the row handed over, unchecked",
+      "file": "lib/services/console.ts",
+      "find": "  if (match === null) throw new TypeError(`${column} must be an RFC 3339 UTC timestamp`);",
+      "replace": "  if (match === null) return value;",
+      "cases": [
+        "a stored value that is not what the DTO says is a typed refusal, not a blank",
+        "both UTC timestamp forms are accepted and normalised, microseconds and all"
+      ]
+    },
+    {
+      "id": "STRICT-04",
+      "note": "an unparseable JSON column reads as null, inverting R24",
+      "file": "lib/services/console.ts",
+      "find": "    throw new TypeError(`${column} is not valid JSON`);",
+      "replace": "    return null;",
+      "cases": [
+        "entitlements fail closed: R24's three states are never reached by coercion"
+      ]
+    },
+    {
+      "id": "ENT-01",
+      "note": "an unknown entitlement limit name is kept",
+      "file": "lib/services/console.ts",
+      "find": "    if (!(ENTITLEMENT_LIMIT_NAMES as readonly string[]).includes(name)) {\n      throw new TypeError(`${name} is not an entitlement limit`);\n    }",
+      "replace": "    if (false) {\n      throw new TypeError(`${name} is not an entitlement limit`);\n    }",
+      "cases": [
+        "entitlements fail closed: R24's three states are never reached by coercion"
+      ]
+    },
+    {
+      "id": "JUDGE-01",
+      "note": "judge samples are passed through as stored",
+      "file": "lib/services/console.ts",
+      "find": "    samples: (samples ?? []).map(judgeSampleOf),",
+      "replace": "    samples: (samples ?? []) as JudgeSample[],",
+      "cases": [
+        "a judge sample is projected field by field, so a stored blob cannot widen it"
+      ]
+    },
+    {
+      "id": "PAGE-01",
+      "note": "the last page still mints a cursor",
+      "file": "lib/services/console.ts",
+      "find": "      next_cursor: more && lastRow !== undefined ? encodeCursor(cursorSecret, scope, keyOf(lastRow)) : null,",
+      "replace": "      next_cursor: lastRow !== undefined ? encodeCursor(cursorSecret, scope, keyOf(lastRow)) : null,",
+      "cases": [
+        "usage pages walk every row exactly once, newest first",
+        "a page is bounded by the contract's default and its look-ahead row never escapes"
+      ]
+    },
+    {
+      "id": "PAGE-02",
+      "note": "the look-ahead row is returned, so a page is one row longer than the limit",
+      "file": "lib/services/console.ts",
+      "find": "    const items = found.slice(0, limit).map(project);",
+      "replace": "    const items = found.map(project);",
+      "cases": [
+        "a page is bounded by the contract's default and its look-ahead row never escapes"
+      ]
+    },
+    {
+      "id": "GUARD-01",
+      "note": "a failing query port throws out of the service instead of returning a Result",
+      "file": "lib/services/console.ts",
+      "find": "        return fail(\"internal_error\", \"this console operation failed unexpectedly\");",
+      "replace": "        throw new Error(\"unguarded\");",
+      "cases": [
+        "a query port that fails is a Result error, never a thrown promise"
+      ]
+    },
+    {
+      "id": "CREDITS-01",
+      "note": "available is a float subtraction",
+      "file": "lib/services/credits.ts",
+      "find": "    available: subMoney(ledgerTotal, reserved),",
+      "replace": "    available: parseMoney((Number(ledgerTotal) - Number(reserved)).toFixed(8)),",
+      "cases": [
+        "available is the reconciled total minus reservations, on scaled integers"
+      ]
+    },
+    {
+      "id": "CREDITS-02",
+      "note": "any failing wallet read falls back to the balance that ignores reservations",
+      "file": "lib/services/credits.ts",
+      "find": "    if (missing) return { kind: \"fallback\", reason: \"org_wallet_summary does not exist yet (pre-D1)\" };",
+      "replace": "    return { kind: \"fallback\", reason: \"org_wallet_summary could not be read\" };",
+      "cases": [
+        "a missing function falls back; a broken one does not"
+      ]
+    },
+    {
+      "id": "CLIENT-01",
+      "note": "a server-only module loses its run-time guard",
+      "file": "lib/services/cursor.ts",
+      "find": "if (typeof window !== \"undefined\") throw new Error(\"lib/services/cursor.ts is server-only\");",
+      "replace": "// guard removed",
+      "cases": [
+        "the server-only modules carry their run-time guard as well"
+      ]
+    },
+    {
+      "id": "ROLE-05",
+      "note": "operator authority on the authorization path is a truthiness test",
+      "file": "lib/services/console.ts",
+      "find": "    if ((OPERATOR_ONLY_OPERATIONS as readonly string[]).includes(operation) && session.isOperator !== true) {",
+      "replace": "    if ((OPERATOR_ONLY_OPERATIONS as readonly string[]).includes(operation) && !session.isOperator) {",
+      "cases": [
+        "a truthy isOperator is not authority on the authorization path either"
+      ]
+    },
+    {
+      "id": "ROLE-06",
+      "note": "owner-or-operator accepts a merely truthy flag",
+      "file": "lib/services/console.ts",
+      "find": "      (OWNER_OR_OPERATOR_OPERATIONS as readonly string[]).includes(operation) &&\n      session.role !== \"owner\" &&\n      session.isOperator !== true",
+      "replace": "      (OWNER_OR_OPERATOR_OPERATIONS as readonly string[]).includes(operation) &&\n      session.role !== \"owner\" &&\n      !session.isOperator",
+      "cases": [
+        "a truthy isOperator is not authority on the authorization path either"
+      ]
+    },
+    {
+      "id": "SCOPE-03",
+      "note": "the audit cursor ignores the target organization it was minted under",
+      "file": "lib/services/console.ts",
+      "find": "        cursorScope(\"operators\", \"adminAudit\", query),",
+      "replace": "        cursorScope(\"operators\", \"adminAudit\", {}),",
+      "cases": [
+        "a cursor does not survive a change of filter, on every filtered list"
+      ]
+    },
+    {
+      "id": "STRICT-05",
+      "note": "an unrecognised boolean reads as false, which silently unsuspends an organization",
+      "file": "lib/services/console.ts",
+      "find": "  throw new TypeError(`${column} must be a boolean`);",
+      "replace": "  return false;",
+      "cases": [
+        "a boolean column is a boolean: a suspension flag is never guessed at"
+      ]
+    },
+    {
+      "id": "KEYNAME-01",
+      "note": "a deleted key denies the whole usage page",
+      "file": "lib/services/console.ts",
+      "find": "  if (id === null && name === null) return { key_id: DELETED_KEY_ID, key_name: DELETED_KEY_NAME };",
+      "replace": "  if (false) return { key_id: DELETED_KEY_ID, key_name: DELETED_KEY_NAME };",
+      "cases": [
+        "a usage row survives a deleted key, and says so"
+      ],
+      "kills_by": "guarded"
+    },
+    {
+      "id": "KEYNAME-02",
+      "note": "a half-null key pair is papered over instead of refused",
+      "file": "lib/services/console.ts",
+      "find": "  if (id === null || name === null) {\n    throw new TypeError(\"a usage row has one of key_id/key_name null: the key join yields both or neither\");\n  }",
+      "replace": "  if (id === null || name === null) return { key_id: id ?? DELETED_KEY_ID, key_name: name ?? DELETED_KEY_NAME };",
+      "cases": [
+        "a usage row survives a deleted key, and says so"
+      ]
+    },
+    {
+      "id": "KEYNAME-03",
+      "note": "the sentinel is a value a caller could filter for",
+      "file": "lib/services/console.ts",
+      "find": "export const DELETED_KEY_ID = \"\";",
+      "replace": "export const DELETED_KEY_ID = \"deleted\";",
+      "cases": [
+        "a usage row survives a deleted key, and says so"
+      ]
+    },
+    {
+      "id": "MONEY-01",
+      "note": "a JSON number of any size is accepted as money, fabricating its last digits",
+      "file": "lib/services/console.ts",
+      "find": "    if (!Number.isFinite(value) || Math.abs(value) >= SAFE_MONEY_NUMBER) {\n      throw new TypeError(`${column} must be a decimal string: a number this large cannot hold eight digits`);\n    }",
+      "replace": "    if (false) {\n      throw new TypeError(`${column} must be a decimal string: a number this large cannot hold eight digits`);\n    }",
+      "cases": [
+        "money arrives as text: a number is accepted only where a double still holds eight digits"
+      ]
+    },
+    {
+      "id": "MONEY-02",
+      "note": "the same, on the credits card's own reader",
+      "file": "lib/services/credits.ts",
+      "find": "    if (!Number.isFinite(value) || Math.abs(value) >= SAFE_MONEY_NUMBER) {\n      throw new TypeError(\"a wallet amount this large must arrive as a decimal string, not a number\");\n    }",
+      "replace": "    if (false) {\n      throw new TypeError(\"a wallet amount this large must arrive as a decimal string, not a number\");\n    }",
+      "cases": [
+        "a wallet amount that arrives as a number is bounded by what a double can hold"
+      ]
+    },
+    {
+      "id": "MONEY-03",
+      "note": "the bound is raised past what a double can hold",
+      "file": "lib/services/console.ts",
+      "find": "const SAFE_MONEY_NUMBER = Math.pow(2, 26);",
+      "replace": "const SAFE_MONEY_NUMBER = Math.pow(2, 53);",
+      "cases": [
+        "money arrives as text: a number is accepted only where a double still holds eight digits"
+      ]
+    },
+    {
+      "id": "CREDITS-03",
+      "note": "the function's name is not required, so an error text forces the fallback",
+      "file": "lib/services/credits.ts",
+      "find": "    const missing = (code === \"PGRST202\" || code === \"42883\") && /org_wallet_summary\\s*\\(/.test(message);",
+      "replace": "    const missing = code === \"PGRST202\" || code === \"42883\";",
+      "cases": [
+        "a missing function falls back; a broken one does not"
+      ]
+    },
+    {
+      "id": "CREDITS-04",
+      "note": "the error code is not required, so any message mentioning the function falls back",
+      "file": "lib/services/credits.ts",
+      "find": "    if (missing) return { kind: \"fallback\", reason: \"org_wallet_summary does not exist yet (pre-D1)\" };",
+      "replace": "    if (missing || /org_wallet_summary/.test(message)) return { kind: \"fallback\", reason: \"org_wallet_summary does not exist yet (pre-D1)\" };",
+      "cases": [
+        "a missing function falls back; a broken one does not"
+      ]
+    },
+    {
+      "id": "PORT-03",
+      "note": "the injected port is used raw, so the shared check is skipped",
+      "file": "lib/services/console.ts",
+      "find": "  const pg = scopedPort(config.pg);\n  const ch = scopedPort(config.ch);",
+      "replace": "  const pg = config.pg;\n  const ch = config.ch;",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "CAP-02",
+      "note": "usageDaily returns whatever the executor gave it",
+      "file": "lib/services/console.ts",
+      "find": "      const capped = found.slice(0, namedQuery(\"usage_daily\").hardLimit ?? found.length);",
+      "replace": "      const capped = found;",
+      "cases": [
+        "usageDaily is bounded by its documented cap, not by the fixture"
+      ]
+    },
+    {
+      "id": "STRICT-02",
+      "note": "an integer column is read with Number(), which accepts \"\", true, [5], 0x10 and 1e2",
+      "file": "lib/services/console.ts",
+      "find": "  if (typeof value !== \"string\" || !INTEGER_TEXT.test(value)) {\n    throw new TypeError(`${column} must be an integer`);\n  }\n  return Number(value);",
+      "replace": "  return Number(value);",
+      "cases": [
+        "a stored value that is not what the DTO says is a typed refusal, not a blank"
+      ]
+    },
+    {
+      "id": "STRICT-06",
+      "note": "a judge score's numeric value is coerced rather than read",
+      "file": "lib/services/console.ts",
+      "find": "  if (typeof value === \"number\" && Number.isFinite(value)) return value;\n  if (typeof value === \"string\" && /^-?\\d+(\\.\\d+)?$/.test(value)) return Number(value);\n  throw new TypeError(`${column} must be a number`);",
+      "replace": "  return Number(value);",
+      "cases": [
+        "a judge sample is projected field by field, so a stored blob cannot widen it"
+      ]
+    },
+    {
+      "id": "CLIENT-02",
+      "note": "the credits module loses its server-only guard",
+      "file": "lib/services/credits.ts",
+      "find": "if (typeof window !== \"undefined\") throw new Error(\"lib/services/credits.ts is server-only\");",
+      "replace": "// guard removed",
+      "cases": [
+        "the server-only modules carry their run-time guard as well"
+      ]
+    },
+    {
+      "id": "PORT-01",
+      "note": "a row whose tenant differs is accepted",
+      "file": "lib/services/query.ts",
+      "find": "        if (row[field] !== plan.tenant.value) {\n          throw new QueryPlanError(`${plan.name} returned a row belonging to another organization`);\n        }",
+      "replace": "        if (false) {\n          throw new QueryPlanError(`${plan.name} returned a row belonging to another organization`);\n        }",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-04",
+      "note": "a row that does not say whose it is is accepted",
+      "file": "lib/services/query.ts",
+      "find": "        if (!Object.hasOwn(row, field)) {\n          throw new QueryPlanError(`${plan.name} returned a row with no ${field}`);\n        }",
+      "replace": "        if (false) {\n          throw new QueryPlanError(`${plan.name} returned a row with no ${field}`);\n        }",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-05",
+      "note": "a tenant carried on a prototype counts as the row's own",
+      "file": "lib/services/query.ts",
+      "find": "        if (!Object.hasOwn(row, field)) {",
+      "replace": "        if (!(field in row)) {",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-06",
+      "note": "only the first row is checked",
+      "file": "lib/services/query.ts",
+      "find": "      const scoped: Row[] = [];\n      for (const row of rows) {",
+      "replace": "      const scoped: Row[] = [];\n      for (const row of rows.slice(0, 1)) {",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-08",
+      "note": "the ClickHouse port is used unwrapped",
+      "file": "lib/services/console.ts",
+      "find": "  const ch = scopedPort(config.ch);",
+      "replace": "  const ch = config.ch;",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-09",
+      "note": "the aggregates stop carrying their tenant, so a totals query is exempt again",
+      "file": "lib/services/query.ts",
+      "find": "    if (spec.tenantColumn !== null) {\n      selected.push(`${spec.tenantColumn} as ${spec.tenantField}`);\n      grouped.push(String(selected.length));\n    }",
+      "replace": "    if (false) {\n      selected.push(`${spec.tenantColumn} as ${spec.tenantField}`);\n      grouped.push(String(selected.length));\n    }",
+      "cases": [
+        "an aggregate carries its tenant as a grouping column, and is ordered and bounded"
+      ]
+    },
+    {
+      "id": "PORT-02",
+      "note": "a tenant-scoped plan may reach the executor without a tenant",
+      "file": "lib/services/query.ts",
+      "find": "      if (plan.tenant === null) {\n        throw new QueryPlanError(`${plan.name} is tenant-scoped and must not run without a tenant`);\n      }",
+      "replace": "      if (plan.tenant === null) {\n        return port.run(plan);\n      }",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-07",
+      "note": "a tenant-scoped query stops declaring the field the check needs",
+      "file": "lib/services/query.ts",
+      "find": "    columns: \"s.org_id, s.trace_mode, s.content_retention_days, s.evaluation_consent\",\n    tenantColumn: \"s.org_id\",\n    tenantField: \"org_id\",",
+      "replace": "    columns: \"s.org_id, s.trace_mode, s.content_retention_days, s.evaluation_consent\",\n    tenantColumn: \"s.org_id\",",
+      "cases": [
+        "an aggregate carries its tenant as a grouping column, and is ordered and bounded"
+      ]
+    },
+    {
+      "id": "TS-01",
+      "note": "a timestamp is carried in whatever form and width the row had",
+      "file": "lib/services/console.ts",
+      "find": "  const [, seconds, fraction] = match;\n  return `${seconds}.${(fraction ?? \"\").padEnd(6, \"0\")}Z`;",
+      "replace": "  return value;",
+      "cases": [
+        "both UTC timestamp forms are accepted and normalised, microseconds and all",
+        "a walk is exactly-once whatever UTC form the relation uses"
+      ]
+    },
+    {
+      "id": "TS-04",
+      "note": "the fraction keeps whatever width arrived, so one list mixes widths",
+      "file": "lib/services/console.ts",
+      "find": "  return `${seconds}.${(fraction ?? \"\").padEnd(6, \"0\")}Z`;",
+      "replace": "  return `${seconds}${fraction === undefined ? \"\" : `.${fraction}`}Z`;",
+      "cases": [
+        "both UTC timestamp forms are accepted and normalised, microseconds and all"
+      ]
+    },
+    {
+      "id": "TS-02",
+      "note": "any offset and the ::text form are accepted, so a non-UTC instant reads as UTC",
+      "file": "lib/services/console.ts",
+      "find": "const ROW_TIMESTAMP = /^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:\\.(\\d{1,6}))?(?:Z|\\+00:00)$/;",
+      "replace": "const ROW_TIMESTAMP = /^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:\\.(\\d+))?(?:Z|[+-]\\d{2}:\\d{2}| .*)$/;",
+      "cases": [
+        "both UTC timestamp forms are accepted and normalised, microseconds and all"
+      ]
+    },
+    {
+      "id": "MONEY-04",
+      "note": "the bound is one-sided, so a large negative amount fabricates its digits",
+      "file": "lib/services/credits.ts",
+      "find": "    if (!Number.isFinite(value) || Math.abs(value) >= SAFE_MONEY_NUMBER) {\n      throw new TypeError(\"a wallet amount this large must arrive as a decimal string, not a number\");\n    }",
+      "replace": "    if (!Number.isFinite(value) || value >= SAFE_MONEY_NUMBER) {\n      throw new TypeError(\"a wallet amount this large must arrive as a decimal string, not a number\");\n    }",
+      "cases": [
+        "a wallet amount that arrives as a number is bounded by what a double can hold"
+      ]
+    },
+    {
+      "id": "MONEY-05",
+      "note": "the display path counts a value it cannot read exactly",
+      "file": "lib/services/credits.ts",
+      "find": "    const units =\n      typeof row.delta_usd === \"number\"\n        ? Math.abs(row.delta_usd) < SAFE_MONEY_NUMBER\n          ? tryParseMoneyUnits(row.delta_usd.toFixed(8))\n          : null\n        : tryParseMoneyUnits(row.delta_usd);",
+      "replace": "    const units =\n      typeof row.delta_usd === \"number\"\n        ? tryParseMoneyUnits(row.delta_usd.toFixed(8))\n        : tryParseMoneyUnits(row.delta_usd);",
+      "cases": [
+        "a wallet amount that arrives as a number is bounded by what a double can hold"
+      ]
+    },
+    {
+      "id": "CREDITS-05",
+      "note": "the fallback regex is not anchored on the call, so an inner name matches",
+      "file": "lib/services/credits.ts",
+      "find": "    const missing = (code === \"PGRST202\" || code === \"42883\") && /org_wallet_summary\\s*\\(/.test(message);",
+      "replace": "    const missing = (code === \"PGRST202\" || code === \"42883\") && /org_wallet_summary/.test(message);",
+      "cases": [
+        "a missing function falls back; a broken one does not"
+      ]
+    },
+    {
+      "id": "ZERO-01",
+      "note": "an empty aggregate is read as a row, so every empty window fails",
+      "file": "lib/services/console.ts",
+      "find": "      if (found.length === 0) return ok(ZERO_USAGE_SUMMARY);",
+      "replace": "      if (false) return ok(ZERO_USAGE_SUMMARY);",
+      "cases": [
+        "an empty window is zeros, not a failure"
+      ],
+      "kills_by": "guarded"
+    },
+    {
+      "id": "ZERO-02",
+      "note": "an empty window reports something other than zero",
+      "file": "lib/services/console.ts",
+      "find": "const ZERO_USAGE_SUMMARY: UsageSummary = {\n  requests: 0,",
+      "replace": "const ZERO_USAGE_SUMMARY: UsageSummary = {\n  requests: 1,",
+      "cases": [
+        "an empty window is zeros, not a failure"
+      ]
+    },
+    {
+      "id": "ZERO-03",
+      "note": "more than one grouped row for one tenant is averaged over instead of refused",
+      "file": "lib/services/console.ts",
+      "find": "      if (found.length > 1) {\n        return fail<UsageSummary>(\"internal_error\", \"a usage summary returned more than one row\");\n      }",
+      "replace": "      if (false) {\n        return fail<UsageSummary>(\"internal_error\", \"a usage summary returned more than one row\");\n      }",
+      "cases": [
+        "an empty window is zeros, not a failure"
+      ]
+    },
+    {
+      "id": "SCAN-01",
+      "note": "the bare-ok scan stops finding the shape it forbids",
+      "file": "tests/c/client-boundary.test.ts",
+      "find": "      if (bare.test(code)) found.push(`${label}:${index + 1}: ${line.trim()}`);",
+      "replace": "      if (false) found.push(`${label}:${index + 1}: ${line.trim()}`);",
+      "cases": [
+        "every case in this track asserts success through a helper, never as a bare ok check"
+      ]
+    }
+  ]
+}
