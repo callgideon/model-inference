@@ -547,3 +547,15 @@ def test_a_ledger_belongs_to_one_run_and_its_planned_samples():
     for n in range(2, 60):                       # nothing unplanned can grow the ledger
         book.deliver(check(fakes.result(), sample=fakes.uuid(n)))
     assert len(book) <= len(book.sample_ids) == 2
+
+
+def test_a_ledger_refuses_an_unusable_sample_id_rather_than_raising():
+    """An unhashable sample id cannot be a planned one and cannot be a dict key either, so
+    it is a typed refusal instead of a `TypeError` out of the collector."""
+    book = ledger((SAMPLE,))
+    for unusable in ([], {}, set(), bytearray(b"x")):
+        first, refused = book.deliver(
+            Rejected(run_id=RUN, sample_id=unusable, rubric_version=1, reason="r", detail="d"))
+        assert first is False
+        assert reject(refused).reason == "unexpected_sample"
+    assert len(book) == 0

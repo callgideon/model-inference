@@ -21,7 +21,8 @@ from .rubric import (MARLIN_VIDEO_V1, MAX_DETAIL_CHARS, Criterion, DuplicateKey,
                      parse_judge_json, validate_json, validate_output)
 from .sampling import (DEFAULT_DESIGN, FINISH_REASON_LENGTH, CalibrationDesign, CandidateSource,
                        Exclusion, Excluded, Sample, Selection, Stratum, TraceCandidate,
-                       check_consent, deduplicate, rank, select)
+                       canonical_id, check_consent, deduplicate, rank, select,
+                       within_consent_window)
 
 __all__ = [
     "APPROVED_RATES", "CalibrationDesign", "CandidateSource", "CostEstimate", "Criterion",
@@ -29,9 +30,10 @@ __all__ = [
     "FINISH_REASON_LENGTH", "JUDGE_MODE_LIVE", "JudgeScores", "MARLIN_VIDEO_V1",
     "MAX_CANDIDATES", "MAX_DETAIL_CHARS", "ProviderRate", "RateTable", "Rejected", "Result",
     "Rubric", "Sample", "Score", "ScoreLedger", "Selection", "StaticRateTable", "Stratum",
-    "TokenCeilings", "TraceCandidate", "UNPRICED_NOTE", "check_consent", "dedupe_key",
+    "TokenCeilings", "TraceCandidate", "UNPRICED_NOTE", "canonical_id", "check_consent",
+    "dedupe_key",
     "deduplicate", "describe", "estimate_worst_case", "is_storable_text",
     "live_submission_allowed", "parse_judge_json",
     "per_sample_cost", "plan_dry_run", "rank", "require_live_submission", "scan_bound", "select",
-    "validate_json", "validate_output", "worst_case",
+    "validate_json", "validate_output", "within_consent_window", "worst_case",
 ]

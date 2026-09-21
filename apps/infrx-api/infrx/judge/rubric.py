@@ -447,7 +447,15 @@ class ScoreLedger:
         if result.rubric_version != self.rubric_version:
             return self._unexpected(result, "unexpected_rubric_version",
                                     f"this ledger is rubric version {self.rubric_version}")
-        if result.sample_id not in self.sample_ids:
+        try:
+            planned = result.sample_id in self.sample_ids
+        except TypeError:
+            # An unhashable sample id cannot be a planned one and cannot be a dict key
+            # either, so it is a typed refusal rather than a `TypeError` from the collector.
+            return self._unexpected(result, "unexpected_sample",
+                                    f"a sample id must be a usable key, not "
+                                    f"{type(result.sample_id).__name__}")
+        if not planned:
             return self._unexpected(result, "unexpected_sample",
                                     "not a planned sample of this run")
         key = dedupe_key(result)

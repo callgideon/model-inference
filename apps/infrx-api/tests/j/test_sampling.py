@@ -10,8 +10,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from infrx.contracts import errors
 from infrx.contracts.records import AuthorRole, ContentState, FeedbackName, TraceMode
-from infrx.judge import (CalibrationDesign, DEFAULT_DESIGN, Exclusion, Stratum, deduplicate,
-                         select)
+from infrx.judge import (CalibrationDesign, DEFAULT_DESIGN, Exclusion, Stratum, TraceCandidate,
+                         canonical_id, deduplicate, select, within_consent_window)
 
 from . import fakes
 
@@ -79,16 +79,34 @@ def test_evaluation_consent_is_not_retroactive():
     later = fakes.candidate(4, started_at=datetime(2027, 1, 1, tzinfo=timezone.utc))
     selection = draw((inside, later), consent=future_revocation)
     assert selection.sample_ids == (inside.request_id,)
-    assert reasons(selection) == [(later.request_id, Exclusion.outside_consent_window)]
+    # ...reported as `malformed_row`, because a trace stamped after the plan's `now` is a
+    # clock or a bug before it is anything else, and that rule fires first. The consent
+    # window's own end bound is pinned directly in the next case.
+    assert reasons(selection) == [(later.request_id, Exclusion.malformed_row)]
 
-    # R2-B4: **at** the revocation instant is out, one microsecond before is in. Tested
-    # only against a far-future trace, `<` and `<=` were indistinguishable - and the end
-    # of a consent window is an instant the customer picked.
-    at_revocation = fakes.candidate(5, started_at=revoked_at)
-    just_before = fakes.candidate(6, started_at=revoked_at - timedelta(microseconds=1))
-    selection = draw((at_revocation, just_before), consent=future_revocation)
-    assert selection.sample_ids == (just_before.request_id,)
-    assert reasons(selection) == [(at_revocation.request_id, Exclusion.outside_consent_window)]
+
+def test_the_consent_window_is_half_open_at_both_ends():
+    """R2-B4: **at** `effective_at` is inside, **at** `revoked_at` is outside; tested only
+    against a far-future trace, `<` and `<=` were indistinguishable at the end - and the end
+    of a consent window is an instant the customer picked.
+
+    Tested on the predicate directly, because the end bound cannot fire through `select`: a
+    *current* consent has `now < revoked_at` and a well-formed candidate has
+    `started_at <= now`. It stays in code because R56 states it and because J2's
+    re-check at submission will not have that guarantee.
+    """
+    revoked_at = datetime(2026, 12, 1, tzinfo=timezone.utc)
+    consent = fakes.consent(revoked_at="2026-12-01T00:00:00Z")
+    micro = timedelta(microseconds=1)
+    assert within_consent_window(fakes.CONSENT_FROM, consent) is True
+    assert within_consent_window(fakes.CONSENT_FROM - micro, consent) is False
+    assert within_consent_window(revoked_at - micro, consent) is True
+    assert within_consent_window(revoked_at, consent) is False
+    assert within_consent_window(revoked_at + micro, consent) is False
+    # and with no revocation the window has no end
+    assert within_consent_window(revoked_at + micro, fakes.consent()) is True
+    # the start bound is the one reachable through the draw
+    assert draw((fakes.candidate(7, started_at=fakes.CONSENT_FROM),)).sample_ids == (fakes.uuid(7),)
 
 
 # --- exclusions -------------------------------------------------------------------
@@ -167,6 +185,76 @@ def test_a_conflicting_duplicate_is_excluded_rather_than_sampled_twice():
     # and it does not poison the rest of the draw
     selection = draw((row, conflicting, fakes.candidate(2)))
     assert selection.sample_ids == (fakes.uuid(2),)
+
+
+def test_another_orgs_row_cannot_exclude_my_trace_as_a_duplicate():
+    """The tenant filter runs **before** deduplication. With dedupe first, a foreign row
+    carrying one of my request ids disagreed with mine and excluded *my* trace as a
+    conflicting duplicate - another tenant deciding what I get calibrated on."""
+    mine = fakes.candidate(1)
+    impostor = fakes.truncated(1, org_id=fakes.ORG_B)      # same request id, different org
+    selection = draw((mine, impostor))
+    assert selection.sample_ids == (mine.request_id,)
+    assert reasons(selection) == [(impostor.request_id, Exclusion.not_owned)]
+    # ...and in either arrival order
+    selection = draw((impostor, mine))
+    assert selection.sample_ids == (mine.request_id,)
+
+
+def test_deduplication_is_on_the_canonical_request_id():
+    """A UUID's hex is case-insensitive, so two spellings are one trace. Grouping by the raw
+    string let the same trace through twice."""
+    assert canonical_id(" AB-CD ") == "ab-cd" and canonical_id(7) == "7"
+    lower = fakes.candidate(0xABCDEF)               # an id with hex *letters* in it
+    assert lower.request_id != lower.request_id.upper(), "the id must differ by case"
+    upper = TraceCandidate(**{**lower.__dict__, "request_id": lower.request_id.upper()})
+    padded = TraceCandidate(**{**lower.__dict__, "request_id": f"  {lower.request_id}  "})
+    selection = draw((lower, upper, padded))
+    assert selection.sample_ids == (lower.request_id,)
+    assert reasons(selection) == [(lower.request_id, Exclusion.duplicate_row)] * 2
+
+
+@pytest.mark.parametrize("field,value", [
+    ("http_status", None), ("http_status", "500"), ("http_status", True), ("http_status", 5.0),
+    ("started_at", datetime(2026, 9, 20, 12, 0)),                       # naive
+    ("started_at", datetime(2027, 1, 1, tzinfo=timezone.utc)),          # in the future
+    ("started_at", "2026-09-20T00:00:00Z"),
+    ("schema_valid", "no"), ("media_available", 1), ("finish_reason", 7),
+    ("trace_mode", "full"), ("content_state", "available"),
+    ("request_id", ""), ("request_id", None),
+    ("model_revision", None), ("feedback", []),
+])
+def test_one_bad_row_is_excluded_and_never_interpreted(field, value):
+    """A projection can hand back a row whose facts are the wrong shape. Interpreting it is
+    worse than dropping it: `"500" >= 500` raises, `True` is not a status code, a naive
+    `started_at` cannot be compared with the consent window, and a future timestamp is a
+    clock or a bug. Each is excluded on its own and the rest of the draw goes on."""
+    good = fakes.candidate(1)
+    bad = TraceCandidate(**{**fakes.candidate(2).__dict__, field: value})
+    selection = draw((good, bad))
+    assert selection.sample_ids == (good.request_id,), f"{field}={value!r} aborted the draw"
+    assert [e.reason for e in selection.excluded] == [Exclusion.malformed_row]
+
+
+def test_a_row_with_no_organization_is_not_mine():
+    """The tenant filter runs first, so a row whose `org_id` is missing is `not_owned`
+    rather than `malformed_row` - it cannot be mine, and that is the stronger statement."""
+    bad = TraceCandidate(**{**fakes.candidate(2).__dict__, "org_id": None})
+    selection = draw((fakes.candidate(1), bad))
+    assert selection.sample_ids == (fakes.uuid(1),)
+    assert [e.reason for e in selection.excluded] == [Exclusion.not_owned]
+
+
+def test_the_finish_reason_is_exact_lower_case_text():
+    """Stated rather than folded: the sampler compares `finish_reason` to `"length"`
+    exactly, so `"LENGTH"` is not a truncation. T2's adapter owns the spelling, and the
+    port's docstring says so."""
+    assert fakes.candidate(1, finish_reason="LENGTH").failed is False
+    assert fakes.candidate(1, finish_reason="length").failed is True
+    strata = {s.request_id: s.stratum for s in
+              draw((fakes.candidate(1, finish_reason="LENGTH"),
+                    fakes.candidate(2, finish_reason="length"))).samples}
+    assert strata == {fakes.uuid(1): Stratum.uniform, fakes.uuid(2): Stratum.failures}
 
 
 def test_deduplication_accounts_for_every_row():

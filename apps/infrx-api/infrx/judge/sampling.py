@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import enum
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Protocol
 
@@ -65,6 +65,7 @@ class Exclusion(enum.StrEnum):
     content_expired = "content_expired"
     content_missing = "content_missing"
     already_calibrated = "already_calibrated"
+    malformed_row = "malformed_row"
     duplicate_row = "duplicate_row"
     conflicting_duplicate = "conflicting_duplicate"
     stratum_full = "stratum_full"
@@ -186,12 +187,17 @@ class CandidateSource(Protocol):
 
     * return rows for **`org_id` only**, `trace_mode = full`, started at or after
       `since`, at most `limit` of them;
-    * return them **deduplicated by `request_id` and in a stable order** (`06` §3.1
-      queries `FINAL` for exactly this reason). The sampler enforces both anyway - it
-      truncates to the bound and deduplicates - but only a stable order makes *which*
-      rows fall inside the bound reproducible;
-    * carry the **raw** facts (`finish_reason`, `http_status`, `schema_valid`,
-      `media_available`, `content_state`) and let the sampler derive the strata;
+    * return them **deduplicated by `request_id` (lower-case UUID text) and in a stable
+      order** (`06` §3.1 queries `FINAL` for exactly this reason). The sampler enforces
+      both anyway - it truncates to the bound and deduplicates on the canonical id - but
+      only a stable order makes *which* rows fall inside the bound reproducible;
+    * carry the **raw**, **typed** facts and let the sampler derive the strata:
+      `http_status` an `int`, `schema_valid`/`media_available` a `bool`, `started_at` a
+      UTC-aware `datetime` no later than the plan's `now`, `trace_mode`/`content_state`
+      the enums, and `finish_reason` either `None` or the engine's token **exactly as
+      lower-case text** (`"length"`, `"stop"`; the sampler does not fold case, so a
+      differently-spelled value is simply not a truncation). A row that breaks any of
+      this is excluded on its own as `malformed_row` rather than interpreted;
     * attach only feedback rows belonging to that organization and request.
     """
 
@@ -234,6 +240,22 @@ class Selection:
         return tuple(sample for sample in self.samples if sample.limited)
 
 
+def canonical_id(request_id: object) -> str:
+    """The form two rows are compared by: trimmed and lower-case.
+
+    A UUID's hex is case-insensitive, so `"AB…"` and `"ab…"` are one trace. Grouping by
+    the raw string let the same trace through twice under two spellings, which is the
+    duplicate R56 exists to stop.
+    """
+    return request_id.strip().lower() if isinstance(request_id, str) else repr(request_id)
+
+
+def _reportable_id(candidate: TraceCandidate) -> str:
+    """The id for an exclusion row, safe even on a malformed candidate."""
+    request_id = candidate.request_id
+    return request_id if isinstance(request_id, str) else f"<{type(request_id).__name__}>"
+
+
 def rank(seed: str, request_id: str) -> int:
     """A keyed hash, so "seeded" means reproducible rather than merely shuffled."""
     digest = hashlib.blake2b(f"{seed}\x00{request_id}".encode(), digest_size=8).digest()
@@ -274,24 +296,71 @@ def deduplicate(candidates: tuple[TraceCandidate, ...]
     order: list[str] = []
     groups: dict[str, list[TraceCandidate]] = {}
     for candidate in candidates:
-        rows = groups.get(candidate.request_id)
+        key = canonical_id(candidate.request_id)
+        rows = groups.get(key)
         if rows is None:
-            groups[candidate.request_id] = [candidate]
-            order.append(candidate.request_id)
+            groups[key] = [candidate]
+            order.append(key)
         else:
             rows.append(candidate)
     kept: list[TraceCandidate] = []
     excluded: list[Excluded] = []
-    for request_id in order:
-        rows = groups[request_id]
+    for key in order:
+        rows = groups[key]
+        request_id = rows[0].request_id
         if len(rows) == 1:
             kept.append(rows[0])
-        elif all(row == rows[0] for row in rows[1:]):
+        elif all(_same_facts(row, rows[0]) for row in rows[1:]):
             kept.append(rows[0])
             excluded.extend(Excluded(request_id, Exclusion.duplicate_row) for _ in rows[1:])
         else:
             excluded.extend(Excluded(request_id, Exclusion.conflicting_duplicate) for _ in rows)
     return kept, excluded
+
+
+def _same_facts(one: TraceCandidate, other: TraceCandidate) -> bool:
+    """Whether two rows for the same trace agree, ignoring how the id was spelled.
+
+    They are grouped by the canonical id, so two rows differing *only* in the case or
+    padding of `request_id` are the same trace reported twice - a duplicate, not a
+    conflict. Comparing the records whole made that spelling difference look like
+    disagreement and excluded the trace outright.
+    """
+    blank = {"request_id": ""}
+    return replace(one, **blank) == replace(other, **blank)
+
+
+def _malformed(candidate: TraceCandidate, now: datetime) -> bool:
+    """Whether this row's raw facts are usable at all.
+
+    One bad row from the projection must not abort the whole selection, and it must not be
+    *interpreted* either: a `"500"` status is not a 5xx to `>=`, `True` is not a status code,
+    a naive `started_at` cannot be compared with the consent window, and a trace stamped in
+    the future is a clock or a bug rather than a candidate. Each is excluded on its own with
+    `malformed_row` and the rest of the draw goes on.
+    """
+    if not isinstance(candidate.request_id, str) or not candidate.request_id.strip():
+        return True
+    if not isinstance(candidate.org_id, str) or not candidate.org_id.strip():
+        return True
+    if not isinstance(candidate.trace_mode, TraceMode):
+        return True
+    if not isinstance(candidate.content_state, ContentState):
+        return True
+    if type(candidate.http_status) is not int:
+        return True
+    if candidate.finish_reason is not None and type(candidate.finish_reason) is not str:
+        return True
+    if type(candidate.schema_valid) is not bool or type(candidate.media_available) is not bool:
+        return True
+    if not isinstance(candidate.model_revision, str):
+        return True
+    started = candidate.started_at
+    if not isinstance(started, datetime) or started.tzinfo is None:
+        return True
+    if not isinstance(candidate.feedback, tuple):
+        return True
+    return started > now
 
 
 def select(org_id: str, consent: ConsentSnapshot, candidates: tuple[TraceCandidate, ...], *,
@@ -301,10 +370,25 @@ def select(org_id: str, consent: ConsentSnapshot, candidates: tuple[TraceCandida
     check_consent(org_id, consent, now)
     rubric_version = _check_rubric_version(rubric_version)
 
-    unique, excluded = deduplicate(tuple(candidates))
+    # The tenant filter runs **before** deduplication: a foreign row carrying one of my
+    # request ids would otherwise disagree with mine and exclude *my* trace as a
+    # conflicting duplicate - another tenant deciding what I get calibrated on. Shape comes
+    # next, because a row whose facts are unusable cannot be compared either.
+    excluded: list[Excluded] = []
+    owned: list[TraceCandidate] = []
+    for candidate in candidates:
+        if candidate.org_id != org_id:
+            excluded.append(Excluded(_reportable_id(candidate), Exclusion.not_owned))
+        elif _malformed(candidate, now):
+            excluded.append(Excluded(_reportable_id(candidate), Exclusion.malformed_row))
+        else:
+            owned.append(candidate)
+
+    unique, duplicates = deduplicate(tuple(owned))
+    excluded.extend(duplicates)
     eligible: dict[Stratum, list[TraceCandidate]] = {stratum: [] for stratum in Stratum}
     for candidate in unique:
-        reason = _ineligible(candidate, org_id, consent, rubric_version)
+        reason = _ineligible(candidate, consent, rubric_version)
         if reason is not None:
             excluded.append(Excluded(candidate.request_id, reason))
             continue
@@ -335,20 +419,30 @@ def _stratum_of(candidate: TraceCandidate) -> Stratum:
     return Stratum.uniform
 
 
-def _within_consent_window(candidate: TraceCandidate, consent: ConsentSnapshot) -> bool:
-    """R56: evaluation consent is not retroactive and does not outlive itself."""
-    if candidate.started_at < consent.effective_at:
+def within_consent_window(started_at: datetime, consent: ConsentSnapshot) -> bool:
+    """R56: evaluation consent is not retroactive and does not outlive itself.
+
+    Both bounds are half-open at the top: **at** `effective_at` is inside, **at**
+    `revoked_at` is outside.
+
+    The end bound cannot fire through `select` today, and that is a consequence of two
+    rules meeting rather than dead code: a *current* consent has `now < revoked_at`, and a
+    well-formed candidate has `started_at <= now`. It stays because R56 states it and
+    because the next caller (J2 re-checking at submission, J3 replaying an old plan) will
+    not have that guarantee - so it is unit-tested directly rather than only through the
+    draw.
+    """
+    if started_at < consent.effective_at:
         return False
-    return consent.revoked_at is None or candidate.started_at < consent.revoked_at
+    return consent.revoked_at is None or started_at < consent.revoked_at
 
 
-def _ineligible(candidate: TraceCandidate, org_id: str, consent: ConsentSnapshot,
+def _ineligible(candidate: TraceCandidate, consent: ConsentSnapshot,
                 rubric_version: int) -> Exclusion | None:
-    if candidate.org_id != org_id:
-        return Exclusion.not_owned
+    """Ownership and shape are already settled by `select` before this runs."""
     if candidate.trace_mode is not TraceMode.full:
         return Exclusion.trace_mode_not_full
-    if not _within_consent_window(candidate, consent):
+    if not within_consent_window(candidate.started_at, consent):
         return Exclusion.outside_consent_window
     if candidate.produced_no_output:
         # R56 / `06` §3.1 step 3: a 5xx has no answer to grade.
