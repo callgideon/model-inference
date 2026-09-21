@@ -350,6 +350,11 @@ class _Segment:
     sealed: bool = False
     fsync_failed: bool = False
     adopted: bool = False
+    # One flag per appended-but-unsynced record: whether its capture had already counted a
+    # loss. An fsync failure unpromises records from *earlier batches* too, so the flags
+    # have to live with the segment - R42 bounds the losses one capture contributes however
+    # far apart the two refusals are.
+    unsynced_counted: list[bool] = field(default_factory=list)
 
     def view(self) -> SegmentView:
         return SegmentView(self.name, self.records, self.written, self.synced_records,
@@ -417,6 +422,7 @@ class _WriteResult:
     fsynced: int = 0
     dropped: list[tuple[TraceLossReason, bool]] = field(default_factory=list)
     fsync_failed: int = 0          # appended records an fsync error unpromised
+    fsync_losses: int = 0          # ... of which had not already counted a loss (R42)
 
 
 # --------------------------------------------------------------------------------------
@@ -653,10 +659,12 @@ class SpoolTraceSink(FakeTraceSink):
             # `counted` is the capture's own loss count travelling with its row (R42): the
             # drop is recorded either way, the *loss* only once per capture.
             self._drop(reason, counted=counted)
-        if result.fsync_failed:
+        if result.fsync_losses:
             # Appended, then unpromised: not refused (the bytes may even be on disk), but
-            # nothing here will claim durability for them.
-            self.loss_reasons[TraceLossReason.disk_error] += result.fsync_failed
+            # nothing here will claim durability for them. `fsync_failed` is how many
+            # records that was; `fsync_losses` is how many of them are this capture's
+            # first loss, which is what the loss table may count (R42).
+            self.loss_reasons[TraceLossReason.disk_error] += result.fsync_losses
 
     async def stats(self) -> dict[str, object]:
         """The contract keys the suites read, plus what the spool adds.
@@ -792,6 +800,7 @@ class SpoolTraceSink(FakeTraceSink):
                     pass
                 segment.written = segment.synced
                 segment.records = segment.synced_records
+                segment.unsynced_counted = []
             segment.sealed = True
         self.spool_bytes = sum(segment.written for segment in self._segments)
         self.appended_records = self.fsynced_records
@@ -874,6 +883,7 @@ class SpoolTraceSink(FakeTraceSink):
             with self._lock:
                 segment.records += 1
                 segment.written += need
+                segment.unsynced_counted.append(row.counted)
                 self.spool_bytes += need
             result.appended += 1
         if fsync_due:
@@ -890,20 +900,26 @@ class SpoolTraceSink(FakeTraceSink):
             self._fsync(segment, result)
 
     def _fsync(self, segment: _Segment, result: _WriteResult) -> None:
+        flags = segment.unsynced_counted
         unsynced = segment.records - segment.synced_records
         try:
             self.io.fsync(segment.fd)
         except OSError:
             # POSIX gives no second chance after an fsync error, so these records are
             # counted lost rather than retried into a promise we cannot keep. The segment
-            # is sealed: the next record starts a file whose fsync may work.
+            # is sealed: the next record starts a file whose fsync may work. A record whose
+            # capture has already contributed its one loss is unpromised without counting a
+            # second one (R42).
             segment.fsync_failed = True
             segment.sealed = True
             result.fsync_failed += unsynced
+            result.fsync_losses += sum(1 for counted in flags if not counted)
+            segment.unsynced_counted = []
             self._close_segment(segment)
             return
         segment.synced = segment.written
         segment.synced_records = segment.records
+        segment.unsynced_counted = []
         result.fsynced += unsynced
 
     def _refuse_bytes(self, need: int) -> TraceLossReason | None:

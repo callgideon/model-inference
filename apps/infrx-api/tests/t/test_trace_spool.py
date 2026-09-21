@@ -36,7 +36,8 @@ from infrx.contracts.conformance import builders as b
 from infrx.contracts.conformance.services import tracesink_cases
 from infrx.contracts.fakes.support import FailurePlan, FakeClock, SequentialIds
 from infrx.contracts.limits import DEFAULTS
-from infrx.contracts.records import TraceEnvelope, TraceMode, TraceOfferResult
+from infrx.contracts.records import (TraceEnvelope, TraceLossReason, TraceMode,
+                                     TraceOfferResult)
 from infrx.traces.spool import (FRAME, HEADER, MAX_ENVELOPE_BYTES, SpoolIO,
                                 SpoolTraceSink, frame_checksum, recover, scan_segment,
                                 segment_header)
@@ -708,6 +709,428 @@ def test_the_capture_list_is_pruned_so_reap_stays_bounded():
         assert len(spool.captures) <= 2 * traces.spool.CAPTURE_PRUNE_AT, len(spool.captures)
         assert (await spool.stats())["open_captures"] == 0
         assert spool.reap() == 0
+    asyncio.run(scenario())
+
+
+# ======================================================================================
+# round 1 of review: the request path, the writer's failures and the ids
+# ======================================================================================
+def test_no_filesystem_call_ever_happens_on_the_event_loop():
+    """B1. The module's threading table is a promise: after construction, every syscall
+    belongs to the writer thread.
+
+    The oracle is the *thread name* each call was made on, not a timing threshold - a
+    stopwatch on a shared machine is a flake, a thread name is a fact. Round 1 measured a
+    2,006 ms event-loop stall through the paused flush's `statvfs` and another through
+    `ack`'s `unlink`; both are here.
+    """
+    async def scenario():
+        io = DrillIO(free=DEFAULTS.trace_spool_min_free_bytes - 1)
+        spool = sink(io=io)
+        io.threads.clear()                       # construction is allowed its own syscalls
+        await capture_one(spool, ID_A, b"a" * 100)       # request path: no syscall at all
+        assert io.threads == [], f"the request path touched the disk: {io.threads}"
+        await spool.flush(spool.clock.now())             # refused: the floor is below us
+        assert spool.paused is True
+        await spool.flush(spool.clock.now())             # the paused re-check: statvfs
+        io.free = PLENTY
+        await spool.flush(spool.clock.now())
+        await capture_one(spool, ID_B, b"b" * 100)
+        await spool.flush(spool.clock.now())
+        name = await spool.rotate()
+        assert await spool.read_segment(name) is not None
+        assert await spool.ack(name) is True
+        offenders = [(op, thread) for op, thread in io.threads
+                     if not thread.startswith("infrx-trace-spool")]
+        assert offenders == [], f"filesystem calls off the writer thread: {offenders}"
+        assert {op for op, _t in io.threads} >= {"free_bytes", "write", "unlink", "read"}
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_a_failed_segment_open_leaks_no_descriptor_and_no_file():
+    """B2. A disk that refuses the header write used to leak the descriptor *and* leave the
+    header-less file behind, once per flush: 300 flushes against a full disk meant 300
+    orphans and 300 descriptors, i.e. `EMFILE` on the gateway. Neither is tracked anywhere,
+    so nothing would ever clean them up."""
+    async def scenario():
+        io = DrillIO(fail_write_on=1)                    # even the header fails
+        spool = sink(io=io)
+        before = len(os.listdir("/proc/self/fd"))
+        for index in range(60):
+            await capture_one(spool, request_id(index), b"x" * 100)
+            await spool.flush(spool.clock.now())
+        after = len(os.listdir("/proc/self/fd"))
+        stats = await spool.stats()
+        assert after == before, f"descriptors leaked: {before} -> {after}"
+        assert [name for name in os.listdir(spool.spool_dir)
+                if name.endswith(".seg")] == [], "orphan segments were left on disk"
+        assert stats["spool_segments"] == 0 and stats["spool_bytes"] == 0
+        assert stats["loss_reasons"]["disk_error"] == 60
+        assert stats["dropped"] == 60
+        assert stats["in_memory_content_bytes"] == 0, "a failed write kept its charge"
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_a_cancelled_flush_still_settles_its_batch():
+    """B3. `flush` has no deadline of its own, so a caller's `wait_for` is its only bound -
+    and cancelling it must not strand the batch, which has already left the queue. Round 1:
+    five records vanished (appended 0, dropped 0, an empty loss table) and 5 MB stayed
+    charged for ever, with `fsynced` claiming 5 at the same time."""
+    async def scenario():
+        block, entered = threading.Event(), threading.Event()
+        spool = sink(io=DrillIO(block=block, entered=entered))
+        for index in range(5):
+            await capture_one(spool, request_id(index), b"z" * 1_000)
+        charged = (await spool.stats())["in_memory_content_bytes"]
+        assert charged == 5_000
+        try:
+            await asyncio.wait_for(spool.flush(spool.clock.now()), 0.05)
+        except asyncio.TimeoutError:
+            pass
+        else:
+            raise AssertionError("the flush was not cancelled")
+        assert entered.is_set(), "the writer never started"
+        block.set()
+        # A second flush *carrying a record* queues behind the first on the single writer
+        # thread, so awaiting it is a deterministic "the cancelled batch has landed" - no
+        # polling, no sleep. (An empty flush would return without queueing anything.)
+        await capture_one(spool, ID_C, b"the flush after the cancelled one")
+        await spool.flush(spool.clock.now())
+        stats = await spool.stats()
+        assert stats["appended"] == 6, stats
+        assert stats["in_memory_content_bytes"] == 0, "the cancelled batch kept its charge"
+        assert stats["in_memory"] == 0
+        assert len(recover(spool.spool_dir).records) == 6
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_a_writer_error_that_is_not_an_oserror_still_settles_the_batch():
+    """B3, the other half: a bug in the writer is not a disk, but a raised batch is still
+    records the sink has already reported accepted. Both layers are checked - a non-OSError
+    from the filesystem, and the whole call failing."""
+    async def scenario():
+        spool = sink(io=DrillIO(fail_write_on=2, write_error=RuntimeError("boom")))
+        for index in range(5):
+            await capture_one(spool, request_id(index), b"z" * 1_000)
+        stats = await spool.flush(spool.clock.now())
+        assert stats["appended"] + stats["dropped"] == 5, stats
+        assert stats["loss_reasons"]["disk_error"] == stats["dropped"]
+        assert stats["in_memory_content_bytes"] == 0, "a RuntimeError kept the charge"
+        await spool.close()
+
+        # and when the writer call itself cannot even run
+        spool = sink()
+        for index in range(3):
+            await capture_one(spool, request_id(index), b"y" * 1_000)
+
+        def explode(*_args):
+            raise RuntimeError("the writer itself failed")
+
+        spool._write_batch = explode
+        try:
+            await spool.flush(spool.clock.now())
+        except RuntimeError:
+            pass                                 # the caller may see it; the books may not lie
+        stats = await spool.stats()
+        assert stats["loss_reasons"]["disk_error"] == 3, stats["loss_reasons"]
+        assert stats["dropped"] == 3
+        assert stats["in_memory_content_bytes"] == 0
+        assert stats["appended"] == 0
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_only_one_flush_is_ever_in_flight():
+    """B3/memory. A caller that fires flushes on a timer without awaiting them used to pile
+    batches up behind a blocked writer - 299,901 records in flight, outside the queue
+    ceiling that is supposed to bound memory. One flush at a time keeps in-flight rows
+    bounded by `TRACE_QUEUE_MAX`, and the rows stay in the queue where the ceiling can see
+    them."""
+    async def scenario():
+        block, entered = threading.Event(), threading.Event()
+        spool = sink(DEFAULTS.replace(trace_queue_max=4),
+                     io=DrillIO(block=block, entered=entered))
+        await capture_one(spool, ID_A, b"first")
+        first = asyncio.create_task(spool.flush(spool.clock.now()))
+        await asyncio.to_thread(entered.wait, 5)
+        second = asyncio.create_task(spool.flush(spool.clock.now()))
+        await asyncio.sleep(0)
+        for index in range(1, 8):                # more than the queue may hold
+            await capture_one(spool, request_id(index), b"more")
+        stats = await spool.stats()
+        assert stats["in_memory"] == 4, "the second flush took a batch of its own"
+        assert stats["loss_reasons"]["queue_full"] == 3, stats["loss_reasons"]
+        block.set()
+        await first
+        await second
+        stats = await spool.stats()
+        assert stats["appended"] == 5 and stats["in_memory"] == 0
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_a_record_id_is_never_reused_after_an_ack_and_a_restart():
+    """B4(a). The steady state is drain then deploy: the shipper acks everything and the
+    process restarts. With names derived from the files present, the next process reissued
+    `('trace-000000.seg', 0)` for a different record, and 02's "stable event IDs" became a
+    collision the projection would dedupe *away*."""
+    async def scenario():
+        directory = _dir("reuse")
+        first = SpoolTraceSink(FakeClock(), limits=DEFAULTS, spool_dir=directory,
+                               io=DrillIO())
+        first.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        await capture_one(first, ID_A, b"the first process's record")
+        await first.flush(first.clock.now())
+        name = await first.rotate()
+        before = await first.read_segment(name)
+        assert await first.ack(name) is True
+        assert first.segments() == ()
+        await first.close()
+
+        second = SpoolTraceSink(FakeClock(), limits=DEFAULTS, spool_dir=directory,
+                               io=DrillIO())
+        second.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        await capture_one(second, ID_B, b"the second process's record")
+        await second.flush(second.clock.now())
+        after = await second.read_segment(second.segments()[0].name)
+        assert before.ids and after.ids
+        assert before.ids != after.ids, "two different records were filed under one id"
+        assert second.boot_id != first.boot_id
+        await second.close()
+    asyncio.run(scenario())
+
+
+def test_a_flipped_bit_in_a_frame_header_is_the_tail_never_a_wrong_identity():
+    """B4(b). The frame carried its own index, outside the checksum: flipping one bit of it
+    made the reader report two records under the same id, checksum-clean, and all 32 flips
+    of that field were silent. The id is now the verified position and the lengths are
+    inside the checksum, so no single-bit change can produce a record with someone else's
+    identity - it can only stop the scan."""
+    async def scenario():
+        spool = sink()
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        for index, letter in enumerate((b"A", b"B", b"C")):
+            await capture_one(spool, request_id(index), letter * 60)
+        await spool.flush(spool.clock.now())
+        name = spool.segments()[0].name
+        await spool.close()
+        data = (spool.spool_dir / name).read_bytes()
+        whole = scan_segment(name, data)
+        assert len(whole.records) == 3
+        truth = dict(zip(whole.ids, zip(whole.records, whole.contents)))
+        checked = 0
+        for offset in range(HEADER.size, len(data)):
+            for bit in (0x01, 0x80):
+                mutated = bytearray(data)
+                mutated[offset] ^= bit
+                scan = scan_segment(name, bytes(mutated))
+                checked += 1
+                assert len(scan.ids) == len(set(scan.ids)), \
+                    f"one id twice at offset {offset}: {scan.ids}"
+                for row_id, record, content in zip(scan.ids, scan.records, scan.contents):
+                    expected = truth.get(row_id)
+                    assert expected is not None, f"invented id {row_id} at offset {offset}"
+                    assert (record, content) == expected, \
+                        f"id {row_id} came back as another record at offset {offset}"
+        print(f"\nframe identity: {checked} single-bit flips, no wrong or duplicate id")
+    asyncio.run(scenario())
+
+
+def test_one_capture_counts_one_loss_even_when_the_writer_refuses_it():
+    """B5 / R42. A capture that has already contributed its one loss - it breached the
+    budget and finished as honest metadata - and is then refused by the writer must still
+    count **one**. Round 1: `{'memory_budget': 1, 'disk_error': 1}` for a single capture,
+    on all three writer refusals. The lattice cannot see this, because it never makes the
+    writer fail."""
+    async def scenario():
+        tiny = DEFAULTS.replace(trace_capture_bytes=DEFAULTS.trace_metadata_reserve_bytes + 1_000)
+        refusals = {
+            "write error": DrillIO(fail_write_on=1),
+            "fsync error": DrillIO(fail_fsync_on=1),
+            "spool cap": DrillIO(free=0),
+        }
+        for label, io in refusals.items():
+            spool = sink(tiny, io=io)
+            spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+            capture = spool.open(ID_A, b.ORG_A, TraceMode.full, spool.clock.at(600))
+            assert capture.add(b"x" * 2_000) is False        # breaches: one loss counted
+            assert await capture.finish(
+                b.trace(ID_A, content_bytes=0, metadata_bytes=64)) \
+                is TraceOfferResult.accepted_in_memory
+            stats = await spool.flush(spool.clock.now())
+            losses = sum(stats["loss_reasons"].values())
+            assert losses == 1, f"{label}: one capture counted {stats['loss_reasons']}"
+            assert stats["loss_reasons"]["memory_budget"] == 1, label
+            await spool.close()
+    asyncio.run(scenario())
+
+
+def test_retained_content_is_released_with_its_charge():
+    """B6/R20+R21. The capture keeps the parts it charged, so every route that releases the
+    charge has to drop them in the same step - otherwise the budget reports bytes as free
+    while the process is still holding them. Nothing asserted this: the microbenchmark
+    printed resident memory but never checked it."""
+    async def scenario():
+        spool = sink(DEFAULTS.replace(trace_capture_bytes=5_000,
+                                      trace_metadata_reserve_bytes=1_000))
+        # (a) a budget breach discards the whole content
+        breached = spool.open(ID_A, b.ORG_A, TraceMode.full, spool.clock.at(600))
+        assert breached.add(b"x" * 3_000) is True
+        assert breached.parts, "nothing was retained to begin with"
+        assert breached.add(b"x" * 2_000) is False
+        assert breached.parts == [], "a discarded capture kept its content"
+        # (b) an abandon releases them
+        abandoned = spool.open(ID_B, b.ORG_A, TraceMode.full, spool.clock.at(600))
+        assert abandoned.add(b"y" * 1_000) is True
+        await abandoned.abandon(TraceLossReason.abandoned)
+        assert abandoned.parts == []
+        # (c) a finish hands them over and keeps nothing
+        kept = spool.open(ID_C, b.ORG_A, TraceMode.full, spool.clock.at(600))
+        assert kept.add(b"z" * 1_000) is True
+        await kept.finish(b.trace(ID_C, content_bytes=1_000, metadata_bytes=16))
+        assert kept.parts == [], "a finished capture kept a second copy of its content"
+        # (d) a reap releases them
+        reaped = spool.open(request_id(9), b.ORG_A, TraceMode.full, spool.clock.at(10))
+        assert reaped.add(b"w" * 1_000) is True
+        spool.clock.advance(200)
+        assert spool.reap() == 1
+        assert reaped.parts == []
+        await spool.flush(spool.clock.now())
+        assert (await spool.stats())["in_memory_content_bytes"] == 0
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_the_metadata_reserve_is_released_as_rows_are_written():
+    """B6/R24. The reserve is what keeps metadata flowing after content has been cut off,
+    so a written row has to give its metadata bytes back. Without that the sink refuses
+    everything as `metadata_budget` for ever once 8 MiB of rows have passed through - a
+    process that spools perfectly and then goes silent."""
+    async def scenario():
+        spool = sink(DEFAULTS.replace(trace_metadata_reserve_bytes=128))
+        for index in range(10):                  # 10 x 64 B, against a 128 B reserve
+            spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+            assert await spool.offer(b.trace(request_id(index), content_bytes=0,
+                                             metadata_bytes=64)) \
+                is TraceOfferResult.accepted_in_memory, index
+            stats = await spool.flush(spool.clock.now())
+            assert stats["in_memory_metadata_bytes"] == 0, index
+        stats = await spool.stats()
+        assert stats["appended"] == 10
+        assert "metadata_budget" not in stats["loss_reasons"], stats["loss_reasons"]
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_repeated_fsync_rounds_count_each_record_once():
+    """B6/R03. `fsynced` is a count of records, so the per-segment promised mark has to
+    advance with it; otherwise every fsync round re-counts the whole segment and the
+    durability gap a dashboard reads goes negative."""
+    async def scenario():
+        spool = sink()
+        for index in range(3):
+            spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+            await capture_one(spool, request_id(index), b"x" * 20)
+            stats = await spool.flush(spool.clock.now())
+            assert stats["fsynced"] == index + 1, stats
+            assert stats["appended"] == index + 1
+        assert len(spool.segments()) == 1, "the records went to different segments"
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_an_idle_flush_fsyncs_the_appended_tail():
+    """B6/R35. "fsync at most every 2 s" is also a promise that it *does* happen: on a host
+    that goes quiet after one request, the appended tail must still become durable on the
+    next tick rather than waiting for traffic that never comes."""
+    async def scenario():
+        spool = sink()
+        await capture_one(spool, ID_A, b"the last record before the host went quiet")
+        stats = await spool.flush(spool.clock.now())
+        assert (stats["appended"], stats["fsynced"]) == (1, 0)
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        stats = await spool.flush(spool.clock.now())          # nothing in the queue
+        assert stats["fsynced"] == 1, "an idle tick never promised the appended tail"
+        assert len(recover(spool.spool_dir).records) == 1
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_two_sinks_cannot_share_one_spool_directory():
+    """Round 1: two sinks on one directory adopted each other's *live* segments as sealed
+    and acked them away, after which the other process kept appending to an unlinked file.
+    That is not a configuration to document, it is one to refuse."""
+    async def scenario():
+        directory = _dir("shared")
+        first = SpoolTraceSink(FakeClock(), limits=DEFAULTS, spool_dir=directory,
+                               io=DrillIO())
+        try:
+            SpoolTraceSink(FakeClock(), limits=DEFAULTS, spool_dir=directory, io=DrillIO())
+        except RuntimeError as error:
+            assert "spools traces" in str(error)
+        else:
+            raise AssertionError("two sinks shared one spool directory")
+        await first.close()
+        # and the lock is released, so the next process starts normally
+        second = SpoolTraceSink(FakeClock(), limits=DEFAULTS, spool_dir=directory,
+                                io=DrillIO())
+        await second.close()
+    asyncio.run(scenario())
+
+
+def test_a_closed_sink_refuses_and_starts_no_second_writer():
+    """Round 1: after `close()` a `finish` still answered `accepted_in_memory` and the next
+    flush started a fresh writer thread, so a shut-down process kept promising to spool
+    records nothing would ever write."""
+    async def scenario():
+        spool = sink()
+        await capture_one(spool, ID_A, b"before the close")
+        await spool.flush(spool.clock.now())
+        threads_before = threading.active_count()
+        await spool.close()
+        late = await capture_one(spool, ID_B, b"after the close")
+        assert late is TraceOfferResult.dropped, "a closed sink accepted a record"
+        stats = await spool.flush(spool.clock.now())
+        assert stats["in_memory"] == 0
+        assert stats["loss_reasons"]["shutdown"] == 1
+        assert threading.active_count() <= threads_before, "a closed sink started a writer"
+        assert stats["appended"] == 1
+    asyncio.run(scenario())
+
+
+def test_a_torn_tail_reports_where_it_stopped():
+    """T2 has to tell a benign torn tail from mid-segment corruption: one flipped bit can
+    cost a whole segment of *fsynced* records, and a scan that only says "torn" cannot be
+    alarmed about the difference."""
+    async def scenario():
+        spool = sink()
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        for index in range(4):
+            await capture_one(spool, request_id(index), b"x" * 200)
+        await spool.flush(spool.clock.now())
+        name = spool.segments()[0].name
+        await spool.close()
+        path = spool.spool_dir / name
+        data = path.read_bytes()
+        clean = scan_segment(name, data)
+        assert clean.torn == 0 and clean.unread_bytes == 0 and clean.torn_at == {}
+        record = (len(data) - HEADER.size) // 4
+        # a tail lost to a crash: at most the record it was in the middle of
+        tail = scan_segment(name, data[:-10])
+        assert tail.torn == 1 and tail.unread_bytes <= record, (tail.unread_bytes, record)
+        assert len(tail.records) == 3
+        assert tail.torn_at[name] < len(data)
+        # a bit flipped in the first record: the whole segment is unread, which is the
+        # alarm, not the routine tail
+        mutated = bytearray(data)
+        mutated[HEADER.size + FRAME.size + 4] ^= 0xFF
+        corrupt = scan_segment(name, bytes(mutated))
+        assert corrupt.records == [] and corrupt.torn == 1
+        assert corrupt.unread_bytes >= 4 * record, (corrupt.unread_bytes, record)
+        assert corrupt.torn_at[name] == HEADER.size
     asyncio.run(scenario())
 
 
