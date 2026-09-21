@@ -10,7 +10,6 @@ is built, and a large body is parsed off the loop.
 """
 import asyncio
 import json
-import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -69,104 +68,6 @@ def test_media_sec__a_public_url_is_bounded():
     response = tc.post(support.CHAT_PATH, headers=support.AUTH, json=body)
     assert (response.status_code, support.error_of(response)["code"]) == (400, "unsupported_media")
     assert calls == []
-
-
-def test_media_sec__non_media_json_is_bounded_but_inline_media_is_not():
-    """The bound that catches structure every individual cap allows. An inline
-    `data:` video is the one thing a legitimate body is megabytes of, so its
-    characters are measured out of it."""
-    tc, calls = client()
-    padding = "x" * (validate.MAX_NON_MEDIA_BYTES // 60)
-    fat = {"messages": [{"role": "user", "content": [{"type": "text", "text": padding}]}
-                        for _ in range(60)]}
-    response = tc.post(support.CHAT_PATH, headers=support.AUTH, json=fat)
-    assert response.status_code in (400, 413), response.text
-    assert calls == []
-
-    inline = "data:video/mp4;base64," + "A" * (validate.MAX_NON_MEDIA_BYTES + 4096)
-    body = {"messages": [{"role": "user", "content": [
-        {"type": "video_url", "video_url": {"url": inline}}]}]}
-    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=body).status_code == 202
-    assert len(calls) == 1
-
-
-def test_media_sec__a_huge_body_is_refused_without_stalling_the_event_loop():
-    """The reviewer's repro, shrunk to 8 MiB: refused, nothing accepted, and the
-    loop keeps running while it happens.
-
-    The gap bound is wall clock on purpose - it is a liveness property, not a logical
-    one - and it is loose (0.5 s) because the machine is shared; the behaviour it
-    rules out took 1.3 s for this body and 21.8 s for the reviewer's 95 MiB one.
-    """
-    count = 8 * 1024 * 1024 // 40
-    raw = json.dumps({"messages": [{"role": "user", "content": ""}] * count}).encode()
-    calls, accept = support.recorder()
-    app, _ = support.cutover_app(ingress_deps=support.deps(accept=accept))
-    gaps = []
-
-    async def drive():
-        async def watchdog():
-            last = time.monotonic()
-            while True:
-                await asyncio.sleep(0)
-                now = time.monotonic()
-                gaps.append(now - last)
-                last = now
-
-        sent = []
-
-        async def receive():
-            return {"type": "http.request", "body": raw, "more_body": False}
-
-        async def send(message):
-            sent.append(message)
-
-        watch = asyncio.create_task(watchdog())
-        await asyncio.sleep(0)
-        await app({"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
-                   "method": "POST", "path": support.CHAT_PATH,
-                   "raw_path": support.CHAT_PATH.encode(), "query_string": b"", "root_path": "",
-                   "scheme": "http", "client": ("127.0.0.1", 1), "server": ("t", 80),
-                   "headers": [(key.encode(), value.encode())
-                               for key, value in support.RAW.items()]}, receive, send)
-        watch.cancel()
-        return sent
-
-    sent = asyncio.run(drive())
-    assert sent[0]["status"] in (400, 413), sent[0]
-    assert calls == []
-    assert max(gaps) < 0.5, f"the event loop was blocked for {max(gaps):.2f}s"
-
-
-def test_media_sec__a_large_body_is_parsed_off_the_event_loop():
-    """Directly: `parse_body` above the threshold runs in another thread, below it
-    on the caller's."""
-    import threading
-
-    raw = b'{"messages": [' + b'{"role":"user","content":"x"},' * 40_000 + b'{"role":"user","content":"x"}]}'
-    assert len(raw) > validate.PARSE_OFFLOAD_BYTES
-
-    async def where(body, threshold):
-        from infrx.gateway.routes import intake
-
-        seen = {}
-        real = intake.parse_object
-
-        def spy(data):
-            seen["thread"] = threading.get_ident()
-            return real(data)
-
-        intake.parse_object = spy
-        try:
-            await intake.parse_body(body, offload_over_bytes=threshold)
-        finally:
-            intake.parse_object = real
-        return seen["thread"], threading.get_ident()
-
-    parsed_on, loop_thread = asyncio.run(where(raw, validate.PARSE_OFFLOAD_BYTES))
-    assert parsed_on != loop_thread, "a large body was parsed on the event loop"
-    small_on, loop_thread = asyncio.run(where(b'{"a": 1}', validate.PARSE_OFFLOAD_BYTES))
-    assert small_on == loop_thread, "a small body paid for a thread"
 
 
 # The surrogate travels as the JSON escape it legally is; no HTTP client can encode
@@ -257,19 +158,207 @@ def test_media_sec__the_parser_itself_refuses_json_that_is_not_json():
     assert intake.parse_object(b'{"x": 1.5}') == {"x": 1.5}
 
 
-def test_media_sec__the_structure_caps_bound_the_non_media_body():
-    """The derivation the 1 MiB bound was standing in for: with these caps, a body
-    that carries no inline media cannot exceed ~205 KiB, so the outer bound is an
-    assertion about the caps rather than a second policy to keep in step."""
-    derived = (validate.MAX_TEXT_CODEPOINTS + validate.MAX_URL_CHARS
-               + validate.MAX_MESSAGES * validate.MAX_PARTS_PER_MESSAGE * 64)
-    assert validate.MAX_NON_MEDIA_BYTES == derived
-    assert derived < 256 * 1024, derived
-    assert validate.MAX_VIDEO_PARTS == 1
 
 
-if __name__ == "__main__":
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_") and not hasattr(fn, "pytestmark"):
-            fn()
-            print("ok", name)
+# --- review r2 B1: refuse before materialising, and bound how many arrive at once ---
+def parse_spy():
+    """A recorder around `intake.parse_object`, so "the parser was never called" is an
+    assertion and not a hope. Restored by the caller."""
+    from infrx.gateway.routes import intake
+
+    calls = []
+    real = intake.parse_object
+
+    def spy(raw):
+        calls.append(len(raw))
+        return real(raw)
+
+    intake.parse_object = spy
+    return calls, (lambda: setattr(intake, "parse_object", real))
+
+
+HOSTILE = (
+    # the reviewer's attack9, shrunk to 8 MiB: the same shape, the same refusal
+    ("3.4M empty messages", lambda n: b'{"messages":[' + b'{"role":"user","content":""},' * n
+                                     + b'{"role":"user","content":""}]}'),
+    ("nested arrays", lambda n: b'{"messages":' + b"[" * n + b"]" * n + b"}"),
+)
+
+
+@pytest.mark.parametrize("name,build", HOSTILE, ids=[row[0] for row in HOSTILE])
+def test_media_sec__hostile_structure_is_refused_without_parsing_it(name, build):
+    """B1a: the count caps run on the parsed tree, so they arrive after the damage.
+    This is refused by counting openers in the raw bytes - `json.loads` is never
+    called, which the spy proves."""
+    from infrx.gateway.routes import validate as v
+
+    raw = build(200_000)
+    assert raw.count(b"{") + raw.count(b"[") > v.MAX_OPENERS, "the body is not over the cap"
+    tc, accepted = client()
+    calls, restore = parse_spy()
+    try:
+        response = tc.post(support.CHAT_PATH, headers=support.RAW, content=raw)
+    finally:
+        restore()
+    assert response.status_code == 413, response.text[:200]
+    assert support.error_of(response)["code"] == "request_too_large"
+    assert calls == [], f"the parser ran on {calls} bytes"
+    assert accepted == []
+
+
+def test_media_sec__a_legitimate_body_at_the_opener_cap_is_still_parsed():
+    """The cap is the structure the caps allow plus one opener per permitted code
+    point of text, so a body full of braces *in text* is accepted."""
+    braces = "{" * 1_000
+    body = {"messages": [{"role": "user", "content": braces}]}
+    tc, accepted = client()
+    calls, restore = parse_spy()
+    try:
+        response = tc.post(support.CHAT_PATH, headers=support.AUTH, json=body)
+    finally:
+        restore()
+    assert response.status_code == 202, response.text[:200]
+    assert calls and len(accepted) == 1
+
+
+def test_media_sec__at_most_two_large_bodies_are_in_flight():
+    """B1b: one parse of a legitimate large body stalls the loop; this bounds how many
+    can do that at once. The excess is refused with retry guidance, never queued.
+
+    The eight requests are held *inside the read* - each sends one chunk and waits -
+    so they are genuinely concurrent at the moment the slot is claimed, with no sleep
+    anywhere.
+    """
+    from infrx.gateway.routes import intake
+
+    slots = intake.LargeBodies(limit=2, threshold=1024)
+    calls, accept = support.recorder()
+    app, mounted = support.cutover_app(
+        ingress_deps=support.deps(accept=accept, large_bodies=slots))
+    assert mounted.slots is slots
+    head = b'{"messages":[{"role":"user","content":"' + b"x" * 4_000
+    tail = b'"}]}'
+
+    async def drive():
+        everyone_arrived = asyncio.Event()
+        arrived = 0
+
+        async def one():
+            nonlocal arrived
+            sent = []
+            chunks = [{"type": "http.request", "body": head, "more_body": True},
+                      {"type": "http.request", "body": tail, "more_body": False}]
+
+            async def receive():
+                nonlocal arrived
+                message = chunks.pop(0)
+                if message["more_body"]:
+                    arrived += 1
+                    if arrived >= 8:
+                        everyone_arrived.set()
+                    return message
+                # the holders finish only once every request has claimed or been refused
+                await everyone_arrived.wait()
+                return message
+
+            async def send(message):
+                sent.append(message)
+
+            await app({"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+                       "method": "POST", "path": support.CHAT_PATH,
+                       "raw_path": support.CHAT_PATH.encode(), "query_string": b"",
+                       "root_path": "", "scheme": "http", "client": ("127.0.0.1", 1),
+                       "server": ("t", 80),
+                       "headers": [(key.encode(), value.encode())
+                                   for key, value in support.RAW.items()]},
+                      receive, send)
+            return sent[0]["status"], dict(
+                (key.decode(), value.decode()) for key, value in sent[0]["headers"])
+
+        return await asyncio.gather(*[one() for _ in range(8)])
+
+    answers = asyncio.run(drive())
+    statuses = [status for status, _headers in answers]
+    assert statuses.count(202) == 2, statuses
+    assert statuses.count(429) == 6, statuses
+    assert slots.peak == 2, slots.peak
+    assert slots.in_flight == 0, "a slot was not released"
+    assert slots.refused == 6
+    assert len(calls) == 2
+    for status, headers in answers:
+        if status == 429:
+            assert headers["retry-after"] == "2", headers
+
+
+def test_media_sec__a_large_body_slot_is_released_on_every_path():
+    """Including the refusals: a slot the ingress keeps is a slot nobody gets again."""
+    from infrx.gateway.routes import intake
+
+    slots = intake.LargeBodies(limit=1, threshold=64)
+    calls, accept = support.recorder()
+    app, _ = support.cutover_app(ingress_deps=support.deps(accept=accept, large_bodies=slots))
+    tc = TestClient(app)
+    big = "x" * 4_000
+    for status, body in ((202, json.dumps({"messages": [{"role": "user", "content": big}]})),
+                         (400, json.dumps({"messages": [{"role": "user", "content": big},
+                                                        {"role": "nope", "content": big}]})),
+                         (400, "{" + big)):
+        assert tc.post(support.CHAT_PATH, headers=support.RAW,
+                       content=body.encode()).status_code == status, body[:40]
+        assert slots.in_flight == 0, (status, slots.in_flight)
+    assert len(calls) == 1
+
+
+def test_media_sec__no_per_byte_python_work_touches_a_media_payload():
+    """B1c: the expensive scans (`storable`, the URL hygiene regex) are for short
+    references. A 4 MiB inline payload goes through the prefix check only, and the
+    payload digest is the canonical non-media document plus the payload's hash."""
+    from infrx.gateway.routes import validate as v
+
+    payload = "data:video/mp4;base64," + "A" * (4 * 1024 * 1024)
+    seen = []
+    real_storable, real_search = v.storable, v.UNSAFE_IN_URL.search
+
+    def spy_storable(text, param):
+        seen.append(("storable", len(text)))
+        return real_storable(text, param)
+
+    class SpyRe:
+        def search(self, text):
+            seen.append(("regex", len(text)))
+            return real_search(text)
+
+    v.storable, v.UNSAFE_IN_URL = spy_storable, SpyRe()
+    try:
+        tc, accepted = client()
+        response = tc.post(support.CHAT_PATH, headers=support.AUTH, json={
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": "describe"},
+                {"type": "video_url", "video_url": {"url": payload}}]}]})
+    finally:
+        v.storable, v.UNSAFE_IN_URL = real_storable, v.__dict__["UNSAFE_IN_URL"] if False else real_search.__self__
+    assert response.status_code == 202, response.text[:200]
+    assert len(accepted) == 1
+    # nothing per-byte ever saw the payload
+    assert max(size for _kind, size in seen) < 1_000, seen
+    assert all(size != len(payload) for _kind, size in seen), "a scan ran over the payload"
+
+
+def test_dur_admit__the_payload_digest_covers_the_media_payload_by_hash():
+    """The exact construction: the canonical document with each inline payload replaced
+    by `data-sha256:<sha256 of the url>`. Stable under reordering, and one byte of the
+    payload changes it."""
+    from infrx.gateway.routes import validate as v
+
+    def digest_for(payload):
+        body = {"messages": [{"role": "user", "content": [
+            {"type": "video_url", "video_url": {"url": payload}}]}]}
+        messages, media = v.check_messages(body, {"video/mp4"})
+        return v.payload_digest(body, messages, media), media
+
+    a, media = digest_for("data:video/mp4;base64," + "A" * 4096)
+    b, _ = digest_for("data:video/mp4;base64," + "A" * 4095 + "B")
+    assert a != b, "a changed payload did not change the digest"
+    assert list(media.values())[0].startswith(v.MEDIA_TOKEN)
+    again, _ = digest_for("data:video/mp4;base64," + "A" * 4096)
+    assert a == again

@@ -57,13 +57,15 @@ def check_content_type(request) -> None:
                                     param="Content-Type")
 
 
-async def read_body(request, *, max_bytes: int, timeout_s: float, clock) -> bytes:
+async def read_body(request, *, max_bytes: int, timeout_s: float, clock, large=None) -> bytes:
     """The request body, or `request_too_large` / `deadline_exceeded`.
 
     The running total is the only size bound, deliberately: `Content-Length` is a
     hint the caller chooses, a chunked body carries none, and refusing on the total
     never buffers more than one chunk past the limit. A second check against the
-    declared length would only be a check the attacker controls.
+    declared length would only be a check the attacker controls. The declared length
+    *is* used for one thing - claiming a large-body slot early, before the bytes
+    arrive - because being wrong there only costs the caller its own slot.
 
     The deadline is enforced twice because there are two ways to outlast it, and
     neither mechanism catches the other. A body that arrives slowly is caught per
@@ -75,6 +77,10 @@ async def read_body(request, *, max_bytes: int, timeout_s: float, clock) -> byte
     chunks: list[bytes] = []
     total = 0
     deadline = clock() + timeout_s
+    if large is not None:
+        declared = request.headers.get("content-length")
+        if declared is not None and declared.isdigit():
+            large.account(int(declared))
     try:
         async with asyncio.timeout(timeout_s):
             async for chunk in request.stream():
@@ -83,6 +89,8 @@ async def read_body(request, *, max_bytes: int, timeout_s: float, clock) -> byte
                     raise errors.RequestTooLarge(f"body exceeded the {max_bytes} byte limit")
                 if clock() > deadline:
                     raise errors.DeadlineExceeded(f"the {timeout_s}s intake deadline passed")
+                if large is not None:
+                    large.account(total)
                 chunks.append(chunk)
     except TimeoutError:
         raise errors.DeadlineExceeded(f"the {timeout_s}s intake deadline passed") from None
@@ -100,11 +108,38 @@ def _no_constants(name: str) -> None:
     raise ValueError(f"{name} is not valid JSON")
 
 
+OPENERS = (b"{", b"[")
+
+
+def check_structure(raw: bytes, max_openers: int) -> None:
+    """Refuse hostile structure **before** `json.loads` materialises it.
+
+    The count caps in `validate` run on the parsed tree, so a 95 MiB body of 3.4
+    million empty messages was parsed in full - 1.9 s of stalled event loop, +1.1 GiB
+    resident - and only then refused. This counts the bytes that can open an object or
+    an array first, with `bytes.count`: one C scan per byte value, no Python loop, and
+    no allocation.
+
+    The cap is the structure the caps allow plus one opener per permitted code point of
+    text, because `{` inside a string is legitimate text. Base64 contains neither byte,
+    so an inline media payload costs nothing against it.
+    """
+    openers = sum(raw.count(byte) for byte in OPENERS)
+    if openers > max_openers:
+        raise errors.RequestTooLarge(f"the body opens more than {max_openers} objects")
+
+
 def parse_object(raw: bytes) -> dict:
     """JSON parsing, after the bounds. The parser's own message never leaves.
 
     `RecursionError` is caught with `ValueError` because that is what deep nesting
     raises (`[`×100k), and it is a malformed request, not a server fault.
+
+    Deliberately *not* run in a thread: `json.loads` is one C call holding the GIL, so
+    `asyncio.to_thread` moves the stall without shortening it (measured: 1.91 s of
+    parsing, 1.83 s of it with the loop blocked). What keeps the loop live is refusing
+    hostile bodies before this runs (`check_structure`) and bounding how many large
+    ones are in flight at once (`LargeBodies`).
     """
     try:
         body = json.loads(raw, parse_constant=_no_constants)
@@ -115,15 +150,50 @@ def parse_object(raw: bytes) -> dict:
     return body
 
 
-async def parse_body(raw: bytes, *, offload_over_bytes: int) -> dict:
-    """Parse, off the event loop when the body is big enough to block it.
+class LargeBodies:
+    """At most `limit` bodies over `threshold` bytes in flight per process.
 
-    `json.loads` does not yield, so parsing megabytes inline stalls every other
-    request in the process - health checks included - for as long as it takes.
+    One parse of a legitimate large body stalls the loop for as long as it takes; this
+    is what stops that being multiplied by however many clients ask at once. The deploy
+    unit runs one worker and one loop, and eight concurrent 95 MiB bodies measured a
+    30 s stall and several GiB resident. Excess is refused, never queued: a queue is
+    the same stall with a longer fuse.
     """
-    if len(raw) > offload_over_bytes:
-        return await asyncio.to_thread(parse_object, raw)
-    return parse_object(raw)
+
+    def __init__(self, limit: int = 2, threshold: int = 1_048_576) -> None:
+        self.limit = limit
+        self.threshold = threshold
+        self.in_flight = 0
+        self.peak = 0
+        self.refused = 0
+
+    def slot(self) -> "LargeBody":
+        return LargeBody(self)
+
+
+class LargeBody:
+    """One request's claim on a large-body slot: claimed once, released once."""
+
+    def __init__(self, slots: LargeBodies) -> None:
+        self.slots = slots
+        self.held = False
+
+    def account(self, total: int) -> None:
+        """Claim a slot the first time this body is known to be large."""
+        if self.held or total <= self.slots.threshold:
+            return
+        if self.slots.in_flight >= self.slots.limit:
+            self.slots.refused += 1
+            raise errors.CapacityExhausted(
+                f"{self.slots.limit} large bodies are already in flight", retry_after_s=2)
+        self.slots.in_flight += 1
+        self.slots.peak = max(self.slots.peak, self.slots.in_flight)
+        self.held = True
+
+    def release(self) -> None:
+        if self.held:
+            self.slots.in_flight -= 1
+            self.held = False
 
 
 def safe_param(param: object) -> str | None:

@@ -74,7 +74,13 @@ DATA_PREFIX = "data:"
 # `data:<video mime>;base64,` only: a `data:` URL naming another type, or no base64
 # marker, is not a video the pilot can decode.
 DATA_URL = re.compile(r"data:(?P<mime>[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+);base64,")
-CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+# Only the prefix of a `data:` URL is ever examined, so the window is small and fixed.
+MAX_DATA_PREFIX_CHARS = 256
+# What may not appear in a *reference* URL. C0 and DEL smuggle headers; C1 (`\x85`) and
+# U+2028/U+2029 are line terminators to something downstream; a space ends a request
+# line; `@` carries userinfo, which is how a validated host stops being the host that
+# is fetched; a backslash is a path separator to some clients and not to others.
+UNSAFE_IN_URL = re.compile(r"[\x00-\x20\x7f-\x9f\u2028\u2029@\\]")
 MAX_STOP_SEQUENCES = 4
 MAX_STOP_CHARS = 64
 
@@ -89,17 +95,18 @@ MAX_TEXT_CODEPOINTS = 131_072
 MAX_URL_CHARS = 8_192
 MAX_MODEL_CHARS = 128
 MAX_SEED = 2 ** 63 - 1
-# The caps above already bound everything that is not an inline media payload:
-# at most `MAX_MESSAGES` messages, `MAX_PARTS_PER_MESSAGE` parts each, one media part
-# per request whose URL is at most `MAX_URL_CHARS`, and `MAX_TEXT_CODEPOINTS` of text
-# across the whole request. The non-media body is therefore under
-# `MAX_TEXT_CODEPOINTS + MAX_URL_CHARS + MAX_MESSAGES * MAX_PARTS_PER_MESSAGE * 64`
-# bytes of JSON punctuation - about 205 KiB, asserted in the suite. A separate 1 MiB
-# bound would have been unreachable, i.e. untestable, i.e. not a bound at all.
-MAX_NON_MEDIA_BYTES = (MAX_TEXT_CODEPOINTS + MAX_URL_CHARS
-                       + MAX_MESSAGES * MAX_PARTS_PER_MESSAGE * 64)
-# Above this, parsing happens off the event loop: `json.loads` never yields.
-PARSE_OFFLOAD_BYTES = 1_048_576
+# There is deliberately **no** byte bound on the non-media body. The one this replaced
+# assumed a byte per code point and no JSON escaping, so 35,000 CJK characters from an
+# ordinary client (210 KB of `\uXXXX`) were refused against a documented 96 MiB cap.
+# What bounds a body is the byte cap, the pre-parse opener count below, and the
+# post-parse code-point and count caps - all three form-independent.
+#
+# `MAX_OPENERS` is checked on the raw bytes before `json.loads` runs (`intake`): the
+# structure these caps allow, plus one opener per permitted code point of text, because
+# `{` inside a string is legitimate text. Base64 contains neither `{` nor `[`, so an
+# inline media payload costs nothing against it.
+STRUCTURE_OPENERS = 2 + MAX_MESSAGES * (2 + MAX_PARTS_PER_MESSAGE * 2) + 2
+MAX_OPENERS = STRUCTURE_OPENERS + MAX_TEXT_CODEPOINTS
 # r1 R7: `admit` derives its ceiling from the *database* clock. Without a margin a
 # store clock a millisecond behind the gateway refuses every request, and the first
 # review's tests could not see it because they pinned the fake's clock to
@@ -160,40 +167,60 @@ def check_stop(stop: object) -> None:
         storable(item, "stop")
 
 
-def check_video_ref(ref: object) -> tuple[str, int]:
+def check_data_url(source: str, allowed_mime) -> None:
+    """An inline video, checked by its **prefix only**.
+
+    This is the one string in a request that is legitimately megabytes long, so
+    nothing here may be per-byte Python work: a `CONTROL_CHARS.search` over a 95 MiB
+    payload cost 0.52 s of blocked event loop, and `.lower()` copied the whole thing.
+    Base64 cannot contain a control character, a space or a backslash, so the prefix
+    and the length are the whole check here; M validates the payload when it decodes
+    it against `MAX_MEDIA_BYTES`.
+    """
+    match = DATA_URL.match(source[:MAX_DATA_PREFIX_CHARS])
+    if match is None:
+        raise errors.UnsupportedMedia("an inline video is data:<video mime>;base64,",
+                                      param="messages")
+    if match.group("mime").lower() not in allowed_mime:
+        raise errors.UnsupportedMedia("the inline media type is not a supported video",
+                                      param="messages")
+    if len(source) <= match.end():
+        raise errors.UnsupportedMedia("an inline video carries no payload", param="messages")
+
+
+def check_video_ref(ref: object, allowed_mime=frozenset()) -> tuple[str, bool]:
     """r1 R58: a video part carries exactly `{url}`, and the url is a reference we
     are willing to resolve later — never anything that would make the engine fetch.
 
-    Returns the source and how many of its characters are inline media, so the
-    caller can measure the *non-media* size of the body (review r1 item 3c).
+    Returns the source and whether it is an inline media payload, which decides
+    whether anything downstream may touch it byte by byte.
     """
     if not isinstance(ref, dict) or set(ref) != VIDEO_REF_KEYS:
         raise errors.InvalidRequest("a video part carries exactly {url}", param="messages")
     source = ref["url"]
     if not isinstance(source, str) or not source:
         raise errors.InvalidRequest("a video url must be a non-empty string", param="messages")
+    if source[:len(DATA_PREFIX)].lower() == DATA_PREFIX:
+        check_data_url(source, allowed_mime)
+        return source, True
+    # Everything else is a short reference, so the expensive checks are affordable.
     storable(source, "messages")
-    if CONTROL_CHARS.search(source):
-        # A CR/LF in a URL is a request smuggling primitive the moment anything
-        # downstream builds a header or a log line out of it.
-        raise errors.UnsupportedMedia("a video url contains control characters",
+    if UNSAFE_IN_URL.search(source):
+        # A CR/LF in a URL is a request-smuggling primitive the moment anything
+        # downstream builds a header out of it; U+2028/2029 split lines in JavaScript;
+        # `user:pass@` and a backslash are how a validated host stops being the host
+        # that is fetched.
+        raise errors.UnsupportedMedia("a video url contains characters it may not",
                                       param="messages")
     if source.startswith(UPLOAD_SCHEME):
-        # The frozen `normalized_request` fixture's form. A bare `upl_…` is not a
-        # reference: it is an identifier with no namespace.
+        # The frozen `normalized_request` fixture's form, with no organization in it:
+        # the tenant comes from the authenticated key, and an org-qualified reference
+        # invites cross-tenant probing. A bare `upl_…` is not a reference either.
         handle = source[len(UPLOAD_SCHEME):]
         if not ids.UPLOAD_HANDLE_RE.fullmatch(handle):
             raise errors.UnsupportedMedia("an upload reference is infrx-upload:upl_…",
                                           param="messages")
-        return source, 0
-    if source.lower().startswith(DATA_PREFIX):
-        # Inline base64 is the one legitimately huge string in a body; it is bounded
-        # by the intake cap and by `MAX_MEDIA_BYTES` once M decodes it, not by the
-        # URL length bound, so it is measured separately.
-        if not DATA_URL.match(source):
-            raise errors.UnsupportedMedia("an inline video is data:<mime>;base64,",
-                                          param="messages")
-        return source, len(source)
+        return source, False
     if not source.lower().startswith(HTTP_SCHEMES):
         # The reason class, not the value: the value is the caller's URL and goes
         # nowhere near the envelope's fixed message anyway.
@@ -202,10 +229,10 @@ def check_video_ref(ref: object) -> tuple[str, int]:
     if len(source) > MAX_URL_CHARS:
         raise errors.UnsupportedMedia(f"a video url is at most {MAX_URL_CHARS} characters",
                                       param="messages")
-    return source, 0
+    return source, False
 
 
-def check_messages(body: dict) -> tuple[tuple[dict, ...], int]:
+def check_messages(body: dict, allowed_mime=frozenset()) -> tuple[tuple[dict, ...], dict]:
     """r1 R58: the allow-list for a pilot request's messages, and its bounds.
 
     An allow-list, never a deny-list: the key set of a message and of a part must
@@ -219,7 +246,9 @@ def check_messages(body: dict) -> tuple[tuple[dict, ...], int]:
     so a body of three million empty messages is refused at message 65 instead of
     after the loop has already run (review r1 item 3).
 
-    Returns the messages and the number of inline-media characters in them.
+    Returns the messages and, for each accepted inline `data:` payload, the token the
+    payload digest uses in its place (review r2 B1c: the digest never re-serialises a
+    media payload).
     """
     messages = body.get("messages")
     if not isinstance(messages, list) or not messages:
@@ -228,7 +257,7 @@ def check_messages(body: dict) -> tuple[tuple[dict, ...], int]:
         raise errors.InvalidRequest(f"at most {MAX_MESSAGES} messages", param="messages")
     videos = 0
     text_chars = 0
-    media_chars = 0
+    media: dict[str, str] = {}
     for message in messages:
         if not isinstance(message, dict) or set(message) != MESSAGE_KEYS:
             raise errors.InvalidRequest("a message is exactly {role, content}", param="messages")
@@ -274,11 +303,15 @@ def check_messages(body: dict) -> tuple[tuple[dict, ...], int]:
                     # (models/marlin2b/README.md), and R58 pairs one media part with
                     # one staged ref.
                     raise errors.UnsupportedMedia("one video per request", param="messages")
-                media_chars += check_video_ref(part[VIDEO_TYPE])[1]
+                source, inline = check_video_ref(part[VIDEO_TYPE], allowed_mime)
+                if inline:
+                    # `encode` and `sha256` are C calls that release the GIL for a
+                    # buffer this size; `json.dumps` over the same string does not.
+                    media[source] = MEDIA_TOKEN + hashlib.sha256(source.encode()).hexdigest()
             else:
                 raise errors.UnsupportedMedia(f"content parts are {TEXT_TYPE} and {VIDEO_TYPE}",
                                               param="messages")
-    return tuple(messages), media_chars
+    return tuple(messages), media
 
 
 def execution_mode(body: dict, headers) -> ExecutionMode:
@@ -322,6 +355,44 @@ def off_mode_policy(org_id: str, now: datetime) -> ConsentSnapshot:
     """
     return ConsentSnapshot(org_id=org_id, consent_version=0, trace_mode=TraceMode.off,
                            content_retention_days=1, evaluation_consent=False, effective_at=now)
+
+
+# The token an inline payload is replaced by when the payload digest is computed.
+MEDIA_TOKEN = "data-sha256:"
+
+
+def payload_digest(body: dict, messages: tuple[dict, ...], media: dict[str, str]) -> str:
+    """The digest of the canonical payload, without re-serialising inline media.
+
+    Exact construction. Let *D* be the request body with every accepted inline
+    `data:` URL string replaced by `"data-sha256:" + sha256(url.encode()).hexdigest()`.
+    The digest is `sha256(canonical_bytes(D))`, i.e. the canonical **non-media**
+    document plus the content hash of each media payload. `canonical_bytes` sorts keys
+    and drops insignificant whitespace, so the digest is stable under key reordering
+    and formatting exactly as before, and changes when any value changes - including
+    one byte of the payload.
+
+    Why not simply `canonical_bytes(body)`: that re-serialises the payload, which cost
+    0.57 s of blocked event loop for a 95 MiB inline video. `sha256` and `str.encode`
+    are C calls that release the GIL for buffers this size; `json.dumps` over the same
+    string is not.
+    """
+    if not media:
+        return "sha256:" + hashlib.sha256(canonical_bytes(body)).hexdigest()
+    document = {**body, "messages": [_tokenised(message, media) for message in messages]}
+    return "sha256:" + hashlib.sha256(canonical_bytes(document)).hexdigest()
+
+
+def _tokenised(message: dict, media: dict[str, str]) -> dict:
+    content = message.get("content")
+    if not isinstance(content, list):
+        return message
+    parts = []
+    for part in content:
+        url = part.get(VIDEO_TYPE, {}).get("url") if part.get("type") == VIDEO_TYPE else None
+        token = media.get(url) if isinstance(url, str) else None
+        parts.append({**part, VIDEO_TYPE: {"url": token}} if token else part)
+    return {**message, "content": parts}
 
 
 class Validator:
@@ -380,8 +451,7 @@ class Validator:
         # ceiling. The sum is then exactly MAX_CONTEXT_TOKENS, which R55 allows.
         return self.limits.max_context_tokens - output, output
 
-    def normalize(self, body: dict, auth, request_id: str, headers,
-                  body_bytes: int = 0) -> NormalizedRequest:
+    def normalize(self, body: dict, auth, request_id: str, headers) -> NormalizedRequest:
         for name in body:
             # The name is the caller's, so it is never formatted into a message; the
             # envelope echoes it only if it looks like a parameter name (intake).
@@ -392,11 +462,7 @@ class Validator:
                 # `{"temperature": null}` mean something different from every other
                 # null-typed field in the request.
                 raise errors.InvalidRequest("a parameter must not be null", param=name)
-        messages, media_chars = check_messages(body)
-        if body_bytes - media_chars > MAX_NON_MEDIA_BYTES:
-            # The outer envelope of the caps above, not a second policy: reaching it
-            # means one of them was widened without this being reconsidered.
-            raise errors.RequestTooLarge("the request body is too large")
+        messages, media = check_messages(body, self.rt.settings.allowed_video_mime)
         count = _int(body, "n")
         if count is not None and count != 1:
             raise errors.UnsupportedParameter("only n=1 is supported", param="n")
@@ -426,7 +492,7 @@ class Validator:
             # digest is computed here so the ref and the bytes cannot disagree. M1/G2
             # replace the ref with the staged object's.
             payload_ref=f"payloads/{auth.org_id}/{request_id}.json",
-            payload_digest="sha256:" + hashlib.sha256(canonical_bytes(body)).hexdigest(),
+            payload_digest=payload_digest(body, messages, media),
             # Media is resolved by M during preparation (public URLs) or from an owned
             # upload handle; the ingress validates the reference and stages nothing.
             media=(), execution_mode=mode,

@@ -41,7 +41,7 @@ from ...auth.context import AuthResolver
 from ...config import RuntimeMisconfigured
 from ...contracts import errors, ids, wire
 from . import intake
-from .validate import PARSE_OFFLOAD_BYTES, Validator, idempotency
+from .validate import MAX_OPENERS, Validator, idempotency
 
 CHAT_PATH = "/v1/chat/completions"
 HEALTH_PATH = "/healthz"
@@ -70,6 +70,8 @@ class IngressDeps:
     consent_for: Callable | None = None
     entitlement_version: Callable[[str], int] | None = None
     served_models: dict[str, str] | None = None
+    # One per process, shared by every request: the bound is on the process's loop.
+    large_bodies: "intake.LargeBodies | None" = None
     new_request_id: Callable[[], str] = ids.new_request_id
 
 
@@ -109,28 +111,37 @@ class Ingress:
         self.auth = AuthResolver(rt, entitlement_version=self.deps.entitlement_version)
         self.validator = Validator(rt, consent_for=self.deps.consent_for,
                                    served_models=self.deps.served_models)
+        self.slots = self.deps.large_bodies or intake.LargeBodies()
         self.startup_state = assert_startup(rt, self.deps)
 
     async def validated(self, request: Request, request_id: str):
-        """Tenant, then bounded body, then shape. In that order, always.
+        """Tenant, then bounded body, then structure, then shape. In that order.
 
         Identity comes **first**, from the headers alone: an unauthenticated caller
         must never be able to make this process buffer 96 MiB, and the body we do
-        read is read on behalf of a known tenant. The byte and time bounds come
-        before the parse because they are the only defence that has to work before
-        anything is trusted, and the structure caps come immediately after it,
-        before any record is built.
+        read is read on behalf of a known tenant. The byte and time bounds come next,
+        because they are the only defence that has to work before anything is trusted.
+        Then the cheap structural count on the raw bytes, because the caps that run on
+        the parsed tree arrive too late to stop it being built. Only then `json.loads`,
+        with at most `LargeBodies.limit` large bodies reaching it at once.
         """
         limits = self.rt.settings.pilot
         auth = await self.auth.context(request)
         intake.check_content_type(request)
-        raw = await intake.read_body(request, max_bytes=limits.max_request_bytes,
-                                     timeout_s=limits.intake_timeout_s, clock=self.rt.clock)
-        body = await intake.parse_body(raw, offload_over_bytes=PARSE_OFFLOAD_BYTES)
-        normalized = self.validator.normalize(body, auth, request_id, request.headers,
-                                              body_bytes=len(raw))
-        idem = idempotency(auth, request.headers, normalized.payload_digest, CHAT_OPERATION)
-        return auth, normalized, idem
+        large = self.slots.slot()
+        try:
+            raw = await intake.read_body(request, max_bytes=limits.max_request_bytes,
+                                         timeout_s=limits.intake_timeout_s,
+                                         clock=self.rt.clock, large=large)
+            intake.check_structure(raw, MAX_OPENERS)
+            body = intake.parse_object(raw)
+            normalized = self.validator.normalize(body, auth, request_id, request.headers)
+            idem = idempotency(auth, request.headers, normalized.payload_digest, CHAT_OPERATION)
+            return auth, normalized, idem
+        finally:
+            # Every exit path, refusals included: a slot that is not released is a slot
+            # nobody gets again.
+            large.release()
 
 
 def install_error_handlers(app, mint_request_id=ids.new_request_id) -> None:
