@@ -93,6 +93,16 @@ SEGMENT_MAX_BYTES = 16 * 1024 * 1024
 # Amortised pruning of the capture list `reap` walks: a process that never pruned it grew
 # by one dead capture per request for ever, which is the leak a bounded sink cannot have.
 CAPTURE_PRUNE_AT = 1_024
+# The serialized envelope bytes this process will hold for records that are queued or with
+# the writer. It exists because the *contract* counter charges the metadata reserve the
+# caller-declared `envelope.metadata_bytes`, which a caller may under-declare (the frozen
+# case `trace_bounds__metadata_exhaustion_drops_with_counters` requires the declared number,
+# and F2.2 will let a real sink charge `max(declared, len(payload))`). Until then this is
+# the honest bound on what the queue can actually cost: 32 MiB is ~80,000 ordinary metadata
+# rows, far past `TRACE_QUEUE_MAX`, while 10,000 under-declared 20 KB envelopes - the
+# reviewer's measurement, 435 MiB resident - stop at 32 MiB. Over the cap is `queue_full`,
+# the same reason the row ceiling uses, because it is the same refusal.
+QUEUED_PAYLOAD_MAX_BYTES = 32 * 1024 * 1024
 
 
 # --------------------------------------------------------------------------------------
@@ -421,6 +431,8 @@ class _Settlement:
                                  - sum(row.content_bytes for row in self.batch))
         sink.metadata_bytes = max(0, sink.metadata_bytes
                                   - sum(row.metadata_bytes for row in self.batch))
+        sink.queued_payload_bytes = max(0, sink.queued_payload_bytes
+                                        - sum(len(row.payload) for row in self.batch))
         if result.fsynced or result.fsync_failed:
             sink._last_fsync = self.now
 
@@ -529,6 +541,8 @@ class SpoolTraceSink(FakeTraceSink):
         self._in_flight: _Settlement | None = None
         # One `_Row` per queued record, in lockstep with the inherited `queued`.
         self._pending: list[_Row] = []
+        # Serialized envelope bytes held for queued *and* in-flight records.
+        self.queued_payload_bytes = 0
         # Counters, not the inherited `appended`/`fsynced` lists: a spool exists so that a
         # written record can leave memory, and those two lists are what keeping every
         # record for ever looks like. They stay empty here; `stats` reads these.
@@ -618,6 +632,13 @@ class SpoolTraceSink(FakeTraceSink):
                     # The reader refuses a frame this long, so writing one would spool
                     # bytes nothing can replay. Writer and reader agree or neither works.
                     reason = TraceLossReason.malformed
+                elif (self.queued_payload_bytes + len(payload)
+                      > QUEUED_PAYLOAD_MAX_BYTES):
+                    # What the queue really costs, as opposed to what the caller declared it
+                    # would. The row ceiling counts rows and the metadata reserve counts a
+                    # caller's number; this counts bytes, so an under-declared 20 KB envelope
+                    # cannot buy 10,000 places in a queue sized for metadata.
+                    reason = TraceLossReason.queue_full
         if reason is not None:
             self.content_bytes = max(0, self.content_bytes - charged)
             if capture is not None:
@@ -627,6 +648,7 @@ class SpoolTraceSink(FakeTraceSink):
         counted = capture.counted if capture is not None else False
         result = super()._enqueue(envelope, charged=charged, capture=capture)
         if result is TraceOfferResult.accepted_in_memory:
+            self.queued_payload_bytes += len(payload)
             self._pending.append(_Row(payload=payload, parts=parts,
                                       content_bytes=content_bytes,
                                       metadata_bytes=envelope.metadata_bytes,
@@ -721,6 +743,7 @@ class SpoolTraceSink(FakeTraceSink):
             "spool_segments": segments,
             "spool_unacked_records": unacked,
             "spool_paused": self.paused,
+            "queued_payload_bytes": self.queued_payload_bytes,
         }
 
     # --- the shipper's interface (T2) --------------------------------------------------
@@ -809,6 +832,7 @@ class SpoolTraceSink(FakeTraceSink):
             self.dropped += lost
             self.loss_reasons[TraceLossReason.shutdown] += lost
             self.content_bytes = self.metadata_bytes = 0
+            self.queued_payload_bytes = 0
         if self._writer is not None:
             # Seal on the way out: an unsynced tail left behind is a record this process
             # appended and never promised, and sealing fsyncs before it closes.
@@ -855,6 +879,7 @@ class SpoolTraceSink(FakeTraceSink):
                 capture.parts.clear()
         self.captures.clear()
         self.content_bytes = self.metadata_bytes = 0
+        self.queued_payload_bytes = 0
         if lost:
             self.loss_reasons[TraceLossReason.shutdown] += lost
         return lost

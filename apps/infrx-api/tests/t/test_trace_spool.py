@@ -997,6 +997,48 @@ def test_a_cancelling_flusher_cannot_take_a_second_batch():
     asyncio.run(scenario())
 
 
+def test_the_queue_is_bounded_in_bytes_as_well_as_in_rows():
+    """Ruling 5 (interim). The metadata reserve charges what the *caller declared*, because
+    the frozen conformance case requires that number, and a caller can declare zero for a
+    20 KB envelope. The row ceiling then lets 10,000 of them into memory: the reviewer
+    measured 435 MiB resident for records that claimed to cost nothing.
+
+    So the queue also has a byte bound on the serialized payloads it is really holding, over
+    which a record is `queue_full` - the same refusal the row ceiling makes. The oracle is
+    the byte counter, not resident memory.
+    """
+    async def scenario():
+        block, entered = threading.Event(), threading.Event()
+        spool = sink(io=DrillIO(block=block, entered=entered))
+        cap = traces.spool.QUEUED_PAYLOAD_MAX_BYTES
+        # 20 KB of envelope declared as costing nothing at all
+        big = "m" * 20_000
+        accepted = 0
+        for index in range(4_000):
+            envelope = b.trace(request_id(index), mode=TraceMode.minimal, content_bytes=0,
+                               metadata_bytes=0).model_copy(update={"model_revision": big})
+            if await spool.offer(envelope) is TraceOfferResult.accepted_in_memory:
+                accepted += 1
+            if index == 0:                       # start the writer, then stall it
+                asyncio.create_task(spool.flush(spool.clock.now()))
+                await asyncio.to_thread(entered.wait, 5)
+        stats = await spool.stats()
+        assert stats["queued_payload_bytes"] <= cap, stats["queued_payload_bytes"]
+        assert stats["in_memory"] < DEFAULTS.trace_queue_max, \
+            "the row ceiling was reached before the byte ceiling"
+        assert stats["loss_reasons"]["queue_full"] == 4_000 - accepted
+        assert stats["loss_reasons"].get("metadata_budget") is None
+        # in flight plus queued, never more than two capfuls
+        assert accepted * 20_000 <= 2 * cap + 20_000
+        block.set()
+        await spool.drain()
+        assert (await spool.stats())["queued_payload_bytes"] < cap, "the cap never released"
+        print(f"\nqueued payload bound: {accepted:,} of 4,000 under-declared 20 KB "
+              f"envelopes accepted against a {cap:,} B cap")
+        await spool.close()
+    asyncio.run(scenario())
+
+
 def test_a_record_id_is_never_reused_after_an_ack_and_a_restart():
     """B4(a). The steady state is drain then deploy: the shipper acks everything and the
     process restarts. With names derived from the files present, the next process reissued
