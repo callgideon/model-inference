@@ -683,3 +683,20 @@ containers with `still_named_ours_but_not_ours: []`.
   output parsing, the server's reliance on a CLI default) and each is fixed with the case that
   found it. Test files plus three one-line code fixes; no behaviour was added. All containers,
   volumes, networks, processes and temp files created during this pass were removed.
+
+### Round-3 addendum: proving the leak no longer leaves the leak
+
+Checking `$TMPDIR` after the r3 mutation run found 16 files. `e2m54` reintroduces the leaked
+server log on purpose, so **every** server the mutated copy starts leaves one, not only the one
+the guarded case watches. Two changes, both scoped to our own prefix: the M43 case redirects
+`tempfile.tempdir` to a directory it owns (so the assertion is about the directory the server
+really writes into, and a reintroduced leak vanishes with the case), and `run_one` snapshots
+`$TMPDIR/infrx-e2-*` around each mutant and removes what appeared - never what was already
+there, and never the state file.
+
+Final run at `7516afc` (21:45:55Z -> 21:48:28Z, exit **0**, all stages): 39 RLS cases,
+8 engine conformance cases, `tests/integration` **88 passed**, `make api-test` **670**,
+`make console-test` **# pass 131 / # fail 0**, `make bench-test` **40**, mutants
+**58 / 56 killed / 2 controls survived / 0 problems**, canary named in both runners, teardown
+clean. Without the stack: **67 passed, 21 skipped**, each skip naming `run.py`. Afterwards: no
+`infrx-e2` container, volume or network, no fake vLLM process, no `infrx-e2-*` path in `$TMPDIR`.
