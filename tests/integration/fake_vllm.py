@@ -40,6 +40,7 @@ import json
 import os
 import signal
 import subprocess
+import tempfile
 import sys
 import time
 import uuid
@@ -286,20 +287,35 @@ class FakeVllmServer:
     def start(self, timeout: float = 30.0) -> "FakeVllmServer":
         argv = [sys.executable, str(Path(__file__).resolve()), "--port", str(self.port),
                 "--fault", self.fault, "--stall-real-s", str(self.stall_real_s)]
-        self.process = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
-                                        stderr=subprocess.DEVNULL,
+        # The child's stderr goes to a temporary file, not to DEVNULL: a server that dies on
+        # startup (a busy port is the obvious one) otherwise reports only its exit status,
+        # and "exited 3" with no reason costs whoever reads it an afternoon.
+        self._log = tempfile.NamedTemporaryFile(prefix="infrx-e2-fake-vllm-", suffix=".log",
+                                                delete=False)
+        self.process = subprocess.Popen(argv, stdout=self._log, stderr=subprocess.STDOUT,
                                         env={**os.environ, "PYTHONUNBUFFERED": "1"})
         import httpx
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             if self.process.poll() is not None:
-                raise RuntimeError(f"fake vLLM exited {self.process.returncode} during startup")
+                raise RuntimeError(f"fake vLLM exited {self.process.returncode} during startup "
+                                   f"on port {self.port}: {self._tail()}")
             try:
                 if httpx.get(f"{self.base_url}/health", timeout=1.0).status_code == 200:
                     return self
             except Exception:                        # noqa: BLE001 - not listening yet
                 time.sleep(0.05)
-        raise RuntimeError(f"fake vLLM did not answer /health within {timeout}s")
+        raise RuntimeError(f"fake vLLM did not answer /health within {timeout}s "
+                           f"on port {self.port}: {self._tail()}")
+
+    def _tail(self, lines: int = 6) -> str:
+        log = getattr(self, "_log", None)
+        if log is None:
+            return "(no log)"
+        try:
+            return " | ".join(Path(log.name).read_text().strip().splitlines()[-lines:])
+        except OSError:
+            return "(log unreadable)"
 
     def control(self, **payload) -> dict:
         import httpx
@@ -319,15 +335,19 @@ class FakeVllmServer:
         return self.process is not None and self.process.poll() is None
 
     def stop(self) -> None:
-        if self.process is None:
-            return
-        self.process.terminate()
-        try:
-            self.process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            self.process.kill()
-            self.process.wait(timeout=10)
-        self.process = None
+        if self.process is not None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=10)
+            self.process = None
+        log = getattr(self, "_log", None)
+        if log is not None:
+            log.close()
+            Path(log.name).unlink(missing_ok=True)
+            self._log = None
 
     def __enter__(self) -> "FakeVllmServer":
         return self.start()

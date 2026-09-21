@@ -102,14 +102,20 @@ def counts(output: str) -> dict[str, int]:
     return found
 
 
-def shell(argv: list[str], *, cwd: Path, env: dict | None = None, timeout: float = 1800.0):
+def shell(argv: list[str], *, cwd: Path, env: dict | None = None, timeout: float = 1800.0,
+          needle: str | None = None):
+    """`needle` is searched in the WHOLE output, not the tail: node --test prints a failure's
+    detail long before its summary block, so a tail-only search reported "detected but not
+    named" for a failure that was named perfectly well."""
     started = time.monotonic()
     result = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True,
                             timeout=timeout, env={**os.environ, **(env or {})})
+    output = result.stdout + result.stderr
     return {"argv": " ".join(argv), "cwd": str(cwd.relative_to(harness.REPO_ROOT) or "."),
             "exit": result.returncode, "seconds": round(time.monotonic() - started, 1),
-            "counts": counts(result.stdout + result.stderr),
-            "tail": "\n".join((result.stdout + result.stderr).strip().splitlines()[-12:])}
+            "counts": counts(output),
+            "named": None if needle is None else (needle.lower() in output.lower()),
+            "tail": "\n".join(output.strip().splitlines()[-12:])}
 
 
 # --------------------------------------------------------------------- stages
@@ -129,6 +135,16 @@ def preflight(report: Report, *, want_services: bool) -> bool:
                    f"{foreign} - refusing to touch them")
         return False
     missing = harness.images_present()
+    # Whatever a previous run left is ours and goes first: "provisions FRESH services" is the
+    # acceptance criterion, and a leftover stack would otherwise look like a busy port below.
+    if harness.owned_containers():
+        harness.down()
+    busy = harness.busy_ports()
+    if busy:
+        report.add("preflight", FAIL,
+                   f"these task-local ports are already in use: {busy} - stop whatever holds "
+                   f"them (a previous `--keep` run, or `docker compose -p infrx-e2 down -v`)")
+        return False
     report.add("preflight", PASS, {"docker": why, "images": harness.compose_images(),
                                    "not_yet_pulled": missing,
                                    "ports": harness.PORTS})
@@ -257,20 +273,22 @@ def canary(report: Report) -> None:
     runs = {
         "python": shell([sys.executable, "-m", "pytest", "-q", "tests/integration",
                          "-p", "no:cacheprovider", "-k", "canary"],
-                        cwd=harness.REPO_ROOT, env={"INFRX_E2_CANARY": "fail"}),
+                        cwd=harness.REPO_ROOT, env={"INFRX_E2_CANARY": "fail"},
+                        needle="E2 canary"),
         "console": shell(["pnpm", "test"], cwd=harness.REPO_ROOT / "apps" / "app",
-                         env={"INFRX_E2_CANARY": "fail"}),
+                         env={"INFRX_E2_CANARY": "fail"}, needle="E2 canary"),
     }
     problems = []
     for half, run in runs.items():
         if run["exit"] == 0:
             problems.append(f"{half}: the canary failure was NOT detected (exit 0)")
-        elif "canary" not in run["tail"].lower():
+        elif not run["named"]:
             problems.append(f"{half}: exit {run['exit']} but no canary named in the output")
     report.add("canary", FAIL if problems else PASS,
                {"expected": "both runners fail and name the canary",
                 "problems": problems or None,
-                "runs": {half: {"exit": run["exit"], "counts": run["counts"]}
+                "runs": {half: {"exit": run["exit"], "counts": run["counts"],
+                                "named": run["named"]}
                          for half, run in runs.items()}}, runs=runs)
 
 

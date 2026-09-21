@@ -185,6 +185,22 @@ def foreign_containers() -> list[str]:
                   if name.startswith(PREFIX) and name not in ours)
 
 
+def busy_ports() -> dict[str, int]:
+    """The task-local ports something else is already listening on.
+
+    Checked before provisioning: a port in use is the one failure that otherwise shows up as
+    an unexplained exit status from whatever tried to bind it.
+    """
+    import socket
+    busy = {}
+    for service, port in PORTS.items():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.settimeout(0.5)
+            if probe.connect_ex(("127.0.0.1", port)) == 0:
+                busy[service] = port
+    return busy
+
+
 def assert_ours(container: str) -> str:
     """Refuse to touch anything outside the namespace. Two gates, not one: the name
     must carry our prefix AND docker must attribute it to our compose project."""

@@ -35,6 +35,11 @@ Useful flags:
 `make integration` would be the natural spelling and is an **integration request**: the root
 `Makefile` is coordinator-owned.
 
+Preflight removes whatever a previous run of *this* project left (fresh services are the
+acceptance criterion), then refuses to continue if any task-local port is still held by
+something else, naming the ports — a busy port otherwise surfaces as an unexplained exit
+status from whichever process tried to bind it.
+
 Other entry points, all self-contained:
 
 ```bash
