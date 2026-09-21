@@ -144,6 +144,9 @@ test("U1-T03 the query carries only contract fields, and the service accepts it"
   }
   assert.equal(scope.cursor, undefined, "a summary is of the whole scope, never of one page");
   assert.equal(scope.limit, undefined);
+  assert.equal(scope.key_id, "key-x", "the key filter reaches the service");
+  assert.equal(scope.model, "model-y", "and so does the model filter");
+  assert.equal(usageScopeQuery({ ...filters, keyId: null, model: null }, NOW).key_id, undefined);
   assert.equal(page.cursor, "c1");
   assert.equal(page.limit, PAGE_SIZE);
   assert.equal(page.to, "2026-09-20T12:00:00.000Z", "`to` is the injected clock, never wall time");
@@ -257,6 +260,13 @@ test("U1-T06 the state machine distinguishes loading, empty, ready and each reco
   assert.equal(state.recovery, "retry", "a 503 is worth retrying");
   assert.match(state.message, /unavailable/i);
 
+  // The failure drill: the retry the page offers must actually work, and the failed read must have
+  // left nothing behind. An injected failure fires before anything is read or written.
+  const retried = await fake.usage(fake.sessions.owner, usagePageQuery(WIDE, NOW));
+  assert.ok(retried.ok, "the retry succeeds");
+  assert.ok(ready.ok);
+  assert.deepEqual(retried.value, ready.value, "and returns exactly what the failed call would have");
+
   assert.equal(recoveryFor("invalid_cursor"), "restart");
   assert.equal(recoveryFor("rate_limited"), "retry");
   assert.equal(recoveryFor("internal_error"), "retry");
@@ -323,6 +333,17 @@ test("U1-T08 unreported usage shows no token count and says so instead of estima
   assert.equal(view.prompt, "—");
   assert.equal(view.completion, "—");
   assert.match(view.note ?? "", /not reported/i);
+
+  // Counts the service does not vouch for are not counts. A row may carry numbers *and* say the
+  // usage is unknown — the certainty is what decides, not whether the fields happen to be null.
+  const reported = tokensView({
+    usage_certainty: "unknown",
+    prompt_tokens: 4096,
+    completion_tokens: 128,
+  });
+  assert.equal(reported.prompt, "—", "unknown usage shows no count even when one was reported");
+  assert.equal(reported.completion, "—");
+  assert.match(reported.note ?? "", /not reported/i);
 
   const settled = rows.get("settled")!;
   assert.equal(settled.usage_certainty, "authoritative");
