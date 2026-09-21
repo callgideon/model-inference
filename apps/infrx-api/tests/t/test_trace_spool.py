@@ -1371,6 +1371,49 @@ def test_a_closed_sink_refuses_and_starts_no_second_writer():
     asyncio.run(scenario())
 
 
+def test_close_admits_nothing_once_it_has_started_and_joins_off_the_loop():
+    """Round 2. `_closed` was set only *after* the await on the seal, so a `finish` during
+    that await was answered `accepted_in_memory` and a concurrent flush opened a segment that
+    close then left unsealed, descriptor open, its record neither fsynced nor counted. And
+    `writer.shutdown(wait=True)` ran on the event loop: a 4,517 ms stall with a batch queued
+    on a slow disk.
+
+    The oracle for the join is the thread name again - a join is a filesystem-shaped wait, so
+    it belongs off the loop like every syscall.
+    """
+    async def scenario():
+        block, entered = threading.Event(), threading.Event()
+        io = DrillIO(block=block, entered=entered)
+        spool = sink(io=io)
+        await capture_one(spool, ID_A, b"the batch that is already out")
+        flushing = asyncio.create_task(spool.flush(spool.clock.now()))
+        await asyncio.to_thread(entered.wait, 5)
+        closing = asyncio.create_task(spool.close())
+        await asyncio.sleep(0)                   # close starts and is now inside its awaits
+        # the sink is shut from the first line of close, not from the last
+        late = await capture_one(spool, ID_B, b"during the close")
+        assert late is TraceOfferResult.dropped, "close admitted a record while closing"
+        assert (await spool.flush(spool.clock.now()))["in_memory"] == 0
+        block.set()
+        await closing
+        try:
+            await flushing
+        except (asyncio.CancelledError, RuntimeError):
+            pass
+        stats = await spool.stats()
+        assert stats["in_memory"] == 0
+        assert stats["loss_reasons"]["shutdown"] >= 1
+        # every segment sealed, nothing left open, and what was appended was promised
+        assert all(view.sealed for view in spool.segments()), \
+            "close left a segment open behind it"
+        assert stats["fsynced"] == stats["appended"], (stats["fsynced"], stats["appended"])
+        assert len(recover(spool.spool_dir).records) == stats["appended"]
+        offenders = [(op, thread) for op, thread in io.threads
+                     if not thread.startswith("infrx-trace-spool")]
+        assert offenders == [], f"filesystem calls off the writer thread: {offenders}"
+    asyncio.run(scenario())
+
+
 def test_a_torn_tail_reports_where_it_stopped():
     """T2 has to tell a benign torn tail from mid-segment corruption: one flipped bit can
     cost a whole segment of *fsynced* records, and a scan that only says "torn" cannot be

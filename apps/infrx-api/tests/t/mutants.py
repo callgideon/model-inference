@@ -82,6 +82,7 @@ DIR_FSYNC = "test_a_segment_and_its_deletion_are_both_committed_to_the_directory
 PARTIAL = "test_bytes_a_failed_write_left_behind_still_count_against_the_cap"
 ADOPTED = "test_an_adopted_segment_says_its_counts_are_unknown"
 UNREAD = "test_an_unreadable_segment_reports_every_byte_as_unread"
+CLOSE_RACE = "test_close_admits_nothing_once_it_has_started_and_joins_off_the_loop"
 
 
 @dataclass(frozen=True)
@@ -386,6 +387,16 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("an_adopted_segment_is_not_flagged", "an adopted segment says so (B8/N16)",
        "                                           sealed=True, adopted=True))",
        "                                           sealed=True, adopted=False))", ADOPTED),
+    _m("close_marks_the_sink_closed_last", "nothing enters once close has started",
+       "        self._closed = True\n        writer, self._writer = self._writer, None",
+       "        writer, self._writer = self._writer, None", CLOSE_RACE),
+    # No mutant for "the writer join runs off the loop". It is the right shape - a thread
+    # join is not the event loop's work, and round 2 measured 4,517 ms of stall through it -
+    # but with the seal awaited *through the executor* first, the join has nothing left to
+    # wait for: the writer is idle by then, so moving it back onto the loop changes no
+    # observable behaviour. An oracle would have to be a stopwatch, which is the flake R40
+    # would rather not have. The `close` race itself is killed by
+    # `close_marks_the_sink_closed_last`.
     _m("an_unreadable_segment_reports_no_unread_bytes", "unreadable means all unread (B8/N19)",
        "        scan.unreadable += 1\n        scan.unread_bytes += len(data)\n"
        "        return scan\n    offset = HEADER.size",

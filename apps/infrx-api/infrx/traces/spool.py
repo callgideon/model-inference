@@ -830,6 +830,15 @@ class SpoolTraceSink(FakeTraceSink):
         `shutdown` rather than accepted into a process that has no writer left, and `flush`
         no longer starts one.
         """
+        if self._closed:
+            return 0
+        # **First**, before any await: round 2 found that a `finish` during the seal's await
+        # was answered `accepted_in_memory`, and a flush during it opened a new segment that
+        # close then left unsealed with its descriptor open and its record neither fsynced
+        # nor counted. Nothing may enter after this line.
+        self._closed = True
+        writer, self._writer = self._writer, None
+        in_flight, self._in_flight = self._in_flight, None
         lost = 0
         if drop_queued and self.queued:
             lost = len(self.queued)
@@ -839,14 +848,27 @@ class SpoolTraceSink(FakeTraceSink):
             self.loss_reasons[TraceLossReason.shutdown] += lost
             self.content_bytes = self.metadata_bytes = 0
             self.queued_payload_bytes = 0
-        if self._writer is not None:
+        if writer is not None:
+            loop = asyncio.get_running_loop()
             # Seal on the way out: an unsynced tail left behind is a record this process
-            # appended and never promised, and sealing fsyncs before it closes.
-            _name, result = await self._run(self._seal_active)
-            self._apply(result)
-            writer, self._writer = self._writer, None
-            writer.shutdown(wait=True)
-        self._closed = True
+            # appended and never promised, and sealing fsyncs before it closes. The batch
+            # that was in flight is already ahead of this on the one writer thread, so it
+            # settles first; then the join, which is a thread join and belongs nowhere near
+            # the event loop (measured: 4,517 ms with a batch queued on a slow disk).
+            sealing = loop.run_in_executor(writer, self._seal_active)
+            try:
+                _name, result = await asyncio.shield(sealing)
+            except BaseException:
+                result = None
+            if result is not None:
+                self._apply(result)
+            await loop.run_in_executor(None, writer.shutdown, True)
+            if in_flight is not None and not in_flight.done:
+                # The writer is joined, so its future is complete; the callback may still be
+                # queued on the loop. Settling it here is idempotent (`_Settlement.done`).
+                in_flight.settle(_WriteResult(
+                    dropped=[(TraceLossReason.shutdown, row.counted)
+                             for row in in_flight.batch]))
         if self._dir_lock is not None:
             self.io.unlock_dir(self._dir_lock)
             self._dir_lock = None
