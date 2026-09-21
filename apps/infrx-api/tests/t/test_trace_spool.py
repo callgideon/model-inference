@@ -436,10 +436,10 @@ def test_rotation_seals_by_size_and_keeps_every_record():
         # one that cannot, two more that fit.
         spool = sink(segment_max_bytes=2_048)
         spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
-        for index in range(5):
-            await capture_one(spool, request_id(index), b"y" * 200)
-        await capture_one(spool, request_id(5), b"Y" * 4_000)      # larger than a segment
-        for index in range(6, 8):
+        # First, so it meets an empty segment: a record too big to fit anywhere has to be
+        # written into the fresh segment rather than rotating past it for ever.
+        await capture_one(spool, request_id(0), b"Y" * 4_000)      # larger than a segment
+        for index in range(1, 8):
             await capture_one(spool, request_id(index), b"y" * 200)
         await spool.flush(spool.clock.now())
         views = spool.segments()

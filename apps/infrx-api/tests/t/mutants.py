@@ -63,6 +63,7 @@ WRITER_BUG = "test_a_writer_error_that_is_not_an_oserror_still_settles_the_batch
 ONE_FLUSH = "test_only_one_flush_is_ever_in_flight"
 ID_REUSE = "test_a_record_id_is_never_reused_after_an_ack_and_a_restart"
 BITFLIP = "test_a_flipped_bit_in_a_frame_header_is_the_tail_never_a_wrong_identity"
+SWAPPED = "test_a_frame_whose_lengths_were_swapped_is_the_tail"
 ONE_LOSS = "test_one_capture_counts_one_loss_even_when_the_writer_refuses_it"
 PARTS = "test_retained_content_is_released_with_its_charge"
 METADATA = "test_the_metadata_reserve_is_released_as_rows_are_written"
@@ -101,7 +102,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("the_checksum_ignores_the_lengths", "a frame's lengths are inside its checksum",
        "    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes))\n"
        "    crc = binascii.crc32(payload, crc)",
-       "    crc = binascii.crc32(payload)", BITFLIP),
+       "    crc = binascii.crc32(payload)", SWAPPED),
     _m("the_reader_numbers_records_by_hand", "a record's id is its verified position",
        "        position, index = index, index + 1", "        position, index = 0, index + 1",
        BITFLIP),
@@ -282,12 +283,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "            if not batch and not self.paused and not (fsync_due and self._unsynced()):",
        "            if not batch:", IDLE_FSYNC),
     _m("rotation_ignores_the_incoming_record", "a segment's size bound includes the record (R06)",
-       "            if active.written + need <= self.segment_max_bytes or active.records == 0:",
-       "            if active.written <= self.segment_max_bytes or active.records == 0:",
-       ROTATE),
-    _m("an_oversize_record_rotates_for_ever", "a record too big for a segment still lands (R07)",
-       "            if active.written + need <= self.segment_max_bytes or active.records == 0:",
-       "            if active.written + need <= self.segment_max_bytes:", ROTATE),
+       "            if active.written + need <= self.segment_max_bytes:",
+       "            if active.written <= self.segment_max_bytes:", ROTATE),
+    # No mutant for "a record too big for a segment still lands": the branch that used to
+    # say so (`or active.records == 0`) was unreachable and is gone. A fresh segment is
+    # returned straight to the record that opened it, so the active segment is never empty
+    # at the rotation check - which is exactly why nothing could kill a mutant of it.
     _m("the_rest_of_the_batch_is_written_anyway", "a broken handle writes nothing more (R19)",
        "            if broken:\n                result.dropped.append((TraceLossReason.disk_error, row.counted))\n"
        "                continue",

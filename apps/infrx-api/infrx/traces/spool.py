@@ -951,9 +951,14 @@ class SpoolTraceSink(FakeTraceSink):
         with self._lock:
             active = self._segments[-1] if self._segments else None
         if active is not None and not active.sealed and active.fd is not None:
-            if active.written + need <= self.segment_max_bytes or active.records == 0:
+            if active.written + need <= self.segment_max_bytes:
                 return active
             self._seal(active, result)
+        # A record larger than the bound lands in a *fresh* segment on its own. There is no
+        # "the active segment is empty, take it anyway" case: a freshly opened segment is
+        # returned straight to the record that opened it, so it is never the active segment
+        # at this check. The condition that used to say so was unreachable, which is why no
+        # test could kill a mutant of it (R40).
         return self._open_segment()
 
     def _open_segment(self) -> _Segment:
