@@ -110,10 +110,12 @@ def sink(limits=None, *, io: SpoolIO | None = None, clock: FakeClock | None = No
                           io=io if io is not None else DrillIO(), **kw)
 
 
-# The suites build a fresh sink per case and the lattice one per sequence - tens of
-# thousands of them - and each writes through its own single writer thread. Nothing in the
-# harness contract closes an adapter, so the factory retires the oldest: bounded live
-# threads without waiting for a cycle collection to reach the sink.
+# The suites build a fresh sink per case and the lattice one per sequence - a quarter of a
+# million of them at length 4 - and each has its own writer thread and an open segment.
+# Nothing in the harness contract closes an adapter, and a dropped sink's descriptor is an
+# integer no garbage collection closes, so the factory retires the oldest. Measured before
+# this closed the descriptors: the length-2 lattice alone leaked 132, which on a host with
+# the usual 1024 limit is `EMFILE` somewhere inside the length-3 run.
 _LIVE: deque = deque()
 
 
@@ -124,6 +126,8 @@ def _retire(spool: SpoolTraceSink) -> SpoolTraceSink:
         writer, old._writer = old._writer, None
         if writer is not None:
             writer.shutdown(wait=False)
+        for segment in old._segments:
+            old._close_segment(segment)
     return spool
 
 

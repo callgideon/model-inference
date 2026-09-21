@@ -323,6 +323,14 @@ shipped it.
   because the check and the increment are not one atomic step in the inherited
   accounting. Documented in the module; the fix, if a threaded producer ever appears, is
   a lock inside the accounting, which is the coordinator's file.
+- **Descriptor hygiene.** A sink dropped without `close()` keeps its active segment's
+  descriptor open, because a file descriptor is an integer no garbage collection closes.
+  With one sink per process that is a non-issue, and `close()`/`crash()`/`ack` all close
+  properly; the test harness retires sinks explicitly because the lattice builds a quarter
+  of a million of them. Measured before that was added: the length-2 lattice alone leaked
+  132 descriptors, i.e. the length-3 default run would have hit `EMFILE` on a host with the
+  usual 1024 limit (this host allows 1,048,576, which is why the first full run passed).
+  After the fix the same measurement is `open fds 4 -> 4`.
 - **The metadata reserve is accounted, not physically separate.** `metadata_bytes` is
   charged against `TRACE_METADATA_RESERVE_BYTES` exactly as the specification has it; no
   separate allocator exists.
