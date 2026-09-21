@@ -42,13 +42,17 @@ class Mutant:
     scenario: str            # fresh | upgrade | volume | prodlike
     check: str               # the check that must fail
     why: str                 # what would be wrong in production
+    #: How many places this ONE conceptual edit touches (the three console RPCs share a
+    #: tenant guard). Still a single edit; the count is stated so a stale target is
+    #: still an error rather than a silent partial mutation.
+    occurrences: int = 1
 
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- a dropped REVOKE / a widened grant ---------------------------------
-    Mutant("organizations_update_not_revoked", ROLES,
-           "revoke update on public.organizations from anon, authenticated;",
-           "-- mutant: the table-level UPDATE grant stays",
+    Mutant("organizations_update_not_narrowed", ROLES,
+           "grant update (name, slug) on public.organizations to authenticated;",
+           "grant update on public.organizations to authenticated;",
            "fresh", "role_matrix",
            "an owner clears their own suspension through the existing update policy"),
     Mutant("rpc_granted_to_authenticated", ROLES,
@@ -79,7 +83,10 @@ MUTANTS: tuple[Mutant, ...] = (
     # surviving mutant, which is why it is not in this list. The invariant is still
     # claimed by the matrix, so the mutant edits the file that actually holds it. The
     # runner works on a temporary copy, so 0001 is never modified in the checkout.
-    Mutant("profiles_operator_column_grant_widened", "0001_init.sql",
+    # r2: 0004 now revokes and re-grants `public.profiles` itself, so the killable edit
+    # is 0004's (0001's grant no longer decides anything - which is the point of
+    # enumerating the whole surface in one file).
+    Mutant("profiles_operator_column_grant_widened", ROLES,
            "grant update (full_name, avatar_url) on public.profiles to authenticated;",
            "grant update on public.profiles to authenticated;",
            "fresh", "role_matrix",
@@ -115,9 +122,14 @@ MUTANTS: tuple[Mutant, ...] = (
            "-- mutant: no wallet for a new organization",
            "fresh", "wallets",
            "a new organization has no wallet row, so its first admission cannot lock one"),
+    # B10: the previous form of this mutant made 0003 fail to apply (the pilot-regime
+    # check refuses a row with no outcome), and the runner scored that as a kill. The
+    # reviewer's form applies cleanly and is killed by the check that claims it.
     Mutant("historical_usage_enters_the_settlement_regime", SCHEMA,
-           "add column if not exists settlement_regime text not null default 'legacy',",
-           "add column if not exists settlement_regime text not null default 'pilot',",
+           "-- r2: `usage_events_pilot_settlement_idx (id, settlement_version)` was",
+           "update public.usage_events set settlement_regime = 'pilot', "
+           "outcome = 'completed', settlement_state = 'settled', settlement_version = 1;\n"
+           "-- r2: `usage_events_pilot_settlement_idx (id, settlement_version)` was",
            "upgrade", "upgrade_preserved",
            "reconciliation replays historical usage into new debits"),
     Mutant("ledger_history_is_editable", SCHEMA,
@@ -206,15 +218,6 @@ MUTANTS: tuple[Mutant, ...] = (
            "from infrx.audit_entries a;",
            "fresh", "console_read_surface",
            "a customer reads the operator audit trail, principals and all (R34)"),
-    Mutant("ledger_actor_is_never_masked", CONSOLE,
-           "       case when l.by_operator and not (public.is_operator() "
-           "or public.is_service_client())\n"
-           "            then 'platform'\n"
-           "            else coalesce(l.operator_principal, p.email, l.created_by::text) "
-           "end as actor,",
-           "       coalesce(l.operator_principal, p.email, l.created_by::text) as actor,",
-           "fresh", "console_read_surface",
-           "a customer session reads the operator's identity off a grant (R41/R50)"),
     Mutant("calibration_labels_leak_into_feedback", CONSOLE,
            "where not f.calibration_set\n  and (public.is_org_member(f.org_id)",
            "where (public.is_org_member(f.org_id)",
@@ -227,15 +230,17 @@ MUTANTS: tuple[Mutant, ...] = (
            "or public.is_service_client();",
            "fresh", "console_read_surface",
            "judge runs and their costs are owner and operator only (R13)"),
-    Mutant("wallet_summary_answers_for_any_organization", CONSOLE,
+    Mutant("console_rpcs_answer_for_any_organization", CONSOLE,
            "  if not (public.is_org_member(p_org) or public.is_operator()\n"
            "          or public.is_service_client()) then",
            "  if false then",
            "fresh", "console_read_surface",
-           "org_wallet_summary reports another tenant's balance to any signed-in user"),
-    Mutant("api_keys_update_not_narrowed", CONSOLE,
-           "revoke update on public.api_keys from anon, authenticated;",
-           "-- mutant: the broad owner UPDATE grant stays",
+           "the wallet summary and both usage aggregates report another tenant's "
+           "figures to any signed-in user",
+           occurrences=3),
+    Mutant("api_keys_update_not_narrowed", ROLES,
+           "grant update (name, revoked_at) on public.api_keys to authenticated;",
+           "grant update on public.api_keys to authenticated;",
            "fresh", "role_matrix",
            "an owner writes `trace_mode` directly, so a consent change leaves no "
            "consent_history row"),
@@ -254,6 +259,164 @@ MUTANTS: tuple[Mutant, ...] = (
            "volume", "index_plans",
            "the lease reaper scans every attempt ever made"),
 
+    # --- the ten the reviewer's corpus left alive at 9d9857b (B9) -------------
+    Mutant("views_writable_by_browser_roles", CONSOLE,
+           "revoke all on public.wallets, public.console_ledger, public.console_usage,\n"
+           "               public.org_settings, public.consent_history, public.feedback,\n"
+           "               public.calibration_labels, public.console_judge_runs,\n"
+           "               public.console_admin_orgs, public.operator_audit\n"
+           "  from public, anon, authenticated;\n",
+           "",
+           "fresh", "privileges",
+           "an owner runs `update public.wallets set ledger_total = 1000000` through a "
+           "simple updatable view over infrx - the whole money invariant"),
+    Mutant("consent_view_actor_unmasked", CONSOLE,
+           "       public.visible_principal(c.org_id, c.actor_principal) as changed_by,",
+           "       c.actor_principal as changed_by,",
+           "fresh", "console_read_surface",
+           "a customer reads the operator who changed their trace consent (R41)"),
+    Mutant("feedback_view_principal_unmasked", CONSOLE,
+           "       public.visible_principal(f.org_id, f.author_principal) as author_principal,",
+           "       f.author_principal,",
+           "fresh", "console_read_surface",
+           "a customer reads the operator principal off a feedback entry (R41)"),
+    Mutant("ledger_actor_masking_keys_on_the_marker", CONSOLE,
+           "       public.visible_principal(l.org_id, l.created_by::text,\n"
+           "                                coalesce(p.email, l.created_by::text)) as actor,",
+           "       case when l.by_operator then 'platform'\n"
+           "            else coalesce(p.email, l.created_by::text) end as actor,",
+           "fresh", "console_read_surface",
+           "the masking fails open again: `by_operator` defaults false for all history "
+           "and the deployed console never sets it"),
+    Mutant("job_org_mutable", SCHEMA,
+           "  if new.request_id is distinct from old.request_id\n"
+           "     or new.org_id is distinct from old.org_id\n",
+           "  if new.request_id is distinct from old.request_id\n",
+           "fresh", "row_constraints",
+           "a job can be moved to another tenant after admission"),
+    Mutant("consent_deletable", SCHEMA,
+           "create trigger consent_history_guard before update or delete on infrx.consent_history",
+           "create trigger consent_history_guard before update on infrx.consent_history",
+           "fresh", "row_constraints",
+           "consent history stops being an audit trail"),
+    Mutant("attempts_not_keyed_by_kind", SCHEMA,
+           "  primary key (job_id, kind, generation),",
+           "  primary key (job_id, generation),",
+           "fresh", "row_constraints",
+           "R46's two attempt sequences collide: a preparation lease at generation 1 "
+           "blocks the inference attempt at generation 1"),
+    Mutant("idempotency_key_ignores_operation", SCHEMA,
+           "  primary key (org_id, operation, key),",
+           "  primary key (org_id, key),",
+           "fresh", "row_constraints",
+           "one idempotency key cannot be reused across operations, so a feedback "
+           "submit collides with a chat completion"),
+    Mutant("chunks_not_keyed_by_generation", SCHEMA,
+           "  primary key (job_id, generation, sequence),",
+           "  primary key (job_id, sequence),",
+           "fresh", "row_constraints",
+           "a requeued attempt cannot write sequence 1 again, so a replay loses events"),
+    Mutant("no_active_holds_by_org_index", SCHEMA,
+           "create index credit_holds_org_active_idx on infrx.credit_holds (org_id)\n"
+           "  where state in ('held','unknown');",
+           "-- mutant: no active-holds index",
+           "volume", "index_plans",
+           "06's org/active hold path scans every hold ever taken"),
+    Mutant("infrx_usage_to_authenticated", ROLES,
+           "grant usage on schema infrx to service_role;",
+           "grant usage on schema infrx to service_role, authenticated;",
+           "fresh", "privileges",
+           "the pilot schema becomes reachable from a browser session"),
+    Mutant("clock_granted_to_authenticated", ROLES,
+           "revoke all on function infrx.now() from public, anon, authenticated;\n"
+           "grant execute on function infrx.now() to service_role;",
+           "grant execute on function infrx.now() to service_role, authenticated;",
+           "fresh", "privileges",
+           "a browser session can read the store's clock"),
+
+    # --- r2: the routes the review found ---------------------------------------
+    Mutant("ledger_keeps_the_operator_principal", SCHEMA,
+           "  add column if not exists by_operator boolean not null default false,\n"
+           "  add column if not exists idempotency_key text;",
+           "  add column if not exists by_operator boolean not null default false,\n"
+           "  add column if not exists operator_principal text,\n"
+           "  add column if not exists idempotency_key text;",
+           "fresh", "no_operator_identity",
+           "an operator's address sits in a column every member may SELECT"),
+    Mutant("truncate_guard_dropped", SCHEMA,
+           "    execute format('create trigger %I before truncate on %s for each statement '",
+           "    continue; execute format('create trigger %I before truncate on %s for each statement '",
+           "fresh", "truncate_refused",
+           "`truncate public.credit_ledger cascade` erases the ledger for anyone who "
+           "still holds the privilege"),
+    Mutant("api_keys_insert_is_table_wide", ROLES,
+           "grant insert (org_id, created_by, name, prefix, key_hash) on public.api_keys\n"
+           "  to authenticated;",
+           "grant insert on public.api_keys to authenticated;",
+           "fresh", "role_matrix",
+           "an owner sets `trace_mode` - a consent decision - by inserting a key"),
+    Mutant("views_without_security_barrier", CONSOLE,
+           "create or replace view public.wallets with (security_barrier = true) as",
+           "create or replace view public.wallets as",
+           "fresh", "leaky_function",
+           "a cheap user function in the WHERE clause reads every tenant's balance"),
+    Mutant("wallet_total_not_moved_by_the_ledger", SCHEMA,
+           "create trigger credit_ledger_moves_wallet after insert on public.credit_ledger\n"
+           "  for each row execute function infrx.ledger_moves_wallet();",
+           "-- mutant: nothing moves the wallet",
+           "fresh", "legacy_drift",
+           "the deployed console's addCredit leaves the summary disagreeing with the "
+           "ledger, silently"),
+    Mutant("consent_revocation_can_be_undone", SCHEMA,
+           "  if old.revoked_at is not null and new.revoked_at is distinct from old.revoked_at then",
+           "  if old.revoked_at is not null and new.revoked_at <> old.revoked_at then",
+           "fresh", "row_constraints",
+           "`set revoked_at = null` compares NULL, passes, and un-revokes consent"),
+    Mutant("holds_need_not_belong_to_the_job", SCHEMA,
+           "  add constraint credit_holds_job_belongs_to_org\n"
+           "    foreign key (request_id, org_id) references infrx.jobs (request_id, org_id)\n"
+           "    on delete restrict,",
+           "",
+           "fresh", "row_constraints",
+           "one tenant's credit is reserved against another tenant's job"),
+    Mutant("ledger_signs_unconstrained", SCHEMA,
+           "    check (case kind when 'grant' then delta_usd > 0",
+           "    check (true or case kind when 'grant' then delta_usd > 0",
+           "fresh", "row_constraints",
+           "a `grant` of minus five hundred, or a `usage` that pays the customer"),
+    Mutant("usage_pilot_rows_need_no_job", SCHEMA,
+           "  if new.settlement_regime = 'pilot'\n"
+           "     and not exists (select 1 from infrx.jobs j",
+           "  if false\n"
+           "     and not exists (select 1 from infrx.jobs j",
+           "fresh", "row_constraints",
+           "a settled usage row can be written under an organization that never ran it"),
+    Mutant("terminal_settlement_is_rewritable", SCHEMA,
+           "      raise exception 'job % is terminal: its settlement is immutable', "
+           "old.request_id\n        using errcode = '23514';",
+           "      null;",
+           "fresh", "row_constraints",
+           "a settled job's debit and result can be rewritten afterwards (R53)"),
+    Mutant("admin_orgs_duplicates_an_org_with_two_owners", CONSOLE,
+           "  where m.org_id = o.id and m.role = 'owner'\n"
+           "  order by m.created_at, owner_profile.email\n"
+           "  limit 1) owner on true",
+           "  where m.org_id = o.id and m.role = 'owner') owner on true",
+           "fresh", "console_read_surface",
+           "an organization with two owners appears twice and C's keyset pagination "
+           "skips a page"),
+    Mutant("money_leaves_the_views_as_a_number", CONSOLE,
+           "select w.org_id, w.ledger_total::text as ledger_total,",
+           "select w.org_id, w.ledger_total as ledger_total,",
+           "fresh", "console_read_surface",
+           "PostgREST renders numeric unquoted and the browser parses it into a double "
+           "- money stops being exact (ruling 10)"),
+    Mutant("usage_daily_is_unbounded", CONSOLE,
+           "  order by 1 desc\n  limit 400;",
+           "  order by 1 desc;",
+           "fresh", "console_read_surface",
+           "one call can ask for every day since the epoch"),
+
     # --- the database clock --------------------------------------------------
     Mutant("the_clock_offset_works_in_production", SCHEMA,
            "  if current_database() like 'infrx@_%' escape '@' then",
@@ -270,13 +433,27 @@ def _mutate(directory: Path, mutant: Mutant) -> None:
     target = directory / mutant.file
     text = target.read_text()
     found = text.count(mutant.old)
-    assert found == 1, (f"mutant {mutant.name}: its target appears {found} times in "
-                        f"{mutant.file}; a mutant must be one edit in one place")
+    assert found == mutant.occurrences, (
+        f"mutant {mutant.name}: its target appears {found} times in {mutant.file}, "
+        f"expected {mutant.occurrences}")
     target.write_text(text.replace(mutant.old, mutant.new))
 
 
+#: The runner self-test (R40/B10): a mutant that deliberately breaks the SQL must be
+#: reported as an apply error, never as a kill.
+SELF_TEST = Mutant("self_test_broken_sql", SCHEMA,
+                   "create table infrx.price_versions (",
+                   "create tabl infrx.price_versions (",
+                   "fresh", "relations_exist",
+                   "(not a defect: the runner must classify this as an apply error)")
+
 _CHECKS = {
     "relations_exist": checks.check_relations_exist,
+    "privileges": checks.check_privileges,
+    "truncate_refused": checks.check_truncate_refused,
+    "leaky_function": checks.check_leaky_function_probe,
+    "no_operator_identity": checks.check_no_operator_identity_in_public,
+    "legacy_drift": checks.check_legacy_writer_does_not_drift,
     "rpc_boundary": checks.check_rpc_boundary,
     "entitlements": checks.check_entitlements_and_limits,
     "money_domain": checks.check_money_domain,
@@ -290,47 +467,66 @@ _CHECKS = {
 }
 
 
-def kill(mutant: Mutant) -> str | None:
+#: R40 / B10: a kill is an ASSERTION FAILURE RAISED BY THE NAMED CHECK. Anything else
+#: is its own class and is never counted as a kill - the previous runner counted
+#: `psycopg.Error` and setup/apply failures, and reported
+#: `historical_usage_enters_the_settlement_regime` as "killed by setup: 0003 failed to
+#: apply", which is a migration that does not build, not an invariant that is defended.
+KILLED = "killed"
+SURVIVED = "survived"
+APPLY_ERROR = "apply_error"
+SETUP_ERROR = "setup_error"
+
+
+def kill(mutant: Mutant) -> tuple[str, str]:
     """Build a database from the mutated migrations and run the check that claims the
-    invariant. Returns the failure that killed the mutant, or None if it survived."""
+    invariant. Returns `(outcome, detail)` with `outcome` in KILLED / SURVIVED /
+    APPLY_ERROR / SETUP_ERROR."""
     pgharness.ensure()
     with TemporaryDirectory(prefix=f"infrx-d1-{mutant.name}-") as tmp:
         directory = Path(tmp)
         _mutate(directory, mutant)
         files = migrations.sql_for(directory=directory)
         database = MUT_PRODLIKE_DB if mutant.scenario == "prodlike" else MUT_DB
+        current = tuple(f for f in files if f[0] in (
+            "supabase_shim.sql", "0001_init.sql", "0002_seed_models.sql"))
         try:
-            if mutant.scenario == "upgrade":
-                pgharness.recreate(database)
-                current = tuple(f for f in files if f[0] in (
-                    "supabase_shim.sql", "0001_init.sql", "0002_seed_models.sql"))
-                pgharness.apply(database, current)
-                with pgharness.connect(database) as conn:
-                    before = checks.seed_legacy(conn)
-                    pgharness.apply(database, tuple(f for f in files if f not in current))
-                    return _report(checks.check_upgrade_preserved, conn, before)
             pgharness.recreate(database)
-            pgharness.apply(database, files)
+            if mutant.scenario == "upgrade":
+                pgharness.apply(database, current)
+            else:
+                pgharness.apply(database, files)
+        except (AssertionError, psycopg.Error) as broken:
+            return APPLY_ERROR, _first_line(broken)
+        try:
             with pgharness.connect(database) as conn:
+                if mutant.scenario == "upgrade":
+                    before = checks.seed_legacy(conn)
+                    try:
+                        pgharness.apply(database, tuple(f for f in files if f not in current))
+                    except (AssertionError, psycopg.Error) as broken:
+                        return APPLY_ERROR, _first_line(broken)
+                    return _run(checks.check_upgrade_preserved, conn, before)
                 if mutant.scenario in ("fresh", "volume"):
                     checks.seed_fixtures(conn)
                 if mutant.scenario == "volume":
                     checks.seed_volume(conn)
-                return _report(_CHECKS[mutant.check], conn)
+                return _run(_CHECKS[mutant.check], conn)
         except (AssertionError, psycopg.Error) as during_setup:
-            # A mutant the schema itself refuses (a constraint the migration can no
-            # longer satisfy, a fixture it can no longer store) is killed too - by the
-            # migration rather than by the check. Say which.
-            return f"setup: {_first_line(during_setup)}"
+            return SETUP_ERROR, _first_line(during_setup)
 
 
-def _report(check, *args) -> str | None:
+def _run(check, *args) -> tuple[str, str]:
+    """Only an AssertionError from the named check is a kill."""
     try:
         check(*args)
-    except (AssertionError, psycopg.Error) as failure:
-        return _first_line(failure)
-    return None
-
+    except AssertionError as failure:
+        return KILLED, _first_line(failure)
+    except psycopg.Error as wrong_class:
+        # The check blew up instead of asserting: that is a broken check, not a
+        # defended invariant, and it must be visible as such.
+        return SETUP_ERROR, f"the check raised instead of asserting: {_first_line(wrong_class)}"
+    return SURVIVED, ""
 
 def _first_line(error: BaseException) -> str:
     return f"{type(error).__name__}: {str(error).strip().splitlines()[0][:160]}"

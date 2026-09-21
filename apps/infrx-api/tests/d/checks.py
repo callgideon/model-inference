@@ -25,8 +25,13 @@ USER_OPERATOR = "33333333-3333-4333-8333-333333333333"
 # ORG_B's own owner, so the ORG_A sessions belong to exactly one organization
 # and "a session of one org sees another org's rows" is a real question.
 USER_OTHER = "77777777-7777-4777-8777-777777777777"
+USER_SECOND_OWNER = "88888888-8888-4888-8888-888888888888"
 KEY_A = "44444444-4444-4444-8444-444444444444"
 JOB_PREPARING = "50000000-0000-4000-8000-000000000000"
+# Childless AND keyless: the only thing that can refuse moving it to another
+# organization is `jobs_guard` (B9/m16 - the old target was refused by the
+# api-key foreign key, so the mutant that dropped the guard survived).
+JOB_NOKEY = "50000000-0000-4000-8000-00000000000e"
 JOB_QUEUED = "50000000-0000-4000-8000-000000000001"
 JOB_RUNNING = "50000000-0000-4000-8000-000000000002"
 JOB_TERMINAL = "50000000-0000-4000-8000-000000000003"
@@ -145,13 +150,17 @@ def seed_fixtures(conn) -> None:
     conn.execute(f"""
     insert into auth.users (id, email) values
       ('{USER_OWNER}', 'owner@example.com'), ('{USER_MEMBER}', 'member@example.com'),
-      ('{USER_OPERATOR}', 'operator@example.com'), ('{USER_OTHER}', 'other@example.com');
+      ('{USER_OPERATOR}', 'operator@example.com'), ('{USER_OTHER}', 'other@example.com'),
+      ('{USER_SECOND_OWNER}', 'second-owner@example.com');
     update public.profiles set is_operator = true where id = '{USER_OPERATOR}';
     insert into public.organizations (id, name, slug, created_by)
       values ('{ORG_A}', 'org a', 'org-a', '{USER_OWNER}'),
              ('{ORG_B}', 'org b', 'org-b', '{USER_OTHER}');
     insert into public.org_members (org_id, user_id, role) values
       ('{ORG_A}', '{USER_OWNER}', 'owner'), ('{ORG_A}', '{USER_MEMBER}', 'member'),
+      -- A SECOND owner, because an organization with two of them used to appear twice in
+      -- `console_admin_orgs` and C's keyset pagination would skip a page (B1).
+      ('{ORG_A}', '{USER_SECOND_OWNER}', 'owner'),
       ('{ORG_B}', '{USER_OTHER}', 'owner');
     insert into public.api_keys (id, org_id, created_by, name, prefix, key_hash)
       values ('{KEY_A}', '{ORG_A}', '{USER_OWNER}', 'k', 'sk-infrx-aaaaaaaa', 'hash-a');
@@ -167,6 +176,8 @@ def seed_fixtures(conn) -> None:
     insert into infrx.org_entitlements (org_id) values ('{ORG_A}');
     """)
     conn.execute(_job_values(JOB_PREPARING, "job_preparing", state="preparing") + ")")
+    conn.execute(_job_values(JOB_NOKEY, "job_nokey", state="preparing").replace(
+        f"'{KEY_A}'", "null") + ")")
     conn.execute(_job_values(JOB_QUEUED, "job_queued") + ")")
     conn.execute(_job_values(JOB_RUNNING, "job_running", state="running",
                              extra="published") + ", true)")
@@ -273,6 +284,13 @@ def seed_fixtures(conn) -> None:
       (id, org_id, api_key_id, model_id, status, prompt_tokens, completion_tokens, cost_usd)
       values ('90000000-0000-4000-8000-000000000001', '{ORG_A}', '{KEY_A}',
               'nemostation/marlin-2b', 200, 1000, 250, 0.00012345);
+    -- 450 distinct UTC days, so `console_usage_daily`'s 400-row bound is a bound this
+    -- fixture can actually reach (ruling 10).
+    insert into public.usage_events
+      (id, org_id, api_key_id, model_id, status, cost_usd, created_at)
+    select gen_random_uuid(), '{ORG_A}', '{KEY_A}', 'nemostation/marlin-2b', 200, 0.00001,
+           now() - make_interval(days => d)
+    from generate_series(1, 450) as g(d);
     -- r2: the fixture writes ledger rows only - `infrx.wallets.ledger_total` is moved by
     -- the AFTER INSERT trigger (ruling 8), so a fixture that set it by hand would be
     -- testing a number nothing maintains. `reserved_total` is still set directly,
@@ -871,7 +889,7 @@ VIOLATIONS = (
     # `jobs_guard` can refuse this - the old target was refused by a child foreign key
     # and the mutant that removed `org_id` from the guard survived.
     ("changing a job's organization",
-     f"update infrx.jobs set org_id = '{ORG_B}' where request_id = '{JOB_PREPARING}'"),
+     f"update infrx.jobs set org_id = '{ORG_B}' where request_id = '{JOB_NOKEY}'"),
     ("changing a job's admitted budget",
      f"update infrx.jobs set budget_generation_s = 9999 where request_id = '{JOB_QUEUED}'"),
     ("changing a job's payload reference",
@@ -1022,15 +1040,15 @@ VIOLATIONS = (
     ("a zero-day retention policy (R43)",
      f"insert into infrx.consent_history (org_id, consent_version, trace_mode, "
      f"content_retention_days, evaluation_consent, actor_principal, effective_at) "
-     f"values ('{ORG_A}', 2, 'full', 0, false, 'u', now())"),
+     f"values ('{ORG_A}', 5, 'full', 0, false, 'u', now())"),
     ("a retention policy past 90 days",
      f"insert into infrx.consent_history (org_id, consent_version, trace_mode, "
      f"content_retention_days, evaluation_consent, actor_principal, effective_at) "
-     f"values ('{ORG_A}', 3, 'full', 91, false, 'u', now())"),
+     f"values ('{ORG_A}', 6, 'full', 91, false, 'u', now())"),
     ("evaluation consent without full capture",
      f"insert into infrx.consent_history (org_id, consent_version, trace_mode, "
      f"content_retention_days, evaluation_consent, actor_principal, effective_at) "
-     f"values ('{ORG_A}', 4, 'minimal', 30, true, 'u', now())"),
+     f"values ('{ORG_A}', 7, 'minimal', 30, true, 'u', now())"),
     ("rewriting consent history",
      f"update infrx.consent_history set evaluation_consent = false "
      f"where org_id = '{ORG_A}'"),
@@ -1475,6 +1493,54 @@ def check_privileges(conn) -> str:
             f"infrx unreachable")
 
 
+#: Ruling 2: an operator's identity or free text must not live in a relation a customer
+#: can SELECT. These are the column names that carry one.
+OPERATOR_IDENTITY_COLUMNS = ("operator_principal", "suspended_by", "actor_principal",
+                             "author_principal", "created_by", "updated_by",
+                             "changed_by", "owner_email")
+
+
+def check_no_operator_identity_in_public(conn) -> str:
+    """Ruling 2 / B2(b,c): the operator principal is stored only where customers cannot
+    read it.
+
+    A column grant is not enough on a legacy table - the deployed console may
+    `select *`, and 0001's policies already give members SELECT on `credit_ledger`,
+    `organizations` and `profiles`. So the rule is structural: no base table in `public`
+    that `authenticated` may read carries an operator identity column, and the masked
+    views are the only place a principal appears at all.
+    """
+    # pg_catalog, not information_schema: the oid form of `has_table_privilege` cannot
+    # be handed the name of something that no longer exists.
+    readable = [(table, column) for table, column in conn.execute("""
+        select c.relname, a.attname
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+        where n.nspname = 'public' and c.relkind = 'r'
+          and has_table_privilege('authenticated', c.oid, 'select')
+        order by 1, 2""").fetchall()]
+    offending = [f"public.{table}.{column}" for table, column in readable
+                 if column in OPERATOR_IDENTITY_COLUMNS
+                 and not (table, column) in (("profiles", "created_by"),)]
+    # `created_by` is 0001's own column on api_keys/organizations/credit_ledger: it names
+    # a *member* for tenant rows, and the masked views are what decide whether a viewer
+    # may resolve it to a person. What must not exist is a column carrying the platform
+    # side's identity or prose.
+    offending = [name for name in offending
+                 if name.endswith(("operator_principal", "suspended_by"))]
+    assert not offending, \
+        f"an operator identity is stored where customers can read it: {offending}"
+    # And the customer-safe suspension reason is a code, not prose.
+    codes = conn.execute("""
+        select pg_get_constraintdef(oid) from pg_constraint
+        where conrelid = 'public.organizations'::regclass
+          and conname = 'organizations_suspension_reason_check'""").fetchone()
+    assert codes, "public.organizations.suspension_reason is unconstrained free text"
+    return (f"{len(readable)} customer-readable columns hold no operator identity; "
+            f"the suspension reason is a closed code")
+
+
 def check_truncate_refused(conn) -> str:
     """B3: TRUNCATE is refused for every role, including the one that owns the data.
 
@@ -1508,38 +1574,59 @@ def check_leaky_function_probe(conn) -> str:
     """Ruling 6 / B5: a caller's own cheap function in the WHERE clause must not see
     rows the tenant predicate excludes.
 
-    Without `security_barrier` the planner may evaluate a `cost 1e-7` user function
-    before the view's own qual, which is how the reviewer read every organization's
-    wallet as ORG_B's owner. The probe collects what the function saw; it must see
-    nothing that is not the caller's own.
+    Without `security_barrier` the view is flattened into the caller's query and the
+    planner orders the quals by cost, so a `cost 1e-7` function runs before
+    `is_org_member(org_id)` and sees every row - which is how the reviewer read every
+    organization's wallet as ORG_B's owner.
+
+    The probe must be **stable**, not volatile: PostgreSQL evaluates a volatile qual
+    last whatever its cost, so a probe that writes to a table cannot see the leak it is
+    looking for (the first version of this check passed with the barrier removed, which
+    is exactly the false negative R32 exists to catch). It signals through a notice
+    instead, which a stable function may raise.
     """
+    seen: list[str] = []
     conn.execute("""
-        create table if not exists public._d1_probe_log (
-          relation text not null, seen text not null);
-        truncate public._d1_probe_log;
         create or replace function public._d1_probe(p_relation text, p_value text)
-        returns boolean language plpgsql cost 0.0000001 as $$
+        returns boolean language plpgsql stable cost 0.0000001 as $$
         begin
-          insert into public._d1_probe_log values (p_relation, p_value);
+          raise notice 'D1PROBE %|%', p_relation, coalesce(p_value, '-');
           return true;
         end $$;""")
-    probes = (("public.wallets", "org_id::text"),
-              ("public.feedback", "author_principal"),
-              ("public.console_ledger", "coalesce(actor, '-')"),
-              ("public.operator_audit", "actor_principal"))
-    for relation, expression in probes:
-        # As ORG_B's owner: everything the probe sees must belong to ORG_B.
-        read_rows(conn, "other", f"select count(*) from {relation} "
-                               f"where public._d1_probe('{relation}', {expression})")
-    seen = conn.execute("""select relation, seen from public._d1_probe_log
-                           order by relation, seen""").fetchall()
-    own = {ORG_B, USER_OTHER, "platform", "-", None}
-    leaked = [(relation, value) for relation, value in seen if value not in own]
-    conn.execute("drop function if exists public._d1_probe(text, text); "
-                 "drop table if exists public._d1_probe_log;")
+
+    def collect(diagnostic) -> None:
+        message = getattr(diagnostic, "message_primary", "") or ""
+        if message.startswith("D1PROBE "):
+            seen.append(message.removeprefix("D1PROBE "))
+
+    conn.add_notice_handler(collect)
+    # Every probe reports the row's ORGANIZATION, so "did it see a row it must not" is
+    # an exact question: the only ids it may report are the ones this session is a
+    # member of (which includes the personal organization the signup trigger made).
+    probes = (("public.wallets", "coalesce(org_id::text, '-')"),
+              ("public.feedback", "coalesce(org_id::text, '-')"),
+              ("public.console_ledger", "coalesce(org_id::text, '-')"),
+              ("public.console_usage", "coalesce(org_id::text, '-')"),
+              ("public.operator_audit", "coalesce(target_org_id::text, '-')"))
+    try:
+        for relation, expression in probes:
+            # As ORG_B's owner: everything the probe sees must belong to ORG_B.
+            read_or_denied(conn, "other",
+                           f"select count(*) from {relation} "
+                           f"where public._d1_probe('{relation}', {expression})")
+    finally:
+        conn.remove_notice_handler(collect)
+        conn.execute("drop function if exists public._d1_probe(text, text)")
+    own = {str(org) for org, in conn.execute(
+        "select org_id from public.org_members where user_id = %s", (USER_OTHER,)).fetchall()}
+    own.add("-")
+    leaked = [entry for entry in seen if entry.split("|", 1)[1] not in own]
+    assert seen, ("the probe was never evaluated, so this check proves nothing "
+                  "(did the notice handler or the function cost change?)")
     assert not leaked, ("a leaky function in the WHERE clause saw another tenant's "
                         f"rows: {leaked[:8]}")
-    return f"{len(probes)} views probed with a cheap leaky function; nothing foreign seen"
+    return (f"{len(probes)} views probed with a cheap stable leaky function "
+            f"({len(seen)} evaluations); nothing foreign seen")
 
 
 def check_legacy_writer_does_not_drift(conn) -> str:
@@ -1687,6 +1774,12 @@ def check_console_read_surface(conn) -> str:
     assert read_rows(conn, "operator",
                      "select id from public.calibration_labels")
 
+    # One row per organization, however many owners it has (B1).
+    orgs = read_rows(conn, "operator",
+                     "select org_id, owner_email from public.console_admin_orgs")
+    assert len(orgs) == len({org for org, _ in orgs}), \
+        f"console_admin_orgs duplicates an organization: {sorted(orgs)}"
+
     # Ruling 10: money crosses as TEXT with eight fractional digits, never as a JSON
     # number, and timestamps stay timestamptz (PostgREST renders `…+00:00`).
     money = read_rows(conn, "member", "select ledger_total, reserved_total, available "
@@ -1714,7 +1807,8 @@ def check_console_read_surface(conn) -> str:
     daily = read_rows(conn, "member",
                       f"select * from public.console_usage_daily('{ORG_A}', "
                       f"'2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')")
-    assert daily and len(daily) <= 400, f"the daily bucket bound is not held: {len(daily)}"
+    # The fixture seeds 450 distinct days, so the bound is reachable and exact.
+    assert len(daily) == 400, f"the daily bucket bound is not held: {len(daily)} rows"
     assert isinstance(daily[0][4], str), f"daily cost is not text: {daily[0]}"
     for rpc in (f"select * from public.console_usage_summary('{ORG_B}', "
                 f"'2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')",

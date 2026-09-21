@@ -124,6 +124,12 @@ def test_dur_rls__the_browser_privilege_surface_is_enumerated() -> None:
     print(checks.check_privileges(_fresh()))
 
 
+def test_dur_rls__no_operator_identity_is_customer_readable() -> None:
+    """Ruling 2 / B2: the operator principal and their prose live only where a customer
+    cannot SELECT them - structurally, not behind a column grant on a legacy table."""
+    print(checks.check_no_operator_identity_in_public(_fresh()))
+
+
 def test_dur_rls__truncate_is_refused_for_every_role() -> None:
     """B3: TRUNCATE ignores RLS and never fires a row trigger, so the append-only
     relations refuse it with a statement trigger as well as a missing privilege."""

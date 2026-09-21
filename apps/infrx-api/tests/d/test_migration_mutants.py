@@ -31,17 +31,20 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           "a_debit_on_any_outcome", "operator_entry_without_the_marker",
           "the_publication_marker_can_be_cleared",
           "the_clock_offset_works_in_production",
-          "organizations_update_not_revoked", "rpc_granted_to_authenticated",
+          "organizations_update_not_narrowed", "rpc_granted_to_authenticated",
           "profiles_operator_column_grant_widened",
           "infrx_tables_readable_by_authenticated",
           "entitlements_deny_everyone_by_default", "new_organizations_get_no_wallet",
           "wallet_money_is_not_the_domain", "no_pending_outbox_index",
-          "wallet_view_without_a_tenant_predicate",
-          "operator_audit_readable_by_a_member",
-          "ledger_actor_is_never_masked",
-          "calibration_labels_leak_into_feedback",
-          "wallet_summary_answers_for_any_organization",
-          "api_keys_update_not_narrowed")
+          # r2: one per round-2 finding, so the default run covers every B item.
+          "views_writable_by_browser_roles", "ledger_actor_masking_keys_on_the_marker",
+          "ledger_keeps_the_operator_principal", "truncate_guard_dropped",
+          "api_keys_insert_is_table_wide", "views_without_security_barrier",
+          "wallet_total_not_moved_by_the_ledger", "consent_revocation_can_be_undone",
+          "holds_need_not_belong_to_the_job", "ledger_signs_unconstrained",
+          "terminal_settlement_is_rewritable", "money_leaves_the_views_as_a_number",
+          "console_rpcs_answer_for_any_organization",
+          "admin_orgs_duplicates_an_org_with_two_owners")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 
@@ -65,9 +68,24 @@ def test_the_mutant_list_is_well_formed() -> None:
 
 @pytest.mark.parametrize("mutant", SELECTED, ids=lambda m: m.name)
 def test_mutant_is_killed(mutant) -> None:
-    """The check that claims this invariant fails when the migration loses it."""
-    killed_by = mutation_list.kill(mutant)
-    assert killed_by is not None, (
-        f"mutant {mutant.name} SURVIVED: {mutant.check} passed although "
-        f"{mutant.file} lost `{mutant.old.strip()[:80]}`. In production: {mutant.why}")
-    print(f"{mutant.name}: killed by {mutant.check} -> {killed_by}")
+    """The check that claims this invariant fails when the migration loses it.
+
+    R40: only an assertion failure raised by the NAMED check counts. An apply or setup
+    error is its own outcome and fails this test too - a migration that does not build
+    proves nothing about the invariant.
+    """
+    outcome, detail = mutation_list.kill(mutant)
+    assert outcome == mutation_list.KILLED, (
+        f"mutant {mutant.name} was {outcome.upper()} (not killed): {mutant.check} on "
+        f"{mutant.file} losing `{mutant.old.strip()[:80]}` -> {detail or 'no failure'}. "
+        f"In production: {mutant.why}")
+    print(f"{mutant.name}: killed by {mutant.check} -> {detail}")
+
+
+def test_the_runner_cannot_report_a_broken_migration_as_a_kill() -> None:
+    """B10's self-test: the previous runner counted `psycopg.Error` and setup failures as
+    kills, and reported one mutant as "killed by setup: 0003 failed to apply"."""
+    outcome, detail = mutation_list.kill(mutation_list.SELF_TEST)
+    assert outcome == mutation_list.APPLY_ERROR, \
+        f"a migration that does not compile was reported as {outcome}: {detail}"
+    print(f"runner self-test: broken SQL classified as {outcome} -> {detail}")
