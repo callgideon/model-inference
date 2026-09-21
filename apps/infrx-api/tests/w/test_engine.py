@@ -387,6 +387,9 @@ def test_api_stream__media_belongs_to_the_requests_tenant():
                                      {"type": "video_url", "video_url": {"url": "b"}}]},)})
     upstream, engine, _lease, _prepared = drive()
     assert refusal(engine, mixed) == "refused: not_found"
+    # ... and with no salt to check them against, two tenants in one prompt are still
+    # refused: they would share a cache namespace and a token budget
+    assert refusal(engine, mixed.model_copy(update={"parameters": {}})) == "refused: not_found"
 
 
 def test_api_stream__the_video_token_budget_is_f1s_own_function():
