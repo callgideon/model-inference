@@ -1294,11 +1294,15 @@ async def trace_bounds__every_bounded_capture_sequence_holds_the_invariants(fact
     out of this space promptly counted a loss twice (`abandon` then `finish`; a breach then
     a mode-mismatched `finish`). Lengths 1-3 run here, exhaustively, so an adapter's own
     conformance run covers them; `tests/contracts/test_trace_sequences.py` runs the full
-    product to length 4 (~136k sequences) and prints what it ran.
+    product to length 4 and prints what it ran.
     """
-    from .sequences import tracesink_sequence_properties
+    from .sequences import OPERATIONS, tracesink_sequence_properties
     report = await tracesink_sequence_properties(factory, max_length=3)
-    assert report.sequences == (12 + 144 + 1728) * 6, report.line()
+    # Computed from the alphabet rather than written down, so adding an operation widens
+    # the lattice instead of breaking this line: every sequence x 3 modes x 2 deadlines.
+    alphabet = len(OPERATIONS)
+    expected = (alphabet + alphabet ** 2 + alphabet ** 3) * 3 * 2
+    assert report.sequences == expected, report.line()
     assert report.sampled_lengths == ()
 
 

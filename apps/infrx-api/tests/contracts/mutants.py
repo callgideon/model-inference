@@ -872,6 +872,23 @@ MUTANTS: tuple[Mutant, ...] = (
           "            if reason is TraceLossReason.queue_full:\n"
           "                self.content_bytes = max(0, self.content_bytes - charged)",
        "trace_bounds__a_dropped_finish_releases_its_charge"),
+    # --- F2.1: the lattice assertions the S1 review found vacuous --------------
+    _m("shutdown_counted_for_nothing", "only a real loss names a reason (R42)",
+       T, "        if lost:\n            # Only a real loss names a reason.",
+       "        if True:\n            # Only a real loss names a reason.",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("closed_capture_still_queues", "a capture closed before any finish stores nothing (R42)",
+       T, "        if self.closed:                      # abandoned or reaped first: nothing to queue",
+       "        if self.closed and self.lost_reason is TraceLossReason.memory_budget:"
+       "  # abandoned or reaped first: nothing to queue",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("flush_drops_instead_of_appending", "a flush appends what it takes out of memory",
+       T, "        self.appended.extend(self.queued)\n        self.queued.clear()",
+       "        self.queued.clear()",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("raw_content_envelope_is_trusted", "the capture decides its mode, never the envelope (R12)",
+       T, "        if envelope.mode is not self.mode:", "        if False:",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
     # --- r8 R42: loss accounting cannot regress -------------------------------
     _m("count_is_not_idempotent", "one loss count per capture, whatever follows (R42)",
        T, "        if self.counted:\n            return\n        self.counted = True",

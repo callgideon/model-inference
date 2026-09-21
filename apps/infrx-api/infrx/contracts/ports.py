@@ -305,7 +305,28 @@ class TraceSink(Protocol):
         raises into it** - an off-mode envelope is dropped and counted `malformed`."""
 
     async def stats(self) -> dict[str, Any]:
-        """In-memory, appended and fsynced counts plus loss reasons, separately."""
+        """In-memory, appended and fsynced counts plus loss reasons, separately.
+
+        The exported suites read these keys, so an adapter that omits one skips an
+        assertion silently. They are the contract:
+
+        | Key | Meaning |
+        |---|---|
+        | `accepted` | records taken into memory (`offer`/`finish` answered `accepted_in_memory`) |
+        | `dropped` | records refused, each with a counted `loss_reasons` entry |
+        | `in_memory` | records held in memory, not yet appended |
+        | `in_memory_content_bytes` | content bytes currently charged to the process budget |
+        | `in_memory_metadata_bytes` | metadata bytes currently charged |
+        | `open_captures` | captures opened and not yet finished or abandoned |
+        | `appended` | records written to the spool but not necessarily fsynced |
+        | `fsynced` | records fsynced, i.e. the only ones durability is claimed for |
+        | `loss_reasons` | `{reason_value: count}`, **non-zero counts only** - a reason with
+          nothing behind it is not a loss, and reporting `shutdown: 0` made a silent
+          off-mode process look lossy (R42) |
+
+        02 requires the three durability states separately, so a caller can never read
+        "appended" as "safe".
+        """
 
     async def flush(self, deadline: datetime) -> dict[str, Any]: ...
 

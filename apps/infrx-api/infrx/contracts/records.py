@@ -161,6 +161,9 @@ class TraceLossReason(enum.StrEnum):
 
 class TraceOfferResult(enum.StrEnum):
     accepted_in_memory = "accepted_in_memory"
+    # `dropped` means "nothing was stored", not "a loss was counted": an off-mode capture
+    # answers `dropped` while counting neither a loss nor a drop (R42), so a caller must
+    # not read this value as an error to report or retry.
     dropped = "dropped"
 
 

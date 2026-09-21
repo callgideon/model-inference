@@ -407,5 +407,10 @@ class FakeTraceSink:
             capture.content_bytes = 0
         self.captures.clear()
         self.content_bytes = self.metadata_bytes = 0
-        self.loss_reasons[TraceLossReason.shutdown] += len(lost)
+        if lost:
+            # Only a real loss names a reason. `loss_reasons` is a defaultdict, so
+            # incrementing by zero *created* a `shutdown: 0` entry, and a crash with
+            # nothing to lose - every off-mode process among them - then reported a loss
+            # table where R42 requires silence.
+            self.loss_reasons[TraceLossReason.shutdown] += len(lost)
         return len(lost)

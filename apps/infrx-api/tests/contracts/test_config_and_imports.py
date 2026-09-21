@@ -266,11 +266,22 @@ def test_contracts_import_pulls_in_no_track_dependency():
 
 
 def test_the_extras_are_installed_so_the_check_is_meaningful():
-    """Otherwise the test above would pass by accident in a core-only environment."""
+    """Otherwise the test above would pass by accident in a core-only environment.
+
+    A **failure**, not a skip. This used to skip, which meant the one test that gives the
+    import-boundary check its meaning could go quiet and `make api-test` would still print
+    a clean pass: an environment without the extras cannot prove that importing `infrx`
+    leaves them unimported, because there is nothing to leave unimported. `make api-env`
+    (`uv sync --frozen --all-extras`) is what the canonical command depends on, and
+    `uv run --frozen` keeps them, so this failing means the environment is wrong rather
+    than the code.
+    """
     import importlib.util
     missing = [name for name in HEAVY if importlib.util.find_spec(name) is None]
-    if missing:
-        pytest.skip(f"not installed (run uv sync --all-extras): {', '.join(missing)}")
+    assert missing == [], (
+        f"the import-boundary check cannot run: {', '.join(missing)} not installed. "
+        f"Run `make api-env` (uv sync --frozen --all-extras) - a skip here would let "
+        f"`make api-test` report a pass for a check that never ran.")
 
 
 def test_task_local_services_never_collide_across_worktrees():
