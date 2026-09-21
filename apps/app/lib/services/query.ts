@@ -274,16 +274,17 @@ const NAMED_QUERIES = {
     tenantField: "org_id",
   },
 
+  /** Oldest first: consent history is an audit trail, and `version` is 06's key within an org. */
   consent_history: {
     engine: "pg",
     source: "consent",
     from: "public.consent_history c",
-    columns: "c.changed_at, c.evaluation_consent, c.changed_by, c.by_operator",
+    columns: "c.version, c.changed_at, c.evaluation_consent, c.changed_by, c.by_operator",
     tenantColumn: "c.org_id",
     tenantField: "org_id",
     sort: {
       at: { field: "changed_at", column: "c.changed_at" },
-      id: { field: "changed_at", column: "c.changed_at" },
+      id: { field: "version", column: "c.version" },
       direction: "asc",
     },
   },

@@ -719,7 +719,10 @@ export function createConsoleServices(config: ConsoleServicesConfig): ConsoleSer
         const found = await rows("settings_get", { orgId: resolved.orgId, limit: 1 });
         const row = found[0];
         if (row === undefined) return fail<ConsoleSettings>("not_found", "no settings for this organization");
-        const history = await rows("consent_history", { orgId: resolved.orgId });
+        // Bounded like every other read. `ConsoleSettings.consent_history` is a whole array in the
+        // contract, with no cursor, so a history longer than this would be truncated rather than
+        // paged — recorded as a limit rather than left as an unbounded scan.
+        const history = await rows("consent_history", { orgId: resolved.orgId, limit: MAX_PAGE_LIMIT });
         return ok({
           trace_mode: text(row, "trace_mode") as ConsoleSettings["trace_mode"],
           content_retention_days: integer(row, "content_retention_days"),

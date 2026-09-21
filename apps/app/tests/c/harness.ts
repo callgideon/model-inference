@@ -225,7 +225,9 @@ export function seedDataset(state: DebugState): Dataset {
       content_retention_days: org.settings.content_retention_days,
       evaluation_consent: org.settings.evaluation_consent,
     });
-    for (const entry of org.settings.consent_history) data.consent.push({ ...entry, org_id: org.org_id });
+    org.settings.consent_history.forEach((entry, index) => {
+      data.consent.push({ ...entry, version: index + 1, org_id: org.org_id });
+    });
     for (const trace of org.traces) {
       const { feedback, timings, versions, ...rest } = trace as Record<string, unknown> & {
         feedback: Record<string, unknown>[];
