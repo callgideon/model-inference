@@ -1020,13 +1020,19 @@ def test_a_cancelled_flush_still_settles_its_batch():
             await capture_one(spool, request_id(index), b"z" * 1_000)
         charged = (await spool.stats())["in_memory_content_bytes"]
         assert charged == 5_000
+        # A real caller cancels this with `wait_for`; the test cancels it directly, once the
+        # writer is known to be inside the disk. A 50 ms timeout was a wall clock in a unit
+        # test and it duly failed once under load, falsely killing a mutant.
+        flushing = asyncio.create_task(spool.flush(spool.clock.now()))
+        await asyncio.to_thread(entered.wait, 5)
+        assert entered.is_set(), "the writer never started"
+        flushing.cancel()
         try:
-            await asyncio.wait_for(spool.flush(spool.clock.now()), 0.05)
-        except asyncio.TimeoutError:
+            await flushing
+        except asyncio.CancelledError:
             pass
         else:
             raise AssertionError("the flush was not cancelled")
-        assert entered.is_set(), "the writer never started"
         block.set()
         # `drain()` queues a no-op behind the batch on the single writer thread, so it is a
         # deterministic "the cancelled batch has landed" with no polling and no sleep. A
