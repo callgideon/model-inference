@@ -27,6 +27,7 @@ from . import checks, pgharness
 
 SCHEMA = "0003_pilot_durable_schema.sql"
 ROLES = "0004_pilot_roles_and_rpcs.sql"
+CONSOLE = "0005_console_read_surface.sql"
 
 MUT_DB = f"{pgharness.DATABASE}_mut"
 MUT_PRODLIKE_DB = "prodlike_d1_mut"       # deliberately not infrx_*
@@ -190,6 +191,55 @@ MUTANTS: tuple[Mutant, ...] = (
            "fresh", "entitlements",
            "every organization is entitled to nothing, because null became '{}' (R24)"),
 
+    # --- the console read surface (0005) -------------------------------------
+    Mutant("wallet_view_without_a_tenant_predicate", CONSOLE,
+           "from infrx.wallets w\n"
+           "where public.is_org_member(w.org_id) or public.is_operator() "
+           "or public.is_service_client();",
+           "from infrx.wallets w;",
+           "fresh", "console_read_surface",
+           "every tenant's balance is readable by any signed-in user, because the view "
+           "reads infrx with its owner's rights"),
+    Mutant("operator_audit_readable_by_a_member", CONSOLE,
+           "from infrx.audit_entries a\nwhere public.is_operator() "
+           "or public.is_service_client();",
+           "from infrx.audit_entries a;",
+           "fresh", "console_read_surface",
+           "a customer reads the operator audit trail, principals and all (R34)"),
+    Mutant("ledger_actor_is_never_masked", CONSOLE,
+           "       case when l.by_operator and not (public.is_operator() "
+           "or public.is_service_client())\n"
+           "            then 'platform'\n"
+           "            else coalesce(l.operator_principal, p.email, l.created_by::text) "
+           "end as actor,",
+           "       coalesce(l.operator_principal, p.email, l.created_by::text) as actor,",
+           "fresh", "console_read_surface",
+           "a customer session reads the operator's identity off a grant (R41/R50)"),
+    Mutant("calibration_labels_leak_into_feedback", CONSOLE,
+           "where not f.calibration_set\n  and (public.is_org_member(f.org_id)",
+           "where (public.is_org_member(f.org_id)",
+           "fresh", "console_read_surface",
+           "operator calibration verdicts appear in a customer's feedback list (R49)"),
+    Mutant("judge_runs_readable_by_any_member", CONSOLE,
+           "where public.is_org_owner(r.org_id) or public.is_operator() "
+           "or public.is_service_client();",
+           "where public.is_org_member(r.org_id) or public.is_operator() "
+           "or public.is_service_client();",
+           "fresh", "console_read_surface",
+           "judge runs and their costs are owner and operator only (R13)"),
+    Mutant("wallet_summary_answers_for_any_organization", CONSOLE,
+           "  if not (public.is_org_member(p_org) or public.is_operator()\n"
+           "          or public.is_service_client()) then",
+           "  if false then",
+           "fresh", "console_read_surface",
+           "org_wallet_summary reports another tenant's balance to any signed-in user"),
+    Mutant("api_keys_update_not_narrowed", CONSOLE,
+           "revoke update on public.api_keys from anon, authenticated;",
+           "-- mutant: the broad owner UPDATE grant stays",
+           "fresh", "role_matrix",
+           "an owner writes `trace_mode` directly, so a consent change leaves no "
+           "consent_history row"),
+
     # --- bounded access paths ------------------------------------------------
     Mutant("no_pending_outbox_index", SCHEMA,
            "create index outbox_pending_idx on infrx.outbox (available_at, event_id)\n"
@@ -235,6 +285,7 @@ _CHECKS = {
     "row_constraints": checks.check_row_constraints,
     "index_plans": checks.check_index_plans,
     "production_clock": checks.check_production_clock,
+    "console_read_surface": checks.check_console_read_surface,
     "upgrade_preserved": None,        # needs the captured "before" state
 }
 

@@ -18,6 +18,9 @@ ORG_B = "0b000000-0000-4000-8000-00000000000b"
 USER_MEMBER = "11111111-1111-4111-8111-111111111111"
 USER_OWNER = "22222222-2222-4222-8222-222222222222"
 USER_OPERATOR = "33333333-3333-4333-8333-333333333333"
+# ORG_B's own owner, so the ORG_A sessions belong to exactly one organization
+# and "a session of one org sees another org's rows" is a real question.
+USER_OTHER = "77777777-7777-4777-8777-777777777777"
 KEY_A = "44444444-4444-4444-8444-444444444444"
 JOB_PREPARING = "50000000-0000-4000-8000-000000000000"
 JOB_QUEUED = "50000000-0000-4000-8000-000000000001"
@@ -39,6 +42,15 @@ EXPECTED_RELATIONS = (
     "infrx.judge_budgets", "infrx.judge_reservations", "infrx.judge_runs",
     "infrx.judge_samples", "infrx.callback_destinations", "infrx.callback_deliveries",
     "infrx.org_entitlements", "infrx.audit_entries",
+)
+
+#: The console read surface of 0005 (views in `public`, owner's rights over `infrx`).
+EXPECTED_VIEWS = (
+    "public.wallets", "public.console_ledger", "public.console_usage",
+    "public.org_settings", "public.consent_history", "public.feedback",
+    "public.calibration_labels", "public.console_judge_runs",
+    "public.console_admin_orgs", "public.operator_audit",
+    "infrx.wallet_reconciliation",
 )
 
 #: 06 §"Mutation boundaries". `grant` is `grant_credit` (reserved word).
@@ -129,14 +141,14 @@ def seed_fixtures(conn) -> None:
     conn.execute(f"""
     insert into auth.users (id, email) values
       ('{USER_OWNER}', 'owner@example.com'), ('{USER_MEMBER}', 'member@example.com'),
-      ('{USER_OPERATOR}', 'operator@example.com');
+      ('{USER_OPERATOR}', 'operator@example.com'), ('{USER_OTHER}', 'other@example.com');
     update public.profiles set is_operator = true where id = '{USER_OPERATOR}';
     insert into public.organizations (id, name, slug, created_by)
       values ('{ORG_A}', 'org a', 'org-a', '{USER_OWNER}'),
-             ('{ORG_B}', 'org b', 'org-b', '{USER_MEMBER}');
+             ('{ORG_B}', 'org b', 'org-b', '{USER_OTHER}');
     insert into public.org_members (org_id, user_id, role) values
       ('{ORG_A}', '{USER_OWNER}', 'owner'), ('{ORG_A}', '{USER_MEMBER}', 'member'),
-      ('{ORG_B}', '{USER_MEMBER}', 'owner');
+      ('{ORG_B}', '{USER_OTHER}', 'owner');
     insert into public.api_keys (id, org_id, created_by, name, prefix, key_hash)
       values ('{KEY_A}', '{ORG_A}', '{USER_OWNER}', 'k', 'sk-infrx-aaaaaaaa', 'hash-a');
     insert into infrx.price_versions
@@ -209,6 +221,29 @@ def seed_fixtures(conn) -> None:
       values ('{EVENT_ID}', '{DEST_ID}', 'pending', '2026-09-21T00:03:00Z');
     insert into infrx.audit_entries (id, actor_principal, action, target_org_id, reason)
       values (gen_random_uuid(), 'ops@infrx', 'admin_grant', '{ORG_A}', 'pilot credit');
+    -- ORG_B gets one row in every tenant-scoped relation, so "a session of one
+    -- organization cannot see another's" is a real question for every console read view
+    -- rather than a query over an empty set.
+    insert into infrx.consent_history
+      (org_id, consent_version, trace_mode, content_retention_days, evaluation_consent,
+       actor_principal, effective_at)
+      values ('{ORG_B}', 1, 'minimal', 7, false, '{USER_OTHER}', '2026-01-01T00:00:00Z');
+    insert into public.credit_ledger (org_id, delta_usd, kind, reason)
+      values ('{ORG_B}', 5.00000000, 'grant', 'org b credit');
+    update infrx.wallets set ledger_total = 5.00000000 where org_id = '{ORG_B}';
+    insert into public.usage_events (id, org_id, model_id, status, cost_usd)
+      values ('{JOB_B}', '{ORG_B}', 'nemostation/marlin-2b', 200, 0.00000100);
+    insert into infrx.feedback
+      (feedback_id, org_id, request_id, author_principal, author_role, channel, name,
+       value_bool)
+      values ('fb_b', '{ORG_B}', '{JOB_B}', '{USER_OTHER}', 'customer', 'api', 'thumb',
+              false);
+    insert into infrx.judge_budgets (org_id, period_start, period_end, limit_usd)
+      values ('{ORG_B}', '{PERIOD}', '2026-10-01T00:00:00Z', 1.00000000);
+    insert into infrx.judge_runs
+      (run_id, org_id, consent_version, rubric_version, model_revision, state)
+      values ('60000000-0000-4000-8000-0000000000bb', '{ORG_B}', 1, 2, 'claude-opus',
+              'dry_run');
     -- One legacy usage row, so the constraints on the columns 0003 added to
     -- usage_events have something to be checked against on a fresh database too.
     insert into public.usage_events
@@ -377,8 +412,14 @@ def check_relations_exist(conn) -> str:
         where table_schema = 'infrx' and grantee in ('anon', 'authenticated', 'PUBLIC')
         order by 1, 2, 3""").fetchall()
     assert not leaked, f"browser roles hold grants inside infrx: {leaked}"
+    views = {f"{s}.{v}" for s, v in conn.execute(
+        "select schemaname, viewname from pg_views where schemaname in ('infrx','public')"
+        ).fetchall()}
+    missing_views = [name for name in EXPECTED_VIEWS if name not in views]
+    assert not missing_views, f"console read views missing: {missing_views}"
     assert conn.execute("select count(*) from infrx.wallet_reconciliation").fetchone()
-    return f"{len(EXPECTED_RELATIONS)} relations, RLS on all, no browser grants"
+    return (f"{len(EXPECTED_RELATIONS)} relations, {len(EXPECTED_VIEWS)} views, RLS on "
+            f"all, no browser grants")
 
 
 def check_rpc_boundary(conn) -> str:
@@ -607,6 +648,9 @@ ATTACKS = (
                        "('pv-free', 'nemostation/marlin-2b', 0, 0, 'tr', now())"),
     ("membership", f"insert into public.org_members (org_id, user_id, role) values "
                    f"('{ORG_B}', '{USER_OWNER}', 'owner')"),
+    # Trace consent is an audited decision recorded in consent_history, not a column an
+    # owner writes through the key-management policy.
+    ("per-key trace consent", "update public.api_keys set trace_mode = 'full'"),
     ("another tenant's output", "select payload from infrx.stream_chunks"),
     ("audit trail", "delete from infrx.audit_entries"),
     ("the database clock", "select infrx.now()"),
@@ -624,6 +668,15 @@ ALLOWED = (
      "member", "select count(*) from public.usage_events"),
     ("member reads their organization's ledger",
      "member", "select count(*) from public.credit_ledger"),
+    # The console's own key actions must keep working (R33: a leaked key is always
+    # revocable), which is what the narrowed column grant is for.
+    ("owner renames a key",
+     "owner", f"update public.api_keys set name = 'renamed' where org_id = '{ORG_A}'"),
+    ("owner revokes a key",
+     "owner", f"update public.api_keys set revoked_at = now() where org_id = '{ORG_A}'"),
+    ("owner creates a key",
+     "owner", f"insert into public.api_keys (org_id, created_by, name, prefix, key_hash) "
+              f"values ('{ORG_A}', '{USER_OWNER}', 'new', 'sk-infrx-dddddddd', 'hash-d')"),
     ("service role writes a wallet",
      "service", f"update infrx.wallets set reserved_total = 2 where org_id = '{ORG_A}'"),
     ("service role calls the clock", "service", "select infrx.now()"),
@@ -1031,6 +1084,109 @@ def check_index_plans(conn) -> str:
             problems.append(f"{path}: sequential scan\n{plan}")
     assert not problems, "bounded access paths without an index:\n" + "\n".join(problems)
     return f"{len(PLANS)} access paths index-served"
+
+
+# --- the console read surface (0005) ------------------------------------------
+#: (view, "tenant" | "owner" | "operator"). A tenant view must show a member only their
+#: own organization's rows; an operator view must show a non-operator nothing.
+READ_VIEWS = (
+    ("public.wallets", "tenant"),
+    ("public.console_ledger", "tenant"),
+    ("public.console_usage", "tenant"),
+    ("public.org_settings", "tenant"),
+    ("public.consent_history", "tenant"),
+    ("public.feedback", "tenant"),
+    ("public.console_judge_runs", "owner"),
+    ("public.calibration_labels", "operator"),
+    ("public.console_admin_orgs", "operator"),
+    ("public.operator_audit", "operator"),
+)
+
+
+class _Rollback(Exception):
+    """Carries the rows out of the transaction that is then rolled back."""
+
+    def __init__(self, rows: list) -> None:
+        super().__init__("rollback")
+        self.rows = rows
+
+
+def read_as(conn, session: str, sql: str) -> list:
+    """Read under that session's role, then roll the transaction back (`set local`)."""
+    try:
+        with conn.transaction():
+            conn.execute(SESSIONS[session])
+            raise _Rollback(conn.execute(sql).fetchall())
+    except _Rollback as done:
+        return done.rows
+
+
+def check_console_read_surface(conn) -> str:
+    """The console's read surface (0005) is owner's-rights over `infrx`, so a missing
+    predicate leaks every tenant. Each view is checked for what it shows whom."""
+    problems = []
+    for view, kind in READ_VIEWS:
+        tenanted = kind in ("tenant", "owner")
+        # anon has no session at all and must see nothing, anywhere.
+        if read_as(conn, "anon", f"select count(*) from {view}")[0][0]:
+            problems.append(f"{view}: anon sees rows")
+        if kind == "operator":
+            for session in ("member", "owner"):
+                if read_as(conn, session, f"select count(*) from {view}")[0][0]:
+                    problems.append(f"{view}: a {session} session sees operator rows")
+            if not read_as(conn, "operator", f"select count(*) from {view}")[0][0]:
+                problems.append(f"{view}: an operator sees nothing (the view is empty, "
+                                f"so the denials above prove nothing)")
+            continue
+        session = "owner" if kind == "owner" else "member"
+        rows = read_as(conn, session, f"select count(*) from {view}")[0][0]
+        if not rows:
+            problems.append(f"{view}: a {session} of the seeded org sees nothing, so the "
+                            f"cross-tenant check below proves nothing")
+        if kind == "owner":
+            # R13: judge runs are owner and operator only.
+            if read_as(conn, "member", f"select count(*) from {view}")[0][0]:
+                problems.append(f"{view}: a plain member sees owner-only rows")
+        if tenanted:
+            # Not "nothing but ORG_A": a user may legitimately belong to several
+            # organizations (the signup trigger gives everyone a personal one). The
+            # invariant is that ORG_B's row - a tenant this session is not in - is
+            # invisible, which is why the fixture seeds one in every relation.
+            foreign = read_as(conn, session,
+                              f"select count(*) from {view} where org_id = '{ORG_B}'")
+            if foreign[0][0]:
+                problems.append(f"{view}: a session of one org sees another org's rows")
+    assert not problems, "the console read surface leaks:\n  " + "\n  ".join(problems)
+
+    # R41/R50: a customer reads `platform`, an operator reads the principal.
+    customer = read_as(conn, "member", "select actor from public.console_ledger "
+                                       "where by_operator")
+    assert customer and all(row[0] == "platform" for row in customer), \
+        f"a customer session read an operator principal from the ledger: {customer}"
+    operator = read_as(conn, "operator", "select actor from public.console_ledger "
+                                         "where by_operator")
+    assert operator and all(row[0] == "ops@infrx" for row in operator), \
+        f"an operator did not read the real ledger principal: {operator}"
+    labels = read_as(conn, "operator", "select count(*) from public.feedback "
+                                       "where calibration_set")
+    assert labels[0][0] == 0, "a calibration label appeared in a feedback list (R49)"
+    assert read_as(conn, "operator",
+                   "select count(*) from public.calibration_labels")[0][0] == 1
+
+    # The summary function: the guard is an error, not an empty result.
+    summary = read_as(conn, "member",
+                      f"select * from public.org_wallet_summary('{ORG_A}')")[0]
+    ledger, reserved, loaded, spent = summary
+    assert (ledger, reserved) == (Decimal("50.00000000"), Decimal("1.25000000")), summary
+    assert loaded == Decimal("50.00000000") and spent == Decimal("0.00000000"), summary
+    try:
+        read_as(conn, "member", f"select * from public.org_wallet_summary('{ORG_B}')")
+    except psycopg.errors.InsufficientPrivilege:
+        pass
+    else:
+        raise AssertionError("org_wallet_summary answered for another organization")
+    return (f"{len(READ_VIEWS)} views tenant- and role-scoped; principals masked; "
+            f"org_wallet_summary guarded")
 
 
 # --- the database clock -------------------------------------------------------

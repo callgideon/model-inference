@@ -112,6 +112,15 @@ def test_dur_rls__the_mutation_boundary_is_narrow_and_fails_closed() -> None:
     print(checks.check_rpc_boundary(_fresh()))
 
 
+def test_dur_rls__the_console_read_surface_is_tenant_scoped() -> None:
+    """0005's views read `infrx` with the view owner's rights, so each one carries its
+    own tenant or operator predicate: a member sees only their organization, a
+    non-operator sees no operator relation, a customer reads `platform` as the actor of
+    anything the platform did, no feedback list carries a calibration label, and
+    `org_wallet_summary` refuses another organization instead of answering empty."""
+    print(checks.check_console_read_surface(_fresh()))
+
+
 # --- (4) row checks -----------------------------------------------------------
 def test_every_row_check_refuses_its_violation() -> None:
     """One statement per invariant the schema claims; each must be refused."""

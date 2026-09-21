@@ -35,7 +35,13 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           "profiles_operator_column_grant_widened",
           "infrx_tables_readable_by_authenticated",
           "entitlements_deny_everyone_by_default", "new_organizations_get_no_wallet",
-          "wallet_money_is_not_the_domain", "no_pending_outbox_index")
+          "wallet_money_is_not_the_domain", "no_pending_outbox_index",
+          "wallet_view_without_a_tenant_predicate",
+          "operator_audit_readable_by_a_member",
+          "ledger_actor_is_never_masked",
+          "calibration_labels_leak_into_feedback",
+          "wallet_summary_answers_for_any_organization",
+          "api_keys_update_not_narrowed")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 
