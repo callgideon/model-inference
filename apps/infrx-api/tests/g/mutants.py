@@ -77,8 +77,9 @@ MUTANTS: tuple[Mutant, ...] = (
        I, "    except (ValueError, RecursionError):", "    except ValueError:",
        "test_media_sec__a_parser_hostile_body_is_a_400_not_a_500"),
     _m("json_constants_accepted", "NaN and Infinity are not numbers JSON has",
-       I, "        body = json.loads(text, parse_constant=_no_constants)",
-       "        body = json.loads(text)",
+       I, "        body = json.loads(text, parse_constant=_no_constants,\n"
+          "                          parse_int=_bounded_int, parse_float=_bounded_float)",
+       "        body = json.loads(text, parse_int=_bounded_int, parse_float=_bounded_float)",
        "test_media_sec__the_parser_itself_refuses_json_that_is_not_json"),
     # --- review r1 item 2: the error path cannot raise -------------------------
     _m("param_echoed_unfiltered", "only a parameter-shaped param is echoed",
