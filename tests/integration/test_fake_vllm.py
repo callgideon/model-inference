@@ -348,26 +348,37 @@ def test_the_server_log_is_never_left_behind_in_the_temp_directory():
     $TMPDIR - not while the server runs, not after `stop()`, and not after a `kill()` either,
     which is the path that used to leak (the owner dies, so nothing removes the name).
     """
-    import glob
-    pattern = str(Path(os.environ.get("TMPDIR", "/tmp")) / "infrx-e2-fake-vllm-*")
-    before = set(glob.glob(pattern))
-    victim = FakeVllmServer(TEST_PORT + 5).start()
-    try:
-        assert set(glob.glob(pattern)) == before, \
-            f"the server's log is visible in $TMPDIR: {set(glob.glob(pattern)) - before}"
-        # It still has to be READABLE - the diagnostic is the whole point of keeping it.
-        assert victim._tail() is not None
-        assert asyncio.run(HttpEngine(victim.base_url, clock=FakeClock()).health())["ready"]
-    finally:
-        victim.stop()
-    assert set(glob.glob(pattern)) == before, "stop() must leave nothing either"
+    import tempfile
+    # The temp directory is redirected to one this case owns, for two reasons: the assertion is
+    # about the directory the server actually writes into, and a MUTANT that reintroduces the
+    # leak then leaks into a directory that vanishes with this case instead of into the shared
+    # /tmp (measured: proving this claim used to leave 16 files behind).
+    previous = tempfile.tempdir
+    with tempfile.TemporaryDirectory(prefix="e2-logscope-") as scope:
+        tempfile.tempdir = scope
+        try:
+            left = lambda: sorted(Path(scope).iterdir())
+            assert left() == [], scope
+            victim = FakeVllmServer(TEST_PORT + 5).start()
+            try:
+                assert left() == [], f"the server's log is visible in its temp dir: {left()}"
+                # It still has to be READABLE - the diagnostic is the point of keeping it.
+                assert victim._tail() is not None
+                assert asyncio.run(HttpEngine(victim.base_url,
+                                              clock=FakeClock()).health())["ready"]
+            finally:
+                victim.stop()
+            assert left() == [], f"stop() must leave nothing either: {left()}"
 
-    killed = FakeVllmServer(TEST_PORT + 5).start()
-    killed.kill(signal.SIGKILL)
-    assert set(glob.glob(pattern)) == before, \
-        "a SIGKILLed server must leave no log: the owner is gone, so nothing can unlink a name"
-    killed.stop()
-    assert set(glob.glob(pattern)) == before
+            killed = FakeVllmServer(TEST_PORT + 5).start()
+            killed.kill(signal.SIGKILL)
+            assert left() == [], \
+                f"a SIGKILLed server must leave no log - the owner is gone, so nothing can " \
+                f"unlink a name: {left()}"
+            killed.stop()
+            assert left() == []
+        finally:
+            tempfile.tempdir = previous
 
 
 def test_canary_intentional_failure_is_detected():

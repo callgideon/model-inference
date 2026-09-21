@@ -483,10 +483,21 @@ def _copy_trees(destination: Path) -> None:
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
 
 
+def _temp_litter() -> set:
+    """Files in the temp directory carrying our prefix, minus the state file, which is ours."""
+    root = Path(tempfile.gettempdir())
+    return {path for path in root.glob(f"{harness.PROJECT}-*") if path != harness.STATE_FILE}
+
+
 def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
     if mutant.layer == 2 and not stack_available:
         return {"id": mutant.id, "status": "pending", "why": "layer 2: no live stack",
                 "invariant": mutant.invariant}
+    # A mutant is broken code by construction, so it may leak what the real code cannot: e2m54
+    # reintroduces the leaked server log, and every server the copy starts then leaves a file
+    # behind, not only the one the guarded case watches. Anything new under our own prefix is
+    # removed afterwards - never anything that was there before, and never the state file.
+    litter_before = _temp_litter()
     with tempfile.TemporaryDirectory(prefix=f"infrx-e2-{mutant.id}-") as tmp:
         root = Path(tmp)
         _copy_trees(root)
@@ -510,6 +521,15 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
                  "INFRX_E2_CANARY": "off", "PYTHONDONTWRITEBYTECODE": "1"})
         output = result.stdout + result.stderr
         verdict = _verdict(mutant, result.returncode, output)
+    litter = sorted(str(path) for path in _temp_litter() - litter_before)
+    for path in litter:
+        pathlib_path = Path(path)
+        if pathlib_path.is_dir():
+            shutil.rmtree(pathlib_path, ignore_errors=True)
+        else:
+            pathlib_path.unlink(missing_ok=True)
+    if litter:
+        verdict["temp_litter_removed"] = litter
     if mutant.dirties_database:
         verdict["reprovisioned"] = _reprovision()
     return verdict
