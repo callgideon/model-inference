@@ -564,17 +564,64 @@ def test_an_entitlement_limit_is_a_strict_integer(value):
             {**raw, "limits": {**raw["limits"], "max_concurrent_requests": value}})
 
 
+# The store mints these freshly on every admission, so a fixture cannot pin them; every
+# other field of `admission.json` is the store's own derivation and is compared exactly.
+FRESHLY_MINTED = ("job_handle", "outbox")
+
+
 def test_the_request_fixture_is_one_the_store_would_admit():
-    """r1 R55: `admit` range-checks the ceilings, so the canonical request fixture - which
-    every track reads as "this is what a normalized request looks like" - has to be inside
-    them. A fixture the store would refuse teaches the wrong shape."""
+    """F-CONTRACT: `admission.json` is what `admit` returns for `normalized_request.json`.
+
+    It used to be asserted by eye, and two things had drifted: the request's `deadline_at`
+    was `created_at + 450 s` where a **stream** request's bound is 120 + 10 + 300 = 430 s,
+    so the store would have refused the very request the admission fixture claims it
+    admitted; and `maximum_hold` was `0.00768000` where the ceiling formula on the
+    fixture's own rates and ceilings gives `0.00629760`. Both are the kind of drift only a
+    real call can find, so this one makes the call - on the fake, with the clock at the
+    fixture's `created_at` and its own price snapshot seeded - and compares the returned
+    record field by field.
+    """
     request = fixtures.model("normalized_request.json")
+    expected = fixtures.model("admission.json")
+    # r1 R55: inside the ceiling ranges, which is the cheap half of the check
     assert 1 <= request.max_output_tokens <= limits.DEFAULTS.max_output_tokens
     assert request.max_input_tokens >= 1
     assert (request.max_input_tokens + request.max_output_tokens
             <= limits.DEFAULTS.max_context_tokens)
     prepared = fixtures.model("prepared_request.json")
     assert 1 <= prepared.max_output_tokens <= limits.DEFAULTS.max_output_tokens
+
+    admission = _admit_the_fixture(request, expected)
+    for field in records.Admission.model_fields:
+        if field in FRESHLY_MINTED:
+            continue
+        assert getattr(admission, field) == getattr(expected, field), \
+            f"admission.json disagrees with the store on {field}: " \
+            f"{getattr(expected, field)!r} vs {getattr(admission, field)!r}"
+    # the two a fixture cannot pin are still checked for shape
+    assert ids.JOB_HANDLE_RE.fullmatch(admission.job_handle)
+    assert [event.kind for event in admission.outbox] == \
+        [event.kind for event in expected.outbox]
+    assert [event.payload["request_id"] for event in admission.outbox] == \
+        [request.request_id for _ in expected.outbox]
+
+
+def _admit_the_fixture(request, expected):
+    """Admit `normalized_request.json` on the fake, at its own `created_at`."""
+    import asyncio
+    from infrx.contracts.fakes.state import FakeJobStore
+    from infrx.contracts.fakes.support import FakeClock, SequentialIds
+
+    async def run():
+        store = FakeJobStore(FakeClock(request.created_at), SequentialIds(),
+                             prices={request.model_revision: expected.price_snapshot})
+        store.grant(request.org_id, "25.00")
+        idem = records.IdempotencyRef(org_id=request.org_id, operation=expected.operation,
+                                      key=expected.idempotency_key,
+                                      payload_hash=expected.payload_hash)
+        return await store.admit(request, idem, ())
+
+    return asyncio.run(run())
 
 
 def test_client_feedback_submission_cannot_set_provenance():

@@ -623,6 +623,13 @@ MUTANTS: tuple[Mutant, ...] = (
           "            \"maximum_hold\": self._derive_hold(job.request,\n"
           "                                              current or job.admission.price_snapshot)})",
        "dur_admit__a_replay_reports_the_original_hold_and_price"),
+    _m("replay_refreshes_the_admitted_at", "a replay reports the original admission (t15)",
+       S, "        job = self.jobs[record.request_id]\n"
+          '        return self._snapshot(job).model_copy(update={"replayed": True})',
+       "        job = self.jobs[record.request_id]\n"
+          '        return self._snapshot(job).model_copy(update={"replayed": True,\n'
+          '                                                     "admitted_at": now})',
+       "dur_admit__a_replay_reports_the_original_hold_and_price"),
     _m("preparation_retries_unbounded", "preparation retries are bounded (q08)",
        S, "            if job.preparation_attempts > self.limits.max_prepublication_retries:",
        "            if False:",
@@ -652,6 +659,10 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "        if not 1 <= request.max_output_tokens <= limits.max_output_tokens:",
        "        if request.max_output_tokens > limits.max_output_tokens:",
        "dur_admit__the_token_ceilings_are_range_checked"),
+    _m("admit_drops_the_output_ceiling_upper_bound", "the output ceiling has an upper bound (t05)",
+       S, "        if not 1 <= request.max_output_tokens <= limits.max_output_tokens:",
+       "        if not 1 <= request.max_output_tokens:",
+       "dur_admit__the_token_ceilings_are_range_checked"),
     _m("admit_accepts_a_zero_input_ceiling", "an input ceiling is at least one (R55)",
        S, "        if request.max_input_tokens < 1:", "        if False:",
        "dur_admit__the_token_ceilings_are_range_checked"),
@@ -679,6 +690,15 @@ MUTANTS: tuple[Mutant, ...] = (
           "        if self.clock.now() >= job.preparation_lease.expires_at:",
        "        if self.clock.now() >= job.preparation_lease.expires_at:",
        "dur_output__a_heartbeating_preparation_worker_is_terminalized_on_time"),
+    _m("inference_expiry_checked_before_the_deadline", "the deadline goes first, both paths (t02)",
+       S, "        self._enforce_deadlines(job)\n"
+          "        if self.clock.now() >= job.lease.expires_at:\n"
+          '            raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")\n'
+          "        return job",
+       "        if self.clock.now() >= job.lease.expires_at:\n"
+          '            raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")\n'
+          "        self._enforce_deadlines(job)\n        return job",
+       "dur_fence__an_overdue_inference_lease_terminalizes_in_the_same_call"),
     _m("preparation_expiry_checked_before_the_deadline", "the deadline goes first (R55)",
        S, "        # r1 R55/R29: the phase first, because a clamped lease expires with it.\n"
           "        self._enforce_deadlines(job)\n"
@@ -1159,6 +1179,10 @@ MUTANTS: tuple[Mutant, ...] = (
           "            if reason is TraceLossReason.queue_full:\n"
           "                self.content_bytes = max(0, self.content_bytes - charged)",
        "trace_bounds__a_dropped_finish_releases_its_charge"),
+    _m("minimal_capture_accumulates", "a quiet mode charges nothing (P08)",
+       T, "        no_op = mode is not TraceMode.full or deadline_at is None",
+       "        no_op = mode is TraceMode.off or deadline_at is None",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
     # --- P17/P18: identity and mode, now observable inside the lattice ------------
     _m("noop_capture_trusts_the_envelope_mode", "the capture decides its own mode (P18)",
        T, "        if envelope.mode is not self.mode:\n"

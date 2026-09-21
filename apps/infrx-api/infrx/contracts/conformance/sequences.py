@@ -69,7 +69,7 @@ MODES = (TraceMode.off, TraceMode.minimal, TraceMode.full)
 GUARDED = ("minimal_stores_no_content", "lost_content_is_marked", "lost_content_is_counted",
            "closed_capture_stores_nothing", "closed_capture_holds_nothing",
            "crash_losses_are_bounded", "rows_belong_to_their_capture",
-           "rows_carry_the_opened_mode")
+           "rows_carry_the_opened_mode", "quiet_modes_charge_nothing")
 
 
 @dataclass
@@ -271,6 +271,16 @@ async def _run_one(factory, mode: TraceMode, with_deadline: bool,
         fired["rows_carry_the_opened_mode"] = fired.get("rows_carry_the_opened_mode", 0) + 1
         assert row.mode is mode, \
             f"a row opened {mode} was stored as {row.mode}: {context}"
+    if mode in (TraceMode.off, TraceMode.minimal):
+        # P08 inside the lattice: a capture that may not store content must never *charge*
+        # for it either. `add` is False and the process budget stays at zero, whatever the
+        # sequence did - so a sink that decided "no-op" on the deadline alone (`mode is off
+        # or deadline_at is None`) and let a `minimal` capture accumulate is caught here,
+        # not only where a row happens to be queued.
+        fired["quiet_modes_charge_nothing"] = fired.get("quiet_modes_charge_nothing", 0) + 1
+        assert charged == 0, f"a {mode} capture charged {charged} bytes: {context}"
+        assert stats["in_memory_content_bytes"] == 0, \
+            f"a {mode} capture held {stats['in_memory_content_bytes']} bytes: {context}"
     if mode is TraceMode.minimal and rows:
         # P08. It fires only once a `minimal` capture has a row at all - which the raw
         # envelope operation is what produces, since `add` on a minimal capture is a no-op.

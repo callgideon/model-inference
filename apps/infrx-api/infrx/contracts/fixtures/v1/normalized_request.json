@@ -1,6 +1,6 @@
 {
   "created_at": "2026-09-20T12:00:00Z",
-  "deadline_at": "2026-09-20T12:07:30Z",
+  "deadline_at": "2026-09-20T12:07:00Z",
   "execution_mode": "stream",
   "key_id": "3c3c3c3c-0000-4000-8000-000000000003",
   "max_input_tokens": 30720,

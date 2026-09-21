@@ -118,12 +118,17 @@ async def media_parity__staging_is_content_addressed_and_tenant_namespaced(facto
     else:
         raise AssertionError("a refused attach left media behind for prepare")
     # and an unknown job cannot be attached to at all: there is no row to read the org from
-    try:
-        await harness.port.attach(harness.ids.uuid(), staged_a)
-    except errors.NotFound:
-        pass
-    else:
-        raise AssertionError("media attached to a job the store does not know")
+    for what, refs in (("with refs", staged_a), ("with no refs at all", ())):
+        # t12: an empty tuple must not skip the job lookup. With the org read inside the
+        # loop, `attach(unknown, ())` silently created an entry for a job that does not
+        # exist, and `prepare` would then hand a worker an empty prepared set as if it were
+        # a finished preparation.
+        try:
+            await harness.port.attach(harness.ids.uuid(), refs)
+        except errors.NotFound:
+            pass
+        else:
+            raise AssertionError(f"attached to a job the store does not know, {what}")
     await harness.port.attach(request_a.request_id, staged_a)
     prepared = await harness.port.prepare(request_a.request_id, "profile-2")
     assert prepared[0].profile_version == "profile-2"

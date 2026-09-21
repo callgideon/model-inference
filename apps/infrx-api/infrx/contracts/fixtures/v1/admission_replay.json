@@ -8,11 +8,11 @@
     "schema_version": 1,
     "stall_s": 20.0
   },
-  "deadline_at": "2026-09-20T12:07:30Z",
+  "deadline_at": "2026-09-20T12:07:00Z",
   "idempotency_key": "client-key-0001",
   "job_handle": "job_Ck1hQeTdJ6WwWVQe4LnPXe9kM0bF1sAqTgYn2R7xVpU",
   "key_id": "3c3c3c3c-0000-4000-8000-000000000003",
-  "maximum_hold": "0.00768000",
+  "maximum_hold": "0.00629760",
   "operation": "chat.completions",
   "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
   "outbox": [

@@ -450,6 +450,10 @@ async def dur_admit__the_token_ceilings_are_range_checked(factory):
         (-1, 16, "a negative input ceiling"),
         (16, -1, "a negative output ceiling"),
         (30_720, ceiling + 1, "an output ceiling past MAX_OUTPUT_TOKENS"),
+        # t05: and one whose context sum is comfortably legal, so the **upper bound itself**
+        # is what refuses it. Every other over-ceiling row above also breaks the context
+        # cap, so dropping `<= MAX_OUTPUT_TOKENS` left them all still failing.
+        (100, ceiling + 1, "an output ceiling past MAX_OUTPUT_TOKENS with a legal context sum"),
         (40_000, 4_096, "a request past MAX_CONTEXT_TOKENS"),
         (context, ceiling, "input at the context cap plus any output"),
     )
@@ -479,6 +483,11 @@ async def dur_admit__the_token_ceilings_are_range_checked(factory):
     largest = b.request(harness, max_input_tokens=context - ceiling, max_output_tokens=ceiling)
     admitted = await harness.port.admit(largest, b.idem(largest, "ceil-largest"), ())
     assert admitted.maximum_hold > 0
+    # exactly at the output ceiling, with room to spare in the context: admitted.
+    at_ceiling = b.request(harness, max_input_tokens=100, max_output_tokens=ceiling)
+    admitted_at_ceiling = await harness.port.admit(
+        at_ceiling, b.idem(at_ceiling, "ceil-exact"), ())
+    assert admitted_at_ceiling.maximum_hold > 0
     smallest_request = b.request(harness, max_input_tokens=1, max_output_tokens=1)
     smallest = await harness.port.admit(smallest_request,
                                         b.idem(smallest_request, "ceil-smallest"), ())
@@ -1086,6 +1095,104 @@ async def dur_fence__an_expired_lease_can_neither_renew_nor_settle(factory):
             pass
         else:
             raise AssertionError("an expired lease mutated the job")
+
+
+async def dur_fence__an_overdue_inference_lease_terminalizes_in_the_same_call(factory):
+    """DUR-FENCE / r1 R29 + R55: the ordering is claimed for **both** paths.
+
+    R29 names `heartbeat`, `append`, `prepared` and `complete`: past a phase deadline the
+    store terminalizes the job *in that same operation*, so the outcome never depends on
+    reaper timing. Only the preparation path was pinned, so putting the lease-expiry check
+    back in front of the deadline check on the inference path survived - and that is the
+    same defect B1 was: a worker whose lease and deadline have both passed gets
+    `stale_lease`, the job stays `running`, and the customer's hold stays reserved.
+
+    Three states, deliberately separated by a lease TTL shorter than the generation budget:
+
+    * lease expired **and** the deadline passed -> `already_terminal`, the job is
+      `deadline_exceeded`, and the hold is released in that call;
+    * lease expired **before** any deadline -> `stale_lease`, state unchanged;
+    * a superseded generation -> `stale_lease`, and it never terminalizes on the new
+      holder's behalf.
+    """
+    limits = DEFAULTS.replace(lease_ttl_s=120.0, generation_timeout_s=130.0)
+    deadline_s = b.default_deadline_s(ExecutionMode.stream, limits)
+
+    async def overdue(key):
+        """A running job whose lease expires at t+120 and whose generation ends at t+130."""
+        harness = factory(limits=limits)
+        request, admission = await _admit(harness, key=key, deadline_s=deadline_s)
+        await _prepare(harness.port, request.request_id)
+        lease = await harness.port.claim(request.request_id, "worker-a")
+        assert lease.expires_at == harness.clock.at(limits.lease_ttl_s)
+        assert lease.generation_deadline_at == harness.clock.at(limits.generation_timeout_s)
+        assert lease.expires_at < lease.generation_deadline_at, \
+            "the case needs the lease to expire before the deadline"
+        return harness, request, admission, lease
+
+    # 1. both passed: every fenced operation terminalizes here and releases the hold.
+    for operation in ("complete", "heartbeat", "append", "load_work"):
+        harness, request, admission, lease = await overdue(f"t02-{operation}")
+        stream = hook(harness, "stream")
+        funded = harness.extra["balance"](request.org_id)
+        assert funded["reserved"] == admission.maximum_hold > 0
+        harness.clock.advance(limits.generation_timeout_s + 1)
+        invoke = {
+            "complete": lambda: harness.port.complete(lease,
+                                                      b.outcome(request.request_id, harness)),
+            "heartbeat": lambda: harness.port.heartbeat(lease),
+            "append": lambda: stream.append(lease, b.events("late")),
+            "load_work": lambda: harness.port.load_work(lease),
+        }[operation]
+        try:
+            await invoke()
+        except errors.AlreadyTerminal:
+            pass
+        else:
+            raise AssertionError(f"{operation} past the generation deadline did not refuse")
+        stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+        assert outcome is not None, \
+            f"{operation} refused but left the job running: R29 wants it settled here"
+        assert outcome.cause is TerminalCause.deadline_exceeded, outcome.cause
+        assert outcome.debit == 0 and outcome.settlement_state in (
+            SettlementState.released_free, SettlementState.released_platform_absorbed)
+        assert not any(reservation.active for reservation in stored.reservations)
+        after = harness.extra["balance"](request.org_id)
+        assert after["reserved"] == 0, f"{operation} left the hold reserved for a reaper"
+        assert after["ledger"] == funded["ledger"], "our own deadline charges nothing (R21)"
+
+    # 2. the lease alone: expired, but the job still has deadline left. A stale worker is
+    # fenced and **nothing** changes - a lost lease is a requeue for `recover` to decide,
+    # not a terminal state this call may invent.
+    harness, request, admission, lease = await overdue("t02-lease-only")
+    harness.clock.advance(limits.lease_ttl_s + 1)
+    assert harness.clock.now() < lease.generation_deadline_at
+    try:
+        await harness.port.heartbeat(lease)
+    except errors.StaleLease as exc:
+        assert exc.code == "stale_lease", exc.code
+    else:
+        raise AssertionError("an expired lease renewed itself")
+    stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert outcome is None and stored.state is JobState.running, \
+        "an expired lease inside the deadline terminalized the job early"
+    assert harness.extra["balance"](request.org_id)["reserved"] == admission.maximum_hold
+
+    # 3. a superseded generation, past the deadline: still `stale_lease`, and it must not
+    # terminalize on the new holder's behalf.
+    harness, request, admission, lease = await overdue("t02-superseded")
+    harness.clock.advance(limits.lease_ttl_s + 1)
+    await harness.port.recover()                          # requeues; generation moves on
+    second = await harness.port.claim(request.request_id, "worker-b")
+    assert second.generation == lease.generation + 1
+    try:
+        await harness.port.heartbeat(lease)
+    except errors.StaleLease:
+        pass
+    else:
+        raise AssertionError("a superseded worker renewed a lease")
+    _stored, still_running = await harness.port.get_owned(request.org_id, admission.job_handle)
+    assert still_running is None, "a superseded worker terminalized the new holder's job"
 
 
 async def dur_fence__another_worker_at_the_same_generation_is_still_fenced(factory):
@@ -1874,6 +1981,10 @@ async def dur_admit__a_replay_reports_the_original_hold_and_price(factory):
     assert reserved == first.maximum_hold
 
     set_price(b.MODEL, dear)
+    # t15: and the clock moves, because a retry arrives later than the original by
+    # definition - that is the whole point of a replay, and `admitted_at` refreshed to the
+    # retry's clock would report an acceptance time no deadline on the job was derived from.
+    harness.clock.advance(7)
     replay = await harness.port.admit(request, idem, ())
     assert replay.replayed is True
     assert replay.price_snapshot == cheap, \
@@ -1881,8 +1992,17 @@ async def dur_admit__a_replay_reports_the_original_hold_and_price(factory):
     assert replay.maximum_hold == first.maximum_hold, \
         (f"a replay reported {money.format_money(replay.maximum_hold)} against the "
          f"{money.format_money(first.maximum_hold)} actually reserved")
-    assert replay.request_id == first.request_id and replay.job_handle == first.job_handle
-    assert replay.admitted_at == first.admitted_at and replay.budgets == first.budgets
+    # t15: field by field, not a hand-picked few. `admitted_at` is the one a store is most
+    # likely to refresh - it is "now" on every other path - and a replay reporting the
+    # retry's clock would tell a client its job was accepted at a time no deadline was
+    # derived from. `replayed` is the only field allowed to differ.
+    for field in type(first).model_fields:
+        if field == "replayed":
+            continue
+        assert getattr(replay, field) == getattr(first, field), \
+            f"a replay reported a different {field}: " \
+            f"{getattr(first, field)!r} vs {getattr(replay, field)!r}"
+    assert first.replayed is False
     # and the wallet never moved, which is what makes the returned record the only place
     # this defect is visible
     assert harness.extra["balance"](b.ORG_A)["reserved"] == reserved
@@ -2498,6 +2618,7 @@ def jobstore_cases():
         dur_fence__a_lease_is_a_fencing_token_not_a_record,
         dur_fence__a_deadline_binds_append_and_complete,
         dur_fence__an_expired_lease_can_neither_renew_nor_settle,
+        dur_fence__an_overdue_inference_lease_terminalizes_in_the_same_call,
         dur_fence__a_stale_generation_is_rejected,
         dur_output__recovery_requeues_only_before_publication,
         dur_output__every_requeued_candidate_carries_the_right_kind,
