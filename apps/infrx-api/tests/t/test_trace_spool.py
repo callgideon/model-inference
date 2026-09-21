@@ -37,8 +37,8 @@ from infrx.contracts.conformance.services import tracesink_cases
 from infrx.contracts.fakes.support import FailurePlan, FakeClock, SequentialIds
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import TraceEnvelope, TraceMode, TraceOfferResult
-from infrx.traces.spool import (FRAME, HEADER, SpoolIO, SpoolTraceSink, recover,
-                                scan_segment, segment_header)
+from infrx.traces.spool import (FRAME, HEADER, MAX_ENVELOPE_BYTES, SpoolIO,
+                                SpoolTraceSink, recover, scan_segment, segment_header)
 
 ID_A = "aaaaaaaa-0000-4000-8000-00000000000a"
 ID_B = "bbbbbbbb-0000-4000-8000-00000000000b"
@@ -83,7 +83,7 @@ class DrillIO(SpoolIO):
             # the slow disk: the writer thread parks here, inside the filesystem
             if self.entered is not None:
                 self.entered.set()
-            self.block.wait(30)
+            self.block.wait(5)
         if self.fail_write_on is not None and self.calls["write"] >= self.fail_write_on:
             raise OSError(28, "No space left on device")
         return super().write(fd, data)
@@ -336,6 +336,18 @@ def test_a_poison_record_does_not_stop_the_scan():
     assert scan.ids == [(name, 1)]
 
 
+def test_a_frame_claiming_more_than_a_frame_may_hold_is_the_tail():
+    """The reader's frame ceiling is the other half of the writer's: a frame whose length
+    field is past `MAX_ENVELOPE_BYTES` is the tail, even when its checksum agrees, because
+    the writer is not allowed to have produced one. Without the ceiling this comes back as
+    a poison record instead - a corrupt length field silently promoted to a bad row."""
+    payload = b"j" * (MAX_ENVELOPE_BYTES + 1)
+    data = (segment_header()
+            + FRAME.pack(len(payload), 0, binascii.crc32(payload), 0) + payload)
+    scan = scan_segment("trace-000000.seg", data)
+    assert scan.torn == 1 and scan.poison == 0 and scan.records == []
+
+
 def test_an_unknown_segment_version_is_never_half_parsed():
     """A segment a future writer produced is left alone rather than guessed at."""
     scan = scan_segment("trace-000000.seg", HEADER.pack(b"INFRXTRC", 99) + b"whatever")
@@ -583,6 +595,24 @@ def test_the_declared_content_and_the_charged_bytes_must_agree():
         assert await capture.finish(understated) is TraceOfferResult.dropped
         stats = await spool.stats()
         assert stats["in_memory"] == 0 and stats["in_memory_content_bytes"] == 0
+        assert stats["loss_reasons"]["malformed"] == 1
+        await spool.flush(spool.clock.now())
+        assert recover(spool.spool_dir).records == []
+        await spool.close()
+    asyncio.run(scenario())
+
+
+def test_an_envelope_too_large_for_a_frame_is_refused_not_written():
+    """The writer and the reader agree on what a frame may be, or neither works: the reader
+    refuses an envelope past `MAX_ENVELOPE_BYTES`, so writing one would spool bytes nothing
+    can replay. It is dropped `malformed` on the way in instead."""
+    async def scenario():
+        spool = sink()
+        huge = b.trace(ID_A, mode=TraceMode.minimal, content_bytes=0,
+                       metadata_bytes=16).model_copy(update={"model_revision": "m" * (2 << 20)})
+        assert await spool.offer(huge) is TraceOfferResult.dropped
+        stats = await spool.stats()
+        assert stats["in_memory"] == 0
         assert stats["loss_reasons"]["malformed"] == 1
         await spool.flush(spool.clock.now())
         assert recover(spool.spool_dir).records == []
