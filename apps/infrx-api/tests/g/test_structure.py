@@ -539,16 +539,26 @@ def test_media_sec__an_opener_free_body_is_refused_without_parsing_it(name, buil
 
 
 def test_media_sec__the_separator_cap_is_exact():
-    """At the cap, in text, accepted; one past, refused - so the bound is the count and
-    not the shape."""
+    """At the cap the body is parsed (and then refused on its shape); one separator
+    past it, it is refused *before* the parse. The spy is what makes the two
+    distinguishable - both are a refusal to the caller, and only one of them is cheap.
+    """
     tc, accepted = client()
-    at_the_cap = "," * validate.MAX_TEXT_CODEPOINTS
-    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json={
-        "messages": [{"role": "user", "content": at_the_cap}]}).status_code == 202
-    response = tc.post(support.CHAT_PATH, headers=support.AUTH, json={
-        "messages": [{"role": "user", "content": at_the_cap + ","}]})
-    assert response.status_code in (400, 413), response.text[:160]
-    assert len(accepted) == 1
+    at_the_cap = b'{"x":[' + b"1," * validate.MAX_SEPARATORS + b"1]}"
+    assert at_the_cap.decode().count(",") == validate.MAX_SEPARATORS
+
+    calls, restore = parse_spy()
+    try:
+        inside = tc.post(support.CHAT_PATH, headers=support.RAW, content=at_the_cap)
+        past = tc.post(support.CHAT_PATH, headers=support.RAW,
+                       content=b'{"x":[' + b"1," * (validate.MAX_SEPARATORS + 1) + b"1]}")
+    finally:
+        restore()
+    assert inside.status_code == 400, inside.text[:160]        # parsed, then unsupported
+    assert support.error_of(inside)["code"] == "unsupported_parameter"
+    assert past.status_code == 413, past.text[:160]            # refused before the parse
+    assert len(calls) == 1, "the body one separator past the cap reached the parser"
+    assert accepted == []
 
 
 def test_media_sec__an_inline_video_costs_one_separator():
@@ -624,16 +634,24 @@ def parts_body(*content):
 
 # --- review r3 same pass: the boundaries, exactly ----------------------------------
 def test_media_sec__the_opener_cap_is_exact_at_its_real_boundary():
-    """133,252 openers in text is accepted and 133,253 is not - the cap itself, not a
-    number comfortably inside it."""
+    """At exactly `MAX_OPENERS` the body is parsed; at one more it is refused before
+    the parse. Both answer the caller with a refusal, so the spy is the difference."""
     tc, accepted = client()
-    inside = "{" * (validate.MAX_OPENERS - validate.STRUCTURE_OPENERS)
-    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json={
-        "messages": [{"role": "user", "content": inside}]}).status_code == 202
-    response = tc.post(support.CHAT_PATH, headers=support.AUTH, json={
-        "messages": [{"role": "user", "content": "{" * (validate.MAX_OPENERS + 1)}]})
-    assert response.status_code in (400, 413), response.text[:160]
-    assert len(accepted) == 1
+    body = b'{"x":"' + b"{" * (validate.MAX_OPENERS - 1) + b'"}'
+    assert body.decode().count("{") == validate.MAX_OPENERS
+
+    calls, restore = parse_spy()
+    try:
+        inside = tc.post(support.CHAT_PATH, headers=support.RAW, content=body)
+        past = tc.post(support.CHAT_PATH, headers=support.RAW,
+                       content=b'{"x":"' + b"{" * validate.MAX_OPENERS + b'"}')
+    finally:
+        restore()
+    assert inside.status_code == 400, inside.text[:160]
+    assert support.error_of(inside)["code"] == "unsupported_parameter"
+    assert past.status_code == 413, past.text[:160]
+    assert len(calls) == 1, "the body one opener past the cap reached the parser"
+    assert accepted == []
 
 
 def test_media_sec__the_large_body_threshold_is_exclusive():
