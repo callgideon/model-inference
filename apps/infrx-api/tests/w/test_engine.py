@@ -996,6 +996,11 @@ def test_api_stream__a_prepared_reference_must_be_one_the_store_could_have_made(
         "../../etc/passwd",
         "media/../../etc/passwd",
         f"media/{b.ORG_B}/v1/source",                  # another tenant's prefix
+        f"media/{b.ORG_A}/../{b.ORG_B}/v1/source",     # traversal *inside* a valid prefix
+        f"media/{b.ORG_A}/v1/./source",
+        f"media/{b.ORG_A}/v1/.hidden",
+        f"media/{b.ORG_A}/v1/source\n",                # `$` matched before a newline
+        f"media/{b.ORG_A}/v1/source\nmedia/x/y/z",
         f"media/{good.org_id}",                        # no object under the tenant
         f"media/{good.org_id}/v1/source extra",        # a space is not a key
         "",
@@ -1005,6 +1010,12 @@ def test_api_stream__a_prepared_reference_must_be_one_the_store_could_have_made(
             update={"storage_ref": storage_ref}),)})
         assert refusal(engine, bad) == "refused: not_found", storage_ref
         assert upstream.requests == [], storage_ref
+    # and the salt's tenant must be the ref's: a hand-built request carrying org A's salt
+    # with org B's ref and key is refused here, not only where the work is translated
+    foreign = prepared.model_copy(update={"media": (b.media(b.ORG_B).model_copy(update={
+        "storage_ref": f"media/{b.ORG_B}/v1/source"}),)})
+    assert refusal(engine, foreign) == "refused: not_found"
+
     # the store's own five-segment key is accepted too, not only the fixture's shorter one
     real = good.model_copy(update={
         "storage_ref": f"media/{good.org_id}/v1/{good.digest.split(':')[1][:16]}/source"})

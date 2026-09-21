@@ -122,7 +122,7 @@ MM_UUIDS_FIELD = "mm_uuids"
 STORAGE_REF_SEGMENT = r"[A-Za-z0-9][A-Za-z0-9._-]*"
 STORAGE_REF_PATTERN = re.compile(
     r"^media/(?P<org>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/"
-    rf"(?:{STORAGE_REF_SEGMENT}/){{1,3}}{STORAGE_REF_SEGMENT}$")
+    rf"(?:{STORAGE_REF_SEGMENT}/){{1,3}}{STORAGE_REF_SEGMENT}")
 
 DETAIL_MAX_CHARS = 500          # operator-only text, bounded so a log line stays a log line
 ERROR_BODY_MAX_BYTES = 64 * 1024        # an engine's error body is read bounded, never whole
@@ -275,7 +275,9 @@ def check_storage_ref(ref: MediaRef) -> None:
     network, and the allow-list on message *parts* did not help, because the reference is
     ours to trust rather than the customer's to supply.
     """
-    matched = STORAGE_REF_PATTERN.match(ref.storage_ref or "")
+    # `fullmatch`, not `match`: `$` also matches before a trailing newline, so
+    # `media/<org>/v1/source\n` passed and was forwarded.
+    matched = STORAGE_REF_PATTERN.fullmatch(ref.storage_ref or "")
     if matched is None or matched.group("org") != ref.org_id:
         raise errors.NotFound(f"media {ref.handle} has no usable prepared reference")
 
@@ -504,8 +506,14 @@ class VllmEngine:
             # R10: one request, one tenant. Two tenants' objects in one prompt would share
             # a cache namespace and a token budget.
             raise errors.NotFound("prepared media must belong to one organization")
+        salt_tenant = str((prepared.parameters or {}).get("tenant_salt") or "").strip()
         for ref in prepared.media:
             check_storage_ref(ref)
+            if salt_tenant and ref.org_id != salt_tenant:
+                # The tenant link must hold **here** too, not only in `prepared_request`: a
+                # hand-built request carrying org A's salt with org B's ref and key would
+                # otherwise reach the engine, sharing B's object under A's cache namespace.
+                raise errors.NotFound("prepared media does not belong to the salted tenant")
         videos = [ref for ref in prepared.media if ref.mime.startswith(VIDEO_MIME_PREFIX)]
         if len(videos) != len(prepared.media):
             raise errors.UnsupportedParameter("the pilot accepts video media only",
