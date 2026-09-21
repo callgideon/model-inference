@@ -394,6 +394,43 @@ def test_a_frame_claiming_more_than_a_frame_may_hold_is_the_tail():
     assert scan.torn == 1 and scan.poison == 0 and scan.records == []
 
 
+def test_a_segment_truncated_at_any_offset_replays_its_whole_prefix():
+    """The crash model, swept: a host can die between any two bytes, so recovery is only
+    right if it is right at *every* truncation offset - each one must give back exactly the
+    records that were complete, with their content, and classify the rest as a torn tail.
+    (The reviewer's round-1 sweep; keeping it here so it runs every time.)"""
+    async def scenario():
+        spool = sink()
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        for index in range(4):
+            await capture_one(spool, request_id(index), bytes([65 + index]) * 300)
+        await spool.flush(spool.clock.now())
+        name = spool.segments()[0].name
+        await spool.close()
+        data = (spool.spool_dir / name).read_bytes()
+        whole = scan_segment(name, data)
+        assert len(whole.records) == 4
+        bounds, offset = [], HEADER.size
+        for record, content in zip(whole.records, whole.contents):
+            offset += FRAME.size + len(codec.compact_bytes(record)) + len(content)
+            bounds.append(offset)
+        for cut in range(len(data) + 1):
+            scan = scan_segment(name, data[:cut])
+            expected = sum(1 for bound in bounds if bound <= cut)
+            assert len(scan.records) == expected, f"cut {cut}: {scan.line()}"
+            assert scan.contents == whole.contents[:expected], f"cut {cut}"
+            assert scan.ids == whole.ids[:expected], f"cut {cut}"
+            assert scan.poison == 0, f"cut {cut}"
+            if cut < HEADER.size:
+                assert scan.unreadable == 1, f"cut {cut}"
+            else:
+                torn = 0 if cut in bounds or cut == HEADER.size else 1
+                assert scan.torn == torn, f"cut {cut}: expected torn {torn}, {scan.line()}"
+                assert scan.unreadable == 0, f"cut {cut}"
+        print(f"\ntruncation sweep: {len(data) + 1} offsets, every prefix replayed exactly")
+    asyncio.run(scenario())
+
+
 def test_a_frame_whose_lengths_were_swapped_is_the_tail():
     """The checksum covers the two length fields, not only the bytes after them.
 

@@ -159,7 +159,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "        self.appended_records = self.appended_records", RECOVER),
     # --- rotation, sealing and the ack interface --------------------------------
     _m("segments_never_rotate", "segments rotate by size",
-       "            if active.written + need <= self.segment_max_bytes or active.records == 0:",
+       "            if active.written + need <= self.segment_max_bytes:",
        "            if True:", ROTATE),
     _m("the_active_segment_can_be_acked", "only a sealed segment is deleted (no copytruncate)",
        "            if segment is None or not segment.sealed:",
