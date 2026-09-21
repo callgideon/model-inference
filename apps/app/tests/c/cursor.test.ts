@@ -5,8 +5,30 @@
 // still cannot mint a cursor, move one between tenants, filters or lists, or edit the key inside one.
 
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import test from "node:test";
 import { cursorScope, decodeCursor, encodeCursor } from "../../lib/services/cursor.ts";
+
+/**
+ * The tag the service would produce for a given payload, re-derived here with the known secret.
+ *
+ * Without it the "malformed payload" cases were worthless: they carried a tag that was not a MAC of
+ * the body, so every one of them died on the signature and the shape checks they claimed to cover
+ * were never reached — removing those checks left the suite green.
+ */
+function realTag(secret: string, scope: string, payload: string): string {
+  return createHmac("sha256", secret)
+    .update(`${scope}\u0000${payload}`)
+    .digest("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function signed(secret: string, scope: string, body: string): string {
+  const payload = Buffer.from(body, "utf8").toString("base64url");
+  return `${payload}.${realTag(secret, scope, payload)}`;
+}
 
 const SECRET = "c1-test-cursor-secret-0123456789";
 const OTHER_SECRET = "another-secret-0123456789012345";
@@ -52,15 +74,27 @@ test("a caller who knows the format still cannot mint or edit a cursor", () => {
   assert.equal(decodeCursor(SECRET, mine, `${payload}.${tag}`.repeat(20)), null, "an oversized cursor");
   assert.equal(decodeCursor(SECRET, mine, `not-base64.${tag}`), null, "a payload that is not a key");
 
-  // A payload that authenticates but is not a two-element key of strings.
-  for (const rubbish of ["{}", "[]", '["only-one"]', '["", "b"]', '[1, 2]', '["a", "b", "c"]']) {
-    const body = Buffer.from(rubbish, "utf8").toString("base64url");
-    assert.equal(
-      decodeCursor(SECRET, mine, `${body}.${Buffer.from(encodeCursor(SECRET, mine, KEY)).toString("base64url")}`),
-      null,
-      `${rubbish} must not decode`,
-    );
+  // A payload that really does authenticate, and still is not a two-element key of strings. These are
+  // signed with the service's own construction, so the shape validation is what has to refuse them.
+  for (const rubbish of ["{}", "[]", '["only-one"]', '["", "b"]', '["a", ""]', "[1, 2]", '["a", "b", "c"]', '"a"', "null"]) {
+    const cursor = signed(SECRET, mine, rubbish);
+    assert.notEqual(decodeCursor(SECRET, mine, cursor), undefined);
+    assert.equal(decodeCursor(SECRET, mine, cursor), null, `${rubbish} authenticates, so its shape must refuse it`);
   }
+  // The construction is right: the same helper, over a well-formed body, is accepted.
+  assert.deepEqual(decodeCursor(SECRET, mine, signed(SECRET, mine, JSON.stringify([KEY.at, KEY.id]))), KEY);
+});
+
+test("an over-long cursor is refused before it is hashed, even when it authenticates", () => {
+  const mine = scope("org-a", "usage");
+  // A genuine cursor of the service's own making, but far past the bound: the length check is what
+  // refuses it, so removing that check cannot pass unnoticed.
+  const huge = encodeCursor(SECRET, mine, { at: KEY.at, id: "x".repeat(4000) });
+  assert.ok(huge.length > 512, "the probe must actually be over-long");
+  assert.equal(decodeCursor(SECRET, mine, huge), null, "an over-long cursor is refused");
+  const justInside = encodeCursor(SECRET, mine, { at: KEY.at, id: "y".repeat(300) });
+  assert.ok(justInside.length <= 512);
+  assert.deepEqual(decodeCursor(SECRET, mine, justInside)?.id, "y".repeat(300), "and one inside the bound works");
 });
 
 test("a cursor carries no secret and no readable tenant", () => {

@@ -24,6 +24,10 @@ function expectError(
   assert.equal(result.error.code, code);
 }
 
+type ListResult<T> =
+  | { ok: true; value: { items: T[]; next_cursor: string | null } }
+  | { ok: false; error: { code: string; message: string } };
+
 /** Every row of a list, so an assertion cannot be satisfied by a row simply not being on page one. */
 async function walk<T>(
   fetch: (cursor: string | null) => Promise<{ ok: true; value: { items: T[]; next_cursor: string | null } } | { ok: false; error: { code: string; message: string } }>,
@@ -228,6 +232,157 @@ test("an off-mode request has no trace row but still has a detail to open (R13)"
   assert.equal(detail.content, "off");
 });
 
+
+test("the single-row reads are tenant-bound too, in both directions", async () => {
+  const { services, sessions, ids, data } = makeConsoleHarness();
+  // These three reads have no cursor and no filter, so nothing else in the suite would notice if one
+  // of them stopped binding its organization — it would simply answer with the first row it found.
+  const ourSettings = expectOk(await services.settings.get(sessions.owner));
+  const theirSettings = expectOk(await services.settings.get(sessions.otherOwner));
+  const stored = (orgId: string) => data.settings.find((row) => row.org_id === orgId);
+  assert.equal(ourSettings.trace_mode, stored(ids.orgId)?.trace_mode);
+  assert.equal(theirSettings.trace_mode, stored(ids.otherOrgId)?.trace_mode);
+  assert.notDeepEqual(
+    { mode: ourSettings.trace_mode, days: ourSettings.content_retention_days, consent: ourSettings.evaluation_consent },
+    { mode: theirSettings.trace_mode, days: theirSettings.content_retention_days, consent: theirSettings.evaluation_consent },
+    "the harness must give the two organizations different settings, or this proves nothing",
+  );
+
+  // Consent history is the same read; it must not carry the other organization's audit trail.
+  const ours = new Set(data.consent.filter((row) => row.org_id === ids.orgId).map((row) => row.changed_at));
+  const theirs = new Set(data.consent.filter((row) => row.org_id === ids.otherOrgId).map((row) => row.changed_at));
+  for (const entry of ourSettings.consent_history) {
+    assert.ok(ours.has(entry.changed_at), `a consent entry from another organization: ${entry.changed_at}`);
+  }
+  for (const entry of theirSettings.consent_history) {
+    assert.ok(theirs.has(entry.changed_at), "and the reverse direction");
+  }
+
+  // Feedback is keyed by a request id the caller supplies, which is exactly where a tenant is lost.
+  expectError(await services.feedback.list(sessions.otherOwner, ids.availableRequestId), "not_found");
+  expectError(await services.feedback.list(sessions.owner, ids.otherOrgRequestId), "not_found");
+  expectError(await services.traceDetail(sessions.otherOwner, ids.availableRequestId), "not_found");
+  // And a key id: `keys.revoke` resolves ownership before it does anything else.
+  const revoked = await services.keys.revoke(sessions.otherOwner, ids.keyId);
+  assert.ok(!revoked.ok && revoked.error.code === "not_found", "another organization's key is simply absent");
+});
+
+test("a cursor belongs to the list that minted it, across every paged list", async () => {
+  const { services, sessions } = makeConsoleHarness();
+  // Only `usage` was proven before, so a list wired to another list's scope survived. Every list is
+  // paired with every other one here, in both directions.
+  const lists: [string, (cursor: string | null) => Promise<ListResult<{ id?: string }>>][] = [
+    ["usage", (cursor) => services.usage(sessions.owner, { limit: 5, cursor }) as never],
+    ["ledger", (cursor) => services.ledger(sessions.owner, { limit: 5, cursor }) as never],
+    ["traces", (cursor) => services.traces(sessions.owner, { limit: 5, cursor }) as never],
+    ["judgeRuns", (cursor) => services.judgeRuns(sessions.owner, { limit: 2, cursor }) as never],
+    ["adminOrgs", (cursor) => services.adminOrgs(sessions.operator, { limit: 2, cursor }) as never],
+    ["adminAudit", (cursor) => services.adminAudit(sessions.operator, { limit: 5, cursor }) as never],
+  ];
+
+  const cursors = new Map<string, string>();
+  for (const [name, fetch] of lists) {
+    const page = expectOk(await fetch(null));
+    assert.ok(page.next_cursor !== null, `${name} must have more than one page for this case to mean anything`);
+    cursors.set(name, page.next_cursor);
+  }
+  for (const [name, fetch] of lists) {
+    for (const [other, cursor] of cursors) {
+      const result = await fetch(cursor);
+      if (other === name) {
+        expectOk(result);
+        continue;
+      }
+      assert.ok(!result.ok, `${name} accepted a cursor minted by ${other}`);
+      assert.equal(result.error.code, "invalid_cursor", `${name} with ${other}'s cursor`);
+    }
+  }
+});
+
+test("a cursor does not survive a change of filter, on every filtered list", async () => {
+  const { services, sessions, ids } = makeConsoleHarness();
+  const first = expectOk(await services.usage(sessions.owner, { limit: 5 }));
+  assert.ok(first.next_cursor !== null);
+  // Adding, removing or changing a filter is a different query, so the walk cannot continue into it.
+  expectError(await services.usage(sessions.owner, { limit: 5, cursor: first.next_cursor, model: ids.modelId }), "invalid_cursor");
+  const filtered = expectOk(await services.usage(sessions.owner, { limit: 5, model: ids.modelId }));
+  if (filtered.next_cursor !== null) {
+    expectError(await services.usage(sessions.owner, { limit: 5, cursor: filtered.next_cursor }), "invalid_cursor");
+    expectError(
+      await services.usage(sessions.owner, { limit: 5, cursor: filtered.next_cursor, key_id: ids.keyId }),
+      "invalid_cursor",
+    );
+  }
+  const traces = expectOk(await services.traces(sessions.owner, { limit: 5 }));
+  assert.ok(traces.next_cursor !== null);
+  expectError(await services.traces(sessions.owner, { limit: 5, cursor: traces.next_cursor, job_state: "succeeded" }), "invalid_cursor");
+  const byState = expectOk(await services.traces(sessions.owner, { limit: 5, job_state: "succeeded" }));
+  if (byState.next_cursor !== null) {
+    expectError(await services.traces(sessions.owner, { limit: 5, cursor: byState.next_cursor }), "invalid_cursor");
+  }
+  // The page size is not a filter, so a walk may change it (08 §9).
+  expectOk(await services.usage(sessions.owner, { limit: 25, cursor: first.next_cursor }));
+});
+
+test("adminAudit filters by target organization and pages like every other list", async () => {
+  const { services, sessions, ids, data } = makeConsoleHarness();
+  const all = await walk((cursor) => services.adminAudit(sessions.operator, { limit: 5, cursor }));
+  assert.equal(all.length, data.audit.length, "every audit entry is walked exactly once");
+  const forOne = await walk((cursor) =>
+    services.adminAudit(sessions.operator, { limit: 5, cursor, target_org_id: ids.orgId }),
+  );
+  assert.ok(forOne.length > 0 && forOne.length < all.length, "the filter must narrow, not widen or empty");
+  for (const entry of forOne) assert.equal(entry.target_org_id, ids.orgId);
+  // An absent filter is absent: the unfiltered walk carries other organizations' entries.
+  assert.ok(all.some((entry) => entry.target_org_id !== ids.orgId), "the unfiltered list spans organizations");
+  assert.ok(all.every((entry) => entry.at.endsWith("Z")), "and every entry carries a comparable timestamp");
+});
+
+test("has_feedback filters in both directions, and the two halves add up", async () => {
+  const { services, sessions } = makeConsoleHarness();
+  const all = await walk((cursor) => services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }));
+  const withFeedback = await walk((cursor) =>
+    services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, has_feedback: true }),
+  );
+  const without = await walk((cursor) =>
+    services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, has_feedback: false }),
+  );
+  assert.ok(withFeedback.length > 0, "the fixture must have a trace with feedback");
+  assert.ok(without.length > 0, "and one without");
+  assert.equal(withFeedback.length + without.length, all.length, "the two halves partition the list");
+  for (const row of withFeedback) assert.ok(row.feedback_count > 0);
+  for (const row of without) assert.equal(row.feedback_count, 0);
+});
+
+test("a filter value is checked before it is bound: vocabulary, length and timestamp form", async () => {
+  const { services, sessions } = makeConsoleHarness();
+  // `Date.parse` accepts "2026-09-01", which is not an RFC 3339 instant; the bound is the format.
+  for (const from of ["2026-09-01", "2026-09-01 12:00:00", "2026-09-01T12:00:00", "2026-09-01T12:00:00+02:00", "now"]) {
+    expectError(await services.usage(sessions.owner, { from }), "invalid_request");
+  }
+  expectOk(await services.usage(sessions.owner, { from: "2026-09-01T00:00:00Z", limit: 5 }));
+  expectOk(await services.usage(sessions.owner, { from: "2026-09-01T00:00:00.000Z", limit: 5 }));
+  // An identifier is an identifier, not a document.
+  expectError(await services.usage(sessions.owner, { key_id: "x".repeat(201) }), "invalid_request");
+  expectError(await services.usage(sessions.owner, { model: "" }), "invalid_request");
+  expectError(await services.traces(sessions.owner, { has_feedback: "yes" as never }), "invalid_request");
+});
+
+test("pending_reconciliation counts held unknown usage and nothing else", async () => {
+  const { services, sessions, ids, data } = makeConsoleHarness();
+  const before = expectOk(await services.usageSummary(sessions.owner, {}));
+  // A settled row with an outstanding hold is not awaiting reconciliation: the certainty is what says so.
+  const row = data.usage.find((candidate) => candidate.org_id === ids.orgId && candidate.usage_certainty === "authoritative");
+  assert.ok(row !== undefined);
+  row.max_hold = "5.00000000";
+  const after = expectOk(await services.usageSummary(sessions.owner, {}));
+  assert.equal(after.pending_reconciliation, before.pending_reconciliation, "an authoritative hold is not pending");
+  // Flipping the same row to unknown does move the figure.
+  row.usage_certainty = "unknown";
+  const unknown = expectOk(await services.usageSummary(sessions.owner, {}));
+  assert.equal(unknown.pending_reconciliation, addMoney(before.pending_reconciliation, "5.00000000" as Money));
+});
+
 test("a query port that fails is a Result error, never a thrown promise", async () => {
   const failing: QueryPort = {
     async run() {
@@ -273,9 +428,20 @@ test("a query port that fails is a Result error, never a thrown promise", async 
 });
 
 test("the services hold no secret and no client: a cursor secret is required and never echoed", () => {
+  const ports = { pg: { async run() { return []; } }, ch: { async run() { return []; } } };
+  // The boundary is exactly 16 characters, pinned on both sides so neither drifts.
   assert.throws(
-    () => createConsoleServices({ pg: { async run() { return []; } }, ch: { async run() { return []; } }, cursorSecret: "short" }),
+    () => createConsoleServices({ ...ports, cursorSecret: "x".repeat(15) }),
     /cursor signing secret/,
     "an unsigned cursor is a caller-writable keyset, so a weak secret fails closed",
   );
+  for (const weak of ["", "short", "x".repeat(15)]) {
+    assert.throws(() => createConsoleServices({ ...ports, cursorSecret: weak }), /cursor signing secret/);
+  }
+  assert.throws(
+    () => createConsoleServices({ ...ports, cursorSecret: 16 as unknown as string }),
+    /cursor signing secret/,
+    "and a secret that is not a string at all",
+  );
+  createConsoleServices({ ...ports, cursorSecret: "x".repeat(16) });
 });

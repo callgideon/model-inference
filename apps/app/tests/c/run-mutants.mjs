@@ -36,6 +36,9 @@ const SUITE = [
   "tests/c/query-boundary.test.ts",
   "tests/c/cursor.test.ts",
   "tests/c/read-services.test.ts",
+  "tests/c/projection.test.ts",
+  "tests/c/credits.test.ts",
+  "tests/c/client-boundary.test.ts",
 ];
 
 function prepareCopy() {
@@ -60,15 +63,28 @@ function failingCases(out) {
   const pattern = /^( *)not ok \d+ - (.*)$/gm;
   for (let match = pattern.exec(out); match !== null; match = pattern.exec(out)) {
     const rest = out.slice(match.index + match[0].length);
-    const end = rest.search(/^ *\.\.\.$/m);
+    // The block ends at `...` indented exactly two past the `not ok` line. Matching any `...` line
+    // truncated the diagnostic in the middle of a long diff — node elides identical lines with one —
+    // which lost the `code: 'ERR_ASSERTION'` that decides whether this was an assertion or a crash.
+    const terminator = new RegExp(`^ {${match[1].length + 2}}\\.\\.\\.$`, "m");
+    const end = rest.search(terminator);
     const diagnostic = end === -1 ? rest : rest.slice(0, end);
     const assertion = /code: 'ERR_ASSERTION'/.test(diagnostic);
     const wrapped = /threw instead of returning a Result/.test(diagnostic);
     const error = /^ *name: '(\w+)'/m.exec(diagnostic);
+    const name = match[2].trim();
     cases.push({
-      name: match[2].trim(),
+      name,
       how: assertion && !wrapped ? "assertion" : "error",
       error: wrapped ? "an exception surfaced by the suite's own wrapper" : (error?.[1] ?? "unknown"),
+      // A test *file* reported as failing means the copy did not load — a syntax error, a rejected
+      // construct, a module that throws on import. That is a runner error however the rest reads, and
+      // it used to be classified as "survived" because no declared case was named.
+      isFile: /\.(ts|mjs|tsx)$/.test(name),
+      // guarded() turns any escaped exception into `internal_error`. A mutant that merely made some
+      // read throw would then "kill" a case that asserts a successful read — which says nothing about
+      // the invariant the case names, so it has to be declared.
+      viaGuard: /this console operation failed unexpectedly/.test(diagnostic),
     });
   }
   return cases;
@@ -137,7 +153,17 @@ function classify(mutant, run, baselinePassing) {
   if (notAtBaseline.length > 0) {
     return { outcome: "runner-error", why: `these declared cases do not pass unmutated: ${notAtBaseline.join("; ")}` };
   }
-  if (run.failed.length === 0) return { outcome: "runner-error", why: loadFailureReason(run.out) };
+  const fileFailures = run.failed.filter((entry) => entry.isFile);
+  if (fileFailures.length > 0) {
+    return {
+      outcome: "runner-error",
+      why: `${fileFailures.map((entry) => entry.name).join(", ")} did not run as a suite — ${loadFailureReason(run.out)}`,
+    };
+  }
+  if (run.failed.length === 0) {
+    // Nothing failed at all: the mutant changed no observable behaviour the suite checks.
+    return { outcome: "survived", why: "the suite passed unchanged" };
+  }
   if (run.passed.length === 0) {
     return {
       outcome: "runner-error",
@@ -158,7 +184,108 @@ function classify(mutant, run, baselinePassing) {
       why: `the declared case failed by exception (${matched[0].error}), not by assertion`,
     };
   }
-  return { outcome: "killed", by: byAssertion[0].name, collateral: run.failed.length - matched.length };
+  const genuine = byAssertion.filter((entry) => !entry.viaGuard);
+  if (genuine.length === 0 && mutant.kills_by !== "guarded") {
+    return {
+      outcome: "runner-error",
+      why:
+        "the declared case failed only because the boundary guard turned a thrown error into " +
+        'internal_error — if that IS the defect, declare kills_by: "guarded"',
+    };
+  }
+  if (genuine.length > 0 && mutant.kills_by === "guarded") {
+    return {
+      outcome: "runner-error",
+      why: 'the mutant declares kills_by: "guarded" but its case fails on the invariant itself',
+    };
+  }
+  const by = (genuine[0] ?? byAssertion[0]).name;
+  return { outcome: "killed", by, collateral: run.failed.length - matched.length };
+}
+
+/**
+ * The runner's own claims (R40's discipline, in the small): the three classifications a reviewer
+ * asked for, checked against edits whose outcome is known. Run with `--self-test`.
+ */
+const SELF_TESTS = [
+  {
+    name: "a syntax error is a runner error, not a survival",
+    mutant: {
+      id: "SELF-SYNTAX",
+      file: "lib/services/cursor.ts",
+      find: "const MAX_CURSOR_CHARS = 512;",
+      replace: "const MAX_CURSOR_CHARS = ;",
+      cases: ["rejects a cursor it did not issue for this query"],
+    },
+    expect: "runner-error",
+  },
+  {
+    name: "a no-op edit survives",
+    mutant: {
+      id: "SELF-NOOP",
+      file: "lib/services/cursor.ts",
+      find: "const MAX_CURSOR_CHARS = 512;",
+      replace: "const MAX_CURSOR_CHARS = 512; // self-test no-op",
+      cases: ["rejects a cursor it did not issue for this query"],
+    },
+    expect: "survived",
+  },
+  {
+    name: "a kill that only the boundary guard produced is a runner error unless declared",
+    mutant: {
+      id: "SELF-GUARD",
+      file: "lib/services/console.ts",
+      // Nothing about the wallet identity: the read simply throws, and `guarded()` reports
+      // `internal_error`, which would otherwise read as a kill of whatever case asserted a read.
+      find: "async function walletFor(orgId: string): Promise<WalletBalance | null> {",
+      replace:
+        "async function walletFor(orgId: string): Promise<WalletBalance | null> {\n    throw new Error(\"self-test\");",
+      cases: ["balance is the ledger total minus reservations, and holds reduce what is available"],
+    },
+    expect: "runner-error",
+  },
+  {
+    name: "a stale find is stale",
+    mutant: {
+      id: "SELF-STALE",
+      file: "lib/services/cursor.ts",
+      find: "const MAX_CURSOR_CHARS = 999999;",
+      replace: "const MAX_CURSOR_CHARS = 512;",
+      cases: ["rejects a cursor it did not issue for this query"],
+    },
+    expect: "stale",
+  },
+];
+
+async function runSelfTests() {
+  const worker = prepareCopy();
+  let failures = 0;
+  try {
+    const baseline = await runSuite(worker.app);
+    const baselinePassing = new Set(passingCases(baseline.out));
+    for (const { name, mutant, expect } of SELF_TESTS) {
+      const applied = applyMutant(worker.app, mutant);
+      let outcome;
+      if (!applied.ok) {
+        outcome = { outcome: "stale", why: applied.why };
+      } else {
+        const run = await runSuite(worker.app, 60000);
+        applied.restore();
+        outcome = classify(mutant, run, baselinePassing);
+      }
+      const ok = outcome.outcome === expect;
+      if (!ok) failures += 1;
+      console.log(`${ok ? "ok  " : "FAIL"} ${name} — got ${outcome.outcome}${outcome.why ? `: ${outcome.why}` : ""}`);
+    }
+  } finally {
+    rmSync(worker.root, { recursive: true, force: true });
+  }
+  console.log(`\n${SELF_TESTS.length} self-tests, ${failures} failed`);
+  return failures === 0;
+}
+
+if (args.includes("--self-test")) {
+  process.exit((await runSelfTests()) ? 0 : 1);
 }
 
 const catalogue = JSON.parse(readFileSync(join(here, "mutants.json"), "utf8"));

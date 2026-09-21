@@ -172,6 +172,12 @@ type DebugOrg = {
   ledger: Record<string, unknown>[];
   traces: Record<string, unknown>[];
   judge: Record<string, unknown>[];
+  /**
+   * The operator calibration labels. They are stored in the same feedback relation as every other
+   * entry (R43), which is exactly why they have to be seeded: dropping them here is what made the
+   * R49 leak invisible — nothing in the dataset could come back through `feedback.list`.
+   */
+  labels: Record<string, unknown>[];
 };
 
 const CLOCK_MS = Date.parse((orgsFixture as unknown as { clock: string }).clock);
@@ -193,6 +199,32 @@ function walletRow(org: DebugOrg): Row {
     ledger_total: moneyFromUnits(ledgerUnits),
     reserved_total: moneyFromUnits(reservedUnits),
   };
+}
+
+/**
+ * Operator audit entries. C3 appends them; the read, its target filter and its paging are C1's, so
+ * the harness seeds enough of them to page — otherwise `adminAudit` is only ever tested empty.
+ */
+function seedAudit(orgs: DebugOrg[]): Row[] {
+  const rows: Row[] = [];
+  let ordinal = 0;
+  for (const org of orgs) {
+    for (let i = 0; i < 12; i += 1) {
+      ordinal += 1;
+      rows.push({
+        id: `aud_${String(ordinal).padStart(4, "0")}`,
+        at: new Date(CLOCK_MS - ordinal * 60000).toISOString(),
+        actor_principal: "operator@infrx.example",
+        action: i % 2 === 0 ? "grant" : "suspension_set",
+        target_org_id: org.org_id,
+        reason: "seeded for the read side",
+        before: null,
+        after: { seeded: true },
+        idempotency_key: `seed-${ordinal}`,
+      });
+    }
+  }
+  return rows;
 }
 
 export function seedDataset(state: DebugState): Dataset {
@@ -228,6 +260,8 @@ export function seedDataset(state: DebugState): Dataset {
     org.settings.consent_history.forEach((entry, index) => {
       data.consent.push({ ...entry, version: index + 1, org_id: org.org_id });
     });
+    // R43: a label is a feedback row. R49: the read excludes it. Both facts need it in the relation.
+    for (const label of org.labels) data.feedback.push({ ...label, org_id: org.org_id });
     for (const trace of org.traces) {
       const { feedback, timings, versions, ...rest } = trace as Record<string, unknown> & {
         feedback: Record<string, unknown>[];
@@ -239,6 +273,7 @@ export function seedDataset(state: DebugState): Dataset {
     }
     for (const run of org.judge) data.judge.push({ ...run, org_id: org.org_id });
   }
+  data.audit = seedAudit(state.orgs);
   return data;
 }
 
