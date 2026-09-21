@@ -371,6 +371,25 @@ def test_a_zero_or_negative_sample_count_never_authorizes():
     assert allowed(LIVE, estimate(samples=0)) is False
 
 
+def test_the_predicate_fails_closed_on_a_malformed_argument():
+    """`live_submission_allowed` is documented not to raise, and it raised `AttributeError`
+    on a settings object with no `judge_mode` and on `ceilings=None`. Not allowed is the
+    safe answer for a money decision and the only honest one for this contract."""
+    class Empty:
+        pass
+
+    broken = CostEstimate(model=fakes.JUDGE_MODEL, samples=50, ceilings=None,
+                          price_version="test-rates-v1", per_sample=Decimal("1"),
+                          worst_case_total=Decimal("50"))
+    assert allowed(Empty()) is False
+    assert allowed(LIVE, broken) is False
+    assert allowed(None) is False
+    assert live_submission_allowed(LIVE, estimate(), rates=object(), at=fakes.NOW) is False
+    # and the raising form still says why, for the caller that needs to know
+    with pytest.raises(errors.BudgetExceeded):
+        require_live_submission(LIVE, broken, rates=fakes.TEST_RATES, at=fakes.NOW)
+
+
 def test_a_worst_case_over_the_budget_is_refused_and_the_boundary_is_inclusive():
     """R57: `<=` the budget. At exactly the budget a submission is affordable; one unit of
     scale over it is not, which is the off-by-one a `>=` would introduce."""

@@ -255,10 +255,11 @@ def require_live_submission(settings: PilotSettings, estimate: CostEstimate, *,
     estimate, so `dry_run`, a zero budget, an unknown mode, a missing or withdrawn rate,
     a stale estimate and an oversized total each refuse.
     """
-    if settings.judge_mode != JUDGE_MODE_LIVE:
-        raise errors.BudgetExceeded(f"judge mode {settings.judge_mode!r} is not "
-                                    f"{JUDGE_MODE_LIVE!r} and cannot authorize a live submission")
-    budget = _positive_money(settings.judge_live_budget_usd)
+    mode = getattr(settings, "judge_mode", None)
+    if mode != JUDGE_MODE_LIVE:
+        raise errors.BudgetExceeded(f"judge mode {mode!r} is not {JUDGE_MODE_LIVE!r} "
+                                    "and cannot authorize a live submission")
+    budget = _positive_money(getattr(settings, "judge_live_budget_usd", None))
     if budget is None:
         raise errors.BudgetExceeded("a live submission needs a positive JUDGE_LIVE_BUDGET_USD")
     samples = estimate.samples
@@ -294,9 +295,16 @@ def require_live_submission(settings: PilotSettings, estimate: CostEstimate, *,
 
 def live_submission_allowed(settings: PilotSettings, estimate: CostEstimate, *,
                             rates: RateTable, at: datetime) -> bool:
-    """`require_live_submission` as a predicate, for a report that must not raise."""
+    """`require_live_submission` as a predicate, for a report that must not raise.
+
+    It catches **everything**, deliberately. A settings object missing `judge_mode`, a
+    `ceilings` of `None`, a rate table that misbehaves - all of it answers "not allowed",
+    which is the safe direction for a money decision and the only honest answer for a
+    function documented not to raise. `require_live_submission` still raises typed errors
+    for the caller that needs to know why.
+    """
     try:
         require_live_submission(settings, estimate, rates=rates, at=at)
-    except errors.DomainError:
+    except Exception:                                  # noqa: BLE001 - fail closed
         return False
     return True

@@ -117,6 +117,35 @@ class OverReturningSource(FakeCandidateSource):
         return tuple(self.rows)
 
 
+class UnboundedSource(FakeCandidateSource):
+    """A source whose answer is a **generator** of effectively unlimited rows, and which
+    fails loudly if anything consumes more than the bound.
+
+    This is what proves the consumption is bounded rather than merely the result:
+    `tuple(...)[:limit]` would drain every row here before slicing.
+    """
+
+    def __init__(self, template: TraceCandidate, *, total: int = 1_000_000) -> None:
+        super().__init__(())
+        self.template = template
+        self.total = total
+        self.consumed = 0
+
+    async def candidates(self, org_id: str, *, since: datetime,
+                         limit: int):
+        self.calls.append((org_id, since, limit))
+
+        def rows():
+            for n in range(1, self.total + 1):
+                self.consumed = n
+                if n > limit + 1:
+                    raise AssertionError(f"the plan consumed {n} rows for a bound of {limit}")
+                yield candidate(n, org_id=self.template.org_id,
+                                started_at=self.template.started_at)
+
+        return rows()
+
+
 #: An approved-looking rate row for the estimate tests. It is **not** a price from
 #: `research/cross-cutting/cloud-pricing.md` (which has no provider token rows); it is a
 #: test input, which is exactly why the shipped `APPROVED_RATES` table is empty.

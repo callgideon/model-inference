@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from itertools import islice
 
 from ..contracts import errors, money
 from ..contracts.limits import DEFAULTS, PilotSettings
@@ -99,8 +100,12 @@ async def plan_dry_run(source: CandidateSource, *, org_id: str, consent: Consent
     """
     limit = scan_bound(limit)
     check_consent(org_id, consent, now)
-    # Truncated here whatever the source returned: the bound is ours, not its promise.
-    candidates = tuple(await source.candidates(org_id, since=since, limit=limit))[:limit]
+    # `islice`, not `tuple(...)[:limit]`: the bound is ours rather than the source's
+    # promise, and slicing *after* materializing copied a 100,000-row answer into this
+    # process before throwing all but 200 of it away. A generator is consumed only as far
+    # as the bound.
+    rows = await source.candidates(org_id, since=since, limit=limit)
+    candidates = tuple(islice(rows, limit))
     selection = select(org_id, consent, candidates, rubric_version=rubric.version,
                        seed=seed, now=now, design=design)
     estimate = estimate_worst_case(rates, model=model, samples=len(selection.samples),

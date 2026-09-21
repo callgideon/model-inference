@@ -507,9 +507,15 @@ MUTANTS: tuple[Mutant, ...] = (
 
     # --- the dry run: its bound, its ordering, its projection, its import hygiene ------
     _m("scan_bound_not_enforced", "the scan bound holds whatever the source returns (B1/R56)",
-       D, "    candidates = tuple(await source.candidates(org_id, since=since, limit=limit))[:limit]",
-       "    candidates = tuple(await source.candidates(org_id, since=since, limit=limit))",
-       "test_the_scan_bound_holds_against_a_source_that_ignores_it"),
+       D, "    candidates = tuple(islice(rows, limit))", "    candidates = tuple(rows)",
+       "test_the_scan_bound_holds_against_a_source_that_ignores_it",
+       "test_the_plan_consumes_no_more_rows_than_the_bound",
+       dies_by=("AssertionError",)),
+    _m("the_predicate_reraises", "live_submission_allowed fails closed, it never raises",
+       C, "    except Exception:                                  # noqa: BLE001 - fail closed",
+       "    except errors.DomainError:",
+       "test_the_predicate_fails_closed_on_a_malformed_argument",
+       dies_by=("AttributeError",)),
     _m("scan_bound_range_unchecked", "the scan bound is in 1..MAX_CANDIDATES",
        D, "    if not 1 <= limit <= MAX_CANDIDATES:", "    if False:",
        "test_a_scan_bound_that_is_not_one_is_refused"),

@@ -123,6 +123,16 @@ def test_the_scan_bound_holds_against_a_source_that_ignores_it():
     assert len(dry.selection.samples) + len(dry.selection.excluded) == 10
 
 
+def test_the_plan_consumes_no_more_rows_than_the_bound():
+    """The bound is on **consumption**, not just on the result: `tuple(...)[:limit]` drained
+    a 100,000-row answer into this process before throwing all but 200 away. The source here
+    yields a million rows and fails loudly if anything reads past the bound."""
+    source = fakes.UnboundedSource(fakes.candidate(1))
+    _, dry = plan(source=source, limit=25)
+    assert source.consumed <= 26, f"consumed {source.consumed} rows for a bound of 25"
+    assert len(dry.selection.samples) + len(dry.selection.excluded) == 25
+
+
 @pytest.mark.parametrize("limit", [0, -5, True, 2.5, "10", None, MAX_CANDIDATES + 1, 10 ** 9])
 def test_a_scan_bound_that_is_not_one_is_refused(limit):
     """`True` is not 1, `10**9` is not a bound anybody chose, and a zero or negative limit
