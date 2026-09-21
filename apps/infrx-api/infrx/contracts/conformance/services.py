@@ -1373,6 +1373,8 @@ async def trace_bounds__every_bounded_capture_sequence_holds_the_invariants(fact
     expected = (alphabet + alphabet ** 2 + alphabet ** 3) * 3 * 2
     assert report.sequences == expected, report.line()
     assert report.sampled_lengths == ()
+    # and every guarded invariant was actually reached, not merely written down
+    assert report.unfired() == (), f"guarded invariants never reached: {report.unfired()}"
 
 
 def tracesink_cases():

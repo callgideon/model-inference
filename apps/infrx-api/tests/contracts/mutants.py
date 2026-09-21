@@ -120,8 +120,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if False:",
        "dur_admit__a_refused_admission_reserves_nothing"),
     _m("admit_reserves_before_validating", "a refused admission reserves nothing",
-       S, "            price = self._price(request, now)\n            self.journal.reserve(request.request_id)",
-       "            self.journal.reserve(request.request_id)\n            price = self._price(request, now)",
+       S, "            price = self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price)\n"
+          "            self._check_balance(request.org_id, hold)\n"
+          "            self.journal.reserve(request.request_id)",
+       "            self.journal.reserve(request.request_id)\n"
+          "            price = self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price)\n"
+          "            self._check_balance(request.org_id, hold)",
        "dur_admit__a_refused_admission_reserves_nothing"),
     # r1 R53: the hold is the store's, from the snapshot it took in the same
     # transaction. These are the two ways to get that wrong.
@@ -229,16 +235,6 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "            # worker cannot pick up something nobody is waiting for any more.\n"
           "            self._enforce_deadlines(job)",
        "            # worker cannot pick up something nobody is waiting for any more.",
-       "dur_output__a_late_preparation_worker_finds_a_terminal_job"),
-    _m("prepared_ignores_the_phase_deadline", "the phase deadline binds prepared itself (R29/R46)",
-       S, '        if self.clock.now() >= job.preparation_lease.expires_at:\n'
-          '            raise errors.StaleLease(f"preparation lease expired at "\n'
-          '                                    f"{job.preparation_lease.expires_at}")\n'
-          "        self._enforce_deadlines(job)\n        return job",
-       '        if self.clock.now() >= job.preparation_lease.expires_at:\n'
-          '            raise errors.StaleLease(f"preparation lease expired at "\n'
-          '                                    f"{job.preparation_lease.expires_at}")\n'
-          "        return job",
        "dur_output__a_late_preparation_worker_finds_a_terminal_job"),
     # --- phase deadlines (R20) ------------------------------------------------
     _m("phase_deadline_uncapped", "no phase instant outlives deadline_at (R20)",
@@ -516,10 +512,6 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "            if live is not None and now < live.expires_at:",
        "            if False:",
        "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
-    _m("preparation_retries_unbounded", "preparation retries are bounded (R46)",
-       S, "            if job.preparation_attempts > self.limits.max_prepublication_retries:",
-       "            if False:",
-       "dur_output__a_lost_preparation_worker_is_reaped_within_bounds"),
     _m("lost_preparation_is_never_reaped", "recover reaps a lost preparation worker (R46)",
        S, "        if (job.state is JobState.preparing and job.preparation_lease is not None\n"
           "                and now >= job.preparation_lease.expires_at):",
@@ -533,9 +525,6 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("load_work_hides_the_prepared_refs", "load_work carries what preparation produced (R46)",
        S, "                        prepared_refs=job.prepared,", "                        prepared_refs=(),",
        "dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise"),
-    _m("heartbeat_renews_a_preparation_lease", "nothing renews a preparation lease (R46)",
-       S, '            raise errors.InvalidRequest("only an inference lease is renewed")', "            pass",
-       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
     # --- feedback -------------------------------------------------------------
     _m("feedback_operator_role_from_session", "accept always records customer (R31)",
        F, "            author_role=AuthorRole.customer,",
@@ -545,12 +534,9 @@ MUTANTS: tuple[Mutant, ...] = (
        F, '            raise errors.Forbidden("labelling a calibration set requires a platform operator")',
        "            pass", "feedback_ack__an_operator_may_label_a_calibration_set"),
     _m("calibration_not_idempotent", "a calibration label is idempotent",
-       F, "        existing = self.idem.get(idem.scope)\n        if existing is not None:\n"
-          "            payload_hash, feedback_id = existing\n"
-          "            if payload_hash != idem.payload_hash:\n"
-          "                raise errors.IdempotencyConflict(\"same label key, different payload\")\n"
-          "            return self.items[feedback_id]",
-       "        existing = None", "feedback_ack__an_operator_may_label_a_calibration_set"),
+       F, "        replay = self._replay(idem, LABEL, auth)\n        if replay is not None:\n"
+          "            return replay",
+       "        pass", "feedback_ack__an_operator_may_label_a_calibration_set"),
     # --- B4: the eight invariants whose mutants the reviewer found surviving --------
     _m("price_read_from_the_request_again", "the price is never read from the request (q30)",
        S, "        snapshot = self.price_for(request.model_revision, now)",
@@ -577,6 +563,22 @@ MUTANTS: tuple[Mutant, ...] = (
        "                        price_snapshot=job.admission.price_snapshot,\n"
           "                        budgets=Budgets.of(self.limits, job.request.execution_mode))",
        "dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise"),
+    # Three mutants were **removed** in the R52/R54 pass rather than forced, because the
+    # defects they described stopped being representable:
+    #
+    # * `heartbeat_renews_a_preparation_lease` - R52 makes `heartbeat` renew one, so
+    #   "nothing renews it" is no longer the contract. `preparation_heartbeat_does_not_renew`
+    #   and `preparation_heartbeat_buys_phase_time` replace it.
+    # * `prepared_ignores_the_phase_deadline` - R52 clamps a preparation lease to
+    #   `preparation_deadline_at`, so a live lease can never be past it and the lease-expiry
+    #   refusal always fires first. `preparation_lease_outlives_its_phase` kills the clamp.
+    # * `preparation_retries_unbounded` - R52 has `recover` terminalize after the last
+    #   permitted loss, so the count check in `claim_preparation` is now the second line of
+    #   defence and no case can observe its absence.
+    #   `exhausted_preparation_is_redispatched` kills the reaper's own decision.
+    #
+    # Keeping an unkillable mutant would fail the run; keeping it *and* weakening a case to
+    # kill it would be the false kill R40 forbids.
     # --- r1 R52: the preparation lease, the tenant check and the dispatch kind ---
     _m("preparation_lease_uses_the_inference_ttl", "preparation has its own short TTL (R52)",
        S, "                expires_at=min(now + timedelta(seconds=self.limits.preparation_lease_ttl_s),\n"
@@ -705,16 +707,16 @@ MUTANTS: tuple[Mutant, ...] = (
        "            rubric_version=None, created_at=now)",
        "feedback_ack__an_operator_may_label_a_calibration_set"),
     _m("customer_list_shows_labels", "a customer never receives a calibration label (R35)",
-       F, "        return FeedbackList.for_viewer(rows, operator=auth.is_operator).items",
+       F, "        return visible_feedback(rows, operator=bool(auth.is_operator))",
        "        return rows",
        "feedback_ack__calibration_labels_are_operator_data"),
     _m("customer_list_shows_the_operator", "an operator principal is projected to platform (R41)",
-       W, "            else item.model_copy(update={\"author_principal\": PLATFORM_ACTOR})",
-       "            else item",
+       R, "            item = item.model_copy(update={\"author_principal\": PLATFORM_ACTOR})",
+       "            item = item",
        "feedback_ack__calibration_labels_are_operator_data"),
-    _m("wire_list_publishes_labels", "the wire list applies the same projection (R35/R41)",
-       W, "        if operator:\n            return cls(items=tuple(items), next_cursor=next_cursor)",
-       "        if True:\n            return cls(items=tuple(items), next_cursor=next_cursor)",
+    _m("wire_list_publishes_labels", "the wire list applies the same projection (R35/R49)",
+       W, "        visible = visible_feedback(tuple(items), operator=operator)",
+       "        visible = tuple(items)",
        "feedback_ack__calibration_labels_are_operator_data"),
     _m("calibration_list_open_to_customers", "the calibration list is operator only (R35)",
        F, '            raise errors.Forbidden("calibration labels are operator data")', "            pass",
@@ -750,7 +752,9 @@ MUTANTS: tuple[Mutant, ...] = (
           "        if False:",
        "feedback_ack__ownership_does_not_wait_for_the_projection"),
     _m("feedback_replay_makes_a_second_row", "a replayed submission survives once",
-       F, "        existing = self.idem.get(idem.scope)", "        existing = None",
+       F, "        replay = self._replay(idem, ACCEPT, auth)\n        if replay is not None:\n"
+          "            return replay",
+       "        pass",
        "feedback_ack__replay_is_idempotent_and_a_changed_payload_conflicts"),
     # --- judge ----------------------------------------------------------------
     _m("judge_settle_negative", "a judge cost is validated money (R11)",
@@ -1038,6 +1042,24 @@ MUTANTS: tuple[Mutant, ...] = (
           "            if reason is TraceLossReason.queue_full:\n"
           "                self.content_bytes = max(0, self.content_bytes - charged)",
        "trace_bounds__a_dropped_finish_releases_its_charge"),
+    # --- P08/P10/P11: the guarded lattice invariants that now fire ---------------
+    _m("minimal_capture_stores_content", "a minimal capture never stores content (P08)",
+       T, "            if envelope.mode is not TraceMode.minimal or envelope.carries_content:",
+       "            if envelope.mode is not TraceMode.minimal:",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("no_deadline_capture_loses_silently", "declared content that is missing says why (P10)",
+       T, '            "content_complete": False, "content_ref": None, "content_bytes": 0,\n'
+          '            "loss_reason": TraceLossReason.abandoned}), charged=0, capture=self)',
+       '            "content_complete": False, "content_ref": None, "content_bytes": 0,\n'
+          '            "loss_reason": TraceLossReason.none}), charged=0, capture=self)',
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("no_deadline_capture_counts_no_loss", "the missing content is counted (P11)",
+       T, "        self.lost_reason = TraceLossReason.abandoned\n"
+          "        self._count(TraceLossReason.abandoned)\n"
+          "        return self.sink._enqueue(envelope.model_copy(update={",
+       "        self.lost_reason = TraceLossReason.abandoned\n"
+          "        return self.sink._enqueue(envelope.model_copy(update={",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
     # --- F2.1: the lattice assertions the S1 review found vacuous --------------
     _m("shutdown_counted_for_nothing", "only a real loss names a reason (R42)",
        T, "        if lost:\n            # Only a real loss names a reason.",
@@ -1054,7 +1076,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
     _m("raw_content_envelope_is_trusted", "the capture decides its mode, never the envelope (R12)",
        T, "        if envelope.mode is not self.mode:", "        if False:",
-       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+       "trace_bounds__a_live_capture_also_decides_its_own_mode"),
     # --- r8 R42: loss accounting cannot regress -------------------------------
     _m("count_is_not_idempotent", "one loss count per capture, whatever follows (R42)",
        T, "        if self.counted:\n            return\n        self.counted = True",

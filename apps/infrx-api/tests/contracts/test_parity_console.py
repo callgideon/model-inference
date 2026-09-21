@@ -10,6 +10,7 @@ this test, not silently stop being compared.
 """
 import json
 import re
+import types
 import typing
 
 import pytest
@@ -286,6 +287,11 @@ INTERNAL_MARKERS = ("by_operator",)
 UNPAIRED_CONSOLE_TYPES = ("WalletBalance", "TraceListItem")
 
 
+class _TsField(typing.NamedTuple):
+    nullable: bool
+    kind: str
+
+
 def ts_type_fields(source, name):
     """`{field: nullable}` for an `export type NAME = { ... }` object literal.
 
@@ -331,9 +337,71 @@ def ts_type_fields(source, name):
         # `null` has to be a *top-level* alternative: `response: { error: … | null }` is
         # not a nullable response, and taking the whole type text as one string said it
         # was. Nested groups are removed before the union is read.
-        fields[field] = bool(optional) or bool(re.search(r"\bnull\b", _strip_groups(kind)))
+        fields[field] = _TsField(nullable=bool(optional)
+                                 or bool(re.search(r"\bnull\b", _strip_groups(kind))),
+                                 kind=" ".join(kind.split()))
     assert fields, f"{name}: no members parsed"
     return fields
+
+
+# r1 R54 / the original B1 defect class: a field whose **type** changed is the drift that
+# actually bit - `rubric_version` was a string in Python and a number in the console, and a
+# comparison of names and nullability could not see it. Each entry says which TypeScript
+# types a Python annotation is allowed to mean.
+TYPE_EQUIVALENTS = {
+    # The console spells the *entry* vocabulary `FeedbackEntryName` (R43's stored-name
+    # set); Python's `FeedbackName` **is** that set, with `FEEDBACK_INPUT_NAMES` as the
+    # submittable subset. `test_shared_vocabularies_are_identical` compares the values.
+    "FeedbackName": ("FeedbackEntryName",),
+    # An inline object literal against a nested wire model: the members are compared
+    # field for field by `test_the_trace_content_body_matches_member_for_member`.
+    "TraceContentRequest": ("object",),
+    "TraceContentResponse": ("object",),
+    # `FeedbackValue` is the console's alias for exactly `boolean | number | string`,
+    # which is what `bool | int | str` means; the alias's own definition is pinned below.
+    "bool": ("boolean", "FeedbackValue"),
+    "int": ("number", "FeedbackValue"),
+    "str": ("string", "FeedbackValue"),
+    "StrictInt": ("number",),
+    "float": ("number",),
+    "datetime": ("string",),          # RFC 3339 text on the wire
+    "Decimal": ("Money", "string"),   # branded money string
+    "Literal[1]": ("1",),
+}
+
+
+def _python_type_names(annotation) -> set[str]:
+    """The non-`None` members of an annotation, by name.
+
+    Origin first, then args: `dict[str, StrictInt]` is a *mapping*, not "str and
+    StrictInt", and reading the args before the origin reported the latter.
+    """
+    origin = typing.get_origin(annotation)
+    if origin in (typing.Union, types.UnionType):
+        names: set[str] = set()
+        for member in typing.get_args(annotation):
+            if member is not type(None):
+                names |= _python_type_names(member)
+        return names
+    if origin in (tuple, list, set, frozenset):
+        return {"sequence"}
+    if origin is dict:
+        return {"mapping"}
+    if origin is typing.Literal:
+        return {str(value) for value in typing.get_args(annotation)}
+    if hasattr(annotation, "__metadata__"):          # Annotated[T, ...]
+        return _python_type_names(annotation.__origin__)
+    return {getattr(annotation, "__name__", str(annotation))}
+
+
+def _ts_type_members(kind: str) -> set[str]:
+    """Top-level union members of a TypeScript type, `null` removed."""
+    stripped = _strip_groups(kind).strip()
+    if not stripped or stripped in {"", "|"}:
+        return {"object"}
+    members = {part.strip() for part in stripped.split("|") if part.strip()}
+    members.discard("null")
+    return {m.removesuffix("[]") if m.endswith("[]") else m for m in members} or {"object"}
 
 
 def _strip_groups(text):
@@ -380,10 +448,28 @@ def test_record_fields_and_nullability_match(name):
     for ts_field, py_field in mapping.items():
         assert ts_field in console, f"{name}.{ts_field} is gone from the console type"
         assert py_field in python, f"{pair['model'].__name__}.{py_field} is gone"
-        assert console[ts_field] == python[py_field], \
-            (f"{name}.{ts_field} is {'nullable' if console[ts_field] else 'non-null'} in "
-             f"TypeScript but {'nullable' if python[py_field] else 'non-null'} as "
+        assert console[ts_field].nullable == python[py_field], \
+            (f"{name}.{ts_field} is {'nullable' if console[ts_field].nullable else 'non-null'} "
+             f"in TypeScript but {'nullable' if python[py_field] else 'non-null'} as "
              f"{pair['model'].__name__}.{py_field}")
+        # and the **type**, which is the drift that actually bit: `rubric_version` was a
+        # string here and a number there, and names plus nullability could not see it.
+        annotation = pair["model"].model_fields[py_field].annotation
+        python_names = _python_type_names(annotation)
+        ts_members = _ts_type_members(console[ts_field].kind)
+        if {"sequence", "mapping"} & python_names:
+            continue            # containers: compared by name and nullability only
+        # A TypeScript member is explained by an equivalent, or by *being* the Python
+        # name - the two halves spell the shared enums and branded types identically, and
+        # that convention is itself worth pinning.
+        allowed = set(python_names)
+        for python_name in python_names:
+            allowed |= set(TYPE_EQUIVALENTS.get(python_name, ()))
+        unexplained = {m for m in ts_members
+                       if not any(m == a or m.startswith(a) for a in allowed)}
+        assert not unexplained, \
+            (f"{name}.{ts_field} is `{console[ts_field].kind}` in TypeScript, which "
+             f"{pair['model'].__name__}.{py_field} ({sorted(python_names)}) does not explain")
 
 
 @pytest.mark.parametrize("name", UNPAIRED_CONSOLE_TYPES)
@@ -428,3 +514,46 @@ def test_an_internal_marker_is_on_no_public_shape(marker):
     assert marker not in wire.FeedbackEntry.model_fields, "the public entry declares it"
     for dto in ("FeedbackEntry", "ConsentHistoryEntry", "LedgerEntry"):
         assert marker not in ts_type_fields(source, dto), f"the console {dto} declares it"
+
+
+def test_the_feedback_value_alias_is_exactly_the_python_union():
+    """`FeedbackValue` is allowed to stand for `bool | int | str` above, so what it stands
+    for is pinned here rather than assumed."""
+    source = TYPES.read_text(encoding="utf-8")
+    m = re.search(r"export type FeedbackValue = ([^;]+);", source)
+    assert m, "FeedbackValue not found"
+    assert {part.strip() for part in m.group(1).split("|")} == {"boolean", "number", "string"}
+
+
+def test_more_shared_vocabularies_and_constants():
+    """The cheap parity the S1 follow-up asked for: `PLATFORM_ACTOR`, judge modes and the
+    ledger kinds, all of which one half could rename without the other noticing."""
+    source = TYPES.read_text(encoding="utf-8")
+    m = re.search(r'export const PLATFORM_ACTOR = "([^"]+)";', source)
+    assert m, "PLATFORM_ACTOR not found"
+    assert m.group(1) == records.PLATFORM_ACTOR == wire.PLATFORM_ACTOR
+    assert ts_string_array(source, "JUDGE_MODES") == list(limits.JUDGE_MODES)
+    # `purchase` is legacy and read-only (R13): every kind must render, and the creatable
+    # set deliberately excludes it.
+    kinds = ts_string_array(source, "LEDGER_ENTRY_KINDS")
+    creatable = ts_string_array(source, "CREATABLE_LEDGER_ENTRY_KINDS")
+    assert set(creatable) < set(kinds) and "purchase" in set(kinds) - set(creatable)
+    assert kinds == ["grant", "usage", "adjustment", "purchase"]
+
+
+def test_the_trace_content_body_matches_member_for_member():
+    """The `v: 1` literal and the nested request/response shapes, not just the three top
+    names: a console `v: 2` or a renamed `params` would otherwise pass."""
+    source = TYPES.read_text(encoding="utf-8")
+    body = ts_type_fields(source, "TraceContentBody")
+    assert body["v"].kind == "1", f"the schema literal moved: {body['v'].kind}"
+    assert wire.TraceContentBody.model_fields["v"].annotation is typing.Literal[1]
+    nested = re.search(r"export type TraceContentBody = \{(.*?)\n\};", source, re.S)
+    assert nested, "TraceContentBody literal not found"
+    for member, model in (("request", wire.TraceContentRequest),
+                          ("response", wire.TraceContentResponse)):
+        inner = re.search(rf"\s{member}: \{{(.*?)\n  \}};", nested.group(1), re.S)
+        assert inner, f"TraceContentBody.{member} is not an inline object any more"
+        names = set(re.findall(r"^\s+([a-z_]+)[?]?:", inner.group(1), re.M))
+        assert names == set(model.model_fields), \
+            f"TraceContentBody.{member}: {sorted(names)} vs {sorted(model.model_fields)}"

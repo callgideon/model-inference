@@ -59,6 +59,18 @@ CLOSERS = ("abandon", "context_exit")
 MODES = (TraceMode.off, TraceMode.minimal, TraceMode.full)
 
 
+# The guarded invariants, i.e. the ones that only apply to some sequences. A guard that
+# never opens is an assertion that never runs, and three of these never did: a `minimal`
+# capture cannot accumulate, so "minimal never stores content" was structurally true, and a
+# `full` capture with no deadline charged nothing, so "declared content that is missing is a
+# marked, counted loss" had no declaration to notice. `Report.fired` counts them and the
+# caller asserts each was reached, which is the difference between an invariant and a
+# sentence.
+GUARDED = ("minimal_stores_no_content", "lost_content_is_marked", "lost_content_is_counted",
+           "closed_capture_stores_nothing", "closed_capture_holds_nothing",
+           "crash_losses_are_bounded")
+
+
 @dataclass
 class Report:
     """What a run proved, so evidence can quote it instead of claiming it."""
@@ -67,13 +79,18 @@ class Report:
     operations: int = 0
     by_length: dict[int, int] = field(default_factory=dict)
     sampled_lengths: tuple[int, ...] = ()
+    fired: dict[str, int] = field(default_factory=lambda: {name: 0 for name in GUARDED})
+
+    def unfired(self) -> tuple[str, ...]:
+        return tuple(name for name in GUARDED if not self.fired.get(name))
 
     def line(self) -> str:
         lengths = ", ".join(f"len {n}: {count}" for n, count in sorted(self.by_length.items()))
         sampled = (f" (sampled at {self.sampled_lengths}, seed {SEED})"
                    if self.sampled_lengths else " (exhaustive)")
+        fired = ", ".join(f"{name} {count}" for name, count in sorted(self.fired.items()))
         return (f"{self.sequences} sequences, {self.operations} operations"
-                f"{sampled}; {lengths}")
+                f"{sampled}; {lengths}; guarded invariants reached: {fired}")
 
 
 def _sequences(max_length: int, full: bool) -> list[tuple[str, ...]]:
@@ -93,7 +110,7 @@ def _sequences(max_length: int, full: bool) -> list[tuple[str, ...]]:
 
 
 async def _run_one(factory, mode: TraceMode, with_deadline: bool,
-                   operations: tuple[str, ...]) -> int:
+                   operations: tuple[str, ...], fired: dict[str, int] | None = None) -> int:
     """Apply one sequence to one capture and assert every invariant afterwards."""
     harness = factory(limits=LIMITS)
     queued = hook(harness, "queued")
@@ -104,6 +121,7 @@ async def _run_one(factory, mode: TraceMode, with_deadline: bool,
     deadline = harness.clock.at(600) if with_deadline else None
     capture = harness.port.open(request_id, b.ORG_A, mode, deadline)
 
+    fired = {} if fired is None else fired
     charged = 0                 # bytes `add` actually accepted
     claims: list[int] = []      # content bytes an honest finish declared
     results: list[TraceOfferResult] = []
@@ -124,11 +142,15 @@ async def _run_one(factory, mode: TraceMode, with_deadline: bool,
         elif operation == "add_non_bytes":
             capture.add(12_345)
         elif operation == "finish_matching":
-            # the honest finish: it claims exactly what `add` charged, which is what makes
-            # "a row with no content must say why" a meaningful invariant below
+            # The honest finish: it claims exactly what `add` charged, which is what makes
+            # "a row with no content must say why" a meaningful invariant below. Only the
+            # **first** finish can queue a row, so only its claim is recorded - a later
+            # finish is ignored by a closed capture, and counting its claim made the
+            # loss-guard open against a row that finish never produced.
             claimed = charged if mode is TraceMode.full else 0
+            if closed_after is None:
+                claims.append(claimed)
             results.append(await capture.finish(envelope(claimed)))
-            claims.append(claimed)
             closed_after = index if closed_after is None else closed_after
         elif operation == "finish_wrong_id":
             results.append(await capture.finish(
@@ -147,8 +169,12 @@ async def _run_one(factory, mode: TraceMode, with_deadline: bool,
                         harness=harness)))
             closed_after = index if closed_after is None else closed_after
         elif operation == "finish_oversized_claim":
-            # claims content it never charged; only valid to build for a full envelope
+            # Claims content it never charged; only valid to build for a full envelope. The
+            # claim is recorded (it *is* a declaration of content), which is what opens
+            # P10/P11 for a `full` capture that charged nothing - the no-deadline case.
             claim = charged + 4_096
+            if mode is TraceMode.full and closed_after is None:
+                claims.append(claim)
             results.append(await capture.finish(
                 b.trace(request_id, mode=TraceMode.full, content_bytes=claim,
                         metadata_bytes=16, harness=harness)
@@ -228,17 +254,24 @@ async def _run_one(factory, mode: TraceMode, with_deadline: bool,
         # A crash counts `shutdown` for records it lost; with nothing ever stored an
         # off-mode capture has none to lose, so the table stays empty even across one.
         assert stats["loss_reasons"] == {}, f"off-mode counted a loss: {context}"
-    if mode is TraceMode.minimal:
+    if mode is TraceMode.minimal and rows:
+        # P08. It fires only once a `minimal` capture has a row at all - which the raw
+        # envelope operation is what produces, since `add` on a minimal capture is a no-op.
+        fired["minimal_stores_no_content"] = fired.get("minimal_stores_no_content", 0) + 1
         assert all(not row.carries_content for row in rows), \
             f"a minimal capture stored content: {context}"
     for row in rows:
         assert row.content_bytes <= charged, \
             f"stored {row.content_bytes} content bytes over {charged} charged: {context}"
         if row.content_bytes == 0 and any(claim > 0 for claim in claims):
-            # content was declared and is not in the row: that is a loss, and 02 wants it
-            # marked as well as counted
+            # P10/P11: content was declared and is not in the row, so it is a loss, and 02
+            # wants it marked as well as counted. The `full` capture with no deadline is the
+            # case this exists for - it charges nothing, so only a declaration it never
+            # accumulated makes the guard open.
+            fired["lost_content_is_marked"] = fired.get("lost_content_is_marked", 0) + 1
             assert row.loss_reason is not TraceLossReason.none, \
                 f"lost content reported no loss reason: {context}"
+            fired["lost_content_is_counted"] = fired.get("lost_content_is_counted", 0) + 1
             assert sum(stats["loss_reasons"].values()) == 1, \
                 f"lost content was not counted: {stats['loss_reasons']} {context}"
 
@@ -246,7 +279,11 @@ async def _run_one(factory, mode: TraceMode, with_deadline: bool,
     if len(results) > 1:
         assert len(set(results)) == 1 or results[0] is results[-1], \
             f"a second finish answered differently: {results} {context}"
+    if crashed:
+        fired["crash_losses_are_bounded"] = fired.get("crash_losses_are_bounded", 0) + 1
     if closed_after is not None and operations[closed_after] in CLOSERS:
+        fired["closed_capture_stores_nothing"] = \
+            fired.get("closed_capture_stores_nothing", 0) + 1
         # The capture was abandoned (or fell out of its `with`) before any `finish`, so
         # every later finish must queue **nothing at all**. `<= 1` was vacuous here: one
         # row is what a working finish produces, so the old assertion passed either way.
@@ -262,6 +299,7 @@ async def _run_one(factory, mode: TraceMode, with_deadline: bool,
         (f"{stats['in_memory_content_bytes']} bytes held against {charged} charged and "
          f"{queued_bytes} queued: {context}")
     if closed_after is not None and not crashed:
+        fired["closed_capture_holds_nothing"] = fired.get("closed_capture_holds_nothing", 0) + 1
         assert stats["open_captures"] == 0, f"a closed capture is still open: {context}"
         assert stats["in_memory_content_bytes"] == queued_bytes, \
             (f"{stats['in_memory_content_bytes']} bytes held by a closed capture against "
@@ -285,7 +323,8 @@ async def _run_all(factory, sequences, report: Report) -> None:
         report.by_length[len(operations)] = report.by_length.get(len(operations), 0) + 1
         for mode in MODES:
             for with_deadline in (True, False):
-                report.operations += await _run_one(factory, mode, with_deadline, operations)
+                report.operations += await _run_one(factory, mode, with_deadline, operations,
+                                                   report.fired)
                 report.sequences += 1
 
 

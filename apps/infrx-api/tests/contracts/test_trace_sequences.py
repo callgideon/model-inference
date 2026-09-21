@@ -39,6 +39,13 @@ def test_every_bounded_capture_sequence_holds_the_invariants():
     assert report.by_length[1] == len(OPERATIONS)
     assert set(report.by_length) == {1, 2, 3, 4}
     assert report.sequences == sum(report.by_length.values()) * len(MODES) * 2
+    # Every **guarded** invariant was reached. Three of these never were: a `minimal`
+    # capture cannot accumulate, so "minimal never stores content" was structurally true,
+    # and a `full` capture with no deadline charges nothing, so "declared content that is
+    # missing is a marked, counted loss" had no declaration to notice. A guard that never
+    # opens is an assertion that never runs - which is the same as not having it.
+    assert report.unfired() == (), f"guarded invariants never reached: {report.unfired()}"
+    assert all(count > 0 for count in report.fired.values()), report.fired
     # No wall-clock assertion. A threshold on a shared machine fails for reasons that have
     # nothing to do with the contract - a busy CI box, a cold page cache - and a flaky
     # gate teaches people to rerun rather than to look. The timing is *printed* above, so
