@@ -668,26 +668,6 @@
       ]
     },
     {
-      "id": "PORT-01",
-      "note": "the port wrapper stops checking that returned rows belong to the tenant",
-      "file": "lib/services/query.ts",
-      "find": "        if (Object.hasOwn(row, field) && row[field] !== plan.tenant.value) {",
-      "replace": "        if (false) {",
-      "cases": [
-        "every port passes through the tenant check, whatever the port does"
-      ]
-    },
-    {
-      "id": "PORT-02",
-      "note": "a tenant-scoped plan may reach the executor without a tenant",
-      "file": "lib/services/query.ts",
-      "find": "      if (spec.tenantColumn !== null && plan.tenant === null) {\n        throw new QueryPlanError(`${plan.name} is tenant-scoped and must not run without a tenant`);\n      }",
-      "replace": "      if (false) {\n        throw new QueryPlanError(`${plan.name} is tenant-scoped and must not run without a tenant`);\n      }",
-      "cases": [
-        "every port passes through the tenant check, whatever the port does"
-      ]
-    },
-    {
       "id": "PORT-03",
       "note": "the injected port is used raw, so the shared check is skipped",
       "file": "lib/services/console.ts",
@@ -755,6 +735,86 @@
       "replace": "// guard removed",
       "cases": [
         "the server-only modules carry their run-time guard as well"
+      ]
+    },
+    {
+      "id": "PORT-01",
+      "note": "a row whose tenant differs is accepted",
+      "file": "lib/services/query.ts",
+      "find": "        if (row[field] !== plan.tenant.value) {\n          throw new QueryPlanError(`${plan.name} returned a row belonging to another organization`);\n        }",
+      "replace": "        if (false) {\n          throw new QueryPlanError(`${plan.name} returned a row belonging to another organization`);\n        }",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-04",
+      "note": "a row that does not say whose it is is accepted",
+      "file": "lib/services/query.ts",
+      "find": "        if (!Object.hasOwn(row, field)) {\n          throw new QueryPlanError(`${plan.name} returned a row with no ${field}`);\n        }",
+      "replace": "        if (false) {\n          throw new QueryPlanError(`${plan.name} returned a row with no ${field}`);\n        }",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-05",
+      "note": "a tenant carried on a prototype counts as the row's own",
+      "file": "lib/services/query.ts",
+      "find": "        if (!Object.hasOwn(row, field)) {",
+      "replace": "        if (!(field in row)) {",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-06",
+      "note": "only the first row is checked",
+      "file": "lib/services/query.ts",
+      "find": "      const scoped: Row[] = [];\n      for (const row of rows) {",
+      "replace": "      const scoped: Row[] = [];\n      for (const row of rows.slice(0, 1)) {",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-08",
+      "note": "the ClickHouse port is used unwrapped",
+      "file": "lib/services/console.ts",
+      "find": "  const ch = scopedPort(config.ch);",
+      "replace": "  const ch = config.ch;",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-09",
+      "note": "the aggregates stop carrying their tenant, so a totals query is exempt again",
+      "file": "lib/services/query.ts",
+      "find": "    if (spec.tenantColumn !== null) {\n      selected.push(`${spec.tenantColumn} as ${spec.tenantField}`);\n      grouped.push(String(selected.length));\n    }",
+      "replace": "    if (false) {\n      selected.push(`${spec.tenantColumn} as ${spec.tenantField}`);\n      grouped.push(String(selected.length));\n    }",
+      "cases": [
+        "an aggregate carries its tenant as a grouping column, and is ordered and bounded"
+      ]
+    },
+    {
+      "id": "PORT-02",
+      "note": "a tenant-scoped plan may reach the executor without a tenant",
+      "file": "lib/services/query.ts",
+      "find": "      if (plan.tenant === null) {\n        throw new QueryPlanError(`${plan.name} is tenant-scoped and must not run without a tenant`);\n      }",
+      "replace": "      if (plan.tenant === null) {\n        return port.run(plan);\n      }",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-07",
+      "note": "a tenant-scoped query stops declaring the field the check needs",
+      "file": "lib/services/query.ts",
+      "find": "    columns: \"s.org_id, s.trace_mode, s.content_retention_days, s.evaluation_consent\",\n    tenantColumn: \"s.org_id\",\n    tenantField: \"org_id\",",
+      "replace": "    columns: \"s.org_id, s.trace_mode, s.content_retention_days, s.evaluation_consent\",\n    tenantColumn: \"s.org_id\",",
+      "cases": [
+        "an aggregate carries its tenant as a grouping column, and is ordered and bounded"
       ]
     }
   ]

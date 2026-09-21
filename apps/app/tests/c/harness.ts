@@ -108,20 +108,27 @@ export function createMemoryPort(data: Dataset): QueryPort {
         }
       }
       if (spec.aggregates !== undefined) {
-        const groups = new Map<string | null, Row[]>();
-        if (spec.groupBy === undefined) {
-          groups.set(null, rows);
-        } else {
-          for (const row of rows) {
-            const day = String(row.created_at ?? "").slice(0, 10);
-            const bucket = groups.get(day) ?? [];
-            bucket.push(row);
-            groups.set(day, bucket);
-          }
+        // Grouped the way the statement groups: by the tenant column when there is one, and by the day
+        // when there is one. The key comes from the rows, never from the plan, so a port that returned
+        // another organization's rows produces a row that says so.
+        const tenantField = spec.tenantColumn === null ? null : spec.tenantField ?? null;
+        const groups = new Map<string, Row[]>();
+        for (const row of rows) {
+          const parts: string[] = [];
+          if (tenantField !== null) parts.push(String(row[tenantField]));
+          if (spec.groupBy !== undefined) parts.push(String(row.created_at ?? "").slice(0, 10));
+          const key = parts.join("\u0000");
+          const bucket = groups.get(key) ?? [];
+          bucket.push(row);
+          groups.set(key, bucket);
         }
         const out: Row[] = [];
-        for (const [day, bucket] of groups) {
-          const aggregated: Row = day === null ? {} : { [spec.groupBy!.field]: day };
+        for (const bucket of groups.values()) {
+          const aggregated: Row = {};
+          if (tenantField !== null) aggregated[tenantField] = bucket[0][tenantField];
+          if (spec.groupBy !== undefined) {
+            aggregated[spec.groupBy.field] = String(bucket[0].created_at ?? "").slice(0, 10);
+          }
           for (const aggregate of spec.aggregates) {
             const selected =
               aggregate.filters === undefined

@@ -437,29 +437,147 @@ test("pending_reconciliation counts held unknown usage and nothing else", async 
 test("every port passes through the tenant check, whatever the port does", async () => {
   const { data, sessions, ids } = makeConsoleHarness();
   const session = sessions.owner;
+  const honest = createMemoryPort(data);
 
-  // D1's views return EVERY organization's rows to an operator or service-role session, so for those
-  // sessions the plan's predicate is the only thing scoping a tenant's own reads. A port that forgot
-  // it must fail loudly rather than answer a customer's page with the platform's rows.
-  const leaky: QueryPort = {
+  /**
+   * The port a reviewer built to break the old check: honest for `org_status` — so the tenant resolves
+   * and every operation gets past its suspension read — and leaky for everything else, returning the
+   * relation unfiltered with the caller's own rows first so the foreign ones sit at an index past zero.
+   *
+   * D1's views return every organization's rows to an operator or service-role session, so this is not
+   * a hypothetical port: it is what a forgotten predicate looks like.
+   */
+  const leakyPort = (foreignFirst: boolean): QueryPort => ({
     async run(plan) {
-      const spec = namedQuery(plan.name);
-      // Every row of the relation, newest-seeded first — which is another organization's, exactly as
-      // a view that returns the whole platform to a privileged session would answer.
-      return [...(data[spec.source] ?? [])].reverse().slice(0, plan.limit ?? 25);
+      if (plan.name === "org_status") return honest.run(plan);
+      // Unlimited first, then reordered, then cut to the plan's limit — otherwise the limit would be
+      // applied before the reordering and a single-row read could never see a foreign row at all.
+      const rows = await honest.run({ ...plan, tenant: null, limit: null });
+      const field = namedQuery(plan.name).tenantField ?? "org_id";
+      const own = rows.filter((row) => row[field] === session.orgId);
+      const foreign = rows.filter((row) => row[field] !== session.orgId);
+      // Both orderings matter: own-first hides a foreign row past index 0 (a list read), foreign-first
+      // is what a single-row read picks up (PostgREST returns rows in no promised order).
+      const ordered = foreignFirst ? [...foreign, ...own] : [...own, ...foreign];
+      return plan.limit === null ? ordered : ordered.slice(0, plan.limit);
+    },
+  });
+
+  // Every tenant-scoped operation, on both engines (traces and traceDetail are the ClickHouse ones),
+  // and the aggregates too — a totals query used to be exempt by construction.
+  const callsFor = (svc: ReturnType<typeof createConsoleServices>): [string, () => Promise<{ ok: boolean }>][] => [
+    ["usage", () => svc.usage(session, { limit: 5 })],
+    ["usageSummary", () => svc.usageSummary(session, {})],
+    ["usageDaily", () => svc.usageDaily(session, {})],
+    ["balances", () => svc.balances(session)],
+    ["ledger", () => svc.ledger(session, { limit: 5 })],
+    ["keys.list", () => svc.keys.list(session)],
+    ["keys.revoke", () => svc.keys.revoke(session, ids.keyId)],
+    ["settings.get", () => svc.settings.get(session)],
+    ["traces", () => svc.traces(session, { limit: 5 })],
+    ["traceDetail", () => svc.traceDetail(session, ids.availableRequestId)],
+    ["feedback.list", () => svc.feedback.list(session, ids.availableRequestId)],
+    ["judgeRuns", () => svc.judgeRuns(session, { limit: 5 })],
+  ];
+  // The same operations answer normally through a port that does scope, so the case cannot pass by
+  // refusing everything — and it is the yardstick the leaky runs are measured against.
+  const good = createConsoleServices({ pg: honest, ch: honest, cursorSecret: TEST_CURSOR_SECRET });
+  const scopedAnswers = new Map<string, unknown>();
+  for (const [name, call] of callsFor(good)) scopedAnswers.set(name, await call());
+
+  /**
+   * The invariant: a port that ignores the tenant either gets **refused**, or answers exactly what a
+   * scoped port would. Nothing it returns may differ from the tenant's own data — which is a stronger
+   * claim than "it is refused", and the one that matters: `balances` reading a single row is allowed to
+   * succeed when the row it got happened to be the caller's.
+   */
+  for (const foreignFirst of [false, true]) {
+    const port = leakyPort(foreignFirst);
+    const leakyServices = createConsoleServices({ pg: port, ch: port, cursorSecret: TEST_CURSOR_SECRET });
+    const where = foreignFirst ? "with the foreign rows first" : "with the foreign rows after the caller's own";
+    const refused: string[] = [];
+    for (const [name, call] of callsFor(leakyServices)) {
+      const result = (await call()) as { ok: boolean; error?: { code: string } };
+      if (!result.ok) {
+        assert.equal(result.error?.code, "internal_error", `${name} must be refused as a shape failure ${where}`);
+        refused.push(name);
+        continue;
+      }
+      assert.deepEqual(
+        result,
+        scopedAnswers.get(name),
+        `${name} answered with something a scoped port would not have returned, ${where}`,
+      );
+    }
+    if (foreignFirst) {
+      // Everything that *can* receive a foreign row does, and refuses. `traceDetail` and
+      // `feedback.list` cannot: they are filtered by a request id, and an id belongs to one
+      // organization, so no foreign row exists for them to receive.
+      assert.deepEqual(refused.sort(), [
+        "balances",
+        "judgeRuns",
+        "keys.list",
+        "keys.revoke",
+        "ledger",
+        "settings.get",
+        "traces",
+        "usage",
+        "usageDaily",
+        "usageSummary",
+      ]);
+    } else {
+      // A single-row read that happened to receive the caller's own row is allowed to answer it; every
+      // read that sees more than one row must refuse.
+      // With the caller's own rows first, a page of 5 over a relation where the caller has more than 5
+      // rows never reaches a foreign one, and the answers of those reads were compared against the
+      // scoped port's above. What refuses here is what actually receives a foreign row: the two
+      // aggregates (one row per organization), the key list and the key lookup (the caller has fewer
+      // keys than the page size), and the judge list.
+      assert.deepEqual(refused.sort(), ["judgeRuns", "keys.list", "keys.revoke", "usageDaily", "usageSummary"]);
+    }
+  }
+  expectOk(await good.usage(session, { limit: 5 }));
+  expectOk(await good.usageSummary(session, {}));
+  expectOk(await good.usageDaily(session, {}));
+  expectOk(await good.balances(session));
+  expectOk(await good.traces(session, { limit: 5 }));
+  expectOk(await good.judgeRuns(session, { limit: 5 }));
+
+  // A row that does not say whose it is cannot be accepted either — that was the hole.
+  const silent: QueryPort = {
+    async run(plan) {
+      const rows = await honest.run(plan);
+      return rows.map((row) => {
+        const { org_id: _dropped, ...rest } = row as Record<string, unknown>;
+        return rest;
+      });
     },
   };
-  const leakyServices = createConsoleServices({ pg: leaky, ch: leaky, cursorSecret: TEST_CURSOR_SECRET });
-  for (const call of [
-    () => leakyServices.usage(session, { limit: 5 }),
-    () => leakyServices.ledger(session, { limit: 5 }),
-    () => leakyServices.keys.list(session),
-    () => leakyServices.traces(session, { limit: 5 }),
-  ]) {
-    const result = await call();
-    assert.ok(!result.ok, "a port that ignores the tenant is refused");
-    assert.equal(result.error.code, "internal_error");
+  const silentServices = createConsoleServices({ pg: silent, ch: silent, cursorSecret: TEST_CURSOR_SECRET });
+  const silentUsage = await silentServices.usage(session, { limit: 5 });
+  assert.ok(!silentUsage.ok && silentUsage.error.code === "internal_error", "a row with no org_id is refused");
+
+  // And a tenant carried on a prototype is not a tenant.
+  const inherited: QueryPort = {
+    async run(plan) {
+      const rows = await honest.run(plan);
+      return rows.map((row) => {
+        const { org_id: tenant, ...rest } = row as Record<string, unknown>;
+        return Object.assign(Object.create({ org_id: tenant }) as object, rest) as typeof row;
+      });
+    },
+  };
+  const inheritedServices = createConsoleServices({ pg: inherited, ch: inherited, cursorSecret: TEST_CURSOR_SECRET });
+  const inheritedUsage = await inheritedServices.usage(session, { limit: 5 });
+  assert.ok(!inheritedUsage.ok, "an inherited org_id is not an own tenant");
+
+  // The tenant column never reaches a DTO.
+  const page = expectOk(await good.usage(session, { limit: 5 }));
+  for (const row of page.items) {
+    assert.ok(!Object.hasOwn(row, "org_id"), "the tenant column is stripped before projection");
   }
+  const runs = expectOk(await good.judgeRuns(session, { limit: 5 }));
+  for (const run of runs.items) assert.ok(!Object.hasOwn(run, "org_id"));
 
   // And a tenant-scoped plan cannot reach an executor without a tenant at all.
   let reached = 0;

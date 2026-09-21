@@ -185,10 +185,32 @@ test("every page query is ordered, bounded and keyset-resumable in BOTH renderer
   }
 });
 
-test("an aggregate query is ordered and grouped where it says it is", () => {
+test("an aggregate carries its tenant as a grouping column, and is ordered and bounded", () => {
   const daily = renderSql(buildPlan("usage_daily", { orgId: ORG }));
-  assert.match(daily.text, /group by 1\n order by 1 desc/);
+  assert.match(daily.text, /select u\.org_id as org_id, \(u\.created_at at time zone 'utc'\)::date as day/);
+  assert.match(daily.text, /group by 1, 2\n order by 2 desc/, "grouped by tenant and day, ordered by day");
   assert.match(daily.text, /\n limit 400$/, "the day rows are bounded by the metadata horizon");
+
+  const summary = renderSql(buildPlan("usage_summary", { orgId: ORG }));
+  assert.match(summary.text, /select u\.org_id as org_id, count\(\*\) as requests/);
+  assert.match(summary.text, /group by 1/, "a totals query says whose totals they are");
+
+  // Every tenant-scoped query returns its tenant column, or `scopedPort` has nothing to check: a
+  // totals query was exempt by construction, and eleven of twelve row queries said nothing either.
+  for (const name of NAMED_QUERY_NAMES) {
+    const spec = namedQuery(name);
+    if (spec.tenantColumn === null) continue;
+    assert.ok(spec.tenantField !== undefined, `${name} is tenant-scoped and must declare tenantField`);
+    const rendered =
+      spec.engine === "clickhouse"
+        ? renderClickHouseSql(buildPlan(name, { orgId: ORG, limit: 1 }))
+        : renderSql(buildPlan(name, { orgId: ORG, limit: 1 }));
+    const selectList = rendered.text.slice(0, rendered.text.indexOf("\n  from"));
+    assert.ok(
+      new RegExp(`\\b${spec.tenantField}\\b`).test(selectList),
+      `${name} must return ${spec.tenantField}: ${selectList}`,
+    );
+  }
 });
 
 test("every tenant-scoped named query binds the tenant last, under the reserved name", () => {
@@ -289,7 +311,7 @@ test("the rendered statements are the shipped SQL: one relation, named columns, 
   assert.match(summary.text, /u\.max_hold is not null/);
 
   const daily = renderSql(buildPlan("usage_daily", { orgId: ORG }));
-  assert.match(daily.text, /group by 1\n order by 1 desc/);
+  assert.match(daily.text, /group by 1, 2\n order by 2 desc/);
 });
 
 test("a keyset bound compares the whole sort key, in the list's own direction", () => {

@@ -84,20 +84,33 @@ export function scopedPort(port: QueryPort): QueryPort {
   return {
     async run(plan: QueryPlan): Promise<Row[]> {
       const spec = namedQuery(plan.name);
-      if (spec.tenantColumn !== null && plan.tenant === null) {
+      if (spec.tenantColumn === null) return port.run(plan);
+      if (plan.tenant === null) {
         throw new QueryPlanError(`${plan.name} is tenant-scoped and must not run without a tenant`);
       }
-      const rows = await port.run(plan);
       const field = spec.tenantField;
-      if (plan.tenant === null || field === undefined) return rows;
+      // A tenant-scoped query with no declared field would have disabled the check silently, so the
+      // registry invariant is enforced here as well as in a test.
+      if (field === undefined) {
+        throw new QueryPlanError(`${plan.name} is tenant-scoped but declares no tenantField`);
+      }
+      const rows = await port.run(plan);
+      const scoped: Row[] = [];
       for (const row of rows) {
-        // An aggregate returns no tenant column, and could not carry another organization's identity
-        // anyway; a row query that returns one must carry the tenant it was scoped to.
-        if (Object.hasOwn(row, field) && row[field] !== plan.tenant.value) {
+        // `hasOwn`, so a tenant carried on a prototype is not a tenant; and a row that simply does not
+        // say whose it is cannot be accepted — that was the hole: eleven of twelve row queries did not
+        // select the column, so every row passed a check that only fired when the field was present.
+        if (!Object.hasOwn(row, field)) {
+          throw new QueryPlanError(`${plan.name} returned a row with no ${field}`);
+        }
+        if (row[field] !== plan.tenant.value) {
           throw new QueryPlanError(`${plan.name} returned a row belonging to another organization`);
         }
+        // Stripped here, so the tenant column exists for the check and never reaches a DTO.
+        const { [field]: _tenant, ...rest } = row;
+        scoped.push(rest);
       }
-      return rows;
+      return scoped;
     },
   };
 }
@@ -122,6 +135,11 @@ type SortSpec = {
 /**
  * An aggregate, stated declaratively so the SQL renderer and the in-memory port describe the same
  * computation instead of two hand-written ones. `filters` are the `filter (where …)` conditions.
+ *
+ * A tenant-scoped aggregate groups by its tenant column as well, so the row it returns carries the
+ * organization it was computed for and `scopedPort` can check it. Without that, a totals query was
+ * exempt from the tenant check by construction: an executor could return another organization's sums
+ * and nothing in the response said whose they were.
  */
 type AggregateSpec = {
   name: string;
@@ -178,11 +196,11 @@ const USAGE_FILTERS: Record<string, FilterSpec> = {
   model: { column: "u.model", op: "eq", field: "model" },
 };
 
-const USAGE_COLUMNS = `u.request_id, u.created_at, u.model, u.key_id, u.key_name, u.execution_mode,
+const USAGE_COLUMNS = `u.org_id, u.request_id, u.created_at, u.model, u.key_id, u.key_name, u.execution_mode,
          u.job_state, u.terminal_cause, u.http_status, u.prompt_tokens, u.completion_tokens,
          u.usage_certainty, u.settlement_state, u.cost, u.max_hold, u.trace_mode`;
 
-const TRACE_COLUMNS = `request_id, created_at, model, key_id, job_state, http_status, trace_mode,
+const TRACE_COLUMNS = `org_id, request_id, created_at, model, key_id, job_state, http_status, trace_mode,
          content, loss_reason, prompt_tokens, completion_tokens, ttft_ms, wall_ms, cost,
          feedback_count, score_count, execution_mode, terminal_cause, error_code, usage_certainty,
          settlement_state, auth_ms, media_ms, admit_ms, queue_ms, gateway_version, model_revision,
@@ -218,7 +236,7 @@ const NAMED_QUERIES = {
     from: "public.wallets w",
     // D1's view also exposes a stored `available`; this service derives it from the two totals in
     // one place instead, so the identity the conformance suite asserts has a single home.
-    columns: "w.ledger_total, w.reserved_total",
+    columns: "w.org_id, w.ledger_total, w.reserved_total",
     tenantColumn: "w.org_id",
     tenantField: "org_id",
   },
@@ -227,7 +245,7 @@ const NAMED_QUERIES = {
     engine: "pg",
     source: "ledger",
     from: "public.console_ledger l",
-    columns: "l.id, l.created_at, l.delta, l.kind, l.reason, l.ref, l.actor, l.by_operator",
+    columns: "l.org_id, l.id, l.created_at, l.delta, l.kind, l.reason, l.ref, l.actor, l.by_operator",
     tenantColumn: "l.org_id",
     tenantField: "org_id",
     sort: {
@@ -305,7 +323,7 @@ const NAMED_QUERIES = {
     hardLimit: 100,
     source: "keys",
     from: "public.api_keys k",
-    columns: "k.id, k.name, k.prefix, k.created_at, k.last_used_at, k.revoked_at, k.trace_mode",
+    columns: "k.org_id, k.id, k.name, k.prefix, k.created_at, k.last_used_at, k.revoked_at, k.trace_mode",
     tenantColumn: "k.org_id",
     tenantField: "org_id",
     sort: {
@@ -319,7 +337,7 @@ const NAMED_QUERIES = {
     engine: "pg",
     source: "keys",
     from: "public.api_keys k",
-    columns: "k.id, k.name, k.prefix, k.created_at, k.last_used_at, k.revoked_at, k.trace_mode",
+    columns: "k.org_id, k.id, k.name, k.prefix, k.created_at, k.last_used_at, k.revoked_at, k.trace_mode",
     tenantColumn: "k.org_id",
     tenantField: "org_id",
     filters: { key_id: { column: "k.id", op: "eq", field: "id" } },
@@ -329,7 +347,7 @@ const NAMED_QUERIES = {
     engine: "pg",
     source: "settings",
     from: "public.org_settings s",
-    columns: "s.trace_mode, s.content_retention_days, s.evaluation_consent",
+    columns: "s.org_id, s.trace_mode, s.content_retention_days, s.evaluation_consent",
     tenantColumn: "s.org_id",
     tenantField: "org_id",
   },
@@ -340,7 +358,7 @@ const NAMED_QUERIES = {
     hardLimit: 100,
     source: "consent",
     from: "public.consent_history c",
-    columns: "c.version, c.changed_at, c.evaluation_consent, c.changed_by, c.by_operator",
+    columns: "c.org_id, c.version, c.changed_at, c.evaluation_consent, c.changed_by, c.by_operator",
     tenantColumn: "c.org_id",
     tenantField: "org_id",
     sort: {
@@ -355,7 +373,7 @@ const NAMED_QUERIES = {
     hardLimit: 100,
     source: "feedback",
     from: "public.feedback f",
-    columns: `f.id, f.request_id, f.created_at, f.channel, f.author_role, f.author_principal,
+    columns: `f.org_id, f.id, f.request_id, f.created_at, f.channel, f.author_role, f.author_principal,
          f.name, f.value, f.comment, f.calibration_set, f.rubric_version, f.by_operator`,
     tenantColumn: "f.org_id",
     tenantField: "org_id",
@@ -378,7 +396,7 @@ const NAMED_QUERIES = {
     engine: "pg",
     source: "judge",
     from: "public.console_judge_runs r",
-    columns: `r.id, r.created_at, r.state, r.mode, r.rubric_version, r.judge_model,
+    columns: `r.org_id, r.id, r.created_at, r.state, r.mode, r.rubric_version, r.judge_model,
          r.judge_model_version, r.sample_count, r.limited_evaluation_count, r.budget_reserved,
          r.budget_settled, r.consent_snapshot_at, r.external_batch_id, r.quarantine_reason, r.samples`,
     tenantColumn: "r.org_id",
@@ -614,8 +632,18 @@ export function renderSql(plan: QueryPlan): RenderedSql {
   const next = (value: SqlValue): string => bind(`f${index++}`, value);
 
   const selected: string[] = [];
+  // An aggregate carries its tenant as a grouping column, so the row it returns says whose totals
+  // these are and `scopedPort` can check it like any other row.
+  const grouped: string[] = [];
   if (spec.aggregates !== undefined) {
-    if (spec.groupBy !== undefined) selected.push(`${spec.groupBy.column} as ${spec.groupBy.field}`);
+    if (spec.tenantColumn !== null) {
+      selected.push(`${spec.tenantColumn} as ${spec.tenantField}`);
+      grouped.push(String(selected.length));
+    }
+    if (spec.groupBy !== undefined) {
+      selected.push(`${spec.groupBy.column} as ${spec.groupBy.field}`);
+      grouped.push(String(selected.length));
+    }
     for (const aggregate of spec.aggregates) selected.push(aggregateSql(aggregate, next));
   } else {
     selected.push(spec.columns ?? "*");
@@ -636,8 +664,11 @@ export function renderSql(plan: QueryPlan): RenderedSql {
 
   let text = `select ${selected.join(", ")}\n  from ${spec.from}`;
   if (conditions.length > 0) text += `\n where ${conditions.join("\n   and ")}`;
-  if (spec.groupBy !== undefined) {
-    text += `\n group by 1\n order by 1 ${spec.groupBy.direction}`;
+  if (grouped.length > 0) {
+    text += `\n group by ${grouped.join(", ")}`;
+    if (spec.groupBy !== undefined) {
+      text += `\n order by ${grouped[grouped.length - 1]} ${spec.groupBy.direction}`;
+    }
   } else if (spec.aggregates === undefined && spec.sort !== undefined) {
     text += `\n order by ${spec.sort.at.column} ${spec.sort.direction}, ${spec.sort.id.column} ${spec.sort.direction}`;
   }
