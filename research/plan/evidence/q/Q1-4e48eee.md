@@ -770,38 +770,53 @@ of a randomised operation stream, same digest each time.
   three invariants that cannot carry a mutant (no cap on rebuild, claiming mutates nothing
   durable, determinism under identical input — `PYTHONHASHSEED` 0/1/999 all pass).
 
-## What Q2 must reproduce (the exact list)
+## What Q2 must reproduce (the reviewer's corrected list, round 3)
 
-Restated here so the Valkey port has one place to work from. The memory adapter is the
-reference for every item, **not** the fake:
+This replaces the twelve points written in round 2: the round-3 reviewer built an
+independent reference model of R60 from the ruling and found the list incomplete in the
+places its own model needed spelling out. The memory adapter is the reference for every
+item, **not** the fake.
 
-1. One flow per `(dispatch kind, org)`, FIFO inside a flow by an **integer arrival
-   sequence**; a candidate whose visibility timed out re-enters at its **original**
-   sequence, not at the tail.
-2. An arriving flow's tag is **its own kind's** virtual time.
-3. Dispatch, in this float order: `start = max(tag, V[kind])`; `V[kind] = start`;
+1. **One arrival-sequence counter across both kinds**, integer, and it restarts at 1 on
+   `rebuild`.
+2. FIFO inside a flow by that sequence. A candidate whose visibility timed out re-enters
+   at its **original** sequence, and a not-yet-available **older** candidate does not
+   block a newer available one in the same flow.
+3. An arriving flow's tag is **its own kind's** virtual time; `V[kind]` is **never** reset
+   when a kind or a flow empties (only `rebuild` resets it).
+4. Level 2, in this float order: `start = max(tag, V[kind])`; `V[kind] = start`;
    `tag = start + cost / weight`.
-4. Unfiltered claims use **R60 two-level selection**: kinds as level-1 flows (own tag,
-   one top-level virtual time, weight 1, `start = max(kind tag, V_top)`,
-   `V_top = start`, `kind tag = start + cost`), chosen by
-   `(kind tag, arrival sequence of that kind's candidate)`; level 2 unchanged; a
-   kind-filtered claim never reads or writes level-1 state.
-5. A flow is deleted when its pending **and** in-flight count reaches zero.
-6. The service cost is validated **before any write**; a bad answer is
-   `internal_error` and the index is byte-identical afterwards.
-7. Visibility: 30 s preparation, 120 s inference, timed **from the claim**, back when
-   `now >= claimed_at + TTL` (the `>=` boundary).
-8. `enqueue` is a no-op returning `False` for a pending, in-flight or acknowledged id;
-   both caps are checked **before any write**, and a refusal is `capacity_exhausted`.
-9. `remove(job_id)` drops every candidate of that job, pending or in flight, and is **not**
-   remembered — a replayed dispatch event may be re-indexed.
-10. `rebuild`: pending = the de-duplicated snapshot in snapshot order, caps not applied,
-    in-flight dropped, acknowledged cleared, **both** fairness levels reset, bytes = the
-    sum of the snapshot's compact bytes.
-11. An unknown kind is `invalid_request` (R55); `kind=None` means "anything".
-12. The differential run compares `tags()`, `virtual_times()`, `kind_tags()`,
+5. Level 1 (R60), for unfiltered claims only: the kinds are flows with their own tag, one
+   shared top-level virtual time and weight 1. A kind is ranked by
+   `(kind tag, arrival sequence of the candidate **its own level-2 rule would hand
+   out**)`; a kind with no eligible pick is skipped and left untouched. The writes are
+   `top_start = max(kind tag, V_top)` → `V_top = top_start` → `kind tag = top_start +
+   cost` (no weight), and they happen **before** the level-2 writes.
+6. A kind-**filtered** claim never reads or writes level-1 state.
+7. A flow is deleted when its pending **and** in-flight count reaches zero.
+8. The service cost is validated **before any write**; a bad answer (`0`, negative, NaN,
+   infinity, or an estimator that raises) is `internal_error` with the index
+   byte-identical afterwards, and an estimator's own `DomainError` passes through
+   **unchanged**.
+9. Visibility: 30 s preparation, 120 s inference, timed **from the claim**, back when
+   `now >= claimed_at + TTL`. Expiry is evaluated **lazily**, at the start of
+   `claim_candidate`, after kind validation, and across **both** kinds - so
+   `stats()["inflight"]` can still count entries whose visibility has expired until the
+   next claim.
+10. `enqueue` checks in this order: duplicate (pending, in flight or acknowledged → `False`,
+    no write) → item cap → byte cap, both caps before any write, refusal
+    `capacity_exhausted` with `retry_after_s = 1`.
+11. `remove(job_id)` drops every candidate of that job, pending or in flight, and is
+    **not** remembered - a replayed dispatch event may be re-indexed.
+12. `rebuild`: pending = the de-duplicated snapshot in snapshot order, caps **not**
+    applied, in-flight dropped, acknowledged cleared, **both** fairness levels reset, the
+    sequence counter restarted, bytes = the sum of the snapshot's compact bytes.
+13. An unknown kind is `invalid_request` (R55), checked **before anything else**;
+    `kind=None` means "anything".
+14. The differential run compares `tags()`, `virtual_times()`, `kind_tags()`,
     `top_virtual_time()` and `stats()` after **every** operation, including unfiltered
-    claims with both kinds holding work — the case the r2 head had none of.
+    claims with both kinds holding work **and non-unit costs** - the two cases the r2 and
+    r3 heads had no test for.
 
 ## Verification log
 
@@ -811,3 +826,92 @@ reference for every item, **not** the fake:
   50 killed, every named case failing under its mutant. The round-1 claims "every finding
   addressed" and "comparable across kinds" are marked `CORRECTED` in place; the round-1
   B4 limit is corrected in this section. Counts quoted from the commands above.
+
+---
+
+# Review round 3 — coordinator review of `1d721e6`: `fix_required` on tests only
+
+Appended. Round 3 built an **independent reference model of R60** and reported that this
+adapter matched it exactly — tags, per-kind virtual times, kind tags, the top-level
+virtual time, bytes, items and in-flight counts — over 40 seeds × 2,500 operations. **No
+implementation defect, and the adapter was not changed in this round.** Two R60 clauses
+had surviving mutants because no test exercised them, which is the whole of B8 and B9.
+
+| Field | Value |
+|---|---|
+| Reviewed SHA | `1d721e6` |
+| Round-3 implementation SHA | `cae5142` (tests only) |
+| Status | **implemented, not integrated** |
+| Suite | 61 tests in `tests/q`, 54 mutants, 54/54 killed |
+
+## Disposition
+
+| Item | Commit | Case → mutant |
+|---|---|---|
+| **B8** (T07) `kind tag = start + cost` unproven: `+ 1.0` passed the whole suite because no test issued an unfiltered claim with an injected estimator | `cae5142` | `test_q1_none__the_kind_tag_advances_by_the_service_the_kind_received` — preparation 11 s against inference 1 s, both kinds backlogged, 26 unfiltered claims, asserting **both** the pattern `IPIIIIIIIIIIIPIIIIIIIIIIIP` and `kind_tags() == {prepare: 33.0, inference: 23.0}` → mutant `the_kind_tag_advances_by_one_not_by_the_cost` |
+| **B9** (T22) the level-1 tie-break "sequence of the candidate that kind would hand out" unproven: every level-1 case had one flow per kind, so ranking by the kind's **oldest** candidate survived | `cae5142` | `test_q1_none__the_kind_is_ranked_by_the_candidate_it_would_actually_hand_out` — `ORG_A` holds preparation's sequences 1 and 2 and has been served once by a preparation-**filtered** worker (tag 1.0, level-1 state untouched), so preparation's pick is `ORG_B` at sequence 4 while inference holds sequence 3; the unfiltered claim must be the inference candidate → mutant `the_kind_is_ranked_by_its_oldest_candidate` |
+| **T04** the top-level virtual time was not asserted | `cae5142` | `test_q1_none__a_kind_that_waited_catches_up_once_and_cannot_hoard` now claims the late dispatch on its own and asserts `top_virtual_time() == 3.0` before continuing → mutant `the_top_virtual_time_is_the_unclamped_kind_tag`. Order-equivalent with two kinds, but it is state Q2's differential run compares, so it is pinned rather than argued about |
+| Q2 reproduction list | `cae5142` | Replaced with the reviewer's corrected list (§ above): one sequence counter across both kinds restarting at 1 on rebuild, availability not blocking inside a flow, `V[kind]` never reset on empty, a kind with no pick skipped untouched, the level-1 write order, an estimator's `DomainError` passing through, lazy visibility expiry after kind validation, the `enqueue` check order with `retry_after_s = 1`, unknown kind checked first, and non-unit costs in the differential run |
+| Verification log gap | `cae5142` | The round-2 log line said "50 mutants declared" at `5b0217e` while the table already said 51 after `f7a4743`; the log below now covers `f7a4743`, `1d721e6` and `cae5142` |
+
+Two corrections the coordinator made to **R60's own text** on the integration branch, noted
+here so this report and the ruling agree: the tie-break clause now says "the candidate that
+kind would hand out" explicitly, and the starvation bound is *kinds × tenants-in-its-kind at
+equal cost, measured in service time*. Both were errors in the ruling's wording; no claim in
+this report depended on either, and the bound this suite asserts (`[1, 3, 5]`, i.e. one slot
+per kind) is the equal-cost case of the corrected one.
+
+## Commands and results (round 3, UTC 2026-09-21, `load average: 10.00`)
+
+| # | Command | Exit | Output |
+|---|---|---|---|
+| 1 | `make api-test` | 0 | `731 passed, 2 warnings in 31.21s` (670 baseline + 61) |
+| 2 | `uv run --frozen pytest -q tests/q` | 0 | `61 passed in 5.26s` |
+| 3 | `uv run --frozen pytest tests/q/test_memory_scheduler.py -k contract -q -s` | 0 | `scheduler conformance: 7 ran, 0 skipped []` then `9 passed, 38 deselected in 0.16s` |
+| 4 | `uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `10 passed in 7.60s` (3-mutant default subset) |
+| 5 | `INFRX_MUTANTS=all uv run --frozen pytest -q -s tests/q/test_mutants.py` | 0 | `61 passed in 49.57s` (1 well-formedness + 54 mutants + 6 self-tests) |
+| 6 | `uv run --frozen python tests/q/mutants.py` | 0 | `54/54 killed` |
+
+Counts: 61 tests in `tests/q` = 9 contract (7 exported cases, 0 skips) + 4 property +
+38 behaviour/drill + 10 mutation. No failures, no skips. Console and bench targets remain
+not run; real-service evidence remains Q2's.
+
+## Artifacts (round 3)
+
+| File | sha256 |
+|---|---|
+| `q1/r4-api-test.txt` | `d1d11b6108a28410bd58d04dc75a82d4ab462dcae96dc8afc3a38e7706673ae4` |
+| `q1/r4-q-suite.txt` | `baf882fe06c82e446502c863078b76227d23b4b7a6f7f805194c2d13c8a7e8ac` |
+| `q1/r4-conformance.txt` | `2c19ab2c43def0b695ac0b93c10626035186aebc6df40c822934bb710dd5e9c9` |
+| `q1/r4-mutants-subset.txt` | `df418c1070c2a27b7dedb95b608cd8de066754156f904b160ae4db9e6c3a4c59` |
+| `q1/r4-mutants-all.txt` | `5ebdf14dbdfa0eb222c3099db424713098911ff84f152bc453f0913f9bf116b7` |
+| `q1/r4-mutants.txt` | `2d58c8740fe657f40cba743acd84902c02d77568ba1a5cd357b288598112c027` |
+
+## Limits (round 3 addition)
+
+- **Level-1 debt is in service time, and it is inherited across the tenants of a kind.**
+  A kind's tag advances by the cost of whatever was dispatched from it, whichever tenant
+  that was, so an expensive tenant in the preparation pool makes the *whole* preparation
+  pool wait longer for its next unfiltered slot — that is what makes the two pools share
+  the machine by service time rather than by request count (B8's case measures it: one
+  preparation slot per eleven inference slots at 11:1 costs), and it is also the reason a
+  cheap tenant in an expensive pool can be slower to reach an unfiltered worker than it
+  would be with its own pool. Level 2 keeps that tenant's standing *inside* its pool
+  exact. Whoever sets the estimator in Q3 owns this trade-off; it is a property of R60,
+  not a defect, and no test asserts a bound on it.
+- Everything unsuperseded from rounds 0–2 stands.
+
+## Verification log
+
+- 2026-09-21: Round-2 follow-ups at `f7a4743` and `1d721e6`, which the round-2 log line
+  above predates: `f7a4743` adopted the reviewer's third ordering mutant
+  (`the_estimator_is_never_consulted`, `cost = 1.0`), taking the list from 50 to
+  **51 declared, 51 killed**, and `1d721e6` appended the validation of this adapter against
+  the reviewer's own attack scripts. The round-2 table's counts are the ones that hold.
+- 2026-09-21: Review round 3 appended at `cae5142`, tests only — round 3 found **no
+  implementation defect** (an independent reference model of R60 matched this adapter over
+  40 seeds × 2,500 operations), so the adapter is byte-identical to `1d721e6`. B8, B9 and
+  T04 now have cases and mutants: 54 declared, 54 killed, every named case failing under
+  its mutant. The Q2 reproduction list is replaced by the reviewer's corrected version and
+  the level-1 service-time trade-off is recorded under Limits. Counts quoted from the
+  commands above.
