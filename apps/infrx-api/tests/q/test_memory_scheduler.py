@@ -15,6 +15,7 @@ import inspect
 
 import pytest
 from infrx.contracts import errors, ports
+from infrx.contracts.codec import compact_bytes
 from infrx.contracts.conformance import (MissingHook, run_cases, run_scheduler_conformance,
                                           scheduler_cases)
 from infrx.contracts.limits import DEFAULTS
@@ -186,6 +187,114 @@ def test_q1_fair__a_candidate_that_waited_catches_up_once_and_cannot_hoard():
     asyncio.run(run())
 
 
+def test_q1_fair__a_newcomer_does_not_outrank_a_served_flow_with_an_older_head():
+    """r2 B1: the arrival tag is not decoration. A flow that has just been served sits at
+    exactly its pool's virtual time with an *older* head sequence, so it must beat a
+    tenant arriving now - which it does only because the newcomer starts at the virtual
+    time rather than at zero. Starting at zero dispatches `A B A U B A B` instead."""
+    async def run():
+        h = harness()
+        port = h.port
+        for org in (ORG_A, ORG_A, ORG_A, ORG_B, ORG_B, ORG_B):
+            assert await port.enqueue(event(h, org_id=org))
+        opening = []
+        for _ in range(3):
+            candidate = await port.claim_candidate("worker-a")
+            opening.append(candidate.org_id)
+            await port.acknowledge(candidate)
+        assert opening == [ORG_A, ORG_B, ORG_A], opening
+        assert await port.enqueue(event(h, org_id=ORG_C))          # the newcomer
+        rest = [candidate.org_id for candidate in await drain(port)]
+        assert opening + rest == [ORG_A, ORG_B, ORG_A, ORG_B, ORG_C, ORG_A, ORG_B], \
+            opening + rest
+    asyncio.run(run())
+
+
+def test_q1_fair__ties_break_on_arrival_not_on_flow_creation_or_on_the_org_id():
+    """r2 B3: the tie-break is the *candidate's* arrival sequence, and this case is built
+    so that the two cheap ways of getting the right answer for the wrong reason both
+    fail. The flow created first (`ORG_A`, whose id also sorts first) has had its oldest
+    candidate cancelled, so its head is newer than the head of the flow created second:
+    creation order and org id both point at `ORG_A`, arrival order points at `ORG_B`."""
+    async def run():
+        h = harness()
+        port = h.port
+        assert ORG_A < ORG_B                                  # the id would decide wrongly
+        first = event(h, org_id=ORG_A, job_id=JOB_1)          # creates the ORG_A flow
+        second = event(h, org_id=ORG_B)                       # creates the ORG_B flow
+        third = event(h, org_id=ORG_A)
+        for candidate in (first, second, third):
+            assert await port.enqueue(candidate)
+        await port.remove(JOB_1)                              # ORG_A's head is now newer
+        assert port.tags() == {(INFER.value, ORG_A): 0.0, (INFER.value, ORG_B): 0.0}
+        order = [candidate.event_id for candidate in await drain(port)]
+        assert order == [second.event_id, third.event_id], order
+    asyncio.run(run())
+
+
+def test_q1_fair__one_dispatch_moves_the_tag_by_exactly_cost_over_weight():
+    """r2 B3: with an injected estimator, one dispatch moves the tag by exactly
+    `cost / weight` - 7 s of predicted service for a tenant weighted 2 is 3.5, not 1.
+    Without an injected cost the advance could be hard-coded to 1.0 and nothing would
+    notice, which is what `03` §2.3's "by service time, not request count" forbids."""
+    async def run():
+        h = harness(weights={ORG_A: 2.0}, cost=lambda _event: 7.0)
+        port = h.port
+        assert await port.enqueue(event(h, org_id=ORG_A))
+        assert await port.enqueue(event(h, org_id=ORG_B))
+        await port.claim_candidate("worker-a")
+        assert port.tags()[(INFER.value, ORG_A)] == 3.5, port.tags()
+        await port.claim_candidate("worker-a")
+        assert port.tags()[(INFER.value, ORG_B)] == 7.0, port.tags()
+        # the pool's virtual time is the *start* of the last dispatch, so it is still 0
+        assert port.virtual_times() == {INFER.value: 0.0, PREPARE.value: 0.0}
+        assert await port.enqueue(event(h, org_id=ORG_A))
+        await port.claim_candidate("worker-a")                 # A again, starting at 3.5
+        assert port.tags()[(INFER.value, ORG_A)] == 7.0, port.tags()
+        assert port.virtual_times()[INFER.value] == 3.5, port.virtual_times()
+    asyncio.run(run())
+
+
+class _Estimator:
+    """A service-cost estimator with a script, so a bad answer is deterministic."""
+
+    def __init__(self, *answers: object) -> None:
+        self.answers = list(answers)
+        self.calls = 0
+
+    def __call__(self, _event) -> float:
+        self.calls += 1
+        answer = self.answers[min(self.calls - 1, len(self.answers) - 1)]
+        if isinstance(answer, BaseException):
+            raise answer
+        return float(answer)
+
+
+def test_q1_fair__a_bad_service_cost_is_a_typed_error_that_moves_nothing():
+    """r2 B4: a bad estimator answer is a typed `internal_error` **and** leaves the index
+    exactly as it was. The cost used to be computed after the candidate had been taken out
+    of its flow, which wedged it for ever: neither pending nor in flight, so never
+    re-offered (checked here after 10,000 s) while its count and bytes stayed charged."""
+    async def run():
+        for bad in (0.0, -1.0, float("nan"), float("inf"), RuntimeError("estimator bug")):
+            estimator = _Estimator(bad, 1.0)
+            h = harness(cost=estimator)
+            port = h.port
+            assert await port.enqueue(event(h, org_id=ORG_A))
+            before, before_tags = port.stats(), port.tags()
+            with pytest.raises(errors.DomainError) as caught:
+                await port.claim_candidate("worker-a")
+            assert caught.value.code == "internal_error", (bad, caught.value.code)
+            assert port.stats() == before and port.tags() == before_tags, bad
+            assert port.stats()["pending"] == 1 and port.stats()["inflight"] == 0, bad
+            # not wedged: the candidate is still there, and the next claim gets it
+            h.clock.advance(10_000)
+            candidate = await port.claim_candidate("worker-b")
+            assert candidate is not None, bad
+            assert estimator.calls == 2, (bad, estimator.calls)
+    asyncio.run(run())
+
+
 def test_q1_config__a_weight_that_would_break_dispatch_is_refused_where_it_is_set():
     """A zero, negative, NaN or infinite weight is a division by zero or a poisoned
     comparison inside dispatch. It is refused at construction, not discovered later."""
@@ -216,6 +325,68 @@ def test_q1_kind__preparation_and_inference_are_separately_fair():
     asyncio.run(run())
 
 
+async def _interleaved_shares(h, *, prepare_traffic: bool, rounds: int):
+    """Drain `rounds` inference dispatches, optionally taking one preparation dispatch
+    between every two of them, and return the inference dispatches per organization."""
+    port = h.port
+    counts = {ORG_A: 0, ORG_B: 0}
+    for _ in range(rounds):
+        candidate = await port.claim_candidate("worker-a", kind=INFER)
+        assert candidate is not None
+        counts[candidate.org_id] += 1
+        await port.acknowledge(candidate)
+        if prepare_traffic:
+            prepared = await port.claim_candidate("prep-a", kind=PREPARE)
+            assert prepared is not None, "the preparation stream ran dry"
+            await port.acknowledge(prepared)
+    return counts
+
+
+def test_q1_kind__preparation_traffic_does_not_erase_the_weighted_share():
+    """r2 B2: the virtual time is **per kind**. With one shared scalar, preparation
+    dispatches advanced it, every inference flow was clamped up to it at its next
+    dispatch, and the debt between inference tenants disappeared: a tenant weighted 4
+    measured 0.80 of the dispatches with no preparation traffic and 0.50 with one
+    preparation dispatch per inference dispatch. Weighted fairness must not depend on
+    what another pool is doing."""
+    async def run():
+        for prepare_traffic in (False, True):
+            h = harness(weights={ORG_B: 4.0})
+            for _ in range(100):
+                assert await h.port.enqueue(event(h, org_id=ORG_A, kind=INFER))
+                assert await h.port.enqueue(event(h, org_id=ORG_B, kind=INFER))
+                assert await h.port.enqueue(event(h, org_id=ORG_C, kind=PREPARE))
+            counts = await _interleaved_shares(h, prepare_traffic=prepare_traffic,
+                                               rounds=100)
+            assert counts == {ORG_A: 20, ORG_B: 80}, (prepare_traffic, counts)
+    asyncio.run(run())
+
+
+def test_q1_kind__preparation_traffic_does_not_erase_a_service_time_debt():
+    """r2 B2, the same defect measured in service seconds, which is what `03` §2.3's WFQ
+    is about: a tenant whose requests cost 11 s must not get the same *number* of
+    dispatches as one whose requests cost 1 s. With a shared virtual time and preparation
+    traffic the expensive tenant's share of service seconds went 0.50 -> 0.92."""
+    async def run():
+        expensive = {ORG_A: 11.0}
+        for prepare_traffic in (False, True):
+            # 11:1 costs mean one dispatch for ORG_A per eleven for ORG_B, so the depths
+            # are uneven on purpose; the total stays under the index's item cap.
+            h = harness(cost=lambda e: expensive.get(e.org_id, 1.0))
+            for _ in range(20):
+                assert await h.port.enqueue(event(h, org_id=ORG_A, kind=INFER))
+            for _ in range(200):
+                assert await h.port.enqueue(event(h, org_id=ORG_B, kind=INFER))
+            for _ in range(130):
+                assert await h.port.enqueue(event(h, org_id=ORG_C, kind=PREPARE))
+            counts = await _interleaved_shares(h, prepare_traffic=prepare_traffic,
+                                               rounds=120)
+            seconds = {ORG_A: counts[ORG_A] * 11.0, ORG_B: counts[ORG_B] * 1.0}
+            share = seconds[ORG_A] / sum(seconds.values())
+            assert abs(share - 0.5) <= 0.05, (prepare_traffic, counts, share)
+    asyncio.run(run())
+
+
 def test_q1_kind__a_lost_preparation_worker_returns_its_candidate_on_the_preparation_lease():
     """R52: preparation gets the shorter lease (30 s), because a lost transcode worker
     must be noticed early enough for R46's bounded retries to happen inside the
@@ -237,6 +408,25 @@ def test_q1_kind__a_lost_preparation_worker_returns_its_candidate_on_the_prepara
         h.clock.advance(DEFAULTS.lease_ttl_s + 1)
         again = await port.claim_candidate("worker-b", kind=INFER)
         assert again is not None and again.event_id == infer.event_id
+    asyncio.run(run())
+
+
+def test_q1_kind__visibility_expires_at_the_ttl_not_after_it():
+    """The boundary itself, pinned to the fake's (`>=`): one microsecond before the TTL
+    the candidate is still the first worker's, and at exactly the TTL it is back. An
+    off-by-one here is a candidate handed to two workers a moment early, or a lost
+    worker's candidate stuck for a whole extra cycle."""
+    async def run():
+        h = harness()
+        port = h.port
+        assert await port.enqueue(event(h, org_id=ORG_A))
+        first = await port.claim_candidate("worker-a")
+        assert first is not None
+        h.clock.advance(DEFAULTS.lease_ttl_s - 0.000001)
+        assert await port.claim_candidate("worker-b") is None, "back before its TTL"
+        h.clock.advance(0.000001)                              # exactly the TTL
+        back = await port.claim_candidate("worker-b")
+        assert back is not None and back.event_id == first.event_id
     asyncio.run(run())
 
 
@@ -270,14 +460,19 @@ def test_q1_caps__a_full_index_refuses_with_a_typed_retryable_error():
         port = h.port
         assert await port.enqueue(event(h, org_id=ORG_A))
         assert await port.enqueue(event(h, org_id=ORG_A))
+        full = port.stats()
         with pytest.raises(errors.CapacityExhausted) as caught:
             await port.enqueue(event(h, org_id=ORG_B))
         assert errors.http_status(caught.value.code) == 429
         assert caught.value.retry_after_s
-        assert port.stats()["items"] == 2
+        # a refused enqueue inserts nothing at all: no entry, no byte, and no flow for the
+        # tenant it refused (a half-inserted candidate would hold a cap slot for ever)
+        assert port.stats() == full, port.stats()
+        assert set(port.tags()) == {(INFER.value, ORG_A)}, port.tags()
         # an acknowledgment frees the slot again
         await port.acknowledge(await port.claim_candidate("worker-a"))
         assert await port.enqueue(event(h, org_id=ORG_B))
+        assert port.stats()["items"] == 2
     asyncio.run(run())
 
 
@@ -398,8 +593,29 @@ def test_q1_rebuild__clears_in_flight_and_acknowledged_and_keeps_no_stale_tenant
         h.clock.advance(DEFAULTS.lease_ttl_s * 2 + 1)
         order = [candidate.event_id for candidate in await drain(port)]
         assert sorted(order) == sorted([keep.event_id, acked.event_id]), order
-        # a duplicate inside the snapshot indexes once
-        assert await port.rebuild((keep, keep, acked)) == 2
+    asyncio.run(run())
+
+
+def test_q1_rebuild__a_duplicate_in_the_snapshot_is_indexed_and_charged_once():
+    """r2 B3: `rebuild((keep, keep, acked)) == 2` proved nothing on its own, because a
+    dict de-duplicates the *entries* while the flow still holds the id twice: the count
+    was right and the same event was handed to two workers, with its bytes charged twice.
+    The hand-out and the byte total are what carry the invariant."""
+    async def run():
+        h = harness()
+        port = h.port
+        keep = event(h, org_id=ORG_B)
+        acked = event(h, org_id=ORG_A)
+        expected = len(compact_bytes(keep)) + len(compact_bytes(acked))
+        assert await port.rebuild((keep, keep, acked, keep)) == 2
+        assert port.stats()["bytes"] == expected, port.stats()
+        assert port.stats()["items"] == 2 and port.stats()["pending"] == 2
+        handed = [candidate.event_id for candidate in await drain(port)]
+        assert sorted(handed) == sorted([keep.event_id, acked.event_id]), handed
+        assert port.stats()["bytes"] == 0 and port.tags() == {}
+        # and a plain rebuild charges exactly the compact bytes of its snapshot
+        assert await port.rebuild((keep, acked)) == 2
+        assert port.stats()["bytes"] == expected, port.stats()
     asyncio.run(run())
 
 

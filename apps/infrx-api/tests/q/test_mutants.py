@@ -1,25 +1,41 @@
 #!/usr/bin/env python3
 """R32: run the Q mutation list. A surviving mutant is a failed suite.
 
-One pytest process per mutant, so this is the slow part of `tests/q` (~1 s each).
-It is not gated behind an environment variable: the list is short, and a mutation
-suite that usually does not run is a mutation suite that does not work.
+One pytest process per mutant, so the whole list is slow by contract (it was 21 s of a
+50 s `make api-test`). Gated exactly like the coordinator's list: the default suite runs
+a three-mutant subset plus the runner's own self-tests, and the full list runs on demand.
+A surviving mutant is a failed suite either way.
 
-    uv run --frozen pytest -q tests/q/test_mutants.py
+    uv run --frozen pytest -q tests/q/test_mutants.py                     # subset
+    INFRX_MUTANTS=all uv run --frozen pytest -q tests/q/test_mutants.py   # all of them
+    uv run --frozen python tests/q/mutants.py                             # the same list
 """
 from __future__ import annotations
+
+import os
 
 import pytest
 
 from . import mutants as mutation_list
 
 ALL = mutation_list.MUTANTS
+FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
+# One mutant per mechanism most likely to regress: the kind filter (R52, killed through
+# the exported suite), the dispatch clamp, and the arrival tag whose mutant the r2 review
+# found surviving. The whole list is one environment variable away.
+SUBSET = ("the_kind_filter_is_inverted",
+          "the_dispatch_start_is_not_clamped_to_the_virtual_time",
+          "an_arriving_tenant_starts_at_zero")
+SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
 def test_the_list_is_well_formed():
     """Every mutant names an invariant and at least one case, and every anchor exists
     exactly once. A duplicated anchor would mutate the wrong line and prove nothing."""
     assert len({m.name for m in ALL}) == len(ALL), "duplicate mutant names"
+    assert set(SUBSET) <= {m.name for m in ALL}, "the default subset names a missing mutant"
+    print(f"\nQ mutants: {len(ALL)} declared, {len(SELECTED)} selected "
+          f"({'INFRX_MUTANTS=all' if FULL_RUN else 'default subset'})")
     source = (mutation_list.API_DIR / "infrx" / mutation_list.Q).read_text()
     for mutant in ALL:
         assert mutant.cases, f"{mutant.name} names no case"
@@ -29,7 +45,7 @@ def test_the_list_is_well_formed():
         assert mutant.new != mutant.old, f"{mutant.name} changes nothing"
 
 
-@pytest.mark.parametrize("mutant", ALL, ids=[m.name for m in ALL])
+@pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
 def test_mutant_is_killed(mutant):
     result = mutation_list.run_mutant(mutant)
     assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
