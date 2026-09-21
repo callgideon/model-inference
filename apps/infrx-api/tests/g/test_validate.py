@@ -8,6 +8,7 @@ contracts fake) and let *it* decide, so "the ceilings are derived so that admit
 accepts them" is proven by admission rather than by a matching constant here.
 """
 import asyncio
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -431,3 +432,136 @@ if __name__ == "__main__":
         if name.startswith("test_") and not hasattr(fn, "pytestmark"):
             fn()
             print("ok", name)
+
+
+# --- review r2 B3: claims the round-2 evidence made that no case covered ------------
+def test_f_base__max_completion_tokens_alone_is_the_output_ceiling():
+    """The round-2 evidence claimed this was covered; no test sent it alone, and the
+    mutant that ignores it survived."""
+    tc, calls = client()
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH,
+                   json=message(max_completion_tokens=512)).status_code == 202
+    request = calls[0][1]
+    assert (request.max_output_tokens, request.max_input_tokens) == (512, 32_768 - 512)
+    for bad in (0, 2_049, -1):
+        response = tc.post(support.CHAT_PATH, headers=support.AUTH,
+                           json=message(max_completion_tokens=bad))
+        assert response.status_code == 400, (bad, response.text[:120])
+    assert len(calls) == 1
+
+
+def test_f_base__an_omitted_model_goes_through_the_served_map():
+    """The default is mapped like any other public id, not copied through."""
+    tc, calls = client()
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH,
+                   json={"messages": [{"role": "user", "content": "hi"}]}).status_code == 202
+    assert calls[0][1].model_revision == support.MODEL_REVISION
+    assert calls[0][1].model_revision != support.settings().model_id
+
+
+def test_media_sec__an_idempotency_key_is_storable_text():
+    """It is persisted, so it is held to the same rule as any other stored text."""
+    tc, calls = client()
+    # A NUL is what an HTTP header can carry and PostgreSQL cannot store; a lone
+    # surrogate cannot survive a header at all, so the NUL is the reachable case.
+    response = tc.post(support.CHAT_PATH,
+                       headers={**support.AUTH, "Idempotency-Key": "k\x00ey"},
+                       json=message())
+    assert response.status_code == 400, response.text[:160]
+    assert support.error_of(response)["param"] == "Idempotency-Key"
+    assert calls == []
+
+
+def test_f_base__the_content_type_and_prefer_checks_are_case_insensitive():
+    tc, calls = client()
+    assert tc.post(support.CHAT_PATH,
+                   headers={**support.AUTH, "content-type": "APPLICATION/JSON"},
+                   content=json.dumps(message()).encode()).status_code == 202
+    assert tc.post(support.CHAT_PATH, headers={**support.AUTH, "Prefer": "RESPOND-ASYNC"},
+                   json=message()).status_code == 202
+    assert calls[1][1].execution_mode is ExecutionMode.async_
+    # and a prefix match is not a media type
+    assert tc.post(support.CHAT_PATH, headers={**support.AUTH, "content-type": "application/jsonx"},
+                   content=json.dumps(message()).encode()).status_code == 400
+
+
+def test_f_base__the_content_type_is_checked_before_the_body_is_read():
+    """Cheapest refusal first: a wrong content type costs no buffering."""
+    calls, accept = support.recorder()
+    app, _ = support.cutover_app(ingress_deps=support.deps(accept=accept))
+    read = []
+
+    async def receive():
+        read.append(1)
+        return {"type": "http.request", "body": b"{}", "more_body": False}
+
+    sent = []
+
+    asyncio.run(app({"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+                     "method": "POST", "path": support.CHAT_PATH,
+                     "raw_path": support.CHAT_PATH.encode(), "query_string": b"", "root_path": "",
+                     "scheme": "http", "client": ("127.0.0.1", 1), "server": ("t", 80),
+                     "headers": [(b"authorization", f"Bearer {support.TOKEN}".encode()),
+                                 (b"content-type", b"text/plain")]},
+                    receive, lambda message: sent.append(message) or asyncio.sleep(0)))
+    assert sent[0]["status"] == 400, sent[0]
+    assert read == [], "the body was read for a body we were never going to parse"
+
+
+def test_media_sec__an_upload_handle_is_anchored_and_exact():
+    """`fullmatch`, not a prefix: a handle with anything after it is not the handle."""
+    tc, calls = client()
+    good = "infrx-upload:upl_" + "a" * 43
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=parts(
+        {"type": "video_url", "video_url": {"url": good}})).status_code == 202
+    for bad in (good + "/../other", good + "?x=1", "infrx-upload:", "infrx-upload:upl_"):
+        response = tc.post(support.CHAT_PATH, headers=support.AUTH, json=parts(
+            {"type": "video_url", "video_url": {"url": bad}}))
+        assert response.status_code == 400, (bad, response.text[:120])
+    assert len(calls) == 1
+
+
+def test_media_sec__an_inline_video_must_be_a_supported_video_type():
+    tc, calls = client()
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=parts(
+        {"type": "video_url", "video_url": {"url": "data:VIDEO/MP4;base64,AAAA"}}
+    )).status_code == 202, "the media type is compared case-insensitively"
+    for bad in ("data:text/html;base64,AAAA", "data:image/png;base64,AAAA",
+                "data:video/mp4;base64,", "data:video/mp4,AAAA"):
+        response = tc.post(support.CHAT_PATH, headers=support.AUTH, json=parts(
+            {"type": "video_url", "video_url": {"url": bad}}))
+        error = support.error_of(response)
+        assert (response.status_code, error["code"]) == (400, "unsupported_media"), bad
+    assert len(calls) == 1
+
+
+UNSAFE_URLS = ("https://cdn.test/a\rHost: x", "https://cdn.test/a\x85b",
+               "https://cdn.test/a b", "https://cdn.test/a b",
+               "https://user:pass@cdn.test/a", "https://cdn.test\\@evil.test/a")
+
+
+@pytest.mark.parametrize("url", UNSAFE_URLS)
+def test_media_sec__a_reference_url_carries_no_smuggling_characters(url):
+    response, calls = post(parts({"type": "video_url", "video_url": {"url": url}}))
+    error = support.error_of(response)
+    assert (response.status_code, error["code"]) == (400, "unsupported_media"), url
+    assert calls == []
+
+
+def test_f_base__an_empty_idempotency_key_is_refused_and_absence_is_not():
+    tc, calls = client()
+    assert tc.post(support.CHAT_PATH, headers={**support.AUTH, "Idempotency-Key": ""},
+                   json=message()).status_code == 400
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=message()).status_code == 202
+    assert calls[0][2].key is None
+
+
+def test_f_base__top_p_and_the_closed_set_are_exact_at_the_edges():
+    tc, calls = client()
+    for value, status in ((0.0, 202), (1.0, 202), (1.0000001, 400)):
+        assert tc.post(support.CHAT_PATH, headers=support.AUTH,
+                       json=message(top_p=value)).status_code == status, value
+    # and a name one character away from a supported one is still unsupported
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH,
+                   json=message(temperatures=0.5)).status_code == 400
+    assert len(calls) == 2

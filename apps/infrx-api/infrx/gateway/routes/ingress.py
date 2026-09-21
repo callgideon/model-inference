@@ -34,7 +34,6 @@ from typing import Callable
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ...auth.context import AuthResolver
@@ -112,6 +111,12 @@ class Ingress:
         self.validator = Validator(rt, consent_for=self.deps.consent_for,
                                    served_models=self.deps.served_models)
         self.slots = self.deps.large_bodies or intake.LargeBodies()
+        # An empty map used to copy the public id through as the revision, i.e. the
+        # defect the map exists to prevent, reintroduced by omission.
+        default = rt.settings.model_id
+        if default not in self.validator.served_models:
+            raise RuntimeMisconfigured(rt.mode,
+                                       detail=f"MODEL_ID is not in the served-model map")
         self.startup_state = assert_startup(rt, self.deps)
 
     async def validated(self, request: Request, request_id: str):
@@ -160,21 +165,14 @@ def install_error_handlers(app, mint_request_id=ids.new_request_id) -> None:
         code = "not_found" if exc.status_code in (404, 405) else "invalid_request"
         if exc.status_code >= 500:
             code = "internal_error"
-        return intake.response(errors.DomainError(code=code), mint_request_id())
-
-    async def validation_error(request: Request, exc: RequestValidationError):
-        # FastAPI's own body/query validation. Its `errors()` quote the caller's
-        # input, so none of it is echoed.
-        return intake.response(errors.InvalidRequest("request validation failed"),
-                               mint_request_id())
+        return intake.response(errors.DomainError(code=code), intake.mint(mint_request_id))
 
     async def unhandled(request: Request, exc: Exception):
-        request_id = mint_request_id()
+        request_id = intake.mint(mint_request_id)
         intake.log.exception("%s: unhandled error on request %s", request.url.path, request_id)
         return intake.response(errors.InternalError(), request_id)
 
     app.add_exception_handler(StarletteHTTPException, http_exception)
-    app.add_exception_handler(RequestValidationError, validation_error)
     app.add_exception_handler(Exception, unhandled)
 
 

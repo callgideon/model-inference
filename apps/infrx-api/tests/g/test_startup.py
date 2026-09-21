@@ -8,6 +8,8 @@ meters nothing. Two independent refusals cover it - `config.validate_runtime` at
 composition root, and this router refusing to register - and the last group pins
 that the legacy entry point is still exactly what F1 left behind.
 """
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -170,3 +172,93 @@ if __name__ == "__main__":
         if name.startswith("test_") and not hasattr(fn, "pytestmark"):
             fn()
             print("ok", name)
+
+
+# --- review r2 B3 and the same-pass list -------------------------------------------
+def test_f_base__register_reads_its_deps_from_the_runtime():
+    """The cutover hook itself: `ROUTERS` calls `register(app, rt)` with two arguments,
+    so the deps have to arrive on the runtime. Nothing tested that before."""
+    from fastapi import FastAPI
+
+    rt = support.runtime(support.settings("dev"))
+    calls, accept = support.recorder()
+    rt.ingress = support.deps(accept=accept)
+    app = FastAPI()
+    app.state.runtime = rt
+    mounted = ingress.register(app, rt)          # exactly the ROUTERS protocol
+    assert mounted.deps is rt.ingress
+    assert TestClient(app).post(support.CHAT_PATH, headers=support.AUTH,
+                                json=support.BODY).status_code == 202
+    assert len(calls) == 1
+
+
+def test_f_base__the_default_model_must_be_in_the_served_map():
+    """An empty map used to copy the public id through as the revision - the defect the
+    map exists to prevent, reintroduced by omission."""
+    with pytest.raises(RuntimeMisconfigured) as raised:
+        support.cutover_app(ingress_deps=support.deps(served_models={"other/model": "other@1"}))
+    assert "MODEL_ID" in str(raised.value)
+
+
+def test_dur_rls__a_client_that_disconnects_mid_body_is_not_a_server_error(caplog):
+    """No 500, and no stack trace in the log: nothing is wrong with the server and
+    nobody is listening anyway."""
+    from starlette.requests import ClientDisconnect
+
+    calls, accept = support.recorder()
+    app, _ = support.cutover_app(ingress_deps=support.deps(accept=accept))
+    sent = []
+
+    async def receive():
+        raise ClientDisconnect()
+
+    with caplog.at_level("INFO", logger="infrx.gateway"):
+        asyncio.run(app({"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+                         "method": "POST", "path": support.CHAT_PATH,
+                         "raw_path": support.CHAT_PATH.encode(), "query_string": b"",
+                         "root_path": "", "scheme": "http", "client": ("127.0.0.1", 1),
+                         "server": ("t", 80),
+                         "headers": [(key.encode(), value.encode())
+                                     for key, value in support.RAW.items()]},
+                        receive, lambda message: sent.append(message) or asyncio.sleep(0)))
+    assert sent[0]["status"] == 400, sent[0]
+    assert "Traceback" not in caplog.text
+    assert calls == []
+
+
+def test_f_base__a_refusal_before_the_body_closes_the_connection():
+    """An endless chunked body would otherwise hold the socket until a proxy gives up."""
+    app, _ = support.cutover_app(support.settings("dev", supabase_url="", supabase_key=""),
+                                 ingress_deps=support.deps())
+    unauthenticated = TestClient(app).post(support.CHAT_PATH, headers=support.RAW, content=b"{}")
+    assert unauthenticated.status_code == 401
+    assert unauthenticated.headers["connection"] == "close"
+
+    app, _ = support.cutover_app(support.settings(max_request_bytes=8),
+                                 ingress_deps=support.deps())
+    oversized = TestClient(app).post(support.CHAT_PATH, headers=support.RAW, content=b"x" * 64)
+    assert oversized.status_code == 413
+    assert oversized.headers["connection"] == "close"
+
+
+def test_f_base__a_probe_that_answers_falsely_is_unavailable():
+    """Not "callable and did not raise": the answer itself has to be true."""
+    for falsy in (False, None, 0, ""):
+        state = ingress.component_state({"price_source": lambda: falsy, "journal": lambda: True})
+        assert state["price_source"] == "unavailable", falsy
+    assert ingress.component_state({"price_source": lambda: True,
+                                    "journal": lambda: True}) == {"price_source": "ok",
+                                                                  "journal": "ok"}
+
+
+def test_f_base__a_request_id_source_that_misbehaves_never_reaches_a_header():
+    """The id is ours, but it lands in a header, so a raising or CRLF-bearing source is
+    replaced rather than trusted."""
+    for bad in (lambda: (_ for _ in ()).throw(RuntimeError("no id for you")),
+                lambda: "4d4d4d4d-0000-4000-8000-000000000004\r\nX-Evil: 1",
+                lambda: 17):
+        app, _ = support.cutover_app(ingress_deps=support.deps(new_request_id=bad))
+        response = TestClient(app).get(support.READY_PATH, headers=support.AUTH)
+        assert response.status_code == 200, response.text[:120]
+        minted = response.headers[wire.HEADER_INFERENCE_ID]
+        assert "\r" not in minted and "\n" not in minted and len(minted) == 36

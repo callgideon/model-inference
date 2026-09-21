@@ -342,6 +342,9 @@ def idempotency(auth, headers, payload_hash: str, operation: str) -> Idempotency
         raise errors.InvalidRequest(
             f"Idempotency-Key must be 1..{MAX_IDEMPOTENCY_KEY_CHARS} characters",
             param="Idempotency-Key")
+    if key is not None:
+        # It is stored, so it is held to the same rule as any other stored text.
+        storable(key, "Idempotency-Key")
     return IdempotencyRef(org_id=auth.org_id, operation=operation, key=key,
                           payload_hash=payload_hash)
 

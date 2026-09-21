@@ -182,7 +182,10 @@ def test_f_base__the_envelope_of_last_resort():
     response = intake.response(unserialisable, support.REQUEST_ID)
     assert response.status_code == 500
     assert response.headers[wire.HEADER_INFERENCE_ID] == support.REQUEST_ID
-    assert json.loads(response.body) == intake.LAST_RESORT
+    # rebuilt, so it names the request and carries no stale Retry-After
+    assert json.loads(response.body) == {"error": {**intake.LAST_RESORT["error"],
+                                                  "request_id": support.REQUEST_ID}}
+    assert "retry-after" not in {key.lower() for key in response.headers}
 
 
 if __name__ == "__main__":

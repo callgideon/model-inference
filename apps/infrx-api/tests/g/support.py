@@ -12,8 +12,10 @@ Two app shapes, both built without importing the legacy `gateway` shim (r1 R48):
 """
 from __future__ import annotations
 
+import atexit
 import dataclasses
 import pathlib
+import shutil
 import tempfile
 
 import httpx
@@ -44,8 +46,12 @@ PUBLIC_MODEL = "nemostation/marlin-2b"
 MODEL_REVISION = "nemostation/marlin-2b@2026-09-01"
 SERVED_MODELS = {PUBLIC_MODEL: MODEL_REVISION}
 BODY = {"model": PUBLIC_MODEL, "messages": [{"role": "user", "content": "hi"}]}
-# Per-run, not a fixed /tmp path shared with every other session on the host.
-USAGE_LOG = str(pathlib.Path(tempfile.mkdtemp(prefix="infrx-g1-")) / "usage.jsonl")
+# Per run, and removed when the process exits: a bare `mkdtemp` left one directory
+# behind per run *and per mutant subprocess* - 345 of them before this line. The legacy
+# chat route does write this file, so the directory has to exist.
+_USAGE_DIR = tempfile.mkdtemp(prefix="infrx-g1-")
+atexit.register(shutil.rmtree, _USAGE_DIR, ignore_errors=True)
+USAGE_LOG = str(pathlib.Path(_USAGE_DIR) / "usage.jsonl")
 
 
 def supabase(rows=(ROW,), down=False, seen=None):

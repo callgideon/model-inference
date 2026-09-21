@@ -33,7 +33,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.requests import ClientDisconnect
 
-from ...contracts import errors, wire
+from ...contracts import errors, ids, wire
 
 log = logging.getLogger("infrx.gateway")
 
@@ -47,6 +47,13 @@ SAFE_PARAM = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 # can. This is what a client gets if even the envelope could not be rendered.
 LAST_RESORT = {"error": {"message": errors.MESSAGES["internal_error"], "type": "server_error",
                          "code": "internal_error"}}
+# Refusals that happen while a body may still be arriving. Keeping the socket open
+# invites the caller to go on sending an endless chunked body until a proxy gives up.
+CLOSE_CODES = frozenset({"invalid_api_key", "request_too_large", "capacity_exhausted",
+                         "deadline_exceeded"})
+# The minted id is ours, but it reaches a response header, so it is checked like
+# anything else that does: a CRLF in a header value splits the response.
+REQUEST_ID_RE = re.compile(r"[0-9a-fA-F-]{36}")
 
 
 def check_content_type(request) -> None:
@@ -210,6 +217,8 @@ def response(error: errors.DomainError, request_id: str) -> JSONResponse:
     headers = {wire.HEADER_INFERENCE_ID: request_id}
     try:
         public = error if error.code in errors.HTTP_ERRORS else errors.InternalError()
+        if public.code in CLOSE_CODES:
+            headers["Connection"] = "close"
         if public is not error:
             log.error("internal-only error code %s escaped a route on request %s",
                       error.code, request_id)
@@ -226,7 +235,11 @@ def response(error: errors.DomainError, request_id: str) -> JSONResponse:
                             status_code=errors.http_status(public.code), headers=headers)
     except Exception:
         log.exception("the error envelope could not be rendered for request %s", request_id)
-        return JSONResponse(LAST_RESORT, status_code=500, headers=headers)
+        # Rebuilt, not reused: `headers` may already carry a Retry-After for a code
+        # this envelope no longer reports.
+        body = {"error": {**LAST_RESORT["error"], "request_id": request_id}}
+        return JSONResponse(body, status_code=500,
+                            headers={wire.HEADER_INFERENCE_ID: request_id})
 
 
 def _retry_hint(error: errors.DomainError) -> dict | None:
@@ -238,6 +251,23 @@ def _retry_hint(error: errors.DomainError) -> dict | None:
         # let `envelope()` raise inside the error path.
         infrx["retry_after_s"] = 5
     return infrx or None
+
+
+def mint(mint_request_id) -> str:
+    """A request id that is certainly usable in a header.
+
+    The source is ours, but its answer lands in `Inference-Id`, so an injected source
+    that raises, returns a non-string or returns something with a CRLF in it must not
+    be able to split a response or leave a bare 500 in place of an envelope.
+    """
+    try:
+        minted = mint_request_id()
+        if isinstance(minted, str) and REQUEST_ID_RE.fullmatch(minted):
+            return minted
+        log.error("the request-id source returned something unusable")
+    except Exception:
+        log.exception("the request-id source raised")
+    return ids.new_request_id()
 
 
 def guard(mint_request_id):
@@ -259,7 +289,7 @@ def guard(mint_request_id):
         # that when it reads the signature, and `request_id` would become a required
         # query parameter on every route.
         async def wrapped(request: Request):
-            request_id = mint_request_id()
+            request_id = mint(mint_request_id)
             try:
                 return await handler(request, request_id)
             except errors.DomainError as error:
