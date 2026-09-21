@@ -191,16 +191,34 @@ test("a boolean column is a boolean: a suspension flag is never guessed at", asy
 
 test("a usage row survives a deleted key, and says so", async () => {
   const { services, sessions, ids, data } = makeConsoleHarness();
-  // `usage_events.api_key_id` is nullable (`on delete set null`) and D1's view LEFT JOINs the key, so
-  // the name arrives null. Dropping the row would understate a cost total; blanking the cell would
-  // read as "no key". It is named as deleted instead.
+  // D1's view LEFT JOINs `api_keys` and `usage_events.api_key_id` is `on delete set null`, so a
+  // deleted key leaves **both** columns null. That is the state the view can actually produce, and it
+  // used to deny the whole page: `key_id` went through the strict string reader.
   const usage = data.usage.find((row) => row.org_id === ids.orgId);
   assert.ok(usage !== undefined);
+  usage.key_id = null;
   usage.key_name = null;
   const page = expectOk(await services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT }));
   const row = page.items.find((candidate) => candidate.request_id === usage.request_id);
-  assert.ok(row !== undefined, "the row is kept");
+  assert.ok(row !== undefined, "the row is kept, or the cost total it carries would be understated");
   assert.equal(row.key_name, "(deleted key)");
+  assert.equal(row.key_id, "", "the documented sentinel, until key_id becomes nullable in the contract");
+
+  // And the sentinel is unreachable from a filter: a key id filter must be identifier-shaped.
+  expectError(await services.usage(sessions.owner, { key_id: "" }), "invalid_request", "the empty key filter");
+  const byKey = expectOk(await services.usage(sessions.owner, { key_id: ids.keyId, limit: MAX_PAGE_LIMIT }));
+  assert.ok(
+    !byKey.items.some((candidate) => candidate.key_id === ""),
+    "a real key filter never matches the sentinel",
+  );
+
+  // Exactly one of the two null is a shape the view cannot produce: it is a malformed row.
+  usage.key_id = ids.keyId;
+  usage.key_name = null;
+  expectError(await services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT }), "internal_error", "name null alone");
+  usage.key_id = null;
+  usage.key_name = "restored";
+  expectError(await services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT }), "internal_error", "id null alone");
 });
 
 test("entitlements fail closed: R24's three states are never reached by coercion", async () => {

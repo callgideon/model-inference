@@ -96,7 +96,18 @@ if (typeof window !== "undefined") throw new Error("lib/services/console.ts is s
 
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
-/** What a usage row shows for a key that has since been deleted (`api_key_id` is nullable). */
+/**
+ * What a usage row shows for a key that has since been deleted.
+ *
+ * `usage_events.api_key_id` is `on delete set null`, so D1's `console_usage` LEFT JOIN yields **both**
+ * `key_id` and `key_name` as NULL for such a row — that is the truth, and the row must still be
+ * counted (dropping it understates a cost total). `UsageRow.key_id` is a non-nullable string in the
+ * frozen contract, so until the contract revision that makes it `string | null` (F2.2) the pair is
+ * projected as this documented sentinel. It is deliberately the empty string: a `key_id` filter value
+ * must be identifier-shaped (non-empty, ≤ 200 characters), so no caller can filter *for* it and no
+ * filter can accidentally match it.
+ */
+export const DELETED_KEY_ID = "";
 export const DELETED_KEY_NAME = "(deleted key)";
 
 function ok<T>(value: T): Result<T> {
@@ -286,15 +297,26 @@ function json(row: Row, column: string): unknown {
   }
 }
 
+/**
+ * The key pair, or the sentinel. Both columns null is a deleted key; exactly one null is a shape the
+ * view cannot produce, so it is a malformed row rather than something to paper over.
+ */
+function deletedKeyOr(row: Row): { key_id: string; key_name: string } {
+  const id = optionalText(row, "key_id");
+  const name = optionalText(row, "key_name");
+  if (id === null && name === null) return { key_id: DELETED_KEY_ID, key_name: DELETED_KEY_NAME };
+  if (id === null || name === null) {
+    throw new TypeError("a usage row has one of key_id/key_name null: the key join yields both or neither");
+  }
+  return { key_id: id, key_name: name };
+}
+
 function usageRowOf(row: Row): UsageRow {
   return {
     request_id: text(row, "request_id"),
     created_at: timestamp(row, "created_at"),
     model: text(row, "model"),
-    key_id: text(row, "key_id"),
-    // The key join is an outer one (a deleted key leaves `api_key_id` null), so the row is kept and
-    // the name is named as missing rather than dropped from the total or rendered blank.
-    key_name: optionalText(row, "key_name") ?? DELETED_KEY_NAME,
+    ...deletedKeyOr(row),
     execution_mode: text(row, "execution_mode") as UsageRow["execution_mode"],
     job_state: text(row, "job_state") as UsageRow["job_state"],
     terminal_cause: optionalText(row, "terminal_cause") as UsageRow["terminal_cause"],

@@ -495,17 +495,6 @@
       ]
     },
     {
-      "id": "KEYNAME-01",
-      "note": "a usage row with a deleted key is refused instead of named",
-      "file": "lib/services/console.ts",
-      "find": "    key_name: optionalText(row, \"key_name\") ?? DELETED_KEY_NAME,",
-      "replace": "    key_name: text(row, \"key_name\"),",
-      "cases": [
-        "a usage row survives a deleted key, and says so"
-      ],
-      "kills_by": "guarded"
-    },
-    {
       "id": "PAGE-01",
       "note": "the last page still mints a cursor",
       "file": "lib/services/console.ts",
@@ -604,6 +593,37 @@
       "replace": "  return false;",
       "cases": [
         "a boolean column is a boolean: a suspension flag is never guessed at"
+      ]
+    },
+    {
+      "id": "KEYNAME-01",
+      "note": "a deleted key denies the whole usage page",
+      "file": "lib/services/console.ts",
+      "find": "  if (id === null && name === null) return { key_id: DELETED_KEY_ID, key_name: DELETED_KEY_NAME };",
+      "replace": "  if (false) return { key_id: DELETED_KEY_ID, key_name: DELETED_KEY_NAME };",
+      "cases": [
+        "a usage row survives a deleted key, and says so"
+      ],
+      "kills_by": "guarded"
+    },
+    {
+      "id": "KEYNAME-02",
+      "note": "a half-null key pair is papered over instead of refused",
+      "file": "lib/services/console.ts",
+      "find": "  if (id === null || name === null) {\n    throw new TypeError(\"a usage row has one of key_id/key_name null: the key join yields both or neither\");\n  }",
+      "replace": "  if (id === null || name === null) return { key_id: id ?? DELETED_KEY_ID, key_name: name ?? DELETED_KEY_NAME };",
+      "cases": [
+        "a usage row survives a deleted key, and says so"
+      ]
+    },
+    {
+      "id": "KEYNAME-03",
+      "note": "the sentinel is a value a caller could filter for",
+      "file": "lib/services/console.ts",
+      "find": "export const DELETED_KEY_ID = \"\";",
+      "replace": "export const DELETED_KEY_ID = \"deleted\";",
+      "cases": [
+        "a usage row survives a deleted key, and says so"
       ]
     }
   ]
