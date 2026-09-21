@@ -156,19 +156,41 @@ class RuntimeMisconfigured(ValueError):
     `validate_pilot` still holds; callers that want the distinction catch this.
     """
 
-    def __init__(self, mode: str, missing=(), detail: str = "") -> None:
+    def __init__(self, mode: str, missing=(), detail: str = "", forbidden=()) -> None:
         self.mode = mode
         self.missing = tuple(missing)
-        message = f"INFRX_MODE={mode!r}: " + (detail or "requires " + ", ".join(self.missing))
+        self.forbidden = tuple(forbidden)
+        parts = []
+        if self.missing:
+            parts.append("requires " + ", ".join(self.missing))
+        if self.forbidden:
+            parts.append("must not set " + ", ".join(self.forbidden))
+        message = f"INFRX_MODE={mode!r}: " + (detail or "; ".join(parts))
         super().__init__(message)
 
 
-# r1 R44: what `pilot` needs before it may serve one request. Authentication is a
-# per-organization identity source, so the allow-all path (no Supabase, no key mapping)
-# and the shared `GATEWAY_API_KEY` both fail: neither can say *which* tenant called.
-# Metering is a durable store, because an unmetered pilot is a free-for-all.
+# r1 R44/R51: what `pilot` needs before it may serve one request. Authentication is a
+# per-organization identity source; metering is a durable store, because an unmetered
+# pilot is a free-for-all.
 PILOT_AUTH_SETTINGS = ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
 PILOT_METERING_SETTINGS = ("DATABASE_URL",)
+# r1 R51: and what `pilot` must **not** have. `Auth.authenticate` answers `(None, None)`
+# - allowed, with **no row** - for a request bearing the shared `GATEWAY_API_KEY`, so such
+# a request has no organization and no key id and therefore nothing to meter, entitle or
+# suspend. The comment here used to claim a shared key "fails"; it does not, it succeeds
+# anonymously, which is worse. Requiring `SUPABASE_URL` closes the other anonymous path:
+# with no Supabase configured and no legacy key, `authenticate` also answers `(None, None)`.
+PILOT_FORBIDDEN_SETTINGS = ("GATEWAY_API_KEY",)
+
+
+def _configured(value: object) -> bool:
+    """A setting counts as configured only with non-whitespace content.
+
+    `SUPABASE_URL=" "` passed a plain truthiness test and then built a client pointed at
+    `" /rest/v1"`, so the pilot started "authenticated" against nothing at all. Unit files
+    and `.env` files make a stray space easy to write and impossible to see.
+    """
+    return bool(value) and bool(str(value).strip())
 
 
 def runtime_mode(settings) -> str:
@@ -184,8 +206,9 @@ def validate_runtime(settings):
       entry point must keep working untouched; G1 replaces this branch with a refusal at
       cutover, in the same change in which I2's installer writes `INFRX_MODE=pilot`.
     * `dev` / `test` - explicit, and no further requirement.
-    * `pilot` - requires authentication **and** metering configuration, or a typed
-      `RuntimeMisconfigured` naming the missing setting names.
+    * `pilot` - requires authentication **and** metering configuration, and refuses the
+      shared `GATEWAY_API_KEY` (R51), or a typed `RuntimeMisconfigured` naming the setting
+      names and nothing else. A whitespace-only value is not configuration.
     * anything else - refuses to start. A typo in a unit file is not a mode.
     """
     pilot = getattr(settings, "pilot", PILOT_DEFAULTS)
@@ -197,11 +220,16 @@ def validate_runtime(settings):
     if mode not in MODES:
         raise RuntimeMisconfigured(mode, detail="must be one of " + ", ".join(MODES))
     if mode == "pilot":
-        missing = [name for name in PILOT_METERING_SETTINGS if not pilot.database_url]
-        missing += [name for name in PILOT_AUTH_SETTINGS
-                   if not (settings.supabase_url and settings.supabase_key)]
-        if missing:
-            raise RuntimeMisconfigured(mode, missing)
+        present = {"DATABASE_URL": pilot.database_url,
+                   "SUPABASE_URL": settings.supabase_url,
+                   "SUPABASE_SERVICE_ROLE_KEY": settings.supabase_key}
+        missing = [name for name in PILOT_METERING_SETTINGS + PILOT_AUTH_SETTINGS
+                   if not _configured(present[name])]
+        # r1 R51: a shared key is not tenant authentication, and it bypasses metering.
+        forbidden = [name for name, value in (("GATEWAY_API_KEY", settings.legacy_key),)
+                     if name in PILOT_FORBIDDEN_SETTINGS and _configured(value)]
+        if missing or forbidden:
+            raise RuntimeMisconfigured(mode, missing, forbidden=forbidden)
     return mode
 
 
@@ -224,9 +252,14 @@ def validate_pilot(pilot, gateway=None):
         if getattr(pilot, name) <= 0:
             raise ValueError(f"{env_name(name)} must be positive")
     if pilot.infrx_mode == "pilot":
-        if not pilot.database_url:
+        if not _configured(pilot.database_url):
             raise ValueError("INFRX_MODE=pilot requires DATABASE_URL: admission must be metered")
-        if gateway is not None and not (gateway.supabase_url and gateway.supabase_key):
+        if gateway is not None and not (_configured(gateway.supabase_url)
+                                        and _configured(gateway.supabase_key)):
             raise ValueError("INFRX_MODE=pilot requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY: "
                              "a shared legacy key is not authenticated per organization")
+        if gateway is not None and _configured(gateway.legacy_key):
+            # r1 R51: `Auth.authenticate` answers "allowed, no row" for the shared key, so
+            # a request bearing it has no tenant to meter. Not a fallback - a hole.
+            raise ValueError("INFRX_MODE=pilot must not set GATEWAY_API_KEY")
     return pilot

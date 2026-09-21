@@ -194,11 +194,56 @@ def test_pilot_starts_with_authentication_and_metering():
     assert app.state.runtime.mode == "pilot"
 
 
-def test_a_shared_legacy_key_is_not_authentication():
-    """R44: never the allow-all path, and never a single shared key either - neither can
-    say which organization called, which is the whole point of metering a pilot."""
-    with pytest.raises(config.RuntimeMisconfigured):
-        _app({"INFRX_MODE": "pilot", **METERED, "GATEWAY_API_KEY": "one-shared-key"})
+def test_pilot_refuses_the_shared_legacy_key(caplog):
+    """R51: `pilot` refuses to start with `GATEWAY_API_KEY` set, **even fully configured**.
+
+    `Auth.authenticate` answers `(None, None)` - allowed, with no row - for a request
+    bearing the shared key, so it has no organization, no key id and nothing to meter,
+    entitle or suspend. That is not a fallback, it is an unmetered anonymous door into a
+    metered pilot, and it used to open while validation reported everything in order.
+    """
+    with pytest.raises(config.RuntimeMisconfigured) as caught:
+        _app({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED,
+              "GATEWAY_API_KEY": "one-shared-key"})
+    assert caught.value.forbidden == ("GATEWAY_API_KEY",)
+    assert caught.value.missing == ()
+    # the name, never the value
+    assert "GATEWAY_API_KEY" in str(caught.value) and "one-shared-key" not in str(caught.value)
+    # and the same answer through the settings-only entry point a track uses
+    with pytest.raises(ValueError, match="GATEWAY_API_KEY"):
+        config.validate_pilot(
+            config.pilot_from_env({"INFRX_MODE": "pilot", **METERED}),
+            config.from_env({**AUTHENTICATED, "GATEWAY_API_KEY": "one-shared-key"}))
+
+
+def test_the_allow_all_path_is_unreachable_in_pilot():
+    """R51: with `SUPABASE_URL` required, the other anonymous path is closed too - with
+    no Supabase and no legacy key, `authenticate` also answers "allowed, no row"."""
+    with pytest.raises(config.RuntimeMisconfigured) as caught:
+        _app({"INFRX_MODE": "pilot", **METERED})
+    assert "SUPABASE_URL" in caught.value.missing
+
+
+WHITESPACE = ["", " ", "  ", "\t", "\n", " \t "]
+
+
+@pytest.mark.parametrize("blank", WHITESPACE, ids=[repr(v) for v in WHITESPACE])
+@pytest.mark.parametrize("name", ["DATABASE_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"])
+def test_a_whitespace_only_setting_is_not_configuration(name, blank):
+    """R51: `SUPABASE_URL=" "` passed a truthiness test and then built a client pointed at
+    `" /rest/v1"`, so the pilot started "authenticated" against nothing. A unit file makes
+    a stray space easy to write and impossible to see."""
+    env = {"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED, name: blank}
+    with pytest.raises(config.RuntimeMisconfigured) as caught:
+        _app(env)
+    assert name in caught.value.missing, caught.value.missing
+
+
+def test_a_whitespace_only_legacy_key_is_not_a_legacy_key():
+    """The same rule on the forbidden side: `GATEWAY_API_KEY=" "` is unset, not a shared
+    key, so it must not block a correctly configured pilot."""
+    app = _app({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED, "GATEWAY_API_KEY": "  "})
+    assert app.state.runtime.mode == "pilot"
 
 
 @pytest.mark.parametrize("mode", ["pilo", "PILOT", "production", "legacy", "dev "])
