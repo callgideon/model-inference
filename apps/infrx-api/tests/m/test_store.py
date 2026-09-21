@@ -257,6 +257,41 @@ def test_a_profile_version_cannot_escape_the_tenants_prefix():
     assert staged[0].storage_ref.startswith(f"media/{b.ORG_A}/v2.1_beta-3/")
 
 
+def test_a_digest_cannot_carry_a_path_into_a_key():
+    """Review r2: `_key` re-validated the tenant and the profile version but took the
+    digest as given. A record built server-side with `model_copy` is not re-validated, so
+    `sha256:../../../x` reached the key builder intact."""
+    adapter = staging()
+    hostile = b.media(b.ORG_A).model_copy(update={"digest": "sha256:../../../x"})
+    with pytest.raises(errors.InvalidRequest):
+        asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(hostile,))))
+    assert adapter.refs == {} and adapter.payloads == {}
+    for digest in ("sha256:" + "0" * 63, "sha512:" + "0" * 64, "0" * 64, "sha256:" + "G" * 64,
+                   None):
+        with pytest.raises(errors.InvalidRequest):
+            adapter._key(b.ORG_A, digest, "v1", "source")
+    assert adapter._key(b.ORG_A, "sha256:" + "ab" * 32, "v1", "source").split("/")[3] == "ab" * 8
+
+
+def test_the_allow_list_the_fetcher_was_given_is_the_one_that_is_used():
+    """Review r2: the configurable allow-list (the legacy path's ALLOWED_VIDEO_MIME) has to
+    reach both the fetch path and the `data:` path, or it is decoration."""
+    webm_only = fetch.MediaFetcher(DEFAULTS, resolve=support.resolver([support.PUBLIC]),
+                                   monotonic=support.Ticker(), log=support.Records(),
+                                   allowed_mime={"video/webm"})
+    adapter = store.MediaStaging(store.InMemoryObjectStore(), fetcher=webm_only)
+    webm_only.transport = support.Transport(support.response(mime="video/mp4", body=MP4)).transport
+    with pytest.raises(errors.UnsupportedMedia):
+        asyncio.run(adapter.materialize(b.ORG_A, URL))
+    webm_only.transport = support.Transport(support.response(mime="video/webm", body=MP4)).transport
+    assert asyncio.run(adapter.materialize(b.ORG_A, URL)).mime == "video/webm"
+    # and the same list decides a data: URL, which `materialize` passes through
+    with pytest.raises(errors.UnsupportedMedia):
+        asyncio.run(adapter.materialize(b.ORG_A, DATA_URL))          # video/mp4
+    webm = "data:video/webm;base64," + base64.b64encode(MP4).decode()
+    assert asyncio.run(adapter.materialize(b.ORG_A, webm)).mime == "video/webm"
+
+
 def test_a_known_handle_is_staged_as_the_object_the_store_has():
     """Review B4/S03: for a handle the store already has, the size, type, duration and key
     are the *object's* facts, never the request's claims about them."""

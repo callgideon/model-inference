@@ -35,6 +35,10 @@ HANDLE_DIGEST_CHARS = 40          # 160 bits of the content digest: opaque enoug
 # `profile_version="../../payloads/<another org>"` turned a tenant-scoped key into a path
 # into another tenant's prefix (review, cross-track hazard).
 PROFILE_VERSION_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+# The third part a key is built from. A `MediaRef` validates it, but `model_copy` does
+# not, so a digest reaching `_key` is checked where the key is built and not where the
+# record happens to have come from.
+DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def valid_org(org_id: object) -> str:
@@ -44,6 +48,13 @@ def valid_org(org_id: object) -> str:
     if not isinstance(org_id, str) or not UUID_RE.fullmatch(org_id):
         raise errors.InvalidRequest("org_id must be a lowercase UUID")
     return org_id
+
+
+def valid_digest(digest: object) -> str:
+    """The 16 hex characters a key carries, or a typed refusal."""
+    if not isinstance(digest, str) or not DIGEST_RE.fullmatch(digest):
+        raise errors.InvalidRequest("a digest must be sha256:<64 hexadecimal digits>")
+    return digest[len("sha256:"):][:16]
 
 
 def valid_profile(version: object) -> str:
@@ -133,7 +144,7 @@ class MediaStaging:
         # Both parts a caller can influence are validated *here*, so every key M builds -
         # source, prepared, or whatever M2 adds - goes through the same guard.
         return (f"media/{valid_org(org_id)}/{valid_profile(profile_version)}"
-                f"/{digest.split(':')[1][:16]}/{part}")
+                f"/{valid_digest(digest)}/{part}")
 
     async def _write_once(self, key: str, data: bytes, content_type: str) -> None:
         """Immutable content: the same bytes twice is a no-op, different bytes under a

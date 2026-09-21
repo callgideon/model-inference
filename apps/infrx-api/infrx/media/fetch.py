@@ -36,10 +36,10 @@ import httpx
 from ..config import DEFAULT_ALLOWED_VIDEO_MIME, EXT_MIME
 from ..contracts import errors
 from ..contracts.limits import DEFAULTS, PilotSettings
-# One address policy in the repository: F1's, which already unwraps v4-mapped
-# addresses and refuses private, loopback, link-local (169.254.169.254 and fe80::/10),
-# CGNAT, multicast, reserved (so the NAT64 well-known prefix 64:ff9b::/96) and
-# unspecified addresses, v4 and v6. Reusing it means a fix reaches both paths.
+# One address policy in the repository: F1's, which M tightened in place (review B1) so
+# that it states the tunnel, IPv4-compatible and special-purpose ranges itself instead of
+# inheriting whatever the interpreter's tables happen to say. Reusing it means a fix
+# reaches both paths and the two can never drift apart.
 from .video import address_allowed
 
 LOG = logging.getLogger(__name__)
@@ -246,16 +246,23 @@ class MediaFetcher:
             for hop in range(limits.media_fetch_max_redirects + 1):
                 target = parse_source(url)
                 host = raw_host_of(target)
-                if hop == 0:
-                    secure = target.scheme == "https"
-                elif secure and target.scheme != "https":
+                if hop and secure and target.scheme != "https":
                     # A redirect must not downgrade: the signed query string of the
-                    # `Location` would then travel in plaintext.
+                    # `Location` would then travel in plaintext. Once a hop has been
+                    # confidential the rest of the chain must stay so - `http -> https ->
+                    # http` used to pass, because only hop 0 decided.
                     raise refused("insecure-redirect", host=host)
+                secure = secure or target.scheme == "https"
                 remaining = expires_at - self.monotonic()
                 if remaining <= 0:
                     raise refused("timeout", host=host)
                 address = await self._pin(host, remaining)
+                # Resolution is part of the budget, not before it: the request that
+                # follows must carry what is left *after* the name was looked up, or a
+                # slow resolver hands the read phase a budget that was already spent.
+                remaining = expires_at - self.monotonic()
+                if remaining <= 0:
+                    raise refused("timeout", host=host)
                 # No Set-Cookie from one hop reaches the next, and nothing from a previous
                 # fetch reaches this one: a cookie is ambient authority we never want.
                 client.cookies.clear()

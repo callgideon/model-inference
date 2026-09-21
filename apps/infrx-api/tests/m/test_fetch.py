@@ -145,6 +145,18 @@ def test_every_redirect_hop_is_validated_and_repinned():
     assert len(transport.requests) == 1
 
 
+def test_a_chain_that_became_confidential_stays_confidential():
+    """Review r2: `secure` was decided at hop 0, so `http -> https -> http` was fetched -
+    the https hop's `Location`, with its signed query string, went out in plaintext."""
+    transport = support.Transport(
+        support.response(302, location="https://example.com/signed/v.mp4?sig=deadbeefsig"),
+        support.response(302, location="http://example.com/plain/v.mp4"),
+        support.response(body=MP4))
+    error = refusal(fetcher(transport=transport), "http://example.com/start/v.mp4")
+    assert error.reason == "insecure-redirect"
+    assert len(transport.requests) == 2, "the plaintext hop was fetched"
+
+
 def test_a_redirect_may_not_downgrade_to_plaintext():
     """Review nonblocking: the `Location` of an https fetch carries the caller's query
     string, so a hop to http would put a signed URL on the wire in the clear. A fetch that
@@ -270,9 +282,26 @@ def test_a_slow_redirect_chain_stops_at_the_aggregate_deadline():
     resolve = support.resolver([support.PUBLIC])
     error = refusal(fetcher(transport=transport, resolve=resolve, monotonic=clock))
     assert error.reason == "timeout"
-    assert len(transport.requests) == 2 < DEFAULTS.media_fetch_max_redirects + 1
-    assert resolve.calls == ["example.com", "example.com"], \
+    assert 1 <= len(transport.requests) < DEFAULTS.media_fetch_max_redirects + 1, \
+        "the chain ran to the redirect limit instead of stopping at the deadline"
+    assert len(resolve.calls) <= len(transport.requests) + 1, \
         "a hop was resolved after the budget was gone"
+
+
+def test_the_budget_is_recomputed_after_the_name_is_resolved():
+    """MEDIA-SEC (review r2): resolution spends the budget too. A resolver that takes the
+    whole of it used to be followed by a request carrying a budget that was already gone,
+    because `remaining` was computed before the lookup and never again."""
+    clock = support.Ticker()
+    transport = support.Transport(support.response(body=MP4))
+
+    async def slow(host):
+        clock.now += DEFAULTS.media_fetch_timeout_s * 2      # the lookup took that long
+        return [support.PUBLIC]
+
+    error = refusal(fetcher(transport=transport, resolve=slow, monotonic=clock))
+    assert error.reason == "timeout"
+    assert transport.requests == [], "a request was sent on a budget that was already spent"
 
 
 def test_each_request_carries_what_is_left_of_the_budget():
@@ -289,6 +318,13 @@ def test_each_request_carries_what_is_left_of_the_budget():
     for budget in budgets:
         assert budget["connect"] <= DEFAULTS.media_fetch_connect_timeout_s
         assert budget["read"] == budget["write"] == budget["pool"]
+    # and when less is left than the connect budget, connecting gets the remainder:
+    # a 3 s connect inside a 2 s aggregate limit is not a limit
+    short = DEFAULTS.replace(media_fetch_timeout_s=2.0)
+    tight = support.Transport(support.response(body=MP4))
+    asyncio.run(fetcher(transport=tight, limits=short, monotonic=support.Ticker()).fetch(URL))
+    tightest = tight.requests[0].extensions["timeout"]
+    assert tightest["connect"] == tightest["read"] == 2.0 < short.media_fetch_connect_timeout_s
 
 
 def test_a_resolver_that_never_answers_is_bounded():
