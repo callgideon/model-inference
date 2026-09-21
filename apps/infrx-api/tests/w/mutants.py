@@ -90,6 +90,11 @@ BOUNDS = "test_api_stream__one_event_and_the_whole_output_are_bounded"
 JOURNAL = "test_api_stream__an_event_always_fits_the_journal_in_any_script"
 FLOOD = "test_api_stream__a_line_that_never_ends_is_bounded_and_still_checked"
 FINISH = "test_api_stream__a_finish_reason_outside_the_set_is_not_a_success"
+DROPPED = "test_api_stream__a_dropped_line_is_never_a_billable_success"
+SECOND = "test_api_stream__a_second_choice_is_a_protocol_violation"
+REF = "test_api_stream__a_prepared_reference_must_be_one_the_store_could_have_made"
+MEASURED = "test_api_stream__an_unmeasured_prompt_or_duration_is_refused"
+PINNED = "test_api_stream__the_roles_and_the_timer_boundaries_are_pinned"
 JUNK = "test_api_stream__junk_and_stray_payloads_are_survived_not_relayed"
 FAILURES = "test_api_stream__transport_engine_and_incomplete_failures_are_distinct"
 TYPED = "test_api_stream__every_engine_failure_is_typed"
@@ -475,6 +480,47 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("capability_probe_accepts_any_version", "the version pin is checked",
        E, "        if self.require_version is not None and version != self.require_version:",
        "        if False:", HEALTH),
+    # --- the round-2 same-pass rulings ----------------------------------------
+    _m("dropped_line_still_completes", "a dropped line is not a billable success (R21)",
+       E, "        if self.finish_reason in FINISHED_REASONS and self.usage is not None \\\n"
+          "                and self.malformed_lines == 0:",
+       "        if self.finish_reason in FINISHED_REASONS and self.usage is not None:",
+       DROPPED),
+    _m("second_choice_merged", "n=1 is forced, so index 1 cannot exist",
+       E, "        if index != 0:", "        if False:", SECOND),
+    _m("storage_ref_shape_trusted", "a prepared reference has the store's shape",
+       E, "    if matched is None or matched.group(\"org\") != ref.org_id:",
+       "    if False:", REF),
+    _m("storage_ref_tenant_trusted", "a prepared reference sits under its own tenant",
+       E, "    if matched is None or matched.group(\"org\") != ref.org_id:",
+       "    if matched is None:", REF),
+    _m("storage_ref_unchecked", "every prepared ref is checked before the body is built",
+       E, "        for ref in prepared.media:\n            check_storage_ref(ref)",
+       "        for ref in ():\n            check_storage_ref(ref)", REF),
+    _m("prompt_tokens_unbounded", "a prompt count nothing measured is refused",
+       E, "    if not 0 <= prompt_tokens <= limits.max_context_tokens:", "    if False:",
+       MEASURED),
+    # Declared kill mode: without the guard the adapter *crashes* on a missing duration
+    # (`budget_kwargs(None)`), which is the defect - `or 0.0` silently asked for a four-frame
+    # budget instead, and either way the case's refusal never happens.
+    _m("missing_duration_is_zero", "a prepared video carries its duration",
+       E, "            if videos[0].duration_s is None:", "            if False:", MEASURED,
+       allowed_errors=("TypeError",)),
+    _m("roles_widened", "the role vocabulary is closed (R58)",
+       E, 'ALLOWED_ROLES = ("system", "user", "assistant")',
+       'ALLOWED_ROLES = ("system", "user", "assistant", "tool")', PINNED, ALLOW),
+    _m("first_token_boundary_exclusive", "a deadline is reached at its instant",
+       E, "        if stream.deltas == 0 and lease.first_token_deadline_at is not None \\\n"
+          "                and now >= lease.first_token_deadline_at:",
+       "        if stream.deltas == 0 and lease.first_token_deadline_at is not None \\\n"
+          "                and now > lease.first_token_deadline_at:", PINNED),
+    _m("stall_boundary_exclusive", "the inter-event budget is reached at its instant",
+       E, "                and now >= stream.last_event_at + timedelta(seconds=self.limits.tpot_stall_s):",
+       "                and now > stream.last_event_at + timedelta(seconds=self.limits.tpot_stall_s):",
+       PINNED),
+    _m("generation_boundary_exclusive", "the generation deadline is reached at its instant",
+       E, "        if now >= lease.generation_deadline_at:",
+       "        if now > lease.generation_deadline_at:", PINNED),
     # --- the reasoning filter -------------------------------------------------
     _m("close_delimiter_tail_forgotten", "a split `</think>` is still recognised",
        R, "            self._tail = buf[-(len(CLOSE) - 1):]", '            self._tail = ""',

@@ -39,6 +39,8 @@ malformed payloads a review of the adapter found unhandled):
 | `bad_choices` / `bad_choice` / `bad_delta` / `bad_content` | answer-carrying fields of the wrong type |
 | `null_error_message` | `{"error": {"message": null}}`, a plausible real shape |
 | `stray_object` | a JSON object that is neither content, usage nor error |
+| `second_choice` | a choice at `index: 1`, which `n=1` says cannot exist |
+| `split_json` | one JSON object spread over two `data:` lines |
 | `engine_error_pre_headers` | HTTP 500 with a streamed, oversized error body |
 | `engine_error_post_headers` | 200, one delta, then an SSE error object |
 | `abrupt_exit` | 200, one delta, then the connection dies (`httpx.ReadError`) |
@@ -208,6 +210,7 @@ class FakeUpstream:
             "bad_content": {"choices": [{"index": 0, "delta": {"content": ["abc"]}}]},
             "null_error_message": {"error": {"message": None}},
             "stray_object": {"message": 123},
+            "second_choice": {"choices": [{"index": 1, "delta": {"content": "other sample"}}]},
         }.get(self.fault)
 
     async def _flood(self):
@@ -236,6 +239,17 @@ class FakeUpstream:
             if self.fault in ("no_newline_flood", "slow_flood"):
                 async for frame in self._flood():
                     yield frame
+                self.completed = True
+                return
+            if self.fault == "split_json":
+                # The same object, cut in half across two `data:` lines: neither half parses,
+                # so the content is dropped and the answer is not whole.
+                body = json.dumps(chunk(pieces[0]))
+                yield f"data: {body[:len(body) // 2]}\n\n".encode()
+                yield f"data: {body[len(body) // 2:]}\n\n".encode()
+                yield sse(chunk(finish_reason="stop"))
+                yield sse(chunk(usage=self.usage(1)))
+                yield b"data: [DONE]\n\n"
                 self.completed = True
                 return
             if self.fault == "role_first":

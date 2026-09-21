@@ -858,6 +858,126 @@ def test_api_stream__junk_and_stray_payloads_are_survived_not_relayed():
     assert raws(events) == [upstream.deltas()[0]] and stream.complete
 
 
+def test_api_stream__a_dropped_line_is_never_a_billable_success():
+    """R21 with the round-2 ruling: a `data:` line we could not read is content we dropped,
+    so the stream did not deliver the whole answer and `completed` - the only cause that can
+    charge, with authoritative usage - must not be the outcome. Both ways it happens: junk
+    where a delta should have been, and one JSON object cut across two lines."""
+    box = Box()
+
+    async def junk_then_finish():
+        yield b"data: {oops not json\n\n"
+        yield b'data: {"choices":[{"index":0,"delta":{"content":"ok"}}]}\n\n'
+        yield b'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n'
+        yield (b'data: {"choices":[],"usage":{"prompt_tokens":1,"completion_tokens":1,'
+               b'"total_tokens":2}}\n\n')
+        yield b"data: [DONE]\n\n"
+
+    stream = streamed(box, junk_then_finish).generate(lease(box), text_prepared(box))
+    events, failure = drained(stream)
+    assert failure is None and stream.complete and stream.usage is not None
+    assert stream.malformed_lines == 1
+    assert stream.terminal_cause is TerminalCause.engine_incomplete
+
+    upstream, engine, held, prepared = drive("split_json")
+    stream = engine.generate(held, prepared)
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert stream.malformed_lines == 2 and raws(events) == []
+    assert stream.complete and stream.usage is not None
+    assert stream.terminal_cause is TerminalCause.engine_incomplete
+
+
+def test_api_stream__a_second_choice_is_a_protocol_violation():
+    """`n=1` is forced in the body, so a choice at `index: 1` is either another sample or
+    another request's: merging it would interleave two answers in one journal."""
+    upstream, engine, held, prepared = drive("second_choice")
+    with pytest.raises(EngineFailure) as broke:
+        asyncio.run(collect(engine.generate(held, prepared)))
+    assert isinstance(broke.value, EngineProtocolViolation), type(broke.value)
+    assert broke.value.facts["index"] == 1
+    assert broke.value.terminal_cause is TerminalCause.platform_error
+
+
+def test_api_stream__a_prepared_reference_must_be_one_the_store_could_have_made():
+    """MEDIA-SEC at the last hop: a `PreparedRequest` can be hand-built, so the adapter
+    checks the *shape* of `storage_ref` and its tenant, not just that the message parts were
+    rebuilt. Without this, `http://169.254.169.254/…` in a ref reached the engine, which
+    would have fetched it from inside our network."""
+    upstream, engine, _lease, _prepared = drive()
+    prepared = prepared_request(video_work(Box()), prompt_tokens=1200)
+    good = prepared.media[0]
+    assert refusal(engine, prepared) == "accepted"
+    hostile = (
+        EVIL,
+        "https://videos.example.com/clip.mp4",
+        "data:video/mp4;base64,AAAA",
+        "file:///etc/passwd",
+        "../../etc/passwd",
+        "media/../../etc/passwd",
+        f"media/{b.ORG_B}/v1/source",                  # another tenant's prefix
+        f"media/{good.org_id}",                        # no object under the tenant
+        f"media/{good.org_id}/v1/source extra",        # a space is not a key
+        "",
+    )
+    for storage_ref in hostile:
+        bad = prepared.model_copy(update={"media": (good.model_copy(
+            update={"storage_ref": storage_ref}),)})
+        assert refusal(engine, bad) == "refused: not_found", storage_ref
+        assert upstream.requests == [], storage_ref
+    # the store's own five-segment key is accepted too, not only the fixture's shorter one
+    real = good.model_copy(update={
+        "storage_ref": f"media/{good.org_id}/v1/{good.digest.split(':')[1][:16]}/source"})
+    assert refusal(engine, prepared.model_copy(update={"media": (real,)})) == "accepted"
+
+
+def test_api_stream__an_unmeasured_prompt_or_duration_is_refused():
+    """A number nothing measured must not become a token budget: `prompt_tokens` outside the
+    context is refused where the work is translated, and a prepared video with no duration is
+    refused rather than silently given a four-frame budget (`or 0.0`)."""
+    box = Box()
+    work = video_work(box)
+    for count in (10 ** 30, DEFAULTS.max_context_tokens + 1):
+        with pytest.raises(errors.InvalidRequest) as refused:
+            prepared_request(work, prompt_tokens=count)
+        assert refused.value.param == "prompt_tokens", count
+    with pytest.raises((errors.InvalidRequest, ValidationError)):
+        prepared_request(work, prompt_tokens=-1)         # the record refuses this one too
+    assert prepared_request(work, prompt_tokens=DEFAULTS.max_context_tokens).prompt_tokens
+
+    upstream, engine, _lease, _prepared = drive()
+    prepared = prepared_request(work, prompt_tokens=1200)
+    timeless = prepared.model_copy(update={
+        "media": (prepared.media[0].model_copy(update={"duration_s": None}),)})
+    assert refusal(engine, timeless) == "refused: unsupported_media"
+
+
+def test_api_stream__the_roles_and_the_timer_boundaries_are_pinned():
+    """The two vocabularies a mutant can widen without any case noticing: the allowed roles
+    (R58) and the three timer comparisons, which are `>=` - a deadline is reached *at* its
+    instant, not a second later."""
+    from infrx.worker.engine import ALLOWED_ROLES
+    assert ALLOWED_ROLES == ("system", "user", "assistant")
+
+    box = Box()
+    engine = FakeUpstream(clock=box.clock).engine()
+    held = lease(box, first_token_deadline_at=box.clock.at(60),
+                 generation_deadline_at=box.clock.at(300))
+    stream = engine.generate(held, text_prepared(box))
+    stream.last_event_at = box.clock.now()
+    assert engine._overdue(stream, box.clock.now()) is None
+    # exactly at the first-token instant, with no delta yet
+    assert engine._overdue(stream, box.clock.at(60)) == "first_token"
+    assert engine._overdue(stream, box.clock.at(59.999)) is None
+    # exactly at the inter-event budget, once a delta has arrived
+    stream.deltas = 1
+    assert engine._overdue(stream, box.clock.at(DEFAULTS.tpot_stall_s)) == "inter_event"
+    assert engine._overdue(stream, box.clock.at(DEFAULTS.tpot_stall_s - 0.001)) is None
+    # exactly at the generation instant, which is reported ahead of the others
+    assert engine._overdue(stream, box.clock.at(300)) == "generation"
+    asyncio.run(stream.aclose())
+
+
 # --- failure classes ----------------------------------------------------------
 def test_api_stream__transport_engine_and_incomplete_failures_are_distinct():
     """W1 acceptance: the adapter distinguishes a transport failure, an engine error

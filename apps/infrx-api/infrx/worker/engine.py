@@ -57,6 +57,7 @@ from __future__ import annotations
 import codecs
 import hashlib
 import json
+import re
 from datetime import datetime, timedelta
 from itertools import zip_longest
 from types import SimpleNamespace
@@ -106,6 +107,18 @@ VIDEO_MIME_PREFIX = "video/"
 # this constant is the only line that changes.
 CACHE_SALT_FIELD = "cache_salt"
 MM_UUIDS_FIELD = "mm_uuids"
+
+# r1 R58 / the round-2 review: the adapter is the last hop before the engine, so it checks
+# the *shape* of a prepared reference as well as its tenant. M owns the grammar
+# (`FakeMediaStore._key`: `media/<org>/<profile>/<16 hex of digest>/<part>`); this mirrors it
+# loosely enough to accept a profile with fewer segments and strictly enough that
+# `http://169.254.169.254/…`, `data:…`, `../../etc/passwd` and another tenant's prefix are
+# all refused. A `PreparedRequest` can be hand-built, so trusting the field is trusting the
+# caller. If M changes the layout, this constant changes with it (integration request).
+STORAGE_REF_SEGMENT = r"[A-Za-z0-9][A-Za-z0-9._-]*"
+STORAGE_REF_PATTERN = re.compile(
+    r"^media/(?P<org>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/"
+    rf"(?:{STORAGE_REF_SEGMENT}/){{1,3}}{STORAGE_REF_SEGMENT}$")
 
 DETAIL_MAX_CHARS = 500          # operator-only text, bounded so a log line stays a log line
 ERROR_BODY_MAX_BYTES = 64 * 1024        # an engine's error body is read bounded, never whole
@@ -189,7 +202,8 @@ class EngineUnsupported(EngineFailure):
 
 
 # --- translation --------------------------------------------------------------
-def prepared_request(work: Work, prompt_tokens: int, *, profile_version: str | None = None) -> PreparedRequest:
+def prepared_request(work: Work, prompt_tokens: int, *, profile_version: str | None = None,
+                     limits: PilotSettings = DEFAULTS) -> PreparedRequest:
     """The `PreparedRequest` for the `Work` a lease holder loaded (r1 R46).
 
     `prompt_tokens` is preparation's exact count; it is an argument because `Work` does
@@ -201,6 +215,11 @@ def prepared_request(work: Work, prompt_tokens: int, *, profile_version: str | N
     another tenant's cache namespace.
     """
     request = work.request
+    if not 0 <= prompt_tokens <= limits.max_context_tokens:
+        # Preparation's count, not the caller's guess: 10**30 tokens is not a prompt, and a
+        # number nothing could have measured must not become a hold or a context check.
+        raise errors.InvalidRequest(
+            f"prompt_tokens must be in 0..{limits.max_context_tokens}", param="prompt_tokens")
     refs = work.prepared_refs or work.media_refs
     for ref in refs:
         if ref.org_id != request.org_id:
@@ -238,6 +257,20 @@ def media_uuid(ref: MediaRef, salt: str) -> str:
     salt as the prefix cache, and distinct per object: two sources in one tenant are two
     cache entries, not one."""
     return hashlib.sha256(f"{salt}\x1f{ref.digest}".encode()).hexdigest()[:32]
+
+
+def check_storage_ref(ref: MediaRef) -> None:
+    """The prepared reference the engine will be handed, or `not_found`.
+
+    Shape *and* tenant: the key must be the store's own grammar and must sit under this
+    ref's organization. Without this the adapter forwarded whatever `storage_ref` said -
+    `http://169.254.169.254/…` included - to an engine that would fetch it from inside our
+    network, and the allow-list on message *parts* did not help, because the reference is
+    ours to trust rather than the customer's to supply.
+    """
+    matched = STORAGE_REF_PATTERN.match(ref.storage_ref or "")
+    if matched is None or matched.group("org") != ref.org_id:
+        raise errors.NotFound(f"media {ref.handle} has no usable prepared reference")
 
 
 def _encodable(text: str) -> bool:
@@ -460,6 +493,8 @@ class VllmEngine:
             # R10: one request, one tenant. Two tenants' objects in one prompt would share
             # a cache namespace and a token budget.
             raise errors.NotFound("prepared media must belong to one organization")
+        for ref in prepared.media:
+            check_storage_ref(ref)
         videos = [ref for ref in prepared.media if ref.mime.startswith(VIDEO_MIME_PREFIX)]
         if len(videos) != len(prepared.media):
             raise errors.UnsupportedParameter("the pilot accepts video media only",
@@ -479,7 +514,11 @@ class VllmEngine:
             **forwarded,
         }
         if videos:
-            body["mm_processor_kwargs"] = self._media.budget_kwargs(videos[0].duration_s or 0.0)
+            if videos[0].duration_s is None:
+                # `or 0.0` silently asked for a four-frame budget for a two-minute clip.
+                raise errors.UnsupportedMedia("a prepared video must carry its duration",
+                                              param="messages")
+            body["mm_processor_kwargs"] = self._media.budget_kwargs(videos[0].duration_s)
             body[MM_UUIDS_FIELD] = [media_uuid(ref, salt) for ref in videos]
         return body
 
@@ -816,6 +855,11 @@ class VllmEngine:
                 ceiling: int) -> list[EngineEvent]:
         if not isinstance(choice, dict):
             raise EngineProtocolViolation("a choice is not an object", got=type(choice).__name__)
+        index = choice.get("index", 0)
+        if index != 0:
+            # `n=1` is forced in the body, so a second choice is either another sample or a
+            # different request's; merging it into the answer would interleave two texts.
+            raise EngineProtocolViolation("a choice beyond index 0 with n=1", index=index)
         if choice.get("finish_reason"):
             stream.finish_reason = str(choice["finish_reason"])
         delta = choice.get("delta")
@@ -968,6 +1012,11 @@ class EngineStream:
             return TerminalCause.engine_incomplete
         if self.cancelled:
             return TerminalCause.client_cancelled
-        if self.finish_reason in FINISHED_REASONS and self.usage is not None:
+        if self.finish_reason in FINISHED_REASONS and self.usage is not None \
+                and self.malformed_lines == 0:
+            # A `data:` line we could not read is content we dropped - a chunk split across
+            # two lines, or junk where a delta should have been - so the answer is not whole
+            # and the outcome is a platform/engine failure rather than a billable success
+            # (R21).
             return TerminalCause.completed
         return TerminalCause.engine_incomplete
