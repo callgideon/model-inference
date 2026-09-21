@@ -13,12 +13,17 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import (BaseModel, ConfigDict, Field, PlainSerializer, model_validator)
+from pydantic import (BaseModel, ConfigDict, Field, PlainSerializer, StrictInt,
+                      model_validator)
 from pydantic.functional_validators import BeforeValidator
 
 from . import errors, ids, limits, money
 
 SCHEMA_VERSION = 1
+
+# r1 R41: what a customer session reads in place of an operator's identity. It lives
+# beside the records because the *port* projection needs it, not only the wire one.
+PLATFORM_ACTOR = "platform"
 
 
 # --- vocabulary (08 §3) ------------------------------------------------------
@@ -324,7 +329,8 @@ class OrgEntitlements(Record):
 
     org_id: UuidStr
     model_ids: tuple[str, ...] | None = None
-    limits: dict[str, int] = Field(default_factory=dict)
+    # r1 R52/R54: strict. `True` is not a limit of 1, and `"8"` is not eight.
+    limits: dict[str, StrictInt] = Field(default_factory=dict)
     updated_at: Timestamp | None = None
     updated_by: str | None = None
 
@@ -763,8 +769,16 @@ class Feedback(Record):
     value: bool | int | str
     comment: str | None = Field(default=None, max_length=limits.MAX_FEEDBACK_TEXT_CHARS)
     calibration_set: bool = False       # operator authorization required
-    rubric_version: int | None = Field(default=None, ge=limits.MIN_RUBRIC_VERSION,
-                                       le=limits.MAX_RUBRIC_VERSION)
+    # r1 R54: **strict**. Under pydantic's lax mode `True` validated as 1, so a boolean
+    # was a rubric version and `"3"` was three - the record was looser than the port.
+    rubric_version: StrictInt | None = Field(default=None, ge=limits.MIN_RUBRIC_VERSION,
+                                             le=limits.MAX_RUBRIC_VERSION)
+    # r1 R50: server-set, never client-settable, and it **never leaves the service** -
+    # the public projection is `wire.FeedbackEntry`, which has no such field. It records
+    # that a *platform operator* made this entry, which is what R41's masking keys on;
+    # `author_role` cannot, because `accept` always stores `customer` (R31), so a branch
+    # on the role was dead code and a customer read the operator's address.
+    by_operator: bool = False
     created_at: Timestamp
 
     @model_validator(mode="before")
@@ -784,7 +798,38 @@ class Feedback(Record):
         if label != (self.rubric_version is not None):
             raise ValueError("rubric_version is required on a calibration_label entry "
                              "and null on every other entry")
+        # r1 R54: a label is an operator's verdict. A `calibration_label` row attributed
+        # to a customer would be operator data with a customer's provenance, which is
+        # exactly the forgery R31 exists to prevent.
+        if label and self.author_role is not AuthorRole.operator:
+            raise ValueError("a calibration_label entry is authored by an operator")
+        if label and not self.by_operator:
+            raise ValueError("a calibration_label entry is made by an operator (R50)")
         return self
+
+
+def visible_feedback(items: tuple[Feedback, ...], *, operator: bool) -> tuple[Feedback, ...]:
+    """The one feedback visibility rule, applied at the port and again at the wire.
+
+    * **R35/R49: a feedback list never carries a calibration label, for anyone.** Labels
+      are operator data read only through `list_calibration`/`calibration.list`. An
+      operator listing a request's feedback sees its ordinary entries, with their real
+      principals; it does not see labels there, so no viewer has to remember which list
+      it is reading.
+    * **R41/R50: a non-operator viewer reads `platform` as the principal of any
+      `by_operator` entry.** A tenant learns that the platform acted, never who at the
+      platform did it.
+
+    One function because two copies of a visibility rule is one copy that gets fixed.
+    """
+    visible = []
+    for item in items:
+        if item.calibration_set:
+            continue
+        if not operator and item.by_operator:
+            item = item.model_copy(update={"author_principal": PLATFORM_ACTOR})
+        visible.append(item)
+    return tuple(visible)
 
 
 class JudgeRun(Record):
@@ -794,7 +839,8 @@ class JudgeRun(Record):
     consent: ConsentSnapshot
     # r1 R43: an integer everywhere - runs, samples, scores and calibration labels -
     # matching `research/traces/04`'s `UInt16` and the console's `rubric_version`.
-    rubric_version: int = Field(ge=limits.MIN_RUBRIC_VERSION, le=limits.MAX_RUBRIC_VERSION)
+    rubric_version: StrictInt = Field(ge=limits.MIN_RUBRIC_VERSION,
+                                      le=limits.MAX_RUBRIC_VERSION)
     model_revision: str
     reserved_cost: Money = Field(default=money.ZERO, ge=0)
     actual_cost: Money | None = None

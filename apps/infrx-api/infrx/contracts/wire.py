@@ -14,10 +14,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .codec import compact_bytes
 from . import errors
 from .limits import MAX_FEEDBACK_TEXT_CHARS, MAX_IDEMPOTENCY_KEY_CHARS, MAX_PAGE_LIMIT
-from .records import (FEEDBACK_INPUT_NAMES, AuthorRole, ChunkEventType, ContentState,
-                      ExecutionMode, Feedback, FeedbackChannel, FeedbackName, JobState, JsonObject,
-                      MediaRef, TerminalCause, Timestamp, TraceEnvelope, TraceLossReason,
-                      TraceMode, UploadState, Usage, UuidStr, check_feedback_value, no_float_value)
+from .records import (FEEDBACK_INPUT_NAMES, PLATFORM_ACTOR, AuthorRole, ChunkEventType,
+                      ContentState, ExecutionMode, Feedback, FeedbackChannel, FeedbackName,
+                      JobState, JsonObject, MediaRef, TerminalCause, Timestamp, TraceEnvelope,
+                      TraceLossReason, TraceMode, UploadState, Usage, UuidStr,
+                      check_feedback_value, no_float_value, visible_feedback)
 
 DONE = "[DONE]"
 
@@ -35,9 +36,9 @@ HEADER_SERVER_TIMING = "Server-Timing"
 PREFER_RESPOND_ASYNC = "respond-async"
 IDEMPOTENCY_KEY_MAX_LEN = MAX_IDEMPOTENCY_KEY_CHARS
 
-# What a customer session sees in place of an operator's identity (r1 R41). A tenant
-# learns that the platform acted, never which person at the platform did it.
-PLATFORM_ACTOR = "platform"
+# `records.PLATFORM_ACTOR`, re-exported: what a customer session sees in place of an
+# operator's identity (r1 R41). The port projection needs it too, so it is defined beside
+# the records and named here for readers of the wire bodies.
 
 
 class WireModel(BaseModel):
@@ -330,25 +331,72 @@ class TraceExport(WireModel):
                    trace_schema_version=envelope.request_schema_version, content=content)
 
 
+class FeedbackEntry(WireModel):
+    """The public shape of one stored feedback entry, and the only one that leaves.
+
+    r1 R50: `Feedback.by_operator` is a server-set marker that **never leaves the
+    service**, and `org_id`/`schema_version` are persistence facts the caller already has
+    or does not need. This projection is therefore the console's `FeedbackEntry` field for
+    field, which the parity test asserts - including that `by_operator` is in neither.
+    """
+
+    id: str
+    request_id: UuidStr
+    created_at: Timestamp
+    channel: FeedbackChannel
+    author_role: AuthorRole
+    author_principal: str
+    name: FeedbackName
+    value: bool | int | str
+    comment: str | None = None
+    calibration_set: bool = False
+    rubric_version: int | None = None
+
+    @classmethod
+    def of(cls, record: Feedback) -> FeedbackEntry:
+        return cls(id=record.feedback_id, request_id=record.request_id,
+                   created_at=record.created_at, channel=record.channel,
+                   author_role=record.author_role, author_principal=record.author_principal,
+                   name=record.name, value=record.value, comment=record.comment,
+                   calibration_set=record.calibration_set, rubric_version=record.rubric_version)
+
+
+# The token `for_viewer` passes and nothing else can name usefully.
+_PROJECTED = object()
+
+
 class FeedbackList(WireModel):
-    items: tuple[Feedback, ...] = ()
+    """r1 R54: buildable **only** through `for_viewer`.
+
+    A list body is where a visibility rule is easiest to skip - the items are right there,
+    already typed - so the raw constructor refuses. That is the difference between a rule
+    and a convention.
+    """
+
+    items: tuple[FeedbackEntry, ...] = ()
     next_cursor: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _only_through_the_projection(cls, data: object) -> object:
+        if isinstance(data, dict) and data.get("_projected") is _PROJECTED:
+            return {key: value for key, value in data.items() if key != "_projected"}
+        raise ValueError("build a FeedbackList through FeedbackList.for_viewer(...), so the "
+                         "R35/R41/R49/R50 projection cannot be skipped")
 
     @classmethod
     def for_viewer(cls, items: tuple[Feedback, ...], *, operator: bool,
                    next_cursor: str | None = None) -> FeedbackList:
-        """r1 R35/R41: what a viewer may be shown.
+        """r1 R35/R41/R49/R50: what a viewer may be shown.
 
-        A non-operator viewer gets no calibration labels at all (they are operator
-        data) and never an operator principal: an operator-authored row reads
-        `platform`. An operator viewer gets the rows as stored. Publishing the port's
-        tuple straight into a body is how a customer ends up reading the name of the
-        person who labelled their trace, so the projection lives here, once.
+        `records.visible_feedback` is the rule - no calibration labels for anyone (R49),
+        and `platform` in place of the principal of any `by_operator` entry for a
+        non-operator viewer - and this maps the survivors to the public `FeedbackEntry`,
+        which drops `by_operator` entirely. Publishing the port's tuple straight into a
+        body is how a customer ends up reading the name of the person who labelled their
+        trace, so the projection lives here, once.
         """
-        if operator:
-            return cls(items=tuple(items), next_cursor=next_cursor)
-        visible = tuple(
-            item if item.author_role is not AuthorRole.operator
-            else item.model_copy(update={"author_principal": PLATFORM_ACTOR})
-            for item in items if not item.calibration_set)
-        return cls(items=visible, next_cursor=next_cursor)
+        visible = visible_feedback(tuple(items), operator=operator)
+        return cls(_projected=_PROJECTED,
+                   items=tuple(FeedbackEntry.of(record) for record in visible),
+                   next_cursor=next_cursor)

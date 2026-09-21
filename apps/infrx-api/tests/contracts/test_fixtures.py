@@ -479,6 +479,76 @@ def test_the_feedback_name_fixes_the_value_type(name, value, valid):
             wire.FeedbackSubmission.model_validate(body)
 
 
+# r1 R43/R50/R54: the calibration fields are one fact, and the **record** is what
+# enforces it. The fake never builds an inconsistent row, so without these the validator
+# was unkillable: a mutant deleting a clause survived every conformance case.
+def _label_row():
+    return fixtures.load("feedback_calibration_label.json")
+
+
+def _plain_row():
+    return fixtures.load("feedback.json")
+
+
+INCONSISTENT_FEEDBACK = [
+    # a label missing any one of the three facts that make it a label
+    ("label without membership", {**_label_row(), "calibration_set": False}),
+    ("label without a rubric version", {k: v for k, v in _label_row().items()
+                                        if k != "rubric_version"}),
+    ("label authored by a customer", {**_label_row(), "author_role": "customer"}),
+    ("label not made by an operator", {**_label_row(), "by_operator": False}),
+    # an ordinary entry claiming any one of them
+    ("plain row claiming membership", {**_plain_row(), "calibration_set": True}),
+    ("plain row carrying a rubric version", {**_plain_row(), "rubric_version": 3}),
+    ("plain row named a label", {**_plain_row(), "name": "calibration_label"}),
+    # and a label whose value is not a label
+    ("label with a free-text verdict", {**_label_row(), "value": "golden"}),
+    ("label with a numeric verdict", {**_label_row(), "value": 3}),
+]
+
+
+@pytest.mark.parametrize("what,raw", INCONSISTENT_FEEDBACK, ids=[c[0] for c in INCONSISTENT_FEEDBACK])
+def test_the_record_refuses_every_inconsistent_calibration_row(what, raw):
+    with pytest.raises(ValueError):
+        records.Feedback.model_validate(raw)
+
+
+def test_a_consistent_calibration_row_is_accepted():
+    """The other half: the nine refusals above mean nothing if the valid row is refused
+    too."""
+    assert records.Feedback.model_validate(_label_row()).calibration_set is True
+    assert records.Feedback.model_validate(_plain_row()).rubric_version is None
+
+
+# r1 R54: strict where the ports are. Pydantic's lax mode read `True` as 1 and `"3"` as
+# three, so the record was looser than `label_calibration` - and a caller reaching the
+# record directly (D's adapter, a projection) got the loose behaviour.
+STRICT_INTEGER_FIELDS = [
+    ("rubric_version", True), ("rubric_version", "3"), ("rubric_version", 3.0),
+    ("rubric_version", 3.5),
+]
+
+
+@pytest.mark.parametrize("field,value", STRICT_INTEGER_FIELDS,
+                         ids=[f"{f}={v!r}" for f, v in STRICT_INTEGER_FIELDS])
+def test_a_rubric_version_is_a_strict_integer(field, value):
+    with pytest.raises(ValueError):
+        records.Feedback.model_validate({**_label_row(), field: value})
+    with pytest.raises(ValueError):
+        raw = fixtures.load("judge_runs.json")[0]
+        records.JudgeRun.model_validate({**raw, field: value})
+
+
+@pytest.mark.parametrize("value", [True, False, "8", 8.0, 8.5])
+def test_an_entitlement_limit_is_a_strict_integer(value):
+    """r1 R52/R54: booleans are rejected in both halves. `True` as a limit of 1 is a
+    concurrency cap of one request, silently."""
+    raw = fixtures.load("org_entitlements.json")
+    with pytest.raises(ValueError):
+        records.OrgEntitlements.model_validate(
+            {**raw, "limits": {**raw["limits"], "max_concurrent_requests": value}})
+
+
 def test_client_feedback_submission_cannot_set_provenance():
     """FEEDBACK-ACK: channel, author role and calibration are server-set, and an
     empty body is not a submission (r1 R3)."""

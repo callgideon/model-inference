@@ -1,6 +1,7 @@
 {
   "author_principal": "operator@infrx.example",
   "author_role": "operator",
+  "by_operator": true,
   "calibration_set": true,
   "channel": "console",
   "comment": "the second clip is described, the first is not",

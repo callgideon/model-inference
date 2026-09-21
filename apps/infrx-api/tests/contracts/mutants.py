@@ -522,6 +522,53 @@ MUTANTS: tuple[Mutant, ...] = (
           "                raise errors.IdempotencyConflict(\"same label key, different payload\")\n"
           "            return self.items[feedback_id]",
        "        existing = None", "feedback_ack__an_operator_may_label_a_calibration_set"),
+    # --- r1 R49/R50/R54: replays, the operator marker and the projection --------
+    _m("replay_returns_a_row_of_another_kind", "a replay never crosses operations (R54)",
+       F, "        if entry.made_by != operation:\n"
+          "            raise errors.IdempotencyConflict(\n"
+          '                f"idempotency key {idem.key!r} already belongs to another operation")',
+       "        pass",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("replay_is_not_projected", "a replay is projected like a read (R54)",
+       F, "        projected = visible_feedback((stored,), operator=bool(auth.is_operator))\n"
+          '        assert len(projected) == 1, "accept never stores a label, so nothing is filtered"\n'
+          "        return projected[0]",
+       "        return stored",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("accept_does_not_mark_the_operator", "by_operator is server-set on accept (R50)",
+       F, "            by_operator=bool(auth.is_operator),", "            by_operator=False,",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("masking_keys_on_the_author_role", "masking keys on by_operator, not the role (R50)",
+       R, "        if not operator and item.by_operator:",
+       "        if not operator and item.author_role is AuthorRole.operator:",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("operator_list_owned_returns_labels", "no list_owned returns a label (R49)",
+       R, "        if item.calibration_set:\n            continue",
+       "        if item.calibration_set and not operator:\n            continue",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("wire_list_skips_the_projection", "a viewer list is built only through it (R54)",
+       W, '        raise ValueError("build a FeedbackList through FeedbackList.for_viewer(...), so the "\n'
+          '                         "R35/R41/R49/R50 projection cannot be skipped")',
+       "        return data",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    _m("public_entry_carries_the_marker", "the marker never leaves the service (R50)",
+       W, "    calibration_set: bool = False\n    rubric_version: int | None = None\n\n"
+          "    @classmethod\n    def of(cls, record: Feedback) -> FeedbackEntry:",
+       "    calibration_set: bool = False\n    rubric_version: int | None = None\n"
+          "    by_operator: bool = False\n\n"
+          "    @classmethod\n    def of(cls, record: Feedback) -> FeedbackEntry:",
+       "feedback_ack__calibration_labels_are_operator_data"),
+    # The record's author/marker clauses: the fake never builds an inconsistent row, so
+    # each is made reachable by a fake that stores one. The record must refuse it, which
+    # is what the conformance case sees.
+    _m("label_stored_as_a_customer", "a label is an operator's verdict (R54)",
+       F, "            author_principal=auth.principal, author_role=AuthorRole.operator,",
+       "            author_principal=auth.principal, author_role=AuthorRole.customer,",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    _m("label_stored_without_the_marker", "a label is made by an operator (R50)",
+       F, "            by_operator=True,                # r1 R50: a label is always an operator's",
+       "            by_operator=False,               # r1 R50: a label is always an operator's",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
     # --- r1 R43: one persisted calibration shape, and who may read it ----------
     _m("accept_takes_a_calibration_label_name", "calibration_label is not an input name (R43)",
        W, "        if self.name not in FEEDBACK_INPUT_NAMES:\n"

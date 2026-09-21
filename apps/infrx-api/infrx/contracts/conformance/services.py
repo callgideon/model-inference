@@ -1487,7 +1487,13 @@ async def feedback_ack__a_client_cannot_forge_provenance(factory):
     # r1 R31/R43: `calibration_set` and `rubric_version` are server-set and exist only
     # through the operator path, so even an operator session cannot send them on `accept`
     for auth in (b.auth(), b.auth(role=Role.operator)):
-        for stamped in ({"calibration_set": True}, {"rubric_version": 3}):
+        # r1 R50: `by_operator` too. It is refused twice over - by `SERVER_SET` and by
+        # `FeedbackSubmission`'s `extra="forbid"` - and `accept` builds the row from the
+        # validated submission's own three fields, so a smuggled marker cannot reach the
+        # record by construction. Asserted rather than mutated, because no single edit
+        # changes the behaviour.
+        for stamped in ({"calibration_set": True}, {"rubric_version": 3},
+                        {"by_operator": True}):
             try:
                 await harness.port.accept(auth, request.request_id,
                                           {**b.feedback(), **stamped},
@@ -1580,14 +1586,16 @@ async def feedback_ack__an_operator_may_label_a_calibration_set(factory):
 
 
 async def feedback_ack__calibration_labels_are_operator_data(factory):
-    """FEEDBACK-ACK / r1 R35+R41: a customer never receives a calibration label, and
-    never an operator principal.
+    """FEEDBACK-ACK / r1 R35+R41+R49+R50: a calibration label is read through
+    `list_calibration` and nowhere else, and no customer view names an operator.
 
     The label is filed under the customer's own organization (R26), so "the caller owns
-    the row" is not the filter that protects it: the port has to exclude labels from
-    `list_owned` for a non-operator caller and report an operator-authored principal as
-    `platform`. `wire.FeedbackList.for_viewer` is the same projection for a body built
-    anywhere else, and the operator view is `list_calibration`.
+    the row" is not the filter that protects it. R49: `list_owned` excludes labels for
+    **every** caller, operators included, so no viewer has to remember which list it is
+    reading. R50: the masking keys on the server-set `by_operator` marker, not on
+    `author_role` - `accept` always stores `customer` (R31), so a branch on the role was
+    dead code and an operator submitting on a customer's behalf left its address in the
+    customer's own feedback list.
     """
     harness = factory()
     request, _ = await _owned_request(harness)
@@ -1597,21 +1605,39 @@ async def feedback_ack__calibration_labels_are_operator_data(factory):
     mine = await harness.port.accept(b.auth(), request.request_id,
                                      b.feedback(FeedbackName.rating, 4),
                                      b.idem(request, "fb-mine", operation="feedback"))
+    assert mine.by_operator is False, "a customer's own entry is not an operator's"
+    # r1 R50: an operator pressing the same button is still a customer *signal*, but the
+    # row records that the platform made it.
+    on_behalf = await harness.port.accept(operator, request.request_id,
+                                          b.feedback(FeedbackName.comment, "from support"),
+                                          b.idem(request, "fb-onbehalf", operation="feedback"))
+    assert on_behalf.author_role is AuthorRole.customer, "R31: still a customer signal"
+    assert on_behalf.by_operator is True, "R50: but the platform is recorded as having acted"
     label = await harness.port.label_calibration(
         operator, request.request_id, CalibrationLabel.incorrect.value, 2,
         b.idem(request, "cal-1", operation="calibration.label"))
 
     customer_view = await harness.port.list_owned(b.auth(), request.request_id)
-    assert [row.feedback_id for row in customer_view] == [mine.feedback_id], \
+    assert [row.feedback_id for row in customer_view] == [mine.feedback_id,
+                                                          on_behalf.feedback_id], \
         "a customer was shown a calibration label"
     assert all(not row.calibration_set for row in customer_view)
-    assert all(row.author_role is not AuthorRole.operator for row in customer_view)
     assert all(row.author_principal != operator.principal for row in customer_view)
+    # the entry the operator submitted reads `platform`, not the operator's address
+    masked = next(row for row in customer_view if row.feedback_id == on_behalf.feedback_id)
+    assert masked.author_principal == PLATFORM_ACTOR, \
+        "an operator-made entry must read `platform` to a customer (R41/R50)"
+    assert customer_view[0].author_principal == b.auth().principal, \
+        "the organization's own entry keeps its own principal"
 
-    # The operator sees the label and its author.
+    # r1 R49: the operator's `list_owned` has no labels in it either, but it does name the
+    # real principal on an ordinary entry.
     operator_view = await harness.port.list_owned(operator, request.request_id)
-    assert label.feedback_id in {row.feedback_id for row in operator_view}
-    assert any(row.author_principal == operator.principal for row in operator_view)
+    assert label.feedback_id not in {row.feedback_id for row in operator_view}, \
+        "R49: labels are read through list_calibration, not list_owned"
+    assert all(not row.calibration_set for row in operator_view)
+    assert any(row.author_principal == operator.principal for row in operator_view), \
+        "an operator sees the real principal of an ordinary entry"
     only_labels = await harness.port.list_calibration(operator, request.request_id)
     assert [row.feedback_id for row in only_labels] == [label.feedback_id]
     assert only_labels[0].author_principal == operator.principal
@@ -1622,17 +1648,58 @@ async def feedback_ack__calibration_labels_are_operator_data(factory):
     else:
         raise AssertionError("a customer read the calibration list")
 
-    # r1 R41 for the body: an operator-authored *customer* signal keeps its role and
-    # loses only the principal, so a tenant learns the platform acted, not who did.
-    stored = (mine, label,
-              label.model_copy(update={"name": FeedbackName.comment, "value": "by an operator",
-                                       "calibration_set": False, "rubric_version": None}))
+    # r1 R49/R50 for the body, and R54: a list is built only through the projection.
+    stored = (mine, label, on_behalf)
     published = FeedbackList.for_viewer(stored, operator=False)
-    assert [row.feedback_id for row in published.items] == [mine.feedback_id,
-                                                            stored[2].feedback_id]
+    assert [row.id for row in published.items] == [mine.feedback_id, on_behalf.feedback_id], \
+        "a published list carried a calibration label"
     assert published.items[1].author_principal == PLATFORM_ACTOR
-    assert published.items[1].author_role is AuthorRole.operator
-    assert FeedbackList.for_viewer(stored, operator=True).items == stored
+    assert published.items[1].author_role is AuthorRole.customer
+    as_operator = FeedbackList.for_viewer(stored, operator=True)
+    assert [row.id for row in as_operator.items] == [mine.feedback_id, on_behalf.feedback_id]
+    assert as_operator.items[1].author_principal == operator.principal
+    # r1 R50: the marker never leaves the service - it is not a field of the public entry
+    assert "by_operator" not in type(published.items[0]).model_fields
+    # r1 R54: the raw constructor refuses, so the projection cannot be skipped
+    try:
+        FeedbackList(items=())
+    except Exception:
+        pass
+    else:
+        raise AssertionError("a FeedbackList was built without the viewer projection")
+
+    # r1 R54: a replay is projected like a read, and never returns a row of another kind.
+    label_key = b.idem(request, "cal-shared", operation="calibration.label")
+    labelled = await harness.port.label_calibration(
+        operator, request.request_id, CalibrationLabel.correct.value, 4, label_key)
+    try:
+        await harness.port.accept(b.auth(), request.request_id, b.feedback(), label_key)
+    except errors.IdempotencyConflict:
+        pass
+    else:
+        raise AssertionError("a customer replayed an operator's calibration key through accept")
+    accept_key = b.idem(request, "fb-shared", operation="feedback")
+    plain = await harness.port.accept(operator, request.request_id,
+                                      b.feedback(FeedbackName.thumb, True), accept_key)
+    try:
+        await harness.port.label_calibration(
+            operator, request.request_id, CalibrationLabel.correct.value, 4, accept_key)
+    except errors.IdempotencyConflict:
+        pass
+    else:
+        raise AssertionError("a customer feedback key was replayed as a calibration label")
+    # and the replay a customer *is* entitled to is masked exactly as the read was
+    replayed = await harness.port.accept(b.auth(), request.request_id,
+                                         b.feedback(FeedbackName.comment, "from support"),
+                                         b.idem(request, "fb-onbehalf", operation="feedback"))
+    assert replayed.feedback_id == on_behalf.feedback_id, "the replay returns the original row"
+    assert replayed.author_principal == PLATFORM_ACTOR, \
+        "a replay must mask the operator exactly as a read does (R54)"
+    assert (await harness.port.accept(operator, request.request_id,
+                                      b.feedback(FeedbackName.thumb, True),
+                                      accept_key)).author_principal == operator.principal, \
+        "an operator replaying its own entry still sees itself"
+    assert labelled.rubric_version == 4 and plain.by_operator is True
 
 
 async def feedback_ack__a_suspended_organization_cannot_submit_but_can_read(factory):

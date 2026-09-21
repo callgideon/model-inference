@@ -15,7 +15,7 @@ import typing
 import pytest
 from pathlib import Path
 
-from infrx.contracts import limits, money, records, wire
+from infrx.contracts import fixtures, limits, money, records, wire
 
 API = Path(__file__).resolve().parents[2]            # apps/infrx-api
 CONSOLE = API.parent / "app"
@@ -212,8 +212,10 @@ RECORD_PAIRS = {
                    "rubric_version": "rubric_version"},
         # `org_id` is the tenant binding a console session already carries in its
         # `SessionContext`, so the DTO never repeats it; `schema_version` is on the
-        # persisted record, not on a rendered row.
-        "python_only": {"org_id", "schema_version"},
+        # persisted record, not on a rendered row; `by_operator` is R50's server-set
+        # marker, which **never leaves either service** (asserted below against every
+        # wire model and against the console DTO).
+        "python_only": {"org_id", "schema_version", "by_operator"},
         "console_only": set(),
     },
     "OrgEntitlements": {
@@ -253,6 +255,10 @@ RECORD_PAIRS = {
 # rather than an oversight. `WalletBalance` is derived by the console from the wallet
 # columns (06) and has no record in `records.py`; `TraceListItem` is a ClickHouse
 # projection T owns, whose Python side is a query result rather than a contract record.
+# r1 R50: server-set markers that must never leave *either* service. They live on the
+# persisted record and on the console's stored shape, and on neither DTO.
+INTERNAL_MARKERS = ("by_operator",)
+
 UNPAIRED_CONSOLE_TYPES = ("WalletBalance", "TraceListItem")
 
 
@@ -380,3 +386,21 @@ if __name__ == "__main__":
         if name.startswith("test_"):
             fn()
             print("ok", name)
+
+
+@pytest.mark.parametrize("marker", INTERNAL_MARKERS)
+def test_an_internal_marker_is_on_no_public_shape(marker):
+    """r1 R50: `by_operator` records that a platform operator acted. A customer may learn
+    that the platform acted - the principal reads `platform` - and never more, so the
+    marker is absent from every wire model, every wire fixture and the console DTOs."""
+    source = TYPES.read_text(encoding="utf-8")
+    assert marker in records.Feedback.model_fields, f"{marker} must be a persisted field"
+    for name, model in sorted(fixtures.MODELS.items()):
+        if not model.__module__.endswith("contracts.wire"):
+            continue
+        assert marker not in model.model_fields, f"{model.__name__} declares {marker}"
+        assert marker not in (FIXTURES / name).read_text(encoding="utf-8"), \
+            f"{name} carries {marker}"
+    assert marker not in wire.FeedbackEntry.model_fields, "the public entry declares it"
+    for dto in ("FeedbackEntry", "ConsentHistoryEntry", "LedgerEntry"):
+        assert marker not in ts_type_fields(source, dto), f"the console {dto} declares it"
