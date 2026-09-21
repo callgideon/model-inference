@@ -95,8 +95,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_f_base__an_internal_only_code_escaping_a_route_is_a_500_envelope"),
     _m("envelope_render_unprotected", "rendering the envelope cannot fail",
        I, "    except Exception:\n"
-          '        log.exception("the error envelope could not be rendered for request %s", request_id)\n'
-          "        return JSONResponse(LAST_RESORT, status_code=500, headers=headers)",
+          '        log.exception("the error envelope could not be rendered for request %s", request_id)',
        "    except KeyboardInterrupt:\n        raise",
        "test_f_base__the_envelope_of_last_resort"),
     # --- review r1 item 3: structure, liveness and identity-first -------------
@@ -116,16 +115,8 @@ MUTANTS: tuple[Mutant, ...] = (
        V, "    if len(source) > MAX_URL_CHARS:", "    if False:",
        "test_media_sec__a_public_url_is_bounded"),
     _m("identity_after_the_body", "identity is resolved before the body is read or parsed",
-       N, "        auth = await self.auth.context(request)\n"
-          "        intake.check_content_type(request)\n"
-          "        raw = await intake.read_body(request, max_bytes=limits.max_request_bytes,\n"
-          "                                     timeout_s=limits.intake_timeout_s, clock=self.rt.clock)\n"
-          "        body = await intake.parse_body(raw, offload_over_bytes=PARSE_OFFLOAD_BYTES)",
-       "        intake.check_content_type(request)\n"
-          "        raw = await intake.read_body(request, max_bytes=limits.max_request_bytes,\n"
-          "                                     timeout_s=limits.intake_timeout_s, clock=self.rt.clock)\n"
-          "        body = await intake.parse_body(raw, offload_over_bytes=PARSE_OFFLOAD_BYTES)\n"
-          "        auth = await self.auth.context(request)",
+       N, "        auth = await self.auth.context(request)\n        intake.check_content_type(request)",
+       "        intake.check_content_type(request)",
        "test_dur_rls__an_unauthenticated_caller_never_makes_us_buffer",
        "test_dur_rls__identity_is_checked_before_the_body_is_parsed"),
     _m("unstorable_text_accepted", "text the database cannot store is refused",
@@ -174,17 +165,17 @@ MUTANTS: tuple[Mutant, ...] = (
        V, "        if not ids.UPLOAD_HANDLE_RE.fullmatch(handle):", "        if False:",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("data_url_form_unchecked", "an inline video is data:<mime>;base64,",
-       V, "        if not DATA_URL.match(source):", "        if False:",
+       V, "    if match is None:", "    if False:",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("control_characters_in_urls", "a url carries no control characters",
-       V, "    if CONTROL_CHARS.search(source):", "    if False:",
+       V, "    if UNSAFE_IN_URL.search(source):", "    if False:",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("content_type_unchecked", "the body is application/json",
        I, "    if declared != JSON_MEDIA_TYPE:", "    if False:",
        "test_f_base__a_body_that_is_not_json_is_refused"),
     _m("digest_over_the_raw_bytes", "the payload digest is canonical",
-       V, 'payload_digest="sha256:" + hashlib.sha256(canonical_bytes(body)).hexdigest(),',
-       'payload_digest="sha256:" + hashlib.sha256(repr(body).encode()).hexdigest(),',
+       V, "    if not media:\n        return \"sha256:\" + hashlib.sha256(canonical_bytes(body)).hexdigest()",
+       "    if not media:\n        return \"sha256:\" + hashlib.sha256(repr(body).encode()).hexdigest()",
        "test_dur_admit__the_payload_digest_is_canonical"),
     _m("trace_default_is_full", "the trace policy defaults to off",
        V, "    return ConsentSnapshot(org_id=org_id, consent_version=0, trace_mode=TraceMode.off,",
@@ -414,7 +405,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("declared_length_ignored_for_slots", "a declared large body claims its slot early",
        I, "        if declared is not None and declared.isdigit():\n            large.account(int(declared))",
        "        pass",
-       "test_media_sec__at_most_two_large_bodies_are_in_flight"),
+       "test_media_sec__a_declared_large_body_claims_its_slot_before_it_is_read"),
     _m("payload_scanned_byte_by_byte", "no per-byte Python work touches a media payload",
        V, "    if source[:len(DATA_PREFIX)].lower() == DATA_PREFIX:\n"
           "        check_data_url(source, allowed_mime)\n"
@@ -515,8 +506,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if not ids.UPLOAD_HANDLE_RE.match(handle):",
        "test_media_sec__an_upload_handle_is_anchored_and_exact"),
     _m("retry_hint_not_defaulted", "a 429/503 always carries retry guidance",
-       I, '    elif error.code in errors.RETRY_AFTER_CODES:\n        infrx["retry_after_s"] = 5',
-       "    elif False:\n        pass",
+       I, "    elif error.code in errors.RETRY_AFTER_CODES:", "    elif False:",
        "test_f_base__retry_guidance_rides_with_every_429_and_503"),
     _m("empty_idempotency_key_accepted", "an empty idempotency key is not a key",
        V, "    if key is not None and (not key or len(key) > MAX_IDEMPOTENCY_KEY_CHARS):",

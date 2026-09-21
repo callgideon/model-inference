@@ -74,6 +74,16 @@ def test_f_base__retry_guidance_rides_with_every_429_and_503():
         assert response.status_code == 503
         assert int(response.headers[wire.HEADER_RETRY_AFTER]) > 0
         assert support.error_of(response)["infrx"]["retry_after_s"] > 0
+    # Directly, for a retry code that carries no hint of its own: the contract says
+    # these always come with guidance, and `contracts.errors.envelope` raises rather
+    # than emit one without - inside the error path, where raising is not an option.
+    from infrx.gateway.routes import intake
+
+    for code in sorted(errors.RETRY_AFTER_CODES):
+        bare = intake.response(errors.DomainError(code=code), support.REQUEST_ID)
+        body = json.loads(bare.body)["error"]
+        assert body["code"] == code, body
+        assert body["infrx"]["retry_after_s"] > 0, body
 
 
 def test_f_base__every_answer_carries_a_freshly_minted_inference_id():
@@ -137,7 +147,7 @@ def test_f_base__a_parameter_name_that_is_a_name_is_still_echoed():
     assert support.error_of(response)["param"] == "tools"
 
 
-def test_f_base__an_internal_only_code_escaping_a_route_is_a_500_envelope():
+def test_f_base__an_internal_only_code_escaping_a_route_is_a_500_envelope(caplog):
     """`stale_lease` has no HTTP status by design, so `http_status` raises. An
     acceptor leaking one must not turn the error path into a crash."""
     async def leak(*_a):
@@ -145,11 +155,17 @@ def test_f_base__an_internal_only_code_escaping_a_route_is_a_500_envelope():
 
     calls, _accept = support.recorder()
     app, _ = support.cutover_app(ingress_deps=support.deps(accept=leak))
-    response = TestClient(app).post(support.CHAT_PATH, headers=support.AUTH, json=support.BODY)
+    with caplog.at_level("ERROR", logger="infrx.gateway"):
+        response = TestClient(app).post(support.CHAT_PATH, headers=support.AUTH,
+                                        json=support.BODY)
     assert response.status_code == 500, response.text
     error = support.error_of(response)
     assert error["code"] == "internal_error"
     assert error["request_id"] == response.headers[wire.HEADER_INFERENCE_ID]
+    # Translated deliberately, not caught by the last resort: the difference is
+    # invisible in the body and is exactly what the mapping bug looks like.
+    assert "internal-only error code stale_lease escaped" in caplog.text
+    assert "could not be rendered" not in caplog.text
 
 
 def test_f_base__a_body_that_is_not_json_is_refused():

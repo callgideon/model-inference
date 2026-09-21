@@ -209,7 +209,9 @@ def test_media_sec__hostile_structure_is_refused_without_parsing_it(name, build)
 def test_media_sec__a_legitimate_body_at_the_opener_cap_is_still_parsed():
     """The cap is the structure the caps allow plus one opener per permitted code
     point of text, so a body full of braces *in text* is accepted."""
-    braces = "{" * 1_000
+    # more braces than the structure the caps allow, so only the text allowance can
+    # be what admits this
+    braces = "{" * (validate.STRUCTURE_OPENERS * 4)
     body = {"messages": [{"role": "user", "content": braces}]}
     tc, accepted = client()
     calls, restore = parse_spy()
@@ -328,7 +330,14 @@ def test_media_sec__no_per_byte_python_work_touches_a_media_payload():
             seen.append(("regex", len(text)))
             return real_search(text)
 
-    v.storable, v.UNSAFE_IN_URL = spy_storable, SpyRe()
+    real_canonical = v.canonical_bytes
+
+    def spy_canonical(value):
+        out = real_canonical(value)
+        seen.append(("canonical_bytes", len(out)))
+        return out
+
+    v.storable, v.UNSAFE_IN_URL, v.canonical_bytes = spy_storable, SpyRe(), spy_canonical
     try:
         tc, accepted = client()
         response = tc.post(support.CHAT_PATH, headers=support.AUTH, json={
@@ -336,12 +345,16 @@ def test_media_sec__no_per_byte_python_work_touches_a_media_payload():
                 {"type": "text", "text": "describe"},
                 {"type": "video_url", "video_url": {"url": payload}}]}]})
     finally:
-        v.storable, v.UNSAFE_IN_URL = real_storable, v.__dict__["UNSAFE_IN_URL"] if False else real_search.__self__
+        v.storable, v.canonical_bytes = real_storable, real_canonical
+        v.UNSAFE_IN_URL = real_search.__self__
     assert response.status_code == 202, response.text[:200]
     assert len(accepted) == 1
     # nothing per-byte ever saw the payload
-    assert max(size for _kind, size in seen) < 1_000, seen
     assert all(size != len(payload) for _kind, size in seen), "a scan ran over the payload"
+    # and the digest document is the non-media one: kilobytes, not megabytes
+    serialised = [size for kind, size in seen if kind == "canonical_bytes"]
+    assert serialised and max(serialised) < 4_096, serialised
+    assert max(size for kind, size in seen if kind != "canonical_bytes") < 1_000, seen
 
 
 def test_dur_admit__the_payload_digest_covers_the_media_payload_by_hash():
@@ -439,3 +452,35 @@ def test_media_sec__the_url_cap_is_exact():
                 {"type": "video_url", "video_url": {"url": url}}]}]})
         assert response.status_code == status, (length, response.text[:120])
     assert len(accepted) == 1
+
+
+def test_media_sec__a_declared_large_body_claims_its_slot_before_it_is_read():
+    """The declared length is not trusted as a bound - the running total is - but it is
+    used to claim a slot early, so a request that will be refused never gets buffered
+    at all. Removing that costs one wasted 96 MiB read per refusal."""
+    from infrx.gateway.routes import intake
+
+    slots = intake.LargeBodies(limit=1, threshold=1024)
+    slots.in_flight = 1                       # somebody else is already parsing
+    calls, accept = support.recorder()
+    app, _ = support.cutover_app(ingress_deps=support.deps(accept=accept, large_bodies=slots))
+    read, sent = [], []
+
+    async def receive():
+        read.append(1)
+        return {"type": "http.request", "body": b"x" * 8_000, "more_body": True}
+
+    async def send(message):
+        sent.append(message)
+
+    asyncio.run(app({"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+                     "method": "POST", "path": support.CHAT_PATH,
+                     "raw_path": support.CHAT_PATH.encode(), "query_string": b"", "root_path": "",
+                     "scheme": "http", "client": ("127.0.0.1", 1), "server": ("t", 80),
+                     "headers": [(b"authorization", f"Bearer {support.TOKEN}".encode()),
+                                 (b"content-type", b"application/json"),
+                                 (b"content-length", b"9000")]},
+                    receive, send))
+    assert sent[0]["status"] == 429, sent[0]
+    assert read == [], "the body was read for a request that had no slot"
+    assert calls == []
