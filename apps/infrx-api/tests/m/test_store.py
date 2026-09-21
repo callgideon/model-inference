@@ -85,6 +85,11 @@ def staging(*, limits=DEFAULTS, transport=None, resolve=None, jobs=None, objects
     adapter = store.MediaStaging(objects or store.InMemoryObjectStore(), limits=limits,
                                  fetcher=fetcher, job_org=job_org)
     adapter.jobs = jobs
+    # One clock and one id sequence per adapter, so two requests built for the same
+    # adapter are two requests. Sharing the id by accident hides an invariant: a second
+    # `stage` would be refused by the payload's own immutability before the media ever
+    # reached the check under test.
+    adapter.harness = Harness(port=adapter, clock=FakeClock(), ids=SequentialIds())
     return adapter
 
 
@@ -95,8 +100,7 @@ def factory(limits=None, **_kw) -> Harness:
 
 
 def request(adapter, *, org_id=b.ORG_A, refs=()):
-    return b.request(Harness(port=adapter, clock=FakeClock(), ids=SequentialIds()),
-                     org_id=org_id, refs=refs)
+    return b.request(adapter.harness, org_id=org_id, refs=refs)
 
 
 # --- materialization ---------------------------------------------------------------
@@ -167,11 +171,16 @@ def test_an_object_is_never_replaced_by_different_content():
 
 
 def test_an_unsupported_source_is_refused_before_anything_is_stored():
-    adapter = staging()
-    for source in ("file:///etc/passwd", "s3://bucket/key", "", "javascript:alert(1)"):
-        with pytest.raises(errors.InvalidRequest):
+    """A source that is not an http(s) or `data:` URL is refused by the store, without
+    handing it to the fetcher at all: `file:///etc/passwd` must not become a fetch."""
+    resolve = support.resolver([support.PUBLIC])
+    adapter = staging(resolve=resolve, transport=support.Transport())
+    for source in ("file:///etc/passwd", "s3://bucket/key", "", "javascript:alert(1)",
+                   "//example.com/v.mp4", "DATA:video/mp4;base64,AAAA"):
+        with pytest.raises(errors.InvalidRequest) as caught:
             asyncio.run(adapter.materialize(b.ORG_A, source))
-    assert adapter.objects.objects == {} and adapter.refs == {}
+        assert caught.value.code == "invalid_request", source
+    assert resolve.calls == [] and adapter.objects.objects == {} and adapter.refs == {}
 
 
 def test_an_oversize_source_never_reaches_the_object_store():
@@ -180,6 +189,19 @@ def test_an_oversize_source_never_reaches_the_object_store():
     with pytest.raises(errors.RequestTooLarge):
         asyncio.run(adapter.materialize(b.ORG_A, URL))
     assert adapter.objects.objects == {}
+
+    # ... and the store's own bound is not a comment about the fetcher's: a fetcher that
+    # returned more than MAX_MEDIA_BYTES (a limits mismatch, a future streaming source)
+    # must not get an object written for it.
+    class Generous:
+        async def fetch(self, url):
+            return fetch.Fetched(mime="video/mp4", data=b"x" * 400,
+                                 digest=fetch.digest_of(b"x" * 400), host="example.com")
+
+    lenient = store.MediaStaging(store.InMemoryObjectStore(), limits=SMALL, fetcher=Generous())
+    with pytest.raises(errors.RequestTooLarge):
+        asyncio.run(lenient.materialize(b.ORG_A, URL))
+    assert lenient.objects.objects == {} and lenient.refs == {}
 
 
 # --- staging -----------------------------------------------------------------------
