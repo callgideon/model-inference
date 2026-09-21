@@ -103,7 +103,7 @@ if (typeof window !== "undefined") throw new Error("lib/services/console.ts is s
  * refused: a driver `Date`, the `::text` form (`2026-09-02 07:12:18+00`), a date without a time, and
  * any non-UTC offset.
  */
-const ROW_TIMESTAMP = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)(?:Z|\+00:00)$/;
+const ROW_TIMESTAMP = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(?:Z|\+00:00)$/;
 
 /** A caller's filter value: the same two forms, so a console page can pass either one through. */
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|\+00:00)$/;
@@ -232,11 +232,20 @@ function timestamp(row: Row, column: string): string {
   return normaliseTimestamp(text(row, column), column);
 }
 
-/** `…+00:00` and `…Z` are the same instant; the DTO carries one form, with its digits intact. */
+/**
+ * `…+00:00` and `…Z` are the same instant, and the DTO carries one form: seconds, then exactly six
+ * fractional digits, then `Z`.
+ *
+ * The width is fixed rather than preserved because PostgREST trims trailing zeros — `.12+00:00` next to
+ * `.123456Z` in one relation — and a keyset compares these strings: mixed widths would order
+ * `.12` after `.123456`, and the exported suite requires one comparable width across a list. Padding
+ * keeps every digit the row had and makes the rest explicit.
+ */
 function normaliseTimestamp(value: string, column: string): string {
   const match = ROW_TIMESTAMP.exec(value);
   if (match === null) throw new TypeError(`${column} must be an RFC 3339 UTC timestamp`);
-  return `${match[1]}Z`;
+  const [, seconds, fraction] = match;
+  return `${seconds}.${(fraction ?? "").padEnd(6, "0")}Z`;
 }
 
 function optionalTimestamp(row: Row, column: string): string | null {

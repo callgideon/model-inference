@@ -106,11 +106,13 @@ test("the same masking covers feedback and consent history, which only a write c
   );
 
   const settings = expectOk(await services.settings.get(sessions.owner));
-  const change = settings.consent_history.find((entry) => entry.changed_at === "2026-09-20T12:00:00.000Z");
+  // The DTO form is seconds plus six fractional digits (PostgREST trims zeros, so the width is fixed
+  // rather than preserved); the seeded row's `.000Z` reads back as `.000000Z`.
+  const change = settings.consent_history.find((entry) => entry.changed_at === "2026-09-20T12:00:00.000000Z");
   assert.equal(change?.changed_by, PLATFORM_ACTOR, "a consent change by the platform is not attributed to a person");
   const operatorSettings = expectOk(await services.settings.get(sessions.operator));
   assert.equal(
-    operatorSettings.consent_history.find((entry) => entry.changed_at === "2026-09-20T12:00:00.000Z")?.changed_by,
+    operatorSettings.consent_history.find((entry) => entry.changed_at === "2026-09-20T12:00:00.000000Z")?.changed_by,
     "operator@infrx.example",
   );
   // The same trace's detail must mask it too: a detail view is a customer view.
@@ -249,13 +251,17 @@ test("the single-row reads are tenant-bound too, in both directions", async () =
   );
 
   // Consent history is the same read; it must not carry the other organization's audit trail.
-  const ours = new Set(data.consent.filter((row) => row.org_id === ids.orgId).map((row) => row.changed_at));
-  const theirs = new Set(data.consent.filter((row) => row.org_id === ids.otherOrgId).map((row) => row.changed_at));
+  // Compared on the instant, not the spelling: the DTO pads the fraction to six digits.
+  const instant = (value: unknown): string => new Date(String(value)).toISOString();
+  const ours = new Set(data.consent.filter((row) => row.org_id === ids.orgId).map((row) => instant(row.changed_at)));
+  const theirs = new Set(
+    data.consent.filter((row) => row.org_id === ids.otherOrgId).map((row) => instant(row.changed_at)),
+  );
   for (const entry of ourSettings.consent_history) {
-    assert.ok(ours.has(entry.changed_at), `a consent entry from another organization: ${entry.changed_at}`);
+    assert.ok(ours.has(instant(entry.changed_at)), `a consent entry from another organization: ${entry.changed_at}`);
   }
   for (const entry of theirSettings.consent_history) {
-    assert.ok(theirs.has(entry.changed_at), "and the reverse direction");
+    assert.ok(theirs.has(instant(entry.changed_at)), "and the reverse direction");
   }
 
   // Feedback is keyed by a request id the caller supplies, which is exactly where a tenant is lost.

@@ -201,7 +201,23 @@ test("both UTC timestamp forms are accepted and normalised, microseconds and all
   const row = page.items.find((candidate) => candidate.request_id === usage.request_id);
   assert.equal(row?.created_at, "2026-09-20T11:57:43.123456Z", "microseconds survive: they are half of a cursor key");
 
-  // A walk still works when a row carries the other form, because the cursor key is normalised too.
+  // PostgREST trims trailing zeros, so a relation can hold `.12+00:00` beside `.123456Z`. A keyset
+  // compares these strings, and `.12` would sort after `.123456`; the width is therefore fixed at six
+  // digits rather than preserved, and the exported suite's "one comparable width per list" holds.
+  usage.created_at = "2026-09-20T11:57:43.12+00:00";
+  const trimmed = expectOk(await walkUsage(services as never, sessions.owner));
+  assert.equal(
+    trimmed.items.find((candidate) => candidate.request_id === usage.request_id)?.created_at,
+    "2026-09-20T11:57:43.120000Z",
+    "a trimmed fraction is padded, not left short",
+  );
+  const widths = new Set(trimmed.items.map((item) => item.created_at.length));
+  assert.equal(widths.size, 1, `one list, one width: ${[...widths].join(", ")}`);
+  usage.created_at = "2026-09-20T11:57:43.123456+00:00";
+
+  // A walk still works when a row carries the other form, because the cursor key and the comparison
+  // both use the instant. One rewritten row is not enough to show that — it is never a cursor row at a
+  // page size of 7 — so the three walks below rewrite the whole relation.
   let cursor: string | null = null;
   const seen: string[] = [];
   for (let pages = 0; pages < 100; pages += 1) {
@@ -225,6 +241,57 @@ test("both UTC timestamp forms are accepted and normalised, microseconds and all
     usage.created_at = value;
     expectError(await walkUsage(services as never, sessions.owner), "internal_error", what);
   }
+});
+
+test("a walk is exactly-once whatever UTC form the relation uses", async () => {
+  const { services, sessions, ids, data } = makeConsoleHarness();
+  const own = data.usage.filter((row) => row.org_id === ids.orgId);
+  assert.ok(own.length > 100, "the relation must be longer than a page for this to mean anything");
+
+  const walkIds = async (limit: number): Promise<string[]> => {
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (let pages = 0; pages < 3000; pages += 1) {
+      const page: { items: { request_id: string }[]; next_cursor: string | null } = expectOk(
+        await services.usage(sessions.owner, { limit, cursor }),
+      );
+      seen.push(...page.items.map((item) => item.request_id));
+      if (page.next_cursor === null) return seen;
+      cursor = page.next_cursor;
+    }
+    throw new assert.AssertionError({ message: `the walk at limit ${limit} did not terminate` });
+  };
+
+  const expected = (await walkIds(MAX_PAGE_LIMIT)).sort();
+  assert.equal(expected.length, own.length);
+
+  // (1) Every row in PostgREST's form. A keyset that compared the raw strings against a cursor minted
+  // from the projected form looped forever at limit 1 and returned 243 of 160 rows at limit 3.
+  for (const row of own) row.created_at = String(row.created_at).replace(/Z$/, "+00:00");
+  for (const limit of [1, 3, 7, MAX_PAGE_LIMIT]) {
+    const walked = await walkIds(limit);
+    assert.deepEqual(walked.sort(), expected, `all rows in +00:00, walked at limit ${limit}`);
+  }
+
+  // (2) The two forms alternating within one relation.
+  own.forEach((row, index) => {
+    row.created_at = String(row.created_at).replace(/(Z|\+00:00)$/, index % 2 === 0 ? "Z" : "+00:00");
+  });
+  for (const limit of [1, 3, 7]) {
+    const walked = await walkIds(limit);
+    assert.deepEqual(walked.sort(), expected, `both forms alternating, walked at limit ${limit}`);
+  }
+
+  // (3) A microsecond pair one tick apart, in opposite forms, across a page boundary of one.
+  own[0].created_at = "2026-09-20T23:00:00.123457Z";
+  own[1].created_at = "2026-09-20T23:00:00.123456+00:00";
+  const pairWalk = await walkIds(1);
+  assert.deepEqual(pairWalk.sort(), expected, "the microsecond pair is walked once each");
+  assert.equal(
+    pairWalk.indexOf(String(own[0].request_id)) + 1,
+    pairWalk.indexOf(String(own[1].request_id)),
+    "and in instant order, newest first",
+  );
 });
 
 test("money arrives as text: a number is accepted only where a double still holds eight digits", async () => {

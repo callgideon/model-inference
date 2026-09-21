@@ -26,9 +26,29 @@ export const TEST_CURSOR_SECRET = "c1-test-cursor-secret-0123456789";
 
 export type Dataset = Record<string, Row[]>;
 
+/**
+ * The two UTC forms of one instant, as a single comparable string: `+00:00` becomes `Z` and the
+ * fraction is padded to six digits, exactly as the service's projection does.
+ *
+ * PostgreSQL compares `timestamptz` **values**, so `…12:00:00+00:00` and `…12:00:00.000000Z` are equal
+ * there. A double that compared the raw strings instead is not a smaller version of that behaviour, it
+ * is a different one: `+` sorts before `Z`, so a cursor minted from the projected form would never find
+ * its row again, and a walk over a `+00:00` relation repeated or lost rows. The keyset must compare
+ * instants; the note applies to the supabase-js port C2 writes, too.
+ */
+const TIMESTAMP_FORM = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|\+00:00)$/;
+
+function comparable(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const text = String(value);
+  const match = TIMESTAMP_FORM.exec(text);
+  if (match === null) return text;
+  return `${match[1]}.${(match[2] ?? "").slice(0, 6).padEnd(6, "0")}Z`;
+}
+
 function compare(a: unknown, b: unknown): number {
-  const left = a === null || a === undefined ? "" : String(a);
-  const right = b === null || b === undefined ? "" : String(b);
+  const left = comparable(a);
+  const right = comparable(b);
   return left < right ? -1 : left > right ? 1 : 0;
 }
 

@@ -688,26 +688,6 @@
       ]
     },
     {
-      "id": "TS-01",
-      "note": "a timestamp is carried in whatever form the row had, so one list mixes two",
-      "file": "lib/services/console.ts",
-      "find": "  const match = ROW_TIMESTAMP.exec(value);\n  if (match === null) throw new TypeError(`${column} must be an RFC 3339 UTC timestamp`);\n  return `${match[1]}Z`;",
-      "replace": "  if (!ROW_TIMESTAMP.test(value)) throw new TypeError(`${column} must be an RFC 3339 UTC timestamp`);\n  return value;",
-      "cases": [
-        "both UTC timestamp forms are accepted and normalised, microseconds and all"
-      ]
-    },
-    {
-      "id": "TS-02",
-      "note": "any offset and the ::text form are accepted, so a non-UTC instant reads as UTC",
-      "file": "lib/services/console.ts",
-      "find": "const ROW_TIMESTAMP = /^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?)(?:Z|\\+00:00)$/;",
-      "replace": "const ROW_TIMESTAMP = /^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?)(?:Z|[+-]\\d{2}:\\d{2}| .*)$/;",
-      "cases": [
-        "both UTC timestamp forms are accepted and normalised, microseconds and all"
-      ]
-    },
-    {
       "id": "STRICT-02",
       "note": "an integer column is read with Number(), which accepts \"\", true, [5], 0x10 and 1e2",
       "file": "lib/services/console.ts",
@@ -815,6 +795,37 @@
       "replace": "    columns: \"s.org_id, s.trace_mode, s.content_retention_days, s.evaluation_consent\",\n    tenantColumn: \"s.org_id\",",
       "cases": [
         "an aggregate carries its tenant as a grouping column, and is ordered and bounded"
+      ]
+    },
+    {
+      "id": "TS-01",
+      "note": "a timestamp is carried in whatever form and width the row had",
+      "file": "lib/services/console.ts",
+      "find": "  const [, seconds, fraction] = match;\n  return `${seconds}.${(fraction ?? \"\").padEnd(6, \"0\")}Z`;",
+      "replace": "  return value;",
+      "cases": [
+        "both UTC timestamp forms are accepted and normalised, microseconds and all",
+        "a walk is exactly-once whatever UTC form the relation uses"
+      ]
+    },
+    {
+      "id": "TS-04",
+      "note": "the fraction keeps whatever width arrived, so one list mixes widths",
+      "file": "lib/services/console.ts",
+      "find": "  return `${seconds}.${(fraction ?? \"\").padEnd(6, \"0\")}Z`;",
+      "replace": "  return `${seconds}${fraction === undefined ? \"\" : `.${fraction}`}Z`;",
+      "cases": [
+        "both UTC timestamp forms are accepted and normalised, microseconds and all"
+      ]
+    },
+    {
+      "id": "TS-02",
+      "note": "any offset and the ::text form are accepted, so a non-UTC instant reads as UTC",
+      "file": "lib/services/console.ts",
+      "find": "const ROW_TIMESTAMP = /^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:\\.(\\d{1,6}))?(?:Z|\\+00:00)$/;",
+      "replace": "const ROW_TIMESTAMP = /^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:\\.(\\d+))?(?:Z|[+-]\\d{2}:\\d{2}| .*)$/;",
+      "cases": [
+        "both UTC timestamp forms are accepted and normalised, microseconds and all"
       ]
     }
   ]
