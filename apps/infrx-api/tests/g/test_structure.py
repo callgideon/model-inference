@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 """MEDIA-SEC (structure half): what a body may contain inside the byte cap.
 
-The first review's finding, in one sentence: 96 MiB of JSON is 3.4 million empty
-messages, and building records from them blocked the event loop for 21.8 s and grew
-the process by 2.5 GiB — one authenticated free key stalling every other request in
-the process. These cases are the bounds that make that impossible, plus the two
-liveness properties that make a big body cheap: the caps are checked before anything
-is built, and a large body is parsed off the loop.
+The finding these exist for: 96 MiB of JSON is 3.4 million empty messages, and one
+authenticated key sending it stalled the whole process — 1.9 s in `json.loads` alone,
++1.1 GiB resident, and the refusal only afterwards, because the count caps run on the
+parsed tree. Eight at once made that 13 s and 8 GiB.
+
+So the order is the point, and three properties carry it, each proven by instrumenting
+the code rather than by a stopwatch:
+
+* the openers are counted in the raw bytes and the body refused **before**
+  `json.loads` is called (a spy on the parser proves it was not),
+* at most two large bodies are in flight per process, the rest refused 429 (the peak
+  in-flight count is asserted),
+* nothing per-byte in Python ever touches an inline media payload — not the URL
+  hygiene regex, not `storable`, not `canonical_bytes` (spies on all three).
+
+What remains is one `json.loads` of a legitimate large body, measured and reported as
+a limit in the evidence. A thread would not have helped: it is one C call holding the
+GIL.
 """
 import asyncio
 import json
