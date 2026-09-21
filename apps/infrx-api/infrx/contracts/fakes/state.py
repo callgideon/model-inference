@@ -26,9 +26,10 @@ from ..codec import compact_bytes
 from ..limits import DEFAULTS, PilotSettings
 from ..records import (Admission, BILLABLE_CAUSES, Budgets, CapacityReservation, Chunk,
                        ChunkEventType, Cursor, EngineEvent, HoldState, IdempotencyRef, IndexEvent,
-                       JobState, Lease, MediaRef, NormalizedRequest, OutboxEvent, OutboxKind,
-                       PriceSnapshot, ReservationKind, SettlementState, TERMINAL_STATES, TerminalCause,
-                       TerminalOutcome, Usage, UsageCertainty, states_for_cause)
+                       JobState, Lease, LeaseKind, MediaRef, NormalizedRequest, OutboxEvent,
+                       OutboxKind, PriceSnapshot, ReservationKind, SettlementState,
+                       TERMINAL_STATES, TerminalCause, TerminalOutcome, Usage, UsageCertainty,
+                       Work, states_for_cause)
 from .support import FailurePlan, FakeClock, SequentialIds, failure_hooks, money_input
 
 MAX_READ_LIMIT = 1000           # refinement: the bound on one replay page
@@ -90,6 +91,11 @@ class _Job:
     lease: Lease | None = None
     published: bool = False                  # first committed chunk
     attempts: int = 0                        # prepublication requeues used
+    # r1 R46: preparation is its own fenced attempt sequence, on its own counter, so a
+    # preparation claim never moves the inference generation a worker is fenced on.
+    preparation_generation: int = 0
+    preparation_lease: Lease | None = None
+    preparation_attempts: int = 0
     prepared: tuple[MediaRef, ...] = ()
     queued_at: datetime | None = None         # start of the current queued interval
     outcome: TerminalOutcome | None = None
@@ -459,21 +465,61 @@ class FakeJobStore:
             raise errors.NotFound(f"no job {job_handle} owned by org {org_id}")
         return job
 
-    async def prepared(self, job_handle: str, media: tuple[MediaRef, ...] = ()) -> Admission:
+    # r1 R46: the preparation attempt bound. The first claim plus this many further
+    # attempts, i.e. three claims in total on the default profile - the same bound the
+    # prepublication inference path uses, because it is the same question (how many times
+    # may a phase be retried after a worker is lost) and one number is easier to reason
+    # about than two. `preparation_deadline_at` bounds it in wall-clock terms as well, so
+    # a job cannot be retried for ever even below the count.
+    async def claim_preparation(self, job_id: str, worker_id: str) -> Lease:
+        """r1 R46: a fenced preparation lease, addressed by `job_id` like every other
+        internal operation."""
+        self.failures.before("claim_preparation")
+        async with self._lock:
+            job = self.jobs.get(job_id)
+            if job is None:
+                raise errors.NotFound(f"no job {job_id}")
+            if job.terminal:
+                raise errors.AlreadyTerminal(f"job {job_id} is {job.state}")
+            if job.state is not JobState.preparing:
+                raise errors.NotClaimable(f"job {job_id} is {job.state}, not preparing")
+            # Past the preparation instant the job is terminalized here (R29), so a
+            # worker cannot pick up something nobody is waiting for any more.
+            self._enforce_deadlines(job)
+            now = self.clock.now()
+            live = job.preparation_lease
+            if live is not None and now < live.expires_at:
+                # Two preparation workers writing prepared refs for one job is the media
+                # equivalent of two workers appending output.
+                raise errors.NotClaimable(f"job {job_id} is already being prepared by "
+                                          f"{live.worker_id}")
+            if job.preparation_attempts > self.limits.max_prepublication_retries:
+                outcome = self._terminalize(job, TerminalCause.preparation_failed, None, None,
+                                            JobState.failed)
+                raise errors.NotClaimable(
+                    f"job {job_id} exhausted its {self.limits.max_prepublication_retries} "
+                    f"preparation retries and is {outcome.state}")
+            job.preparation_attempts += 1
+            job.preparation_generation += 1
+            job.preparation_lease = Lease(
+                job_id=job_id, kind=LeaseKind.preparation,
+                generation=job.preparation_generation, worker_id=worker_id, acquired_at=now,
+                expires_at=now + timedelta(seconds=self.limits.lease_ttl_s),
+                # The preparation phase has one deadline, and it is already persisted.
+                generation_deadline_at=job.admission.preparation_deadline_at)
+            lease = job.preparation_lease
+        self.failures.after_commit("claim_preparation")
+        return lease
+
+    async def prepared(self, lease: Lease, media: tuple[MediaRef, ...] = ()) -> Admission:
         self.failures.before("prepared")
         async with self._lock:
-            request_id = self.by_handle.get(job_handle)
-            job = self.jobs.get(request_id) if request_id else None
-            if job is None:
-                raise errors.NotFound(f"no job {job_handle}")
-            if job.terminal:
-                raise errors.AlreadyTerminal(f"job {job_handle} is {job.state}")
-            if job.state is not JobState.preparing:
-                raise errors.StateConflict(f"prepared requires preparing, not {job.state}")
-            # r1 R29: a preparation worker that comes back late finds the job already
-            # terminal, and its own call is what terminalized it: a dead preparation
-            # must not pin a preparation unit, a journal reservation and a hold.
-            self._enforce_deadlines(job)
+            # r1 R46: fenced on the preparation lease. `_fence_preparation` also runs
+            # R29's deadline check, so a preparation worker that comes back late finds
+            # the job already terminal and its own call is what terminalized it: a dead
+            # preparation must not pin a preparation unit, a journal reservation and a
+            # hold.
+            job = self._fence_preparation(lease)
             for ref in media:
                 if ref.org_id != job.request.org_id:
                     raise errors.Forbidden("prepared media must belong to the job's org")
@@ -481,13 +527,50 @@ class FakeJobStore:
             job.prepared = tuple(media)
             job.state = JobState.queued
             job.queued_at = now
+            job.preparation_lease = None          # the phase is over; nothing to fence
             self._enter_queued(job, now)
             self._release(job, ReservationKind.preparation)
             self._emit(job.id, OutboxKind.inference_dispatch, now,
-                       {"job_handle": job_handle, "request_id": job.id})
+                       {"job_handle": job.admission.job_handle, "request_id": job.id})
             admission = self._snapshot(job)
         self.failures.after_commit("prepared")
         return admission
+
+    async def load_work(self, lease: Lease) -> Work:
+        """r1 R46: fenced like a mutation. A stale, foreign or wrong-kind lease gets a
+        typed refusal and no data, because this is the only thing that hands a worker the
+        request, the media, the price and the budgets."""
+        self.failures.before("load_work")
+        async with self._lock:
+            job = (self._fence_preparation(lease) if lease.kind is LeaseKind.preparation
+                   else self._fence(lease))
+            return Work(request=job.request, media_refs=job.request.media,
+                        prepared_refs=job.prepared,
+                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets)
+
+    def _fence_preparation(self, lease: Lease) -> _Job:
+        """The preparation half of `_fence`: its own generation counter, and the lease
+        kind checked first so an inference token can never stand in for one."""
+        if lease.kind is not LeaseKind.preparation:
+            raise errors.StaleLease(f"{lease.kind} lease cannot fence preparation")
+        job = self.jobs.get(lease.job_id)
+        if job is None:
+            raise errors.NotFound(f"no job {lease.job_id}")
+        if job.terminal:
+            raise errors.AlreadyTerminal(f"job {job.id} is already {job.state}")
+        if job.state is not JobState.preparing or job.preparation_lease is None:
+            raise errors.StaleLease(f"job {job.id} is {job.state} with no preparation lease")
+        if job.preparation_generation != lease.generation:
+            raise errors.StaleLease(f"preparation generation {lease.generation} "
+                                    f"!= {job.preparation_generation}")
+        if job.preparation_lease.worker_id != lease.worker_id:
+            raise errors.StaleLease(f"preparation lease belongs to "
+                                    f"{job.preparation_lease.worker_id}")
+        if self.clock.now() >= job.preparation_lease.expires_at:
+            raise errors.StaleLease(f"preparation lease expired at "
+                                    f"{job.preparation_lease.expires_at}")
+        self._enforce_deadlines(job)
+        return job
 
     def _enter_queued(self, job: _Job, now: datetime) -> None:
         """r1 R38: entering `queued` recomputes the deadline from what is left of the
@@ -550,7 +633,8 @@ class FakeJobStore:
             generation_deadline_at = _phase_deadline(now, job.budgets.generation_s,
                                                      job.request.deadline_at)
             job.lease = Lease(
-                job_id=job_id, generation=job.generation, worker_id=worker_id, acquired_at=now,
+                job_id=job_id, kind=LeaseKind.inference,
+                generation=job.generation, worker_id=worker_id, acquired_at=now,
                 expires_at=now + timedelta(seconds=self.limits.lease_ttl_s),
                 # r1 R20: the generation phase starts at the claim, so both instants
                 # are derived here and handed to the worker with its lease.
@@ -566,6 +650,11 @@ class FakeJobStore:
         and nothing else, so a worker cannot rewrite its own deadlines, generation or
         acquisition time by handing back an edited record."""
         self.failures.before("heartbeat")
+        if lease.kind is not LeaseKind.inference:
+            # r1 R46: nothing renews a preparation lease - the preparation budget and the
+            # lease TTL are bounded and equal by default, so there is no renewal to make.
+            # Saying so beats a silent no-op that leaves a fenced worker confident.
+            raise errors.InvalidRequest("only an inference lease is renewed")
         async with self._lock:
             job = self._fence(lease)
             now = self.clock.now()
@@ -578,6 +667,10 @@ class FakeJobStore:
     def _fence(self, lease: Lease) -> _Job:
         """Generation, owner, state and lease expiry, compared against durable
         state and the database clock. A fenced worker mutates nothing."""
+        if lease.kind is not LeaseKind.inference:
+            # r1 R46: the two attempt sequences have separate counters, so a preparation
+            # lease at generation 1 would otherwise pass as inference generation 1.
+            raise errors.StaleLease(f"{lease.kind} lease cannot fence execution")
         job = self.jobs.get(lease.job_id)
         if job is None:
             raise errors.NotFound(f"no job {lease.job_id}")
@@ -825,6 +918,18 @@ class FakeJobStore:
             # reservation and the customer's hold until the absolute deadline.
             return [self._terminalize(job, TerminalCause.preparation_failed, None, None,
                                       JobState.failed)]
+        if (job.state is JobState.preparing and job.preparation_lease is not None
+                and now >= job.preparation_lease.expires_at):
+            # r1 R46: reap a lost preparation worker. The job stays `preparing` and
+            # claimable - within `preparation_deadline_at` (checked above, so this branch
+            # only runs while the phase is still live) and within
+            # `MAX_PREPUBLICATION_RETRIES` further claims, which `claim_preparation`
+            # enforces. Terminalizing here instead would fail a job whose only problem is
+            # that one host died with a hundred seconds of its budget left.
+            job.preparation_lease = None
+            self._emit(job.id, OutboxKind.prepare_dispatch, now,
+                       {"request_id": job.id, "attempt": job.preparation_attempts})
+            return []
         # No separate absolute-deadline branch: every phase instant is already capped
         # by `deadline_at` (r1 R20), so the phase that is running is the one that
         # expires, with the cause that phase deserves.

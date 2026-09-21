@@ -5,6 +5,7 @@
   "generation": 1,
   "generation_deadline_at": "2026-09-20T12:05:02Z",
   "job_id": "4d4d4d4d-0000-4000-8000-000000000004",
+  "kind": "inference",
   "schema_version": 1,
   "worker_id": "worker-a"
 }

@@ -114,6 +114,15 @@ class ReservationKind(enum.StrEnum):
     journal_bytes = "journal_bytes"
 
 
+class LeaseKind(enum.StrEnum):
+    """r1 R46: which phase a lease fences. Preparation and inference are separate
+    attempts on separate counters, so a superseded preparation worker cannot pass
+    its token off as an inference lease (or the reverse)."""
+
+    preparation = "preparation"
+    inference = "inference"
+
+
 class ChunkEventType(enum.StrEnum):
     progress = "progress"
     delta = "delta"
@@ -517,20 +526,31 @@ class Admission(Record):
 # --- execution ---------------------------------------------------------------
 class Lease(Record):
     job_id: UuidStr
+    # r1 R46: which phase this token fences, and therefore which generation counter it
+    # is compared against. A job has one preparation attempt sequence and one inference
+    # attempt sequence; `generation` is the ordinal within this lease's own kind.
+    kind: LeaseKind
     generation: int = Field(ge=1)
     worker_id: str
     acquired_at: Timestamp              # database clock
     expires_at: Timestamp
     # r1 R20: derived at claim from the database clock and the job's budgets, capped
-    # by `deadline_at`. The worker enforces them: it stops generating at
-    # `generation_deadline_at` and gives up on a first token at
-    # `first_token_deadline_at` instead of timing a budget locally.
+    # by `deadline_at`. The worker enforces them: it stops working at
+    # `generation_deadline_at` - which on a **preparation** lease is the job's
+    # `preparation_deadline_at`, that phase having one deadline - and gives up on a
+    # first token at `first_token_deadline_at` instead of timing a budget locally.
     generation_deadline_at: Timestamp
-    first_token_deadline_at: Timestamp
+    first_token_deadline_at: Timestamp | None = None
 
     @model_validator(mode="after")
     def _phase_deadlines_are_ordered(self) -> Lease:
-        if self.first_token_deadline_at > self.generation_deadline_at:
+        if self.kind is LeaseKind.inference and self.first_token_deadline_at is None:
+            raise ValueError("an inference lease carries a first-token deadline")
+        if self.kind is LeaseKind.preparation and self.first_token_deadline_at is not None:
+            # There is no first token to wait for before the job has even been queued.
+            raise ValueError("a preparation lease has no first-token deadline")
+        if self.first_token_deadline_at is not None \
+                and self.first_token_deadline_at > self.generation_deadline_at:
             raise ValueError("the first-token deadline cannot outlast the generation deadline")
         return self
 
@@ -597,6 +617,26 @@ class TerminalOutcome(Record):
         if (self.settlement_state is SettlementState.held_unknown) != (self.reconcile_after is not None):
             raise ValueError("held_unknown requires reconcile_after, and nothing else may set it")
         return self
+
+
+class Work(Record):
+    """r1 R46: everything a lease holder must execute, and nothing else.
+
+    `JobStore.load_work(lease)` is the only way to get one, and it is fenced like a
+    mutation: a stale, foreign or wrong-kind lease gets a typed refusal and **no data**.
+    Before this existed a worker had to be handed the request out of band, which meant
+    nothing stopped a fenced worker from still holding everything it needed to run.
+
+    `media_refs` are the staged sources, `prepared_refs` what preparation produced (empty
+    on a preparation lease, which is what fills them). The price is the admission's
+    snapshot, never re-read at execution time, and `budgets` is the R4 snapshot.
+    """
+
+    request: NormalizedRequest
+    media_refs: tuple[MediaRef, ...] = ()
+    prepared_refs: tuple[MediaRef, ...] = ()
+    price_snapshot: PriceSnapshot
+    budgets: Budgets
 
 
 class PreparedRequest(Record):

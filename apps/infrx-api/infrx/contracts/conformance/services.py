@@ -94,8 +94,9 @@ async def media_parity__staging_is_content_addressed_and_tenant_namespaced(facto
     staged_b = await harness.port.stage(b.ORG_B, request_b)
     assert staged_a[0].storage_ref != staged_b[0].storage_ref
     assert b.ORG_A in staged_a[0].storage_ref and b.ORG_B in staged_b[0].storage_ref
-    hook(harness, "attach")("job_stagingfixture", staged_a)
-    prepared = await harness.port.prepare("job_stagingfixture", "profile-2")
+    # r1 R46: `attach` is a port operation addressed by job id, not a test hook.
+    await harness.port.attach(request_a.request_id, staged_a)
+    prepared = await harness.port.prepare(request_a.request_id, "profile-2")
     assert prepared[0].profile_version == "profile-2"
     assert prepared[0].storage_ref != staged_a[0].storage_ref
     # the profile version namespaces the cache (01: "tenant source digest + profile
@@ -367,11 +368,11 @@ async def dur_outbox__the_index_never_authorizes_execution(factory):
     JobStore.claim decides the winner."""
     harness = factory()
     jobs = hook(harness, "jobs")
-    from .jobs import _admit
+    from .jobs import _admit, _prepare
     from dataclasses import replace
     inner = replace(harness, port=jobs)
     request, admission = await _admit(inner)
-    await jobs.prepared(admission.job_handle, ())
+    await _prepare(jobs, admission.request_id)
     await harness.port.enqueue(_index_event(harness, job_id=request.request_id))
     candidate = await harness.port.claim_candidate("worker-a")
     stored, outcome = await jobs.get_owned(request.org_id, admission.job_handle)
@@ -456,7 +457,9 @@ def _lease(harness):
     """A lease as `JobStore.claim` mints one, phase instants included (r1 R20)."""
     from ..records import Lease
     now = harness.clock.now()
-    return Lease(job_id=harness.ids.uuid(), generation=1, worker_id="worker-a",
+    from ..records import LeaseKind
+    return Lease(job_id=harness.ids.uuid(), kind=LeaseKind.inference, generation=1,
+                 worker_id="worker-a",
                  acquired_at=now, expires_at=harness.clock.at(DEFAULTS.lease_ttl_s),
                  generation_deadline_at=harness.clock.at(DEFAULTS.generation_timeout_s),
                  first_token_deadline_at=harness.clock.at(DEFAULTS.ttft_timeout_s))
@@ -1324,7 +1327,7 @@ def tracesink_cases():
 # ==========================================================================
 async def _owned_request(harness):
     from dataclasses import replace
-    from .jobs import _admit
+    from .jobs import _admit, _prepare
     jobs = hook(harness, "jobs")
     request, admission = await _admit(replace(harness, port=jobs))
     return request, admission

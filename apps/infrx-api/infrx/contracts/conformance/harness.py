@@ -47,7 +47,9 @@ OPTIONAL_HOOKS: dict[str, frozenset[str]] = {
                            "entitle", "retune", "journal_bytes", "failures", "stream",
                            "unsettleable", "set_price"}),
     "streamstore": frozenset({"jobs", "journal_bytes", "failures"}),
-    "mediastore": frozenset({"put_object", "attach"}),
+    # r1 R46: `attach` is a port operation now, so the only optional hook left
+    # here is the one that stands for a client actually uploading bytes.
+    "mediastore": frozenset({"put_object"}),
     "scheduler": frozenset({"jobs"}),
     "engine": frozenset({"text"}),
     "tracesink": frozenset({"queued", "crash", "content_budget", "reap"}),

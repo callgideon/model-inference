@@ -34,7 +34,7 @@ from .records import (Admission, AuthContext, Chunk, ConsentSnapshot, Cursor, En
                       Feedback, IdempotencyRef, IndexEvent, JudgeResolution, JudgeRun, Lease,
                       MediaRef, NormalizedRequest, PreparedRequest, ReservationKind,
                       TerminalOutcome, TraceEnvelope, TraceLossReason, TraceMode,
-                      TraceOfferResult)
+                      TraceOfferResult, Work)
 
 
 @runtime_checkable
@@ -63,15 +63,45 @@ class JobStore(Protocol):
     async def get_owned(self, org_id: str, job_handle: str) -> tuple[Admission, TerminalOutcome | None]:
         """Ownership-checked lookup. Possession of a handle is never enough."""
 
-    async def prepared(self, job_handle: str, media: tuple[MediaRef, ...]) -> Admission:
+    async def claim_preparation(self, job_id: str, worker_id: str) -> Lease:
+        """r1 R46: `Lease(kind=preparation)` for a `preparing` job, fenced exactly like
+        an inference lease (own generation counter, owner, state, expiry).
+
+        At most one live preparation lease per job: a second claim while one is unexpired
+        is `not_claimable`, because two preparation workers writing prepared refs for the
+        same job is the media equivalent of two workers appending output. `recover`
+        reaps an expired one and the job stays preparable, bounded by
+        `MAX_PREPUBLICATION_RETRIES` further attempts (so three claims in total) and by
+        `preparation_deadline_at`, past which the job is `preparation_failed` (R29)."""
+
+    async def prepared(self, lease: Lease, media: tuple[MediaRef, ...]) -> Admission:
         """Store immutable prepared refs, then atomically `preparing -> queued`
-        with the inference dispatch outbox; releases preparation capacity."""
+        with the inference dispatch outbox; releases preparation capacity.
+
+        r1 R46: fenced on the **preparation lease** (`02` §3), like every other
+        execution mutation: generation, owner, state, expiry and the R29 phase
+        deadlines. A superseded preparation worker returning late mutates nothing;
+        it used to be addressed by job handle and therefore needed no token at all."""
+
+    async def load_work(self, lease: Lease) -> Work:
+        """r1 R46: the only way a lease holder reads what it must execute.
+
+        Fenced like a mutation: a stale, foreign or wrong-kind lease gets a typed
+        refusal (`stale_lease`/`not_found`/`already_terminal`) and **no data**. Nothing
+        else hands a worker the request, the media refs, the price snapshot or the
+        budgets, so losing the fence loses the work."""
 
     async def claim(self, job_id: str, worker_id: str) -> Lease:
-        """`queued -> running`, generation incremented from the database clock."""
+        """`queued -> running`, generation incremented from the database clock.
+        Returns `Lease(kind=inference)`."""
 
     async def heartbeat(self, lease: Lease) -> Lease:
-        """Renew a lease fenced on generation, owner, state and expiry."""
+        """Renew an **inference** lease fenced on generation, owner, state and expiry.
+
+        A preparation lease is refused (`invalid_request`): the preparation budget and
+        the lease TTL are both bounded and equal by default, so there is no renewal to
+        make, and a silent no-op would let a preparation worker believe it still held a
+        fence it had lost."""
 
     async def cancel(self, org_id: str, job_handle: str) -> TerminalOutcome:
         """Durable cancellation of any nonterminal state, serialized against
@@ -120,12 +150,27 @@ class StreamStore(Protocol):
 
 @runtime_checkable
 class MediaStore(Protocol):
-    """M. Immutable tenant-scoped content; callers never choose a path."""
+    """M. Immutable tenant-scoped content; callers never choose a path.
+
+    r1 R46 fixes the addressing: **internal** operations take `job_id` (the request
+    UUID), **tenant-facing** ones take the caller's org plus an opaque handle. So
+    `attach`/`prepare` here, `claim_preparation`/`claim`/`load_work` and `IndexEvent`
+    on the JobStore all say `job_id`, while `get_owned`/`cancel`/`read_owned` and
+    `resolve_owned` say `(org_id, handle)`. A handle is a customer-facing lookup key
+    that must be ownership-checked on sight; a job id is the internal identity every
+    durable row is keyed by, and no internal caller should have to resolve one to the
+    other (or be tempted to skip the ownership check when it does).
+    """
 
     async def stage(self, org_id: str, request: NormalizedRequest) -> tuple[MediaRef, ...]:
         """Durably stage the canonical payload and inline media before acceptance."""
 
-    async def prepare(self, job_handle: str, profile: str) -> tuple[MediaRef, ...]:
+    async def attach(self, job_id: str, refs: tuple[MediaRef, ...]) -> None:
+        """r1 R46: bind staged refs to an admitted job, as the job row does in
+        PostgreSQL. A real port operation rather than a test-only hook, because
+        `prepare` cannot work without it and M's adapter has to implement it."""
+
+    async def prepare(self, job_id: str, profile: str) -> tuple[MediaRef, ...]:
         """Produce immutable prepared refs for a profile version."""
 
     async def create_upload(self, org_id: str, constraints: dict[str, Any]) -> dict[str, Any]:

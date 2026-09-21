@@ -54,11 +54,14 @@ class FakeMediaStore:
         upload = self.uploads[upload_handle]
         upload.data, upload.mime = data, mime
 
-    def attach(self, job_handle: str, refs: tuple[MediaRef, ...]) -> None:
-        """Bind staged refs to an admitted job, as the job row does in PostgreSQL."""
-        self.by_job[job_handle] = refs
-
     # --- port ---------------------------------------------------------------
+    async def attach(self, job_id: str, refs: tuple[MediaRef, ...]) -> None:
+        """r1 R46: bind staged refs to an admitted job, as the job row does in
+        PostgreSQL. A port operation, not a test hook: `prepare` cannot work without
+        it, so leaving it out of the port left M free to invent its own way in."""
+        self.failures.before("attach")
+        self.by_job[job_id] = tuple(refs)
+
     async def stage(self, org_id: str, request: NormalizedRequest) -> tuple[MediaRef, ...]:
         """Durable, immutable staging before acceptance. The storage key is built from
         the tenant, the source digest and the profile version; the caller has no say
@@ -119,17 +122,18 @@ class FakeMediaStore:
         # so two orgs with identical bytes never share an object.
         return f"media/{org_id}/{profile_version}/{digest.split(':')[1][:16]}/{part}"
 
-    async def prepare(self, job_handle: str, profile: str) -> tuple[MediaRef, ...]:
+    async def prepare(self, job_id: str, profile: str) -> tuple[MediaRef, ...]:
+        """r1 R46: addressed by `job_id`, like every internal operation."""
         self.failures.before("prepare")
-        sources = self.by_job.get(job_handle)
+        sources = self.by_job.get(job_id)
         if sources is None:
-            raise errors.NotFound(f"no staged media for {job_handle}")
+            raise errors.NotFound(f"no staged media for job {job_id}")
         prepared = tuple(
             ref.model_copy(update={"profile_version": profile,
                                    "storage_ref": self._key(ref.org_id, ref.digest, profile,
                                                             "prepared")})
             for ref in sources)
-        self.by_job[job_handle] = prepared
+        self.by_job[job_id] = prepared
         return prepared
 
     async def create_upload(self, org_id: str, constraints: dict[str, object]) -> dict[str, object]:

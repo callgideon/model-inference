@@ -107,7 +107,7 @@ def mediastore_factory(limits: PilotSettings | None = None, **_: object) -> Harn
     clock, ids, failures = FakeClock(), SequentialIds(), FailurePlan()
     store = FakeMediaStore(clock, ids, limits=limits or DEFAULTS, failures=failures)
     return Harness(port=store, clock=clock, ids=ids, failures=failures,
-                   extra={"put_object": store.put_object, "attach": store.attach})
+                   extra={"put_object": store.put_object})
 
 
 def scheduler_factory(limits: PilotSettings | None = None, **_: object) -> Harness:
