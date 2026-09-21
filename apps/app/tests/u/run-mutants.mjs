@@ -28,6 +28,11 @@ const keep = args.includes("--keep");
 
 const USAGE = "app/(console)/usage/view-model.ts";
 const BILLING = "app/(console)/billing/view-model.ts";
+const BOUNDARY = "app/(console)/usage/boundary.ts";
+// The two error boundaries are `.tsx`, which `node --test` cannot load — the cases read them as
+// source, so a mutant in them is still killable (R48 keeps the logic out of them either way).
+const USAGE_ERROR = "app/(console)/usage/error.tsx";
+const BILLING_ERROR = "app/(console)/billing/error.tsx";
 
 const SUITE = ["tests/u/usage-view-model.test.ts", "tests/u/billing-view-model.test.ts"];
 
@@ -58,6 +63,7 @@ const T = {
   usageWording: "U1-T18 no usage-page string offers payment or calls promotional credit revenue",
   history: "U1-T27 a failed ledger read never makes an established organization look new",
   billingModel: "U1-T28 the billing page model states every branch, and page sizes are named here",
+  boundary: "U1-T19 the error boundaries wire up the recovery that can actually recover",
 };
 
 /** One single edit each, and one named invariant each. */
@@ -449,6 +455,91 @@ const MUTANTS = [
     find: "    here: usageHref(filters),",
     replace: "    here: firstHref,",
     cases: [T.pageHrefs],
+  },
+  // --- review round 2 --------------------------------------------------------
+  {
+    id: "U1-M47",
+    what: "the ledger kind label is read off the prototype chain (survived review round 2)",
+    file: BILLING,
+    find: "  return Object.hasOwn(KIND_LABELS, kind) ? KIND_LABELS[kind] : UNKNOWN_KIND_LABEL;",
+    replace: "  return KIND_LABELS[kind];",
+    cases: [T.ledger],
+  },
+  {
+    id: "U1-M48",
+    what: "the usage boundary goes back to `reset`, which cannot re-fetch a server throw",
+    file: USAGE_ERROR,
+    find: "export default function UsageError({ retry }: { error: Error & { digest?: string }; retry: () => void }) {",
+    replace:
+      "export default function UsageError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {",
+    cases: [T.boundary],
+  },
+  {
+    id: "U1-M49",
+    what: "the balance boundary's button calls `reset()` instead of `retry()`",
+    file: BILLING_ERROR,
+    find: "        <Button variant=\"outline\" size=\"sm\" onClick={() => retry()}>",
+    replace: "        <Button variant=\"outline\" size=\"sm\" onClick={() => reset()}>",
+    cases: [T.boundary],
+  },
+  {
+    id: "U1-M50",
+    what: "the boundary stops telling the reader that nothing was charged by the failure",
+    file: BOUNDARY,
+    find: '  usage: "Your requests and your balance are unaffected — nothing here changes accounting.",',
+    replace: '  usage: "Your requests and your balance are fine.",',
+    cases: [T.boundary],
+  },
+  {
+    id: "U1-M51",
+    what: "the cursor bound becomes exclusive, so a real maximum-length cursor is refused",
+    file: USAGE,
+    find: "  return value !== null && value.length <= MAX_CURSOR_CHARS ? value : null;",
+    replace: "  return value !== null && value.length < MAX_CURSOR_CHARS ? value : null;",
+    cases: [T.bounds],
+  },
+  {
+    id: "U1-M52",
+    what: "the usage pager offers Next on the last page",
+    file: USAGE,
+    find:
+      "        nextHref:\n          page.next_cursor === null\n            ? null\n            : usageHref(nextCursorState(filters, page.next_cursor)),",
+    replace: '        nextHref: usageHref(nextCursorState(filters, page.next_cursor ?? "")),',
+    cases: [T.pageHrefs],
+  },
+  {
+    id: "U1-M53",
+    what: "the ledger pager offers Next on the last page",
+    file: BILLING,
+    find:
+      "        nextHref:\n          value.next_cursor === null\n            ? null\n            : ledgerHref(nextCursorState(input.state, value.next_cursor)),",
+    replace: '        nextHref: ledgerHref(nextCursorState(input.state, value.next_cursor ?? "")),',
+    cases: [T.billingModel],
+  },
+  {
+    id: "U1-M54",
+    what: "being on a later page stops counting as ledger history",
+    file: BILLING,
+    find: "  return ledger.value.items.length > 0 || state.cursor !== null;",
+    replace: "  return ledger.value.items.length > 0;",
+    cases: [T.history, T.billingModel],
+  },
+  {
+    id: "U1-M55",
+    what: "clearing the key filter keeps the cursor minted for the filtered walk",
+    file: USAGE,
+    find:
+      "      filters.keyId === null ? null : usageHref(withFilter(filters, { keyId: null })),",
+    replace: "      filters.keyId === null ? null : usageHref({ ...filters, keyId: null }),",
+    cases: [T.pageHrefs],
+  },
+  {
+    id: "U1-M56",
+    what: "a row reporting only one of the two token counts shows that one as a count",
+    file: USAGE,
+    find: "    row.completion_tokens === null\n",
+    replace: "    false\n",
+    cases: [T.tokens],
   },
 ];
 

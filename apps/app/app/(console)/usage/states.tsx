@@ -92,6 +92,32 @@ function PagerLink({ href, children }: { href: string | null; children: React.Re
   );
 }
 
+/**
+ * A failure beside a control rather than in place of a panel — a broken key list still leaves the
+ * page usable. It carries the same recovery the panels do, so the reader is never told a request
+ * failed without being offered the retry that would fix it.
+ */
+export function InlineError({
+  state,
+  href,
+  children,
+}: {
+  state: ErrorState;
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <p role="status" className="mb-3 text-sm text-destructive">
+      {children} {state.message}{" "}
+      {state.recovery === "retry" ? (
+        <a className="underline underline-offset-4" href={href}>
+          Try again
+        </a>
+      ) : null}
+    </p>
+  );
+}
+
 export function EmptyPanel({ children }: { children: React.ReactNode }) {
   return (
     <Card>

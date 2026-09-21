@@ -20,6 +20,7 @@ import {
 import {
   LEDGER_PAGE_SIZE,
   PROMOTIONAL_NOTICE,
+  UNKNOWN_KIND_LABEL,
   actorLabel,
   balanceCardModel,
   balanceCardState,
@@ -221,6 +222,40 @@ test("U1-T28 the billing page model states every branch, and page sizes are name
 
   const emptyLedger: Result<Page<LedgerEntry>> = { ok: true, value: { items: [], next_cursor: null } };
   assert.equal(billingPageModel({ state, balance, ledger: emptyLedger }).ledger.kind, "empty");
+
+  // Page two and beyond: Previous exists, and the retry target carries the cursor of the page being
+  // shown rather than sending the reader back to the start.
+  assert.ok(ledger.ok && ledger.value.next_cursor !== null);
+  const second = nextCursorState(state, ledger.value.next_cursor);
+  const secondLedger = await fake.ledger(fake.sessions.owner, ledgerPageQuery(second));
+  const secondModel = billingPageModel({ state: second, balance, ledger: secondLedger });
+  assert.ok(secondModel.ledger.kind === "ready");
+  assert.equal(secondModel.ledger.value.page, 2);
+  assert.ok(secondModel.ledger.value.previousHref !== null, "page 2 can go back");
+  assert.equal(secondModel.ledger.value.firstHref, "/billing");
+  assert.ok(secondModel.here.includes("cursor="), "and the retry target keeps the cursor");
+
+  // Walk to the last page: no Next there.
+  let last = state;
+  for (let guard = 0; guard < 20; guard += 1) {
+    const page = await fake.ledger(fake.sessions.owner, ledgerPageQuery(last));
+    assert.ok(page.ok);
+    if (page.value.next_cursor === null) break;
+    last = nextCursorState(last, page.value.next_cursor);
+  }
+  const lastModel = billingPageModel({ state: last, balance, ledger: await fake.ledger(fake.sessions.owner, ledgerPageQuery(last)) });
+  assert.ok(lastModel.ledger.kind === "ready");
+  assert.equal(lastModel.ledger.value.nextHref, null, "the last ledger page offers no Next");
+
+  // A later page whose items happen to be empty is still not a new organization: the cursor says
+  // there is history behind it.
+  const onLaterPage = balanceCardState(balance, emptyLedger, { cursor: "c1", trail: [] });
+  assert.ok(onLaterPage.kind === "ready");
+  assert.notEqual(
+    onLaterPage.value.state.kind,
+    "new",
+    "being on a later page is history, whatever this page holds",
+  );
 });
 
 test("U1-T23 no customer-facing balance wording offers payment or calls the credit revenue", () => {
@@ -311,6 +346,18 @@ test("U1-T25 every ledger kind renders, and an operator's entry names the platfo
   assert.equal(debitView.reason, "—", "and it has no reason to show");
   assert.equal(debitView.credit, false);
   assert.match(debitView.amount, /^-\$/);
+
+  // The kind comes from the service, so the label table is a boundary like any other. A bare
+  // `KIND_LABELS[kind]` answered `toString` with a *function* and an unrecognised kind with
+  // `undefined`, and both reached the table as a React child.
+  for (const key of ["toString", "__proto__", "constructor", "hasOwnProperty", "valueOf"]) {
+    const label = ledgerKindLabel(key as LedgerEntry["kind"]);
+    assert.equal(typeof label, "string", `${key} must not yield a non-string label`);
+    assert.equal(label, UNKNOWN_KIND_LABEL, `${key} is not a ledger kind`);
+  }
+  assert.equal(ledgerKindLabel("refund" as LedgerEntry["kind"]), UNKNOWN_KIND_LABEL);
+  const strange = ledgerRowView({ ...grant, kind: "constructor" as LedgerEntry["kind"] });
+  assert.equal(strange.kind, UNKNOWN_KIND_LABEL, "and a row carrying one still renders");
 
   assert.equal(actorLabel(null), "—");
   assert.equal(actorLabel(PLATFORM_ACTOR), "infrx platform");

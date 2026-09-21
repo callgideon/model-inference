@@ -8,6 +8,7 @@
 // testing — a cursor bound to its filters, a hold that is not a charge, money that stays exact — are
 // about how the page uses the contract, not about invented data.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createFakeConsoleServices } from "../../lib/contracts/fake-services.ts";
@@ -59,6 +60,10 @@ import {
   withFilter,
   type UsageFilters,
 } from "../../app/(console)/usage/view-model.ts";
+import {
+  BOUNDARY_RECOVERY_PROP,
+  boundaryCopy,
+} from "../../app/(console)/usage/boundary.ts";
 
 const NOW = new Date("2026-09-20T12:00:00.000Z");
 
@@ -167,6 +172,16 @@ test("U1-T13 a prototype key is not a range, and no URL value reaches a prototyp
 test("U1-T14 a hand-written URL cannot grow the trail without bound", () => {
   const long = "c".repeat(MAX_CURSOR_CHARS + 1);
   assert.equal(parsePageCursor({ cursor: long }).cursor, null, "an over-long cursor is dropped");
+
+  // The bound is inclusive: a real cursor of exactly the maximum length still works, or the cap
+  // would quietly break the last page of a deep walk instead of a forged URL.
+  const atLimit = "c".repeat(MAX_CURSOR_CHARS);
+  assert.equal(parsePageCursor({ cursor: atLimit }).cursor, atLimit, "the limit itself is accepted");
+  assert.deepEqual(
+    parsePageCursor({ cursor: "c1", trail: [atLimit] }).trail,
+    [atLimit],
+    "and so is a trail entry of exactly the maximum length",
+  );
   assert.equal(
     parsePageCursor({ cursor: "c1", trail: [long, "c0"] }).trail.length,
     1,
@@ -470,6 +485,18 @@ test("U1-T08 unreported usage shows no token count and says so instead of estima
   assert.equal(reported.completion, "—");
   assert.match(reported.note ?? "", /not reported/i);
 
+  // One field missing is the same fact as both: a row that reports input but not output tells us
+  // nothing we can put in a cell, and half a count is worse than none.
+  for (const half of [
+    { prompt_tokens: 4096, completion_tokens: null },
+    { prompt_tokens: null, completion_tokens: 128 },
+  ]) {
+    const view = tokensView({ usage_certainty: "authoritative", ...half });
+    assert.equal(view.prompt, "—", "a half-reported row shows no counts");
+    assert.equal(view.completion, "—");
+    assert.ok(view.note !== null);
+  }
+
   // The mirror case: an authoritative row with nothing in the fields is also not a zero.
   const missing = tokensView({
     usage_certainty: "authoritative",
@@ -681,6 +708,73 @@ test("U1-T16 the page model computes every href and page number the markup rende
   assert.ok(firstModel.rows.kind === "ready");
   assert.equal(firstModel.rows.value.previousHref, null, "page 1 has no Previous");
   assert.equal(firstModel.rows.value.page, 1);
+
+  // The last page has no Next. Walk to the end and check the edge, because "there is always a Next"
+  // is the pagination bug a reader finds by clicking into an empty page.
+  let last = WIDE;
+  for (let guard = 0; guard < 50; guard += 1) {
+    const page = await fake.usage(fake.sessions.owner, usagePageQuery(last, NOW));
+    assert.ok(page.ok);
+    if (page.value.next_cursor === null) break;
+    last = nextCursorState(last, page.value.next_cursor);
+  }
+  const lastModel = usagePageModel(await pageInput(last));
+  assert.ok(lastModel.rows.kind === "ready");
+  assert.equal(lastModel.rows.value.nextHref, null, "the last page offers no Next");
+  assert.ok(lastModel.rows.value.previousHref !== null, "but it can still go back");
+  assert.ok(lastModel.rows.value.page > 1);
+  assert.ok(
+    lastModel.here.includes("cursor="),
+    "and the retry target carries the cursor of the page being shown",
+  );
+
+  // Clearing the key filter is a link the notice can point at, and it resets the walk.
+  const filtered = usagePageModel(await pageInput({ ...second, keyId: "some-key" }));
+  assert.ok(filtered.clearKeyFilterHref !== null);
+  assert.ok(
+    !filtered.clearKeyFilterHref.includes("key=") && !filtered.clearKeyFilterHref.includes("cursor="),
+    "clearing a filter drops the filter and the cursor",
+  );
+  assert.equal(usagePageModel(await pageInput(WIDE)).clearKeyFilterHref, null, "nothing to clear");
+});
+
+test("U1-T19 the error boundaries wire up the recovery that can actually recover", () => {
+  // Next 16.3.5's shipped docs: `retry()` re-fetches and re-renders the boundary's children, while
+  // `reset()` re-renders them *without* re-fetching and "in most cases, you should use retry()".
+  // Both pages are Server Components, so a caught throw happened on the server and `reset()` replays
+  // the same errored payload — a "Try again" button that can never work.
+  assert.equal(BOUNDARY_RECOVERY_PROP, "retry");
+
+  for (const file of ["usage/error.tsx", "billing/error.tsx"]) {
+    const source = readFileSync(new URL(`../../app/(console)/${file}`, import.meta.url), "utf8");
+    assert.match(source, /^"use client";/m, `${file}: an error boundary is a Client Component`);
+    assert.match(source, /\{\s*retry\s*\}/, `${file}: must destructure ${BOUNDARY_RECOVERY_PROP}`);
+    assert.match(source, /onClick=\{\(\) => retry\(\)\}/, `${file}: must call retry() on click`);
+    assert.doesNotMatch(
+      source.replace(/`reset\(\)`/g, "").replace(/^\s*\*.*$/gm, ""),
+      /reset/,
+      `${file}: reset() cannot recover a Server Component throw`,
+    );
+    // The thrown error's own text never reaches the page: it can carry internals.
+    assert.doesNotMatch(source, /\{error\.(message|stack|digest)\}/, `${file}: shows no thrown text`);
+  }
+
+  for (const scope of ["usage", "balance"] as const) {
+    const copy = boundaryCopy(scope);
+    assert.equal(copy.action, "Try again");
+    assert.ok(copy.headline.length > 0 && copy.detail.length > 0);
+    assert.match(copy.detail, /unaffected/i, "the reader is told nothing was charged by the failure");
+    assert.doesNotMatch(
+      `${copy.headline} ${copy.detail} ${copy.action}`,
+      /add credits|add card|top ?up|\bbuy\b|purchase|invoice|checkout|revenue|pay now|credit card/i,
+    );
+  }
+  assert.notEqual(boundaryCopy("usage").detail, boundaryCopy("balance").detail, "each route says what it is");
+  assert.equal(
+    boundaryCopy("__proto__" as "usage").detail.includes("undefined"),
+    false,
+    "and an unknown scope still produces a sentence",
+  );
 });
 
 test("U1-T17 a key filter naming a key of another organization is explained, not shown as silence", async () => {

@@ -550,6 +550,8 @@ export type UsagePageModel = {
   models: string[];
   /** Set when the URL filters by a key this organization does not have. */
   keyNotice: string | null;
+  /** Where "clear the key filter" goes; null when there is no key filter to clear. */
+  clearKeyFilterHref: string | null;
 };
 
 /**
@@ -599,5 +601,7 @@ export function usagePageModel(input: UsagePageInput): UsagePageModel {
     keyOptions: input.keys.ok ? input.keys.value.map((key) => ({ id: key.id, name: key.name })) : [],
     models: modelOptions(input.usage.ok ? input.usage.value.items : [], filters.model),
     keyNotice: keyFilterNotice(filters, input.keys),
+    clearKeyFilterHref:
+      filters.keyId === null ? null : usageHref(withFilter(filters, { keyId: null })),
   };
 }

@@ -128,8 +128,14 @@ const KIND_LABELS: Record<LedgerEntryKind, string> = {
   purchase: "Purchase (legacy)",
 };
 
+/** The label for a kind this table does not know: a fact to render plainly, not a blank or a crash. */
+export const UNKNOWN_KIND_LABEL = "Other";
+
 export function ledgerKindLabel(kind: LedgerEntryKind): string {
-  return KIND_LABELS[kind];
+  // `KIND_LABELS[kind]` alone answered `toString` with a *function* and an unrecognised kind with
+  // `undefined`, and both went straight into the table as a React child. The kind comes from the
+  // service, which is a boundary like any other.
+  return Object.hasOwn(KIND_LABELS, kind) ? KIND_LABELS[kind] : UNKNOWN_KIND_LABEL;
 }
 
 /**

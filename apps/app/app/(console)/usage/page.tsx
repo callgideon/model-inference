@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatTile } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,7 @@ import {
 import { PromotionalBalanceCard } from "../billing/balance-card";
 import { balanceCardState, historyProbeQuery } from "../billing/view-model";
 import { consoleContext } from "./fake-console-context";
-import { EmptyPanel, ErrorPanel, Pager } from "./states";
+import { EmptyPanel, ErrorPanel, InlineError, Pager } from "./states";
 import { UsageChart } from "./usage-chart";
 import { UsageControls } from "./usage-controls";
 import {
@@ -55,13 +56,18 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
       />
 
       {model.keys.kind === "error" ? (
-        <p role="status" className="mb-3 text-sm text-destructive">
-          The API key list could not be loaded, so the key filter is incomplete. {model.keys.message}
-        </p>
+        <InlineError state={model.keys} href={model.here}>
+          The API key list could not be loaded, so the key filter is incomplete.
+        </InlineError>
       ) : null}
       {model.keyNotice === null ? null : (
         <p role="status" className="mb-3 text-sm text-destructive">
-          {model.keyNotice}
+          {model.keyNotice}{" "}
+          {model.clearKeyFilterHref === null ? null : (
+            <Link className="underline underline-offset-4" href={model.clearKeyFilterHref}>
+              Clear it
+            </Link>
+          )}
         </p>
       )}
 
