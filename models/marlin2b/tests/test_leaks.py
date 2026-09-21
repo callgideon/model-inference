@@ -394,6 +394,41 @@ def test_the_argv_gate_ignores_the_public_key_prefix():
             os.environ.pop("MARLIN_API_KEY", None)
 
 
+def test_a_public_prefix_only_counts_with_its_separator():
+    """E1 review round 6, carried into E2: `secret_grams()` must match `fold(prefix) + "-"`.
+
+    `fold("sk-marlin-")` is `sk-marlin`, and the bare folded form prefix-matched a key
+    spelled `sk-marlin2b…`, so 'marlin2b' counted as public boilerplate and the windows
+    straddling it were dropped. That is fail-OPEN: a --label carrying 8 characters of the
+    secret body passed the gate. Measured on the old code: 5 windows starting at index 7;
+    now 11 starting at index 1.
+    """
+    loose = "sk-marlin2bZZQQWWEE"                 # the public prefix without its separator
+    grams = bench.secret_grams(loose.lower())
+    assert min(loose.lower().index(g) for g in grams) == 1, "windows before the body were lost"
+    assert len(grams) == 11, len(grams)
+    for secret in ("rlin2bzz", "marlin2b", "lin2bzzq", "n2bzzqqw"):
+        assert bench.carries_key(secret, loose), secret
+    # The same shape one prefix up: `sk-infrx` without its '-' is not a licence either.
+    assert bench.carries_key("rxsecret", "sk-infrxSECRETBODY99")
+
+    # The real key format is unaffected (the coordinator's note: unreachable with
+    # `sk-infrx-`): the full prefix already carries its separator, so those keys keep exactly
+    # the windows they had.
+    for exact in ("sk-infrx-ZZQQWWEEabc", "sk-marlin-ZZQQWWEE"):
+        body_at = exact.index("-", 3) + 1
+        first = min(exact.lower().index(g) for g in bench.secret_grams(exact.lower()))
+        assert first == body_at - (bench.KEY_MIN_SUBSTRING - bench.KEY_GRAM_FROM_BODY), exact
+    # A prefix whose separator is not already '-' is exactly why the folded form exists: the
+    # folded key reads `sk-infrx-…`, so the folded prefix plus its separator still matches.
+    assert bench.secret_grams(bench.fold("sk_infrx_SECRETBODY99")) == \
+        bench.secret_grams("sk-infrx-secretbody99")
+    # And the n3 property the fix must not undo: public boilerplate still does not refuse.
+    key = "sk-infrx-SECRETBODY0123456789"
+    for public in ("apps/infrx-api/tests", "out/infrx-run.jsonl", "infrx-api", "infrx-impl"):
+        assert not bench.carries_key(public, key), public
+
+
 def test_an_argv_value_carrying_the_key_refuses_to_run():
     """N2/B4: --label and --out become file names and summary fields, and any argv value
     can be echoed by argparse. A value carrying 8+ key characters — literally, folded to a

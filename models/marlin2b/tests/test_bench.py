@@ -5,7 +5,7 @@ fake gateway. Run with pytest or as a plain script:
     python -m pytest models/marlin2b/tests -q
     python models/marlin2b/tests/test_bench.py
 """
-import contextlib, io, json, os, sys, tempfile
+import asyncio, contextlib, io, json, os, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.dirname(HERE)]
@@ -35,6 +35,70 @@ def make_clips(n, tmp):
                       "sha256": "0" * 64, "prompt_id": f"p{i % 4:02d}", "prompt": f"prompt {i % 4}",
                       "prompt_kind": ["caption", "find", "count", "motion"][i % 4]})
     return clips
+
+
+@contextlib.contextmanager
+def virtual_time(idle_rounds=8, tick=0.001):
+    """Drive bench's drivers from a clock the test owns (E2 r1 review).
+
+    The old assertions bounded scheduling lag in WALL-CLOCK seconds (`lag < 0.1`), which is a
+    bound on how busy the host is, not on the driver: measured 0.234 s at load average 45 on
+    16 cores, and it made `make check` flaky. With `bench.CLOCK`/`bench.SLEEP` injected, "the
+    driver sent when the schedule said" becomes exact.
+
+    The clock is EVENT-DRIVEN, not additive: a sleep registers a wake-up time and blocks, and
+    the pump advances the clock to the EARLIEST pending wake-up once every runnable task has
+    gone idle. An additive clock would be wrong here - a request's 1 s Retry-After wait would
+    push the shared clock past every later arrival and manufacture the very lag these tests
+    say cannot happen (measured while writing this: 1.156 s of phantom lag).
+    """
+    state = {"now": 0.0, "waiters": [], "pump": None}
+
+    async def pump():
+        idle = 0
+        while True:
+            await asyncio.sleep(tick)
+            if not state["waiters"]:
+                idle = 0
+                continue
+            # Only move time when nothing else can make progress, so a task that is about to
+            # send is never overtaken by the clock. A request is not idle while it is still
+            # preparing its media (`send_s` is stamped after that, on purpose - it is E1's
+            # coordinated-omission measure), so the loop's own ready queue is the signal, with
+            # the tick count as a fallback if a future CPython hides it.
+            # This pump's own callback has already been popped to run us, so anything left in
+            # the queue is another task that can still make progress.
+            ready = getattr(asyncio.get_running_loop(), "_ready", None)
+            if ready:
+                idle = 0
+                continue
+            idle += 1
+            if idle < idle_rounds:
+                continue
+            idle = 0
+            earliest = min(wake for wake, _ in state["waiters"])
+            state["now"] = max(state["now"], earliest)
+            for waiter in [w for w in state["waiters"] if w[0] <= state["now"]]:
+                state["waiters"].remove(waiter)
+                waiter[1].set()
+
+    async def sleep(seconds):
+        if state["pump"] is None:
+            state["pump"] = asyncio.get_running_loop().create_task(pump())
+        wake = state["now"] + max(float(seconds), 0.0)
+        if wake <= state["now"]:
+            await asyncio.sleep(0)
+            return
+        event = asyncio.Event()
+        state["waiters"].append([wake, event])
+        await event.wait()
+
+    old_clock, old_sleep = bench.CLOCK, bench.SLEEP
+    bench.CLOCK, bench.SLEEP = (lambda: state["now"]), sleep
+    try:
+        yield state
+    finally:
+        bench.CLOCK, bench.SLEEP = old_clock, old_sleep
 
 
 def run_bench(argv, gateway, env=None):
@@ -88,20 +152,33 @@ def test_schedule_is_deterministic_and_independent_of_latency():
         with_clips(clips)
         rows, lag = {}, {}
         for tag, ttft in (("fast", 0.001), ("slow", 0.25)):
-            summary, raw, _, _ = run_bench(base_argv(tmp, requests=12, rate=8, seed=11),
-                                           FakeGateway(ttft=ttft), env={"MARLIN_API_KEY": KEY})
+            with virtual_time():
+                summary, raw, _, _ = run_bench(base_argv(tmp, requests=12, rate=8, seed=11),
+                                               FakeGateway(ttft=ttft), env={"MARLIN_API_KEY": KEY})
             rows[tag] = [(r["seq"], r["clip_id"], r["form"], r["scheduled_s"], r["cold"])
                          for r in sorted(raw, key=lambda r: r["seq"])]
             lag[tag] = summary["schedule_lag_s"]["max"]
             assert summary["accepted"] == 12
-            # open loop measured, not just planned: sends track the schedule even when the
-            # server is slow, and latency is also reported from the scheduled arrival.
-            assert lag[tag] < 0.1, f"{tag}: sends waited for completions (lag {lag[tag]}s)"
+            # Open loop MEASURED, not just planned. Bounded by ONE arrival slot, not by a
+            # wall-clock constant: `send_s` is stamped after the media is prepared (that is
+            # E1's coordinated-omission measure), so on a virtual clock a send can land in the
+            # next slot - but a driver that waited for completions would accumulate, and 12
+            # requests at 0.25 s would be seconds late, not one slot.
+            arrivals = sorted(r["scheduled_s"] for r in raw)
+            widest_slot = max(b - a for a, b in zip(arrivals, arrivals[1:]))
+            assert lag[tag] <= widest_slot + 1e-6, \
+                f"{tag}: sends waited for completions (lag {lag[tag]}s > slot {widest_slot}s)"
             assert all(r["send_s"] >= r["scheduled_s"] for r in raw)
             assert all(r["latency_from_scheduled_s"] >= r["latency_s"] for r in raw)
             assert summary["percentiles"]["latency_from_scheduled_s"]["samples"] == 12
         assert rows["fast"] == rows["slow"], "arrival schedule must not depend on response latency"
-        assert lag["slow"] < 0.25, "a 0.25 s server must not delay the next arrival"
+        # The relative invariant the E2 review asked for, SIGNED and on the test's own clock:
+        # a slower server must not make the driver later. (It is not an equality: on a virtual
+        # clock `send_s` is stamped after media preparation, so which slot a send lands in
+        # depends on the interleaving - bounded above by one arrival slot, asserted per tag.
+        # A closed-loop driver would be seconds late, not one slot.)
+        assert lag["slow"] - lag["fast"] <= 1e-6, \
+            f"a slow server delayed the arrivals ({lag['fast']} -> {lag['slow']})"
 
 
 def test_api_key_never_appears_in_any_output():
@@ -261,14 +338,19 @@ def test_retried_rejections_stay_visible_and_latency_covers_every_attempt():
         # Open loop: the Retry-After wait sits between a retry's scheduled_s and its
         # send_s, but it is not driver lag, so the summary block counts first attempts
         # only (E4 uses schedule_lag_s.max to validate an open-loop cell).
-        summary, raw, _, _ = run_bench(base_argv(tmp, requests=4, concurrency=1, retries=1,
-                                                rate=20, seed=3),
-                                       FakeGateway(statuses={0: 429}, retry_after="1", ttft=0.01),
-                                       env={"MARLIN_API_KEY": KEY})
+        with virtual_time():
+            summary, raw, _, _ = run_bench(base_argv(tmp, requests=4, concurrency=1, retries=1,
+                                                     rate=20, seed=3),
+                                           FakeGateway(statuses={0: 429}, retry_after="1",
+                                                       ttft=0.01),
+                                           env={"MARLIN_API_KEY": KEY})
         second = [r for r in raw if r["attempt"] == 1]
         assert second and second[0]["schedule_lag_s"] > 0.9, "the retry really waited"
         assert summary["schedule_lag_s"]["samples"] == 4, "one lag sample per request, not per attempt"
-        assert summary["schedule_lag_s"]["max"] < 0.1, "a retry wait must not count as schedule lag"
+        # Exact on the test's own clock: the Retry-After wait is inside the request, so it
+        # cannot appear as scheduling lag. The old `< 0.1` bound measured host load instead.
+        assert summary["schedule_lag_s"]["max"] == 0.0, \
+            "a retry wait must not count as schedule lag"
 
 
 def test_rejections_and_failures_are_counted_apart_from_accepted():

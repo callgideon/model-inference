@@ -65,6 +65,15 @@ UPLOAD_REF_SCHEME = "upload://"
 # in-process caller (the tests, any future harness) keeps its own signal disposition.
 CLI_PROCESS = False
 
+# Injected so the open-loop driver can be driven by a virtual clock. A wall-clock bound on
+# scheduling lag ("lag < 0.1 s") is a bound on how busy the HOST is, and it made `make check`
+# flaky on a loaded box (measured: 0.234 s at load average 45 on 16 cores). With these two
+# hooks a test can advance time itself, so "sends track the schedule" becomes an exact
+# statement about the driver instead of a race with whatever else is running. Production runs
+# keep the real clock and the real sleep; nothing but a test replaces them.
+CLOCK = time.perf_counter
+SLEEP = asyncio.sleep
+
 
 # ---------------------------------------------------------------- config / auth
 
@@ -93,13 +102,22 @@ def secret_grams(shape):
     purpose (`apps/infrx-api/...`), so a window lying mostly inside it said nothing about
     the key and refused roughly one key in thirty at random. A window must take at least
     KEY_GRAM_FROM_BODY of its 8 characters from the body after the prefix. Fail-closed
-    otherwise: a key with no known prefix contributes all of its windows."""
+    otherwise: a key with no known prefix contributes all of its windows.
+
+    The folded form of a prefix must keep its SEPARATOR (`fold(prefix) + "-"`). `fold()`
+    strips the trailing '-', so the bare folded form `sk-marlin` also prefix-matched a key
+    spelled `sk-marlin2b…`: 'marlin2b' was then treated as public boilerplate and the
+    windows that straddle it were dropped, i.e. a label carrying 8 characters of the secret
+    body passed the argv gate (measured: 5 windows starting at index 7 instead of 11
+    starting at index 1, so `rlin2bzz` was allowed). Fail-open, and the wrong direction.
+    Keeping the separator is what makes the folded form useful at all - it exists for a
+    prefix whose separator is not already '-' (`sk_infrx_` folds to `sk-infrx-`)."""
     n = KEY_MIN_SUBSTRING
     if len(shape) < n:
         return set()
     body_at = 0
     for prefix in KEY_PUBLIC_PREFIXES:
-        for form in (prefix, fold(prefix)):
+        for form in (prefix, fold(prefix) + "-"):
             if form and shape.startswith(form):
                 body_at = max(body_at, len(form))
     first = max(0, body_at - (n - KEY_GRAM_FROM_BODY))
@@ -484,9 +502,9 @@ async def media_ref_for(item, cfg, client, row):
         # arrival delays every other arrival and the open-loop rate is a fiction.
         return await asyncio.to_thread(data_url, path)
     if form == "upload":
-        t = time.perf_counter()
+        t = CLOCK()
         handle = await upload(client, cfg, path, row)
-        row["upload_s"] = round(time.perf_counter() - t, 4)
+        row["upload_s"] = round(CLOCK() - t, 4)
         return UPLOAD_REF_SCHEME + handle
     raise ValueError(f"unknown form {form}")
 
@@ -566,7 +584,7 @@ async def attempt(client, cfg, item, t0, attempt_no):
            "stream_complete": None, "schedule_lag_s": None,
            # request-level fields, filled by run_one() on the attempt that ends the request
            "request_send_s": None, "request_latency_s": None, "latency_from_scheduled_s": None}
-    now = lambda: round(time.perf_counter() - t0, 6)
+    now = lambda: round(CLOCK() - t0, 6)
     try:
         await _send(client, cfg, item, row, now)
     except Exception as e:                               # transport, file, upload or protocol failure
@@ -738,29 +756,29 @@ async def run_one(client, cfg, item, t0, rows):
             return row
         write_row(cfg, row)              # a retried attempt is already final as it stands
         wait = row["retry_after"] if row["retry_after"] is not None else 1.0   # numeric already
-        await asyncio.sleep(min(max(wait, 0.0), 30.0))
+        await SLEEP(min(max(wait, 0.0), 30.0))
 
 
 # ---------------------------------------------------------------- drivers
 
 
 async def run_open_loop(client, cfg, schedule, rows):
-    t0 = time.perf_counter()
+    t0 = CLOCK()
     tasks = []
     for item in schedule:
-        delay = item["arrival_s"] - (time.perf_counter() - t0)
+        delay = item["arrival_s"] - (CLOCK() - t0)
         if delay > 0:
-            await asyncio.sleep(delay)          # arrivals never wait for completions
+            await SLEEP(delay)                  # arrivals never wait for completions
         tasks.append(asyncio.create_task(run_one(client, cfg, item, t0, rows)))
     await asyncio.gather(*tasks)
-    return time.perf_counter() - t0
+    return CLOCK() - t0
 
 
 async def run_closed_loop(client, cfg, schedule, rows):
     queue = asyncio.Queue()
     for item in schedule:
         queue.put_nowait(item)
-    t0 = time.perf_counter()
+    t0 = CLOCK()
 
     async def worker():
         while True:
@@ -771,7 +789,7 @@ async def run_closed_loop(client, cfg, schedule, rows):
             await run_one(client, cfg, item, t0, rows)
 
     await asyncio.gather(*(worker() for _ in range(cfg["concurrency"])))
-    return time.perf_counter() - t0
+    return CLOCK() - t0
 
 
 # ---------------------------------------------------------------- summary
@@ -952,8 +970,8 @@ async def execute(a, state):
     async with httpx.AsyncClient(timeout=a.timeout, transport=transport) as client:
         if not a.rate and not a.corpus and not a.no_warmup:
             warm = build_schedule(1, clips, cfg["forms"], prompt=prompt, seed=a.seed, video=a.video)
-            await run_one(client, cfg, warm[0], time.perf_counter(), [])   # warm-up, not counted
-        state["t0"] = time.perf_counter()
+            await run_one(client, cfg, warm[0], CLOCK(), [])   # warm-up, not counted
+        state["t0"] = CLOCK()
         state["wall"] = await (run_open_loop(client, cfg, schedule, rows) if a.rate
                                else run_closed_loop(client, cfg, schedule, rows))
 
@@ -998,7 +1016,7 @@ def _run(argv=None):
             print("interrupted before the first request; nothing to summarise", file=sys.stderr)
             return 130
         wall = state["wall"] if state["wall"] is not None else \
-            (time.perf_counter() - state["t0"] if state["t0"] else 0.0)
+            (CLOCK() - state["t0"] if state["t0"] else 0.0)
         res = summarize(state["rows"], wall, cfg)
         res["interrupted"] = state["interrupted"]   # a partial run must never read as complete
         res["raw"] = os.path.relpath(raw, os.path.dirname(a.out) or ".")
