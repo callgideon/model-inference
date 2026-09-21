@@ -21,6 +21,7 @@ Fault modes (04-verification.md's list, plus the ones only an HTTP adapter has):
 | `midstream_stall` | one delta, then the same past the inter-event budget |
 | `missing_usage` | deltas and `[DONE]`, no usage object |
 | `malformed_usage` | a usage object with a string and a null |
+| `inconsistent_usage` | a usage object whose `total_tokens` does not add up |
 | `over_ceiling` | usage claiming more completion tokens than were allowed |
 | `engine_error_pre_headers` | HTTP 500 with an error body, before any event |
 | `engine_error_post_headers` | 200, one delta, then an SSE error object |
@@ -109,6 +110,9 @@ class FakeUpstream:
     def usage(self, produced: int) -> object:
         if self.fault == "malformed_usage":
             return {"prompt_tokens": "1200", "completion_tokens": None}
+        if self.fault == "inconsistent_usage":
+            return {"prompt_tokens": self.prompt_tokens, "completion_tokens": produced,
+                    "total_tokens": self.prompt_tokens + produced + 4}
         if self.fault == "over_ceiling":
             return {"prompt_tokens": self.prompt_tokens, "completion_tokens": 100_000,
                     "total_tokens": self.prompt_tokens + 100_000}
