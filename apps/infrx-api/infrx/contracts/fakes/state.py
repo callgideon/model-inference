@@ -522,7 +522,10 @@ class FakeJobStore:
             job.preparation_lease = Lease(
                 job_id=job_id, kind=LeaseKind.preparation,
                 generation=job.preparation_generation, worker_id=worker_id, acquired_at=now,
-                expires_at=now + timedelta(seconds=self.limits.lease_ttl_s),
+                # r1 R52: a preparation lease is short (`PREPARATION_LEASE_TTL_S`), and
+                # never outlives the phase it fences.
+                expires_at=min(now + timedelta(seconds=self.limits.preparation_lease_ttl_s),
+                               job.admission.preparation_deadline_at),
                 # The preparation phase has one deadline, and it is already persisted.
                 generation_deadline_at=job.admission.preparation_deadline_at)
             lease = job.preparation_lease
@@ -668,14 +671,22 @@ class FakeJobStore:
         and nothing else, so a worker cannot rewrite its own deadlines, generation or
         acquisition time by handing back an edited record."""
         self.failures.before("heartbeat")
-        if lease.kind is not LeaseKind.inference:
-            # r1 R46: nothing renews a preparation lease - the preparation budget and the
-            # lease TTL are bounded and equal by default, so there is no renewal to make.
-            # Saying so beats a silent no-op that leaves a fenced worker confident.
-            raise errors.InvalidRequest("only an inference lease is renewed")
         async with self._lock:
-            job = self._fence(lease)
             now = self.clock.now()
+            if lease.kind is LeaseKind.preparation:
+                # r1 R52: a preparation lease renews like any other - it is short
+                # (`PREPARATION_LEASE_TTL_S`), so a worker doing 100 s of legitimate
+                # transcoding has to say so - but **never past the phase deadline**, or a
+                # renewal would buy preparation time the job was never granted.
+                job = self._fence_preparation(lease)
+                job.preparation_lease = job.preparation_lease.model_copy(update={
+                    "expires_at": min(
+                        now + timedelta(seconds=self.limits.preparation_lease_ttl_s),
+                        job.admission.preparation_deadline_at)})
+                renewed = job.preparation_lease
+                self.failures.after_commit("heartbeat")
+                return renewed
+            job = self._fence(lease)
             job.lease = job.lease.model_copy(update={
                 "expires_at": now + timedelta(seconds=self.limits.lease_ttl_s)})
             renewed = job.lease
@@ -941,10 +952,18 @@ class FakeJobStore:
             # r1 R46: reap a lost preparation worker. The job stays `preparing` and
             # claimable - within `preparation_deadline_at` (checked above, so this branch
             # only runs while the phase is still live) and within
-            # `MAX_PREPUBLICATION_RETRIES` further claims, which `claim_preparation`
-            # enforces. Terminalizing here instead would fail a job whose only problem is
-            # that one host died with a hundred seconds of its budget left.
+            # `MAX_PREPUBLICATION_RETRIES` further claims. Terminalizing on the first loss
+            # would fail a job whose only problem is that one host died with most of its
+            # budget left.
             job.preparation_lease = None
+            if job.preparation_attempts > self.limits.max_prepublication_retries:
+                # r1 R52: but once the retries are spent, redispatching would queue work
+                # whose only possible outcome is `claim_preparation` terminalizing it - a
+                # dispatch that exists to fail. The reaper settles it here instead, so the
+                # hold and the reservations are freed now rather than when some worker
+                # happens to pick the job up.
+                return [self._terminalize(job, TerminalCause.preparation_failed, None, None,
+                                          JobState.failed)]
             self._emit(job.id, OutboxKind.prepare_dispatch, now,
                        {"request_id": job.id, "attempt": job.preparation_attempts})
             return []
@@ -977,6 +996,9 @@ class FakeJobStore:
             self._enter_queued(job, now)          # r1 R38: only the remainder is left
             event = IndexEvent(event_id=self.ids.event_id(), job_id=job.id,
                                org_id=job.request.org_id, key_id=job.request.key_id,
+                               # r1 R52: a requeue after a lost inference attempt is an
+                               # inference candidate, and says so.
+                               kind=OutboxKind.inference_dispatch,
                                execution_mode=job.request.execution_mode, available_at=now,
                                attempt=job.attempts)
             self._emit(job.id, OutboxKind.inference_dispatch, now, {"request_id": job.id,

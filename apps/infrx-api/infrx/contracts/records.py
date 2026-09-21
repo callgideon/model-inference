@@ -669,16 +669,38 @@ class EngineEvent(Record):
     usage: Usage | None = None
 
 
+DISPATCH_KINDS = (OutboxKind.prepare_dispatch, OutboxKind.inference_dispatch)
+
+
 class IndexEvent(Record):
-    """Scheduling index membership. Never authorizes execution by itself."""
+    """Scheduling index membership. Never authorizes execution by itself.
+
+    r1 R52: the event carries its **kind**, so a preparation worker can be fed from the
+    index rather than from a side channel. Without it a candidate said only "this job
+    wants something done", and Q had no way to hand it to the right pool - a preparation
+    worker would claim an inference candidate, be refused by `claim`, and the job would
+    sit there while the index looked busy.
+    """
 
     event_id: UuidStr
     job_id: UuidStr
     org_id: UuidStr
     key_id: UuidStr
+    kind: OutboxKind = OutboxKind.inference_dispatch
     execution_mode: ExecutionMode
     available_at: Timestamp
     attempt: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def _is_a_dispatch(self) -> IndexEvent:
+        if self.kind not in DISPATCH_KINDS:
+            raise ValueError(f"{self.kind} is not a dispatch kind; the index carries "
+                             f"{', '.join(k.value for k in DISPATCH_KINDS)}")
+        return self
+
+    @property
+    def is_preparation(self) -> bool:
+        return self.kind is OutboxKind.prepare_dispatch
 
 
 # --- observability -----------------------------------------------------------

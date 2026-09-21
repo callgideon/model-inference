@@ -80,6 +80,11 @@ class PilotSettings:
     ttft_timeout_s: float = 60.0
     tpot_stall_s: float = 20.0
     lease_ttl_s: float = 120.0
+    # r1 R52: preparation gets a **shorter** lease than inference. With one
+    # 120 s TTL and a 120 s preparation budget, a lost preparation worker was
+    # only reaped as the phase deadline passed, so R46's bounded retries could
+    # never actually happen on the default profile. 30 s leaves room for three.
+    preparation_lease_ttl_s: float = 30.0
     lease_heartbeat_s: float = 40.0
     max_prepublication_retries: int = 2
 

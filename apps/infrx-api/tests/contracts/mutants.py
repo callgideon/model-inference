@@ -551,6 +551,52 @@ MUTANTS: tuple[Mutant, ...] = (
           "                raise errors.IdempotencyConflict(\"same label key, different payload\")\n"
           "            return self.items[feedback_id]",
        "        existing = None", "feedback_ack__an_operator_may_label_a_calibration_set"),
+    # --- r1 R52: the preparation lease, the tenant check and the dispatch kind ---
+    _m("preparation_lease_uses_the_inference_ttl", "preparation has its own short TTL (R52)",
+       S, "                expires_at=min(now + timedelta(seconds=self.limits.preparation_lease_ttl_s),\n"
+          "                               job.admission.preparation_deadline_at),",
+       "                expires_at=min(now + timedelta(seconds=self.limits.lease_ttl_s),\n"
+          "                               job.admission.preparation_deadline_at),",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution",
+       "dur_output__a_lost_preparation_worker_is_reaped_within_bounds"),
+    _m("preparation_lease_outlives_its_phase", "a preparation lease never outlives the phase (R52)",
+       S, "                expires_at=min(now + timedelta(seconds=self.limits.preparation_lease_ttl_s),\n"
+          "                               job.admission.preparation_deadline_at),",
+       "                expires_at=now + timedelta(seconds=self.limits.preparation_lease_ttl_s),",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("preparation_heartbeat_does_not_renew", "a preparation lease renews (R52)",
+       S, "                job.preparation_lease = job.preparation_lease.model_copy(update={\n"
+          '                    "expires_at": min(\n'
+          "                        now + timedelta(seconds=self.limits.preparation_lease_ttl_s),\n"
+          "                        job.admission.preparation_deadline_at)})",
+       "                pass",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("preparation_heartbeat_buys_phase_time", "a renewal never extends the phase (R52)",
+       S, '                    "expires_at": min(\n'
+          "                        now + timedelta(seconds=self.limits.preparation_lease_ttl_s),\n"
+          "                        job.admission.preparation_deadline_at)})",
+       '                    "expires_at": now + timedelta(\n'
+          "                        seconds=self.limits.preparation_lease_ttl_s)})",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("exhausted_preparation_is_redispatched", "a spent preparation is settled, not requeued (R52)",
+       S, "            if job.preparation_attempts > self.limits.max_prepublication_retries:\n"
+          "                # r1 R52: but once the retries are spent, redispatching would queue work",
+       "            if False:\n"
+          "                # r1 R52: but once the retries are spent, redispatching would queue work",
+       "dur_output__a_lost_preparation_worker_is_reaped_within_bounds"),
+    _m("attach_ignores_the_tenant", "attached media belongs to the job's org (R52)",
+       M, "            if ref.org_id != org_id:\n"
+          '                raise errors.NotFound("media attached to a job must belong to its org")',
+       "            pass",
+       "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
+    _m("candidates_ignore_the_dispatch_kind", "a candidate carries its kind (R52)",
+       Q, "            if event.available_at <= now and kind in (None, event.kind):",
+       "            if event.available_at <= now:",
+       "dur_outbox__a_candidate_carries_its_dispatch_kind"),
+    _m("index_accepts_any_outbox_kind", "the index carries dispatch kinds only (R52)",
+       R, "        if self.kind not in DISPATCH_KINDS:",
+       "        if False:",
+       "dur_outbox__a_candidate_carries_its_dispatch_kind"),
     # --- r1 R49/R50/R54: replays, the operator marker and the projection --------
     _m("replay_returns_a_row_of_another_kind", "a replay never crosses operations (R54)",
        F, "        if entry.made_by != operation:\n"

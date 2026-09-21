@@ -142,6 +142,7 @@ def pilot_from_env(env=None):
 MUST_BE_POSITIVE = (
     "max_request_bytes", "max_media_bytes", "journal_event_max_bytes",
     "journal_job_reserve_bytes", "journal_total_bytes", "lease_ttl_s", "lease_heartbeat_s",
+    "preparation_lease_ttl_s",
     "max_active_jobs", "max_active_jobs_per_org", "max_active_jobs_per_key",
     "max_preparing_jobs", "idempotency_ttl_s", "unknown_usage_reconcile_s",
 )

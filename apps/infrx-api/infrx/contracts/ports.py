@@ -32,6 +32,7 @@ from typing import Any, AsyncIterator, Protocol, runtime_checkable
 
 from .records import (Admission, AuthContext, Chunk, ConsentSnapshot, Cursor, EngineEvent,
                       Feedback, IdempotencyRef, IndexEvent, JudgeResolution, JudgeRun, Lease,
+                      OutboxKind,
                       MediaRef, NormalizedRequest, PreparedRequest, ReservationKind,
                       TerminalOutcome, TraceEnvelope, TraceLossReason, TraceMode,
                       TraceOfferResult, Work)
@@ -173,10 +174,14 @@ class MediaStore(Protocol):
     async def stage(self, org_id: str, request: NormalizedRequest) -> tuple[MediaRef, ...]:
         """Durably stage the canonical payload and inline media before acceptance."""
 
-    async def attach(self, job_id: str, refs: tuple[MediaRef, ...]) -> None:
+    async def attach(self, job_id: str, org_id: str, refs: tuple[MediaRef, ...]) -> None:
         """r1 R46: bind staged refs to an admitted job, as the job row does in
         PostgreSQL. A real port operation rather than a test-only hook, because
-        `prepare` cannot work without it and M's adapter has to implement it."""
+        `prepare` cannot work without it and M's adapter has to implement it.
+
+        r1 R52: every ref must belong to `org_id`, the **job's** organization, or
+        `not_found`. A foreign ref used to attach and be caught two phases later by
+        `prepared`, after `prepare` had transcoded it into this tenant's prefix."""
 
     async def prepare(self, job_id: str, profile: str) -> tuple[MediaRef, ...]:
         """Produce immutable prepared refs for a profile version."""
@@ -198,8 +203,14 @@ class Scheduler(Protocol):
     async def enqueue(self, event: IndexEvent) -> bool:
         """Replay-safe: the same event id twice indexes one candidate."""
 
-    async def claim_candidate(self, worker_id: str) -> IndexEvent | None:
-        """A candidate to try; the winner is decided by `JobStore.claim`."""
+    async def claim_candidate(self, worker_id: str, *,
+                              kind: OutboxKind | None = None) -> IndexEvent | None:
+        """A candidate to try; the winner is decided by `JobStore.claim`.
+
+        r1 R52: `kind` selects `prepare_dispatch` or `inference_dispatch`, so a
+        preparation worker can be fed from the index rather than from a side channel.
+        `None` means "anything". A candidate of the wrong kind is not a refusal a pool
+        should have to discover through `claim`."""
 
     async def acknowledge(self, event: IndexEvent) -> None: ...
 

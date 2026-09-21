@@ -9,7 +9,8 @@ from decimal import Decimal
 from .. import errors
 from ..limits import DEFAULTS
 from ..limits import MAX_FEEDBACK_TEXT_CHARS, MAX_RUBRIC_VERSION
-from ..records import (AuthorRole, CalibrationLabel, ChunkEventType, FeedbackChannel, FeedbackName,
+from ..records import (DISPATCH_KINDS, AuthorRole, CalibrationLabel, ChunkEventType,
+                       FeedbackChannel, FeedbackName, OutboxKind,
                        JudgeResolution, JudgeRunState, MediaKind, Role, TraceLossReason,
                        TraceMode, TraceOfferResult)
 from ..wire import PLATFORM_ACTOR, FeedbackList
@@ -95,7 +96,16 @@ async def media_parity__staging_is_content_addressed_and_tenant_namespaced(facto
     assert staged_a[0].storage_ref != staged_b[0].storage_ref
     assert b.ORG_A in staged_a[0].storage_ref and b.ORG_B in staged_b[0].storage_ref
     # r1 R46: `attach` is a port operation addressed by job id, not a test hook.
-    await harness.port.attach(request_a.request_id, staged_a)
+    # r1 R52: and it checks the tenant. ORG_B's refs used to attach to an ORG_A job and
+    # were only caught two phases later by `prepared`, after `prepare` had transcoded them
+    # into ORG_A's prefix.
+    try:
+        await harness.port.attach(request_a.request_id, b.ORG_A, staged_b)
+    except errors.NotFound:
+        pass
+    else:
+        raise AssertionError("another org's media attached to this org's job")
+    await harness.port.attach(request_a.request_id, b.ORG_A, staged_a)
     prepared = await harness.port.prepare(request_a.request_id, "profile-2")
     assert prepared[0].profile_version == "profile-2"
     assert prepared[0].storage_ref != staged_a[0].storage_ref
@@ -321,10 +331,53 @@ def mediastore_cases():
 # ==========================================================================
 # Scheduler
 # ==========================================================================
-def _index_event(harness, *, job_id=None, attempt=0):
+async def dur_outbox__a_candidate_carries_its_dispatch_kind(factory):
+    """DUR-OUTBOX / r1 R52: the index says *what* a job wants done, so a preparation
+    worker can be fed from it.
+
+    Before this a candidate said only "this job wants something done": a preparation pool
+    would claim an inference candidate, be refused by `JobStore.claim`, and the job would
+    sit there while the index looked busy - and the preparation pool had to be fed from
+    somewhere else entirely, which is a second dispatch path nobody was indexing.
+    """
+    harness = factory()
+    prepare = _index_event(harness, kind=OutboxKind.prepare_dispatch)
+    infer = _index_event(harness, kind=OutboxKind.inference_dispatch)
+    assert prepare.is_preparation and not infer.is_preparation
+    assert await harness.port.enqueue(prepare) and await harness.port.enqueue(infer)
+
+    # A preparation pool is handed the preparation candidate and nothing else.
+    claimed = await harness.port.claim_candidate("prep-a", kind=OutboxKind.prepare_dispatch)
+    assert claimed is not None and claimed.event_id == prepare.event_id, \
+        "a preparation worker was handed an inference candidate"
+    assert await harness.port.claim_candidate("prep-b",
+                                              kind=OutboxKind.prepare_dispatch) is None, \
+        "there was only one preparation candidate"
+    # while an inference pool still gets its own, and an unfiltered worker takes anything.
+    worker = await harness.port.claim_candidate("worker-a", kind=OutboxKind.inference_dispatch)
+    assert worker is not None and worker.event_id == infer.event_id
+    await harness.port.acknowledge(worker)
+    again = _index_event(harness, kind=OutboxKind.inference_dispatch)
+    assert await harness.port.enqueue(again)
+    assert (await harness.port.claim_candidate("any")).event_id == again.event_id, \
+        "an unfiltered claim must still take whatever is next"
+    # and the index only ever carries dispatch kinds
+    for kind in OutboxKind:
+        if kind in DISPATCH_KINDS:
+            continue
+        try:
+            _index_event(harness, kind=kind)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"{kind} was accepted as an index event kind")
+
+
+def _index_event(harness, *, job_id=None, attempt=0, kind=OutboxKind.inference_dispatch):
     from ..records import ExecutionMode, IndexEvent
     return IndexEvent(event_id=harness.ids.event_id(), job_id=job_id or harness.ids.uuid(),
-                      org_id=b.ORG_A, key_id=b.KEY_A, execution_mode=ExecutionMode.async_,
+                      org_id=b.ORG_A, key_id=b.KEY_A, kind=kind,
+                      execution_mode=ExecutionMode.async_,
                       available_at=harness.clock.now(), attempt=attempt)
 
 
@@ -435,7 +488,8 @@ async def dur_outbox__rebuild_restores_every_queued_job_exactly_once(factory):
 
 
 def scheduler_cases():
-    return [dur_outbox__enqueue_is_replay_safe,
+    return [dur_outbox__a_candidate_carries_its_dispatch_kind,
+            dur_outbox__enqueue_is_replay_safe,
             dur_outbox__a_claimed_candidate_is_not_re_indexed,
             dur_outbox__the_index_never_authorizes_execution,
             dur_outbox__acknowledged_candidates_do_not_come_back,

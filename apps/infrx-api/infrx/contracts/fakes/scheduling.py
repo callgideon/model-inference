@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from ..limits import DEFAULTS, PilotSettings
-from ..records import IndexEvent
+from ..records import IndexEvent, OutboxKind
 from .support import FailurePlan, FakeClock, failure_hooks
 
 
@@ -37,9 +37,17 @@ class FakeScheduler:
         self.pending[event.event_id] = event
         return True
 
-    async def claim_candidate(self, worker_id: str) -> IndexEvent | None:
+    async def claim_candidate(self, worker_id: str, *,
+                              kind: OutboxKind | None = None) -> IndexEvent | None:
         """A hint, not an authorization. Visibility times out so a lost worker's
-        candidate returns to the index without touching PostgreSQL."""
+        candidate returns to the index without touching PostgreSQL.
+
+        r1 R52: `kind` selects a dispatch kind, so a **preparation** worker can be fed
+        from the index instead of from a side channel. Without it a candidate said only
+        "this job wants something done": a preparation pool would claim an inference
+        candidate, be refused by `claim`, and the job would sit there while the index
+        looked busy. `None` means "anything", which is what a single-pool worker asks for.
+        """
         self.failures.before("claim_candidate")
         now = self.clock.now()
         for event_id, (event, _owner, claimed_at) in list(self.inflight.items()):
@@ -48,7 +56,7 @@ class FakeScheduler:
                 self.pending[event_id] = event
         for event_id, event in sorted(self.pending.items(),
                                       key=lambda item: (item[1].available_at, item[0])):
-            if event.available_at <= now:
+            if event.available_at <= now and kind in (None, event.kind):
                 del self.pending[event_id]
                 self.inflight[event_id] = (event, worker_id, now)
                 return event

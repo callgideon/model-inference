@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from datetime import timedelta
 from decimal import Decimal
 
 from .. import errors, money
@@ -660,6 +661,25 @@ async def dur_fence__preparation_is_claimed_and_fenced_like_execution(factory):
     assert lease.acquired_at == harness.clock.now()      # database time
     assert lease.generation_deadline_at == admission.preparation_deadline_at
     assert lease.first_token_deadline_at is None, "a preparation lease has no first token"
+    # r1 R52: a preparation lease is *short* - shorter than an inference one - so a lost
+    # preparation host is reaped while the phase budget still has room for the retries R46
+    # allows. With one 120 s TTL against a 120 s budget there was never room for any.
+    assert lease.expires_at == harness.clock.at(DEFAULTS.preparation_lease_ttl_s)
+    assert DEFAULTS.preparation_lease_ttl_s < DEFAULTS.lease_ttl_s
+    assert lease.expires_at <= lease.generation_deadline_at, \
+        "a preparation lease may not outlive the phase it fences"
+    # And when the phase is *shorter* than the lease TTL, the clamp is what enforces that -
+    # the only configuration where it is observable, and the one a tight media budget
+    # produces. An unclamped lease would outlive the phase it fences, so the expiry
+    # refusal would stop firing and the phase deadline would be the only thing left.
+    short_limits = DEFAULTS.replace(preparation_timeout_s=10.0)
+    short = factory(limits=short_limits)
+    short_request, short_admission = await _admit(
+        short, key="prep-short", deadline_s=b.default_deadline_s(limits=short_limits))
+    short_lease = await short.port.claim_preparation(short_request.request_id, "prep-a")
+    assert DEFAULTS.preparation_lease_ttl_s > 10.0, "the case needs the phase to be shorter"
+    assert short_lease.expires_at == short_admission.preparation_deadline_at, \
+        "a preparation lease was granted past the phase deadline"
     # one live preparation at a time: two workers writing prepared refs for one job is
     # the media equivalent of two workers appending output
     try:
@@ -668,9 +688,41 @@ async def dur_fence__preparation_is_claimed_and_fenced_like_execution(factory):
         pass
     else:
         raise AssertionError("a job was prepared by two workers at once")
-    # nothing renews a preparation lease, and it cannot stand in for an inference one
-    for call, expected in ((harness.port.heartbeat(lease), errors.InvalidRequest),
-                           (harness.port.complete(lease, b.outcome(request.request_id, harness)),
+    # r1 R52: a preparation lease renews like any other - a worker doing 100 s of
+    # legitimate transcoding has to say so - but **never past the phase deadline**, or a
+    # renewal would buy preparation time the job was never granted.
+    harness.clock.advance(DEFAULTS.preparation_lease_ttl_s / 2)
+    renewed = await harness.port.heartbeat(lease)
+    assert renewed.kind is LeaseKind.preparation and renewed.generation == lease.generation
+    assert renewed.expires_at > lease.expires_at, "a preparation heartbeat renews nothing"
+    assert renewed.expires_at <= renewed.generation_deadline_at
+    lease = renewed
+    # Right up against the phase deadline the renewal is clamped, not extended. On its own
+    # harness, because this one has to move the clock most of the way through the phase and
+    # the fencing checks below need a lease that is still live.
+    # A worker doing a long, legitimate transcode heartbeats its way across the phase -
+    # which is the whole reason the lease may be shorter than the work - and the renewal
+    # right at the end is clamped to the phase deadline rather than extending past it.
+    clamping = factory()
+    clamp_request, clamp_admission = await _admit(clamping, key="prep-clamp")
+    clamp_lease = await clamping.port.claim_preparation(clamp_request.request_id, "prep-a")
+    step = DEFAULTS.preparation_lease_ttl_s * 0.75
+    while clamping.clock.now() + timedelta(seconds=step) < clamp_admission.preparation_deadline_at:
+        clamping.clock.advance(step)
+        beat = await clamping.port.heartbeat(clamp_lease)
+        # Strictly later until the clamp bites, then equal to the phase deadline: a
+        # renewal extends the lease, never the phase.
+        if clamp_lease.expires_at < clamp_admission.preparation_deadline_at:
+            assert beat.expires_at > clamp_lease.expires_at, "a heartbeat did not renew"
+        assert beat.expires_at <= clamp_admission.preparation_deadline_at
+        clamp_lease = beat
+    assert clamp_lease.expires_at == clamp_admission.preparation_deadline_at, \
+        "a preparation heartbeat bought time past the phase deadline"
+    assert clamping.clock.now() > clamp_request.created_at + timedelta(
+        seconds=DEFAULTS.preparation_lease_ttl_s), \
+        "the loop must outlast one lease, or nothing was renewed across it"
+    # and it cannot stand in for an inference lease
+    for call, expected in ((harness.port.complete(lease, b.outcome(request.request_id, harness)),
                             errors.StaleLease),
                            (harness.port.load_work(lease.model_copy(
                                update={"kind": LeaseKind.inference,
@@ -721,10 +773,10 @@ async def dur_fence__preparation_is_claimed_and_fenced_like_execution(factory):
     # An expired preparation lease is stale before anything reaps it, and before the
     # preparation deadline it would be terminalized on: a short lease TTL separates the
     # two, so this is the expiry check and not R29's phase deadline.
-    tight = factory(limits=DEFAULTS.replace(lease_ttl_s=10.0))
+    tight = factory()
     expiring_request, expiring_admission = await _admit(tight, key="prep-expiry")
     expiring = await tight.port.claim_preparation(expiring_request.request_id, "prep-a")
-    tight.clock.advance(tight_ttl := 11.0)
+    tight.clock.advance(tight_ttl := DEFAULTS.preparation_lease_ttl_s + 1)
     assert tight_ttl < DEFAULTS.preparation_timeout_s, "the phase deadline would fire first"
     try:
         await tight.port.prepared(expiring, ())
@@ -789,20 +841,29 @@ async def dur_output__a_lost_preparation_worker_is_reaped_within_bounds(factory)
     stays preparable - but not for ever.
 
     `recover` releases an expired preparation lease and leaves the job `preparing`, so a
-    worker lost with a hundred seconds of budget left costs a retry rather than the
-    request. The bound is the same one the prepublication inference path uses,
+    worker lost with most of its budget left costs a retry rather than the request. The
+    bound is the same one the prepublication inference path uses,
     `MAX_PREPUBLICATION_RETRIES` further claims (three in total), and
     `preparation_deadline_at` bounds it in wall-clock terms whatever the count says.
+
+    **On default limits** (r1 R52). This used to widen `preparation_timeout_s` to 600 s and
+    shrink `lease_ttl_s` to 10 s, which made the three claims reachable in the case and
+    nowhere else: with one 120 s lease TTL against a 120 s preparation budget the first
+    reap arrived exactly as the phase expired, so a real deployment got no retries at all
+    and the case was describing a profile nobody runs. `PREPARATION_LEASE_TTL_S` = 30 is
+    what makes the bound real, and this now proves it against the shipped numbers.
     """
-    limits = DEFAULTS.replace(lease_ttl_s=10.0, preparation_timeout_s=600.0,
-                              max_prepublication_retries=2)
-    harness = factory(limits=limits)
-    request, admission = await _admit(harness, deadline_s=b.default_deadline_s(limits=limits))
+    limits = DEFAULTS
+    harness = factory()
+    request, admission = await _admit(harness)
+    assert limits.preparation_lease_ttl_s * (limits.max_prepublication_retries + 1) \
+        <= limits.preparation_timeout_s, \
+        "the default profile must leave room for every retry R46 allows"
     outbox = harness.extra["outbox"]
     first = await harness.port.claim_preparation(request.request_id, "prep-a")
     dispatches = len([e for e in outbox(request.request_id)
                       if e.kind is OutboxKind.prepare_dispatch])
-    harness.clock.advance(limits.lease_ttl_s + 1)
+    harness.clock.advance(limits.preparation_lease_ttl_s + 1)
     await harness.port.recover()
     stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
     assert stored.state is JobState.preparing and outcome is None, \
@@ -821,12 +882,25 @@ async def dur_output__a_lost_preparation_worker_is_reaped_within_bounds(factory)
     else:
         raise AssertionError("the reaped worker came back and queued the job")
     # the third claim is the last one: `max_prepublication_retries` further attempts
-    harness.clock.advance(limits.lease_ttl_s + 1)
+    harness.clock.advance(limits.preparation_lease_ttl_s + 1)
     await harness.port.recover()
     third = await harness.port.claim_preparation(request.request_id, "prep-c")
     assert third.generation == 3
-    harness.clock.advance(limits.lease_ttl_s + 1)
-    await harness.port.recover()
+    assert third.acquired_at < admission.preparation_deadline_at, \
+        "three claims must fit inside the default preparation budget"
+    # r1 R52: after the last permitted loss the reaper settles the job itself. Emitting
+    # another `prepare_dispatch` would queue work whose only possible outcome is
+    # `claim_preparation` terminalizing it - a dispatch that exists to fail - and the hold
+    # would stay reserved until some worker happened to pick it up.
+    before_last = len([e for e in outbox(request.request_id)
+                       if e.kind is OutboxKind.prepare_dispatch])
+    harness.clock.advance(limits.preparation_lease_ttl_s + 1)
+    produced = await harness.port.recover()
+    assert any(getattr(item, "cause", None) is TerminalCause.preparation_failed
+               for item in produced), "the reaper did not settle the exhausted preparation"
+    assert len([e for e in outbox(request.request_id)
+                if e.kind is OutboxKind.prepare_dispatch]) == before_last, \
+        "the reaper redispatched work that could only terminalize"
     try:
         await harness.port.claim_preparation(request.request_id, "prep-d")
     except (errors.NotClaimable, errors.AlreadyTerminal):
@@ -839,8 +913,7 @@ async def dur_output__a_lost_preparation_worker_is_reaped_within_bounds(factory)
         "an exhausted preparation left the hold behind"
     # and the wall-clock bound holds independently: past the preparation instant the job
     # is `preparation_failed` whatever the attempt count
-    fresh_request, fresh = await _admit(harness, key="prep-deadline",
-                                       deadline_s=b.default_deadline_s(limits=limits))
+    fresh_request, fresh = await _admit(harness, key="prep-deadline")
     await harness.port.claim_preparation(fresh_request.request_id, "prep-a")
     harness.clock.advance(limits.preparation_timeout_s + 1)
     await harness.port.recover()
@@ -1177,22 +1250,12 @@ async def dur_output__a_late_preparation_worker_finds_a_terminal_job(factory):
     # A long lease TTL separates the two refusals, so this is the phase deadline binding
     # `prepared` itself rather than the lease simply having expired - which is the case
     # where the store must terminalize in that same call.
-    live_limits = limits.replace(lease_ttl_s=300.0)
-    live = factory(limits=live_limits)
-    holder, held = await _admit(live, key="live-lease",
-                                deadline_s=b.default_deadline_s(ExecutionMode.stream, live_limits))
-    lease = await live.port.claim_preparation(holder.request_id, "prep-a")
-    live.clock.advance(31)
-    assert live.clock.now() < lease.expires_at, "the lease must still be live"
-    try:
-        await live.port.prepared(lease, ())
-    except errors.AlreadyTerminal:
-        pass
-    else:
-        raise AssertionError("a live preparation lease past the phase deadline queued the job")
-    _held, overdue = await live.port.get_owned(holder.org_id, held.job_handle)
-    assert overdue is not None and overdue.cause is TerminalCause.preparation_failed
-    assert live.extra["balance"](holder.org_id)["reserved"] == 0
+    # r1 R52 makes the third variant - a worker holding a **live** lease past the phase
+    # deadline - unreachable by construction: `claim_preparation` and `heartbeat` both clamp
+    # `expires_at` to `preparation_deadline_at`, so the lease can never outlive the phase and
+    # the lease-expiry refusal always fires first. `_fence_preparation` still enforces the
+    # phase deadline, as defence for an adapter that forgets to clamp, and the clamp itself
+    # is what `dur_fence__preparation_is_claimed_and_fenced_like_execution` pins.
 
 
 async def dur_output__phase_deadlines_are_persisted_at_each_transition(factory):

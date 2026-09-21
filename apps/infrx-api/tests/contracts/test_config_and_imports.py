@@ -35,6 +35,9 @@ EXPECTED = {
     "QUEUE_WAIT_INTERACTIVE_S": 10.0, "QUEUE_WAIT_ASYNC_S": 600.0,
     "GENERATION_TIMEOUT_S": 300.0, "TTFT_TIMEOUT_S": 60.0, "TPOT_STALL_S": 20.0,
     "LEASE_TTL_S": 120.0, "LEASE_HEARTBEAT_S": 40.0, "MAX_PREPUBLICATION_RETRIES": 2,
+    # r1 R52: preparation leases are shorter than inference ones, so a lost
+    # preparation worker is reaped while its phase budget still has room in it.
+    "PREPARATION_LEASE_TTL_S": 30.0,
     "SSE_KEEPALIVE_S": 10.0, "STREAM_BATCH_MS": 50,
     "JOURNAL_EVENT_MAX_BYTES": 1048576, "JOURNAL_JOB_RESERVE_BYTES": 16777216,
     "JOURNAL_TOTAL_BYTES": 1073741824, "JOURNAL_CHUNK_TTL_S": 3600.0,
