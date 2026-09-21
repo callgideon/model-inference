@@ -775,9 +775,14 @@ class FakeJobStore:
                     # One job that cannot be settled right now - no journal capacity for
                     # its terminal event, say - must not stop the sweep: every other
                     # overdue job still needs reaping, and the reaper is the only thing
-                    # that releases their holds. It is reported, not swallowed.
+                    # that releases their holds.
+                    #
+                    # It is *reported*, not returned: `recover` answers with records
+                    # (`TerminalOutcome`/`IndexEvent`), so an exception object in that
+                    # tuple would break the annotation and hand a caller something it
+                    # cannot project. The backlog is visible through the store's own
+                    # `unsettleable` view, which is what a real store alerts on (02).
                     self.unsettleable[job.id] = refused.code
-                    produced.append(refused)
                     continue
                 self.unsettleable.pop(job.id, None)
             produced.extend(self._release_aged_unknown_holds(now))

@@ -67,6 +67,12 @@ class Harness:
     **skipped, naming the hook**, and never counted as a pass (r1 R32), so an adapter
     can adopt the suite in steps without its evidence claiming more than it ran.
 
+    Hook signatures a case relies on: `reap(grace_s: float = 60.0) -> int` is called both
+    as `reap()` and as `reap(-100.0)`, so it must accept an optional grace period and
+    clamp a negative one; `journal_bytes() -> int`; `balance(org_id) -> dict` with
+    `ledger`/`reserved`/`available`; `retune(**limit_changes)`; `unsettleable() -> dict`
+    of job id to error code; `content_budget() -> int`; `queued() -> list`.
+
     The streamstore, scheduler and feedback factories also publish `extra["jobs"]`,
     the JobStore a case needs to admit a job first. The cases only ever call *port*
     operations on it, so a real adapter can pass its own JobStore there; nothing in

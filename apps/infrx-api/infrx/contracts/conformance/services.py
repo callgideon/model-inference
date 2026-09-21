@@ -568,11 +568,21 @@ def engine_cases():
 async def trace_bounds__an_accepted_offer_is_in_memory_only(factory):
     """TRACE-BOUNDS: offer reports in-memory acceptance and never promises fsync."""
     harness = factory()
-    result = await harness.port.offer(b.trace(harness.ids.uuid(), harness=harness))
+    result = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0,
+                                              metadata_bytes=64, harness=harness))
     assert result is TraceOfferResult.accepted_in_memory
     stats = await harness.port.stats()
     assert stats["accepted"] == 1 and stats["in_memory"] == 1
     assert stats["appended"] == 0 and stats["fsynced"] == 0
+    # r1 R27: `offer` is metadata-only. Content is charged as it accumulates, through
+    # `open`/`add`, so an envelope arriving here with content was never charged and is
+    # dropped rather than queued as a capture nobody accounted for.
+    smuggled = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=4_096,
+                                                metadata_bytes=16, harness=harness))
+    assert smuggled is TraceOfferResult.dropped
+    stats = await harness.port.stats()
+    assert stats["in_memory"] == 1 and stats["in_memory_content_bytes"] == 0
+    assert stats["loss_reasons"]["malformed"] == 1
 
 
 async def trace_bounds__a_content_budget_breach_discards_the_whole_content(factory):
@@ -585,13 +595,18 @@ async def trace_bounds__a_content_budget_breach_discards_the_whole_content(facto
     budget = hook(harness, "content_budget")()              # 3,072 bytes
     for _ in range(3):
         # 1,024 each: three fit exactly, and each one alone is far inside the budget
-        assert await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=1024,
-                                                metadata_bytes=16, harness=harness)) \
+        request_id = harness.ids.uuid()
+        capture = harness.port.open(request_id, b.ORG_A, TraceMode.full, harness.clock.at(600))
+        assert capture.add("c" * 1024) is True
+        assert await capture.finish(b.trace(request_id, content_bytes=1024, metadata_bytes=16,
+                                           harness=harness)) \
             is TraceOfferResult.accepted_in_memory
     assert (await harness.port.stats())["in_memory_content_bytes"] == budget
-    over = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=1024,
-                                            metadata_bytes=16, harness=harness))
-    assert over is TraceOfferResult.accepted_in_memory      # metadata survived
+    over_id = harness.ids.uuid()
+    over = harness.port.open(over_id, b.ORG_A, TraceMode.full, harness.clock.at(600))
+    assert over.add("c" * 1024) is False, "the running total was not consulted"
+    assert await over.finish(b.trace(over_id, content_bytes=1024, metadata_bytes=16,
+                                     harness=harness)) is TraceOfferResult.accepted_in_memory
     kept = hook(harness, "queued")()[-1]
     assert kept.content_bytes == 0 and kept.content_ref is None
     assert kept.content_complete is False
@@ -599,10 +614,11 @@ async def trace_bounds__a_content_budget_breach_discards_the_whole_content(facto
     stats = await harness.port.stats()
     assert stats["loss_reasons"]["memory_budget"] == 1
     assert stats["in_memory_content_bytes"] == budget       # never over, never double
-    # and one oversize envelope is discarded the same way
-    huge = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=99_999,
-                                            metadata_bytes=16, harness=harness))
-    assert huge is TraceOfferResult.accepted_in_memory
+    huge_id = harness.ids.uuid()
+    huge = harness.port.open(huge_id, b.ORG_A, TraceMode.full, harness.clock.at(600))
+    assert huge.add("h" * 99_999) is False
+    assert await huge.finish(b.trace(huge_id, content_bytes=99_999, metadata_bytes=16,
+                                     harness=harness)) is TraceOfferResult.accepted_in_memory
     assert hook(harness, "queued")()[-1].content_bytes == 0
     assert (await harness.port.stats())["in_memory_content_bytes"] == budget
 
@@ -626,10 +642,10 @@ async def trace_bounds__a_full_queue_drops_and_inference_continues(factory):
     """TRACE-BOUNDS: the queued-record ceiling drops rather than blocking."""
     harness = factory(limits=DEFAULTS.replace(trace_queue_max=2))
     for _ in range(2):
-        assert await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=8,
+        assert await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0,
                                                 metadata_bytes=8, harness=harness)) \
             is TraceOfferResult.accepted_in_memory
-    assert await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=8,
+    assert await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0,
                                             metadata_bytes=8, harness=harness)) \
         is TraceOfferResult.dropped
     stats = await harness.port.stats()
@@ -640,11 +656,11 @@ async def trace_bounds__a_full_queue_drops_and_inference_continues(factory):
 async def trace_bounds__in_memory_appended_and_fsynced_are_separate_states(factory):
     """TRACE-RECOVER depends on this: durability begins only after fsync."""
     harness = factory()
-    await harness.port.offer(b.trace(harness.ids.uuid(), harness=harness))
+    await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0, harness=harness))
     stats = await harness.port.flush(harness.clock.now())
     assert stats["in_memory"] == 0 and stats["appended"] == 1 and stats["fsynced"] == 0
     harness.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
-    await harness.port.offer(b.trace(harness.ids.uuid(), harness=harness))
+    await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0, harness=harness))
     stats = await harness.port.flush(harness.clock.now())
     assert stats["appended"] == 2 and stats["fsynced"] == 2
 
@@ -692,6 +708,111 @@ async def trace_bounds__off_mode_produces_no_trace_at_all(factory):
         with capture:
             pass
         assert (await harness.port.stats())["in_memory"] == expected_rows
+
+
+async def trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope(factory):
+    """TRACE-BOUNDS / r1 R37+R12 + 01: what a no-op capture stores is decided by the mode
+    it was **opened** with, never by the envelope it is handed.
+
+    Trusting the envelope makes the trace mode a client-supplied field: an `off` request
+    would get a row, a `minimal` one would get content, and a `full` capture that never
+    accumulated anything would report complete content it never charged. Every refusal is
+    dropped and counted; a loss is never silent (02).
+    """
+    deadline = None                                  # set per phase below
+
+    # (a) a `full` capture opened without a deadline can never be reaped, so it is a
+    # no-op - and it finishes as honest metadata with exactly one counted loss, never
+    # `loss_reason: none`
+    harness = factory()
+    request_id = harness.ids.uuid()
+    capture = harness.port.open(request_id, b.ORG_A, TraceMode.full, deadline)
+    assert capture.add("x" * 5_000) is False
+    result = await capture.finish(b.trace(request_id, content_bytes=0, metadata_bytes=32,
+                                          harness=harness))
+    assert result is TraceOfferResult.accepted_in_memory
+    stats = await harness.port.stats()
+    assert stats["in_memory"] == 1 and stats["in_memory_content_bytes"] == 0
+    queued = hook(harness, "queued")()[-1]
+    assert queued.loss_reason is not TraceLossReason.none, "a discarded capture reported no loss"
+    assert sum(stats["loss_reasons"].values()) == 1, stats["loss_reasons"]
+    # ... and a content-carrying envelope from the same capture is stripped, not stored
+    harness = factory()
+    request_id = harness.ids.uuid()
+    capture = harness.port.open(request_id, b.ORG_A, TraceMode.full, None)
+    assert capture.add("x" * 2_000) is False
+    await capture.finish(b.trace(request_id, content_bytes=2_000, metadata_bytes=32,
+                                 harness=harness))
+    queued = hook(harness, "queued")()[-1]
+    assert queued.content_bytes == 0 and queued.content_complete is False
+    assert queued.content_ref is None
+    assert queued.loss_reason is not TraceLossReason.none
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 0
+
+    # (b) a `minimal` capture given a `full` envelope with content: refused, not queued
+    for opened, envelope_mode, content in ((TraceMode.minimal, TraceMode.full, 2_000),
+                                           (TraceMode.minimal, TraceMode.full, 0),
+                                           (TraceMode.off, TraceMode.minimal, 0),
+                                           (TraceMode.off, TraceMode.full, 1_000),
+                                           (TraceMode.minimal, TraceMode.off, 0)):
+        harness = factory()
+        request_id = harness.ids.uuid()
+        capture = harness.port.open(request_id, b.ORG_A, opened, harness.clock.at(600))
+        outcome = await capture.finish(b.trace(request_id, mode=envelope_mode,
+                                               content_bytes=content, metadata_bytes=32,
+                                               harness=harness))
+        stats = await harness.port.stats()
+        assert outcome is TraceOfferResult.dropped, (opened, envelope_mode, content)
+        assert stats["in_memory"] == 0, f"{opened} capture queued a {envelope_mode} envelope"
+        assert stats["in_memory_content_bytes"] == 0
+        assert stats["loss_reasons"]["malformed"] == 1, stats["loss_reasons"]
+
+    # (b2) a *full* capture that really accumulated cannot claim more than it charged:
+    # those bytes never went through the budget, so the numbers must agree or `add` is
+    # decoration and the accounting R27 rests on is fiction
+    harness = factory()
+    request_id = harness.ids.uuid()
+    capture = harness.port.open(request_id, b.ORG_A, TraceMode.full, harness.clock.at(600))
+    assert capture.add("y" * 1_000) is True
+    inflated = await capture.finish(b.trace(request_id, content_bytes=5_000, metadata_bytes=32,
+                                            harness=harness))
+    stats = await harness.port.stats()
+    assert inflated is TraceOfferResult.dropped, "an envelope claimed content it never charged"
+    assert stats["in_memory"] == 0 and stats["in_memory_content_bytes"] == 0
+    assert stats["loss_reasons"]["malformed"] == 1
+    # claiming exactly what was charged is the honest case
+    harness = factory()
+    request_id = harness.ids.uuid()
+    capture = harness.port.open(request_id, b.ORG_A, TraceMode.full, harness.clock.at(600))
+    assert capture.add("y" * 1_000) is True
+    assert await capture.finish(b.trace(request_id, content_bytes=1_000, metadata_bytes=32,
+                                        harness=harness)) is TraceOfferResult.accepted_in_memory
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 1_000
+
+    # (c) the honest minimal case still works: opened minimal, finished minimal, one row
+    harness = factory()
+    request_id = harness.ids.uuid()
+    capture = harness.port.open(request_id, b.ORG_A, TraceMode.minimal, harness.clock.at(600))
+    assert await capture.finish(b.trace(request_id, mode=TraceMode.minimal, content_bytes=0,
+                                        metadata_bytes=32, harness=harness)) \
+        is TraceOfferResult.accepted_in_memory
+    assert (await harness.port.stats())["in_memory"] == 1
+    assert hook(harness, "queued")()[-1].carries_content is False
+
+    # (d) identity is checked on the no-op path too, exactly as on the accumulating one
+    harness = factory()
+    request_id = harness.ids.uuid()
+    capture = harness.port.open(request_id, b.ORG_A, TraceMode.minimal, harness.clock.at(600))
+    foreign = await capture.finish(b.trace(request_id, org_id=b.ORG_B, mode=TraceMode.minimal,
+                                           content_bytes=0, metadata_bytes=32, harness=harness))
+    stats = await harness.port.stats()
+    assert foreign is TraceOfferResult.dropped, "a no-op capture filed another tenant's row"
+    assert stats["in_memory"] == 0 and stats["loss_reasons"]["malformed"] == 1
+    other = harness.port.open(request_id, b.ORG_A, TraceMode.minimal, harness.clock.at(600))
+    assert await other.finish(b.trace(harness.ids.uuid(), mode=TraceMode.minimal,
+                                      content_bytes=0, metadata_bytes=32, harness=harness)) \
+        is TraceOfferResult.dropped
+    assert (await harness.port.stats())["in_memory"] == 0
 
 
 async def trace_bounds__concurrent_captures_share_one_budget(factory):
@@ -931,6 +1052,29 @@ async def trace_bounds__a_dropped_finish_releases_its_charge(factory):
         "a dropped record kept its charge on the budget"
     assert stats["in_memory"] == 1
 
+    # ... and the same for the *other* drop reason: a finish refused because the metadata
+    # reserve is exhausted must release its charge too. The corpus mutant that keeps it
+    # (m20b) dies here rather than only on the queue_full path.
+    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=9_000,
+                                              trace_metadata_reserve_bytes=64,
+                                              trace_queue_max=1_000))
+    filler_id = harness.ids.uuid()
+    assert await harness.port.offer(b.trace(filler_id, content_bytes=0, metadata_bytes=64,
+                                            harness=harness)) \
+        is TraceOfferResult.accepted_in_memory          # the reserve is now exhausted
+    starved_id = harness.ids.uuid()
+    starved = harness.port.open(starved_id, b.ORG_A, TraceMode.full, harness.clock.at(600))
+    assert starved.add("m" * 1_000) is True
+    assert (await harness.port.stats())["in_memory_content_bytes"] == 1_000
+    refused = await starved.finish(b.trace(starved_id, content_bytes=1_000, metadata_bytes=64,
+                                           harness=harness))
+    stats = await harness.port.stats()
+    assert refused is TraceOfferResult.dropped
+    assert stats["loss_reasons"]["metadata_budget"] == 1, stats["loss_reasons"]
+    assert stats["in_memory_content_bytes"] == 0, \
+        "a metadata-budget drop kept its content charge"
+    assert stats["in_memory"] == 1                      # only the filler
+
 
 async def trace_bounds__an_open_capture_past_its_deadline_is_reaped(factory):
     """TRACE-BOUNDS / r1 R37: a request that dies without its `finally` running - a
@@ -977,6 +1121,7 @@ async def trace_bounds__an_open_capture_past_its_deadline_is_reaped(factory):
 def tracesink_cases():
     return [trace_bounds__an_accepted_offer_is_in_memory_only,
             trace_bounds__minimal_mode_never_carries_content,
+            trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope,
             trace_bounds__concurrent_captures_share_one_budget,
             trace_bounds__an_abandoned_capture_releases_its_bytes,
             trace_bounds__a_capture_belongs_to_its_own_request,

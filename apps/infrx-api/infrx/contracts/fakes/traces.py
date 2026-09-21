@@ -116,11 +116,8 @@ class FakeTraceCapture:
             # drop must not be told the record was accepted.
             return self.result
         if self.no_op:
-            # r1 R37 / 01 ("minimal stores metadata only"): a no-op capture behaves as
-            # `offer`, so a minimal request still produces exactly its metadata row and
-            # G needs no branch on the mode. An off-mode request has no row at all.
             self.closed = self.finished = True
-            self.result = self.sink._offer_metadata(envelope)
+            self.result = self._finish_no_op(envelope)
             return self.result
         if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):
             # The single loss this capture contributes is labelled by what went wrong:
@@ -135,6 +132,14 @@ class FakeTraceCapture:
             return self.result
         self.closed = self.finished = True
         charged = self.content_bytes
+        if not self.lost and envelope.content_bytes > charged:
+            # The envelope claims more content than this capture charged, so those bytes
+            # never went through the budget: the numbers must agree, or `add` is
+            # decoration. (A *lost* capture is the honest exception - its charge was
+            # released on purpose and its envelope is stripped below.)
+            self._discard(TraceLossReason.malformed)
+            self.result = self.sink._drop(TraceLossReason.malformed, counted=True)
+            return self.result
         if self.lost or envelope.content_bytes == 0:
             envelope = envelope.model_copy(update={
                 "content_complete": False, "content_ref": None, "content_bytes": 0,
@@ -143,6 +148,42 @@ class FakeTraceCapture:
             self.content_bytes = charged = 0
         self.result = self.sink._enqueue(envelope, charged=charged, capture=self)
         return self.result
+
+    def _finish_no_op(self, envelope: TraceEnvelope) -> TraceOfferResult:
+        """r1 R37/R12 + 01: what a no-op capture does with the envelope it is handed.
+
+        The **capture** decides, not the envelope: a capture opened `minimal` cannot be
+        talked into queueing content by an envelope that calls itself `full`, and a
+        capture opened `off` queues nothing whatever arrives. Trusting the envelope here
+        would make the mode a client-supplied field, which is exactly what R12 forbids.
+        """
+        if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):
+            # The same identity check the accumulating path makes: one request's envelope
+            # must never be filed under another's - or another tenant's.
+            self._count(TraceLossReason.malformed)
+            return self.sink._drop(TraceLossReason.malformed, counted=True)
+        if self.mode is TraceMode.off:
+            # 01: an off-mode request produces no trace row at all.
+            self._count(TraceLossReason.malformed)
+            return self.sink._drop(TraceLossReason.malformed, counted=True)
+        if self.mode is TraceMode.minimal:
+            # Metadata only, and it must say so: an envelope claiming another mode, or
+            # carrying content, is a caller bug that would store unconsented content.
+            if envelope.mode is not TraceMode.minimal or envelope.carries_content:
+                self._count(TraceLossReason.malformed)
+                return self.sink._drop(TraceLossReason.malformed, counted=True)
+            return self.sink._enqueue(envelope, charged=0, capture=self)
+        # A `full` capture that is a no-op because it was opened without a deadline: its
+        # content was never accumulated (every `add` returned False), so it finishes as
+        # honest metadata with exactly one counted loss. `abandoned` is the reason: the
+        # sink gave up on a capture it could never have reaped, which is the same fact
+        # `reap` records - and 02 requires the loss to be marked *and* counted, so
+        # `loss_reason: none` is not an option.
+        self.lost_reason = TraceLossReason.abandoned
+        self._count(TraceLossReason.abandoned)
+        return self.sink._enqueue(envelope.model_copy(update={
+            "content_complete": False, "content_ref": None, "content_bytes": 0,
+            "loss_reason": TraceLossReason.abandoned}), charged=0, capture=self)
 
     async def abandon(self, reason: TraceLossReason = TraceLossReason.abandoned) -> None:
         """Give the bytes back: an abandoned capture must not hold budget a live request
@@ -228,13 +269,17 @@ class FakeTraceSink:
         becomes visible.
         """
         self.failures.before("offer")
+        if envelope.carries_content:
+            # r1 R27: content is charged as it accumulates, through `open`/`add`. An
+            # envelope arriving here with content was never charged to the budget, so
+            # queueing it would be an unaccounted capture; it is dropped and counted.
+            return self._drop(TraceLossReason.malformed)
         return self._offer_metadata(envelope)
 
     def _offer_metadata(self, envelope: TraceEnvelope) -> TraceOfferResult:
-        """`offer` semantics, shared with a no-op capture's `finish` (R37)."""
+        """`offer` semantics: an off-mode request has no row (01). Content is refused by
+        `offer` itself and by a capture's `finish`, so there is no check for it here."""
         if envelope.mode is TraceMode.off:
-            return self._drop(TraceLossReason.malformed)
-        if envelope.mode is not TraceMode.full and envelope.carries_content:
             return self._drop(TraceLossReason.malformed)
         return self._enqueue(envelope, charged=0)
 
@@ -254,20 +299,9 @@ class FakeTraceSink:
             if capture is not None:
                 capture.content_bytes = 0
             return self._drop(reason, counted=capture.counted if capture else False)
-        uncharged = envelope.content_bytes - charged
-        if uncharged > 0:
-            # Content that never went through a capture still has to fit the budget,
-            # or `offer` would be a way around the accounting altogether.
-            if self.content_bytes + uncharged > self.content_budget:
-                envelope = envelope.model_copy(update={
-                    "content_complete": False, "content_ref": None, "content_bytes": 0,
-                    "loss_reason": TraceLossReason.memory_budget})
-                if capture is not None:
-                    capture._count(TraceLossReason.memory_budget)
-                else:
-                    self.loss_reasons[TraceLossReason.memory_budget] += 1
-            else:
-                self.content_bytes += uncharged
+        # No "uncharged content" branch: content reaches the queue only through a
+        # capture, whose `finish` refuses an envelope claiming more than it charged, and
+        # `offer` refuses content outright. One rule, in one place each.
         self.metadata_bytes += envelope.metadata_bytes
         self.queued.append(envelope)
         self.accepted += 1

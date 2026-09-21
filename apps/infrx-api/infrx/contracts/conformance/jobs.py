@@ -1574,7 +1574,10 @@ async def dur_settle__one_unsettleable_job_does_not_stop_the_sweep(factory):
         _stored, outcome = await harness.port.get_owned(request.org_id, admission.job_handle)
         assert outcome is not None, "a reapable job was skipped because another job stuck"
         assert outcome.cause is TerminalCause.queue_wait_expired
-        assert harness.extra["balance"](request.org_id)["reserved"] == 0 or True
+        # a reaped job's hold is released: that is *why* one stuck job must not stop the
+        # sweep, so asserting it is the point of this case
+        assert outcome.settlement_state is SettlementState.released_free
+        assert outcome.debit == 0
     # and once there is room, the stuck job settles on the next sweep
     assert await stream.expire(harness.clock.at(DEFAULTS.journal_chunk_ttl_s + 1)) >= 0
     harness.clock.advance(DEFAULTS.journal_chunk_ttl_s + 1)
