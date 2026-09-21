@@ -14,7 +14,6 @@ import {
   CONTENT_FILTERS,
   FEEDBACK_FILTERS,
   MODE_FILTERS,
-  sameFilters,
   traceHref,
   withPatch,
   type FilterState,
@@ -48,12 +47,14 @@ export function TraceFilters({
   const shown = displayed(sequence, filters, isPending);
 
   function change(patch: Partial<FilterState>) {
-    // Catch up with the URL before issuing: an arrival that does not answer the outstanding
-    // request is stale and moves nothing.
-    const caught = settleArrival(sequence, filters, sameFilters).sequence;
+    // Catch up with the URL before issuing: the page now rendered is the response to whichever
+    // request minted its href, and a response older than the one already applied moves nothing.
+    const caught = settleArrival(sequence, filters, traceHref(filters)).sequence;
     const next = withPatch(shown, patch);
-    setSequence(issue(caught, next).sequence);
-    startTransition(() => router.push(traceHref(shown, patch)));
+    const href = traceHref(shown, patch);
+    // The href is the identity the response will arrive under — a navigation carries no token.
+    setSequence(issue(caught, next, href).sequence);
+    startTransition(() => router.push(href));
   }
 
   return (
