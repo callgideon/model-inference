@@ -173,10 +173,36 @@ class UploadCreated(WireModel):
     expires_at: Timestamp
 
 
+class MediaSummary(WireModel):
+    """What a caller may learn about its own finalized object (r1 R47).
+
+    `records.MediaRef.storage_ref` is a server-built object key and says so - "never
+    returned to callers" - but `UploadCompleted` used to embed the whole record, so the
+    key shipped in the 200 body of every completed upload. This is the projection: the
+    handle the caller already has, and the facts it can verify.
+    """
+
+    handle: str
+    kind: str
+    digest: str
+    bytes: int = Field(ge=0)
+    mime: str
+    duration_s: float | None = None
+
+    @classmethod
+    def of(cls, ref: MediaRef) -> MediaSummary:
+        return cls(handle=ref.handle, kind=ref.kind.value, digest=ref.digest, bytes=ref.bytes,
+                   mime=ref.mime, duration_s=ref.duration_s)
+
+
 class UploadCompleted(WireModel):
     upload_handle: str
     state: UploadState
-    media: MediaRef
+    media: MediaSummary
+
+    @classmethod
+    def of(cls, upload_handle: str, state: UploadState, ref: MediaRef) -> UploadCompleted:
+        return cls(upload_handle=upload_handle, state=state, media=MediaSummary.of(ref))
 
 
 class FeedbackAccepted(WireModel):

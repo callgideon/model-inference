@@ -5,11 +5,7 @@
     "duration_s": 12.5,
     "handle": "upl_9Zt4hLmQ2sVbXeR7nKdJ0oPyWcA5uF1gHi8jTlB3vNs",
     "kind": "upload",
-    "mime": "video/mp4",
-    "org_id": "1a1a1a1a-0000-4000-8000-000000000001",
-    "profile_version": "v1",
-    "schema_version": 1,
-    "storage_ref": "media/1a1a1a1a/22/source.mp4"
+    "mime": "video/mp4"
   },
   "state": "finalized",
   "upload_handle": "upl_9Zt4hLmQ2sVbXeR7nKdJ0oPyWcA5uF1gHi8jTlB3vNs"

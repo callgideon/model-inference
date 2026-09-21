@@ -30,6 +30,86 @@ def test_fixture_round_trips_byte_stably(name):
     assert canonical_bytes(parsed) == fixtures.load_bytes(name)
 
 
+# r1 R47: field names that mean "an object key", plus the credentialed forms of one.
+# `wire.py` claims none of its bodies carries a storage key; this is what makes the
+# claim checkable instead of a docstring, and it walks every wire fixture (and every
+# model in `wire`) rather than the one the ruling happened to name.
+STORAGE_KEY_FIELDS = frozenset({
+    "storage_ref", "content_ref", "storage_key", "object_key", "s3_key", "s3_uri",
+    "bucket", "key_prefix", "signed_url", "presigned_url", "download_url", "object_path",
+})
+# `destination_ref` on `UploadCreated` is deliberately not a key: it is a constrained
+# server-issued reference (`infrx-upload:<org>:<handle>`), and the test below asserts
+# that shape rather than trusting the name.
+WIRE_FIXTURES = tuple(sorted(name for name, model in fixtures.MODELS.items()
+                             if model.__module__.endswith("contracts.wire")))
+
+
+def _field_names(data, into=None):
+    into = set() if into is None else into
+    if isinstance(data, dict):
+        for key, value in data.items():
+            into.add(key)
+            _field_names(value, into)
+    elif isinstance(data, (list, tuple)):
+        for item in data:
+            _field_names(item, into)
+    return into
+
+
+def test_the_wire_fixtures_are_the_public_bodies():
+    """The grep below is only worth its coverage: every `wire` model with a fixture is
+    in it, and the trace export - the body R47 is about - is one of them."""
+    assert "trace_export.json" in WIRE_FIXTURES
+    assert len(WIRE_FIXTURES) >= 10, WIRE_FIXTURES
+
+
+@pytest.mark.parametrize("name", WIRE_FIXTURES)
+def test_no_wire_fixture_carries_a_storage_key(name):
+    """r1 R47: no public body carries an object key or a signed URL, at any depth.
+
+    The trace export is the case the ruling names - `content_ref` is an S3 key, so the
+    export carries `content_state` plus an opaque `content_handle` instead - but the rule
+    is the whole module's, so every wire fixture is checked.
+    """
+    found = _field_names(fixtures.load(name)) & STORAGE_KEY_FIELDS
+    assert found == set(), f"{name} carries storage-key-shaped field(s) {sorted(found)}"
+
+
+@pytest.mark.parametrize("name", WIRE_FIXTURES)
+def test_no_wire_model_declares_a_storage_key(name):
+    """The same rule on the model, so a field nobody put in a fixture cannot slip in."""
+    model = fixtures.MODELS[name]
+    found = set(model.model_fields) & STORAGE_KEY_FIELDS
+    assert found == set(), f"{model.__name__} declares {sorted(found)}"
+
+
+def test_the_trace_export_replaces_the_content_ref_with_availability_and_a_handle():
+    """r1 R47: the export is a projection of the envelope, not the envelope."""
+    export = fixtures.model("trace_export.json")
+    envelope = fixtures.model("trace_envelope.json")
+    assert envelope.content_ref, "the internal envelope does carry the object key"
+    assert export.content_state is records.ContentState.available
+    assert export.content_handle and envelope.content_ref not in export.content_handle
+    assert export.content_bytes == envelope.content_bytes
+    # the content object is `{v: 1, request, response}` (research/traces/04 §3.1)
+    assert export.content is not None and export.content.v == 1
+    assert export.content.response.status == 200
+    assert set(fixtures.load("trace_export.json")["content"]) == {"v", "request", "response"}
+    # and `of()` never copies the key across, whatever it is handed
+    projected = wire.TraceExport.of(envelope, records.ContentState.metadata_only)
+    assert projected.content_handle is None and projected.content is None
+    assert envelope.content_ref not in canonical_bytes(projected).decode()
+
+
+def test_an_upload_destination_is_a_constrained_reference_not_a_url():
+    """The one `*_ref` a public body does carry: a server-issued upload destination.
+    It is asserted by shape, so a signed URL cannot arrive under an innocent name."""
+    created = fixtures.model("upload_created.json")
+    assert created.destination_ref.startswith("infrx-upload:")
+    assert "://" not in created.destination_ref and "?" not in created.destination_ref
+
+
 @pytest.mark.parametrize("name", sorted(fixtures.LIST_MODELS))
 def test_list_fixture_round_trips_byte_stably(name):
     model = fixtures.LIST_MODELS[name]
