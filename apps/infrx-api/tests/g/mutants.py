@@ -110,9 +110,12 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("key_cache_unbounded", "the caller-supplied key hash cannot grow a cache without bound",
        K, "    while len(cache) > cap:", "    while False:",
        "test_dur_rls__the_bounded_key_and_miss_caches_are_preserved"),
-    _m("miss_cache_evicts_real_keys", "a flood of misses cannot evict a real key",
-       K, "        (self.misses if rows else self.keys).pop(h, None)",
-       "        self.keys.pop(h, None)",
+    # Misses live in their own cache with its own cap; sharing one cache is exactly how
+    # a flood of random keys evicts the real ones. (An earlier mutant here - swapping the
+    # `pop` target - was equivalent: for a miss the original already pops `keys`.)
+    _m("one_cache_for_hits_and_misses", "a flood of misses cannot evict a real key",
+       K, "        put(*((self.keys, h, hit, s.key_cache_max) if rows else (self.misses, h, hit, s.miss_cache_max)))",
+       "        put(self.keys, h, hit, s.key_cache_max)",
        "test_dur_rls__a_flood_of_misses_cannot_evict_a_real_key"),
     _m("legacy_comparison_is_not_constant_time", "the legacy key comparison is timing-safe",
        K, "if s.legacy_key and hmac.compare_digest(token.encode(), s.legacy_key.encode()):",
@@ -288,7 +291,7 @@ MUTANTS: tuple[Mutant, ...] = (
     # cutover itself, and they say exactly which cases pin today's behaviour.
     _m("composition_root_mounts_the_ingress", "G1 mounts nothing until the cutover",
        "gateway/app.py", "ROUTERS = (health, models, chat)",
-       "from . import routes as _r\nROUTERS = (health, models, chat, _r.ingress)",
+       "from .routes import ingress as _ingress\nROUTERS = (health, models, chat, _ingress)",
        "test_f_base__the_composition_root_still_mounts_only_the_legacy_routers"),
     _m("unset_mode_refuses", "an unset INFRX_MODE is still legacy behaviour",
        "config.py", '        return "legacy"',

@@ -143,12 +143,13 @@ def test_media_sec__an_owned_upload_handle_and_a_public_url_are_both_accepted():
 def test_media_sec__accepted_messages_keep_their_parts_in_order():
     """r1 R58 pairs one media part with one staged ref, in order, so the normalized
     messages must preserve the order the caller sent - and carry nothing else."""
-    body = parts({"type": "text", "text": "describe"}, VIDEO, {"type": "text", "text": "briefly"})
+    body = parts({"type": "text", "text": "first"}, VIDEO, {"type": "text", "text": "last"})
     tc, calls = client()
     assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=body).status_code == 202
     content = calls[0][1].messages[0]["content"]
-    assert [part["type"] for part in content] == ["text", "video_url", "text"]
-    assert content[1] == VIDEO
+    # The texts, not just the kinds: a reversed list of parts has the same kinds here.
+    assert content == [{"type": "text", "text": "first"}, VIDEO,
+                       {"type": "text", "text": "last"}], content
     assert set(calls[0][1].messages[0]) == {"role", "content"}
 
 
