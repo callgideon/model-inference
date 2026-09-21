@@ -104,6 +104,8 @@ SLOW = "test_api_stream__a_slow_but_steady_stream_is_not_a_stall"
 CANCEL = "test_api_stream__cancellation_closes_the_upstream_stream"
 CANCEL_EARLY = "test_api_stream__a_request_cancelled_before_it_starts_is_never_sent"
 CANCEL_SCOPE = "test_api_stream__a_cancellation_is_scoped_to_its_generation"
+LIFECYCLE = ("test_api_stream__a_cancel_intent_is_never_immortal_and_never_"
+             "refuses_a_running_lease")
 HEALTH = "test_f_contract__health_drain_and_the_capability_probe"
 SPLITS = "test_api_stream__every_chunk_split_filters_to_the_same_text"
 LEADING = "test_api_stream__only_a_leading_block_is_a_delimiter"
@@ -435,27 +437,37 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "        key = (lease.job_id, lease.generation)", "        key = (lease.job_id, 1)",
        CANCEL_SCOPE),
     _m("cancel_intents_unbounded", "intents for work that never runs are bounded (R58)",
-       E, "        while len(self.cancelled) >= MAX_CANCEL_INTENTS:", "        while False:",
-       CANCEL_SCOPE),
-    _m("cancel_evicts_a_live_intent", "only a finished generation may be evicted",
-       E, "            stale = next((held for held in self.cancelled if held in self.finished), None)",
-       "            stale = next(iter(self.cancelled), None)", CANCEL_SCOPE),
-    _m("cancel_forgets_silently", "a cancel it cannot hold answers False, not True",
-       E, "                return False\n"
-          "            self.cancelled.pop(stale, None)",
-       "                self.cancelled.pop(next(iter(self.cancelled)), None)\n"
-          "            self.cancelled.pop(stale, None) if stale else None",
-       CANCEL_SCOPE),
-    _m("two_usage_events", "a repeated usage object is one event, not two",
-       E, "        if stream.usage_objects == 0:", "        if False:", USAGE),
-    _m("inner_generator_not_closed", "a consumer that stops reading closes the engine now",
-       E, "            await inner.aclose()\n"
-          "            # Every exit path, including `upstream_body` refusing before a request was ever",
-       "            # Every exit path, including `upstream_body` refusing before a request was ever",
-       CANCEL_SCOPE),
-    _m("run_does_not_close_its_inner", "the generate boundary closes what it delegated to",
-       E, "            await inner.aclose()\n\n    async def _generate",
-       "            pass\n\n    async def _generate", CANCEL_SCOPE),
+       E, "        if len(self.cancelled) >= MAX_CANCEL_INTENTS:\n"
+          "            self._evict_spent()",
+       "        if False:\n            self._evict_spent()", LIFECYCLE),
+    _m("finished_cancel_is_remembered", "a cancel for a finished generation stores nothing",
+       E, "        if key in self.finished:\n"
+          "            # (1) The generation is over: there is nothing to stop, and remembering the\n"
+          "            # intent for ever is what made an ordinary late cancel immortal.\n"
+          "            return True",
+       "        if False:\n            return True", LIFECYCLE),
+    _m("running_lease_refused", "a running generation is never refused a cancel",
+       E, "        if key in self.running:", "        if False:", LIFECYCLE),
+    _m("running_not_registered", "a generation in flight is known to be running",
+       E, "        self.running.add(key)", "        pass", LIFECYCLE),
+    _m("pre_start_intents_immortal", "a pre-start intent expires with its lease",
+       E, "            if held in self.finished or now >= expires_at:",
+       "            if held in self.finished:", LIFECYCLE),
+    _m("expiry_ignores_the_clock", "the expiry is the lease's own deadline",
+       E, "            if held in self.finished or now >= expires_at:",
+       "            if held in self.finished or True:", LIFECYCLE),
+    _m("eviction_takes_a_running_intent", "eviction never touches a running generation",
+       E, "            if held in self.running:\n                continue",
+       "            if False:\n                continue", LIFECYCLE),
+    _m("aclose_does_not_retire", "closing retires the generation (clause 2)",
+       E, "        try:\n            await self._iterator.aclose()\n        finally:\n"
+          "            self._engine._retire(self._key)",
+       "        await self._iterator.aclose()", LIFECYCLE),
+    _m("finished_never_remembered", "a finished generation is remembered",
+       E, "        self.finished[key] = True", "        pass", LIFECYCLE),
+    _m("finished_unbounded", "the finished map is a bounded FIFO",
+       E, "        while len(self.finished) > MAX_CANCEL_INTENTS:", "        while False:",
+       LIFECYCLE),
     _m("intent_outlives_the_stream", "an intent is cleared on every exit path (R58)",
        E, "            self.cancelled.pop(key, None)\n            self._remember_finished(key)",
        "            self._remember_finished(key)", CANCEL),

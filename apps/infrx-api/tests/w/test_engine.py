@@ -1180,6 +1180,119 @@ def test_api_stream__a_request_cancelled_before_it_starts_is_never_sent():
     assert stream.cancelled and engine.cancelled == {}
 
 
+def test_api_stream__a_cancel_intent_is_never_immortal_and_never_refuses_a_running_lease():
+    """The round-3 ruling, clause by clause. The old rule - "only a finished generation may
+    be evicted, otherwise False" - made never-consumed intents immortal, so 1,024 of them
+    (an ordinary late-cancel race is enough) refused **every** later lease, including a
+    generation running at that moment: a regression for the one case cancellation exists to
+    serve."""
+    box = Box()
+    upstream = FakeUpstream(clock=box.clock)
+    engine = upstream.engine()
+
+    def leases(count, at=300.0, job=1):
+        return [lease(box, job_id=f"{job:08x}-0000-4000-8000-{ordinal:012x}",
+                      first_token_deadline_at=box.clock.at(min(at, 60.0)),
+                      generation_deadline_at=box.clock.at(at))
+                for ordinal in range(count)]
+
+    # (1) a cancel for a generation that has finished is a no-op that stores nothing
+    done = lease(box)
+    asyncio.run(collect(engine.generate(done, text_prepared(box))))
+    assert (done.job_id, done.generation) in engine.finished
+    assert asyncio.run(engine.cancel(done)) is True
+    assert (done.job_id, done.generation) not in engine.cancelled
+
+    # (2) closing retires the intent even when the generator never started - the reviewer's
+    # route: cancel, generate, aclose, over and over, leaves nothing behind
+    async def cancel_generate_close(count):
+        for held in leases(count, job=2):
+            assert await engine.cancel(held) is True
+            stream = engine.generate(held, text_prepared(box))
+            await stream.aclose()
+
+    asyncio.run(cancel_generate_close(MAX_CANCEL_INTENTS + 200))
+    assert engine.cancelled == {}, len(engine.cancelled)
+    assert asyncio.run(engine.cancel(lease(box))) is True
+
+    # (3) a full map never refuses a **running** generation, and the cancel still stops it
+    box = Box()
+    upstream = FakeUpstream(fault="cancellation_race", clock=box.clock)
+    engine = upstream.engine()
+    for held in leases(MAX_CANCEL_INTENTS, job=3):
+        assert asyncio.run(engine.cancel(held)) is True
+    assert len(engine.cancelled) == MAX_CANCEL_INTENTS
+    assert asyncio.run(engine.cancel(leases(1, job=9)[0])) is False      # (5) full and live
+
+    running = lease(box)
+
+    async def cancel_the_running_one():
+        stream = engine.generate(running, text_prepared(box))
+        events = []
+        async for event in stream:
+            events.append(event)
+            if len(raws(events)) == 1:
+                assert await engine.cancel(running) is True, "a running lease was refused"
+        return stream, events
+
+    stream, events = asyncio.run(cancel_the_running_one())
+    assert stream.cancelled and len(raws(events)) < upstream.long_stream_deltas
+    assert (running.job_id, running.generation) not in engine.cancelled
+
+    # (4) a pre-start intent expires with its lease's generation deadline, so a map full of
+    # intents for work that can no longer run is not a full map
+    box = Box()
+    engine = FakeUpstream(clock=box.clock).engine()
+    for held in leases(MAX_CANCEL_INTENTS, at=10.0, job=4):
+        assert asyncio.run(engine.cancel(held)) is True
+    fresh = leases(1, job=5)[0]
+    assert asyncio.run(engine.cancel(fresh)) is False       # still live: refused
+    box.clock.advance(11)
+    assert asyncio.run(engine.cancel(fresh)) is True        # past their deadlines: evictable
+    assert len(engine.cancelled) < MAX_CANCEL_INTENTS
+
+    # eviction never touches a running generation, even one whose key it remembers as
+    # finished (a re-run of the same lease): the intent it would drop is the live one
+    box = Box()
+    upstream = FakeUpstream(fault="cancellation_race", clock=box.clock)
+    engine = upstream.engine()
+    twice = lease(box)
+    asyncio.run(collect(FakeUpstream(clock=box.clock).engine().generate(
+        twice, text_prepared(box))))
+    engine._remember_finished((twice.job_id, twice.generation))   # as its first run would
+    for held in leases(MAX_CANCEL_INTENTS, at=10.0, job=7):
+        assert asyncio.run(engine.cancel(held)) is True
+
+    async def cancel_then_crowd_it_out():
+        stream = engine.generate(twice, text_prepared(box))
+        events = []
+        async for event in stream:
+            events.append(event)
+            if len(raws(events)) == 1:
+                assert await engine.cancel(twice) is True
+                box.clock.advance(11)                    # every other intent is now expired
+                assert await engine.cancel(leases(1, job=8)[0]) is True   # triggers eviction
+        return stream, events
+
+    stream, events = asyncio.run(cancel_then_crowd_it_out())
+    assert stream.cancelled, "the running generation's intent was evicted"
+    assert len(raws(events)) < upstream.long_stream_deltas
+
+    # the reviewer's second route: late cancels, an ordinary race, are not immortal
+    box = Box()
+    upstream = FakeUpstream(clock=box.clock)
+    engine = upstream.engine()
+
+    async def finish_then_cancel(count):
+        for held in leases(count, job=6):
+            await collect(engine.generate(held, text_prepared(box)))
+            assert await engine.cancel(held) is True
+    asyncio.run(finish_then_cancel(MAX_CANCEL_INTENTS + 1))
+    assert engine.cancelled == {}
+    assert len(engine.finished) <= MAX_CANCEL_INTENTS, len(engine.finished)
+    assert asyncio.run(engine.cancel(lease(box))) is True
+
+
 def test_api_stream__a_cancellation_is_scoped_to_its_generation():
     """r1 R58: intents are keyed by `(job_id, generation)`. Keyed by job alone, a stale
     intent for a fenced attempt would kill the attempt that replaced it - and the set of
@@ -1194,40 +1307,9 @@ def test_api_stream__a_cancellation_is_scoped_to_its_generation():
     events = asyncio.run(collect(stream))
     assert upstream.requests, "generation 2 was cancelled by generation 1's intent"
     assert not stream.cancelled and stream.complete and stream.usage is not None
-    assert engine.cancelled == {(first.job_id, 1): True}   # the other intent is untouched
+    assert set(engine.cancelled) == {(first.job_id, 1)}    # the other intent is untouched
 
-    # a cancel for a lease that never runs is bounded - and bounded *without* forgetting a
-    # live intent: every key still in the map belongs to work that may yet run, so the
-    # engine evicts only generations it has already finished and otherwise answers False.
-    held_intent = first.model_copy(update={"generation": 7})
-    assert asyncio.run(engine.cancel(held_intent)) is True
-    answers = [asyncio.run(engine.cancel(first.model_copy(update={"generation": ordinal + 10})))
-               for ordinal in range(MAX_CANCEL_INTENTS + 50)]
-    assert len(engine.cancelled) <= MAX_CANCEL_INTENTS
-    assert (held_intent.job_id, 7) in engine.cancelled, "a live pre-start intent was evicted"
-    assert False in answers, "cancel never refused, so something was forgotten"
-    # the generation that *did* run is the one that was evicted
-    assert (first.job_id, 2) not in engine.cancelled
-    # and the intent still stops the request it belongs to
-    box2 = Box()
-    upstream2 = FakeUpstream(clock=box2.clock)
-    engine2 = upstream2.engine()
-    pre_start = lease(box2)
-    assert asyncio.run(engine2.cancel(pre_start)) is True
-    stream2 = engine2.generate(pre_start, text_prepared(box2))
-    asyncio.run(collect(stream2))
-    assert upstream2.requests == [] and stream2.cancelled
-
-    # cancelling once the usage event is out changes nothing about it
-    box = Box()
-    upstream = FakeUpstream(clock=box.clock)
-    engine = upstream.engine()
-    held = lease(box)
-    stream = engine.generate(held, text_prepared(box))
-    events = asyncio.run(collect(stream))
-    assert asyncio.run(engine.cancel(held)) is True
-    assert stream.usage is not None and not stream.cancelled
-    assert usages(events)[0].usage is not None
+    # the rest of the lifecycle is `…a_cancel_intent_is_never_immortal…` below
 
     # a consumer that stops reading closes the upstream stream deterministically
     box = Box()

@@ -141,8 +141,11 @@ PAYLOAD_COPIES_DIVISOR = 4
 # token is ~16x real text (`est.`, provisional like every limit in 08 §5); it exists so a
 # runaway engine cannot grow `raw_text` without limit, not to police normal answers.
 MAX_CODE_POINTS_PER_OUTPUT_TOKEN = 64
-# Cancellation intents for leases that are never executed: bounded, because a cancel for
-# work that never runs must not be a memory leak. The oldest is dropped first.
+# Cancellation intents, bounded because a cancel for work that never runs must not be a
+# memory leak. *Which* one may go is the whole of the round-3 ruling, in `cancel` below: a
+# finished key is a no-op, a running key is never refused, and a pre-start intent expires at
+# its lease's generation deadline. Nothing is dropped merely for being old - that is what
+# made a full map refuse a generation that was running at the time.
 MAX_CANCEL_INTENTS = 1024
 FINISHED_REASONS = ("stop", "length")
 
@@ -376,8 +379,12 @@ class VllmEngine:
         # a generation this engine has already finished may be evicted; when none can be,
         # `cancel` answers **False** rather than silently forgetting - the caller still owns
         # the task and can cancel that instead.
-        self.cancelled: dict[tuple[str, int], bool] = {}
+        # key -> the instant the intent stops being worth holding, which is the lease's own
+        # `generation_deadline_at`: past it the attempt cannot run, so nobody is waiting for
+        # the cancellation either.
+        self.cancelled: dict[tuple[str, int], datetime] = {}
         self.finished: dict[tuple[str, int], bool] = {}   # bounded FIFO of generations run
+        self.running: set[tuple[str, int]] = set()        # generations executing right now
         # r1: F1's video budget, called rather than reimplemented. `Media` reads only
         # `rt.settings`, so the whole runtime it needs is the settings object.
         self._media = Media(SimpleNamespace(settings=media_settings or Settings()))
@@ -548,15 +555,45 @@ class VllmEngine:
         key = (lease.job_id, lease.generation)
         if key in self.cancelled:
             return True                                  # idempotent
-        while len(self.cancelled) >= MAX_CANCEL_INTENTS:
-            stale = next((held for held in self.cancelled if held in self.finished), None)
-            if stale is None:
-                # Every intent still belongs to work that may yet run: forgetting one would
-                # execute a cancelled request. Say so instead.
-                return False
-            self.cancelled.pop(stale, None)
-        self.cancelled[key] = True
+        if key in self.running:
+            # (3) Never refused, whatever the map holds: this is the case cancellation exists
+            # to serve, and the entry is consumed at the stream's next chunk. At most
+            # `WORKER_CONCURRENCY` of these can exist at once. Checked **before** the
+            # finished memory, so a key that is executing now is never mistaken for one that
+            # is over.
+            self.cancelled[key] = lease.generation_deadline_at
+            return True
+        if key in self.finished:
+            # (1) The generation is over: there is nothing to stop, and remembering the
+            # intent for ever is what made an ordinary late cancel immortal.
+            return True
+        if len(self.cancelled) >= MAX_CANCEL_INTENTS:
+            self._evict_spent()
+        if len(self.cancelled) >= MAX_CANCEL_INTENTS:
+            # (5) Full of live, unexpired intents for work that may still run: forgetting one
+            # would execute a cancelled request, so the caller is told instead - it owns the
+            # task and can cancel that.
+            return False
+        self.cancelled[key] = lease.generation_deadline_at
         return True
+
+    def _evict_spent(self) -> None:
+        """(4) Drop the intents that cannot matter any more: a generation that has finished,
+        and a pre-start one past its lease's generation deadline - the attempt it was meant
+        to stop can no longer run."""
+        now = self.clock.now()
+        for held, expires_at in list(self.cancelled.items()):
+            if held in self.running:
+                continue
+            if held in self.finished or now >= expires_at:
+                self.cancelled.pop(held, None)
+
+    def _retire(self, key: tuple[str, int]) -> None:
+        """This generation is over, however it ended: the intent is spent and the key is
+        remembered so a later cancel for it is a no-op."""
+        self.running.discard(key)
+        self.cancelled.pop(key, None)
+        self._remember_finished(key)
 
     def _remember_finished(self, key: tuple[str, int]) -> None:
         """This generation will not run again, so its intent is safe to drop later."""
@@ -738,6 +775,7 @@ class VllmEngine:
         lease = stream.lease
         key = (lease.job_id, lease.generation)
         inner = self._attempt(stream, key)
+        self.running.add(key)
         try:
             async for event in inner:
                 yield event
@@ -749,8 +787,7 @@ class VllmEngine:
             await inner.aclose()
             # Every exit path, including `upstream_body` refusing before a request was ever
             # sent: this generation is over, so its intent is spent and may be evicted.
-            self.cancelled.pop(key, None)
-            self._remember_finished(key)
+            self._retire(key)
 
     async def _attempt(self, stream: "EngineStream",
                        key: tuple[str, int]) -> AsyncIterator[EngineEvent]:
@@ -957,6 +994,8 @@ class EngineStream:
     """
 
     def __init__(self, engine: VllmEngine, lease: Lease, prepared: PreparedRequest) -> None:
+        self._engine = engine
+        self._key = (lease.job_id, lease.generation)
         self.lease = lease
         self.prepared = prepared
         self.raw_text = ""
@@ -994,7 +1033,15 @@ class EngineStream:
         return await self._iterator.__anext__()
 
     async def aclose(self) -> None:
-        await self._iterator.aclose()
+        """r1 R58 / round-3 ruling (2): closing retires the generation even if the generator
+        never started. Python runs no code inside a generator that was never entered, so the
+        `finally` in `_generate` cannot clear the intent - `cancel(lease)` followed by
+        `generate(...)` and `aclose()` left one behind every time, and 1,024 of those made
+        `cancel` refuse every later lease until the process restarted."""
+        try:
+            await self._iterator.aclose()
+        finally:
+            self._engine._retire(self._key)
 
     @property
     def terminal_cause(self) -> TerminalCause:
