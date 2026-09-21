@@ -458,6 +458,56 @@ def test_q1_stats__a_candidate_is_not_offered_before_it_is_available():
     asyncio.run(run())
 
 
+def test_q1_drill__losing_the_index_mid_flight_loses_no_job_and_executes_none_twice():
+    """The failure drill for the evidence report: the index is destroyed while
+    candidates are in flight, a new one is rebuilt from the JobStore's queued jobs, and
+    the worker holding a pre-loss candidate comes back.
+
+    Durable state is untouched throughout (the jobs stay `queued`), every job is
+    claimable exactly once afterwards, and the worker with the stale candidate is
+    refused by `JobStore.claim` rather than being allowed a second generation.
+    """
+    async def run():
+        from dataclasses import replace
+
+        from infrx.contracts.conformance.jobs import _admit, _prepare
+        h = harness()
+        jobs = h.extra["jobs"]
+        inner = replace(h, port=jobs)
+        admitted = []
+        for n in range(4):
+            request, admission = await _admit(inner, key=f"idem-{n}")
+            await _prepare(jobs, admission.request_id)
+            admitted.append((request, admission))
+            assert await h.port.enqueue(event(h, org_id=request.org_id,
+                                              job_id=request.request_id))
+        stale = await h.port.claim_candidate("worker-lost")
+        assert stale is not None
+        before = [(await jobs.get_owned(request.org_id, admission.job_handle))[0].state.value
+                  for request, admission in admitted]
+        assert before == ["queued"] * 4, before
+
+        # the index is gone: a fresh adapter, rebuilt from PostgreSQL's queued jobs
+        after_loss = harness()
+        snapshot = tuple(event(after_loss, org_id=request.org_id, job_id=request.request_id)
+                         for request, _ in admitted)
+        assert await after_loss.port.rebuild(snapshot) == 4
+        claimed = []
+        for candidate in await drain(after_loss.port):
+            lease = await jobs.claim(candidate.job_id, "worker-new")
+            assert lease.generation == 1, "a rebuilt candidate executed twice"
+            claimed.append(candidate.job_id)
+        assert sorted(claimed) == sorted(request.request_id for request, _ in admitted)
+        # the worker holding the pre-loss candidate comes back and is refused
+        with pytest.raises(errors.DomainError) as caught:
+            await jobs.claim(stale.job_id, "worker-lost")
+        assert caught.value.code == "not_claimable", caught.value.code
+        after = [(await jobs.get_owned(request.org_id, admission.job_handle))[0].state.value
+                 for request, admission in admitted]
+        assert after == ["running"] * 4, after
+    asyncio.run(run())
+
+
 def test_q1_support__the_harness_supplies_the_hooks_the_suite_documents():
     """The factory is part of the deliverable: it must hand the cases the shared fake
     JobStore and the wallet hooks, or the suite would be silently skipping."""
