@@ -335,10 +335,16 @@ class VllmEngine:
         self.require_version = require_version
         self.drained = False
         # r1 R58: keyed by `(job_id, generation)`. Keyed by job alone, a stale intent for a
-        # fenced generation 1 would cancel the live generation 2 of the same job. A bounded
-        # insertion-ordered dict, so intents for work that never runs cannot grow without
-        # limit; the oldest is dropped first.
+        # fenced generation 1 would cancel the live generation 2 of the same job.
+        #
+        # Bounded, but **never at the expense of a live intent**: every key in here is one
+        # no `generate` has consumed yet, so blind FIFO eviction dropped a pre-start
+        # cancellation after 1,024 later cancels and the request was then sent anyway. Only
+        # a generation this engine has already finished may be evicted; when none can be,
+        # `cancel` answers **False** rather than silently forgetting - the caller still owns
+        # the task and can cancel that instead.
         self.cancelled: dict[tuple[str, int], bool] = {}
+        self.finished: dict[tuple[str, int], bool] = {}   # bounded FIFO of generations run
         # r1: F1's video budget, called rather than reimplemented. `Media` reads only
         # `rt.settings`, so the whole runtime it needs is the settings object.
         self._media = Media(SimpleNamespace(settings=media_settings or Settings()))
@@ -500,10 +506,24 @@ class VllmEngine:
         cancelling *instantly* means cancelling the asyncio task, which is W2's job because
         W2 owns the task.
         """
-        self.cancelled[(lease.job_id, lease.generation)] = True
-        while len(self.cancelled) > MAX_CANCEL_INTENTS:
-            self.cancelled.pop(next(iter(self.cancelled)))
+        key = (lease.job_id, lease.generation)
+        if key in self.cancelled:
+            return True                                  # idempotent
+        while len(self.cancelled) >= MAX_CANCEL_INTENTS:
+            stale = next((held for held in self.cancelled if held in self.finished), None)
+            if stale is None:
+                # Every intent still belongs to work that may yet run: forgetting one would
+                # execute a cancelled request. Say so instead.
+                return False
+            self.cancelled.pop(stale, None)
+        self.cancelled[key] = True
         return True
+
+    def _remember_finished(self, key: tuple[str, int]) -> None:
+        """This generation will not run again, so its intent is safe to drop later."""
+        self.finished[key] = True
+        while len(self.finished) > MAX_CANCEL_INTENTS:
+            self.finished.pop(next(iter(self.finished)))
 
     async def health(self) -> dict[str, Any]:
         """Protected readiness: drained is not ready, and neither is an engine that
@@ -676,8 +696,26 @@ class VllmEngine:
             await inner.aclose()
 
     async def _generate(self, stream: "EngineStream") -> AsyncIterator[EngineEvent]:
-        lease, prepared = stream.lease, stream.prepared
+        lease = stream.lease
         key = (lease.job_id, lease.generation)
+        inner = self._attempt(stream, key)
+        try:
+            async for event in inner:
+                yield event
+        finally:
+            # Close the attempt **here**, for the same reason `_run` closes this one: a
+            # consumer that stops reading must close the upstream response now, not whenever
+            # the loop finalises an abandoned async generator. Delegating with `async for`
+            # and leaving it is what kept the engine generating after `aclose()`.
+            await inner.aclose()
+            # Every exit path, including `upstream_body` refusing before a request was ever
+            # sent: this generation is over, so its intent is spent and may be evicted.
+            self.cancelled.pop(key, None)
+            self._remember_finished(key)
+
+    async def _attempt(self, stream: "EngineStream",
+                       key: tuple[str, int]) -> AsyncIterator[EngineEvent]:
+        lease, prepared = stream.lease, stream.prepared
         body = self.upstream_body(prepared)              # DomainError before anything runs
         ceiling = body["max_tokens"]
         if key in self.cancelled:
@@ -717,7 +755,10 @@ class VllmEngine:
             raise EngineTransportError(f"{type(failure).__name__}: {failure}",
                                        stage="stream" if stream.started else "pre_headers") from None
         finally:
-            self.cancelled.pop(key, None)
+            # The adapter is no longer reading the engine: the `async with` above has exited,
+            # so the response is closed on our side. (What that does to the *socket* - and so
+            # to vLLM's generation - is a Layer-3 fact; `MockTransport` cannot show it.)
+            stream.upstream_closed = True
             # r1 R58: the filter's final held tail is part of the customer's text. It is
             # taken here so an abandoned generator cannot lose it from `visible_text`, and
             # emitted below as its own delta so a *streaming* consumer sees it too.
@@ -841,7 +882,11 @@ class VllmEngine:
             return []
         reason = None
         if stream.malformed_usage or stream.usage_candidate is None:
-            # The same fact twice: a usage object we could not read leaves no candidate.
+            # r1 R58 as the round-2 review worded it: **any** malformed usage object in the
+            # stream makes the usage unknown, in either order - a valid object before or
+            # after an unreadable one does not rescue it, because we cannot tell which of
+            # the two the engine meant. (These are not the same fact: a malformed object
+            # followed by a valid one leaves a candidate *and* the flag.)
             reason = "malformed"
         elif len(stream.usage_candidates) > 1:
             reason = "conflicting"
@@ -886,6 +931,7 @@ class EngineStream:
         self.cancelled = False
         self.complete = False                    # the engine sent its completion marker
         self.started = False                     # response headers arrived
+        self.upstream_closed = False             # the adapter stopped reading the engine
         self.malformed_lines = 0
         self.malformed_usage = False
         self.last_event_at: datetime | None = None

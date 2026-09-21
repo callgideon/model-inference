@@ -29,6 +29,9 @@ malformed payloads a review of the adapter found unhandled):
 | `usage_then_delta` | usage, then more content: the count cannot be authoritative |
 | `usage_below_deltas` | a usage object reporting fewer tokens than there were deltas |
 | `conflicting_usage` | two different usage objects in one stream |
+| `valid_then_malformed` / `malformed_then_valid` | one of each, in both orders |
+| `repeated_usage` | the *same* usage object twice: authoritative, and one event |
+| `abort_finish` | `finish_reason: "abort"` - finished, but not a finish we accept |
 | `over_ceiling` | usage claiming more completion tokens than were allowed |
 | `runaway_output` | more output than the envelope can hold |
 | `huge_delta` | one delta far larger than a journal event |
@@ -97,10 +100,16 @@ class FakeUpstream:
     """A scripted engine behind `httpx.MockTransport`.
 
     Observable afterwards: `requests` (every body the adapter sent, for translation
-    assertions), `pings` (how many keepalives the adapter waited through before its
-    timer fired), `closed`/`completed` (whether the adapter closed the stream early,
-    which is how cancellation is proved to reach the engine), `error_bytes` (how much of
-    an oversized error body the adapter actually read).
+    assertions), `pings` (how many keepalives the adapter waited through before its timer
+    fired), `frames_sent`/`chunks_sent` (how much of the script the adapter actually
+    **pulled** - the honest measure of "it stopped reading"), `completed` (whether the
+    script ran to its end), `error_bytes` (how much of an oversized error body was read).
+
+    `closed` is deliberately **not** proof of anything: with `MockTransport` httpx does not
+    close the content iterator when the response closes, so `closed` only becomes true when
+    the event loop finalises the abandoned generator at shutdown (measured: after
+    `asyncio.run` returns, never before). Whether the real socket closes - which is what
+    stops generation in vLLM - is a Layer-3 fact for W3, not something a mock can show.
     """
 
     fault: str = "none"
@@ -125,6 +134,7 @@ class FakeUpstream:
     completed: bool = False
     error_bytes: int = 0
     chunks_sent: int = 0                # how many network chunks the adapter actually pulled
+    frames_sent: int = 0                # how many SSE frames it pulled
     flood_chunk_bytes: int = 1024 * 1024
     # 24 MiB on offer, not the review's 200: the assertion is "how many chunks did the
     # adapter pull", so the fake only has to be able to give it more than the cap allows.
@@ -211,6 +221,15 @@ class FakeUpstream:
             self.chunks_sent += 1
             yield b"y" * self.flood_chunk_bytes
 
+    async def _counted(self, frames):
+        """Count what the adapter pulls, and note when the generator is finalised."""
+        try:
+            async for frame in frames:
+                self.frames_sent += 1
+                yield frame
+        finally:
+            self.closed = True
+
     async def _stream(self):
         pieces = self.deltas()
         try:
@@ -232,7 +251,7 @@ class FakeUpstream:
                 yield sse(misshapen)
                 if self.fault == "stray_object":
                     # Nothing to act on, so the stream must still complete normally.
-                    yield sse(chunk(finish_reason="stop"))
+                    yield sse(chunk(finish_reason="abort" if self.fault == "abort_finish" else "stop"))
                     yield sse(chunk(usage=self.usage(1)))
                     yield b"data: [DONE]\n\n"
                 self.completed = True
@@ -264,12 +283,18 @@ class FakeUpstream:
             if self.fault == "truncated":
                 self.completed = True
                 return                                  # no [DONE], no finish_reason
-            yield sse(chunk(finish_reason="stop"))
+            yield sse(chunk(finish_reason="abort" if self.fault == "abort_finish" else "stop"))
+            if self.fault == "malformed_then_valid":
+                yield sse(chunk(usage={"prompt_tokens": None, "completion_tokens": "7"}))
             if self.fault not in ("missing_usage", "usage_then_delta"):
                 # `usage_then_delta` sends its only usage object mid-stream, so the
                 # inconsistency under test is the delta that followed it, not a second
                 # object (which is `conflicting_usage`).
                 yield sse(chunk(usage=self.usage(len(pieces))))
+            if self.fault == "repeated_usage":
+                yield sse(chunk(usage=self.usage(len(pieces))))      # the identical object
+            if self.fault == "valid_then_malformed":
+                yield sse(chunk(usage={"prompt_tokens": "1200", "completion_tokens": None}))
             if self.fault == "conflicting_usage":
                 yield sse(chunk(usage={"prompt_tokens": self.prompt_tokens + 7,
                                        "completion_tokens": len(pieces),
@@ -315,7 +340,7 @@ class FakeUpstream:
         if self.fault == "engine_error_pre_headers":
             return httpx.Response(500, content=self._error_body())
         return httpx.Response(200, headers={"content-type": "text/event-stream"},
-                              content=self._stream())
+                              content=self._counted(self._stream()))
 
     def client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(base_url="http://engine.invalid",

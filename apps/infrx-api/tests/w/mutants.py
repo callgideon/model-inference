@@ -89,6 +89,7 @@ USAGE = "test_api_stream__usage_is_authoritative_only_when_the_stream_agrees"
 BOUNDS = "test_api_stream__one_event_and_the_whole_output_are_bounded"
 JOURNAL = "test_api_stream__an_event_always_fits_the_journal_in_any_script"
 FLOOD = "test_api_stream__a_line_that_never_ends_is_bounded_and_still_checked"
+FINISH = "test_api_stream__a_finish_reason_outside_the_set_is_not_a_success"
 JUNK = "test_api_stream__junk_and_stray_payloads_are_survived_not_relayed"
 FAILURES = "test_api_stream__transport_engine_and_incomplete_failures_are_distinct"
 TYPED = "test_api_stream__every_engine_failure_is_typed"
@@ -304,6 +305,9 @@ MUTANTS: tuple[Mutant, ...] = (
     # so no single edit to it changes the outcome. "A usage we cannot read is unknown"
     # stays covered by `usage_booleans_trusted`, `usage_nonints_trusted`,
     # `usage_nondict_trusted` and `usage_totals_not_checked`.
+    _m("malformed_flag_ignored", "any malformed usage object makes it unknown (R58)",
+       E, "        if stream.malformed_usage or stream.usage_candidate is None:",
+       "        if stream.usage_candidate is None:", USAGE),
     _m("usage_booleans_trusted", "True is not a token count",
        E, "        if isinstance(value, bool) or not isinstance(value, int) or value < 0:",
        "        if not isinstance(value, int) or value < 0:", USAGE),
@@ -321,6 +325,12 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("completed_without_a_count", "a finished stream with unknown usage is not a success",
        E, "        if self.finish_reason in FINISHED_REASONS and self.usage is not None:",
        "        if self.finish_reason is not None or self.usage is not None:", USAGE),
+    _m("completed_without_finish", "completed needs a finish reason as well (R21)",
+       E, "        if self.finish_reason in FINISHED_REASONS and self.usage is not None:",
+       "        if self.usage is not None:", FINISH),
+    _m("abort_is_finished", "abort is not a finish reason we accept",
+       E, 'FINISHED_REASONS = ("stop", "length")', 'FINISHED_REASONS = ("stop", "length", "abort")',
+       FINISH),
     # --- failure classes ------------------------------------------------------
     _m("pre_header_status_ignored", "a non-200 is an engine error, not a stream",
        E, "                if response.status_code != 200:", "                if False:",
@@ -425,11 +435,30 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "        key = (lease.job_id, lease.generation)", "        key = (lease.job_id, 1)",
        CANCEL_SCOPE),
     _m("cancel_intents_unbounded", "intents for work that never runs are bounded (R58)",
-       E, "        while len(self.cancelled) > MAX_CANCEL_INTENTS:", "        while False:",
+       E, "        while len(self.cancelled) >= MAX_CANCEL_INTENTS:", "        while False:",
        CANCEL_SCOPE),
+    _m("cancel_evicts_a_live_intent", "only a finished generation may be evicted",
+       E, "            stale = next((held for held in self.cancelled if held in self.finished), None)",
+       "            stale = next(iter(self.cancelled), None)", CANCEL_SCOPE),
+    _m("cancel_forgets_silently", "a cancel it cannot hold answers False, not True",
+       E, "                return False\n"
+          "            self.cancelled.pop(stale, None)",
+       "                self.cancelled.pop(next(iter(self.cancelled)), None)\n"
+          "            self.cancelled.pop(stale, None) if stale else None",
+       CANCEL_SCOPE),
+    _m("two_usage_events", "a repeated usage object is one event, not two",
+       E, "        if stream.usage_objects == 0:", "        if False:", USAGE),
+    _m("inner_generator_not_closed", "a consumer that stops reading closes the engine now",
+       E, "            await inner.aclose()\n"
+          "            # Every exit path, including `upstream_body` refusing before a request was ever",
+       "            # Every exit path, including `upstream_body` refusing before a request was ever",
+       CANCEL_SCOPE),
+    _m("run_does_not_close_its_inner", "the generate boundary closes what it delegated to",
+       E, "            await inner.aclose()\n\n    async def _generate",
+       "            pass\n\n    async def _generate", CANCEL_SCOPE),
     _m("intent_outlives_the_stream", "an intent is cleared on every exit path (R58)",
-       E, "        finally:\n            self.cancelled.pop(key, None)",
-       "        finally:\n            pass", CANCEL),
+       E, "            self.cancelled.pop(key, None)\n            self._remember_finished(key)",
+       "            self._remember_finished(key)", CANCEL),
     # --- readiness ------------------------------------------------------------
     _m("drain_is_not_observable", "drain stops reporting ready",
        E, '        if self.drained:\n            return {"ready": False, "drained": True,',

@@ -129,11 +129,19 @@ def accepted(engine: VllmEngine, prepared: PreparedRequest):
 
 
 def drained(stream):
-    """(events, failure). A stall or a cancellation must *not* raise, so "no failure"
-    is something a case can assert."""
+    """(events, failure). A stall or a cancellation must *not* raise, so "no failure" is
+    something a case can assert.
+
+    An **adapter-side** crash is re-raised rather than returned: `_run` wraps any unexpected
+    exception as `EngineFailure(stage="adapter")`, and swallowing that here let a mutant's
+    `NameError` reach a case as a tidy "failure is not None" assertion - a false kill the
+    round-2 review found with two probes.
+    """
     try:
         return asyncio.run(collect(stream)), None
     except EngineFailure as failure:
+        if failure.facts.get("stage") == "adapter":
+            raise
         return [], failure
 
 
@@ -650,6 +658,8 @@ def test_api_stream__usage_is_authoritative_only_when_the_stream_agrees():
     assert stream.terminal_cause is TerminalCause.engine_incomplete   # no count, no success
 
     for fault, reason in (("malformed_usage", "malformed"), ("inconsistent_usage", "malformed"),
+                          ("valid_then_malformed", "malformed"),
+                          ("malformed_then_valid", "malformed"),
                           ("string_usage", "malformed"), ("negative_usage", "malformed"),
                           ("bool_usage", "malformed"), ("nondict_usage", "malformed"),
                           ("usage_then_delta", "delta_after_usage"),
@@ -664,6 +674,37 @@ def test_api_stream__usage_is_authoritative_only_when_the_stream_agrees():
         assert usages(events)[0].payload["certainty"] == "unknown", fault
         assert usages(events)[0].payload["reason"] == reason, fault
         assert stream.terminal_cause is TerminalCause.engine_incomplete, fault
+
+    # ... and the converse: the *same* usage object twice is one count, not a conflict, and
+    # it yields exactly one usage event (r1 R58 as the round-2 review worded it)
+    upstream, engine, held, prepared = drive("repeated_usage")
+    stream = engine.generate(held, prepared)
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert len(usages(events)) == stream.usage_events == 1
+    assert stream.usage is not None and stream.usage.certainty.value == "authoritative"
+    assert stream.usage.completion_tokens == len(upstream.deltas())
+    assert stream.terminal_cause is TerminalCause.completed
+
+
+def test_api_stream__a_finish_reason_outside_the_set_is_not_a_success():
+    """R21/R58: `completed` needs **both** halves - a finish reason the engine is entitled to
+    end on (`stop` or `length`) *and* authoritative usage. `abort` is neither a customer
+    answer nor a length cut-off, so the outcome is `engine_incomplete` however good the
+    count looks; only the usage half was asserted before."""
+    upstream, engine, held, prepared = drive("abort_finish")
+    stream = engine.generate(held, prepared)
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert stream.finish_reason == "abort" and stream.complete
+    assert stream.usage is not None                    # the count itself is fine
+    assert stream.terminal_cause is TerminalCause.engine_incomplete
+    # and the accepted reason really is accepted
+    upstream, engine, held, prepared = drive()
+    stream = engine.generate(held, prepared)
+    drained(stream)
+    assert stream.finish_reason == "stop"
+    assert stream.terminal_cause is TerminalCause.completed
 
 
 def test_api_stream__an_event_always_fits_the_journal_in_any_script():
@@ -991,7 +1032,10 @@ def test_api_stream__cancellation_closes_the_upstream_stream():
 
     events = asyncio.run(cancel_after_two())
     assert len(raws(events)) < upstream.long_stream_deltas
-    assert upstream.closed and not upstream.completed, "the adapter left the engine running"
+    # "it stopped reading" is the honest measure: the script had 200 deltas to give and the
+    # adapter pulled a handful, and it closed its side of the response.
+    assert upstream.frames_sent < upstream.long_stream_deltas // 4, upstream.frames_sent
+    assert not upstream.completed and stream.upstream_closed
     assert stream.cancelled and len(usages(events)) == 1
     assert usages(events)[0].usage is None and stream.usage is None
     assert usages(events)[0].payload["certainty"] == "unknown"
@@ -1032,10 +1076,27 @@ def test_api_stream__a_cancellation_is_scoped_to_its_generation():
     assert not stream.cancelled and stream.complete and stream.usage is not None
     assert engine.cancelled == {(first.job_id, 1): True}   # the other intent is untouched
 
-    # a cancel for a lease that never runs is bounded
-    for ordinal in range(MAX_CANCEL_INTENTS + 50):
-        asyncio.run(engine.cancel(first.model_copy(update={"generation": ordinal + 10})))
-    assert len(engine.cancelled) == MAX_CANCEL_INTENTS
+    # a cancel for a lease that never runs is bounded - and bounded *without* forgetting a
+    # live intent: every key still in the map belongs to work that may yet run, so the
+    # engine evicts only generations it has already finished and otherwise answers False.
+    held_intent = first.model_copy(update={"generation": 7})
+    assert asyncio.run(engine.cancel(held_intent)) is True
+    answers = [asyncio.run(engine.cancel(first.model_copy(update={"generation": ordinal + 10})))
+               for ordinal in range(MAX_CANCEL_INTENTS + 50)]
+    assert len(engine.cancelled) <= MAX_CANCEL_INTENTS
+    assert (held_intent.job_id, 7) in engine.cancelled, "a live pre-start intent was evicted"
+    assert False in answers, "cancel never refused, so something was forgotten"
+    # the generation that *did* run is the one that was evicted
+    assert (first.job_id, 2) not in engine.cancelled
+    # and the intent still stops the request it belongs to
+    box2 = Box()
+    upstream2 = FakeUpstream(clock=box2.clock)
+    engine2 = upstream2.engine()
+    pre_start = lease(box2)
+    assert asyncio.run(engine2.cancel(pre_start)) is True
+    stream2 = engine2.generate(pre_start, text_prepared(box2))
+    asyncio.run(collect(stream2))
+    assert upstream2.requests == [] and stream2.cancelled
 
     # cancelling once the usage event is out changes nothing about it
     box = Box()
@@ -1059,7 +1120,24 @@ def test_api_stream__a_cancellation_is_scoped_to_its_generation():
             if event.type is ChunkEventType.delta:
                 break
         await stream.aclose()
+        # asserted *inside* the coroutine: the loop finalises abandoned async generators at
+        # shutdown, so anything checked after `asyncio.run` returned proves nothing about
+        # who stopped the read. `frames_sent` and `upstream_closed` are what do.
+        pulled = upstream.frames_sent
+        assert stream.upstream_closed, "aclose did not close the response"
+        assert not upstream.completed and pulled <= 3, pulled
+        with pytest.raises(StopAsyncIteration):
+            await stream.__anext__()
+        assert upstream.frames_sent == pulled, "the engine was still being read"
+        return stream
 
-    asyncio.run(stop_after_one())
-    assert upstream.closed and not upstream.completed
-    assert engine.cancelled == {}
+    closed = asyncio.run(stop_after_one())
+    assert closed.cancelled is False and engine.cancelled == {}
+
+    # a generator closed before its first `__anext__` leaves nothing behind either
+    box = Box()
+    upstream = FakeUpstream(clock=box.clock)
+    engine = upstream.engine()
+    never = engine.generate(lease(box), text_prepared(box))
+    asyncio.run(never.aclose())
+    assert upstream.requests == [] and engine.cancelled == {}

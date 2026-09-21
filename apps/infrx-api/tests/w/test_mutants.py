@@ -29,7 +29,7 @@ SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 def test_the_list_is_well_formed():
     """Every mutant names an invariant and at least one case, and no name repeats: a
     typo would make a mutant unkillable by construction."""
-    assert len(ALL) >= 80, f"only {len(ALL)} mutants declared"
+    assert len(ALL) >= 100, f"only {len(ALL)} mutants declared"
     assert len({m.name for m in ALL}) == len(ALL), "duplicate mutant names"
     for mutant in ALL:
         assert mutant.cases, f"{mutant.name} names no case"
@@ -121,6 +121,23 @@ SELF_TESTS = (
                           new="            ready = _undefined_name_at_runtime(response)",
                           cases=("test_f_contract__health_drain_and_the_capability_probe",),
                           allowed_errors=("NameError",))),
+    # the second false-kill channel: a crash on the *generate* path is wrapped by `_run` as
+    # EngineFailure(stage="adapter"), which `drained()` re-raises for exactly this reason
+    ("a_crash_on_the_generate_path_is_not_a_kill", mutation_list.Outcome.broken_runner,
+     mutation_list.Mutant(name="self_generate_crash",
+                          invariant="a wrapped NameError is not evidence",
+                          file="worker/engine.py",
+                          old="        stream.raw_text += content",
+                          new="        stream.raw_text += _undefined_name_at_runtime(content)",
+                          cases=("test_api_stream__a_slow_but_steady_stream_is_not_a_stall",))),
+    ("the_same_crash_declared_is_a_kill", mutation_list.Outcome.killed,
+     mutation_list.Mutant(name="self_generate_crash_declared",
+                          invariant="a declared kill mode is accepted",
+                          file="worker/engine.py",
+                          old="        stream.raw_text += content",
+                          new="        stream.raw_text += _undefined_name_at_runtime(content)",
+                          cases=("test_api_stream__a_slow_but_steady_stream_is_not_a_stall",),
+                          allowed_errors=("EngineFailure",))),
     ("a_mutant_with_no_case_is_a_failure", mutation_list.Outcome.misdeclared,
      mutation_list.Mutant(name="self_no_case", invariant="every mutant names a case",
                           file="worker/engine.py", old="DETAIL_MAX_CHARS = 500",
