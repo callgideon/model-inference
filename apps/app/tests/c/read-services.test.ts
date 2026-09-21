@@ -267,6 +267,38 @@ test("the single-row reads are tenant-bound too, in both directions", async () =
   assert.ok(!revoked.ok && revoked.error.code === "not_found", "another organization's key is simply absent");
 });
 
+test("a truthy isOperator is not authority on the authorization path either", async () => {
+  const { services, sessions, ids } = makeConsoleHarness();
+  // The masking decision was pinned last round; the *authorization* decision was not, so
+  // `session.isOperator !== true` could be weakened to `!session.isOperator` and a session carrying
+  // the string "false" would read every organization on the platform.
+  const spoofed = [1, "false", "true", {}, [], "0"].map((value) => ({
+    ...sessions.owner,
+    isOperator: value as unknown as boolean,
+  }));
+  for (const session of spoofed) {
+    const shown = JSON.stringify(session.isOperator);
+    expectError(await services.adminOrgs(session, { limit: 5 }), "forbidden");
+    expectError(await services.adminAudit(session, { limit: 5 }), "forbidden");
+    expectError(
+      await services.adminGrant(session, {
+        target_org_id: ids.orgId,
+        amount: "1.00000000" as Money,
+        kind: "promotional",
+        reason: `isOperator=${shown} is not authority`,
+        idempotency_key: `spoof-${shown}`,
+      }),
+      "forbidden",
+    );
+    // Owner-or-operator: a *member* whose flag is merely truthy must still be refused.
+    expectError(await services.judgeRuns({ ...session, role: "member" }, { limit: 5 }), "forbidden");
+  }
+  // The genuine flag still works, so the case cannot pass by refusing everybody.
+  expectOk(await services.adminOrgs(sessions.operator, { limit: 5 }));
+  expectOk(await services.adminAudit(sessions.operator, { limit: 5 }));
+  expectOk(await services.judgeRuns(sessions.operatorMember, { limit: 5 }));
+});
+
 test("a cursor belongs to the list that minted it, across every paged list", async () => {
   const { services, sessions } = makeConsoleHarness();
   // Only `usage` was proven before, so a list wired to another list's scope survived. Every list is
@@ -320,6 +352,25 @@ test("a cursor does not survive a change of filter, on every filtered list", asy
   if (byState.next_cursor !== null) {
     expectError(await services.traces(sessions.owner, { limit: 5, cursor: byState.next_cursor }), "invalid_cursor");
   }
+  // The operator list has a filter too, and its scope must carry it: a walk of one organization's
+  // audit trail cannot continue into the whole platform's.
+  const audit = expectOk(await services.adminAudit(sessions.operator, { limit: 5 }));
+  assert.ok(audit.next_cursor !== null);
+  expectError(
+    await services.adminAudit(sessions.operator, { limit: 5, cursor: audit.next_cursor, target_org_id: ids.orgId }),
+    "invalid_cursor",
+  );
+  const forOne = expectOk(await services.adminAudit(sessions.operator, { limit: 5, target_org_id: ids.orgId }));
+  assert.ok(forOne.next_cursor !== null, "the seeded audit trail must page within one organization");
+  expectError(await services.adminAudit(sessions.operator, { limit: 5, cursor: forOne.next_cursor }), "invalid_cursor");
+  expectError(
+    await services.adminAudit(sessions.operator, {
+      limit: 5,
+      cursor: forOne.next_cursor,
+      target_org_id: ids.otherOrgId,
+    }),
+    "invalid_cursor",
+  );
   // The page size is not a filter, so a walk may change it (08 §9).
   expectOk(await services.usage(sessions.owner, { limit: 25, cursor: first.next_cursor }));
 });

@@ -157,6 +157,38 @@ test("a stored value that is not what the DTO says is a typed refusal, not a bla
   expectError(await walkUsage(), "internal_error", "a missing column");
 });
 
+test("a boolean column is a boolean: a suspension flag is never guessed at", async () => {
+  const { services, sessions, ids, data } = makeConsoleHarness();
+  const org = data.orgs.find((row) => row.org_id === ids.orgId);
+  assert.ok(org !== undefined);
+  // `suspended` decides whether new work is refused (R33). A reader that fell back to `false` for a
+  // value it did not recognise would silently unsuspend an organization.
+  for (const value of ["yes", "maybe", 2, "", null, {}]) {
+    org.suspended = value;
+    expectError(
+      await services.usage(sessions.owner, { limit: 5 }),
+      "internal_error",
+      `suspended=${JSON.stringify(value)} must be refused, not guessed`,
+    );
+  }
+  for (const [value, suspended] of [
+    [true, true],
+    [false, false],
+    [1, true],
+    [0, false],
+    ["true", true],
+    ["false", false],
+  ] as [unknown, boolean][]) {
+    org.suspended = value;
+    const result = await services.judgeRuns(sessions.owner, { limit: 5 });
+    assert.equal(
+      result.ok ? "allowed" : result.error.code,
+      suspended ? "org_suspended" : "allowed",
+      `suspended=${JSON.stringify(value)} must read as ${String(suspended)}`,
+    );
+  }
+});
+
 test("a usage row survives a deleted key, and says so", async () => {
   const { services, sessions, ids, data } = makeConsoleHarness();
   // `usage_events.api_key_id` is nullable (`on delete set null`) and D1's view LEFT JOINs the key, so

@@ -565,6 +565,46 @@
       "cases": [
         "the server-only modules carry their run-time guard as well"
       ]
+    },
+    {
+      "id": "ROLE-05",
+      "note": "operator authority on the authorization path is a truthiness test",
+      "file": "lib/services/console.ts",
+      "find": "    if ((OPERATOR_ONLY_OPERATIONS as readonly string[]).includes(operation) && session.isOperator !== true) {",
+      "replace": "    if ((OPERATOR_ONLY_OPERATIONS as readonly string[]).includes(operation) && !session.isOperator) {",
+      "cases": [
+        "a truthy isOperator is not authority on the authorization path either"
+      ]
+    },
+    {
+      "id": "ROLE-06",
+      "note": "owner-or-operator accepts a merely truthy flag",
+      "file": "lib/services/console.ts",
+      "find": "      (OWNER_OR_OPERATOR_OPERATIONS as readonly string[]).includes(operation) &&\n      session.role !== \"owner\" &&\n      session.isOperator !== true",
+      "replace": "      (OWNER_OR_OPERATOR_OPERATIONS as readonly string[]).includes(operation) &&\n      session.role !== \"owner\" &&\n      !session.isOperator",
+      "cases": [
+        "a truthy isOperator is not authority on the authorization path either"
+      ]
+    },
+    {
+      "id": "SCOPE-03",
+      "note": "the audit cursor ignores the target organization it was minted under",
+      "file": "lib/services/console.ts",
+      "find": "        cursorScope(\"operators\", \"adminAudit\", query),",
+      "replace": "        cursorScope(\"operators\", \"adminAudit\", {}),",
+      "cases": [
+        "a cursor does not survive a change of filter, on every filtered list"
+      ]
+    },
+    {
+      "id": "STRICT-05",
+      "note": "an unrecognised boolean reads as false, which silently unsuspends an organization",
+      "file": "lib/services/console.ts",
+      "find": "  throw new TypeError(`${column} must be a boolean`);",
+      "replace": "  return false;",
+      "cases": [
+        "a boolean column is a boolean: a suspension flag is never guessed at"
+      ]
     }
   ]
 }
