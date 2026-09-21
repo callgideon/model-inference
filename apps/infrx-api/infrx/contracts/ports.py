@@ -174,14 +174,19 @@ class MediaStore(Protocol):
     async def stage(self, org_id: str, request: NormalizedRequest) -> tuple[MediaRef, ...]:
         """Durably stage the canonical payload and inline media before acceptance."""
 
-    async def attach(self, job_id: str, org_id: str, refs: tuple[MediaRef, ...]) -> None:
+    async def attach(self, job_id: str, refs: tuple[MediaRef, ...]) -> None:
         """r1 R46: bind staged refs to an admitted job, as the job row does in
         PostgreSQL. A real port operation rather than a test-only hook, because
         `prepare` cannot work without it and M's adapter has to implement it.
 
-        r1 R52: every ref must belong to `org_id`, the **job's** organization, or
-        `not_found`. A foreign ref used to attach and be caught two phases later by
-        `prepared`, after `prepare` had transcoded it into this tenant's prefix."""
+        r1 R52: every ref must belong to the **job's** organization, or `not_found`. A
+        foreign ref used to attach and be caught two phases later by `prepared`, after
+        `prepare` had transcoded it into this tenant's prefix.
+
+        r1 R55: that organization is read from the **job row**. With an `org_id` argument
+        `attach(jobA, ORG_B, (refB,))` satisfied its own check, because the caller named
+        the tenant its refs belonged to - and 06 is explicit that server-derived identity
+        is never taken from an untrusted argument. A refused attach stores nothing."""
 
     async def prepare(self, job_id: str, profile: str) -> tuple[MediaRef, ...]:
         """Produce immutable prepared refs for a profile version."""
@@ -210,7 +215,11 @@ class Scheduler(Protocol):
         r1 R52: `kind` selects `prepare_dispatch` or `inference_dispatch`, so a
         preparation worker can be fed from the index rather than from a side channel.
         `None` means "anything". A candidate of the wrong kind is not a refusal a pool
-        should have to discover through `claim`."""
+        should have to discover through `claim`.
+
+        r1 R55: an **unknown** kind is `invalid_request`, not `None`. Answering "no
+        candidate" for a misspelled kind reports a caller bug as an empty index, so a pool
+        idles for ever against a full queue and looks healthy while it does it."""
 
     async def acknowledge(self, event: IndexEvent) -> None: ...
 

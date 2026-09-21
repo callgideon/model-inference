@@ -62,6 +62,27 @@ R = "contracts/records.py"
 W = "contracts/wire.py"                 # public bodies: projections and input bounds
 MONEY = "contracts/money.py"
 
+# --- how a mutant is allowed to die (r1 round-3 review) --------------------------------
+# A port is a trust boundary, so a kill that depends on an *untyped* exception is a case a
+# real adapter could fail for the wrong reason: a store answering the typed `DomainError`
+# the contract promises must not crash the case. Every committed mutant now dies on an
+# assertion or on a typed `DomainError`, with exactly **two** deliberate exceptions, both
+# of which are guards whose entire purpose is to stop an untyped error escaping:
+#
+# * `mime_string_accepted` - `create_upload`'s allow-list check. Removing it lets
+#   `tuple(5)` raise `TypeError` out of the port, which *is* the defect; adding a second
+#   defensive conversion would make the first guard unkillable, because the port would
+#   then answer `invalid_request` either way. The case asserts the typed code on the
+#   unmutated path.
+# * `add_raises_on_a_non_byte_part` - R37 says `TraceCapture.add` **never raises into the
+#   request path**. The invariant is the absence of an exception, so the only way to break
+#   it is to raise one, and the only honest kill is the raise.
+#
+# The six `ValidationError` kills the review found are gone: `FakeFeedbackService._row`
+# maps a record-validation failure to `internal_error`, because the row's fields are
+# server-chosen and a bad one is our bug rather than the caller's. The two `KeyError`
+# kills are gone too - the trace cases read `loss_reasons` with `.get(..., 0)`, so a
+# missing count is an assertion about a number and not a dictionary lookup that explodes.
 MUTANTS: tuple[Mutant, ...] = (
     # --- identity, idempotency and tenancy -----------------------------------
     _m("admit_replays_any_org", "an idempotency scope belongs to the request's own org",
@@ -224,10 +245,11 @@ MUTANTS: tuple[Mutant, ...] = (
     # R46 split the fence in two, so each enforcement point has its own anchor: the
     # shared two-line form matched both and the mutant edited whichever came first.
     _m("deadlines_do_not_bind_mutations", "deadlines bind every fenced mutation (R29)",
-       S, '        if self.clock.now() >= job.lease.expires_at:\n'
+       S, "        self._enforce_deadlines(job)\n"
+          "        if self.clock.now() >= job.lease.expires_at:\n"
           '            raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")\n'
-          "        self._enforce_deadlines(job)\n        return job",
-       '        if self.clock.now() >= job.lease.expires_at:\n'
+          "        return job",
+       "        if self.clock.now() >= job.lease.expires_at:\n"
           '            raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")\n'
           "        return job",
        "dur_fence__a_lease_is_a_fencing_token_not_a_record"),
@@ -579,6 +601,96 @@ MUTANTS: tuple[Mutant, ...] = (
     #
     # Keeping an unkillable mutant would fail the run; keeping it *and* weakening a case to
     # kill it would be the false kill R40 forbids.
+    # --- r1 round-3: the six non-equivalent survivors the reviewer found -----------
+    _m("preparation_heartbeat_skips_the_fence", "a superseded worker renews nothing (s13)",
+       S, "                job = self._fence_preparation(lease)\n"
+          "                job.preparation_lease = job.preparation_lease.model_copy(update={",
+       "                job = self.jobs[lease.job_id]\n"
+          "                job.preparation_lease = job.preparation_lease.model_copy(update={",
+       "dur_fence__preparation_is_claimed_and_fenced_like_execution"),
+    _m("hold_rounds_half_up", "the maximum hold rounds up, never half up (s01)",
+       MONEY, "def maximum_hold(max_input_tokens: int, max_output_tokens: int, input_rate: Decimal, output_rate: Decimal) -> Decimal:",
+       "def maximum_hold(max_input_tokens: int, max_output_tokens: int, input_rate: Decimal, output_rate: Decimal) -> Decimal:\n"
+       "    return half_up(cost(max_input_tokens, max_output_tokens, input_rate, output_rate))",
+       "dur_cap__the_hold_rounds_up_never_half_up"),
+    _m("replay_rederives_the_hold", "a replay reports the original hold and price (s05)",
+       S, "        job = self.jobs[record.request_id]\n"
+          '        return self._snapshot(job).model_copy(update={"replayed": True})',
+       "        job = self.jobs[record.request_id]\n"
+          "        current = self.price_for(job.request.model_revision, now)\n"
+          '        return self._snapshot(job).model_copy(update={"replayed": True,\n'
+          '            "price_snapshot": current or job.admission.price_snapshot,\n'
+          "            \"maximum_hold\": self._derive_hold(job.request,\n"
+          "                                              current or job.admission.price_snapshot)})",
+       "dur_admit__a_replay_reports_the_original_hold_and_price"),
+    _m("preparation_retries_unbounded", "preparation retries are bounded (q08)",
+       S, "            if job.preparation_attempts > self.limits.max_prepublication_retries:",
+       "            if False:",
+       "dur_output__a_lost_preparation_worker_is_reaped_within_bounds"),
+    _m("requeue_labelled_for_the_wrong_phase", "a requeue carries its own phase's kind (s18)",
+       S, "                               kind=OutboxKind.inference_dispatch,\n"
+          "                               execution_mode=job.request.execution_mode, available_at=now,",
+       "                               kind=OutboxKind.prepare_dispatch,\n"
+          "                               execution_mode=job.request.execution_mode, available_at=now,",
+       "dur_output__every_requeued_candidate_carries_the_right_kind"),
+    _m("lost_inference_emits_a_prepare_dispatch", "a lost attempt dispatches for its own phase (s18)",
+       S, '            self._emit(job.id, OutboxKind.inference_dispatch, now, {"request_id": job.id,\n'
+          '                                                                    "attempt": job.attempts})',
+       '            self._emit(job.id, OutboxKind.prepare_dispatch, now, {"request_id": job.id,\n'
+          '                                                               "attempt": job.attempts})',
+       "dur_output__every_requeued_candidate_carries_the_right_kind"),
+    # --- r1 R55: untrusted store inputs -----------------------------------------
+    _m("attach_trusts_a_caller_supplied_org", "attach reads the org from the job row (R55)",
+       M, "        org_id = self.job_org(job_id)", '        org_id = refs[0].org_id if refs else ""',
+       "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
+    _m("attach_stores_before_validating", "a refused attach stores nothing (R55/s15)",
+       M, "        org_id = self.job_org(job_id)\n        for ref in refs:",
+       "        org_id = self.job_org(job_id)\n        self.by_job[job_id] = tuple(refs)\n"
+       "        for ref in refs:",
+       "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
+    _m("admit_accepts_a_zero_output_ceiling", "a zero ceiling never means a free request (R55)",
+       S, "        if not 1 <= request.max_output_tokens <= limits.max_output_tokens:",
+       "        if request.max_output_tokens > limits.max_output_tokens:",
+       "dur_admit__the_token_ceilings_are_range_checked"),
+    _m("admit_accepts_a_zero_input_ceiling", "an input ceiling is at least one (R55)",
+       S, "        if request.max_input_tokens < 1:", "        if False:",
+       "dur_admit__the_token_ceilings_are_range_checked"),
+    _m("admit_accepts_a_request_past_the_context_cap", "the ceilings fit the context (R55)",
+       S, "        if total > limits.max_context_tokens:", "        if False:",
+       "dur_admit__the_token_ceilings_are_range_checked"),
+    _m("claim_candidate_swallows_an_unknown_kind", "an unknown kind is typed (R55)",
+       Q, "        if kind is not None and kind not in DISPATCH_KINDS:", "        if False:",
+       "dur_outbox__a_candidate_carries_its_dispatch_kind"),
+    _m("operator_author_without_the_marker", "an operator author is marked (R55)",
+       F, "            author_principal=auth.principal, author_role=AuthorRole.operator,\n"
+          "            by_operator=True,                # r1 R50: a label is always an operator's",
+       "            author_principal=auth.principal, author_role=AuthorRole.operator,\n"
+          "            by_operator=bool(auth.role and False),  # r1 R50",
+       "feedback_ack__an_operator_may_label_a_calibration_set"),
+    # --- r1 R55 / B1: the phase deadline is enforced before lease expiry -----------
+    # `prepared_ignores_the_phase_deadline` was removed in the R52 pass as
+    # "unrepresentable". It was not: R52's clamp made the *expiry* check fire first, so
+    # `_enforce_deadlines` became dead code and the invariant regressed. That is what made
+    # the mutant unkillable, and it is restored here with the case that shows the
+    # difference - deleting the call must fail, and so must putting expiry back in front.
+    _m("prepared_ignores_the_phase_deadline", "the phase deadline binds prepared itself (R29/R55)",
+       S, "        # r1 R55/R29: the phase first, because a clamped lease expires with it.\n"
+          "        self._enforce_deadlines(job)\n"
+          "        if self.clock.now() >= job.preparation_lease.expires_at:",
+       "        if self.clock.now() >= job.preparation_lease.expires_at:",
+       "dur_output__a_heartbeating_preparation_worker_is_terminalized_on_time"),
+    _m("preparation_expiry_checked_before_the_deadline", "the deadline goes first (R55)",
+       S, "        # r1 R55/R29: the phase first, because a clamped lease expires with it.\n"
+          "        self._enforce_deadlines(job)\n"
+          "        if self.clock.now() >= job.preparation_lease.expires_at:\n"
+          '            raise errors.StaleLease(f"preparation lease expired at "\n'
+          '                                    f"{job.preparation_lease.expires_at}")\n'
+          "        return job",
+       "        if self.clock.now() >= job.preparation_lease.expires_at:\n"
+          '            raise errors.StaleLease(f"preparation lease expired at "\n'
+          '                                    f"{job.preparation_lease.expires_at}")\n'
+          "        self._enforce_deadlines(job)\n        return job",
+       "dur_output__a_heartbeating_preparation_worker_is_terminalized_on_time"),
     # --- r1 R52: the preparation lease, the tenant check and the dispatch kind ---
     _m("preparation_lease_uses_the_inference_ttl", "preparation has its own short TTL (R52)",
        S, "                expires_at=min(now + timedelta(seconds=self.limits.preparation_lease_ttl_s),\n"
@@ -994,19 +1106,24 @@ MUTANTS: tuple[Mutant, ...] = (
        "            pass\n        if self.closed:",
        "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope",
        "trace_bounds__off_mode_produces_no_trace_at_all"),
+    # P18 split the no-op path's combined guard - `envelope.mode is not minimal or
+    # carries_content` - into a general mode check that applies to **every** mode and a
+    # content check for `minimal`. The two halves the r7 pass tested separately are now two
+    # separate guards, so each has its own mutant and the third (which edited the combined
+    # form) is gone. The mode check is edited here against the no-op *case* as well as
+    # against the lattice, because both must be able to see it.
     _m("minimal_capture_trusts_the_envelope_mode", "the capture's mode decides, not the envelope",
-       T, "            if envelope.mode is not TraceMode.minimal or envelope.carries_content:",
-       "            if False:",
+       T, "        if envelope.mode is not self.mode:\n"
+          "            # r1 R12/R37, the same rule the accumulating path enforces: **the capture",
+       "        if False:\n"
+          "            # r1 R12/R37, the same rule the accumulating path enforces: **the capture",
        "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
-    # both halves of that guard, separately: the mode half alone let a raw-assembled
-    # minimal envelope carry content past a customer's metadata-only consent (r7 F1, y3c)
     _m("minimal_capture_keeps_only_the_mode_half", "a minimal capture never stores content",
-       T, "            if envelope.mode is not TraceMode.minimal or envelope.carries_content:",
-       "            if envelope.mode is not TraceMode.minimal:",
-       "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
-    _m("minimal_capture_keeps_only_the_content_half", "a minimal capture checks the mode too",
-       T, "            if envelope.mode is not TraceMode.minimal or envelope.carries_content:",
-       "            if envelope.carries_content:",
+       T, "            if envelope.carries_content:\n"
+          "                self._count(TraceLossReason.malformed)\n"
+          "                return self.sink._drop(TraceLossReason.malformed, counted=True)\n"
+          "            return self.sink._enqueue(envelope, charged=0, capture=self)",
+       "            return self.sink._enqueue(envelope, charged=0, capture=self)",
        "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
     _m("live_capture_trusts_the_envelope_mode", "the capture decides on the live path too (n1)",
        T, "        if envelope.mode is not self.mode:", "        if False:",
@@ -1042,10 +1159,32 @@ MUTANTS: tuple[Mutant, ...] = (
           "            if reason is TraceLossReason.queue_full:\n"
           "                self.content_bytes = max(0, self.content_bytes - charged)",
        "trace_bounds__a_dropped_finish_releases_its_charge"),
+    # --- P17/P18: identity and mode, now observable inside the lattice ------------
+    _m("noop_capture_trusts_the_envelope_mode", "the capture decides its own mode (P18)",
+       T, "        if envelope.mode is not self.mode:\n"
+          "            # r1 R12/R37, the same rule the accumulating path enforces: **the capture",
+       "        if False:\n"
+          "            # r1 R12/R37, the same rule the accumulating path enforces: **the capture",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("noop_capture_files_a_foreign_identity", "a row belongs to its capture (P17)",
+       T, "        if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):\n"
+          "            # The same identity check the accumulating path makes: one request's envelope",
+       "        if False:\n"
+          "            # The same identity check the accumulating path makes: one request's envelope",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
+    _m("live_capture_files_a_foreign_identity", "a live capture checks identity too (P17)",
+       T, "        if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):\n"
+          "            # The single loss this capture contributes is labelled by what went wrong:",
+       "        if False:\n"
+          "            # The single loss this capture contributes is labelled by what went wrong:",
+       "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
     # --- P08/P10/P11: the guarded lattice invariants that now fire ---------------
     _m("minimal_capture_stores_content", "a minimal capture never stores content (P08)",
-       T, "            if envelope.mode is not TraceMode.minimal or envelope.carries_content:",
-       "            if envelope.mode is not TraceMode.minimal:",
+       T, "            if envelope.carries_content:\n"
+          "                self._count(TraceLossReason.malformed)\n"
+          "                return self.sink._drop(TraceLossReason.malformed, counted=True)\n"
+          "            return self.sink._enqueue(envelope, charged=0, capture=self)",
+       "            return self.sink._enqueue(envelope, charged=0, capture=self)",
        "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
     _m("no_deadline_capture_loses_silently", "declared content that is missing says why (P10)",
        T, '            "content_complete": False, "content_ref": None, "content_bytes": 0,\n'

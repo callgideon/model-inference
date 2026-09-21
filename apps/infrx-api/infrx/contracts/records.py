@@ -827,6 +827,12 @@ class Feedback(Record):
             raise ValueError("a calibration_label entry is authored by an operator")
         if label and not self.by_operator:
             raise ValueError("a calibration_label entry is made by an operator (R50)")
+        # r1 R55: and the converse, for *any* row. An `operator` author role without the
+        # marker was constructible, and the marker is what R41's masking keys on - so such
+        # a row would be operator-authored and read to a customer with the operator's
+        # principal intact, which is the leak R50 exists to close.
+        if self.author_role is AuthorRole.operator and not self.by_operator:
+            raise ValueError("an operator-authored entry is marked by_operator (R55)")
         return self
 
 

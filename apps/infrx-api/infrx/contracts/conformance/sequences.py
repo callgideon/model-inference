@@ -68,7 +68,8 @@ MODES = (TraceMode.off, TraceMode.minimal, TraceMode.full)
 # sentence.
 GUARDED = ("minimal_stores_no_content", "lost_content_is_marked", "lost_content_is_counted",
            "closed_capture_stores_nothing", "closed_capture_holds_nothing",
-           "crash_losses_are_bounded")
+           "crash_losses_are_bounded", "rows_belong_to_their_capture",
+           "rows_carry_the_opened_mode")
 
 
 @dataclass
@@ -254,6 +255,22 @@ async def _run_one(factory, mode: TraceMode, with_deadline: bool,
         # A crash counts `shutdown` for records it lost; with nothing ever stored an
         # off-mode capture has none to lose, so the table stays empty even across one.
         assert stats["loss_reasons"] == {}, f"off-mode counted a loss: {context}"
+    # P17: identity. `rows` is filtered by this request, so a capture that stored a row
+    # under **another** identity was invisible to the lattice - the one place a wrong-id or
+    # wrong-org finish could actually be observed. Every queued row is checked instead.
+    everything = queued()
+    foreign = [row for row in everything
+               if row.request_id != request_id or row.org_id != b.ORG_A]
+    if everything:
+        fired["rows_belong_to_their_capture"] = fired.get("rows_belong_to_their_capture", 0) + 1
+    assert not foreign, \
+        f"a capture stored a row under another identity: {[r.request_id for r in foreign]} {context}"
+    # P18: mode. Nothing asserted that a stored row carries the mode the capture was
+    # **opened** with, so a live capture trusting the envelope's label went unnoticed.
+    for row in rows:
+        fired["rows_carry_the_opened_mode"] = fired.get("rows_carry_the_opened_mode", 0) + 1
+        assert row.mode is mode, \
+            f"a row opened {mode} was stored as {row.mode}: {context}"
     if mode is TraceMode.minimal and rows:
         # P08. It fires only once a `minimal` capture has a row at all - which the raw
         # envelope operation is what produces, since `add` on a minimal capture is a no-op.

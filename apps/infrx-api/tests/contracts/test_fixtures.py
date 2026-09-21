@@ -507,6 +507,11 @@ INCONSISTENT_FEEDBACK = [
                                         if k != "rubric_version"}),
     ("label authored by a customer", {**_label_row(), "author_role": "customer"}),
     ("label not made by an operator", {**_label_row(), "by_operator": False}),
+    # r1 R55: the converse, on any row. `author_role=operator` without the marker was
+    # constructible, and the marker is what the masking keys on - so the row would be
+    # operator-authored and read to a customer with the operator's principal intact.
+    ("operator author without the marker",
+     {**_plain_row(), "author_role": "operator", "by_operator": False}),
     # an ordinary entry claiming any one of them
     ("plain row claiming membership", {**_plain_row(), "calibration_set": True}),
     ("plain row carrying a rubric version", {**_plain_row(), "rubric_version": 3}),
@@ -557,6 +562,19 @@ def test_an_entitlement_limit_is_a_strict_integer(value):
     with pytest.raises(ValueError):
         records.OrgEntitlements.model_validate(
             {**raw, "limits": {**raw["limits"], "max_concurrent_requests": value}})
+
+
+def test_the_request_fixture_is_one_the_store_would_admit():
+    """r1 R55: `admit` range-checks the ceilings, so the canonical request fixture - which
+    every track reads as "this is what a normalized request looks like" - has to be inside
+    them. A fixture the store would refuse teaches the wrong shape."""
+    request = fixtures.model("normalized_request.json")
+    assert 1 <= request.max_output_tokens <= limits.DEFAULTS.max_output_tokens
+    assert request.max_input_tokens >= 1
+    assert (request.max_input_tokens + request.max_output_tokens
+            <= limits.DEFAULTS.max_context_tokens)
+    prepared = fixtures.model("prepared_request.json")
+    assert 1 <= prepared.max_output_tokens <= limits.DEFAULTS.max_output_tokens
 
 
 def test_client_feedback_submission_cannot_set_provenance():

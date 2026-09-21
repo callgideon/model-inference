@@ -9,7 +9,8 @@ from __future__ import annotations
 from datetime import timedelta
 
 from ..limits import DEFAULTS, PilotSettings
-from ..records import IndexEvent, OutboxKind
+from .. import errors
+from ..records import DISPATCH_KINDS, IndexEvent, OutboxKind
 from .support import FailurePlan, FakeClock, failure_hooks
 
 
@@ -49,6 +50,13 @@ class FakeScheduler:
         looked busy. `None` means "anything", which is what a single-pool worker asks for.
         """
         self.failures.before("claim_candidate")
+        if kind is not None and kind not in DISPATCH_KINDS:
+            # r1 R55: an unknown kind is a caller bug, and answering `None` reported it as
+            # "the index is empty" - a preparation pool asking for a misspelled kind would
+            # idle for ever against a full queue and look perfectly healthy.
+            raise errors.InvalidRequest(
+                f"{kind!r} is not a dispatch kind; the index carries "
+                f"{', '.join(k.value for k in DISPATCH_KINDS)}")
         now = self.clock.now()
         for event_id, (event, _owner, claimed_at) in list(self.inflight.items()):
             if now >= claimed_at + timedelta(seconds=self.limits.lease_ttl_s):

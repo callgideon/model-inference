@@ -201,10 +201,19 @@ class FakeTraceCapture:
             # must never be filed under another's - or another tenant's.
             self._count(TraceLossReason.malformed)
             return self.sink._drop(TraceLossReason.malformed, counted=True)
+        if envelope.mode is not self.mode:
+            # r1 R12/R37, the same rule the accumulating path enforces: **the capture
+            # decides, never the envelope.** This used to be checked only for a `minimal`
+            # capture, so a `full` capture opened without a deadline - which is a no-op
+            # capture, and therefore lands here - stored whatever mode its envelope claimed.
+            # A `minimal`-labelled row for a `full` request is a consent record that says the
+            # customer asked for less than they did; the reverse would be worse.
+            self._count(TraceLossReason.malformed)
+            return self.sink._drop(TraceLossReason.malformed, counted=True)
         if self.mode is TraceMode.minimal:
-            # Metadata only, and it must say so: an envelope claiming another mode, or
-            # carrying content, is a caller bug that would store unconsented content.
-            if envelope.mode is not TraceMode.minimal or envelope.carries_content:
+            # Metadata only, and it must say so: an envelope carrying content is a caller
+            # bug that would store unconsented content.
+            if envelope.carries_content:
                 self._count(TraceLossReason.malformed)
                 return self.sink._drop(TraceLossReason.malformed, counted=True)
             return self.sink._enqueue(envelope, charged=0, capture=self)

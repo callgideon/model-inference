@@ -316,6 +316,7 @@ class FakeJobStore:
                 raise errors.ModelNotEntitled(
                     f"org {request.org_id} is not entitled to {request.model_revision}")
             self._check_deadline(request, now)
+            self._check_ceilings(request)
             self._check_capacity(request)
             # Everything that can refuse the admission runs before anything is
             # reserved: a rejected admission leaves no journal bytes, no hold and
@@ -377,6 +378,27 @@ class FakeJobStore:
             if count >= ceiling:
                 raise errors.CapacityExhausted(f"{scope} active job limit {ceiling} reached",
                                                retry_after_s=5)
+
+    def _check_ceilings(self, request: NormalizedRequest) -> None:
+        """r1 R55: the token ceilings are range-checked **inside the transaction**.
+
+        `Field(ge=0)` on the record allowed `0/0`, which admitted with a **zero hold** and
+        therefore unmetered output - the request then settled whatever the engine produced
+        against nothing reserved. And `40000/4096` admitted although 01 caps a request at
+        `MAX_CONTEXT_TOKENS` after preprocessing, so the reserved envelope was a promise the
+        model could not keep. The store owns the limits, so the store checks them.
+        """
+        limits = self.limits
+        if not 1 <= request.max_output_tokens <= limits.max_output_tokens:
+            raise errors.InvalidRequest(
+                f"max_output_tokens must be in 1..{limits.max_output_tokens}")
+        if request.max_input_tokens < 1:
+            raise errors.InvalidRequest("max_input_tokens must be at least 1")
+        total = request.max_input_tokens + request.max_output_tokens
+        if total > limits.max_context_tokens:
+            raise errors.ContextLengthExceeded(
+                f"max_input_tokens + max_output_tokens ({total}) exceeds "
+                f"MAX_CONTEXT_TOKENS {limits.max_context_tokens}")
 
     def _check_deadline(self, request: NormalizedRequest, now: datetime) -> None:
         """r1 R29: a deadline is a promise the store can keep. One already past is a
@@ -571,7 +593,15 @@ class FakeJobStore:
 
     def _fence_preparation(self, lease: Lease) -> _Job:
         """The preparation half of `_fence`: its own generation counter, and the lease
-        kind checked first so an inference token can never stand in for one."""
+        kind checked first so an inference token can never stand in for one.
+
+        r1 R55: **the phase deadline is enforced before lease expiry.** R52 clamps every
+        preparation lease to `preparation_deadline_at`, so the two instants coincide and
+        expiry-first meant `_enforce_deadlines` was dead code: past the deadline a worker
+        got `stale_lease`, the job stayed `preparing` with `outcome=None`, and the
+        customer's hold stayed reserved until a reaper happened to run. R29 requires the
+        store to terminalize in that same operation, so the deadline goes first.
+        """
         if lease.kind is not LeaseKind.preparation:
             raise errors.StaleLease(f"{lease.kind} lease cannot fence preparation")
         job = self.jobs.get(lease.job_id)
@@ -587,10 +617,11 @@ class FakeJobStore:
         if job.preparation_lease.worker_id != lease.worker_id:
             raise errors.StaleLease(f"preparation lease belongs to "
                                     f"{job.preparation_lease.worker_id}")
+        # r1 R55/R29: the phase first, because a clamped lease expires with it.
+        self._enforce_deadlines(job)
         if self.clock.now() >= job.preparation_lease.expires_at:
             raise errors.StaleLease(f"preparation lease expired at "
                                     f"{job.preparation_lease.expires_at}")
-        self._enforce_deadlines(job)
         return job
 
     def _enter_queued(self, job: _Job, now: datetime) -> None:
@@ -713,9 +744,13 @@ class FakeJobStore:
             # A different worker at the same generation is still the wrong worker: two
             # processes that both believe they own generation N must not both append.
             raise errors.StaleLease(f"lease belongs to {job.lease.worker_id}")
+        # r1 R55/R29: the phase deadline first here too. An inference lease is not clamped,
+        # but `generation_deadline_at` is itself clamped by `deadline_at`, so a job whose
+        # absolute deadline lands inside the lease TTL has the two instants coincide - and
+        # expiry-first would again leave the job non-terminal with its hold reserved.
+        self._enforce_deadlines(job)
         if self.clock.now() >= job.lease.expires_at:
             raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")
-        self._enforce_deadlines(job)
         return job
 
     def _fence_without_deadlines(self, lease: Lease) -> _Job:

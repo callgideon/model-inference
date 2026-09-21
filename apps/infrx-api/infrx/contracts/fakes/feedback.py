@@ -69,6 +69,22 @@ class FakeFeedbackService:
         # organization cannot be suspended for admission and live for feedback.
         self.is_suspended = lambda org_id: org_id in jobs.suspended_orgs
 
+    @staticmethod
+    def _row(**fields) -> Feedback:
+        """Build the row, turning a record-validation failure into a **typed** error.
+
+        The record is the last line of defence on the feedback shape (R43/R50/R54), and a
+        port is a trust boundary: pydantic's `ValidationError` escaping `accept` or
+        `label_calibration` would be a 500 with a stack trace where the contract promises a
+        code. The fields here are all server-chosen or already range-checked, so a failure
+        is *our* bug, not the caller's - `internal_error`, not `invalid_request`.
+        """
+        try:
+            return Feedback(**fields)
+        except ValidationError as exc:
+            raise errors.InternalError(
+                f"refused to store an invalid feedback row: {exc.error_count()} errors")
+
     def _replay(self, idem: IdempotencyRef, operation: str, auth) -> Feedback | None:
         """r1 R54: the one replay path, for both writing operations.
 
@@ -141,7 +157,7 @@ class FakeFeedbackService:
             return replay
 
         now = self.clock.now()
-        record = Feedback(
+        record = self._row(
             feedback_id=self.ids.feedback_id(), request_id=request_id, org_id=auth.org_id,
             author_principal=auth.principal,
             # Console origin is not automatically an operator label.
@@ -204,7 +220,7 @@ class FakeFeedbackService:
         if replay is not None:
             return replay
         now = self.clock.now()
-        record = Feedback(
+        record = self._row(
             feedback_id=self.ids.feedback_id(), request_id=request_id, org_id=org_id,
             author_principal=auth.principal, author_role=AuthorRole.operator,
             by_operator=True,                # r1 R50: a label is always an operator's

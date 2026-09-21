@@ -107,7 +107,9 @@ def mediastore_factory(limits: PilotSettings | None = None, **_: object) -> Harn
     clock, ids, failures = FakeClock(), SequentialIds(), FailurePlan()
     store = FakeMediaStore(clock, ids, limits=limits or DEFAULTS, failures=failures)
     return Harness(port=store, clock=clock, ids=ids, failures=failures,
-                   extra={"put_object": store.put_object})
+                   # r1 R55: the job row `attach` reads the organization from. A real
+                   # adapter joins `jobs`; this is the same lookup, injected.
+                   extra={"put_object": store.put_object, "admitted": store.admitted})
 
 
 def scheduler_factory(limits: PilotSettings | None = None, **_: object) -> Harness:
