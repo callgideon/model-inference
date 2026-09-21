@@ -1,0 +1,339 @@
+"""Layer 2: real PostgreSQL, Valkey, ClickHouse and object storage.
+
+This file asserts against the stack `run.py` provisions, migrates and seeds. Without that
+stack every case here is a reported **skip** naming the command that would make it run - a
+skip, never a pass (04: "unavailable external tests are pending, not skipped passes";
+run.py reports the same situation as PENDING and exits 3).
+
+    apps/infrx-api/.venv/bin/python tests/integration/run.py
+
+Nothing here writes outside the E2 namespace: database `postgres` inside the
+`infrx-e2-postgres` container, Valkey keys under `infrx_e2:`, ClickHouse database
+`infrx_e2`, objects under `test/e2/`.
+"""
+from __future__ import annotations
+
+import os
+import sys
+import time
+import uuid
+from decimal import Decimal
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import harness                                          # noqa: E402
+import pgstate                                          # noqa: E402
+
+NO_STACK = ("no infrx-e2 stack with seeded fixtures: run "
+            "`apps/infrx-api/.venv/bin/python tests/integration/run.py`")
+
+
+def stack_or_skip() -> pgstate.Fixtures:
+    """The one place that decides whether layer 2 can run, and says why not."""
+    usable, why = harness.docker_available()
+    if not usable:
+        pytest.skip(f"docker unusable ({why}); {NO_STACK}")
+    state = harness.load_state()
+    if not state or "fixtures" not in state:
+        pytest.skip(NO_STACK)
+    if not harness.owned_containers():
+        pytest.skip(f"state file exists but no {harness.PREFIX}* container is running; {NO_STACK}")
+    return pgstate.Fixtures.from_dict(state["fixtures"])
+
+
+def connect(**kw):
+    import psycopg
+    return psycopg.connect(harness.pg_dsn(), autocommit=True, **kw)
+
+
+# ------------------------------------------------------------------ F-CONTRACT: schema
+
+def test_the_console_migrations_applied_to_a_supabase_compatible_database():
+    """The measurement behind the image choice (08 §10 "D1: four things", item 1):
+    `0001_init.sql` needs `auth.users`, `auth.uid()` and the anon/authenticated/service_role
+    roles. This asserts they are there AND that our tables are on top of them, so a future
+    image swap that quietly drops the auth schema fails here rather than in D1's evidence."""
+    stack_or_skip()
+    with connect() as conn:
+        roles = {row[0] for row in conn.execute(
+            "select rolname from pg_roles where rolname in"
+            " ('anon','authenticated','service_role')").fetchall()}
+        assert roles == {"anon", "authenticated", "service_role"}
+        assert conn.execute("select to_regclass('auth.users') is not null").fetchone()[0]
+        assert conn.execute(
+            "select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace"
+            " where n.nspname = 'auth' and p.proname = 'uid'").fetchone()[0] == 1
+        tables = {row[0] for row in conn.execute(
+            "select tablename from pg_tables where schemaname = 'public'").fetchall()}
+        assert {"profiles", "organizations", "org_members", "models", "api_keys",
+                "usage_events", "credit_ledger"} <= tables
+        unprotected = [row[0] for row in conn.execute(
+            "select tablename from pg_tables where schemaname = 'public'"
+            " and not rowsecurity").fetchall()]
+        assert unprotected == [], f"RLS is off on {unprotected}"
+
+
+def test_the_signup_trigger_and_not_the_harness_created_the_tenants():
+    """Seeding through `auth.users` exercises `handle_new_user`; writing profiles and
+    organizations directly would have tested nothing but INSERT."""
+    fixtures = stack_or_skip()
+    with connect() as conn:
+        for handle, principal in fixtures.principals.items():
+            row = conn.execute(
+                "select p.id, p.is_operator, count(m.org_id) from public.profiles p"
+                " left join public.org_members m on m.user_id = p.id"
+                " where p.id = %s group by p.id, p.is_operator",
+                (principal.user_id,)).fetchone()
+            assert row is not None, f"no profile for {handle}"
+            assert row[1] == principal.is_operator, handle
+            assert row[2] >= 1, f"{handle} has no organization"
+        owner = conn.execute(
+            "select role from public.org_members where org_id = %s and user_id = %s",
+            (fixtures.org("alpha"), fixtures.user("owner_alpha"))).fetchone()
+        assert owner[0] == "owner"
+        member = conn.execute(
+            "select role from public.org_members where org_id = %s and user_id = %s",
+            (fixtures.org("alpha"), fixtures.user("member_alpha"))).fetchone()
+        assert member[0] == "member", "the matrix needs a non-owner member of someone's org"
+
+
+def test_balances_are_exact_decimals_and_the_seed_is_reproducible():
+    """DUR-RLS: "migrations preserve existing balances". The anchor is an exact Decimal, so
+    a float round-trip anywhere in the stack would show up as a mismatch."""
+    fixtures = stack_or_skip()
+    with connect() as conn:
+        totals = pgstate.balances(conn)
+    assert totals["alpha-e2"] == Decimal("23.746875") == fixtures.ledger_totals["alpha"]
+    assert totals["beta-e2"] == Decimal("23.746875")
+    assert fixtures.seed == harness.load_state()["seed"]
+
+
+# ------------------------------------------------------------------ DUR-RLS
+
+def test_the_role_matrix_holds_for_every_role():
+    """DUR-RLS: member/browser/operator/service roles attacking protected columns and RPCs;
+    tenant and role enforcement in the database as well as in the route.
+
+    Every check runs in its own rolled-back transaction, so this can be re-run against the
+    same stack and leaves nothing behind.
+    """
+    fixtures = stack_or_skip()
+    with connect() as conn:
+        rows = pgstate.run_role_matrix(conn, fixtures)
+    failed = [row for row in rows if not row["passed"]]
+    assert failed == [], failed
+    assert len(rows) >= 30, f"the matrix shrank to {len(rows)} cases"
+    # It must contain both directions, or a broken grant would look like a working policy.
+    assert any(row["expected"].startswith("error") for row in rows)
+    assert any(row["expected"] == "rowcount=1" for row in rows)
+
+
+def test_a_check_that_should_fail_does_fail():
+    """The matrix runner itself is the thing under test here: if `run_check` could not
+    report a failure, every row above would be worthless. One deliberately wrong
+    expectation must come back `passed=False` (R32 applied to the harness)."""
+    fixtures = stack_or_skip()
+    wrong = pgstate.Check("E2-RLS-MUTANT", "anon", None,
+                          "select count(*) from public.organizations",
+                          ("value", 999), "a deliberately wrong expectation")
+    wrong_error = pgstate.Check("E2-RLS-MUTANT2", "authenticated", "member_alpha",
+                                "select public.org_balance({alpha})",
+                                ("error", pgstate.PERMISSION_DENIED),
+                                "a success wrongly expected to be refused")
+    # "It errored" is not the assertion: a refusal has to be the RIGHT refusal. This one
+    # really does raise 42501, and expecting 42P01 (undefined table) must still fail - or a
+    # typo'd table name in any matrix row would read as a passing tenant check.
+    wrong_sqlstate = pgstate.Check("E2-RLS-MUTANT3", "authenticated", "member_alpha",
+                                   "select public.org_balance({beta})",
+                                   ("error", "42P01"),
+                                   "the right refusal, checked against the wrong SQLSTATE")
+    with connect() as conn:
+        assert pgstate.run_check(conn, wrong, fixtures)["passed"] is False
+        assert pgstate.run_check(conn, wrong_error, fixtures)["passed"] is False
+        observed = pgstate.run_check(conn, wrong_sqlstate, fixtures)
+        assert observed["observed"] == pgstate.PERMISSION_DENIED, observed
+        assert observed["passed"] is False, "a mismatched SQLSTATE must not pass"
+
+
+# ------------------------------------------------------------------ the movable clock
+
+def test_database_time_moves_only_inside_a_transaction_that_asks_for_it():
+    """R7 needs a database clock a test can move; 08 §10 needs a clock production cannot.
+    Both hold only if the offset is transaction-local and lives outside the migrations."""
+    stack_or_skip()
+    with connect() as conn:
+        pgstate.install_test_clock(conn)
+        with conn.transaction():
+            pgstate.set_clock_offset(conn, 7200.0)
+            moved, real = conn.execute(
+                f"select {pgstate.CLOCK_SCHEMA}.now(), now()").fetchone()
+            assert 7195 < (moved - real).total_seconds() < 7205
+        after = conn.execute(f"select {pgstate.CLOCK_SCHEMA}.now() - now()").fetchone()[0]
+        assert abs(after.total_seconds()) < 1.0, "the offset leaked out of its transaction"
+        # And backwards, which is what an expiry test needs.
+        with conn.transaction():
+            pgstate.set_clock_offset(conn, -3600.0)
+            behind = conn.execute(
+                f"select {pgstate.CLOCK_SCHEMA}.now() < now()").fetchone()[0]
+            assert behind is True
+
+
+# ------------------------------------------------------------------ the other three stores
+
+def test_valkey_accepts_namespaced_keys_and_the_suite_cleans_up_after_itself():
+    stack_or_skip()
+    client = harness.valkey_client()
+    keys = [f"{harness.VALKEY_PREFIX}smoke:{index}" for index in range(5)]
+    try:
+        for index, key in enumerate(keys):
+            client.set(key, index)
+        assert [int(client.get(key)) for key in keys] == list(range(5))
+        assert sorted(client.keys(f"{harness.VALKEY_PREFIX}*")) == sorted(
+            key.encode() for key in keys), "no key outside the namespace"
+    finally:
+        client.delete(*keys)
+    assert client.keys(f"{harness.VALKEY_PREFIX}*") == []
+
+
+def test_clickhouse_answers_ddl_and_a_round_trip_in_its_own_database():
+    """T owns the real DDL (08 §1). This proves the service is usable and isolated, and
+    nothing more - the table is dropped again."""
+    stack_or_skip()
+    client = harness.clickhouse_client()
+    table = f"{harness.CH_DATABASE}.e2_smoke"
+    try:
+        client.command(f"create table if not exists {table}"
+                       " (id UUID, org_id UUID, ts DateTime64(3), bytes UInt32)"
+                       " engine = MergeTree order by (org_id, ts)")
+        from datetime import datetime, timedelta, timezone
+        base = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        rows = [(str(uuid.uuid4()), str(uuid.uuid4()), base + timedelta(seconds=index),
+                 index * 11) for index in range(20)]
+        client.insert(table, rows, column_names=["id", "org_id", "ts", "bytes"])
+        total = client.query(f"select count(), sum(bytes) from {table}").result_rows[0]
+        assert total == (20, sum(index * 11 for index in range(20)))
+        assert client.query("select currentDatabase()").result_rows[0][0] == harness.CH_DATABASE
+    finally:
+        client.command(f"drop table if exists {table}")
+
+
+def test_object_storage_is_tenant_prefixed_and_refuses_an_unsigned_read():
+    stack_or_skip()
+    s3 = harness.s3_client()
+    key = f"{harness.OBJECT_PREFIX}smoke/{uuid.uuid4()}.json"
+    try:
+        s3.create_bucket(Bucket=harness.S3_BUCKET)
+    except Exception:                                    # noqa: BLE001 - already exists
+        pass
+    try:
+        s3.put_object(Bucket=harness.S3_BUCKET, Key=key, Body=b'{"v":1}',
+                      ContentType="application/json")
+        assert s3.get_object(Bucket=harness.S3_BUCKET, Key=key)["Body"].read() == b'{"v":1}'
+        listed = s3.list_objects_v2(Bucket=harness.S3_BUCKET, Prefix=harness.OBJECT_PREFIX)
+        assert any(item["Key"] == key for item in listed.get("Contents", []))
+        import httpx
+        anonymous = httpx.get(f"{harness.s3_endpoint()}/{harness.S3_BUCKET}/{key}", timeout=5.0)
+        assert anonymous.status_code in (403, 404), \
+            "an unsigned read must not succeed: a trace object is not public"
+    finally:
+        s3.delete_object(Bucket=harness.S3_BUCKET, Key=key)
+
+
+# ------------------------------------------------------------------ fault injection
+
+def test_a_paused_container_hangs_the_client_and_recovers_when_unpaused():
+    """A network drop that HANGS is the shape that finds a missing timeout: the kernel
+    still accepts the connection and nothing ever answers. A client without a timeout waits
+    for ever here, which is the defect this fault exists to expose."""
+    stack_or_skip()
+    import valkey
+    with harness.Faults() as faults:
+        faults.pause("valkey")
+        client = harness.valkey_client(socket_timeout=2)
+        started = time.monotonic()
+        with pytest.raises((valkey.exceptions.TimeoutError, valkey.exceptions.ConnectionError)):
+            client.ping()
+        waited = time.monotonic() - started
+        assert waited < 15, f"the client hung for {waited:.1f}s, not the 2s timeout it asked for"
+    assert harness.wait_valkey(timeout=30), "unpausing must restore the service"
+
+
+def test_killing_a_container_is_survivable_and_the_harness_puts_it_back():
+    """OPS-RECOVER in miniature: SIGKILL a store, see a failure rather than a silent
+    success, then bring it back. Valkey is the victim because it is disposable by
+    construction (`--save ""`), so nothing durable is at stake in this drill."""
+    stack_or_skip()
+    import valkey
+    client = harness.valkey_client(socket_timeout=2)
+    client.set(f"{harness.VALKEY_PREFIX}kill-drill", "before")
+    with harness.Faults() as faults:
+        faults.kill_container("valkey", "SIGKILL")
+        with pytest.raises((valkey.exceptions.ConnectionError, valkey.exceptions.TimeoutError)):
+            harness.valkey_client(socket_timeout=2).ping()
+    harness.wait_valkey(timeout=60)
+    fresh = harness.valkey_client()
+    assert fresh.get(f"{harness.VALKEY_PREFIX}kill-drill") is None, \
+        "a save-less Valkey comes back empty, which is what makes the DUR-OUTBOX rebuild " \
+        "drill cheap: the index must be rebuildable from PostgreSQL"
+
+
+def test_a_network_partition_is_distinguishable_from_a_dead_process():
+    """`disconnect` removes the endpoint from the project network, which also takes the
+    published port with it - a refusal rather than a hang. Both shapes exist because a
+    client that handles one often mishandles the other."""
+    stack_or_skip()
+    import valkey
+    with harness.Faults() as faults:
+        faults.disconnect("valkey")
+        with pytest.raises((valkey.exceptions.ConnectionError, valkey.exceptions.TimeoutError)):
+            harness.valkey_client(socket_timeout=3).ping()
+    harness.wait_valkey(timeout=60)
+
+
+def test_cleanup_is_scoped_and_refuses_a_container_it_did_not_create():
+    """The namespace guard against the live daemon: whatever else is running on this host,
+    only `infrx-e2-*` containers owned by this compose project are touchable."""
+    stack_or_skip()
+    ours = harness.owned_containers()
+    assert ours, "the stack should be up here"
+    assert all(name.startswith(harness.PREFIX) for name in ours), ours
+    import subprocess
+    everything = subprocess.run(["docker", "ps", "-a", "--format", "{{.Names}}"],
+                                capture_output=True, text=True, timeout=60).stdout.split()
+    strangers = [name for name in everything if name not in ours]
+    for stranger in strangers[:5]:
+        with pytest.raises(harness.HarnessError):
+            harness.assert_ours(stranger)
+    assert harness.foreign_containers() == [], "an infrx-e2-* container we do not own exists"
+
+
+def test_the_prefix_alone_is_not_enough_to_be_touchable():
+    """The second gate, which the prefix check hides: a container NAMED like ours but not
+    created by this compose project must still be refused, and must be reported rather than
+    removed. Proved with a decoy in our own namespace - created here, never started, removed
+    in `finally` - because a stranger's name already fails the first gate and so cannot test
+    the second."""
+    stack_or_skip()
+    decoy = f"{harness.PREFIX}decoy"
+    image = harness.compose_images()["valkey"]
+    harness.run(["docker", "create", "--name", decoy, image, "true"], timeout=120)
+    try:
+        assert decoy not in harness.owned_containers(), "the decoy must not carry our label"
+        assert harness.foreign_containers() == [decoy], \
+            "a same-named container this project did not create must be reported"
+        with pytest.raises(harness.HarnessError, match="not created by project"):
+            harness.assert_ours(decoy)
+    finally:
+        harness.run(["docker", "rm", "-f", decoy], check=False, timeout=120)
+    assert harness.foreign_containers() == []
+
+
+# ------------------------------------------------------------------ canary
+
+def test_canary_intentional_failure_is_detected_in_the_service_suite():
+    if os.environ.get("INFRX_E2_CANARY") == "fail":
+        raise AssertionError("E2 canary: this failure is intentional (INFRX_E2_CANARY=fail)")
+    assert os.environ.get("INFRX_E2_CANARY") in (None, "", "off")

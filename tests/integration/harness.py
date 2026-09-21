@@ -21,7 +21,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-REPO_ROOT = HERE.parents[1]
+# The override exists for one caller: `mutants.py`, which runs this suite from a temporary
+# copy of the owned trees and still needs the real repository for the migrations and the
+# contracts package. Nothing else sets it.
+REPO_ROOT = Path(os.environ["INFRX_E2_REPO_ROOT"]) if os.environ.get("INFRX_E2_REPO_ROOT") \
+    else HERE.parents[1]
 COMPOSE_FILE = HERE / "compose.yaml"
 API_ROOT = REPO_ROOT / "apps" / "infrx-api"
 MIGRATIONS_DIR = REPO_ROOT / "apps" / "app" / "supabase" / "migrations"
@@ -223,6 +227,11 @@ def down() -> list[str]:
     left = owned_containers()
     if left:
         raise HarnessError(f"teardown left {left} behind")
+    volumes = run(["docker", "volume", "ls", "--filter",
+                   f"label=com.docker.compose.project={PROJECT}", "--format", "{{.Name}}"],
+                  timeout=60).stdout.split()
+    if volumes:
+        raise HarnessError(f"teardown left volumes behind: {volumes} - disposable means gone")
     return before
 
 

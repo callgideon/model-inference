@@ -93,13 +93,22 @@ def secret_grams(shape):
     purpose (`apps/infrx-api/...`), so a window lying mostly inside it said nothing about
     the key and refused roughly one key in thirty at random. A window must take at least
     KEY_GRAM_FROM_BODY of its 8 characters from the body after the prefix. Fail-closed
-    otherwise: a key with no known prefix contributes all of its windows."""
+    otherwise: a key with no known prefix contributes all of its windows.
+
+    The folded form of a prefix must keep its SEPARATOR (`fold(prefix) + "-"`). `fold()`
+    strips the trailing '-', so the bare folded form `sk-marlin` also prefix-matched a key
+    spelled `sk-marlin2b…`: 'marlin2b' was then treated as public boilerplate and the
+    windows that straddle it were dropped, i.e. a label carrying 8 characters of the secret
+    body passed the argv gate (measured: 5 windows starting at index 7 instead of 11
+    starting at index 1, so `rlin2bzz` was allowed). Fail-open, and the wrong direction.
+    Keeping the separator is what makes the folded form useful at all - it exists for a
+    prefix whose separator is not already '-' (`sk_infrx_` folds to `sk-infrx-`)."""
     n = KEY_MIN_SUBSTRING
     if len(shape) < n:
         return set()
     body_at = 0
     for prefix in KEY_PUBLIC_PREFIXES:
-        for form in (prefix, fold(prefix)):
+        for form in (prefix, fold(prefix) + "-"):
             if form and shape.startswith(form):
                 body_at = max(body_at, len(form))
     first = max(0, body_at - (n - KEY_GRAM_FROM_BODY))

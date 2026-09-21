@@ -232,6 +232,21 @@ def suites(report: Report, *, own_only: bool) -> None:
                runs=runs)
 
 
+def mutation(report: Report, *, layer: str) -> None:
+    """R32: every invariant this task claims must be killable, on a temp copy."""
+    import mutants
+    stack = bool(harness.load_state())
+    results = [mutants.run_one(mutant, stack_available=stack) for mutant in mutants.MUTANTS
+               if layer == "all" or mutant.layer == 1]
+    survived = [r for r in results if r["status"] in ("SURVIVED", "stale")]
+    pending = [r for r in results if r["status"] == "pending"]
+    status = FAIL if survived else (PENDING if pending else PASS)
+    report.add("mutants", status,
+               {"mutants": len(results), "killed": len(results) - len(survived) - len(pending),
+                "survived": [r["id"] for r in survived] or None,
+                "pending": [r["id"] for r in pending] or None}, results=results)
+
+
 def canary(report: Report) -> None:
     """An INTENTIONAL failure must be detected, not skipped (E2 acceptance).
 
@@ -287,6 +302,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report", type=Path, help="write the JSON report here")
     parser.add_argument("--only-suites", action="store_true",
                         help="run only this suite, not the canonical make targets")
+    parser.add_argument("--no-mutants", action="store_true",
+                        help="skip the R32 mutation run (it is ~2 minutes)")
     args = parser.parse_args(argv)
 
     report = Report()
@@ -303,6 +320,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.layer != "2":
             engine(report)
             suites(report, own_only=args.only_suites)
+            if not args.no_mutants:
+                mutation(report, layer="all" if have_services else "1")
             if args.canary:
                 canary(report)
     finally:
