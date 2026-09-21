@@ -88,6 +88,7 @@ EMPTY = "test_api_stream__an_empty_first_delta_is_not_a_token"
 USAGE = "test_api_stream__usage_is_authoritative_only_when_the_stream_agrees"
 BOUNDS = "test_api_stream__one_event_and_the_whole_output_are_bounded"
 JOURNAL = "test_api_stream__an_event_always_fits_the_journal_in_any_script"
+FLOOD = "test_api_stream__a_line_that_never_ends_is_bounded_and_still_checked"
 JUNK = "test_api_stream__junk_and_stray_payloads_are_survived_not_relayed"
 FAILURES = "test_api_stream__transport_engine_and_incomplete_failures_are_distinct"
 TYPED = "test_api_stream__every_engine_failure_is_typed"
@@ -240,6 +241,25 @@ MUTANTS: tuple[Mutant, ...] = (
           "            yield EngineEvent(type=ChunkEventType.delta,\n"
           '                              payload=_delta_payload("", stream.held_tail))',
        JOURNAL),
+    _m("pending_line_unbounded", "an unterminated SSE line is bounded (R58/B7)",
+       E, "            if len(pending) > self.pending_cap():", "            if False:", FLOOD),
+    _m("pending_cap_is_a_whole_stream", "the pending cap is one journal event, not a stream",
+       E, "        return max(4096, self.limits.journal_event_max_bytes)",
+       "        return 512 * 1024 * 1024", FLOOD),
+    _m("chunk_checks_skipped", "the deadline is checked once per chunk, not per line (B7)",
+       E, "            now = self.clock.now()\n"
+          "            stall = self._overdue(stream, now)\n"
+          "            if stall is not None:\n"
+          "                stream.stall = stall\n                return",
+       "            now = self.clock.now()\n"
+          "            if False:\n                stream.stall = None\n                return",
+       FLOOD, STALL),
+    _m("chunk_cancel_check_skipped", "cancellation is checked once per chunk (B7)",
+       E, "            if key in self.cancelled:\n"
+          "                stream.cancelled = True\n                return",
+       "            if False:\n"
+          "                stream.cancelled = True\n                return",
+       CANCEL),
     _m("output_bytes_unbounded", "the accumulated output is bounded (R58)",
        E, "        if len(stream.raw_text) + len(content) > budget:", "        if False:", BOUNDS),
     _m("visible_and_raw_collapsed", "visible is filtered, raw is not (R58)",

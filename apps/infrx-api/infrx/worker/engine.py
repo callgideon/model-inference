@@ -54,6 +54,7 @@ truncated answer:
 """
 from __future__ import annotations
 
+import codecs
 import hashlib
 import json
 from datetime import datetime, timedelta
@@ -592,6 +593,60 @@ class VllmEngine:
             return "inter_event"
         return None
 
+    def pending_cap(self) -> int:
+        """How much of an unterminated SSE line may be buffered.
+
+        One journal event's worth (1 MiB), which covers the largest delta line the engine
+        may legally send, because a line longer than that could never be journalled anyway.
+        """
+        return max(4096, self.limits.journal_event_max_bytes)
+
+    async def _lines(self, response: httpx.Response, stream: "EngineStream",
+                     key: tuple[str, int]):
+        """SSE lines, split here rather than by `httpx.aiter_lines()`.
+
+        Two reasons, both measured by the round-2 review:
+
+        * `aiter_lines()` buffers a stream with no newline in it **without bound** - a
+          200 MiB `data:` line pulled all 200 MiB (800 MiB peak) before anything looked at
+          it. The pending buffer is capped at one journal event here, and past it the engine
+          has broken the protocol.
+        * its loop only comes back to the caller when a **line** completes, so nothing
+          checked the deadline or the cancellation while a newline-less stream flowed: fifty
+          chunks with 30 s between them ran 1,500 s past a 300 s generation deadline, and
+          the client read timeout never fires because bytes keep arriving. The checks run
+          once per **chunk** here.
+
+        Yields `(line, now)`; sets `stream.stall`/`stream.cancelled` and stops instead of
+        raising, because a stall is not an error (W owns the policy).
+        """
+        decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        pending = ""
+        async for chunk in response.aiter_bytes():
+            now = self.clock.now()
+            stall = self._overdue(stream, now)
+            if stall is not None:
+                stream.stall = stall
+                return
+            if key in self.cancelled:
+                stream.cancelled = True
+                return
+            pending += decoder.decode(chunk)
+            while True:
+                line, separator, rest = pending.partition("\n")
+                if not separator:
+                    break
+                pending = rest
+                yield line.rstrip("\r"), now
+            if len(pending) > self.pending_cap():
+                raise EngineProtocolViolation(
+                    f"an SSE line exceeded {self.pending_cap()} characters",
+                    pending=len(pending))
+        pending += decoder.decode(b"", True)
+        if pending.strip():
+            # A last line with no trailing newline: real servers do this at end of stream.
+            yield pending.rstrip("\r"), self.clock.now()
+
     async def _read_bounded(self, response: httpx.Response) -> str:
         """An engine's error body, read bounded: it is a stack trace of unknown size and
         only `DETAIL_MAX_CHARS` of it is ever kept."""
@@ -643,18 +698,12 @@ class VllmEngine:
                 stream.started = True
                 stream.last_event_at = self.clock.now()
                 yield EngineEvent(type=ChunkEventType.progress, payload={"phase": "running"})
-                async for line in response.aiter_lines():
-                    now = self.clock.now()
-                    stall = self._overdue(stream, now)
-                    if stall is not None:
-                        stream.stall = stall
-                        break                            # leaving the block closes the stream
-                    if key in self.cancelled:
-                        stream.cancelled = True
-                        break
+                async for line, now in self._lines(response, stream, key):
+                    # The deadline and the cancellation are checked once per network chunk
+                    # inside `_lines`; leaving this block closes the upstream stream.
                     for event in self._events(stream, line, reasoning, ceiling, now):
                         yield event
-                    if stream.complete:
+                    if stream.complete or stream.stall is not None or stream.cancelled:
                         break
         except httpx.TimeoutException as failure:
             # Post-header silence is a stall, not a failed engine: the read timeout is the

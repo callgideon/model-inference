@@ -44,6 +44,8 @@ malformed payloads a review of the adapter found unhandled):
 | `os_error` | a non-httpx exception mid-stream |
 | `cancellation_race` | a long stream, so a cancellation lands mid-generation |
 | `truncated` | deltas, then a clean end with no `[DONE]` and no finish reason |
+| `no_newline_flood` | `data:` with no newline in it, in 1 MiB chunks, more than the cap |
+| `slow_flood` | the same without a newline, small chunks, 30 s of clock per chunk |
 """
 from __future__ import annotations
 
@@ -122,6 +124,12 @@ class FakeUpstream:
     closed: bool = False
     completed: bool = False
     error_bytes: int = 0
+    chunks_sent: int = 0                # how many network chunks the adapter actually pulled
+    flood_chunk_bytes: int = 1024 * 1024
+    # 24 MiB on offer, not the review's 200: the assertion is "how many chunks did the
+    # adapter pull", so the fake only has to be able to give it more than the cap allows.
+    flood_chunks: int = 24
+    flood_clock_s: float = 0.0
 
     # --- the script -----------------------------------------------------------
     def deltas(self) -> tuple[str, ...]:
@@ -192,9 +200,25 @@ class FakeUpstream:
             "stray_object": {"message": 123},
         }.get(self.fault)
 
+    async def _flood(self):
+        """A `data:` line that never ends: what an adapter buffering by line swallows whole
+        (the review measured 200 MiB pulled, 800 MiB peak, before anything was checked)."""
+        yield b'data: {"choices":[{"index":0,"delta":{"content":"'
+        self.chunks_sent += 1
+        for _ in range(self.flood_chunks):
+            if self.flood_clock_s:
+                self.clock.advance(self.flood_clock_s)
+            self.chunks_sent += 1
+            yield b"y" * self.flood_chunk_bytes
+
     async def _stream(self):
         pieces = self.deltas()
         try:
+            if self.fault in ("no_newline_flood", "slow_flood"):
+                async for frame in self._flood():
+                    yield frame
+                self.completed = True
+                return
             if self.fault == "role_first":
                 yield sse(chunk("", role=True))
             if self.fault == "prefill_stall":

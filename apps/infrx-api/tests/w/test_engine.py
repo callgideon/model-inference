@@ -757,6 +757,39 @@ def test_api_stream__one_event_and_the_whole_output_are_bounded():
     assert broke.value.terminal_cause is TerminalCause.platform_error
 
 
+def test_api_stream__a_line_that_never_ends_is_bounded_and_still_checked():
+    """r1 R58 / B7: `httpx.aiter_lines()` buffers a stream with no newline in it without
+    bound and hands nothing back to the caller until a line completes, so a 200 MiB `data:`
+    line was pulled whole (800 MiB peak) and neither the deadline nor the cancellation was
+    looked at while it flowed - the client read timeout never fires, because bytes keep
+    arriving. The adapter splits lines itself: the pending buffer is capped at one journal
+    event, and the checks run once per network chunk."""
+    box = Box()
+    upstream = FakeUpstream(fault="no_newline_flood", clock=box.clock)
+    engine = upstream.engine()
+    with pytest.raises(EngineFailure) as broke:
+        asyncio.run(collect(engine.generate(lease(box), text_prepared(box))))
+    assert isinstance(broke.value, EngineProtocolViolation), type(broke.value)
+    assert broke.value.terminal_cause is TerminalCause.platform_error
+    # memory is asserted as chunks pulled, not as RSS: the fake had 24 MiB more to give
+    assert upstream.chunks_sent <= 3, upstream.chunks_sent
+    assert upstream.chunks_sent < upstream.flood_chunks
+
+    # and the deadline is checked per chunk, so a slow flood stops on time
+    box = Box()
+    upstream = FakeUpstream(fault="slow_flood", clock=box.clock, flood_chunk_bytes=1024,
+                           flood_clock_s=30.0)
+    held = lease(box, first_token_deadline_at=box.clock.at(100),
+                 generation_deadline_at=box.clock.at(100))
+    stream = upstream.engine().generate(held, text_prepared(box))
+    events, failure = drained(stream)
+    assert failure is None, failure
+    assert stream.stall == "generation" and stream.terminal_cause is TerminalCause.deadline_exceeded
+    elapsed = (box.clock.now() - held.acquired_at).total_seconds()
+    assert 100 <= elapsed <= 160, elapsed          # stopped at the deadline, not 1,500 s later
+    assert upstream.chunks_sent <= 6 < upstream.flood_chunks
+
+
 def test_api_stream__junk_and_stray_payloads_are_survived_not_relayed():
     """API-STREAM: a line that is not JSON, or not an object, is the engine misbehaving
     and not content: it is counted and never relayed. A well-formed object that carries
