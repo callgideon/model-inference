@@ -230,7 +230,9 @@ def test_a_malformed_tenant_is_refused_before_anything_is_fetched():
     record-validation error rather than a typed refusal."""
     resolve = support.resolver([support.PUBLIC])
     adapter = staging(resolve=resolve, transport=support.Transport(support.response(body=MP4)))
-    for org in ("../../etc", "", "ORG", b.ORG_A.upper(), None, "1a1a1a1a-0000-4000-8000"):
+    for org in ("../../etc", "", "ORG", b.ORG_A.upper(), None, "1a1a1a1a-0000-4000-8000",
+                # B-R2-1.5: a prefix match would accept everything after the UUID
+                b.ORG_A + "\n", b.ORG_A + "/../" + b.ORG_B, b.ORG_A + "x"):
         with pytest.raises(errors.InvalidRequest):
             asyncio.run(adapter.materialize(org, URL))
     assert resolve.calls == [] and adapter.objects.objects == {}
@@ -242,7 +244,10 @@ def test_a_profile_version_cannot_escape_the_tenants_prefix():
     into a path into another tenant's prefix."""
     adapter = staging()
     for version in ("../../payloads/" + b.ORG_B, "v1/../v2", "V1", "", "a" * 65, "-v1",
-                    "v1 2", "v1\n"):
+                    "v1 2", "v1\n",
+                    # B-R2-1.4: a leading dot is the whole traversal on its own -
+                    # `media/<org>/../<digest>/source` needs no slash of its own.
+                    "..", ".", ".v1", "._", "..v1"):
         hostile = b.media(b.ORG_A).model_copy(update={"profile_version": version})
         with pytest.raises(errors.InvalidRequest):
             asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(hostile,))))
