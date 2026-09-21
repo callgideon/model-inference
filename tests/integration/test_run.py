@@ -541,6 +541,9 @@ sys.exit(run.main(["--layer", "all", "--no-mutants"]))
         child.terminate()                                     # SIGTERM, not SIGINT
         code = child.wait(timeout=60)
         output = child.communicate()[0] or ""
+        # Read before `finally` removes it, so the drill leaves nothing behind even when a
+        # mutant makes it fail.
+        state_text = marker.read_text() if marker.exists() else ""
     finally:
         if child.poll() is None:
             child.kill()
@@ -553,10 +556,10 @@ sys.exit(run.main(["--layer", "all", "--no-mutants"]))
                 os.killpg(os.getpgid(server_pid), signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 pass
+        marker.unlink(missing_ok=True)
     assert code == 128 + 15, f"expected 143 through the handler, got {code}\n{output[-2000:]}"
-    state = _json.loads(marker.read_text())
+    state = _json.loads(state_text or "{}")
     assert state.get("teardown") is True, f"teardown never ran: {state}"
-    marker.unlink(missing_ok=True)
     # And the server it started is gone, process group included.
     with pytest.raises(ProcessLookupError):
         os.kill(server_pid, 0)

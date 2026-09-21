@@ -375,10 +375,12 @@ class FakeVllmServer:
                 "--fault", self.fault, "--stall-real-s", str(self.stall_real_s)]
         self._drop_log()        # a restart after a kill would otherwise orphan the old one
         # The child's stderr goes to a temporary file, not to DEVNULL: a server that dies on
-        # startup (a busy port is the obvious one) otherwise reports only its exit status,
-        # and "exited 3" with no reason costs whoever reads it an afternoon.
-        self._log = tempfile.NamedTemporaryFile(prefix="infrx-e2-fake-vllm-", suffix=".log",
-                                                delete=False)
+        # startup (a busy port is the obvious one) otherwise reports only its exit status, and
+        # "exited 3" with no reason costs whoever reads it an afternoon. The file is UNLINKED
+        # the moment it is created (`TemporaryFile`), so it cannot be leaked even when this
+        # process is killed outright - which is exactly what the SIGTERM drill does to itself
+        # under the mutant that removes the handler (measured: 28 leaked logs in $TMPDIR).
+        self._log = tempfile.TemporaryFile(prefix="infrx-e2-fake-vllm-", suffix=".log")
         # r1 review, same pass: its OWN process group, so a signal handler can take the whole
         # server down with one `killpg` and a SIGTERM to run.py cannot leave it orphaned on a
         # task-local port for the next run to trip over.
@@ -410,9 +412,11 @@ class FakeVllmServer:
         if log is None:
             return "(no log)"
         try:
-            return " | ".join(Path(log.name).read_text().strip().splitlines()[-lines:])
-        except OSError:
+            log.seek(0)
+            text = log.read().decode(errors="replace")
+        except (OSError, ValueError):
             return "(log unreadable)"
+        return " | ".join(text.strip().splitlines()[-lines:]) or "(no output)"
 
     def control(self, **payload) -> dict:
         import httpx
@@ -450,10 +454,10 @@ class FakeVllmServer:
         self._drop_log()
 
     def _drop_log(self) -> None:
+        """Closing is enough: the file was unlinked at creation, so the last close frees it."""
         log = getattr(self, "_log", None)
         if log is not None:
             log.close()
-            Path(log.name).unlink(missing_ok=True)
         self._log = None
 
     def __enter__(self) -> "FakeVllmServer":
