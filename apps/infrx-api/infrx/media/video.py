@@ -24,6 +24,7 @@ DENIED_NETWORKS = tuple(ipaddress.ip_network(cidr) for cidr in (
     "2001::/32",            # Teredo
     "192.88.99.0/24",       # 6to4 relay anycast
     # Special-purpose space that is never a video host.
+    "::/96",                # IPv4-compatible (::127.0.0.1, ::169.254.169.254)
     "2001:20::/28",         # ORCHIDv2
     "3fff::/20",            # documentation (RFC 9637)
     "198.18.0.0/15",        # benchmarking (RFC 2544)

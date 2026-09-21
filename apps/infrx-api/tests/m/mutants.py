@@ -38,10 +38,19 @@ def _m(name, invariant, file, old, new, *cases) -> Mutant:
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- the address policy ---------------------------------------------------
-    # Review B1: the policy states the tunnel and special-purpose ranges itself, so the
-    # decisive guards are these three plus `is_global`. The interpreter's `is_reserved`
-    # stays as depth and has no mutant: on this build it also covers NAT64, so removing it
-    # changes no answer (see the evidence report).
+    # Review B1 (r2 correction): every check in `address_allowed` is load bearing, and the
+    # round-2 claim that `is_reserved` "changes no answer" was wrong - IPv4-compatible forms
+    # (`::127.0.0.1`, `::a9fe:a9fe`) are global and not private on every build, and reserved
+    # space outside `::/96` (`4000::1`) is refused by `is_reserved` alone. The policy states
+    # the tunnel, IPv4-compatible and special-purpose ranges itself so it does not depend on
+    # the interpreter's tables either way. `::/96` in `DENIED_NETWORKS` has no mutant for
+    # that reason: it is the same refusal `is_reserved` already gives *on this build*, and it
+    # is stated so the policy still holds on one where `::/8` is not reserved.
+    _m("reserved_addresses_allowed",
+       "reserved space is refused (IPv4-compatible forms and 4000::/3 are caught by it alone)",
+       V, "or a.is_reserved or a.is_unspecified", "or a.is_unspecified",
+       "test_the_address_policy_does_not_depend_on_the_interpreters_tables",
+       "test_no_internal_address_form_is_reachable"),
     _m("site_local_allowed", "deprecated site-local fec0::/10 is refused (is_global says True)",
        V, "    if a.version == 6 and a.is_site_local:\n        return False", "    pass",
        "test_the_address_policy_does_not_depend_on_the_interpreters_tables",

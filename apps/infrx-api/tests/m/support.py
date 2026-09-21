@@ -23,6 +23,12 @@ INTERNAL = (METADATA, "127.0.0.1", "10.0.0.7", "192.168.1.1", "100.64.0.1", "0.0
             "::1", "fe80::1", "fc00::1", "::",
             "::ffff:169.254.169.254",          # v4-mapped metadata
             "::ffff:10.0.0.7",                 # v4-mapped private
+            "::127.0.0.1",                     # IPv4-compatible loopback: global, not private
+            "::a9fe:a9fe",                     # IPv4-compatible metadata
+            "::10.0.0.1",                      # IPv4-compatible private
+            "4000::1",                         # reserved space outside ::/96
+            "224.0.0.1", "239.255.255.250",    # multicast, v4
+            "ff02::1", "ff05::1:3",            # multicast, v6
             "64:ff9b::a9fe:a9fe",              # NAT64, well-known prefix
             "64:ff9b:1::a9fe:a9fe",            # NAT64, local use
             "2002:a9fe:a9fe::",                # 6to4 to the metadata address
