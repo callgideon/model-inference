@@ -15,12 +15,19 @@ import { displayMoney, parseMoney, ZERO_MONEY } from "../../lib/contracts/money.
 import {
   MAX_PAGE_LIMIT,
   USAGE_QUERY_FIELDS,
+  type ApiKeySummary,
+  type ErrorCode,
+  type Page,
+  type Result,
   type SettlementState,
+  type UsageDay,
   type UsageRow,
 } from "../../lib/contracts/types.ts";
 import {
   ALL,
   DEFAULT_RANGE,
+  MAX_CURSOR_CHARS,
+  MAX_TRAIL_PAGES,
   PAGE_SIZE,
   RANGES,
   amountView,
@@ -29,7 +36,9 @@ import {
   firstCursorState,
   hasPreviousPage,
   instantLabel,
+  keyFilterNotice,
   ledgerHref,
+  mapState,
   modelOptions,
   nextCursorState,
   pageNumberOf,
@@ -41,6 +50,7 @@ import {
   summaryTiles,
   tokensView,
   usageHref,
+  usagePageModel,
   usagePageQuery,
   usageRowView,
   usageScopeQuery,
@@ -97,8 +107,93 @@ test("U1-T01 the URL is untrusted: an unrecognised range falls back, `all` means
   const walked = parseUsageFilters({ cursor: "c3", trail: ["c1", "c2"] });
   assert.equal(walked.cursor, "c3");
   assert.deepEqual(walked.trail, ["c1", "c2"]);
-  assert.deepEqual(parsePageCursor({ trail: "c1" }).trail, ["c1"], "one page back is not an array yet");
-  assert.deepEqual(parsePageCursor({ cursor: "", trail: ["", "c1"] }), { cursor: null, trail: ["c1"] });
+  assert.deepEqual(
+    parsePageCursor({ cursor: "c2", trail: "c1" }).trail,
+    ["c1"],
+    "one page back is not an array yet",
+  );
+  assert.deepEqual(parsePageCursor({ cursor: "", trail: ["", "c1"] }), { cursor: null, trail: [] });
+});
+
+test("U1-T13 a prototype key is not a range, and no URL value reaches a prototype lookup", () => {
+  // `range in RANGES` was true for every Object.prototype member, so `?range=toString` made
+  // `now - <function>` NaN and `new Date(NaN).toISOString()` threw: one query parameter, no page.
+  for (const key of [
+    "toString",
+    "__proto__",
+    "constructor",
+    "hasOwnProperty",
+    "valueOf",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+    "toLocaleString",
+  ]) {
+    const filters = parseUsageFilters({ range: key });
+    assert.equal(filters.range, DEFAULT_RANGE, `${key} must not pass as a range`);
+    const query = usageScopeQuery(filters, NOW);
+    assert.equal(query.to, NOW.toISOString());
+    assert.ok(
+      !Number.isNaN(Date.parse(query.from ?? "")),
+      `${key} must not produce an unparseable from`,
+    );
+  }
+
+  // The same guard at the other end: a range key from anywhere but the parser cannot make a NaN
+  // instant either, because the one place that reads the table checks for an own property.
+  const forged: UsageFilters = { ...WIDE, range: "__proto__" as unknown as UsageFilters["range"] };
+  assert.doesNotThrow(
+    () => usageScopeQuery(forged, NOW),
+    "a forged range key must not throw: `RANGES.__proto__` is an object, and now - object is NaN",
+  );
+  assert.ok(!Number.isNaN(Date.parse(usageScopeQuery(forged, NOW).from ?? "")));
+
+  // Error hints and HTTP statuses are looked up by code the same way.
+  assert.equal(explainError("hasOwnProperty" as ErrorCode, "fallback"), "fallback");
+  assert.equal(recoveryFor("toString" as ErrorCode), "none");
+  assert.equal(recoveryFor("__proto__" as ErrorCode), "none");
+
+  // And a settlement state outside the contract's vocabulary is a row that says so, not a crash.
+  const unknown = settlementView({
+    settlement_state: "not_a_state" as SettlementState,
+    job_state: "succeeded",
+    max_hold: null,
+  });
+  assert.ok(unknown, "an unknown settlement state must still produce a view, not undefined");
+  assert.ok(unknown.detail, "with an explanation rather than a blank cell");
+  assert.equal(unknown.label, "Unknown");
+  assert.match(unknown.detail, /nothing is presented as charged/i);
+});
+
+test("U1-T14 a hand-written URL cannot grow the trail without bound", () => {
+  const long = "c".repeat(MAX_CURSOR_CHARS + 1);
+  assert.equal(parsePageCursor({ cursor: long }).cursor, null, "an over-long cursor is dropped");
+  assert.equal(
+    parsePageCursor({ cursor: "c1", trail: [long, "c0"] }).trail.length,
+    1,
+    "and so is an over-long trail entry",
+  );
+
+  const forged = Array.from({ length: MAX_TRAIL_PAGES + 500 }, (_, index) => `c${index}`);
+  const parsed = parsePageCursor({ cursor: "last", trail: forged });
+  assert.equal(parsed.trail.length, MAX_TRAIL_PAGES, "the trail is capped");
+  assert.deepEqual(
+    parsed.trail,
+    forged.slice(-MAX_TRAIL_PAGES),
+    "and it keeps the most recent pages",
+  );
+
+  // Page 1 has nothing behind it, so a trail without a cursor is noise or a forged back-stack.
+  assert.deepEqual(parsePageCursor({ trail: forged }), { cursor: null, trail: [] });
+
+  let state: UsageFilters = WIDE;
+  for (let step = 0; step < MAX_TRAIL_PAGES + 10; step += 1) {
+    state = nextCursorState(state, `c${step}`);
+  }
+  assert.equal(state.trail.length, MAX_TRAIL_PAGES, "and walking forward cannot grow it either");
+  assert.ok(
+    usageSearch(state).length < 16 * 1024,
+    `a walked URL stays small, was ${usageSearch(state).length} characters`,
+  );
 });
 
 test("U1-T02 serializing and parsing a filter state round-trips, and defaults stay out of the URL", () => {
@@ -323,6 +418,36 @@ test("U1-T07 an unsettled amount is never shown as a charge, and a hold has its 
     assert.equal(view.charged, displayMoney(ZERO_MONEY), `${key}: no charge`);
     assert.equal(view.held, null, `${key}: the hold was released`);
   }
+
+  // Every unsettled fixture row happens to carry a zero cost, so the fixture alone cannot tell
+  // "we read the cost only when settled" from "we read the cost always". A crafted row can: a
+  // service that reports a cost beside an unreleased hold must still charge nothing on screen.
+  const crafted = amountView({
+    settlement_state: "held_unknown",
+    cost: parseMoney("0.50000000"),
+    max_hold: parseMoney("0.75000000"),
+  });
+  assert.equal(crafted.charged, "$0.00", "an unsettled row charges nothing, whatever its cost says");
+  assert.equal(crafted.held, "$0.75", "and its hold is reported as a hold");
+  assert.equal(crafted.final, false);
+  assert.equal(
+    amountView({
+      settlement_state: null,
+      cost: parseMoney("0.50000000"),
+      max_hold: parseMoney("0.75000000"),
+    }).charged,
+    "$0.00",
+    "and neither does a non-terminal one",
+  );
+  assert.equal(
+    amountView({
+      settlement_state: "settled",
+      cost: parseMoney("0.50000000"),
+      max_hold: null,
+    }).charged,
+    "$0.50",
+    "a settled row does show its cost, or the column would be useless",
+  );
 });
 
 test("U1-T08 unreported usage shows no token count and says so instead of estimating one", async () => {
@@ -345,6 +470,16 @@ test("U1-T08 unreported usage shows no token count and says so instead of estima
   assert.equal(reported.completion, "—");
   assert.match(reported.note ?? "", /not reported/i);
 
+  // The mirror case: an authoritative row with nothing in the fields is also not a zero.
+  const missing = tokensView({
+    usage_certainty: "authoritative",
+    prompt_tokens: null,
+    completion_tokens: null,
+  });
+  assert.equal(missing.prompt, "—", "a missing count is not a count of zero");
+  assert.equal(missing.completion, "—");
+  assert.ok(missing.note !== null, "and it says why the cell is empty");
+
   const settled = rows.get("settled")!;
   assert.equal(settled.usage_certainty, "authoritative");
   const known = tokensView(settled);
@@ -353,25 +488,54 @@ test("U1-T08 unreported usage shows no token count and says so instead of estima
   assert.ok(/[0-9]/.test(known.completion));
 });
 
-test("U1-T09 each settlement state gets its own explanation", async () => {
+test("U1-T09 each settlement state gets its own label and its own explanation", async () => {
   const rows = await oneOfEach();
   const labels = new Map<string, string>();
+  const details = new Map<string, string>();
   for (const [key, row] of rows) {
     const view = settlementView(row);
     assert.ok(view.label.length > 0 && view.detail.length > 0, `${key} needs a label and a detail`);
     labels.set(key, view.label);
+    details.set(key, view.detail);
   }
   assert.equal(new Set(labels.values()).size, labels.size, "five facts, five labels");
+  // The label is the badge; the sentence under it is what a customer actually reads. Giving a free
+  // failure the platform-absorbed explanation (or the reverse) is wrong in exactly the way that
+  // matters, and identical labels would not catch it.
+  assert.equal(new Set(details.values()).size, details.size, "five facts, five explanations");
+
   assert.equal(labels.get("settled"), "Settled");
   assert.equal(labels.get("unsettled"), "Not settled yet");
-  assert.match(settlementView(rows.get("held_unknown")!).detail, /not a charge/i);
-  assert.match(settlementView(rows.get("released_platform_absorbed")!).detail, /not charged/i);
+  assert.equal(labels.get("held_unknown"), "Awaiting reconciliation");
+  assert.equal(labels.get("released_free"), "No charge");
+  assert.equal(labels.get("released_platform_absorbed"), "Platform absorbed");
+
+  assert.match(details.get("held_unknown") ?? "", /not a charge/i);
+  assert.match(details.get("released_platform_absorbed") ?? "", /the failure was ours/i);
+  assert.match(details.get("released_platform_absorbed") ?? "", /not charged/i);
+  assert.match(details.get("released_free") ?? "", /before it produced billable work/i);
+  assert.match(details.get("settled") ?? "", /priced and drawn/i);
   assert.equal(settlementView(rows.get("released_platform_absorbed")!).tone, "muted");
+
+  // An unsettled row must never claim a charge. This is the sentence beside a request that is still
+  // running, so "This has been charged." would be a lie the badge does not contradict.
+  const unsettled = details.get("unsettled") ?? "";
+  assert.match(unsettled, /nothing has been charged/i);
+  assert.match(unsettled, /ceiling rather than a price/i);
+  assert.equal(settlementView(rows.get("unsettled")!).tone, "neutral");
 
   const row = usageRowView(rows.get("unsettled")!);
   assert.equal(row.settlement.label, "Not settled yet");
   assert.equal(row.amount.charged, displayMoney(ZERO_MONEY));
   assert.equal(row.when, instantLabel(rows.get("unsettled")!.created_at));
+  // The outcome column names the terminal cause where there is one, because "failed" alone does not
+  // tell a customer whether it was their media or our engine.
+  assert.equal(usageRowView(rows.get("settled")!).outcome, rows.get("settled")!.terminal_cause);
+  assert.equal(
+    row.outcome,
+    rows.get("unsettled")!.job_state,
+    "and falls back to the job state only while there is no cause",
+  );
 });
 
 test("U1-T10 the summary reports charges and holds as different figures, formatted as money", async () => {
@@ -430,4 +594,160 @@ test("U1-T12 the model filter offers the models on the page plus whatever is sel
     withSelection.includes("a-model-not-in-this-page"),
     "the active filter must stay selectable even when no visible row uses it",
   );
+});
+
+// ---------------------------------------------------------------------------
+// The page model: a failed read is never an empty screen
+// ---------------------------------------------------------------------------
+
+const FAILED = <T,>(code: ErrorCode = "dependency_unavailable"): Result<T> => ({
+  ok: false,
+  error: { code, message: "injected failure" },
+});
+
+async function pageInput(filters: UsageFilters = WIDE) {
+  const fake = services();
+  const session = fake.sessions.owner;
+  const [usage, summary, daily, keys] = await Promise.all([
+    fake.usage(session, usagePageQuery(filters, NOW)),
+    fake.usageSummary(session, usageScopeQuery(filters, NOW)),
+    fake.usageDaily(session, usageScopeQuery(filters, NOW)),
+    fake.keys.list(session),
+  ]);
+  return { filters, usage, summary, daily, keys };
+}
+
+test("U1-T15 every failed read on the usage page is an error state, never an empty one", async () => {
+  const input = await pageInput();
+  const healthy = usagePageModel(input);
+  for (const part of ["summary", "daily", "rows", "keys"] as const) {
+    assert.equal(healthy[part].kind, "ready", `${part} must be ready when the service answers`);
+  }
+  assert.equal(healthy.keyNotice, null);
+  assert.ok(healthy.rows.kind === "ready" && healthy.rows.value.rows.length === PAGE_SIZE);
+  assert.ok(healthy.keyOptions.length > 0, "the key filter has options");
+
+  // One failure at a time: each part must fail on its own and take nothing else down with it.
+  for (const part of ["summary", "daily", "usage", "keys"] as const) {
+    const model = usagePageModel({ ...input, [part]: FAILED() });
+    const state = part === "usage" ? model.rows : model[part];
+    assert.equal(state.kind, "error", `a failed ${part} read must be an error state`);
+    assert.ok(state.kind === "error");
+    assert.equal(state.code, "dependency_unavailable");
+    assert.equal(state.recovery, "retry", "and it must offer the retry it can recover with");
+    assert.notEqual(state.kind, "empty", `a failed ${part} read must never read as "nothing here"`);
+    for (const other of ["summary", "daily", "rows", "keys"] as const) {
+      if ((part === "usage" ? "rows" : part) === other) continue;
+      assert.equal(model[other].kind, "ready", `a failed ${part} must leave ${other} alone`);
+    }
+  }
+
+  // An empty *successful* read is still empty — the distinction the error states exist to keep.
+  const emptyDaily: Result<UsageDay[]> = { ok: true, value: [] };
+  assert.equal(usagePageModel({ ...input, daily: emptyDaily }).daily.kind, "empty");
+  const emptyKeys: Result<ApiKeySummary[]> = { ok: true, value: [] };
+  assert.equal(usagePageModel({ ...input, keys: emptyKeys }).keys.kind, "empty");
+  const emptyUsage: Result<Page<UsageRow>> = { ok: true, value: { items: [], next_cursor: null } };
+  assert.equal(usagePageModel({ ...input, usage: emptyUsage }).rows.kind, "empty");
+
+  assert.deepEqual(mapState({ kind: "loading" }, () => "mapped"), { kind: "loading" });
+  assert.deepEqual(mapState({ kind: "ready", value: 1 }, (value) => value + 1), {
+    kind: "ready",
+    value: 2,
+  });
+});
+
+test("U1-T16 the page model computes every href and page number the markup renders", async () => {
+  const fake = services();
+  const first = await fake.usage(fake.sessions.owner, usagePageQuery(WIDE, NOW));
+  assert.ok(first.ok && first.value.next_cursor !== null);
+  const second = nextCursorState(WIDE, first.value.next_cursor);
+
+  const model = usagePageModel(await pageInput(second));
+  assert.ok(model.rows.kind === "ready");
+  assert.equal(model.rows.value.page, 2);
+  assert.equal(model.rows.value.firstHref, usageHref(firstCursorState(second)));
+  assert.equal(model.rows.value.previousHref, usageHref(previousCursorState(second)));
+  assert.ok(model.rows.value.nextHref !== null, "there is a page 3 in the fixture");
+  assert.equal(model.here, usageHref(second), "the retry target is the URL being shown");
+
+  const onlyPage = usagePageModel({
+    ...(await pageInput()),
+    usage: { ok: true, value: { items: [], next_cursor: null } },
+  });
+  assert.equal(onlyPage.rows.kind, "empty", "and an empty page has no pager at all");
+
+  const firstModel = usagePageModel(await pageInput(WIDE));
+  assert.ok(firstModel.rows.kind === "ready");
+  assert.equal(firstModel.rows.value.previousHref, null, "page 1 has no Previous");
+  assert.equal(firstModel.rows.value.page, 1);
+});
+
+test("U1-T17 a key filter naming a key of another organization is explained, not shown as silence", async () => {
+  const fake = services();
+  const keys = await fake.keys.list(fake.sessions.owner);
+  assert.ok(keys.ok);
+
+  const mine = keys.value[0].id;
+  assert.equal(keyFilterNotice({ ...WIDE, keyId: mine }, keys), null, "my own key is fine");
+  assert.equal(keyFilterNotice(WIDE, keys), null, "and so is no filter at all");
+
+  // The service answers an unknown key with an ok, empty page — which on screen reads as "you have
+  // no traffic". Only the organization's own key list can tell the two apart.
+  const foreign = { ...WIDE, keyId: fake.ids.otherOrgKeyId };
+  const page = await fake.usage(fake.sessions.owner, usagePageQuery(foreign, NOW));
+  assert.ok(page.ok, "the service does not refuse an unknown key");
+  assert.equal(page.value.items.length, 0, "it returns nothing at all");
+
+  const notice = keyFilterNotice(foreign, keys);
+  assert.ok(notice !== null, "so the page must say the filter is the reason");
+  assert.match(notice, /does not belong to this organization/i);
+  assert.match(notice, /clear the key filter/i);
+
+  const model = usagePageModel({ ...(await pageInput(foreign)), keys });
+  assert.equal(model.rows.kind, "empty");
+  assert.equal(model.keyNotice, notice, "the page model carries it");
+
+  // With the key list itself unreadable there is nothing to check against, and a guess would be
+  // worse than silence: the key-list error is what the page shows instead.
+  assert.equal(keyFilterNotice(foreign, FAILED<ApiKeySummary[]>()), null);
+  assert.equal(usagePageModel({ ...(await pageInput(foreign)), keys: FAILED() }).keys.kind, "error");
+});
+
+test("U1-T18 no usage-page string offers payment or calls promotional credit revenue", async () => {
+  const fake = services();
+  const summary = await fake.usageSummary(fake.sessions.owner, usageScopeQuery(WIDE, NOW));
+  assert.ok(summary.ok);
+  const rows = await oneOfEach();
+
+  const strings = [
+    ...summaryTiles(summary.value).flatMap((tile) => [tile.label, tile.hint]),
+    ...[...rows.values()].flatMap((row) => {
+      const view = usageRowView(row);
+      return [view.settlement.label, view.settlement.detail, view.tokens.note ?? ""];
+    }),
+    ...(
+      [
+        "invalid_cursor",
+        "invalid_request",
+        "forbidden",
+        "not_found",
+        "org_suspended",
+        "rate_limited",
+        "dependency_unavailable",
+        "internal_error",
+        "deadline_exceeded",
+      ] as const
+    ).map((code) => explainError(code, "")),
+    keyFilterNotice({ ...WIDE, keyId: "nope" }, await fake.keys.list(fake.sessions.owner)) ?? "",
+  ];
+
+  for (const value of strings) {
+    assert.doesNotMatch(
+      value,
+      /add credits|add card|top ?up|\bbuy\b|purchase|invoice|checkout|revenue|pay now|credit card/i,
+      `payment or revenue wording in usage copy: ${value}`,
+    );
+  }
+  assert.ok(strings.filter((value) => value.length > 0).length > 20, "the scan must cover the copy");
 });

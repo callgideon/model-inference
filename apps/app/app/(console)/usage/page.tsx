@@ -11,25 +11,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PromotionalBalanceCard } from "../billing/balance-card";
+import { balanceCardState, historyProbeQuery } from "../billing/view-model";
 import { consoleContext } from "./fake-console-context";
 import { EmptyPanel, ErrorPanel, Pager } from "./states";
 import { UsageChart } from "./usage-chart";
 import { UsageControls } from "./usage-controls";
 import {
-  dayViews,
-  firstCursorState,
-  hasPreviousPage,
-  modelOptions,
-  nextCursorState,
-  pageNumberOf,
   parseUsageFilters,
-  previousCursorState,
-  summaryTiles,
-  usageHref,
+  usagePageModel,
   usagePageQuery,
-  usageRowView,
   usageScopeQuery,
-  viewStateOf,
   type UsageRowView,
 } from "./view-model";
 
@@ -41,19 +32,17 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
   const filters = parseUsageFilters(params);
   const scope = usageScopeQuery(filters, now);
 
-  const [rows, summary, daily, keys, balance, history] = await Promise.all([
+  const [usage, summary, daily, keys, balance, history] = await Promise.all([
     services.usage(session, usagePageQuery(filters, now)),
     services.usageSummary(session, scope),
     services.usageDaily(session, scope),
     services.keys.list(session),
     services.balances(session),
-    services.ledger(session, { limit: 1 }),
+    services.ledger(session, historyProbeQuery()),
   ]);
 
-  const rowsState = viewStateOf(rows, (page) => page.items.length === 0);
-  const summaryState = viewStateOf(summary, () => false);
-  const here = usageHref(filters);
-  const firstPageHref = usageHref(firstCursorState(filters));
+  const model = usagePageModel({ filters, usage, summary, daily, keys });
+  const card = balanceCardState(balance, history);
 
   return (
     <>
@@ -61,66 +50,81 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
         title="Usage"
         subtitle="Metadata only — no prompts or video are stored. Amounts are drawn from promotional pilot credit."
         action={
-          <UsageControls
-            filters={filters}
-            keys={keys.ok ? keys.value.map((key) => ({ id: key.id, name: key.name })) : []}
-            models={modelOptions(rows.ok ? rows.value.items : [], filters.model)}
-          />
+          <UsageControls filters={model.filters} keys={model.keyOptions} models={model.models} />
         }
       />
 
-      {summaryState.kind === "ready" ? (
+      {model.keys.kind === "error" ? (
+        <p role="status" className="mb-3 text-sm text-destructive">
+          The API key list could not be loaded, so the key filter is incomplete. {model.keys.message}
+        </p>
+      ) : null}
+      {model.keyNotice === null ? null : (
+        <p role="status" className="mb-3 text-sm text-destructive">
+          {model.keyNotice}
+        </p>
+      )}
+
+      {model.summary.kind === "ready" ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {summaryTiles(summaryState.value).map((tile) => (
+          {model.summary.value.map((tile) => (
             <StatTile key={tile.label} label={tile.label} value={tile.value} hint={tile.hint} />
           ))}
         </div>
       ) : null}
-      {summaryState.kind === "error" ? (
+      {model.summary.kind === "error" ? (
         <ErrorPanel
           title="This range could not be totalled"
-          message={summaryState.message}
-          code={summaryState.code}
-          recovery={summaryState.recovery}
-          href={here}
-          firstPageHref={firstPageHref}
+          state={model.summary}
+          href={model.here}
+          firstPageHref={model.firstHref}
         />
       ) : null}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card>
           <CardContent>
-            <UsageChart days={daily.ok ? dayViews(daily.value) : []} />
+            {model.daily.kind === "error" ? (
+              <ErrorPanel
+                title="The daily breakdown could not be loaded"
+                state={model.daily}
+                href={model.here}
+                firstPageHref={model.firstHref}
+              />
+            ) : (
+              <UsageChart days={model.daily.kind === "ready" ? model.daily.value : []} />
+            )}
           </CardContent>
         </Card>
-        {balance.ok ? (
-          <PromotionalBalanceCard
-            balance={balance.value}
-            hasHistory={history.ok && history.value.items.length > 0}
+        {card.kind === "ready" ? <PromotionalBalanceCard model={card.value} /> : null}
+        {card.kind === "error" ? (
+          <ErrorPanel
+            title="Your balance could not be loaded"
+            state={card}
+            href={model.here}
+            firstPageHref={model.firstHref}
           />
         ) : null}
       </div>
 
       <h2 className="mt-8 mb-3 font-heading text-base font-medium">Requests</h2>
 
-      {rowsState.kind === "error" ? (
+      {model.rows.kind === "error" ? (
         <ErrorPanel
           title="These requests could not be loaded"
-          message={rowsState.message}
-          code={rowsState.code}
-          recovery={rowsState.recovery}
-          href={here}
-          firstPageHref={firstPageHref}
+          state={model.rows}
+          href={model.here}
+          firstPageHref={model.firstHref}
         />
       ) : null}
 
-      {rowsState.kind === "empty" ? (
+      {model.rows.kind === "empty" ? (
         <EmptyPanel>
           No requests in this range. Widen the time range, or clear the key and model filters.
         </EmptyPanel>
       ) : null}
 
-      {rowsState.kind === "ready" ? (
+      {model.rows.kind === "ready" ? (
         <>
           <Card>
             <CardContent className="p-0">
@@ -138,7 +142,7 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rowsState.value.items.map(usageRowView).map((row) => (
+                  {model.rows.value.rows.map((row) => (
                     <UsageTableRow key={row.requestId} row={row} />
                   ))}
                 </TableBody>
@@ -147,14 +151,10 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
           </Card>
           <Pager
             label="Usage pages"
-            page={pageNumberOf(filters)}
-            firstHref={firstPageHref}
-            previousHref={hasPreviousPage(filters) ? usageHref(previousCursorState(filters)) : null}
-            nextHref={
-              rowsState.value.next_cursor === null
-                ? null
-                : usageHref(nextCursorState(filters, rowsState.value.next_cursor))
-            }
+            page={model.rows.value.page}
+            firstHref={model.rows.value.firstHref}
+            previousHref={model.rows.value.previousHref}
+            nextHref={model.rows.value.nextHref}
           />
           <p className="mt-2 text-xs text-muted-foreground">
             <strong>Charged</strong> is what left your balance. <strong>Held</strong> is a ceiling

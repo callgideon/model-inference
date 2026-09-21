@@ -11,35 +11,23 @@ import {
 } from "@/components/ui/table";
 import { consoleContext } from "../usage/fake-console-context";
 import { EmptyPanel, ErrorPanel, Pager } from "../usage/states";
-import {
-  firstCursorState,
-  hasPreviousPage,
-  ledgerHref,
-  nextCursorState,
-  pageNumberOf,
-  parsePageCursor,
-  previousCursorState,
-  viewStateOf,
-} from "../usage/view-model";
+import { parsePageCursor } from "../usage/view-model";
 import { PromotionalBalanceCard } from "./balance-card";
-import { ledgerRowView } from "./view-model";
+import { billingPageModel, ledgerPageQuery } from "./view-model";
 
 export const metadata = { title: "Balance · infrx" };
 
 export default async function BillingPage({ searchParams }: PageProps<"/billing">) {
   const params = await searchParams;
   const { services, session } = consoleContext();
-  const page = parsePageCursor(params);
+  const state = parsePageCursor(params);
 
   const [balance, ledger] = await Promise.all([
     services.balances(session),
-    services.ledger(session, { limit: 25, ...(page.cursor === null ? {} : { cursor: page.cursor }) }),
+    services.ledger(session, ledgerPageQuery(state)),
   ]);
 
-  const walletState = viewStateOf(balance, () => false);
-  const ledgerState = viewStateOf(ledger, (value) => value.items.length === 0);
-  const here = ledgerHref(page);
-  const firstPageHref = ledgerHref(firstCursorState(page));
+  const model = billingPageModel({ state, balance, ledger });
 
   return (
     <>
@@ -48,20 +36,13 @@ export default async function BillingPage({ searchParams }: PageProps<"/billing"
         subtitle="The free pilot runs on promotional credit granted by the infrx team. There is nothing to pay."
       />
 
-      {walletState.kind === "ready" ? (
-        <PromotionalBalanceCard
-          balance={walletState.value}
-          hasHistory={ledger.ok && (ledger.value.items.length > 0 || page.cursor !== null)}
-        />
-      ) : null}
-      {walletState.kind === "error" ? (
+      {model.balance.kind === "ready" ? <PromotionalBalanceCard model={model.balance.value} /> : null}
+      {model.balance.kind === "error" ? (
         <ErrorPanel
           title="Your balance could not be loaded"
-          message={walletState.message}
-          code={walletState.code}
-          recovery={walletState.recovery}
-          href={here}
-          firstPageHref={firstPageHref}
+          state={model.balance}
+          href={model.here}
+          firstPageHref={model.firstHref}
         />
       ) : null}
 
@@ -71,20 +52,18 @@ export default async function BillingPage({ searchParams }: PageProps<"/billing"
           <Badge variant="outline">Newest first</Badge>
         </CardHeader>
         <CardContent className="p-0">
-          {ledgerState.kind === "error" ? (
+          {model.ledger.kind === "error" ? (
             <div className="p-4">
               <ErrorPanel
                 title="The ledger could not be loaded"
-                message={ledgerState.message}
-                code={ledgerState.code}
-                recovery={ledgerState.recovery}
-                href={here}
-                firstPageHref={firstPageHref}
+                state={model.ledger}
+                href={model.here}
+                firstPageHref={model.firstHref}
               />
             </div>
           ) : null}
 
-          {ledgerState.kind === "empty" ? (
+          {model.ledger.kind === "empty" ? (
             <div className="p-4">
               <EmptyPanel>
                 Nothing on the ledger yet. Grants, adjustments and settled requests appear here as
@@ -93,7 +72,7 @@ export default async function BillingPage({ searchParams }: PageProps<"/billing"
             </div>
           ) : null}
 
-          {ledgerState.kind === "ready" ? (
+          {model.ledger.kind === "ready" ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -105,7 +84,7 @@ export default async function BillingPage({ searchParams }: PageProps<"/billing"
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {ledgerState.value.items.map(ledgerRowView).map((row) => (
+                {model.ledger.value.rows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {row.when}
@@ -126,17 +105,13 @@ export default async function BillingPage({ searchParams }: PageProps<"/billing"
         </CardContent>
       </Card>
 
-      {ledgerState.kind === "ready" ? (
+      {model.ledger.kind === "ready" ? (
         <Pager
           label="Ledger pages"
-          page={pageNumberOf(page)}
-          firstHref={firstPageHref}
-          previousHref={hasPreviousPage(page) ? ledgerHref(previousCursorState(page)) : null}
-          nextHref={
-            ledgerState.value.next_cursor === null
-              ? null
-              : ledgerHref(nextCursorState(page, ledgerState.value.next_cursor))
-          }
+          page={model.ledger.value.page}
+          firstHref={model.ledger.value.firstHref}
+          previousHref={model.ledger.value.previousHref}
+          nextHref={model.ledger.value.nextHref}
         />
       ) : null}
     </>

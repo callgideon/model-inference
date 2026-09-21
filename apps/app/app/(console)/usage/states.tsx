@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
-import type { Recovery } from "./view-model";
+import type { ViewState } from "./view-model";
+
+/** The error branch of any `ViewState`; the panel takes the state itself, so nothing is re-derived. */
+export type ErrorState = Extract<ViewState<unknown>, { kind: "error" }>;
 
 /**
  * Markup only. What the user is offered comes from the view model's `recovery`: a reload for the
@@ -12,16 +15,12 @@ import type { Recovery } from "./view-model";
  */
 export function ErrorPanel({
   title,
-  message,
-  code,
-  recovery,
+  state,
   href,
   firstPageHref,
 }: {
   title: string;
-  message: string;
-  code: string;
-  recovery: Recovery;
+  state: ErrorState;
   href: string;
   firstPageHref: string;
 }) {
@@ -29,18 +28,18 @@ export function ErrorPanel({
     <Card>
       <CardContent className="space-y-2 py-8 text-center">
         <p className="font-medium">{title}</p>
-        <p className="text-sm text-muted-foreground">{message}</p>
-        {recovery === "retry" ? (
+        <p className="text-sm text-muted-foreground">{state.message}</p>
+        {state.recovery === "retry" ? (
           <a className="inline-block text-sm underline underline-offset-4" href={href}>
             Try again
           </a>
         ) : null}
-        {recovery === "restart" ? (
+        {state.recovery === "restart" ? (
           <Link className="inline-block text-sm underline underline-offset-4" href={firstPageHref}>
             Back to the first page
           </Link>
         ) : null}
-        <p className="text-xs text-muted-foreground">Reference: {code}</p>
+        <p className="text-xs text-muted-foreground">Reference: {state.code}</p>
       </CardContent>
     </Card>
   );

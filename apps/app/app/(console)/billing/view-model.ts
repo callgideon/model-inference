@@ -15,12 +15,28 @@ import {
   moneyUnits,
 } from "../../../lib/contracts/money.ts";
 import {
+  DEFAULT_PAGE_LIMIT,
   PLATFORM_ACTOR,
   type LedgerEntry,
   type LedgerEntryKind,
+  type Page,
+  type PageQuery,
+  type Result,
   type WalletBalance,
 } from "../../../lib/contracts/types.ts";
-import { instantLabel } from "../usage/view-model.ts";
+import {
+  firstCursorState,
+  hasPreviousPage,
+  instantLabel,
+  ledgerHref,
+  mapState,
+  nextCursorState,
+  pageNumberOf,
+  previousCursorState,
+  viewStateOf,
+  type PageCursor,
+  type ViewState,
+} from "../usage/view-model.ts";
 
 export const PROMOTIONAL_NOTICE =
   "Promotional pilot credit, granted by the infrx team. It is not a cash balance, it cannot be " +
@@ -152,5 +168,110 @@ export function ledgerRowView(entry: LedgerEntry): LedgerRowView {
     actor: actorLabel(entry.actor),
     amount: signedMoney(entry.delta),
     credit: !isNegativeMoney(entry.delta),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The page models: every branch the balance card and the ledger page take
+// ---------------------------------------------------------------------------
+
+/** One page of the ledger. The usage page only needs to know *whether* there is any history. */
+export const LEDGER_PAGE_SIZE = DEFAULT_PAGE_LIMIT;
+export const HISTORY_PROBE_LIMIT = 1;
+
+export function ledgerPageQuery(state: PageCursor): PageQuery {
+  return { limit: LEDGER_PAGE_SIZE, ...(state.cursor === null ? {} : { cursor: state.cursor }) };
+}
+
+export function historyProbeQuery(): PageQuery {
+  return { limit: HISTORY_PROBE_LIMIT };
+}
+
+/**
+ * Whether this organization has ledger history at all.
+ *
+ * A *failed* read is not evidence of absence: reporting "no history" from an error would greet an
+ * established organization as brand new and tell it to go ask for its first grant. So a failure
+ * counts as history, and being on a later page counts as history whatever this page holds.
+ */
+export function hasLedgerHistory(
+  ledger: Result<Page<LedgerEntry>>,
+  state: PageCursor = { cursor: null, trail: [] },
+): boolean {
+  if (!ledger.ok) return true;
+  return ledger.value.items.length > 0 || state.cursor !== null;
+}
+
+export type BalanceCardModel = {
+  figures: BalanceFigure[];
+  state: BalanceState;
+  /** False when the three figures do not satisfy the contract's identity; the card says so. */
+  reconciles: boolean;
+  notice: string;
+};
+
+export function balanceCardModel(balance: WalletBalance, hasHistory: boolean): BalanceCardModel {
+  return {
+    figures: balanceFigures(balance),
+    state: balanceState(balance, hasHistory),
+    reconciles: balanceIsConsistent(balance),
+    notice: PROMOTIONAL_NOTICE,
+  };
+}
+
+/**
+ * The card as a state, so a failed `balances` read renders an error instead of quietly vanishing —
+ * a missing card is indistinguishable from a card that has not loaded, and both read as "no money".
+ */
+export function balanceCardState(
+  balance: Result<WalletBalance>,
+  ledger: Result<Page<LedgerEntry>>,
+  state: PageCursor = { cursor: null, trail: [] },
+): ViewState<BalanceCardModel> {
+  return mapState(viewStateOf(balance, () => false), (wallet) =>
+    balanceCardModel(wallet, hasLedgerHistory(ledger, state)),
+  );
+}
+
+export type LedgerPageRows = {
+  rows: LedgerRowView[];
+  page: number;
+  firstHref: string;
+  previousHref: string | null;
+  nextHref: string | null;
+};
+
+export type BillingPageModel = {
+  here: string;
+  firstHref: string;
+  balance: ViewState<BalanceCardModel>;
+  ledger: ViewState<LedgerPageRows>;
+};
+
+export function billingPageModel(input: {
+  state: PageCursor;
+  balance: Result<WalletBalance>;
+  ledger: Result<Page<LedgerEntry>>;
+}): BillingPageModel {
+  const firstHref = ledgerHref(firstCursorState(input.state));
+  return {
+    here: ledgerHref(input.state),
+    firstHref,
+    balance: balanceCardState(input.balance, input.ledger, input.state),
+    ledger: mapState(
+      viewStateOf(input.ledger, (value) => value.items.length === 0),
+      (value) => ({
+        rows: value.items.map(ledgerRowView),
+        page: pageNumberOf(input.state),
+        firstHref,
+        previousHref: hasPreviousPage(input.state)
+          ? ledgerHref(previousCursorState(input.state))
+          : null,
+        nextHref:
+          value.next_cursor === null
+            ? null
+            : ledgerHref(nextCursorState(input.state, value.next_cursor)),
+      }),
+    ),
   };
 }

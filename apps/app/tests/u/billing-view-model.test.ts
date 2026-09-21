@@ -9,14 +9,28 @@ import test from "node:test";
 
 import { createFakeConsoleServices } from "../../lib/contracts/fake-services.ts";
 import { displayMoney, parseMoney, ZERO_MONEY } from "../../lib/contracts/money.ts";
-import { PLATFORM_ACTOR, type LedgerEntry, type WalletBalance } from "../../lib/contracts/types.ts";
 import {
+  PLATFORM_ACTOR,
+  type ErrorCode,
+  type LedgerEntry,
+  type Page,
+  type Result,
+  type WalletBalance,
+} from "../../lib/contracts/types.ts";
+import {
+  LEDGER_PAGE_SIZE,
   PROMOTIONAL_NOTICE,
   actorLabel,
+  balanceCardModel,
+  balanceCardState,
   balanceFigures,
   balanceIsConsistent,
   balanceState,
+  billingPageModel,
+  hasLedgerHistory,
+  historyProbeQuery,
   ledgerKindLabel,
+  ledgerPageQuery,
   ledgerRowView,
   signedMoney,
 } from "../../app/(console)/billing/view-model.ts";
@@ -107,6 +121,106 @@ test("U1-T22 a new organization, an exhausted one and a funded one get different
 
   // A zero ledger total with history is not a brand-new organization.
   assert.equal(balanceState(wallet("0.00000000", "0.00000000", "0.00000000"), true).kind, "exhausted");
+
+  // Both halves of the new-organization test have to matter. A funded wallet whose history we could
+  // not read is *not* new — and this is reachable: the ledger read beside the balance can fail on its
+  // own, and greeting a funded organization with "ask for your first grant" is the failure mode.
+  assert.equal(
+    balanceState(funded.value, false).kind,
+    "funded",
+    "money in the wallet means the organization is not new, whatever the history says",
+  );
+  assert.equal(balanceState(wallet("30.00000000", "30.00000000", "0.00000000"), false).kind, "exhausted");
+
+  // The exhausted guidance still has to say where credit comes from; it is the same dead end.
+  const exhaustedState = balanceState(wallet("30.00000000", "30.00000000", "0.00000000"), true);
+  assert.ok(exhaustedState.kind === "exhausted");
+  assert.match(exhaustedState.guidance, /operator/i);
+  assert.match(exhaustedState.guidance, /spent or reserved/i);
+});
+
+test("U1-T27 a failed ledger read never makes an established organization look new", async () => {
+  const fake = services();
+  const funded = await fake.balances(fake.sessions.owner);
+  assert.ok(funded.ok);
+
+  const empty: Result<Page<LedgerEntry>> = { ok: true, value: { items: [], next_cursor: null } };
+  const failed: Result<Page<LedgerEntry>> = {
+    ok: false,
+    error: { code: "dependency_unavailable" as ErrorCode, message: "injected failure" },
+  };
+
+  assert.equal(hasLedgerHistory(empty), false, "an empty ledger really is no history");
+  assert.equal(
+    hasLedgerHistory(failed),
+    true,
+    "but a failed read is not evidence of absence — it must not read as 'no history'",
+  );
+  assert.equal(
+    hasLedgerHistory(empty, { cursor: "c1", trail: [] }),
+    true,
+    "and being on a later page is history whatever this page holds",
+  );
+
+  const fresh = await fake.balances(fake.sessions.otherOwner);
+  assert.ok(fresh.ok);
+  assert.equal(balanceCardModel(fresh.value, hasLedgerHistory(empty)).state.kind, "new");
+  assert.equal(
+    balanceCardModel(fresh.value, hasLedgerHistory(failed)).state.kind,
+    "exhausted",
+    "a zero wallet with an unreadable ledger gets the neutral dead-end, not the welcome",
+  );
+
+  // The card is a state: a failed `balances` read is an error, not a card that quietly disappears.
+  const broken = services();
+  broken.failNext("balances", "dependency_unavailable");
+  const state = balanceCardState(await broken.balances(broken.sessions.owner), empty);
+  assert.equal(state.kind, "error");
+  assert.ok(state.kind === "error" && state.recovery === "retry");
+
+  const ready = balanceCardState(funded, empty);
+  assert.ok(ready.kind === "ready");
+  assert.equal(ready.value.figures.length, 3);
+  assert.equal(ready.value.reconciles, true);
+  assert.equal(ready.value.notice, PROMOTIONAL_NOTICE);
+  assert.equal(
+    balanceCardModel({ ...funded.value, available: parseMoney("1.00000000") }, true).reconciles,
+    false,
+    "and a wallet that does not reconcile says so through the model, not by looking right",
+  );
+});
+
+test("U1-T28 the billing page model states every branch, and page sizes are named here", async () => {
+  const fake = services();
+  const state = { cursor: null, trail: [] };
+  assert.deepEqual(ledgerPageQuery(state), { limit: LEDGER_PAGE_SIZE });
+  assert.deepEqual(ledgerPageQuery({ cursor: "c1", trail: [] }), {
+    limit: LEDGER_PAGE_SIZE,
+    cursor: "c1",
+  });
+  assert.deepEqual(historyProbeQuery(), { limit: 1 }, "the usage page only asks whether any row exists");
+
+  const balance = await fake.balances(fake.sessions.owner);
+  const ledger = await fake.ledger(fake.sessions.owner, ledgerPageQuery(state));
+  const model = billingPageModel({ state, balance, ledger });
+  assert.equal(model.balance.kind, "ready");
+  assert.ok(model.ledger.kind === "ready");
+  assert.equal(model.ledger.value.rows.length, LEDGER_PAGE_SIZE);
+  assert.equal(model.ledger.value.page, 1);
+  assert.equal(model.ledger.value.previousHref, null);
+  assert.ok(model.ledger.value.nextHref !== null);
+  assert.equal(model.here, "/billing");
+
+  const failedLedger: Result<Page<LedgerEntry>> = {
+    ok: false,
+    error: { code: "dependency_unavailable" as ErrorCode, message: "injected failure" },
+  };
+  const brokenLedger = billingPageModel({ state, balance, ledger: failedLedger });
+  assert.equal(brokenLedger.ledger.kind, "error", "a failed ledger read is an error, not an empty table");
+  assert.equal(brokenLedger.balance.kind, "ready", "and the balance card survives it");
+
+  const emptyLedger: Result<Page<LedgerEntry>> = { ok: true, value: { items: [], next_cursor: null } };
+  assert.equal(billingPageModel({ state, balance, ledger: emptyLedger }).ledger.kind, "empty");
 });
 
 test("U1-T23 no customer-facing balance wording offers payment or calls the credit revenue", () => {
@@ -131,8 +245,22 @@ test("U1-T23 no customer-facing balance wording offers payment or calls the cred
   for (const value of strings) {
     assert.doesNotMatch(
       value,
-      /add credits|add card|top ?up|buy|purchase|invoice|checkout|revenue|pay now/i,
+      /add credits|add card|top ?up|\bbuy\b|purchase|invoice|checkout|revenue|pay now|credit card/i,
       `payment or revenue wording in customer copy: ${value}`,
+    );
+  }
+
+  // The ledger kind labels go through the same scan, with exactly one allowed exception: the legacy
+  // `purchase` row has to render as what it is (R13). Anything else matching is a new offer to pay.
+  const PURCHASE_LABEL = "Purchase (legacy)";
+  assert.equal(ledgerKindLabel("purchase"), PURCHASE_LABEL, "the one allowed exception, named");
+  for (const kind of ["grant", "usage", "adjustment", "purchase"] as const) {
+    const label = ledgerKindLabel(kind);
+    if (label === PURCHASE_LABEL) continue;
+    assert.doesNotMatch(
+      label,
+      /add credits|add card|top ?up|\bbuy\b|purchase|invoice|checkout|revenue|pay now|credit card/i,
+      `payment wording in the ${kind} label: ${label}`,
     );
   }
 });
