@@ -555,3 +555,36 @@ Limit 7 of round 1 is therefore **closed**, and corrected in place above.
   processes created during this pass were removed; `docker ps -a`/`docker volume ls` show no
   `infrx-e2` resource. Nothing was pushed, and no `infrx-d1-*` or other session's resource was
   touched at any point.
+
+### Round-2 addendum: R-c fired for real, and the drill's own orphan
+
+Two things happened after the headline run and are recorded rather than smoothed over.
+
+**1. A real ephemeral-range collision (R-c).** The confirming run at `2fc036e` (18:22:13Z)
+reported:
+
+```
+[PEND] services: could not provision: port bind failed twice (ephemeral-range collision, R-c)
+Error response from daemon: failed to set up container networking: driver failed programming
+external connectivity on endpoint infrx-e2-s3 … failed to bind host port 127.0.0.1:55500/tcp
+```
+
+Exactly the ruling's scenario, on exactly the port it warned about. The harness retried once,
+then reported **PENDING (exit 3)** — never a pass — and teardown removed everything it had
+created. `busy_ports()` could not have caught it: nothing was *listening*, an outbound
+connection merely held 55500 as its local port, which is why R-c asks for a retry rather than a
+preflight check. The next run (18:24:33Z → 18:26:49Z, 136 s) was **exit 0, all stages**, with the
+same counts as the headline run (39 RLS cases, 8 engine cases, 83/670/131/40, 46 mutants /
+44 killed / 2 controls survived / 0 problems, canary named in both runners, teardown clean).
+
+**2. The SIGTERM drill left the orphan it exists to prevent.** Checking the host after the
+mutation run found one fake vLLM on 55583, from the `e2m45` mutant: that mutant removes the
+SIGTERM handler, so the drill's child died without stopping its server. Fixed in `2fc036e` — the
+drill kills the recorded process group in `finally`, which is the test tidying up after itself,
+not part of what it asserts. A root-owned `/tmp/infrx-e2-s3` from an early round-1 MinIO run was
+removed too (through the pinned image, since the host user cannot).
+
+Final state at `2fc036e`: `docker ps -a`, `docker volume ls` and `docker network ls` show **no**
+`infrx-e2` resource, no fake vLLM process survives, `/tmp` holds no `infrx-e2-*` path, and the
+only other container on the host (`gideon-migration-order-test-…`, plus the `infrx-d1-*` and
+`infrx-review-*` containers that came and went during this pass) was never touched.
