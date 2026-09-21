@@ -75,6 +75,26 @@ def test_every_container_is_named_in_the_namespace_and_volumes_are_project_scope
     assert binds == [], f"no host bind mount: a disposable volume cannot be a host path: {binds}"
 
 
+def test_every_container_helper_is_namespace_checked():
+    """r1 B2 (H5): `pause` was the one fault helper with no test behind its `assert_ours`, so
+    removing the check survived. Each helper is driven with a stubbed `run`/`compose`, which
+    must never be reached, because `assert_ours` refuses first."""
+    reached = []
+    original_run, original_compose = harness.run, harness.compose
+    harness.run = lambda argv, **kw: reached.append(argv)
+    harness.compose = lambda *a, **kw: reached.append(a)
+    original_labels = harness._labels
+    harness._labels = lambda kind, name: {}          # nothing carries our labels
+    try:
+        for helper in (harness.pause_container, harness.disconnect_container,
+                       harness.signal_container):
+            with pytest.raises(harness.HarnessError, match="not created by project"):
+                helper("valkey")
+    finally:
+        harness.run, harness.compose, harness._labels = original_run, original_compose, original_labels
+    assert reached == [], f"a helper reached docker before its namespace check: {reached}"
+
+
 def test_a_destructive_helper_refuses_anything_outside_the_namespace():
     """Other sessions run containers on this host. The prefix check happens before docker
     is consulted, so this holds with no daemon at all."""

@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -46,9 +47,26 @@ class Mutant:
     layer: int = 1
     occurrences: int = 1          # `before` must appear exactly this many times
     cases: tuple[str, ...] = field(default_factory=tuple)
+    # r1 review B3: a CONTROL that must SURVIVE. If a no-op edit comes back "killed", the
+    # runner is measuring its own setup and every other kill it reports is worthless.
+    must_survive: bool = False
 
 
 MUTANTS: tuple[Mutant, ...] = (
+    # ---------------- controls (must survive)
+    Mutant("e2c01", "CONTROL: a comment-only edit changes no behaviour and must SURVIVE",
+           "tests/integration/fake_vllm.py",
+           "STALL_COMMENT = \": infrx-stall \"",
+           "STALL_COMMENT = \": infrx-stall \"  # control: no behaviour change",
+           "tests/integration/test_fake_vllm.py", "stall or conformance or terminator",
+           must_survive=True),
+    Mutant("e2c02", "CONTROL: a comment-only edit in the role matrix must SURVIVE",
+           "tests/integration/pgstate.py",
+           "PERMISSION_DENIED = \"42501\"",
+           "PERMISSION_DENIED = \"42501\"  # control: no behaviour change",
+           "tests/integration/test_services.py", "role_matrix_holds or should_fail",
+           layer=2, must_survive=True),
+
     # ---------------- HttpEngine: the adapter the exported conformance suite runs against
     Mutant("e2m01", "malformed usage is never coerced into authoritative tokens",
            "tests/integration/fake_vllm.py",
@@ -109,6 +127,112 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("api_stream__reasoning_delimiters_split_across_chunks",
                   "test_split_reasoning_delimiters_never_appear_whole_in_one_chunk")),
 
+    # ---------------- run.py: the seven reviewer mutants of r1 B2, plus the claims
+    Mutant("e2m30", "r1 B2: PENDING is never reported as a pass",
+           "tests/integration/run.py",
+           "        if any(entry[\"status\"] == PENDING for entry in self.stages):\n"
+           "            return 3",
+           "        if False:\n            return 3",
+           "tests/integration/test_run.py", "exit_code_maps or pending",
+           cases=("test_the_exit_code_maps_pass_pending_and_fail_and_never_confuses_them",)),
+    Mutant("e2m31", "r1 B2: a failing stage is never reported as a pass",
+           "tests/integration/run.py",
+           "        if any(entry[\"status\"] == FAIL for entry in self.stages):\n"
+           "            return 1",
+           "        if False:\n            return 1",
+           "tests/integration/test_run.py", "exit_code_maps or failing_suite or canary",
+           cases=("test_the_exit_code_maps_pass_pending_and_fail_and_never_confuses_them",)),
+    Mutant("e2m32", "r1 B2: a provisioning failure is PENDING, not PASS",
+           "tests/integration/run.py",
+           '        report.add("services", PENDING, f"could not provision: {exc}")',
+           '        report.add("services", PASS, f"could not provision: {exc}")',
+           "tests/integration/test_run.py", "provisioning_failure",
+           cases=("test_a_provisioning_failure_is_pending_and_never_a_pass",)),
+    Mutant("e2m33", "r1 B2: docker being unusable is PENDING, not PASS",
+           "tests/integration/run.py",
+           '            report.add("preflight", PENDING, f"docker unusable: {why}")',
+           '            report.add("preflight", PASS, f"docker unusable: {why}")',
+           "tests/integration/test_run.py", "docker_is_unusable",
+           cases=("test_preflight_reports_pending_when_docker_is_unusable_and_never_pass",)),
+    Mutant("e2m34", "r1 B2: an undetected canary fails the run",
+           "tests/integration/run.py",
+           '            problems.append(f"{half}: the canary failure was NOT detected (exit 0)")',
+           "            pass",
+           "tests/integration/test_run.py", "undetected_canary",
+           cases=("test_an_undetected_canary_fails_the_run",)),
+    Mutant("e2m35", "r1 B2: a failing suite fails the run",
+           "tests/integration/run.py",
+           '    failed = [run for run in runs if run["exit"] != 0]',
+           "    failed = []",
+           "tests/integration/test_run.py", "failing_suite",
+           cases=("test_a_failing_suite_fails_the_run",)),
+    Mutant("e2m36", "r1 B2: teardown runs even when a stage raises",
+           "tests/integration/run.py",
+           "        if have_services and not args.keep:\n            teardown(report)",
+           "        if False:\n            teardown(report)",
+           "tests/integration/test_run.py", "teardown_runs_even",
+           cases=("test_teardown_runs_even_when_a_stage_raises",)),
+    Mutant("e2m37", "r1 B2 (H8): teardown fails if anything of ours survives",
+           "tests/integration/harness.py",
+           "    if still:\n        raise HarnessError(f\"teardown left {still} behind"
+           " - disposable means gone\")",
+           "    if False:\n        raise HarnessError(f\"teardown left {still} behind"
+           " - disposable means gone\")",
+           "tests/integration/test_run.py", "down_records_ids",
+           cases=("test_down_records_ids_and_fails_if_anything_of_ours_survives",)),
+    Mutant("e2m38", "r1 B2 (H9): the busy-port preflight really refuses",
+           "tests/integration/run.py",
+           '            report.add("preflight", FAIL,\n'
+           '                       f"these task-local ports are already in use: {busy}',
+           '            report.add("preflight", PASS,\n'
+           '                       f"these task-local ports are already in use: {busy}',
+           "tests/integration/test_run.py", "busy_task_local_port",
+           cases=("test_preflight_fails_on_a_busy_task_local_port",)),
+    Mutant("e2m39", "r1 B2 (H10): docker-unreachable is detected at all",
+           "tests/integration/harness.py",
+           '        return False, f"docker daemon unreachable: {(probe.stderr or \'\').strip()[:200]}"',
+           '        return True, "assumed fine"',
+           "tests/integration/test_run.py", "docker_available_reports",
+           cases=("test_docker_available_reports_why_not_rather_than_raising",)),
+    Mutant("e2m40", "r1 B2 (P1): a migration is never applied to a dirty database",
+           "tests/integration/pgstate.py",
+           "    if require_fresh and not is_fresh(conn):",
+           "    if False:",
+           "tests/integration/test_run.py", "not_fresh",
+           cases=("test_apply_migrations_refuses_a_database_that_is_not_fresh",)),
+    Mutant("e2m41", "r1 B2 (V7): the fake server binds loopback unless told otherwise",
+           "tests/integration/fake_vllm.py",
+           "    if args.host not in LOOPBACK and not args.allow_non_loopback:",
+           "    if False:",
+           "tests/integration/test_run.py", "binds_loopback",
+           cases=("test_the_fake_server_binds_loopback_unless_explicitly_allowed",)),
+    Mutant("e2m42", "r1 B2 (H5): the pause helper is namespace-checked like the others",
+           "tests/integration/harness.py",
+           '    name = assert_ours(container_of(service))\n    run(["docker", "pause", name]',
+           '    name = container_of(service)\n    run(["docker", "pause", name]',
+           "tests/integration/test_harness.py", "pause_helper",
+           cases=("test_every_container_helper_is_namespace_checked",)),
+    Mutant("e2m43", "r1 B2: the canary needle is searched in the whole output",
+           "tests/integration/run.py",
+           '            "named": None if needle is None else (needle.lower() in output.lower()),',
+           '            "named": None if needle is None else (needle.lower() in\n'
+           '                     "\\n".join(output.strip().splitlines()[-12:]).lower()),',
+           "tests/integration/test_run.py", "whole_output_not_the_tail",
+           cases=("test_the_needle_is_searched_in_the_whole_output_not_the_tail",)),
+    Mutant("e2m44", "r1 R-c: a bind failure is retried exactly once",
+           "tests/integration/harness.py",
+           "        if not retry_bind or not _looks_like_a_bind_failure(str(first)):\n"
+           "            raise",
+           "        raise",
+           "tests/integration/test_run.py", "bind_failure",
+           cases=("test_a_bind_failure_is_retried_once_and_then_refused",)),
+    Mutant("e2m45", "same pass: SIGTERM is handled like SIGINT so teardown still runs",
+           "tests/integration/run.py",
+           "    for signum in (signal.SIGINT, signal.SIGTERM):",
+           "    for signum in (signal.SIGINT,):",
+           "tests/integration/test_run.py", "sigterm",
+           cases=("test_sigterm_tears_down_and_orphans_no_fake_server",)),
+
     # ---------------- namespace and pinning guards
     Mutant("e2m08", "a destructive helper refuses a name outside the namespace",
            "tests/integration/harness.py",
@@ -168,16 +292,14 @@ MUTANTS: tuple[Mutant, ...] = (
     # ---------------- layer 2: need the live stack, reported pending without it
     Mutant("e2m16", "the role-matrix runner can report a failure at all",
            "tests/integration/pgstate.py",
-           "        passed = outcome == \"error\" and observed == expected\n"
-           "    else:\n"
-           "        passed = outcome == \"ok\" and _same(observed, expected)",
-           "        passed = True\n    else:\n        passed = True",
-           "tests/integration/test_services.py", "should_fail or role_matrix",
+           '            "outcome": outcome, "passed": passed, "why": check.why}',
+           '            "outcome": outcome, "passed": True, "why": check.why}',
+           "tests/integration/test_services.py", "should_fail or role_matrix_holds",
            layer=2, cases=("test_a_check_that_should_fail_does_fail",)),
     Mutant("e2m17", "an RLS refusal is checked against its SQLSTATE, not just 'it errored'",
            "tests/integration/pgstate.py",
-           '        passed = outcome == "error" and observed == expected',
-           '        passed = outcome == "error"',
+           '        passed = (outcome == "error" and observed == expected',
+           '        passed = (outcome == "error" and True',
            "tests/integration/test_services.py", "should_fail",
            layer=2, cases=("test_a_check_that_should_fail_does_fail",)),
     Mutant("e2m18", "database time moves only inside a transaction that asks for it",
@@ -189,10 +311,10 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_database_time_moves_only_inside_a_transaction_that_asks_for_it",)),
     Mutant("e2m19", "the namespace guard holds against the live daemon, not just the prefix",
            "tests/integration/harness.py",
-           "    if container not in owned_containers():",
+           '    if labels.get("com.docker.compose.project") != PROJECT:',
            "    if False:",
            "tests/integration/test_services.py", "cleanup_is_scoped or prefix_alone",
-           layer=2, cases=("test_cleanup_is_scoped_and_refuses_a_container_it_did_not_create",)),
+           layer=2, cases=("test_the_prefix_alone_is_not_enough_to_be_touchable",)),
     Mutant("e2m20", "the matrix's allowed writes really are allowed by the database",
            "tests/integration/pgstate.py",
            '              ("rowcount", 1), "an owner mints a key for their own tenant"),',
@@ -207,6 +329,49 @@ MUTANTS: tuple[Mutant, ...] = (
            '              ("value", 1), "cross-tenant key metadata is invisible"),',
            "tests/integration/test_services.py", "role_matrix_holds",
            layer=2, cases=("test_the_role_matrix_holds_for_every_role",)),
+    Mutant("e2m22", "r1 B1: ownership needs the checkout label, not just the project name",
+           "tests/integration/harness.py",
+           "    return (labels.get(\"com.docker.compose.project\") == PROJECT\n"
+           "            and labels.get(CHECKOUT_LABEL) == working_dir())",
+           "    return labels.get(\"com.docker.compose.project\") == PROJECT",
+           "tests/integration/test_services.py", "another_checkout or prefix_alone",
+           layer=2,
+           cases=("test_a_stack_labelled_for_another_checkout_is_refused_not_destroyed",)),
+    Mutant("e2m23", "r1 B1: a same-named volume nobody labelled is refused, not deleted",
+           "tests/integration/harness.py",
+           '    return [item for kind in ("container", "volume", "network") for item in foreign(kind)]',
+           '    return foreign("container")',
+           "tests/integration/test_services.py", "unlabelled_volume",
+           layer=2,
+           cases=("test_an_unlabelled_volume_with_our_name_is_refused_not_deleted",)),
+    Mutant("e2m24", "r1 B4: the fixture ids really are a function of the seed",
+           "tests/integration/pgstate.py",
+           "    rng = Random(seed)\n"
+           "    ids = {\"users\": {handle: _uuid(rng) for handle, _, _ in PEOPLE},",
+           "    rng = Random()\n"
+           "    ids = {\"users\": {handle: _uuid(rng) for handle, _, _ in PEOPLE},",
+           "tests/integration/test_services.py", "recomputed_from_the_seed",
+           layer=2,
+           cases=("test_exactly_the_seeded_ids_are_in_the_database_recomputed_from_the_seed",)),
+    Mutant("e2m25", "r1 R-b: the JSON claims form is set as well as the legacy GUCs",
+           "tests/integration/pgstate.py",
+           "    conn.execute(\"select set_config('request.jwt.claims', %s, true)\",\n"
+           "                 (json.dumps({\"sub\": str(user_id), \"role\": role}),))",
+           "    pass",
+           "tests/integration/test_services.py", "both_jwt_claim_forms",
+           layer=2, cases=("test_both_jwt_claim_forms_are_set_for_an_impersonated_principal",)),
+    Mutant("e2m26", "r1 R-b: a vacuous matrix (auth.uid() NULL) cannot pass",
+           "tests/integration/pgstate.py",
+           "                if str(identity) != str(principal.user_id):",
+           "                if False:",
+           "tests/integration/test_services.py", "vacuous or role_matrix_holds",
+           layer=2, cases=("test_a_matrix_that_authenticates_nobody_fails",)),
+    Mutant("e2m27", "r1 R-a: the template copy is owned by postgres, or migrations cannot run",
+           "tests/integration/harness.py",
+           "                             f\"template {PG_TEMPLATE_SOURCE} owner {PG_USER}\")],",
+           "                             f\"template {PG_TEMPLATE_SOURCE}\")],",
+           "tests/integration/test_services.py", "templated_database",
+           layer=2, cases=("test_the_target_database_is_a_template_copy_owned_by_postgres",)),
 )
 
 
@@ -236,14 +401,46 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
              "-k", mutant.select, "-p", "no:cacheprovider", "--no-header", "-x"],
             cwd=str(root), capture_output=True, text=True, timeout=900,
             env={**os.environ, "INFRX_E2_REPO_ROOT": str(harness.REPO_ROOT),
+                 # The copy must claim the provisioning checkout's identity or B1's ownership
+                 # label correctly makes the live stack foreign, and every layer-2 mutant is
+                 # skipped instead of killed.
+                 "INFRX_E2_CHECKOUT": harness.working_dir(),
                  "INFRX_E2_CANARY": "off", "PYTHONDONTWRITEBYTECODE": "1"})
         output = result.stdout + result.stderr
-        selected = "no tests ran" not in output
-        killed = result.returncode != 0 and selected
-        return {"id": mutant.id, "status": "killed" if killed else "SURVIVED",
-                "invariant": mutant.invariant, "exit": result.returncode,
-                "selected_cases": mutant.cases,
-                "tail": "\n".join(output.strip().splitlines()[-6:])}
+        return _verdict(mutant, result.returncode, output)
+
+
+def _verdict(mutant: Mutant, code: int, output: str) -> dict:
+    """R40 / r1 review B3: a kill is an ASSERTION FAILURE, not "the process exited non-zero".
+
+    The old criterion was `returncode != 0`, and in a temporary copy the fake-vLLM child could
+    not import `infrx`, so every engine mutant "died" of a `ModuleNotFoundError` in
+    `setup_module` - a collection **error**, and a comment-only edit died the same way. A run
+    therefore only counts as a kill when pytest reports `failed` and no `error`, and a run
+    that selected nothing is neither a kill nor a survival but a broken selector.
+    """
+    failed = re.search(r"(\d+) failed", output)
+    errors = re.search(r"(\d+) error", output)
+    nothing_ran = "no tests ran" in output or re.search(r"^0 selected", output, re.M)
+    detail = {"id": mutant.id, "invariant": mutant.invariant, "exit": code,
+              "selected_cases": mutant.cases, "must_survive": mutant.must_survive,
+              "failed": int(failed.group(1)) if failed else 0,
+              "errors": int(errors.group(1)) if errors else 0,
+              "tail": "\n".join(output.strip().splitlines()[-6:])}
+    if nothing_ran:
+        return {**detail, "status": "no-cases",
+                "why": f"the selector {mutant.select!r} matched nothing: not a kill"}
+    if detail["errors"]:
+        return {**detail, "status": "setup-error",
+                "why": "pytest reported an ERROR, not a failure: the suite could not run, so "
+                       "this says nothing about the invariant"}
+    killed = code != 0 and detail["failed"] > 0
+    if mutant.must_survive:
+        return {**detail, "status": "SURVIVED" if not killed else "CONTROL-KILLED",
+                "why": None if not killed else
+                       "a no-op edit was reported killed: the runner is measuring its own "
+                       "setup, so every other kill it reports is worthless"}
+    return {**detail, "status": "killed" if killed else "SURVIVED"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -257,7 +454,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.list:
         for mutant in MUTANTS:
-            print(f"{mutant.id}  layer {mutant.layer}  {mutant.path}\n"
+            print(f"{mutant.id}  layer {mutant.layer}  "
+                  f"{'CONTROL ' if mutant.must_survive else ''}{mutant.path}\n"
                   f"        {mutant.invariant}")
         print(f"\n{len(MUTANTS)} mutants")
         return 0
@@ -269,15 +467,24 @@ def main(argv: list[str] | None = None) -> int:
         and bool(harness.owned_containers() if harness.docker_available()[0] else [])
     results = [run_one(mutant, stack_available=stack) for mutant in wanted]
     for result in results:
-        print(f"[{result['status']:>8}] {result['id']}  {result['invariant']}", flush=True)
-    survived = [r for r in results if r["status"] in ("SURVIVED", "stale")]
+        print(f"[{result['status']:>13}] {result['id']}  {result['invariant']}", flush=True)
+    # A control that survived is a PASS; anything else that survived, or that could not be
+    # driven at all, is a failure of this list rather than of the code (R40/B3).
+    bad = [r for r in results
+           if (r["status"] != "killed" and not r.get("must_survive"))
+           or r["status"] in ("CONTROL-KILLED", "stale", "setup-error", "no-cases")]
     pending = [r for r in results if r["status"] == "pending"]
-    summary = {"mutants": len(results), "killed": len(results) - len(survived) - len(pending),
-               "survived": len(survived), "pending": len(pending), "results": results}
+    bad = [r for r in bad if r not in pending]
+    controls = [r for r in results if r.get("must_survive") and r["status"] == "SURVIVED"]
+    summary = {"mutants": len(results),
+               "killed": sum(1 for r in results if r["status"] == "killed"),
+               "controls_survived": len(controls), "not_killed": len(bad),
+               "pending": len(pending), "problems": [r["id"] for r in bad] or None,
+               "results": results}
     print(json.dumps(summary, indent=2))
     if args.report:
         args.report.write_text(json.dumps(summary, indent=2))
-    return 1 if survived else 0
+    return 1 if bad else 0
 
 
 if __name__ == "__main__":

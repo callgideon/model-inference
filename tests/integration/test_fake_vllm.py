@@ -205,20 +205,101 @@ def test_cancellation_is_keyed_by_job_and_leaves_other_jobs_alone():
         "cancelling one job must not cancel another"
 
 
-def test_a_per_request_fault_header_beats_the_process_default():
-    """So one scripted request cannot disturb a concurrent one, and a client that cannot
-    send a header (a gateway under test) still has the /_control default."""
+SERVER_TEXT_CHUNKS = tuple(DEFAULT_TEXT[i:i + fake_vllm.CHUNK_SIZE]
+                           for i in range(0, len(DEFAULT_TEXT), fake_vllm.CHUNK_SIZE))
+
+
+def test_a_cancel_that_arrives_after_the_first_delta_bills_only_what_was_produced():
+    """r1 review, same pass: the script was precomputed, so a cancel arriving mid-stream was
+    ignored entirely - seven chunks and `completion_tokens: 5` for a request the client had
+    already abandoned. W2/E3 depend on the other shape: stop, and report the deltas actually
+    emitted. Driven over a real socket with a real interleaving.
+    """
+    SERVER.reset()
+    job_id = str(uuid.uuid4())
+    payload = {"model": "m", "stream": True, "messages": [], "infrx_job_id": job_id,
+               "infrx_fault": "cancellation_race"}
+    deltas, usage_events, saw_done = 0, [], False
+    with httpx.Client(timeout=10.0) as client:
+        with client.stream("POST", f"{SERVER.base_url}/v1/chat/completions",
+                           json=payload) as response:
+            for line in response.iter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line[len("data:"):].strip()
+                if data == "[DONE]":
+                    saw_done = True
+                    break
+                chunk = json.loads(data)
+                if (chunk["choices"][0].get("delta") or {}).get("content"):
+                    deltas += 1
+                    if deltas == 1:            # the cancel lands while the stream is open
+                        assert httpx.post(f"{SERVER.base_url}/_control/cancel",
+                                          json={"job_id": job_id},
+                                          timeout=5.0).status_code == 200
+                if "usage" in chunk:
+                    usage_events.append(chunk["usage"])
+    assert saw_done, "a cancelled stream still ends cleanly"
+    assert len(usage_events) == 1, usage_events
+    assert usage_events[0]["completion_tokens"] == deltas, \
+        f"reported {usage_events[0]['completion_tokens']} for {deltas} deltas actually sent"
+    assert 1 <= deltas < len(SERVER_TEXT_CHUNKS), \
+        f"it produced something ({deltas}) and really stopped early"
+    SERVER.reset()
+
+
+def test_an_unknown_fault_is_a_4xx_not_a_500():
+    """Same pass: a caller asking for a fault that does not exist is a client error. A 500
+    would make a typo in a test look like a broken engine."""
+    SERVER.reset()
+    body = httpx.post(f"{SERVER.base_url}/v1/chat/completions", timeout=10.0,
+                      json={"stream": True, "model": "m", "messages": [],
+                            "infrx_fault": "nope"})
+    assert body.status_code == 400, body.status_code
+    error = body.json()["error"]
+    assert error["code"] == "unsupported_parameter" and "nope" in error["message"]
+    assert "prefill_stall" in error["known"], "it says what it would have accepted"
+    header = httpx.post(f"{SERVER.base_url}/v1/chat/completions", timeout=10.0,
+                        json={"stream": True, "model": "m", "messages": []},
+                        headers={"X-Infrx-Fault": "not-a-fault"})
+    assert header.status_code == 400
+    control = httpx.post(f"{SERVER.base_url}/_control", json={"fault": "invented"}, timeout=5.0)
+    assert control.status_code == 400
+    assert control.json()["error"]["code"] == "unsupported_parameter"
+    assert httpx.get(f"{SERVER.base_url}/_control", timeout=5.0).json()["fault"] == "none", \
+        "a refused control changed nothing"
+
+
+def test_chunk_ids_and_created_are_seedable():
+    """Same pass: with a seed the transcript is comparable between runs; without one the ids
+    are random and `created` is the wall clock, as a real engine's are."""
+    def lines(app):
+        return [payload for _kind, payload in app.script(EngineFault.none, "")]
+
+    assert lines(fake_vllm.FakeVllmApp(seed=7)) == lines(fake_vllm.FakeVllmApp(seed=7))
+    assert lines(fake_vllm.FakeVllmApp(seed=7)) != lines(fake_vllm.FakeVllmApp(seed=8))
+    assert lines(fake_vllm.FakeVllmApp()) != lines(fake_vllm.FakeVllmApp()), \
+        "no seed means no determinism, which is what a real engine looks like"
+    assert f'"created":{fake_vllm.SEEDED_CREATED + 1}' in lines(fake_vllm.FakeVllmApp(seed=7))[0]
+
+
+def test_a_per_request_fault_precedence_is_header_then_body_then_default():
+    """Three levels, all three checked: so one scripted request cannot disturb a concurrent
+    one, and a client that cannot send a header (a gateway under test) still has /_control."""
     SERVER.control(fault="missing_usage")
     try:
-        response = httpx.post(f"{SERVER.base_url}/v1/chat/completions",
-                              json={"stream": True, "model": "m", "messages": []},
-                              headers={"X-Infrx-Fault": "split_reasoning_delimiters"},
-                              timeout=10.0)
-        assert "<th" in response.text and "ink>" in response.text
-        default = httpx.post(f"{SERVER.base_url}/v1/chat/completions",
-                             json={"stream": True, "model": "m", "messages": []},
-                             timeout=10.0).text
-        assert '"usage"' not in default, "the process default still applies with no header"
+        both = httpx.post(f"{SERVER.base_url}/v1/chat/completions", timeout=10.0,
+                          json={"stream": True, "model": "m", "messages": [],
+                                "infrx_fault": "missing_usage"},
+                          headers={"X-Infrx-Fault": "split_reasoning_delimiters"})
+        assert "<th" in both.text and "ink>" in both.text, "the header wins over the body"
+        body_only = httpx.post(f"{SERVER.base_url}/v1/chat/completions", timeout=10.0,
+                               json={"stream": True, "model": "m", "messages": [],
+                                     "infrx_fault": "split_reasoning_delimiters"}).text
+        assert "<th" in body_only and "ink>" in body_only, "the body wins over the default"
+        default = httpx.post(f"{SERVER.base_url}/v1/chat/completions", timeout=10.0,
+                             json={"stream": True, "model": "m", "messages": []}).text
+        assert '"usage"' not in default, "the process default applies when neither is given"
     finally:
         SERVER.reset()
 

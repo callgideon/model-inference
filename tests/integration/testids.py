@@ -12,14 +12,12 @@ are measured by `test_harness.py` rather than asserted here:
    both a gateway failure-matrix row and a feedback requirement. A reader who sees "Q3
    failed" cannot tell which suite it was.
 2. Between a legacy test id and a **task id in this plan**: `E1` is a manual console
-   checklist and also the benchmark task; `Q1`, `F1`, `D1`, `I1`, `M1`, `T1`, `J1`, `C1`,
-   `U1`, `G1` are all both. That is the worse pair, because a status line saying "F2
-   failed" reads as a task.
-
-The mapping is pure data plus one resolver, and `test_harness.py` checks it against the
-source documents: every legacy id must actually occur in the document it is attributed to,
-no namespaced id may be issued twice, and any legacy id used by two documents must resolve
-to two namespaced ids. A table nobody checks is a table that rots.
+   checklist and also the benchmark task; `Q1`, `F1`, `I1`, `M1`, `T1`, `J1`, `C1`, `U1` and
+   `G1` are all both. That is the worse pair, because a status line saying "F2 failed" reads
+   as a task. `D1`-`D4` are deliberately NOT in this table: in production-api §1 they are
+   design *decisions*, not test cases, and `test_harness.py` asserts their absence so nobody
+   adds them by accident (r1 review: the docstring used to claim "D1 is both", which
+   contradicted that assertion).
 
 The mapping is pure data plus one resolver, and `test_harness.py` checks it against the
 source documents: every legacy id must actually occur in the document it is attributed to,

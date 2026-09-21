@@ -371,6 +371,136 @@ def test_the_prefix_alone_is_not_enough_to_be_touchable():
 
 # ------------------------------------------------------------------ canary
 
+def test_a_stack_labelled_for_another_checkout_is_refused_not_destroyed():
+    """r1 review B1.1: the compose PROJECT NAME is every checkout's. A container carrying our
+    name and our project label but ANOTHER checkout's `ai.infrx.e2.checkout` must be reported
+    and must make provisioning refuse - the reviewer's reproduction was a second checkout
+    silently destroying and replacing a live stack, exit 0, all PASS.
+    """
+    stack_or_skip()
+    decoy = f"{harness.PREFIX}otherco"
+    image = harness.compose_images()["valkey"]
+    harness.run(["docker", "create", "--name", decoy,
+                 "--label", "com.docker.compose.project=infrx-e2",
+                 "--label", f"{harness.CHECKOUT_LABEL}=/somewhere/else/tests/integration",
+                 image, "true"], timeout=120)
+    try:
+        assert decoy not in harness.owned_containers(), "the decoy is not ours"
+        reported = [item for item in harness.foreign("container") if item["name"] == decoy]
+        assert reported and "another checkout" in reported[0]["why"], reported
+        with pytest.raises(harness.HarnessError, match="another checkout"):
+            harness.assert_ours(decoy)
+        # And the gate in front of every create and every remove.
+        with pytest.raises(harness.HarnessError, match="refusing to provision or tear down"):
+            harness.assert_nothing_foreign()
+    finally:
+        harness.run(["docker", "rm", "-f", decoy], check=False, timeout=120)
+    harness.assert_nothing_foreign()
+
+
+def test_an_unlabelled_volume_with_our_name_is_refused_not_deleted():
+    """r1 review B1.2: `down -v` deleted a volume it had not created, because the name was the
+    one compose would have picked. A volume without our checkout label is foreign whatever it
+    is called, and it must still exist afterwards.
+
+    The gate itself is exercised here against the live daemon; that `up()` and `down()` call
+    it is proved in `test_harness.py` with `compose` stubbed, because a test that really ran
+    `down()` under a mutant which had removed the gate would destroy the stack every later
+    case needs - and then those cases would skip and their mutants would "survive".
+    """
+    stack_or_skip()
+    victim = f"{harness.PROJECT}_reviewer-probe"
+    harness.run(["docker", "volume", "create", "--label", "reviewer=e2", victim], timeout=60)
+    try:
+        reported = [item for item in harness.foreign("volume") if item["name"] == victim]
+        assert reported and "no infrx-e2 checkout label" in reported[0]["why"], reported
+        with pytest.raises(harness.HarnessError, match="refusing to provision or tear down"):
+            harness.assert_nothing_foreign()
+        survived = harness.run(["docker", "volume", "inspect", victim], check=False, timeout=60)
+        assert survived.returncode == 0, "a volume this harness did not create must survive"
+        assert victim not in harness.owned("volume")
+    finally:
+        harness.run(["docker", "volume", "rm", "-f", victim], check=False, timeout=60)
+    harness.assert_nothing_foreign()
+
+
+def test_the_target_database_is_a_template_copy_owned_by_postgres():
+    """r1 review R-a: `infrx_e2` created with TEMPLATE postgres OWNER postgres.
+
+    Three things at once, because all three are what make it usable: the name matches D1's
+    `current_database() like 'infrx\\_%'` clock gate, the Supabase `auth` schema came across
+    with the template, and `postgres` owns it (otherwise `public` - owned by
+    `pg_database_owner` - refuses CREATE and the migration cannot run at all).
+    """
+    stack_or_skip()
+    with connect() as conn:
+        name, owner = conn.execute(
+            "select d.datname, pg_get_userbyid(d.datdba) from pg_database d"
+            " where d.datname = current_database()").fetchone()
+        assert name == harness.PG_DATABASE == "infrx_e2"
+        assert conn.execute("select current_database() like 'infrx\\_%'").fetchone()[0] is True, \
+            "the name must match D1's clock gate"
+        assert owner == harness.PG_USER, \
+            f"owned by {owner}: `postgres` could not create in public and the migration fails"
+        assert conn.execute("select to_regclass('auth.users') is not null").fetchone()[0], \
+            "the template copy carries the image's auth schema"
+        assert conn.execute(
+            "select count(*) from pg_namespace where nspname = 'auth'").fetchone()[0] == 1
+        # And production is NOT this name, which is the whole reason the gate works.
+        assert harness.PG_TEMPLATE_SOURCE == "postgres" != harness.PG_DATABASE
+
+
+def test_both_jwt_claim_forms_are_set_for_an_impersonated_principal():
+    """r1 review R-b: the pinned image's `auth.uid()` reads the legacy per-claim GUC; hosted
+    Supabase / PostgREST >= 10 set the JSON `request.jwt.claims`. A harness that sets one is
+    silently nobody against the other, and then every deny-case passes for the wrong reason."""
+    fixtures = stack_or_skip()
+    principal = fixtures.user("member_alpha")
+    import json
+    with connect() as conn:
+        with conn.transaction():
+            conn.execute("set local role authenticated")
+            pgstate.impersonate(conn, principal, "authenticated")
+            legacy_sub, legacy_role, claims, uid = conn.execute(
+                "select current_setting('request.jwt.claim.sub', true),"
+                "       current_setting('request.jwt.claim.role', true),"
+                "       current_setting('request.jwt.claims', true),"
+                "       auth.uid()").fetchone()
+        conn.execute("reset role")
+    assert legacy_sub == str(principal), "the legacy per-claim GUC the pinned image reads"
+    assert legacy_role == "authenticated"
+    assert json.loads(claims) == {"sub": str(principal), "role": "authenticated"}, \
+        "the JSON form hosted Supabase and PostgREST >= 10 read"
+    assert str(uid) == str(principal), "auth.uid() is the principal, not NULL"
+
+
+def test_a_matrix_that_authenticates_nobody_fails():
+    """r1 review R-b: with `auth.uid()` NULL every policy that reads it denies everybody, so
+    every "0 rows" case passes for the wrong reason. The gate that stops that must itself be
+    provable, so this replaces `impersonate` with one that authenticates nobody and asserts the
+    case is reported `no-identity` and `passed=False` - while the same case passes normally.
+    """
+    fixtures = stack_or_skip()
+    case = pgstate.Check("E2-RLS-VACUOUS", "authenticated", "member_alpha",
+                         "select count(*) from public.organizations where id = {beta}",
+                         ("value", 0),
+                         "cross-tenant denial - which is also what a NULL identity produces")
+    with connect() as conn:
+        honest = pgstate.run_check(conn, case, fixtures)
+        assert honest["passed"] is True and honest["auth_uid"] == str(fixtures.user("member_alpha"))
+
+        real = pgstate.impersonate
+        pgstate.impersonate = lambda conn, user_id, role: None   # authenticate nobody
+        try:
+            vacuous = pgstate.run_check(conn, case, fixtures)
+        finally:
+            pgstate.impersonate = real
+    assert vacuous["outcome"] == "no-identity", vacuous
+    assert vacuous["passed"] is False, \
+        "the statement still answers 0 rows; only the identity gate can tell the difference"
+    assert "auth.uid() is None" in str(vacuous["observed"]), vacuous["observed"]
+
+
 def test_canary_intentional_failure_is_detected_in_the_service_suite():
     if os.environ.get("INFRX_E2_CANARY") == "fail":
         raise AssertionError("E2 canary: this failure is intentional (INFRX_E2_CANARY=fail)")
