@@ -334,11 +334,44 @@ def test_the_extras_are_installed_so_the_check_is_meaningful():
 
 def test_task_local_services_never_collide_across_worktrees():
     """08 §8: one container name, port, database and object prefix per task."""
-    assert tasklocal.all_host_ports()[55432] == "d/postgres"
+    assert tasklocal.all_host_ports()[55432] == "d1/postgres"
     d1 = tasklocal.local_services("D1")["postgres"]
     assert (d1.container, d1.host_port, d1.database, d1.object_prefix) == \
         ("infrx-d1-postgres", 55432, "infrx_d1", "test/d1/")
     assert tasklocal.local_services("d2")["postgres"].container == "infrx-d2-postgres"
+
+
+# r1 R48: PostgreSQL is per **task**. More than one of these is open at once in practice -
+# a coordinator running D2's migration while C1's console suite holds a database - and
+# they all used to be handed 55432, so the second one silently talked to the first's data.
+R48_POSTGRES_PORTS = {"d1": 55432, "d2": 55433, "d3": 55434, "d5": 55436, "d4": 55435,
+                      "d6": 55437, "c1": 55441}
+
+
+@pytest.mark.parametrize("task,port", sorted(R48_POSTGRES_PORTS.items()))
+def test_each_database_task_has_its_own_postgres_port(task, port):
+    service = tasklocal.local_services(task)["postgres"]
+    assert service.host_port == port
+    assert service.container == f"infrx-{task}-postgres"
+    assert service.database == f"infrx_{task}"
+
+
+def test_no_two_tasks_share_a_postgres_port():
+    ports = {task: tasklocal.local_services(task)["postgres"].host_port
+             for task in R48_POSTGRES_PORTS}
+    assert len(set(ports.values())) == len(ports), ports
+    reserved = tasklocal.all_host_ports()
+    for task, port in ports.items():
+        assert reserved[port] == f"{task}/postgres"
+    # and the whole table is still collision-free, which `all_host_ports` enforces
+    assert len(reserved) == len(set(reserved))
+
+
+def test_c1_is_the_only_console_task_with_a_database():
+    """R48 grants C1 a port; the rest of C, and U/V, build against the fakes."""
+    assert tasklocal.local_services("c1")["postgres"].host_port == 55441
+    assert tasklocal.local_services("c2") == {}
+    assert tasklocal.local_services("u1") == {} and tasklocal.local_services("v1") == {}
     assert sorted(tasklocal.local_services("t")) == ["clickhouse", "s3"]
     assert tasklocal.local_services("t")["s3"].host_port != \
         tasklocal.local_services("m")["s3"].host_port

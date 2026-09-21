@@ -82,8 +82,11 @@ LIST_MODELS: dict[str, type[BaseModel]] = {
     "judge_runs.json": records.JudgeRun,
 }
 
+# r1 R54: `text_bounds.json` is the third cross-language parity table - boundary
+# strings both halves must classify identically, in **code points**. It is
+# byte-identical to the console copy at `apps/app/tests/contracts/text_bounds.json`.
 TABLES = ("error_envelopes.json", "error_codes.json", "money_cases.json",
-          "money_tables.json")
+          "money_tables.json", "text_bounds.json")
 
 
 def names() -> tuple[str, ...]:

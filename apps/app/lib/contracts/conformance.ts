@@ -1416,6 +1416,54 @@ export function runConsoleServicesConformance(
         "a reason one character past the bound",
       );
 
+      // r1 R54: every shared bound counts **Unicode code points**, in both halves. A string
+      // of astral characters - emoji, musical symbols, most of CJK Extension B - is twice its
+      // code-point count in UTF-16 units, so a `.length` check is silently stricter here than
+      // `len()` is in Python: a 200-code-point key name was a 400 from the console and an
+      // accepted row from the API. `tests/contracts/text-bounds.test.ts` drives the shared
+      // `text_bounds.json` table; this is the same rule inside the exported suite, so an
+      // adapter running only the suite still has to get it right.
+      const GCLEF = "\u{1D11E}";
+      assert.equal(GCLEF.length, 2, "the probe character must be astral, or it proves nothing");
+      assert.equal([...GCLEF].length, 1, "and it must be one code point");
+      expectOk(
+        await services.keys.create(sessions.owner, { name: GCLEF.repeat(MAX_KEY_NAME_CHARS) }),
+        "a key name of astral characters at the bound",
+      );
+      expectError(
+        await services.keys.create(sessions.owner, { name: GCLEF.repeat(MAX_KEY_NAME_CHARS + 1) }),
+        "invalid_request",
+        "a key name of astral characters one code point past the bound",
+      );
+      expectOk(
+        await services.adminGrant(sessions.operator, {
+          target_org_id: ids.orgId,
+          amount: "1.00000000" as Money,
+          kind: "promotional",
+          reason: GCLEF.repeat(MAX_GRANT_REASON_CHARS),
+          idempotency_key: "bounds-reason-astral",
+        }),
+        "a reason of astral characters at the bound",
+      );
+      expectOk(
+        await services.feedback.submit(sessions.owner, {
+          request_id: ids.availableRequestId,
+          name: "correction",
+          value: GCLEF.repeat(MAX_FEEDBACK_TEXT_CHARS),
+          idempotency_key: "bounds-feedback-astral",
+        }),
+        "a correction of astral characters at the bound",
+      );
+      expectOk(
+        await services.feedback.submit(sessions.owner, {
+          request_id: ids.availableRequestId,
+          name: "thumb",
+          value: true,
+          idempotency_key: GCLEF.repeat(MAX_IDEMPOTENCY_KEY_CHARS),
+        }),
+        "an idempotency key of astral characters at the bound",
+      );
+
       // Entitlement limits: a ceiling, and whole numbers only — a typo must not mean "unlimited".
       expectOk(
         await services.adminSetEntitlements(sessions.operator, {
@@ -1432,6 +1480,11 @@ export function runConsoleServicesConformance(
         ["fractional", 2.5],
         ["not a number", "many" as unknown as number],
         ["infinite", Number.POSITIVE_INFINITY],
+        // r1 R52/R54: booleans are rejected in both halves. `true` read as a limit of 1 is
+        // a concurrency cap of one request, silently, and `false` is a cap of zero.
+        ["a boolean true", true as unknown as number],
+        ["a boolean false", false as unknown as number],
+        ["a numeric string", "8" as unknown as number],
       ] as [string, number][]) {
         expectError(
           await services.adminSetEntitlements(sessions.operator, {

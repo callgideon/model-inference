@@ -12,7 +12,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .codec import compact_bytes
-from . import errors
+from . import errors, ids
 from .limits import MAX_FEEDBACK_TEXT_CHARS, MAX_IDEMPOTENCY_KEY_CHARS, MAX_PAGE_LIMIT
 from .records import (FEEDBACK_INPUT_NAMES, PLATFORM_ACTOR, AuthorRole, ChunkEventType,
                       ContentState, ExecutionMode, Feedback, FeedbackChannel, FeedbackName,
@@ -307,7 +307,9 @@ class TraceExport(WireModel):
     completed_at: Timestamp | None = None
     content_complete: bool = False
     content_state: ContentState
-    content_handle: str | None = None       # opaque; resolved server-side, never a key
+    # r1 R54: opaque, resolved server-side, and **prefixed** (`tc_`), so a storage key
+    # cannot be passed off as a handle by a caller or by a careless projection.
+    content_handle: str | None = None
     content_bytes: int = Field(default=0, ge=0)
     metadata_bytes: int = Field(default=0, ge=0)
     loss_reason: TraceLossReason = TraceLossReason.none
@@ -315,6 +317,14 @@ class TraceExport(WireModel):
     price_version: str
     trace_schema_version: int = 1
     content: TraceContentBody | None = None
+
+    @model_validator(mode="after")
+    def _handle_is_an_opaque_handle(self) -> TraceExport:
+        if self.content_handle is not None:
+            ids.require_handle(self.content_handle, ids.TRACE_CONTENT_HANDLE_RE)
+        if self.content is not None and self.content_handle is None:
+            raise ValueError("resolved content is reached through a content handle")
+        return self
 
     @classmethod
     def of(cls, envelope: TraceEnvelope, content_state: ContentState,

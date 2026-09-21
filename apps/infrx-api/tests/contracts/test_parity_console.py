@@ -127,6 +127,30 @@ def test_money_cases_are_byte_identical():
     assert console == (FIXTURES / "money_cases.json").read_bytes()
 
 
+def test_text_bound_cases_are_byte_identical():
+    """r1 R54: the third parity table. Both halves read the same boundary strings."""
+    console = (CONSOLE / "tests" / "contracts" / "text_bounds.json").read_bytes()
+    assert console == (FIXTURES / "text_bounds.json").read_bytes()
+
+
+def test_python_classifies_every_text_bound_case_by_code_points():
+    """r1 R54: `len()` counts code points, and the table says what that means for each
+    case. The console half asserts the same table with `[...text].length`; a half using
+    UTF-16 units would disagree on every astral row."""
+    cases = json.loads((FIXTURES / "text_bounds.json").read_text(encoding="utf-8"))
+    assert cases, "the table must not be empty"
+    astral = [case for case in cases if case["utf16_units"] > case["code_points"]]
+    assert astral, "the table must contain astral cases, or it proves nothing"
+    bounds = {"feedback_text": limits.MAX_FEEDBACK_TEXT_CHARS,
+              "key_name": limits.MAX_KEY_NAME_CHARS,
+              "grant_reason": limits.MAX_GRANT_REASON_CHARS,
+              "idempotency_key": limits.MAX_IDEMPOTENCY_KEY_CHARS}
+    for case in cases:
+        assert bounds[case["bound"]] == case["limit"], case["bound"]
+        assert len(case["text"]) == case["code_points"], case
+        assert (len(case["text"]) <= case["limit"]) is case["within"], case
+
+
 # --- shared numeric bounds (R17, R43) -------------------------------------------
 # Every number both halves enforce. A bound one language widened would otherwise be a
 # 400 on one side and an accepted document on the other, which is how a 4000-character

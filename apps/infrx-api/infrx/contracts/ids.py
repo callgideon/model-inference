@@ -14,6 +14,10 @@ HANDLE_BYTES = 32                       # secrets.token_urlsafe(32) -> 43 chars
 JOB_PREFIX = "job_"
 UPLOAD_PREFIX = "upl_"
 FEEDBACK_PREFIX = "fb_"
+# r1 R47/R54: the opaque handle a trace export carries in place of the object key.
+# Prefixed like every other public handle so it is recognisable as one, and so a
+# storage key cannot be passed off as one by accident.
+TRACE_CONTENT_PREFIX = "tc_"
 CHAT_PREFIX = "chatcmpl-"
 
 # Matched with `fullmatch` everywhere: `$` alone would accept a trailing newline.
@@ -22,6 +26,7 @@ _HANDLE_BODY = r"[A-Za-z0-9_-]{22,64}"
 JOB_HANDLE_RE = re.compile(JOB_PREFIX + _HANDLE_BODY)
 UPLOAD_HANDLE_RE = re.compile(UPLOAD_PREFIX + _HANDLE_BODY)
 FEEDBACK_ID_RE = re.compile(FEEDBACK_PREFIX + _HANDLE_BODY)
+TRACE_CONTENT_HANDLE_RE = re.compile(TRACE_CONTENT_PREFIX + _HANDLE_BODY)
 
 
 def new_request_id() -> str:
@@ -47,6 +52,10 @@ def new_upload_handle() -> str:
 
 def new_feedback_id() -> str:
     return _handle(FEEDBACK_PREFIX)
+
+
+def new_trace_content_handle() -> str:
+    return _handle(TRACE_CONTENT_PREFIX)
 
 
 def chat_completion_id(request_id: str) -> str:

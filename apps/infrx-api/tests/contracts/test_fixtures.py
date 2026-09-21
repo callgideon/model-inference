@@ -90,7 +90,17 @@ def test_the_trace_export_replaces_the_content_ref_with_availability_and_a_handl
     envelope = fixtures.model("trace_envelope.json")
     assert envelope.content_ref, "the internal envelope does carry the object key"
     assert export.content_state is records.ContentState.available
+    # r1 R54: opaque and prefixed, so a storage key cannot pass for a handle.
     assert export.content_handle and envelope.content_ref not in export.content_handle
+    assert export.content_handle.startswith(ids.TRACE_CONTENT_PREFIX)
+    for forged in (envelope.content_ref, "tc_short", "", "fb_" + "a" * 30,
+                   "tc_/etc/passwd", "s3://bucket/key"):
+        with pytest.raises(ValueError):
+            wire.TraceExport.of(envelope, records.ContentState.available,
+                                export.content, content_handle=forged)
+    # and resolved content is reached *through* a handle, never handed over without one
+    with pytest.raises(ValueError):
+        wire.TraceExport.of(envelope, records.ContentState.available, export.content)
     assert export.content_bytes == envelope.content_bytes
     # the content object is `{v: 1, request, response}` (research/traces/04 §3.1)
     assert export.content is not None and export.content.v == 1
