@@ -84,6 +84,20 @@ def test_dur_rls__a_configuration_with_no_identity_source_accepts_nothing():
         context(resolved)
 
 
+def test_dur_rls__an_unconfigured_gateway_accepts_no_request():
+    """The same rule through the route, which is where `O-FAILOPEN` would bite: an
+    install run that lost its parameters serves 401, not 200."""
+    from fastapi.testclient import TestClient
+
+    calls, accept = support.recorder()
+    app, _ = support.cutover_app(support.settings("dev", supabase_url="", supabase_key=""),
+                                 ingress_deps=support.deps(accept=accept))
+    response = TestClient(app).post(support.CHAT_PATH, headers=support.AUTH, json=support.BODY)
+    assert response.status_code == 401, response.text
+    assert support.error_of(response)["code"] == "invalid_api_key"
+    assert calls == []
+
+
 def test_dur_rls__the_shared_legacy_key_is_not_an_identity():
     """It authenticates in F1 and carries no organization, so it cannot be metered,
     entitled or suspended. `dev` still starts with one; the request is still 401."""

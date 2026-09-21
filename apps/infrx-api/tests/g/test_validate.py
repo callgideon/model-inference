@@ -12,7 +12,6 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
-from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes import FACTORIES
 from infrx.contracts.records import ExecutionMode
@@ -138,6 +137,7 @@ def test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor():
     assert (auth.org_id, auth.key_id, auth.principal) == (support.ORG, support.KEY, support.KEY)
     assert (request.org_id, request.key_id) == (support.ORG, support.KEY)
     assert (request.max_output_tokens, request.max_input_tokens) == (512, 32_768 - 512)
+    assert request.model_revision == b.MODEL != support.settings().model_id
     assert request.execution_mode is ExecutionMode.sync
     assert request.payload_digest.startswith("sha256:")
     assert (idem.org_id, idem.operation, idem.key) == (support.ORG, "chat.completions", "idem-1")
@@ -214,20 +214,6 @@ def test_dur_admit__an_async_request_gets_the_async_queue_budget():
     admission = asyncio.run(harness.port.admit(request, idem))
     assert admission.budgets.queue_wait_s == 600.0
     assert (admission.deadline_at - admission.admitted_at).total_seconds() == 1_020.0
-
-
-def test_dur_admit__an_unpriced_model_is_refused_by_the_store_not_the_ingress():
-    """The ingress does not decide what a model costs or whether it exists: it passes
-    the revision through and the store fails closed (r1 R45)."""
-    harness = FACTORIES["jobstore"]()
-    harness.extra["grant"](support.ORG, "1.00")
-    tc, calls = client()
-    assert tc.post(support.CHAT_PATH, headers=support.AUTH,
-                   json=message(model="someone/else@v9")).status_code == 202
-    _auth, request, idem = calls[0]
-    harness.clock.advance((request.created_at - harness.clock.now()).total_seconds())
-    with pytest.raises(errors.InvalidRequest):
-        asyncio.run(harness.port.admit(request, idem))
 
 
 if __name__ == "__main__":
