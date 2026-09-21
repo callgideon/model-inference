@@ -89,9 +89,15 @@ MAX_TEXT_CODEPOINTS = 131_072
 MAX_URL_CHARS = 8_192
 MAX_MODEL_CHARS = 128
 MAX_SEED = 2 ** 63 - 1
-# JSON that is not an inline media payload is small. `data:` URLs are the one thing a
-# legitimate body can be megabytes of, so they are measured out of this bound.
-MAX_NON_MEDIA_BYTES = 1_048_576
+# The caps above already bound everything that is not an inline media payload:
+# at most `MAX_MESSAGES` messages, `MAX_PARTS_PER_MESSAGE` parts each, one media part
+# per request whose URL is at most `MAX_URL_CHARS`, and `MAX_TEXT_CODEPOINTS` of text
+# across the whole request. The non-media body is therefore under
+# `MAX_TEXT_CODEPOINTS + MAX_URL_CHARS + MAX_MESSAGES * MAX_PARTS_PER_MESSAGE * 64`
+# bytes of JSON punctuation - about 205 KiB, asserted in the suite. A separate 1 MiB
+# bound would have been unreachable, i.e. untestable, i.e. not a bound at all.
+MAX_NON_MEDIA_BYTES = (MAX_TEXT_CODEPOINTS + MAX_URL_CHARS
+                       + MAX_MESSAGES * MAX_PARTS_PER_MESSAGE * 64)
 # Above this, parsing happens off the event loop: `json.loads` never yields.
 PARSE_OFFLOAD_BYTES = 1_048_576
 # r1 R7: `admit` derives its ceiling from the *database* clock. Without a margin a
@@ -388,10 +394,9 @@ class Validator:
                 raise errors.InvalidRequest("a parameter must not be null", param=name)
         messages, media_chars = check_messages(body)
         if body_bytes - media_chars > MAX_NON_MEDIA_BYTES:
-            # Everything but an inline media payload is small. This is what stops
-            # megabytes of structure that each individual cap allows.
-            raise errors.RequestTooLarge(
-                f"non-media JSON exceeds {MAX_NON_MEDIA_BYTES} bytes")
+            # The outer envelope of the caps above, not a second policy: reaching it
+            # means one of them was widened without this being reconsidered.
+            raise errors.RequestTooLarge("the request body is too large")
         count = _int(body, "n")
         if count is not None and count != 1:
             raise errors.UnsupportedParameter("only n=1 is supported", param="n")

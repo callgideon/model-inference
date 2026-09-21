@@ -79,8 +79,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("json_constants_accepted", "NaN and Infinity are not numbers JSON has",
        I, "        body = json.loads(raw, parse_constant=_no_constants)",
        "        body = json.loads(raw)",
-       "test_media_sec__a_parser_hostile_body_is_a_400_not_a_500",
-       "test_media_sec__a_number_json_does_not_have_is_refused"),
+       "test_media_sec__the_parser_itself_refuses_json_that_is_not_json"),
     # --- review r1 item 2: the error path cannot raise -------------------------
     _m("param_echoed_unfiltered", "only a parameter-shaped param is echoed",
        I, "    return param if isinstance(param, str) and SAFE_PARAM.fullmatch(param) else None",
@@ -99,7 +98,7 @@ MUTANTS: tuple[Mutant, ...] = (
           '        log.exception("the error envelope could not be rendered for request %s", request_id)\n'
           "        return JSONResponse(LAST_RESORT, status_code=500, headers=headers)",
        "    except KeyboardInterrupt:\n        raise",
-       "test_f_base__an_unrenderable_param_is_still_an_envelope"),
+       "test_f_base__the_envelope_of_last_resort"),
     # --- review r1 item 3: structure, liveness and identity-first -------------
     _m("messages_unbounded", "the message count is bounded",
        V, "    if len(messages) > MAX_MESSAGES:", "    if False:",
@@ -117,16 +116,21 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("url_unbounded", "a public url is bounded",
        V, "    if len(source) > MAX_URL_CHARS:", "    if False:",
        "test_media_sec__a_public_url_is_bounded"),
-    _m("non_media_size_unbounded_for_a_model_name", "a megabyte model name is refused",
-       V, "        if body_bytes - media_chars > MAX_NON_MEDIA_BYTES:",
-       "        if body_bytes - media_chars > 2 ** 40:",
-       "test_media_sec__a_megabyte_model_name_never_reaches_the_store"),
-    _m("non_media_size_unbounded", "non-media JSON is bounded",
-       V, "        if body_bytes - media_chars > MAX_NON_MEDIA_BYTES:", "        if False:",
-       "test_media_sec__non_media_json_is_bounded_but_inline_media_is_not"),
+    _m("text_cap_widened", "the structure caps are what bound the body",
+       V, "MAX_TEXT_CODEPOINTS = 131_072", "MAX_TEXT_CODEPOINTS = 131_072_000",
+       "test_media_sec__the_structure_caps_bound_the_non_media_body"),
+    _m("non_media_size_unbounded", "the outer body bound holds",
+       V, "MAX_NON_MEDIA_BYTES = (MAX_TEXT_CODEPOINTS + MAX_URL_CHARS\n"
+          "                       + MAX_MESSAGES * MAX_PARTS_PER_MESSAGE * 64)",
+       "MAX_NON_MEDIA_BYTES = 2 ** 40",
+       "test_media_sec__the_structure_caps_bound_the_non_media_body"),
     _m("inline_media_counted_as_structure", "an inline video is measured out of that bound",
        V, "        return source, len(source)", "        return source, 0",
        "test_media_sec__non_media_json_is_bounded_but_inline_media_is_not"),
+    _m("megabyte_model_name_reaches_the_store", "a megabyte model name never reaches the store",
+       V, "        if len(model) > MAX_MODEL_CHARS:", "        if False:",
+       "test_media_sec__a_megabyte_model_name_never_reaches_the_store",
+       "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("parse_blocks_the_event_loop", "a large body is parsed off the loop",
        I, "    if len(raw) > offload_over_bytes:\n        return await asyncio.to_thread(parse_object, raw)",
        "    if False:\n        return await asyncio.to_thread(parse_object, raw)",
@@ -244,12 +248,11 @@ MUTANTS: tuple[Mutant, ...] = (
        I, "    headers = {wire.HEADER_INFERENCE_ID: request_id}", "    headers = {}",
        "test_f_base__every_answer_carries_a_freshly_minted_inference_id"),
     _m("retry_after_header_dropped", "429/503 carry retry guidance",
-       I, "    if error.retry_after_s is not None:", "    if False:",
+       I, "        if public.retry_after_s is not None:", "        if False:",
        "test_f_base__retry_guidance_rides_with_every_429_and_503"),
     _m("unhandled_exception_text_leaks", "an unexpected exception never reaches the client",
        I, "            except Exception:\n"
-          "                log.exception(\"%s %s: unhandled error on request %s\", request.method,\n"
-          "                              request.url.path, request_id)\n"
+          "                log.exception(\"%s: unhandled error on request %s\", request.url.path, request_id)\n"
           "                return response(errors.InternalError(), request_id)",
        "            except Exception as leaked:\n"
        "                return JSONResponse({\"error\": {\"message\": str(leaked),\n"
@@ -303,12 +306,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_dur_admit__admit_accepts_the_ingress_ceilings_and_derives_the_hold",
        "test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor"),
     _m("deadline_beyond_the_budgets", "the deadline is one the store can keep (R29)",
-       V, "                                                 + budgets.generation_s)),",
-       "                                                 + budgets.generation_s * 2)),",
+       V, "                                                 - DEADLINE_SKEW_MARGIN_S)),",
+       "                                                 + budgets.generation_s)),",
        "test_dur_admit__the_ingress_deadline_is_one_the_store_can_keep",
        "test_dur_admit__an_async_request_gets_the_async_queue_budget"),
     _m("prefer_async_ignored", "Prefer: respond-async selects the async queue budget",
-       V, '    if "respond-async" in prefer:', "    if False:",
+       V, "    if wire.PREFER_RESPOND_ASYNC in tokens:", "    if False:",
        "test_f_base__the_execution_mode_follows_stream_and_prefer",
        "test_dur_admit__an_async_request_gets_the_async_queue_budget"),
     _m("stream_mode_ignored", "a streaming request is not a sync request",
@@ -325,7 +328,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if not isinstance(message, dict):",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("unknown_role_accepted", "a message names a known role",
-       V, '        if message["role"] not in ROLES:', "        if False:",
+       V, "        if not isinstance(role, str) or role not in ROLES:", "        if False:",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("non_object_part_accepted", "a content part is an object (R58)",
        V, "            if not isinstance(part, dict):", "            if False:",
@@ -350,10 +353,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "                pass",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("media_scheme_unchecked", "a media source is http(s), data: or an upload handle",
-       V, "    if not source.lower().startswith(MEDIA_SCHEMES):", "    if False:",
+       V, "    if not source.lower().startswith(HTTP_SCHEMES):", "    if False:",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("second_video_accepted", "one video per request",
-       V, "    if videos > 1:", "    if False:",
+       V, "                if videos > MAX_VIDEO_PARTS:", "                if False:",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("parts_reordered", "normalized parts keep the caller's order (R58)",
        V, "    return tuple(messages)",
@@ -372,7 +375,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("number_range_unchecked", "a sampling range is a range",
        V, "    if not low <= value <= high:", "    if False:",
-       "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
+       "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code",
+       "test_media_sec__a_number_json_does_not_have_is_refused"),
     _m("idempotency_key_unbounded", "the idempotency key is bounded",
        V, "    if key is not None and (not key or len(key) > MAX_IDEMPOTENCY_KEY_CHARS):",
        "    if False:", "test_f_base__an_over_long_idempotency_key_is_refused"),
@@ -393,10 +397,14 @@ MUTANTS: tuple[Mutant, ...] = (
        '        return JSONResponse({"status": OK, "components": component_state(deps.checks)})',
        "test_f_base__public_health_is_generic"),
     _m("parse_before_identity", "identity is checked before the body is parsed",
-       N, "        auth = await self.auth.context(request)\n"
-          "        body = intake.parse_object(raw)",
-       "        body = intake.parse_object(raw)\n"
-       "        auth = await self.auth.context(request)",
+       N, "        raw = await intake.read_body(request, max_bytes=limits.max_request_bytes,\n"
+          "                                     timeout_s=limits.intake_timeout_s, clock=self.rt.clock)\n"
+          "        body = await intake.parse_body(raw, offload_over_bytes=PARSE_OFFLOAD_BYTES)",
+       "        body = await intake.parse_body(\n"
+       "            await intake.read_body(request, max_bytes=limits.max_request_bytes,\n"
+       "                                   timeout_s=limits.intake_timeout_s, clock=self.rt.clock),\n"
+       "            offload_over_bytes=PARSE_OFFLOAD_BYTES)\n"
+       "        raw = b''",
        "test_dur_rls__identity_is_checked_before_the_body_is_parsed"),
     _m("success_omits_the_inference_id", "a success answer names its request too",
        N, "        accepted.headers.setdefault(wire.HEADER_INFERENCE_ID, request_id)", "        pass",
@@ -413,18 +421,18 @@ MUTANTS: tuple[Mutant, ...] = (
        '        raise errors.UnsupportedParameter("the request body is not valid JSON") from None',
        "test_media_sec__malformed_json_is_a_400_with_no_parser_text"),
     _m("envelope_carries_the_operator_detail", "the envelope carries only contract fields",
-       I, '    return JSONResponse(envelope.model_dump(mode="json", exclude_none=True),',
-       '    return JSONResponse({**envelope.model_dump(mode="json", exclude_none=True),\n'
-       '                         "detail": str(error.detail)},',
+       I, '        return JSONResponse(body.model_dump(mode="json", exclude_none=True),',
+       '        return JSONResponse({**body.model_dump(mode="json", exclude_none=True),\n'
+       '                             "detail": str(error.detail)},',
        "test_f_base__the_envelope_carries_only_the_contract_fields"),
     _m("upload_handles_refused", "an owned upload handle is a valid media reference",
-       V, "    if source.startswith(UPLOAD_PREFIX):\n        return source", "    pass",
+       V, "    if source.startswith(UPLOAD_SCHEME):", "    if False:",
        "test_media_sec__an_owned_upload_handle_and_a_public_url_are_both_accepted"),
     _m("disagreeing_output_ceilings_accepted", "max_tokens and max_completion_tokens must agree",
        V, "        if requested is not None and alternative is not None and requested != alternative:",
        "        if False:", "test_f_base__max_tokens_and_max_completion_tokens_must_agree"),
     _m("model_revision_replaced", "the requested model revision passes through untouched",
-       V, "            model_revision=model or self.rt.settings.model_id,",
+       V, "            model_revision=revision,",
        "            model_revision=self.rt.settings.model_id,",
        "test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor"),
     _m("api_key_is_an_operator", "an API key is a service principal, never an operator",

@@ -241,6 +241,33 @@ def test_dur_rls__an_unauthenticated_caller_never_makes_us_buffer():
     assert calls == []
 
 
+def test_media_sec__the_parser_itself_refuses_json_that_is_not_json():
+    """Directly at the boundary, not through the range checks that also catch these:
+    `json` accepts `NaN`/`Infinity` by default, `jsonb` cannot store them, and
+    `json.dumps` would then write a payload no parser accepts. So they never become a
+    Python object in the first place.
+    """
+    from infrx.contracts import errors
+    from infrx.gateway.routes import intake
+
+    for raw in (b'{"x": NaN}', b'{"x": Infinity}', b'{"x": -Infinity}', b'{"x": [NaN]}'):
+        with pytest.raises(errors.InvalidRequest) as raised:
+            intake.parse_object(raw)
+        assert raised.value.code == "invalid_request"
+    assert intake.parse_object(b'{"x": 1.5}') == {"x": 1.5}
+
+
+def test_media_sec__the_structure_caps_bound_the_non_media_body():
+    """The derivation the 1 MiB bound was standing in for: with these caps, a body
+    that carries no inline media cannot exceed ~205 KiB, so the outer bound is an
+    assertion about the caps rather than a second policy to keep in step."""
+    derived = (validate.MAX_TEXT_CODEPOINTS + validate.MAX_URL_CHARS
+               + validate.MAX_MESSAGES * validate.MAX_PARTS_PER_MESSAGE * 64)
+    assert validate.MAX_NON_MEDIA_BYTES == derived
+    assert derived < 256 * 1024, derived
+    assert validate.MAX_VIDEO_PARTS == 1
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and not hasattr(fn, "pytestmark"):

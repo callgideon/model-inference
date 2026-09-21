@@ -31,6 +31,7 @@ READY_PATH = ingress.READY_PATH
 ORG = "1a1a1a1a-0000-4000-8000-000000000001"
 KEY = "3c3c3c3c-0000-4000-8000-000000000003"
 ROW = {"id": KEY, "org_id": ORG, "revoked_at": None}
+REQUEST_ID = "4d4d4d4d-0000-4000-8000-000000000004"
 TOKEN = "sk-infrx-g1-test"
 AUTH = {"authorization": f"Bearer {TOKEN}"}
 # A raw `content=` post carries no content type of its own and the ingress requires

@@ -6,6 +6,7 @@ searched for the things that must never be in it, for every failure the matrix c
 produce. A message that "looks safe" is not the test; the absence of the secret is.
 """
 import asyncio
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -170,6 +171,18 @@ def client_app():
     calls, accept = support.recorder()
     app, _ = support.cutover_app(ingress_deps=support.deps(accept=accept))
     return TestClient(app), calls
+
+
+def test_f_base__the_envelope_of_last_resort():
+    """The guard's guard. An error carrying something unserialisable used to raise out
+    of the error path; now the client gets the constant envelope and a request id."""
+    from infrx.gateway.routes import intake
+
+    unserialisable = errors.InvalidRequest("x", infrx={"probe": object()})
+    response = intake.response(unserialisable, support.REQUEST_ID)
+    assert response.status_code == 500
+    assert response.headers[wire.HEADER_INFERENCE_ID] == support.REQUEST_ID
+    assert json.loads(response.body) == intake.LAST_RESORT
 
 
 if __name__ == "__main__":
