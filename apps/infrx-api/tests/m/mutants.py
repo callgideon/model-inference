@@ -212,6 +212,14 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "        key = f\"payloads/{org_id}/{request.request_id}.json\"",
        "        key = request.payload_ref",
        "test_staging_makes_the_canonical_payload_durable_with_a_digest_and_a_size"),
+    _m("index_before_the_payload",
+       "nothing is indexed until the durable payload write has succeeded",
+       S, "        await self._write_once(key, payload, \"application/json\")\n"
+          "        # One visible step: nothing above wrote to `self.refs`.\n"
+          "        self.refs.update(pending)",
+       "        self.refs.update(pending)\n"
+       "        await self._write_once(key, payload, \"application/json\")",
+       "test_a_fault_at_the_payload_write_stages_nothing_and_the_retry_completes_it"),
     _m("payload_not_stored", "the canonical payload is durable before acceptance",
        S, "        await self._write_once(key, payload, \"application/json\")", "        pass",
        "test_staging_makes_the_canonical_payload_durable_with_a_digest_and_a_size"),

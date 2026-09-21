@@ -306,6 +306,69 @@ def test_a_second_payload_for_one_request_id_cannot_replace_the_first():
     assert stored == codec.canonical_bytes(first)
 
 
+# --- failure drills ----------------------------------------------------------------
+class Breaks:
+    """An object store that refuses one key, standing in for a storage fault at exactly
+    the step the drill is about."""
+
+    def __init__(self, inner, *, on: str) -> None:
+        self.inner, self.on, self.attempts = inner, on, 0
+
+    async def head(self, key):
+        return await self.inner.head(key)
+
+    async def put(self, key, data, content_type):
+        if self.on in key:
+            self.attempts += 1
+            raise errors.DependencyUnavailable("the object store is unavailable")
+        await self.inner.put(key, data, content_type)
+
+
+def test_a_fault_at_the_payload_write_stages_nothing_and_the_retry_completes_it():
+    """Failure drill: the media objects are written, then the payload write fails. No ref
+    is indexed and no payload is recorded, so acceptance cannot proceed on half a request
+    (02: "a staging failure creates no job or hold"); the retry finishes the job with one
+    object and one payload, not two."""
+    objects = store.InMemoryObjectStore()
+    breaking = Breaks(objects, on="payloads/")
+    adapter = staging(objects=breaking,
+                      transport=support.Transport(support.response(body=MP4)))
+    ref = asyncio.run(adapter.materialize(b.ORG_A, URL))
+    before = dict(objects.objects)
+    # A second reference the store has not seen before, so this staging really has an
+    # index entry to lose: with only the materialized one there would be nothing pending.
+    fresh = b.media(b.ORG_A, handle="upl_drillfixture000000000000000000000001")
+    payload_request = request(adapter, refs=(ref, fresh))
+    with pytest.raises(errors.DependencyUnavailable):
+        asyncio.run(adapter.stage(b.ORG_A, payload_request))
+    assert objects.objects == before, "the failed staging wrote something anyway"
+    assert adapter.payloads == {} and list(adapter.refs) == [(b.ORG_A, ref.handle)]
+    adapter.objects = objects                       # the store recovers
+    retried = asyncio.run(adapter.stage(b.ORG_A, payload_request))
+    assert retried[0] == ref and len(retried) == 2
+    assert len(objects.objects) == len(before) + 1  # the payload, and no second media copy
+    assert adapter.staged_payload(payload_request.request_id).bytes > 0
+
+
+def test_a_crash_between_the_object_and_the_index_leaves_a_retryable_orphan():
+    """Failure drill: the process dies after the object is written and before the request
+    is staged. The blob is an orphan with its digest in its own key, so the retry
+    materializes to the *same* key and handle and stages once - and M3's orphan
+    collection has something it can identify, rather than a second copy."""
+    objects = store.InMemoryObjectStore()
+    first = staging(objects=objects, transport=support.Transport(support.response(body=MP4)))
+    ref = asyncio.run(first.materialize(b.ORG_A, URL))
+    orphan = dict(objects.objects)
+    assert list(orphan) == [ref.storage_ref]        # durable state after the crash
+
+    restarted = staging(objects=objects,            # a new process, the same bucket
+                        transport=support.Transport(support.response(body=MP4)))
+    again = asyncio.run(restarted.materialize(b.ORG_A, URL))
+    assert again == ref and objects.objects == orphan, "the retry wrote a second copy"
+    staged = asyncio.run(restarted.stage(b.ORG_A, request(restarted, refs=(again,))))
+    assert staged == (ref,)
+
+
 def test_an_unstaged_payload_is_not_found():
     with pytest.raises(errors.NotFound):
         staging().staged_payload("00000000-0000-4000-8000-000000000001")
