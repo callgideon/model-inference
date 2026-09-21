@@ -159,7 +159,7 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "        if len({ref.org_id for ref in prepared.media}) > 1:", "        if False:",
        TENANT),
     _m("frame_budget_rewritten", "the video budget is F1's own function",
-       E, '            body["mm_processor_kwargs"] = self._media.budget_kwargs(videos[0].duration_s or 0.0)',
+       E, '            body["mm_processor_kwargs"] = self._media.budget_kwargs(videos[0].duration_s)',
        '            body["mm_processor_kwargs"] = {"fps": 2.0, "min_frames": 4,\n'
        '                                          "max_frames": 240,\n'
        '                                          "size": {"shortest_edge": 4096,\n'
@@ -272,15 +272,7 @@ MUTANTS: tuple[Mutant, ...] = (
        E, '    return {"visible": visible, "raw": raw, "content": raw}',
        '    return {"visible": raw, "raw": raw, "content": raw}', TEXTS, ADAPTER_SPLITS),
     _m("held_tail_never_emitted", "the filter's final tail reaches the events (R58)",
-       E, "        if stream.held_tail:\n"
-          "            stream.events += 1\n"
-          "            yield EngineEvent(type=ChunkEventType.delta,\n"
-          '                              payload=_delta_payload("", stream.held_tail))',
-       "        if False:\n"
-          "            stream.events += 1\n"
-          "            yield EngineEvent(type=ChunkEventType.delta,\n"
-          '                              payload=_delta_payload("", stream.held_tail))',
-       TAIL, ADAPTER_SPLITS),
+       E, "        if stream.held_tail:", "        if False:", TAIL, ADAPTER_SPLITS),
     # --- usage (r1 R58) -------------------------------------------------------
     _m("first_usage_wins", "the authoritative usage is the last one (R58)",
        E, '        if obj.get("usage") is not None:\n'
@@ -328,11 +320,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "    if total is not None and (isinstance(total, bool) or not isinstance(total, int)):",
        USAGE),
     _m("completed_without_a_count", "a finished stream with unknown usage is not a success",
-       E, "        if self.finish_reason in FINISHED_REASONS and self.usage is not None:",
-       "        if self.finish_reason is not None or self.usage is not None:", USAGE),
+       E, "        if self.finish_reason in FINISHED_REASONS and self.usage is not None \\\n"
+          "                and self.malformed_lines == 0:",
+       "        if self.finish_reason in FINISHED_REASONS and self.malformed_lines == 0:",
+       USAGE),
     _m("completed_without_finish", "completed needs a finish reason as well (R21)",
-       E, "        if self.finish_reason in FINISHED_REASONS and self.usage is not None:",
-       "        if self.usage is not None:", FINISH),
+       E, "        if self.finish_reason in FINISHED_REASONS and self.usage is not None \\\n"
+          "                and self.malformed_lines == 0:",
+       "        if self.usage is not None and self.malformed_lines == 0:", FINISH),
     _m("abort_is_finished", "abort is not a finish reason we accept",
        E, 'FINISHED_REASONS = ("stop", "length")', 'FINISHED_REASONS = ("stop", "length", "abort")',
        FINISH),
@@ -392,9 +387,11 @@ MUTANTS: tuple[Mutant, ...] = (
           "            return []",
        "        if not isinstance(obj, dict):\n            return []", JUNK),
     # --- timers ---------------------------------------------------------------
-    _m("stall_never_stops_the_stream", "a stall stops the stream",
-       E, "                    if stall is not None:", "                    if False:", STALL,
-       allowed_errors=("EngineIncomplete",)),
+    # `stall_never_stops_the_stream` was retired in the B7 pass: the check moved into
+    # `_lines`, where `chunk_checks_skipped` kills it, and losing only the *reason* there is
+    # unrepresentable because the post-loop `_overdue` re-derives it (measured: the mutant
+    # survives). Keeping it would be an unkillable mutant, and weakening the post-loop
+    # derivation to kill it would be the false kill r1 R40 forbids.
     _m("first_token_deadline_ignored", "the store's first-token instant binds the worker",
        E, "        if stream.deltas == 0 and lease.first_token_deadline_at is not None \\\n"
           "                and now >= lease.first_token_deadline_at:",
@@ -419,12 +416,10 @@ MUTANTS: tuple[Mutant, ...] = (
           "            return TerminalCause.deadline_exceeded",
        "        if False:\n            return TerminalCause.deadline_exceeded", DEADLINE),
     # --- cancellation ---------------------------------------------------------
-    _m("cancellation_ignored_mid_stream", "cancelling reaches the engine",
-       E, "                    if key in self.cancelled:\n"
-          "                        stream.cancelled = True\n                        break",
-       "                    if False:\n"
-          "                        stream.cancelled = True\n                        break",
-       CANCEL),
+    # `cancellation_ignored_mid_stream` moved with B7: the check lives in `_lines` now and
+    # `chunk_cancel_check_skipped` is the same defect at its new site, so keeping both would
+    # be one mutant that cannot find its anchor.
+
     _m("cancelled_request_still_sent", "a cancelled request is never sent",
        E, "        if key in self.cancelled:\n"
           "            # Cancelled before the request was sent: nothing ran, so zero tokens is the",
