@@ -814,7 +814,7 @@ C3 remains the larger remaining share, and should lift `ownedTrace`, `ownedKey`,
 
 # Appendix — review round 2 (fix_required, narrow, at `e91b288`)
 
-Appended. Implementation SHA of these fixes: **`db5f1e8`** (see the table; the head at hand-back is the
+Appended. Implementation SHA of these fixes: **`b71ea50`** (see the table; the head at hand-back is the
 evidence commit on top of it). Same worktree and branch, same owned paths, nothing pushed, no service
 contacted. One commit per item, because sessions have been cut by rate limits.
 
@@ -847,7 +847,7 @@ the reviewer corrected to; the difference is this round's new cases).
 | **B4** missing-function detection forced by an error string | `a6afa15` | `a missing function falls back; a broken one does not` — the two real repros (`42883` from *inside* the function, `P0001` naming it) now raise, plus a pair differing only in the code → **CREDITS-03** (drop the name requirement), **CREDITS-04** (drop the code requirement), alongside **CREDITS-02** |
 | **Rulings**: both UTC timestamp forms; the tenant check every port passes through; the real `usageDaily` cap | `973ce79` | `both UTC timestamp forms are accepted and normalised, microseconds and all` → **TS-01**, **TS-02**, **STRICT-03**; `every port passes through the tenant check, whatever the port does` → **PORT-01**, **PORT-02**, **PORT-03**; `usageDaily is bounded by its documented cap, not by the fixture` (401 days, and a port that ignores `limit`) → **CAP-02** |
 | **Nonblocking**: `integer()` coercion, `value_num` coercion, credits guard, runner `viaGuard` | `a083e92` | the strict-row case extended with `""`, `true`, `["500"]`, `0x10`, `1e2` and a fractional count → **STRICT-02**; the judge case extended with five coercible score values → **STRICT-06**; the guard-presence list now includes `credits.ts` → **CLIENT-02** |
-| stale mutant refresh | `db5f1e8` | **STRICT-03** repointed at the normaliser's refusal |
+| stale mutant refresh | `b71ea50` | **STRICT-03** repointed at the normaliser's refusal |
 
 ### Ruling details as implemented
 
@@ -919,7 +919,7 @@ exit=1
 ```
 
 UTC window `2026-09-21T16:57:34Z` – `2026-09-21T16:59:10Z` (the mutant totals re-run after the stale
-refresh at `db5f1e8`). The two lint warnings remain the pre-existing ones in coordinator-owned
+refresh at `b71ea50`). The two lint warnings remain the pre-existing ones in coordinator-owned
 `lib/contracts/*`. The exported conformance split is unchanged at **16 / 29**, every failure still
 attributed to a C2/C3 operation by `tests/c/console-conformance.test.ts`.
 
