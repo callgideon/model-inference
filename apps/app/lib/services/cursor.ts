@@ -14,6 +14,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Keyset } from "./query.ts";
 
+/** Server only, at module scope; see the note in `./query.ts`. */
+if (typeof window !== "undefined") throw new Error("lib/services/cursor.ts is server-only");
+
 /** Cursor payloads are tiny; anything larger than this is refused before any hashing. */
 const MAX_CURSOR_CHARS = 512;
 

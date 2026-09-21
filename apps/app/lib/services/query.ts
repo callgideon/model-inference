@@ -18,6 +18,14 @@
  * repository is the in-memory port the track tests inject.
  */
 
+/**
+ * Server only. The console's dependency set is frozen, so there is no `server-only` package to
+ * import (08 §6); this is the guard `lib/supabase/admin.ts` already uses, at module scope, so a
+ * client component that imports this file fails loudly instead of shipping the statements in a
+ * browser chunk. `tests/c/client-boundary.test.ts` is the static half of the same rule.
+ */
+if (typeof window !== "undefined") throw new Error("lib/services/query.ts is server-only");
+
 // ---------------------------------------------------------------------------
 // Plans
 // ---------------------------------------------------------------------------
@@ -102,6 +110,14 @@ type NamedQuerySpec = {
   /** Predicates the query always applies, whatever the caller asked for. */
   constants?: Predicate[];
   aggregates?: AggregateSpec[];
+  /**
+   * The bound applied when the caller asks for no limit. The contract gives some reads no cursor at
+   * all (`keys.list`, `feedback.list`, `settings.get`'s consent history, `usageDaily`), and an
+   * unbounded read is exactly the defect this task replaced in `getCredits`. Documented caps:
+   * 100 keys, 100 feedback entries per request, 100 consent versions, 400 daily rows (13 calendar
+   * months of metadata retention). A tenant past a cap is a contract revision, not a silent scan.
+   */
+  hardLimit?: number;
   /** Grouping for `usage_daily`: one day per row, derived from the timestamp. */
   groupBy?: { field: string; column: string; derive: "date"; direction: "asc" | "desc" };
 };
@@ -111,20 +127,23 @@ const TIME_FILTERS = (column: string): Record<string, FilterSpec> => ({
   to: { column, op: "lte", field: "created_at" },
 });
 
-const USAGE_FROM = `public.usage_events e
-       join public.api_keys k on k.id = e.api_key_id
-       left join public.credit_holds h on h.request_id = e.id and h.state in ('held', 'unknown')`;
+/**
+ * D1 ships the usage read as one view (`0005_console_read_surface.sql`), because the three-way join
+ * this registry used to render reached `infrx.credit_holds`, which no browser role may see. The view
+ * LEFT JOINs `api_keys` — `usage_events.api_key_id` is nullable (`on delete set null`), and an inner
+ * join would silently drop every row whose key was deleted and understate a cost total.
+ */
+const USAGE_FROM = "public.console_usage u";
 
 const USAGE_FILTERS: Record<string, FilterSpec> = {
-  ...TIME_FILTERS("e.created_at"),
-  key_id: { column: "e.api_key_id", op: "eq", field: "key_id" },
-  model: { column: "e.model_id", op: "eq", field: "model" },
+  ...TIME_FILTERS("u.created_at"),
+  key_id: { column: "u.key_id", op: "eq", field: "key_id" },
+  model: { column: "u.model", op: "eq", field: "model" },
 };
 
-const USAGE_COLUMNS = `e.id as request_id, e.created_at, e.model_id as model, e.api_key_id as key_id,
-         k.name as key_name, e.execution_mode, e.job_state, e.terminal_cause, e.status as http_status,
-         e.prompt_tokens, e.completion_tokens, e.usage_certainty, e.settlement_state,
-         e.cost_usd as cost, h.max_amount_usd as max_hold, e.trace_mode`;
+const USAGE_COLUMNS = `u.request_id, u.created_at, u.model, u.key_id, u.key_name, u.execution_mode,
+         u.job_state, u.terminal_cause, u.http_status, u.prompt_tokens, u.completion_tokens,
+         u.usage_certainty, u.settlement_state, u.cost, u.max_hold, u.trace_mode`;
 
 const TRACE_COLUMNS = `request_id, created_at, model, key_id, job_state, http_status, trace_mode,
          content, loss_reason, prompt_tokens, completion_tokens, ttft_ms, wall_ms, cost,
@@ -160,7 +179,9 @@ const NAMED_QUERIES = {
     engine: "pg",
     source: "wallets",
     from: "public.wallets w",
-    columns: "w.ledger_total, w.reserved_total, (w.ledger_total - w.reserved_total) as available",
+    // D1's view also exposes a stored `available`; this service derives it from the two totals in
+    // one place instead, so the identity the conformance suite asserts has a single home.
+    columns: "w.ledger_total, w.reserved_total",
     tenantColumn: "w.org_id",
     tenantField: "org_id",
   },
@@ -168,8 +189,8 @@ const NAMED_QUERIES = {
   ledger_page: {
     engine: "pg",
     source: "ledger",
-    from: "public.credit_ledger l",
-    columns: "l.id, l.created_at, l.delta_usd as delta, l.kind, l.reason, l.ref, l.actor, l.by_operator",
+    from: "public.console_ledger l",
+    columns: "l.id, l.created_at, l.delta, l.kind, l.reason, l.ref, l.actor, l.by_operator",
     tenantColumn: "l.org_id",
     tenantField: "org_id",
     sort: {
@@ -184,12 +205,12 @@ const NAMED_QUERIES = {
     source: "usage",
     from: USAGE_FROM,
     columns: USAGE_COLUMNS,
-    tenantColumn: "e.org_id",
+    tenantColumn: "u.org_id",
     tenantField: "org_id",
     filters: USAGE_FILTERS,
     sort: {
-      at: { field: "created_at", column: "e.created_at" },
-      id: { field: "request_id", column: "e.id" },
+      at: { field: "created_at", column: "u.created_at" },
+      id: { field: "request_id", column: "u.request_id" },
       direction: "desc",
     },
   },
@@ -198,51 +219,53 @@ const NAMED_QUERIES = {
     engine: "pg",
     source: "usage",
     from: USAGE_FROM,
-    tenantColumn: "e.org_id",
+    tenantColumn: "u.org_id",
     tenantField: "org_id",
     filters: USAGE_FILTERS,
     aggregates: [
       { name: "requests", kind: "count" },
-      { name: "failed_requests", kind: "count", filters: [{ field: "http_status", column: "e.status", op: "gte", value: 400 }] },
-      { name: "prompt_tokens", kind: "sum", field: "prompt_tokens", column: "e.prompt_tokens" },
-      { name: "completion_tokens", kind: "sum", field: "completion_tokens", column: "e.completion_tokens" },
-      { name: "cost", kind: "sum", field: "cost", column: "e.cost_usd" },
+      { name: "failed_requests", kind: "count", filters: [{ field: "http_status", column: "u.http_status", op: "gte", value: 400 }] },
+      { name: "prompt_tokens", kind: "sum", field: "prompt_tokens", column: "u.prompt_tokens" },
+      { name: "completion_tokens", kind: "sum", field: "completion_tokens", column: "u.completion_tokens" },
+      { name: "cost", kind: "sum", field: "cost", column: "u.cost" },
       {
         name: "pending_reconciliation",
         kind: "sum",
         field: "max_hold",
-        column: "h.max_amount_usd",
+        column: "u.max_hold",
         filters: [
-          { field: "usage_certainty", column: "e.usage_certainty", op: "eq", value: "unknown" },
-          { field: "max_hold", column: "h.max_amount_usd", op: "not_null", value: null },
+          { field: "usage_certainty", column: "u.usage_certainty", op: "eq", value: "unknown" },
+          { field: "max_hold", column: "u.max_hold", op: "not_null", value: null },
         ],
       },
       {
         name: "platform_absorbed_requests",
         kind: "count",
-        filters: [{ field: "settlement_state", column: "e.settlement_state", op: "eq", value: "released_platform_absorbed" }],
+        filters: [{ field: "settlement_state", column: "u.settlement_state", op: "eq", value: "released_platform_absorbed" }],
       },
     ],
   },
 
   usage_daily: {
     engine: "pg",
+    hardLimit: 400,
     source: "usage",
     from: USAGE_FROM,
-    tenantColumn: "e.org_id",
+    tenantColumn: "u.org_id",
     tenantField: "org_id",
     filters: USAGE_FILTERS,
-    groupBy: { field: "day", column: "(e.created_at at time zone 'utc')::date", derive: "date", direction: "desc" },
+    groupBy: { field: "day", column: "(u.created_at at time zone 'utc')::date", derive: "date", direction: "desc" },
     aggregates: [
       { name: "requests", kind: "count" },
-      { name: "prompt_tokens", kind: "sum", field: "prompt_tokens", column: "e.prompt_tokens" },
-      { name: "completion_tokens", kind: "sum", field: "completion_tokens", column: "e.completion_tokens" },
-      { name: "cost", kind: "sum", field: "cost", column: "e.cost_usd" },
+      { name: "prompt_tokens", kind: "sum", field: "prompt_tokens", column: "u.prompt_tokens" },
+      { name: "completion_tokens", kind: "sum", field: "completion_tokens", column: "u.completion_tokens" },
+      { name: "cost", kind: "sum", field: "cost", column: "u.cost" },
     ],
   },
 
   keys_list: {
     engine: "pg",
+    hardLimit: 100,
     source: "keys",
     from: "public.api_keys k",
     columns: "k.id, k.name, k.prefix, k.created_at, k.last_used_at, k.revoked_at, k.trace_mode",
@@ -277,6 +300,7 @@ const NAMED_QUERIES = {
   /** Oldest first: consent history is an audit trail, and `version` is 06's key within an org. */
   consent_history: {
     engine: "pg",
+    hardLimit: 100,
     source: "consent",
     from: "public.consent_history c",
     columns: "c.version, c.changed_at, c.evaluation_consent, c.changed_by, c.by_operator",
@@ -291,6 +315,7 @@ const NAMED_QUERIES = {
 
   feedback_by_request: {
     engine: "pg",
+    hardLimit: 100,
     source: "feedback",
     from: "public.feedback f",
     columns: `f.id, f.request_id, f.created_at, f.channel, f.author_role, f.author_principal,
@@ -298,6 +323,13 @@ const NAMED_QUERIES = {
     tenantColumn: "f.org_id",
     tenantField: "org_id",
     filters: { request_id: { column: "f.request_id", op: "eq", field: "request_id" } },
+    /**
+     * R49: a calibration label is operator data and leaves this list for *everyone*, operators
+     * included — it is read only through the calibration listing. The exclusion is a constant of the
+     * query, like the trace list's off-mode predicate, so no caller and no forgotten filter can drop
+     * it, and the customer's `feedback_count` never counts one (R35).
+     */
+    constants: [{ field: "calibration_set", column: "f.calibration_set", op: "eq", value: false }],
     sort: {
       at: { field: "created_at", column: "f.created_at" },
       id: { field: "id", column: "f.id" },
@@ -410,6 +442,23 @@ export class QueryPlanError extends Error {}
  * function is what guarantees they can only reach the columns the registry names, and that the
  * tenant predicate goes on last.
  */
+/** The largest row count any named query may be asked for: a page plus its look-ahead row. */
+export const MAX_PLAN_ROWS = 1000;
+
+/**
+ * `buildPlan` is an exported API, so it validates its own arguments rather than trusting a caller to
+ * have done it. Three details matter more than they look:
+ *
+ * - **`Object.hasOwn`, not a bracket lookup.** `spec.filters?.["constructor"]` on an object literal
+ *   returns the inherited `Object.prototype` member, which is not `undefined`, so a filter named
+ *   `constructor`, `toString`, `valueOf`, `hasOwnProperty`, `isPrototypeOf` or `__proto__` used to
+ *   pass the allowlist and render `where undefined undefined $1`. Every place an untrusted string
+ *   indexes an object goes through `hasOwn`.
+ * - **`limit` is interpolated into the statement text**, so it is checked as an integer in range
+ *   rather than bound as a parameter (PostgreSQL will not take a placeholder there in every driver).
+ * - **the tenant is a non-empty string**, because `orgId` reaches the statement as the one value that
+ *   decides which organization's rows come back.
+ */
 export function buildPlan(
   name: NamedQueryName,
   options: {
@@ -421,28 +470,48 @@ export function buildPlan(
 ): QueryPlan {
   const spec = namedQuery(name);
   const predicates: Predicate[] = [...(spec.constants ?? [])];
-  for (const [filterName, value] of Object.entries(options.filters ?? {})) {
+  const filters = options.filters ?? {};
+  for (const filterName of Object.keys(filters)) {
+    const value = filters[filterName];
     if (value === undefined) continue;
-    const filter = spec.filters?.[filterName];
-    if (filter === undefined) {
+    if (spec.filters === undefined || !Object.hasOwn(spec.filters, filterName)) {
       throw new QueryPlanError(`${filterName} is not a filter of ${name}`);
     }
-    if ((RESERVED_PARAM_NAMES as readonly string[]).includes(filterName)) {
-      throw new QueryPlanError(`${filterName} is a reserved parameter name`);
+    const filter = spec.filters[filterName];
+    if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
+      throw new QueryPlanError(`${filterName} must be a string, a number or a boolean`);
     }
     predicates.push({ field: filter.field, column: filter.column, op: filter.op, value });
   }
+
   const orgId = options.orgId ?? null;
-  if (spec.tenantColumn !== null && (orgId === null || orgId === "")) {
+  if (spec.tenantColumn !== null && (typeof orgId !== "string" || orgId === "")) {
     throw new QueryPlanError(`${name} is tenant-scoped and needs the session organization`);
   }
+  if (spec.tenantColumn === null && orgId !== null) {
+    throw new QueryPlanError(`${name} is not tenant-scoped, so it must not be given an organization`);
+  }
+
+  const limit = options.limit ?? spec.hardLimit ?? null;
+  if (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > MAX_PLAN_ROWS)) {
+    throw new QueryPlanError(`${name}: a row limit must be an integer between 1 and ${MAX_PLAN_ROWS}`);
+  }
+
+  const keyset = options.keyset ?? null;
+  if (keyset !== null && (typeof keyset.at !== "string" || typeof keyset.id !== "string")) {
+    throw new QueryPlanError(`${name}: a keyset bound is two strings`);
+  }
+  if (keyset !== null && spec.sort === undefined) {
+    throw new QueryPlanError(`${name} has no sort key, so it cannot resume from a cursor`);
+  }
+
   return {
     name,
     predicates,
-    keyset: options.keyset ?? null,
-    limit: options.limit ?? null,
+    keyset,
+    limit,
     // Last, always: a plan with the tenant anywhere else is not constructible from here.
-    tenant: spec.tenantColumn === null || orgId === null ? null : { column: spec.tenantColumn, value: orgId },
+    tenant: spec.tenantColumn === null ? null : { column: spec.tenantColumn, value: orgId as string },
   };
 }
 
@@ -563,9 +632,6 @@ export function renderClickHouseSql(plan: QueryPlan): RenderedClickHouseSql {
   const params: Record<string, SqlValue> = {};
   let index = 0;
   const bind = (name: string, value: SqlValue): string => {
-    if (name !== TENANT_PARAM && (RESERVED_PARAM_NAMES as readonly string[]).includes(name)) {
-      throw new QueryPlanError(`${name} is a reserved parameter name`);
-    }
     paramNames.push(name);
     params[name] = value;
     return `{${name}:${CLICKHOUSE_TYPE(value)}}`;

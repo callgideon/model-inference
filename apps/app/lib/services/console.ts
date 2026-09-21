@@ -21,7 +21,11 @@ import {
   AUDIT_QUERY_FIELDS,
   CALIBRATION_LABEL_FIELDS,
   DEFAULT_PAGE_LIMIT,
+  ENTITLEMENT_LIMIT_NAMES,
   FEEDBACK_INPUT_FIELDS,
+  JUDGE_LIMITED_REASONS,
+  JUDGE_SCORE_KINDS,
+  MAX_ENTITLEMENT_LIMIT,
   JOB_STATES,
   MAX_PAGE_LIMIT,
   PAGE_QUERY_FIELDS,
@@ -42,6 +46,7 @@ import {
   type FeedbackEntry,
   type JudgeRun,
   type JudgeSample,
+  type JudgeScore,
   type LedgerEntry,
   type OrgEntitlements,
   type Page,
@@ -86,7 +91,13 @@ export type ConsoleServicesConfig = {
   cursorSecret: string;
 };
 
+/** Server only, at module scope; see the note in `./query.ts`. */
+if (typeof window !== "undefined") throw new Error("lib/services/console.ts is server-only");
+
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+
+/** What a usage row shows for a key that has since been deleted (`api_key_id` is nullable). */
+export const DELETED_KEY_NAME = "(deleted key)";
 
 function ok<T>(value: T): Result<T> {
   return { ok: true, value };
@@ -170,58 +181,120 @@ function badLimit(limit: unknown): string | null {
 // row is spread into a response, so a widened relation cannot widen a DTO.
 // ---------------------------------------------------------------------------
 
+/**
+ * A stored value that is not what the DTO says it is gets refused, not coerced. `String(value ?? "")`
+ * turned a missing column into an empty string and a `Date` into a locale-ish string that is not the
+ * cursor key it has to be; `Number(x)` turned `"abc"` into `NaN`, which serialises as `null`. Both
+ * produced a page that looked fine and was wrong. Everything here throws, and the boundary guard turns
+ * that into one `internal_error` (R41-style masking is separate, and fails closed on its own).
+ */
+function cell(row: Row, column: string): unknown {
+  if (!Object.hasOwn(row, column)) {
+    throw new TypeError(`the query did not return the column ${column}`);
+  }
+  return row[column];
+}
+
 function text(row: Row, column: string): string {
-  const value = row[column];
-  return typeof value === "string" ? value : String(value ?? "");
+  const value = cell(row, column);
+  if (typeof value !== "string") throw new TypeError(`${column} must be a string`);
+  return value;
+}
+
+/**
+ * A timestamp crosses as a full-precision RFC 3339 string, never a driver `Date`: it is half of every
+ * cursor key, and a `Date` reaching `String()` would corrupt the keyset the next page resumes from.
+ */
+function timestamp(row: Row, column: string): string {
+  const value = text(row, column);
+  if (!RFC3339.test(value)) throw new TypeError(`${column} must be an RFC 3339 UTC timestamp`);
+  return value;
+}
+
+function optionalTimestamp(row: Row, column: string): string | null {
+  const value = cell(row, column);
+  if (value === null) return null;
+  return timestamp(row, column);
 }
 
 function optionalText(row: Row, column: string): string | null {
-  const value = row[column];
-  return value === null || value === undefined ? null : String(value);
+  const value = cell(row, column);
+  if (value === null) return null;
+  if (typeof value !== "string") throw new TypeError(`${column} must be a string or null`);
+  return value;
 }
 
 function integer(row: Row, column: string): number {
-  return Number(row[column] ?? 0);
+  const value = cell(row, column);
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    throw new TypeError(`${column} must be an integer`);
+  }
+  return parsed;
 }
 
 function optionalInteger(row: Row, column: string): number | null {
-  const value = row[column];
-  return value === null || value === undefined ? null : Number(value);
+  const value = cell(row, column);
+  if (value === null) return null;
+  return integer(row, column);
 }
 
 function flag(row: Row, column: string): boolean {
-  return row[column] === true || row[column] === 1 || row[column] === "true";
+  const value = cell(row, column);
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === 0) return value === 1;
+  if (value === "true" || value === "false") return value === "true";
+  throw new TypeError(`${column} must be a boolean`);
+}
+
+/**
+ * The masking decision, fail-closed (R41/R50): a viewer who is not an operator is told `platform`
+ * unless the stored marker says explicitly that no operator was involved. A D1 function that forgets
+ * to select `by_operator` therefore hides principals rather than publishing them.
+ */
+function masked(row: Row, session: SessionContext): boolean {
+  if (session.isOperator === true) return false;
+  return row.by_operator !== false;
 }
 
 function money(row: Row, column: string): Money {
-  const value = row[column];
-  if (value === null || value === undefined) return ZERO_MONEY;
-  return parseMoney(typeof value === "string" ? value : String(value));
+  const value = cell(row, column);
+  if (value === null) return ZERO_MONEY;
+  return parseMoney(typeof value === "number" ? value.toFixed(8) : value);
 }
 
 function optionalMoney(row: Row, column: string): Money | null {
-  const value = row[column];
-  if (value === null || value === undefined) return null;
-  return parseMoney(typeof value === "string" ? value : String(value));
+  const value = cell(row, column);
+  if (value === null) return null;
+  return money(row, column);
 }
 
+/**
+ * A JSON column, fail-closed. A string that does not parse — a PostgreSQL array literal `{a,b}`, say —
+ * is refused rather than read as `null`, because `null` is a *meaning* in `OrgEntitlements`
+ * ("platform default") and reading a malformed value as it would invert R24 from "these models" to
+ * "the default set".
+ */
 function json(row: Row, column: string): unknown {
-  const value = row[column];
-  if (typeof value !== "string") return value ?? null;
+  const value = cell(row, column);
+  if (value === null) return null;
+  if (typeof value !== "string") return value;
   try {
     return JSON.parse(value) as unknown;
   } catch {
-    return null;
+    throw new TypeError(`${column} is not valid JSON`);
   }
 }
 
 function usageRowOf(row: Row): UsageRow {
   return {
     request_id: text(row, "request_id"),
-    created_at: text(row, "created_at"),
+    created_at: timestamp(row, "created_at"),
     model: text(row, "model"),
     key_id: text(row, "key_id"),
-    key_name: text(row, "key_name"),
+    // The key join is an outer one (a deleted key leaves `api_key_id` null), so the row is kept and
+    // the name is named as missing rather than dropped from the total or rendered blank.
+    key_name: optionalText(row, "key_name") ?? DELETED_KEY_NAME,
     execution_mode: text(row, "execution_mode") as UsageRow["execution_mode"],
     job_state: text(row, "job_state") as UsageRow["job_state"],
     terminal_cause: optionalText(row, "terminal_cause") as UsageRow["terminal_cause"],
@@ -244,12 +317,12 @@ function ledgerEntryOf(row: Row, session: SessionContext): LedgerEntry {
   const actor = optionalText(row, "actor");
   return {
     id: text(row, "id"),
-    created_at: text(row, "created_at"),
+    created_at: timestamp(row, "created_at"),
     delta: money(row, "delta"),
     kind: text(row, "kind") as LedgerEntry["kind"],
     reason: optionalText(row, "reason"),
     ref: optionalText(row, "ref"),
-    actor: flag(row, "by_operator") && !session.isOperator ? PLATFORM_ACTOR : actor,
+    actor: actor === null ? null : masked(row, session) ? PLATFORM_ACTOR : actor,
   };
 }
 
@@ -258,9 +331,9 @@ function keyOf(row: Row): ApiKeySummary {
     id: text(row, "id"),
     name: text(row, "name"),
     prefix: text(row, "prefix"),
-    created_at: text(row, "created_at"),
-    last_used_at: optionalText(row, "last_used_at"),
-    revoked_at: optionalText(row, "revoked_at"),
+    created_at: timestamp(row, "created_at"),
+    last_used_at: optionalTimestamp(row, "last_used_at"),
+    revoked_at: optionalTimestamp(row, "revoked_at"),
     trace_mode: text(row, "trace_mode") as ApiKeySummary["trace_mode"],
   };
 }
@@ -268,7 +341,7 @@ function keyOf(row: Row): ApiKeySummary {
 function traceListItemOf(row: Row): TraceListItem {
   return {
     request_id: text(row, "request_id"),
-    created_at: text(row, "created_at"),
+    created_at: timestamp(row, "created_at"),
     model: text(row, "model"),
     key_id: text(row, "key_id"),
     job_state: text(row, "job_state") as TraceListItem["job_state"],
@@ -308,27 +381,29 @@ function traceDetailOf(row: Row, feedback: FeedbackEntry[]): TraceDetail {
       price_snapshot_version: text(row, "price_snapshot_version"),
       trace_schema_version: integer(row, "trace_schema_version"),
     },
-    content_expires_at: optionalText(row, "content_expires_at"),
-    metadata_expires_at: text(row, "metadata_expires_at"),
+    content_expires_at: optionalTimestamp(row, "content_expires_at"),
+    metadata_expires_at: timestamp(row, "metadata_expires_at"),
     feedback,
   };
 }
 
 /** R41 for feedback: the entry stays a customer signal; only the operator's identity is withheld. */
+function feedbackValue(row: Row): FeedbackEntry["value"] {
+  const value = cell(row, "value");
+  if (typeof value === "boolean" || typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  throw new TypeError("a feedback value is a boolean, a number or text");
+}
+
 function feedbackEntryOf(row: Row, session: SessionContext): FeedbackEntry {
-  const rawValue = row["value"];
-  const value =
-    typeof rawValue === "boolean" || typeof rawValue === "number" || typeof rawValue === "string"
-      ? rawValue
-      : String(rawValue ?? "");
+  const value = feedbackValue(row);
   return {
     id: text(row, "id"),
     request_id: text(row, "request_id"),
-    created_at: text(row, "created_at"),
+    created_at: timestamp(row, "created_at"),
     channel: text(row, "channel") as FeedbackEntry["channel"],
     author_role: text(row, "author_role") as FeedbackEntry["author_role"],
-    author_principal:
-      flag(row, "by_operator") && !session.isOperator ? PLATFORM_ACTOR : text(row, "author_principal"),
+    author_principal: masked(row, session) ? PLATFORM_ACTOR : text(row, "author_principal"),
     name: text(row, "name") as FeedbackEntry["name"],
     value,
     comment: optionalText(row, "comment"),
@@ -339,26 +414,46 @@ function feedbackEntryOf(row: Row, session: SessionContext): FeedbackEntry {
 
 function consentEntryOf(row: Row, session: SessionContext): ConsentHistoryEntry {
   return {
-    changed_at: text(row, "changed_at"),
+    changed_at: timestamp(row, "changed_at"),
     evaluation_consent: flag(row, "evaluation_consent"),
-    changed_by: flag(row, "by_operator") && !session.isOperator ? PLATFORM_ACTOR : text(row, "changed_by"),
+    changed_by: masked(row, session) ? PLATFORM_ACTOR : text(row, "changed_by"),
   };
 }
 
+/**
+ * R24 is a three-state fact — `null` is "the platform default", `[]` is "nothing entitled" — so a
+ * stored value that is neither a real array nor null is refused rather than read as `null`: that
+ * reading would invert a fail-closed denial into the default set. Limit names come from the closed
+ * `ENTITLEMENT_LIMIT_NAMES` set, and anything else is a defect rather than a silently kept control.
+ */
 function entitlementsOf(row: Row): OrgEntitlements {
   const modelIds = json(row, "model_ids");
+  if (modelIds !== null && !Array.isArray(modelIds)) {
+    throw new TypeError("model_ids must be a JSON array or null");
+  }
+  if (Array.isArray(modelIds) && modelIds.some((model) => typeof model !== "string")) {
+    throw new TypeError("every entitled model id is a string");
+  }
   const limitsValue = json(row, "limits");
+  if (limitsValue !== null && (typeof limitsValue !== "object" || Array.isArray(limitsValue))) {
+    throw new TypeError("limits must be a JSON object or null");
+  }
   const limits: Partial<Record<EntitlementLimitName, number>> = {};
-  if (typeof limitsValue === "object" && limitsValue !== null) {
-    for (const [name, value] of Object.entries(limitsValue as Record<string, unknown>)) {
-      limits[name as EntitlementLimitName] = Number(value);
+  for (const [name, value] of Object.entries((limitsValue ?? {}) as Record<string, unknown>)) {
+    if (value === null || value === undefined) continue;
+    if (!(ENTITLEMENT_LIMIT_NAMES as readonly string[]).includes(name)) {
+      throw new TypeError(`${name} is not an entitlement limit`);
     }
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_ENTITLEMENT_LIMIT) {
+      throw new TypeError(`${name} must be an integer between 0 and ${MAX_ENTITLEMENT_LIMIT}`);
+    }
+    limits[name as EntitlementLimitName] = value;
   }
   return {
     org_id: text(row, "org_id"),
-    model_ids: Array.isArray(modelIds) ? (modelIds as string[]) : null,
+    model_ids: modelIds === null ? null : (modelIds as string[]),
     limits,
-    updated_at: optionalText(row, "entitlements_updated_at"),
+    updated_at: optionalTimestamp(row, "entitlements_updated_at"),
     updated_by: optionalText(row, "entitlements_updated_by"),
   };
 }
@@ -369,11 +464,60 @@ function walletOf(ledgerTotal: Money, reservedTotal: Money): WalletBalance | nul
   return { ledger_total: ledgerTotal, reserved_total: reservedTotal, available };
 }
 
-function judgeRunOf(row: Row): JudgeRun {
-  const samples = json(row, "samples");
+/**
+ * A stored JSON blob is not a DTO. Passing `samples` through verbatim handed a page whatever the
+ * projection happened to contain — an `org_id`, a provider batch id, the principal who labelled a
+ * sample — so every nested field is read by name, from the vocabularies the contract freezes.
+ */
+function judgeScoreOf(value: unknown): JudgeScore {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("a judge score is an object");
+  }
+  const row = value as Row;
+  const kind = text(row, "kind");
+  if (!(JUDGE_SCORE_KINDS as readonly string[]).includes(kind)) throw new TypeError("unknown judge score kind");
+  return {
+    name: text(row, "name"),
+    kind: kind as JudgeScore["kind"],
+    value_num: cell(row, "value_num") === null ? null : Number(cell(row, "value_num")),
+    value_bool: cell(row, "value_bool") === null ? null : flag(row, "value_bool"),
+    value_label: optionalText(row, "value_label"),
+    value_text: optionalText(row, "value_text"),
+    rationale: optionalText(row, "rationale"),
+    rubric_version: integer(row, "rubric_version"),
+    judge_model: text(row, "judge_model"),
+    judge_model_version: text(row, "judge_model_version"),
+    estimated: flag(row, "estimated"),
+  };
+}
+
+function judgeSampleOf(value: unknown): JudgeSample {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("a judge sample is an object");
+  }
+  const row = value as Row;
+  const limitedReason = optionalText(row, "limited_reason");
+  if (limitedReason !== null && !(JUDGE_LIMITED_REASONS as readonly string[]).includes(limitedReason)) {
+    throw new TypeError("unknown limited-evaluation reason");
+  }
+  const scores = cell(row, "scores");
+  if (!Array.isArray(scores)) throw new TypeError("a judge sample's scores are a list");
   return {
     id: text(row, "id"),
-    created_at: text(row, "created_at"),
+    run_id: text(row, "run_id"),
+    request_id: text(row, "request_id"),
+    limited_evaluation: flag(row, "limited_evaluation"),
+    limited_reason: limitedReason as JudgeSample["limited_reason"],
+    scores: scores.map(judgeScoreOf),
+  };
+}
+
+function judgeRunOf(row: Row): JudgeRun {
+  const samples = json(row, "samples");
+  if (samples !== null && !Array.isArray(samples)) throw new TypeError("samples must be a JSON array");
+  return {
+    id: text(row, "id"),
+    created_at: timestamp(row, "created_at"),
     state: text(row, "state") as JudgeRun["state"],
     mode: text(row, "mode") as JudgeRun["mode"],
     rubric_version: integer(row, "rubric_version"),
@@ -383,10 +527,10 @@ function judgeRunOf(row: Row): JudgeRun {
     limited_evaluation_count: integer(row, "limited_evaluation_count"),
     budget_reserved: money(row, "budget_reserved"),
     budget_settled: optionalMoney(row, "budget_settled"),
-    consent_snapshot_at: text(row, "consent_snapshot_at"),
+    consent_snapshot_at: timestamp(row, "consent_snapshot_at"),
     external_batch_id: optionalText(row, "external_batch_id"),
     quarantine_reason: optionalText(row, "quarantine_reason"),
-    samples: Array.isArray(samples) ? (samples as JudgeSample[]) : [],
+    samples: (samples ?? []).map(judgeSampleOf),
   };
 }
 
@@ -395,7 +539,7 @@ function auditEntryOf(row: Row): AuditEntry {
   const after = json(row, "after");
   return {
     id: text(row, "id"),
-    at: text(row, "at"),
+    at: timestamp(row, "at"),
     actor_principal: text(row, "actor_principal"),
     action: text(row, "action") as AuditEntry["action"],
     target_org_id: text(row, "target_org_id"),
@@ -443,7 +587,8 @@ export function createConsoleServices(config: ConsoleServicesConfig): ConsoleSer
   }
 
   function requireRole<T>(session: SessionContext, operation: ConsoleOperation): Result<T> | null {
-    if ((OPERATOR_ONLY_OPERATIONS as readonly string[]).includes(operation) && !session.isOperator) {
+    // `=== true`: a truthy `"false"`, `1` or `{}` arriving from a mis-wired caller is not authority.
+    if ((OPERATOR_ONLY_OPERATIONS as readonly string[]).includes(operation) && session.isOperator !== true) {
       return fail<T>("forbidden", "this operation requires platform-operator authority");
     }
     // Operator authority is the flag; it never stands in for the organization role.
@@ -453,7 +598,7 @@ export function createConsoleServices(config: ConsoleServicesConfig): ConsoleSer
     if (
       (OWNER_OR_OPERATOR_OPERATIONS as readonly string[]).includes(operation) &&
       session.role !== "owner" &&
-      !session.isOperator
+      session.isOperator !== true
     ) {
       return fail<T>("forbidden", "only an organization owner or a platform operator can read this");
     }
@@ -719,10 +864,10 @@ export function createConsoleServices(config: ConsoleServicesConfig): ConsoleSer
         const found = await rows("settings_get", { orgId: resolved.orgId, limit: 1 });
         const row = found[0];
         if (row === undefined) return fail<ConsoleSettings>("not_found", "no settings for this organization");
-        // Bounded like every other read. `ConsoleSettings.consent_history` is a whole array in the
-        // contract, with no cursor, so a history longer than this would be truncated rather than
-        // paged — recorded as a limit rather than left as an unbounded scan.
-        const history = await rows("consent_history", { orgId: resolved.orgId, limit: MAX_PAGE_LIMIT });
+        // The cap lives on the named query (`hardLimit`), because the contract gives this read no
+        // cursor: a history past the cap is truncated rather than paged, which is a recorded limit
+        // rather than an unbounded scan.
+        const history = await rows("consent_history", { orgId: resolved.orgId });
         return ok({
           trace_mode: text(row, "trace_mode") as ConsoleSettings["trace_mode"],
           content_retention_days: integer(row, "content_retention_days"),

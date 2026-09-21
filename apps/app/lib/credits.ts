@@ -1,6 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import type { LedgerRow } from "@/lib/types";
 import { MAX_PAGE_LIMIT } from "@/lib/contracts/types";
+import {
+  creditsFromLedgerPage,
+  creditsFromSummary,
+  walletSummaryOutcome,
+  type WalletSummaryRow,
+} from "@/lib/services/credits";
 
 export type Credits = {
   rows: LedgerRow[];
@@ -9,13 +15,6 @@ export type Credits = {
   spent: number;
   /** Outstanding reservations: money committed to accepted work and not available to spend again. */
   reserved: number;
-};
-
-type WalletSummary = {
-  ledger_total: number | string | null;
-  reserved_total: number | string | null;
-  loaded: number | string | null;
-  spent: number | string | null;
 };
 
 /**
@@ -29,12 +28,16 @@ type WalletSummary = {
  * paged through `ConsoleServices.ledger`, which is where money crosses as a decimal string.
  *
  * The tenant is the caller's own organization, exactly as before: this function takes the org id the
- * session resolved and adds no organization selection of its own.
+ * session resolved and adds no organization selection of its own. The decisions — which source
+ * answers, and what a failing read means — live in `lib/services/credits.ts`, where they are tested.
+ *
+ * `Credits` still crosses as `number` because `components/credits-card.tsx` renders it that way and
+ * is not this task's file; the typed boundary (`ConsoleServices.balances`, `.ledger`) uses `Money`.
  */
 export async function getCredits(orgId: string): Promise<Credits> {
   const supabase = await createClient();
   const [summary, ledger] = await Promise.all([
-    supabase.rpc("org_wallet_summary", { p_org: orgId }).maybeSingle<WalletSummary>(),
+    supabase.rpc("org_wallet_summary", { p_org: orgId }).maybeSingle<WalletSummaryRow>(),
     supabase
       .from("credit_ledger")
       .select("id, delta_usd, kind, reason, ref, created_at")
@@ -44,29 +47,23 @@ export async function getCredits(orgId: string): Promise<Credits> {
   ]);
 
   const rows = (ledger.data ?? []) as LedgerRow[];
-  const wallet = summary.data;
-  if (wallet !== null && wallet !== undefined) {
-    const reserved = Number(wallet.reserved_total ?? 0);
-    return {
-      rows,
-      loaded: Number(wallet.loaded ?? 0),
-      spent: Math.abs(Number(wallet.spent ?? 0)),
-      reserved,
-      available: Number(wallet.ledger_total ?? 0) - reserved,
-    };
-  }
+  const outcome = walletSummaryOutcome(summary.data, summary.error);
+  const figures =
+    outcome.kind === "summary"
+      ? creditsFromSummary(outcome.row)
+      : // Expand/contract compatibility (03 §Rollback): `wallets`, `credit_holds` and the reconciled
+        // `org_wallet_summary` function are D1's migration. Against the schema deployed today there
+        // are no holds at all, so the ledger balance *is* the available balance, and the existing
+        // `org_balance` function still answers it. Once the summary function exists, a *failing* call
+        // is raised rather than answered from `org_balance` — which ignores reservations and would
+        // report an inflated available balance.
+        creditsFromLedgerPage((await supabase.rpc("org_balance", { p_org: orgId })).data, rows);
 
-  // Expand/contract compatibility (03 §Rollback): `wallets`, `credit_holds` and the reconciled
-  // `org_wallet_summary` function are D1's migration. Against the schema deployed today there are no
-  // holds at all, so the ledger balance *is* the available balance, and the existing `org_balance`
-  // function still answers it without pulling every row into the application.
-  const { data: balance } = await supabase.rpc("org_balance", { p_org: orgId });
-  let loaded = 0;
-  let spent = 0;
-  for (const row of rows) {
-    const value = Number(row.delta_usd);
-    if (value >= 0) loaded += value;
-    else spent -= value;
-  }
-  return { rows, loaded, spent, reserved: 0, available: Number(balance ?? 0) };
+  return {
+    rows,
+    loaded: Number(figures.loaded),
+    spent: Number(figures.spent),
+    reserved: Number(figures.reserved),
+    available: Number(figures.available),
+  };
 }
