@@ -82,15 +82,42 @@ test("a wallet amount that arrives as a number is bounded by what a double can h
 });
 
 test("a missing function falls back; a broken one does not", () => {
-  // Pre-D1 the function does not exist, and the ledger balance is the available balance.
+  // Pre-D1 the function does not exist, and the ledger balance is the available balance. Both the
+  // code and the function's name are required, so neither half alone decides.
   for (const error of [
-    { code: "PGRST202", message: "Could not find the function public.org_wallet_summary(p_org)" },
+    { code: "PGRST202", message: "Could not find the function public.org_wallet_summary(p_org) in the schema cache" },
     { code: "42883", message: "function public.org_wallet_summary(uuid) does not exist" },
-    { code: null, message: "Could not find the function in the schema cache" },
   ]) {
     const outcome = walletSummaryOutcome(null, error);
     assert.equal(outcome.kind, "fallback", `${String(error.code)} must fall back`);
   }
+
+  // The message alone must not decide: an error whose text an operator or a caller can influence
+  // would otherwise force the hold-ignoring fallback.
+  for (const error of [
+    { code: null, message: "Could not find the function in the schema cache" },
+    { code: "P0001", message: "org_wallet_summary is temporarily unavailable, use org_balance" },
+    { code: "PGRST301", message: "org_wallet_summary: JWT expired" },
+  ]) {
+    assert.throws(
+      () => walletSummaryOutcome(null, error),
+      /wallet summary could not be read/,
+      `${String(error.code)} must not be talked into the fallback`,
+    );
+  }
+
+  // And the code alone must not decide either: 42883 is also what a missing function *inside* the
+  // shipped one raises, which is a broken wallet rather than an absent one.
+  assert.throws(
+    () => walletSummaryOutcome(null, { code: "42883", message: "function infrx.wallet_of(uuid) does not exist" }),
+    /wallet summary could not be read/,
+    "a missing function inside org_wallet_summary is not org_wallet_summary missing",
+  );
+
+  // The two halves, one at a time, over the same message: only the code differs.
+  const text = "Could not find the function public.org_wallet_summary(p_org) in the schema cache";
+  assert.equal(walletSummaryOutcome(null, { code: "PGRST202", message: text }).kind, "fallback");
+  assert.throws(() => walletSummaryOutcome(null, { code: "P0001", message: text }), /could not be read/);
 
   // Once it exists, a failing call must NOT be answered from `org_balance`: that function ignores
   // every outstanding hold, so the fallback would report an inflated available balance — a number a

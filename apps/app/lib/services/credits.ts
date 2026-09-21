@@ -123,8 +123,18 @@ export function walletSummaryOutcome(
   if (error !== null && error !== undefined) {
     const code = error.code ?? "";
     const message = error.message ?? "";
-    // PostgREST reports an unknown function as PGRST202; PostgreSQL as 42883 (undefined_function).
-    const missing = code === "PGRST202" || code === "42883" || /could not find the function/i.test(message);
+    /**
+     * Both halves are required, and each one catches something the other does not.
+     *
+     * The **code** must be one of the two that mean "no such function" — PostgREST's `PGRST202` or
+     * PostgreSQL's `42883` — because an error whose *text* merely mentions the function (a `P0001`
+     * raised inside it, say) would otherwise force the fallback. The **name** must appear too,
+     * because `42883` is also what a missing function *inside* the shipped one raises, and that is a
+     * broken wallet rather than an absent one. Falling back answers from `org_balance`, which ignores
+     * every outstanding hold: getting this wrong reports an inflated available balance, which is a
+     * number a customer acts on.
+     */
+    const missing = (code === "PGRST202" || code === "42883") && /org_wallet_summary/.test(message);
     if (missing) return { kind: "fallback", reason: "org_wallet_summary does not exist yet (pre-D1)" };
     throw new Error(`the wallet summary could not be read: ${code || "unknown error"}`);
   }

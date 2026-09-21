@@ -655,6 +655,26 @@
       "cases": [
         "money arrives as text: a number is accepted only where a double still holds eight digits"
       ]
+    },
+    {
+      "id": "CREDITS-03",
+      "note": "the function's name is not required, so an error text forces the fallback",
+      "file": "lib/services/credits.ts",
+      "find": "    const missing = (code === \"PGRST202\" || code === \"42883\") && /org_wallet_summary/.test(message);",
+      "replace": "    const missing = code === \"PGRST202\" || code === \"42883\";",
+      "cases": [
+        "a missing function falls back; a broken one does not"
+      ]
+    },
+    {
+      "id": "CREDITS-04",
+      "note": "the error code is not required, so any message mentioning the function falls back",
+      "file": "lib/services/credits.ts",
+      "find": "    if (missing) return { kind: \"fallback\", reason: \"org_wallet_summary does not exist yet (pre-D1)\" };",
+      "replace": "    if (missing || /org_wallet_summary/.test(message)) return { kind: \"fallback\", reason: \"org_wallet_summary does not exist yet (pre-D1)\" };",
+      "cases": [
+        "a missing function falls back; a broken one does not"
+      ]
     }
   ]
 }
