@@ -140,7 +140,8 @@ export function createMemoryPort(data: Dataset): QueryPort {
           const direction = spec.groupBy.direction === "desc" ? -1 : 1;
           out.sort((a, b) => direction * compare(a[spec.groupBy!.field], b[spec.groupBy!.field]));
         }
-        return out;
+        // The rendered statement carries `limit`, so the double honours it for grouped aggregates too.
+        return plan.limit === null ? out : out.slice(0, plan.limit);
       }
       return plan.limit === null ? rows : rows.slice(0, plan.limit);
     },

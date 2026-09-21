@@ -8,8 +8,8 @@ import test from "node:test";
 import { addMoney, compareMoney, subMoney, ZERO_MONEY, type Money } from "../../lib/contracts/money.ts";
 import { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, PLATFORM_ACTOR } from "../../lib/contracts/types.ts";
 import { createConsoleServices } from "../../lib/services/console.ts";
-import type { QueryPort } from "../../lib/services/query.ts";
-import { makeConsoleHarness, TEST_CURSOR_SECRET } from "./harness.ts";
+import { buildPlan, namedQuery, scopedPort, type QueryPort } from "../../lib/services/query.ts";
+import { createMemoryPort, makeConsoleHarness, TEST_CURSOR_SECRET } from "./harness.ts";
 
 function expectOk<T>(result: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }): T {
   assert.ok(result.ok, `expected success, got ${result.ok ? "" : `${result.error.code}: ${result.error.message}`}`);
@@ -432,6 +432,78 @@ test("pending_reconciliation counts held unknown usage and nothing else", async 
   row.usage_certainty = "unknown";
   const unknown = expectOk(await services.usageSummary(sessions.owner, {}));
   assert.equal(unknown.pending_reconciliation, addMoney(before.pending_reconciliation, "5.00000000" as Money));
+});
+
+test("every port passes through the tenant check, whatever the port does", async () => {
+  const { data, sessions, ids } = makeConsoleHarness();
+  const session = sessions.owner;
+
+  // D1's views return EVERY organization's rows to an operator or service-role session, so for those
+  // sessions the plan's predicate is the only thing scoping a tenant's own reads. A port that forgot
+  // it must fail loudly rather than answer a customer's page with the platform's rows.
+  const leaky: QueryPort = {
+    async run(plan) {
+      const spec = namedQuery(plan.name);
+      // Every row of the relation, newest-seeded first — which is another organization's, exactly as
+      // a view that returns the whole platform to a privileged session would answer.
+      return [...(data[spec.source] ?? [])].reverse().slice(0, plan.limit ?? 25);
+    },
+  };
+  const leakyServices = createConsoleServices({ pg: leaky, ch: leaky, cursorSecret: TEST_CURSOR_SECRET });
+  for (const call of [
+    () => leakyServices.usage(session, { limit: 5 }),
+    () => leakyServices.ledger(session, { limit: 5 }),
+    () => leakyServices.keys.list(session),
+    () => leakyServices.traces(session, { limit: 5 }),
+  ]) {
+    const result = await call();
+    assert.ok(!result.ok, "a port that ignores the tenant is refused");
+    assert.equal(result.error.code, "internal_error");
+  }
+
+  // And a tenant-scoped plan cannot reach an executor without a tenant at all.
+  let reached = 0;
+  const counting = scopedPort({
+    async run() {
+      reached += 1;
+      return [];
+    },
+  });
+  await assert.rejects(() => counting.run({ ...buildPlan("usage_page", { orgId: ids.orgId, limit: 5 }), tenant: null }));
+  assert.equal(reached, 0, "the executor is never called with an unscoped plan");
+  // The operator-wide reads are the exception the contract allows, and they still run.
+  await counting.run(buildPlan("admin_orgs_page", { limit: 5 }));
+  assert.equal(reached, 1);
+});
+
+test("usageDaily is bounded by its documented cap, not by the fixture", async () => {
+  const { services, sessions, ids, data } = makeConsoleHarness();
+  const template = data.usage.find((row) => row.org_id === ids.orgId);
+  assert.ok(template !== undefined);
+  // 401 distinct days: one more than the cap, so a service that returned whatever the executor gave
+  // it would hand a chart the whole retained history.
+  for (let day = 0; day < 401; day += 1) {
+    data.usage.push({
+      ...template,
+      request_id: `day-${day}`,
+      created_at: new Date(Date.parse("2024-01-01T00:00:00.000Z") + day * 86400000).toISOString(),
+    });
+  }
+  const days = expectOk(await services.usageDaily(sessions.owner, {}));
+  assert.equal(days.length, 400, "the cap is real, and it is the documented one");
+  assert.ok(days.length < new Set(data.usage.map((row) => String(row.created_at).slice(0, 10))).size);
+
+  // And the service does not depend on the executor honouring the statement's LIMIT: a port that
+  // ignores it must not turn "capped" into "the whole retained history".
+  const unbounded: QueryPort = {
+    async run(plan) {
+      const rows = await createMemoryPort(data).run({ ...plan, limit: null });
+      return rows;
+    },
+  };
+  const lenient = createConsoleServices({ pg: unbounded, ch: unbounded, cursorSecret: TEST_CURSOR_SECRET });
+  const stillCapped = expectOk(await lenient.usageDaily(sessions.owner, {}));
+  assert.equal(stillCapped.length, 400, "the cap is the service's, not the executor's good manners");
 });
 
 test("a query port that fails is a Result error, never a thrown promise", async () => {

@@ -27,6 +27,30 @@ function expectError(
   assert.equal(result.error.code, code, what);
 }
 
+/**
+ * Every usage page, because a mangled timestamp changes where its row sorts: `"2026-09-02 …"` is far
+ * from the head of the list, so a single-page probe would never project the row it just broke.
+ */
+async function walkUsage(
+  services: { usage: (session: never, query: unknown) => Promise<ListResult> },
+  session: unknown,
+): Promise<ListResult> {
+  let cursor: string | null = null;
+  const items: ListResult extends { ok: true; value: { items: infer T } } ? T : never = [] as never;
+  for (let pages = 0; pages < 100; pages += 1) {
+    const page = await services.usage(session as never, { limit: MAX_PAGE_LIMIT, cursor } as never);
+    if (!page.ok) return page;
+    items.push(...page.value.items);
+    if (page.value.next_cursor === null) return { ok: true, value: { items, next_cursor: null } };
+    cursor = page.value.next_cursor;
+  }
+  throw new Error("pagination did not terminate");
+}
+
+type ListResult =
+  | { ok: true; value: { items: { request_id: string; created_at: string; cost: string; key_id: string; key_name: string }[]; next_cursor: string | null } }
+  | { ok: false; error: { code: string; message: string } };
+
 test("a calibration label never reaches a feedback list or a trace detail, for anyone (R49/R35)", async () => {
   const { services, sessions, data, ids } = makeConsoleHarness();
   // The fixture's label is stored in the same relation as ordinary feedback (R43). If this ever stops
@@ -155,6 +179,42 @@ test("a stored value that is not what the DTO says is a typed refusal, not a bla
   // A missing column is a refusal too: `String(undefined ?? "")` used to render it as an empty cell.
   delete usage.model;
   expectError(await walkUsage(), "internal_error", "a missing column");
+});
+
+test("both UTC timestamp forms are accepted and normalised, microseconds and all", async () => {
+  const { services, sessions, ids, data } = makeConsoleHarness();
+  const usage = data.usage.find((row) => row.org_id === ids.orgId);
+  assert.ok(usage !== undefined);
+
+  // PostgREST renders `timestamptz` with `+00:00`; the fixtures and the API use `Z`. Both are the
+  // same instant, so both are read — and the DTO carries one form, with every digit it was given.
+  usage.created_at = "2026-09-20T11:57:43.123456+00:00";
+  const page = expectOk(await walkUsage(services as never, sessions.owner));
+  const row = page.items.find((candidate) => candidate.request_id === usage.request_id);
+  assert.equal(row?.created_at, "2026-09-20T11:57:43.123456Z", "microseconds survive: they are half of a cursor key");
+
+  // A walk still works when a row carries the other form, because the cursor key is normalised too.
+  let cursor: string | null = null;
+  const seen: string[] = [];
+  for (let pages = 0; pages < 100; pages += 1) {
+    const next = expectOk(await services.usage(sessions.owner, { limit: 7, cursor }));
+    seen.push(...next.items.map((item) => item.request_id));
+    if (next.next_cursor === null) break;
+    cursor = next.next_cursor;
+  }
+  assert.equal(new Set(seen).size, seen.length, "no row is returned twice across the form change");
+  assert.ok(seen.includes(String(usage.request_id)), "and the row in the other form is walked exactly once");
+
+  for (const [value, what] of [
+    ["2026-09-02 07:12:18+00", "the ::text form"],
+    ["2026-09-20", "a date with no time"],
+    ["2026-09-20T11:57:43+02:00", "a non-UTC offset"],
+    ["2026-09-20T11:57:43.1234567Z", "more than microsecond precision"],
+    [new Date("2026-09-20T11:57:43Z"), "a driver Date"],
+  ] as [unknown, string][]) {
+    usage.created_at = value;
+    expectError(await walkUsage(services as never, sessions.owner), "internal_error", what);
+  }
 });
 
 test("money arrives as text: a number is accepted only where a double still holds eight digits", async () => {

@@ -675,6 +675,66 @@
       "cases": [
         "a missing function falls back; a broken one does not"
       ]
+    },
+    {
+      "id": "PORT-01",
+      "note": "the port wrapper stops checking that returned rows belong to the tenant",
+      "file": "lib/services/query.ts",
+      "find": "        if (Object.hasOwn(row, field) && row[field] !== plan.tenant.value) {",
+      "replace": "        if (false) {",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-02",
+      "note": "a tenant-scoped plan may reach the executor without a tenant",
+      "file": "lib/services/query.ts",
+      "find": "      if (spec.tenantColumn !== null && plan.tenant === null) {\n        throw new QueryPlanError(`${plan.name} is tenant-scoped and must not run without a tenant`);\n      }",
+      "replace": "      if (false) {\n        throw new QueryPlanError(`${plan.name} is tenant-scoped and must not run without a tenant`);\n      }",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "PORT-03",
+      "note": "the injected port is used raw, so the shared check is skipped",
+      "file": "lib/services/console.ts",
+      "find": "  const pg = scopedPort(config.pg);\n  const ch = scopedPort(config.ch);",
+      "replace": "  const pg = config.pg;\n  const ch = config.ch;",
+      "cases": [
+        "every port passes through the tenant check, whatever the port does"
+      ]
+    },
+    {
+      "id": "CAP-02",
+      "note": "usageDaily returns whatever the executor gave it",
+      "file": "lib/services/console.ts",
+      "find": "      const capped = found.slice(0, namedQuery(\"usage_daily\").hardLimit ?? found.length);",
+      "replace": "      const capped = found;",
+      "cases": [
+        "usageDaily is bounded by its documented cap, not by the fixture"
+      ]
+    },
+    {
+      "id": "TS-01",
+      "note": "a timestamp is carried in whatever form the row had, so one list mixes two",
+      "file": "lib/services/console.ts",
+      "find": "  const match = ROW_TIMESTAMP.exec(value);\n  if (match === null) throw new TypeError(`${column} must be an RFC 3339 UTC timestamp`);\n  return `${match[1]}Z`;",
+      "replace": "  if (!ROW_TIMESTAMP.test(value)) throw new TypeError(`${column} must be an RFC 3339 UTC timestamp`);\n  return value;",
+      "cases": [
+        "both UTC timestamp forms are accepted and normalised, microseconds and all"
+      ]
+    },
+    {
+      "id": "TS-02",
+      "note": "any offset and the ::text form are accepted, so a non-UTC instant reads as UTC",
+      "file": "lib/services/console.ts",
+      "find": "const ROW_TIMESTAMP = /^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?)(?:Z|\\+00:00)$/;",
+      "replace": "const ROW_TIMESTAMP = /^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?)(?:Z|[+-]\\d{2}:\\d{2}| .*)$/;",
+      "cases": [
+        "both UTC timestamp forms are accepted and normalised, microseconds and all"
+      ]
     }
   ]
 }

@@ -65,6 +65,43 @@ export type QueryPort = {
   run(plan: QueryPlan): Promise<Row[]>;
 };
 
+/**
+ * The tenant check every port implementation passes through.
+ *
+ * It is here, wrapping the port, rather than inside any one implementation, because D1's views return
+ * **every** organization's rows to an operator or service-role session: for those sessions this
+ * predicate is the only thing scoping a tenant's own reads, so an implementation that forgot to apply
+ * `plan.tenant` would answer a customer's page with the whole platform's rows and no test of the
+ * implementation alone would say so. Two rules, both cheap:
+ *
+ * 1. a tenant-scoped named query may not run without a tenant (refused before the executor is called);
+ * 2. every row that comes back carries that tenant, or the read fails.
+ *
+ * The second is a post-check on data the port has already fetched, so it costs one comparison per row
+ * and turns "the port forgot the predicate" into a loud failure instead of a cross-tenant page.
+ */
+export function scopedPort(port: QueryPort): QueryPort {
+  return {
+    async run(plan: QueryPlan): Promise<Row[]> {
+      const spec = namedQuery(plan.name);
+      if (spec.tenantColumn !== null && plan.tenant === null) {
+        throw new QueryPlanError(`${plan.name} is tenant-scoped and must not run without a tenant`);
+      }
+      const rows = await port.run(plan);
+      const field = spec.tenantField;
+      if (plan.tenant === null || field === undefined) return rows;
+      for (const row of rows) {
+        // An aggregate returns no tenant column, and could not carry another organization's identity
+        // anyway; a row query that returns one must carry the tenant it was scoped to.
+        if (Object.hasOwn(row, field) && row[field] !== plan.tenant.value) {
+          throw new QueryPlanError(`${plan.name} returned a row belonging to another organization`);
+        }
+      }
+      return rows;
+    },
+  };
+}
+
 /** Parameter names a caller filter may never use, because the tenant binding owns them. */
 export const RESERVED_PARAM_NAMES = ["__org_id"] as const;
 

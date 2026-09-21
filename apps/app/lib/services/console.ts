@@ -74,9 +74,11 @@ import { cursorScope, decodeCursor, encodeCursor } from "./cursor.ts";
 import {
   buildPlan,
   feedbackCountPredicate,
+  scopedPort,
   type Keyset,
   type NamedQueryName,
   type Predicate,
+  namedQuery,
   type QueryPort,
   type Row,
   type SqlValue,
@@ -94,7 +96,17 @@ export type ConsoleServicesConfig = {
 /** Server only, at module scope; see the note in `./query.ts`. */
 if (typeof window !== "undefined") throw new Error("lib/services/console.ts is server-only");
 
-const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+/**
+ * The two UTC forms a row may carry (R59-9): PostgREST renders `timestamptz` with `+00:00`, and the
+ * fixtures and the API use `Z`. Fractional seconds up to **microseconds** are kept — they are half of
+ * every keyset key, so rounding them would make a cursor resume on a row that no longer exists. Still
+ * refused: a driver `Date`, the `::text` form (`2026-09-02 07:12:18+00`), a date without a time, and
+ * any non-UTC offset.
+ */
+const ROW_TIMESTAMP = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)(?:Z|\+00:00)$/;
+
+/** A caller's filter value: the same two forms, so a console page can pass either one through. */
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|\+00:00)$/;
 
 /**
  * What a usage row shows for a key that has since been deleted.
@@ -217,9 +229,14 @@ function text(row: Row, column: string): string {
  * cursor key, and a `Date` reaching `String()` would corrupt the keyset the next page resumes from.
  */
 function timestamp(row: Row, column: string): string {
-  const value = text(row, column);
-  if (!RFC3339.test(value)) throw new TypeError(`${column} must be an RFC 3339 UTC timestamp`);
-  return value;
+  return normaliseTimestamp(text(row, column), column);
+}
+
+/** `…+00:00` and `…Z` are the same instant; the DTO carries one form, with its digits intact. */
+function normaliseTimestamp(value: string, column: string): string {
+  const match = ROW_TIMESTAMP.exec(value);
+  if (match === null) throw new TypeError(`${column} must be an RFC 3339 UTC timestamp`);
+  return `${match[1]}Z`;
 }
 
 function optionalTimestamp(row: Row, column: string): string | null {
@@ -594,7 +611,10 @@ function auditEntryOf(row: Row): AuditEntry {
 // ---------------------------------------------------------------------------
 
 export function createConsoleServices(config: ConsoleServicesConfig): ConsoleServices {
-  const { pg, ch, cursorSecret } = config;
+  const { cursorSecret } = config;
+  // Every injected port goes through the shared tenant check; nothing here calls one directly.
+  const pg = scopedPort(config.pg);
+  const ch = scopedPort(config.ch);
   if (typeof cursorSecret !== "string" || cursorSecret.length < 16) {
     throw new Error("createConsoleServices needs a cursor signing secret of at least 16 characters");
   }
@@ -679,8 +699,13 @@ export function createConsoleServices(config: ConsoleServicesConfig): ConsoleSer
     });
   }
 
+  /**
+   * The cursor key. The timestamp is normalised exactly as the DTO's is, so a relation that renders
+   * `+00:00` still walks: a keyset compares strings, and mixing the two forms inside one list would
+   * order `+` before `Z` and drop rows at the boundary.
+   */
   const timeKey = (atColumn: string, idColumn: string) => (row: Row): Keyset => ({
-    at: text(row, atColumn),
+    at: timestamp(row, atColumn),
     id: text(row, idColumn),
   });
 
@@ -787,8 +812,12 @@ export function createConsoleServices(config: ConsoleServicesConfig): ConsoleSer
       const resolved = await tenant<UsageDay[]>(session, "usageDaily");
       if (isFailure(resolved)) return resolved;
       const found = await rows("usage_daily", { orgId: resolved.orgId, filters: usageFilters(query) });
+      // The cap is the named query's (`hardLimit`), applied here as well: `UsageDay[]` has no cursor,
+      // so a longer history is truncated rather than paged, and an executor that ignored the LIMIT
+      // must not turn that into an unbounded response.
+      const capped = found.slice(0, namedQuery("usage_daily").hardLimit ?? found.length);
       return ok(
-        found.map((row) => ({
+        capped.map((row) => ({
           day: text(row, "day"),
           requests: integer(row, "requests"),
           prompt_tokens: integer(row, "prompt_tokens"),
