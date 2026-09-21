@@ -1212,6 +1212,30 @@ VIOLATIONS = (
                  extra="settled_at, outcome_cause, settlement_state, usage_certainty, "
                        "result_ref, debit")
      + ", '2026-09-21T00:05:00Z', 'completed', 'settled', 'authoritative', 'r', 99)"),
+    # r3 (N3): one NULL violation per three-valued hole the sweep closed.
+    ("a settled job with NO usage certainty at all",
+     _job_values("53000000-0000-4000-8000-000000000001", "job_n3a", state="succeeded",
+                 extra="settled_at, outcome_cause, settlement_state, result_ref")
+     + ", '2026-09-21T00:05:00Z', 'completed', 'settled', 'r')"),
+    ("a debit on a job that never settled",
+     _job_values("53000000-0000-4000-8000-000000000002", "job_n3b",
+                 extra="debit") + ", 0.00100000)"),
+    ("a reconciliation window on a job that never settled",
+     _job_values("53000000-0000-4000-8000-000000000003", "job_n3c",
+                 extra="reconcile_after") + ", '2026-09-22T00:00:00Z')"),
+    ("a rating whose value is text",
+     f"insert into infrx.feedback (feedback_id, org_id, request_id, author_principal, "
+     f"author_role, channel, name, value_text) values ('fb_n3', '{ORG_A}', "
+     f"'{JOB_TERMINAL}', 'u', 'customer', 'api', 'rating', 'five')"),
+    ("a thumb whose value is text",
+     f"insert into infrx.feedback (feedback_id, org_id, request_id, author_principal, "
+     f"author_role, channel, name, value_text) values ('fb_n3b', '{ORG_A}', "
+     f"'{JOB_TERMINAL}', 'u', 'customer', 'api', 'thumb', 'yes')"),
+    ("a calibration label whose value is an integer",
+     f"insert into infrx.feedback (feedback_id, org_id, request_id, author_principal, "
+     f"author_role, channel, name, value_int, calibration_set, rubric_version, "
+     f"by_operator) values ('fb_n3c', '{ORG_A}', '{JOB_TERMINAL}', 'ops', 'operator', "
+     f"'console', 'calibration_label', 3, true, 1, true)"),
     ("a settlement on usage that was never authoritative",
      _job_values("52000000-0000-4000-8000-0000000000fb", "job_vcert", state="succeeded",
                  extra="settled_at, outcome_cause, settlement_state, usage_certainty, "

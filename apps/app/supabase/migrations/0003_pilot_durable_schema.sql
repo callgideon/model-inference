@@ -229,12 +229,13 @@ create table infrx.jobs (
       else state = 'failed' end)),
   -- R21: only a settled outcome carries a debit, and only three causes may be one.
   constraint jobs_debit_only_when_settled
-    check (debit = 0 or (settlement_state = 'settled'
-                         and outcome_cause in ('completed','client_cancelled',
-                                               'client_disconnected'))),
+    check (debit = 0 or (settlement_state is not distinct from 'settled'
+                         and coalesce(outcome_cause in ('completed','client_cancelled',
+                                                        'client_disconnected'), false))),
   -- The 24 h reconciliation window exists exactly while usage is unknown.
   constraint jobs_unknown_needs_reconcile_after
-    check ((settlement_state = 'held_unknown') = (reconcile_after is not null)),
+    check ((settlement_state is not distinct from 'held_unknown')
+           = (reconcile_after is not null)),
   -- R30: a success the customer cannot fetch is not a success.
   constraint jobs_success_has_result
     check (state <> 'succeeded' or result_ref is not null),
@@ -242,10 +243,16 @@ create table infrx.jobs (
   -- a debit past the reserved envelope is the one number admission promised to bound.
   constraint jobs_debit_within_hold check (debit <= maximum_hold),
   -- 05: a settled debit rests on authoritative usage; held_unknown is its opposite.
+  -- r3 (N3): `is distinct from`, throughout. `settlement_state <> 'settled' or
+  -- usage_certainty = 'authoritative'` is NULL when either side is NULL, and a CHECK
+  -- PASSES on NULL - so a succeeded/completed/settled job with no usage certainty at all
+  -- was accepted, which is a settled debit resting on nothing. Every check below that
+  -- compares a NULLABLE column inside an OR now uses three-valued-safe operators.
   constraint jobs_settled_usage_is_authoritative
-    check (settlement_state <> 'settled' or usage_certainty = 'authoritative'),
+    check (settlement_state is distinct from 'settled'
+           or usage_certainty is not distinct from 'authoritative'),
   constraint jobs_unknown_usage_is_not_authoritative
-    check (settlement_state <> 'held_unknown'
+    check (settlement_state is distinct from 'held_unknown'
            or usage_certainty is distinct from 'authoritative'),
   -- R29: a deadline before the admission is a job nothing may ever run.
   constraint jobs_deadline_after_admission check (deadline_at > admitted_at),
@@ -543,13 +550,16 @@ create table infrx.feedback (
   -- Ownership is durable job identity, and the pair is the tenant check (02, R55).
   foreign key (request_id, org_id) references infrx.jobs (request_id, org_id) on delete cascade,
   -- R3/R43: the name fixes the value's type and range, and exactly one variant is set.
+  -- r3 (N3): `coalesce(…, false)`. With `name = 'rating'` and the text variant set
+  -- instead of the integer one, `value_int between 1 and 5` is NULL, `true and NULL` is
+  -- NULL, and the row was accepted - a rating whose value is a string.
   constraint feedback_value_matches_name
-    check (num_nonnulls(value_bool, value_int, value_text) = 1 and (case name
+    check (num_nonnulls(value_bool, value_int, value_text) = 1 and coalesce(case name
       when 'thumb' then value_bool is not null
       when 'rating' then value_int between 1 and 5
       when 'calibration_label' then value_text in
         ('correct','partially_correct','incorrect','unusable')
-      else value_text is not null and length(btrim(value_text)) > 0 end)),
+      else value_text is not null and length(btrim(value_text)) > 0 end, false)),
   constraint feedback_text_bounded
     check (value_text is null or length(value_text) <= 4000),
   -- R43: the three calibration facts cannot disagree.
