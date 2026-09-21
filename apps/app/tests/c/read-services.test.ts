@@ -419,6 +419,30 @@ test("a filter value is checked before it is bound: vocabulary, length and times
   }
   expectOk(await services.usage(sessions.owner, { from: "2026-09-01T00:00:00Z", limit: 5 }));
   expectOk(await services.usage(sessions.owner, { from: "2026-09-01T00:00:00.000Z", limit: 5 }));
+  // A caller may write either UTC form, since a row may arrive in either (R59-9).
+  expectOk(await services.usage(sessions.owner, { from: "2026-09-01T00:00:00+00:00", limit: 5 }));
+  expectOk(await services.usage(sessions.owner, { to: "2026-09-30T00:00:00.123456+00:00", limit: 5 }));
+  // The two spellings are the same instant, so they select the same rows...
+  const asZ = expectOk(await services.usage(sessions.owner, { from: "2026-09-10T00:00:00Z", limit: MAX_PAGE_LIMIT }));
+  const asOffset = expectOk(
+    await services.usage(sessions.owner, { from: "2026-09-10T00:00:00+00:00", limit: MAX_PAGE_LIMIT }),
+  );
+  assert.deepEqual(
+    asOffset.items.map((row) => row.request_id),
+    asZ.items.map((row) => row.request_id),
+    "the two UTC spellings of one instant filter identically",
+  );
+  // ...but they are different *text*, so they are different cursor scopes: changing the spelling
+  // mid-walk is a changed query, and the cursor from the other one is refused rather than resumed.
+  assert.ok(asZ.next_cursor !== null);
+  expectError(
+    await services.usage(sessions.owner, {
+      from: "2026-09-10T00:00:00+00:00",
+      limit: MAX_PAGE_LIMIT,
+      cursor: asZ.next_cursor,
+    }),
+    "invalid_cursor",
+  );
   // An identifier is an identifier, not a document.
   expectError(await services.usage(sessions.owner, { key_id: "x".repeat(201) }), "invalid_request");
   expectError(await services.usage(sessions.owner, { model: "" }), "invalid_request");

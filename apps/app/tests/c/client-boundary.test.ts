@@ -122,6 +122,40 @@ test("no client component reaches lib/services, however indirectly", () => {
   );
 });
 
+/**
+ * The mutation runner decides whether a kill was genuine or merely the boundary guard turning a thrown
+ * error into `internal_error`, and it does that from the TAP text of the failing assertion. A case that
+ * asserted success as a bare `assert.ok(result.ok)` would print no code at all, and a guard-only failure
+ * would be counted as a genuine kill. So every success assertion in this track goes through a helper
+ * that names the code, and this is the rule that keeps it that way.
+ */
+test("every case in this track asserts success through a helper, never as a bare ok check", () => {
+  const bare = /assert\.ok\(\s*[^,()]*\.ok\s*\)/;
+  const offenders: string[] = [];
+  for (const file of sourceFiles(join(appRoot, "tests", "c"))) {
+    const source = readFileSync(file, "utf8");
+    source.split("\n").forEach((line, index) => {
+      const code = line.replace(/\/\/.*$/, "").replace(/^\s*\*.*$/, "");
+      // Not the rule's own text: a comment, a doc line or the string literals that demonstrate it.
+      if (code.includes("bare.test(") || code.includes("bare =")) return;
+      // `assert.ok(<something>.ok)` with no message: nothing in the output says which code came back.
+      if (bare.test(code)) offenders.push(`${relative(appRoot, file)}:${index + 1}: ${line.trim()}`);
+    });
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `use expectOk/expectError (or pass a message naming the code) so a guard-only failure cannot be\ncounted as a kill:\n${offenders.join("\n")}`,
+  );
+  // The rule is not vacuous: the first shape is the one it forbids, the second is the one it allows.
+  assert.equal(bare.test("    assert" + ".ok(result.ok);"), true, "the pattern matches the bare form");
+  assert.equal(
+    bare.test("    assert" + '.ok(result.ok, "usage page");'),
+    false,
+    "and not the form that names what failed",
+  );
+});
+
 test("the server-only modules carry their run-time guard as well", () => {
   for (const name of ["query.ts", "console.ts", "cursor.ts", "server.ts", "credits.ts"]) {
     const source = readFileSync(join(SERVER_ONLY, name), "utf8");
