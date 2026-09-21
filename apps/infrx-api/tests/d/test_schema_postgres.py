@@ -124,6 +124,14 @@ def test_dur_rls__the_browser_privilege_surface_is_enumerated() -> None:
     print(checks.check_privileges(_fresh()))
 
 
+def test_dur_rls__the_execute_surface_is_enumerated() -> None:
+    """N4: `revoke all … from public` leaves Supabase's default-ACL grant to `anon` and
+    `authenticated` in place, and the per-schema default-privilege revoke for functions is
+    a no-op - so every function, every sequence and a function created afterwards are
+    checked against the enumerated caller list."""
+    print(checks.check_function_privileges(_fresh()))
+
+
 def test_dur_rls__no_operator_identity_is_customer_readable() -> None:
     """Ruling 2 / B2: the operator principal and their prose live only where a customer
     cannot SELECT them - structurally, not behind a column grant on a legacy table."""

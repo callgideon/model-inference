@@ -35,7 +35,12 @@ language sql stable security invoker set search_path = public, pg_temp as $$
   -- superuser applying migrations; false for `anon` and `authenticated`.
   select pg_has_role(current_user, 'service_role', 'usage');
 $$;
-revoke all on function public.is_service_client() from public;
+-- r3 (N4): `from public, anon` - revoking from PUBLIC leaves Supabase's default-ACL
+-- grant to `anon` and `authenticated` in place, because they are separate grantees.
+-- `authenticated` keeps EXECUTE here: the views are owner's-rights but a function called
+-- inside one is executed as the CALLER, so a browser session that may read the view must
+-- be able to run its predicates.
+revoke all on function public.is_service_client() from public, anon, authenticated;
 grant execute on function public.is_service_client() to authenticated, service_role;
 
 -- ------------------------------------------- whose principal may be read (r2) ---
@@ -79,8 +84,9 @@ returns text language sql stable security invoker set search_path = public, pg_t
       then coalesce(p_display, p_subject)
     else 'platform' end;
 $$;
-revoke all on function public.principal_uuid(text) from public;
-revoke all on function public.visible_principal(uuid, text, text) from public;
+revoke all on function public.principal_uuid(text) from public, anon, authenticated;
+revoke all on function public.visible_principal(uuid, text, text)
+  from public, anon, authenticated;
 grant execute on function public.principal_uuid(text) to authenticated, service_role;
 grant execute on function public.visible_principal(uuid, text, text)
   to authenticated, service_role;
@@ -351,6 +357,7 @@ begin
              from public.credit_ledger where org_id = p_org) l on true;
 end $$;
 
+revoke all on function public.org_wallet_summary(uuid) from public, anon, authenticated;
 grant execute on function public.org_wallet_summary(uuid) to authenticated, service_role;
 
 comment on function public.org_wallet_summary(uuid) is
@@ -446,6 +453,12 @@ begin
   limit 400;
 end $$;
 
+revoke all on function public.console_usage_summary(uuid, timestamptz, timestamptz,
+                                                    text, uuid)
+  from public, anon, authenticated;
+revoke all on function public.console_usage_daily(uuid, timestamptz, timestamptz,
+                                                  text, uuid)
+  from public, anon, authenticated;
 grant execute on function public.console_usage_summary(uuid, timestamptz, timestamptz,
                                                        text, uuid)
   to authenticated, service_role;

@@ -1472,6 +1472,111 @@ TRUNCATE_GUARDED = (
 )
 
 
+#: r3 (N4): who may EXECUTE what. `function signature -> the roles that may call it`.
+#: Anything in `public` or `infrx` outside this map must be callable by neither `anon` nor
+#: `authenticated`. The three browser-callable groups are: 0001's reporting functions, the
+#: predicates the console views evaluate as the caller, and the three console RPCs.
+EXPECTED_FUNCTION_CALLERS = {
+    # 0001's, kept as they were
+    "public.is_operator()": {"authenticated", "service_role"},
+    "public.is_org_member(uuid)": {"authenticated", "service_role"},
+    "public.is_org_owner(uuid)": {"authenticated", "service_role"},
+    "public.org_usage_summary(uuid,timestamp with time zone,timestamp with time zone,uuid)":
+        {"authenticated", "service_role"},
+    "public.org_usage_daily(uuid,timestamp with time zone,timestamp with time zone,uuid)":
+        {"authenticated", "service_role"},
+    "public.org_balance(uuid)": {"authenticated", "service_role"},
+    # D1's view predicates: a function inside an owner's-rights view runs as the CALLER.
+    "public.is_service_client()": {"authenticated", "service_role"},
+    "public.principal_uuid(text)": {"authenticated", "service_role"},
+    "public.visible_principal(uuid,text,text)": {"authenticated", "service_role"},
+    # D1's console RPCs.
+    "public.org_wallet_summary(uuid)": {"authenticated", "service_role"},
+    "public.console_usage_summary(uuid,timestamp with time zone,timestamp with time zone,"
+    "text,uuid)": {"authenticated", "service_role"},
+    "public.console_usage_daily(uuid,timestamp with time zone,timestamp with time zone,"
+    "text,uuid)": {"authenticated", "service_role"},
+}
+
+
+#: The `infrx` functions a platform client may call. Everything else in that schema is a
+#: trigger or a guard, which fires with the table owner's rights and needs no EXECUTE.
+INFRX_CALLABLE = tuple(f"infrx.{name}(jsonb)" for name in RPC_NAMES) + (
+    "infrx.now()", "infrx.extend_model_limits()")
+
+
+def check_function_privileges(conn) -> str:
+    """r3 (N4): the EXECUTE surface is the enumerated one, and a function created after the
+    migrations is not callable by a browser role.
+
+    `revoke all … from public` does not remove Supabase's default-ACL grant to `anon` and
+    `authenticated` - they are separate grantees - so all six functions 0005 creates were
+    callable by `anon` on both images while the round-2 evidence's surface table did not
+    mention functions at all.
+    """
+    problems = []
+    functions = conn.execute("""
+        select p.oid, n.nspname,
+               n.nspname || '.' || p.proname
+                 || regexp_replace(p.oid::regprocedure::text, '^[^(]*', '') as signature
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname in ('public', 'infrx') and p.prokind = 'f'
+          -- Not the extensions' own functions (pgcrypto's `armor`, pg_net's, …): they
+          -- carry PUBLIC EXECUTE from their extension and are not D1's surface.
+          and not exists (select 1 from pg_depend d
+                          where d.objid = p.oid and d.deptype = 'e')
+        order by 3""").fetchall()
+    for oid, schema, signature in functions:
+        browser = EXPECTED_FUNCTION_CALLERS.get(signature, set())
+        for role in ("anon", "authenticated"):
+            may = conn.execute("select has_function_privilege(%s, %s, 'execute')",
+                               (role, oid)).fetchone()[0]
+            if may and role not in browser:
+                problems.append(f"{role} may execute {signature}")
+            if not may and role in browser:
+                problems.append(f"{role} may NOT execute {signature}, which it needs")
+        # The platform side: the documented `infrx` surface must be callable, because that
+        # is what D2-D6 reach the store through.
+        if signature in INFRX_CALLABLE or schema == "public" and browser:
+            assert conn.execute("select has_function_privilege('service_role', %s, "
+                                "'execute')", (oid,)).fetchone()[0], \
+                f"service_role may not execute {signature}"
+    assert not problems, "the EXECUTE surface is not the enumerated one:\n  " + \
+        "\n  ".join(problems)
+
+    # A function created AFTER the migrations, in either schema, by the migration owner.
+    for schema in ("public", "infrx"):
+        conn.execute(f"create or replace function {schema}._d1_later() returns int "
+                     f"language sql as $$ select 1 $$")
+        for role in ("anon", "authenticated"):
+            if conn.execute("select has_function_privilege(%s, %s, 'execute')",
+                            (role, f"{schema}._d1_later()")).fetchone()[0]:
+                problems.append(f"a function created later in {schema} is callable "
+                                f"by {role}")
+        conn.execute(f"drop function {schema}._d1_later()")
+    assert not problems, ("the default privileges do not fail closed:\n  " +
+                          "\n  ".join(problems))
+
+    # And no default ACL hands a browser role anything in `infrx`.
+    leaked = conn.execute("""
+        select defaclobjtype, defaclacl::text from pg_default_acl d
+        join pg_namespace n on n.oid = d.defaclnamespace
+        where n.nspname = 'infrx'
+          and (defaclacl::text like '%anon=%' or defaclacl::text like '%authenticated=%')
+        """).fetchall()
+    assert not leaked, f"a default privilege in infrx grants a browser role: {leaked}"
+
+    # Sequences too: `nextval` on a sequence behind a protected table is a write.
+    sequences = conn.execute("""
+        select c.relname, has_sequence_privilege('authenticated', c.oid, 'usage,update')
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where c.relkind = 'S' and n.nspname in ('public', 'infrx')""").fetchall()
+    writable = [name for name, may in sequences if may]
+    assert not writable, f"authenticated may advance a sequence: {writable}"
+    return (f"{len(functions)} functions: {len(EXPECTED_FUNCTION_CALLERS)} browser-callable "
+            f"and no more; later functions and {len(sequences)} sequences closed")
+
+
 def check_privileges(conn) -> str:
     """Ruling 4: the browser-reachable privilege surface is exactly the enumerated one.
 
@@ -1660,6 +1765,11 @@ def check_leaky_function_probe(conn) -> str:
           raise notice 'D1PROBE %|%', p_relation, coalesce(p_value, '-');
           return true;
         end $$;""")
+    # The probe stands for a function the CALLER wrote, so the caller must be able to run
+    # it. Since N4 the migration owner's default privileges no longer grant PUBLIC or the
+    # browser roles EXECUTE on a new function - which is the point - so the fixture grants
+    # it here. (The "was it evaluated at all" assertion below is what caught this.)
+    conn.execute("grant execute on function public._d1_probe(text, text) to authenticated")
 
     def collect(diagnostic) -> None:
         message = getattr(diagnostic, "message_primary", "") or ""

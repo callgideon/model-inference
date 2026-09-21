@@ -23,14 +23,53 @@ grant select, insert, update, delete on all tables in schema infrx to service_ro
 grant select on infrx.wallet_reconciliation to service_role;
 grant execute on function infrx.now() to service_role;
 
--- r2 (ruling 4): every object a later migration adds here starts with nothing.
--- `grant … on all tables` above is evaluated once, so without this a relation added by
--- D2-D6 would carry PostgreSQL's defaults (PUBLIC EXECUTE on a function) until its
--- author remembered a revoke.
-alter default privileges in schema infrx revoke execute on functions from public;
+-- Every object a later migration adds here starts with nothing.
+--
+-- r3 (N4): `alter default privileges IN SCHEMA … revoke execute on functions from public`
+-- is a **no-op**. PostgreSQL's built-in default of `EXECUTE to PUBLIC` for a new function
+-- is not a per-schema default ACL entry, so there is nothing in the schema for a
+-- per-schema statement to remove: a function created in `infrx` afterwards still carried
+-- `=X/postgres`. The form that works is the GLOBAL one, for the role that creates the
+-- object, and it is written with dynamic SQL because the migration owner differs between
+-- a local container (`postgres`, superuser) and the deployed project (`postgres`, NOT a
+-- superuser - measured on supabase/postgres 17.6).
+--
+-- What it covers: every function created by THIS role, in every schema, from here on.
+-- What it cannot cover: a function created by a different role (on the real image
+-- `supabase_admin` owns default ACLs of its own), which is why the checks assert the
+-- actual privileges of every function rather than trusting the default.
+do $$
+begin
+  execute format('alter default privileges for role %I '
+                 'revoke execute on functions from public', current_user);
+  execute format('alter default privileges for role %I in schema public '
+                 'revoke execute on functions from anon, authenticated', current_user);
+  execute format('alter default privileges for role %I in schema infrx '
+                 'revoke execute on functions from anon, authenticated', current_user);
+end $$;
+
 alter default privileges in schema infrx
   grant select, insert, update, delete on tables to service_role;
 alter default privileges in schema infrx grant execute on functions to service_role;
+
+-- And the functions that already exist. `revoke all … from public` on a function does NOT
+-- remove Supabase's default-ACL grant to `anon`/`authenticated` (a separate grantee), so
+-- both roles held EXECUTE on all six functions 0005 creates and on the three RPCs, on
+-- both images. Each is revoked from PUBLIC, anon and authenticated, then granted back to
+-- exactly the callers that need it. The `infrx` RPC surface is handled at the end of this
+-- file; 0005 does its own functions after it creates them.
+revoke all on function public.is_operator() from public, anon;
+revoke all on function public.is_org_member(uuid) from public, anon;
+revoke all on function public.is_org_owner(uuid) from public, anon;
+revoke all on function public.org_usage_summary(uuid, timestamptz, timestamptz, uuid)
+  from public, anon;
+revoke all on function public.org_usage_daily(uuid, timestamptz, timestamptz, uuid)
+  from public, anon;
+revoke all on function public.org_balance(uuid) from public, anon;
+-- Trigger functions: a trigger fires with the table owner's rights, so nothing needs to
+-- call these directly.
+revoke all on function public.set_updated_at() from public, anon, authenticated;
+revoke all on function public.handle_new_user() from public, anon, authenticated;
 
 -- Row-level security on every tenant-bearing relation, with no policy for a browser
 -- role. `service_role` is BYPASSRLS (as in production), so this sits behind the
@@ -193,3 +232,7 @@ revoke all on function infrx.staged_media_guard() from public, anon, authenticat
 revoke all on function infrx.ensure_wallet() from public, anon, authenticated;
 revoke all on function infrx.now() from public, anon, authenticated;
 grant execute on function infrx.now() to service_role;
+-- The one `infrx` helper a platform client is meant to call: a re-run of
+-- `0002_seed_models.sql` wipes the pilot keys out of `models.limits`, and this
+-- puts them back (see 0003).
+grant execute on function infrx.extend_model_limits() to service_role;

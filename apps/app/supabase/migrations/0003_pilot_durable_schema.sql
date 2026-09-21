@@ -927,7 +927,9 @@ create trigger usage_events_pilot_tenant before insert or update on public.usage
 -- into the existing jsonb, leaving the values already there untouched. It is a
 -- function because re-running `0002_seed_models.sql` (which the supabase README
 -- documents) sets `limits = excluded.limits` and wipes the merge: an operator who does
--- that runs `select infrx.extend_model_limits();` to put it back.
+-- that runs `select infrx.extend_model_limits();
+-- 0004 revokes every `infrx` function from the browser roles; this one is meant to be
+-- callable by a platform client, so it is granted there.` to put it back.
 create or replace function infrx.extend_model_limits() returns int
 language sql security definer set search_path = infrx, public, pg_temp as $$
   with merged as (
@@ -938,6 +940,8 @@ language sql security definer set search_path = infrx, public, pg_temp as $$
   select count(*)::int from merged;
 $$;
 select infrx.extend_model_limits();
+-- 0004 revokes every `infrx` function from the browser roles; this one is meant to be
+-- callable by a platform client, so it is granted there.
 
 -- ==================================================== tenant coherence (r2) ===
 -- Ruling 7: every relation that names two tenant-bearing things proves they are the
