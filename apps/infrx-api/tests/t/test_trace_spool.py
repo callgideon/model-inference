@@ -38,7 +38,8 @@ from infrx.contracts.fakes.support import FailurePlan, FakeClock, SequentialIds
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import TraceEnvelope, TraceMode, TraceOfferResult
 from infrx.traces.spool import (FRAME, HEADER, MAX_ENVELOPE_BYTES, SpoolIO,
-                                SpoolTraceSink, recover, scan_segment, segment_header)
+                                SpoolTraceSink, frame_checksum, recover, scan_segment,
+                                segment_header)
 
 ID_A = "aaaaaaaa-0000-4000-8000-00000000000a"
 ID_B = "bbbbbbbb-0000-4000-8000-00000000000b"
@@ -65,42 +66,70 @@ class DrillIO(SpoolIO):
 
     def __init__(self, *, free: int = PLENTY, fail_write_on: int | None = None,
                  fail_fsync_on: int | None = None, block: threading.Event | None = None,
-                 entered: threading.Event | None = None) -> None:
+                 entered: threading.Event | None = None, write_error: BaseException | None = None,
+                 one_shot: bool = False, free_error: BaseException | None = None) -> None:
         self.free = free
         self.fail_write_on = fail_write_on
         self.fail_fsync_on = fail_fsync_on
         self.block = block
         self.entered = entered
+        self.write_error = write_error
+        self.one_shot = one_shot
+        self.free_error = free_error
         self.calls: Counter = Counter()
+        # (operation, thread name) for every call: the deterministic oracle for "no
+        # filesystem call happens on the event loop". A timing assertion would be a flake;
+        # a thread name is a fact.
+        self.threads: list[tuple[str, str]] = []
+
+    def _seen(self, operation: str) -> None:
+        self.calls[operation] += 1
+        self.threads.append((operation, threading.current_thread().name))
 
     def free_bytes(self, path: Path) -> int:
-        self.calls["free_bytes"] += 1
+        self._seen("free_bytes")
+        if self.free_error is not None:
+            raise self.free_error
         return self.free
 
     def write(self, fd: int, data: bytes) -> int:
-        self.calls["write"] += 1
+        self._seen("write")
         if self.block is not None:
             # the slow disk: the writer thread parks here, inside the filesystem
             if self.entered is not None:
                 self.entered.set()
             self.block.wait(5)
         if self.fail_write_on is not None and self.calls["write"] >= self.fail_write_on:
-            raise OSError(28, "No space left on device")
+            if self.one_shot:
+                self.fail_write_on = None
+            raise self.write_error or OSError(28, "No space left on device")
         return super().write(fd, data)
 
     def fsync(self, fd: int) -> None:
-        self.calls["fsync"] += 1
+        self._seen("fsync")
         if self.fail_fsync_on is not None and self.calls["fsync"] >= self.fail_fsync_on:
             raise OSError(5, "Input/output error")
         super().fsync(fd)
 
+    def fsync_dir(self, path: Path) -> None:
+        self._seen("fsync_dir")
+        super().fsync_dir(path)
+
     def truncate(self, path: Path, size: int) -> None:
-        self.calls["truncate"] += 1
+        self._seen("truncate")
         super().truncate(path, size)
 
     def unlink(self, path: Path) -> None:
-        self.calls["unlink"] += 1
+        self._seen("unlink")
         super().unlink(path)
+
+    def read(self, path: Path) -> bytes:
+        self._seen("read")
+        return super().read(path)
+
+    def open_append(self, path: Path) -> int:
+        self._seen("open_append")
+        return super().open_append(path)
 
 
 def sink(limits=None, *, io: SpoolIO | None = None, clock: FakeClock | None = None,
@@ -128,6 +157,9 @@ def _retire(spool: SpoolTraceSink) -> SpoolTraceSink:
             writer.shutdown(wait=False)
         for segment in old._segments:
             old._close_segment(segment)
+        if old._dir_lock is not None:
+            old.io.unlock_dir(old._dir_lock)
+            old._dir_lock = None
     return spool
 
 
@@ -273,12 +305,16 @@ def test_recovery_replays_only_fsynced_records_and_tolerates_a_torn_tail():
         stats = await spool.stats()
         assert stats["fsynced"] == 1 and stats["appended"] == 1
         assert stats["loss_reasons"]["shutdown"] == 1
+        # the segment's own bookkeeping follows the truncation, or T2 ships a record count
+        # that includes what the crash took away
+        assert stats["spool_unacked_records"] == 1
+        assert spool.segments()[0].records == 1
         scan = recover(spool.spool_dir)
         assert [row.request_id for row in scan.records] == [ID_A], scan.line()
         # a torn frame after the promised prefix is tolerated, not fatal
         segment = spool.spool_dir / spool.segments()[0].name
         with open(segment, "ab") as handle:
-            handle.write(FRAME.pack(4_096, 0, 0, 7)[:9])        # half a frame header
+            handle.write(FRAME.pack(4_096, 0, 0)[:7])           # half a frame header
         torn = recover(spool.spool_dir)
         assert [row.request_id for row in torn.records] == [ID_A]
         assert torn.torn == 1, torn.line()
@@ -321,6 +357,11 @@ def test_a_corrupt_record_is_not_replayed_and_stops_the_tail():
         scan = recover(spool.spool_dir)
         assert [row.request_id for row in scan.records] == [ID_A], scan.line()
         assert scan.torn == 1
+        # the same through the segment reader itself, which is what T2 calls: a checksum
+        # failure must stop the scan and keep what came before it, not discard the segment
+        direct = scan_segment(spool.segments()[0].name, path.read_bytes())
+        assert [row.request_id for row in direct.records] == [ID_A], direct.line()
+        assert direct.torn == 1 and direct.torn_at != {} and direct.unread_bytes > 0
         await spool.close()
     asyncio.run(scenario())
 
@@ -332,8 +373,8 @@ def test_a_poison_record_does_not_stop_the_scan():
     junk = b'{"not":"an envelope"}'
     good = codec.compact_bytes(b.trace(ID_A, content_bytes=0, metadata_bytes=16))
     data = (segment_header()
-            + FRAME.pack(len(junk), 0, binascii.crc32(junk), 0) + junk
-            + FRAME.pack(len(good), 0, binascii.crc32(good), 1) + good)
+            + FRAME.pack(len(junk), 0, frame_checksum(junk, (), 0)) + junk
+            + FRAME.pack(len(good), 0, frame_checksum(good, (), 0)) + good)
     scan = scan_segment(name, data)
     assert scan.poison == 1 and scan.torn == 0
     assert [row.request_id for row in scan.records] == [ID_A]
@@ -347,7 +388,7 @@ def test_a_frame_claiming_more_than_a_frame_may_hold_is_the_tail():
     a poison record instead - a corrupt length field silently promoted to a bad row."""
     payload = b"j" * (MAX_ENVELOPE_BYTES + 1)
     data = (segment_header()
-            + FRAME.pack(len(payload), 0, binascii.crc32(payload), 0) + payload)
+            + FRAME.pack(len(payload), 0, frame_checksum(payload, (), 0)) + payload)
     scan = scan_segment("trace-000000.seg", data)
     assert scan.torn == 1 and scan.poison == 0 and scan.records == []
 
@@ -372,7 +413,13 @@ def test_rotation_seals_by_size_and_keeps_every_record():
         views = spool.segments()
         assert len(views) > 1, "no rotation happened at all"
         assert sum(view.records for view in views) == 6
-        assert all(view.bytes <= 512 + 1_024 for view in views), [v.bytes for v in views]
+        # The bound is the configured one, not a generous multiple of it: a segment may
+        # only exceed it when it holds a single record too big to fit anywhere (and then it
+        # holds exactly that one). A loose bound here let rotation ignore the incoming
+        # record's size entirely.
+        assert all(view.bytes <= 512 or view.records == 1 for view in views), \
+            [(v.bytes, v.records) for v in views]
+        assert all(view.records >= 1 for view in views), "an empty segment was created"
         stats = await spool.stats()
         assert stats["appended"] == 6 and stats["fsynced"] == 6, stats
         assert len(recover(spool.spool_dir).records) == 6
@@ -391,14 +438,14 @@ def test_the_shipper_acks_whole_segments_and_nothing_is_ever_truncated():
         await spool.flush(spool.clock.now())
         active = spool.segments()[0]
         assert active.sealed is False
-        assert spool.ack(active.name) is False, "the active segment was acked"
-        assert spool.ack("trace-999999.seg") is False
+        assert await spool.ack(active.name) is False, "the active segment was acked"
+        assert await spool.ack("trace-999999.seg") is False
         name = await spool.rotate()
         assert name == active.name
         assert spool.segments()[0].sealed is True
-        shipped = spool.read_segment(name)
+        shipped = await spool.read_segment(name)
         assert [row.request_id for row in shipped.records] == [ID_A]
-        assert spool.ack(name) is True
+        assert await spool.ack(name) is True
         assert spool.segments() == ()
         assert (await spool.stats())["spool_bytes"] == 0
         assert not (spool.spool_dir / name).exists()
@@ -422,7 +469,7 @@ def test_a_restart_adopts_existing_segments_and_never_reuses_a_name():
         await first.close()
 
         second = SpoolTraceSink(FakeClock(), limits=DEFAULTS, spool_dir=first.spool_dir,
-                                io=DrillIO())
+                                io=DrillIO(), boot_id="bbbbbbbbbbbbbbbbbbbb")
         assert [view.name for view in second.segments()] == [old.name]
         assert second.segments()[0].sealed is True
         assert (await second.stats())["spool_bytes"] == old.bytes
@@ -491,7 +538,7 @@ def test_a_full_spool_drops_with_disk_budget_and_comes_back_on_an_ack():
         assert (await spool.stats())["loss_reasons"]["disk_budget"] == before + 1
         await spool.rotate()                            # the shipper ships and acks
         for view in spool.segments():
-            assert spool.ack(view.name) is True
+            assert await spool.ack(view.name) is True
         assert spool.paused is False
         assert (await spool.stats())["spool_bytes"] == 0
         assert await capture_one(spool, ID_B, b"after the ack") \
@@ -506,7 +553,9 @@ def test_the_free_disk_floor_refuses_before_the_host_runs_out():
     reason inference loses its disk. The pause lifts when the disk comes back - on the
     flusher's own timer, not only when the shipper acks something."""
     async def scenario():
-        io = DrillIO(free=DEFAULTS.trace_spool_min_free_bytes - 1)
+        # free space *above* the floor, but not by as much as this record needs: the check
+        # has to include the record, or the floor is crossed by exactly one write.
+        io = DrillIO(free=DEFAULTS.trace_spool_min_free_bytes + 10)
         spool = sink(io=io)
         await capture_one(spool, ID_A, b"nowhere to go")
         stats = await spool.flush(spool.clock.now())
@@ -521,6 +570,14 @@ def test_the_free_disk_floor_refuses_before_the_host_runs_out():
         await capture_one(spool, ID_B, b"room again")
         stats = await spool.flush(spool.clock.now())
         assert stats["appended"] == 1 and stats["spool_paused"] is False
+        # a disk that cannot be measured is not a disk with room on it
+        io.free_error = OSError(5, "statvfs failed")
+        await capture_one(spool, request_id(7), b"unmeasurable disk")
+        stats = await spool.flush(spool.clock.now())
+        assert stats["appended"] == 1, "a record was written to an unmeasurable disk"
+        assert stats["spool_paused"] is True
+        assert stats["loss_reasons"]["disk_budget"] == 3
+        io.free_error = None
         await spool.close()
     asyncio.run(scenario())
 
@@ -530,7 +587,10 @@ def test_a_write_error_drops_the_rest_of_the_batch_and_abandons_the_segment():
     abandoned rather than appended behind unreadable bytes, and every record the batch
     still held is counted `disk_error` instead of silently vanishing."""
     async def scenario():
-        io = DrillIO(fail_write_on=5)         # header, r1 head, r1 content, r2 head, boom
+        # One-shot on purpose: a disk that fails for ever would write nothing after the
+        # error whatever the code did, so "the rest of the batch is dropped" would be
+        # unobservable. This disk works again immediately - only the batch is abandoned.
+        io = DrillIO(fail_write_on=5, one_shot=True)   # header, r1, r1, r2 head, boom
         spool = sink(io=io)
         for rid in (ID_A, ID_B, ID_C):
             await capture_one(spool, rid, b"d" * 50)
@@ -576,13 +636,24 @@ def test_shutdown_is_a_counted_loss_not_a_silent_one():
     figures have to show."""
     async def scenario():
         spool = sink()
+        # one record already appended but not yet fsynced (the interval has not elapsed),
+        # and one still in memory: close must promise the first and count the second
+        await capture_one(spool, ID_B, b"appended, not yet promised")
+        appended = await spool.flush(spool.clock.now())
+        assert (appended["appended"], appended["fsynced"]) == (1, 0)
         await capture_one(spool, ID_A, b"in memory when the process stops")
         assert (await spool.stats())["in_memory"] == 1
         assert await spool.close() == 1
         stats = await spool.stats()
         assert stats["loss_reasons"]["shutdown"] == 1
+        assert stats["dropped"] == 1, "a shutdown loss was not a dropped record"
         assert stats["in_memory"] == 0 and stats["in_memory_content_bytes"] == 0
-        assert stats["appended"] == 0
+        assert stats["appended"] == 1
+        # close seals the active segment, and sealing fsyncs: an appended tail left
+        # unpromised by an orderly shutdown is a record we could have kept and did not
+        assert stats["fsynced"] == 1
+        assert spool.segments()[0].sealed is True
+        assert len(recover(spool.spool_dir).records) == 1
         assert await spool.close() == 0                 # idempotent
     asyncio.run(scenario())
 
@@ -693,7 +764,7 @@ def test_synthetic_concurrent_load_stays_within_the_declared_bounds():
             peak_spool = max(peak_spool, stats["spool_bytes"])
             await spool.rotate()
             for view in spool.segments():        # stand in for T2's shipper
-                spool.ack(view.name)
+                await spool.ack(view.name)
         elapsed = time.monotonic() - started
         rss_after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         stats = await spool.stats()

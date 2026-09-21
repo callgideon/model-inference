@@ -17,13 +17,19 @@ What runs where, because it is the whole design:
 
 | Thread | Operations | Touches |
 |---|---|---|
-| the event loop (request path) | `open`, `add`, `finish`, `abandon`, `offer`, `reap` | counters and the in-memory queue only - never disk, never `await` |
-| the spool writer (one per sink) | serialize, `write`, `fsync`, rotate, seal | segment files and `_segments` |
+| the event loop (request path) | `open`, `add`, `finish`, `abandon`, `offer`, `reap` | counters and the in-memory queue only - no syscall, no `await` |
+| the spool writer (one per sink) | `write`, `fsync`, rotate, seal, `unlink`, `statvfs`, segment reads | segment files and `_segments` |
+| the constructing thread, once | `mkdir`, `listdir`, `stat`, `flock` | adoption at boot |
 
 `add`/`offer` are O(1) counter updates, so a writer stuck in a 30-second write cannot
-block a request: that is the slow-disk drill. No lock is ever held across a filesystem
-call, for the same reason - the lock exists only so the loop thread can read the segment
-list while the writer appends to it.
+block a request: that is the slow-disk drill. **Every** filesystem call after construction
+belongs to the writer thread, including the pause re-check's `statvfs`, an `ack`'s `unlink`
+and the shipper's segment reads - round 1 of review measured a 2-second event-loop stall
+through each of the first two. No lock is held across a filesystem call either; the lock
+exists only so the loop thread can read the segment list while the writer appends to it.
+This sink therefore requires **one event loop and one writer**: `add` from two OS threads
+would race the shared budget counter, because the accounting's check-and-charge is not one
+atomic step (measured drift: 133,598 bytes charged with every capture closed).
 
 Durability states are reported separately (02): `in_memory` -> `appended` (handed to the
 OS) -> `fsynced` (the only records durability is claimed for). A record's charge against
@@ -33,23 +39,33 @@ so the process bound stays one budget instead of one budget plus an in-flight ba
 Segment format, version 1 (08 §5 "spool segment 1"):
 
     header : magic b"INFRXTRC" + uint16 version
-    frame  : uint32 envelope_bytes | uint32 content_bytes | uint32 crc32 | uint64 index
+    frame  : uint32 envelope_bytes | uint32 content_bytes | uint32 crc32
              followed by the canonical envelope JSON and then the raw content bytes
+    crc32  : over (envelope_bytes, content_bytes) + envelope JSON + content
 
 A crash tears at most the last frame, and the reader stops at the first frame that is
 short or fails its checksum. Nothing is ever rewritten or truncated in place: a shipped
-segment is *unlinked whole* (`ack`), which is what "no copytruncate" means here. The
-stable id a projection deduplicates by is `(segment name, index)`; segment names are never
-reused, and this sink deliberately does not dedupe by request (R42, the T1/G1 note).
+segment is *unlinked whole* (`ack`), which is what "no copytruncate" means here.
+
+The stable id a projection deduplicates by is `(segment name, position in segment)`.
+Neither half can be corrupted into another record's id: the position is derived from the
+frames the reader has already verified rather than stored (round 1 flipped one bit of a
+stored index and got two records under the same id), and a segment name carries the
+writing process's boot id, so it is unique for all time rather than only while the file
+exists - the shipper acking everything and the process restarting used to reissue
+`('trace-000000.seg', 0)` for a different record. The lengths are inside the checksum for
+the same reason. This sink deliberately does not dedupe by request (R42, the T1/G1 note).
 """
 from __future__ import annotations
 
 import asyncio
 import binascii
+import fcntl
 import os
 import shutil
 import struct
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -65,7 +81,8 @@ SEGMENT_MAGIC = b"INFRXTRC"
 SEGMENT_PREFIX = "trace-"
 SEGMENT_SUFFIX = ".seg"
 HEADER = struct.Struct("!8sH")          # magic, version
-FRAME = struct.Struct("!IIIQ")          # envelope bytes, content bytes, crc32, index
+FRAME = struct.Struct("!III")           # envelope bytes, content bytes, crc32
+LENGTHS = struct.Struct("!II")          # the part of the frame header the crc32 covers
 # A metadata row is a few KiB. A torn tail can claim any length at all, so an envelope
 # length past this is corruption rather than a record we are missing bytes for.
 MAX_ENVELOPE_BYTES = 1 << 20
@@ -129,6 +146,38 @@ class SpoolIO:
     def free_bytes(self, path: Path) -> int:
         return shutil.disk_usage(path).free
 
+    def fsync_dir(self, path: Path) -> None:
+        """Commit the directory entry, not just the file's data: an fsynced record in a
+        file whose *name* was never committed is not a record anybody can find."""
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(fd)
+        except OSError:
+            pass                     # some filesystems refuse; the data fsync still holds
+        finally:
+            os.close(fd)
+
+    def lock_dir(self, path: Path) -> int:
+        """An exclusive, non-blocking lock on the spool directory.
+
+        Two sinks on one directory is not a configuration, it is data loss: each adopts the
+        other's live segments as sealed and can ack them away while the other keeps writing
+        to the unlinked file.
+        """
+        fd = os.open(path / ".writer.lock", os.O_WRONLY | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+            raise RuntimeError(f"another process already spools traces in {path}") from None
+        return fd
+
+    def unlock_dir(self, fd: int) -> None:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
 
 # --------------------------------------------------------------------------------------
 # the segment format and its reader
@@ -137,15 +186,24 @@ def segment_header() -> bytes:
     return HEADER.pack(SEGMENT_MAGIC, SEGMENT_VERSION)
 
 
-def frame_checksum(payload: bytes, content: bytes) -> int:
-    """One checksum over envelope + content, computed without joining them: a 96 MiB
-    content part copied into a third buffer just to be hashed is 96 MiB of avoidable peak
-    memory."""
-    return binascii.crc32(content, binascii.crc32(payload))
+def frame_checksum(payload: bytes, parts, content_bytes: int) -> int:
+    """The checksum over a frame's **lengths**, its envelope and its content.
+
+    The lengths are inside the checksum because a corrupt length field is how a reader
+    silently mis-frames a record; round 1 of review found a single flipped bit turning one
+    record into two with a wrong identity. `parts` is chained through `crc32` rather than
+    joined, so a 96 MiB content part is never copied into a third buffer just to be hashed
+    - nor, since round 2, joined at all.
+    """
+    crc = binascii.crc32(LENGTHS.pack(len(payload), content_bytes))
+    crc = binascii.crc32(payload, crc)
+    for part in parts:
+        crc = binascii.crc32(part, crc)
+    return crc
 
 
-def pack_frame(payload: bytes, crc: int, content_bytes: int, index: int) -> bytes:
-    return FRAME.pack(len(payload), content_bytes, crc, index) + payload
+def pack_frame(payload: bytes, crc: int, content_bytes: int) -> bytes:
+    return FRAME.pack(len(payload), content_bytes, crc) + payload
 
 
 def frame_size(payload: bytes, content_bytes: int) -> int:
@@ -163,10 +221,16 @@ class Scan:
     torn: int = 0                  # segments whose tail was incomplete or corrupt
     poison: int = 0                # checksum-valid frames that are not a TraceEnvelope
     unreadable: int = 0            # bad magic or an unknown format version
+    # Where each torn segment stopped, and how many bytes it left unread. A benign tail is
+    # a few bytes; stopping 12 MiB early means a flipped bit cost a segment of *fsynced*
+    # records, and T2 has to be able to tell those apart (round 1, nonblocking).
+    torn_at: dict[str, int] = field(default_factory=dict)
+    unread_bytes: int = 0
 
     def line(self) -> str:
         return (f"{len(self.records)} records over {self.segments} segments; "
-                f"torn tails {self.torn}, poison {self.poison}, unreadable {self.unreadable}")
+                f"torn tails {self.torn}, poison {self.poison}, unreadable {self.unreadable}, "
+                f"unread {self.unread_bytes} B")
 
 
 def scan_segment(name: str, data: bytes, into: Scan | None = None) -> Scan:
@@ -174,47 +238,64 @@ def scan_segment(name: str, data: bytes, into: Scan | None = None) -> Scan:
 
     A pure function over bytes: the reader is the half a crash drill has to trust, so it
     is testable without a filesystem at all.
+
+    A record's identity is its **position** in the segment - the ordinal of the frame the
+    reader has just verified - and never a number read off the disk. Round 1 flipped one
+    bit in the stored index and got two records reported under the same id, checksum-clean,
+    because the index was outside the crc. A position cannot be corrupted into a different
+    position: the frame before it either verifies or the scan stops there.
     """
     scan = into if into is not None else Scan()
     scan.segments += 1
     if len(data) < HEADER.size:
         scan.unreadable += 1
+        scan.unread_bytes += len(data)
         return scan
     magic, version = HEADER.unpack_from(data)
     if magic != SEGMENT_MAGIC or version != SEGMENT_VERSION:
         # Never guess at a format we do not know: a future writer's segment is left for a
         # reader that understands it rather than half-parsed by this one.
         scan.unreadable += 1
+        scan.unread_bytes += len(data)
         return scan
     offset = HEADER.size
+    index = 0
     while offset < len(data):
         if len(data) - offset < FRAME.size:
-            scan.torn += 1
+            _torn(scan, name, offset, len(data))
             break
-        envelope_bytes, content_bytes, crc, index = FRAME.unpack_from(data, offset)
+        envelope_bytes, content_bytes, crc = FRAME.unpack_from(data, offset)
         body = offset + FRAME.size
         if envelope_bytes > MAX_ENVELOPE_BYTES or len(data) - body < envelope_bytes + content_bytes:
             # A partial write, or a length field that is itself corrupt. Either way this
             # is the tail: everything before it was whole.
-            scan.torn += 1
+            _torn(scan, name, offset, len(data))
             break
         payload = data[body:body + envelope_bytes]
         content = data[body + envelope_bytes:body + envelope_bytes + content_bytes]
-        if binascii.crc32(content, binascii.crc32(payload)) != crc:
-            scan.torn += 1
+        if frame_checksum(payload, (content,), content_bytes) != crc:
+            _torn(scan, name, offset, len(data))
             break
         offset = body + envelope_bytes + content_bytes
+        position, index = index, index + 1
         try:
             envelope = TraceEnvelope.model_validate_json(payload)
         except ValueError:
             # Framing was intact, so the rest of the segment is still readable; the
-            # record itself is poison and T2 quarantines it rather than stopping here.
+            # record itself is poison and T2 quarantines it rather than stopping here. The
+            # position is still spent, so the ids of the records after it do not shift.
             scan.poison += 1
             continue
         scan.records.append(envelope)
         scan.contents.append(content)
-        scan.ids.append((name, index))
+        scan.ids.append((name, position))
     return scan
+
+
+def _torn(scan: Scan, name: str, offset: int, size: int) -> None:
+    scan.torn += 1
+    scan.torn_at[name] = offset
+    scan.unread_bytes += size - offset
 
 
 def segment_names(spool_dir: Path, io: SpoolIO | None = None) -> list[str]:
@@ -250,6 +331,11 @@ class SegmentView:
     bytes: int
     fsynced_records: int
     sealed: bool
+    # A segment this process found on disk rather than wrote: `records` and
+    # `fsynced_records` are **unknown** (counting them would mean reading up to 10 GiB at
+    # boot), so T2 must scan it rather than trust a zero. Round 1 caught
+    # `spool_unacked_records` silently under-reporting after a restart.
+    adopted: bool = False
 
 
 @dataclass
@@ -263,10 +349,64 @@ class _Segment:
     synced_records: int = 0
     sealed: bool = False
     fsync_failed: bool = False
+    adopted: bool = False
 
     def view(self) -> SegmentView:
         return SegmentView(self.name, self.records, self.written, self.synced_records,
-                           self.sealed)
+                           self.sealed, self.adopted)
+
+
+@dataclass
+class _Row:
+    """One accepted record as the writer will see it: already serialized, with the loss
+    count its capture has already contributed.
+
+    `counted` travels with the row because R42 bounds the losses **one capture** may
+    contribute, and a record the writer refuses is the same capture's second refusal.
+    Round 1: a capture that breached the budget and was then refused by a failing disk
+    reported `{'memory_budget': 1, 'disk_error': 1}`.
+    """
+
+    payload: bytes
+    parts: tuple[bytes, ...]
+    content_bytes: int
+    metadata_bytes: int
+    counted: bool
+
+
+class _Settlement:
+    """Applies one writer batch to the counters, exactly once, however the call ended.
+
+    It is a done-callback rather than code after the `await`, because the awaiting flush can
+    be cancelled: the batch has already left `queued`, the writer is still holding it, and
+    only something attached to the *future* can be relied on to release the charges and
+    count the records. A writer that raises something other than `OSError` (a bug, not a
+    disk) is the same problem, so that is settled here too rather than escaping as a flush
+    exception with five records silently gone.
+    """
+
+    def __init__(self, sink: "SpoolTraceSink", batch: "list[_Row]", now: datetime) -> None:
+        self.sink, self.batch, self.now, self.done = sink, batch, now, False
+
+    def __call__(self, future) -> None:
+        if self.done:
+            return
+        self.done = True
+        sink = self.sink
+        try:
+            result = future.result()
+        except BaseException:                    # noqa: BLE001 - a writer bug, not a disk
+            result = _WriteResult(dropped=[(TraceLossReason.disk_error, row.counted)
+                                           for row in self.batch])
+        sink._apply(result)
+        # The charge is released now, not when the batch was taken: until the writer has
+        # appended these bytes they are still in this process, and the budget says so.
+        sink.content_bytes = max(0, sink.content_bytes
+                                 - sum(row.content_bytes for row in self.batch))
+        sink.metadata_bytes = max(0, sink.metadata_bytes
+                                  - sum(row.metadata_bytes for row in self.batch))
+        if result.fsynced or result.fsync_failed:
+            sink._last_fsync = self.now
 
 
 @dataclass
@@ -275,7 +415,7 @@ class _WriteResult:
 
     appended: int = 0
     fsynced: int = 0
-    dropped: list[TraceLossReason] = field(default_factory=list)
+    dropped: list[tuple[TraceLossReason, bool]] = field(default_factory=list)
     fsync_failed: int = 0          # appended records an fsync error unpromised
 
 
@@ -308,16 +448,21 @@ class SpoolCapture(FakeTraceCapture):
         self.parts.clear()
         super()._discard(reason)
 
-    def take_content(self, declared: int) -> bytes:
-        """The charged bytes, handed to the queue and released from the capture.
+    def take_content(self, declared: int) -> tuple[tuple[bytes, ...], int]:
+        """The charged parts and their total, handed over and released from the capture.
 
         `declared` is what the envelope says; the accounting has already refused a claim
         larger than the charge, and a capture that finished as stripped metadata declares
         zero, so its parts are dropped rather than spooled.
+
+        The parts are **not joined**: round 1 pointed out that `b"".join` of a 96 MiB
+        capture is a memcpy on the event loop, and a second copy of the whole content at
+        peak. The writer checksums and writes them in order instead.
         """
-        content = b"".join(self.parts) if declared else b""
+        parts = tuple(self.parts) if declared else ()
+        total = sum(len(part) for part in parts)
         self.parts.clear()
-        return content
+        return parts, total
 
 
 class SpoolTraceSink(FakeTraceSink):
@@ -331,7 +476,8 @@ class SpoolTraceSink(FakeTraceSink):
 
     def __init__(self, clock=None, *, limits: PilotSettings = DEFAULTS, failures=None,
                  spool_dir: Path | str | None = None, io: SpoolIO | None = None,
-                 segment_max_bytes: int = SEGMENT_MAX_BYTES) -> None:
+                 segment_max_bytes: int = SEGMENT_MAX_BYTES,
+                 boot_id: str | None = None, lock_dir: bool = True) -> None:
         super().__init__(clock, limits=limits, failures=failures)
         configured = str(spool_dir if spool_dir is not None else limits.trace_spool_dir).strip()
         if not configured:
@@ -343,13 +489,26 @@ class SpoolTraceSink(FakeTraceSink):
         self.io = io or SpoolIO()
         self.segment_max_bytes = segment_max_bytes
         self.io.mkdir(self.spool_dir)
+        # One writer per spool directory, enforced rather than assumed: two sinks sharing a
+        # directory adopted each other's *live* segments as sealed and acked them out from
+        # under the other process, which then appended to an unlinked file (round 1).
+        self._dir_lock: int | None = self.io.lock_dir(self.spool_dir) if lock_dir else None
+        # Segment names carry this process's boot id, so a name is unique for all time
+        # rather than only while the previous file still exists. `_next_index` alone made
+        # `(segment, position)` repeat after the shipper had acked everything and the
+        # process restarted - which is the steady state: drain, then deploy.
+        self.boot_id = boot_id or f"{time.time_ns():016x}{os.getpid() & 0xffff:04x}"
         self._lock = threading.Lock()
         self._writer: ThreadPoolExecutor | None = None
         self._segments: list[_Segment] = []
         self._next_index = 0
-        # (envelope bytes, content bytes) per queued row, in lockstep with the inherited
-        # `queued`: what the writer will append, already serialized.
-        self._pending: list[tuple[bytes, bytes]] = []
+        self._closed = False
+        # At most one flush in flight: a caller that fires flushes without awaiting them
+        # otherwise piles up batches behind a blocked writer, outside the queue ceiling
+        # that is supposed to bound memory (round 1 measured 299,901 records in flight).
+        self._flush_lock = asyncio.Lock()
+        # One `_Row` per queued record, in lockstep with the inherited `queued`.
+        self._pending: list[_Row] = []
         # Counters, not the inherited `appended`/`fsynced` lists: a spool exists so that a
         # written record can leave memory, and those two lists are what keeping every
         # record for ever looks like. They stay empty here; `stats` reads these.
@@ -367,18 +526,20 @@ class SpoolTraceSink(FakeTraceSink):
 
     def _adopt_existing_segments(self) -> None:
         """Segments a previous process left behind are still the shipper's to ack, so they
-        count against the host cap and their names are never reused. They are sealed: a
-        restarted process must never append behind a tail it did not write, because the
-        reader stops at a torn frame and would lose everything after it."""
+        count against the host cap. They are sealed: a restarted process must never append
+        behind a tail it did not write, because the reader stops at a torn frame and would
+        lose everything after it.
+
+        Their record counts are left at zero and marked `adopted`, because counting them
+        means reading every byte of a spool that may hold 10 GiB at boot. T2 scans an
+        adopted segment instead of trusting the count.
+        """
         for name in segment_names(self.spool_dir, self.io):
             path = self.spool_dir / name
             size = self.io.size(path)
             self._segments.append(_Segment(name=name, path=path, written=size, synced=size,
-                                           sealed=True))
+                                           sealed=True, adopted=True))
             self.spool_bytes += size
-            digits = name[len(SEGMENT_PREFIX):-len(SEGMENT_SUFFIX)]
-            if digits.isdigit():
-                self._next_index = max(self._next_index, int(digits) + 1)
 
     # --- the request path -------------------------------------------------------------
     def open(self, request_id: str, org_id: str, mode: TraceMode,
@@ -404,16 +565,22 @@ class SpoolTraceSink(FakeTraceSink):
         reported accepted, and there is no honest counter for that; and an envelope
         assembled past the record validator (`model_construct`, which is how a caller bug
         reaches a sink) can be unserializable, so this is a trust boundary like any other.
-        The *content* is not touched here: checksumming 96 MiB on the request path is
-        exactly the work the writer thread exists to take away.
+        The *content* is not touched here - not even joined: checksumming or copying 96 MiB
+        on the request path is exactly the work the writer thread exists to take away.
         """
-        content = capture.take_content(envelope.content_bytes) if capture is not None else b""
+        parts, content_bytes = (capture.take_content(envelope.content_bytes)
+                                if capture is not None else ((), 0))
         reason = None
-        if self.paused:
+        if self._closed:
+            # A closed sink keeps nothing: the writer is gone, so accepting would be a
+            # promise no thread is left to keep (round 1: `finish` answered
+            # `accepted_in_memory` after `close` and the next flush resurrected a thread).
+            reason = TraceLossReason.shutdown
+        elif self.paused:
             # Nowhere for this record to land: dropped now with the honest reason rather
             # than after the memory queue has filled with rows that cannot be written.
             reason = TraceLossReason.disk_budget
-        elif len(content) != envelope.content_bytes:
+        elif content_bytes != envelope.content_bytes:
             # The bytes held and the bytes declared are one fact. The accounting refuses a
             # claim *larger* than the charge; a smaller one would spool content the row
             # does not account for, which is the same defect from the other side.
@@ -437,9 +604,13 @@ class SpoolTraceSink(FakeTraceSink):
                 capture.content_bytes = 0
             return self._drop(reason,
                               counted=capture.counted if capture is not None else False)
+        counted = capture.counted if capture is not None else False
         result = super()._enqueue(envelope, charged=charged, capture=capture)
         if result is TraceOfferResult.accepted_in_memory:
-            self._pending.append((payload, content))
+            self._pending.append(_Row(payload=payload, parts=parts,
+                                      content_bytes=content_bytes,
+                                      metadata_bytes=envelope.metadata_bytes,
+                                      counted=counted))
         return result
 
     # --- durability -------------------------------------------------------------------
@@ -453,36 +624,35 @@ class SpoolTraceSink(FakeTraceSink):
         the flusher and nothing else, which is why the writer is its own thread.
         """
         self.failures.before("flush")
-        if self.paused:
-            # The flusher is the timer: re-checking the host limits here is what lifts a
-            # pause when the disk was freed by something other than an `ack`. It is a
-            # `statvfs` on the flush path, never on the request path.
-            self._refuse_bytes(self._refused_need)
-        assert len(self.queued) == len(self._pending), "the queue and its bytes diverged"
-        batch = list(zip(self.queued, self._pending))
-        self.queued, self._pending = [], []
-        now = self.clock.now()
-        fsync_due = (now - self._last_fsync).total_seconds() >= self.limits.trace_fsync_interval_s
-        if not batch and not (fsync_due and self._unsynced()):
+        if self._closed:
             return await self.stats()
-        result = await self._run(self._write_batch, batch, fsync_due)
-        self._apply(result)
-        # The charge is released now, not when the batch was taken: until the writer has
-        # appended these bytes they are still in this process, and the budget says so.
-        self.content_bytes = max(0, self.content_bytes
-                                 - sum(len(content) for _e, (_p, content) in batch))
-        self.metadata_bytes = max(0, self.metadata_bytes
-                                  - sum(envelope.metadata_bytes for envelope, _b in batch))
-        if result.fsynced or result.fsync_failed:
-            self._last_fsync = now
-        return await self.stats()
+        async with self._flush_lock:
+            assert len(self.queued) == len(self._pending), "the queue and its bytes diverged"
+            batch, self.queued, self._pending = self._pending, [], []
+            now = self.clock.now()
+            fsync_due = ((now - self._last_fsync).total_seconds()
+                         >= self.limits.trace_fsync_interval_s)
+            if not batch and not self.paused and not (fsync_due and self._unsynced()):
+                return await self.stats()
+            future = self._submit(self._write_batch, batch, fsync_due)
+            settled = _Settlement(self, batch, now)
+            future.add_done_callback(settled)
+            # `shield`: a caller that times this flush out (its only bound, since the
+            # deadline argument is a database instant) must not leave the batch in limbo.
+            # The writer keeps going and the callback settles the counters and the charges
+            # whichever way it ends - round 1 lost five records and 5 MB of budget for ever
+            # to `wait_for(flush, 0.2)`.
+            await asyncio.shield(future)
+            return await self.stats()
 
     def _apply(self, result: _WriteResult) -> None:
         """Writer-thread outcome -> the counters the request path reads."""
         self.appended_records += result.appended
         self.fsynced_records += result.fsynced
-        for reason in result.dropped:
-            self._drop(reason)
+        for reason, counted in result.dropped:
+            # `counted` is the capture's own loss count travelling with its row (R42): the
+            # drop is recorded either way, the *loss* only once per capture.
+            self._drop(reason, counted=counted)
         if result.fsync_failed:
             # Appended, then unpromised: not refused (the bytes may even be on disk), but
             # nothing here will claim durability for them.
@@ -522,17 +692,29 @@ class SpoolTraceSink(FakeTraceSink):
         with self._lock:
             return tuple(segment.view() for segment in self._segments)
 
-    def read_segment(self, name: str) -> Scan:
-        """The shipper's read path: the checksum-valid records of one segment."""
+    async def read_segment(self, name: str) -> Scan:
+        """The shipper's read path: the checksum-valid records of one segment.
+
+        `async` and routed through the writer, like everything else that touches a file:
+        reading a 16 MiB segment on the event loop would be a request-path stall on the
+        shipper's schedule.
+        """
+        return await self._run(self._read_segment, name)
+
+    def _read_segment(self, name: str) -> Scan:
         return scan_segment(name, self.io.read(self.spool_dir / name))
 
-    def ack(self, name: str) -> bool:
+    async def ack(self, name: str) -> bool:
         """Delete a shipped segment, whole.
 
         Only a sealed segment may go: the active one is still being appended to, and
         rewriting a file the writer holds open is precisely the copytruncate race this
         design exists to avoid (TRACE-RECOVER). Acking frees disk, so it is also where a
         paused spool comes back.
+
+        `async` since round 1: the `unlink` and the pause re-check are filesystem calls, and
+        on the loop thread they were a 2-second event-loop stall on a slow disk. The list
+        bookkeeping stays on the loop (it is the loop's data); only the syscalls move.
         """
         with self._lock:
             segment = next((s for s in self._segments if s.name == name), None)
@@ -540,11 +722,16 @@ class SpoolTraceSink(FakeTraceSink):
                 return False
             self._segments.remove(segment)
             self.spool_bytes = max(0, self.spool_bytes - segment.written)
-        self.io.unlink(segment.path)
+        await self._run(self._unlink_acked, segment.path)
+        return True
+
+    def _unlink_acked(self, path: Path) -> None:
+        """Writer thread: the syscalls of an ack."""
+        self.io.unlink(path)
+        self.io.fsync_dir(self.spool_dir)        # the deletion, not just the data
         if self.paused:
             # recomputed against the freed disk, for the record that was refused
             self._refuse_bytes(self._refused_need)
-        return True
 
     async def rotate(self) -> str | None:
         """Seal the active segment so the shipper can ack it; returns its name.
@@ -558,7 +745,12 @@ class SpoolTraceSink(FakeTraceSink):
 
     async def close(self, *, drop_queued: bool = True) -> int:
         """Orderly shutdown: be honest about what is still in memory (`shutdown`, 08 §3),
-        seal the segments and stop the writer. Returns what it dropped."""
+        seal the segments and stop the writer. Returns what it dropped.
+
+        The sink is closed afterwards and stays closed: a later `finish`/`offer` is dropped
+        `shutdown` rather than accepted into a process that has no writer left, and `flush`
+        no longer starts one.
+        """
         lost = 0
         if drop_queued and self.queued:
             lost = len(self.queued)
@@ -568,10 +760,16 @@ class SpoolTraceSink(FakeTraceSink):
             self.loss_reasons[TraceLossReason.shutdown] += lost
             self.content_bytes = self.metadata_bytes = 0
         if self._writer is not None:
-            name, result = await self._run(self._seal_active)
+            # Seal on the way out: an unsynced tail left behind is a record this process
+            # appended and never promised, and sealing fsyncs before it closes.
+            _name, result = await self._run(self._seal_active)
             self._apply(result)
             writer, self._writer = self._writer, None
             writer.shutdown(wait=True)
+        self._closed = True
+        if self._dir_lock is not None:
+            self.io.unlock_dir(self._dir_lock)
+            self._dir_lock = None
         return lost
 
     def crash(self) -> int:
@@ -612,6 +810,9 @@ class SpoolTraceSink(FakeTraceSink):
 
     # --- the writer thread ------------------------------------------------------------
     def _executor(self) -> ThreadPoolExecutor:
+        if self._closed:
+            # A closed sink does not quietly start a second writer thread for a late call.
+            raise RuntimeError("this trace sink is closed")
         if self._writer is None:
             # Lazily, and one worker: the spool writer is a single serial thread, so
             # segment state needs no ordering discipline beyond "the writer owns it". A
@@ -621,9 +822,13 @@ class SpoolTraceSink(FakeTraceSink):
                                               thread_name_prefix="infrx-trace-spool")
         return self._writer
 
+    def _submit(self, function, *args):
+        """Hand work to the writer thread and return its future, so a caller that is
+        cancelled can still have the result settled by a done-callback."""
+        return asyncio.get_running_loop().run_in_executor(self._executor(), function, *args)
+
     async def _run(self, function, *args):
-        return await asyncio.get_running_loop().run_in_executor(self._executor(), function,
-                                                                *args)
+        return await self._submit(function, *args)
 
     def _unsynced(self) -> int:
         """Appended records an fsync could still promise."""
@@ -631,32 +836,38 @@ class SpoolTraceSink(FakeTraceSink):
             return sum(segment.records - segment.synced_records for segment in self._segments
                        if segment.fd is not None and not segment.fsync_failed)
 
-    def _write_batch(self, batch, fsync_due: bool) -> _WriteResult:
+    def _write_batch(self, batch: "list[_Row]", fsync_due: bool) -> _WriteResult:
         """The only code that touches a file. Runs in the writer thread."""
         result = _WriteResult()
         broken = False
-        for _envelope, (payload, content) in batch:
+        if not batch and self.paused:
+            # Nothing to write, but the pause is this thread's to re-evaluate: the flusher
+            # is the timer that lifts one when the disk comes back, and the `statvfs` that
+            # decides belongs here rather than on the event loop.
+            self._refuse_bytes(self._refused_need)
+        for row in batch:
             if broken:
-                result.dropped.append(TraceLossReason.disk_error)
+                result.dropped.append((TraceLossReason.disk_error, row.counted))
                 continue
-            crc = frame_checksum(payload, content)
-            need = frame_size(payload, len(content))
+            crc = frame_checksum(row.payload, row.parts, row.content_bytes)
+            need = frame_size(row.payload, row.content_bytes)
             refusal = self._refuse_bytes(need)
             if refusal is not None:
-                result.dropped.append(refusal)
+                result.dropped.append((refusal, row.counted))
                 continue
             try:
                 segment = self._segment_for(need, result)
-                self.io.write(segment.fd, pack_frame(payload, crc, len(content),
-                                                     segment.records))
-                if content:
-                    self.io.write(segment.fd, content)
-            except OSError:
-                # The disk refused mid-batch. Stop writing: the handle is at an arbitrary
-                # offset, so the segment is abandoned (its tail is torn, which the reader
-                # tolerates) and the rest of the batch is dropped honestly rather than
-                # appended behind unreadable bytes.
-                result.dropped.append(TraceLossReason.disk_error)
+                self.io.write(segment.fd, pack_frame(row.payload, crc, row.content_bytes))
+                for part in row.parts:
+                    self.io.write(segment.fd, part)
+            except Exception:                    # noqa: BLE001
+                # The disk refused mid-batch - or something worse than a disk did, which is
+                # a bug rather than ENOSPC but must not escape the writer either: a raised
+                # batch is records the sink has already reported accepted. Stop writing: the
+                # handle is at an arbitrary offset, so the segment is abandoned (its tail is
+                # torn, which the reader tolerates) and the rest of the batch is dropped
+                # honestly rather than appended behind unreadable bytes.
+                result.dropped.append((TraceLossReason.disk_error, row.counted))
                 self._abandon_active(result)
                 broken = True
                 continue
@@ -729,18 +940,35 @@ class SpoolTraceSink(FakeTraceSink):
         return self._open_segment()
 
     def _open_segment(self) -> _Segment:
-        """A name is never reused, so `(segment, index)` is a stable id a projection can
-        deduplicate by even across a restart."""
+        """A name carries this process's boot id, so it is never reused and
+        `(segment, position)` is a stable id a projection can deduplicate by across a
+        restart - including the restart that follows the shipper acking everything."""
         while True:
             with self._lock:
-                name = f"{SEGMENT_PREFIX}{self._next_index:06d}{SEGMENT_SUFFIX}"
+                name = (f"{SEGMENT_PREFIX}{self.boot_id}-"
+                        f"{self._next_index:06d}{SEGMENT_SUFFIX}")
                 self._next_index += 1
             path = self.spool_dir / name
             if not self.io.exists(path):
                 break
         fd = self.io.open_append(path)
         segment = _Segment(name=name, path=path, fd=fd)
-        self.io.write(fd, segment_header())
+        try:
+            self.io.write(fd, segment_header())
+            # The *name* has to survive too: without this an fsynced record could be in a
+            # file the directory entry for which was never committed.
+            self.io.fsync_dir(self.spool_dir)
+        except BaseException:
+            # Round 1: the descriptor leaked and the header-less file stayed on disk on
+            # every failed open - 300 flushes against a full disk left 300 orphans and 300
+            # descriptors, which is `EMFILE` on the gateway. Neither is tracked anywhere, so
+            # both are cleaned up here before the failure travels on.
+            self._close_segment(segment)
+            try:
+                self.io.unlink(path)
+            except OSError:
+                pass
+            raise
         segment.written = HEADER.size
         with self._lock:
             self.spool_bytes += HEADER.size
@@ -765,12 +993,24 @@ class SpoolTraceSink(FakeTraceSink):
 
     def _abandon_active(self, result: _WriteResult) -> None:
         """A segment whose write failed: sealed without an fsync, since the failing disk
-        is in no state to promise anything and the torn tail is what the reader expects."""
+        is in no state to promise anything and the torn tail is what the reader expects.
+
+        Its size is re-read from disk, because a failed write may still have landed some of
+        its bytes and those bytes count against the host cap whatever the writer thinks.
+        """
         with self._lock:
             active = self._segments[-1] if self._segments else None
-        if active is not None and not active.sealed:
-            active.sealed = True
-            self._close_segment(active)
+        if active is None or active.sealed:
+            return
+        active.sealed = True
+        self._close_segment(active)
+        try:
+            landed = self.io.size(active.path)
+        except OSError:
+            return
+        with self._lock:
+            self.spool_bytes += max(0, landed - active.written)
+            active.written = max(active.written, landed)
 
     def _seal_active(self) -> tuple[str | None, _WriteResult]:
         result = _WriteResult()
