@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""JUDGE-SCORES: consented, deterministic, stratified selection.
+"""JUDGE-SCORES: consented, deterministic, stratified selection (rulings R43, R56).
 
     uv run --frozen pytest -q tests/j/test_sampling.py
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from infrx.contracts import errors
 from infrx.contracts.records import AuthorRole, ContentState, FeedbackName, TraceMode
-from infrx.judge import CalibrationDesign, DEFAULT_DESIGN, Exclusion, Stratum, select
+from infrx.judge import (CalibrationDesign, DEFAULT_DESIGN, Exclusion, Stratum, deduplicate,
+                         select)
 
 from . import fakes
 
@@ -19,6 +22,10 @@ def draw(candidates, *, consent=None, seed: str = SEED, rubric_version: int = 1,
          design: CalibrationDesign = DEFAULT_DESIGN, org_id: str = fakes.ORG_A):
     return select(org_id, consent or fakes.consent(org_id), tuple(candidates),
                   rubric_version=rubric_version, seed=seed, now=fakes.NOW, design=design)
+
+
+def reasons(selection) -> list[tuple[str, Exclusion]]:
+    return [(e.request_id, e.reason) for e in selection.excluded]
 
 
 # --- consent ---------------------------------------------------------------------
@@ -51,8 +58,27 @@ def test_another_tenants_trace_is_never_a_sample():
     theirs = fakes.candidate(2, org_id=fakes.ORG_B)
     selection = draw((mine, theirs))
     assert selection.sample_ids == (mine.request_id,)
-    assert [(e.request_id, e.reason) for e in selection.excluded] == [
-        (theirs.request_id, Exclusion.not_owned)]
+    assert reasons(selection) == [(theirs.request_id, Exclusion.not_owned)]
+
+
+def test_evaluation_consent_is_not_retroactive():
+    """R56: consent granted today does not authorize last month's traces, and a trace
+    created after the consent was revoked is outside it too. The customer agreed to send
+    *future* requests for scoring, not the archive."""
+    before = fakes.candidate(1, started_at=fakes.CONSENT_FROM - timedelta(seconds=1))
+    at_the_edge = fakes.candidate(2, started_at=fakes.CONSENT_FROM)
+    inside = fakes.candidate(3)
+    selection = draw((before, at_the_edge, inside))
+    assert set(selection.sample_ids) == {at_the_edge.request_id, inside.request_id}
+    assert reasons(selection) == [(before.request_id, Exclusion.outside_consent_window)]
+
+    # A revocation dated in the future leaves the record current now, but a trace made
+    # after that instant is still outside the window.
+    future_revocation = fakes.consent(revoked_at="2026-12-01T00:00:00Z")
+    later = fakes.candidate(4, started_at=datetime(2027, 1, 1, tzinfo=timezone.utc))
+    selection = draw((inside, later), consent=future_revocation)
+    assert selection.sample_ids == (inside.request_id,)
+    assert reasons(selection) == [(later.request_id, Exclusion.outside_consent_window)]
 
 
 # --- exclusions -------------------------------------------------------------------
@@ -69,58 +95,130 @@ def test_content_that_cannot_be_read_is_excluded_with_its_reason(state, reason):
     capture failure - and the console shows the difference."""
     selection = draw((fakes.candidate(1, content=state),))
     assert selection.samples == ()
-    assert [(e.request_id, e.reason) for e in selection.excluded] == [(fakes.uuid(1), reason)]
+    assert reasons(selection) == [(fakes.uuid(1), reason)]
 
 
 def test_a_non_full_trace_is_excluded_even_with_consent():
     selection = draw((fakes.candidate(1, mode=TraceMode.minimal),))
     assert selection.samples == ()
-    assert selection.excluded[0].reason is Exclusion.trace_mode_not_full
+    assert reasons(selection) == [(fakes.uuid(1), Exclusion.trace_mode_not_full)]
+
+
+def test_a_request_that_produced_no_output_is_skipped():
+    """R56 / `06` §3.1 step 3: a 5xx has no answer to grade, so it is `skipped_no_output`
+    rather than a failure sample - grading an empty response would score the platform's
+    outage as the model's quality."""
+    selection = draw((fakes.candidate(1, http_status=500),
+                      fakes.candidate(2, http_status=503, finish_reason="length"),
+                      fakes.candidate(3, http_status=499)))
+    assert selection.sample_ids == (fakes.uuid(3),)
+    assert reasons(selection) == [(fakes.uuid(1), Exclusion.skipped_no_output),
+                                  (fakes.uuid(2), Exclusion.skipped_no_output)]
 
 
 def test_a_trace_already_labelled_at_this_rubric_version_is_excluded():
-    """J4: a new rubric version is a new series, so the same trace is a candidate
-    again there and only there."""
+    """J4: a new rubric version is a new series, so the same trace is a candidate again
+    there and only there."""
     labelled = fakes.candidate(1, entries=(fakes.label(fakes.uuid(1), rubric_version=1),))
-    assert draw((labelled,), rubric_version=1).excluded[0].reason is Exclusion.already_calibrated
+    assert reasons(draw((labelled,), rubric_version=1)) == [(fakes.uuid(1),
+                                                            Exclusion.already_calibrated)]
     assert draw((labelled,), rubric_version=2).sample_ids == (fakes.uuid(1),)
+
+
+@pytest.mark.parametrize("version", [True, "1", 1.0, 0, 5000, None])
+def test_the_rubric_version_is_validated(version):
+    """A string version or 5000 would silently never match a stored label, so every
+    trace would look uncalibrated for ever."""
+    with pytest.raises(errors.InvalidRequest):
+        draw((fakes.candidate(1),), rubric_version=version)
+
+
+# --- duplicates from the projection (R56) ------------------------------------------
+def test_a_repeated_row_is_sampled_once():
+    """A ClickHouse projection returns the same trace twice until it merges, which is
+    why `06` §3.1 queries `FINAL`. Sampling it twice would grade and bill it twice and
+    put a duplicate into `JudgeRun.sample_ids`."""
+    row = fakes.candidate(1)
+    selection = draw((row, row, row))
+    assert selection.sample_ids == (row.request_id,)
+    assert len(set(selection.sample_ids)) == len(selection.sample_ids)
+    assert reasons(selection) == [(row.request_id, Exclusion.duplicate_row)] * 2
+
+
+def test_a_conflicting_duplicate_is_excluded_rather_than_sampled_twice():
+    """R56: two rows for one trace that *disagree* - one truncated, one not - would land
+    the same trace in two strata. We cannot tell which is true, so neither is sampled."""
+    row = fakes.candidate(1)
+    conflicting = fakes.truncated(1)
+    selection = draw((row, conflicting))
+    assert selection.samples == ()
+    assert reasons(selection) == [(row.request_id, Exclusion.conflicting_duplicate)] * 2
+
+    # and it does not poison the rest of the draw
+    selection = draw((row, conflicting, fakes.candidate(2)))
+    assert selection.sample_ids == (fakes.uuid(2),)
+
+
+def test_deduplication_accounts_for_every_row():
+    """Each input row is either a sample or an exclusion; nothing is silently dropped."""
+    rows = (fakes.candidate(1), fakes.candidate(1), fakes.candidate(2), fakes.truncated(2),
+            fakes.candidate(3))
+    selection = draw(rows)
+    assert len(selection.samples) + len(selection.excluded) == len(rows)
+    kept, excluded = deduplicate(rows)
+    assert [c.request_id for c in kept] == [fakes.uuid(1), fakes.uuid(3)]
+    assert len(kept) + len(excluded) == len(rows)
 
 
 # --- stratification ---------------------------------------------------------------
 def test_the_design_is_25_uniform_15_failures_10_feedback():
-    """`research/traces/06` §3.9's plan, and its bounds bite: an oversupplied stratum
-    is cut to its size and the overflow is reported, never spilled into another."""
+    """`research/traces/06` §3.9's plan, and its bounds bite: an oversupplied stratum is
+    cut to its size and the overflow is reported, never spilled into another."""
     selection = draw(fakes.population())
     assert selection.counts == {Stratum.failures: 15, Stratum.feedback: 10, Stratum.uniform: 25}
     assert len(selection.samples) == 50 == DEFAULT_DESIGN.total
+    assert len(set(selection.sample_ids)) == 50
     assert all(e.reason is Exclusion.stratum_full for e in selection.excluded)
     assert len(selection.excluded) == 80 - 50
 
 
 def test_a_stratum_that_cannot_be_filled_is_reported_not_backfilled():
-    """A calibration run of 50 uniform samples is not the design. J3 grades per
-    stratum, so the shortfall is data, not something to paper over."""
+    """A calibration run of 50 uniform samples is not the design. J3 grades per stratum,
+    so the shortfall is data, not something to paper over."""
     selection = draw(fakes.population(uniform=40, failures=2, feedback_bearing=0))
     assert selection.counts == {Stratum.failures: 2, Stratum.feedback: 0, Stratum.uniform: 25}
     assert selection.shortfall == {Stratum.failures: 13, Stratum.feedback: 10, Stratum.uniform: 0}
     assert len(selection.samples) == 27
 
 
+def test_the_failure_stratum_is_derived_from_the_raw_facts():
+    """R56 / `06` §3.1: truncation or an invalid structured output, derived here rather
+    than trusted from a flag the query computed."""
+    assert fakes.truncated(1).failed is True
+    assert fakes.candidate(2, schema_valid=False).failed is True
+    assert fakes.candidate(3).failed is False
+    selection = draw((fakes.truncated(1), fakes.candidate(2, schema_valid=False),
+                      fakes.candidate(3)))
+    by_id = {s.request_id: s.stratum for s in selection.samples}
+    assert by_id == {fakes.uuid(1): Stratum.failures, fakes.uuid(2): Stratum.failures,
+                     fakes.uuid(3): Stratum.uniform}
+
+
 def test_a_failing_trace_claims_the_failures_stratum_before_feedback():
     """`06` §3.1's ordering: always -> feedback -> sample. A truncated answer that also
     has a thumbs-down is the failures stratum's, and is counted once."""
-    both = fakes.candidate(1, failure=True, entries=(fakes.feedback(fakes.uuid(1)),))
+    both = fakes.truncated(1, entries=(fakes.feedback(fakes.uuid(1)),))
     selection = draw((both,))
     assert [s.stratum for s in selection.samples] == [Stratum.failures]
 
 
-# --- what counts as feedback, and what counts as calibration (r1 R43) --------------
+# --- what counts as feedback, and what counts as calibration (r1 R43, R56) ----------
 def test_ordinary_customer_feedback_is_a_stratum_not_a_calibration_label():
-    """The heart of R43. A thumb, a rating, a correction or a comment puts a trace in
-    the feedback stratum and is **never** calibration membership; only a
-    `calibration_label` entry with `calibration_set` is. Conflating them would let the
-    console's thumbs-up exclude the trace as "already labelled" and let J3 grade the
-    judge against customer sentiment."""
+    """The heart of R43. A thumb, a rating, a correction or a comment puts a trace in the
+    feedback stratum and is **never** calibration membership; only a `calibration_label`
+    entry with `calibration_set` is. Conflating them would let the console's thumbs-up
+    exclude the trace as "already labelled" and let J3 grade the judge against customer
+    sentiment."""
     for name, value in ((FeedbackName.thumb, True), (FeedbackName.rating, 5),
                         (FeedbackName.correction, "it was a cat"),
                         (FeedbackName.comment, "close enough")):
@@ -150,10 +248,51 @@ def test_an_operator_label_is_not_the_feedback_stratum():
     assert [s.stratum for s in draw((labelled,), rubric_version=1).samples] == [Stratum.uniform]
 
 
+def test_an_ordinary_entry_the_platform_made_is_neither_signal_nor_label():
+    """R56/R50. `by_operator` is server-set when the accepting session is a platform
+    operator, while `author_role` stays `customer` (R31) - so such a row is an ordinary
+    entry *we* typed. It is not the customer telling us anything, so it must not create a
+    feedback-stratum sample; and it is not a verdict against a rubric, so it must not
+    exclude the trace as already calibrated."""
+    ours = fakes.feedback(fakes.uuid(1), name=FeedbackName.comment, value="reproduced for the ticket",
+                          role=AuthorRole.customer, by_operator=True)
+    assert ours.calibration_set is False and ours.by_operator is True
+    candidate = fakes.candidate(1, entries=(ours,))
+    assert candidate.has_customer_feedback is False
+    assert candidate.calibration_labels == ()
+    selection = draw((candidate,), rubric_version=1)
+    assert [s.stratum for s in selection.samples] == [Stratum.uniform]
+
+
+# --- feedback rows must belong to the candidate (B4 / R56) --------------------------
+def test_another_orgs_label_cannot_exclude_this_orgs_trace():
+    """R56: a row counts only when its organization matches. Otherwise one tenant's
+    calibration label decides another tenant's eligibility - a cross-tenant fact
+    silently shrinking someone's calibration set."""
+    foreign = fakes.label(fakes.uuid(1), org_id=fakes.ORG_B, rubric_version=1)
+    candidate = fakes.candidate(1, entries=(foreign,))
+    assert candidate.own_feedback == () and candidate.calibration_labels == ()
+    assert draw((candidate,), rubric_version=1).sample_ids == (fakes.uuid(1),)
+
+
+def test_a_row_for_another_request_does_not_move_a_trace_into_the_feedback_stratum():
+    """R56: the request must match too. A thumb on trace 2 is not signal about trace 1,
+    and a projection join that returns the wrong rows must not redesign the strata."""
+    wrong_request = fakes.feedback(fakes.uuid(999), name=FeedbackName.thumb, value=True)
+    candidate = fakes.candidate(1, entries=(wrong_request,))
+    assert candidate.own_feedback == () and candidate.has_customer_feedback is False
+    assert [s.stratum for s in draw((candidate,)).samples] == [Stratum.uniform]
+
+    # and a label for another request cannot exclude this one either
+    other_label = fakes.label(fakes.uuid(999), rubric_version=1)
+    assert draw((fakes.candidate(1, entries=(other_label,)),),
+                rubric_version=1).sample_ids == (fakes.uuid(1),)
+
+
 # --- determinism ------------------------------------------------------------------
 def test_the_same_seed_picks_the_same_samples_whatever_the_scan_order():
-    """"Seeded" means reproducible, not merely shuffled: a run that dies half way
-    through re-selects the same traces instead of re-rolling the dice (`06` §3.1)."""
+    """"Seeded" means reproducible, not merely shuffled: a run that dies half way through
+    re-selects the same traces instead of re-rolling the dice (`06` §3.1)."""
     candidates = fakes.population()
     first = draw(candidates)
     assert draw(candidates).sample_ids == first.sample_ids
@@ -163,8 +302,8 @@ def test_the_same_seed_picks_the_same_samples_whatever_the_scan_order():
 
 
 def test_selection_is_stable_when_the_population_grows():
-    """A trace already drawn stays drawn when new traces arrive with worse ranks,
-    which is what makes an interrupted calibration resumable."""
+    """A trace already drawn stays drawn when new traces arrive with worse ranks, which
+    is what makes an interrupted calibration resumable."""
     base = fakes.population(uniform=25, failures=15, feedback_bearing=10)
     first = set(draw(base).sample_ids)
     grown = base + tuple(fakes.candidate(500 + i) for i in range(5))

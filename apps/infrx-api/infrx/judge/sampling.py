@@ -1,24 +1,30 @@
-"""Deterministic, consented selection of judge samples (J1).
+"""Deterministic, consented selection of judge samples (J1, ruling R56).
 
-Three rules do the work here, and each of them exists because the obvious
-implementation is wrong:
+Rules that exist because the obvious implementation is wrong:
 
-* **Trace opt-in is not evaluation consent.** A `full`-mode trace says the customer
-  agreed to *store* content; `ConsentSnapshot.allows_evaluation` says they agreed to
-  send it to a third party. The gate is the **current** consent record, because the
-  row a customer revokes is the live one (02, r1 R9).
+* **Trace opt-in is not evaluation consent, and consent is not retroactive.** A
+  `full`-mode trace says the customer agreed to *store* content;
+  `ConsentSnapshot.allows_evaluation` says they agreed to send it to a third party.
+  The gate is the **current** consent record (02, r1 R9), and only traces created
+  inside that record's window are eligible (R56) - consent granted today does not
+  authorize last month's traces.
 * **The seed decides, not the scan order.** Selection ranks a candidate by a keyed
-  hash of its id, so a run that dies half way through re-selects the same traces
-  instead of re-rolling the dice (`research/traces/06` §3.1 uses `cityHash64` for the
-  same reason).
+  hash of its id, so a run that dies half way re-selects the same traces instead of
+  re-rolling the dice (`research/traces/06` §3.1 uses `cityHash64` for this).
+* **The source is data, not authority.** A ClickHouse projection can return the same
+  trace twice (which is why `06` §3.1 queries `FINAL`), rows for another tenant if a
+  join grows, and feedback rows belonging to some other request. So candidates are
+  deduplicated by `request_id` before stratifying, a *conflicting* duplicate is
+  excluded rather than sampled twice (R56), the tenant is re-checked here, and a
+  feedback row counts only when its organization **and** request match the
+  candidate's.
 * **Ordinary customer feedback is not a calibration label.** The feedback-bearing
-  stratum is chosen *from* customer feedback; calibration membership is only a
-  `calibration_label` entry with `calibration_set` (r1 R43). Conflating the two would
-  let the console's thumbs-up count as an operator verdict and let the calibration
-  report grade the judge against itself.
+  stratum is chosen from customer signal; calibration membership is only a
+  `calibration_label` entry with `calibration_set` (r1 R43). A `by_operator` ordinary
+  entry is neither (R56): the platform typed it, so it is not the customer telling us
+  something.
 
-Nothing in this module performs I/O. `CandidateSource` is the injected port; T's
-ClickHouse projection and D's feedback table implement it after integration.
+Nothing in this module performs I/O. `CandidateSource` is the injected port.
 """
 from __future__ import annotations
 
@@ -28,17 +34,19 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
-from ..contracts import errors
+from ..contracts import errors, limits
 from ..contracts.records import AuthorRole, ConsentSnapshot, ContentState, Feedback, TraceMode
+
+#: `research/traces/06` §3.1: a truncated answer is the failure stratum's first member.
+FINISH_REASON_LENGTH = "length"
+#: R56: a 5xx produced no answer to grade.
+NO_OUTPUT_STATUS = 500
 
 
 class Stratum(enum.StrEnum):
-    """`research/traces/06` §3.9's calibration design, in priority order.
-
-    `failures` before `feedback` before `uniform` is `06` §3.1's ordering
-    (always -> feedback -> sample): a truncated or erroring answer is the most
-    informative thing an operator can label, so it claims its trace first.
-    """
+    """`06` §3.9's calibration design, in `06` §3.1's priority order (always ->
+    feedback -> sample): a truncated or schema-invalid answer is the most informative
+    thing an operator can label, so it claims its trace first."""
 
     failures = "failures"
     feedback = "feedback"
@@ -46,21 +54,25 @@ class Stratum(enum.StrEnum):
 
 
 class Exclusion(enum.StrEnum):
-    """Why a candidate is not a sample. Every excluded trace is reported, so
-    "why was this not judged" is a lookup rather than a guess (`06` §3.1)."""
+    """Why a candidate is not a sample. Every excluded row is reported, so "why was
+    this not judged" is a lookup rather than a guess (`06` §3.1)."""
 
     not_owned = "not_owned"
     trace_mode_not_full = "trace_mode_not_full"
+    outside_consent_window = "outside_consent_window"
+    skipped_no_output = "skipped_no_output"
     content_lost = "content_lost"
     content_expired = "content_expired"
     content_missing = "content_missing"
     already_calibrated = "already_calibrated"
+    duplicate_row = "duplicate_row"
+    conflicting_duplicate = "conflicting_duplicate"
     stratum_full = "stratum_full"
 
 
-# Content availability (08 §9) -> why it cannot be evaluated. Only `available`
-# content can leave, and the three unavailable reasons are kept apart because an
-# expired trace is a retention decision while a lost one is a capture failure.
+# Content availability (08 §9) -> why it cannot be evaluated. `lost`, `expired` and
+# `missing` stay apart because an expired trace is a retention decision while a lost
+# one is a capture failure, and the console shows the difference.
 _CONTENT_EXCLUSION: dict[ContentState, Exclusion] = {
     ContentState.lost: Exclusion.content_lost,
     ContentState.expired: Exclusion.content_expired,
@@ -102,11 +114,14 @@ DEFAULT_DESIGN = CalibrationDesign()
 
 @dataclass(frozen=True)
 class TraceCandidate:
-    """One eligible-looking trace, as the candidate source reports it.
+    """One candidate trace, as the source reports it: **raw facts only**.
 
+    R56: the sampler derives the strata from `finish_reason`, `http_status` and
+    `schema_valid` rather than trusting a `failure` flag the query computed, so the
+    policy lives in one place and a query change cannot quietly redefine it.
     `feedback` carries the trace's feedback *rows* rather than two booleans, so the
-    "a customer signal is not a calibration label" rule is decided from the persisted
-    shape (r1 R43) instead of from a flag whoever wrote the query chose.
+    R43 distinction between a customer signal and an operator label is decided from
+    the persisted shape - and only from rows that actually belong to this trace.
     """
 
     request_id: str
@@ -115,36 +130,69 @@ class TraceCandidate:
     content_state: ContentState
     started_at: datetime
     model_revision: str
-    failure: bool = False
+    http_status: int = 200
+    finish_reason: str | None = None
+    schema_valid: bool = True
     media_available: bool = False
     feedback: tuple[Feedback, ...] = ()
 
     @property
+    def own_feedback(self) -> tuple[Feedback, ...]:
+        """R56: a row counts only when its organization **and** request match.
+
+        Without both checks an org-B label attached to an org-A candidate excluded that
+        candidate as already labelled, and an org-B thumb for another request moved an
+        org-A trace into the customer-feedback stratum - a cross-tenant fact deciding a
+        tenant's calibration set.
+        """
+        return tuple(entry for entry in self.feedback
+                     if entry.org_id == self.org_id and entry.request_id == self.request_id)
+
+    @property
     def calibration_labels(self) -> tuple[Feedback, ...]:
-        """r1 R43: membership is the boolean on a `calibration_label` entry. The
-        record already refuses any disagreement between name, flag and rubric
-        version, so this one field is the whole test."""
-        return tuple(entry for entry in self.feedback if entry.calibration_set)
+        """r1 R43: membership is the boolean on a `calibration_label` entry. The record
+        already refuses any disagreement between name, flag and rubric version, so this
+        one field is the whole test - and `by_operator` is *not* it (R56): the platform
+        typing an ordinary comment is not an operator verdict against a rubric."""
+        return tuple(entry for entry in self.own_feedback if entry.calibration_set)
 
     @property
     def has_customer_feedback(self) -> bool:
-        """The `feedback` stratum: a customer told us something about this answer.
-        A judge's own score is not customer feedback, and a label is not either."""
+        """The `feedback` stratum: a *customer* told us something about this answer.
+        A judge's own score is not customer feedback, a label is not, and neither is an
+        ordinary entry the platform made on the customer's behalf (R56/R50)."""
         return any(entry.author_role is AuthorRole.customer and not entry.calibration_set
-                   for entry in self.feedback)
+                   and not entry.by_operator for entry in self.own_feedback)
+
+    @property
+    def failed(self) -> bool:
+        """R56 / `06` §3.1: the failure stratum is a truncated answer or an invalid
+        structured output. Derived here, never taken from the source."""
+        return self.finish_reason == FINISH_REASON_LENGTH or self.schema_valid is False
+
+    @property
+    def produced_no_output(self) -> bool:
+        return self.http_status >= NO_OUTPUT_STATUS
 
     def labelled_against(self, rubric_version: int) -> bool:
-        return any(entry.rubric_version == rubric_version
-                   for entry in self.calibration_labels)
+        return any(entry.rubric_version == rubric_version for entry in self.calibration_labels)
 
 
 class CandidateSource(Protocol):
-    """J's read side over T's trace projection. Injected; faked in tests.
+    """J's read side over T's trace projection plus D's feedback rows. Injected.
 
-    It is a *port*, not a query helper: the adapter owns the tenant filter, the
-    `full`-mode filter and the lookback, and this module re-checks every one of them
-    anyway, because a selection that trusts its query is a selection that ships one
-    org's traces the day the query grows a join.
+    Contract for an adapter (the coordinator may move this and `TraceCandidate` into
+    `contracts/ports.py`, so the shape stays minimal and tenant-scoped):
+
+    * return rows for **`org_id` only**, `trace_mode = full`, started at or after
+      `since`, at most `limit` of them;
+    * return them **deduplicated by `request_id` and in a stable order** (`06` §3.1
+      queries `FINAL` for exactly this reason). The sampler enforces both anyway - it
+      truncates to the bound and deduplicates - but only a stable order makes *which*
+      rows fall inside the bound reproducible;
+    * carry the **raw** facts (`finish_reason`, `http_status`, `schema_valid`,
+      `media_available`, `content_state`) and let the sampler derive the strata;
+    * attach only feedback rows belonging to that organization and request.
     """
 
     async def candidates(self, org_id: str, *, since: datetime,
@@ -187,40 +235,76 @@ class Selection:
 
 
 def rank(seed: str, request_id: str) -> int:
-    """A keyed hash, so "seeded" means reproducible rather than merely shuffled.
-
-    Ordering by this instead of by arrival makes selection independent of the scan
-    order: the same seed, rubric version and candidate set always pick the same
-    traces, which is what lets a crashed run resume without re-rolling the dice.
-    """
+    """A keyed hash, so "seeded" means reproducible rather than merely shuffled."""
     digest = hashlib.blake2b(f"{seed}\x00{request_id}".encode(), digest_size=8).digest()
     return int.from_bytes(digest, "big")
 
 
-def _stratum_of(candidate: TraceCandidate) -> Stratum:
-    if candidate.failure:
-        return Stratum.failures
-    if candidate.has_customer_feedback:
-        return Stratum.feedback
-    return Stratum.uniform
+def check_consent(org_id: str, consent: ConsentSnapshot, now: datetime) -> None:
+    """The gate, callable **before** anything is read (r1 R10 / R9).
+
+    Separated from `select` so a caller can refuse an unconsented or foreign request
+    without querying the trace store at all: a refusal that reads the traces first has
+    already touched the data it was refusing to touch.
+    """
+    if consent.org_id != org_id:
+        raise errors.NotFound(f"consent for org {consent.org_id} does not match org {org_id}")
+    if not consent.allows_evaluation(now):
+        raise errors.ConsentMissing(f"org {org_id} has no current evaluation consent")
+
+
+def _check_rubric_version(rubric_version: object) -> int:
+    if isinstance(rubric_version, bool) or not isinstance(rubric_version, int):
+        raise errors.InvalidRequest("a rubric version is an integer (r1 R43)")
+    if not limits.MIN_RUBRIC_VERSION <= rubric_version <= limits.MAX_RUBRIC_VERSION:
+        raise errors.InvalidRequest(f"a rubric version is in {limits.MIN_RUBRIC_VERSION}.."
+                                    f"{limits.MAX_RUBRIC_VERSION}")
+    return rubric_version
+
+
+def deduplicate(candidates: tuple[TraceCandidate, ...]
+                ) -> tuple[list[TraceCandidate], list[Excluded]]:
+    """R56: one row per `request_id` before stratifying.
+
+    A repeated *identical* row is a projection artefact: keep the first and report the
+    copies. A repeated row that **disagrees** (one says the answer was truncated, the
+    other does not) is excluded outright: we cannot tell which is true, and sampling
+    both would put one trace in two strata and grade it twice.
+    """
+    order: list[str] = []
+    groups: dict[str, list[TraceCandidate]] = {}
+    for candidate in candidates:
+        rows = groups.get(candidate.request_id)
+        if rows is None:
+            groups[candidate.request_id] = [candidate]
+            order.append(candidate.request_id)
+        else:
+            rows.append(candidate)
+    kept: list[TraceCandidate] = []
+    excluded: list[Excluded] = []
+    for request_id in order:
+        rows = groups[request_id]
+        if len(rows) == 1:
+            kept.append(rows[0])
+        elif all(row == rows[0] for row in rows[1:]):
+            kept.append(rows[0])
+            excluded.extend(Excluded(request_id, Exclusion.duplicate_row) for _ in rows[1:])
+        else:
+            excluded.extend(Excluded(request_id, Exclusion.conflicting_duplicate) for _ in rows)
+    return kept, excluded
 
 
 def select(org_id: str, consent: ConsentSnapshot, candidates: tuple[TraceCandidate, ...], *,
            rubric_version: int, seed: str, now: datetime,
            design: CalibrationDesign = DEFAULT_DESIGN) -> Selection:
     """The seeded, stratified, consented draw. Pure: no clock, no I/O, no network."""
-    if consent.org_id != org_id:
-        # r1 R10: one org's consent never authorizes another org's traces leaving.
-        raise errors.NotFound(f"consent for org {consent.org_id} does not match org {org_id}")
-    if not consent.allows_evaluation(now):
-        # The whole point of the gate: `full` mode alone is storage consent, and a
-        # revoked or not-yet-effective record is not consent at all.
-        raise errors.ConsentMissing(f"org {org_id} has no current evaluation consent")
+    check_consent(org_id, consent, now)
+    rubric_version = _check_rubric_version(rubric_version)
 
+    unique, excluded = deduplicate(tuple(candidates))
     eligible: dict[Stratum, list[TraceCandidate]] = {stratum: [] for stratum in Stratum}
-    excluded: list[Excluded] = []
-    for candidate in candidates:
-        reason = _ineligible(candidate, org_id, rubric_version)
+    for candidate in unique:
+        reason = _ineligible(candidate, org_id, consent, rubric_version)
         if reason is not None:
             excluded.append(Excluded(candidate.request_id, reason))
             continue
@@ -243,11 +327,32 @@ def select(org_id: str, consent: ConsentSnapshot, candidates: tuple[TraceCandida
                      counts=counts, shortfall=shortfall)
 
 
-def _ineligible(candidate: TraceCandidate, org_id: str, rubric_version: int) -> Exclusion | None:
+def _stratum_of(candidate: TraceCandidate) -> Stratum:
+    if candidate.failed:
+        return Stratum.failures
+    if candidate.has_customer_feedback:
+        return Stratum.feedback
+    return Stratum.uniform
+
+
+def _within_consent_window(candidate: TraceCandidate, consent: ConsentSnapshot) -> bool:
+    """R56: evaluation consent is not retroactive and does not outlive itself."""
+    if candidate.started_at < consent.effective_at:
+        return False
+    return consent.revoked_at is None or candidate.started_at < consent.revoked_at
+
+
+def _ineligible(candidate: TraceCandidate, org_id: str, consent: ConsentSnapshot,
+                rubric_version: int) -> Exclusion | None:
     if candidate.org_id != org_id:
         return Exclusion.not_owned
     if candidate.trace_mode is not TraceMode.full:
         return Exclusion.trace_mode_not_full
+    if not _within_consent_window(candidate, consent):
+        return Exclusion.outside_consent_window
+    if candidate.produced_no_output:
+        # R56 / `06` §3.1 step 3: a 5xx has no answer to grade.
+        return Exclusion.skipped_no_output
     if candidate.content_state is not ContentState.available:
         return _CONTENT_EXCLUSION[candidate.content_state]
     if candidate.labelled_against(rubric_version):

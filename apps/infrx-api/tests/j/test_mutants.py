@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """r1 R32: run track J's mutation list.
 
-The list is slow by contract (one pytest process per mutant), so the default suite
-runs the subset covering the five invariants the task brief names and the whole list
-runs on demand:
+The list is slow by contract (one pytest process per mutant), so the default suite runs
+the subset covering the invariants the task brief and rulings R56/R57 name, and the whole
+list runs on demand:
 
     uv run --frozen pytest -q tests/j/test_mutants.py                     # subset
     INFRX_MUTANTS=all uv run --frozen pytest -q tests/j/test_mutants.py   # all
@@ -20,9 +20,13 @@ from . import mutants as mutation_list
 
 ALL = mutation_list.MUTANTS
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
-# The five invariants the brief names, one mutant each.
+# One mutant per invariant the brief names, plus one each for R56's sampling policy and
+# R57's money guard - the two rulings this task was corrected against.
 SUBSET = ("consent_from_the_snapshot_only", "stratum_bound_ignored", "score_range_unchecked",
-          "dedupe_key_drops_the_rubric_version", "limited_flag_lost")
+          "dedupe_key_drops_the_rubric_version", "limited_flag_lost", "duplicates_sampled_twice",
+          "feedback_org_not_checked", "guard_trusts_the_estimates_total",
+          "rate_lookup_takes_the_first_row", "scan_bound_not_enforced",
+          "consent_checked_after_the_read")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 SUITE_DIR = pathlib.Path(__file__).resolve().parent
@@ -32,8 +36,8 @@ CASE_NAMES = {name for path in SUITE_DIR.glob("test_*.py") if path.name != "test
 
 
 def test_the_list_is_well_formed():
-    """A typo in a case name would make a mutant unkillable by construction, and a
-    mutant that names no case would pass by saying nothing."""
+    """A typo in a case name would make a mutant unkillable by construction, and a mutant
+    that names no case would pass by saying nothing."""
     assert len({m.name for m in ALL}) == len(ALL), "duplicate mutant names"
     for mutant in ALL:
         assert mutant.cases, f"{mutant.name} names no case"
@@ -45,19 +49,56 @@ def test_the_list_is_well_formed():
 
 
 def test_the_required_invariants_each_have_a_mutant():
-    """The brief's five: consent check, stratification bounds, score range, dedupe key,
-    limited flag. Named here so a later edit cannot quietly drop one."""
+    """The brief's five, plus every invariant rulings R56 and R57 add. Named here so a
+    later edit cannot quietly drop one, and so "every invariant has a mutant" is a check
+    rather than a claim in an evidence report."""
     required = {
+        # the brief's five
         "consent check": ("consent_check_skipped", "consent_from_the_snapshot_only"),
         "stratification bounds": ("stratum_bound_ignored", "design_collapses_to_one_bound"),
         "score range": ("score_range_unchecked", "boolean_score_accepted"),
         "dedupe key": ("dedupe_key_drops_the_rubric_version",),
         "limited flag": ("limited_flag_lost", "limited_result_not_marked",
                          "missing_criterion_counts_as_a_pass"),
+        # R56
+        "consent is not retroactive": ("consent_window_ignored", "consent_window_start_ignored",
+                                       "consent_window_end_ignored"),
+        "strata from raw facts": ("schema_invalid_is_not_a_failure", "truncation_is_not_a_failure",
+                                  "no_output_is_graded_anyway"),
+        "candidate deduplication": ("duplicates_sampled_twice", "conflicting_duplicate_is_kept",
+                                    "identical_duplicates_dropped_silently"),
+        "feedback belongs to the candidate": ("feedback_org_not_checked",
+                                             "feedback_request_not_checked"),
+        "by_operator is neither": ("calibration_keys_on_by_operator",
+                                   "platform_entry_counts_as_customer_signal"),
+        "no media, no pass, in code": ("media_criterion_passes_without_media",
+                                       "scores_record_allows_a_no_media_pass"),
+        "the scan bound": ("scan_bound_not_enforced", "scan_bound_range_unchecked",
+                           "scan_bound_accepts_a_boolean"),
+        # R57
+        "the guard recomputes": ("guard_trusts_the_estimates_total", "stale_estimate_accepted",
+                                 "priced_from_per_sample_only"),
+        "the mode is exact": ("mode_compared_loosely",),
+        "the budget boundary": ("over_budget_can_submit", "budget_boundary_exclusive"),
+        "the effective rate": ("rate_lookup_takes_the_first_row", "rate_lookup_ignores_the_clock",
+                               "duplicate_rate_rows_accepted", "a_zero_or_negative_rate_accepted"),
+        # B5: dryrun.py had no mutant at all
+        "the refusal ordering": ("consent_checked_after_the_read",),
+        "the JudgeRun projection": ("judge_run_is_not_a_dry_run", "judge_run_reserves_money"),
+        "no provider SDK": ("provider_sdk_imported_on_the_dry_run_path",),
     }
     declared = {m.name for m in ALL}
     for invariant, names in required.items():
         assert set(names) <= declared, invariant
+
+
+def test_every_judge_module_is_covered():
+    """dryrun.py shipped with no mutant at all, so "every invariant has one" was false for
+    a whole module. One file with no mutant is one file nothing proves."""
+    modules = {path.name for path in (SUITE_DIR.parents[1] / "infrx" / "judge").glob("*.py")
+               if path.name != "__init__.py"}
+    covered = {pathlib.Path(m.file).name for m in ALL}
+    assert modules <= covered, f"no mutant touches {sorted(modules - covered)}"
 
 
 @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
@@ -69,8 +110,8 @@ def test_mutant_is_killed(mutant):
 
 
 # --- the runner's own honesty ------------------------------------------------------
-# A runner that counted a syntax error as a kill would let the whole list pass while
-# proving nothing, so each non-kill outcome is exercised deliberately.
+# A runner that counted a syntax error, or a test that crashed, as a kill would let the
+# whole list pass while proving nothing, so each non-kill outcome is exercised here.
 SELF_TESTS = (
     ("a_no_op_edit_survives", mutation_list.Outcome.survived,
      mutation_list.Mutant(name="self_no_op", invariant="an edit that changes nothing survives",
@@ -89,6 +130,13 @@ SELF_TESTS = (
                           old="return (result.run_id, result.sample_id, result.rubric_version)",
                           new="return (result.run_id, result.sample_id)",
                           cases=("test_a_sample_without_media_is_marked_limited",))),
+    # The new one: a test that *crashed* is not a test that noticed.
+    ("an_undeclared_exception_death_is_not_a_kill", mutation_list.Outcome.broken_runner,
+     mutation_list.Mutant(name="self_crash", invariant="a kill is assertion-shaped",
+                          file="judge/rubric.py",
+                          old="    unnamed = [key for key in payload if not isinstance(key, str)]",
+                          new="    unnamed = []",
+                          cases=("test_a_hostile_payload_is_rejected_rather_than_raised",))),
     ("a_missing_anchor_is_a_failure", mutation_list.Outcome.misdeclared,
      mutation_list.Mutant(name="self_missing_anchor", invariant="the list matches the code",
                           file="judge/cost.py", old="this text is not in the module",
@@ -105,3 +153,22 @@ def test_the_runner_cannot_report_a_false_kill(name, expected, mutant):
     result = mutation_list.run_mutant(mutant)
     assert result.outcome is expected, f"{name}: got {result.outcome} - {result.detail}"
     assert result.killed is (expected is mutation_list.Outcome.killed)
+
+
+def test_the_same_defect_is_a_kill_once_its_exception_is_declared():
+    """The other half of the classification: an invariant whose honest kill *is* an
+    exception (`validate_output` never raises) declares it, and then the same edit is a
+    kill rather than a runner error."""
+    declared = next(m for m in ALL if m.name == "non_string_key_reaches_the_key_arithmetic")
+    assert declared.dies_by == ("TypeError",)
+    assert mutation_list.run_mutant(declared).killed
+
+
+def test_the_death_classifier_reads_each_shape():
+    """Unit-level, because the classifier is what the honesty above rests on."""
+    kinds = mutation_list._death_kinds(
+        "/x/test_a.py:1: assert 1 == 2\n"
+        "/x/test_b.py:2: TypeError: boom\n"
+        "/x/test_c.py:5: Failed: DID NOT RAISE <class 'ValueError'>\n"
+        "FAILED /x/test_a.py::test_a\n")
+    assert kinds == ["AssertionError", "TypeError", "Failed"]

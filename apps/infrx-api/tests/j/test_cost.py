@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""JUDGE-SCORES / JUDGE-BUDGET: the worst-case estimate, and the egress guard.
+"""JUDGE-SCORES / JUDGE-BUDGET: the worst-case estimate, and the egress guard (R57).
 
-Also the import-hygiene proof: the dry-run path must not so much as *import* the
-provider SDK, which is checked in a subprocess rather than asserted in prose.
+Also the import-hygiene proof: the dry-run path must not so much as *import* the provider
+SDK, which is checked in a subprocess rather than asserted in prose.
 
     uv run --frozen pytest -q tests/j/test_cost.py
 """
@@ -12,36 +12,46 @@ import pathlib
 import re
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
 from infrx.contracts import errors, money
 from infrx.contracts.limits import DEFAULTS
-from infrx.judge import (APPROVED_RATES, DEFAULT_CEILINGS, UNPRICED_NOTE, ProviderRate,
-                         StaticRateTable, TokenCeilings, estimate_worst_case,
-                         live_submission_allowed, require_live_submission)
+from infrx.judge import (APPROVED_RATES, DEFAULT_CEILINGS, UNPRICED_NOTE, CostEstimate,
+                         ProviderRate, StaticRateTable, TokenCeilings, estimate_worst_case,
+                         live_submission_allowed, per_sample_cost, require_live_submission,
+                         worst_case)
 
 from . import fakes
 
 LIVE = DEFAULTS.replace(judge_mode="live", judge_live_budget_usd=Decimal("100"))
+RATE_KW = {"price_version": "v", "model": "m", "input_per_million": Decimal("5"),
+           "output_per_million": Decimal("25"), "source": "doc",
+           "effective_at": datetime(2026, 1, 1, tzinfo=timezone.utc)}
 
 
 def estimate(rates=fakes.TEST_RATES, *, samples: int = 50, ceilings=DEFAULT_CEILINGS,
-             model: str = fakes.JUDGE_MODEL):
+             model: str = fakes.JUDGE_MODEL, at=None):
     return estimate_worst_case(rates, model=model, samples=samples, ceilings=ceilings,
-                               at=fakes.NOW)
+                               at=at or fakes.NOW)
+
+
+def allowed(settings=LIVE, est=None, *, rates=fakes.TEST_RATES, at=None):
+    return live_submission_allowed(settings, est if est is not None else estimate(),
+                                   rates=rates, at=at or fakes.NOW)
 
 
 # --- the reservation ---------------------------------------------------------------
 def test_the_estimate_is_a_worst_case_at_the_versioned_rate():
-    """02: reserve the maximum, at versioned provider rates, rounded up. The arithmetic
-    is `money`'s ceiling formula on the ceilings, so it can never round in the
-    platform's favour."""
+    """02: reserve the maximum, at versioned provider rates, rounded up. The arithmetic is
+    `money`'s ceiling formula on the ceilings, so it can never round in the platform's
+    favour."""
     one = estimate(samples=1)
     assert one.priced and one.price_version == "test-rates-v1"
     expected = money.maximum_hold(DEFAULT_CEILINGS.input_tokens,
-                                 DEFAULT_CEILINGS.billed_output_tokens,
-                                 Decimal("5"), Decimal("25"))
+                                  DEFAULT_CEILINGS.billed_output_tokens,
+                                  Decimal("5"), Decimal("25"))
     assert one.per_sample == expected
     assert one.worst_case_total == expected
     assert estimate(samples=50).worst_case_total == money.ceiling(expected * 50)
@@ -60,12 +70,12 @@ def test_reasoning_tokens_are_billed_as_output_and_included():
 
 
 def test_the_reservation_is_never_reduced_by_a_batch_discount():
-    """`06` §3.8 prices batches at x0.5. Halving a worst case turns it into an average;
-    the discount belongs to reconciliation, where the actual usage is known."""
+    """`06` §3.8 prices batches at x0.5. Halving a worst case turns it into an average; the
+    discount belongs to reconciliation, where the actual usage is known."""
     rate = fakes.TEST_RATE
     full_price = money.maximum_hold(DEFAULT_CEILINGS.input_tokens,
-                                   DEFAULT_CEILINGS.billed_output_tokens,
-                                   rate.input_per_million, rate.output_per_million)
+                                    DEFAULT_CEILINGS.billed_output_tokens,
+                                    rate.input_per_million, rate.output_per_million)
     assert estimate(samples=1).per_sample == full_price
 
 
@@ -73,8 +83,9 @@ def test_the_reservation_is_never_reduced_by_a_batch_discount():
                                 {"output_tokens": True}, {"reasoning_tokens": -5},
                                 {"output_tokens": 1.5}])
 def test_a_ceiling_that_would_reserve_nothing_is_refused(kw):
-    """A zero output ceiling reserves nothing and then bills whatever arrives - the
-    defect r1 R55 closed at admission, in the judge's currency."""
+    """A zero or negative output ceiling, a boolean and a float are refused - the r1 R55
+    defect (a zero ceiling makes a zero hold and then bills whatever arrives) in the
+    judge's currency."""
     base = {"input_tokens": 100, "output_tokens": 100}
     with pytest.raises(ValueError):
         TokenCeilings(**{**base, **kw})
@@ -86,12 +97,19 @@ def test_a_sample_count_is_a_nonnegative_integer(samples):
         estimate(samples=samples)
 
 
+def test_an_unrepresentable_worst_case_refuses_rather_than_raising_arithmetic():
+    """`money` is `numeric(20, 8)`, so a large enough total cannot be quantized. That is a
+    refusal with a typed error, not a `decimal.InvalidOperation` out of a money path."""
+    with pytest.raises(errors.BudgetExceeded):
+        worst_case(fakes.TEST_RATE, DEFAULT_CEILINGS, 10 ** 30)
+
+
 # --- rates come from an approved source, and there is not one yet ------------------
 def test_the_shipped_rate_table_is_empty_and_says_why():
-    """Prices come only from `research/cross-cutting/cloud-pricing.md` (r1 R45's rule,
-    and this package's). That document prices GPU capacity and carries **no per-MTok
-    row** for any judge model, so the approved table is empty, the estimate is
-    unpriced, and the note carries the TO BE VERIFIED marker rather than a guess."""
+    """Prices come only from `research/cross-cutting/cloud-pricing.md` (r1 R45's rule, and
+    this package's). That document prices GPU capacity and carries **no per-MTok row** for
+    any judge model, so the approved table is empty, the estimate is unpriced, and the note
+    carries the TO BE VERIFIED marker rather than a guess."""
     assert APPROVED_RATES.rows == ()
     unpriced = estimate(APPROVED_RATES)
     assert unpriced.priced is False
@@ -107,43 +125,102 @@ def test_an_unknown_model_is_unpriced_rather_than_free():
 
 @pytest.mark.parametrize("kw", [{"input_per_million": "-1"}, {"output_per_million": "-0.5"},
                                 {"input_per_million": 1.5}, {"input_per_million": "1e3"},
-                                {"input_per_million": "NaN"}, {"price_version": ""},
-                                {"model": ""}, {"source": ""}])
+                                {"input_per_million": "NaN"}, {"input_per_million": "0"},
+                                {"output_per_million": "0"}, {"price_version": ""},
+                                {"model": ""}, {"source": ""}, {"model": 5},
+                                {"effective_at": "2026-01-01T00:00:00Z"},
+                                {"effective_at": datetime(2026, 1, 1)}])
 def test_a_rate_row_is_validated_at_the_boundary(kw):
-    """A negative rate turns output into a credit; a float is not money; a row with no
-    source is a price nobody approved."""
-    good = {"price_version": "v", "model": "m", "input_per_million": Decimal("5"),
-            "output_per_million": Decimal("25"), "source": "doc"}
+    """R57: every rate is a **finite positive** decimal. A negative rate turns a debit into
+    a credit; a **zero** rate makes a zero worst case that any budget covers, which is how
+    an unbounded submission gets authorized; a float is not money; a naive `effective_at`
+    cannot be compared with the store clock; and a row with no source is a price nobody
+    approved."""
     with pytest.raises(ValueError):
-        ProviderRate(**{**good, **kw})
+        ProviderRate(**{**RATE_KW, **kw})
 
 
 def test_a_rate_row_normalizes_to_the_money_scale():
-    row = ProviderRate(price_version="v", model="m", input_per_million="5",
-                       output_per_million="25", source="doc")
+    row = ProviderRate(**{**RATE_KW, "input_per_million": "5", "output_per_million": "25"})
     assert row.input_per_million == money.parse("5")
     assert StaticRateTable((row,)).rate_for("m", fakes.NOW) is row
     assert StaticRateTable((row,)).rate_for("other", fakes.NOW) is None
 
 
-# --- the guard ---------------------------------------------------------------------
+def test_the_rate_table_refuses_duplicate_rows_for_a_model():
+    """R57: two rows for one model at one instant is an ambiguous price - which one applied
+    would depend on list order, i.e. on whoever edited last."""
+    with pytest.raises(errors.InvalidRequest):
+        StaticRateTable((fakes.TEST_RATE, fakes.TEST_RATE))
+    with pytest.raises(errors.InvalidRequest):
+        StaticRateTable((fakes.TEST_RATE,
+                         ProviderRate(**{**RATE_KW, "model": fakes.JUDGE_MODEL,
+                                         "price_version": "other",
+                                         "effective_at": fakes.TEST_RATE.effective_at})))
+    with pytest.raises(errors.InvalidRequest):
+        StaticRateTable(("not a rate",))
+    # two rows for one model at *different* instants are a price history, not a duplicate
+    assert StaticRateTable((fakes.TEST_RATE, fakes.NEWER_RATE)).rows
+
+
+@pytest.mark.parametrize("rows", [(fakes.TEST_RATE, fakes.NEWER_RATE),
+                                 (fakes.NEWER_RATE, fakes.TEST_RATE)])
+def test_the_rate_effective_at_the_clock_is_used_whatever_the_row_order(rows):
+    """R57. With "the first matching row wins", adding a newer, dearer row left every
+    reservation at the old rate and under-reserved by the difference - and reversing the
+    list silently changed the price. The row order must not be able to decide it."""
+    table = StaticRateTable(rows)
+    before_both = fakes.TEST_RATE.effective_at - timedelta(seconds=1)
+    assert table.rate_for(fakes.JUDGE_MODEL, before_both) is None
+    assert table.rate_for(fakes.JUDGE_MODEL, fakes.TEST_RATE.effective_at) is fakes.TEST_RATE
+    assert table.rate_for(fakes.JUDGE_MODEL,
+                          fakes.NEWER_RATE.effective_at - timedelta(seconds=1)) is fakes.TEST_RATE
+    assert table.rate_for(fakes.JUDGE_MODEL, fakes.NEWER_RATE.effective_at) is fakes.NEWER_RATE
+    assert table.rate_for(fakes.JUDGE_MODEL, fakes.NOW) is fakes.NEWER_RATE
+    # and the dearer row really is dearer, so "which row" is a money question
+    assert (per_sample_cost(fakes.NEWER_RATE, DEFAULT_CEILINGS)
+            > per_sample_cost(fakes.TEST_RATE, DEFAULT_CEILINGS))
+    assert estimate(table).price_version == "test-rates-v2"
+
+
+def test_a_price_lookup_needs_an_aware_instant():
+    with pytest.raises(errors.InvalidRequest):
+        fakes.TEST_RATES.rate_for(fakes.JUDGE_MODEL, datetime(2026, 9, 21))
+
+
+# --- the guard (R57) ---------------------------------------------------------------
 def test_the_defaults_can_never_authorize_a_submission():
-    """08 §5: `JUDGE_MODE=dry_run`, `JUDGE_LIVE_BUDGET_USD=0`. Both refuse on their
-    own, so flipping one setting is not enough to spend money."""
+    """08 §5: `JUDGE_MODE=dry_run`, `JUDGE_LIVE_BUDGET_USD=0`. Each guard refuses **on its
+    own account** (asserted by message), so flipping one setting is not enough to spend
+    money."""
     priced = estimate()
-    # The message matters: each condition must refuse on its *own* account, or removing
-    # one of the three guards would still look refused because another one fired.
     with pytest.raises(errors.BudgetExceeded, match="judge mode"):
-        require_live_submission(DEFAULTS, priced)
-    assert live_submission_allowed(DEFAULTS, priced) is False
-    # live mode with the default zero budget
+        require_live_submission(DEFAULTS, priced, rates=fakes.TEST_RATES, at=fakes.NOW)
+    assert allowed(DEFAULTS, priced) is False
     with pytest.raises(errors.BudgetExceeded, match="JUDGE_LIVE_BUDGET_USD"):
-        require_live_submission(DEFAULTS.replace(judge_mode="live"), priced)
-    # a budget without live mode
+        require_live_submission(DEFAULTS.replace(judge_mode="live"), priced,
+                                rates=fakes.TEST_RATES, at=fakes.NOW)
     with pytest.raises(errors.BudgetExceeded, match="judge mode"):
-        require_live_submission(DEFAULTS.replace(judge_live_budget_usd=Decimal("100")), priced)
-    # both, and it is allowed
-    assert live_submission_allowed(LIVE, priced) is True
+        require_live_submission(DEFAULTS.replace(judge_live_budget_usd=Decimal("100")), priced,
+                                rates=fakes.TEST_RATES, at=fakes.NOW)
+    assert allowed(LIVE, priced) is True
+    assert require_live_submission(LIVE, priced, rates=fakes.TEST_RATES,
+                                   at=fakes.NOW) == priced.worst_case_total
+
+
+@pytest.mark.parametrize("mode", ["dry_run", "", "Live", "LIVE", "live ", "dryrun", "test",
+                                  "anything"])
+def test_only_the_exact_mode_live_authorizes(mode):
+    """R57: matched exactly. "Anything but dry_run" authorized every typo of a mode name,
+    which is the one class of configuration error that silently starts spending."""
+    settings = DEFAULTS.replace(judge_mode=mode, judge_live_budget_usd=Decimal("100"))
+    assert allowed(settings) is (mode == "live")
+
+
+@pytest.mark.parametrize("budget", ["0", "-1", "0.00000000"])
+def test_a_budget_that_is_not_positive_never_authorizes(budget):
+    assert allowed(DEFAULTS.replace(judge_mode="live",
+                                    judge_live_budget_usd=Decimal(budget))) is False
 
 
 def test_a_pricing_estimate_without_a_hard_maximum_cannot_authorize_a_submission():
@@ -151,14 +228,62 @@ def test_a_pricing_estimate_without_a_hard_maximum_cannot_authorize_a_submission
     reserve, so live submission stays disabled even in live mode with a budget."""
     unpriced = estimate(APPROVED_RATES)
     with pytest.raises(errors.BudgetExceeded, match="unpriced"):
-        require_live_submission(LIVE, unpriced)
-    assert live_submission_allowed(LIVE, unpriced) is False
+        require_live_submission(LIVE, unpriced, rates=APPROVED_RATES, at=fakes.NOW)
+    assert allowed(LIVE, unpriced, rates=APPROVED_RATES) is False
 
 
-def test_a_worst_case_over_the_budget_is_refused():
+def test_a_withdrawn_rate_disables_submission_even_for_a_priced_estimate():
+    """The estimate is a report from a moment ago; the guard asks the table again. A rate
+    withdrawn in between is exactly the state in which nothing may be submitted."""
+    priced = estimate()
+    assert allowed(LIVE, priced, rates=fakes.TEST_RATES) is True
+    assert allowed(LIVE, priced, rates=APPROVED_RATES) is False
+    # ...and so is an estimate priced at a version that is no longer effective
+    assert allowed(LIVE, priced, rates=StaticRateTable((fakes.TEST_RATE, fakes.NEWER_RATE))) \
+        is False
+
+
+def test_the_guard_recomputes_the_total_and_never_trusts_the_estimate():
+    """R57, the heart of it. A `CostEstimate` is a report: these four forgeries each used
+    to authorize a submission because the guard read `worst_case_total` (or fell back to
+    zero when it was absent) instead of recomputing `ceiling(per_sample x samples)`."""
+    ceilings = DEFAULT_CEILINGS
+    forgeries = (
+        CostEstimate(model=fakes.JUDGE_MODEL, samples=50, ceilings=ceilings,
+                     price_version="test-rates-v1", per_sample=Decimal("999")),
+        CostEstimate(model=fakes.JUDGE_MODEL, samples=50, ceilings=ceilings,
+                     price_version="test-rates-v1", per_sample=Decimal("999"),
+                     worst_case_total=Decimal("-5")),
+        CostEstimate(model=fakes.JUDGE_MODEL, samples=1_000_000, ceilings=ceilings,
+                     price_version="test-rates-v1", per_sample=Decimal("999"),
+                     worst_case_total=Decimal("0.01")),
+        CostEstimate(model=fakes.JUDGE_MODEL, samples=50, ceilings=ceilings,
+                     price_version="test-rates-v1", per_sample=Decimal("0.00000001"),
+                     worst_case_total=Decimal("0.00000001")),
+    )
+    for forged in forgeries:
+        assert allowed(LIVE, forged) is False, forged
+        with pytest.raises(errors.BudgetExceeded):
+            require_live_submission(LIVE, forged, rates=fakes.TEST_RATES, at=fakes.NOW)
+    # none of them is even `priced`, and the honest estimate is
+    assert [f.priced for f in forgeries] == [False, False, True, True]
+    assert estimate().priced is True
+
+
+def test_a_zero_or_negative_sample_count_never_authorizes():
+    assert allowed(LIVE, estimate(samples=0)) is False
+
+
+def test_a_worst_case_over_the_budget_is_refused_and_the_boundary_is_inclusive():
+    """R57: `<=` the budget. At exactly the budget a submission is affordable; one unit of
+    scale over it is not, which is the off-by-one a `>=` would introduce."""
+    exact = estimate(samples=50)
+    total = exact.worst_case_total
+    assert allowed(DEFAULTS.replace(judge_mode="live", judge_live_budget_usd=total)) is True
+    assert allowed(DEFAULTS.replace(judge_mode="live",
+                                    judge_live_budget_usd=total - money.SCALE)) is False
     small = DEFAULTS.replace(judge_mode="live", judge_live_budget_usd=Decimal("0.01"))
-    assert live_submission_allowed(small, estimate(samples=50)) is False
-    assert live_submission_allowed(LIVE, estimate(samples=50)) is True
+    assert allowed(small, exact) is False
 
 
 # --- import hygiene: no provider SDK on the dry-run path ---------------------------
@@ -166,9 +291,9 @@ PACKAGE = pathlib.Path(__file__).resolve().parents[2] / "infrx"
 
 
 def test_the_judge_package_never_imports_the_provider_sdk():
-    """A guard alone is not enough: an import at module scope builds no client but it
-    does load the SDK into every process that touches the judge, and the next
-    refactor puts a client next to it. The source is the check."""
+    """A guard alone is not enough: an import at module scope builds no client but it does
+    load the SDK into every process that touches the judge, and the next refactor puts a
+    client next to it. The source is the check."""
     sdk_import = re.compile(r"^\s*(?:import|from)\s+anthropic\b", re.MULTILINE)
     offenders = [path.name for path in sorted((PACKAGE / "judge").rglob("*.py"))
                  if sdk_import.search(path.read_text())]
@@ -179,9 +304,9 @@ def test_the_judge_package_never_imports_the_provider_sdk():
 
 
 def test_importing_the_dry_run_path_loads_no_provider_sdk():
-    """Checked in a fresh interpreter, because another test in the same session could
-    have imported the SDK for its own reasons and hidden this."""
-    script = ("import sys, asyncio\n"
+    """Checked in a fresh interpreter, because another test in the same session could have
+    imported the SDK for its own reasons and hidden this."""
+    script = ("import sys\n"
               "import infrx.judge as judge\n"
               "from infrx.judge import plan_dry_run, require_live_submission\n"
               "assert 'anthropic' not in sys.modules, sorted(m for m in sys.modules "

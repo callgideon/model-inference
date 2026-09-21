@@ -12,13 +12,17 @@ from decimal import Decimal
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.records import (AuthorRole, CalibrationLabel, ConsentSnapshot, ContentState,
                                      Feedback, FeedbackChannel, FeedbackName, TraceMode)
-from infrx.judge import ProviderRate, StaticRateTable, TraceCandidate
+from infrx.judge import (FINISH_REASON_LENGTH, ProviderRate, Rejected, Result, StaticRateTable,
+                         TraceCandidate)
 
 ORG_A, ORG_B = b.ORG_A, b.ORG_B
 MODEL = b.MODEL
 JUDGE_MODEL = "claude-opus-5"
 NOW = datetime(2026, 9, 21, 12, 0, tzinfo=timezone.utc)
 SINCE = NOW - timedelta(days=7)
+#: `builders.consent` is effective from this instant, so a candidate must be at or after
+#: it to be inside the consent window (R56).
+CONSENT_FROM = datetime(2026, 9, 1, tzinfo=timezone.utc)
 
 
 def uuid(n: int) -> str:
@@ -32,14 +36,16 @@ def consent(org_id: str = ORG_A, **kw) -> ConsentSnapshot:
 def feedback(request_id: str, *, org_id: str = ORG_A, name: FeedbackName = FeedbackName.rating,
              value: object = 4, role: AuthorRole = AuthorRole.customer,
              calibration_set: bool = False, rubric_version: int | None = None,
-             principal: str = "member-1") -> Feedback:
+             by_operator: bool | None = None, principal: str = "member-1") -> Feedback:
     """One persisted feedback row. A calibration label is the *same* record with
     `name=calibration_label` (r1 R43), which is what the sampler must distinguish."""
+    if by_operator is None:
+        by_operator = role is AuthorRole.operator
     return Feedback(feedback_id="fb_" + request_id.replace("-", "")[:32], request_id=request_id,
                     org_id=org_id, author_principal=principal, author_role=role,
                     channel=FeedbackChannel.console, name=name, value=value,
                     calibration_set=calibration_set, rubric_version=rubric_version,
-                    by_operator=role is AuthorRole.operator, created_at=NOW)
+                    by_operator=by_operator, created_at=NOW)
 
 
 def label(request_id: str, *, org_id: str = ORG_A, rubric_version: int = 1,
@@ -50,13 +56,21 @@ def label(request_id: str, *, org_id: str = ORG_A, rubric_version: int = 1,
 
 
 def candidate(n: int, *, org_id: str = ORG_A, mode: TraceMode = TraceMode.full,
-              content: ContentState = ContentState.available, failure: bool = False,
-              media: bool = True, entries: tuple[Feedback, ...] = (),
-              started_at: datetime | None = None) -> TraceCandidate:
+              content: ContentState = ContentState.available, media: bool = True,
+              entries: tuple[Feedback, ...] = (), started_at: datetime | None = None,
+              http_status: int = 200, finish_reason: str | None = "stop",
+              schema_valid: bool = True) -> TraceCandidate:
+    """R56: the candidate carries raw facts; the sampler derives the strata."""
     return TraceCandidate(request_id=uuid(n), org_id=org_id, trace_mode=mode,
                           content_state=content, started_at=started_at or NOW,
-                          model_revision=MODEL, failure=failure, media_available=media,
-                          feedback=entries)
+                          model_revision=MODEL, http_status=http_status,
+                          finish_reason=finish_reason, schema_valid=schema_valid,
+                          media_available=media, feedback=entries)
+
+
+def truncated(n: int, **kw) -> TraceCandidate:
+    """A failure-stratum candidate: `06` §3.1's `finish_reason = length`."""
+    return candidate(n, finish_reason=FINISH_REASON_LENGTH, **kw)
 
 
 def population(*, uniform: int = 40, failures: int = 20, feedback_bearing: int = 20,
@@ -67,7 +81,7 @@ def population(*, uniform: int = 40, failures: int = 20, feedback_bearing: int =
     for _ in range(uniform):
         out.append(candidate(n, org_id=org_id)); n += 1
     for _ in range(failures):
-        out.append(candidate(n, org_id=org_id, failure=True)); n += 1
+        out.append(truncated(n, org_id=org_id)); n += 1
     for _ in range(feedback_bearing):
         out.append(candidate(n, org_id=org_id,
                              entries=(feedback(uuid(n), org_id=org_id),))); n += 1
@@ -75,8 +89,12 @@ def population(*, uniform: int = 40, failures: int = 20, feedback_bearing: int =
 
 
 class FakeCandidateSource:
-    """`judge.CandidateSource`. Records its arguments so a test can prove the port was
-    called with the tenant and lookback it was given, not with something wider."""
+    """`judge.CandidateSource`, honouring its contract: it truncates to `limit`.
+
+    Records its arguments so a test can prove the port was called with the tenant and
+    lookback it was given - and that it was **not** called at all when consent or
+    ownership refuses.
+    """
 
     def __init__(self, candidates: tuple[TraceCandidate, ...] = ()) -> None:
         self.rows = candidates
@@ -88,12 +106,30 @@ class FakeCandidateSource:
         return tuple(self.rows)[:limit]
 
 
+class OverReturningSource(FakeCandidateSource):
+    """A source that **ignores `limit`** - a query without a `LIMIT`, a projection
+    replaying a backlog, an adapter someone wrote in a hurry. The sampler's bound has to
+    hold anyway, which is exactly what the well-behaved fake above cannot show."""
+
+    async def candidates(self, org_id: str, *, since: datetime,
+                         limit: int) -> tuple[TraceCandidate, ...]:
+        self.calls.append((org_id, since, limit))
+        return tuple(self.rows)
+
+
 #: An approved-looking rate row for the estimate tests. It is **not** a price from
-#: `research/cross-cutting/cloud-pricing.md` (which has no provider token rows); it is
-#: a test input, which is exactly why the shipped `APPROVED_RATES` table is empty.
+#: `research/cross-cutting/cloud-pricing.md` (which has no provider token rows); it is a
+#: test input, which is exactly why the shipped `APPROVED_RATES` table is empty.
 TEST_RATE = ProviderRate(price_version="test-rates-v1", model=JUDGE_MODEL,
                          input_per_million=Decimal("5"), output_per_million=Decimal("25"),
-                         source="tests/j/fakes.py - test input, not an approved price")
+                         source="tests/j/fakes.py - test input, not an approved price",
+                         effective_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+#: A dearer row that takes effect later, so "the row effective at the clock" is
+#: observable and reversing the row order cannot change the answer (R57).
+NEWER_RATE = ProviderRate(price_version="test-rates-v2", model=JUDGE_MODEL,
+                          input_per_million=Decimal("10"), output_per_million=Decimal("50"),
+                          source="tests/j/fakes.py - test input, not an approved price",
+                          effective_at=datetime(2026, 9, 15, tzinfo=timezone.utc))
 TEST_RATES = StaticRateTable((TEST_RATE,))
 
 
@@ -113,3 +149,15 @@ def result(*, groundedness: int | None = 4, relevance: int = 4, completeness: in
                         and fmt >= 3 and refusal >= 3)
     payload["overall_pass"] = overall_pass
     return payload
+
+
+def rejection(value: Result) -> Rejected:
+    """Assert first, then read `.reason`.
+
+    A test that reads `.reason` off whatever came back turns "the validator accepted
+    something it should have refused" into an `AttributeError` in the test body, which is
+    a test that crashed rather than a test that failed - and a mutation runner cannot
+    tell that from an honest assertion.
+    """
+    assert isinstance(value, Rejected), f"expected a rejection, got {value!r}"
+    return value
