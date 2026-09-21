@@ -17,8 +17,8 @@ from .cost import (APPROVED_RATES, JUDGE_MODE_LIVE, UNPRICED_NOTE, CostEstimate,
                    live_submission_allowed, per_sample_cost, require_live_submission, worst_case)
 from .dryrun import DEFAULT_CEILINGS, MAX_CANDIDATES, DryRunPlan, plan_dry_run, scan_bound
 from .rubric import (MARLIN_VIDEO_V1, MAX_DETAIL_CHARS, Criterion, DuplicateKey, JudgeScores,
-                     Rejected, Result, Rubric, Score, ScoreLedger, dedupe_key, parse_judge_json,
-                     validate_json, validate_output)
+                     Rejected, Result, Rubric, Score, ScoreLedger, dedupe_key, is_storable_text,
+                     parse_judge_json, validate_json, validate_output)
 from .sampling import (DEFAULT_DESIGN, FINISH_REASON_LENGTH, CalibrationDesign, CandidateSource,
                        Exclusion, Excluded, Sample, Selection, Stratum, TraceCandidate,
                        check_consent, deduplicate, rank, select)
@@ -30,7 +30,8 @@ __all__ = [
     "MAX_CANDIDATES", "MAX_DETAIL_CHARS", "ProviderRate", "RateTable", "Rejected", "Result",
     "Rubric", "Sample", "Score", "ScoreLedger", "Selection", "StaticRateTable", "Stratum",
     "TokenCeilings", "TraceCandidate", "UNPRICED_NOTE", "check_consent", "dedupe_key",
-    "deduplicate", "estimate_worst_case", "live_submission_allowed", "parse_judge_json",
+    "deduplicate", "estimate_worst_case", "is_storable_text",
+    "live_submission_allowed", "parse_judge_json",
     "per_sample_cost", "plan_dry_run", "rank", "require_live_submission", "scan_bound", "select",
     "validate_json", "validate_output", "worst_case",
 ]

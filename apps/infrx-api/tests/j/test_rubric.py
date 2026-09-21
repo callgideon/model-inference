@@ -9,11 +9,14 @@ duplicate delivery, the no-media rule, and "never raises, whatever arrives".
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 from infrx.contracts import limits
 from infrx.judge import (MARLIN_VIDEO_V1, MAX_DETAIL_CHARS, Criterion, DuplicateKey, JudgeScores,
-                         Rejected, Rubric, ScoreLedger, dedupe_key, parse_judge_json,
-                         validate_json, validate_output)
+                         Rejected, Rubric, ScoreLedger, dedupe_key, is_storable_text,
+                         parse_judge_json, validate_json, validate_output)
+from infrx.judge.rubric import NOTES
 
 from . import fakes
 
@@ -315,8 +318,69 @@ def test_parsing_refuses_malformed_json_without_raising():
                                     media_available=True)).detail) <= MAX_DETAIL_CHARS + 3
 
 
+def test_a_deeply_nested_payload_is_rejected_rather_than_raised():
+    """R2-B1: `json.loads` raises `RecursionError`, which is a `RuntimeError` and not a
+    `ValueError`, so it went straight through the parse guard and out of J2's
+    untrusted-input entry point. A 20 KB payload was enough."""
+    deep = reject(validate_json(RUBRIC, "[" * 10_000 + "]" * 10_000, run_id=RUN,
+                                sample_id=SAMPLE, media_available=True))
+    assert deep.reason == "too_deeply_nested"
+    # The other two shapes the review named. Some depths the C scanner handles, so the
+    # assertion is the one that matters: an answer, never an exception.
+    for text in ('{"a":' * 5_000 + "1" + "}" * 5_000,
+                 '{"relevance": {"score": 4, "rationale": '
+                 + "[" * 6_000 + "]" * 6_000 + "}}",
+                 '{"a":' * 40_000 + "1" + "}" * 40_000):
+        answer = validate_json(RUBRIC, text, run_id=RUN, sample_id=SAMPLE, media_available=True)
+        assert isinstance(answer, (JudgeScores, Rejected)), text[:24]
+    assert reject(validate_json(RUBRIC, '{"a":' * 40_000 + "1" + "}" * 40_000, run_id=RUN,
+                                sample_id=SAMPLE, media_available=True)).reason == \
+        "too_deeply_nested"
+
+
+def test_a_lone_surrogate_is_refused_at_the_boundary():
+    """R2-B1: `"\\ud800"` decodes to a lone surrogate, passes every length and range
+    check, and then raises at persistence - on the collect path, after the money is
+    spent. `is_storable_text` refuses it here instead."""
+    assert is_storable_text("ok") is True and is_storable_text("\ud800") is False
+    payload = fakes.result()
+    payload["relevance"] = {"score": 4, "rationale": "frame \ud800 shows it"}
+    assert reject(check(payload)).reason == "unstorable_text"
+    assert reject(check(fakes.result(notes="\udfff"))).reason == "unstorable_text"
+    # and through the JSON door, which is how it actually arrives
+    text = json.dumps(fakes.result()).replace('"fine"', '"\\ud800"')
+    assert reject(validate_json(RUBRIC, text, run_id=RUN, sample_id=SAMPLE,
+                                media_available=True)).reason == "unstorable_text"
+
+
+def test_a_hostile_subclass_cannot_make_the_validator_raise():
+    """R2-B1: the checks are exact-type, so a `dict`/`str`/`int` subclass whose hooks
+    raise is refused at the door rather than invited past it."""
+    class Exploding(dict):
+        def __iter__(self):
+            raise RuntimeError("boom")
+
+        def keys(self):
+            raise RuntimeError("boom")
+
+    class Weird(str):
+        def strip(self, *args):
+            raise RuntimeError("boom")
+
+    class Sneaky(int):
+        def __le__(self, other):
+            raise RuntimeError("boom")
+
+    assert reject(check(Exploding())).reason == "not_an_object"
+    payload = fakes.result(); payload["relevance"] = {"score": 4, "rationale": Weird("x")}
+    assert reject(check(payload)).reason == "rationale_missing"
+    payload = fakes.result(); payload["relevance"] = {"score": Sneaky(4), "rationale": "x"}
+    assert reject(check(payload)).reason == "score_not_an_integer"
+    payload = fakes.result(); payload[NOTES] = Weird("x")
+    assert reject(check(payload)).reason == "notes_out_of_bounds"
+
+
 def test_a_parsed_result_validates_like_a_built_one():
-    import json
     text = json.dumps(fakes.result())
     accepted = validate_json(RUBRIC, text, run_id=RUN, sample_id=SAMPLE, media_available=True)
     assert isinstance(accepted, JudgeScores) and accepted.overall_pass is True

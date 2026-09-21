@@ -50,6 +50,21 @@ def _brief(value: object, limit: int = 60) -> str:
     return text if len(text) <= limit else text[:limit] + "..."
 
 
+def is_storable_text(value: str) -> bool:
+    """Whether this string survives the trip to a UTF-8 column.
+
+    `json.loads` happily produces a **lone surrogate** (`"\\ud800"` decodes to one), and
+    every length and range check passes it - then `.encode("utf-8")` raises at
+    persistence, on the collect path, after the money has been spent. It is refused at
+    the boundary instead, like every other unstorable input.
+    """
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def _bounded_int(value: object, name: str, low: int, high: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{name} must be an integer")
@@ -256,7 +271,12 @@ def parse_judge_json(text: str | bytes) -> object:
 
 def validate_json(rubric: Rubric, text: str | bytes, *, run_id: str, sample_id: str,
                   media_available: bool) -> Result:
-    """`parse_judge_json` then `validate_output`, never raising for either."""
+    """`parse_judge_json` then `validate_output`, never raising for either.
+
+    `RecursionError` is caught by name because it is a `RuntimeError`, not a
+    `ValueError`: `"["*10000 + "]"*10000` is a 20 KB payload that blew straight through
+    the `(ValueError, TypeError)` clause and out of J2's untrusted-input entry point.
+    """
     def reject(reason: str, detail: str) -> Rejected:
         return Rejected(run_id=run_id, sample_id=sample_id, rubric_version=rubric.version,
                         reason=reason, detail=detail)
@@ -265,8 +285,16 @@ def validate_json(rubric: Rubric, text: str | bytes, *, run_id: str, sample_id: 
         payload = parse_judge_json(text)
     except DuplicateKey as exc:
         return reject("duplicate_key", str(exc))
+    except RecursionError:
+        # Deliberately not re-raised and deliberately not rendered: the stack is nearly
+        # exhausted, so the handler does the least work it can.
+        return reject("too_deeply_nested", "the result is nested too deeply to parse")
+    except json.JSONDecodeError as exc:
+        # `msg` is one of CPython's fixed strings and `pos` is an offset, so the detail
+        # says what went wrong and where without echoing a byte of the document.
+        return reject("malformed_json", f"{exc.msg} at position {exc.pos}")
     except (ValueError, TypeError) as exc:
-        return reject("malformed_json", str(exc))
+        return reject("malformed_json", f"unparsable input ({type(exc).__name__})")
     return validate_output(rubric, payload, run_id=run_id, sample_id=sample_id,
                            media_available=media_available)
 
@@ -280,10 +308,13 @@ def validate_output(rubric: Rubric, payload: object, *, run_id: str, sample_id: 
         return Rejected(run_id=run_id, sample_id=sample_id, rubric_version=rubric.version,
                         reason=reason, detail=detail)
 
-    if not isinstance(payload, dict):
+    # Exact types throughout, not `isinstance`: a `dict` subclass whose `__iter__` or
+    # `keys` raises would otherwise get past the door of a function documented never to
+    # raise, and `True` is not a score of 1. JSON only ever produces the exact types.
+    if type(payload) is not dict:
         return reject("not_an_object",
                       f"a judge result is a JSON object, not {type(payload).__name__}")
-    unnamed = [key for key in payload if not isinstance(key, str)]
+    unnamed = [key for key in payload if type(key) is not str]
     if unnamed:
         # Not reachable from JSON, but `validate_output` also takes a dict built in
         # process, and a non-string key made the key-set arithmetic raise `TypeError`
@@ -309,11 +340,11 @@ def validate_output(rubric: Rubric, payload: object, *, run_id: str, sample_id: 
     scores: list[Score] = []
     for criterion in scorable:
         entry = payload[criterion.name]
-        if not isinstance(entry, dict) or set(entry) != {"score", "rationale"}:
+        if type(entry) is not dict or set(entry) != {"score", "rationale"}:
             return reject("malformed_criterion",
                           f"{criterion.name} needs exactly a score and a rationale")
         score = entry["score"]
-        if isinstance(score, bool) or not isinstance(score, int):
+        if type(score) is not int:
             # `True` is not 1 and `4.0` is not 4: a float score would round into the
             # projection and a boolean would compare as one.
             return reject("score_not_an_integer", f"{criterion.name} score must be an integer")
@@ -322,21 +353,25 @@ def validate_output(rubric: Rubric, payload: object, *, run_id: str, sample_id: 
                           f"{criterion.name} score {_brief(score)} is outside "
                           f"{criterion.min_score}..{criterion.max_score}")
         rationale = entry["rationale"]
-        if not isinstance(rationale, str) or not rationale.strip():
+        if type(rationale) is not str or not rationale.strip():
             return reject("rationale_missing", f"{criterion.name} needs a rationale")
         # r1 R54: bounds count Unicode code points, which is what `len` counts here.
         if not rubric.min_rationale_chars <= len(rationale) <= rubric.max_rationale_chars:
             return reject("rationale_out_of_bounds",
                           f"{criterion.name} rationale is {len(rationale)} characters, not "
                           f"{rubric.min_rationale_chars}..{rubric.max_rationale_chars}")
+        if not is_storable_text(rationale):
+            return reject("unstorable_text", f"{criterion.name} rationale is not valid UTF-8")
         scores.append(Score(name=criterion.name, score=score, rationale=rationale))
 
     notes = payload[NOTES]
-    if not isinstance(notes, str) or len(notes) > rubric.max_notes_chars:
+    if type(notes) is not str or len(notes) > rubric.max_notes_chars:
         return reject("notes_out_of_bounds",
                       f"notes must be text of at most {rubric.max_notes_chars} characters")
+    if not is_storable_text(notes):
+        return reject("unstorable_text", "notes are not valid UTF-8")
     claimed = payload[OVERALL_PASS]
-    if not isinstance(claimed, bool):
+    if type(claimed) is not bool:
         return reject("overall_pass_not_a_boolean", "overall_pass must be a boolean")
     by_name = {score.name: score.score for score in scores}
     expected = rubric.passes(by_name, media=media_available)
