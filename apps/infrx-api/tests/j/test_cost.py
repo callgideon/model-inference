@@ -8,6 +8,8 @@ SDK, which is checked in a subprocess rather than asserted in prose.
 """
 from __future__ import annotations
 
+import ast
+import decimal
 import pathlib
 import re
 import subprocess
@@ -102,6 +104,62 @@ def test_an_unrepresentable_worst_case_refuses_rather_than_raising_arithmetic():
     refusal with a typed error, not a `decimal.InvalidOperation` out of a money path."""
     with pytest.raises(errors.BudgetExceeded):
         worst_case(fakes.TEST_RATE, DEFAULT_CEILINGS, 10 ** 30)
+    # and ceilings that are not ceilings are a refusal too, not an AttributeError
+    with pytest.raises(errors.BudgetExceeded):
+        worst_case(fakes.TEST_RATE, None, 1)
+
+
+@pytest.mark.parametrize("prec,rounding", [(3, decimal.ROUND_HALF_EVEN), (3, decimal.ROUND_DOWN),
+                                           (1, decimal.ROUND_FLOOR), (5, decimal.ROUND_DOWN)])
+def test_the_worst_case_ignores_the_ambient_decimal_context(prec, rounding):
+    """R2-B2: `per_sample * samples` ran in the **ambient** context, so a process whose
+    context carried a small precision or `ROUND_DOWN` rounded the worst case *down* - and
+    the guard then authorized a budget below what the run could spend. The review's repro:
+    49 samples at the test rates is exactly 5.56346000, and under `prec = 3` the estimate
+    read 5.56000000 and a 5.56 budget was authorized."""
+    exact = Decimal("5.56346000")
+    assert estimate(samples=49).worst_case_total == exact
+    below = DEFAULTS.replace(judge_mode="live", judge_live_budget_usd=Decimal("5.56"))
+    covering = DEFAULTS.replace(judge_mode="live", judge_live_budget_usd=exact)
+    with decimal.localcontext() as ctx:
+        ctx.prec, ctx.rounding = prec, rounding
+        hostile = estimate(samples=49)
+        assert hostile.worst_case_total == exact, "the ambient context moved the worst case"
+        assert allowed(below, hostile) is False
+        with pytest.raises(errors.BudgetExceeded, match="exceeds the live budget"):
+            require_live_submission(below, hostile, rates=fakes.TEST_RATES, at=fakes.NOW)
+        # and a budget that really does cover it still authorizes, so the fix is not just
+        # "refuse everything under a strange context"
+        assert require_live_submission(covering, hostile, rates=fakes.TEST_RATES,
+                                       at=fakes.NOW) == exact
+
+
+def test_no_decimal_arithmetic_in_the_judge_escapes_the_explicit_context():
+    """The audit R2-B2 asked for, as a check rather than a claim: no bare arithmetic
+    operator between money values anywhere in `infrx/judge`. Every amount goes through
+    `money`, which works in `money.CONTEXT` (prec 40) throughout."""
+    money_names = {"per_sample", "budget", "total", "amount", "input_per_million",
+                   "output_per_million", "worst_case_total", "reserved_cost"}
+
+    def named(node):
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        return ""
+
+    bare = []
+    for path in sorted((PACKAGE / "judge").rglob("*.py")):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.BinOp):
+                continue
+            if not isinstance(node.op, (ast.Mult, ast.Div, ast.Add, ast.Sub, ast.Pow)):
+                continue
+            touched = {named(node.left), named(node.right)} & money_names
+            if touched:
+                bare.append(f"{path.name}:{node.lineno}: {sorted(touched)}")
+    assert bare == [], "Decimal arithmetic outside money.CONTEXT"
 
 
 # --- rates come from an approved source, and there is not one yet ------------------

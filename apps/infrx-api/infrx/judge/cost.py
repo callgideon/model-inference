@@ -201,16 +201,25 @@ def _sample_count(samples: object) -> int:
 def worst_case(rate: ProviderRate, ceilings: TokenCeilings, samples: int) -> Decimal:
     """`ceiling(per_sample x samples)`, the one place the arithmetic lives.
 
+    Every operation runs in `money.CONTEXT` (prec 40), **never** the ambient decimal
+    context (R2-B2): `per_sample * samples` used the caller's context, so a process whose
+    context carried a small precision or `ROUND_DOWN` rounded the worst case *down* and
+    the guard authorized a budget below what the run could spend. Nothing in `infrx/`
+    changes the ambient context today, which is exactly why it was invisible.
+
     Raises `BudgetExceeded` rather than letting `decimal.InvalidOperation` out: a number
     too large to quantize is a refusal, not a 500.
     """
+    if not isinstance(ceilings, TokenCeilings):
+        raise errors.BudgetExceeded("a worst case needs validated token ceilings")
     try:
         per_sample = money.maximum_hold(ceilings.input_tokens, ceilings.billed_output_tokens,
                                         rate.input_per_million, rate.output_per_million)
-        # `money.parse` is what enforces the `numeric(20, 8)` domain: `ceiling` alone
-        # quantizes happily past 10^12, so a large enough sample count produced a
-        # reservation no ledger column could hold.
-        return money.parse(money.ceiling(per_sample * samples))
+        product = money.CONTEXT.multiply(per_sample, Decimal(samples))
+        # `money.parse` enforces the `numeric(20, 8)` domain: `ceiling` alone quantizes
+        # happily past 10^12, so a large enough sample count produced a reservation no
+        # ledger column could hold.
+        return money.parse(money.ceiling(product))
     except (decimal.DecimalException, ValueError) as exc:
         raise errors.BudgetExceeded(
             f"the worst case is not a representable amount: {exc}") from exc
