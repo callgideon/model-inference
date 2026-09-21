@@ -827,6 +827,36 @@
       "cases": [
         "both UTC timestamp forms are accepted and normalised, microseconds and all"
       ]
+    },
+    {
+      "id": "MONEY-04",
+      "note": "the bound is one-sided, so a large negative amount fabricates its digits",
+      "file": "lib/services/credits.ts",
+      "find": "    if (!Number.isFinite(value) || Math.abs(value) >= SAFE_MONEY_NUMBER) {\n      throw new TypeError(\"a wallet amount this large must arrive as a decimal string, not a number\");\n    }",
+      "replace": "    if (!Number.isFinite(value) || value >= SAFE_MONEY_NUMBER) {\n      throw new TypeError(\"a wallet amount this large must arrive as a decimal string, not a number\");\n    }",
+      "cases": [
+        "a wallet amount that arrives as a number is bounded by what a double can hold"
+      ]
+    },
+    {
+      "id": "MONEY-05",
+      "note": "the display path counts a value it cannot read exactly",
+      "file": "lib/services/credits.ts",
+      "find": "    const units =\n      typeof row.delta_usd === \"number\"\n        ? Math.abs(row.delta_usd) < SAFE_MONEY_NUMBER\n          ? tryParseMoneyUnits(row.delta_usd.toFixed(8))\n          : null\n        : tryParseMoneyUnits(row.delta_usd);",
+      "replace": "    const units =\n      typeof row.delta_usd === \"number\"\n        ? tryParseMoneyUnits(row.delta_usd.toFixed(8))\n        : tryParseMoneyUnits(row.delta_usd);",
+      "cases": [
+        "a wallet amount that arrives as a number is bounded by what a double can hold"
+      ]
+    },
+    {
+      "id": "CREDITS-05",
+      "note": "the fallback regex is not anchored on the call, so an inner name matches",
+      "file": "lib/services/credits.ts",
+      "find": "    const missing = (code === \"PGRST202\" || code === \"42883\") && /org_wallet_summary\\s*\\(/.test(message);",
+      "replace": "    const missing = (code === \"PGRST202\" || code === \"42883\") && /org_wallet_summary/.test(message);",
+      "cases": [
+        "a missing function falls back; a broken one does not"
+      ]
     }
   ]
 }

@@ -137,7 +137,9 @@ export function walletSummaryOutcome(
      * every outstanding hold: getting this wrong reports an inflated available balance, which is a
      * number a customer acts on.
      */
-    const missing = (code === "PGRST202" || code === "42883") && /org_wallet_summary/.test(message);
+    // Anchored on the call, so a helper named `org_wallet_summary_inner(uuid)` going missing inside the
+    // shipped function is not read as the shipped function going missing.
+    const missing = (code === "PGRST202" || code === "42883") && /org_wallet_summary\s*\(/.test(message);
     if (missing) return { kind: "fallback", reason: "org_wallet_summary does not exist yet (pre-D1)" };
     throw new Error(`the wallet summary could not be read: ${code || "unknown error"}`);
   }

@@ -70,6 +70,24 @@ test("a wallet amount that arrives as a number is bounded by what a double can h
     () => creditsFromSummary({ ledger_total: 2 ** 26, reserved_total: "0", loaded: "0", spent: "0" }),
     /decimal string/,
   );
+  // The bound is on the magnitude: a debit is negative, and `-123456789012.12345678` fabricates its
+  // last digits exactly as the positive value does.
+  for (const field of ["ledger_total", "reserved_total", "loaded", "spent"] as const) {
+    const row = { ledger_total: "0", reserved_total: "0", loaded: "0", spent: "0" };
+    assert.throws(
+      () => creditsFromSummary({ ...row, [field]: -123456789012.12345678 }),
+      /decimal string/,
+      `${field} as a large negative number`,
+    );
+    assert.throws(
+      () => creditsFromSummary({ ...row, [field]: -(2 ** 26) }),
+      /decimal string/,
+      `${field} at the negative bound`,
+    );
+  }
+  // And just inside it, on the negative side, a number is still exact.
+  const negative = creditsFromSummary({ ledger_total: "0", reserved_total: "0", loaded: "0", spent: -(2 ** 26 - 1) });
+  assert.equal(negative.spent, "67108863.00000000");
   const inside = creditsFromSummary({ ledger_total: 2 ** 26 - 1, reserved_total: 0.5, loaded: 1.25, spent: -0.25 });
   assert.equal(inside.ledger_total, "67108863.00000000");
   assert.equal(inside.available, "67108862.50000000");
@@ -79,6 +97,18 @@ test("a wallet amount that arrives as a number is bounded by what a double can h
   assert.equal(fallback.available, "12.50000000");
   assert.equal(fallback.loaded, "20.00000000");
   assert.equal(fallback.spent, "7.50000000");
+
+  // A row it cannot read exactly is skipped rather than counted with invented digits: these two figures
+  // are display-only on a path that disappears with D1, and a fabricated total is worse than a low one.
+  const unsafe = creditsFromLedgerPage("5.00000000", [
+    { delta_usd: 20 },
+    { delta_usd: 123456789012.12345678 },
+    { delta_usd: -(2 ** 26) },
+    { delta_usd: "not-money" as unknown as number },
+  ]);
+  assert.equal(unsafe.loaded, "20.00000000", "the unsafe credit is skipped, not fabricated");
+  assert.equal(unsafe.spent, "0.00000000", "and so is the unsafe debit");
+  assert.equal(unsafe.available, "5.00000000", "while the balance comes from the function, unaffected");
 });
 
 test("a missing function falls back; a broken one does not", () => {
@@ -108,11 +138,18 @@ test("a missing function falls back; a broken one does not", () => {
 
   // And the code alone must not decide either: 42883 is also what a missing function *inside* the
   // shipped one raises, which is a broken wallet rather than an absent one.
-  assert.throws(
-    () => walletSummaryOutcome(null, { code: "42883", message: "function infrx.wallet_of(uuid) does not exist" }),
-    /wallet summary could not be read/,
-    "a missing function inside org_wallet_summary is not org_wallet_summary missing",
-  );
+  for (const message of [
+    "function infrx.wallet_of(uuid) does not exist",
+    // An inner helper whose name merely starts with the function's: the regex is anchored on the call.
+    "function public.org_wallet_summary_inner(uuid) does not exist",
+    "column org_wallet_summary.reserved_total does not exist",
+  ]) {
+    assert.throws(
+      () => walletSummaryOutcome(null, { code: "42883", message }),
+      /wallet summary could not be read/,
+      `a missing thing inside org_wallet_summary is not org_wallet_summary missing: ${message}`,
+    );
+  }
 
   // The two halves, one at a time, over the same message: only the code differs.
   const text = "Could not find the function public.org_wallet_summary(p_org) in the schema cache";
