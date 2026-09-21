@@ -781,6 +781,9 @@ def test_an_fsync_error_never_claims_durability():
         assert stats["appended"] == 1
         assert stats["fsynced"] == 0, "durability was claimed over a failed fsync"
         assert stats["loss_reasons"]["disk_error"] == 1
+        # the durability gap I reports: appended, then unpromised. It is not the loss count,
+        # because R42 caps a capture's losses at one and this figure counts records.
+        assert stats["unpromised"] == 1, stats
         assert spool.segments()[0].sealed is True
         io.fail_fsync_on = None
         spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
@@ -988,6 +991,20 @@ def test_a_failed_segment_open_leaks_no_descriptor_and_no_file():
         assert stats["dropped"] == 60
         assert stats["in_memory_content_bytes"] == 0, "a failed write kept its charge"
         await spool.close()
+
+        # and a failure that is not an OSError leaks no more than one that is: whatever the
+        # exception, the descriptor and the header-less file are ours to clean up (N29)
+        io = DrillIO(fail_write_on=1, write_error=RuntimeError("not a disk error"))
+        spool = sink(io=io)
+        before = len(os.listdir("/proc/self/fd"))
+        for index in range(20):
+            await capture_one(spool, request_id(index), b"x" * 100)
+            await spool.flush(spool.clock.now())
+        assert len(os.listdir("/proc/self/fd")) == before, "a RuntimeError leaked descriptors"
+        assert [name for name in os.listdir(spool.spool_dir)
+                if name.endswith(".seg")] == [], "a RuntimeError left orphan segments"
+        assert (await spool.stats())["loss_reasons"]["disk_error"] == 20
+        await spool.close()
     asyncio.run(scenario())
 
 
@@ -1057,6 +1074,20 @@ def test_a_writer_error_that_is_not_an_oserror_still_settles_the_batch():
         assert stats["dropped"] == 3
         assert stats["in_memory_content_bytes"] == 0
         assert stats["appended"] == 0
+        await spool.close()
+
+        # R42 holds through this path too: a capture that has already contributed its one
+        # loss and whose batch then fails *at the settlement* counts one, not two.
+        tiny = DEFAULTS.replace(trace_capture_bytes=DEFAULTS.trace_metadata_reserve_bytes + 1_000)
+        spool = sink(tiny)
+        capture = spool.open(ID_A, b.ORG_A, TraceMode.full, spool.clock.at(600))
+        assert capture.add(b"x" * 2_000) is False        # breaches: one loss counted
+        await capture.finish(b.trace(ID_A, content_bytes=0, metadata_bytes=64))
+        spool._write_batch = explode
+        await spool.flush(spool.clock.now())
+        stats = await spool.stats()
+        assert sum(stats["loss_reasons"].values()) == 1, stats["loss_reasons"]
+        assert stats["loss_reasons"]["memory_budget"] == 1
         await spool.close()
     asyncio.run(scenario())
 
@@ -1335,6 +1366,18 @@ def test_retained_content_is_released_with_its_charge():
         assert abandoned.add(b"y" * 1_000) is True
         await abandoned.abandon(TraceLossReason.abandoned)
         assert abandoned.parts == []
+        # (b2) a capture whose envelope declares no content spools none of it, even though
+        # the parts are still in hand: the row and the bytes are one fact (N25)
+        stripped = spool.open(request_id(8), b.ORG_A, TraceMode.full, spool.clock.at(600))
+        assert stripped.add(b"content the envelope will not declare") is True
+        assert await stripped.finish(
+            b.trace(request_id(8), content_bytes=0, metadata_bytes=16)) \
+            is TraceOfferResult.accepted_in_memory
+        assert stripped.parts == []
+        spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
+        await spool.flush(spool.clock.now())
+        stored = [row for row in recover(spool.spool_dir).contents if row]
+        assert stored == [], f"a stripped capture spooled its content anyway: {stored}"
         # (c) a finish hands them over and keeps nothing
         kept = spool.open(ID_C, b.ORG_A, TraceMode.full, spool.clock.at(600))
         assert kept.add(b"z" * 1_000) is True

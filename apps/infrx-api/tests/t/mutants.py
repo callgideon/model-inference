@@ -86,6 +86,7 @@ CLOSE_RACE = "test_close_admits_nothing_once_it_has_started_and_joins_off_the_lo
 FSYNC_RAISES = "test_an_fsync_step_that_raises_leaves_the_books_agreeing"
 OWNERSHIP = "test_a_failed_ack_keeps_the_segment_and_a_failed_boot_keeps_no_lock"
 MOVED_FRAME = "test_a_frame_excised_or_duplicated_mid_segment_is_the_tail"
+PARTS_RELEASE = PARTS
 
 
 @dataclass(frozen=True)
@@ -429,6 +430,21 @@ MUTANTS: tuple[Mutant, ...] = (
        '                                   f"{int.from_bytes(os.urandom(4), \'big\'):08x}")',
        '        self.boot_id = boot_id or f"{time.time_ns():016x}"',
        ID_REUSE),
+    _m("settlement_forgets_the_counted_flag", "one loss per capture through a writer bug (N03)",
+       "            result = _WriteResult(dropped=[(TraceLossReason.disk_error, row.counted)\n"
+       "                                           for row in self.batch])",
+       "            result = _WriteResult(dropped=[(TraceLossReason.disk_error, False)\n"
+       "                                           for row in self.batch])",
+       WRITER_BUG),
+    _m("the_unpromised_count_is_not_reported", "the durability gap is visible (N27)",
+       "        self.unpromised_records += result.fsync_failed",
+       "        self.unpromised_records += 0", FSYNC_ERROR),
+    _m("a_stripped_capture_spools_its_content", "the row and its bytes are one fact (N25)",
+       "        parts = tuple(self.parts) if declared else ()",
+       "        parts = tuple(self.parts)", PARTS_RELEASE),
+    _m("a_failed_open_cleans_up_only_on_oserror", "any failed open cleans up (N29)",
+       "        except BaseException:\n            # Round 1: the descriptor leaked",
+       "        except OSError:\n            # Round 1: the descriptor leaked", OPEN_FAIL),
     _m("close_marks_the_sink_closed_last", "nothing enters once close has started",
        "        self._closed = True\n        writer, self._writer = self._writer, None",
        "        writer, self._writer = self._writer, None", CLOSE_RACE),

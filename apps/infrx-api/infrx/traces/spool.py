@@ -569,6 +569,11 @@ class SpoolTraceSink(FakeTraceSink):
         self.appended_records = 0
         self.fsynced_records = 0
         self.spool_bytes = 0
+        # Records appended and then unpromised by an fsync error. Distinct from the loss
+        # count: R42 lets a capture contribute one loss, so a record whose capture had
+        # already counted one is unpromised without being counted again - and I's durability
+        # gap still has to be able to see it.
+        self.unpromised_records = 0
         self.paused = False
         # The size of the largest record the caps refused, so resuming asks "would that
         # record fit now?" instead of "is there a byte free?" - the second answer is yes
@@ -752,6 +757,7 @@ class SpoolTraceSink(FakeTraceSink):
             # `counted` is the capture's own loss count travelling with its row (R42): the
             # drop is recorded either way, the *loss* only once per capture.
             self._drop(reason, counted=counted)
+        self.unpromised_records += result.fsync_failed
         if result.fsync_losses:
             # Appended, then unpromised: not refused (the bytes may even be on disk), but
             # nothing here will claim durability for them. `fsync_failed` is how many
@@ -786,6 +792,7 @@ class SpoolTraceSink(FakeTraceSink):
             "spool_unacked_records": unacked,
             "spool_paused": self.paused,
             "queued_payload_bytes": self.queued_payload_bytes,
+            "unpromised": self.unpromised_records,
         }
 
     # --- the shipper's interface (T2) --------------------------------------------------
