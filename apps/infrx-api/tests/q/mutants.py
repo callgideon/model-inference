@@ -133,6 +133,13 @@ MUTANTS: tuple[Mutant, ...] = (
        "        cost = self._service_cost(entry.event)",
        "        flow.events.remove(event_id)\n        cost = self._service_cost(entry.event)",
        "test_q1_fair__a_bad_service_cost_is_a_typed_error_that_moves_nothing"),
+    _m("the_estimator_is_never_consulted",
+       "the injected estimator is called on every dispatch, so its answer is what the "
+       "tag advances by and a bad answer is still a typed refusal",
+       "        cost = self._service_cost(entry.event)",
+       "        cost = 1.0",
+       "test_q1_fair__a_bad_service_cost_is_a_typed_error_that_moves_nothing",
+       "test_q1_fair__one_dispatch_moves_the_tag_by_exactly_cost_over_weight"),
     _m("a_bad_service_cost_is_not_validated",
        "a bad estimator answer is a typed internal_error raised before anything moves",
        '        if not (cost > 0) or cost == float("inf"):',
