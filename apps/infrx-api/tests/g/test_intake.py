@@ -109,14 +109,16 @@ def test_media_sec__a_slow_body_hits_the_intake_deadline():
     now = [1_790_000_000.0]
     tc, calls = client(clock=lambda: now[0], intake_timeout_s=30)
 
-    def drip():
-        for _ in range(4):
-            now[0] += 20            # 20s per chunk: the second one is past 30s
-            yield b'{"messages":[]}'
+    def chunk():
+        now[0] += 20                # 20 s per chunk: the second one is past 30 s
+        return b'{"messages":[]}'
 
-    response = tc.post(support.CHAT_PATH, headers=support.RAW, content=drip())
-    assert response.status_code == 504, response.text
-    assert support.error_of(response)["code"] == "deadline_exceeded"
+    # Raw ASGI, because a test client hands the whole body over at once and could not
+    # show *when* the read stopped - only that it did.
+    sent, asked = asgi_post(tc.app, body_chunks=chunk, limit=16)
+    assert sent[0]["status"] == 504, sent[0]
+    assert b"deadline_exceeded" in sent[1]["body"]
+    assert asked == 2, f"the read stopped after {asked} chunks, not 2"
     assert calls == []
 
 

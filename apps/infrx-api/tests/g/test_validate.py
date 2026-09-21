@@ -427,6 +427,29 @@ def test_dur_admit__the_deadline_survives_clock_skew(behind_s, expected):
         assert raised.value.code == "invalid_request"
 
 
+
+def test_media_sec__a_backslash_alone_is_enough_to_refuse_a_url():
+    """Without a userinfo `@`: a backslash is a path separator to some clients and not
+    to others, which is how a validated host stops being the host that is fetched."""
+    response, calls = post(parts({"type": "video_url",
+                                  "video_url": {"url": "https://cdn.test" + chr(92) + "evil/a"}}))
+    error = support.error_of(response)
+    assert (response.status_code, error["code"]) == (400, "unsupported_media")
+    assert calls == []
+
+
+def test_f_base__parameters_carry_the_closed_set_and_nothing_else():
+    """`messages` and `model` are record fields, not parameters; everything else a
+    caller may send travels in `parameters`, and nothing else does."""
+    tc, calls = client()
+    body = message(model=support.PUBLIC_MODEL, temperature=0.4, stream=False, n=1, seed=7)
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json=body).status_code == 202
+    parameters = calls[0][1].parameters
+    assert set(parameters) == {"temperature", "stream", "n", "seed"}, parameters
+    assert "messages" not in parameters and "model" not in parameters
+    assert set(parameters) <= validate.SUPPORTED
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and not hasattr(fn, "pytestmark"):

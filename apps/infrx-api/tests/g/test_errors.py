@@ -224,3 +224,41 @@ if __name__ == "__main__":
         if name.startswith("test_") and not hasattr(fn, "pytestmark"):
             fn()
             print("ok", name)
+
+
+def test_f_base__a_429_and_a_504_also_close_the_connection():
+    """Both are refused while a body may still be arriving."""
+    from infrx.gateway.routes import intake
+
+    for error in (errors.CapacityExhausted("x", retry_after_s=2),
+                  errors.DeadlineExceeded("x")):
+        response = intake.response(error, support.REQUEST_ID)
+        assert response.headers["connection"] == "close", error.code
+
+
+def test_f_base__the_last_resort_carries_no_header_from_the_envelope_it_replaced():
+    """The headers built for the envelope that failed - a Retry-After for a code this
+    one does not report - must not ride along."""
+    from infrx.gateway.routes import intake
+
+    unserialisable = errors.CapacityExhausted("x", retry_after_s=2, infrx={"p": object()})
+    response = intake.response(unserialisable, support.REQUEST_ID)
+    assert response.status_code == 500
+    assert "retry-after" not in {key.lower() for key in response.headers}
+    assert json.loads(response.body)["error"]["code"] == "internal_error"
+
+
+def test_f_base__the_app_level_handlers_mint_a_checked_request_id():
+    """They answer outside a route, so they use the same guarded minting the routes do."""
+    app, _ = support.cutover_app(ingress_deps=support.deps(
+        new_request_id=lambda: "not-a-request-id\r\nX-Evil: 1"))
+    tc = TestClient(app, raise_server_exceptions=False)
+
+    @app.get("/boom")
+    async def boom():
+        raise RuntimeError("no")
+
+    for response in (tc.get("/v1/nope"), tc.get("/boom")):
+        minted = response.headers[wire.HEADER_INFERENCE_ID]
+        assert "\r" not in minted and len(minted) == 36, minted
+        assert support.error_of(response)["request_id"] == minted

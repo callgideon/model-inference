@@ -620,3 +620,76 @@ def test_media_sec__an_inline_payload_that_is_not_base64_ascii_is_refused(name, 
 
 def parts_body(*content):
     return {"messages": [{"role": "user", "content": list(content)}]}
+
+
+# --- review r3 same pass: the boundaries, exactly ----------------------------------
+def test_media_sec__the_opener_cap_is_exact_at_its_real_boundary():
+    """133,252 openers in text is accepted and 133,253 is not - the cap itself, not a
+    number comfortably inside it."""
+    tc, accepted = client()
+    inside = "{" * (validate.MAX_OPENERS - validate.STRUCTURE_OPENERS)
+    assert tc.post(support.CHAT_PATH, headers=support.AUTH, json={
+        "messages": [{"role": "user", "content": inside}]}).status_code == 202
+    response = tc.post(support.CHAT_PATH, headers=support.AUTH, json={
+        "messages": [{"role": "user", "content": "{" * (validate.MAX_OPENERS + 1)}]})
+    assert response.status_code in (400, 413), response.text[:160]
+    assert len(accepted) == 1
+
+
+def test_media_sec__the_large_body_threshold_is_exclusive():
+    """A body *at* the threshold is not a large body; one byte more is."""
+    from infrx.gateway.routes import intake
+
+    slots = intake.LargeBodies(limit=1, threshold=1024)
+    slot = slots.slot()
+    slot.account(1024)
+    assert slots.in_flight == 0 and not slot.held
+    slot.account(1025)
+    assert slots.in_flight == 1 and slot.held
+
+
+def test_media_sec__a_slot_is_released_once_however_often_release_is_called():
+    from infrx.gateway.routes import intake
+
+    slots = intake.LargeBodies(limit=1, threshold=8)
+    slot = slots.slot()
+    slot.account(64)
+    assert slots.in_flight == 1
+    slot.release()
+    slot.release()
+    slot.release()
+    assert slots.in_flight == 0, "releasing twice freed a slot nobody held"
+    other = slots.slot()
+    other.account(64)                      # the slot is available exactly once
+    assert slots.in_flight == 1
+
+
+def test_media_sec__a_declared_length_that_is_not_a_number_is_ignored():
+    """`"²".isdigit()` is true and a 5,000-digit length is a pointless big int: neither
+    is a content length, and neither may reach `int()` on the request path. The running
+    total is the real bound either way."""
+    from infrx.gateway.routes import intake
+
+    slots = intake.LargeBodies(limit=1, threshold=8)
+    calls, accept = support.recorder()
+    app, _ = support.cutover_app(ingress_deps=support.deps(accept=accept, large_bodies=slots))
+    body = json.dumps({"messages": [{"role": "user", "content": "hi"}]}).encode()
+
+    for declared in (b"\xc2\xb2", b"9" * 5_000, b"", b"-1", b"12abc"):
+        sent = []
+
+        async def receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        asyncio.run(app({"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+                         "method": "POST", "path": support.CHAT_PATH,
+                         "raw_path": support.CHAT_PATH.encode(), "query_string": b"",
+                         "root_path": "", "scheme": "http", "client": ("127.0.0.1", 1),
+                         "server": ("t", 80),
+                         "headers": [(b"authorization", f"Bearer {support.TOKEN}".encode()),
+                                     (b"content-type", b"application/json"),
+                                     (b"content-length", declared)]},
+                        receive, lambda message: sent.append(message) or asyncio.sleep(0)))
+        assert sent[0]["status"] == 202, (declared[:20], sent[0])
+    assert len(calls) == 5
+    assert slots.in_flight == 0
