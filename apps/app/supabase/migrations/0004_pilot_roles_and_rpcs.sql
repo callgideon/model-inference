@@ -23,6 +23,15 @@ grant select, insert, update, delete on all tables in schema infrx to service_ro
 grant select on infrx.wallet_reconciliation to service_role;
 grant execute on function infrx.now() to service_role;
 
+-- r2 (ruling 4): every object a later migration adds here starts with nothing.
+-- `grant … on all tables` above is evaluated once, so without this a relation added by
+-- D2-D6 would carry PostgreSQL's defaults (PUBLIC EXECUTE on a function) until its
+-- author remembered a revoke.
+alter default privileges in schema infrx revoke execute on functions from public;
+alter default privileges in schema infrx
+  grant select, insert, update, delete on tables to service_role;
+alter default privileges in schema infrx grant execute on functions to service_role;
+
 -- Row-level security on every tenant-bearing relation, with no policy for a browser
 -- role. `service_role` is BYPASSRLS (as in production), so this sits behind the
 -- schema grant as defence in depth: a future PostgREST exposure of `infrx` would
@@ -49,29 +58,53 @@ alter table infrx.org_entitlements       enable row level security;
 alter table infrx.audit_entries          enable row level security;
 alter table infrx.price_versions         enable row level security;
 
--- =============================== protected columns on existing public tables ===
--- organizations: 0001 revoked insert and delete but left UPDATE, because an owner may
--- rename their workspace (`organizations_update_owner`). Suspension now lives on this
--- row, so the table-level privilege goes and exactly the two harmless columns come
--- back. Without this an owner clears their own suspension through the existing policy.
-revoke update on public.organizations from anon, authenticated;
+-- ============================= privileges on the existing public relations (r2) ===
+-- Ruling 4, and B3: enumerating verbs (`revoke insert, update, delete`) left TRUNCATE
+-- behind, which Supabase's default ALL grant hands to `anon` and `authenticated` —
+-- `truncate public.credit_ledger cascade` erased the ledger as an anonymous browser
+-- session, and neither RLS (which TRUNCATE ignores) nor the row-level append-only
+-- trigger (which never fires) said a word. So: **revoke ALL, then grant back exactly
+-- what the deployed console needs**, verb by verb and column by column. The list below
+-- is the whole browser-reachable privilege surface of this database; the evidence
+-- repeats it as a table.
+--
+-- `anon` gets nothing at all: every policy in 0001 is `to authenticated`, so anon
+-- already read zero rows through RLS, and the grants only ever amounted to the
+-- TRUNCATE hole. A future public (pre-login) page that needs the model catalogue must
+-- add `grant select on public.models to anon` and say so.
+revoke all on public.profiles, public.organizations, public.org_members,
+              public.models, public.api_keys, public.usage_events,
+              public.credit_ledger
+  from anon, authenticated;
+
+-- profiles: read yourself and anyone sharing an organization (0001's policy), and write
+-- exactly your own display fields. `is_operator` IS the platform operator role (06).
+grant select on public.profiles to authenticated;
+grant update (full_name, avatar_url) on public.profiles to authenticated;
+
+-- organizations: an owner renames their workspace and nothing else. Suspension lives
+-- here now, so a table-level UPDATE would let an owner lift their own suspension.
+grant select on public.organizations to authenticated;
 grant update (name, slug) on public.organizations to authenticated;
 
--- profiles: `is_operator` IS the platform operator role (06). 0001 already granted
--- only (full_name, avatar_url); this states the negative so a future widening of the
--- table grant cannot silently re-expose it.
-revoke update (is_operator) on public.profiles from anon, authenticated;
+-- org_members, models: read-only for a signed-in user.
+grant select on public.org_members to authenticated;
+grant select on public.models to authenticated;
 
--- Money and metering stay service-only. 0001 revoked these; repeated here because
--- this file is the one place the whole matrix can be read, and because the columns
--- 0003 added to both tables are protected by exactly these revokes.
-revoke insert, update, delete on public.credit_ledger from anon, authenticated;
-revoke insert, update, delete on public.usage_events from anon, authenticated;
-revoke insert, update, delete on public.models from anon, authenticated;
-revoke insert, update, delete on public.org_members from anon, authenticated;
+-- api_keys (ruling 5 / B4): INSERT is column-scoped too. A table-level INSERT covers
+-- every column, so an owner could create a key with `trace_mode = 'full'` — a consent
+-- decision with no `consent_history` row — or backdate `created_at`, or choose `id`.
+-- The five columns below are exactly what `app/(console)/api-keys/actions.ts` writes;
+-- `id`, `created_at`, `last_used_at` and `trace_mode` take their defaults.
+grant select on public.api_keys to authenticated;
+grant insert (org_id, created_by, name, prefix, key_hash) on public.api_keys
+  to authenticated;
+grant update (name, revoked_at) on public.api_keys to authenticated;
 
--- api_keys keeps 0001's owner insert/update (creating and revoking a key is a
--- nonfinancial tenant action, and R33 keeps `keys.revoke` working while suspended).
+-- usage_events, credit_ledger: read-only. Every write is the service role's, and
+-- TRUNCATE is refused for every role by the statement trigger in 0003.
+grant select on public.usage_events to authenticated;
+grant select on public.credit_ledger to authenticated;
 
 -- ========================================================= mutation boundary ===
 -- 06: "Expose narrow service/RPC operations for admit, prepare, claim, heartbeat,

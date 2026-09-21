@@ -146,7 +146,11 @@ create table infrx.jobs (
   request_id uuid primary key,
   job_handle text unique not null,
   org_id uuid not null references public.organizations(id) on delete cascade,
-  key_id uuid references public.api_keys(id) on delete set null,
+  -- r2: the foreign key is composite and RESTRICT, in the tenant-coherence block
+  -- below. `on delete set null` could never execute anyway - `jobs_guard` refuses the
+  -- referential update - so a key that had admitted a job was simply undeletable with
+  -- a misleading error. Pilot policy: keys are revoked, never deleted.
+  key_id uuid,
   model_revision text not null,
   execution_mode text not null check (execution_mode in ('sync','stream','async')),
   state text not null
@@ -233,7 +237,21 @@ create table infrx.jobs (
     check ((settlement_state = 'held_unknown') = (reconcile_after is not null)),
   -- R30: a success the customer cannot fetch is not a success.
   constraint jobs_success_has_result
-    check (state <> 'succeeded' or result_ref is not null)
+    check (state <> 'succeeded' or result_ref is not null),
+  -- r2, from the review's list of things the schema accepted:
+  -- a debit past the reserved envelope is the one number admission promised to bound.
+  constraint jobs_debit_within_hold check (debit <= maximum_hold),
+  -- 05: a settled debit rests on authoritative usage; held_unknown is its opposite.
+  constraint jobs_settled_usage_is_authoritative
+    check (settlement_state <> 'settled' or usage_certainty = 'authoritative'),
+  constraint jobs_unknown_usage_is_not_authoritative
+    check (settlement_state <> 'held_unknown'
+           or usage_certainty is distinct from 'authoritative'),
+  -- R29: a deadline before the admission is a job nothing may ever run.
+  constraint jobs_deadline_after_admission check (deadline_at > admitted_at),
+  -- R38: the queue budget cannot be overspent by the accounting that tracks it.
+  constraint jobs_queue_wait_within_budget
+    check (queue_wait_used_s <= budget_queue_wait_s)
 );
 create index jobs_org_created_idx on infrx.jobs (org_id, created_at desc, request_id);
 create index jobs_org_active_idx on infrx.jobs (org_id)
@@ -255,30 +273,62 @@ create index jobs_reconcile_idx on infrx.jobs (reconcile_after)
 create or replace function infrx.jobs_guard() returns trigger
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 begin
-  if new.request_id <> old.request_id or new.org_id <> old.org_id
-     or new.job_handle <> old.job_handle
-     or coalesce(new.key_id::text, '') <> coalesce(old.key_id::text, '')
-     or new.payload_ref <> old.payload_ref or new.payload_digest <> old.payload_digest
-     or new.price_version <> old.price_version
-     or new.operation <> old.operation
-     or new.admitted_at <> old.admitted_at or new.deadline_at <> old.deadline_at
-     or new.preparation_deadline_at <> old.preparation_deadline_at
-     or new.budget_preparation_s <> old.budget_preparation_s
-     or new.budget_queue_wait_s <> old.budget_queue_wait_s
-     or new.budget_generation_s <> old.budget_generation_s
-     or new.budget_first_token_s <> old.budget_first_token_s
-     or new.budget_stall_s <> old.budget_stall_s then
-    raise exception 'job %: tenant identity, input refs, price and budgets are immutable',
-      old.request_id using errcode = '23514';
+  -- r2: `is distinct from`, and the list is now everything an admitted job promised.
+  -- `<>` is NULL for a nullable column, so the old test let `key_id` and
+  -- `idempotency_key` change to or from NULL unnoticed; and the comment claimed price
+  -- immutability while `price_snapshot`, `maximum_hold`, `model_revision`, the token
+  -- ceilings, `consent_version` and `trace_mode` were all rewritable - which is R53's
+  -- whole point (settlement uses the ADMITTED snapshot, so a rewritable snapshot is a
+  -- rewritable debit).
+  if new.request_id is distinct from old.request_id
+     or new.org_id is distinct from old.org_id
+     or new.job_handle is distinct from old.job_handle
+     or new.key_id is distinct from old.key_id
+     or new.payload_ref is distinct from old.payload_ref
+     or new.payload_digest is distinct from old.payload_digest
+     or new.price_version is distinct from old.price_version
+     or new.price_snapshot is distinct from old.price_snapshot
+     or new.maximum_hold is distinct from old.maximum_hold
+     or new.model_revision is distinct from old.model_revision
+     or new.execution_mode is distinct from old.execution_mode
+     or new.max_input_tokens is distinct from old.max_input_tokens
+     or new.max_output_tokens is distinct from old.max_output_tokens
+     or new.consent_version is distinct from old.consent_version
+     or new.trace_mode is distinct from old.trace_mode
+     or new.operation is distinct from old.operation
+     or new.idempotency_key is distinct from old.idempotency_key
+     or new.admitted_at is distinct from old.admitted_at
+     or new.deadline_at is distinct from old.deadline_at
+     or new.preparation_deadline_at is distinct from old.preparation_deadline_at
+     or new.budget_preparation_s is distinct from old.budget_preparation_s
+     or new.budget_queue_wait_s is distinct from old.budget_queue_wait_s
+     or new.budget_generation_s is distinct from old.budget_generation_s
+     or new.budget_first_token_s is distinct from old.budget_first_token_s
+     or new.budget_stall_s is distinct from old.budget_stall_s then
+    raise exception 'job %: tenant identity, input refs, price, ceilings, consent and '
+      'budgets are immutable', old.request_id using errcode = '23514';
   end if;
   if old.published and not new.published then
     raise exception 'job %: the publication marker cannot be cleared', old.request_id
       using errcode = '23514';
   end if;
-  if old.state in ('succeeded','failed','cancelled','expired')
-     and new.state <> old.state then
-    raise exception 'job % is terminal (%): it cannot be resurrected as %',
-      old.request_id, old.state, new.state using errcode = '23514';
+  if old.state in ('succeeded','failed','cancelled','expired') then
+    if new.state is distinct from old.state then
+      raise exception 'job % is terminal (%): it cannot be resurrected as %',
+        old.request_id, old.state, new.state using errcode = '23514';
+    end if;
+    -- r2: the settled facts are as immutable as the state that carries them. A
+    -- rewritable `debit` or `result_ref` on a terminal row is a second settlement
+    -- wearing the first one's clothes (02 §7: one usage identity, one settlement).
+    if new.outcome_cause is distinct from old.outcome_cause
+       or new.settlement_state is distinct from old.settlement_state
+       or new.usage_certainty is distinct from old.usage_certainty
+       or new.debit is distinct from old.debit
+       or new.result_ref is distinct from old.result_ref
+       or new.settled_at is distinct from old.settled_at then
+      raise exception 'job % is terminal: its settlement is immutable', old.request_id
+        using errcode = '23514';
+    end if;
   end if;
   -- 02: preparing -> queued -> running -> terminal, plus the prepublication requeue
   -- running -> queued, plus cancellation of any nonterminal state.
@@ -295,6 +345,20 @@ begin
 end $$;
 create trigger jobs_guard before update on infrx.jobs
   for each row execute function infrx.jobs_guard();
+
+-- r2: and a settled job cannot be deleted. 06 forbids a destructive downgrade of
+-- accepted job data, and a DELETE was the one route around every check above.
+create or replace function infrx.jobs_no_delete_when_terminal() returns trigger
+language plpgsql security definer set search_path = infrx, public, pg_temp as $$
+begin
+  if old.state in ('succeeded','failed','cancelled','expired') then
+    raise exception 'job % is terminal (%): accepted job data is not deletable',
+      old.request_id, old.state using errcode = '23514';
+  end if;
+  return old;
+end $$;
+create trigger jobs_no_delete_when_terminal before delete on infrx.jobs
+  for each row execute function infrx.jobs_no_delete_when_terminal();
 
 -- attempts: keyed (job, kind, generation) - R46's two independent counters.
 create table infrx.attempts (
@@ -412,10 +476,14 @@ create table infrx.stream_chunks (
   event_type text not null
     check (event_type in ('progress','delta','usage','error','terminal')),
   payload jsonb not null,
-  bytes int not null check (bytes >= 0),
+  -- JOURNAL_EVENT_MAX_BYTES (R25): an event over the limit is `journal_write_failed`,
+  -- never a silently stored one, and `bytes` may not understate what was stored.
+  bytes int not null check (bytes >= 0 and bytes <= 1048576),
   committed_at timestamptz not null default infrx.now(),
   expires_at timestamptz not null,
-  primary key (job_id, generation, sequence)
+  primary key (job_id, generation, sequence),
+  check (octet_length(payload::text) <= 1048576),
+  check (bytes >= octet_length(payload::text) - 2)
 );
 -- R30: the terminal event is derived from the stored outcome, once.
 create unique index stream_chunks_one_terminal_idx on infrx.stream_chunks (job_id)
@@ -427,6 +495,9 @@ create index stream_chunks_expiry_idx on infrx.stream_chunks (expires_at);
 create table infrx.outbox (
   event_id uuid primary key,
   aggregate_id uuid not null,
+  -- r2 (ruling 7): 06 says every tenant record carries `org_id`, and this one did not,
+  -- so a projection consumer had to trust the payload to know whose event it was.
+  org_id uuid not null references public.organizations(id) on delete cascade,
   kind text not null check (kind in ('prepare_dispatch','inference_dispatch',
     'usage_projection','trace_projection','feedback_projection','judge_projection',
     'callback_delivery')),
@@ -445,6 +516,9 @@ create table infrx.outbox (
 create index outbox_pending_idx on infrx.outbox (available_at, event_id)
   where acknowledged_at is null;
 create index outbox_aggregate_idx on infrx.outbox (aggregate_id, kind);
+create index outbox_org_idx on infrx.outbox (org_id, created_at desc, event_id);
+-- The composite target the delivery rows point at (ruling 7).
+create unique index outbox_event_org_idx on infrx.outbox (event_id, org_id);
 
 -- feedback: one signal per row (R3), one persisted shape for labels too (R43).
 create table infrx.feedback (
@@ -523,17 +597,23 @@ begin
   if tg_op = 'DELETE' then
     raise exception 'consent history is immutable' using errcode = '23514';
   end if;
-  if new.org_id <> old.org_id or new.consent_version <> old.consent_version
-     or new.trace_mode <> old.trace_mode
-     or new.content_retention_days <> old.content_retention_days
-     or new.evaluation_consent <> old.evaluation_consent
-     or new.actor_principal <> old.actor_principal
-     or new.by_operator <> old.by_operator
-     or new.effective_at <> old.effective_at then
+  -- r2 (ruling 9): `is distinct from`, and `created_at` is in the list. With `<>` a
+  -- comparison against NULL is NULL, so `set revoked_at = null` slipped past the
+  -- revocation test below - a revocation could be undone, which is the one thing a
+  -- consent record exists to make impossible - and `created_at` was rewritable.
+  if new.org_id is distinct from old.org_id
+     or new.consent_version is distinct from old.consent_version
+     or new.trace_mode is distinct from old.trace_mode
+     or new.content_retention_days is distinct from old.content_retention_days
+     or new.evaluation_consent is distinct from old.evaluation_consent
+     or new.actor_principal is distinct from old.actor_principal
+     or new.by_operator is distinct from old.by_operator
+     or new.effective_at is distinct from old.effective_at
+     or new.created_at is distinct from old.created_at then
     raise exception 'consent %/% is immutable; record a new version instead',
       old.org_id, old.consent_version using errcode = '23514';
   end if;
-  if old.revoked_at is not null and new.revoked_at <> old.revoked_at then
+  if old.revoked_at is not null and new.revoked_at is distinct from old.revoked_at then
     raise exception 'consent %/% is already revoked', old.org_id, old.consent_version
       using errcode = '23514';
   end if;
@@ -598,6 +678,8 @@ create index judge_reservations_budget_idx
 
 create table infrx.judge_samples (
   run_id uuid not null references infrx.judge_runs(run_id) on delete cascade,
+  -- r2 (ruling 7): the sample's tenant, so `request_id` can be proved to belong to it.
+  org_id uuid not null references public.organizations(id) on delete cascade,
   sample_id text not null,
   rubric_version int not null check (rubric_version between 1 and 1000),
   request_id uuid,
@@ -619,13 +701,17 @@ create table infrx.callback_destinations (
   active boolean not null default true,
   created_at timestamptz not null default infrx.now(),
   created_by text,
-  unique (org_id, url)
+  unique (org_id, url),
+  unique (destination_id, org_id)
 );
 
 create table infrx.callback_deliveries (
-  event_id uuid not null references infrx.outbox(event_id) on delete cascade,
-  destination_id uuid not null references infrx.callback_destinations(destination_id)
-    on delete cascade,
+  event_id uuid not null,
+  destination_id uuid not null,
+  -- r2 (ruling 7): one tenant for the pair, so ORG_A's event cannot be delivered to
+  -- ORG_B's registered destination - which is an egress of one tenant's data to
+  -- another's endpoint, not merely a bookkeeping error.
+  org_id uuid not null,
   state text not null check (state in ('pending','delivered','failed','dead_letter')),
   attempts int not null default 0 check (attempts >= 0),
   next_attempt_at timestamptz,
@@ -634,6 +720,10 @@ create table infrx.callback_deliveries (
   created_at timestamptz not null default infrx.now(),
   delivered_at timestamptz,
   primary key (event_id, destination_id),
+  foreign key (event_id, org_id) references infrx.outbox (event_id, org_id)
+    on delete cascade,
+  foreign key (destination_id, org_id)
+    references infrx.callback_destinations (destination_id, org_id) on delete cascade,
   check ((state = 'delivered') = (delivered_at is not null)),
   check ((state = 'dead_letter') = (dead_letter_reason is not null))
 );
@@ -679,21 +769,40 @@ create trigger audit_entries_immutable before update or delete on infrx.audit_en
 -- Suspension lives on the organization (R33: it gates new work and configuration
 -- changes only, and never alters existing terminal accounting). 0004 revokes the
 -- column grants that would otherwise let an owner clear their own suspension.
+--
+-- r2 (review R59 ruling 2): there is NO `suspended_by` column and `suspension_reason`
+-- is a closed CODE, not free text. `public.organizations` is a relation members
+-- SELECT (0001's `organizations_select`), and the deployed console may `select *`, so
+-- an operator's identity or their prose stored here reaches every member of the
+-- suspended organization. The operator principal and their free-text reason live in
+-- `infrx.audit_entries` (R34), which no browser role can read.
 alter table public.organizations
   add column if not exists suspended boolean not null default false,
   add column if not exists suspended_at timestamptz,
-  add column if not exists suspension_reason text,
-  add column if not exists suspended_by text;
+  add column if not exists suspension_reason text;
+alter table public.organizations
+  add constraint organizations_suspension_reason_check
+    check (suspension_reason is null or suspension_reason in
+           ('abuse','nonpayment','security','operator_request','other')),
+  -- A suspension a customer cannot date or explain is a support ticket nobody can
+  -- answer, so the marker and its two facts travel together.
+  add constraint organizations_suspension_is_complete
+    check (suspended = (suspended_at is not null)
+           and suspended = (suspension_reason is not null));
 
 -- credit_ledger: precision expanded, provenance added. numeric(14,6) ->
 -- numeric(20,8) widens the stored scale (1.500000 -> 1.50000000) and changes no
 -- value; the upgrade test compares numerically and by sum.
+--
+-- r2 (ruling 2): NO `operator_principal` column either, for the same reason - members
+-- already hold SELECT on this table. `by_operator` stays, because a boolean carries no
+-- more than the literal `platform` the masked view shows anyway (ruling 3); who the
+-- operator was is in `infrx.audit_entries`, linked by `operation_id`.
 alter table public.credit_ledger
   alter column delta_usd type numeric(20,8);
 alter table public.credit_ledger
   add column if not exists operation_id text,
   add column if not exists request_id uuid,
-  add column if not exists operator_principal text,
   add column if not exists by_operator boolean not null default false,
   add column if not exists idempotency_key text;
 -- A stable operation id makes an operator grant idempotent (02) without a second
@@ -702,9 +811,53 @@ create unique index credit_ledger_operation_idx on public.credit_ledger (operati
   where operation_id is not null;
 create index credit_ledger_request_idx on public.credit_ledger (request_id)
   where request_id is not null;
+-- r2 (ruling 7): tenant coherence for the pilot rows. Historical rows carry no
+-- `request_id`, so the composite key is simply not enforced for them - no history is
+-- rewritten and the constraint is VALID from the start.
+alter table public.credit_ledger
+  add constraint credit_ledger_request_belongs_to_org
+    foreign key (request_id, org_id) references infrx.jobs (request_id, org_id);
+-- r2 (ruling 7): money signs by kind, and one usage debit per request. Added NOT VALID
+-- because production history is not this repository's to re-examine: every future row
+-- and every update is checked, no existing row is touched or rewritten, and a
+-- `validate constraint` can be run once history has been reviewed.
+alter table public.credit_ledger
+  add constraint credit_ledger_delta_is_nonzero check (delta_usd <> 0) not valid,
+  add constraint credit_ledger_sign_matches_kind
+    check (case kind when 'grant' then delta_usd > 0
+                     when 'purchase' then delta_usd > 0
+                     when 'usage' then delta_usd < 0
+                     else true end) not valid,
+  -- An operator-made entry is the one an audit entry explains, and `operation_id` is
+  -- the link (02: a grant needs a stable idempotency key and an audit record).
+  add constraint credit_ledger_operator_entry_is_traceable
+    check (not by_operator or operation_id is not null) not valid;
+create unique index credit_ledger_one_usage_per_request
+  on public.credit_ledger (request_id) where kind = 'usage' and request_id is not null;
 -- 02: append-only. Corrections are compensating entries, never edits.
 create trigger credit_ledger_append_only before update or delete on public.credit_ledger
   for each row execute function infrx.forbid_update_delete();
+
+-- r2 (ruling 8): the wallet total moves in the same transaction as the ledger row,
+-- whatever writes it. The deployed console's `addCredit` inserts through the service
+-- role and knows nothing about `infrx.wallets`; before this trigger that insert left
+-- `wallet_reconciliation.ledger_drift` nonzero and `org_wallet_summary` disagreeing
+-- with `org_balance` until somebody noticed. D5's settlement does the same thing -
+-- insert the ledger row and let the trigger move the total - so there is exactly one
+-- writer of `ledger_total` and no writer can diverge from the ledger.
+create or replace function infrx.ledger_moves_wallet() returns trigger
+language plpgsql security definer set search_path = infrx, public, pg_temp as $$
+begin
+  insert into infrx.wallets (org_id, ledger_total, revision, updated_at)
+  values (new.org_id, new.delta_usd, 1, infrx.now())
+  on conflict (org_id) do update
+    set ledger_total = infrx.wallets.ledger_total + new.delta_usd,
+        revision = infrx.wallets.revision + 1,
+        updated_at = infrx.now();
+  return null;
+end $$;
+create trigger credit_ledger_moves_wallet after insert on public.credit_ledger
+  for each row execute function infrx.ledger_moves_wallet();
 
 -- usage_events: the numeric HTTP status stays exactly as it is (02); the terminal
 -- outcome is a separate text column. `settlement_regime` marks every row that
@@ -740,15 +893,130 @@ alter table public.usage_events
     check (settlement_regime = 'legacy'
            or (outcome is not null and settlement_state is not null
                and settlement_version is not null));
-create unique index usage_events_pilot_settlement_idx
-  on public.usage_events (id, settlement_version) where settlement_regime = 'pilot';
+-- r2: `usage_events_pilot_settlement_idx (id, settlement_version)` was redundant with
+-- the primary key on `id` and is gone. One settlement per request is the PK.
+
+-- r2 (ruling 7): tenant coherence for the pilot regime only. A foreign key cannot be
+-- conditional and legacy `id`s are not job ids, so the rule is a trigger scoped to
+-- `settlement_regime = 'pilot'`: no historical row is examined, rewritten or dropped.
+create or replace function infrx.usage_pilot_row_matches_job() returns trigger
+language plpgsql security definer set search_path = infrx, public, pg_temp as $$
+begin
+  if new.settlement_regime = 'pilot'
+     and not exists (select 1 from infrx.jobs j
+                     where j.request_id = new.id and j.org_id = new.org_id) then
+    raise exception 'usage row % is not the settlement of a job owned by org %',
+      new.id, new.org_id using errcode = '23503';
+  end if;
+  return new;
+end $$;
+create trigger usage_events_pilot_tenant before insert or update on public.usage_events
+  for each row execute function infrx.usage_pilot_row_matches_job();
 
 -- models.limits is EXTENDED, not duplicated (02): the pilot's per-model controls go
--- into the existing jsonb. This adds the keys the pilot reads to any row missing
--- them, leaving the values already there untouched.
-update public.models
-set limits = jsonb_build_object('max_output_tokens', coalesce(max_output_tokens, 2048),
-                                'max_context_tokens', context_tokens) || limits;
+-- into the existing jsonb, leaving the values already there untouched. It is a
+-- function because re-running `0002_seed_models.sql` (which the supabase README
+-- documents) sets `limits = excluded.limits` and wipes the merge: an operator who does
+-- that runs `select infrx.extend_model_limits();` to put it back.
+create or replace function infrx.extend_model_limits() returns int
+language sql security definer set search_path = infrx, public, pg_temp as $$
+  with merged as (
+    update public.models
+    set limits = jsonb_build_object('max_output_tokens', coalesce(max_output_tokens, 2048),
+                                    'max_context_tokens', context_tokens) || limits
+    returning 1)
+  select count(*)::int from merged;
+$$;
+select infrx.extend_model_limits();
+
+-- ==================================================== tenant coherence (r2) ===
+-- Ruling 7: every relation that names two tenant-bearing things proves they are the
+-- same tenant with a composite foreign key, rather than trusting whoever inserted the
+-- row. Each of these was accepted before, as `service_role`, with two organizations
+-- mixed in one row - which is the class of defect R55 exists to remove, and no amount
+-- of care in D2-D6 would have caught it after the fact.
+--
+-- The composite targets first (all trivially unique: each is a primary key plus its
+-- organization), then the references.
+alter table public.api_keys add constraint api_keys_org_id_key unique (org_id, id);
+alter table infrx.feedback add constraint feedback_org_id_key unique (feedback_id, org_id);
+alter table infrx.judge_runs add constraint judge_runs_org_id_key unique (run_id, org_id);
+
+alter table infrx.jobs
+  add constraint jobs_key_belongs_to_org
+    foreign key (org_id, key_id) references public.api_keys (org_id, id)
+    on delete restrict;
+
+alter table infrx.credit_holds
+  add constraint credit_holds_job_belongs_to_org
+    foreign key (request_id, org_id) references infrx.jobs (request_id, org_id)
+    on delete restrict,
+  add constraint credit_holds_key_belongs_to_org
+    foreign key (org_id, key_id) references public.api_keys (org_id, id)
+    on delete restrict;
+
+alter table infrx.capacity_reservations
+  add constraint capacity_reservations_job_belongs_to_org
+    foreign key (request_id, org_id) references infrx.jobs (request_id, org_id)
+    on delete restrict,
+  add constraint capacity_reservations_key_belongs_to_org
+    foreign key (org_id, key_id) references public.api_keys (org_id, id)
+    on delete restrict;
+
+-- An idempotency row refers to exactly one result (the row check above); whichever it
+-- is, it belongs to the row's organization. A null reference is not constrained, which
+-- is what makes one composite key per kind work.
+alter table infrx.idempotency
+  add constraint idempotency_job_belongs_to_org
+    foreign key (request_id, org_id) references infrx.jobs (request_id, org_id)
+    on delete restrict,
+  add constraint idempotency_feedback_belongs_to_org
+    foreign key (feedback_id, org_id) references infrx.feedback (feedback_id, org_id)
+    on delete restrict;
+
+alter table infrx.judge_reservations
+  add constraint judge_reservations_run_belongs_to_org
+    foreign key (run_id, org_id) references infrx.judge_runs (run_id, org_id)
+    on delete cascade;
+
+alter table infrx.judge_samples
+  add constraint judge_samples_run_belongs_to_org
+    foreign key (run_id, org_id) references infrx.judge_runs (run_id, org_id)
+    on delete cascade,
+  add constraint judge_samples_request_belongs_to_org
+    foreign key (request_id, org_id) references infrx.jobs (request_id, org_id)
+    on delete restrict;
+
+-- ===================================================== statement-level guards ===
+-- Ruling 4 / B3: RLS does not apply to TRUNCATE and a row trigger never sees it, so
+-- `truncate public.credit_ledger cascade` erased the ledger as `anon`. The privilege
+-- goes (0004), and the relations whose whole point is that nothing is ever removed get
+-- a statement trigger that refuses it for EVERY role, `service_role` and the migration
+-- owner included: a privilege can be re-granted by accident, a trigger cannot.
+create or replace function infrx.forbid_truncate() returns trigger
+language plpgsql security definer set search_path = infrx, public, pg_temp as $$
+begin
+  raise exception '% is append-only: TRUNCATE is never permitted', tg_table_name
+    using errcode = '23514';
+end $$;
+
+do $$
+declare
+  r text;
+begin
+  foreach r in array array[
+      'public.credit_ledger', 'public.usage_events', 'infrx.jobs', 'infrx.attempts',
+      'infrx.credit_holds', 'infrx.capacity_reservations', 'infrx.stream_chunks',
+      'infrx.outbox', 'infrx.idempotency', 'infrx.feedback', 'infrx.consent_history',
+      'infrx.price_versions', 'infrx.audit_entries', 'infrx.wallets',
+      'infrx.judge_runs', 'infrx.judge_reservations', 'infrx.judge_samples',
+      'infrx.callback_deliveries']
+  loop
+    execute format('create trigger %I before truncate on %s for each statement '
+                   'execute function infrx.forbid_truncate()',
+                   replace(r, '.', '_') || '_no_truncate', r);
+  end loop;
+end $$;
 
 -- ===================================================== wallet summary import ===
 -- Every existing organization gets a wallet whose ledger_total is the sum of its
