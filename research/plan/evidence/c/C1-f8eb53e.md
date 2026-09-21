@@ -843,7 +843,7 @@ the reviewer corrected to; the difference is this round's new cases).
 |---|---|---|
 | **B1** `isOperator === true` unpinned on the authorization path; adminAudit filter swap untested; `flag()` refusal unpinned | `30bdc29` | `a truthy isOperator is not authority on the authorization path either` (six spoofed values × adminOrgs, adminAudit, adminGrant, and judgeRuns as a member, with the genuine flag still passing) → **ROLE-05**, **ROLE-06**; `a cursor does not survive a change of filter, on every filtered list` extended with `target_org_id` → **SCOPE-03**; `a boolean column is a boolean: a suspension flag is never guessed at` → **STRICT-05** |
 | **B2** NULL `key_id` denied the whole usage page | `90b8c75` | `a usage row survives a deleted key, and says so` — both columns null → sentinel `""` + `(deleted key)`; the empty key filter is `invalid_request`; a real key filter never matches the sentinel; one column null alone is a malformed row → **KEYNAME-01** (deny the page again, `kills_by: "guarded"`), **KEYNAME-02** (paper over a half-null pair), **KEYNAME-03** (a sentinel a caller could filter for) |
-| **B3** JSON-number money fabricated digits from 2^26 | `d64a58e` | `money arrives as text: a number is accepted only where a double still holds eight digits` (123456789012.12345678, ±2^26, 1e20, NaN, Infinity refused; 2^26−1 exact; the same value as text keeps every digit) and `a wallet amount that arrives as a number is bounded by what a double can hold` → **MONEY-01**, **MONEY-02**, **MONEY-03** |
+| **B3** JSON-number money fabricated digits from 2^26 | `d64a58e` | `money arrives as text: a number is accepted only where a double still holds eight digits` (123456789012.12345678, ±2^26, 1e20, NaN, Infinity refused; 2^26−1 exact; the same value as text keeps every digit — **[corrected in round 3]** the credits-side case tested only the positive bound, so the negative half of it was unpinned) and `a wallet amount that arrives as a number is bounded by what a double can hold` → **MONEY-01**, **MONEY-02**, **MONEY-03** |
 | **B4** missing-function detection forced by an error string | `a6afa15` | `a missing function falls back; a broken one does not` — the two real repros (`42883` from *inside* the function, `P0001` naming it) now raise, plus a pair differing only in the code → **CREDITS-03** (drop the name requirement), **CREDITS-04** (drop the code requirement), alongside **CREDITS-02** |
 | **Rulings**: both UTC timestamp forms; the tenant check every port passes through; the real `usageDaily` cap | `973ce79` | `both UTC timestamp forms are accepted and normalised, microseconds and all` → **TS-01**, **TS-02**, **STRICT-03**; `every port passes through the tenant check, whatever the port does` → **PORT-01**, **PORT-02**, **PORT-03**; `usageDaily is bounded by its documented cap, not by the fixture` (401 days, and a port that ignores `limit`) → **CAP-02** |
 | **Nonblocking**: `integer()` coercion, `value_num` coercion, credits guard, runner `viaGuard` | `a083e92` | the strict-row case extended with `""`, `true`, `["500"]`, `0x10`, `1e2` and a fractional count → **STRICT-02**; the judge case extended with five coercible score values → **STRICT-06**; the guard-presence list now includes `credits.ts` → **CLIENT-02** |
@@ -871,7 +871,11 @@ the reviewer corrected to; the difference is this round's new cases).
 - **The tenant check every port passes through.** `scopedPort` wraps *both* injected ports inside
   `createConsoleServices`, so no implementation can skip it: it refuses a tenant-scoped plan with no
   tenant before calling the executor, and refuses any returned row whose tenant field is not the bound
-  one. This matters because D1's views return every organization's rows to an operator or service-role
+  one. **[corrected in round 3]** As written in round 2 that last clause was close to meaningless: only
+  `org_status` selected the tenant column, so for the other eleven row queries "any returned row whose
+  tenant field is not the bound one" matched no row at all, and the aggregates were exempt by
+  construction. Round 3 makes every tenant-scoped query return `org_id` and makes a row that *lacks* it a
+  refusal; see the round-3 appendix. This matters because D1's views return every organization's rows to an operator or service-role
   session, so for those sessions C1's predicate is the only scoping there is.
 - **`usageDaily` cap.** Real on both sides: the memory port honours `plan.limit` for grouped aggregates
   (the rendered statement always carried `limit 400`) and the service slices to the named query's cap,
@@ -924,9 +928,13 @@ refresh at `b71ea50`). The two lint warnings remain the pre-existing ones in coo
 attributed to a C2/C3 operation by `tests/c/console-conformance.test.ts`.
 
 One invariant was deliberately **not** claimed: `TS-03` (the cursor key keeping a row's raw timestamp
-form) is unobservable through a port that compares the same values it returns, and in PostgreSQL both
-forms are one instant — so a case for it could not fail. The normalisation stays for consistency
-between the DTO and the cursor; the mutant is not in the list.
+form). **[corrected in round 3] That reasoning was wrong.** The in-memory port compared raw strings while
+the cursor carried the normalised form, and `+` sorts before `Z`, so over a relation rendered in
+PostgREST's `+00:00` form a walk at limit 1 never terminated and at limit 3 returned 243 of 160 rows —
+the invariant was observable and broken in-repo, and the round-2 case rewrote a single row that is never
+a cursor row at limit 7. Round 3 makes the double compare instants (as PostgreSQL compares `timestamptz`)
+and adds three whole-relation walks; TS-03 is undeclared again, now because the double and the database
+agree that the two forms are one value.
 
 ## Changes
 
@@ -956,8 +964,9 @@ Replacing the round-1 list where they overlap:
 3. **`usageSummary` accepts an unbounded range** until the from/to contract revision (F2.2).
 4. **`UsageRow.key_id` is not nullable in the frozen contract**, so a deleted key reads as the
    documented sentinel `""`. The revision is F2.2's.
-5. **Money as a JSON number is accepted below 2^26** for the legacy `org_balance` fallback path only;
-   everything else must be text.
+5. **Money as a JSON number is accepted below 2^26 in magnitude** (`|value| < 2^26`, both signs — the
+   round-2 text said "±2^26" loosely and the negative side was untested until round 3) for the legacy
+   `org_balance` fallback path only; everything else must be text.
 6. **`Credits` still crosses as `number`** for `components/credits-card.tsx`, which is not this task's
    file.
 7. **Aggregate drift** between the SQL renderer and the in-memory port is still only visible against
@@ -990,3 +999,153 @@ Unchanged from round 1, plus:
   every failure still attributed to C2 or C3 by an executable check. The round-1 case count was
   corrected from the runner's own output rather than restated. No service was contacted; nothing was
   pushed or deployed.
+
+---
+
+# Appendix — review round 3 (fix_required at `a089b34`)
+
+Appended; the round-1 and round-2 appendices are corrected **in place** where they were wrong, each
+correction marked `[corrected in round 3]`. Implementation SHA of these fixes: **`fd33cad`**. Same
+worktree and branch, same owned paths, nothing pushed, no service contacted. One commit per item.
+
+## Item → commit → killing test
+
+| Item | Commit | Killing test / mutants |
+|---|---|---|
+| **B1** `scopedPort`'s row check was vacuous: only `org_status` selected the tenant column, so eleven row queries returned rows with no tenant field and every one passed; aggregates were exempt by construction | `c57841f` | `every port passes through the tenant check, whatever the port does` — the reviewer's port (honest for `org_status`, leaky elsewhere) over **all twelve** tenant-scoped operations on **both** engines, with the foreign rows before *and* after the caller's own → **PORT-01** (foreign tenant accepted), **PORT-02** (unscoped plan reaches the executor), **PORT-03** (port used raw), **PORT-04** (row with no tenant accepted), **PORT-05** (`in` instead of `hasOwn`), **PORT-06** (first row only), **PORT-07** (a spec drops `tenantField`), **PORT-08** (ClickHouse port unwrapped), **PORT-09** (aggregates stop carrying their tenant) |
+| **B2** the normalised cursor key broke exactly-once on a `+00:00` relation in the double | `1a0bbeb` | `a walk is exactly-once whatever UTC form the relation uses` — the whole relation in `+00:00` at limits 1/3/7/100, the two forms alternating at 1/3/7, and a microsecond pair one tick apart in opposite forms across a page boundary of one → **TS-01**, **TS-02**, **TS-04**; the fraction-width half is in `both UTC timestamp forms are accepted and normalised, microseconds and all` |
+| **B3** the credits money bound was one-sided | `2686159` | `a wallet amount that arrives as a number is bounded by what a double can hold` — every field of the summary row at and past the negative bound, with `-(2^26 − 1)` still exact → **MONEY-04**; same commit: the anchored fallback regex → **CREDITS-05**, and the display path's skip of an unreadable value → **MONEY-05** |
+| **Same pass**: caller filters in both UTC forms, a form change mid-walk, one way to assert success | `8f4d769` | `a filter value is checked before it is bound…` extended (both spellings select the same rows; the other spelling's cursor is `invalid_cursor`) and `every case in this track asserts success through a helper, never as a bare ok check` |
+| lint + stale mutants | `fd33cad` | two unused bindings removed; **CREDITS-03** and **TENANT-04** re-pointed at lines this round rewrote |
+
+## What changed, and why it was wrong before
+
+- **B1.** Every tenant-scoped query now returns `org_id`: row queries select it, aggregates group by it
+  (`group by 1` for the totals; `group by 1, 2` with `order by 2 desc` for the daily rows, which the
+  in-memory double mirrors by grouping on the tenant **taken from the rows**, never from the plan, so a
+  leaky port produces a row that says whose totals these are). `scopedPort` refuses a row that lacks the
+  own field, a row whose field is not the bound tenant (`Object.hasOwn`, so an inherited `org_id` is not
+  a tenant), and a tenant-scoped spec with no `tenantField`; the column is stripped before projection.
+  D1 is asked to expose `org_id` on every console view and RPC result (integration request below).
+
+  The case's assertion is deliberately stronger than "the call is refused": a leaky port must either be
+  refused **or answer exactly what a scoped port would**. That is what makes a single-row read honest —
+  `balances` reading one row that happens to be the caller's own is allowed to answer it — while still
+  forbidding a wrong answer. The two refusal sets are pinned with the reason each member is in them:
+  with the caller's own rows first, a page of 5 over a relation where the caller has more than 5 rows
+  never reaches a foreign one, so what refuses is the two aggregates, the key list, the key lookup and
+  the judge list; with a foreign row first, everything that *can* receive one does, which is those five
+  plus `balances`, `ledger`, `settings.get`, `traces` and `usage`. `traceDetail` and `feedback.list` are
+  filtered by a request id, and an id belongs to one organization, so no foreign row exists for them.
+- **B2.** The double now compares **instants** for timestamp columns (`+00:00` → `Z`, fraction padded to
+  six digits) for both the sort and the keyset bound, which is what PostgreSQL does with `timestamptz`.
+  A double that compared raw strings was not a smaller version of that behaviour but a different one.
+  The projected form is fixed at six fractional digits because PostgREST trims trailing zeros and a
+  keyset compares these strings: `.12` would sort after `.123456`, and the exported suite requires one
+  comparable width per list.
+- **B3.** `Math.abs(value) >= SAFE_MONEY_NUMBER` was only ever tested on the positive side.
+
+## Results (quoted)
+
+```
+=== make console-test
+exit=0
+# tests 188
+# pass 188
+# fail 0
+# skipped 0
+=== make console-lint
+exit=0
+✖ 2 problems (0 errors, 2 warnings)
+=== make console-typecheck
+exit=0
+✓ Types generated successfully
+=== make console-mutants
+exit=0
+144 mutants: 144 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 26.1s
+=== make api-test
+exit=0
+670 passed, 2 warnings in 27.65s
+=== node tests/c/run-mutants.mjs --jobs 6
+exit=0
+baseline: 75 cases pass unmutated, 31 fail (C2/C3 operations this task does not implement); 84 mutants, 6 at a time
+84 mutants: 84 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 30.8s
+=== node tests/c/run-mutants.mjs --self-test
+exit=0
+4 self-tests, 0 failed
+=== exported conformance
+exit=1
+# tests 45
+# pass 16
+# fail 29
+```
+
+Track cases per file at this head:
+
+```
+$ for f in tests/c/*.test.ts; do node --test --test-reporter=tap "$f" | grep -cE "^ok [0-9]+ - "; done
+tests/c/client-boundary.test.ts: 4
+tests/c/console-conformance.test.ts: 3
+tests/c/credits.test.ts: 5
+tests/c/cursor.test.ts: 5
+tests/c/projection.test.ts: 11
+tests/c/query-boundary.test.ts: 14
+tests/c/read-services.test.ts: 20
+```
+
+**62 cases in seven files.** The exported conformance split is unchanged at **16 / 29**, every failure
+still attributed to a C2/C3 operation by `tests/c/console-conformance.test.ts`. The two lint warnings are
+the pre-existing ones in coordinator-owned `lib/contracts/*`; the two this round introduced (unused
+destructuring bindings) are gone.
+
+One mutant is deliberately **not** declared: `PORT-10` (leaving the tenant column on the row instead of
+stripping it). Every DTO is built field by field, so the column cannot reach one whether it is stripped or
+not — a case for it could not fail. The stripping stays as defence, and this is recorded rather than
+claimed.
+
+## Changes
+
+```
+$ git diff --numstat a089b34..HEAD
+12	3	apps/app/lib/services/console.ts
+3	1	apps/app/lib/services/credits.ts
+54	20	apps/app/lib/services/query.ts
+34	0	apps/app/tests/c/client-boundary.test.ts
+42	5	apps/app/tests/c/credits.test.ts
+41	14	apps/app/tests/c/harness.ts
+143	42	apps/app/tests/c/mutants.json
+68	1	apps/app/tests/c/projection.test.ts
+25	3	apps/app/tests/c/query-boundary.test.ts
+175	24	apps/app/tests/c/read-services.test.ts
+```
+
+## Limits (delta)
+
+Round-2's list stands, with two changes:
+
+- **New:** `scopedPort`'s row check proves *whose* rows came back, not that the totals in an aggregate
+  row are right. A port that returned one correctly-labelled row with another organization's sums inside
+  it would pass — the label is checkable, the arithmetic is not. The statement's `where org_id = $n` is
+  what makes the sums right, and that is a Layer-2 assertion against real PostgreSQL.
+- **Corrected:** the round-2 limit "a malformed row fails the whole page" now includes a `+00:00`
+  relation as a *supported* form rather than a malformed one.
+
+## Integration requests (delta)
+
+1. **To D1 (new):** expose `org_id` on **every** console view and RPC result — including the aggregates
+   (`group by org_id`) and `org_wallet_summary`, whose four columns need the organization alongside them.
+   Without it a scoped read is refused by design: `scopedPort` cannot accept a row that does not say
+   whose it is.
+2. **To C2 (new):** the supabase-js port's keyset must compare **instants**, not strings. `Z` and
+   `+00:00` are one value in PostgreSQL and must be one value in the port.
+3. Everything else from rounds 1 and 2 is unchanged (the log sink, F2.2's three items, money and
+   timestamps as text).
+
+## Verification log
+
+- 2026-09-21: Review round 3 addressed. B1 (the vacuous tenant check), B2 (exactly-once over a `+00:00`
+  relation) and B3 (the one-sided money bound) each got a commit and a killing test, as did the four
+  same-pass items; 188 console tests pass, 84 of 84 C1 mutants and 144 of 144 F2 mutants are killed, the
+  runner's self-tests pass, and the conformance split is unchanged. Three earlier statements in this
+  report were wrong and are corrected in place, marked: the port check's reach, the TS-03 rationale, and
+  the loose "±2^26". No service was contacted; nothing was pushed or deployed.
