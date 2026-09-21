@@ -62,16 +62,24 @@ create table if not exists auth.users (
 -- missing GUC null rather than an error, and the `nullif` runs BEFORE the `::jsonb`
 -- cast, because an unset GUC reads as the empty string and `''::jsonb` raises - which
 -- turns every anonymous query into a 500 instead of a denial.
+-- r2: BOTH forms, because the real `supabase/postgres` 17.6 image reads the LEGACY
+-- per-claim GUCs (`request.jwt.claim.sub`) while newer PostgREST sets the JSON
+-- `request.jwt.claims`. A shim that understood only the JSON one made every principal
+-- anonymous on the real image - every RLS test would have passed by seeing nothing.
 create or replace function auth.uid() returns uuid
 language sql stable as $$
-  select nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub',
-                '')::uuid;
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.sub', true), ''),
+    nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub', '')
+  )::uuid;
 $$;
 
 create or replace function auth.role() returns text
 language sql stable as $$
-  select nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role',
-                '');
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.role', true), ''),
+    nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', '')
+  );
 $$;
 
 -- --------------------------------------------------- Supabase grant defaults ---

@@ -99,6 +99,11 @@ def test_upgrade_reconciliation_is_clean() -> None:
 
 
 # --- (3) role attack matrix (DUR-RLS) -----------------------------------------
+def test_dur_rls__every_impersonated_session_is_somebody() -> None:
+    """A matrix where `auth.uid()` is NULL denies everything and proves nothing."""
+    print(checks.check_sessions_are_somebody(_fresh()))
+
+
 def test_dur_rls__browser_roles_cannot_reach_protected_state() -> None:
     """Every protected column, relation and mutation boundary, against anon, a member,
     an owner and a platform operator session - each denial asserted, with positive
@@ -110,6 +115,30 @@ def test_dur_rls__the_mutation_boundary_is_narrow_and_fails_closed() -> None:
     """06's eleven RPCs are SECURITY DEFINER with a fixed search_path, executable by
     `service_role` alone, and raise until their owning task implements them."""
     print(checks.check_rpc_boundary(_fresh()))
+
+
+def test_dur_rls__the_browser_privilege_surface_is_enumerated() -> None:
+    """Ruling 4: `anon` and `authenticated` hold exactly the enumerated grants - verb by
+    verb, column by column - and nothing in schema `infrx`. Enumerating only
+    insert/update/delete is what left TRUNCATE behind (B3)."""
+    print(checks.check_privileges(_fresh()))
+
+
+def test_dur_rls__truncate_is_refused_for_every_role() -> None:
+    """B3: TRUNCATE ignores RLS and never fires a row trigger, so the append-only
+    relations refuse it with a statement trigger as well as a missing privilege."""
+    print(checks.check_truncate_refused(_fresh()))
+
+
+def test_dur_rls__a_leaky_function_cannot_read_another_tenant() -> None:
+    """B5 / ruling 6: `security_barrier`, probed the way the reviewer broke it."""
+    print(checks.check_leaky_function_probe(_fresh()))
+
+
+def test_dur_cap__a_legacy_ledger_writer_cannot_drift_the_wallet() -> None:
+    """B8 / ruling 8: the deployed console's addCredit moves the wallet total in the
+    same transaction, so no writer can make the summary disagree with the ledger."""
+    print(checks.check_legacy_writer_does_not_drift(_fresh()))
 
 
 def test_dur_rls__the_console_read_surface_is_tenant_scoped() -> None:
@@ -136,6 +165,7 @@ def test_bounded_access_paths_use_their_index() -> None:
         checks.seed_volume(conn)
         _state["volume"] = True
     print(checks.check_index_plans(conn))
+    print(checks.check_view_pushdown(conn))
 
 
 # --- the database clock (R7 / S1 note 3) --------------------------------------

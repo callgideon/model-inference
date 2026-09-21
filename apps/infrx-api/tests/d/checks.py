@@ -12,6 +12,10 @@ from decimal import Decimal
 
 import psycopg
 
+def _first_line(error: BaseException) -> str:
+    return f"{type(error).__name__}: {str(error).strip().splitlines()[0][:140]}"
+
+
 # --- fixture identities (fixed so failures name the same row twice) ------------
 ORG_A = "0a000000-0000-4000-8000-00000000000a"
 ORG_B = "0b000000-0000-4000-8000-00000000000b"
@@ -188,8 +192,9 @@ def seed_fixtures(conn) -> None:
               'infrx-media:{ORG_A}:upl_a', '2026-09-21T00:00:30Z');
     insert into infrx.job_media (job_id, org_id, handle, role)
       values ('{JOB_QUEUED}', '{ORG_A}', 'upl_a', 'source');
-    insert into infrx.outbox (event_id, aggregate_id, kind, available_at)
-      values ('{EVENT_ID}', '{JOB_QUEUED}', 'inference_dispatch', '2026-09-21T00:02:00Z');
+    insert into infrx.outbox (event_id, aggregate_id, org_id, kind, available_at)
+      values ('{EVENT_ID}', '{JOB_QUEUED}', '{ORG_A}', 'inference_dispatch',
+              '2026-09-21T00:02:00Z');
     insert into infrx.stream_chunks
       (job_id, generation, sequence, event_type, payload, bytes, expires_at)
       values ('{JOB_TERMINAL}', 1, 1, 'delta', '{{"d":"hi"}}'::jsonb, 10,
@@ -206,6 +211,21 @@ def seed_fixtures(conn) -> None:
        value_text, calibration_set, rubric_version, by_operator)
       values ('fb_label', '{ORG_A}', '{JOB_TERMINAL}', 'ops@infrx', 'operator', 'console',
               'calibration_label', 'correct', true, 3, true);
+    -- An ordinary operator-authored entry: it stays in the feedback list (R49) and its
+    -- principal must read `platform` to a customer.
+    insert into infrx.feedback
+      (feedback_id, org_id, request_id, author_principal, author_role, channel, name,
+       value_text, by_operator)
+      values ('fb_ops', '{ORG_A}', '{JOB_TERMINAL}', '{USER_OPERATOR}', 'operator',
+              'console', 'comment', 'looked into this', true);
+    -- A second consent version, authored by an operator and with no dependent rows: the
+    -- masking check reads it, and the DELETE violation needs a row no foreign key
+    -- protects incidentally (B9/m27).
+    insert into infrx.consent_history
+      (org_id, consent_version, trace_mode, content_retention_days, evaluation_consent,
+       actor_principal, by_operator, effective_at)
+      values ('{ORG_A}', 2, 'full', 30, true, '{USER_OPERATOR}', true,
+              '2026-02-01T00:00:00Z');
     insert into infrx.judge_budgets (org_id, period_start, period_end, limit_usd)
       values ('{ORG_A}', '{PERIOD}', '2026-10-01T00:00:00Z', 10.00000000);
     insert into infrx.judge_runs
@@ -217,8 +237,9 @@ def seed_fixtures(conn) -> None:
     insert into infrx.callback_destinations
       (destination_id, org_id, url, signing_key_ref)
       values ('{DEST_ID}', '{ORG_A}', 'https://hooks.example.com/infrx', 'kms:key/1');
-    insert into infrx.callback_deliveries (event_id, destination_id, state, next_attempt_at)
-      values ('{EVENT_ID}', '{DEST_ID}', 'pending', '2026-09-21T00:03:00Z');
+    insert into infrx.callback_deliveries
+      (event_id, destination_id, org_id, state, next_attempt_at)
+      values ('{EVENT_ID}', '{DEST_ID}', '{ORG_A}', 'pending', '2026-09-21T00:03:00Z');
     insert into infrx.audit_entries (id, actor_principal, action, target_org_id, reason)
       values (gen_random_uuid(), 'ops@infrx', 'admin_grant', '{ORG_A}', 'pilot credit');
     -- ORG_B gets one row in every tenant-scoped relation, so "a session of one
@@ -228,9 +249,11 @@ def seed_fixtures(conn) -> None:
       (org_id, consent_version, trace_mode, content_retention_days, evaluation_consent,
        actor_principal, effective_at)
       values ('{ORG_B}', 1, 'minimal', 7, false, '{USER_OTHER}', '2026-01-01T00:00:00Z');
+    -- Revoked, so "a revocation cannot be undone" (ruling 9) has something to undo.
+    update infrx.consent_history set revoked_at = '2026-03-01T00:00:00Z'
+      where org_id = '{ORG_B}' and consent_version = 1;
     insert into public.credit_ledger (org_id, delta_usd, kind, reason)
       values ('{ORG_B}', 5.00000000, 'grant', 'org b credit');
-    update infrx.wallets set ledger_total = 5.00000000 where org_id = '{ORG_B}';
     insert into public.usage_events (id, org_id, model_id, status, cost_usd)
       values ('{JOB_B}', '{ORG_B}', 'nemostation/marlin-2b', 200, 0.00000100);
     insert into infrx.feedback
@@ -250,15 +273,28 @@ def seed_fixtures(conn) -> None:
       (id, org_id, api_key_id, model_id, status, prompt_tokens, completion_tokens, cost_usd)
       values ('90000000-0000-4000-8000-000000000001', '{ORG_A}', '{KEY_A}',
               'nemostation/marlin-2b', 200, 1000, 250, 0.00012345);
-    -- A wallet summary is only ever the ledger and the active holds, so the fixture
-    -- writes the ledger row too: a summary seeded on its own would be exactly the
-    -- drift the reconciliation view exists to find.
+    -- r2: the fixture writes ledger rows only - `infrx.wallets.ledger_total` is moved by
+    -- the AFTER INSERT trigger (ruling 8), so a fixture that set it by hand would be
+    -- testing a number nothing maintains. `reserved_total` is still set directly,
+    -- because holds do not move it until D2/D5.
+    --
+    -- Three provenance cases for the masking rule (ruling 1):
+    --   * an operator-made entry WITH the marker,
+    --   * an operator-made entry WITHOUT it (the fail-open case: `by_operator` defaults
+    --     false for all history and the deployed console never sets it),
+    --   * an entry by an actual member, whose principal a member MAY read.
     insert into public.credit_ledger
-      (org_id, delta_usd, kind, reason, operator_principal, by_operator, operation_id)
-      values ('{ORG_A}', 50.00000000, 'grant', 'pilot credit', 'ops@infrx', true,
+      (org_id, delta_usd, kind, reason, created_by, by_operator, operation_id)
+      values ('{ORG_A}', 50.00000000, 'grant', 'pilot credit', '{USER_OPERATOR}', true,
               'grant:fixture-1');
-    update infrx.wallets set ledger_total = 50.00000000, reserved_total = 1.25000000
-      where org_id = '{ORG_A}';
+    insert into public.credit_ledger
+      (org_id, delta_usd, kind, reason, created_by, by_operator)
+      values ('{ORG_A}', 7.00000000, 'grant', 'unmarked operator grant',
+              '{USER_OPERATOR}', false);
+    insert into public.credit_ledger
+      (org_id, delta_usd, kind, reason, created_by, by_operator)
+      values ('{ORG_A}', 3.00000000, 'adjustment', 'by the owner', '{USER_OWNER}', false);
+    update infrx.wallets set reserved_total = 1.25000000 where org_id = '{ORG_A}';
     """)
 
 
@@ -334,8 +370,9 @@ def seed_volume(conn, rows: int = 3000) -> None:
            admitted_at + interval '1 hour'
     from infrx.jobs, generate_series(1, 2) as s where job_handle like 'job_bulk_%';
 
-    insert into infrx.outbox (event_id, aggregate_id, kind, available_at, acknowledged_at)
-    select gen_random_uuid(), request_id, 'usage_projection', admitted_at,
+    insert into infrx.outbox (event_id, aggregate_id, org_id, kind, available_at,
+      acknowledged_at)
+    select gen_random_uuid(), request_id, '{ORG_A}', 'usage_projection', admitted_at,
            case when infrx_bulk_n(job_handle) % 10 <> 0
                 then admitted_at + interval '1 second' end
     from infrx.jobs where job_handle like 'job_bulk_%';
@@ -355,9 +392,9 @@ def seed_volume(conn, rows: int = 3000) -> None:
     on conflict do nothing;
 
     -- A backlog of ready deliveries among many delivered ones.
-    insert into infrx.callback_deliveries (event_id, destination_id, state,
+    insert into infrx.callback_deliveries (event_id, destination_id, org_id, state,
       next_attempt_at, delivered_at)
-    select o.event_id, '{DEST_ID}',
+    select o.event_id, '{DEST_ID}', '{ORG_A}',
            case when o.acknowledged_at is null then 'pending' else 'delivered' end,
            case when o.acknowledged_at is null then o.available_at end,
            o.acknowledged_at
@@ -587,21 +624,31 @@ class _Allowed(Exception):
     """Raised inside the transaction so an allowed mutation is still rolled back."""
 
 
+def _jwt(user: str) -> str:
+    """Impersonate a PostgREST session, in BOTH claim forms.
+
+    The real `supabase/postgres` image's `auth.uid()` reads the legacy per-claim GUCs
+    (`request.jwt.claim.sub`); newer PostgREST sets the JSON `request.jwt.claims`.
+    Setting only one makes every principal anonymous on the other's image - and a role
+    matrix where nobody is anybody passes by seeing nothing.
+    """
+    return (f"set local role authenticated; "
+            f"select set_config('request.jwt.claims',"
+            f"'{{\"sub\":\"{user}\",\"role\":\"authenticated\"}}', true), "
+            f"set_config('request.jwt.claim.sub', '{user}', true), "
+            f"set_config('request.jwt.claim.role', 'authenticated', true)")
+
+
 SESSIONS = {
     "anon": "set local role anon",
-    "member": f"set local role authenticated; "
-              f"select set_config('request.jwt.claims',"
-              f"'{{\"sub\":\"{USER_MEMBER}\",\"role\":\"authenticated\"}}', true)",
-    "owner": f"set local role authenticated; "
-             f"select set_config('request.jwt.claims',"
-             f"'{{\"sub\":\"{USER_OWNER}\",\"role\":\"authenticated\"}}', true)",
-    "operator": f"set local role authenticated; "
-                f"select set_config('request.jwt.claims',"
-                f"'{{\"sub\":\"{USER_OPERATOR}\",\"role\":\"authenticated\"}}', true)",
+    "member": _jwt(USER_MEMBER),
+    "owner": _jwt(USER_OWNER),
+    "operator": _jwt(USER_OPERATOR),
+    "other": _jwt(USER_OTHER),
     "service": "set local role service_role",
 }
 
-BROWSER_SESSIONS = ("anon", "member", "owner", "operator")
+BROWSER_SESSIONS = ("anon", "member", "owner", "operator", "other")
 
 #: (what is protected, statement). Every browser session must be refused every one.
 ATTACKS = (
@@ -649,8 +696,34 @@ ATTACKS = (
     ("membership", f"insert into public.org_members (org_id, user_id, role) values "
                    f"('{ORG_B}', '{USER_OWNER}', 'owner')"),
     # Trace consent is an audited decision recorded in consent_history, not a column an
-    # owner writes through the key-management policy.
+    # owner writes through the key-management policy - by UPDATE **or** by INSERT
+    # (ruling 5): a table-level INSERT grant covers every column of the new row.
     ("per-key trace consent", "update public.api_keys set trace_mode = 'full'"),
+    ("per-key trace consent by insert",
+     f"insert into public.api_keys (org_id, created_by, name, prefix, key_hash, "
+     f"trace_mode) values ('{ORG_A}', '{USER_OWNER}', 'k', 'sk-infrx-eeeeeeee', "
+     f"'hash-e', 'full')"),
+    ("choosing an api key's identity",
+     f"insert into public.api_keys (id, org_id, created_by, name, prefix, key_hash) "
+     f"values ('44444444-4444-4444-8444-4444444444ff', '{ORG_A}', '{USER_OWNER}', 'k', "
+     f"'sk-infrx-ffffffff', 'hash-f')"),
+    ("backdating an api key",
+     f"insert into public.api_keys (org_id, created_by, name, prefix, key_hash, "
+     f"created_at) values ('{ORG_A}', '{USER_OWNER}', 'k', 'sk-infrx-99999999', "
+     f"'hash-9', '2020-01-01T00:00:00Z')"),
+    ("forging a key's last use",
+     f"insert into public.api_keys (org_id, created_by, name, prefix, key_hash, "
+     f"last_used_at) values ('{ORG_A}', '{USER_OWNER}', 'k', 'sk-infrx-88888888', "
+     f"'hash-8', now())"),
+    # B9/m44: the console views are owner's-rights views over `infrx`. A simple view is
+    # updatable, so without the revoke an owner writes the ledger total through one.
+    ("balances through the console view",
+     "update public.wallets set ledger_total = '1000000'"),
+    ("the ledger through the console view",
+     "update public.console_ledger set delta = '1000000'"),
+    ("feedback provenance through the console view",
+     "update public.feedback set author_principal = 'someone else'"),
+    ("deleting through a console view", "delete from public.console_usage"),
     ("another tenant's output", "select payload from infrx.stream_chunks"),
     ("audit trail", "delete from infrx.audit_entries"),
     ("the database clock", "select infrx.now()"),
@@ -694,6 +767,32 @@ def _attempt(conn, session: str, sql: str) -> str | None:
         return None
     except psycopg.Error as refused:
         return f"{refused.sqlstate} {str(refused).splitlines()[0]}"
+
+
+def check_sessions_are_somebody(conn) -> str:
+    """Every impersonated session IS the principal it claims to be.
+
+    Without this the whole matrix can pass by accident: if `auth.uid()` reads a claim
+    form the harness does not set (the real Supabase image reads the legacy per-claim
+    GUCs), every session is anonymous, every policy denies, and every attack "fails"
+    for the wrong reason.
+    """
+    expected = {"member": USER_MEMBER, "owner": USER_OWNER, "operator": USER_OPERATOR,
+                "other": USER_OTHER}
+    for session, user in expected.items():
+        uid, role, operator = read_rows(
+            conn, session, "select auth.uid(), auth.role(), public.is_operator()")[0]
+        assert uid is not None and str(uid) == user, \
+            f"the {session} session is nobody: auth.uid() = {uid!r}"
+        assert role == "authenticated", f"the {session} session has role {role!r}"
+        assert operator == (session == "operator"), \
+            f"is_operator() is {operator} for the {session} session"
+    assert read_rows(conn, "anon", "select auth.uid()")[0][0] is None
+    assert read_rows(conn, "owner",
+                     f"select public.is_org_owner('{ORG_A}')")[0][0] is True
+    assert read_rows(conn, "member",
+                     f"select public.is_org_owner('{ORG_A}')")[0][0] is False
+    return f"{len(expected)} impersonated principals resolve, in both claim forms"
 
 
 def check_role_matrix(conn) -> str:
@@ -768,8 +867,11 @@ VIOLATIONS = (
          DIGEST, "md5:deadbeef") + ")"),
     ("an unknown job state",
      _job_values("52000000-0000-4000-8000-00000000000d", "job_vd", state="paused") + ")"),
+    # r2/B9(m16): JOB_PREPARING has no job_media, hold or reservation, so only
+    # `jobs_guard` can refuse this - the old target was refused by a child foreign key
+    # and the mutant that removed `org_id` from the guard survived.
     ("changing a job's organization",
-     f"update infrx.jobs set org_id = '{ORG_B}' where request_id = '{JOB_QUEUED}'"),
+     f"update infrx.jobs set org_id = '{ORG_B}' where request_id = '{JOB_PREPARING}'"),
     ("changing a job's admitted budget",
      f"update infrx.jobs set budget_generation_s = 9999 where request_id = '{JOB_QUEUED}'"),
     ("changing a job's payload reference",
@@ -839,12 +941,14 @@ VIOLATIONS = (
      f"payload, bytes, expires_at) values ('{JOB_RUNNING}', 1, 1, 'heartbeat', "
      f"'{{}}'::jsonb, 2, '2026-09-21T01:00:00Z')"),
     ("an unknown outbox kind",
-     f"insert into infrx.outbox (event_id, aggregate_id, kind, available_at) values "
-     f"('70000000-0000-4000-8000-0000000000ff', '{JOB_QUEUED}', 'email', now())"),
+     f"insert into infrx.outbox (event_id, aggregate_id, org_id, kind, available_at) "
+     f"values ('70000000-0000-4000-8000-0000000000ff', '{JOB_QUEUED}', '{ORG_A}', "
+     f"'email', now())"),
     ("an unbounded outbox payload",
-     f"insert into infrx.outbox (event_id, aggregate_id, kind, payload, available_at) "
-     f"values ('70000000-0000-4000-8000-0000000000fe', '{JOB_QUEUED}', "
-     f"'usage_projection', jsonb_build_object('blob', repeat('x', 5000)), now())"),
+     f"insert into infrx.outbox (event_id, aggregate_id, org_id, kind, payload, "
+     f"available_at) values ('70000000-0000-4000-8000-0000000000fe', '{JOB_QUEUED}', "
+     f"'{ORG_A}', 'usage_projection', jsonb_build_object('blob', repeat('x', 5000)), "
+     f"now())"),
     ("a thumb whose value is a number (R3)",
      f"insert into infrx.feedback (feedback_id, org_id, request_id, author_principal, "
      f"author_role, channel, name, value_int) values ('fb_x1', '{ORG_A}', "
@@ -930,8 +1034,14 @@ VIOLATIONS = (
     ("rewriting consent history",
      f"update infrx.consent_history set evaluation_consent = false "
      f"where org_id = '{ORG_A}'"),
+    # r2/B9(m27): version 2 has no judge run pointing at it, so the guard is the only
+    # thing that can refuse the delete.
     ("deleting consent history",
-     f"delete from infrx.consent_history where org_id = '{ORG_A}'"),
+     f"delete from infrx.consent_history where org_id = '{ORG_A}' and consent_version = 2"),
+    ("undoing a consent revocation (ruling 9)",
+     f"update infrx.consent_history set revoked_at = null where org_id = '{ORG_B}'"),
+    ("rewriting a consent row's created_at",
+     f"update infrx.consent_history set created_at = now() where org_id = '{ORG_A}'"),
     ("an idempotency row that refers to nothing",
      f"insert into infrx.idempotency (org_id, operation, key, payload_digest) values "
      f"('{ORG_A}', 'chat.completions', 'k1', '{DIGEST}')"),
@@ -958,8 +1068,8 @@ VIOLATIONS = (
      f"model_revision, state) values ('60000000-0000-4000-8000-0000000000ff', "
      f"'{ORG_A}', 99, 1, 'claude-opus', 'dry_run')"),
     ("a duplicate sample score for one rubric version",
-     f"insert into infrx.judge_samples (run_id, sample_id, rubric_version) values "
-     f"('{RUN_ID}', 's1', 3), ('{RUN_ID}', 's1', 3)"),
+     f"insert into infrx.judge_samples (run_id, org_id, sample_id, rubric_version) values "
+     f"('{RUN_ID}', '{ORG_A}', 's1', 3), ('{RUN_ID}', '{ORG_A}', 's1', 3)"),
     ("a plaintext callback destination",
      f"insert into infrx.callback_destinations (destination_id, org_id, url, "
      f"signing_key_ref) values ('80000000-0000-4000-8000-0000000000ff', '{ORG_A}', "
@@ -1011,11 +1121,137 @@ VIOLATIONS = (
     ("an unknown settlement state",
      "update public.usage_events set settlement_state = 'maybe' "
      "where id = '90000000-0000-4000-8000-000000000001'"),
+    # --- r2: tenant coherence by composite key (ruling 7) ---
+    ("a hold on one tenant's job against another's credit",
+     f"insert into infrx.credit_holds (request_id, org_id, amount, state) "
+     f"values ('{JOB_B}', '{ORG_A}', 1, 'held')"),
+    ("a hold naming another tenant's key",
+     f"insert into infrx.credit_holds (request_id, org_id, key_id, amount, state) "
+     f"values ('{JOB_RUNNING}', '{ORG_A}', "
+     f"'44444444-4444-4444-8444-4444444444bb', 1, 'held')"),
+    ("a reservation on another tenant's job",
+     f"insert into infrx.capacity_reservations (request_id, kind, org_id, amount) "
+     f"values ('{JOB_B}', 'inference', '{ORG_A}', 1)"),
+    ("a job keyed by another tenant's api key",
+     _job_values("52000000-0000-4000-8000-0000000000fd", "job_vkey").replace(
+         f"'{KEY_A}'", "'44444444-4444-4444-8444-4444444444bb'") + ")"),
+    ("an idempotency row pointing at another tenant's job",
+     f"insert into infrx.idempotency (org_id, operation, key, payload_digest, request_id) "
+     f"values ('{ORG_B}', 'chat.completions', 'k3', '{DIGEST}', '{JOB_QUEUED}')"),
+    ("a judge reservation against another tenant's budget",
+     f"insert into infrx.judge_reservations (run_id, org_id, period_start, amount, state) "
+     f"values ('60000000-0000-4000-8000-0000000000bb', '{ORG_A}', '{PERIOD}', 1, 'held')"),
+    ("a judge sample naming another tenant's request",
+     f"insert into infrx.judge_samples (run_id, org_id, sample_id, rubric_version, "
+     f"request_id) values ('{RUN_ID}', '{ORG_A}', 's-foreign', 3, '{JOB_B}')"),
+    ("a callback delivery of one tenant's event to another's destination",
+     f"insert into infrx.callback_deliveries (event_id, destination_id, org_id, state) "
+     f"values ('{EVENT_ID}', '{DEST_ID}', '{ORG_B}', 'failed')"),
+    ("an outbox event with no organization",
+     f"insert into infrx.outbox (event_id, aggregate_id, kind, available_at) values "
+     f"('70000000-0000-4000-8000-0000000000fd', '{JOB_QUEUED}', 'usage_projection', "
+     f"now())"),
+    ("a pilot usage row under another tenant",
+     f"insert into public.usage_events (id, org_id, model_id, status, "
+     f"settlement_regime, outcome, settlement_state, settlement_version) values "
+     f"('{JOB_TERMINAL}', '{ORG_B}', 'nemostation/marlin-2b', 200, 'pilot', "
+     f"'completed', 'settled', 1)"),
+    ("a ledger row against another tenant's request",
+     f"insert into public.credit_ledger (org_id, delta_usd, kind, request_id) values "
+     f"('{ORG_B}', -1, 'usage', '{JOB_TERMINAL}')"),
+    # --- r2: money signs and one debit per request (ruling 7) ---
+    ("a negative grant",
+     f"insert into public.credit_ledger (org_id, delta_usd, kind) values "
+     f"('{ORG_A}', -5, 'grant')"),
+    ("a positive usage debit",
+     f"insert into public.credit_ledger (org_id, delta_usd, kind) values "
+     f"('{ORG_A}', 5, 'usage')"),
+    ("a zero-delta ledger row",
+     f"insert into public.credit_ledger (org_id, delta_usd, kind) values "
+     f"('{ORG_A}', 0, 'adjustment')"),
+    ("an operator-made ledger row with nothing to audit it",
+     f"insert into public.credit_ledger (org_id, delta_usd, kind, by_operator) values "
+     f"('{ORG_A}', 5, 'grant', true)"),
+    ("a second usage debit for one request",
+     f"insert into public.credit_ledger (org_id, delta_usd, kind, request_id) values "
+     f"('{ORG_A}', -1, 'usage', '{JOB_TERMINAL}'), "
+     f"('{ORG_A}', -1, 'usage', '{JOB_TERMINAL}')"),
+    # --- r2: the nonblocking checks that were one line each ---
+    ("a debit past the reserved envelope",
+     _job_values("52000000-0000-4000-8000-0000000000fc", "job_vdebit", state="succeeded",
+                 extra="settled_at, outcome_cause, settlement_state, usage_certainty, "
+                       "result_ref, debit")
+     + ", '2026-09-21T00:05:00Z', 'completed', 'settled', 'authoritative', 'r', 99)"),
+    ("a settlement on usage that was never authoritative",
+     _job_values("52000000-0000-4000-8000-0000000000fb", "job_vcert", state="succeeded",
+                 extra="settled_at, outcome_cause, settlement_state, usage_certainty, "
+                       "result_ref")
+     + ", '2026-09-21T00:05:00Z', 'completed', 'settled', 'unknown', 'r')"),
+    ("a held_unknown outcome with authoritative usage",
+     _job_values("52000000-0000-4000-8000-0000000000fa", "job_vheld", state="failed",
+                 extra="settled_at, outcome_cause, settlement_state, usage_certainty, "
+                       "reconcile_after")
+     + ", '2026-09-21T00:05:00Z', 'engine_error', 'held_unknown', 'authoritative',"
+       " '2026-09-22T00:00:00Z')"),
+    ("a deadline before the admission",
+     _job_values("52000000-0000-4000-8000-0000000000f9", "job_vdead").replace(
+         "'2026-09-21T00:10:00Z'", "'2026-09-20T00:00:00Z'") + ")"),
+    ("queue time spent beyond the queue budget",
+     f"update infrx.jobs set queue_wait_used_s = 9999 "
+     f"where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted price snapshot (R53)",
+     f"update infrx.jobs set price_snapshot = '{{}}'::jsonb "
+     f"where request_id = '{JOB_QUEUED}'"),
+    ("rewriting an admitted token ceiling",
+     f"update infrx.jobs set max_output_tokens = 4096 "
+     f"where request_id = '{JOB_QUEUED}'"),
+    ("rewriting a settled debit",
+     f"update infrx.jobs set debit = 0 where request_id = '{JOB_TERMINAL}'"),
+    ("deleting a settled job",
+     f"delete from infrx.jobs where request_id = '{JOB_TERMINAL}'"),
+    ("a suspension with no reason or date",
+     f"update public.organizations set suspended = true where id = '{ORG_A}'"),
+    ("a free-text suspension reason",
+     f"update public.organizations set suspended = true, suspended_at = now(), "
+     f"suspension_reason = 'called the CEO names' where id = '{ORG_A}'"),
+    ("a journal chunk past the event byte limit",
+     f"insert into infrx.stream_chunks (job_id, generation, sequence, event_type, "
+     f"payload, bytes, expires_at) values ('{JOB_RUNNING}', 1, 9, 'delta', "
+     f"jsonb_build_object('d', repeat('x', 1100000)), 1100000, now() + interval '1h')"),
+    ("a chunk whose byte count understates its payload",
+     f"insert into infrx.stream_chunks (job_id, generation, sequence, event_type, "
+     f"payload, bytes, expires_at) values ('{JOB_RUNNING}', 1, 8, 'delta', "
+     f"jsonb_build_object('d', repeat('x', 4000)), 1, now() + interval '1h')"),
+)
+
+#: Statements that must be ACCEPTED. Without these, a primary key that drops a column
+#: (B9: m19 `kind`, m21 `operation`, m23 `generation`) looks exactly like a stricter
+#: schema, and every "must be refused" case still passes.
+ACCEPTED = (
+    ("R46: a preparation and an inference attempt share generation 1",
+     f"insert into infrx.attempts (job_id, kind, generation, worker_id, acquired_at, "
+     f"expires_at, generation_deadline_at, first_token_deadline_at) values "
+     f"('{JOB_QUEUED}', 'preparation', 1, 'w', '2026-09-21T00:00:10Z', "
+     f"'2026-09-21T00:00:40Z', '2026-09-21T00:02:00Z', null), "
+     f"('{JOB_QUEUED}', 'inference', 1, 'w', '2026-09-21T00:03:00Z', "
+     f"'2026-09-21T00:05:00Z', '2026-09-21T00:08:00Z', '2026-09-21T00:04:00Z')"),
+    ("one idempotency key in two operations",
+     f"insert into infrx.idempotency "
+     f"(org_id, operation, key, payload_digest, request_id, feedback_id) values "
+     f"('{ORG_A}', 'chat.completions', 'shared', '{DIGEST}', '{JOB_QUEUED}', null), "
+     f"('{ORG_A}', 'feedback.submit', 'shared', '{DIGEST}', null, 'fb_1')"),
+    ("the same sequence in two generations of one journal",
+     f"insert into infrx.stream_chunks (job_id, generation, sequence, event_type, "
+     f"payload, bytes, expires_at) values "
+     f"('{JOB_RUNNING}', 1, 1, 'delta', '{{}}'::jsonb, 2, now() + interval '1h'), "
+     f"('{JOB_RUNNING}', 2, 1, 'delta', '{{}}'::jsonb, 2, now() + interval '1h')"),
 )
 
 
 def check_row_constraints(conn) -> str:
-    """Every row check, exclusion and immutability trigger refuses its violation."""
+    """Every row check, exclusion and immutability trigger refuses its violation - and
+    every shape the schema must still accept is accepted, so a key that lost a column
+    cannot pass as a stricter schema."""
     survived = []
     for invariant, sql in VIOLATIONS:
         try:
@@ -1027,7 +1263,19 @@ def check_row_constraints(conn) -> str:
         except psycopg.Error:
             continue
     assert not survived, "the schema accepted:\n  " + "\n  ".join(survived)
-    return f"{len(VIOLATIONS)} row-level violations refused"
+    refused = []
+    for invariant, sql in ACCEPTED:
+        try:
+            with conn.transaction():
+                conn.execute(sql)
+                raise _Allowed()
+        except _Allowed:
+            continue
+        except psycopg.Error as wrongly:
+            refused.append(f"{invariant}: {_first_line(wrongly)}")
+    assert not refused, "the schema refused what it must accept:\n  " + "\n  ".join(refused)
+    return (f"{len(VIOLATIONS)} row-level violations refused, "
+            f"{len(ACCEPTED)} required shapes accepted")
 
 
 # --- bounded access paths -----------------------------------------------------
@@ -1060,6 +1308,9 @@ PLANS = (
     ("ready callback deliveries", "callback_deliveries_ready_idx",
      "select event_id from infrx.callback_deliveries where state = 'pending' "
      "and next_attempt_at <= now() limit 100"),
+    ("active holds by organization", "credit_holds_org_active_idx",
+     f"select request_id from infrx.credit_holds where org_id = '{ORG_A}' "
+     f"and state in ('held','unknown') limit 100"),
     ("usage pagination by org and time", "usage_events_org_created_idx",
      f"select id from public.usage_events where org_id = '{ORG_A}' "
      f"order by created_at desc limit 100"),
@@ -1067,6 +1318,46 @@ PLANS = (
      f"select id from public.credit_ledger where org_id = '{ORG_A}' "
      f"order by created_at desc limit 100"),
 )
+
+#: Ruling 6: a `security_barrier` view must still push the caller's tenant qual DOWN to
+#: the base relation. If it did not, every row of every tenant would be materialised
+#: before the filter ran - which is both the leak B5 found and an unbounded scan.
+PUSHDOWN = (
+    ("console_usage by org", "usage_events",
+     f"select request_id from public.console_usage where org_id = '{ORG_A}' "
+     f"order by created_at desc limit 100"),
+    ("console_usage by org and time", "usage_events",
+     f"select request_id from public.console_usage where org_id = '{ORG_A}' "
+     f"and created_at < now() limit 100"),
+    ("console_ledger by org", "credit_ledger",
+     f"select id from public.console_ledger where org_id = '{ORG_A}' limit 100"),
+    ("wallets by org", "wallets",
+     f"select ledger_total from public.wallets where org_id = '{ORG_A}'"),
+)
+
+
+def check_view_pushdown(conn) -> str:
+    """The tenant qual reaches the base relation inside every barrier view.
+
+    An ordered index scan is NOT available through a barrier (the view's own quals sit
+    between the ordering and the index), so the console's bounded pages sort what the
+    pushed-down qual selected; what must never happen is the qual being applied ABOVE
+    the barrier, which would scan every tenant's rows first.
+    """
+    problems = []
+    for path, relation, query in PUSHDOWN:
+        plan = "\n".join(line for line, in conn.execute(f"explain (costs off) {query}"))
+        scan = [line for line in plan.splitlines()
+                if f"Scan on {relation}" in line or f"Scan using" in line and relation in line]
+        if not scan:
+            problems.append(f"{path}: no scan of {relation}\n{plan}")
+            continue
+        index = plan.split(scan[0], 1)[1].splitlines()[:3]
+        if not any("org_id = " in line for line in index):
+            problems.append(f"{path}: the tenant qual did not reach {relation}\n{plan}")
+    assert not problems, "a barrier view did not push the tenant qual down:\n" + \
+        "\n".join(problems)
+    return f"{len(PUSHDOWN)} view queries push their tenant qual to the base relation"
 
 
 def check_index_plans(conn) -> str:
@@ -1084,6 +1375,205 @@ def check_index_plans(conn) -> str:
             problems.append(f"{path}: sequential scan\n{plan}")
     assert not problems, "bounded access paths without an index:\n" + "\n".join(problems)
     return f"{len(PLANS)} access paths index-served"
+
+
+
+# --- privileges, statement by statement (r2, ruling 4) -------------------------
+#: The WHOLE browser-reachable privilege surface: relation -> {verb: columns or None}.
+#: `None` means the table-level privilege. Anything not listed here must not be held by
+#: `anon` or `authenticated`, which is what makes TRUNCATE (B3) visible: it was never
+#: enumerated, so nobody noticed Supabase's default ALL grant still carried it.
+EXPECTED_PRIVILEGES = {
+    ("authenticated", "profiles"): {"SELECT": None,
+                                    "UPDATE": {"full_name", "avatar_url"}},
+    ("authenticated", "organizations"): {"SELECT": None, "UPDATE": {"name", "slug"}},
+    ("authenticated", "org_members"): {"SELECT": None},
+    ("authenticated", "models"): {"SELECT": None},
+    ("authenticated", "api_keys"): {
+        "SELECT": None,
+        "INSERT": {"org_id", "created_by", "name", "prefix", "key_hash"},
+        "UPDATE": {"name", "revoked_at"}},
+    ("authenticated", "usage_events"): {"SELECT": None},
+    ("authenticated", "credit_ledger"): {"SELECT": None},
+    # The console read surface: read-only, by name.
+    **{("authenticated", view.split(".", 1)[1]): {"SELECT": None}
+       for view, _kind in (
+           ("public.wallets", ""), ("public.console_ledger", ""),
+           ("public.console_usage", ""), ("public.org_settings", ""),
+           ("public.consent_history", ""), ("public.feedback", ""),
+           ("public.calibration_labels", ""), ("public.console_judge_runs", ""),
+           ("public.console_admin_orgs", ""), ("public.operator_audit", ""))},
+}
+
+#: Relations whose whole point is that nothing is ever removed (0003's trigger list).
+TRUNCATE_GUARDED = (
+    "public.credit_ledger", "public.usage_events", "infrx.jobs", "infrx.attempts",
+    "infrx.credit_holds", "infrx.capacity_reservations", "infrx.stream_chunks",
+    "infrx.outbox", "infrx.idempotency", "infrx.feedback", "infrx.consent_history",
+    "infrx.price_versions", "infrx.audit_entries", "infrx.wallets",
+    "infrx.judge_runs", "infrx.judge_reservations", "infrx.judge_samples",
+    "infrx.callback_deliveries",
+)
+
+
+def check_privileges(conn) -> str:
+    """Ruling 4: the browser-reachable privilege surface is exactly the enumerated one.
+
+    Table-level grants are compared verb by verb (so TRUNCATE, REFERENCES and TRIGGER
+    cannot hide in an ALL grant) and column grants column by column.
+    """
+    problems = []
+    table_grants: dict[tuple, dict] = {}
+    for role, table, verb in conn.execute("""
+            select grantee, table_name, privilege_type
+            from information_schema.role_table_grants
+            where table_schema = 'public' and grantee in ('anon','authenticated','PUBLIC')
+            """).fetchall():
+        table_grants.setdefault((role, table), {})[verb] = None
+    column_grants: dict[tuple, dict] = {}
+    for role, table, verb, column in conn.execute("""
+            select grantee, table_name, privilege_type, column_name
+            from information_schema.column_privileges
+            where table_schema = 'public' and grantee in ('anon','authenticated','PUBLIC')
+            """).fetchall():
+        column_grants.setdefault((role, table), {}).setdefault(verb, set()).add(column)
+
+    for key, verbs in sorted(table_grants.items()):
+        role, table = key
+        expected = EXPECTED_PRIVILEGES.get(key, {})
+        extra = sorted(v for v in verbs if expected.get(v, "missing") is not None)
+        if extra:
+            problems.append(f"{role} holds table-level {', '.join(extra)} on {table}")
+    for key, verbs in sorted(column_grants.items()):
+        role, table = key
+        expected = EXPECTED_PRIVILEGES.get(key)
+        if expected is None:
+            problems.append(f"{role} holds {sorted(verbs)} on {table}, which is not "
+                            f"in the enumerated surface")
+            continue
+        for verb, columns in sorted(verbs.items()):
+            allowed = expected.get(verb, "absent")
+            if allowed == "absent":
+                problems.append(f"{role} holds {verb} on {table} ({sorted(columns)})")
+            elif allowed is not None and not columns <= allowed:
+                problems.append(f"{role} holds {verb} on {table} columns "
+                                f"{sorted(columns - allowed)} beyond {sorted(allowed)}")
+    for key in EXPECTED_PRIVILEGES:
+        if key not in table_grants and key not in column_grants:
+            problems.append(f"{key[0]} lost every grant on {key[1]}: the console breaks")
+    assert not problems, "the privilege surface is not the enumerated one:\n  " + \
+        "\n  ".join(problems)
+    # And the pilot schema itself is unreachable, which is what m09 and m08 claim.
+    for role in ("anon", "authenticated"):
+        assert not conn.execute("select has_schema_privilege(%s, 'infrx', 'usage')",
+                                (role,)).fetchone()[0], \
+            f"{role} holds USAGE on schema infrx"
+        assert not conn.execute(
+            "select has_function_privilege(%s, 'infrx.now()', 'execute')",
+            (role,)).fetchone()[0], f"{role} may call the store's clock"
+    return (f"{len(EXPECTED_PRIVILEGES)} enumerated grants and nothing else; "
+            f"infrx unreachable")
+
+
+def check_truncate_refused(conn) -> str:
+    """B3: TRUNCATE is refused for every role, including the one that owns the data.
+
+    RLS does not apply to TRUNCATE and a row trigger never sees it, so a privilege was
+    the only thing standing between `anon` and `truncate public.credit_ledger cascade`.
+    Now the privilege is gone AND a statement trigger refuses it - a privilege can be
+    re-granted by accident, a trigger cannot.
+    """
+    survived = []
+    for relation in TRUNCATE_GUARDED:
+        for session in ("anon", "member", "owner", "operator", "service"):
+            refusal = _attempt(conn, session, f"truncate {relation} cascade")
+            if refusal is None:
+                survived.append(f"{session} truncated {relation}")
+    # And as the migration owner (superuser), where only the trigger can refuse.
+    for relation in TRUNCATE_GUARDED:
+        try:
+            with conn.transaction():
+                conn.execute(f"truncate {relation} cascade")
+                raise _Allowed()
+        except _Allowed:
+            survived.append(f"the table owner truncated {relation}")
+        except psycopg.Error:
+            continue
+    assert not survived, "TRUNCATE was accepted:\n  " + "\n  ".join(survived)
+    return (f"{len(TRUNCATE_GUARDED)} append-only relations refuse TRUNCATE for "
+            f"5 browser/service sessions and for the owner")
+
+
+def check_leaky_function_probe(conn) -> str:
+    """Ruling 6 / B5: a caller's own cheap function in the WHERE clause must not see
+    rows the tenant predicate excludes.
+
+    Without `security_barrier` the planner may evaluate a `cost 1e-7` user function
+    before the view's own qual, which is how the reviewer read every organization's
+    wallet as ORG_B's owner. The probe collects what the function saw; it must see
+    nothing that is not the caller's own.
+    """
+    conn.execute("""
+        create table if not exists public._d1_probe_log (
+          relation text not null, seen text not null);
+        truncate public._d1_probe_log;
+        create or replace function public._d1_probe(p_relation text, p_value text)
+        returns boolean language plpgsql cost 0.0000001 as $$
+        begin
+          insert into public._d1_probe_log values (p_relation, p_value);
+          return true;
+        end $$;""")
+    probes = (("public.wallets", "org_id::text"),
+              ("public.feedback", "author_principal"),
+              ("public.console_ledger", "coalesce(actor, '-')"),
+              ("public.operator_audit", "actor_principal"))
+    for relation, expression in probes:
+        # As ORG_B's owner: everything the probe sees must belong to ORG_B.
+        read_rows(conn, "other", f"select count(*) from {relation} "
+                               f"where public._d1_probe('{relation}', {expression})")
+    seen = conn.execute("""select relation, seen from public._d1_probe_log
+                           order by relation, seen""").fetchall()
+    own = {ORG_B, USER_OTHER, "platform", "-", None}
+    leaked = [(relation, value) for relation, value in seen if value not in own]
+    conn.execute("drop function if exists public._d1_probe(text, text); "
+                 "drop table if exists public._d1_probe_log;")
+    assert not leaked, ("a leaky function in the WHERE clause saw another tenant's "
+                        f"rows: {leaked[:8]}")
+    return f"{len(probes)} views probed with a cheap leaky function; nothing foreign seen"
+
+
+def check_legacy_writer_does_not_drift(conn) -> str:
+    """B8 / ruling 8: the deployed console's `addCredit` path cannot make the wallet
+    summary disagree with the ledger.
+
+    This is exactly `app/(console)/admin/actions.ts`: an insert into `credit_ledger`
+    through the service role, with no knowledge of `infrx.wallets`.
+    """
+    before = conn.execute("select ledger_total from infrx.wallets where org_id = %s",
+                          (ORG_A,)).fetchone()[0]
+    with conn.transaction():
+        conn.execute("set local role service_role")
+        conn.execute(f"""
+            insert into public.credit_ledger (org_id, delta_usd, kind, reason, created_by)
+            values ('{ORG_A}', 5.00000000, 'grant', 'legacy console top-up',
+                    '{USER_OPERATOR}')""")
+    after = conn.execute("select ledger_total from infrx.wallets where org_id = %s",
+                         (ORG_A,)).fetchone()[0]
+    assert after == before + Decimal("5.00000000"), \
+        f"a legacy ledger insert did not move the wallet: {before} -> {after}"
+    drift = conn.execute("""select org_id, ledger_drift from infrx.wallet_reconciliation
+                            where ledger_drift <> 0 or reserved_drift <> 0""").fetchall()
+    assert not drift, f"the legacy writer left the summary drifting: {drift}"
+    # Both figures a customer can see must agree, and both are read as a member: the
+    # 0001 reporting functions are SECURITY INVOKER and refuse a caller who is nobody.
+    summary = read_rows(conn, "member",
+                        f"select ledger_total from public.org_wallet_summary('{ORG_A}')")
+    balance = read_rows(conn, "member", f"select public.org_balance('{ORG_A}')")
+    assert Decimal(summary[0][0]) == balance[0][0], \
+        f"org_wallet_summary {summary[0][0]} disagrees with org_balance {balance[0][0]}"
+    return f"a legacy service-role grant moved the wallet to {after}; reconciliation clean"
+
+
 
 
 # --- the console read surface (0005) ------------------------------------------
@@ -1111,8 +1601,13 @@ class _Rollback(Exception):
         self.rows = rows
 
 
-def read_as(conn, session: str, sql: str) -> list:
-    """Read under that session's role, then roll the transaction back (`set local`)."""
+def read_rows(conn, session: str, sql: str) -> list:
+    """Read under that session's role, then roll the transaction back (`set local`).
+
+    Named `read_rows` because it returns ROWS: a check that asks a view for `count(*)`
+    lets the planner drop the joins whose columns nobody selected, which is how B1's
+    operator view passed a test while raising `42501` in production.
+    """
     try:
         with conn.transaction():
             conn.execute(SESSIONS[session])
@@ -1123,70 +1618,139 @@ def read_as(conn, session: str, sql: str) -> list:
 
 def check_console_read_surface(conn) -> str:
     """The console's read surface (0005) is owner's-rights over `infrx`, so a missing
-    predicate leaks every tenant. Each view is checked for what it shows whom."""
+    predicate leaks every tenant. Each view is checked for what it shows whom - by
+    selecting its COMPUTED columns, never `count(*)`: the planner drops a join whose
+    columns nobody selects, and B1's operator view was "passing" that way while it in
+    fact raised 42501 for every caller but the platform key."""
     problems = []
     for view, kind in READ_VIEWS:
-        tenanted = kind in ("tenant", "owner")
-        # anon has no session at all and must see nothing, anywhere.
-        if read_as(conn, "anon", f"select count(*) from {view}")[0][0]:
+        columns = _view_columns(conn, view)
+        projection = ", ".join(columns)
+        # `anon` holds no SELECT at all after ruling 4, so the read is refused rather
+        # than empty. Both are "sees nothing"; refused is the stronger one.
+        if read_or_denied(conn, "anon", f"select {projection} from {view}"):
             problems.append(f"{view}: anon sees rows")
         if kind == "operator":
             for session in ("member", "owner"):
-                if read_as(conn, session, f"select count(*) from {view}")[0][0]:
+                if read_or_denied(conn, session, f"select {projection} from {view}"):
                     problems.append(f"{view}: a {session} session sees operator rows")
-            if not read_as(conn, "operator", f"select count(*) from {view}")[0][0]:
-                problems.append(f"{view}: an operator sees nothing (the view is empty, "
-                                f"so the denials above prove nothing)")
+            if not read_rows(conn, "operator", f"select {projection} from {view}"):
+                problems.append(f"{view}: an operator sees nothing, so the denials "
+                                f"above prove nothing")
             continue
         session = "owner" if kind == "owner" else "member"
-        rows = read_as(conn, session, f"select count(*) from {view}")[0][0]
-        if not rows:
+        if not read_rows(conn, session, f"select {projection} from {view}"):
             problems.append(f"{view}: a {session} of the seeded org sees nothing, so the "
                             f"cross-tenant check below proves nothing")
-        if kind == "owner":
-            # R13: judge runs are owner and operator only.
-            if read_as(conn, "member", f"select count(*) from {view}")[0][0]:
-                problems.append(f"{view}: a plain member sees owner-only rows")
-        if tenanted:
-            # Not "nothing but ORG_A": a user may legitimately belong to several
-            # organizations (the signup trigger gives everyone a personal one). The
-            # invariant is that ORG_B's row - a tenant this session is not in - is
-            # invisible, which is why the fixture seeds one in every relation.
-            foreign = read_as(conn, session,
-                              f"select count(*) from {view} where org_id = '{ORG_B}'")
-            if foreign[0][0]:
-                problems.append(f"{view}: a session of one org sees another org's rows")
+        if kind == "owner" and read_or_denied(conn, "member",
+                                              f"select {projection} from {view}"):
+            problems.append(f"{view}: a plain member sees owner-only rows")
+        # Not "nothing but ORG_A": a user may belong to several organizations (the
+        # signup trigger gives everyone a personal one). The invariant is that ORG_B's
+        # row - a tenant this session is not in - is invisible, which is why the fixture
+        # seeds one in every relation.
+        if read_or_denied(conn, session,
+                          f"select {projection} from {view} where org_id = '{ORG_B}'"):
+            problems.append(f"{view}: a session of one org sees another org's rows")
     assert not problems, "the console read surface leaks:\n  " + "\n  ".join(problems)
 
-    # R41/R50: a customer reads `platform`, an operator reads the principal.
-    customer = read_as(conn, "member", "select actor from public.console_ledger "
-                                       "where by_operator")
-    assert customer and all(row[0] == "platform" for row in customer), \
-        f"a customer session read an operator principal from the ledger: {customer}"
-    operator = read_as(conn, "operator", "select actor from public.console_ledger "
-                                         "where by_operator")
-    assert operator and all(row[0] == "ops@infrx" for row in operator), \
+    # R41/R50 by PROVEN MEMBERSHIP (ruling 1), not by a marker that defaults false.
+    ledger = "select reason, actor, by_operator from public.console_ledger order by reason"
+    customer = dict((reason, actor) for reason, actor, _ in read_rows(conn, "member", ledger))
+    assert customer["pilot credit"] == "platform", \
+        f"a customer read a marked operator principal: {customer}"
+    assert customer["unmarked operator grant"] == "platform", \
+        ("a customer read an UNMARKED operator principal - the masking still keys on "
+         f"`by_operator`, which fails open for history: {customer}")
+    assert customer["by the owner"] == "owner@example.com", \
+        f"a customer cannot see their own member's principal: {customer}"
+    operator = dict((reason, actor) for reason, actor, _ in read_rows(conn, "operator", ledger))
+    assert operator["pilot credit"] == "operator@example.com", \
         f"an operator did not read the real ledger principal: {operator}"
-    labels = read_as(conn, "operator", "select count(*) from public.feedback "
-                                       "where calibration_set")
-    assert labels[0][0] == 0, "a calibration label appeared in a feedback list (R49)"
-    assert read_as(conn, "operator",
-                   "select count(*) from public.calibration_labels")[0][0] == 1
 
-    # The summary function: the guard is an error, not an empty result.
-    summary = read_as(conn, "member",
-                      f"select * from public.org_wallet_summary('{ORG_A}')")[0]
-    ledger, reserved, loaded, spent = summary
-    assert (ledger, reserved) == (Decimal("50.00000000"), Decimal("1.25000000")), summary
-    assert loaded == Decimal("50.00000000") and spent == Decimal("0.00000000"), summary
+    consent = read_rows(conn, "member", "select version, changed_by from "
+                                        f"public.consent_history where org_id = '{ORG_A}'")
+    by_version = dict(consent)
+    assert by_version[2] == "platform", \
+        f"a customer read the operator who changed their consent: {by_version}"
+    feedback = dict(read_rows(conn, "member", "select name, author_principal from "
+                                              "public.feedback where org_id = "
+                                              f"'{ORG_A}'"))
+    assert feedback["comment"] == "platform", \
+        f"a customer read an operator principal off a feedback entry: {feedback}"
+    assert feedback["thumb"] == "owner@example.com" or \
+        feedback["thumb"] == USER_OWNER, f"their own member's principal was masked: {feedback}"
+
+    labels = read_rows(conn, "operator", "select count(*) from public.feedback "
+                                         "where calibration_set")
+    assert labels[0][0] == 0, "a calibration label appeared in a feedback list (R49)"
+    assert read_rows(conn, "operator",
+                     "select id from public.calibration_labels")
+
+    # Ruling 10: money crosses as TEXT with eight fractional digits, never as a JSON
+    # number, and timestamps stay timestamptz (PostgREST renders `…+00:00`).
+    money = read_rows(conn, "member", "select ledger_total, reserved_total, available "
+                                      f"from public.wallets where org_id = '{ORG_A}'")[0]
+    assert all(isinstance(value, str) for value in money), \
+        f"money left a view as something other than text: {money}"
+    assert money[0].endswith(".00000000") or "." in money[0], money
+    kinds = dict(conn.execute("""
+        select column_name, data_type from information_schema.columns
+        where table_schema = 'public' and table_name = 'console_usage'""").fetchall())
+    assert kinds["cost"] == "text" and kinds["max_hold"] == "text", kinds
+    assert kinds["created_at"] == "timestamp with time zone", kinds
+    # `key_id` is null exactly when `key_name` is (a deleted key keeps its usage row).
+    assert kinds["key_id"] == "uuid", kinds
+    pairs = read_rows(conn, "member", "select key_id, key_name from public.console_usage")
+    assert all((key_id is None) == (name is None) for key_id, name in pairs), pairs
+
+    # The two aggregates C cannot express over a view (ruling 10).
+    summary = read_rows(conn, "member",
+                        f"select * from public.console_usage_summary('{ORG_A}', "
+                        f"'2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')")[0]
+    assert summary[0] >= 1, f"the usage summary counted nothing: {summary}"
+    assert isinstance(summary[4], str) and isinstance(summary[5], str), \
+        f"the summary returned money as a number: {summary}"
+    daily = read_rows(conn, "member",
+                      f"select * from public.console_usage_daily('{ORG_A}', "
+                      f"'2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')")
+    assert daily and len(daily) <= 400, f"the daily bucket bound is not held: {len(daily)}"
+    assert isinstance(daily[0][4], str), f"daily cost is not text: {daily[0]}"
+    for rpc in (f"select * from public.console_usage_summary('{ORG_B}', "
+                f"'2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')",
+                f"select * from public.console_usage_daily('{ORG_B}', "
+                f"'2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')",
+                f"select * from public.org_wallet_summary('{ORG_B}')"):
+        try:
+            read_rows(conn, "member", rpc)
+        except psycopg.errors.InsufficientPrivilege:
+            continue
+        raise AssertionError(f"a console RPC answered for another organization: {rpc}")
+
+    summary = read_rows(conn, "member",
+                        f"select * from public.org_wallet_summary('{ORG_A}')")[0]
+    assert all(isinstance(value, str) for value in summary), \
+        f"org_wallet_summary returned numbers, not Money strings: {summary}"
+    assert Decimal(summary[0]) == conn.execute(
+        "select ledger_total from infrx.wallets where org_id = %s", (ORG_A,)).fetchone()[0]
+    return (f"{len(READ_VIEWS)} views tenant- and role-scoped on their computed columns; "
+            f"principals masked by membership; money is text; 3 RPCs guarded")
+
+
+def read_or_denied(conn, session: str, sql: str) -> list:
+    """Rows, or `[]` when the read is refused outright - both are "sees nothing"."""
     try:
-        read_as(conn, "member", f"select * from public.org_wallet_summary('{ORG_B}')")
+        return read_rows(conn, session, sql)
     except psycopg.errors.InsufficientPrivilege:
-        pass
-    else:
-        raise AssertionError("org_wallet_summary answered for another organization")
-    return (f"{len(READ_VIEWS)} views tenant- and role-scoped; principals masked; "
-            f"org_wallet_summary guarded")
+        return []
+
+
+def _view_columns(conn, view: str) -> list[str]:
+    schema, name = view.split(".", 1)
+    return [c for c, in conn.execute("""
+        select column_name from information_schema.columns
+        where table_schema = %s and table_name = %s order by ordinal_position""",
+        (schema, name)).fetchall()]
 
 
 # --- the database clock -------------------------------------------------------

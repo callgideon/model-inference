@@ -60,23 +60,29 @@ language sql immutable as $$
     then p_principal::uuid end;
 $$;
 
-create or replace function public.visible_principal(p_org uuid, p_principal text)
+-- `p_subject` is the thing whose membership is proved (a user id, where there is one);
+-- `p_display` is what a permitted viewer reads instead, when the readable form differs
+-- from the subject - an email for a ledger entry whose subject is `created_by`.
+create or replace function public.visible_principal(
+  p_org uuid, p_subject text, p_display text default null)
 returns text language sql stable security invoker set search_path = public, pg_temp as $$
   select case
-    when p_principal is null then null
+    when p_subject is null and p_display is null then null
     -- An operator or the platform key reads the real principal (R49: operators see
     -- real principals on ordinary entries).
-    when public.is_operator() or public.is_service_client() then p_principal
+    when public.is_operator() or public.is_service_client()
+      then coalesce(p_display, p_subject)
     -- A customer session reads a principal only when it is one of their own members.
     when exists (select 1 from public.org_members m
                  where m.org_id = p_org
-                   and m.user_id = public.principal_uuid(p_principal)) then p_principal
+                   and m.user_id = public.principal_uuid(p_subject))
+      then coalesce(p_display, p_subject)
     else 'platform' end;
 $$;
 revoke all on function public.principal_uuid(text) from public;
-revoke all on function public.visible_principal(uuid, text) from public;
+revoke all on function public.visible_principal(uuid, text, text) from public;
 grant execute on function public.principal_uuid(text) to authenticated, service_role;
-grant execute on function public.visible_principal(uuid, text)
+grant execute on function public.visible_principal(uuid, text, text)
   to authenticated, service_role;
 
 -- ========================================= columns the console reads and D writes ===
@@ -145,8 +151,8 @@ where public.is_org_member(w.org_id) or public.is_operator() or public.is_servic
 -- ledger_page. `actor` is masked by PROVEN MEMBERSHIP (ruling 1), not by a marker.
 create or replace view public.console_ledger with (security_barrier = true) as
 select l.id, l.org_id, l.created_at, l.delta_usd::text as delta, l.kind, l.reason, l.ref,
-       public.visible_principal(l.org_id,
-         coalesce(p.email, l.created_by::text)) as actor,
+       public.visible_principal(l.org_id, l.created_by::text,
+                                coalesce(p.email, l.created_by::text)) as actor,
        l.by_operator
 from public.credit_ledger l
 left join public.profiles p on p.id = l.created_by
@@ -274,20 +280,23 @@ select a.id, a.at, a.actor_principal, a.action, a.target_org_id, a.reason, a.bef
 from infrx.audit_entries a
 where public.is_operator() or public.is_service_client();
 
+-- `revoke all` first, then exactly SELECT (ruling 4). These views are created in
+-- `public`, so Supabase's default privileges hand `anon` and `authenticated` ALL on
+-- each one the moment it exists: `anon` held SELECT (its rows are empty - the view's
+-- predicate sees no session - but the reachability was never intended), and both roles
+-- held INSERT/UPDATE/DELETE on a **simple updatable view over `infrx`**, which is how
+-- an owner ran `update public.wallets set ledger_total = 1000000` and moved the money
+-- the whole schema exists to protect.
+revoke all on public.wallets, public.console_ledger, public.console_usage,
+               public.org_settings, public.consent_history, public.feedback,
+               public.calibration_labels, public.console_judge_runs,
+               public.console_admin_orgs, public.operator_audit
+  from public, anon, authenticated;
 grant select on public.wallets, public.console_ledger, public.console_usage,
                 public.org_settings, public.consent_history, public.feedback,
                 public.calibration_labels, public.console_judge_runs,
                 public.console_admin_orgs, public.operator_audit
   to authenticated, service_role;
--- A view is read-only here whatever PostgREST offers: a simple updatable view would
--- otherwise let a browser role write straight through it into `infrx` - an owner ran
--- `update public.wallets set ledger_total = 1000000` before this revoke existed, which
--- is the whole money invariant defeated by a missing line.
-revoke insert, update, delete, truncate on public.wallets, public.console_ledger,
-                public.console_usage, public.org_settings, public.consent_history,
-                public.feedback, public.calibration_labels, public.console_judge_runs,
-                public.console_admin_orgs, public.operator_audit
-  from anon, authenticated;
 
 -- ------------------------------------------------- the wallet summary function ---
 -- The function `apps/app/lib/credits.ts` calls (falling back to `org_balance` until it
@@ -305,6 +314,9 @@ returns table (
   loaded text,
   spent text)
 language plpgsql stable security invoker set search_path = public, pg_temp as $$
+-- The OUT parameters are named for C's DTO, so a column of the same name inside the
+-- body is ambiguous; the columns win.
+#variable_conflict use_column
 begin
   if not (public.is_org_member(p_org) or public.is_operator()
           or public.is_service_client()) then
@@ -312,13 +324,13 @@ begin
   end if;
 
   return query
-  select coalesce(w.ledger_total, 0::numeric(20,8))::text,
-         coalesce(w.reserved_total, 0::numeric(20,8))::text,
+  select coalesce(w.total, 0::numeric(20,8))::text,
+         coalesce(w.reserved, 0::numeric(20,8))::text,
          coalesce(l.loaded, 0)::numeric(20,8)::text,
          coalesce(l.spent, 0)::numeric(20,8)::text
   from (select 1) one
-  left join (select org_id, ledger_total::numeric(20,8) as ledger_total,
-                    reserved_total::numeric(20,8) as reserved_total
+  left join (select org_id, ledger_total::numeric(20,8) as total,
+                    reserved_total::numeric(20,8) as reserved
              from public.wallets) w on w.org_id = p_org
   left join (select sum(delta_usd) filter (where delta_usd > 0) as loaded,
                     -sum(delta_usd) filter (where delta_usd < 0) as spent
