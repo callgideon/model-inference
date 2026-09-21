@@ -146,7 +146,7 @@ order, and a budget breach followed by a mode-mismatched `finish`. The reviewer 
 3,914 of 124,416 sequences affected. `ports.py` said "a capture contributes at most one
 loss count however it ends" throughout, so the port was right and the code was wrong.
 
-Fixed in `F2-py-459233f.md` by putting the guard back where every route passes through it
+Fixed in `F2-py-a3b5277.md` by putting the guard back where every route passes through it
 (`_count` is idempotent per capture), together with R42's ruling that an off-mode capture is
 silent - this pass counted a `malformed` loss on every ordinary off-mode request, which
 would have reported a 100% loss rate for customers who asked for no tracing at all. The

@@ -71,6 +71,7 @@ export const TRACE_LOSS_REASONS = [
   "disk_error",
   "shutdown",
   "malformed",
+  "abandoned",
 ] as const;
 export type TraceLossReason = (typeof TRACE_LOSS_REASONS)[number];
 

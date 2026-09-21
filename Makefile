@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: check api-env api-test api-mutants console-test console-lint bench-test
+.PHONY: check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -23,6 +23,15 @@ console-test:
 console-lint:
 	cd apps/app && pnpm lint
 
+# tsc needs Next's generated route types (PageProps/LayoutProps); a checkout that
+# never ran next dev/build/typegen fails without them.
+console-typecheck:
+	cd apps/app && pnpm exec next typegen && pnpm exec tsc --noEmit
+
+# R32/R36: exported console conformance must kill every declared mutant.
+console-mutants:
+	cd apps/app && pnpm test:mutants
+
 # E1 owns models/marlin2b/tests. Until it exists this target reports "not run"
 # rather than pretending a pass.
 bench-test:
@@ -32,4 +41,4 @@ bench-test:
 		echo "bench-test: not run - models/marlin2b/tests does not exist yet (E1 owns it)"; \
 	fi
 
-check: api-test api-mutants console-test console-lint bench-test
+check: api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test
