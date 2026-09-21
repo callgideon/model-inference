@@ -368,7 +368,12 @@ def test_q1_kind__preparation_traffic_does_not_erase_a_service_time_debt():
     dispatches as one whose requests cost 1 s. With a shared virtual time and preparation
     traffic the expensive tenant's share of service seconds went 0.50 -> 0.92."""
     async def run():
-        expensive = {ORG_A: 11.0}
+        # The preparation tenant is expensive too, so its stream advances *its* pool's
+        # virtual time by 11 per round. That is what exposes a shared virtual time: both
+        # inference tenants are then clamped forward every round and alternate, which is
+        # the 0.92 share. With a 1 s preparation cost the shared scalar happens to advance
+        # at exactly ORG_B's rate and the defect hides, so the fixture would prove nothing.
+        expensive = {ORG_A: 11.0, ORG_C: 11.0}
         for prepare_traffic in (False, True):
             # 11:1 costs mean one dispatch for ORG_A per eleven for ORG_B, so the depths
             # are uneven on purpose; the total stays under the index's item cap.

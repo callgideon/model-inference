@@ -287,6 +287,15 @@ def run_mutant(mutant: Mutant, *, paths: str = "tests/q") -> Result:
         if stray:
             return Result(Outcome.broken_runner,
                           f"failures outside the named cases: {stray[:3]}")
+        # r2: **every** named case must notice. The coordinator's runner is satisfied by
+        # one failure among the names, and that let a mutant claim coverage from a case it
+        # could not kill - this list had exactly that shape (a service-time fixture whose
+        # preparation cost hid the defect it was named for).
+        unproven = [case for case in mutant.cases
+                    if not any(case in test_id for test_id in failed)]
+        if unproven:
+            return Result(Outcome.misdeclared,
+                          f"named cases that did not notice: {unproven}")
         return Result(Outcome.killed, summary)
 
 

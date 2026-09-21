@@ -76,6 +76,17 @@ SELF_TESTS = (
                           old="        if self._bytes + size > self._max_bytes:",
                           new="        if False and self._bytes + size > self._max_bytes:",
                           cases=("test_q1_contract__the_adapter_satisfies_the_scheduler_protocol",))),
+    # r2: a mutant may not claim coverage from a case that cannot see it. The item cap is
+    # really broken here, the caps case notices and the protocol-shape case cannot, so the
+    # declaration is wrong even though something failed.
+    ("a_named_case_that_does_not_notice_is_a_failure", mutation_list.Outcome.misdeclared,
+     mutation_list.Mutant(name="self_unproven_case",
+                          invariant="every named case must notice the defect",
+                          file=mutation_list.Q,
+                          old="        if len(self._entries) + 1 > self._max_items:",
+                          new="        if False and len(self._entries) + 1 > self._max_items:",
+                          cases=("test_q1_caps__a_full_index_refuses_with_a_typed_retryable_error",
+                                 "test_q1_contract__the_adapter_satisfies_the_scheduler_protocol"))),
     ("a_missing_anchor_is_a_failure", mutation_list.Outcome.misdeclared,
      mutation_list.Mutant(name="self_missing_anchor", invariant="the list matches the code",
                           file=mutation_list.Q, old="this text is not in the scheduler",
