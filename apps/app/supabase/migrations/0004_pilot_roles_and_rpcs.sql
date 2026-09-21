@@ -71,6 +71,17 @@ revoke all on function public.org_balance(uuid) from public, anon;
 revoke all on function public.set_updated_at() from public, anon, authenticated;
 revoke all on function public.handle_new_user() from public, anon, authenticated;
 
+-- r3 (review's D2-D6 note, done now because it is two grants): `infrx.wallets.ledger_total`
+-- is moved by ONE writer, the AFTER INSERT trigger on `credit_ledger`, which is SECURITY
+-- DEFINER and therefore unaffected by this. So the platform role loses the two privileges
+-- that would let it drift the summary: UPDATE of `ledger_total` (a settlement that both
+-- inserted a ledger row and set the total would double-move it) and DELETE of a wallet
+-- (the trigger would recreate it with the next delta as its whole total). `reserved_total`,
+-- `revision` and `updated_at` stay writable: D2 and D5 move the reservation.
+revoke update, delete, insert on infrx.wallets from service_role;
+grant insert (org_id, reserved_total) on infrx.wallets to service_role;
+grant update (reserved_total, revision, updated_at) on infrx.wallets to service_role;
+
 -- Row-level security on every tenant-bearing relation, with no policy for a browser
 -- role. `service_role` is BYPASSRLS (as in production), so this sits behind the
 -- schema grant as defence in depth: a future PostgREST exposure of `infrx` would

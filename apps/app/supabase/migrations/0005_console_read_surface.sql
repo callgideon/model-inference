@@ -77,10 +77,18 @@ returns text language sql stable security invoker set search_path = public, pg_t
     -- real principals on ordinary entries).
     when public.is_operator() or public.is_service_client()
       then coalesce(p_display, p_subject)
-    -- A customer session reads a principal only when it is one of their own members.
+    -- A customer session reads a principal when it is one of their own members...
     when exists (select 1 from public.org_members m
                  where m.org_id = p_org
                    and m.user_id = public.principal_uuid(p_subject))
+      then coalesce(p_display, p_subject)
+    -- ...or one of their own API keys (r3 ruling): feedback submitted through the API is
+    -- authored by the key that sent it, and the Python contract shows that key id to the
+    -- customer. Masking it to `platform` told a tenant the platform had written their own
+    -- feedback. Another organization's key id stays masked, which the check asserts in
+    -- both directions.
+    when exists (select 1 from public.api_keys k
+                 where k.org_id = p_org and k.id = public.principal_uuid(p_subject))
       then coalesce(p_display, p_subject)
     else 'platform' end;
 $$;
@@ -175,7 +183,11 @@ select e.id as request_id, e.org_id, e.created_at, e.model_id as model,
        e.completion_tokens, e.usage_certainty, e.settlement_state, e.settlement_regime,
        e.cost_usd::text as cost, h.amount::text as max_hold, e.trace_mode, e.price_version
 from public.usage_events e
-left join public.api_keys k on k.id = e.api_key_id
+-- r3 ruling: `and k.org_id = e.org_id`, so a usage row naming another organization's key
+-- shows no key at all rather than that tenant's key name. The trigger in 0003 refuses such
+-- a row outright in the pilot regime; this is the belt to that braces, and it also covers
+-- any legacy row that already carries one.
+left join public.api_keys k on k.id = e.api_key_id and k.org_id = e.org_id
 left join infrx.credit_holds h on h.request_id = e.id and h.state in ('held','unknown')
 where public.is_org_member(e.org_id) or public.is_operator() or public.is_service_client();
 

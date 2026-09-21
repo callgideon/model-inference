@@ -520,6 +520,22 @@ create table infrx.outbox (
   -- 02: bounded canonical refs, not payloads. Large bodies live in object storage.
   check (length(payload::text) <= 4096)
 );
+-- r3 ruling: `aggregate_id` may name a job, a feedback entry or a judge run, so it cannot
+-- carry a foreign key - but when it names a JOB, that job must belong to the event's
+-- organization. A projection consumer reads the aggregate to find its subject.
+create or replace function infrx.outbox_aggregate_tenant() returns trigger
+language plpgsql security definer set search_path = infrx, public, pg_temp as $$
+begin
+  if exists (select 1 from infrx.jobs j where j.request_id = new.aggregate_id
+             and j.org_id <> new.org_id) then
+    raise exception 'outbox event % names job %, which is not org %''s',
+      new.event_id, new.aggregate_id, new.org_id using errcode = '23503';
+  end if;
+  return new;
+end $$;
+create trigger outbox_aggregate_tenant before insert or update on infrx.outbox
+  for each row execute function infrx.outbox_aggregate_tenant();
+
 create index outbox_pending_idx on infrx.outbox (available_at, event_id)
   where acknowledged_at is null;
 create index outbox_aggregate_idx on infrx.outbox (aggregate_id, kind);
@@ -912,11 +928,20 @@ alter table public.usage_events
 create or replace function infrx.usage_pilot_row_matches_job() returns trigger
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 begin
-  if new.settlement_regime = 'pilot'
-     and not exists (select 1 from infrx.jobs j
-                     where j.request_id = new.id and j.org_id = new.org_id) then
-    raise exception 'usage row % is not the settlement of a job owned by org %',
-      new.id, new.org_id using errcode = '23503';
+  if new.settlement_regime = 'pilot' then
+    if not exists (select 1 from infrx.jobs j
+                   where j.request_id = new.id and j.org_id = new.org_id) then
+      raise exception 'usage row % is not the settlement of a job owned by org %',
+        new.id, new.org_id using errcode = '23503';
+    end if;
+    -- r3 ruling: and the key it names is that organization's. A metered row attributed to
+    -- another tenant's key is another tenant's key name on this tenant's usage page.
+    if new.api_key_id is not null
+       and not exists (select 1 from public.api_keys k
+                       where k.id = new.api_key_id and k.org_id = new.org_id) then
+      raise exception 'usage row % names api key %, which is not org %''s',
+        new.id, new.api_key_id, new.org_id using errcode = '23503';
+    end if;
   end if;
   return new;
 end $$;

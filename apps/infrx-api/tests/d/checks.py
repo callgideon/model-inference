@@ -27,6 +27,7 @@ USER_OPERATOR = "33333333-3333-4333-8333-333333333333"
 USER_OTHER = "77777777-7777-4777-8777-777777777777"
 USER_SECOND_OWNER = "88888888-8888-4888-8888-888888888888"
 KEY_A = "44444444-4444-4444-8444-444444444444"
+KEY_B = "44444444-4444-4444-8444-4444444444bb"   # ORG_B's
 JOB_PREPARING = "50000000-0000-4000-8000-000000000000"
 # Childless AND keyless: the only thing that can refuse moving it to another
 # organization is `jobs_guard` (B9/m16 - the old target was refused by the
@@ -162,8 +163,11 @@ def seed_fixtures(conn) -> None:
       -- `console_admin_orgs` and C's keyset pagination would skip a page (B1).
       ('{ORG_A}', '{USER_SECOND_OWNER}', 'owner'),
       ('{ORG_B}', '{USER_OTHER}', 'owner');
-    insert into public.api_keys (id, org_id, created_by, name, prefix, key_hash)
-      values ('{KEY_A}', '{ORG_A}', '{USER_OWNER}', 'k', 'sk-infrx-aaaaaaaa', 'hash-a');
+    insert into public.api_keys (id, org_id, created_by, name, prefix, key_hash) values
+      ('{KEY_A}', '{ORG_A}', '{USER_OWNER}', 'k', 'sk-infrx-aaaaaaaa', 'hash-a'),
+      -- A distinct prefix and hash: `seed_volume` uses 'hash-b'/'hash-c' for ORG_A's
+      -- extra keys, and a unique-hash conflict there would silently skip them.
+      ('{KEY_B}', '{ORG_B}', '{USER_OTHER}', 'kb', 'sk-infrx-orgbkey1', 'hash-org-b');
     insert into infrx.price_versions
       (price_version, model_revision, input_rate_per_million, output_rate_per_million,
        token_rules_version, effective_from)
@@ -229,6 +233,19 @@ def seed_fixtures(conn) -> None:
        value_text, by_operator)
       values ('fb_ops', '{ORG_A}', '{JOB_TERMINAL}', '{USER_OPERATOR}', 'operator',
               'console', 'comment', 'looked into this', true);
+    -- r3 ruling: feedback authored through the API carries the KEY id as its principal.
+    -- The customer may read their own key's id; another organization's key id may not be
+    -- read, which the check asserts in both directions.
+    insert into infrx.feedback
+      (feedback_id, org_id, request_id, author_principal, author_role, channel, name,
+       value_int)
+      values ('fb_key', '{ORG_A}', '{JOB_TERMINAL}', '{KEY_A}', 'customer', 'api',
+              'rating', 4);
+    insert into infrx.feedback
+      (feedback_id, org_id, request_id, author_principal, author_role, channel, name,
+       value_int)
+      values ('fb_foreignkey', '{ORG_A}', '{JOB_TERMINAL}', '{KEY_B}', 'customer', 'api',
+              'rating', 2);
     -- A second consent version, authored by an operator and with no dependent rows: the
     -- masking check reads it, and the DELETE violation needs a row no foreign key
     -- protects incidentally (B9/m27).
@@ -1177,6 +1194,17 @@ VIOLATIONS = (
     ("a callback delivery of one tenant's event to another's destination",
      f"insert into infrx.callback_deliveries (event_id, destination_id, org_id, state) "
      f"values ('{EVENT_ID}', '{DEST_ID}', '{ORG_B}', 'failed')"),
+    ("a pilot usage row naming another tenant's api key",
+     f"insert into public.usage_events (id, org_id, api_key_id, model_id, status, "
+     f"settlement_regime, outcome, settlement_state, settlement_version) values "
+     f"('{JOB_QUEUED}', '{ORG_A}', '{KEY_B}', 'nemostation/marlin-2b', 200, 'pilot', "
+     f"'completed', 'settled', 1)"),
+    ("an outbox event naming another tenant's job",
+     f"insert into infrx.outbox (event_id, aggregate_id, org_id, kind, available_at) "
+     f"values ('70000000-0000-4000-8000-0000000000fc', '{JOB_B}', '{ORG_A}', "
+     f"'usage_projection', now())"),
+    ("moving an outbox event to another tenant",
+     f"update infrx.outbox set org_id = '{ORG_B}' where event_id = '{EVENT_ID}'"),
     ("an outbox event with no organization",
      f"insert into infrx.outbox (event_id, aggregate_id, kind, available_at) values "
      f"('70000000-0000-4000-8000-0000000000fd', '{JOB_QUEUED}', 'usage_projection', "
@@ -1835,6 +1863,22 @@ def check_legacy_writer_does_not_drift(conn) -> str:
     balance = read_rows(conn, "member", f"select public.org_balance('{ORG_A}')")
     assert Decimal(summary[0][0]) == balance[0][0], \
         f"org_wallet_summary {summary[0][0]} disagrees with org_balance {balance[0][0]}"
+    # r3 ruling: the trigger is the ONLY writer of `ledger_total`. The platform role can
+    # move `reserved_total` (D2/D5 reserve), and can neither set the total nor delete the
+    # row - a settlement that did both would double-move, and a delete would let the next
+    # delta become the whole balance.
+    for label, sql in (
+            ("set ledger_total", f"update infrx.wallets set ledger_total = 1 "
+                                 f"where org_id = '{ORG_A}'"),
+            ("delete a wallet", f"delete from infrx.wallets where org_id = '{ORG_A}'"),
+            ("insert a funded wallet",
+             "insert into infrx.wallets (org_id, ledger_total) values "
+             "('0d000000-0000-4000-8000-00000000000d', 500)")):
+        refusal = _attempt(conn, "service", sql)
+        assert refusal is not None, f"the platform role may {label}"
+    allowed = _attempt(conn, "service", f"update infrx.wallets set reserved_total = 2 "
+                                        f"where org_id = '{ORG_A}'")
+    assert allowed is None, f"the platform role may not reserve credit: {allowed}"
     return f"a legacy service-role grant moved the wallet to {after}; reconciliation clean"
 
 
@@ -1949,6 +1993,14 @@ def check_console_read_surface(conn) -> str:
         f"a customer read an operator principal off a feedback entry: {feedback}"
     assert feedback["thumb"] == "owner@example.com" or \
         feedback["thumb"] == USER_OWNER, f"their own member's principal was masked: {feedback}"
+
+    # r3 ruling: an own-org API key id is readable; another organization's is not.
+    by_id = dict(read_rows(conn, "member", "select id, author_principal from "
+                                           f"public.feedback where org_id = '{ORG_A}'"))
+    assert by_id["fb_key"] == KEY_A, \
+        f"a customer cannot read their own API key's id as an author: {by_id}"
+    assert by_id["fb_foreignkey"] == "platform", \
+        f"a customer read another organization's key id: {by_id}"
 
     labels = read_rows(conn, "operator", "select count(*) from public.feedback "
                                          "where calibration_set")
