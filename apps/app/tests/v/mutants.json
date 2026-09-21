@@ -1,5 +1,5 @@
 {
-  "_comment": "R32 for track V: one single-edit mutant per invariant the V1 cases claim, each with the case names that must catch it on an assertion. Run with `node tests/v/run-mutants.mjs`. A survivor, a stale `find`, a declared case that dies by exception, or an all-cases failure fails the run. The three the brief names — filter allowlist, stale-response guard, availability mapping — are ALLOW-*/SIZE-*/CURSOR-*, STALE-*, and AVAIL-*.",
+  "_comment": "R32 for track V: one single-edit mutant per invariant the V1 cases claim, each with the case names that must catch it on an assertion. Run with `node tests/v/run-mutants.mjs`. A survivor, a stale `find`, a declared case that dies by exception, or a whole test file failing to load each fail the run. The areas the brief names are ALLOW-*/SIZE-*/CURSOR-*/MODEL-*/TRIM-*/ANCHOR-*/HREF-* (filter allowlist and URL state), AVAIL-*/STATUS-*/EMPTY-*/ERROR-*/JOIN-*/SIGNAL-*/SUSPEND-*/KEYS-*/FIRST-* (presentation), and STALE-*/TRACK-* (the stale-response guard).",
   "mutants": [
     {
       "id": "ALLOW-01",
@@ -18,7 +18,9 @@
       "file": "app/(console)/traces/query.ts",
       "find": "export const CONTENT_FILTERS = [\"available\", \"metadata_only\", \"pending\", \"lost\", \"expired\"] as const;",
       "replace": "export const CONTENT_FILTERS = [\"available\", \"metadata_only\", \"pending\", \"lost\", \"expired\", \"off\"] as const;",
-      "cases": ["V1-Q03 `off` is not a list filter, and the refusal says where those requests are"]
+      "cases": [
+        "V1-Q03 `off` is not a list filter, and the refusal says where those requests are"
+      ]
     },
     {
       "id": "ALLOW-03",
@@ -26,7 +28,9 @@
       "file": "app/(console)/traces/query.ts",
       "find": "  if (allowed !== null && !allowed.includes(value)) {",
       "replace": "  if (false && allowed !== null && !allowed.includes(value)) {",
-      "cases": ["V1-Q04 a key filter must name one of this organization's keys"]
+      "cases": [
+        "V1-Q04 a key filter must name one of this organization's keys"
+      ]
     },
     {
       "id": "ALLOW-04",
@@ -34,15 +38,19 @@
       "file": "app/(console)/traces/query.ts",
       "find": "    .filter((name) => !(TRACE_PARAMS as readonly string[]).includes(name))",
       "replace": "    .filter(() => false)",
-      "cases": ["V1-Q01 only the parameters this page declares reach the typed query"]
+      "cases": [
+        "V1-Q01 only the parameters this page declares reach the typed query"
+      ]
     },
     {
       "id": "SIZE-01",
       "note": "an out-of-range page size is clamped instead of refused",
       "file": "app/(console)/traces/query.ts",
-      "find": "    const parsed = /^\\d+$/.test(rawSize) ? Number(rawSize) : Number.NaN;",
+      "find": "    const parsed = /^\\d+$/.test(rawSize) && String(Number(rawSize)) === rawSize ? Number(rawSize) : Number.NaN;",
       "replace": "    const parsed = Math.min(Number(rawSize) || DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);",
-      "cases": ["V1-Q07 the page size comes from the offered set, and is never a clamp"]
+      "cases": [
+        "V1-Q07 the page size comes from the offered set, and is never a clamp"
+      ]
     },
     {
       "id": "CURSOR-01",
@@ -50,7 +58,9 @@
       "file": "app/(console)/traces/query.ts",
       "find": "    } else if (!pinned) {",
       "replace": "    } else if (false) {",
-      "cases": ["V1-Q05 the window is resolved from the range, and a page link pins it"]
+      "cases": [
+        "V1-Q05 the window is resolved from the range, and a page link pins it"
+      ]
     },
     {
       "id": "CURSOR-02",
@@ -58,15 +68,19 @@
       "file": "app/(console)/traces/query.ts",
       "find": "    if ([...rawCursor].length > MAX_CURSOR_CHARS || !CURSOR_CHARS.test(rawCursor)) {",
       "replace": "    if (false) {",
-      "cases": ["V1-Q06 a cursor is bounded and charset-checked, and otherwise opaque"]
+      "cases": [
+        "V1-Q06 a cursor is bounded and charset-checked, and otherwise opaque"
+      ]
     },
     {
       "id": "HREF-01",
       "note": "a filter change keeps the cursor, resuming a walk that no longer exists",
       "file": "app/(console)/traces/query.ts",
-      "find": "    cursor: changesFilter ? null : (patch.cursor ?? filters.cursor),",
-      "replace": "    cursor: patch.cursor ?? filters.cursor,",
-      "cases": ["V1-Q09 changing a filter drops the cursor; a page link keeps the window"]
+      "find": "  const cursor = changesFilter ? null : \"cursor\" in patch ? (patch.cursor ?? null) : filters.cursor;",
+      "replace": "  const cursor = \"cursor\" in patch ? (patch.cursor ?? null) : filters.cursor;",
+      "cases": [
+        "V1-Q09 changing a filter drops the cursor; a page link keeps the window"
+      ]
     },
     {
       "id": "ANCHOR-01",
@@ -130,7 +144,9 @@
       "file": "app/(console)/traces/view-model.ts",
       "find": "  if (httpStatus >= 200) return \"ok\";",
       "replace": "  if (httpStatus >= 0) return \"ok\";",
-      "cases": ["V1-V05 status tone follows the class, and an unset status is not drawn as success"]
+      "cases": [
+        "V1-V05 status tone follows the class, and an unset status is not drawn as success"
+      ]
     },
     {
       "id": "EMPTY-01",
@@ -138,7 +154,9 @@
       "file": "app/(console)/traces/view-model.ts",
       "find": "    if (narrowed) {",
       "replace": "    if (false) {",
-      "cases": ["V1-V06 an empty page distinguishes filtered, capture-off and simply idle"]
+      "cases": [
+        "V1-V06 an empty page distinguishes filtered, capture-off, keys-unknown and simply idle"
+      ]
     },
     {
       "id": "EMPTY-02",
@@ -146,7 +164,9 @@
       "file": "app/(console)/traces/view-model.ts",
       "find": "    const capturing = context.keys.some((key) => key.trace_mode !== \"off\" && key.revoked_at === null);",
       "replace": "    const capturing = true;",
-      "cases": ["V1-V06 an empty page distinguishes filtered, capture-off and simply idle"]
+      "cases": [
+        "V1-V06 an empty page distinguishes filtered, capture-off, keys-unknown and simply idle"
+      ]
     },
     {
       "id": "ERROR-01",
@@ -154,7 +174,9 @@
       "file": "app/(console)/traces/view-model.ts",
       "find": "        copy === undefined || copy.retry",
       "replace": "        true",
-      "cases": ["V1-V07 an error offers a retry only where retrying can work"]
+      "cases": [
+        "V1-V07 an error offers a retry only where retrying can work"
+      ]
     },
     {
       "id": "STALE-01",
@@ -173,23 +195,192 @@
       "file": "app/(console)/traces/sequence.ts",
       "find": "  if (token !== sequence.issued || token <= sequence.applied) {\n    return { sequence, applied: false };\n  }",
       "replace": "  if (token !== sequence.issued) {\n    return { sequence, applied: false };\n  }",
-      "cases": ["V1-S03 a duplicate delivery of a response already applied changes nothing"]
+      "cases": [
+        "V1-S03 a duplicate delivery of a response already applied changes nothing"
+      ]
     },
     {
       "id": "STALE-03",
-      "note": "an arrival that answers an older request is taken as the answer to the newest",
+      "note": "a superseded arrival is treated as an external navigation and applied",
       "file": "app/(console)/traces/sequence.ts",
-      "find": "  if (!same(sequence.query, arrived)) return { sequence, applied: false };",
-      "replace": "  if (false) return { sequence, applied: false };",
-      "cases": ["V1-S05 an arrival that does not answer the outstanding request is dropped"]
+      "find": "  if (token !== null) return settle(sequence, token, arrived);",
+      "replace": "  if (token !== null && token === sequence.issued) return settle(sequence, token, arrived);",
+      "cases": [
+        "V1-S05 an arrival is resolved by the token it was issued under, not by its value",
+        "V1-S07 no resolution order of up to four requests can show an older filter"
+      ]
     },
     {
       "id": "STALE-04",
-      "note": "the controls draw whatever page arrived, including an older one",
+      "note": "the controls ignore whether a request is still settling, so they stick on the last pick",
       "file": "app/(console)/traces/sequence.ts",
-      "find": "  return outstanding && sequence.issued > sequence.applied ? sequence.query : arrived;",
-      "replace": "  return arrived;",
-      "cases": ["V1-S06 the controls draw the newest request while one is outstanding"]
+      "find": "  return waiting && sequence.issued > sequence.applied ? sequence.query : arrived;",
+      "replace": "  return sequence.query;",
+      "cases": [
+        "V1-S06 the controls draw the newest request only while one is settling"
+      ]
+    },
+    {
+      "id": "HREF-02",
+      "note": "`patch.cursor ?? filters.cursor` again: an explicit `cursor: null` falls through to the cursor already there, so the way out of a bad link is that link",
+      "file": "app/(console)/traces/query.ts",
+      "find": "  const cursor = changesFilter ? null : \"cursor\" in patch ? (patch.cursor ?? null) : filters.cursor;",
+      "replace": "  const cursor = changesFilter ? null : (patch.cursor ?? filters.cursor);",
+      "cases": [
+        "V1-V07 an error offers a retry only where retrying can work",
+        "V1-V10 the way out of a bad page link actually loads a page of rows"
+      ]
+    },
+    {
+      "id": "ANCHOR-02",
+      "note": "the anchor is not bounded, so a window can start before anything retained (and `from` stops being a timestamp)",
+      "file": "app/(console)/traces/query.ts",
+      "find": "  if (!(ms >= now - MAX_ANCHOR_AGE_MS && ms <= now + MAX_ANCHOR_SKEW_MS)) {",
+      "replace": "  if (false) {",
+      "cases": [
+        "V1-Q11 an anchor must be a real instant inside the window the console keeps"
+      ]
+    },
+    {
+      "id": "ANCHOR-03",
+      "note": "an anchor that parses as a different day is accepted, so the window is not the one asked for",
+      "file": "app/(console)/traces/query.ts",
+      "find": "  if (new Date(ms).toISOString().slice(0, 19) !== value.slice(0, 19)) {",
+      "replace": "  if (false) {",
+      "cases": [
+        "V1-Q11 an anchor must be a real instant inside the window the console keeps"
+      ]
+    },
+    {
+      "id": "MODEL-01",
+      "note": "a model filter is not shape-checked, so control and bidi characters reach the query and the page",
+      "file": "app/(console)/traces/query.ts",
+      "find": "  if (!MODEL_ID.test(value)) {",
+      "replace": "  if (false) {",
+      "cases": [
+        "V1-Q04 a key filter must name one of this organization's keys"
+      ]
+    },
+    {
+      "id": "MODEL-02",
+      "note": "the old control-character check, which passes U+0085, U+2028 and U+202E",
+      "file": "app/(console)/traces/query.ts",
+      "find": "const MODEL_ID = /^[A-Za-z0-9._:@/+-]+$/;",
+      "replace": "const MODEL_ID = /^[^\\u0000-\\u001f\\u007f]+$/;",
+      "cases": [
+        "V1-Q04 a key filter must name one of this organization's keys"
+      ]
+    },
+    {
+      "id": "SIZE-02",
+      "note": "a size in another spelling (`0100`) passes the offered-set check",
+      "file": "app/(console)/traces/query.ts",
+      "find": "/^\\d+$/.test(rawSize) && String(Number(rawSize)) === rawSize ? Number(rawSize) : Number.NaN",
+      "replace": "/^\\d+$/.test(rawSize) ? Number(rawSize) : Number.NaN",
+      "cases": [
+        "V1-Q07 the page size comes from the offered set, and is never a clamp"
+      ]
+    },
+    {
+      "id": "TRIM-01",
+      "note": "values are trimmed, so `?size=%20100` becomes 100 instead of being reported",
+      "file": "app/(console)/traces/query.ts",
+      "find": "  return value === \"\" ? null : value;",
+      "replace": "  return value.trim() === \"\" ? null : value.trim();",
+      "cases": [
+        "V1-Q07 the page size comes from the offered set, and is never a clamp"
+      ]
+    },
+    {
+      "id": "KEYS-01",
+      "note": "a failed key read is reported as \"tracing is off for every key\"",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "    if (context.keysUnavailable === true) {",
+      "replace": "    if (false) {",
+      "cases": [
+        "V1-V06 an empty page distinguishes filtered, capture-off, keys-unknown and simply idle"
+      ]
+    },
+    {
+      "id": "FIRST-01",
+      "note": "no way back to the start of a walk",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "      context.filters.cursor === null",
+      "replace": "      true",
+      "cases": [
+        "V1-V08 the next-page link carries the cursor and pins the window"
+      ]
+    },
+    {
+      "id": "JOIN-01",
+      "note": "an unknown key id is rendered in full instead of shortened",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "    keyLabel: key?.name ?? shortId(item.key_id),",
+      "replace": "    keyLabel: key?.name ?? item.key_id,",
+      "cases": [
+        "V1-V04 rows join key names, mark revoked keys, and never invent one"
+      ]
+    },
+    {
+      "id": "SIGNAL-01",
+      "note": "the feedback column shows the score count",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "    feedbackCount: item.feedback_count,",
+      "replace": "    feedbackCount: item.score_count,",
+      "cases": [
+        "V1-V04 rows join key names, mark revoked keys, and never invent one"
+      ]
+    },
+    {
+      "id": "SUSPEND-01",
+      "note": "a suspended organization is told its traces cannot be read, with no retry",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "    message: \"This organization is suspended. Traces stay readable — reload to try again.\",\n    retry: true,",
+      "replace": "    message: \"This organization is suspended.\",\n    retry: false,",
+      "cases": [
+        "V1-V07 an error offers a retry only where retrying can work"
+      ]
+    },
+    {
+      "id": "STALE-05",
+      "note": "a response for a request the reader has already moved on from is applied",
+      "file": "app/(console)/traces/sequence.ts",
+      "find": "  if (token !== sequence.issued || token <= sequence.applied) {\n    return { sequence, applied: false };\n  }\n  return { sequence: { ...sequence, applied: token, query: arrived }, applied: true };",
+      "replace": "  if (token <= sequence.applied) {\n    return { sequence, applied: false };\n  }\n  return { sequence: { ...sequence, applied: token, query: arrived }, applied: true };",
+      "cases": [
+        "V1-S07 no resolution order of up to four requests can show an older filter"
+      ]
+    },
+    {
+      "id": "TRACK-01",
+      "note": "issued requests are forgotten, so a superseded response is indistinguishable from a back navigation",
+      "file": "app/(console)/traces/sequence.ts",
+      "find": "      tracked: [...sequence.tracked, { token, key }].slice(-MAX_TRACKED_REQUESTS),",
+      "replace": "      tracked: [{ token, key }],",
+      "cases": [
+        "V1-S05 an arrival is resolved by the token it was issued under, not by its value",
+        "V1-S07 no resolution order of up to four requests can show an older filter"
+      ]
+    },
+    {
+      "id": "CLEAR-01",
+      "note": "the way back keeps the pinned window, so the reader is still fixed to an old anchor",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "    feedback: \"any\",\n    cursor: null,\n    pinned: false,\n  });",
+      "replace": "    feedback: \"any\",\n    cursor: null,\n  });",
+      "cases": [
+        "V1-V10 the way out of a bad page link actually loads a page of rows"
+      ]
+    },
+    {
+      "id": "FIRST-02",
+      "note": "the first-page link keeps the walk's pinned window",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "        : traceHref(context.filters, { cursor: null, pinned: false }),",
+      "replace": "        : traceHref(context.filters, { cursor: null }),",
+      "cases": [
+        "V1-V08 the next-page link carries the cursor and pins the window"
+      ]
     }
   ]
 }

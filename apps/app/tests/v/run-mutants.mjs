@@ -24,7 +24,12 @@ const args = process.argv.slice(2);
 const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",") : null;
 const keep = args.includes("--keep");
 
-const SUITE = ["tests/v/trace-query.test.ts", "tests/v/trace-sequence.test.ts", "tests/v/trace-view-model.test.ts"];
+const SUITE = [
+  "tests/v/trace-query.test.ts",
+  "tests/v/trace-sequence.test.ts",
+  "tests/v/trace-tenant.test.ts",
+  "tests/v/trace-view-model.test.ts",
+];
 
 const catalogue = JSON.parse(readFileSync(join(here, "mutants.json"), "utf8"));
 const mutants = catalogue.mutants.filter((mutant) => only === null || only.includes(mutant.id));
