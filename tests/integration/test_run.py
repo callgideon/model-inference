@@ -466,8 +466,19 @@ def test_the_fake_server_binds_loopback_unless_explicitly_allowed():
     import fake_vllm
     parsed = fake_vllm.parse_args([])
     assert parsed.host == "127.0.0.1"
-    with pytest.raises(SystemExit):
-        fake_vllm.main(["--host", "0.0.0.0", "--port", str(harness.PORTS["fake_vllm"])])
+    served = []
+    # `SERVE` is stubbed so this case can never open a socket: with the guard mutated away it
+    # would otherwise bind every interface and block until the runner's timeout.
+    with patched(fake_vllm, SERVE=lambda app, host, port: served.append((host, port))):
+        with pytest.raises(SystemExit, match="refusing to bind"):
+            fake_vllm.main(["--host", "0.0.0.0", "--port", str(harness.PORTS["fake_vllm"])])
+        assert served == [], "a refused bind must not reach the server at all"
+        assert fake_vllm.main(["--host", "127.0.0.1", "--port", "1"]) == 0
+        assert served == [("127.0.0.1", 1)], "loopback is served without a flag"
+        served.clear()
+        assert fake_vllm.main(["--host", "0.0.0.0", "--port", "1",
+                               "--allow-non-loopback"]) == 0
+        assert served == [("0.0.0.0", 1)], "and only an explicit flag permits anything else"
     allowed = fake_vllm.parse_args(["--host", "0.0.0.0", "--allow-non-loopback"])
     assert allowed.host == "0.0.0.0" and allowed.allow_non_loopback is True
 

@@ -32,6 +32,13 @@ Useful flags:
 | `--report P` | write the JSON stage report to `P` |
 | `--no-mutants` | skip the ~2 minute mutation run |
 
+**Harness runs are serialized host-wide** (r1 review R-c). One compose project name is shared
+by every checkout of this repository, so two runs cannot be in flight at once; the ownership
+label below makes the second run *refuse* rather than destroy the first, but it still refuses.
+Ports 55500–55599 also lie inside the kernel's ephemeral range (32768–60999), so a transient
+bind failure is possible: provisioning retries once after a short wait and then reports
+PENDING (exit 3), never a pass.
+
 `make integration` would be the natural spelling and is an **integration request**: the root
 `Makefile` is coordinator-owned.
 
@@ -61,6 +68,7 @@ apps/infrx-api/.venv/bin/python tests/integration/fake_vllm.py --port 55580 --fa
 | `run.py` | the one command above |
 | `mutants.py` | R32: one single-edit mutant per claimed invariant, on a temp copy |
 | `test_harness.py` | layer 1: the guards (pinning, ports, namespace, clock, test-id map) |
+| `test_run.py` | layer 1: the orchestration itself — exit mapping, every stage, the harness lifecycle — with docker and the shells stubbed |
 | `test_fake_vllm.py` | layer 1: the exported engine conformance suite over HTTP, plus wire shapes |
 | `test_services.py` | layer 2: migrations, the role matrix, the three other stores, faults |
 
@@ -69,13 +77,24 @@ discovery and the console canary and lists the `CONSOLE-*` cases still pending.
 
 ## Isolation
 
-Everything is in one namespace, and every destructive helper checks it twice — the name must
-carry the prefix **and** docker must attribute the container to this compose project:
+Everything is in one namespace, and every destructive helper checks it **three** ways: the name
+must carry the prefix, docker must attribute the resource to this compose project, **and** it
+must carry `ai.infrx.e2.checkout` set to this checkout's compose directory.
+
+The third gate is the one that matters (r1 review B1): the project name is every checkout's, so
+keying teardown on it destroyed another run's live stack, and `down -v` deleted a hand-made
+volume that merely had the name compose would have picked. `compose.yaml` stamps the label on
+every container, every volume and the network from `INFRX_E2_CHECKOUT` (with `:?`, so compose
+refuses to run without it), and anything carrying one of our names or our project label without
+it is **reported, never touched** — `up()` and `down()` both refuse while such a resource
+exists, and `down()` records every id before removing and re-checks by id afterwards.
 
 | Thing | Value |
 |---|---|
 | compose project | `infrx-e2` |
 | containers | `infrx-e2-postgres`, `-valkey`, `-clickhouse`, `-s3` |
+| ownership label | `ai.infrx.e2.checkout` = this checkout's `tests/integration` directory |
+| PostgreSQL database | `infrx_e2`, created `TEMPLATE postgres OWNER postgres` (see below) |
 | host ports | `55532` PG, `55579` Valkey, `55523`/`55590` ClickHouse, `55500` S3, `55580` fake vLLM — all inside E's 55500–55599 range (08 §8), all bound to `127.0.0.1` |
 | volumes | project-scoped and disposable; `down -v` removes them and the teardown fails if any survive |
 | ClickHouse database | `infrx_e2` |
@@ -103,28 +122,41 @@ a comment only.
 All four are public registries (Docker Hub, Quay). MinIO is no longer published on Docker
 Hub — `minio/minio` returns `object not found` — so it comes from Quay.
 
-### Why `supabase/postgres`, and why the database is `postgres`
+### Why `supabase/postgres`, and why the database is `infrx_e2`
 
-`08 §10` (“D1: four things the fakes cannot tell you”, item 1) is right: `0001_init.sql`
-references `auth.users`, `auth.uid()`, `authenticated` and `service_role`, none of which
-plain PostgreSQL has. D1's evidence did not exist when this was written, so the choice is
-made here and documented for D1 to adopt or overrule:
+`08 §10` ("D1: four things the fakes cannot tell you", item 1) is right: `0001_init.sql`
+references `auth.users`, `auth.uid()`, `authenticated` and `service_role`, none of which plain
+PostgreSQL has.
 
 - **`supabase/postgres` 17.6.1.173, no shim.** Measured on this image: the roles `anon`,
   `authenticated` and `service_role` exist (only the last two with `BYPASSRLS`), the `auth`
   schema carries `users`, `audit_log_entries`, `refresh_tokens`, `instances`,
   `schema_migrations` and the `uid()`/`role()`/`email()` functions, and `pgcrypto` +
-  `uuid-ossp` are installed. Both console migrations then apply unchanged.
-- **The database is `postgres`, not `infrx_e2`.** The image's entrypoint builds the `auth`
-  schema in `postgres` only, which is also the database name a real Supabase project uses. A
-  freshly `create database`d `infrx_e2` has no `auth` schema, so `0001_init.sql` fails with
-  `schema "auth" does not exist`; `create database infrx_e2 template postgres` is refused
-  because the image runs `pg_cron` and `pg_net` background workers that hold permanent
-  sessions on `postgres`. 08 §8's `infrx_<task>` naming exists to stop two worktrees
-  colliding, and that is achieved here by the container, the port and the disposable volume.
-- `auth.uid()` reads `current_setting('request.jwt.claim.sub')`, so the role matrix sets that
-  GUC — which is also the point of case `E2-RLS-70`: whoever sets the claim **is** the
-  tenant, so it may only ever come from a verified JWT.
+  `uuid-ossp` are installed.
+- **The database is `infrx_e2`** (r1 review R-a), created with
+  `CREATE DATABASE infrx_e2 TEMPLATE postgres OWNER postgres`. The name matters: D1's
+  `infrx.now()` honours a test clock offset only when `current_database() like 'infrx\_%'`,
+  and production is `postgres`, so that gate is what keeps a movable clock out of a deployed
+  database. Two things the copy needs, both measured:
+  - the template's background workers must be gone first — `pg_net 0.20.4` and the `pg_cron
+    scheduler` hold permanent sessions on `postgres`, and PostgreSQL refuses to copy a
+    database anything else is connected to (`source database "postgres" is being accessed by
+    other users … 2 other sessions`);
+  - `pg_terminate_backend` on those needs a real superuser, and in this image `postgres` is
+    **not** one (`usesuper` false) — `supabase_admin` is, and has no TCP password here, so the
+    statement goes through `docker exec` on the container's local socket. Each statement is
+    its own `-c`, because `DROP`/`CREATE DATABASE` cannot run inside a transaction block, and
+    the race with the reconnecting workers is retried rather than reported as a refusal.
+  - `OWNER postgres` is not cosmetic: `public` is owned by `pg_database_owner`, so without it
+    the copy's owner is `supabase_admin` and the migration fails with `permission denied for
+    schema public`.
+  - E2's own `infrx_e2_test.now()` clock stays until D1 merges, then gives way to D1's
+    `infrx_test` clock; both are gated the same way.
+- `auth.uid()` reads `current_setting('request.jwt.claim.sub')`, while hosted Supabase and
+  PostgREST ≥ 10 set the JSON `request.jwt.claims`. The matrix sets **both** (r1 review R-b)
+  and asserts `auth.uid()` is the impersonated principal on every principal-bearing case — a
+  matrix in which it is NULL passes every deny-case vacuously. Case `E2-RLS-70` is the point:
+  whoever sets the claim **is** the tenant, so it may only ever come from a verified JWT.
 
 ## What the fake vLLM does
 
@@ -142,9 +174,14 @@ Fault modes (04 §Test environments plus 08 §2), selected per request with the
 | `midstream_stall` | one delta, then a declared stall past `TPOT_STALL_S` |
 | `malformed_usage` | a usage object with `"1200"` and `null` counts |
 | `missing_usage` | `finish_reason` but no usage object at all |
-| `cancellation_race` | after `POST /_control/cancel`, one usage chunk for the work really done |
+| `cancellation_race` | a cancel **before** the stream gives one usage chunk for zero work; a cancel **after** the first delta stops the stream and reports the deltas actually sent. 20 ms between deltas on this path only, because without a gap the body is emitted before any client could cancel |
 | `abrupt_exit` | the response body is aborted mid-stream: no terminator, torn connection |
 | `split_reasoning_delimiters` | `<think>`/`</think>` split across chunk boundaries |
+
+An unknown fault is a **400** carrying the set it would have accepted, never a 500, and a
+refused `/_control` leaves the default unchanged. `--host` must be loopback unless
+`--allow-non-loopback` is passed in so many words. `--seed` makes the chunk `id`s and `created`
+a function of the seed, so a captured transcript is comparable between runs.
 
 **A stall is declared, not waited out.** The stream emits an SSE comment
 `: infrx-stall <seconds>` and the adapter advances its **injected** clock by that much,
@@ -167,6 +204,11 @@ the client side (`truncated_stream`).
 | `Faults.disconnect(svc)` | a hard partition: the endpoint leaves the project network, so the peer refuses rather than hangs | `docker network connect` |
 | `pgstate.set_clock_offset(conn, s)` | database time moves, transaction-locally | end of transaction |
 | `FakeVllmServer.kill(SIGKILL)` | the engine process dies mid-request | `start()` |
+
+`run.py` handles SIGTERM as well as SIGINT: both raise into `main`'s `finally`, so the stack is
+torn down and the exit code is 128+signum, and the fake server runs in its own process group so
+one `killpg` takes it with them. A server that still survives is reported by the next run's
+preflight rather than surfacing as a failure to bind.
 
 `Faults` is a context manager that reverts in reverse order even when the body raises, and
 every container helper is namespace-checked first.

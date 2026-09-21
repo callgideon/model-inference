@@ -399,7 +399,7 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", str(root / mutant.suite),
              "-k", mutant.select, "-p", "no:cacheprovider", "--no-header", "-x"],
-            cwd=str(root), capture_output=True, text=True, timeout=900,
+            cwd=str(root), capture_output=True, text=True, timeout=240,
             env={**os.environ, "INFRX_E2_REPO_ROOT": str(harness.REPO_ROOT),
                  # The copy must claim the provisioning checkout's identity or B1's ownership
                  # label correctly makes the live stack foreign, and every layer-2 mutant is

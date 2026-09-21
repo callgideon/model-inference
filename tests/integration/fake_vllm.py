@@ -602,6 +602,17 @@ def engine_factory(server: FakeVllmServer):
 LOOPBACK = ("127.0.0.1", "::1", "localhost")
 
 
+def _serve(app, host: str, port: int) -> None:
+    import uvicorn
+    uvicorn.run(app, host=host, port=port, log_level="warning")
+
+
+# Injected so a test can check the CLI's guards without ever opening a socket: a case that
+# proves "--host 0.0.0.0 is refused" must not bind 0.0.0.0 when the guard is mutated away -
+# it would block for ever and, worse, actually listen on every interface.
+SERVE = _serve
+
+
 def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="controllable fake vLLM for E2")
     parser.add_argument("--port", type=int, default=55580)
@@ -628,9 +639,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.host not in LOOPBACK and not args.allow_non_loopback:
         raise SystemExit(f"refusing to bind {args.host}: pass --allow-non-loopback to mean it "
                          f"(loopback is {', '.join(LOOPBACK)})")
-    import uvicorn
     app = FakeVllmApp(fault=args.fault, stall_real_s=args.stall_real_s, seed=args.seed)
-    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    SERVE(app, args.host, args.port)
     return 0
 
 
