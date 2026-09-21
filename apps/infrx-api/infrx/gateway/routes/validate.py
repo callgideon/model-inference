@@ -105,8 +105,12 @@ MAX_SEED = 2 ** 63 - 1
 # structure these caps allow, plus one opener per permitted code point of text, because
 # `{` inside a string is legitimate text. Base64 contains neither `{` nor `[`, so an
 # inline media payload costs nothing against it.
+# `stop` and `model` are text too, and their characters may all be commas or braces:
+# four 64-character stop sequences plus a 128-character model name at the text cap
+# was a false 413 (133,453 > 133,264).
+TEXT_BESIDE_MESSAGES = MAX_STOP_SEQUENCES * MAX_STOP_CHARS + MAX_MODEL_CHARS
 STRUCTURE_OPENERS = 2 + MAX_MESSAGES * (2 + MAX_PARTS_PER_MESSAGE * 2) + 2
-MAX_OPENERS = STRUCTURE_OPENERS + MAX_TEXT_CODEPOINTS
+MAX_OPENERS = STRUCTURE_OPENERS + MAX_TEXT_CODEPOINTS + TEXT_BESIDE_MESSAGES
 # Openers alone are evadable: one collection needs one opener however many elements it
 # holds, so `{"<hex>":1, …}` with nine million keys has exactly one. Every element needs
 # a separator, so this is the count that bounds the size of the tree: the top-level
@@ -115,7 +119,7 @@ MAX_OPENERS = STRUCTURE_OPENERS + MAX_TEXT_CODEPOINTS
 # text. A `data:` URL's prefix contains exactly one and base64 contains none.
 STRUCTURE_SEPARATORS = (len(SUPPORTED) + MAX_MESSAGES * (2 + MAX_PARTS_PER_MESSAGE * 2)
                         + MAX_STOP_SEQUENCES)
-MAX_SEPARATORS = STRUCTURE_SEPARATORS + MAX_TEXT_CODEPOINTS
+MAX_SEPARATORS = STRUCTURE_SEPARATORS + MAX_TEXT_CODEPOINTS + TEXT_BESIDE_MESSAGES
 # r1 R7: `admit` derives its ceiling from the *database* clock. Without a margin a
 # store clock a millisecond behind the gateway refuses every request, and the first
 # review's tests could not see it because they pinned the fake's clock to

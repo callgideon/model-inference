@@ -118,6 +118,40 @@ def _no_constants(name: str) -> None:
     raise ValueError(f"{name} is not valid JSON")
 
 
+# No value this API accepts needs more digits than this: the largest is `seed`, at
+# 2**63-1, which is 19. Nothing here is a limit on what JSON can express; it is a limit
+# on what a *request* may contain, and it is what stops the parser doing quadratic work.
+MAX_NUMBER_DIGITS = 20
+# A float literal carries a point and possibly an exponent, and the longest a real
+# double needs is about 24 characters (`1.7976931348623157e+308`), so it gets its own,
+# wider allowance: wide enough that no value a client can legitimately send is refused,
+# narrow enough that a 700-character number is never converted.
+MAX_NUMBER_CHARS = 32
+
+
+def _bounded_int(literal: str) -> int:
+    """`int(str)` is quadratic in CPython up to its own 4,300-digit threshold, and
+    `json.loads` calls it once per integer literal. A 94 MiB body of 23,000
+    4,300-digit integers passes both structural counts - two openers, 23,000 commas -
+    and cost 2.67 s of blocked event loop and +283 MiB. Refusing the literal by its
+    length costs nothing: the parser raises before converting anything.
+    """
+    if len(literal.lstrip("-")) > MAX_NUMBER_DIGITS:
+        raise ValueError(f"a number of more than {MAX_NUMBER_DIGITS} digits")
+    return int(literal)
+
+
+def _bounded_float(literal: str) -> float:
+    """The same bound, for the same reason. `float(str)` is linear, so this is the
+    cheaper half of the problem - 700-character floats measured 0.38 s against the
+    integers' 2.67 s - but no accepted parameter is a 700-character number either, so
+    there is no reason to convert one.
+    """
+    if len(literal) > MAX_NUMBER_CHARS:
+        raise ValueError(f"a number of more than {MAX_NUMBER_CHARS} characters")
+    return float(literal)
+
+
 OPENERS = ("{", "[")
 SEPARATOR = ","
 BOM = "﻿"
@@ -180,7 +214,8 @@ def parse_object(text: str) -> dict:
     ones are in flight at once (`LargeBodies`).
     """
     try:
-        body = json.loads(text, parse_constant=_no_constants)
+        body = json.loads(text, parse_constant=_no_constants,
+                          parse_int=_bounded_int, parse_float=_bounded_float)
     except (ValueError, RecursionError):
         raise errors.InvalidRequest("the request body is not valid JSON") from None
     if not isinstance(body, dict):

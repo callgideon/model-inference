@@ -705,7 +705,11 @@ def test_media_sec__a_declared_length_that_is_not_a_number_is_ignored():
     app, _ = support.cutover_app(ingress_deps=support.deps(accept=accept, large_bodies=slots))
     body = json.dumps({"messages": [{"role": "user", "content": "hi"}]}).encode()
 
-    for declared in (b"\xc2\xb2", b"9" * 5_000, b"", b"-1", b"12abc"):
+    # `b"\xb2"`, not `b"\xc2\xb2"`: the ASGI layer decodes header bytes as latin-1, so
+    # the UTF-8 spelling arrives as "Â²" and `isdigit()` already rejects it - the
+    # `isascii()` guard would never have been exercised. As latin-1 it arrives as "²",
+    # which *is* a digit, and only `isascii()` stands between it and `int()`.
+    for declared in (b"\xb2", b"\xb3", b"\xb9", b"9" * 5_000, b"", b"-1", b"12abc"):
         sent = []
 
         async def receive():
@@ -721,5 +725,74 @@ def test_media_sec__a_declared_length_that_is_not_a_number_is_ignored():
                                      (b"content-length", declared)]},
                         receive, lambda message: sent.append(message) or asyncio.sleep(0)))
         assert sent[0]["status"] == 202, (declared[:20], sent[0])
-    assert len(calls) == 5
+    assert len(calls) == 7
     assert slots.in_flight == 0
+
+
+# --- review r4 B1: the parser's own per-literal work -------------------------------
+def test_media_sec__a_body_of_huge_integers_is_refused_by_the_parser():
+    """Two openers and 23,000 commas pass both structural counts, so this body reaches
+    `json.loads` - which calls `int()` per literal, and CPython's `int(str)` is
+    quadratic up to its own 4,300-digit threshold. 94 MiB of 4,300-digit integers cost
+    2.67 s of blocked event loop before the literal bound existed.
+    """
+    raw = b'{"messages":[' + b",".join([b"9" * 4_300] * 23_000) + b"]}"
+    assert raw.count(b"{") + raw.count(b"[") == 2
+    assert raw.count(b",") < validate.MAX_SEPARATORS
+    tc, accepted = client()
+    response = tc.post(support.CHAT_PATH, headers=support.RAW, content=raw)
+    assert response.status_code == 400, response.text[:200]
+    assert support.error_of(response)["code"] == "invalid_request"
+    assert accepted == []
+
+
+# `converted` is whether the *parser* accepted the literal. A converted number may
+# still be refused on its range, which is a different answer - and the `param` field is
+# how the two are told apart: a range refusal names the parameter, a parse refusal
+# cannot, because at that point there is no parameter yet.
+NUMBER_LITERALS = (
+    ("20 digits", b"99999999999999999999", True),
+    ("21 digits", b"999999999999999999999", False),
+    ("20 digits, negative", b"-99999999999999999999", True),
+    ("a 23-character float", b"1.7976931348623157e+308", True),
+    ("a 40-digit fraction", b"0.1111111111111111111111111111111111111111", False),
+    ("4,300 digits", b"9" * 4_300, False),
+    ("19 digits, in range", b"9223372036854775807", True),
+)
+
+
+@pytest.mark.parametrize("name,literal,converted", NUMBER_LITERALS,
+                         ids=[row[0] for row in NUMBER_LITERALS])
+def test_media_sec__a_number_literal_is_bounded_by_its_length(name, literal, converted):
+    """`seed` is the longest number this API accepts, at 19 digits, so 20 is the bound
+    and 21 is refused - and no double needs more than about 24 characters."""
+    raw = b'{"messages":[{"role":"user","content":"hi"}],"seed":' + literal + b"}"
+    tc, accepted = client()
+    response = tc.post(support.CHAT_PATH, headers=support.RAW, content=raw)
+    if converted:
+        # either accepted, or refused on the *value* - which names the parameter
+        assert response.status_code == 202 or support.error_of(response)["param"] == "seed", \
+            response.text[:200]
+    else:
+        error = support.error_of(response)
+        assert (response.status_code, error["code"]) == (400, "invalid_request"), error
+        assert "param" not in error, error
+        assert accepted == []
+
+
+def test_media_sec__a_maximal_structure_body_is_accepted():
+    """The structural allowance, from the legitimate side: the largest shape the caps
+    permit - 64 messages, 16 text parts each, the text cap spread over them, four stop
+    sequences and a full-length model name - must pass both counts."""
+    per_part = validate.MAX_TEXT_CODEPOINTS // (validate.MAX_MESSAGES
+                                               * validate.MAX_PARTS_PER_MESSAGE)
+    body = {"messages": [{"role": "user",
+                          "content": [{"type": "text", "text": "," * per_part}
+                                      for _ in range(validate.MAX_PARTS_PER_MESSAGE)]}
+                         for _ in range(validate.MAX_MESSAGES)],
+            "model": support.PUBLIC_MODEL,
+            "stop": ["," * validate.MAX_STOP_CHARS] * validate.MAX_STOP_SEQUENCES}
+    tc, accepted = client()
+    response = tc.post(support.CHAT_PATH, headers=support.AUTH, json=body)
+    assert response.status_code == 202, response.text[:200]
+    assert len(accepted) == 1
