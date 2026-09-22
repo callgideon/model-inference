@@ -157,7 +157,7 @@ ERROR_BODY_MAX_BYTES = 64 * 1024        # an engine's error body is read bounded
 # (`StreamStore.event_bytes` = `len(compact_bytes(event.payload))`, `JOURNAL_EVENT_MAX_BYTES`
 # = 1 MiB). Sizing by code points was wrong for anything but ASCII: a delta carries its
 # text twice (`visible` and `raw`; the transitional `content` alias was removed by F2R
-# item 2, R64), a code point costs up to 4 bytes in UTF-8 and up to 6 as a JSON escape
+# item 2, R80), a code point costs up to 4 bytes in UTF-8 and up to 6 as a JSON escape
 # (`\u0001`), so a code-point budget lets an ordinary CJK answer outgrow the ceiling and
 # W2's `append` would answer `journal_write_failed`. Pieces are therefore measured in
 # **encoded JSON bytes** and each copy gets `(ceiling - overhead) // PAYLOAD_COPIES`; the
@@ -422,7 +422,7 @@ def _split_encoded(text: str, budget: int) -> list[str]:
 
 
 def _delta_payload(raw: str, visible: str) -> dict[str, str]:
-    """r1 R58 / R64: `visible` is the customer's text, `raw` is for trace capture only.
+    """r1 R58 / R80: `visible` is the customer's text, `raw` is for trace capture only.
 
     Exactly these two keys: the transitional `content` alias of `raw` is gone (F2R item
     2). No relay may read `raw` - a relay that does leaks the reasoning block.

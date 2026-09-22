@@ -31,7 +31,7 @@ DEFAULT_MODELS_DOC = os.path.join(_API_DIR, "openrouter", "provider-models.json"
 # so ingress refuses it up front rather than fetching bytes preparation must reject.
 DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime"
 EXT_MIME = {".mp4": "video/mp4", ".m4v": "video/mp4", ".webm": "video/webm",
-            ".mov": "video/quicktime", ".mpeg": "video/mpeg", ".mpg": "video/mpeg"}
+            ".mov": "video/quicktime"}
 
 
 def _mimes(raw):

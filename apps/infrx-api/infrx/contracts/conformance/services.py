@@ -218,7 +218,7 @@ async def media_sec__staging_never_replaces_an_existing_object(factory):
     second = reused["upload_handle"]
     squatted = await b.materialized(harness, b.ORG_A, handle=second, kind=MediaKind.inline)
     if squatted.handle != second:
-        # R66: this store derives a materialized handle from the content, so no object of
+        # R82: this store derives a materialized handle from the content, so no object of
         # the tenant's can sit under an upload handle and there is nothing to replace.
         return
     staged_first = await harness.port.stage(b.ORG_A, b.request(harness, refs=(squatted,)))
@@ -793,21 +793,22 @@ async def trace_bounds__metadata_exhaustion_drops_with_counters(factory):
     """TRACE-BOUNDS: when the metadata reserve is gone the record is dropped and
     counted; inference is untouched either way.
 
-    Revised by F2R item 3 (R65): a record costs the reserve `max(declared metadata_bytes,
+    Revised by F2R item 3 (R81): a record costs the reserve `max(declared metadata_bytes,
     len(serialized envelope))`, so an under-declared envelope cannot buy a second place,
     and an over-declared one is charged what it declared."""
     from ..codec import compact_bytes
     probe = factory()
-    actual = len(compact_bytes(b.trace(probe.ids.uuid(), content_bytes=0, metadata_bytes=1,
+    actual = len(compact_bytes(b.trace(probe.ids.uuid(), content_bytes=0, metadata_bytes=0,
                                        harness=probe)))
-    # room for one serialized row, not for two
+    # room for one serialized row, not for two; every record declares 0 metadata bytes,
+    # the canonical under-declaration, so only the serialized charge can stop the second
     limits = DEFAULTS.replace(trace_capture_bytes=1 << 20,
                               trace_metadata_reserve_bytes=actual + actual // 2)
     harness = factory(limits=limits)
     accepted = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0,
-                                                metadata_bytes=1, harness=harness))
+                                                metadata_bytes=0, harness=harness))
     dropped = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0,
-                                               metadata_bytes=1, harness=harness))
+                                               metadata_bytes=0, harness=harness))
     assert accepted is TraceOfferResult.accepted_in_memory
     assert dropped is TraceOfferResult.dropped
     stats = await harness.port.stats()
@@ -1815,15 +1816,9 @@ async def feedback_ack__calibration_labels_are_operator_data(factory):
         raise AssertionError("a FeedbackList was built without the viewer projection")
 
     # r1 R54: a replay is projected like a read, and never returns a row of another kind.
-    label_key = b.idem(request, "cal-shared", operation="calibration.label")
-    labelled = await harness.port.label_calibration(
-        operator, request.request_id, CalibrationLabel.correct.value, 4, label_key)
-    try:
-        await harness.port.accept(b.auth(), request.request_id, b.feedback(), label_key)
-    except errors.IdempotencyConflict:
-        pass
-    else:
-        raise AssertionError("a customer replayed an operator's calibration key through accept")
+    # The label-side replay is checked first: it is the direction where a missing
+    # operation check returns the wrong row to this case (the accept-side replay of a label
+    # would trip the fake's own projection guard before the case could see it).
     accept_key = b.idem(request, "fb-shared", operation="feedback")
     plain = await harness.port.accept(operator, request.request_id,
                                       b.feedback(FeedbackName.thumb, True), accept_key)
@@ -1834,6 +1829,15 @@ async def feedback_ack__calibration_labels_are_operator_data(factory):
         pass
     else:
         raise AssertionError("a customer feedback key was replayed as a calibration label")
+    label_key = b.idem(request, "cal-shared", operation="calibration.label")
+    labelled = await harness.port.label_calibration(
+        operator, request.request_id, CalibrationLabel.correct.value, 4, label_key)
+    try:
+        await harness.port.accept(b.auth(), request.request_id, b.feedback(), label_key)
+    except errors.IdempotencyConflict:
+        pass
+    else:
+        raise AssertionError("a customer replayed an operator's calibration key through accept")
     # and the replay a customer *is* entitled to is masked exactly as the read was
     replayed = await harness.port.accept(b.auth(), request.request_id,
                                          b.feedback(FeedbackName.comment, "from support"),

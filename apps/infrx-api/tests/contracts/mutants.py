@@ -84,8 +84,8 @@ TA = "contracts/traces_accounting.py"      # the accounting the fake and the spo
 # real adapter could fail for the wrong reason: a store answering the typed `DomainError`
 # the contract promises must not crash the case. Every committed mutant dies on an
 # assertion, and the shared runner now **enforces** that: a death by any other exception
-# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **two**
-# mutants declare one, and both are guards whose entire purpose is to stop an untyped
+# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **four**
+# mutants declare one; the first two are guards whose entire purpose is to stop an untyped
 # error escaping:
 #
 # * `mime_string_accepted` - `create_upload`'s allow-list check. Removing it lets
@@ -96,6 +96,11 @@ TA = "contracts/traces_accounting.py"      # the accounting the fake and the spo
 # * `add_raises_on_a_non_byte_part` - R37 says `TraceCapture.add` **never raises into the
 #   request path**. The invariant is the absence of an exception, so the only way to break
 #   it is to raise one, and the only honest kill is the raise.
+# * `DEPLOY-04` - with `>=`, an equal pool (min == max, valid) is refused by the typed
+#   `RuntimeMisconfigured` the case asserts is NOT raised: that refusal is the defect.
+# * `drop_reason_falls_back_on_truthiness` - an `AssertionError` raised inside the package
+#   is not the case's observation (R83 amendment (a)); here it is the accounting base's
+#   own `_drop` guard, which is the invariant's enforcement in every sink.
 #
 # The six `ValidationError` kills the review found are gone: `FakeFeedbackService._row`
 # maps a record-validation failure to `internal_error`, because the row's fields are
@@ -1184,7 +1189,11 @@ MUTANTS: tuple[Mutant, ...] = (
        T, "            reason = (TraceLossReason.abandoned if self.lost_reason is TraceLossReason.none\n"
           "                      else self.lost_reason)",
        "            reason = self.lost_reason or TraceLossReason.abandoned",
-       "trace_bounds__no_loss_is_ever_counted_under_none"),
+       "trace_bounds__no_loss_is_ever_counted_under_none",
+       # R83 (a): the base's own `_drop` guard (`assert reason is not none`) stops this
+       # defect before any count moves, in every sink built on the base - the raise is
+       # what a real sink would do, so it is the declared kill mode.
+       dies_by=("AssertionError",)),
     _m("no_op_full_capture_keeps_its_content", "a discarded capture finishes as metadata",
        T, '        return self.sink._enqueue(envelope.model_copy(update={\n'
           '            "content_complete": False, "content_ref": None, "content_bytes": 0,\n'
@@ -1370,7 +1379,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "            resolved = run.model_copy(update={\"state\": JudgeRunState.quarantined})\n"
        "            self.runs[run_id] = resolved",
        "judge_budget__an_ambiguous_run_is_resolved_only_by_an_operator"),
-    # --- F2R lane A item 2: the delta payload is exactly `{visible, raw}` (R64) ------
+    # --- F2R lane A item 2: the delta payload is exactly `{visible, raw}` (R80) ------
     _m("engine_fake_visible_is_raw", "the customer never reads the reasoning block (R58)",
        E, 'SPLIT_REASONING_VISIBLE = ("", "", "", "Two people unload boxes.")',
        "SPLIT_REASONING_VISIBLE = SPLIT_REASONING",
@@ -1389,6 +1398,32 @@ MUTANTS: tuple[Mutant, ...] = (
            old='DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime"',
            new='DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime,video/mpeg"',
            cases=("test_the_default_video_allow_list_has_no_mpeg",)),
+    Mutant(name="mpeg_extension_mapped_again", invariant="no extension guess names video/mpeg",
+           file="config.py", old='            ".mov": "video/quicktime"}',
+           new='            ".mov": "video/quicktime", ".mpg": "video/mpeg"}',
+           cases=("test_the_default_video_allow_list_has_no_mpeg",)),
+    # --- lane B IR-6: deployment settings (config.py) --------------------------------
+    Mutant(name="DEPLOY-01", invariant="an empty deployment value is refused, not defaulted",
+           file="config.py", old='        if raw.strip() == "":', new="        if False:",
+           cases=("test_an_empty_deployment_value_is_refused",)),
+    Mutant(name="DEPLOY-02", invariant="a deployment bound a zero would disable is refused",
+           file="config.py", old="        if getattr(deployment, name) <= 0:",
+           new="        if getattr(deployment, name) < 0:",
+           cases=("test_a_deployment_bound_a_zero_would_disable_is_refused",)),
+    Mutant(name="DEPLOY-03", invariant="a bad deployment value refuses before anything mounts",
+           file="config.py",
+           old='    validate_deployment(getattr(settings, "deployment", DEPLOYMENT_DEFAULTS), mode)\n',
+           new="", cases=("test_a_bad_deployment_value_refuses_before_anything_mounts",)),
+    Mutant(name="DEPLOY-04", invariant="the pool bounds are ordered (min == max is valid)",
+           file="config.py",
+           old="    if deployment.database_pool_min_size > deployment.database_pool_max_size:",
+           new="    if deployment.database_pool_min_size >= deployment.database_pool_max_size:",
+           cases=("test_the_pool_bounds_must_be_ordered",), dies_by=("RuntimeMisconfigured",)),
+    Mutant(name="DEPLOY-05", invariant="a short console cursor secret is refused",
+           file="config.py",
+           old="    if _configured(secret) and len(secret) < MIN_CONSOLE_CURSOR_SECRET_CHARS:",
+           new="    if _configured(secret) and len(secret) < 1:",
+           cases=("test_a_short_cursor_secret_is_refused_without_echoing_it",)),
     # --- F2R: the two money-context mutants the audit found surviving ----------------
     _m("money_context_default_precision", "money arithmetic runs at 40 digits",
        MONEY, "        prec=40, rounding=decimal.ROUND_HALF_EVEN,",
@@ -1409,13 +1444,20 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("accounting_regime_respelled", "the regime is spelled as the console spells it (IR-7)",
        R, '    legacy_usd = "legacy_usd"', '    legacy_usd = "legacy"',
        "test_enum_values_are_frozen"),
-    # --- F2R lane A item 3: the metadata reserve is charged the serialized row (R65) ----
+    # --- F2R lane A item 3: the metadata reserve is charged the serialized row (R81) ----
     _m("metadata_charged_as_declared", "an under-declared record is charged what it costs",
        TA, "        return max(envelope.metadata_bytes, serialized)",
        "        return envelope.metadata_bytes",
        "trace_bounds__metadata_exhaustion_drops_with_counters"),
     _m("metadata_charged_as_serialized", "an over-declared record is charged what it declared",
        TA, "        return max(envelope.metadata_bytes, serialized)", "        return serialized",
+       "trace_bounds__metadata_exhaustion_drops_with_counters"),
+    # F2R-A review: a zero declaration is the canonical under-declaration, and the case
+    # declares exactly that, so a charge that waives it cannot pass.
+    _m("metadata_charge_skips_zero", "a record declaring 0 metadata bytes is still charged",
+       TA, "        metadata = self.metadata_charge(envelope, serialized)",
+       "        metadata = 0 if envelope.metadata_bytes == 0 else "
+       "self.metadata_charge(envelope, serialized)",
        "trace_bounds__metadata_exhaustion_drops_with_counters"),
 )
 
@@ -1488,6 +1530,8 @@ def _domain_deaths() -> frozenset[str]:
     death. `TypeError`, `NameError`, `KeyError`, `AttributeError`, `ValidationError`,
     `RecursionError` and the rest are not, and must be declared per mutant in `dies_by`.
     """
+    if str(API_DIR) not in sys.path:          # a list run as a script by its path
+        sys.path.insert(0, str(API_DIR))
     from infrx.contracts import errors
 
     found, pending = set(), [errors.DomainError]
@@ -1513,7 +1557,14 @@ _FAILED_LINE = re.compile(r"^(?:FAILED|ERROR) ([^\s:]+(?:::[^\s]+)?)")
 # `--tb=line` prints one `path:lineno: <message>` line per failure.
 _DEATH = re.compile(r"^(?P<where>\S*?):\d+: (?P<message>.+)$")
 _CLASS = re.compile(r"^(?P<cls>[A-Za-z_][A-Za-z0-9_.]*)(?::|$)")
-_RAN = re.compile(r"(\d+) (?:passed|failed|skipped)")
+# `errors?` too (R83 amendment (c)): a fixture or collection error with no test run is a
+# broken copy, not a mutant that named no case - and `-rfE` lists the ERROR ids, which
+# `-rf` alone left out (such a run read as `survived`).
+_RAN = re.compile(r"(\d+) (?:passed|failed|skipped|errors?)")
+# R83 amendment (a): an `assert` inside the package is the package's own guard, not the
+# case observing anything. The exported conformance cases live in the package, so their
+# assertions are still the case's own.
+_PACKAGE_FRAME = re.compile(r"(?:^|/)infrx/(?!contracts/conformance/)")
 
 
 @dataclass(frozen=True)
@@ -1523,7 +1574,10 @@ class Runner:
     `targets` are pytest paths; `targets_for` narrows them per mutant (track G collects
     only the files defining the named cases, because collecting its whole suite imports
     FastAPI once per mutant). `require_every_case` is track Q's stricter rule: a mutant
-    may not claim coverage from a case that cannot see it.
+    may not claim coverage from a case that cannot see it. `layout` builds a copy of a
+    different shape (track I mutates `deploy/`, outside the package, and one case reads
+    a repository file): it fills the temporary root and returns the directory pytest runs
+    in; a mutant's `file` is then relative to that directory joined with `package`.
     """
 
     name: str
@@ -1533,6 +1587,7 @@ class Runner:
     timeout_s: float = NESTED_TIMEOUT_S
     require_every_case: bool = False
     targets_for: "Callable[[tuple[str, ...]], Sequence[str]] | None" = None
+    layout: "Callable[[pathlib.Path], pathlib.Path] | None" = None
 
     def select(self, cases: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(self.targets_for(cases)) if self.targets_for else self.targets
@@ -1587,7 +1642,8 @@ def _death_kinds(stdout: str) -> list[tuple[str, str]]:
     return deaths
 
 
-def _undeclared(deaths: list[tuple[str, str]], allowed: set[str]) -> list[str]:
+def _undeclared(deaths: list[tuple[str, str]], allowed: set[str],
+                declared: "set[str] | tuple[str, ...]" = ()) -> list[str]:
     """The deaths that are not evidence, as `class@file`.
 
     Two kinds of death are evidence: an assertion (including pytest's `Failed` for a
@@ -1598,9 +1654,15 @@ def _undeclared(deaths: list[tuple[str, str]], allowed: set[str]) -> list[str]:
     kill mode and makes it reviewable. This is track J's round-3 review rule, applied to
     every list (`a test that crashed is not a test that noticed`); the file is reported
     with the class so a reader can see *where* it crashed without opening the log.
+
+    An `AssertionError` raised **inside the package** (outside the exported conformance
+    cases) is the package's guard firing, not the case asserting: it is evidence only when
+    the mutant declares `AssertionError` in `dies_by` (R83 amendment (a)).
     """
     return [f"{kind}@{where.rsplit('/', 1)[-1]}" for where, kind in deaths
-            if kind not in allowed]
+            if kind not in allowed
+            or (kind in ASSERTION_DEATHS and _PACKAGE_FRAME.search(where)
+                and kind not in declared)]
 
 
 def case_of(test_id: str, cases: tuple[str, ...]) -> str | None:
@@ -1624,8 +1686,10 @@ def case_of(test_id: str, cases: tuple[str, ...]) -> str | None:
     return None
 
 
-def _prepare(root: pathlib.Path, mutant: "Mutant", runner: Runner) -> Result | None:
-    """Copy the tree, apply the one edit, and refuse an edit that cannot be evidence."""
+def _copy(root: pathlib.Path, runner: Runner) -> pathlib.Path:
+    """The default copy: the package and the tests; returns where pytest runs."""
+    if runner.layout is not None:
+        return runner.layout(root)
     junk = shutil.ignore_patterns("__pycache__")
     shutil.copytree(API_DIR / runner.package, root / runner.package, ignore=junk)
     shutil.copytree(API_DIR / "tests", root / "tests", ignore=junk)
@@ -1633,7 +1697,12 @@ def _prepare(root: pathlib.Path, mutant: "Mutant", runner: Runner) -> Result | N
     # mode, `pythonpath=["."]`), or the copy collects under different import rules than
     # the suite was written for.
     shutil.copy2(API_DIR / "pyproject.toml", root / "pyproject.toml")
-    target = root / runner.package / mutant.file
+    return root
+
+
+def _prepare(api: pathlib.Path, mutant: "Mutant", runner: Runner) -> Result | None:
+    """Apply the one edit to the copy, and refuse an edit that cannot be evidence."""
+    target = api / runner.package / mutant.file
     source = target.read_text()
     found = source.count(mutant.old)
     if found != mutant.occurrences:
@@ -1655,6 +1724,67 @@ def _prepare(root: pathlib.Path, mutant: "Mutant", runner: Runner) -> Result | N
     return None
 
 
+def _pytest(root: pathlib.Path, api: pathlib.Path, runner: Runner, targets, selection: str,
+            timeout_s: float) -> subprocess.CompletedProcess:
+    """One pytest process over `targets -k selection` in a copy, with its own bytecode
+    cache, temporary directory and home inside that copy."""
+    cache, temp = root / ".pycache", root / ".tmp"
+    cache.mkdir(exist_ok=True)
+    temp.mkdir(exist_ok=True)
+    return subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "--no-header",
+         "-p", "no:cacheprovider", "-rfE", "--tb=line",
+         *runner.extra_args, *targets, "-k", selection],
+        cwd=api, capture_output=True, text=True, timeout=timeout_s,
+        env={"PYTHONPATH": str(api), "PATH": "/usr/bin:/bin", "HOME": str(temp),
+             "PYTHONPYCACHEPREFIX": str(cache), "TMPDIR": str(temp)})
+
+
+# R83 amendment (b): the pristine baseline. A mutant is evidence only if its cases pass
+# on the unmutated tree; otherwise a case that fails for its own reasons "kills" every
+# mutant naming it. Once per list and runner per process (one extra pytest run, not one
+# per mutant), over the union of the list's named cases.
+BASELINE_TIMEOUT_S = 1800
+_BASELINES: "dict[tuple[Runner, tuple[str, ...]], Result | None]" = {}
+
+
+def _siblings(mutant: "Mutant") -> "tuple[Mutant, ...]":
+    """The list (`MUTANTS` of a loaded module) this mutant belongs to, or `()` for a
+    runner self-test's one-off mutant."""
+    for module in list(sys.modules.values()):
+        listed = getattr(module, "MUTANTS", None)
+        if isinstance(listed, tuple) and any(m is mutant for m in listed):
+            return listed
+    return ()
+
+
+def pristine(cases: tuple[str, ...], runner: Runner) -> Result | None:
+    """None if every named case passes on the unmutated copy, else the refusal."""
+    key = (runner, cases)
+    if key not in _BASELINES:
+        _BASELINES[key] = _baseline(cases, runner)
+    return _BASELINES[key]
+
+
+def _baseline(cases: tuple[str, ...], runner: Runner) -> Result | None:
+    targets = runner.select(cases)
+    with tempfile.TemporaryDirectory(prefix=f"{runner.name}-pristine-") as tmp:
+        root = pathlib.Path(tmp)
+        api = _copy(root, runner)
+        try:
+            done = _pytest(root, api, runner, targets, " or ".join(cases), BASELINE_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            return Result(Outcome.broken_runner,
+                          f"pristine baseline did not finish within {BASELINE_TIMEOUT_S}s")
+    if done.returncode == PYTEST_ALL_PASSED:
+        return None
+    failed, errored = _failing_ids(done.stdout or "")
+    lines = ((done.stdout or done.stderr) or "").strip().splitlines()
+    return Result(Outcome.broken_runner,
+                  f"pristine baseline: the unmutated tree fails the list's own cases "
+                  f"(pytest exit {done.returncode}): {(failed + errored)[:3] or lines[-1:]}")
+
+
 def run_mutant(mutant: "Mutant", runner: Runner | None = None) -> Result:
     """Apply one mutant to a throwaway copy of the tree and run the cases it names.
 
@@ -1670,23 +1800,20 @@ def run_mutant(mutant: "Mutant", runner: Runner | None = None) -> Result:
     if not targets:
         return Result(Outcome.misdeclared,
                       f"no target defines any of {list(mutant.cases)}")
-    with tempfile.TemporaryDirectory(prefix=f"{runner.name}-mutant-{mutant.name}-") as tmp:
-        root = pathlib.Path(tmp)
-        refused = _prepare(root, mutant, runner)
+    siblings = _siblings(mutant)
+    if siblings:
+        refused = pristine(tuple(sorted({case for m in siblings for case in m.cases})), runner)
         if refused is not None:
             return refused
-        cache, temp = root / ".pycache", root / ".tmp"
-        cache.mkdir()
-        temp.mkdir()
+    with tempfile.TemporaryDirectory(prefix=f"{runner.name}-mutant-{mutant.name}-") as tmp:
+        root = pathlib.Path(tmp)
+        api = _copy(root, runner)
+        refused = _prepare(api, mutant, runner)
+        if refused is not None:
+            return refused
         selection = " or ".join(mutant.cases)
         try:
-            done = subprocess.run(
-                [sys.executable, "-m", "pytest", "-q", "--no-header",
-                 "-p", "no:cacheprovider", "-rf", "--tb=line",
-                 *runner.extra_args, *targets, "-k", selection],
-                cwd=root, capture_output=True, text=True, timeout=runner.timeout_s,
-                env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin",
-                     "PYTHONPYCACHEPREFIX": str(cache), "TMPDIR": str(temp)})
+            done = _pytest(root, api, runner, targets, selection, runner.timeout_s)
         except subprocess.TimeoutExpired:
             # A defect that makes a case hang is real, but a hang is not the proof the
             # contract asks for, and a runner that waits for ever proves nothing at all.
@@ -1716,7 +1843,7 @@ def run_mutant(mutant: "Mutant", runner: Runner | None = None) -> Result:
             return Result(Outcome.broken_runner,
                           f"failures outside the named cases: {stray[:3]}")
         crashed = sorted(set(_undeclared(_death_kinds(stdout),
-                                         HONEST_DEATHS | set(mutant.dies_by))))
+                                         HONEST_DEATHS | set(mutant.dies_by), mutant.dies_by)))
         if crashed:
             # The mutated code blew up rather than answering. The case may well have
             # noticed the defect, but a crash inside the package is not a proof: declare

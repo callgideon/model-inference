@@ -46,6 +46,9 @@ SHARED_ENUMS = {
     # 08 §9's closed availability set, which Python spells `ContentState`.
     "TRACE_CONTENT_AVAILABILITY": records.ContentState,
     "ENTITLEMENT_LIMIT_NAMES": limits.ENTITLEMENT_LIMIT_NAMES,
+    # D1's `usage_events.settlement_regime` is `legacy`/`pilot`; both halves spell the
+    # regime `legacy_usd`/`pilot` (F2R coordinator addition 9).
+    "ACCOUNTING_REGIMES": records.AccountingRegime,
 }
 
 
@@ -292,12 +295,6 @@ UNPAIRED_CONSOLE_TYPES = ("WalletBalance", "TraceListItem",
                           # that decision turns on instead.
                           "UsageRow", "ApiKeySummary", "AuditEntry", "JudgeSample")
 
-# r2 (F2R item 6): the console vocabulary that has no Python counterpart **yet**. Recorded so
-# "not compared" is a decision: F2P/lane A adds `records.AccountingRegime` and this moves into
-# `SHARED_ENUMS`. The values are the console's own names for D1's `usage_events.settlement_regime`
-# (`legacy`/`pilot`), which is why they are not spelled the same.
-UNPAIRED_CONSOLE_ENUMS = {"ACCOUNTING_REGIMES": ["legacy_usd", "pilot"]}
-
 # The nullability the legacy projection turns on, field by field. A field that stops being nullable
 # here starts rejecting real D1 history again (the A07 defect), and a field that *becomes* nullable
 # without a decision would let a projection hand the console a null it does not handle. `False`
@@ -501,13 +498,6 @@ def test_record_fields_and_nullability_match(name):
         assert not unexplained, \
             (f"{name}.{ts_field} is `{console[ts_field].kind}` in TypeScript, which "
              f"{pair['model'].__name__}.{py_field} ({sorted(python_names)}) does not explain")
-
-
-@pytest.mark.parametrize("name", sorted(UNPAIRED_CONSOLE_ENUMS))
-def test_the_console_only_vocabularies_are_recorded(name):
-    """A vocabulary only the console has is still pinned here, so adding the Python half is a
-    decision and renaming or widening it breaks this test rather than drifting quietly."""
-    assert ts_string_array(TYPES.read_text(encoding="utf-8"), name) == UNPAIRED_CONSOLE_ENUMS[name]
 
 
 @pytest.mark.parametrize("name", sorted(LEGACY_NULLABLE_CONSOLE_FIELDS))

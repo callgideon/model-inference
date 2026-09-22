@@ -83,7 +83,7 @@ class FakeEngine:
     def _script(self) -> list[_Step]:
         progress = _Step(EngineEvent(type=ChunkEventType.progress, payload={"phase": "running"}))
         pieces = self.deltas()
-        # r1 R58 / R64: a delta payload is exactly `{visible, raw}`.
+        # r1 R58 / R80: a delta payload is exactly `{visible, raw}`.
         deltas = [_Step(EngineEvent(type=ChunkEventType.delta,
                                     payload={"visible": visible, "raw": raw}))
                   for raw, visible in zip(pieces, self.visibles(), strict=True)]

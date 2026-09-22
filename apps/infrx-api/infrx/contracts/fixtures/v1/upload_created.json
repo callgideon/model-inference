@@ -2,8 +2,7 @@
   "accepted_mime": [
     "video/mp4",
     "video/webm",
-    "video/quicktime",
-    "video/mpeg"
+    "video/quicktime"
   ],
   "destination_ref": "infrx-upload:upl_9Zt4hLmQ2sVbXeR7nKdJ0oPyWcA5uF1gHi8jTlB3vNs",
   "expires_at": "2026-09-20T13:00:00Z",

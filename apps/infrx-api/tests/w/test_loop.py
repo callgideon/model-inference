@@ -8,7 +8,7 @@ Every case drives `infrx.worker.AttemptRunner` / `WorkerLoop` against the **shar
 fake JobStore, StreamStore and Scheduler (`infrx.contracts.fakes`) - the D2-D5 contract
 until the real store exists - on one injected clock. Three engines are used, all
 deterministic and none of them a process: W1's real `VllmEngine` over
-`httpx.MockTransport`, the shared `FakeEngine` (through the R58 shim below), and a
+`httpx.MockTransport`, the shared `FakeEngine` (R58 `{visible, raw}` deltas), and a
 scripted `ScriptEngine` for the event shapes neither of the other two can produce.
 
 Nothing here sleeps on the wall clock except the two cases that prove the task-level
@@ -38,7 +38,7 @@ from infrx.worker.attempt import BATCH_MAX_EVENTS
 from infrx.worker.engine import (LOCAL_MEDIA_ROOT, MODEL_EOS_TOKEN_IDS, _inside_tenant_root,
                                  local_media_url)
 from infrx.worker.fakes import FakeUpstream, engine_factory as engine_harness, m2_local_uri
-from infrx.worker.reasoning import ReasoningFilter, filter_text
+from infrx.worker.reasoning import filter_text
 from tests.w.test_engine import Box as _Box
 from tests.w.test_engine import text_prepared as _text_prepared
 from tests.w.test_engine import video_work as _video_work
@@ -126,44 +126,6 @@ def adapter(world: World, fault: str = "none", *, upstream_kw: dict | None = Non
     upstream = FakeUpstream(fault=fault, clock=world.clock, limits=world.limits,
                             **(upstream_kw or {}))
     return upstream, upstream.engine(**kw)
-
-
-class R58Engine:
-    """The shared `FakeEngine` with R58 delta payloads.
-
-    `contracts/fakes/engine.py` still emits `{"content": …}` (the unfiltered text under
-    the key no relay may read); R58 says a delta carries `visible` and `raw`, and F2R
-    item 2 changes the shared fake. Until it does, this shim is what lets the shared fake
-    drive a loop that journals `visible` only - it is the pending delta, written down.
-    """
-
-    def __init__(self, inner: FakeEngine) -> None:
-        self.inner = inner
-
-    def generate(self, lease, prepared):
-        return self._events(lease, prepared)
-
-    async def _events(self, lease, prepared):
-        reasoning = ReasoningFilter()
-        async for event in self.inner.generate(lease, prepared):
-            if event.type is not ChunkEventType.delta:
-                yield event
-                continue
-            raw = event.payload.get("content", "")
-            yield EngineEvent(type=ChunkEventType.delta,
-                              payload={"visible": reasoning.feed(raw), "raw": raw})
-        tail = reasoning.close()
-        if tail:
-            yield EngineEvent(type=ChunkEventType.delta, payload={"visible": tail, "raw": ""})
-
-    async def cancel(self, lease) -> bool:
-        return await self.inner.cancel(lease)
-
-    async def health(self) -> dict:
-        return await self.inner.health()
-
-    async def drain(self) -> None:
-        await self.inner.drain()
 
 
 @dataclass
@@ -1207,13 +1169,13 @@ def test_ops_recover__a_drain_that_can_wait_lets_the_attempt_finish():
 
 
 def test_ops_recover__the_shared_fake_engine_drives_the_same_loop():
-    """The engines are interchangeable: the shared `FakeEngine` (through the R58 shim)
+    """The engines are interchangeable: the shared `FakeEngine`
     settles the same way W1's adapter does, so nothing here depends on the adapter's
     extra reporting. Its `missing_usage` fault takes the reconciliation path."""
     async def case():
         world = World()
         request, _ = await queued(world)
-        engine = R58Engine(FakeEngine(clock=world.clock, limits=world.limits))
+        engine = FakeEngine(clock=world.clock, limits=world.limits)
         result = await world.runner(engine).run(request.request_id)
         assert result.cause is TerminalCause.completed
         assert world.visible(request.request_id) == FakeEngine().text
@@ -1221,8 +1183,8 @@ def test_ops_recover__the_shared_fake_engine_drives_the_same_loop():
 
         missing = World()
         request2, _ = await queued(missing)
-        silent = R58Engine(FakeEngine(clock=missing.clock, limits=missing.limits,
-                                      fault=EngineFault.missing_usage))
+        silent = FakeEngine(clock=missing.clock, limits=missing.limits,
+                                      fault=EngineFault.missing_usage)
         result2 = await missing.runner(silent).run(request2.request_id)
         assert result2.cause is TerminalCause.engine_incomplete
         assert result2.outcome.usage is None
@@ -1231,8 +1193,8 @@ def test_ops_recover__the_shared_fake_engine_drives_the_same_loop():
         # and its abrupt exit is an engine failure, not an untyped escape
         exited = World()
         request3, _ = await queued(exited)
-        dying = R58Engine(FakeEngine(clock=exited.clock, limits=exited.limits,
-                                     fault=EngineFault.abrupt_exit))
+        dying = FakeEngine(clock=exited.clock, limits=exited.limits,
+                                     fault=EngineFault.abrupt_exit)
         result3 = await exited.runner(dying).run(request3.request_id)
         assert result3.proposed_cause is TerminalCause.platform_error
         assert result3.outcome.state is JobState.failed and result3.outcome.debit == 0

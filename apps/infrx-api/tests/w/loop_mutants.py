@@ -25,9 +25,9 @@ L = "worker/loop.py"
 E = "worker/engine.py"
 
 
-def _m(name, invariant, file, old, new, *cases, allowed_errors=()) -> Mutant:
+def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
     return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
-                  allowed_errors=tuple(allowed_errors))
+                  dies_by=tuple(dies_by))
 
 
 def run(mutant: Mutant):
@@ -120,7 +120,7 @@ MUTANTS: tuple[Mutant, ...] = (
           ".total_seconds())",
        "        return float(self.limits.generation_timeout_s)", CLAMP,
        # with the 300 s budget the case's own 2 s bound reports it
-       allowed_errors=("TimeoutError",)),
+       dies_by=("TimeoutError",)),
     _m("usage_minus_one_token", "the authoritative count reaches `complete` unchanged",
        A, "        state.usage = event.usage\n",
        "        state.usage = event.usage.model_copy(update={\"completion_tokens\": "
@@ -212,7 +212,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "                async with asyncio.timeout(None):", SILENT,
        # A loop with no bound never returns, so the case's own `wait_for` is what fails:
        # a declared kill mode, and the only one in this list.
-       allowed_errors=("TimeoutError",)),
+       dies_by=("TimeoutError",)),
     _m("deadline_is_not_the_leases", "the bound is the store's instant, not a constant",
        A, "        return max(0.0, (lease.generation_deadline_at - "
           "self.clock.now()).total_seconds())",
@@ -268,11 +268,11 @@ MUTANTS: tuple[Mutant, ...] = (
        A, "    if cause is TerminalCause.completed:\n        return JobState.succeeded",
        "    if cause is TerminalCause.completed:\n        return JobState.failed", HAPPY,
        # the record itself refuses the pair (`records.CAUSE_STATES`), which is the kill
-       allowed_errors=("ValidationError",)),
+       dies_by=("ValidationError",)),
     _m("cancelled_state_is_failed", "a cancellation is `cancelled`, not `failed`",
        A, "    if cause is TerminalCause.client_cancelled:\n        return JobState.cancelled",
        "    if cause is TerminalCause.client_cancelled:\n        return JobState.failed",
-       BILLABLE, allowed_errors=("ValidationError",)),
+       BILLABLE, dies_by=("ValidationError",)),
     _m("result_never_stored", "r1 R30: a success the customer cannot fetch is not a success",
        A, "        if cause is TerminalCause.completed:\n            try:\n"
           "                result_ref = await _maybe_await(self.put_result(state.lease.job_id,",
@@ -318,7 +318,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("drain_keeps_claiming", "draining stops claiming",
        L, "        while not self.draining:", "        while True:", DRAIN_WAIT,
        # a loop that never stops claiming never ends, so the case's own bound reports it
-       allowed_errors=("TimeoutError",)),
+       dies_by=("TimeoutError",)),
     _m("drain_bound_ignored", "an attempt that can finish inside the bound is not released",
        L, "            _, pending = await asyncio.wait(tasks, timeout=max(0.0, within_s))",
        "            _, pending = await asyncio.wait(tasks, timeout=0.0)", DRAIN_WAIT),
@@ -328,7 +328,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "        for task in pending:\n            pass", DRAIN_RELEASE,
        # with nothing cancelled the blocked runner never ends, so the case's own bound
        # reports it
-       allowed_errors=("TimeoutError",)),
+       dies_by=("TimeoutError",)),
 
     # --- the two S2M profile items in the adapter ------------------------------------
     _m("media_sent_as_a_bare_key", "S2M D3: the engine is handed a local file, not a key",
@@ -339,7 +339,7 @@ MUTANTS: tuple[Mutant, ...] = (
        E, "local_media_url(ref, self.local_media_root, org_id,",
        "local_media_url(ref, LOCAL_MEDIA_ROOT, org_id,", MEDIA_FILE,
        # M2's path under the pinned root fails the default root's check: that is the kill
-       allowed_errors=("NotFound",)),
+       dies_by=("NotFound",)),
     _m("media_path_unchecked", "R61: M2's path is checked, not trusted",
        E, "    if not _inside_tenant_root(path, root, org_id, ref):", "    if False:",
        MEDIA_FILE),

@@ -565,7 +565,7 @@ def test_api_stream__deltas_carry_the_visible_and_raw_text():
     """r1 R58: the delta payload keeps `visible` (what the customer reads) beside `raw`
     (the model's own text, which trace capture records, DEC-05), so the delimiter filter
     runs once, here, and not again in every consumer. Exactly those two keys: the
-    transitional `content` alias is gone (F2R item 2, R64)."""
+    transitional `content` alias is gone (F2R item 2, R80)."""
     upstream, engine, held, prepared = drive("split_reasoning_delimiters")
     stream = engine.generate(held, prepared)
     events = asyncio.run(collect(stream))

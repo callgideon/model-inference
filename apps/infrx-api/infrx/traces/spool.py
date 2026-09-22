@@ -98,7 +98,7 @@ SEGMENT_MAX_BYTES = 16 * 1024 * 1024
 # Amortised pruning of the capture list `reap` walks: a process that never pruned it grew
 # by one dead capture per request for ever, which is the leak a bounded sink cannot have.
 CAPTURE_PRUNE_AT = 1_024
-# No separate byte cap on the queue (F2R item 3, R65): the metadata reserve is charged
+# No separate byte cap on the queue (F2R item 3, R81): the metadata reserve is charged
 # `max(declared, len(serialized row))` per record, so the serialized bytes queued and in
 # flight never exceed `TRACE_METADATA_RESERVE_BYTES`. T1's interim 32 MiB
 # `QUEUED_PAYLOAD_MAX_BYTES` bounded the same thing against under-declared envelopes and was

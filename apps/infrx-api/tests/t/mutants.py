@@ -350,9 +350,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "            # A batch is still with the writer.", CANCELLING, ONE_FLUSH),
     _m("the_settlement_keeps_the_guard", "the settlement releases the guard (B7)",
        "        if sink._in_flight is self:", "        if False:", CANCELLING),
-    # F2R item 3 (R65): the byte bound is the metadata reserve charged the serialized row,
+    # F2R item 3 (R81): the byte bound is the metadata reserve charged the serialized row,
     # so the interim cap and its mutant went; this breaks the charge the bound rests on.
-    Mutant(name="the_queue_counts_only_rows", invariant="the queue is bounded in bytes too (R65)",
+    Mutant(name="the_queue_counts_only_rows", invariant="the queue is bounded in bytes too (R81)",
            file="contracts/traces_accounting.py",
            old="        return max(envelope.metadata_bytes, serialized)",
            new="        return envelope.metadata_bytes", cases=(PAYLOAD_CAP,)),
