@@ -5,7 +5,8 @@
 W2 is the lease/cancellation/completion loop: `AttemptRunner` runs one fenced attempt,
 `WorkerLoop` claims candidates and drains. Both reach the JobStore and the StreamStore
 through their ports only, and neither touches the wallet - settlement is the store's
-single transaction.
+single transaction. W3's `WorkerService` is the process around the loop: the `recover`
+reaper, signal-driven drain and loopback readiness.
 """
 from .attempt import AttemptResult, AttemptRunner
 from .engine import (EngineError, EngineFailure, EngineIncomplete, EngineProtocolViolation,
@@ -13,8 +14,9 @@ from .engine import (EngineError, EngineFailure, EngineIncomplete, EngineProtoco
                      cache_salt, prepared_request)
 from .loop import DrainReport, WorkerLoop
 from .reasoning import ReasoningFilter, filter_text
+from .service import WorkerService
 
 __all__ = ["AttemptResult", "AttemptRunner", "DrainReport", "EngineError", "EngineFailure",
            "EngineIncomplete", "EngineProtocolViolation", "EngineStream",
            "EngineTransportError", "EngineUnsupported", "ReasoningFilter", "VllmEngine",
-           "WorkerLoop", "cache_salt", "filter_text", "prepared_request"]
+           "WorkerLoop", "WorkerService", "cache_salt", "filter_text", "prepared_request"]

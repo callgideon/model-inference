@@ -40,6 +40,11 @@ class DrainReport:
     finished: int = 0          # runners that stopped on their own inside the bound
     released: int = 0          # runners cancelled at the bound, their jobs left to the store
     claimed: int = 0           # attempts this loop claimed in total
+    # W3: what the drain did to each job. `ended` is (job id, the settled cause or the
+    # refusal) for every attempt that finished inside the bound; `released_jobs` are the
+    # jobs whose attempt was cancelled at it - still leased, for `recover` to decide.
+    ended: tuple[tuple[str, str], ...] = ()
+    released_jobs: tuple[str, ...] = ()
 
 
 @dataclass
@@ -61,6 +66,8 @@ class WorkerLoop:
     failures: list = field(default_factory=list)
     claimed: int = 0
     draining: bool = False
+    # runner task -> the job it is executing right now (W3: drain records what it released)
+    in_flight: dict = field(default_factory=dict)
     _tasks: list = field(default_factory=list)
 
     # --- one candidate --------------------------------------------------------
@@ -70,9 +77,11 @@ class WorkerLoop:
         if candidate is None:
             return None
         self.claimed += 1
+        self.in_flight[asyncio.current_task()] = candidate.job_id
         try:
             result = await self.runner.run(candidate.job_id)
         finally:
+            self.in_flight.pop(asyncio.current_task(), None)
             # Always: the candidate is consumed whether the claim won, lost or failed.
             # A job that needs another attempt is re-dispatched by the store, as a new
             # index event for a new generation.
@@ -95,7 +104,9 @@ class WorkerLoop:
         dry. Returns every result, in completion order."""
         if concurrency < 1:
             raise ValueError("concurrency must be at least 1")
-        self.draining = False
+        # No `draining = False` here: a drain that arrives before this task first runs (a
+        # SIGTERM straight after start) must still stop the pool. A drained loop stays
+        # drained; a new pool is a new `WorkerLoop`.
         self._tasks = [asyncio.create_task(self._runner(stop_when_idle, max_claims),
                                            name=f"{self.worker_id}-{n}")
                        for n in range(concurrency)]
@@ -117,15 +128,19 @@ class WorkerLoop:
     async def drain(self, within_s: float) -> DrainReport:
         """Stop claiming, wait for what is in flight, release the rest at the bound."""
         self.draining = True
+        seen = len(self.results)
         tasks = [task for task in self._tasks if not task.done()]
         if tasks:
             _, pending = await asyncio.wait(tasks, timeout=max(0.0, within_s))
         else:
             pending = set()
+        released = tuple(self.in_flight[task] for task in pending if task in self.in_flight)
         for task in pending:
             # Released, not settled: the store fences the lease and `recover` decides.
             task.cancel()
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
+        ended = tuple((result.job_id, str(result.cause or result.refusal))
+                      for result in self.results[seen:])
         return DrainReport(finished=len(self._tasks) - len(pending), released=len(pending),
-                           claimed=self.claimed)
+                           claimed=self.claimed, ended=ended, released_jobs=released)
