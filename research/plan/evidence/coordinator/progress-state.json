@@ -1,11 +1,11 @@
 {
-  "updated": "2026-09-22T22:14:13Z",
+  "updated": "2026-09-22T22:35:57Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
     "F2P": {
       "lane": "codex-f2p",
-      "phase": "wire-in phase READY TO DISPATCH (brief .claude/handoff/wave3/F2P-wirein.md); additive merged",
+      "phase": "wire-in phase in flight (codex-f2p-wirein)",
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
     },
@@ -26,6 +26,12 @@
       "phase": "dispatched (admission transaction, outbox, M3 tables, D1R follow-ups)",
       "since": "2026-09-22T20:55:35Z",
       "note": "real JobStore over PostgreSQL"
+    },
+    "A1": {
+      "lane": "codex-a1 / codex/a1-signup-grant",
+      "phase": "implementing (signup grant, backfill, retention)",
+      "since": "2026-09-22T22:35:57Z",
+      "note": "new files only; migrations 0015+; D2 in flight"
     }
   },
   "reviews": {},

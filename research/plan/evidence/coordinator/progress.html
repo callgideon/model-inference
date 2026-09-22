@@ -27,17 +27,17 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T22:14:13Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T22:35:57Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>11</b><span>done</span></div>
-<div class="tile prog"><b>4</b><span>in progress</span></div>
-<div class="tile rem"><b>15</b><span>remaining</span></div>
+<div class="tile prog"><b>5</b><span>in progress</span></div>
+<div class="tile rem"><b>14</b><span>remaining</span></div>
 <div class="tile blk"><b>6</b><span>GPU-gated</span></div>
 <div class="tile"><b>37%</b><span>of 30 backend packages</span></div>
 </section>
 <section class="panel"><h2>Bands (E4B dependency closure)</h2>
 <div class="band"><div class="n">B0 · Baseline &amp; contracts</div><div class="bar"><i class="d" style="width:83.3%"></i><i class="p" style="width:16.7%"></i><i class="r" style="width:0.0%"></i></div><div class="c">5 done · 1 in progress · 0 left</div></div>
-<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:35.3%"></i><i class="p" style="width:5.9%"></i><i class="r" style="width:58.8%"></i></div><div class="c">6 done · 1 in progress · 10 left</div></div>
+<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:35.3%"></i><i class="p" style="width:11.8%"></i><i class="r" style="width:52.9%"></i></div><div class="c">6 done · 2 in progress · 9 left</div></div>
 <div class="band"><div class="n">B2 · Integrate &amp; deploy</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:50.0%"></i><i class="r" style="width:50.0%"></i></div><div class="c">0 done · 2 in progress · 2 left</div></div>
 <div class="band"><div class="n">B3 · Measured tuning</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 2 left</div></div>
 <div class="band"><div class="n">B4 · Endpoint gate</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 1 left</div></div>
@@ -54,7 +54,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B1</td><td><code>D3</code></td><td>Fenced leases, recovery and cancellation</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>D4</code></td><td>Persistent stream journal and replay</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>D5</code></td><td>Terminal transaction, grants and reconciliation</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
-<tr><td>B1</td><td><code>A1</code></td><td>Verified individual signup entitlement and idempotent backfill</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>A1</code></td><td>Verified individual signup entitlement and idempotent backfill</td><td><span class="pill prog">in-progress</span></td><td class="note">new files only; migrations 0015+; D2 in flight</td></tr>
 <tr><td>B1</td><td><code>M2</code></td><td>Versioned preprocessing and tenant cache</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>M3</code></td><td>Owned uploads, expiry and orphan collection</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>Q2</code></td><td>Valkey adapter with atomic tested scripts</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
@@ -92,10 +92,11 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td><code>P-19 (new)</code></td><td>Sourced AWS g6e.2xlarge / single-L40S price row in research/cross-cutting/cloud-pricing.md</td><td>publishing any cost-per-video-hour figure (S2M §5.2, E1B protocol)</td><td>pricing owner / user</td></tr>
 </tbody></table></div></section>
 <section class="panel"><h2>In flight now</h2><ul>
-<li><code>F2P</code> — codex-f2p — wire-in phase READY TO DISPATCH (brief .claude/handoff/wave3/F2P-wirein.md); additive merged since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>
+<li><code>F2P</code> — codex-f2p — wire-in phase in flight (codex-f2p-wirein) since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>
 <li><code>E1B</code> — codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
 <li><code>E3B</code> — codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge</li>
 <li><code>D2</code> — codex-d2 / codex/d2-admission-outbox — dispatched (admission transaction, outbox, M3 tables, D1R follow-ups) since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL</li>
+<li><code>A1</code> — codex-a1 / codex/a1-signup-grant — implementing (signup grant, backfill, retention) since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>
