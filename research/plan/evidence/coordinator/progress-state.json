@@ -1,17 +1,11 @@
 {
-  "updated": "2026-09-22T21:18:49Z",
+  "updated": "2026-09-22T22:14:13Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
-    "F2R": {
-      "lane": "codex-f2r",
-      "phase": "lane A merged (e1a33d1) pending review; post-merge follow-ups IR-A1..A10 in flight on codex-f2r-int",
-      "since": "2026-09-22T15:51:21Z",
-      "note": "integration head red at collection until IR-A8 lands; main held at f9ba5d2"
-    },
     "F2P": {
       "lane": "codex-f2p",
-      "phase": "additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A",
+      "phase": "wire-in phase READY TO DISPATCH (brief .claude/handoff/wave3/F2P-wirein.md); additive merged",
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
     },
@@ -175,6 +169,10 @@
     {
       "at": "2026-09-22T21:18:49Z",
       "what": "E3B phase 1 merged (c7d715f); integration engine client on {visible, raw}; migration set 0001\u20130009"
+    },
+    {
+      "at": "2026-09-22T22:14:13Z",
+      "what": "F2R-A follow-ups merged (5f7ca02): tree collects (2485 tests); F2R implemented; session paused at the 85% window mark"
     }
   ],
   "cadence_windows": [

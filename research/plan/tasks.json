@@ -2142,7 +2142,7 @@
       "title": "Close remaining wave-2 contract and verification carryovers",
       "track": "F",
       "handoff": "11-wave3-revision-handoffs.md",
-      "status": "planned",
+      "status": "implemented",
       "start_dependencies": [
         "S1"
       ],
@@ -2154,9 +2154,13 @@
       ],
       "product": "shared",
       "milestone": "APP-M0",
-      "disposition": "new-revision",
+      "disposition": "new-revision Lane B merged 2bfb0c4; lane A merged e1a33d1 (review pass) with follow-ups 5f7ca02 (2026-09-22).",
       "amendment": "Account for all 16 old F2.2 items; audit fixes are partial, not whole-task completion.",
-      "execution_class": "core"
+      "execution_class": "core",
+      "evidence": [
+        "research/plan/evidence/f/F2R-A-6ab781b.md",
+        "research/plan/evidence/f/F2R-B-e06af7f.md"
+      ]
     },
     {
       "id": "F2P",
