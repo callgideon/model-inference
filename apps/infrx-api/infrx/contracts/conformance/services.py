@@ -739,8 +739,10 @@ async def trace_bounds__a_content_budget_breach_discards_the_whole_content(facto
     still flows and the loss is counted. The budget is a **running total**: envelopes
     that each fit on their own but not together must not all be kept, so a sink that
     only compares one envelope against the budget fails here."""
-    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=4096,
-                                              trace_metadata_reserve_bytes=1024))
+    # A reserve that holds every envelope below (each is charged its serialized size,
+    # well under 1 KiB, since F2R item 3) and leaves a 3,072-byte content budget.
+    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=3_072 + 8_192,
+                                              trace_metadata_reserve_bytes=8_192))
     budget = hook(harness, "content_budget")()              # 3,072 bytes
     for _ in range(3):
         # 1,024 each: three fit exactly, and each one alone is far inside the budget
@@ -774,17 +776,34 @@ async def trace_bounds__a_content_budget_breach_discards_the_whole_content(facto
 
 async def trace_bounds__metadata_exhaustion_drops_with_counters(factory):
     """TRACE-BOUNDS: when the metadata reserve is gone the record is dropped and
-    counted; inference is untouched either way."""
-    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=8192,
-                                              trace_metadata_reserve_bytes=64))
+    counted; inference is untouched either way.
+
+    Revised by F2R item 3 (R65): a record costs the reserve `max(declared metadata_bytes,
+    len(serialized envelope))`, so an under-declared envelope cannot buy a second place,
+    and an over-declared one is charged what it declared."""
+    from ..codec import compact_bytes
+    probe = factory()
+    actual = len(compact_bytes(b.trace(probe.ids.uuid(), content_bytes=0, metadata_bytes=1,
+                                       harness=probe)))
+    # room for one serialized row, not for two
+    limits = DEFAULTS.replace(trace_capture_bytes=1 << 20,
+                              trace_metadata_reserve_bytes=actual + actual // 2)
+    harness = factory(limits=limits)
     accepted = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0,
-                                                metadata_bytes=64, harness=harness))
+                                                metadata_bytes=1, harness=harness))
     dropped = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0,
-                                               metadata_bytes=64, harness=harness))
+                                               metadata_bytes=1, harness=harness))
     assert accepted is TraceOfferResult.accepted_in_memory
     assert dropped is TraceOfferResult.dropped
     stats = await harness.port.stats()
     assert stats["dropped"] == 1 and stats["loss_reasons"].get("metadata_budget", 0) == 1
+    # the declared number still binds when it is the larger one
+    fresh = factory(limits=limits)
+    assert await fresh.port.offer(b.trace(fresh.ids.uuid(), content_bytes=0,
+                                          metadata_bytes=actual * 2, harness=fresh)) \
+        is TraceOfferResult.dropped
+    stats = await fresh.port.stats()
+    assert stats["loss_reasons"].get("metadata_budget", 0) == 1
 
 
 async def trace_bounds__a_full_queue_drops_and_inference_continues(factory):
@@ -1311,11 +1330,13 @@ async def trace_bounds__a_dropped_finish_releases_its_charge(factory):
     # ... and the same for the *other* drop reason: a finish refused because the metadata
     # reserve is exhausted must release its charge too. The corpus mutant that keeps it
     # (m20b) dies here rather than only on the queue_full path.
-    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=9_000,
-                                              trace_metadata_reserve_bytes=64,
+    # (The reserve is charged max(declared, serialized) since F2R item 3, so the filler
+    # declares the whole reserve: a real row is well under 2 KiB.)
+    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=11_048,
+                                              trace_metadata_reserve_bytes=2_048,
                                               trace_queue_max=1_000))
     filler_id = harness.ids.uuid()
-    assert await harness.port.offer(b.trace(filler_id, content_bytes=0, metadata_bytes=64,
+    assert await harness.port.offer(b.trace(filler_id, content_bytes=0, metadata_bytes=2_048,
                                             harness=harness)) \
         is TraceOfferResult.accepted_in_memory          # the reserve is now exhausted
     starved_id = harness.ids.uuid()

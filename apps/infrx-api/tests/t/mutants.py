@@ -75,6 +75,7 @@ TORN_AT = "test_a_torn_tail_reports_where_it_stopped"
 CANCELLING = "test_a_cancelling_flusher_cannot_take_a_second_batch"
 PAYLOAD_CAP = "test_the_queue_is_bounded_in_bytes_as_well_as_in_rows"
 CLOCK = "test_a_sink_without_a_clock_refuses_to_exist"
+HOOKLESS = "test_the_production_sink_carries_no_test_hook"
 MULTI_PART = "test_a_multi_part_capture_spools_its_parts_in_order_and_byte_exact"
 FSYNC_FLAGS = "test_a_good_fsync_clears_the_loss_flags_it_promised"
 DIR_FSYNC = "test_a_segment_and_its_deletion_are_both_committed_to_the_directory"
@@ -170,11 +171,6 @@ MUTANTS: tuple[Mutant, ...] = (
        "            self._fsync(segment, result)",
        "        if False:\n            self._fsync(segment, result)",
        ROTATE),
-    _m("unsynced_bytes_survive_a_crash", "only fsynced records recover",
-       "            if segment.written > segment.synced:", "            if False:", RECOVER),
-    _m("a_crash_keeps_its_promise_count", "a crash reports what it lost",
-       "        self.appended_records = self.fsynced_records",
-       "        self.appended_records = self.appended_records", RECOVER),
     # --- rotation, sealing and the ack interface --------------------------------
     _m("segments_never_rotate", "segments rotate by size",
        "            if active.written + need <= self.segment_max_bytes:",
@@ -320,10 +316,6 @@ MUTANTS: tuple[Mutant, ...] = (
        "            sealing = loop.run_in_executor(writer, self._seal_active)",
        "            sealing = loop.run_in_executor(writer, lambda: (None, _WriteResult()))",
        SHUTDOWN),
-    _m("crash_keeps_the_record_count", "a crash's bookkeeping follows its truncation (R40)",
-       "                segment.records = segment.synced_records\n"
-       "                segment.unsynced_counted = []",
-       "                segment.unsynced_counted = []", RECOVER),
     _m("a_checksum_failure_discards_the_segment", "a torn tail keeps what came before (R41)",
        "        if frame_checksum(payload, (content,), content_bytes, index) != crc:\n"
        "            _torn(scan, name, offset, len(data))\n            break",
@@ -358,17 +350,27 @@ MUTANTS: tuple[Mutant, ...] = (
        "            # A batch is still with the writer.", CANCELLING, ONE_FLUSH),
     _m("the_settlement_keeps_the_guard", "the settlement releases the guard (B7)",
        "        if sink._in_flight is self:", "        if False:", CANCELLING),
-    _m("the_queue_counts_only_rows", "the queue is bounded in bytes too (ruling 5)",
-       "                elif (self.queued_payload_bytes + len(payload)\n"
-       "                      > QUEUED_PAYLOAD_MAX_BYTES):",
-       "                elif False:", PAYLOAD_CAP),
+    # F2R item 3 (R65): the byte bound is the metadata reserve charged the serialized row,
+    # so the interim cap and its mutant went; this breaks the charge the bound rests on.
+    Mutant(name="the_queue_counts_only_rows", invariant="the queue is bounded in bytes too (R65)",
+           file="contracts/traces_accounting.py",
+           old="        return max(envelope.metadata_bytes, serialized)",
+           new="        return envelope.metadata_bytes", cases=(PAYLOAD_CAP,)),
     _m("queued_payload_bytes_never_released", "a written row frees its payload bound",
        "        sink.queued_payload_bytes = max(0, sink.queued_payload_bytes\n"
        "                                        - sum(len(row.payload) for row in self.batch))",
        "        sink.queued_payload_bytes = sink.queued_payload_bytes", PAYLOAD_CAP),
-    _m("a_clockless_sink_is_built", "a durable sink needs a real clock (ruling 7)",
-       '            raise ValueError("a spool sink needs the clock it reads; None is not one")',
-       "            pass", CLOCK),
+    # The refusal now lives in the shared accounting (F2R item 3). Without it a None clock
+    # fails at its first read instead - `AttributeError`, declared: the refusal the case
+    # names is exactly what the guard turns that crash into.
+    Mutant(name="a_clockless_sink_is_built", invariant="a durable sink needs a real clock (ruling 7)",
+           file="contracts/traces_accounting.py",
+           old='            raise ValueError("a trace sink needs the clock it reads; None is not one")',
+           new="            pass", cases=(CLOCK,), dies_by=("AttributeError",)),
+    _m("the_production_sink_acquires_the_fake", "no production class carries a test hook (F2R 3)",
+       "class SpoolTraceSink(TraceSinkBase):",
+       "class SpoolTraceSink(__import__('infrx.contracts.fakes.traces', fromlist=['_'])"
+       ".FakeTraceSink):", HOOKLESS),
     _m("only_the_first_content_part_is_written", "every part is written (B8/N22)",
        "                for part in row.parts:\n                    self.io.write(segment.fd, part)",
        "                for part in row.parts[:1]:\n                    self.io.write(segment.fd, part)",

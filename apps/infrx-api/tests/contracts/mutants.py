@@ -69,13 +69,15 @@ def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mu
 S = "contracts/fakes/state.py"          # JobStore + StreamStore
 J = "contracts/fakes/judge.py"
 M = "contracts/fakes/media.py"
-T = "contracts/fakes/traces.py"
+T = "contracts/traces_accounting.py"   # the shared trace accounting (F2R item 3)
+TF = "contracts/fakes/traces.py"          # the fake's own hooks: FakeClock default, crash
 F = "contracts/fakes/feedback.py"
 Q = "contracts/fakes/scheduling.py"
 R = "contracts/records.py"
 W = "contracts/wire.py"                 # public bodies: projections and input bounds
 MONEY = "contracts/money.py"
 E = "contracts/fakes/engine.py"
+TA = "contracts/traces_accounting.py"      # the accounting the fake and the spool share
 
 # --- how a mutant is allowed to die (r1 round-3 review; enforced since F2R item 9) ----
 # A port is a trust boundary, so a kill that depends on an *untyped* exception is a case a
@@ -502,7 +504,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "trace_bounds__a_full_queue_drops_and_inference_continues",
        "trace_bounds__a_dropped_finish_releases_its_charge"),
     _m("metadata_reserve_ignored", "metadata exhaustion drops with counters",
-       T, "                       if self.metadata_bytes + envelope.metadata_bytes\n"
+       T, "                       if self.metadata_bytes + metadata\n"
           "                       > self.limits.trace_metadata_reserve_bytes else None):",
        "                       if False else None):",
        "trace_bounds__metadata_exhaustion_drops_with_counters"),
@@ -1244,7 +1246,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
     # --- F2.1: the lattice assertions the S1 review found vacuous --------------
     _m("shutdown_counted_for_nothing", "only a real loss names a reason (R42)",
-       T, "        if lost:\n            # Only a real loss names a reason.",
+       TF, "        if lost:\n            # Only a real loss names a reason.",
        "        if True:\n            # Only a real loss names a reason.",
        "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
     _m("closed_capture_still_queues", "a capture closed before any finish stores nothing (R42)",
@@ -1366,6 +1368,14 @@ MUTANTS: tuple[Mutant, ...] = (
        E, 'payload={"visible": visible, "raw": raw}))',
        'payload={"visible": visible, "raw": raw, "content": raw}))',
        "api_stream__canonical_events_end_with_authoritative_usage"),
+    # --- F2R lane A item 3: the metadata reserve is charged the serialized row (R65) ----
+    _m("metadata_charged_as_declared", "an under-declared record is charged what it costs",
+       TA, "        return max(envelope.metadata_bytes, serialized)",
+       "        return envelope.metadata_bytes",
+       "trace_bounds__metadata_exhaustion_drops_with_counters"),
+    _m("metadata_charged_as_serialized", "an over-declared record is charged what it declared",
+       TA, "        return max(envelope.metadata_bytes, serialized)", "        return serialized",
+       "trace_bounds__metadata_exhaustion_drops_with_counters"),
 )
 
 

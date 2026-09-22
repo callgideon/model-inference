@@ -120,7 +120,7 @@ SELF_TESTS = (
     ("an_undeclared_exception_death_is_not_a_kill", mutation_list.Outcome.broken_runner,
      mutation_list.Mutant(
          name="self_undeclared_crash", invariant="a kill is assertion-shaped",
-         file="contracts/fakes/traces.py",
+         file="contracts/traces_accounting.py",
          old="        elif not isinstance(part, (bytes, bytearray, memoryview)):",
          new="        elif False:",
          cases=("trace_bounds__a_capture_belongs_to_its_own_request",))),
