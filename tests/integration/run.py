@@ -482,13 +482,18 @@ def backend(report: Report) -> None:
     except harness.HarnessError as exc:
         report.add("backend", PENDING, f"could not start PostgREST: {exc}")
         return
-    with tempfile.TemporaryDirectory(prefix=f"{harness.PROJECT}-e3b-") as tmp:
-        junit = Path(tmp) / "backend.xml"
-        run = shell([sys.executable, "-m", "pytest", "-q", BACKEND_SUITE, "-p",
-                     "no:cacheprovider", "-rs", f"--junitxml={junit}"], cwd=harness.REPO_ROOT,
-                    env={"INFRX_E2_CANARY": "off"})
-        cases = classify(junit.read_text()) if junit.exists() else \
-            {"passed": [], "failed": ["<no junit report>"], "pending": {}, "skipped": []}
+    try:
+        with tempfile.TemporaryDirectory(prefix=f"{harness.PROJECT}-e3b-") as tmp:
+            junit = Path(tmp) / "backend.xml"
+            run = shell([sys.executable, "-m", "pytest", "-q", BACKEND_SUITE, "-p",
+                         "no:cacheprovider", "-rs", f"--junitxml={junit}"],
+                        cwd=harness.REPO_ROOT, env={"INFRX_E2_CANARY": "off"})
+            cases = classify(junit.read_text()) if junit.exists() else \
+                {"passed": [], "failed": ["<no junit report>"], "pending": {}, "skipped": []}
+    finally:
+        # Measured: PostgREST's pool holds sessions on `infrx_e2`, so a dirtying mutant's
+        # re-provision (DROP DATABASE) later in the run is refused while it is up.
+        backend_teardown(report)
     distinct = {name for names in cases["pending"].values() for name in names}
     report.add("backend", backend_verdict(cases, run["exit"]),
                {"postgrest": postgrest, "run": len(cases["passed"]),
