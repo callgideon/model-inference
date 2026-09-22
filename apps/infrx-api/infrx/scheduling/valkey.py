@@ -483,6 +483,9 @@ class ValkeyScheduler:
                 return None
             event = IndexEvent.model_validate_json(payload)
             if int(state) == 2:
+                if expected and _text(event_id) != expected:   # the fence, checked twice
+                    raise errors.InternalError(
+                        f"the claim committed {_text(event_id)}, not the priced {expected}")
                 return event
             cost = self._service_cost(event)         # validated before anything moves
             expected = _text(event_id)
