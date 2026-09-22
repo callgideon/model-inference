@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T17:01:43Z",
+  "updated": "2026-09-22T17:03:02Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -47,7 +47,7 @@
     },
     "E1B": {
       "lane": "codex-e1b",
-      "phase": "implementing (software slices; GPU slices wait for W3/I2B)",
+      "phase": "software slices a/b/c: independent review at 2cf7a81; GPU slices pending W3\u2192I2B",
       "since": "2026-09-22T16:03:43Z",
       "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol"
     },
