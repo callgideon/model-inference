@@ -106,3 +106,51 @@ def test_registry__ownership_immutability_and_visibility() -> None:
     """Provider-owned, immutable revisions and rate snapshots; dev never public; roles
     distinct from consumer roles; display text is not a key."""
     print(checks_credit.check_registry(_credit()))
+
+
+# --- item 4: pin resolution, admission rows, the read surface, privileges ---------
+def test_resolve_admission_pins__alias_and_pin_are_the_fixture() -> None:
+    """D2 seam: alias and R62 pin resolve to the F2P admission_pins; unknown, private
+    dev, retired and draining are not_found; a card not yet effective is unpriced."""
+    print(checks_credit.check_resolve_pins(_credit()))
+
+
+def test_credit_admission__pins_holds_and_settlement_rows() -> None:
+    """The atomic admission schema D2 writes and D5 settles, as refused/accepted rows."""
+    print(checks_credit.check_credit_admission_rows(_credit()))
+
+
+def test_credit_rate__a_published_rate_never_reaches_an_admitted_job() -> None:
+    """CREDIT-RATE: publish a new card and listing while a job is queued."""
+    print(checks_credit.check_credit_rate(_credit()))
+
+
+def test_credit_read_surface__exact_text_scoped_and_legacy_separate() -> None:
+    """C0's result shapes: wallet summary, wallet/ledger pages, legacy USD statement."""
+    print(checks_credit.check_credit_read_surface(_credit()))
+
+
+def test_credit_privileges__service_reads_money_and_writes_through_seams() -> None:
+    """R59-4 for the new relations, plus D1's enumerated surfaces on the full chain."""
+    from . import checks
+    conn = _credit()
+    print(checks_credit.check_credit_privileges(conn))
+    print(checks.check_privileges(conn))
+    print(checks.check_function_privileges(conn))
+
+
+def test_credit_role_matrix__provider_consumer_operator_service_anon() -> None:
+    """DUR-RLS extended to provider member / provider admin / consumer-only / operator /
+    service / anon."""
+    print(checks_credit.check_credit_role_matrix(_credit()))
+
+
+# --- item 5: fail closed, flags, re-run -----------------------------------------
+def test_fail_closed__a_disabled_or_missing_flag_is_maintenance() -> None:
+    """Application is not enablement: every guarded write refuses with 55000."""
+    print(checks_credit.check_fail_closed(_credit()))
+
+
+def test_flags__applying_the_migrations_enables_nothing() -> None:
+    conn, _ = _upgraded05()
+    print(checks_credit.check_flag_defaults(conn))

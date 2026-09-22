@@ -918,3 +918,538 @@ def check_registry(conn) -> str:
     n = _all_refused(conn, refused, "registry")
     m = _all_accepted(conn, accepted, "registry controls")
     return f"{n} registry violations refused, {m} controls accepted"
+
+
+# =============================================================================
+# item 4: pin resolution, CREDIT admission rows, the read surface, privileges
+# =============================================================================
+def credit_job(rid: str, handle: str, org: str, wallet: str, *, card: str = CARD,
+               deployment: str = PUBLIC_DEPLOYMENT, serving: str = SERVING,
+               model: str = MODEL, policy: str = POLICY, hold: str = "10.01440000") -> str:
+    """A CREDIT-regime admission row, the shape D2 writes: every pin, no USD price."""
+    return f"""insert into infrx.jobs (request_id, job_handle, org_id, model_revision,
+      execution_mode, state, operation, payload_ref, payload_digest, max_input_tokens,
+      max_output_tokens, maximum_hold, consent_version, trace_mode, admitted_at, deadline_at,
+      budget_preparation_s, budget_queue_wait_s, budget_generation_s, budget_first_token_s,
+      budget_stall_s, preparation_deadline_at, accounting_regime, wallet_id, model_id,
+      requested_model, deployment_revision_id, serving_version_id, rate_card_version,
+      policy_version)
+    values ('{rid}', '{handle}', '{org}', 'nemostation/marlin-2b@2026-09-01', 'sync',
+      'queued', 'chat.completions', 'infrx-payload:{rid}', '{checks.DIGEST}', 23500, 512,
+      {hold}, 1, 'off', infrx.now(), infrx.now() + interval '10 minutes', 120, 10, 300, 60,
+      20, infrx.now() + interval '2 minutes', 'credit', '{wallet}', '{model}',
+      'nemostation/marlin-2b@2026-09-01', '{deployment}', '{serving}', '{card}',
+      '{policy}')"""
+
+
+def hold(rid: str, org: str, wallet: str, amount: str = "10.01440000", card: str = CARD) -> str:
+    return (f"insert into infrx.credit_wallet_holds (request_id, org_id, wallet_id, "
+            f"rate_card_version, amount, state) values ('{rid}', '{org}', '{wallet}', "
+            f"'{card}', {amount}, 'held')")
+
+
+def resolve(conn, model: str) -> dict:
+    cur = conn.execute("select * from infrx.resolve_admission_pins(%s)", (model,))
+    names = [d.name for d in cur.description]
+    return dict(zip(names, map(_as_fixture, cur.fetchone())))
+
+
+def check_resolve_pins(conn) -> str:
+    """The D2 seam: the alias and the R62 pin resolve to exactly the F2P `admission_pins`
+    fixture; unknown, private-dev, retired and draining are `not_found` (R70); a card
+    not yet effective is `invalid_request` (R69); CREDIT admission off is maintenance."""
+    fx = _load("admission_pins")
+    for model in (fx["requested_model"], "nemostation/marlin-2b"):
+        got = resolve(conn, model)
+        for k in ("model_id", "deployment_revision_id", "serving_version_id",
+                  "rate_card_version", "policy_version", "accounting_regime"):
+            assert got[k] == fx[k], f"resolve({model}).{k}: {got[k]!r}, fixture {fx[k]!r}"
+        assert got["requested_model"] == model and got["provisional"] is True
+        assert got["model_revision"] == "nemostation/marlin-2b@2026-09-01", got
+    refusals = (
+        ("an unknown alias", "nobody/nothing", "P0002"),
+        ("an unknown revision label", "nemostation/marlin-2b@2031-01-01", "P0002"),
+        ("the private dev deployment's id", DEV_DEPLOYMENT, "P0002"),
+        ("a malformed pin", "nemostation/marlin-2b@a@b", "P0002"),
+    )
+    for label, model, code in refusals:
+        why = attempt(conn, "select * from infrx.resolve_admission_pins(%s)", (model,))
+        assert why is not None and why.startswith(code), f"{label}: {why!r}"
+    staged = (
+        ("a retired listed deployment", "P0002",
+         f"update infrx.deployment_revisions set state = 'retired' "
+         f"where deployment_revision_id = '{PUBLIC_DEPLOYMENT}'"),
+        ("a draining listed deployment", "P0002",
+         f"update infrx.deployment_revisions set state = 'draining' "
+         f"where deployment_revision_id = '{PUBLIC_DEPLOYMENT}'"),
+        ("a listing whose card is not yet effective", "22023",
+         f"insert into infrx.rate_card_versions (rate_card_version, model_id, "
+         f"deployment_revision_id, serving_version_id, input_rate_per_million, "
+         f"output_rate_per_million, effective_at, approved_by, provisional) values "
+         f"('rc_future', '{MODEL}', '{PUBLIC_DEPLOYMENT}', '{SERVING}', 1, 1, "
+         f"infrx.now() + interval '1 day', 'ops', false); insert into infrx.catalog_listings "
+         f"(public_model_id, version, model_id, deployment_revision_id, serving_version_id, "
+         f"rate_card_version, effective_at, approved_by) values ('nemostation/marlin-2b', 7, "
+         f"'{MODEL}', '{PUBLIC_DEPLOYMENT}', '{SERVING}', 'rc_future', infrx.now(), 'ops')"),
+        ("CREDIT admission switched off", "55000",
+         "update infrx.feature_flags set enabled = false where name = 'credit_admission'"),
+    )
+    for label, code, setup in staged:
+        with conn.transaction():
+            conn.execute(setup)
+            why = attempt(conn, "select * from infrx.resolve_admission_pins(%s)",
+                          ("nemostation/marlin-2b",))
+            raise psycopg.Rollback()
+        assert why is not None and why.startswith(code), f"{label}: {why!r}"
+    return f"alias and pin == admission_pins fixture; {len(refusals) + len(staged)} refusals"
+
+
+def _admission_cases(conn) -> tuple[tuple, tuple]:
+    w1, w2 = wallet_of(conn, CONSUMER_1), wallet_of(conn, CONSUMER_2)
+    o1, o2 = personal_org(conn, CONSUMER_1), personal_org(conn, CONSUMER_2)
+    j = "5c000000-0000-4000-8000-0000000000"
+    usage = ("insert into public.usage_events (id, org_id, model_id, status, "
+             "settlement_regime, outcome, settlement_state, usage_certainty, "
+             "settlement_version, accounting_regime, charged_credits, rate_card_version, "
+             "serving_version_id, deployment_revision_id, prompt_tokens, completion_tokens) "
+             "values ")
+    admitted = credit_job(j + "01", "job_c_01", o1, w1) + "; " + hold(j + "01", o1, w1)
+    refused = (
+        ("a CREDIT job pinned to a card of another deployment",
+         credit_job(j + "02", "job_c_02", o1, w1, card=DEV_CARD)),
+        ("a CREDIT job whose serving pin is not its deployment's",
+         credit_job(j + "02", "job_c_02", o1, w1, serving=MODEL)),
+        ("a CREDIT job with no policy pin", credit_job(j + "02", "job_c_02", o1, w1)
+         .replace(f"'{POLICY}')", "null)")),
+        ("a CREDIT job pinned to an unrecorded policy",
+         credit_job(j + "02", "job_c_02", o1, w1, policy="dap_unknown")),
+        ("a CREDIT job that also carries a USD price",
+         credit_job(j + "02", "job_c_02", o1, w1).replace(
+             "policy_version)", "policy_version, price_version)").replace(
+             f"'{POLICY}')", f"'{POLICY}', 'pv-1')")),
+        ("a USD job that also carries CREDIT pins",
+         checks._job_values(j + "03", "job_c_03").replace(
+             "accounting_regime\n)", "accounting_regime, rate_card_version)") + f", '{CARD}')"),
+        ("a job with no regime",
+         checks._job_values(j + "03", "job_c_03").replace("'legacy_usd'", "null") + ")"),
+        ("spending another individual's wallet through one's own organization",
+         credit_job(j + "04", "job_c_04", o1, w2)),
+        ("a provider dev wallet paying for public production",
+         credit_job(j + "05", "job_c_05", o1, PROVIDER_WALLET)),
+        ("a hold beyond the available credit",
+         credit_job(j + "06", "job_c_06", o1, w1) + "; "
+         + hold(j + "06", o1, w1, amount="10000.00000001")),
+        ("a hold on another wallet than the job's",
+         credit_job(j + "07", "job_c_07", o1, w1) + "; " + hold(j + "07", o1, w2)),
+        ("a hold at another card than the job's",
+         credit_job(j + "07", "job_c_07", o1, w1) + "; " + hold(j + "07", o1, w1, card=DEV_CARD)),
+        ("a second hold for one request", admitted + "; " + hold(j + "01", o1, w1)),
+        ("a hold born settled", credit_job(j + "08", "job_c_08", o1, w1) + "; "
+         + hold(j + "08", o1, w1).replace("'held')", "'settled')")),
+        ("re-pinning an admitted job to the next card",
+         admitted + f"; update infrx.jobs set rate_card_version = '{DEV_CARD}', "
+                    f"deployment_revision_id = '{DEV_DEPLOYMENT}' where request_id = '{j}01'"),
+        ("switching an admitted job's regime",
+         admitted + f"; update infrx.jobs set accounting_regime = 'legacy_usd' "
+                    f"where request_id = '{j}01'"),
+        ("resizing a hold", admitted + f"; update infrx.credit_wallet_holds set amount = 1 "
+                                       f"where request_id = '{j}01'"),
+        ("debiting unknown usage later",
+         admitted + f"; update infrx.credit_wallet_holds set state = 'unknown', "
+                    f"reconcile_after = now() where request_id = '{j}01'; "
+                    f"update infrx.credit_wallet_holds set state = 'settled', "
+                    f"reconcile_after = null where request_id = '{j}01'"),
+        ("re-holding a settled hold",
+         admitted + f"; update infrx.credit_wallet_holds set state = 'settled' "
+                    f"where request_id = '{j}01'; update infrx.credit_wallet_holds "
+                    f"set state = 'held' where request_id = '{j}01'"),
+        ("deleting a hold", admitted + f"; delete from infrx.credit_wallet_holds "
+                                       f"where request_id = '{j}01'"),
+        ("a settlement at a card the job was not admitted at",
+         admitted + "; " + usage + f"('{j}01', '{o1}', 'nemostation/marlin-2b', 200, 'pilot', "
+         f"'completed', 'settled', 'authoritative', 1, 'credit', 9.976, '{DEV_CARD}', "
+         f"'{SERVING}', '{DEV_DEPLOYMENT}', 23500, 480)"),
+        ("a CREDIT settlement that also states a USD cost",
+         admitted + "; " + usage.replace("prompt_tokens,", "cost_usd, prompt_tokens,")
+         + f"('{j}01', '{o1}', 'nemostation/marlin-2b', 200, 'pilot', 'completed', "
+         f"'settled', 'authoritative', 1, 'credit', 9.976, '{CARD}', '{SERVING}', "
+         f"'{PUBLIC_DEPLOYMENT}', 0.01, 23500, 480)"),
+        ("a debit from another wallet than the job's",
+         admitted + f"; insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, "
+         f"operation_id, request_id, actor) values ('{w2}', 'consumer', 'inference_debit', "
+         f"-9.976, gen_random_uuid(), '{j}01', 'svc')"),
+        ("a second debit for one request",
+         admitted + f"; insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, "
+         f"operation_id, request_id, actor) values ('{w1}', 'consumer', 'inference_debit', "
+         f"-1, gen_random_uuid(), '{j}01', 'svc'), ('{w1}', 'consumer', 'inference_debit', "
+         f"-1, gen_random_uuid(), '{j}01', 'svc')"),
+    )
+    settle = (f"; update infrx.credit_wallet_holds set state = 'settled' where request_id = "
+              f"'{j}01'; insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, "
+              f"operation_id, request_id, actor) values ('{w1}', 'consumer', 'inference_debit', "
+              f"-9.976, gen_random_uuid(), '{j}01', 'svc'); " + usage
+              + f"('{j}01', '{o1}', 'nemostation/marlin-2b', 200, 'pilot', 'completed', "
+              f"'settled', 'authoritative', 1, 'credit', 9.976, '{CARD}', '{SERVING}', "
+              f"'{PUBLIC_DEPLOYMENT}', 23500, 480)")
+    accepted = (
+        ("admission, hold and settlement at the admitted card (usage_credit fixture)",
+         admitted + settle),
+        ("a hold of exactly the available credit",
+         credit_job(j + "09", "job_c_09", o1, w1, hold="10000") + "; "
+         + hold(j + "09", o1, w1, amount="10000")),
+        ("a provider dev wallet on its own dev deployment",
+         credit_job(j + "0a", "job_c_0a", o1, PROVIDER_WALLET, card=DEV_CARD,
+                    deployment=DEV_DEPLOYMENT)),
+        ("unknown usage keeps its hold, then releases it",
+         admitted + f"; update infrx.credit_wallet_holds set state = 'unknown', "
+                    f"reconcile_after = now() where request_id = '{j}01'; "
+                    f"update infrx.credit_wallet_holds set state = 'released', "
+                    f"reconcile_after = null where request_id = '{j}01'"),
+    )
+    return refused, accepted
+
+
+def check_credit_admission_rows(conn) -> str:
+    """D2's atomic admission schema: a CREDIT job carries every pin and its wallet and no
+    USD price; the pins are one card's own and never change (R69/R78); the wallet is
+    reachable from the admission (R66); a hold reserves in CREDIT and 402 is the named
+    `credit_wallets_reserved_within_total`; unknown usage is released, never debited;
+    a settlement is at the admitted card, once, from the job's wallet."""
+    refused, accepted = _admission_cases(conn)
+    n = _all_refused(conn, refused, "CREDIT admission")
+    m = _all_accepted(conn, accepted, "CREDIT admission controls")
+    j = "5c000000-0000-4000-8000-0000000000"
+    why = attempt(conn, credit_job(j + "06", "job_c_06", personal_org(conn, CONSUMER_1),
+                                   wallet_of(conn, CONSUMER_1)) + "; "
+                  + hold(j + "06", personal_org(conn, CONSUMER_1), wallet_of(conn, CONSUMER_1),
+                         amount="10000.00000001"))
+    assert why is not None and "credit_wallets_reserved_within_total" in why, \
+        f"insufficient credit is not the named 402 constraint: {why!r}"
+    # The whole lifecycle leaves the summary equal to ledger and holds.
+    with conn.transaction():
+        conn.execute(accepted[0][1])
+        w1 = wallet_of(conn, CONSUMER_1)
+        row = conn.execute("select ledger_total::text, reserved_total::text from "
+                           "infrx.credit_wallets where wallet_id = %s", (w1,)).fetchone()
+        assert row == ("9990.02400000", "0.00000000"), f"after one settlement: {row}"
+        check_credit_reconciles(conn)
+        raise psycopg.Rollback()
+    return f"{n} admission/hold/settlement violations refused, {m} controls accepted"
+
+
+def check_credit_rate(conn) -> str:
+    """CREDIT-RATE: a job admitted at card v1 keeps v1 after a new card and a new listing
+    are published (admission now resolves v2), and settles only at v1."""
+    o1, w1 = personal_org(conn, CONSUMER_1), wallet_of(conn, CONSUMER_1)
+    rid = "5c000000-0000-4000-8000-0000000000f1"
+    with conn.transaction():
+        pins = resolve(conn, "nemostation/marlin-2b")
+        conn.execute(credit_job(rid, "job_rate", o1, w1, card=pins["rate_card_version"]))
+        conn.execute(hold(rid, o1, w1, card=pins["rate_card_version"]))
+        conn.execute(f"""
+          insert into infrx.rate_card_versions (rate_card_version, model_id,
+            deployment_revision_id, serving_version_id, input_rate_per_million,
+            output_rate_per_million, effective_at, approved_by, provisional)
+          values ('rc_marlin2b_v2', '{MODEL}', '{PUBLIC_DEPLOYMENT}', '{SERVING}', 800, 2400,
+                  infrx.now(), 'ops@infrx', false);
+          insert into infrx.catalog_listings (public_model_id, version, model_id,
+            deployment_revision_id, serving_version_id, rate_card_version, effective_at,
+            approved_by)
+          values ('nemostation/marlin-2b', 2, '{MODEL}', '{PUBLIC_DEPLOYMENT}', '{SERVING}',
+                  'rc_marlin2b_v2', infrx.now(), 'ops@infrx')""")
+        now = resolve(conn, "nemostation/marlin-2b")
+        assert now["rate_card_version"] == "rc_marlin2b_v2", f"new admission: {now}"
+        kept, = conn.execute("select rate_card_version from infrx.jobs where request_id = %s",
+                             (rid,)).fetchone()
+        assert kept == pins["rate_card_version"] == CARD, f"the queued job moved to {kept}"
+        settle_at = ("insert into public.usage_events (id, org_id, model_id, status, "
+                     "settlement_regime, outcome, settlement_state, usage_certainty, "
+                     "settlement_version, accounting_regime, charged_credits, "
+                     "rate_card_version, serving_version_id, deployment_revision_id) values "
+                     f"('{rid}', '{o1}', 'nemostation/marlin-2b', 200, 'pilot', 'completed', "
+                     f"'settled', 'authoritative', 1, 'credit', 1, %s, '{SERVING}', "
+                     f"'{PUBLIC_DEPLOYMENT}')")
+        assert attempt(conn, settle_at, ("rc_marlin2b_v2",)) is not None, \
+            "the queued job settled at the newly published card"
+        assert attempt(conn, settle_at, (CARD,)) is None, "the admitted card was refused"
+        raise psycopg.Rollback()
+    return "admitted at v1, v2 published, v1 kept and settled; v2 refused for that job"
+
+
+def check_fail_closed(conn) -> str:
+    """Item 5: application is not enablement. With a flag off, the write it guards is a
+    maintenance refusal (55000) - never an unmetered or unregimed success."""
+    o1, w1 = personal_org(conn, CONSUMER_1), wallet_of(conn, CONSUMER_1)
+    cases = (
+        ("credit_admission", credit_job("5c000000-0000-4000-8000-0000000000e1", "job_off",
+                                        o1, w1)),
+        ("legacy_usd_admission", checks._job_values("5c000000-0000-4000-8000-0000000000e2",
+                                                    "job_off2") + ")"),
+        ("signup_grant", f"select infrx.grant_signup_credit('{UNGRANTED}', 'e')"),
+        ("credit_admission", "select * from infrx.resolve_admission_pins('nemostation/marlin-2b')"),
+    )
+    for flag, sql in cases:
+        assert attempt(conn, sql) is None, f"{flag}: the control was refused while enabled"
+        with conn.transaction():
+            set_flag(conn, flag, False)
+            why = attempt(conn, sql)
+            raise psycopg.Rollback()
+        assert why is not None and why.startswith("55000"), f"{flag} off: {why!r}"
+    with conn.transaction():
+        conn.execute("delete from infrx.feature_flags where name = 'credit_admission'")
+        why = attempt(conn, cases[0][1])
+        raise psycopg.Rollback()
+    assert why is not None and why.startswith("55000"), f"a missing flag row: {why!r}"
+    return (f"{len(cases)} guarded writes refuse with 55000 when off, and when the flag row "
+            f"is missing")
+
+
+def check_flag_defaults(conn) -> str:
+    """Applying the migrations enables nothing new: CREDIT admission and the signup grant
+    start OFF; the pilot's own USD admission keeps its pre-cutover behaviour."""
+    got = dict(conn.execute("select name, enabled from infrx.feature_flags").fetchall())
+    want = {"signup_grant": False, "credit_admission": False, "legacy_usd_admission": True}
+    assert got == want, f"feature flags after apply: {got}, expected {want}"
+    return f"flags after apply: {got}"
+
+
+
+SESSIONS = {
+    "anon": checks.SESSIONS["anon"],
+    "consumer": checks._jwt(CONSUMER_1),
+    "consumer_2": checks._jwt(CONSUMER_2),
+    "ungranted": checks._jwt(UNGRANTED),
+    "provider_member": checks._jwt(PROVIDER_DEV_USER),
+    "provider_admin": checks._jwt(PROVIDER_ADMIN_USER),
+    "operator": checks._jwt(checks.USER_OPERATOR),
+    "service": checks.SESSIONS["service"],
+}
+BROWSER = ("anon", "consumer", "provider_member", "provider_admin", "operator")
+
+
+def rows_as(conn, session: str, sql: str, params=None) -> list:
+    with conn.transaction():
+        conn.execute(SESSIONS[session])
+        out = conn.execute(sql, params).fetchall()
+        raise psycopg.Rollback()
+    return out
+
+
+def refused_as(conn, session: str, sql: str) -> str | None:
+    try:
+        with conn.transaction():
+            conn.execute(SESSIONS[session])
+            conn.execute(sql)
+            raise _Allowed()
+    except _Allowed:
+        return None
+    except psycopg.Error as refused:
+        return f"{refused.sqlstate} {str(refused).splitlines()[0][:100]}"
+
+
+def check_credit_read_surface(conn) -> str:
+    """Item 4: exact text amounts and explicit units; an individual reads only their own
+    wallet and ledger (not even co-members of their org, not a provider's dev wallet);
+    operator principals read `platform` to a customer; the wallet summary refuses
+    another user's id; the legacy USD statement is separate, labelled, and carries the
+    rollout hold."""
+    w1 = wallet_of(conn, CONSUMER_1)
+    c1 = rows_as(conn, "consumer", "select * from public.console_wallet_summary(%s)",
+                 (CONSUMER_1,))
+    assert len(c1) == 1, c1
+    user, wallet, kind, unit, total, reserved, available, revision, granted = c1[0]
+    assert (str(user), str(wallet), kind, unit, total, reserved, available) == (
+        CONSUMER_1, w1, "consumer", "CREDIT", "10000.00000000", "0.00000000",
+        "10000.00000000"), f"consumer summary: {c1}"
+    assert granted is not None and revision == 1, c1
+    none = rows_as(conn, "ungranted", "select wallet_id, ledger_total, available "
+                   "from public.console_wallet_summary(%s)", (UNGRANTED,))
+    assert none == [(None, "0.00000000", "0.00000000")], f"no wallet yet: {none}"
+    for session, target in (("consumer_2", CONSUMER_1), ("provider_admin", CONSUMER_1)):
+        why = refused_as(conn, session,
+                         f"select * from public.console_wallet_summary('{target}')")
+        assert why is not None and why.startswith("42501"), f"{session} read {target}: {why}"
+    assert refused_as(conn, "anon", f"select * from public.console_wallet_summary("
+                                    f"'{CONSUMER_1}')") is not None, "anon read a wallet"
+    for session in ("operator", "service"):
+        got = rows_as(conn, session, "select ledger_total from public.console_wallet_summary(%s)",
+                      (CONSUMER_1,))
+        assert got == [("10000.00000000",)], f"{session}: {got}"
+    # Visibility of the pages themselves.
+    seen = {s: {str(r[0]) for r in rows_as(conn, s, "select wallet_id from "
+                                                   "public.console_credit_wallets")}
+            for s in ("consumer", "consumer_2", "provider_member", "provider_admin",
+                      "operator")}
+    assert seen["consumer"] == {w1}, f"consumer sees wallets {seen['consumer']}"
+    assert PROVIDER_WALLET not in seen["provider_admin"] | seen["provider_member"], \
+        "a provider member reads the provider dev wallet through the consumer surface"
+    assert refused_as(conn, "anon", "select * from public.console_credit_wallets"), \
+        "anon reads the wallet page"
+    assert {w1, PROVIDER_WALLET} <= seen["operator"], seen["operator"]
+    with conn.transaction():
+        conn.execute("insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, "
+                     "operation_id, actor, reason) values (%s, 'consumer', "
+                     "'operator_adjustment', 1, gen_random_uuid(), %s, 'goodwill')",
+                     (w1, checks.USER_OPERATOR))
+        mine = rows_as(conn, "consumer", "select wallet_id, kind, amount, unit, actor "
+                       "from public.console_credit_ledger order by created_at, kind")
+        ops = rows_as(conn, "operator", "select actor from public.console_credit_ledger "
+                      "where wallet_id = %s and kind = 'operator_adjustment'", (w1,))
+        raise psycopg.Rollback()
+    assert {str(r[0]) for r in mine} == {w1}, f"consumer ledger rows: {mine}"
+    assert ("signup_grant", "10000.00000000", "CREDIT", "platform") in \
+        {r[1:] for r in mine}, mine
+    assert {r[4] for r in mine} == {"platform"}, f"an operator principal leaked: {mine}"
+    assert ops == [(checks.USER_OPERATOR,)], f"operator view of the principal: {ops}"
+    assert rows_as(conn, "consumer_2", "select count(*) from public.console_credit_ledger "
+                   "where wallet_id = %s", (w1,)) == [(0,)], "a consumer read another ledger"
+    # Money is text on every new surface.
+    numeric = conn.execute("""
+        select table_name, column_name from information_schema.columns
+        where table_schema = 'public'
+          and table_name in ('console_credit_wallets', 'console_credit_ledger', 'console_usage')
+          and column_name in ('ledger_total', 'reserved_total', 'available', 'amount',
+                              'charged_credits', 'credit_hold', 'cost', 'max_hold')
+          and data_type <> 'text'""").fetchall()
+    assert not numeric, f"money leaves SQL as a number: {numeric}"
+    # The legacy USD statement: its own unit, the hold when nonzero, guarded.
+    stmt = rows_as(conn, "operator", "select accounting_regime, unit, balance, entry_count, "
+                   "rollout_hold from public.console_legacy_usd_statement(%s)", (checks.ORG_A,))
+    bal, n = conn.execute("select coalesce(sum(delta_usd), 0)::numeric(20,8)::text, count(*) "
+                          "from public.credit_ledger where org_id = %s",
+                          (checks.ORG_A,)).fetchone()
+    assert stmt == [("legacy_usd", "USD", bal, n, bal != "0.00000000")], \
+        f"legacy statement {stmt} vs ledger {bal}/{n}"
+    zero = rows_as(conn, "consumer", "select balance, entry_count, rollout_hold from "
+                   "public.console_legacy_usd_statement(%s)", (personal_org(conn, CONSUMER_1),))
+    assert zero == [("0.00000000", 0, False)], f"an org with no USD history: {zero}"
+    why = refused_as(conn, "consumer", f"select * from public.console_legacy_usd_statement("
+                                       f"'{checks.ORG_A}')")
+    assert why is not None and why.startswith("42501"), f"cross-org legacy statement: {why}"
+    return ("wallet summary, wallet and ledger pages scoped to the individual; operator "
+            "masked; money as text; legacy USD statement separate with rollout_hold")
+
+
+def check_credit_privileges(conn) -> str:
+    """Item 4 / R59-4: the platform role reads the CREDIT money relations and writes them
+    only through D's definer functions; it cannot delete or truncate registry history;
+    no browser role holds anything in `infrx`; the only new browser-callable functions
+    are the two console RPCs (checked by `checks.check_function_privileges`)."""
+    problems = []
+    no_write = ("credit_wallets", "credit_ledger", "signup_entitlements",
+                "credit_wallet_holds", "credit_wallet_reconciliation")
+    for table in no_write:
+        for verb in ("INSERT", "UPDATE", "DELETE", "TRUNCATE"):
+            if conn.execute("select has_table_privilege('service_role', %s, %s)",
+                            (f"infrx.{table}", verb)).fetchone()[0]:
+                problems.append(f"service_role may {verb} infrx.{table}")
+        if not conn.execute("select has_table_privilege('service_role', %s, 'SELECT')",
+                            (f"infrx.{table}",)).fetchone()[0]:
+            problems.append(f"service_role cannot read infrx.{table}")
+    for table in ("provider_orgs", "provider_memberships", "model_versions", "serving_versions",
+                  "endpoints", "deployment_revisions", "rate_card_versions",
+                  "data_access_policies", "catalog_listings", "feature_flags"):
+        for verb in ("DELETE", "TRUNCATE"):
+            if conn.execute("select has_table_privilege('service_role', %s, %s)",
+                            (f"infrx.{table}", verb)).fetchone()[0]:
+                problems.append(f"service_role may {verb} infrx.{table}")
+    for column in ("enabled", "updated_by", "reason"):
+        if not conn.execute("select has_column_privilege('service_role', "
+                            "'infrx.feature_flags', %s, 'UPDATE')", (column,)).fetchone()[0]:
+            problems.append(f"the operator cannot switch feature_flags.{column}")
+    if conn.execute("select has_table_privilege('service_role', 'infrx.feature_flags', "
+                    "'INSERT')").fetchone()[0]:
+        problems.append("service_role may invent a feature flag")
+    assert not problems, "platform-role privileges:\n  " + "\n  ".join(problems)
+    return (f"{len(no_write)} CREDIT relations read-only to service_role; registry and flags "
+            f"never deleted")
+
+
+#: (what is protected, statement). Every browser session must be refused every one.
+ATTACKS = (
+    ("mint: a CREDIT ledger row",
+     f"insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id, "
+     f"actor) select wallet_id, 'consumer', 'operator_adjustment', 1000, gen_random_uuid(), "
+     f"'me' from infrx.credit_wallets limit 1"),
+    ("mint: the signup grant RPC", f"select infrx.grant_signup_credit('{UNGRANTED}', 'me')"),
+    ("mint: an entitlement", f"insert into infrx.signup_entitlements (user_id, entitlement, "
+                             f"wallet_id, amount, verification_evidence_ref, ledger_operation_id)"
+                             f" values ('{UNGRANTED}', 'initial_signup_grant', "
+                             f"gen_random_uuid(), 10000, 'me', gen_random_uuid())"),
+    ("balances: a wallet total", "update infrx.credit_wallets set ledger_total = 1e6"),
+    ("balances: read wallets directly", "select ledger_total from infrx.credit_wallets"),
+    ("balances: through the console view",
+     "update public.console_credit_wallets set ledger_total = '1000000'"),
+    ("ledger: through the console view", "delete from public.console_credit_ledger"),
+    ("hold", "insert into infrx.credit_wallet_holds (request_id, org_id, wallet_id, "
+             "rate_card_version, amount, state) values (gen_random_uuid(), gen_random_uuid(), "
+             "gen_random_uuid(), 'x', 0, 'held')"),
+    ("settle", "update infrx.credit_wallet_holds set state = 'settled'"),
+    ("admission pins", "select * from infrx.resolve_admission_pins('nemostation/marlin-2b')"),
+    ("provider role: self-assign administrator",
+     f"insert into infrx.provider_memberships (provider_org_id, user_id, role, granted_by) "
+     f"values ('{NEMO}', '{CONSUMER_1}', 'administrator', 'me')"),
+    ("provider role: revoke someone", "update infrx.provider_memberships set revoked_at = now()"),
+    ("provider role: read memberships", "select * from infrx.provider_memberships"),
+    ("rates: publish a card", f"insert into infrx.rate_card_versions (rate_card_version, "
+                              f"model_id, deployment_revision_id, serving_version_id, "
+                              f"input_rate_per_million, output_rate_per_million, effective_at, "
+                              f"approved_by, provisional) values ('rc_free', '{MODEL}', "
+                              f"'{PUBLIC_DEPLOYMENT}', '{SERVING}', 0, 0, now(), 'me', false)"),
+    ("rates: move the alias", f"insert into infrx.catalog_listings (public_model_id, version, "
+                              f"model_id, deployment_revision_id, serving_version_id, "
+                              f"rate_card_version, effective_at, approved_by) values "
+                              f"('nemostation/marlin-2b', 99, '{MODEL}', "
+                              f"'{PUBLIC_DEPLOYMENT}', '{SERVING}', '{CARD}', now(), 'me')"),
+    ("deployment: promote", f"update infrx.deployment_revisions set state = 'retired' "
+                            f"where deployment_revision_id = '{DEV_DEPLOYMENT}'"),
+    ("model ownership", f"update public.models set provider_org_id = '{OTHER_PROVIDER}'"),
+    ("model identity", f"update public.models set model_uuid = gen_random_uuid()"),
+    ("rollout switch", "update infrx.feature_flags set enabled = true"),
+    ("the flag gate", "select infrx.require_feature('credit_admission')"),
+    ("usage: write a CREDIT settlement",
+     "update public.usage_events set accounting_regime = 'credit'"),
+)
+
+#: The platform role's side of the same boundary: what it does through D's functions
+#: (allowed) and what it can never do directly (refused).
+SERVICE_ALLOWED = (
+    ("grants through the A1 seam", f"select infrx.grant_signup_credit('{UNGRANTED}', 'e')"),
+    ("resolves pins for D2", "select * from infrx.resolve_admission_pins('nemostation/marlin-2b')"),
+    ("reads wallets", "select ledger_total from infrx.credit_wallets"),
+    ("grants a provider role (Lab/G6B server path)",
+     f"insert into infrx.provider_memberships (provider_org_id, user_id, role, granted_by) "
+     f"values ('{NEMO}', '{CONSUMER_1}', 'viewer', 'ops@infrx')"),
+    ("switches a rollout flag", "update infrx.feature_flags set enabled = true, "
+                                "updated_by = 'ops@infrx', reason = 'cutover' "
+                                "where name = 'credit_admission'"),
+)
+SERVICE_REFUSED = (
+    ("mints directly", ATTACKS[0][1]),
+    ("moves a total directly", "update infrx.credit_wallets set ledger_total = 1e6"),
+    ("holds directly", ATTACKS[7][1]),
+    ("writes an entitlement directly", ATTACKS[2][1]),
+    ("deletes a rate card", "delete from infrx.rate_card_versions"),
+    ("truncates the registry", "truncate infrx.catalog_listings"),
+)
+
+
+def check_credit_role_matrix(conn) -> str:
+    """DUR-RLS extended: anon, consumer-only, provider member, provider administrator and
+    platform operator sessions are refused every mint, hold, settle, provider-role,
+    rate, deployment and rollout write, and every direct `infrx` read; the service role
+    does what D's seams give it and nothing directly on the money relations."""
+    reached = [f"{s} may {label}" for label, sql in ATTACKS for s in BROWSER
+               if refused_as(conn, s, sql) is None]
+    assert not reached, "browser sessions reached protected state:\n  " + "\n  ".join(reached)
+    denied = [f"{label}: {why}" for label, sql in SERVICE_ALLOWED
+              if (why := refused_as(conn, "service", sql)) is not None]
+    assert not denied, "the platform role lost a seam:\n  " + "\n  ".join(denied)
+    direct = [label for label, sql in SERVICE_REFUSED if refused_as(conn, "service", sql) is None]
+    assert not direct, "the platform role wrote money directly:\n  " + "\n  ".join(direct)
+    for session, user in (("consumer", CONSUMER_1), ("provider_member", PROVIDER_DEV_USER),
+                          ("provider_admin", PROVIDER_ADMIN_USER)):
+        uid, = rows_as(conn, session, "select auth.uid()")[0]
+        assert str(uid) == user, f"the {session} session is nobody: {uid}"
+    return (f"{len(ATTACKS)} attacks x {len(BROWSER)} browser sessions refused; service: "
+            f"{len(SERVICE_ALLOWED)} seams allowed, {len(SERVICE_REFUSED)} direct writes refused")

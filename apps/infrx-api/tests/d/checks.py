@@ -1638,7 +1638,9 @@ EXPECTED_PRIVILEGES = {
            ("public.console_usage", ""), ("public.org_settings", ""),
            ("public.consent_history", ""), ("public.feedback", ""),
            ("public.calibration_labels", ""), ("public.console_judge_runs", ""),
-           ("public.console_admin_orgs", ""), ("public.operator_audit", ""))},
+           ("public.console_admin_orgs", ""), ("public.operator_audit", ""),
+           # D1R (0008): the CREDIT wallet and ledger pages.
+           ("public.console_credit_wallets", ""), ("public.console_credit_ledger", ""))},
 }
 
 #: Relations whose whole point is that nothing is ever removed (0003's trigger list).
@@ -1676,13 +1678,18 @@ EXPECTED_FUNCTION_CALLERS = {
     "text,uuid)": {"authenticated", "service_role"},
     "public.console_usage_daily(uuid,timestamp with time zone,timestamp with time zone,"
     "text,uuid)": {"authenticated", "service_role"},
+    # D1R (0008): the CREDIT balance and the separate legacy USD statement.
+    "public.console_wallet_summary(uuid)": {"authenticated", "service_role"},
+    "public.console_legacy_usd_statement(uuid)": {"authenticated", "service_role"},
 }
 
 
 #: The `infrx` functions a platform client may call. Everything else in that schema is a
 #: trigger or a guard, which fires with the table owner's rights and needs no EXECUTE.
 INFRX_CALLABLE = tuple(f"infrx.{name}(jsonb)" for name in RPC_NAMES) + (
-    "infrx.now()", "infrx.extend_model_limits()")
+    "infrx.now()", "infrx.extend_model_limits()",
+    # D1R: the A1 grant seam and the D2 pin resolver.
+    "infrx.grant_signup_credit(uuid,text,text,uuid)", "infrx.resolve_admission_pins(text)")
 
 
 def check_function_privileges(conn) -> str:

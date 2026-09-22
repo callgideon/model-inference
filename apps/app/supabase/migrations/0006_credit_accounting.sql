@@ -439,7 +439,7 @@ alter table infrx.credit_wallet_holds enable row level security;
 revoke all on infrx.feature_flags, infrx.credit_wallets, infrx.credit_ledger,
               infrx.signup_entitlements, infrx.credit_wallet_holds
   from public, anon, authenticated, service_role;
-revoke all on infrx.credit_wallet_reconciliation from public, anon, authenticated;
+revoke all on infrx.credit_wallet_reconciliation from public, anon, authenticated, service_role;
 grant select on infrx.feature_flags, infrx.credit_wallets, infrx.credit_ledger,
                 infrx.signup_entitlements, infrx.credit_wallet_holds,
                 infrx.credit_wallet_reconciliation to service_role;
