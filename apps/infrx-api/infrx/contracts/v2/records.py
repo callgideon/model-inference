@@ -728,9 +728,13 @@ class UsageRecordV2(RecordV2):
             raise ValueError(f"a {self.accounting_regime.value} row is denominated in "
                              f"{expected}, not {self.unit}")
         # Parsing under the declared unit is the trust boundary: an amount that is
-        # not an exact numeric(20, 8) decimal string never becomes a DTO.
+        # not an exact numeric(20, 8) decimal string never becomes a DTO. The
+        # canonical eight-digit spelling is required too, so the same amount is the
+        # same bytes in a fixture, on the wire and in the database.
         from .money_units import parse_amount
-        parse_amount(self.charged_amount, self.unit)
+        if str(parse_amount(self.charged_amount, self.unit)) != self.charged_amount:
+            raise ValueError(f"an amount crosses JSON in its canonical eight-digit form, "
+                             f"not {self.charged_amount!r}")
         if self.accounting_regime is AccountingRegime.credit:
             if self.rate_card_version is None or self.serving_version_id is None:
                 raise ValueError("a CREDIT row names the rate card and serving revision it "
