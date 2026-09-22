@@ -105,6 +105,18 @@ async def split_contract__a_consumer_credential_cannot_reach_a_private_dev_endpo
         except errors.NotFound:
             continue
         raise AssertionError(f"{wrong.audience} reached the private dev deployment directly")
+    # G1 (F2P review B1): `model_copy(update=)` skips AuthContextV2's validator, so a
+    # consumer context can carry the dev endpoint's own ids and pass both equality
+    # checks. Only the explicit audience check refuses it.
+    forged = consumer.model_copy(update={"endpoint_id": deployment.endpoint_id,
+                                         "provider_org_id": deployment.provider_org_id})
+    try:
+        v2ports.pin_admission(auth=forged, **direct)
+    except errors.NotFound:
+        pass
+    else:
+        raise AssertionError("a consumer context copied with the dev endpoint's scope "
+                             "reached the private deployment")
     pins, _card = v2ports.pin_admission(auth=provider, **direct)
     assert pins.deployment_revision_id == deployment.deployment_revision_id
 
@@ -328,8 +340,20 @@ async def credit_identity__a_provider_dev_credential_resolves_a_zero_provider_wa
             "wallet_id": IDS.rival_provider_org,
             "owner_provider_org_id": IDS.rival_provider_org}))
     except errors.Forbidden:
+        pass
+    else:
+        raise AssertionError("a provider credential spent another provider's wallet")
+    # G3 (F2P review B1): a consumer wallet copied with this provider's id as owner.
+    # `model_copy(update=)` skips WalletRef's ownership validator, so ownership
+    # matches and only the explicit kind check refuses it.
+    consumer_wallet = await harness.wallets.consumer_wallet_for_user(IDS.consumer_user)
+    try:
+        v2ports.resolve_wallet(auth, consumer_wallet.model_copy(update={
+            "owner_provider_org_id": auth.provider_org_id}))
+    except errors.Forbidden:
         return
-    raise AssertionError("a provider credential spent another provider's wallet")
+    raise AssertionError("a provider credential spent a consumer wallet whose owner fields "
+                         "were copied to match")
 
 
 async def credit_identity__no_request_field_can_select_a_wallet(factory):
@@ -371,6 +395,17 @@ async def credit_identity__a_foreign_wallet_is_forbidden_not_a_fallback(factory)
         pass
     else:
         raise AssertionError("a missing wallet resolved to something")
+    # G2 (F2P review B1): a provider_dev wallet copied with this consumer's owner and
+    # personal org. `model_copy(update=)` skips WalletRef's ownership validator, so
+    # both equalities pass and only the explicit kind check refuses it.
+    provider_wallet = await harness.wallets.provider_dev_wallet(IDS.provider_org)
+    try:
+        v2ports.resolve_wallet(auth, provider_wallet.model_copy(update={
+            "owner_user_id": auth.user_id, "personal_org_id": auth.org_id}))
+    except errors.Forbidden:
+        return
+    raise AssertionError("a consumer credential spent a provider_dev wallet whose owner "
+                         "fields were copied to match")
 
 
 async def credit_identity__an_operator_credential_spends_no_wallet(factory):
