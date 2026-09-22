@@ -236,6 +236,21 @@ function walletRow(org: DebugOrg): Row {
 function seedAudit(orgs: DebugOrg[]): Row[] {
   const rows: Row[] = [];
   let ordinal = 0;
+  // r2: `audit_entries.target_org_id` is `on delete set null`, so the trail outlives its targets.
+  // The entry is still the record that the write happened, and `admin_audit_page` is untenanted
+  // (operator-only), so nothing else has to change for it to be readable. A `target_org_id` filter
+  // must not sweep it into some surviving organization's page.
+  rows.push({
+    id: "aud_0000",
+    at: new Date(CLOCK_MS - 60000).toISOString(),
+    actor_principal: "operator@infrx.example",
+    action: "entitlements_set",
+    target_org_id: null,
+    reason: "closed the account's entitlements before deletion",
+    before: { model_ids: null },
+    after: { model_ids: [] },
+    idempotency_key: "seed-entitlements-closed",
+  });
   for (const org of orgs) {
     for (let i = 0; i < 12; i += 1) {
       ordinal += 1;
@@ -277,7 +292,18 @@ export function seedDataset(state: DebugState): Dataset {
       entitlements_updated_by: org.entitlements.updated_by,
     });
     for (const entry of org.ledger) data.ledger.push({ ...entry, org_id: org.org_id });
-    for (const row of org.usage) data.usage.push({ ...row, org_id: org.org_id });
+    for (const row of org.usage) {
+      // The fake holds the DTO's `accounting_regime`; `console_usage` holds the database's
+      // `settlement_regime` (`legacy`/`pilot`), and this harness stands in for the view, so it
+      // must speak the view's column names — the mapping back to the console vocabulary is the
+      // projection's job and is what `accountingRegimeOf` is tested on.
+      const { accounting_regime: regime, ...rest } = row;
+      data.usage.push({
+        ...rest,
+        settlement_regime: regime === "legacy_usd" ? "legacy" : "pilot",
+        org_id: org.org_id,
+      });
+    }
     for (const key of org.keys) data.keys.push({ ...key, org_id: org.org_id });
     data.settings.push({
       org_id: org.org_id,
@@ -317,6 +343,12 @@ export function makeConsoleHarness(): ConsoleHarness & { data: Dataset } {
     services: createConsoleServices({ pg: port, ch: port, cursorSecret: TEST_CURSOR_SECRET }),
     sessions: fake.sessions,
     ids: fake.ids,
+    // The dataset is seeded from the fake, so it carries exactly the pre-pilot and nullable
+    // history the fixtures do: legacy_usd rows with a charge, rows whose key was deleted, a key
+    // with no recorded capture mode, a judge run that reached no provider — plus the orphaned
+    // audit entry seeded above. Declaring it makes the gated conformance cases **run** here
+    // instead of skipping, which is the point: they are what proves the real projection.
+    hasLegacyRows: fake.hasLegacyRows,
     data,
   };
 }

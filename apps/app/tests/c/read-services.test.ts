@@ -12,6 +12,13 @@ import { buildPlan, namedQuery, scopedPort, type QueryPort } from "../../lib/ser
 import { createFakeConsoleServices } from "../../lib/contracts/fake-services.ts";
 import { createMemoryPort, makeConsoleHarness, TEST_CURSOR_SECRET } from "./harness.ts";
 
+/**
+ * r2: `usageSummary`/`usageDaily` require a window — an unbounded aggregate is a scan whose answer
+ * nobody can check, and it mixes the legacy accounting regime into a pilot total. The cases below
+ * want "all of it", so they say so, instead of relying on an implicit all-time default.
+ */
+const ALL_TIME = { from: "2000-01-01T00:00:00Z", to: "2100-01-01T00:00:00Z" } as const;
+
 function expectOk<T>(result: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }): T {
   assert.ok(result.ok, `expected success, got ${result.ok ? "" : `${result.error.code}: ${result.error.message}`}`);
   return result.value;
@@ -166,13 +173,13 @@ test("a page is bounded by the contract's default and its look-ahead row never e
     seen += next.items.length;
     cursor = next.next_cursor;
   }
-  const summary = expectOk(await services.usageSummary(sessions.owner, {}));
+  const summary = expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME }));
   assert.equal(seen, summary.requests, "the walk returns exactly the rows the summary counts");
 });
 
 test("usageDaily groups by UTC day, newest first, and its costs add up", async () => {
   const { services, sessions } = makeConsoleHarness();
-  const days = expectOk(await services.usageDaily(sessions.owner, {}));
+  const days = expectOk(await services.usageDaily(sessions.owner, { ...ALL_TIME }));
   assert.ok(days.length > 1, "the fixture spans more than one day");
   for (let i = 1; i < days.length; i += 1) assert.ok(days[i - 1].day > days[i].day, "newest day first");
   let total = ZERO_MONEY;
@@ -182,7 +189,7 @@ test("usageDaily groups by UTC day, newest first, and its costs add up", async (
     total = addMoney(total, day.cost);
     requests += day.requests;
   }
-  const summary = expectOk(await services.usageSummary(sessions.owner, {}));
+  const summary = expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME }));
   assert.equal(total, summary.cost, "the daily costs sum to the summary cost");
   assert.equal(requests, summary.requests);
 });
@@ -452,16 +459,16 @@ test("a filter value is checked before it is bound: vocabulary, length and times
 
 test("pending_reconciliation counts held unknown usage and nothing else", async () => {
   const { services, sessions, ids, data } = makeConsoleHarness();
-  const before = expectOk(await services.usageSummary(sessions.owner, {}));
+  const before = expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME }));
   // A settled row with an outstanding hold is not awaiting reconciliation: the certainty is what says so.
   const row = data.usage.find((candidate) => candidate.org_id === ids.orgId && candidate.usage_certainty === "authoritative");
   assert.ok(row !== undefined);
   row.max_hold = "5.00000000";
-  const after = expectOk(await services.usageSummary(sessions.owner, {}));
+  const after = expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME }));
   assert.equal(after.pending_reconciliation, before.pending_reconciliation, "an authoritative hold is not pending");
   // Flipping the same row to unknown does move the figure.
   row.usage_certainty = "unknown";
-  const unknown = expectOk(await services.usageSummary(sessions.owner, {}));
+  const unknown = expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME }));
   assert.equal(unknown.pending_reconciliation, addMoney(before.pending_reconciliation, "5.00000000" as Money));
 });
 
@@ -498,8 +505,8 @@ test("every port passes through the tenant check, whatever the port does", async
   // and the aggregates too — a totals query used to be exempt by construction.
   const callsFor = (svc: ReturnType<typeof createConsoleServices>): [string, () => Promise<{ ok: boolean }>][] => [
     ["usage", () => svc.usage(session, { limit: 5 })],
-    ["usageSummary", () => svc.usageSummary(session, {})],
-    ["usageDaily", () => svc.usageDaily(session, {})],
+    ["usageSummary", () => svc.usageSummary(session, { ...ALL_TIME })],
+    ["usageDaily", () => svc.usageDaily(session, { ...ALL_TIME })],
     ["balances", () => svc.balances(session)],
     ["ledger", () => svc.ledger(session, { limit: 5 })],
     ["keys.list", () => svc.keys.list(session)],
@@ -568,8 +575,8 @@ test("every port passes through the tenant check, whatever the port does", async
     }
   }
   expectOk(await good.usage(session, { limit: 5 }));
-  expectOk(await good.usageSummary(session, {}));
-  expectOk(await good.usageDaily(session, {}));
+  expectOk(await good.usageSummary(session, { ...ALL_TIME }));
+  expectOk(await good.usageDaily(session, { ...ALL_TIME }));
   expectOk(await good.balances(session));
   expectOk(await good.traces(session, { limit: 5 }));
   expectOk(await good.judgeRuns(session, { limit: 5 }));
@@ -643,11 +650,11 @@ test("an empty window is zeros, not a failure", async () => {
   // The statement groups by the tenant, and a grouped aggregate over nothing returns NO rows — in
   // PostgreSQL and in the double alike. Each of these is a window a console page asks for every day.
   for (const [query, what] of [
-    [{ model: "no-such-model" }, "a filter that matches no model"],
-    [{ from: "2031-01-01T00:00:00Z" }, "a window that has not happened yet"],
-    [{ key_id: "no-such-key" }, "a filter that matches no key"],
+    [{ ...ALL_TIME, model: "no-such-model" }, "a filter that matches no model"],
+    [{ from: "2031-01-01T00:00:00Z", to: ALL_TIME.to }, "a window that has not happened yet"],
+    [{ ...ALL_TIME, key_id: "no-such-key" }, "a filter that matches no key"],
     [{ from: "2031-01-01T00:00:00Z", to: "2031-02-01T00:00:00Z" }, "an empty range"],
-  ] as [Record<string, string>, string][]) {
+  ] as [Record<string, string> & { from: string; to: string }, string][]) {
     const summary = expectOk(await services.usageSummary(sessions.owner, query));
     assert.deepEqual(summary, zero, `${what} must read as no traffic`);
     // And the daily rows for the same window are simply empty.
@@ -656,16 +663,22 @@ test("an empty window is zeros, not a failure", async () => {
 
   // The same page for an organization that has never sent a request — every newly signed-up pilot org.
   data.usage = data.usage.filter((row) => row.org_id !== ids.orgId);
-  assert.deepEqual(expectOk(await services.usageSummary(sessions.owner, {})), zero, "an organization with no usage");
-  assert.deepEqual(expectOk(await services.usageDaily(sessions.owner, {})), []);
+  assert.deepEqual(
+    expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME })),
+    zero,
+    "an organization with no usage",
+  );
+  assert.deepEqual(expectOk(await services.usageDaily(sessions.owner, { ...ALL_TIME })), []);
   expectOk(await services.usage(sessions.owner, { limit: 5 }));
 
   // The contract's own fake answers the same way, so the two halves agree on what "nothing" is.
   const fake = createFakeConsoleServices();
-  const fakeZero = await fake.usageSummary(fake.sessions.owner, { model: "no-such-model" });
+  const fakeZero = await fake.usageSummary(fake.sessions.owner, { ...ALL_TIME, model: "no-such-model" });
   assert.ok(fakeZero.ok, "the fake answers an empty window");
   const fresh = makeConsoleHarness();
-  const mine = expectOk(await fresh.services.usageSummary(fresh.sessions.owner, { model: "no-such-model" }));
+  const mine = expectOk(
+    await fresh.services.usageSummary(fresh.sessions.owner, { ...ALL_TIME, model: "no-such-model" }),
+  );
   assert.deepEqual(mine, fakeZero.value, "the real service and the fixture-backed fake agree");
 
   // More than one row for one tenant is not something to average over: it is a refusal.
@@ -676,7 +689,7 @@ test("an empty window is zeros, not a failure", async () => {
     },
   };
   const confused = createConsoleServices({ pg: doubled, ch: doubled, cursorSecret: TEST_CURSOR_SECRET });
-  expectError(await confused.usageSummary(sessions.owner, {}), "internal_error");
+  expectError(await confused.usageSummary(sessions.owner, { ...ALL_TIME }), "internal_error");
 });
 
 test("usageDaily is bounded by its documented cap, not by the fixture", async () => {
@@ -692,7 +705,7 @@ test("usageDaily is bounded by its documented cap, not by the fixture", async ()
       created_at: new Date(Date.parse("2024-01-01T00:00:00.000Z") + day * 86400000).toISOString(),
     });
   }
-  const days = expectOk(await services.usageDaily(sessions.owner, {}));
+  const days = expectOk(await services.usageDaily(sessions.owner, { ...ALL_TIME }));
   assert.equal(days.length, 400, "the cap is real, and it is the documented one");
   assert.ok(days.length < new Set(data.usage.map((row) => String(row.created_at).slice(0, 10))).size);
 
@@ -705,7 +718,7 @@ test("usageDaily is bounded by its documented cap, not by the fixture", async ()
     },
   };
   const lenient = createConsoleServices({ pg: unbounded, ch: unbounded, cursorSecret: TEST_CURSOR_SECRET });
-  const stillCapped = expectOk(await lenient.usageDaily(sessions.owner, {}));
+  const stillCapped = expectOk(await lenient.usageDaily(sessions.owner, { ...ALL_TIME }));
   assert.equal(stillCapped.length, 400, "the cap is the service's, not the executor's good manners");
 });
 
@@ -731,8 +744,8 @@ test("a query port that fails is a Result error, never a thrown promise", async 
     () => services.traces(session, {}),
     () => services.settings.get(session),
     () => services.keys.list(session),
-    () => services.usageSummary(session, {}),
-    () => services.usageDaily(session, {}),
+    () => services.usageSummary(session, { ...ALL_TIME }),
+    () => services.usageDaily(session, { ...ALL_TIME }),
     () => services.traceDetail(session, "00000000-0000-4000-8000-000000000000"),
     () => services.judgeRuns(session, {}),
   ]) {

@@ -43,6 +43,13 @@ const OWNED_CASES = [
   "no operation accepts a field the caller invented",
   "a filter filters, and an absent filter does not",
   "the operator list pages like every other list",
+  // r2: these two prove the projection over pre-pilot and nullable history, and they **run** here
+  // rather than skipping, because the harness declares `hasLegacyRows` and carries the rows. A
+  // harness that stopped carrying them would make them skip, and a skipped case is not a pass —
+  // which is exactly why they are pinned in this list.
+  "legacy and key-less usage rows keep their nulls and are still counted",
+  "an unrecorded capture mode, an orphaned audit target and an unreached provider are nulls, not defaults",
+  "an aggregate without a window is invalid_request, not an all-time total",
 ];
 
 /**
@@ -81,6 +88,14 @@ test("every conformance case C1 owns passes against the real services", () => {
   const passed = new Set(cases("ok"));
   const missing = OWNED_CASES.filter((name) => !passed.has(name));
   assert.deepEqual(missing, [], `these C1 cases did not pass:\n${missing.join("\n")}`);
+  // A skip is reported as `ok … # SKIP`, so "passed" alone would count one. Nothing C1 owns may
+  // skip: a harness that stopped declaring its legacy rows would otherwise look green here.
+  const skipped = [...output.matchAll(/^ {4}ok \d+ - (.*?) # SKIP/gm)].map((match) => match[1].trim());
+  assert.deepEqual(
+    OWNED_CASES.filter((name) => skipped.includes(name)),
+    [],
+    `these C1 cases skipped instead of running:\n${skipped.join("\n")}`,
+  );
 });
 
 test("every failing case fails only because an operation is not implemented in C1", () => {
