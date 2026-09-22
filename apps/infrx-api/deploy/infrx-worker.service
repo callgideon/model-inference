@@ -3,14 +3,18 @@ Description=infrx worker (claim -> engine -> journal; drains on stop)
 Requires=docker.service
 After=docker.service network-online.target marlin2b-vllm.service infrx-valkey.service
 Wants=network-online.target
+# W3: a stop or restart of the engine stops (drains) the worker first.
+PartOf=marlin2b-vllm.service
 
 [Service]
 User=ubuntu
 EnvironmentFile=/etc/marlin2b-gateway.env
 ExecStartPre=-/usr/bin/docker rm -f infrx-worker
 # Its own uid (10002); reads the media root the gateway writes, through the shared group.
-# `python -m infrx.worker` is W3's entry point (the probe refuses a pilot image without it).
-ExecStart=/usr/bin/docker run --rm --name infrx-worker --network host \
+# `python -m infrx.worker`: the composition root around W3's WorkerService, which also runs
+# the store's recover() reaper (the probe refuses a pilot image without it). --init: tini
+# forwards SIGTERM, which starts the drain, and reaps children.
+ExecStart=/usr/bin/docker run --rm --init --name infrx-worker --network host \
   --user 10002:10000 --read-only --tmpfs /tmp:rw,size=256m,mode=1777 \
   --cap-drop ALL --security-opt no-new-privileges \
   --memory 4g --cpus 2 --pids-limit 256 \
@@ -18,7 +22,7 @@ ExecStart=/usr/bin/docker run --rm --name infrx-worker --network host \
   -v ${PROCESSING_CACHE_DIR}:${PROCESSING_CACHE_DIR}:ro \
   ${INFRX_IMAGE} python -m infrx.worker
 # W3's drain: SIGTERM stops claiming, lets in-flight attempts finish within the deadline,
-# then fences and releases the rest - a released job is requeued by the reaper, never lost
+# then fences and releases the rest - a released job is requeued by the store, never lost
 # (W2 limit 8). 330 s covers one full generation (08 §5 GENERATION_TIMEOUT_S = 300) plus
 # margin; systemd waits longer than docker, or it would kill only the client.
 ExecStop=/usr/bin/docker stop -t 330 infrx-worker

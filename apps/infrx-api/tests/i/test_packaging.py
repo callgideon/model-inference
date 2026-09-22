@@ -22,9 +22,9 @@ from . import support
 from .support import preflight
 
 DEPLOY = support.API_DIR / "deploy"
-RUNTIME_UNITS = ("marlin2b-gateway.service", "infrx-worker.service", "infrx-reaper.service")
+RUNTIME_UNITS = ("marlin2b-gateway.service", "infrx-worker.service")
 CONTAINER_UNITS = RUNTIME_UNITS + ("infrx-valkey.service",)
-LONG_RUNNING = tuple(name for name in CONTAINER_UNITS if name != "infrx-reaper.service")
+LONG_RUNNING = CONTAINER_UNITS
 ENV_FILE = "/etc/marlin2b-gateway.env"
 
 
@@ -90,7 +90,7 @@ def test_backend_deploy__the_units_are_valid_systemd():
     the engine script's absolute path, which exists on the box and not on this host."""
     if shutil.which("systemd-analyze") is None:
         pytest.fail("systemd-analyze is not installed: the units are unverified")
-    names = sorted(p.name for p in DEPLOY.glob("*.service")) + ["infrx-reaper.timer"]
+    names = sorted(p.name for p in DEPLOY.glob("*.service"))
     done = subprocess.run(["systemd-analyze", "verify", "--man=no",
                            *[str(DEPLOY / n) for n in names]],
                           capture_output=True, text=True)
@@ -112,9 +112,6 @@ def test_ops_recover__every_container_unit_stops_later_than_docker_does():
             seconds = stop_seconds(name)
         assert seconds >= 10, name
         assert int(unit(name)["TimeoutStopSec"][0]) > seconds, name
-    reaper = unit("infrx-reaper.service")
-    assert reaper["Type"] == ["oneshot"]
-    assert reaper.get("ExecStopPost") == ["-/usr/bin/docker rm -f infrx-reaper"]
 
 
 def test_ops_recover__the_worker_drain_outlasts_one_generation():
@@ -126,17 +123,20 @@ def test_ops_recover__the_worker_drain_outlasts_one_generation():
     assert stop_seconds("marlin2b-gateway.service") >= 120
 
 
-def test_ops_recover__the_reaper_runs_within_the_preparation_lease():
-    """W2 request 7 / E3B request 4: `JobStore.recover()` runs on a timer, at least once
-    per preparation lease TTL, so r1 R52's bounded preparation retries can happen."""
-    from infrx.contracts.limits import DEFAULTS
-
-    timer = unit("infrx-reaper.timer")
-    assert int(timer["OnUnitActiveSec"][0]) <= DEFAULTS.preparation_lease_ttl_s
-    assert docker_run("infrx-reaper.service")[-3:] == ["python", "-m", "infrx.worker.reaper"]
+def test_ops_recover__the_worker_drains_before_the_engine_stops():
+    """W3's worker unit: it runs `python -m infrx.worker` (the composition root around
+    WorkerService, whose in-process reaper is W2 request 7's `recover()` caller - so there
+    is no timer to run it twice), it is `PartOf=` the engine and ordered after it, so an
+    engine stop or restart drains it first, and tini (`--init`) delivers the SIGTERM that
+    starts the drain. The gateway gets tini too: uvicorn's graceful stop needs the signal."""
+    worker = unit("infrx-worker.service")
+    assert worker.get("PartOf") == ["marlin2b-vllm.service"]
+    assert "marlin2b-vllm.service" in worker["After"][0].split()
     assert docker_run("infrx-worker.service")[-3:] == ["python", "-m", "infrx.worker"]
-    assert tuple(entry.removesuffix(".__main__") for entry in preflight.WORKER_ENTRIES) == (
-        "infrx.worker", "infrx.worker.reaper")
+    assert preflight.WORKER_ENTRIES == ("infrx.worker.__main__",)
+    for name in RUNTIME_UNITS:
+        assert "--init" in docker_run(name), name
+    assert not list(DEPLOY.glob("*.timer")), "a second reaper path (W3 limit: one path)"
 
 
 def test_backend_deploy__runtime_containers_run_unprivileged_and_bounded():
@@ -158,7 +158,6 @@ def test_backend_deploy__runtime_containers_run_unprivileged_and_bounded():
     media = "${PROCESSING_CACHE_DIR}"
     assert f"{media}:{media}" in flag(docker_run("marlin2b-gateway.service"), "-v")
     assert f"{media}:{media}:ro" in flag(docker_run("infrx-worker.service"), "-v")
-    assert not [v for v in flag(docker_run("infrx-reaper.service"), "-v")]
 
 
 def test_backend_deploy__the_runtime_listens_only_on_loopback():
@@ -318,8 +317,8 @@ def test_deploy_failclosed__pilot_runs_only_the_pinned_runtime_image(tmp_path, m
 def test_deploy_failclosed__a_pilot_image_must_be_unprivileged_and_carry_the_worker(
         tmp_path, monkeypatch):
     """Inside the image, a pilot refuses a root interpreter and a runtime without W3's
-    worker and reaper entry points - the units would start something that cannot run.
-    Both entry points are absent today: that refusal is the named pending item."""
+    worker entry point - the unit would start something that cannot run. It is absent
+    today: that refusal is the named pending item."""
     env = tmp_path / "pilot.env"
     env.write_text("INFRX_MODE=pilot\n")
     problems = preflight.probe(env, "pilot")["problems"]

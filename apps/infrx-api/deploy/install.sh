@@ -11,7 +11,7 @@
 #   4. preflight.py apply: read every secret, validate, probe INSIDE the image, replace
 #      the env file by one rename - or refuse with everything untouched (exit 2);
 #   5. install the unit files (inert until restarted), start the index and the engine;
-#   6. restart the runtime units, wait for readiness (pilot: /readyz);
+#   6. restart the runtime units, wait for readiness (pilot: gateway and worker /readyz);
 #   7. only then the edge: validate the Caddyfile with the pinned Caddy and serve it.
 # A refusal at 1-4 leaves the host exactly as it was. A failure at 5-7 leaves a validated
 # configuration installed and says which backup to roll back to; it does not roll back
@@ -78,7 +78,7 @@ mkdir -p "$UNIT_DIR"
 for f in $UNIT_FILES; do put "$here/$f" "$UNIT_DIR/$f"; done
 systemctl daemon-reload
 if [ "$mode" = pilot ]; then
-  systemctl enable marlin2b-vllm infrx-valkey $runtime_units infrx-reaper.timer
+  systemctl enable marlin2b-vllm infrx-valkey $runtime_units
   systemctl start infrx-valkey
 else
   systemctl enable marlin2b-vllm $runtime_units
@@ -94,7 +94,6 @@ wait_http http://127.0.0.1:8000/health "${ENGINE_READY_S:-900}" \
 # 6. the runtime, then readiness
 systemctl restart $runtime_units
 wait_ready "$mode" || die "the runtime did not become ready; the edge was not changed. Roll back with: $here/rollback.sh $backup" 4
-if [ "$mode" = pilot ]; then systemctl start infrx-reaper.timer; fi
 
 # 7. the edge - pilot only (a dev host answering on the pilot's name is an unmetered pilot)
 if [ "$mode" = pilot ]; then edge_install "$here"; fi

@@ -71,9 +71,10 @@ FORBIDDEN_ENGINE_FLAGS = ("--reasoning-parser", "continuous_usage_stats")
 # W3's record of the served engine, next to serve.sh (models/marlin2b/).
 SERVING_VERSION = "serving-version.json"
 LOOPBACK_PUBLISH = ("127.0.0.1:", "${BIND:-127.0.0.1}:")
-# W3's entry points the worker and reaper units start (`python -m <module>`). A pilot
-# image without them would install units that crash-loop.
-WORKER_ENTRIES = ("infrx.worker.__main__", "infrx.worker.reaper")
+# The worker unit starts `python -m infrx.worker`: the composition root around W3's
+# WorkerService (claims, the in-process recover() reaper, drain, loopback readiness). A
+# pilot image without it would install a unit that crash-loops.
+WORKER_ENTRIES = ("infrx.worker.__main__",)
 
 # est. budgets (infra/README.md §2), checked where each directory lives or will live: the
 # usage spill and logs on the root EBS volume (5 GiB + headroom), and the media root on
@@ -569,7 +570,7 @@ def probe(env_file: pathlib.Path, mode: str) -> dict:
         for entry in WORKER_ENTRIES:
             if not _importable(entry):
                 problems.append(f"PENDING(W3): {entry} is not in the runtime; the worker "
-                                f"and reaper units start it")
+                                f"unit starts it")
     problems += transport_logger_problems()
     return {"ok": not problems, "python": version, "mode": mode,
             "validated_mode": validated, "problems": problems, "warnings": warnings}

@@ -20,7 +20,7 @@ ExecStartPre=+/usr/bin/install -d -o 10001 -g 10000 -m 2750 ${PROCESSING_CACHE_D
 # Least privilege: uid 10001 in group infrx, read-only root, no capabilities, bounded
 # memory/CPU/pids (est. budgets, infra/README.md §2), loopback only - Caddy is the only
 # public listener. The media root is the gateway's to write (M2/M3 preparation).
-ExecStart=/usr/bin/docker run --rm --name infrx-gateway --network host \
+ExecStart=/usr/bin/docker run --rm --init --name infrx-gateway --network host \
   --user 10001:10000 --read-only --tmpfs /tmp:rw,size=1g,mode=1777 \
   --cap-drop ALL --security-opt no-new-privileges \
   --memory 8g --cpus 4 --pids-limit 512 \

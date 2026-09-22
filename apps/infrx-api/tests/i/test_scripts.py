@@ -216,19 +216,21 @@ def test_backend_deploy__a_dev_install_pins_the_image_it_probed(tmp_path, monkey
 def test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness(
         tmp_path, monkeypatch):
     """Pilot order (infra/README.md §7): the index and the engine, then the runtime, then
-    /readyz, then the reaper timer, and only then the edge - validated with the pinned
-    Caddy before it is served, with the maintenance site installed beside it."""
+    the gateway's and the worker's /readyz, and only then the edge - validated with the
+    pinned Caddy before it is served, with the maintenance site installed beside it."""
     host = Host(tmp_path, monkeypatch)
     done = host.run("install.sh", INFRX_MODE="pilot", PREFLIGHT=host.pilot_preflight())
     assert done.returncode == 0, done.stderr
     assert host.of("systemctl") == [
         "systemctl daemon-reload",
-        "systemctl enable marlin2b-vllm infrx-valkey infrx-worker marlin2b-gateway "
-        "infrx-reaper.timer",
+        "systemctl enable marlin2b-vllm infrx-valkey infrx-worker marlin2b-gateway",
         "systemctl start infrx-valkey", "systemctl start marlin2b-vllm",
-        "systemctl restart infrx-worker marlin2b-gateway", "systemctl start infrx-reaper.timer"]
+        "systemctl restart infrx-worker marlin2b-gateway"]
     events = host.events
-    ready = events.index(next(e for e in events if e.endswith("http://127.0.0.1:8001/readyz")))
+    ready = [i for i, e in enumerate(events)
+             if e.endswith(("http://127.0.0.1:8001/readyz", "http://127.0.0.1:8002/readyz"))]
+    assert len(ready) == 2, events
+    ready = max(ready)
     edge = [i for i, e in enumerate(events) if e.startswith("docker") and "caddy" in e]
     assert edge and min(edge) > ready
     validates = [e for e in host.of("docker") if "caddy validate" in e]
@@ -244,8 +246,9 @@ def test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness(
 def test_ops_recover__a_runtime_that_is_not_ready_leaves_the_edge_alone(tmp_path,
                                                                         monkeypatch):
     """A runtime that never answers /readyz is exit 4 naming the backup to roll back
-    to; the edge is not touched (it keeps serving maintenance or the previous site) and
-    the reaper timer is not started. No automatic rollback: the file is validated."""
+    to; the edge is not touched (it keeps serving maintenance or the previous site). No
+    automatic rollback: the file is validated. The worker's readiness counts as much as
+    the gateway's."""
     host = Host(tmp_path, monkeypatch)
     host.behave(curl_fails=["http://127.0.0.1:8001/readyz"])
     done = host.run("install.sh", INFRX_MODE="pilot", PREFLIGHT=host.pilot_preflight())
@@ -253,7 +256,10 @@ def test_ops_recover__a_runtime_that_is_not_ready_leaves_the_edge_alone(tmp_path
     [backup] = backups(host)
     assert f"rollback.sh {backup}" in done.stderr
     assert [e for e in host.of("docker") if "caddy" in e] == []
-    assert "systemctl start infrx-reaper.timer" not in host.events
+    host.clear()
+    host.behave(curl_fails=["http://127.0.0.1:8002/readyz"])
+    assert host.run("install.sh", INFRX_MODE="pilot", PREFLIGHT=host.pilot_preflight()).returncode == 4
+    assert [e for e in host.of("docker") if "caddy" in e] == []
 
 
 # --- drain.sh -------------------------------------------------------------------------
@@ -269,7 +275,7 @@ def _pilot_host(tmp_path, monkeypatch) -> Host:
 def test_ops_recover__drain_closes_the_edge_before_stopping_the_worker(tmp_path,
                                                                        monkeypatch):
     """pause: the active site becomes maintenance (so a Caddy restart keeps it) and is
-    reloaded **before** the reaper and the runtime stop; resume opens the edge only
+    reloaded **before** the runtime stops; resume opens the edge only
     after /readyz, and a runtime that is not ready keeps maintenance (exit 4)."""
     host = _pilot_host(tmp_path, monkeypatch)
     active = host.file("etc/caddy/Caddyfile")
@@ -277,7 +283,7 @@ def test_ops_recover__drain_closes_the_edge_before_stopping_the_worker(tmp_path,
     assert active.read_bytes() == (DEPLOY / "Caddyfile.maintenance").read_bytes()
     assert host.events == [
         "docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile",
-        "systemctl stop infrx-reaper.timer", "systemctl stop infrx-worker marlin2b-gateway"]
+        "systemctl stop infrx-worker marlin2b-gateway"]
 
     host.clear()
     host.behave(caddy_image="running", curl_fails=["http://127.0.0.1:8001/readyz"])
@@ -292,7 +298,7 @@ def test_ops_recover__drain_closes_the_edge_before_stopping_the_worker(tmp_path,
     events = host.events
     assert events[0] == "systemctl start infrx-worker marlin2b-gateway"
     assert events[-1].startswith("docker exec caddy caddy reload")
-    assert events.index("systemctl start infrx-reaper.timer") < len(events) - 1
+    assert events[-2].endswith("http://127.0.0.1:8002/readyz"), events
 
 
 # --- rollback.sh -------------------------------------------------------------------------

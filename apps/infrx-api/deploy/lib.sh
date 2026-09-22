@@ -13,8 +13,7 @@ CADDY_IMAGE=caddy@sha256:14a9c00d4e833ebc2b65d36515b37bde3b73f0b323a2663aaafc889
 # Start order is systemd's (After=); these lists are what each mode runs.
 RUNTIME_UNITS_dev="marlin2b-gateway"
 RUNTIME_UNITS_pilot="infrx-worker marlin2b-gateway"
-UNIT_FILES="marlin2b-vllm.service marlin2b-gateway.service infrx-worker.service
-infrx-reaper.service infrx-reaper.timer infrx-valkey.service"
+UNIT_FILES="marlin2b-vllm.service marlin2b-gateway.service infrx-worker.service infrx-valkey.service"
 
 die() { echo "$*" >&2; exit "${2:-1}"; }
 
@@ -40,10 +39,13 @@ caddy_site() {
   docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
 }
 
-# Readiness per mode: pilot's /readyz (W3; operator-only, loopback) covers engine, index,
-# journal and ledger; dev has only the generic /health.
+# Readiness per mode. pilot: the gateway's /readyz (G2) and the worker's loopback /readyz
+# (W3's WorkerService: engine up, pool running, not draining) on WORKER_HEALTH_PORT, whose
+# name and default 8002 are W3's request to the coordinator. dev: the generic /health.
+WORKER_READY=http://127.0.0.1:${WORKER_HEALTH_PORT:-8002}/readyz
 wait_ready() {
-  if [ "$1" = pilot ]; then wait_http http://127.0.0.1:8001/readyz "${READY_S:-120}"
+  if [ "$1" = pilot ]; then
+    wait_http http://127.0.0.1:8001/readyz "${READY_S:-120}" && wait_http "$WORKER_READY" "${READY_S:-120}"
   else wait_http http://127.0.0.1:8001/health "${READY_S:-120}"; fi
 }
 

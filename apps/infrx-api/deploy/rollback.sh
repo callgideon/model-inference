@@ -32,7 +32,7 @@ accepted on this host." 2
 fi
 
 # Stop what the current configuration runs (the worker drains within its stop budget).
-systemctl stop infrx-reaper.timer $RUNTIME_UNITS_pilot 2>/dev/null || systemctl stop marlin2b-gateway
+systemctl stop $RUNTIME_UNITS_pilot 2>/dev/null || systemctl stop marlin2b-gateway
 tar -C "${ROOT:-/}" -xpf "$backup/files.tar"
 while read -r path; do
   [ -n "$path" ] || continue
@@ -43,7 +43,6 @@ systemctl daemon-reload
 case "$restored" in pilot) units=$RUNTIME_UNITS_pilot ;; *) units=$RUNTIME_UNITS_dev ;; esac
 systemctl restart $units
 wait_ready "${restored:-legacy}" || die "the restored runtime is not ready" 4
-if [ "$restored" = pilot ]; then systemctl start infrx-reaper.timer; fi
 # The edge serves whatever site the backup had (none on a pre-pilot host).
 if [ -f "$CADDY_DIR/Caddyfile" ] && docker inspect caddy >/dev/null 2>&1; then
   docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile

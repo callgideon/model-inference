@@ -1,4 +1,4 @@
-# The pinned runtime image: gateway, worker and reaper all run from it (I2B.a).
+# The pinned runtime image: the gateway and the worker run from it (I2B.a).
 #
 #   docker build --provenance=false -f deploy/Dockerfile -t infrx-runtime:<git-sha> apps/infrx-api
 #
