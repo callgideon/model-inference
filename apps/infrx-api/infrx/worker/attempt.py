@@ -426,9 +426,9 @@ class AttemptRunner:
         """There is no `client_cancelled` here: a cancellation this worker discovered is
         the store's own terminal state, so that path never reaches a settlement. A stream
         the *engine* was told to cancel says so through its own report (W1's
-        `terminal_cause`), which is why the hint is read before this is."""
-        if self.clock.now() >= state.lease.generation_deadline_at:
-            return TerminalCause.deadline_exceeded
+        `terminal_cause`), which is why the hint is read before this is. Nor is there a
+        `deadline_exceeded`: past the instant the task-level timeout or the store's fenced
+        append/complete (R29) decides, never a clock read here."""
         if state.usage is not None and state.last_event is ChunkEventType.usage:
             # r1 R58: authoritative usage is the last usage object of the stream and arrives
             # after the final content delta, so an authoritative usage event that *is* the
