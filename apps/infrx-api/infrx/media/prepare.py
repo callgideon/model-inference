@@ -212,6 +212,10 @@ class ProcessingCache:
             self._remove(key, entry)
         return len(expired)
 
+    def evict(self, key: tuple[str, str, str]) -> None:
+        """Remove one entry and its file now (M3's capacity bound)."""
+        self._remove(key, self.entries[key])
+
     def _remove(self, key: tuple[str, str, str], entry: CacheEntry) -> None:
         self.entries.pop(key, None)
         try:

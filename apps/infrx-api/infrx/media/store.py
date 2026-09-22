@@ -87,6 +87,19 @@ class ObjectStore(Protocol):
         rather than a read and a write a concurrent staging can interleave with.
         """
 
+    # M3: the three operations uploads and collection need, each one S3 call.
+    async def describe(self, key: str) -> tuple[int, str] | None:
+        """`(size, content type)` of the stored object, or None (S3 `HeadObject`).
+
+        What a finalizing upload checks *before* it downloads anything: an object over
+        the upload's byte cap is refused without reading it into memory."""
+
+    async def keys(self, prefix: str) -> list[str]:
+        """Every key under `prefix` (S3 `ListObjectsV2`), for orphan collection."""
+
+    async def delete(self, key: str) -> None:
+        """Remove one object; absent is not an error (S3 `DeleteObject`)."""
+
 
 class InMemoryObjectStore:
     """The unit-test double, and the only object store M1 ships."""
@@ -107,6 +120,16 @@ class InMemoryObjectStore:
             return False
         self.objects[key] = (digest_of(data), bytes(data), content_type)
         return True
+
+    async def describe(self, key: str) -> tuple[int, str] | None:
+        stored = self.objects.get(key)
+        return (len(stored[1]), stored[2]) if stored else None
+
+    async def keys(self, prefix: str) -> list[str]:
+        return sorted(key for key in self.objects if key.startswith(prefix))
+
+    async def delete(self, key: str) -> None:
+        self.objects.pop(key, None)
 
     def seed(self, key: str, data: bytes, content_type: str = "video/mp4") -> None:
         """Not part of the port: how a test puts something at a key behind the store's
