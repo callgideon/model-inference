@@ -68,7 +68,7 @@ same bit-exact flags (`-threads 1 -fflags +bitexact -flags:v +bitexact`) and a
 byte-identical output, which `verify` and the tests hold the manifest to.
 
 **Deviation from §3.8:** §3.8 asks for "a text overlay naming the current step" via
-`drawtext`. The pinned build **has no `drawtext` filter** (it lists 494 filters and
+`drawtext`. The pinned build **has no `drawtext` filter** (it lists 486 filters and
 none of them is `drawtext`; ffmpeg 7.0 made libharfbuzz a hard requirement and this
 static build ships only libfreetype/fontconfig). Re-pinning the encoder to gain a
 cosmetic overlay would invalidate the licensed corpus's verified hashes, so the step

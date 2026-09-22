@@ -25,6 +25,13 @@ import bench
 from fake_gateway import FakeGateway
 from test_bench import make_clips, with_clips              # fake local clips, patched loader
 
+
+def attempt_rows(text):
+    """The ATTEMPT rows of a raw file. Its first line is the run_profile fingerprint and
+    resource samples are interleaved, so a leak check that wants rows must filter first."""
+    rows = [json.loads(line) for line in text.splitlines() if line.strip()]
+    return [row for row in rows if row.get("kind") is None]
+
 # Canaries. The key carries '/', '+' and '=' because a real key may. Every substring of
 # it of 8 characters or more is checked, not just prefixes: an echoed key[9:] used to pass.
 KEY = "sk-infrx-CANARYKEY-0123456789abcdef/+=q"
@@ -280,7 +287,7 @@ def test_every_adversarial_url_shape_yields_a_rebuilt_label():
             blobs, summary = run(tmp, "video_url", True, {}, video=url)
             assert summary["accepted"] == 2, why
             assert summary["video"] == want, (why, summary["video"])
-            rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+            rows = attempt_rows(blobs["raw"])
             assert rows and all(r["clip_id"] == want for r in rows), why
             assert json.loads(blobs["out"].splitlines()[-1])["video"] == want, why
             assert_clean(blobs, why)
@@ -320,7 +327,7 @@ def test_no_server_controlled_string_is_recorded_verbatim():
     with tempfile.TemporaryDirectory() as tmp:
         with_clips(make_clips(2, tmp))
         blobs, summary = run(tmp, "video_b64", False, {"hostile_fields": f"{KEY}/{SIG}"})
-        rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+        rows = attempt_rows(blobs["raw"])
         assert rows and summary["accepted"] == 2
         for r in rows:
             assert r["finish_reason"] == "unrecognized"      # not [a-z0-9_]{1,64}
@@ -331,7 +338,7 @@ def test_no_server_controlled_string_is_recorded_verbatim():
         assert_clean(blobs, "hostile header and stream fields")
         # and the well-formed forms still come through untouched
         blobs, summary = run(tmp, "video_b64", False, {})
-        rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+        rows = attempt_rows(blobs["raw"])
         assert all(r["finish_reason"] == "stop" and len(r["inference_id"]) == 32 for r in rows)
         assert all(r["server_timing"] == {"queue": 12.5, "prep": 340.0, "gpu": 880.25} for r in rows)
         assert all(r["prompt_tokens"] == 2061 for r in rows)
@@ -354,14 +361,14 @@ def test_an_allowlisted_field_carrying_the_key_is_still_refused():
                     401, {"error": {"code": KEY[9:].lower().replace("/", "_").replace("+", "_")
                                     .replace("=", "_"), "type": "auth"}})}, "error_code")):
             blobs, summary = run(tmp, "video_b64", False, gw)
-            rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+            rows = attempt_rows(blobs["raw"])
             assert rows, why
             assert all(r[field] == "unrecognized" for r in rows), (why, rows[0][field])
             assert_clean(blobs, why)
         # an Inference-Id and a Server-Timing metric name carrying the body go the same way
         blobs, summary = run(tmp, "video_b64", False,
                              {"hostile_fields": "x" * 0 + body.replace("-", "")})
-        rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+        rows = attempt_rows(blobs["raw"])
         assert all(r["inference_id"] == "unrecognized" for r in rows)
         assert all("dropped_metrics" in (r["server_timing"] or {}) for r in rows)
         assert_clean(blobs, "hostile id and timing name")
@@ -499,7 +506,8 @@ def test_rows_are_on_disk_as_they_finish_and_an_interrupt_is_marked():
         def peek(request):
             # Read the raw file from inside the run: earlier rows must already be there.
             path = os.path.join(tmp, "raw.jsonl")
-            seen.append(len(open(path, encoding="utf-8").read().splitlines())
+            # Attempt rows only: the first line is the run_profile fingerprint.
+            seen.append(len(attempt_rows(open(path, encoding="utf-8").read()))
                         if os.path.exists(path) else 0)
             return None
 
@@ -517,7 +525,7 @@ def test_rows_are_on_disk_as_they_finish_and_an_interrupt_is_marked():
         blobs, summary = run(tmp, "video_b64", False, {"chat_override": interrupt}, requests=6)
         assert summary["interrupted"] is True, "a partial run must not read as a complete one"
         assert summary["requests"] < 6 and summary["accepted"] >= 1
-        rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+        rows = attempt_rows(blobs["raw"])
         assert len(rows) == summary["attempts"] >= 1, "the completed rows survived the interrupt"
         assert json.loads(blobs["out"].splitlines()[-1])["interrupted"] is True
         assert_clean(blobs, "interrupted run")
@@ -584,7 +592,7 @@ def test_a_second_ctrl_c_cannot_lose_the_summary():
         assert os.path.exists(out), "the summary line must exist"
         summary = json.loads(open(out, encoding="utf-8").read().splitlines()[-1])
         assert summary["interrupted"] is True and summary["attempts"] >= 1
-        rows = [json.loads(l) for l in open(raw, encoding="utf-8").read().splitlines()]
+        rows = attempt_rows(open(raw, encoding="utf-8").read())
         assert len(rows) == summary["attempts"], "every completed row survived"
         assert_clean({"stdout": stdout, "stderr": stderr,
                       "out": open(out, encoding="utf-8").read(),
@@ -671,14 +679,14 @@ def test_an_opaque_server_id_is_a_documented_residual():
     with tempfile.TemporaryDirectory() as tmp:
         with_clips(make_clips(2, tmp))
         blobs, _ = run(tmp, "video_b64", False, {"extra_headers": {"inference-id": SIG}})
-        rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+        rows = attempt_rows(blobs["raw"])
         assert all(r["inference_id"] == SIG for r in rows), "documented residual, not a surprise"
         # but the same value one character outside the pattern, or carrying the key, does not
         blobs, _ = run(tmp, "video_b64", False, {"extra_headers": {"inference-id": SIG + "/x"}})
-        rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+        rows = attempt_rows(blobs["raw"])
         assert all(r["inference_id"] == "unrecognized" for r in rows)
         blobs, _ = run(tmp, "video_b64", False, {"extra_headers": {"inference-id": KEY[9:25]}})
-        rows = [json.loads(l) for l in blobs["raw"].splitlines()]
+        rows = attempt_rows(blobs["raw"])
         assert all(r["inference_id"] == "unrecognized" for r in rows)
         assert_clean(blobs, "key body echoed as an Inference-Id")
 

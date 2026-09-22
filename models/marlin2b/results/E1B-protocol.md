@@ -39,7 +39,7 @@ Coordinator inventory, 2026-09-22 (read-only, no run):
 | Fact | Consequence for this protocol |
 |---|---|
 | The deployed gateway is the **pre-refactor monolith**: no `/metrics`, no `/readyz`, instrumentation is `usage.jsonl` only (`ttft_s`, `wall_s`, prompt/completion tokens, `video_seconds`, `status`, `stream`) | **The baseline is not taken on the monolith.** Phase timing comes from the refactored gateway's `Server-Timing` headers and usage resource, which **I2B** deploys. Until then `bench.py --report` prints every declared phase as `declared_missing`, which is the honest state, not a gap to fill by arithmetic. |
-| The engine is **warm and idle with primed caches** (prefix-cache hit 74.6 %, MM-cache hit 88.2 % from earlier single-clip runs) | A cold/warm claim requires **either** an engine restart immediately before the cell **or** clips the target has never seen. `bench.py --engine-state {restarted,warm,unknown}` records which; the report refuses a cold/warm split taken at `unknown`. Every cell uses distinct corpus clips, never a repeated single clip. |
+| The engine is **warm and idle with primed caches** (prefix-cache hit 74.6 %, MM-cache hit 88.2 % from earlier single-clip runs) | A cold/warm claim requires **either** an engine restart immediately before the cell **or** clips the target has never seen. `bench.py --engine-state {restarted,warm,unknown}` records which, and the report **flags** a cold/warm split taken at anything but `restarted` as unsupported — a flag, not a refusal: the client prints the cell and names the limit, and it is this protocol that forbids publishing it. A resumed run reports `cold` as unknown outright, because the interrupted run already warmed the target. Every cell uses distinct corpus clips, never a repeated single clip. |
 | Engine flags `--max-num-seqs 32`, `--max-model-len 32768`; **no RepoDigest recorded** | The concurrency sweep stops at 32 because past it the engine queues rather than batches, and that is an engine limit, not a measurement. The serving-version pin is **W3's**; this protocol records the digest W3 supplies and does not invent one. |
 | **Hybrid attention: 6 of 24 layers are full attention** | Any KV-capacity or context-headroom arithmetic must use the hybrid layer mix. A dense-layer estimate overstates KV cost by roughly fourfold (`est.`, from the 6-of-24 ratio alone) and is not admissible in this protocol. |
 | 1× **L40S, 46,068 MiB = 45.0 GiB**; 39.9 GiB resident while the engine is up and idle; a single GPU is a single point of failure | **Idle residency says nothing about KV capacity.** With `--gpu-memory-utilization 0.90` vLLM pre-allocates the KV pool at start-up, so the resident figure already contains it and the remaining headroom is not a KV budget. KV capacity for this protocol is the engine-reported **`num_gpu_blocks` × block size**, read from the engine's own start-up log, and **W3** supplies it with the serving-version pin. No KV or context-headroom number is computed here. Recovery is **measured and published**; no availability target is stated and single-GPU process recovery is never called high availability (P-16). |
@@ -102,7 +102,8 @@ reconciled from `usage`, credits from the usage resource.
 A cell that shows any of these is reported as invalid rather than published:
 
 1. a repeated single clip, or a warm cache with `engine_state` not `restarted`, behind
-   a cold/warm claim;
+   a cold/warm claim (the report flags this; it does not and cannot refuse to print the
+   cell);
 2. an undersampled tail quoted anyway (the client suppresses it; a reader must not
    substitute the maximum);
 3. hidden rejections — a retry that absorbs a 429, or rejects left out of the

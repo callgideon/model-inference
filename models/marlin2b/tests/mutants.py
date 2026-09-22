@@ -43,6 +43,10 @@ MUTANTS: tuple[Mutant, ...] = (
            "bench.py", 'IDEMPOTENCY_PREFIX = "sop1."',
            'IDEMPOTENCY_PREFIX = "sop1."  # control: no behaviour change',
            "item_key or resume or tenant", must_survive=True),
+    Mutant("e1bc03", "CONTROL: the copy layout does not by itself fail the CLI default-path case",
+           "bench.py", 'DEFAULT_OUT = os.path.join(HERE, "results", "bench.jsonl")',
+           'DEFAULT_OUT = os.path.join(HERE, "results", "bench.jsonl")  # control',
+           "historical_cli", must_survive=True),
     Mutant("e1bc02", "CONTROL: a comment-only edit in synth.py changes nothing",
            "corpus-synth/synth.py", 'MEDIA_SUBDIR = "sop-synth-v1"',
            'MEDIA_SUBDIR = "sop-synth-v1"  # control: no behaviour change',
@@ -156,6 +160,28 @@ MUTANTS: tuple[Mutant, ...] = (
            "report_refuses",
            cases=("test_the_report_refuses_unsupported_tails_and_names_every_cell_limit",)),
 
+    # ---------------- the review's non-blocking items, each with its own case
+    Mutant("n05", "only an attributable failure feeds the platform-caused criterion",
+           "bench.py",
+           '    return row.get("outcome") == "failed" and (\n'
+           '        (isinstance(status, int) and status >= 500)\n'
+           '        or row.get("error_class") in PLATFORM_ERROR_CLASSES)',
+           '    return row.get("outcome") == "failed"',
+           "unattributable",
+           cases=("test_an_unattributable_failure_is_not_counted_as_platform_caused",)),
+    Mutant("n07", "a resumed run makes no cold/warm claim",
+           "bench.py", '    for item in schedule:\n        item["cold"] = None',
+           '    for item in []:\n        item["cold"] = None',
+           "no_cold_warm_claim",
+           cases=("test_a_resumed_run_makes_no_cold_warm_claim",)),
+    Mutant("n08", "a resume across a changed identity knob is refused",
+           "bench.py",
+           "    differing = [name for name in FINGERPRINT_FIELDS "
+           "if previous.get(name) != current[name]]",
+           "    differing = []",
+           "run_profile",
+           cases=("test_the_raw_file_declares_its_run_profile_and_a_mismatched_resume_is_refused",)),
+
     # ---------------- the reviewer's surviving mutants (review of 2cf7a81), now killable
     Mutant("r05", "a target that publishes no Server-Timing gets no invented phase",
            "bench.py", "    return out or None", '    return out or {"queue": 0.0}',
@@ -239,7 +265,12 @@ SUMMARY_LINE = re.compile(r"^(?:(?:\d+ [a-z]+(?:, )?)+|no tests ran) in [\d.]+s.
 
 def run_one(mutant: Mutant) -> dict:
     with tempfile.TemporaryDirectory(prefix=f"infrx-e1b-{mutant.id}-") as tmp:
-        root = Path(tmp) / "marlin2b"
+        # models/marlin2b, not marlin2b: bench.DEFAULT_OUT is derived from the file's own
+        # path, and test_historical_cli_still_parses… asserts it ends with
+        # models/marlin2b/results/bench.jsonl. A copy one level shallower failed that case in
+        # EVERY run, so any mutant whose selector reached it was killed by the copy layout
+        # rather than by the edit. Control e1bc03 guards exactly that.
+        root = Path(tmp) / "models" / "marlin2b"
         shutil.copytree(TREE, root, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         target = root / mutant.path
         source = target.read_text()

@@ -1,8 +1,8 @@
 {
  "schema_version": 1,
  "fixture_version": "sop-synth-v1",
- "generated_at_utc": "2026-09-22T17:20:12Z",
- "built_at_utc": "2026-09-22T17:21:41Z",
+ "generated_at_utc": "2026-09-22T17:31:59Z",
+ "built_at_utc": "2026-09-22T17:33:04Z",
  "cache_root_env": "CORPUS_CACHE",
  "cache_root_default": ".claude/corpus-cache",
  "media_subdir": "sop-synth-v1",
@@ -113,7 +113,7 @@
    "frames_profile_v1": 16,
    "longest_edge_profile_v1": 3211264,
    "recipe": {
-    "source": "lavfi color + drawbox + drawtext",
+    "source": "lavfi color + drawbox",
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -195,7 +195,7 @@
    "frames_profile_v1": 16,
    "longest_edge_profile_v1": 3211264,
    "recipe": {
-    "source": "lavfi color + drawbox + drawtext",
+    "source": "lavfi color + drawbox",
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -268,7 +268,7 @@
    "frames_profile_v1": 16,
    "longest_edge_profile_v1": 3211264,
    "recipe": {
-    "source": "lavfi color + drawbox + drawtext",
+    "source": "lavfi color + drawbox",
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -350,7 +350,7 @@
    "frames_profile_v1": 60,
    "longest_edge_profile_v1": 12042240,
    "recipe": {
-    "source": "lavfi color + drawbox + drawtext",
+    "source": "lavfi color + drawbox",
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -414,7 +414,7 @@
    "frames_profile_v1": 60,
    "longest_edge_profile_v1": 12042240,
    "recipe": {
-    "source": "lavfi color + drawbox + drawtext",
+    "source": "lavfi color + drawbox",
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -505,7 +505,7 @@
    "frames_profile_v1": 60,
    "longest_edge_profile_v1": 12042240,
    "recipe": {
-    "source": "lavfi color + drawbox + drawtext",
+    "source": "lavfi color + drawbox",
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -596,7 +596,7 @@
    "frames_profile_v1": 120,
    "longest_edge_profile_v1": 24084480,
    "recipe": {
-    "source": "lavfi color + drawbox + drawtext",
+    "source": "lavfi color + drawbox",
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -694,7 +694,7 @@
    "frames_profile_v1": 120,
    "longest_edge_profile_v1": 24084480,
    "recipe": {
-    "source": "lavfi color + drawbox + drawtext",
+    "source": "lavfi color + drawbox",
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -794,7 +794,7 @@
    "frames_profile_v1": 120,
    "longest_edge_profile_v1": 24084480,
    "recipe": {
-    "source": "lavfi color + drawbox + drawtext",
+    "source": "lavfi color + drawbox",
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -903,7 +903,7 @@
    "frames_profile_v1": 240,
    "longest_edge_profile_v1": 48168960,
    "recipe": {
-    "source": "lavfi color + drawbox + drawtext",
+    "source": "lavfi color + drawbox",
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -1014,7 +1014,7 @@
    "frames_profile_v1": 240,
    "longest_edge_profile_v1": 48168960,
    "recipe": {
-    "source": "lavfi color + drawbox + drawtext",
+    "source": "lavfi color + drawbox",
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",
@@ -1096,7 +1096,7 @@
    "frames_profile_v1": 240,
    "longest_edge_profile_v1": 48168960,
    "recipe": {
-    "source": "lavfi color + drawbox + drawtext",
+    "source": "lavfi color + drawbox",
     "encode": {
      "codec": "libx264",
      "preset": "veryfast",

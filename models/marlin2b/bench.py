@@ -81,6 +81,22 @@ UPLOAD_REF_SCHEME = "infrx-upload:"
 # marlin-sop.md §3.1: `Idempotency-Key = sop1.<item_key>`, scoped org + operation + key.
 IDEMPOTENCY_PREFIX = "sop1."
 ITEM_KEY_HEX = 32
+# A failed attempt this client can ATTRIBUTE to the platform: a 5xx, or a 200 whose stream
+# the server broke. A transport error, a local file error or an upload failure may or may not
+# be the platform's fault and this client cannot tell, so they are counted separately rather
+# than folded into the <1 % criterion (R21 makes platform-caused failures free, which is
+# exactly why the count may not be inflated).
+PLATFORM_ERROR_CLASSES = frozenset({"stream_error_event", "truncated_stream", "no_content_delta",
+                                    "malformed_sse_chunk"})
+
+
+def is_platform_failure(row):
+    status = row.get("http_status")
+    return row.get("outcome") == "failed" and (
+        (isinstance(status, int) and status >= 500)
+        or row.get("error_class") in PLATFORM_ERROR_CLASSES)
+
+
 # The phases a run wants timed end to end (18-marlin-backend-first.md E1B.b). The gateway
 # publishes them as Server-Timing metrics; a name that is absent is reported as absent,
 # never inferred from the wall clock.
@@ -610,6 +626,55 @@ def build_schedule(n, clips, forms, prompt=None, rate=None, seed=0, video=None, 
 # ---------------------------------------------------------------- resume (pure)
 
 
+def run_fingerprint(cfg):
+    """The identity of a run, written as the raw file's FIRST line.
+
+    These are exactly the knobs that decide an item's key and its payload, so a `--resume`
+    against a raw file written under different ones would re-send items under keys that do
+    not match their payloads — 409 idempotency_conflict, i.e. a client bug (§3.6). The
+    fingerprint makes that a refusal instead.
+    """
+    a = cfg["args"]
+    return {"kind": "run_profile", "dataset_version": cfg["dataset_version"],
+            "profile_version": a.profile_version, "seed": a.seed, "forms": cfg["forms"],
+            "max_tokens_mix": list(a.max_tokens_mix), "tenants": cfg["tenants"],
+            "requests": a.requests}
+
+
+FINGERPRINT_FIELDS = ("dataset_version", "profile_version", "seed", "forms", "max_tokens_mix")
+
+
+def read_fingerprint(path):
+    """The run_profile line of a previous raw file, or None for a file written before it."""
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                return None
+            if isinstance(row, dict) and row.get("kind") == "run_profile":
+                return row
+            return None            # the first line is already an attempt: an older file
+    return None
+
+
+def check_resume_profile(a, cfg, previous):
+    """Refuse a resume whose identity knobs differ from the run being resumed."""
+    if previous is None:
+        print("note: the resumed raw file carries no run_profile line; its identity cannot "
+              "be checked (written before this client recorded one)", file=sys.stderr)
+        return
+    current = run_fingerprint(cfg)
+    differing = [name for name in FINGERPRINT_FIELDS if previous.get(name) != current[name]]
+    if differing:
+        sys.exit("refusing to resume: " + "; ".join(
+            f"{name} was {previous.get(name)!r}, now {current[name]!r}" for name in differing)
+            + ". These decide every item key and payload, so resuming across them would "
+              "re-send items under keys that no longer match their payloads (409).")
+
+
 def read_attempts(path):
     """The attempt rows of a previous raw file; resource samples and junk lines are skipped."""
     rows = []
@@ -635,6 +700,20 @@ def is_terminal(row):
     if row.get("outcome") == "accepted":
         return True
     return row.get("outcome") == "rejected" and row.get("http_status") in TERMINAL_REJECT_STATUS
+
+
+def forget_cold(schedule):
+    """A resumed run cannot say which clips are cold.
+
+    `cold` is the FIRST occurrence of a clip in the schedule, and the interrupted run
+    already sent some of them to the same target, so its caches are warm in a way this run
+    cannot observe. Every resumed item is therefore `cold = None` (unknown) rather than
+    carrying a flag computed before the filtering — a cold/warm split out of a resumed run
+    would be a claim about a cache state nobody measured.
+    """
+    for item in schedule:
+        item["cold"] = None
+    return schedule
 
 
 def apply_resume(schedule, previous):
@@ -1223,6 +1302,11 @@ def summarize(rows, wall, cfg):
                          "attempts": len(rows),
                          "rejected_attempts": sum(1 for r in rows if r["outcome"] == "rejected"),
                          "failed_attempts": sum(1 for r in rows if r["outcome"] == "failed"),
+                         # Attributed, so the provisional <1 % platform criterion is not fed
+                         # by failures this client cannot blame on the platform.
+                         "platform_failed_attempts": sum(1 for r in rows if is_platform_failure(r)),
+                         "unattributed_failed_attempts": sum(
+                             1 for r in rows if r["outcome"] == "failed" and not is_platform_failure(r)),
                          "cancelled_attempts": sum(1 for r in rows if r["outcome"] == "cancelled"),
                          "retried_requests": sum(1 for r in finals if r.get("retries"))},
         # MARLIN-SOP: one accepted item per distinct key, and a replay is not a second item.
@@ -1363,8 +1447,11 @@ async def execute(a, state):
     if a.resume:
         # The keys and payloads are re-derived, not remembered: only the outcomes come from
         # the previous file. A key that is a function of the attempt would defeat this.
+        check_resume_profile(a, cfg, read_fingerprint(a.resume))
         schedule, cfg["skipped_terminal"] = apply_resume(schedule, read_attempts(a.resume))
+        forget_cold(schedule)
         cfg["resumed_from"] = os.path.basename(a.resume)
+    write_row(cfg, run_fingerprint(cfg))     # the raw file's first line, before any attempt
     rows = state["rows"]
     # asyncio's default handler prints the exception MESSAGE of an unretrieved task.
     asyncio.get_running_loop().set_exception_handler(
@@ -1404,10 +1491,18 @@ def cell_warnings(s):
     out = list(s.get("suppressed_percentiles") or [])
     d = s.get("denominators") or {}
     attempts = d.get("attempts") or 0
-    platform = (d.get("failed_attempts") or 0)
-    if attempts and platform / attempts > 0.01:
-        out.append(f"platform-caused failures {platform}/{attempts} exceed the provisional "
+    platform = d.get("platform_failed_attempts")
+    if platform is None:
+        out.append("platform-caused failure rate unavailable: this cell predates the "
+                   "attributed denominators")
+    elif attempts and platform / attempts > 0.01:
+        out.append(f"platform-attributed failures {platform}/{attempts} exceed the provisional "
                    f"1 % criterion (P-18, provisional)")
+    unattributed = d.get("unattributed_failed_attempts") or 0
+    if unattributed:
+        out.append(f"{unattributed}/{attempts} failed attempt(s) this client cannot attribute "
+                   f"(transport, local file or upload): neither counted as platform-caused nor "
+                   f"dismissed")
     if s.get("interrupted"):
         out.append("run was interrupted: partial")
     profile = s.get("profile") or {}

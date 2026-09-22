@@ -126,7 +126,11 @@ def run_bench(argv, gateway, env=None):
     out_path = argv[argv.index("--out") + 1]
     raw = os.path.join(os.path.dirname(out_path), summary["raw"])
     with open(raw, encoding="utf-8") as f:
-        rows = [json.loads(line) for line in f]
+        lines = [json.loads(line) for line in f]
+    # The raw file's first line is the run_profile fingerprint and resource samples are
+    # interleaved; `raw` means the ATTEMPT rows. A test that cares about the other kinds
+    # reads the file itself.
+    rows = [line for line in lines if line.get("kind") is None]
     return summary, rows, out, rc
 
 
@@ -376,6 +380,10 @@ def test_rejections_and_failures_are_counted_apart_from_accepted():
                                            "scheduled": 8, "skipped_terminal_on_resume": 0,
                                            "attempts": 8, "rejected_attempts": 2,
                                            "failed_attempts": 2, "cancelled_attempts": 0,
+                                           # the 500 and the 503 are attributable; a
+                                           # transport or local-file failure would not be
+                                           "platform_failed_attempts": 2,
+                                           "unattributed_failed_attempts": 0,
                                            "retried_requests": 0}
         assert summary["error_codes"]["rate_limit_exceeded"] == 1
         assert summary["error_codes"]["insufficient_credit"] == 1
@@ -692,6 +700,106 @@ def test_a_rejected_429_item_is_resumed_with_the_same_key():
         assert len(gw.accepted_keys) == 3 and len(set(gw.accepted_keys)) == 3
 
 
+def test_an_unattributable_failure_is_not_counted_as_platform_caused():
+    """R21 makes platform-caused failures free, so the count may not be inflated by
+    failures this client cannot blame on anybody (reviewer N5)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(2, tmp)
+        with_clips(clips)
+        # a transport error: the client cannot tell whose fault it is
+        summary, raw, _, _ = run_bench(base_argv(tmp, requests=2, concurrency=1),
+                                       FakeGateway(raise_with_key="sk-not-the-point"),
+                                       env={"MARLIN_API_KEY": KEY})
+        d = summary["denominators"]
+        assert summary["failed"] == 2 and d["failed_attempts"] == 2
+        assert d["platform_failed_attempts"] == 0 and d["unattributed_failed_attempts"] == 2
+        warnings = bench.cell_warnings(summary)
+        assert not any("exceed the provisional" in w for w in warnings), \
+            "a transport failure must not trip the platform-caused criterion"
+        assert any("cannot attribute" in w for w in warnings), "and must still be reported"
+
+        # a 5xx and a torn 200 stream are attributable
+        argv = base_argv(tmp, requests=2, concurrency=1)
+        argv[argv.index("--raw") + 1] = os.path.join(tmp, "raw-5xx.jsonl")
+        summary, raw, _, _ = run_bench(argv, FakeGateway(statuses={0: 500, 1: 502}),
+                                       env={"MARLIN_API_KEY": KEY})
+        assert summary["denominators"]["platform_failed_attempts"] == 2
+        assert any("platform-attributed failures 2/2" in w for w in bench.cell_warnings(summary))
+        argv[argv.index("--raw") + 1] = os.path.join(tmp, "raw-trunc.jsonl")
+        summary, _, _, _ = run_bench(argv, FakeGateway(truncate_stream=True),
+                                     env={"MARLIN_API_KEY": KEY})
+        assert summary["denominators"]["platform_failed_attempts"] == 2, "truncated_stream"
+
+
+def test_a_resumed_run_makes_no_cold_warm_claim():
+    """cold is the first occurrence in the schedule, and the interrupted run already warmed
+    the target, so a resumed run reports `unknown` rather than a flag nobody measured."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(3, tmp)
+        with_clips(clips)
+        gw = FakeGateway(idempotent=True, lose_ack=(0, 1, 2))
+        first = os.path.join(tmp, "raw1.jsonl")
+        argv = base_argv(tmp, requests=3, concurrency=1, dataset_version="ds")
+        argv[argv.index("--raw") + 1] = first
+        summary, raw, _, _ = run_bench(argv, gw, env={"MARLIN_API_KEY": KEY})
+        assert summary["cold_requests"] == 0 and all(r["cold"] is True for r in raw)
+
+        argv2 = base_argv(tmp, requests=3, concurrency=1, dataset_version="ds")
+        argv2[argv2.index("--raw") + 1] = os.path.join(tmp, "raw2.jsonl")
+        argv2 += ["--resume", first]
+        resumed, raw2, _, _ = run_bench(argv2, gw, env={"MARLIN_API_KEY": KEY})
+        assert resumed["accepted"] == 3 and len(raw2) == 3
+        assert all(r["cold"] is None for r in raw2), "a resumed item's cache state is unknown"
+        assert resumed["cold_requests"] == 0 and resumed["warm_requests"] == 0
+        assert resumed["cold_ttft_s"]["samples"] == 0 and resumed["warm_ttft_s"]["samples"] == 0
+
+
+def test_the_raw_file_declares_its_run_profile_and_a_mismatched_resume_is_refused():
+    """The fingerprint is the raw file's first line; resuming across any knob that decides an
+    item key or its payload is refused instead of producing 409s (reviewer N8)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(2, tmp)
+        with_clips(clips)
+        first = os.path.join(tmp, "raw1.jsonl")
+        argv = base_argv(tmp, requests=2, concurrency=1, dataset_version="ds", seed=5,
+                         max_tokens="128,512")
+        argv[argv.index("--raw") + 1] = first
+        run_bench(argv, FakeGateway(idempotent=True, lose_ack=(0, 1)),
+                  env={"MARLIN_API_KEY": KEY})
+        with open(first, encoding="utf-8") as f:
+            head = json.loads(f.readline())
+        assert head == {"kind": "run_profile", "dataset_version": "ds", "profile_version": "v1",
+                        "seed": 5, "forms": ["video_b64"], "max_tokens_mix": [128, 512],
+                        "tenants": 1, "requests": 2}
+        assert bench.read_fingerprint(first) == head
+
+        for knob, value in (("seed", 6), ("dataset_version", "other"),
+                            ("profile_version", "v2"), ("max_tokens", "256"),
+                            ("forms", "text")):
+            bad = base_argv(tmp, requests=2, concurrency=1, dataset_version="ds", seed=5,
+                            max_tokens="128,512")
+            flag = f"--{knob.replace('_', '-')}"
+            if flag in bad:
+                bad[bad.index(flag) + 1] = str(value)
+            else:
+                bad += [flag, str(value)]
+            bad[bad.index("--raw") + 1] = os.path.join(tmp, f"raw-{knob}.jsonl")
+            bad += ["--resume", first]
+            try:
+                run_bench(bad, FakeGateway(idempotent=True), env={"MARLIN_API_KEY": KEY})
+                raise AssertionError(f"resumed across a changed {knob}")
+            except SystemExit as e:
+                assert "refusing to resume" in str(e.code) and knob.split("_")[0] in str(e.code)
+        # the matching resume still works
+        good = base_argv(tmp, requests=2, concurrency=1, dataset_version="ds", seed=5,
+                         max_tokens="128,512")
+        good[good.index("--raw") + 1] = os.path.join(tmp, "raw-ok.jsonl")
+        good += ["--resume", first]
+        resumed, raw2, _, rc = run_bench(good, FakeGateway(idempotent=True),
+                                         env={"MARLIN_API_KEY": KEY})
+        assert rc == 0 and resumed["accepted"] == 2 and len(raw2) == 2
+
+
 def test_real_load_corpus_reads_the_committed_manifest():
     """Every other test monkeypatches load_corpus, so the real loader, the $CORPUS_CACHE
     resolution and the manifest's own field names are only exercised here."""
@@ -913,6 +1021,9 @@ def test_the_predeclared_protocol_matches_the_client_that_implements_it():
     # comparison is an estimate.
     assert "num_gpu_blocks" in text and "Idle residency says nothing about KV capacity" in text
     assert "45.0 GiB" in text and "(`est.`" in text
+    # N6: the client FLAGS a cold/warm split at a non-restarted engine; it does not refuse
+    # to print the cell, and the protocol may not claim otherwise.
+    assert "a flag, not a refusal" in text and "the report **flags**" in text
     for pending in ("P-04", "P-18", "P-07"):
         assert pending in text
     assert "Server-Timing" in text and "declared_missing" in text, \

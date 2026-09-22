@@ -50,7 +50,7 @@ PROFILE = {"version": "v1", "fps": 2.0, "min_frames": 4, "max_frames": 240,
 #
 # DEVIATION from marlin-sop.md §3.8, with its reason: §3.8 describes "a text overlay naming
 # the current step" via `drawtext`, and the pinned ffmpeg 7.0.2-amd64-static build does not
-# ship drawtext at all (`ffmpeg -filters` lists 494 filters and none of them is drawtext;
+# ship drawtext at all (`ffmpeg -filters` lists 486 filters and none of them is drawtext;
 # ffmpeg 7.0 made libharfbuzz a hard requirement for it and this static build has only
 # libfreetype/fontconfig). Re-pinning the encoder to gain a cosmetic overlay would throw
 # away the corpus's verified sha256 pin, so the step label is encoded in the PIXELS instead:
@@ -203,7 +203,8 @@ def plan():
             "boundary_spanning_step_ids": spanning_ids(steps, duration),
             "frames_profile_v1": profile_frames(duration),
             "longest_edge_profile_v1": profile_frames(duration) * PROFILE["px_per_frame"],
-            "recipe": {"source": "lavfi color + drawbox + drawtext", "encode": dict(ENCODE)},
+            # drawtext is deliberately absent: see REQUIRED_FILTERS.
+            "recipe": {"source": "lavfi color + drawbox", "encode": dict(ENCODE)},
             "file": f"{MEDIA_SUBDIR}/{cid}.mp4",
             "derived": None, "status": "unbuilt"})
     return {
