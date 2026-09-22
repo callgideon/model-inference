@@ -1,0 +1,1132 @@
+{
+ "schema_version": 1,
+ "fixture_version": "sop-synth-v1",
+ "generated_at_utc": "2026-09-22T16:27:50Z",
+ "built_at_utc": "2026-09-22T16:28:30Z",
+ "cache_root_env": "CORPUS_CACHE",
+ "cache_root_default": ".claude/corpus-cache",
+ "media_subdir": "sop-synth-v1",
+ "purpose": "SOP journey, temporal-event plumbing and evaluator-harness fixture. NOT a quality benchmark: a score here is not an accuracy claim (marlin-sop.md \u00a75).",
+ "ground_truth": "the step script is the renderer's input; labels and spans are inputs, not annotations",
+ "rights": "wholly generated from lavfi sources: no people, no logos, no real footage, no customer or vendor data",
+ "api_limits": {
+  "max_clip_duration_s": 120,
+  "max_pixels_per_frame": 200704
+ },
+ "profile": {
+  "version": "v1",
+  "fps": 2.0,
+  "min_frames": 4,
+  "max_frames": 240,
+  "px_per_frame": 200704,
+  "shortest_edge": 4096
+ },
+ "ffmpeg": {
+  "version": "7.0.2-static",
+  "build": "ffmpeg-7.0.2-amd64-static (johnvansickle.com static build, gcc 8/Debian)",
+  "tarball_url": "https://johnvansickle.com/ffmpeg/releases/ffmpeg-7.0.2-amd64-static.tar.xz",
+  "tarball_url_fallbacks": [
+   "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz",
+   "https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-7.0.2-amd64-static.tar.xz"
+  ],
+  "tarball_sha256": "abda8d77ce8309141f83ab8edf0596834087c52467f6badf376a6a2a4c87cf67",
+  "tarball_md5": "7fa72b652e19bf84c9461e332ea1cdf3",
+  "tarball_bytes": 41888096,
+  "ffmpeg_sha256": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
+  "ffprobe_sha256": "4f231a1960d83e403d08f7971e271707bec278a9ae18e21b8b5b03186668450d",
+  "dir": "ffmpeg-7.0.2-amd64-static"
+ },
+ "required_filters": [
+  "color",
+  "drawbox"
+ ],
+ "label_encoding": "no text overlay: the pinned ffmpeg build ships no drawtext filter (ffmpeg 7.0 needs libharfbuzz), so a step is identified in the pixels by its part colour and a tally of canonical_index + 1 marks",
+ "encode_defaults": {
+  "codec": "libx264",
+  "preset": "veryfast",
+  "crf": 26,
+  "pix_fmt": "yuv420p",
+  "gop": 48,
+  "threads": 1,
+  "bitexact": true,
+  "audio": "none (synthetic source has none)"
+ },
+ "segment_boundary_s": 60.0,
+ "prompts": [
+  {
+   "id": "sop00",
+   "kind": "steps",
+   "text": "List every step of the procedure you can see, in the order they happen, with start and end times in seconds."
+  },
+  {
+   "id": "sop01",
+   "kind": "find",
+   "text": "From when to when is the operator working on the bracket?"
+  },
+  {
+   "id": "sop02",
+   "kind": "absence",
+   "text": "Which of these steps does NOT happen in this clip: place housing, align bracket, drive screw, apply seal?"
+  }
+ ],
+ "clips": [
+  {
+   "id": "sop00-8s-640x360",
+   "case": null,
+   "duration_s": 8,
+   "width": 640,
+   "height": 360,
+   "fps": 10,
+   "prompt": "sop00",
+   "segment_boundary_s": null,
+   "steps": [
+    {
+     "step_id": "sop00-8s-640x360-s0",
+     "canonical_index": 0,
+     "label": "fetch tray",
+     "part_colour": "0xE05A4E",
+     "start_s": 0.4,
+     "end_s": 1.6,
+     "position": 0
+    },
+    {
+     "step_id": "sop00-8s-640x360-s1",
+     "canonical_index": 1,
+     "label": "place housing",
+     "part_colour": "0x4EA8E0",
+     "start_s": 2.8,
+     "end_s": 4.0,
+     "position": 1
+    },
+    {
+     "step_id": "sop00-8s-640x360-s2",
+     "canonical_index": 2,
+     "label": "align bracket",
+     "part_colour": "0x8FD14F",
+     "start_s": 5.2,
+     "end_s": 6.4,
+     "position": 2
+    }
+   ],
+   "absent_steps": [],
+   "boundary_spanning_step_ids": [],
+   "frames_profile_v1": 16,
+   "longest_edge_profile_v1": 3211264,
+   "recipe": {
+    "source": "lavfi color + drawbox + drawtext",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "none (synthetic source has none)"
+    }
+   },
+   "file": "sop-synth-v1/sop00-8s-640x360.mp4",
+   "derived": {
+    "duration_s": 8.0,
+    "bytes": 5133,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 640,
+    "height": 360,
+    "fps": 10.0,
+    "pix_fmt": "yuv420p",
+    "frames": 80,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null,
+    "sha256": "3a79e59089e05fe81a3409a2fe930a3b8df146300b012a37ff18e6eb9fe975b7"
+   },
+   "status": "built"
+  },
+  {
+   "id": "sop01-8s-854x480-steps_within_one_second",
+   "case": "steps_within_one_second",
+   "duration_s": 8,
+   "width": 854,
+   "height": 480,
+   "fps": 15,
+   "prompt": "sop01",
+   "segment_boundary_s": null,
+   "steps": [
+    {
+     "step_id": "sop01-8s-854x480-steps_within_one_second-s0",
+     "canonical_index": 0,
+     "label": "fetch tray",
+     "part_colour": "0xE05A4E",
+     "start_s": 0.4,
+     "end_s": 1.4,
+     "position": 0
+    },
+    {
+     "step_id": "sop01-8s-854x480-steps_within_one_second-s1",
+     "canonical_index": 1,
+     "label": "place housing",
+     "part_colour": "0x4EA8E0",
+     "start_s": 1.8,
+     "end_s": 2.8,
+     "position": 1
+    },
+    {
+     "step_id": "sop01-8s-854x480-steps_within_one_second-s2",
+     "canonical_index": 2,
+     "label": "align bracket",
+     "part_colour": "0x8FD14F",
+     "start_s": 4.0,
+     "end_s": 5.0,
+     "position": 2
+    },
+    {
+     "step_id": "sop01-8s-854x480-steps_within_one_second-s3",
+     "canonical_index": 3,
+     "label": "drive screw",
+     "part_colour": "0xE0C34E",
+     "start_s": 5.8,
+     "end_s": 6.8,
+     "position": 3
+    }
+   ],
+   "absent_steps": [],
+   "boundary_spanning_step_ids": [],
+   "frames_profile_v1": 16,
+   "longest_edge_profile_v1": 3211264,
+   "recipe": {
+    "source": "lavfi color + drawbox + drawtext",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "none (synthetic source has none)"
+    }
+   },
+   "file": "sop-synth-v1/sop01-8s-854x480-steps_within_one_second.mp4",
+   "derived": {
+    "duration_s": 8.0,
+    "bytes": 7492,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 854,
+    "height": 480,
+    "fps": 15.0,
+    "pix_fmt": "yuv420p",
+    "frames": 120,
+    "aspect": "427:240",
+    "display_aspect_ratio": "427:240",
+    "rotation_metadata": null,
+    "sha256": "f7da13a80ddc1589685bb0d86beeda21448f62a4aa465b5e010eb12fd880a866"
+   },
+   "status": "built"
+  },
+  {
+   "id": "sop02-8s-1280x720",
+   "case": null,
+   "duration_s": 8,
+   "width": 1280,
+   "height": 720,
+   "fps": 30,
+   "prompt": "sop02",
+   "segment_boundary_s": null,
+   "steps": [
+    {
+     "step_id": "sop02-8s-1280x720-s0",
+     "canonical_index": 0,
+     "label": "fetch tray",
+     "part_colour": "0xE05A4E",
+     "start_s": 0.4,
+     "end_s": 1.6,
+     "position": 0
+    },
+    {
+     "step_id": "sop02-8s-1280x720-s1",
+     "canonical_index": 1,
+     "label": "place housing",
+     "part_colour": "0x4EA8E0",
+     "start_s": 2.8,
+     "end_s": 4.0,
+     "position": 1
+    },
+    {
+     "step_id": "sop02-8s-1280x720-s2",
+     "canonical_index": 2,
+     "label": "align bracket",
+     "part_colour": "0x8FD14F",
+     "start_s": 5.2,
+     "end_s": 6.4,
+     "position": 2
+    }
+   ],
+   "absent_steps": [],
+   "boundary_spanning_step_ids": [],
+   "frames_profile_v1": 16,
+   "longest_edge_profile_v1": 3211264,
+   "recipe": {
+    "source": "lavfi color + drawbox + drawtext",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "none (synthetic source has none)"
+    }
+   },
+   "file": "sop-synth-v1/sop02-8s-1280x720.mp4",
+   "derived": {
+    "duration_s": 8.0,
+    "bytes": 15838,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "pix_fmt": "yuv420p",
+    "frames": 240,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null,
+    "sha256": "562e07939ac523cf4f2d9520bd7d4e4ebba1fad45e44ac2459172825f601efa5"
+   },
+   "status": "built"
+  },
+  {
+   "id": "sop03-30s-640x360",
+   "case": null,
+   "duration_s": 30,
+   "width": 640,
+   "height": 360,
+   "fps": 10,
+   "prompt": "sop00",
+   "segment_boundary_s": null,
+   "steps": [
+    {
+     "step_id": "sop03-30s-640x360-s0",
+     "canonical_index": 0,
+     "label": "fetch tray",
+     "part_colour": "0xE05A4E",
+     "start_s": 0.4,
+     "end_s": 4.0,
+     "position": 0
+    },
+    {
+     "step_id": "sop03-30s-640x360-s1",
+     "canonical_index": 1,
+     "label": "place housing",
+     "part_colour": "0x4EA8E0",
+     "start_s": 7.7,
+     "end_s": 11.3,
+     "position": 1
+    },
+    {
+     "step_id": "sop03-30s-640x360-s2",
+     "canonical_index": 2,
+     "label": "align bracket",
+     "part_colour": "0x8FD14F",
+     "start_s": 15.0,
+     "end_s": 18.6,
+     "position": 2
+    },
+    {
+     "step_id": "sop03-30s-640x360-s3",
+     "canonical_index": 3,
+     "label": "drive screw",
+     "part_colour": "0xE0C34E",
+     "start_s": 22.3,
+     "end_s": 25.9,
+     "position": 3
+    }
+   ],
+   "absent_steps": [],
+   "boundary_spanning_step_ids": [],
+   "frames_profile_v1": 60,
+   "longest_edge_profile_v1": 12042240,
+   "recipe": {
+    "source": "lavfi color + drawbox + drawtext",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "none (synthetic source has none)"
+    }
+   },
+   "file": "sop-synth-v1/sop03-30s-640x360.mp4",
+   "derived": {
+    "duration_s": 30.0,
+    "bytes": 13404,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 640,
+    "height": 360,
+    "fps": 10.0,
+    "pix_fmt": "yuv420p",
+    "frames": 300,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null,
+    "sha256": "e7ceae9e8acd283f1e3991412882fb1568ea329a82a0cc537533c9fdc09f5537"
+   },
+   "status": "built"
+  },
+  {
+   "id": "sop04-30s-854x480-steps_out_of_order",
+   "case": "steps_out_of_order",
+   "duration_s": 30,
+   "width": 854,
+   "height": 480,
+   "fps": 15,
+   "prompt": "sop01",
+   "segment_boundary_s": null,
+   "steps": [
+    {
+     "step_id": "sop04-30s-854x480-steps_out_of_order-s1",
+     "canonical_index": 1,
+     "label": "place housing",
+     "part_colour": "0x4EA8E0",
+     "start_s": 0.4,
+     "end_s": 7.7,
+     "position": 0
+    },
+    {
+     "step_id": "sop04-30s-854x480-steps_out_of_order-s0",
+     "canonical_index": 0,
+     "label": "fetch tray",
+     "part_colour": "0xE05A4E",
+     "start_s": 15.0,
+     "end_s": 22.3,
+     "position": 1
+    }
+   ],
+   "absent_steps": [],
+   "boundary_spanning_step_ids": [],
+   "frames_profile_v1": 60,
+   "longest_edge_profile_v1": 12042240,
+   "recipe": {
+    "source": "lavfi color + drawbox + drawtext",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "none (synthetic source has none)"
+    }
+   },
+   "file": "sop-synth-v1/sop04-30s-854x480-steps_out_of_order.mp4",
+   "derived": {
+    "duration_s": 30.0,
+    "bytes": 20272,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 854,
+    "height": 480,
+    "fps": 15.0,
+    "pix_fmt": "yuv420p",
+    "frames": 450,
+    "aspect": "427:240",
+    "display_aspect_ratio": "427:240",
+    "rotation_metadata": null,
+    "sha256": "18be67bf21d0e2d2781e233c5d8f934defe300976bcff7b4b83a0beb796c0309"
+   },
+   "status": "built"
+  },
+  {
+   "id": "sop05-30s-1280x720",
+   "case": null,
+   "duration_s": 30,
+   "width": 1280,
+   "height": 720,
+   "fps": 30,
+   "prompt": "sop02",
+   "segment_boundary_s": null,
+   "steps": [
+    {
+     "step_id": "sop05-30s-1280x720-s0",
+     "canonical_index": 0,
+     "label": "fetch tray",
+     "part_colour": "0xE05A4E",
+     "start_s": 0.4,
+     "end_s": 3.3,
+     "position": 0
+    },
+    {
+     "step_id": "sop05-30s-1280x720-s1",
+     "canonical_index": 1,
+     "label": "place housing",
+     "part_colour": "0x4EA8E0",
+     "start_s": 6.2,
+     "end_s": 9.1,
+     "position": 1
+    },
+    {
+     "step_id": "sop05-30s-1280x720-s2",
+     "canonical_index": 2,
+     "label": "align bracket",
+     "part_colour": "0x8FD14F",
+     "start_s": 12.1,
+     "end_s": 15.0,
+     "position": 2
+    },
+    {
+     "step_id": "sop05-30s-1280x720-s3",
+     "canonical_index": 3,
+     "label": "drive screw",
+     "part_colour": "0xE0C34E",
+     "start_s": 17.9,
+     "end_s": 20.8,
+     "position": 3
+    },
+    {
+     "step_id": "sop05-30s-1280x720-s4",
+     "canonical_index": 4,
+     "label": "apply seal",
+     "part_colour": "0xB06AE0",
+     "start_s": 23.8,
+     "end_s": 26.7,
+     "position": 4
+    }
+   ],
+   "absent_steps": [],
+   "boundary_spanning_step_ids": [],
+   "frames_profile_v1": 60,
+   "longest_edge_profile_v1": 12042240,
+   "recipe": {
+    "source": "lavfi color + drawbox + drawtext",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "none (synthetic source has none)"
+    }
+   },
+   "file": "sop-synth-v1/sop05-30s-1280x720.mp4",
+   "derived": {
+    "duration_s": 30.0,
+    "bytes": 53958,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "pix_fmt": "yuv420p",
+    "frames": 900,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null,
+    "sha256": "8db751c78eb5e6dfb67e6f3bbde77df1e28c61d8836f9111ee936c19c1f84c8c"
+   },
+   "status": "built"
+  },
+  {
+   "id": "sop06-60s-640x360",
+   "case": null,
+   "duration_s": 60,
+   "width": 640,
+   "height": 360,
+   "fps": 10,
+   "prompt": "sop00",
+   "segment_boundary_s": null,
+   "steps": [
+    {
+     "step_id": "sop06-60s-640x360-s0",
+     "canonical_index": 0,
+     "label": "fetch tray",
+     "part_colour": "0xE05A4E",
+     "start_s": 0.4,
+     "end_s": 6.3,
+     "position": 0
+    },
+    {
+     "step_id": "sop06-60s-640x360-s1",
+     "canonical_index": 1,
+     "label": "place housing",
+     "part_colour": "0x4EA8E0",
+     "start_s": 12.2,
+     "end_s": 18.1,
+     "position": 1
+    },
+    {
+     "step_id": "sop06-60s-640x360-s2",
+     "canonical_index": 2,
+     "label": "align bracket",
+     "part_colour": "0x8FD14F",
+     "start_s": 24.1,
+     "end_s": 30.0,
+     "position": 2
+    },
+    {
+     "step_id": "sop06-60s-640x360-s3",
+     "canonical_index": 3,
+     "label": "drive screw",
+     "part_colour": "0xE0C34E",
+     "start_s": 35.9,
+     "end_s": 41.8,
+     "position": 3
+    },
+    {
+     "step_id": "sop06-60s-640x360-s4",
+     "canonical_index": 4,
+     "label": "apply seal",
+     "part_colour": "0xB06AE0",
+     "start_s": 47.8,
+     "end_s": 53.7,
+     "position": 4
+    }
+   ],
+   "absent_steps": [],
+   "boundary_spanning_step_ids": [],
+   "frames_profile_v1": 120,
+   "longest_edge_profile_v1": 24084480,
+   "recipe": {
+    "source": "lavfi color + drawbox + drawtext",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "none (synthetic source has none)"
+    }
+   },
+   "file": "sop-synth-v1/sop06-60s-640x360.mp4",
+   "derived": {
+    "duration_s": 60.0,
+    "bytes": 25265,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 640,
+    "height": 360,
+    "fps": 10.0,
+    "pix_fmt": "yuv420p",
+    "frames": 600,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null,
+    "sha256": "8e7a6d7b2c41aff09d88cf69bae631b7b5a4d05ac8027d199f6be0113ee41310"
+   },
+   "status": "built"
+  },
+  {
+   "id": "sop07-60s-854x480-step_absent",
+   "case": "step_absent",
+   "duration_s": 60,
+   "width": 854,
+   "height": 480,
+   "fps": 15,
+   "prompt": "sop01",
+   "segment_boundary_s": null,
+   "steps": [
+    {
+     "step_id": "sop07-60s-854x480-step_absent-s0",
+     "canonical_index": 0,
+     "label": "fetch tray",
+     "part_colour": "0xE05A4E",
+     "start_s": 0.4,
+     "end_s": 5.3,
+     "position": 0
+    },
+    {
+     "step_id": "sop07-60s-854x480-step_absent-s1",
+     "canonical_index": 1,
+     "label": "place housing",
+     "part_colour": "0x4EA8E0",
+     "start_s": 10.3,
+     "end_s": 15.2,
+     "position": 1
+    },
+    {
+     "step_id": "sop07-60s-854x480-step_absent-s3",
+     "canonical_index": 3,
+     "label": "drive screw",
+     "part_colour": "0xE0C34E",
+     "start_s": 30.0,
+     "end_s": 34.9,
+     "position": 2
+    },
+    {
+     "step_id": "sop07-60s-854x480-step_absent-s4",
+     "canonical_index": 4,
+     "label": "apply seal",
+     "part_colour": "0xB06AE0",
+     "start_s": 39.9,
+     "end_s": 44.8,
+     "position": 3
+    },
+    {
+     "step_id": "sop07-60s-854x480-step_absent-s5",
+     "canonical_index": 5,
+     "label": "close lid",
+     "part_colour": "0x4EE0C3",
+     "start_s": 49.7,
+     "end_s": 54.6,
+     "position": 4
+    }
+   ],
+   "absent_steps": [
+    {
+     "step_id": "sop07-60s-854x480-step_absent-s2",
+     "canonical_index": 2,
+     "label": "align bracket",
+     "why": "never performed in this clip; no span exists for it"
+    }
+   ],
+   "boundary_spanning_step_ids": [],
+   "frames_profile_v1": 120,
+   "longest_edge_profile_v1": 24084480,
+   "recipe": {
+    "source": "lavfi color + drawbox + drawtext",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "none (synthetic source has none)"
+    }
+   },
+   "file": "sop-synth-v1/sop07-60s-854x480-step_absent.mp4",
+   "derived": {
+    "duration_s": 60.0,
+    "bytes": 39811,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 854,
+    "height": 480,
+    "fps": 15.0,
+    "pix_fmt": "yuv420p",
+    "frames": 900,
+    "aspect": "427:240",
+    "display_aspect_ratio": "427:240",
+    "rotation_metadata": null,
+    "sha256": "4cbc0c64197cd970f708bc83e83890c91c5f066cecbbf2e6588b0410f9e34f23"
+   },
+   "status": "built"
+  },
+  {
+   "id": "sop08-60s-1280x720",
+   "case": null,
+   "duration_s": 60,
+   "width": 1280,
+   "height": 720,
+   "fps": 30,
+   "prompt": "sop02",
+   "segment_boundary_s": null,
+   "steps": [
+    {
+     "step_id": "sop08-60s-1280x720-s0",
+     "canonical_index": 0,
+     "label": "fetch tray",
+     "part_colour": "0xE05A4E",
+     "start_s": 0.4,
+     "end_s": 5.3,
+     "position": 0
+    },
+    {
+     "step_id": "sop08-60s-1280x720-s1",
+     "canonical_index": 1,
+     "label": "place housing",
+     "part_colour": "0x4EA8E0",
+     "start_s": 10.3,
+     "end_s": 15.2,
+     "position": 1
+    },
+    {
+     "step_id": "sop08-60s-1280x720-s2",
+     "canonical_index": 2,
+     "label": "align bracket",
+     "part_colour": "0x8FD14F",
+     "start_s": 20.1,
+     "end_s": 25.0,
+     "position": 2
+    },
+    {
+     "step_id": "sop08-60s-1280x720-s3",
+     "canonical_index": 3,
+     "label": "drive screw",
+     "part_colour": "0xE0C34E",
+     "start_s": 30.0,
+     "end_s": 34.9,
+     "position": 3
+    },
+    {
+     "step_id": "sop08-60s-1280x720-s4",
+     "canonical_index": 4,
+     "label": "apply seal",
+     "part_colour": "0xB06AE0",
+     "start_s": 39.9,
+     "end_s": 44.8,
+     "position": 4
+    },
+    {
+     "step_id": "sop08-60s-1280x720-s5",
+     "canonical_index": 5,
+     "label": "close lid",
+     "part_colour": "0x4EE0C3",
+     "start_s": 49.7,
+     "end_s": 54.6,
+     "position": 5
+    }
+   ],
+   "absent_steps": [],
+   "boundary_spanning_step_ids": [],
+   "frames_profile_v1": 120,
+   "longest_edge_profile_v1": 24084480,
+   "recipe": {
+    "source": "lavfi color + drawbox + drawtext",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "none (synthetic source has none)"
+    }
+   },
+   "file": "sop-synth-v1/sop08-60s-1280x720.mp4",
+   "derived": {
+    "duration_s": 60.0,
+    "bytes": 106839,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "pix_fmt": "yuv420p",
+    "frames": 1800,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null,
+    "sha256": "69727216ecb9cacc0fe9a76d0b9df5b1bc592ccd6f78bdab85f8928902b218fc"
+   },
+   "status": "built"
+  },
+  {
+   "id": "sop09-115s-640x360",
+   "case": null,
+   "duration_s": 115,
+   "width": 640,
+   "height": 360,
+   "fps": 10,
+   "prompt": "sop00",
+   "segment_boundary_s": 60.0,
+   "steps": [
+    {
+     "step_id": "sop09-115s-640x360-s0",
+     "canonical_index": 0,
+     "label": "fetch tray",
+     "part_colour": "0xE05A4E",
+     "start_s": 0.4,
+     "end_s": 8.6,
+     "position": 0
+    },
+    {
+     "step_id": "sop09-115s-640x360-s1",
+     "canonical_index": 1,
+     "label": "place housing",
+     "part_colour": "0x4EA8E0",
+     "start_s": 16.7,
+     "end_s": 24.9,
+     "position": 1
+    },
+    {
+     "step_id": "sop09-115s-640x360-s2",
+     "canonical_index": 2,
+     "label": "align bracket",
+     "part_colour": "0x8FD14F",
+     "start_s": 33.0,
+     "end_s": 41.2,
+     "position": 2
+    },
+    {
+     "step_id": "sop09-115s-640x360-s3",
+     "canonical_index": 3,
+     "label": "drive screw",
+     "part_colour": "0xE0C34E",
+     "start_s": 49.3,
+     "end_s": 57.5,
+     "position": 3
+    },
+    {
+     "step_id": "sop09-115s-640x360-s4",
+     "canonical_index": 4,
+     "label": "apply seal",
+     "part_colour": "0xB06AE0",
+     "start_s": 65.7,
+     "end_s": 73.9,
+     "position": 4
+    },
+    {
+     "step_id": "sop09-115s-640x360-s5",
+     "canonical_index": 5,
+     "label": "close lid",
+     "part_colour": "0x4EE0C3",
+     "start_s": 82.0,
+     "end_s": 90.2,
+     "position": 5
+    },
+    {
+     "step_id": "sop09-115s-640x360-s6",
+     "canonical_index": 6,
+     "label": "scan label",
+     "part_colour": "0xE07FB0",
+     "start_s": 98.3,
+     "end_s": 106.5,
+     "position": 6
+    }
+   ],
+   "absent_steps": [],
+   "boundary_spanning_step_ids": [],
+   "frames_profile_v1": 230,
+   "longest_edge_profile_v1": 46161920,
+   "recipe": {
+    "source": "lavfi color + drawbox + drawtext",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "none (synthetic source has none)"
+    }
+   },
+   "file": "sop-synth-v1/sop09-115s-640x360.mp4",
+   "derived": {
+    "duration_s": 115.0,
+    "bytes": 46141,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 640,
+    "height": 360,
+    "fps": 10.0,
+    "pix_fmt": "yuv420p",
+    "frames": 1150,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null,
+    "sha256": "0aaab1126240cac85bd742906b18c44e0da2e9599b6afb9e9d539055e9845823"
+   },
+   "status": "built"
+  },
+  {
+   "id": "sop10-115s-854x480-step_spans_segment_boundary",
+   "case": "step_spans_segment_boundary",
+   "duration_s": 115,
+   "width": 854,
+   "height": 480,
+   "fps": 15,
+   "prompt": "sop01",
+   "segment_boundary_s": 60.0,
+   "steps": [
+    {
+     "step_id": "sop10-115s-854x480-step_spans_segment_boundary-s0",
+     "canonical_index": 0,
+     "label": "fetch tray",
+     "part_colour": "0xE05A4E",
+     "start_s": 0.4,
+     "end_s": 8.6,
+     "position": 0
+    },
+    {
+     "step_id": "sop10-115s-854x480-step_spans_segment_boundary-s1",
+     "canonical_index": 1,
+     "label": "place housing",
+     "part_colour": "0x4EA8E0",
+     "start_s": 16.7,
+     "end_s": 24.9,
+     "position": 1
+    },
+    {
+     "step_id": "sop10-115s-854x480-step_spans_segment_boundary-s2",
+     "canonical_index": 2,
+     "label": "align bracket",
+     "part_colour": "0x8FD14F",
+     "start_s": 33.0,
+     "end_s": 41.2,
+     "position": 2
+    },
+    {
+     "step_id": "sop10-115s-854x480-step_spans_segment_boundary-s3",
+     "canonical_index": 3,
+     "label": "drive screw",
+     "part_colour": "0xE0C34E",
+     "start_s": 49.3,
+     "end_s": 57.5,
+     "position": 3
+    },
+    {
+     "step_id": "sop10-115s-854x480-step_spans_segment_boundary-s4",
+     "canonical_index": 4,
+     "label": "apply seal",
+     "part_colour": "0xB06AE0",
+     "start_s": 59.5,
+     "end_s": 61.5,
+     "position": 4
+    },
+    {
+     "step_id": "sop10-115s-854x480-step_spans_segment_boundary-s5",
+     "canonical_index": 5,
+     "label": "close lid",
+     "part_colour": "0x4EE0C3",
+     "start_s": 82.0,
+     "end_s": 90.2,
+     "position": 5
+    },
+    {
+     "step_id": "sop10-115s-854x480-step_spans_segment_boundary-s6",
+     "canonical_index": 6,
+     "label": "scan label",
+     "part_colour": "0xE07FB0",
+     "start_s": 98.3,
+     "end_s": 106.5,
+     "position": 6
+    }
+   ],
+   "absent_steps": [],
+   "boundary_spanning_step_ids": [
+    "sop10-115s-854x480-step_spans_segment_boundary-s4"
+   ],
+   "frames_profile_v1": 230,
+   "longest_edge_profile_v1": 46161920,
+   "recipe": {
+    "source": "lavfi color + drawbox + drawtext",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "none (synthetic source has none)"
+    }
+   },
+   "file": "sop-synth-v1/sop10-115s-854x480-step_spans_segment_boundary.mp4",
+   "derived": {
+    "duration_s": 115.0,
+    "bytes": 74898,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 854,
+    "height": 480,
+    "fps": 15.0,
+    "pix_fmt": "yuv420p",
+    "frames": 1725,
+    "aspect": "427:240",
+    "display_aspect_ratio": "427:240",
+    "rotation_metadata": null,
+    "sha256": "f2b6bf815a598024ffd0e85c73b94b982928d3479f27ca1b8aba46e4f7093c65"
+   },
+   "status": "built"
+  },
+  {
+   "id": "sop11-115s-1280x720",
+   "case": null,
+   "duration_s": 115,
+   "width": 1280,
+   "height": 720,
+   "fps": 30,
+   "prompt": "sop02",
+   "segment_boundary_s": 60.0,
+   "steps": [
+    {
+     "step_id": "sop11-115s-1280x720-s0",
+     "canonical_index": 0,
+     "label": "fetch tray",
+     "part_colour": "0xE05A4E",
+     "start_s": 0.4,
+     "end_s": 14.7,
+     "position": 0
+    },
+    {
+     "step_id": "sop11-115s-1280x720-s1",
+     "canonical_index": 1,
+     "label": "place housing",
+     "part_colour": "0x4EA8E0",
+     "start_s": 28.9,
+     "end_s": 43.2,
+     "position": 1
+    },
+    {
+     "step_id": "sop11-115s-1280x720-s2",
+     "canonical_index": 2,
+     "label": "align bracket",
+     "part_colour": "0x8FD14F",
+     "start_s": 57.5,
+     "end_s": 71.8,
+     "position": 2
+    },
+    {
+     "step_id": "sop11-115s-1280x720-s3",
+     "canonical_index": 3,
+     "label": "drive screw",
+     "part_colour": "0xE0C34E",
+     "start_s": 86.1,
+     "end_s": 100.4,
+     "position": 3
+    }
+   ],
+   "absent_steps": [],
+   "boundary_spanning_step_ids": [
+    "sop11-115s-1280x720-s2"
+   ],
+   "frames_profile_v1": 230,
+   "longest_edge_profile_v1": 46161920,
+   "recipe": {
+    "source": "lavfi color + drawbox + drawtext",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "none (synthetic source has none)"
+    }
+   },
+   "file": "sop-synth-v1/sop11-115s-1280x720.mp4",
+   "derived": {
+    "duration_s": 115.0,
+    "bytes": 199327,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "pix_fmt": "yuv420p",
+    "frames": 3450,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null,
+    "sha256": "e5e77d427015e38bf9ad9622dca892da0ec126b0eb058b297eed7345a50d3069"
+   },
+   "status": "built"
+  }
+ ]
+}
