@@ -521,6 +521,51 @@ MUTANTS += (
        "test_deploy_failclosed__rollback_never_returns_a_pilot_to_an_unmetered_runtime"),
 )
 
+MIGRATE = U + "migrate.py"
+MIG = "test_deploy_failclosed__migrate_"
+MUTANTS += (
+    _m("plan_not_read_only", "the dry run cannot write",
+       MIGRATE, '        conn.execute("set default_transaction_read_only = on")\n', "",
+       "test_backend_deploy__migrate_plans_read_only_and_names_every_pending_file"),
+    _m("reviewed_digest_not_enforced", "apply runs only the reviewed plan",
+       MIGRATE, "        if digest(plan) != expect:", "        if False:",
+       MIG + "applies_only_the_reviewed_plan"),
+    _m("digest_blind_to_content", "an edited file is a different plan",
+       MIGRATE, 'lines = "".join(f"{version} {name} {hashlib.sha256(body).hexdigest()}\\n"',
+       'lines = "".join(f"{version} {name}\\n"',
+       MIG + "applies_only_the_reviewed_plan"),
+    _m("lock_not_taken", "concurrent migrators are excluded",
+       MIGRATE, '        conn.execute("select pg_advisory_xact_lock(%s)", (LOCK_KEY,))\n', "",
+       MIG + "applies_only_the_reviewed_plan"),
+    _m("commit_per_file", "the whole plan is one transaction",
+       MIGRATE, "                         [values[c] for c in insert])",
+       "                         [values[c] for c in insert]); conn.commit()",
+       MIG + "applies_only_the_reviewed_plan"),
+    _m("failure_not_rolled_back", "a failed file rolls every file back",
+       MIGRATE, "                conn.rollback()\n", "",
+       "test_deploy_failclosed__a_failed_migration_rolls_back_the_whole_plan"),
+    _m("failure_reported_as_success", "a failed migration is not exit 0",
+       MIGRATE, "                return FAILED", "                return 0",
+       "test_deploy_failclosed__a_failed_migration_rolls_back_the_whole_plan"),
+    _m("no_history_assumed_empty", "a database without history is not assumed fresh",
+       MIGRATE, '    if "version" not in columns:', "    if False:",
+       MIG + "refuses_a_history_it_cannot_explain"),
+    _m("unknown_version_ignored", "a version the repository lacks is a refusal",
+       MIGRATE, "    if unknown:", "    if False:", MIG + "refuses_a_history_it_cannot_explain"),
+    _m("gap_filled", "a gap in the applied versions is a refusal",
+       MIGRATE, "    if versions[:len(applied)] != sorted(applied):", "    if False:",
+       MIG + "refuses_a_history_it_cannot_explain"),
+    _m("odd_file_skipped", "a file outside the grammar is a refusal, not a skip",
+       MIGRATE, '            raise Refused(f"{path.name}: not a NNNN_name.sql migration")',
+       "            continue", MIG + "refuses_a_history_it_cannot_explain"),
+    _m("duplicate_version_accepted", "two files cannot share a version",
+       MIGRATE, "    if len(set(versions)) != len(versions):", "    if False:",
+       MIG + "refuses_a_history_it_cannot_explain"),
+    _m("missing_dsn_attempted", "no DSN is a refusal, never a default connection",
+       MIGRATE, "    if not dsn.strip():", "    if False:",
+       MIG + "refuses_a_history_it_cannot_explain"),
+)
+
 
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and

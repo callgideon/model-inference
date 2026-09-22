@@ -166,8 +166,6 @@ def main(argv=None) -> int:
     try:
         if args.command == "plan":
             return plan_command(directory)
-        if not re.fullmatch(r"[0-9a-f]{64}", args.expect):
-            raise Refused("apply needs --expect <the 64-hex plan digest `plan` printed>")
         return apply_command(directory, args.expect)
     except Refused as refusal:
         print(f"refused, nothing changed: {refusal}", file=sys.stderr)
