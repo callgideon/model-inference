@@ -1492,3 +1492,15 @@ def test_gap__a_stale_complete_settles_nothing():
         assert not result.settled and result.refusal == "stale_lease", result
         assert world.outcome(request.request_id) is None
     run(case())
+
+
+def test_gap__the_task_deadline_is_the_clamped_instant_not_the_generation_budget():
+    async def case():
+        world = World()
+        # R29 clamp: the caller's deadline is far shorter than the 300 s generation budget
+        request, _ = await queued(world, deadline_s=0.05)
+        engine = ScriptEngine(hang=True)
+        result = await asyncio.wait_for(world.runner(engine).run(request.request_id), timeout=2)
+        assert result.proposed_cause is TerminalCause.deadline_exceeded
+        assert engine.closed == 1
+    run(case())
