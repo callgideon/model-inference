@@ -99,6 +99,9 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("i3bm16", "a reaped inference lease is a requeue, a reaped preparation a redispatch",
            METRICS, 'action="prepare_redispatched" if preparing else "requeued")',
            'action="requeued")', OBSERVE, "ob09"),
+    Mutant("i3bm25", "a released unknown-usage hold is not a second terminal job", METRICS,
+           "        elif isinstance(item, TerminalOutcome) and str(item.job_id) in released:",
+           "        elif False:", OBSERVE, "ob09"),
     Mutant("i3bm17", "a terminal outcome counts its settlement", METRICS,
            '    reg.inc("infrx_settlements_total", settlement=outcome.settlement_state)',
            "    pass", OBSERVE, "ob09"),
@@ -126,6 +129,40 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("i3bm24", "every metric family has a dashboard panel", DASHBOARD,
            '        {"title": "GPU utilization", "metric": "infrx_gpu_utilization_ratio", '
            '"by": ["gpu"], "unit": "ratio"},\n', "", OBSERVE, "ob10"),
+)
+
+
+STATE = "apps/infrx-api/infrx/contracts/fakes/state.py"
+KIT = "tests/integration/backend/recovery/recoverykit.py"
+
+MUTANTS += (
+    # ---------------- the drills' oracle has teeth (I3B.b), on the reference store
+    Mutant("i3bm30", "reconcile catches an accepted job left undispatched after recovery",
+           KIT, "                await self.scheduler.enqueue(item)", "                pass",
+           DRILLS, "rc01"),
+    Mutant("i3bm31", "reconcile catches output regenerated after publication "
+                     "(a second executable attempt reached the customer)", STATE,
+           "            if job.published:\n                # After the publication marker",
+           "            if False:\n                # After the publication marker", DRILLS, "rc01"),
+    Mutant("i3bm32", "reconcile catches a failed job that keeps its hold", STATE,
+           "else SettlementState.released_platform_absorbed)\n            self._release_hold(wallet, hold)",
+           "else SettlementState.released_platform_absorbed)\n            pass", DRILLS, "rc05"),
+    Mutant("i3bm33", "the index is rebuilt from the durable snapshot of queued jobs", KIT,
+           "if job.state is JobState.queued)", "if job.state is JobState.running)",
+           DRILLS, "rc06", layer=2),
+    # ---------------- the restore procedure (the runbook's steps), on the real PostgreSQL
+    Mutant("i3bm40", "a restore empties the template's default privileges first (else anon "
+                     "gets ALL on the tenant tables)", RESTORE,
+           "    if neutralize:\n", "    if False:\n", RESTORE, "bk01_a", layer=2),
+    Mutant("i3bm41", "a restore re-creates the project's triggers on auth tables", RESTORE,
+           "        for definition in triggers:\n", "        for definition in ():\n",
+           RESTORE, "bk01_a", layer=2),
+    Mutant("i3bm42", "a restore carries 0004's global function default", RESTORE,
+           "            if not public_executes:\n", "            if False:\n",
+           RESTORE, "bk01_a", layer=2),
+    Mutant("i3bm43", "the maintenance switch turns off BOTH admission flags", RESTORE,
+           "\"('legacy_usd_admission', 'credit_admission')\")", "\"('credit_admission')\")",
+           RESTORE, "bk04", layer=2),
 )
 
 

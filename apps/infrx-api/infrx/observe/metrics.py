@@ -38,7 +38,7 @@ import os
 import re
 import threading
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Collection, Mapping
 
 from ..contracts import errors
 from ..contracts.records import (TERMINAL_STATES, ExecutionMode, IndexEvent, LeaseKind,
@@ -68,7 +68,8 @@ DISPATCH_KINDS = frozenset({OutboxKind.prepare_dispatch.value,
                             OutboxKind.inference_dispatch.value})
 COMPONENTS = frozenset({"engine", "database", "index", "object_store", "journal",
                         "price_source"})
-RECOVERY_ACTIONS = frozenset({"requeued", "prepare_redispatched", "terminalized"})
+RECOVERY_ACTIONS = frozenset({"requeued", "prepare_redispatched", "terminalized",
+                              "hold_released"})
 RECONCILE_RESULTS = frozenset({"ok", "drift", "error"})
 _TENANT = re.compile(r"t_[0-9a-f]{12}")
 _DEVICE = re.compile(r"[0-9]{1,2}")
@@ -315,9 +316,14 @@ def record_outcome(reg: Registry, outcome: TerminalOutcome) -> None:
     reg.inc("infrx_settlements_total", settlement=outcome.settlement_state)
 
 
-def record_recovery(reg: Registry, produced) -> None:
+def record_recovery(reg: Registry, produced, *, released: Collection[str] = ()) -> None:
     """What one `JobStore.recover()` pass returned: a re-dispatch means a lease was lost
-    and reaped; an outcome means the reaper settled a job."""
+    and reaped; an outcome means the reaper settled a job.
+
+    `released` names the jobs whose returned outcome is an aged unknown-usage hold being
+    released - a job that was already terminal. The port returns that as a
+    `TerminalOutcome` too, so without it the job would be counted terminal twice; with it,
+    it is one settlement and one `hold_released`."""
     for item in produced:
         if isinstance(item, IndexEvent):
             preparing = item.kind is OutboxKind.prepare_dispatch
@@ -325,6 +331,9 @@ def record_recovery(reg: Registry, produced) -> None:
                     action="prepare_redispatched" if preparing else "requeued")
             reg.inc("infrx_lease_lost_total", detected_by="reaper",
                     kind=LeaseKind.preparation if preparing else LeaseKind.inference)
+        elif isinstance(item, TerminalOutcome) and str(item.job_id) in released:
+            reg.inc("infrx_recovery_actions_total", action="hold_released")
+            reg.inc("infrx_settlements_total", settlement=item.settlement_state)
         elif isinstance(item, TerminalOutcome):
             reg.inc("infrx_recovery_actions_total", action="terminalized")
             record_outcome(reg, item)

@@ -245,15 +245,19 @@ def test_i3b_ob08_host_gauges_read_the_machine_and_fail_towards_the_alert(tmp_pa
 # ------------------------------------------------------------------ the wiring helpers
 
 def test_i3b_ob09_the_reaper_helper_counts_what_recover_returned():
-    """`record_recovery` over a real `JobStore.recover()` pass: a lost inference worker is a
+    """`record_recovery` over real `JobStore.recover()` passes: a lost inference worker is a
     requeue (an inference lease reaped), a worker lost after publication a terminalized
-    `lost_after_publication` held unknown. A preparation re-dispatch the store returns
-    counts as a reaped preparation lease (the reference store emits it to the outbox only,
-    so it is handed over here as the event a store would return)."""
+    `lost_after_publication` held unknown - and, a day later, a released hold, counted as
+    one settlement and never as a second terminal job. A preparation re-dispatch the store
+    returns counts as a reaped preparation lease (the reference store emits it to the
+    outbox only, so it is handed over here as the event a store would return)."""
     from infrx.contracts.limits import DEFAULTS
     from infrx.contracts.records import OutboxKind
     world = kit.World()
     reg = Registry("reaper")
+
+    def value(name, **labels):
+        return reg.value(name, **labels) or 0
 
     async def body():
         requeue = await world.queued()
@@ -265,15 +269,25 @@ def test_i3b_ob09_the_reaper_helper_counts_what_recover_returned():
         produced = await world.jobs.recover()
         preparing = world.candidate(requeue.request_id, kind=OutboxKind.prepare_dispatch)
         metrics.record_recovery(reg, (*produced, preparing))
-    asyncio.run(body())
-    assert reg.value("infrx_recovery_actions_total", action="requeued") == 1
-    assert reg.value("infrx_recovery_actions_total", action="prepare_redispatched") == 1
-    assert reg.value("infrx_recovery_actions_total", action="terminalized") == 1
-    assert reg.value("infrx_lease_lost_total", kind="inference", detected_by="reaper") == 1
-    assert reg.value("infrx_lease_lost_total", kind="preparation", detected_by="reaper") == 1
-    assert reg.value("infrx_jobs_terminal_total", state="failed",
+        assert value("infrx_recovery_actions_total", action="requeued") == 1
+        assert value("infrx_recovery_actions_total", action="prepare_redispatched") == 1
+        assert value("infrx_recovery_actions_total", action="terminalized") == 1
+        assert value("infrx_lease_lost_total", kind="inference", detected_by="reaper") == 1
+        assert value("infrx_lease_lost_total", kind="preparation", detected_by="reaper") == 1
+        assert value("infrx_jobs_terminal_total", state="failed",
                      cause="lost_after_publication") == 1
-    assert reg.value("infrx_settlements_total", settlement="held_unknown") == 1
+        assert value("infrx_settlements_total", settlement="held_unknown") == 1
+
+        await world.jobs.cancel(requeue.org_id, requeue.job_handle)
+        world.clock.advance(DEFAULTS.unknown_usage_reconcile_s + 1)
+        metrics.record_recovery(reg, await world.jobs.recover(),
+                                released={published.request_id})
+        assert value("infrx_recovery_actions_total", action="hold_released") == 1
+        assert value("infrx_settlements_total", settlement="released_platform_absorbed") == 1
+        assert value("infrx_recovery_actions_total", action="terminalized") == 1
+        assert value("infrx_jobs_terminal_total", state="failed",
+                     cause="lost_after_publication") == 1
+    asyncio.run(body())
 
 
 # ------------------------------------------------------------------ alerts and dashboard

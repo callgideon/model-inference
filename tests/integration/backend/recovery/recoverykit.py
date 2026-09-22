@@ -72,6 +72,22 @@ def m_support():
     return module
 
 
+# I2B is I3B's own start dependency (18 §I3B), which is why it is a pending id here although
+# E took it out of the backend vocabulary for E3B (a reverse edge there, review round 1).
+# Everything else, and the refusal of an unknown id, is E's `stack.PENDING`.
+PENDING = {**stack.PENDING,
+           "I2B": "deploy/drain/rollback scripts and units for the headless endpoint"}
+
+
+def pending(*ids: str, why: str):
+    """Skip as PENDING[<ids>] - counted by `run.py --layer 3`, never a pass."""
+    import pytest
+    unknown = [task for task in ids if task not in PENDING]
+    if not ids or unknown:
+        raise AssertionError(f"a pending case must name known unblocking ids, got {ids}")
+    pytest.skip(f"PENDING[{','.join(ids)}] {why}")
+
+
 def needs_stack():
     """The layer-3 drills run against E2's live stack; without one they skip the way every
     E2/E3B stack case does (a plain skip at layer 3 is a stage FAILURE, so this can only
@@ -98,6 +114,7 @@ class World:
         self.accepted: dict[str, object] = {}         # request_id -> Admission at acceptance
         self.results: dict[str, str] = {}
         self.media = None
+        self.released: set[str] = set()               # unknown-usage holds the reaper let go
         for org, _key in TENANTS:
             self.jobs.grant(org, GRANT)
 
@@ -111,19 +128,21 @@ class World:
         self.metrics.inc("infrx_jobs_accepted_total", mode=mode, tenant=org)
         return admission
 
-    async def queued(self, tenant: int = 0):
-        """Admitted and prepared (no media): what an inference worker claims."""
-        admission = await self.admit(tenant)
+    async def queued(self, tenant: int = 0, *, mode=ExecutionMode.async_):
+        """Admitted and prepared (no media): what an inference worker claims. Async by
+        default: an interactive job's 10 s queue budget expires inside any outage a drill
+        injects, which is correct and is its own case, not every case's."""
+        admission = await self.admit(tenant, mode=mode)
         lease = await self.jobs.claim_preparation(admission.request_id, "prep-a")
         await self.jobs.prepared(lease, ())
         return admission
 
     def candidate(self, job_id: str, *, kind=OutboxKind.inference_dispatch, attempt=0):
         admission = self.accepted[job_id]
+        mode = self.jobs.jobs[job_id].request.execution_mode
         return IndexEvent(event_id=self.ids.event_id(), job_id=job_id, org_id=admission.org_id,
-                          key_id=admission.key_id, kind=kind,
-                          execution_mode=ExecutionMode.stream, available_at=self.clock.now(),
-                          attempt=attempt)
+                          key_id=admission.key_id, kind=kind, execution_mode=mode,
+                          available_at=self.clock.now(), attempt=attempt)
 
     # --- the emulated glue ------------------------------------------------------------
     async def dispatch(self, *job_ids: str) -> None:
@@ -133,8 +152,12 @@ class World:
 
     async def reap(self) -> tuple:
         """W3's reaper tick, emulated: one recover() pass, counted, its events indexed."""
+        terminal = {job_id for job_id, job in self.jobs.jobs.items() if job.terminal}
         produced = await self.jobs.recover()
-        metrics.record_recovery(self.metrics, produced)
+        released = {str(item.job_id) for item in produced
+                    if not isinstance(item, IndexEvent) and str(item.job_id) in terminal}
+        self.released |= released
+        metrics.record_recovery(self.metrics, produced, released=released)
         for item in produced:
             if isinstance(item, IndexEvent):
                 await self.scheduler.enqueue(item)
@@ -189,7 +212,8 @@ class World:
 
         * no accepted job is lost: each is still owned by its tenant and is terminal;
         * pins are the ones frozen at acceptance (price snapshot, hold, deadlines, budgets);
-        * each terminal job has exactly one usage projection, a debit only when settled,
+        * each terminal job has one usage projection (two once its unknown-usage hold was
+          released), a debit only when settled,
           and a succeeded job's output comes from exactly one generation (no duplicate
           executable attempt reached the customer);
         * per tenant: ledger = granted - settled debits, reserved = holds still held
@@ -208,8 +232,10 @@ class World:
                 for pin in ("price_snapshot", "maximum_hold", "deadline_at", "budgets",
                             "admitted_at", "payload_hash"):
                     assert getattr(now, pin) == getattr(accepted, pin), (request_id, pin)
+                # One projection per terminal outcome, plus one when the reaper later
+                # released that job's unknown-usage hold (a state update of the same row).
                 projections = self.jobs.outbox_kinds(request_id).count(OutboxKind.usage_projection)
-                assert projections == 1, (request_id, projections)
+                assert projections == 1 + (request_id in self.released), (request_id, projections)
                 if outcome.settlement_state is not SettlementState.settled:
                     assert outcome.debit == 0, (request_id, outcome)
                 if outcome.settlement_state is SettlementState.held_unknown:
@@ -247,5 +273,5 @@ def run(body):
     return asyncio.run(body())
 
 
-__all__ = ["World", "delta", "fired", "free_port", "m_support", "needs_stack", "run",
-           "errors", "FakeEngine", "FakeClock"]
+__all__ = ["World", "delta", "fired", "free_port", "m_support", "needs_stack", "pending",
+           "run", "errors", "FakeEngine", "FakeClock"]
