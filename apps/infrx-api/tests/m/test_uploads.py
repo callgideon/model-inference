@@ -396,3 +396,83 @@ def test_a_probe_that_times_out_leaves_the_upload_open():
     assert adapter.uploads[handle].state is UploadState.created
     adapter.probe = probe.probe
     assert run(adapter.finalize_upload(b.ORG_A, handle)).duration_s == pytest.approx(10.0)
+
+
+# --- use by a job ---------------------------------------------------------------------
+def upload_request(adapter, ref, org_id=b.ORG_A):
+    return b.request(adapter.harness, org_id=org_id, refs=(ref,))
+
+
+def test_stage_uses_the_finalized_record_not_the_callers_copy():
+    """A request naming an upload carries claims; the job gets the store's record."""
+    adapter = adapter_for()
+    handle, ref = finalized(adapter)
+    claim = ref.model_copy(update={"bytes": 1, "duration_s": 1.0, "mime": "video/webm",
+                                   "storage_ref": "media/elsewhere"})
+    assert run(adapter.stage(b.ORG_A, upload_request(adapter, claim))) == (ref,)
+
+
+def test_stage_refuses_an_unfinalized_upload():
+    """MEDIA-SEC: an upload is usable only once finalized, and a refusal stages nothing."""
+    adapter = adapter_for()
+    handle = created(adapter)
+    arrive(adapter, handle, CLIP)
+    claim = b.media(b.ORG_A, handle=handle, kind=MediaKind.upload)
+    request = upload_request(adapter, claim)
+    with pytest.raises(errors.DomainError) as refused:
+        run(adapter.stage(b.ORG_A, request))
+    assert errors.http_status(refused.value.code) in (400, 404)
+    assert request.request_id not in adapter.payloads
+
+
+def test_resolve_refuses_an_upload_that_is_not_finalized_even_if_its_handle_is_indexed():
+    """A handle squatted by a staged ref is not a finalized upload."""
+    adapter = adapter_for()
+    handle = created(adapter)
+    squat = b.media(b.ORG_A, handle=handle, kind=MediaKind.inline)
+    run(adapter.stage(b.ORG_A, b.request(adapter.harness, refs=(squat,))))
+    with pytest.raises(errors.InvalidRequest):
+        run(adapter.resolve_owned(b.ORG_A, handle))
+
+
+def test_stage_refuses_another_orgs_upload():
+    """MEDIA-SEC: neither by naming the owner nor by claiming the handle as one's own."""
+    adapter = adapter_for()
+    handle, ref = finalized(adapter)
+    for claim in (ref, ref.model_copy(update={"org_id": b.ORG_B})):
+        request = upload_request(adapter, claim, org_id=b.ORG_B)
+        with pytest.raises(errors.NotFound):
+            run(adapter.stage(b.ORG_B, request))
+        assert request.request_id not in adapter.payloads
+
+
+@pytest.mark.parametrize("change", ["replaced", "deleted"])
+def test_an_upload_whose_object_changed_is_not_staged(change):
+    """MEDIA-SEC: the object behind a finalized upload is re-checked at use."""
+    adapter = adapter_for()
+    handle, ref = finalized(adapter)
+    if change == "replaced":
+        adapter.objects.seed(ref.storage_ref, b"other bytes")
+    else:
+        run(adapter.objects.delete(ref.storage_ref))
+    with pytest.raises(errors.NotFound):
+        run(adapter.stage(b.ORG_A, upload_request(adapter, ref)))
+    with pytest.raises(errors.NotFound):
+        run(adapter.resolve_owned(b.ORG_A, handle))
+
+
+def test_an_uploaded_clip_is_prepared_like_any_source(tmp_path):
+    """M2 limit 10: `prepare` finds a finalized upload at the source key it rebuilds, and
+    the prepared artifact and the local file follow."""
+    adapter = adapter_for(tmp_path)
+    handle, ref = finalized(adapter)
+    staged = run(adapter.stage(b.ORG_A, upload_request(adapter, ref)))
+    job_id = adapter.harness.ids.uuid()
+    adapter.jobs[job_id] = b.ORG_A
+    run(adapter.attach(job_id, staged))
+    prepared = run(adapter.prepare(job_id, "v1"))
+    assert prepared[0].handle == handle and prepared[0].duration_s == pytest.approx(10.0)
+    assert prepared[0].storage_ref == ref.storage_ref.replace("/source", "/prepared")
+    local = adapter.local_uri(prepared[0]).removeprefix("file://")
+    assert open(local, "rb").read() == CLIP
+    assert os.path.commonpath([str(tmp_path), local]) == str(tmp_path)

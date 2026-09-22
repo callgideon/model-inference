@@ -226,3 +226,24 @@ class MediaUploads(MediaPreparation):
         """A failed check is final: a second finalize is not a second chance at it."""
         upload.state = UploadState.aborted
         return error
+
+    # --- use ------------------------------------------------------------------
+    async def resolve_owned(self, org_id: str, ref: str) -> MediaRef:
+        media = await super().resolve_owned(org_id, ref)     # another org's: not_found
+        upload = self.uploads.get(ref)
+        if upload is not None and upload.state is not UploadState.finalized:
+            raise errors.InvalidRequest(f"upload {ref} is {upload.state}, not finalized")
+        if media.kind is MediaKind.upload \
+                and await self.objects.head(media.storage_ref) != media.digest:
+            # Collected, or replaced behind the store: a job must not run on either.
+            raise errors.NotFound(f"the object for upload {ref} is gone")
+        return media
+
+    async def stage(self, org_id, request):
+        refs = await super().stage(org_id, request)
+        self._touch(refs)
+        return refs
+
+    async def attach(self, job_id, refs) -> None:
+        await super().attach(job_id, refs)
+        self._touch(self.by_job[job_id])
