@@ -37,8 +37,8 @@ from infrx.worker import (EngineError, EngineFailure, EngineIncomplete, EnginePr
 from infrx.worker.engine import (LOCAL_MEDIA_ROOT, LOCAL_MEDIA_SCHEME, MAX_CANCEL_INTENTS,
                                  MIN_JOURNAL_EVENT_BYTES, MODEL_EOS_TOKEN_IDS,
                                  PAYLOAD_OVERHEAD_BYTES, _delta_payload, check_storage_ref,
-                                 local_media_url, media_uuid)
-from infrx.worker.fakes import (ERROR_BODY_CHUNK, SERVED_MODEL, FakeUpstream,
+                                 media_uuid)
+from infrx.worker.fakes import (ERROR_BODY_CHUNK, SERVED_MODEL, FakeUpstream, m2_local_uri,
                                engine_factory)
 from infrx.worker.reasoning import filter_text
 
@@ -329,7 +329,7 @@ def test_api_stream__messages_are_rebuilt_from_an_allow_list():
         # S2M §2/D3: the local file the prepared reference materialized to, under the
         # root the engine was started with - never the customer's own url
         {"type": "video_url",
-         "video_url": {"url": local_media_url(prepared.media[0], LOCAL_MEDIA_ROOT)}}]
+         "video_url": {"url": m2_local_uri(LOCAL_MEDIA_ROOT)(prepared.media[0])}}]
     for role in ("system", "user", "assistant"):
         engine.upstream_body(text_prepared(Box(), messages=({"role": role, "content": "hi"},)))
 
@@ -350,10 +350,9 @@ def test_api_stream__no_outbound_body_ever_carries_a_foreign_url():
         assert events, url
         sent = json.dumps(upstream.requests[0])
         assert sent.count("://") == 1, (url, sent)          # exactly the one file:// we built
-        assert local_media_url(prepared.media[0], LOCAL_MEDIA_ROOT) in sent
+        assert m2_local_uri(LOCAL_MEDIA_ROOT)(prepared.media[0]) in sent
         for scheme in ("http", "data:", "gopher", "ftp", "s3", "//169.254"):
             assert scheme not in sent.replace(LOCAL_MEDIA_SCHEME, ""), (url, scheme)
-        assert prepared.media[0].storage_ref in sent
 
 
 def test_api_stream__prepared_media_replaces_the_customers_url():
@@ -365,7 +364,7 @@ def test_api_stream__prepared_media_replaces_the_customers_url():
     prepared = prepared_request(work, prompt_tokens=1200)
     body = engine.upstream_body(prepared)
     assert body["messages"][0]["content"][1]["video_url"] == {
-        "url": local_media_url(work.prepared_refs[0], LOCAL_MEDIA_ROOT)}
+        "url": m2_local_uri(LOCAL_MEDIA_ROOT)(work.prepared_refs[0])}
     assert EVIL not in json.dumps(body)
 
     # a prepared ref with no media part at all: only the count check can refuse this

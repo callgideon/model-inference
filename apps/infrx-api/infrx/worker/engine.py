@@ -122,7 +122,6 @@ MM_UUIDS_FIELD = "mm_uuids"
 # all refused. A `PreparedRequest` can be hand-built, so trusting the field is trusting the
 # caller. If M changes the layout, this constant changes with it (integration request).
 STORAGE_REF_SEGMENT = r"[A-Za-z0-9][A-Za-z0-9._-]*"
-STORAGE_REF_PREFIX = "media"
 STORAGE_REF_PATTERN = re.compile(
     r"^media/(?P<org>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/"
     rf"(?:{STORAGE_REF_SEGMENT}/){{1,3}}{STORAGE_REF_SEGMENT}")
@@ -134,11 +133,13 @@ STORAGE_REF_PATTERN = re.compile(
 # open, and the customer's own URL is never forwarded whatever it said.
 #
 # The root is a **deployment** fact - it must be the same path the engine was started with -
-# so W3 passes it to the constructor. This default exists so nothing here reads the
-# environment (integration request: a `Settings` field, plus `MediaRef.local_path` if M2
-# ever materializes somewhere other than `<root>/<storage_ref>`).
+# so W3 passes it to the constructor, together with M2's processing cache, whose root must
+# be the same path. This default exists so nothing here reads the environment (integration
+# request: a `Settings` field).
 LOCAL_MEDIA_ROOT = "/mnt/nvme/processing"
 LOCAL_MEDIA_SCHEME = "file://"
+# M2's file name inside a digest directory (`prepare.SOURCE_FILENAME` + a probed extension).
+LOCAL_MEDIA_FILE = re.compile(r"source\.[a-z0-9]{1,8}")
 
 # S2M §1.2 consequence 1: the `--hf-overrides` architecture remap loads Marlin as plain
 # `Qwen3_5ForConditionalGeneration` and loses its custom code, the second EOS id with it.
@@ -319,31 +320,46 @@ def check_storage_ref(ref: MediaRef) -> None:
         raise errors.NotFound(f"media {ref.handle} has no usable prepared reference")
 
 
-def _inside_tenant_root(path: str, root: str, org_id: str) -> bool:
-    """Is `path` a file the engine may open for **this** tenant?
+def _inside_tenant_root(path: str, root: str, org_id: str, ref: MediaRef) -> bool:
+    """Is `path` the file the engine may open for **this** request's `ref`?
 
-    Two conditions, both necessary: it is inside the root vLLM was started with
-    (`--allowed-local-media-path`), and it is under that tenant's own prefix inside it. A
-    path that only satisfies the first is another organization's video with a legal name.
+    R61 (2) as amended: M2 materializes a prepared object at
+    `<root>/<org uuid>/<profile_version>/<digest16>/source.<ext>`. The path is checked
+    segment by segment against facts this adapter already holds - the request's
+    organization, the ref's profile version and its digest - so the organization is read
+    **from the path** and compared, never taken from whatever produced the path. Inside the
+    root vLLM was started with (`--allowed-local-media-path`) is necessary but not
+    sufficient: a path that only satisfies that is another organization's video with a
+    legal name.
     """
-    if not root.startswith("/") or not path.startswith("/"):
-        # A relative root cannot be compared with anything, and vLLM's allow-list is
-        # absolute: refusing is the only safe answer.
+    if not root.startswith("/") or not path.startswith("/") or not org_id:
+        # A relative root cannot be compared with anything, vLLM's allow-list is absolute,
+        # and a request with no organization owns nothing: refusing is the only safe answer.
         return False
-    prefix = posixpath.join(posixpath.normpath(root), STORAGE_REF_PREFIX, org_id) + "/"
-    return posixpath.normpath(path).startswith(prefix)
+    # No normalization step: after the literal root prefix exactly four segments must
+    # equal known values or M2's file name, so `.`, `..` and `` can never pass.
+    prefix = posixpath.normpath(root) + "/"
+    if not path.startswith(prefix):
+        return False
+    segments = path[len(prefix):].split("/")
+    digest16 = ref.digest.removeprefix("sha256:")[:16]
+    return (len(segments) == 4 and segments[:3] == [org_id, ref.profile_version, digest16]
+            and LOCAL_MEDIA_FILE.fullmatch(segments[3]) is not None)
 
 
-def local_media_url(ref: MediaRef, root: str) -> str:
-    """The `file://` URL the pinned engine opens the prepared object with (S2M §2/D3).
+def local_media_url(ref: MediaRef, root: str, org_id: str, local_uri) -> str:
+    """The `file://` URL the pinned engine opens the prepared object with (R61 (2), S2M D3).
 
-    The path is derived from the store's own key (`upstream_body` has already checked that
-    key's grammar and its tenant), then re-checked against the configured root and the
-    ref's organization: the grammar alone would be enough today, and that is exactly the
-    kind of "enough" that stops being true when the layout changes.
+    `local_uri` is preparation's (M2 `MediaPreparation.local_uri`): the path is M2's to
+    build and ours to check. Whatever it returns is validated against the configured root
+    and the **request's** organization before it can reach the engine.
     """
-    path = posixpath.normpath(posixpath.join(root, ref.storage_ref))
-    if not _inside_tenant_root(path, root, ref.org_id):
+    if local_uri is None:
+        raise errors.DependencyUnavailable("no local media resolver is configured")
+    uri = local_uri(ref)
+    path = uri[len(LOCAL_MEDIA_SCHEME):] if isinstance(uri, str) \
+        and uri.startswith(LOCAL_MEDIA_SCHEME) else ""
+    if not _inside_tenant_root(path, root, org_id, ref):
         raise errors.NotFound(f"media {ref.handle} is not inside this tenant's media root")
     return f"{LOCAL_MEDIA_SCHEME}{path}"
 
@@ -451,8 +467,11 @@ class VllmEngine:
     def __init__(self, client: httpx.AsyncClient, *, served_model: str, clock,
                  limits: PilotSettings = DEFAULTS, path: str = "/v1/chat/completions",
                  media_settings: Settings | None = None, require_version: str | None = None,
-                 local_media_root: str = LOCAL_MEDIA_ROOT) -> None:
+                 local_media_root: str = LOCAL_MEDIA_ROOT, local_uri=None) -> None:
         self.client = client
+        # R61 (2): M2's `MediaPreparation.local_uri`, the one producer of the local path.
+        # Without it a video request is refused (`dependency_unavailable`), never guessed.
+        self.local_uri = local_uri
         # S2M §2/D3: the same path the engine was started with
         # (`--allowed-local-media-path`). W3 pins it; nothing here reads the environment.
         self.local_media_root = local_media_root
@@ -536,6 +555,9 @@ class VllmEngine:
         our network.
         """
         refs = list(prepared.media)
+        # The request's organization: `prepared_request` overwrites `tenant_salt` with
+        # `work.request.org_id`, so it is the one tenant fact a ref did not bring with it.
+        org_id = str((prepared.parameters or {}).get("tenant_salt") or "").strip()
         messages, consumed = [], 0
         for message in prepared.messages:
             if not isinstance(message, dict):
@@ -556,7 +578,7 @@ class VllmEngine:
                 raise errors.InvalidRequest("content is text or a list of parts", param="messages")
             parts = []
             for part in content:
-                rebuilt, consumed = self._part(part, refs, consumed)
+                rebuilt, consumed = self._part(part, refs, consumed, org_id)
                 parts.append(rebuilt)
             messages.append({"role": role, "content": parts})
         if consumed != len(refs):
@@ -564,7 +586,8 @@ class VllmEngine:
                 f"{consumed} media parts but {len(refs)} prepared references", param="messages")
         return messages
 
-    def _part(self, part: object, refs: list[MediaRef], consumed: int) -> tuple[dict, int]:
+    def _part(self, part: object, refs: list[MediaRef], consumed: int,
+              org_id: str) -> tuple[dict, int]:
         """One content part, rebuilt; returns it and how many refs are now consumed."""
         if not isinstance(part, dict):
             raise errors.InvalidRequest("a content part is an object", param="messages")
@@ -587,7 +610,8 @@ class VllmEngine:
             # The customer's own `video_url` value is never read: the reference is ours,
             # and what the engine gets is the local file that reference materialized to.
             return ({"type": VIDEO_PART,
-                     "video_url": {"url": local_media_url(ref, self.local_media_root)}},
+                     "video_url": {"url": local_media_url(ref, self.local_media_root, org_id,
+                                                           self.local_uri)}},
                     consumed + 1)
         raise errors.UnsupportedParameter(
             f"{kind!r} content parts are not supported; the pilot is text and video",

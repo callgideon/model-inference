@@ -37,7 +37,7 @@ from infrx.worker import AttemptRunner, WorkerLoop, prepared_request
 from infrx.worker.attempt import BATCH_MAX_EVENTS
 from infrx.worker.engine import (LOCAL_MEDIA_ROOT, MODEL_EOS_TOKEN_IDS, _inside_tenant_root,
                                  local_media_url)
-from infrx.worker.fakes import FakeUpstream, engine_factory as engine_harness
+from infrx.worker.fakes import FakeUpstream, engine_factory as engine_harness, m2_local_uri
 from infrx.worker.reasoning import ReasoningFilter, filter_text
 from tests.w.test_engine import Box as _Box
 from tests.w.test_engine import text_prepared as _text_prepared
@@ -1013,6 +1013,22 @@ def test_dur_settle__a_request_the_engine_cannot_accept_settles_free_and_runs_no
         assert result3.proposed_cause is TerminalCause.invalid_media
         assert result3.outcome.settlement_state is SettlementState.released_free
         assert result3.outcome.debit == 0
+
+        # R61 (2): the processing cache lost the prepared file between preparation and
+        # this attempt (M2 `local_uri` raises `not_found` on a miss). Nothing is sent,
+        # the platform absorbs it, nobody is charged
+        lost = World()
+        request4, _ = await queued(lost, refs=(b.media(b.ORG_A),))
+        lost.jobs.jobs[request4.request_id].request = request4.model_copy(
+            update={"messages": request3_messages})
+
+        def evicted(ref):
+            raise errors.NotFound(f"media {ref.handle} is not in the processing cache")
+
+        upstream4, engine4 = adapter(lost, local_uri=evicted)
+        result4 = await lost.runner(engine4).run(request4.request_id)
+        assert result4.proposed_cause is TerminalCause.platform_error
+        assert result4.outcome.debit == 0 and upstream4.requests == []
     run(case())
 
 
@@ -1241,44 +1257,60 @@ def test_dur_output__a_relay_that_fails_never_fails_a_committed_attempt():
 # the two adapter changes S2M's pinned profile settles (engine.py, minimal)
 # --------------------------------------------------------------------------
 def test_api_stream__a_prepared_video_reaches_the_engine_as_a_local_file_of_its_own_tenant():
-    """S2M §2 / discrepancy D3: the pilot engine opens the prepared object from the
-    processing-cache root it was started with (`--allowed-local-media-path`), so the part
-    carries `file://<root>/<the store's own key>` - never the bare key, which vLLM cannot
-    open, and never the customer's url."""
+    """R61 (2) as amended / S2M D3: the engine opens the prepared object M2 materialized at
+    `<root>/<org>/<profile>/<digest16>/source.<ext>` under the root it was started with
+    (`--allowed-local-media-path`). The path is M2's (`local_uri`) and the adapter's to
+    check: inside the root, and every segment the request's own - the organization read
+    from the path and compared with the request's, never a carried field."""
     box = _Box()
     work = _video_work(box)
     prepared = prepared_request(work, 1200)
     ref = prepared.media[0]
+    org, d16 = ref.org_id, ref.digest.removeprefix("sha256:")[:16]
+    good = f"/srv/cache/{org}/v1/{d16}/source.mp4"
 
     default = FakeUpstream(clock=box.clock).engine()
     assert default.upstream_body(prepared)["messages"][0]["content"][1]["video_url"] == {
-        "url": f"file://{LOCAL_MEDIA_ROOT}/{ref.storage_ref}"}
+        "url": f"file://{LOCAL_MEDIA_ROOT}/{org}/v1/{d16}/source.mp4"}
     # the root is a deployment fact, and it is the engine's, not the request's
     pinned = FakeUpstream(clock=box.clock).engine(local_media_root="/srv/cache")
     assert pinned.upstream_body(prepared)["messages"][0]["content"][1]["video_url"] == {
-        "url": f"file:///srv/cache/{ref.storage_ref}"}
+        "url": f"file://{good}"}
 
-    # inside the root **and** under this tenant's prefix: both, or it is refused
-    assert _inside_tenant_root(f"/srv/cache/{ref.storage_ref}", "/srv/cache", ref.org_id)
-    assert not _inside_tenant_root(f"/srv/cache/media/{b.ORG_B}/v1/source", "/srv/cache",
-                                   ref.org_id)
-    assert not _inside_tenant_root("/etc/passwd", "/srv/cache", ref.org_id)
-    assert not _inside_tenant_root(f"/other/media/{ref.org_id}/v1/source", "/srv/cache",
-                                   ref.org_id)
-    # a relative root cannot be compared with anything, so it is not a root
-    assert not _inside_tenant_root(f"cache/media/{ref.org_id}/v1/s", "cache", ref.org_id)
-    # and a path that only *starts* with the prefix is normalized before it is compared
-    assert not _inside_tenant_root(f"/srv/cache/media/{ref.org_id}/../../../etc/passwd",
-                                   "/srv/cache", ref.org_id)
+    # every segment is checked: root, organization, profile version, digest, file name
+    assert _inside_tenant_root(good, "/srv/cache", org, ref)
+    for bad in (f"/srv/cache/{b.ORG_B}/v1/{d16}/source.mp4",       # another tenant
+                f"/other/{org}/v1/{d16}/source.mp4",               # outside the root
+                f"/srv/cache/{org}/v2/{d16}/source.mp4",           # another profile
+                f"/srv/cache/{org}/v1/{'0' * 16}/source.mp4",      # another object
+                f"/srv/cache/{org}/v1/{d16}/passwd",               # not M2's file
+                f"/srv/cache/{org}/v1/{d16}/source.mp4/source.mp4",  # a deeper path
+                f"/srv/cache/{org}/v1/../../{org}/v1/{d16}/source.mp4",   # not normalized
+                "/etc/passwd"):
+        assert not _inside_tenant_root(bad, "/srv/cache", org, ref), bad
+    # a relative root, a relative path and a request with no organization own nothing
+    assert not _inside_tenant_root(good[1:], "/srv/cache", org, ref)
+    assert not _inside_tenant_root(f"cache/{org}/v1/{d16}/source.mp4", "cache", org, ref)
+    assert not _inside_tenant_root(f"/srv/cache//v1/{d16}/source.mp4", "/srv/cache", "", ref)
+
+    # what the resolver returns is checked, not trusted: a foreign or non-file answer
+    # is refused before anything is sent
+    for answer in (f"file:///srv/cache/{b.ORG_B}/v1/{d16}/source.mp4",
+                   f"https://videos.example.com/{org}/v1/{d16}/source.mp4",
+                   f"http://{good}", good, None):
+        with pytest.raises(errors.NotFound):
+            local_media_url(ref, "/srv/cache", org, lambda _ref, a=answer: a)
+    # the organization compared is the **request's**: a ref that claims org B while the
+    # request is org A never becomes org B's path, even if the resolver agrees with the ref
     with pytest.raises(errors.NotFound):
-        local_media_url(ref, "cache")
-    # a key outside this tenant's own prefix never becomes a path, whatever its shape
-    with pytest.raises(errors.NotFound):
-        local_media_url(ref.model_copy(update={"storage_ref": "../../etc/passwd"}),
-                        LOCAL_MEDIA_ROOT)
-    with pytest.raises(errors.NotFound):
-        local_media_url(ref.model_copy(update={"storage_ref": f"media/{b.ORG_B}/v1/source"}),
-                        LOCAL_MEDIA_ROOT)
+        local_media_url(ref.model_copy(update={"org_id": b.ORG_B}), "/srv/cache", org,
+                        m2_local_uri("/srv/cache"))
+    # no resolver configured: a typed platform refusal, never a guessed path
+    with pytest.raises(errors.DependencyUnavailable):
+        local_media_url(ref, "/srv/cache", org, None)
+    unwired = FakeUpstream(clock=box.clock).engine(local_uri=None)
+    with pytest.raises(errors.DependencyUnavailable):
+        unwired.upstream_body(prepared)
 
 
 def test_api_stream__both_eos_ids_are_supplied_on_every_request():
