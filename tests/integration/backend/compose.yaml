@@ -1,0 +1,37 @@
+# E3B backend profile: the service E2's `infrx-e2` stack lacks (04 layer 2, P-03).
+#
+# PostgreSQL, Valkey (the selected queue mode) and S3-compatible storage are E2's stack,
+# provisioned and torn down by `tests/integration/run.py`. This file adds PostgREST in its
+# OWN project, `infrx-e3b`, attached to E2's network so it reaches `infrx-e2-postgres` by
+# name. Its lifecycle is `backend/stack.py` (`postgrest_up`/`postgrest_down`), and it is
+# removed before E2's teardown, because a network with a container attached cannot be.
+#
+# Same rules as E2's compose file: image pinned by digest (the tag is a comment), host port
+# in E's 55500-55599 range on 127.0.0.1 only, ownership is the checkout label (`:?` makes
+# compose refuse without it), credentials are fixed local literals and nothing here can
+# reach Supabase production or AWS.
+name: infrx-e3b
+
+x-checkout: &checkout
+  ai.infrx.e3b.checkout: ${INFRX_E3B_CHECKOUT:?exported by tests/integration/backend/stack.py}
+
+services:
+  postgrest:
+    image: postgrest/postgrest@sha256:a312f4b2e48530a01fc26f5310d547d6c26d087858360e164522e415723a7732  # v13.0.4
+    container_name: infrx-e3b-postgrest
+    labels: *checkout
+    environment:
+      PGRST_DB_URI: postgres://postgres:infrx-e2-local@infrx-e2-postgres:5432/infrx_e2
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: infrx-e3b-local-jwt-secret-not-a-real-one-0001
+      PGRST_DB_POOL: "4"
+    ports:
+      - "127.0.0.1:55530:3000"
+    networks: [e2]
+    stop_grace_period: 5s
+
+networks:
+  e2:
+    name: infrx-e2_default
+    external: true
