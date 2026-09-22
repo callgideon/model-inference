@@ -139,7 +139,9 @@ class Operations:
 
 @dataclasses.dataclass(frozen=True)
 class TenantSession:
-    """A consumer key's view of its own organization. Foreign ids answer NotFound."""
+    """A consumer key's view of its own organization. Foreign ids answer NotFound.
+    Built only by `Operations.tenant(secret)`; no public entry point takes a caller-built
+    one - the trust boundary is the database credential behind the ports."""
 
     ops: Operations
     auth: AuthContextV2
@@ -176,6 +178,9 @@ class TenantSession:
 
 @dataclasses.dataclass(frozen=True)
 class OperatorSession:
+    """Built only by `Operations.operator(secret)`; no public entry point takes a
+    caller-built one - the trust boundary is the database credential behind the ports."""
+
     ops: Operations
     principal: str
 
