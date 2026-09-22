@@ -290,8 +290,11 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "            raise errors.Forbidden(\"a request may only be staged for its own org\")",
        "            pass", "test_a_request_may_only_be_staged_for_its_own_org"),
     _m("stage_accepts_a_foreign_reference", "a body cannot name another tenant's object",
-       S, "                raise errors.NotFound(\"media reference does not belong to this org\")",
-       "                pass", "test_a_foreign_or_oversize_reference_is_not_staged"),
+       S, "            existing = self.refs.get((org_id, ref.handle))",
+       "            existing = next((value for (_o, handle), value in self.refs.items()\n"
+       "                             if handle == ref.handle), None)",
+       "test_a_foreign_or_oversize_reference_is_not_staged",
+       "test_stage_takes_only_refs_this_store_materialized"),
     _m("stage_ignores_the_byte_cap", "a source over MAX_MEDIA_BYTES is refused",
        S, "            if ref.bytes > self.limits.max_media_bytes:", "            if False:",
        "test_a_foreign_or_oversize_reference_is_not_staged"),
@@ -302,7 +305,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_an_upload_reference_is_resolved_not_trusted"),
     _m("stage_returns_the_callers_ref",
        "an owned object is staged as the store has it, not as the request describes it",
-       S, "                resolved.append(existing)", "                resolved.append(ref)",
+       S, "            resolved.append(existing)\n", "            resolved.append(ref)\n",
        "test_a_known_handle_is_staged_as_the_object_the_store_has"),
     _m("materialize_indexes_before_the_write",
        "no ref is indexed without an object behind it",
@@ -317,31 +320,17 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("digest_taken_from_the_fetcher", "the stored object's digest is measured here",
        S, "        digest = digest_of(fetched.data)", "        digest = fetched.digest",
        "test_the_digest_is_measured_not_taken_from_the_fetcher"),
-    _m("stage_replaces_an_existing_object", "a staged handle keeps the content it has",
-       S, "                    raise errors.Conflict(\n"
-          "                        f\"media handle {ref.handle} already holds different content\")",
-       "                    existing = ref", "test_a_staged_handle_keeps_the_content_it_has"),
-    _m("stage_takes_the_last_of_two_handles", "one handle cannot carry two objects",
-       S, "                raise errors.InvalidRequest(\n"
-          "                    f\"media handle {ref.handle} appears twice with different content\")",
-       "                pass", "test_one_handle_cannot_carry_two_different_objects_in_one_request"),
-    _m("stage_indexes_as_it_goes", "staging is all or nothing",
-       S, "            pending[(org_id, staged.handle)] = staged",
-       "            pending[(org_id, staged.handle)] = staged\n"
-       "            self.refs[(org_id, staged.handle)] = staged",
-       "test_a_refused_request_stages_nothing_at_all"),
+    # F2R item 4: `stage` no longer indexes a caller's ref, so the three mutants of the
+    # code that did (replace-on-conflict, last-of-two-handles, index-as-it-goes) went with
+    # it; this is the one rule left, and it is the one they were approximating.
+    _m("stage_takes_a_ref_it_never_made", "only a ref this store materialized is staged",
+       S, "            if existing is None or existing.digest != ref.digest:",
+       "            if False:",
+       "test_stage_takes_only_refs_this_store_materialized"),
     _m("payload_key_from_the_request", "the caller never names the payload's path",
        S, "        key = f\"payloads/{valid_org(org_id)}/{request.request_id}.json\"",
        "        key = request.payload_ref",
        "test_staging_makes_the_canonical_payload_durable_with_a_digest_and_a_size"),
-    _m("index_before_the_payload",
-       "nothing is indexed until the durable payload write has succeeded",
-       S, "        await self._write_once(key, payload, \"application/json\")\n"
-          "        # One visible step: nothing above wrote to `self.refs`.\n"
-          "        self.refs.update(pending)",
-       "        self.refs.update(pending)\n"
-       "        await self._write_once(key, payload, \"application/json\")",
-       "test_a_fault_at_the_payload_write_stages_nothing_and_the_retry_completes_it"),
     _m("payload_not_stored", "the canonical payload is durable before acceptance",
        S, "        await self._write_once(key, payload, \"application/json\")", "        pass",
        "test_staging_makes_the_canonical_payload_durable_with_a_digest_and_a_size", dies_by=("KeyError",)),

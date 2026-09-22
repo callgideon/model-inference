@@ -172,7 +172,20 @@ class MediaStore(Protocol):
     """
 
     async def stage(self, org_id: str, request: NormalizedRequest) -> tuple[MediaRef, ...]:
-        """Durably stage the canonical payload and inline media before acceptance."""
+        """Durably stage the canonical payload before acceptance, with refs **this store
+        produced** (F2R item 4, R66).
+
+        Every url/inline ref must be one the store materialized for `org_id` (M's
+        `materialize`; the conformance harness's `materialized(org_id, ref)` hook), and
+        every upload ref a finalized upload it resolves; anything else - never
+        materialized, another tenant's, or a real handle claiming other content - is
+        `not_found`, and nothing is written. The refs returned are the store's own
+        records (key, size, type, duration), never the request's copies. The request's
+        messages carry one `video_url` part per ref, in order (R58).
+
+        `MediaRef.duration_s` is written by **preparation** (M2's probe, before the
+        object is stored); a caller never supplies it, and a store with no decoder
+        records `None`."""
 
     async def attach(self, job_id: str, refs: tuple[MediaRef, ...]) -> None:
         """r1 R46: bind staged refs to an admitted job, as the job row does in

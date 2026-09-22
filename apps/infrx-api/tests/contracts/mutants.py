@@ -451,26 +451,36 @@ MUTANTS: tuple[Mutant, ...] = (
        "        media = next((value for (_o, handle), value in self.objects.items()\n"
        "                      if handle == ref), None)",
        "media_sec__another_org_cannot_resolve_or_finalize"),
-    _m("staging_overwrites_content", "staged content is immutable",
-       M, "                if existing.digest != ref.digest:", "                if False:",
-       "media_sec__staging_never_replaces_an_existing_object"),
-    _m("staging_commits_as_it_goes", "staging is all or nothing",
-       M, "        self.objects.update(pending)",
-       "        pass  # objects were written as the loop went (they are not, now)",
+    # F2R item 4: `stage` records nothing of the caller's any more (it takes only refs the
+    # store produced), so "commits as it goes" / "resolves after writing" have no code left
+    # to break; what they guarded is now these two refusals.
+    _m("staging_overwrites_content", "a handle keeps the content the store has (F2R 4)",
+       M, "            if existing is None or existing.digest != ref.digest:\n"
+          "                raise errors.NotFound(f\"media {ref.handle} was not materialized",
+       "            if existing is None:\n"
+       "                raise errors.NotFound(f\"media {ref.handle} was not materialized",
+       "media_sec__staging_never_replaces_an_existing_object",
        "media_sec__a_partial_request_stages_nothing"),
-    _m("staging_resolves_after_writing", "an unresolvable upload leaves nothing staged",
-       M, "                owned = await self.resolve_owned(org_id, ref.handle)",
-       "                self.objects.update(pending)\n"
-       "                owned = await self.resolve_owned(org_id, ref.handle)",
+    _m("staging_takes_a_ref_it_never_made", "only a ref the store produced is staged (F2R 4)",
+       M, "            if existing is None or existing.digest != ref.digest:\n"
+          "                raise errors.NotFound(f\"media {ref.handle} was not materialized",
+       "            if False:\n"
+       "                raise errors.NotFound(f\"media {ref.handle} was not materialized",
+       "media_sec__a_partial_request_stages_nothing"),
+    _m("attach_takes_a_ref_it_never_made", "only a ref the store produced is attached (F2R 4)",
+       M, "            if indexed is None or indexed.digest != ref.digest:", "            if False:",
        "media_sec__a_partial_request_stages_nothing"),
     _m("staging_validates_nothing_up_front", "staging is all or nothing",
-       M, "        for ref in request.media:\n            if ref.org_id != org_id:",
-       "        for ref in ():\n            if ref.org_id != org_id:",
+       M, "        for ref in request.media:\n            # No separate `ref.org_id` check",
+       "        for ref in ():\n            # No separate `ref.org_id` check",
        "media_sec__a_partial_request_stages_nothing",
        "media_sec__a_foreign_media_reference_is_not_staged"),
     _m("staging_ignores_the_org", "a body cannot name another tenant's object",
-       M, '                raise errors.NotFound("media reference does not belong to this org")',
-       "                pass", "media_sec__a_foreign_media_reference_is_not_staged"),
+       M, "            existing = self.objects.get((org_id, ref.handle))",
+       "            existing = next((value for (_o, handle), value in self.objects.items()\n"
+       "                             if handle == ref.handle), None)",
+       "media_sec__a_foreign_media_reference_is_not_staged",
+       "media_sec__a_partial_request_stages_nothing"),
     _m("finalize_overwrites_the_tenants_object", "finalizing replaces nothing",
        M, '            raise errors.Conflict(f"handle {upload_handle} already holds different content")',
        "            pass", "media_sec__staging_never_replaces_an_existing_object"),
@@ -671,9 +681,9 @@ MUTANTS: tuple[Mutant, ...] = (
        M, "        org_id = self.job_org(job_id)", '        org_id = refs[0].org_id if refs else ""',
        "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
     _m("attach_stores_before_validating", "a refused attach stores nothing (R55/s15)",
-       M, "        org_id = self.job_org(job_id)\n        for ref in refs:",
+       M, "        org_id = self.job_org(job_id)\n        owned: list[MediaRef] = []",
        "        org_id = self.job_org(job_id)\n        self.by_job[job_id] = tuple(refs)\n"
-       "        for ref in refs:",
+       "        owned: list[MediaRef] = []",
        "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
     _m("admit_accepts_a_zero_output_ceiling", "a zero ceiling never means a free request (R55)",
        S, "        if not 1 <= request.max_output_tokens <= limits.max_output_tokens:",
@@ -1133,9 +1143,6 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("stuck_jobs_not_reported", "an unsettleable job is reported (F2)",
        S, "                    self.unsettleable[job.id] = refused.code", "                    pass",
        "dur_settle__one_unsettleable_job_does_not_stop_the_sweep"),
-    _m("duplicate_handle_last_wins", "one handle carries one object per request",
-       M, "            if clash is not None and clash.digest != stored.digest:", "            if False:",
-       "media_sec__a_partial_request_stages_nothing"),
     # --- r6 B1/B2: one mutant per branch of the no-op finish --------------------
     _m("no_op_finish_skips_the_identity_check", "a no-op capture checks identity too",
        T, "        if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):\n"

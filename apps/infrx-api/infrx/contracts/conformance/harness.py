@@ -50,7 +50,9 @@ OPTIONAL_HOOKS: dict[str, frozenset[str]] = {
     # r1 R46: `attach` is a port operation now. The optional hooks left are the one that
     # stands for a client uploading bytes and, since R55, the job row `attach` reads a
     # job's organization from.
-    "mediastore": frozenset({"put_object", "admitted"}),
+    # F2R item 4: `materialized(org_id, ref)` makes `ref` one the store produced, since
+    # `stage` accepts nothing else.
+    "mediastore": frozenset({"put_object", "admitted", "materialized"}),
     "scheduler": frozenset({"jobs"}),
     "engine": frozenset({"text"}),
     "tracesink": frozenset({"queued", "crash", "content_budget", "reap"}),
@@ -80,6 +82,9 @@ class Harness:
     `set_price(model_revision: str, snapshot: PriceSnapshot | None)` writes the store's
     injectable price source and `None` withdraws the price, so a case can price one model
     at four rates and make another unpriced without the request carrying either (r1 R45).
+    `async materialized(org_id, ref: MediaRef) -> MediaRef` has the store materialize
+    content standing for `ref` and returns the ref **the store** produced (its handle and
+    digest may differ from `ref`'s); a case stages that, never the builder's (F2R item 4).
 
     The streamstore, scheduler and feedback factories also publish `extra["jobs"]`,
     the JobStore a case needs to admit a job first. The cases only ever call *port*

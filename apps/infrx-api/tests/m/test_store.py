@@ -93,10 +93,30 @@ def staging(*, limits=DEFAULTS, transport=None, resolve=None, jobs=None, objects
     return adapter
 
 
+def source_for(ref: MediaRef) -> str:
+    """A data: URL whose bytes stand for `ref` - distinct per handle, so two builder refs
+    are two objects - for `materialize` to decode and store (F2R item 4)."""
+    return ("data:video/mp4;base64,"
+            + base64.b64encode(MP4 + ref.handle.encode()).decode())
+
+
+def materialized(adapter):
+    """The conformance `materialized(org_id, ref)` hook: the store's own `materialize`."""
+    async def hook(org_id: str, ref: MediaRef) -> MediaRef:
+        return await adapter.materialize(org_id, source_for(ref))
+    return hook
+
+
 def factory(limits=None, **_kw) -> Harness:
     adapter = staging(limits=limits or DEFAULTS)
     return Harness(port=Deferred(adapter), clock=FakeClock(), ids=SequentialIds(),
-                   extra={"admitted": adapter.jobs.__setitem__})
+                   extra={"admitted": adapter.jobs.__setitem__,
+                          "materialized": materialized(adapter)})
+
+
+def made(adapter, org_id=b.ORG_A, **kw) -> MediaRef:
+    """A ref this adapter materialized from a builder ref's stand-in bytes."""
+    return asyncio.run(adapter.materialize(org_id, source_for(b.media(org_id, **kw))))
 
 
 def request(adapter, *, org_id=b.ORG_A, refs=()):
@@ -248,12 +268,15 @@ def test_a_profile_version_cannot_escape_the_tenants_prefix():
                     # B-R2-1.4: a leading dot is the whole traversal on its own -
                     # `media/<org>/../<digest>/source` needs no slash of its own.
                     "..", ".", ".v1", "._", "..v1"):
-        hostile = b.media(b.ORG_A).model_copy(update={"profile_version": version})
         with pytest.raises(errors.InvalidRequest):
-            asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(hostile,))))
-        assert adapter.refs == {} and adapter.payloads == {}
-    good = b.media(b.ORG_A).model_copy(update={"profile_version": "v2.1_beta-3"})
-    staged = asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(good,))))
+            adapter._key(b.ORG_A, "sha256:" + "ab" * 32, version, "source")
+        hostile = store.MediaStaging(store.InMemoryObjectStore(), profile_version=version)
+        with pytest.raises(errors.InvalidRequest):
+            asyncio.run(hostile.materialize(b.ORG_A, DATA_URL))
+        assert hostile.refs == {} and hostile.objects.objects == {}
+    good = store.MediaStaging(store.InMemoryObjectStore(), profile_version="v2.1_beta-3")
+    ref = asyncio.run(good.materialize(b.ORG_A, DATA_URL))
+    staged = asyncio.run(good.stage(b.ORG_A, b.request(adapter.harness, refs=(ref,))))
     assert staged[0].storage_ref.startswith(f"media/{b.ORG_A}/v2.1_beta-3/")
 
 
@@ -263,7 +286,7 @@ def test_a_digest_cannot_carry_a_path_into_a_key():
     `sha256:../../../x` reached the key builder intact."""
     adapter = staging()
     hostile = b.media(b.ORG_A).model_copy(update={"digest": "sha256:../../../x"})
-    with pytest.raises(errors.InvalidRequest):
+    with pytest.raises((errors.InvalidRequest, errors.NotFound)):
         asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(hostile,))))
     assert adapter.refs == {} and adapter.payloads == {}
     for digest in ("sha256:" + "0" * 63, "sha512:" + "0" * 64, "0" * 64, "sha256:" + "G" * 64,
@@ -407,31 +430,31 @@ def test_a_foreign_or_oversize_reference_is_not_staged():
     assert adapter.refs == {} and adapter.payloads == {}
 
 
-def test_one_handle_cannot_carry_two_different_objects_in_one_request():
+def test_stage_takes_only_refs_this_store_materialized():
+    """F2R item 4: a url/inline ref is staged only if this store materialized it for this
+    org. One it never produced, a real handle claiming other content (the old "twin" and
+    "changed content" cases), and another tenant's real ref relabelled are all
+    `not_found`, and nothing is written."""
     adapter = staging()
-    good = b.media(b.ORG_A)
-    twin = good.model_copy(update={"digest": b.digest("other content"), "bytes": good.bytes + 1})
-    with pytest.raises(errors.InvalidRequest):
-        asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(good, twin))))
-    assert adapter.refs == {}
-
-
-def test_a_staged_handle_keeps_the_content_it_has():
-    adapter = staging()
-    good = b.media(b.ORG_A)
-    asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(good,))))
-    changed = good.model_copy(update={"digest": b.digest("different")})
-    with pytest.raises(errors.Conflict):
-        asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(changed,))))
-    assert asyncio.run(adapter.resolve_owned(b.ORG_A, good.handle)).digest == good.digest
+    good = made(adapter)
+    theirs = made(adapter, b.ORG_B, handle="upl_theirs000000000000000000000000000001")
+    for forged in (b.media(b.ORG_A),
+                   good.model_copy(update={"digest": b.digest("other content")}),
+                   theirs.model_copy(update={"org_id": b.ORG_A})):
+        before = dict(adapter.objects.objects)
+        with pytest.raises(errors.NotFound):
+            asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(good, forged))))
+        assert adapter.objects.objects == before and adapter.payloads == {}
+    assert asyncio.run(adapter.resolve_owned(b.ORG_A, good.handle)) == good
+    assert asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(good,)))) == (good,)
 
 
 def test_a_refused_request_stages_nothing_at_all():
-    """02: "a staging failure creates no job or hold". The first reference must not be
-    left behind either, or a client correcting the bad one finds half its request stored
-    under a handle it can no longer change."""
+    """02: "a staging failure creates no job or hold". A refused request writes no
+    payload and no object, and the corrected retry stages the store's own ref."""
     adapter = staging()
-    good = b.media(b.ORG_A, handle="upl_first00000000000000000000000000000001")
+    good = made(adapter)
+    before = dict(adapter.objects.objects)
     for bad in (b.media(b.ORG_A, handle="upl_second0000000000000000000000000000002",
                         nbytes=DEFAULTS.max_media_bytes + 1),
                 b.media(b.ORG_B, handle="upl_third00000000000000000000000000000003"),
@@ -439,11 +462,8 @@ def test_a_refused_request_stages_nothing_at_all():
                         kind=MediaKind.upload)):
         with pytest.raises(errors.DomainError):
             asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(good, bad))))
-        with pytest.raises(errors.NotFound):
-            asyncio.run(adapter.resolve_owned(b.ORG_A, good.handle))
-        assert adapter.payloads == {} and adapter.objects.objects == {}
-    assert asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(good,))))[0].handle \
-        == good.handle
+        assert adapter.payloads == {} and adapter.objects.objects == before
+    assert asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(good,)))) == (good,)
 
 
 def test_an_upload_reference_is_resolved_not_trusted():
@@ -498,17 +518,14 @@ def test_a_fault_at_the_payload_write_stages_nothing_and_the_retry_completes_it(
                       transport=support.Transport(support.response(body=MP4)))
     ref = asyncio.run(adapter.materialize(b.ORG_A, URL))
     before = dict(objects.objects)
-    # A second reference the store has not seen before, so this staging really has an
-    # index entry to lose: with only the materialized one there would be nothing pending.
-    fresh = b.media(b.ORG_A, handle="upl_drillfixture000000000000000000000001")
-    payload_request = request(adapter, refs=(ref, fresh))
+    payload_request = request(adapter, refs=(ref,))
     with pytest.raises(errors.DependencyUnavailable):
         asyncio.run(adapter.stage(b.ORG_A, payload_request))
     assert objects.objects == before, "the failed staging wrote something anyway"
     assert adapter.payloads == {} and list(adapter.refs) == [(b.ORG_A, ref.handle)]
     adapter.objects = objects                       # the store recovers
     retried = asyncio.run(adapter.stage(b.ORG_A, payload_request))
-    assert retried[0] == ref and len(retried) == 2
+    assert retried == (ref,)
     assert len(objects.objects) == len(before) + 1  # the payload, and no second media copy
     assert adapter.staged_payload(payload_request.request_id).bytes > 0
 
@@ -544,9 +561,9 @@ def test_attach_takes_the_tenant_from_the_job_row():
     tenant its own refs belonged to."""
     jobs = {}
     adapter = staging(jobs=jobs)
-    mine = asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(b.media(b.ORG_A),))))
+    mine = asyncio.run(adapter.stage(b.ORG_A, request(adapter, refs=(made(adapter),))))
     theirs = asyncio.run(adapter.stage(b.ORG_B, request(adapter, org_id=b.ORG_B,
-                                                        refs=(b.media(b.ORG_B),))))
+                                                        refs=(made(adapter, b.ORG_B),))))
     job = "11111111-0000-4000-8000-000000000001"
     jobs[job] = b.ORG_A
     with pytest.raises(errors.NotFound):

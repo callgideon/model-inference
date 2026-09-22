@@ -59,6 +59,21 @@ class FakeMediaStore:
         upload = self.uploads[upload_handle]
         upload.data, upload.mime = data, mime
 
+    async def materialized(self, org_id: str, ref: MediaRef) -> MediaRef:
+        """Test hook standing in for M's `materialize` (F2R item 4): the store fetched or
+        decoded a source and wrote it, so `ref` becomes one it produced - under a key the
+        store builds, never the caller's. `stage` accepts only refs made this way (or a
+        finalized upload). The fake keeps the builder's `duration_s`, standing in for the
+        measurement preparation (M2) writes."""
+        stored = ref.model_copy(update={
+            "org_id": org_id,
+            "storage_ref": self._key(org_id, ref.digest, ref.profile_version, "source")})
+        existing = self.objects.get((org_id, stored.handle))
+        if existing is not None and existing.digest != stored.digest:
+            raise errors.Conflict(f"handle {stored.handle} already names different content")
+        self.objects[(org_id, stored.handle)] = existing or stored
+        return existing or stored
+
     def _job_org(self, job_id: str) -> str:
         org_id = self.job_orgs.get(job_id)
         if org_id is None:
@@ -89,65 +104,53 @@ class FakeMediaStore:
         """
         self.failures.before("attach")
         org_id = self.job_org(job_id)
+        owned: list[MediaRef] = []
         for ref in refs:
             if ref.org_id != org_id:
                 raise errors.NotFound("media attached to a job must belong to its org")
+            # F2R item 4: and it must be the object this store holds for that org, as
+            # the store describes it - a forged or never-materialized ref binds nothing.
+            indexed = self.objects.get((org_id, ref.handle))
+            if indexed is None or indexed.digest != ref.digest:
+                raise errors.NotFound(f"media {ref.handle} was not staged for org {org_id}")
+            owned.append(indexed)
         # Validated in full first: a refused attach must leave `prepare` with nothing,
         # rather than a half-written set the next phase would transcode.
-        self.by_job[job_id] = tuple(refs)
+        self.by_job[job_id] = tuple(owned)
 
     async def stage(self, org_id: str, request: NormalizedRequest) -> tuple[MediaRef, ...]:
-        """Durable, immutable staging before acceptance. The storage key is built from
-        the tenant, the source digest and the profile version; the caller has no say
-        in it.
+        """Durable, immutable staging before acceptance, of refs **this store produced**.
 
-        All or nothing (02: "a staging failure creates no job or hold"): every
-        reference is validated **and resolved** first, the objects to write are
-        prepared in memory, and only then does anything become visible. An upload that
-        cannot be resolved therefore leaves no inline sibling staged behind, so a
-        client that corrects the bad reference and retries does not find half its
-        request already stored under a handle it can no longer change.
+        F2R item 4: every url/inline ref must be one the store materialized for this
+        organization (the `materialized` hook here; `materialize` in M), and every upload
+        ref a finalized upload it resolves. What is staged is the store's own record of the
+        object - its key, size, type and duration - never the request's copy, so a forged,
+        foreign or never-materialized ref cannot reach a job.
+
+        All or nothing (02: "a staging failure creates no job or hold"): every reference
+        is validated and resolved before anything is recorded.
         """
         self.failures.before("stage")
         if request.org_id != org_id:
             raise errors.Forbidden("a request may only be staged for its own org")
         resolved: list[MediaRef] = []
-        pending: dict[tuple[str, str], MediaRef] = {}
         for ref in request.media:
-            if ref.org_id != org_id:
-                raise errors.NotFound("media reference does not belong to this org")
+            # No separate `ref.org_id` check: every lookup below is inside this org's
+            # namespace, so another tenant's ref - or a copy relabelled with this org -
+            # simply is not there (`not_found`), which is the single guard (F2R item 4).
             if ref.bytes > self.limits.max_media_bytes:
                 raise errors.RequestTooLarge(
                     f"{ref.bytes} bytes exceeds MAX_MEDIA_BYTES {self.limits.max_media_bytes}")
-            existing = self.objects.get((org_id, ref.handle))
             if ref.kind is MediaKind.upload:
-                # Resolution can fail (unknown handle, unfinalized upload, digest
-                # mismatch), so it belongs in this pass, before anything is written.
                 owned = await self.resolve_owned(org_id, ref.handle)
                 if owned.digest != ref.digest:
                     raise errors.UnsupportedMedia("upload digest does not match the reference")
                 resolved.append(owned)
                 continue
-            if existing is not None:
-                # Staged and finalized content is immutable: the same handle keeps the
-                # object it already has, and different content is a conflict.
-                if existing.digest != ref.digest:
-                    raise errors.Conflict(
-                        f"media handle {ref.handle} already holds different content")
-                resolved.append(existing)
-                continue
-            stored = ref.model_copy(update={
-                "storage_ref": self._key(org_id, ref.digest, ref.profile_version, "source")})
-            clash = pending.get((org_id, stored.handle))
-            if clash is not None and clash.digest != stored.digest:
-                # The same handle twice in one request, with different content: last-wins
-                # would silently stage one and hand the job the other's digest.
-                raise errors.InvalidRequest(
-                    f"media handle {ref.handle} appears twice with different content")
-            pending[(org_id, stored.handle)] = stored
-            resolved.append(stored)
-        # One visible step: nothing above wrote to `self.objects`.
-        self.objects.update(pending)
+            existing = self.objects.get((org_id, ref.handle))
+            if existing is None or existing.digest != ref.digest:
+                raise errors.NotFound(f"media {ref.handle} was not materialized for org {org_id}")
+            resolved.append(existing)
         return tuple(resolved)
 
     @staticmethod

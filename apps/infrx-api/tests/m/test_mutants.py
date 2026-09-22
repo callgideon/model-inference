@@ -19,7 +19,7 @@ ALL = mutation_list.MUTANTS
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # One per mutated file, plus the two pins the whole path rests on.
 SUBSET = ("one_answer_is_enough", "connects_to_the_name_not_the_address",
-          "denied_networks_not_checked", "stage_indexes_as_it_goes", "key_without_the_tenant",
+          "denied_networks_not_checked", "stage_takes_a_ref_it_never_made", "key_without_the_tenant",
           "transport_logs_not_silenced", "attach_accepts_an_unstaged_ref")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
@@ -44,7 +44,8 @@ def test_the_mutation_list_covers_the_owned_modules():
     count is a floor on the two modules M1 wrote plus the address policy it reuses."""
     files = {mutant.file for mutant in ALL}
     assert files == {"media/fetch.py", "media/store.py", "media/video.py"}
-    assert len(ALL) >= 78, f"only {len(ALL)} mutants declared"
+    # 77: F2R item 4 retired four mutants of staging code that no longer exists and added one
+    assert len(ALL) >= 77, f"only {len(ALL)} mutants declared"
 
 
 @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
@@ -73,8 +74,8 @@ def test_the_runner_cannot_report_a_false_kill():
         (Outcome.survived, mutation_list.Mutant(
             name="self_wrong_test", invariant="the kill must come from the named test",
             file="media/store.py",
-            old="                raise errors.NotFound(\"media reference does not belong to this org\")",
-            new="                pass", cases=("test_an_unstaged_payload_is_not_found",))),
+            old="            if existing is None or existing.digest != ref.digest:",
+            new="            if False:", cases=("test_an_unstaged_payload_is_not_found",))),
         (Outcome.misdeclared, mutation_list.Mutant(
             name="self_missing_anchor", invariant="the list matches the code",
             file="media/store.py", old="this text is not in the module", new="nor is this",
