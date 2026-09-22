@@ -78,7 +78,8 @@ _JOB_COLUMNS = """
   operation, payload_ref, payload_digest, max_input_tokens, max_output_tokens,
   price_version, price_snapshot, maximum_hold, consent_version, trace_mode,
   admitted_at, deadline_at, budget_preparation_s, budget_queue_wait_s,
-  budget_generation_s, budget_first_token_s, budget_stall_s, preparation_deadline_at
+  budget_generation_s, budget_first_token_s, budget_stall_s, preparation_deadline_at,
+  accounting_regime
 """
 
 
@@ -91,7 +92,7 @@ def _job_values(request_id: str, handle: str, *, org: str = ORG_A, state: str = 
       'infrx-payload:{request_id}', '{DIGEST}', 4096, 512,
       'pv-1', '{{"price_version":"pv-1"}}'::jsonb, 1.25000000, 1, 'full',
       '2026-09-21T00:00:00Z', '2026-09-21T00:10:00Z', 120, 10, 300, 60, 20,
-      '2026-09-21T00:02:00Z'"""
+      '2026-09-21T00:02:00Z', 'legacy_usd'"""
 
 
 # --- seeding -----------------------------------------------------------------
@@ -456,7 +457,7 @@ def seed_volume(conn, rows: int = 3000) -> None:
            now() - make_interval(secs => i),
            now() - make_interval(secs => i) + interval '2 hours',
            120, 10, 300, 60, 20,
-           now() - make_interval(secs => i) + interval '2 minutes'
+           now() - make_interval(secs => i) + interval '2 minutes', 'legacy_usd'
     from generate_series(1, {rows}) as g(i);
 
     -- Most jobs in a live table are terminal; the partial "active" indexes exist

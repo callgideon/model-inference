@@ -7,6 +7,13 @@ fixture already has them.
 """
 from __future__ import annotations
 
+import json
+import threading
+import uuid
+from pathlib import Path
+
+import psycopg
+
 from . import checks
 from .checks import KEY_A
 
@@ -34,7 +41,7 @@ def seed_old_regime(conn, org_a: str) -> None:
     held USD hold, one settled with its pilot usage row and USD debit, one whose usage is
     unknown and whose hold is still reserved. `seed_legacy` already put users, keys and
     positive/negative/sign-violating USD history in place."""
-    cols = checks._JOB_COLUMNS
+    cols = checks._JOB_COLUMNS.replace(",\n  accounting_regime", "")   # 0005 has no regime
     common = (f"'{org_a}', '{KEY_A}', 'nemostation/marlin-2b@2026-09-01', 'stream', "
               "@STATE, 'chat.completions', 'infrx-payload:@RID', "
               f"'{checks.DIGEST}', 4096, 512, 'pv-old', "
@@ -224,3 +231,384 @@ def upgrade05(pgharness, database: str, files) -> tuple:
     pgharness.apply(database, d1r)
     return conn, before
 
+
+
+# =============================================================================
+# item 2: CREDIT wallets, ledger, entitlements, the initial grant
+# =============================================================================
+FIXTURES = Path(__file__).resolve().parents[2] / "infrx" / "contracts" / "fixtures" / "v2"
+
+# Individuals created for the CREDIT fixture, one auth user (and so one personal
+# organization, made by 0001's signup trigger) each, in separate statements so each
+# personal organization is unambiguous.
+CONSUMER_1 = "c1000000-0000-4000-8000-000000000001"
+CONSUMER_2 = "c1000000-0000-4000-8000-000000000002"
+UNGRANTED = "c1000000-0000-4000-8000-000000000003"      # a verified-later individual
+SHARED = "c1000000-0000-4000-8000-000000000004"         # personal org with a second member
+RACER = "c1000000-0000-4000-8000-000000000005"          # granted only by the race check
+PROVIDER_DEV_USER = "c1000000-0000-4000-8000-000000000006"
+PROVIDER_ADMIN_USER = "c1000000-0000-4000-8000-000000000007"
+EVIDENCE = "email_verification/2026-09-22/test"
+
+
+def _load(name: str):
+    return json.loads((FIXTURES / f"{name}.json").read_text())
+
+
+def personal_org(conn, user: str) -> str:
+    return str(conn.execute("select id from public.organizations where created_by = %s "
+                            "order by created_at, id limit 1", (user,)).fetchone()[0])
+
+
+def wallet_of(conn, user: str) -> str | None:
+    row = conn.execute("select wallet_id from infrx.credit_wallets "
+                       "where owner_user_id = %s and kind = 'consumer'", (user,)).fetchone()
+    return str(row[0]) if row else None
+
+
+def set_flag(conn, name: str, enabled: bool) -> None:
+    conn.execute("update infrx.feature_flags set enabled = %s, updated_by = 'd1r-test', "
+                 "reason = 'test' where name = %s", (enabled, name))
+
+
+def grant(conn, user: str, *, campaign: str = "launch_2026_09", op: str | None = None,
+          evidence: str = EVIDENCE) -> tuple:
+    return conn.execute("select * from infrx.grant_signup_credit(%s, %s, %s, %s)",
+                        (user, evidence, campaign, op)).fetchone()
+
+
+def seed_credit(conn) -> None:
+    """On top of `checks.seed_fixtures`: the individuals, the flags on, two grants."""
+    for user in (CONSUMER_1, CONSUMER_2, UNGRANTED, SHARED, RACER, PROVIDER_DEV_USER,
+                 PROVIDER_ADMIN_USER):
+        conn.execute("insert into auth.users (id, email) values (%s, %s)",
+                     (user, f"{user[:8]}-{user[-2:]}@example.com"))
+    conn.execute("insert into public.org_members (org_id, user_id, role) values (%s, %s, "
+                 "'member')", (personal_org(conn, SHARED), CONSUMER_2))
+    set_flag(conn, "signup_grant", True)
+    set_flag(conn, "credit_admission", True)
+    grant(conn, CONSUMER_1)
+    grant(conn, CONSUMER_2)
+
+
+class _Allowed(Exception):
+    pass
+
+
+def attempt(conn, sql: str, params=None, *, session: str | None = None) -> str | None:
+    """None when the statement succeeded (it is rolled back either way), else the
+    SQLSTATE, the constraint name if any, and the first line of the message."""
+    try:
+        with conn.transaction():
+            if session:
+                conn.execute(checks.SESSIONS[session])
+            conn.execute(sql, params)
+            raise _Allowed()
+    except _Allowed:
+        return None
+    except psycopg.Error as refused:
+        name = getattr(refused.diag, "constraint_name", None) or ""
+        return f"{refused.sqlstate} {name} {str(refused).splitlines()[0][:120]}".strip()
+
+
+def _all_refused(conn, cases, what: str) -> int:
+    survived = [label for label, sql in cases if attempt(conn, sql) is None]
+    assert not survived, f"the schema accepted ({what}):\n  " + "\n  ".join(survived)
+    return len(cases)
+
+
+def _all_accepted(conn, cases, what: str) -> int:
+    refused = [f"{label}: {why}" for label, sql in cases
+               if (why := attempt(conn, sql)) is not None]
+    assert not refused, f"the schema refused ({what}):\n  " + "\n  ".join(refused)
+    return len(cases)
+
+
+def _identity_cases(conn) -> tuple[tuple, tuple]:
+    w1, w2 = wallet_of(conn, CONSUMER_1), wallet_of(conn, CONSUMER_2)
+    o1, o2 = personal_org(conn, CONSUMER_1), personal_org(conn, CONSUMER_2)
+    adj = "00000000-0000-4000-8000-00000000ad01"
+    ledger = ("insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, "
+              "operation_id, request_id, actor) values ")
+    refused = (
+        ("a consumer wallet without its personal org",
+         f"insert into infrx.credit_wallets (kind, owner_user_id) values "
+         f"('consumer', '{UNGRANTED}')"),
+        ("a consumer wallet that also names a provider owner",
+         f"insert into infrx.credit_wallets (kind, owner_user_id, personal_org_id, "
+         f"owner_provider_org_id) values ('consumer', '{UNGRANTED}', "
+         f"'{personal_org(conn, UNGRANTED)}', gen_random_uuid())"),
+        ("a provider_dev wallet owned by an individual",
+         f"insert into infrx.credit_wallets (kind, owner_user_id) values "
+         f"('provider_dev', '{UNGRANTED}')"),
+        ("a second consumer wallet for one individual",
+         f"insert into infrx.credit_wallets (kind, owner_user_id, personal_org_id) values "
+         f"('consumer', '{CONSUMER_1}', '{personal_org(conn, UNGRANTED)}')"),
+        ("a second wallet funded through one personal org",
+         f"insert into infrx.credit_wallets (kind, owner_user_id, personal_org_id) values "
+         f"('consumer', '{UNGRANTED}', '{o1}')"),
+        ("a wallet denominated in USD",
+         f"insert into infrx.credit_wallets (kind, unit, owner_user_id, personal_org_id) "
+         f"values ('consumer', 'USD', '{UNGRANTED}', '{personal_org(conn, UNGRANTED)}')"),
+        ("a wallet created with a balance",
+         f"insert into infrx.credit_wallets (kind, owner_user_id, personal_org_id, "
+         f"ledger_total) values ('consumer', '{UNGRANTED}', "
+         f"'{personal_org(conn, UNGRANTED)}', 5)"),
+        ("changing a wallet's kind",
+         f"update infrx.credit_wallets set kind = 'provider_dev' where wallet_id = '{w1}'"),
+        ("changing a wallet's owner",
+         f"update infrx.credit_wallets set owner_user_id = '{CONSUMER_2}' "
+         f"where wallet_id = '{w1}'"),
+        ("rebinding a wallet to another org",
+         f"update infrx.credit_wallets set personal_org_id = '{o2}' where wallet_id = '{w1}'"),
+        ("relabelling a wallet's unit",
+         f"update infrx.credit_wallets set unit = 'USD' where wallet_id = '{w1}'"),
+        ("moving a total without a ledger row (even as the owner)",
+         f"update infrx.credit_wallets set ledger_total = 20000 where wallet_id = '{w1}'"),
+        ("moving a reservation without a hold",
+         f"update infrx.credit_wallets set reserved_total = 1 where wallet_id = '{w1}'"),
+        ("deleting a wallet", f"delete from infrx.credit_wallets where wallet_id = '{w1}'"),
+        ("a transfer kind",
+         ledger + f"('{w1}', 'consumer', 'transfer', -5, gen_random_uuid(), null, 'x')"),
+        ("a signup grant of another amount",
+         ledger + f"('{w1}', 'consumer', 'signup_grant', 5000, gen_random_uuid(), null, "
+                  f"'platform')"),
+        ("a second signup grant into a wallet, without an entitlement",
+         ledger + f"('{w1}', 'consumer', 'signup_grant', 10000, gen_random_uuid(), null, "
+                  f"'platform')"),
+        ("a ledger row that lies about its wallet's kind",
+         ledger + f"('{w1}', 'provider_dev', 'operator_adjustment', 5, gen_random_uuid(), "
+                  f"null, 'ops')"),
+        ("an operator allocation minting consumer credit",
+         ledger + f"('{w1}', 'consumer', 'operator_allocation', 5, gen_random_uuid(), "
+                  f"null, 'ops')"),
+        ("a positive inference debit",
+         ledger + f"('{w1}', 'consumer', 'inference_debit', 5, gen_random_uuid(), "
+                  f"gen_random_uuid(), 'svc')"),
+        ("an inference debit that names no request",
+         ledger + f"('{w1}', 'consumer', 'inference_debit', -5, gen_random_uuid(), null, "
+                  f"'svc')"),
+        ("a grant that claims to settle a request",
+         ledger + f"('{w1}', 'consumer', 'operator_adjustment', 5, gen_random_uuid(), "
+                  f"gen_random_uuid(), 'ops')"),
+        ("a zero movement",
+         ledger + f"('{w1}', 'consumer', 'operator_adjustment', 0, gen_random_uuid(), null, "
+                  f"'ops')"),
+        ("an anonymous movement",
+         ledger + f"('{w1}', 'consumer', 'operator_adjustment', 5, gen_random_uuid(), null, "
+                  f"'  ')"),
+        ("a debit past zero",
+         ledger + f"('{w1}', 'consumer', 'operator_adjustment', -10000.00000001, "
+                  f"gen_random_uuid(), null, 'ops')"),
+        ("a reused operation id",
+         ledger + f"('{w2}', 'consumer', 'operator_adjustment', 5, "
+                  f"(select operation_id from infrx.credit_ledger where wallet_id = '{w1}' "
+                  f"limit 1), null, 'ops')"),
+        ("editing ledger history", f"update infrx.credit_ledger set amount = 20000 "
+                                   f"where wallet_id = '{w1}'"),
+        ("deleting ledger history", f"delete from infrx.credit_ledger where wallet_id = '{w1}'"),
+        ("truncating the CREDIT ledger", "truncate infrx.credit_ledger cascade"),
+        ("truncating CREDIT wallets", "truncate infrx.credit_wallets cascade"),
+        ("a second initial entitlement under another campaign",
+         f"insert into infrx.signup_entitlements (user_id, entitlement, wallet_id, amount, "
+         f"verification_evidence_ref, ledger_operation_id, campaign_version) "
+         f"select user_id, entitlement, wallet_id, amount, 'again', gen_random_uuid(), "
+         f"'relaunch' from infrx.signup_entitlements where user_id = '{CONSUMER_1}'"),
+        ("an entitlement paid into another individual's wallet",
+         f"insert into infrx.signup_entitlements (user_id, entitlement, wallet_id, amount, "
+         f"verification_evidence_ref, ledger_operation_id) select '{UNGRANTED}', "
+         f"entitlement, wallet_id, amount, 'x', ledger_operation_id "
+         f"from infrx.signup_entitlements where user_id = '{CONSUMER_1}'"),
+        ("an entitlement whose money is not a signup row",
+         f"with a as (insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, "
+         f"operation_id, actor) values ('{w2}', 'consumer', 'operator_adjustment', 1, "
+         f"'{adj}', 'ops') returning 1) "
+         f"insert into infrx.signup_entitlements (user_id, entitlement, wallet_id, amount, "
+         f"verification_evidence_ref, ledger_operation_id) values ('{CONSUMER_2}', "
+         f"'initial_signup_grant_2', '{w2}', 10000, 'x', '{adj}')"),
+        ("an entitlement for another amount",
+         f"update infrx.signup_entitlements set amount = 20000 where user_id = '{CONSUMER_1}'"),
+        ("re-dating or re-attributing an entitlement",
+         f"update infrx.signup_entitlements set campaign_version = 'x' "
+         f"where user_id = '{CONSUMER_1}'"),
+        ("an entitlement with no verification evidence",
+         f"insert into infrx.signup_entitlements (user_id, entitlement, wallet_id, amount, "
+         f"verification_evidence_ref, ledger_operation_id) values ('{UNGRANTED}', "
+         f"'initial_signup_grant', '{w1}', 10000, ' ', gen_random_uuid())"),
+    )
+    accepted = (
+        ("an audited operator adjustment, both signs",
+         ledger + f"('{w1}', 'consumer', 'operator_adjustment', 2.5, gen_random_uuid(), "
+                  f"null, 'ops@infrx'), ('{w1}', 'consumer', 'operator_adjustment', "
+                  f"-2.5, gen_random_uuid(), null, 'ops@infrx')"),
+        ("spending exactly to zero",
+         ledger + f"('{w1}', 'consumer', 'operator_adjustment', -10000, gen_random_uuid(), "
+                  f"null, 'ops@infrx')"),
+    )
+    return refused, accepted
+
+
+def check_credit_identity(conn) -> str:
+    """CREDIT-IDENTITY / R59-7 / R67 / R71: ownership is an exclusive-or by kind, one
+    wallet per individual and per personal org, kind/unit/owner immutable, totals move
+    only by the ledger, the ledger vocabulary is closed with sign and wallet-kind rules,
+    and the entitlement is one per individual, paid into their own wallet by its own
+    signup row."""
+    refused, accepted = _identity_cases(conn)
+    n = _all_refused(conn, refused, "identity")
+    m = _all_accepted(conn, accepted, "identity controls")
+    return f"{n} identity/ledger violations refused, {m} controls accepted"
+
+
+def check_credit_reconciles(conn) -> str:
+    """R59-7: every CREDIT summary equals its ledger and its active holds."""
+    drift = conn.execute("select wallet_id, ledger_drift, reserved_drift from "
+                         "infrx.credit_wallet_reconciliation where ledger_drift <> 0 "
+                         "or reserved_drift <> 0").fetchall()
+    assert not drift, f"CREDIT wallets disagree with their ledger/holds: {drift}"
+    n, = conn.execute("select count(*) from infrx.credit_wallets").fetchone()
+    assert n >= 2, "the reconciliation saw no wallet"
+    return f"{n} CREDIT wallets reconcile"
+
+
+def check_grant(conn) -> str:
+    """CREDIT-GRANT / A1 seam: one transaction creates the wallet, the entitlement and
+    exactly one +10000.00000000 row; every retry (another operation id, campaign or
+    organization) returns the same grant; a missing flag is a maintenance refusal; blank
+    evidence, a shared organization and an unknown user are refused."""
+    with conn.transaction():
+        user, wallet, op, amount, _at, replayed = grant(conn, UNGRANTED)
+        assert str(user) == UNGRANTED and not replayed and amount == "10000.00000000", \
+            f"first grant: {(user, amount, replayed)}"
+        row = conn.execute("select kind, unit, personal_org_id, ledger_total::text, "
+                           "reserved_total::text, revision from infrx.credit_wallets "
+                           "where wallet_id = %s", (wallet,)).fetchone()
+        assert row == ("consumer", "CREDIT", uuid.UUID(personal_org(conn, UNGRANTED)),
+                       "10000.00000000", "0.00000000", 1), \
+            f"granted wallet: {row}"
+        # Another organization, another campaign, another operation id: same grant.
+        conn.execute("insert into public.organizations (name, slug, created_by) values "
+                     "('second', 'second-org-x', %s)", (UNGRANTED,))
+        again = grant(conn, UNGRANTED, campaign="relaunch_2027",
+                      op="00000000-0000-4000-8000-00000000aa01", evidence="other")
+        assert again[5] is True and again[2] == op and again[1] == wallet, \
+            f"a retry minted or moved the grant: {again}"
+        n, = conn.execute("select count(*) from infrx.credit_ledger where wallet_id = %s",
+                          (wallet,)).fetchone()
+        assert n == 1, f"{n} ledger rows for one grant"
+        raise psycopg.Rollback()
+    for label, sql, code in (
+        ("blank evidence", f"select infrx.grant_signup_credit('{UNGRANTED}', ' ')", "22023"),
+        ("a shared personal organization",
+         f"select infrx.grant_signup_credit('{SHARED}', 'e')", "55000"),
+        ("an unknown user", "select infrx.grant_signup_credit(gen_random_uuid(), 'e')",
+         "P0002"),
+    ):
+        why = attempt(conn, sql)
+        assert why is not None and why.startswith(code), f"{label}: {why!r}"
+    with conn.transaction():
+        set_flag(conn, "signup_grant", False)
+        why = attempt(conn, f"select infrx.grant_signup_credit('{UNGRANTED}', 'e')")
+        raise psycopg.Rollback()
+    assert why is not None and why.startswith("55000"), f"grant with the flag off: {why!r}"
+    return "grant: one row, idempotent across op/campaign/org, 4 refusals"
+
+
+def check_grant_race(connect, database: str, attempts: int = 8) -> str:
+    """CREDIT-GRANT under a race: N concurrent callers for one individual produce
+    exactly one ledger row, and every caller is handed that same row."""
+    barrier = threading.Barrier(attempts)
+    out: list = []
+
+    def call() -> None:
+        with connect(database) as c:
+            barrier.wait()
+            out.append(grant(c, RACER, op=None))
+
+    threads = [threading.Thread(target=call) for _ in range(attempts)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    with connect(database) as c:
+        rows = c.execute("select l.operation_id from infrx.credit_ledger l "
+                         "join infrx.credit_wallets w using (wallet_id) "
+                         "where w.owner_user_id = %s", (RACER,)).fetchall()
+    assert len(out) == attempts, f"only {len(out)} of {attempts} callers returned"
+    assert len(rows) == 1, f"{len(rows)} ledger rows after a race of {attempts}"
+    assert {r[2] for r in out} == {rows[0][0]}, "callers were handed different grants"
+    assert sum(1 for r in out if not r[5]) == 1, "not exactly one caller issued the grant"
+    return f"{attempts} concurrent grants -> 1 ledger row, 1 issuer, {attempts - 1} replays"
+
+
+def check_no_unit_conversion(conn) -> str:
+    """R64/R65/R73: no function or view touches a USD amount and a CREDIT amount
+    together (so none can sum or convert across units), and nothing is named like a
+    converter. `public.console_usage` shows the two columns side by side, never combined."""
+    usd = ("delta_usd", "cost_usd", "infrx.wallets", "infrx.credit_holds", "usd_per_m",
+           "price_versions", "public.credit_ledger")
+    credit = ("credit_wallets", "infrx.credit_ledger", "credit_wallet_holds",
+              "charged_credits", "signup_entitlements", "rate_card_versions")
+    side_by_side = {"public.console_usage"}
+    found = []
+    objects = conn.execute("""
+        select n.nspname || '.' || p.proname, lower(p.prosrc) from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname in ('public', 'infrx')
+          and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+        union all
+        select schemaname || '.' || viewname, lower(definition) from pg_views
+        where schemaname in ('public', 'infrx')""").fetchall()
+    for name, src in objects:
+        if any(w in name for w in ("convert", "exchange", "to_credit", "to_usd", "usd_to",
+                                   "credit_to")):
+            found.append(f"{name}: named like a converter")
+        both = any(t in src for t in usd) and any(t in src for t in credit)
+        if both and name not in side_by_side:
+            found.append(f"{name}: reads USD and CREDIT amounts together")
+        if both and name in side_by_side and "sum(" in src:
+            found.append(f"{name}: aggregates across units")
+    assert not found, "cross-unit code exists:\n  " + "\n  ".join(found)
+    return f"{len(objects)} functions/views: none converts or combines units"
+
+
+def check_money_unit_cases(conn) -> str:
+    """The F2P `money_unit_cases` fixture as SQL: every valid amount round-trips through
+    numeric(20,8) to its canonical eight-digit text, and the out-of-range one is refused
+    by the column type. (Rounding refusals - `0.000000001`, `1e3` - are the service
+    parser's: PostgreSQL's numeric input rounds, so the trust boundary is money_units.)"""
+    n = 0
+    for case in _load("money_unit_cases"):
+        if case["valid"]:
+            text, = conn.execute("select %s::numeric(20,8)::text", (case["input"],)).fetchone()
+            assert text == case["canonical"], f"{case}: the database spells it {text}"
+            n += 1
+        elif case["input"] == "1000000000000.00000000":
+            assert attempt(conn, "select %s::numeric(20,8)", (case["input"],)) is not None, \
+                "numeric(20,8) accepted 10^12"
+            n += 1
+    return f"{n} money_unit_cases executed as SQL"
+
+
+def check_regime_on_usage(conn) -> str:
+    """CREDIT-UNITS on usage: a row states its regime; a legacy_usd row carries no
+    CREDIT field, and the regime is one of the two."""
+    base = ("insert into public.usage_events (id, org_id, model_id, status, "
+            "accounting_regime, charged_credits) values (gen_random_uuid(), "
+            f"'{checks.ORG_A}', 'nemostation/marlin-2b', 200, ")
+    n = _all_refused(conn, (
+        ("a legacy row with a CREDIT charge", base + "'legacy_usd', 1)"),
+        ("an unknown regime", base + "'usd', null)"),
+        ("a CREDIT row with no card or serving revision", base + "'credit', 1)"),
+    ), "usage regime")
+    # The deployed gateway's own insert (no regime named) is still the legacy writer.
+    m = _all_accepted(conn, (
+        ("the deployed gateway's usage row",
+         "insert into public.usage_events (id, org_id, api_key_id, model_id, status, stream, "
+         "prompt_tokens, completion_tokens, video_seconds, ttft_ms, latency_ms, cached, "
+         f"cost_usd) values (gen_random_uuid(), '{checks.ORG_A}', '{checks.KEY_A}', "
+         "'nemostation/marlin-2b', 200, true, 10, 5, 1.5, 100, 900, false, 0.00000350)"),
+    ), "legacy writer")
+    regime, = conn.execute("select count(*) from public.usage_events "
+                           "where accounting_regime <> 'legacy_usd'").fetchone()
+    return f"{n} regime violations refused, {m} legacy writer accepted ({regime} CREDIT rows)"
