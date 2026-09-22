@@ -646,6 +646,22 @@ gate's counterpart: when `ROUTERS` gains the ingress, this check starts passing 
 same run's `validate_runtime` refusal is what keeps an incomplete pilot from serving.
 I2B reuses `apply` as its atomic configuration step rather than writing a second one.
 
+## 5.2 The packaged backend (I2B)
+
+**Implemented in the repository and rehearsed locally; not on the host** until the
+coordinator runs [the rollout runbook](rollout/README.md). What §2 proposed, as built:
+
+| Piece | Where | Rule |
+|---|---|---|
+| Runtime image | `apps/infrx-api/deploy/Dockerfile` | `python:3.12.14-slim-trixie` and `uv 0.11.8` by digest, `uv.lock` frozen, uids 10001 (gateway) / 10002 (worker) in group 10000, no root; built on the host from the release commit with `--provenance=false`, and its content id is the pin (`INFRX_IMAGE` in the env file) |
+| Units | `deploy/*.service`, `infrx-reaper.timer` | gateway, worker, reaper (oneshot every 30 s ≤ `PREPARATION_LEASE_TTL_S`), Valkey (digest, loopback, no persistence, `noeviction`) and the engine; every container read-only, `--cap-drop ALL`, `no-new-privileges`, memory/pid bounds (`est.`); `TimeoutStopSec` > `docker stop -t` everywhere; worker drain 330 s > `GENERATION_TIMEOUT_S` |
+| One configuration authority | `/etc/marlin2b-gateway.env`, written only by `preflight.py apply` | the manifest keys plus `--set` tunables, which must be names the runtime reads (the schema is every name `config.from_env` reads, pinned by a test); systemd reads `INFRX_IMAGE`, the containers and serve.sh read the rest |
+| Media root R | `PROCESSING_CACHE_DIR=/opt/dlami/nvme/processing` | **changed from §2's `/var/lib/infrx/media`** to W3's proposal: a rebuildable 7-day cache on the instance-store NVMe (386 G free, I1B), one value for the gateway (writer), worker and engine (read-only); the units recreate it with its owner at every start because a stop wipes the NVMe |
+| Usage spill | `/var/lib/infrx/usage/usage.jsonl` | row `M-SCRATCH`: root EBS, survives a stop |
+| Disk budget | `preflight.DISK_BUDGET` | pilot refuses below 10 GiB free for `/var/lib/infrx` and 60 GiB for R (`est.`) |
+| Edge | `deploy/Caddyfile`, `Caddyfile.maintenance` | pinned Caddy; `/metrics`, `/readyz`, `/internal` 404; public `/health` is `{"ok":true}` / `{"ok":false}` only; no route to the engine; bodies bounded at `MAX_REQUEST_BYTES` (declared length refused up front); maintenance is the active site, so it survives a Caddy restart |
+| Scripts | `install.sh` (deploy), `migrate.py`, `drain.sh`, `rollback.sh`, `rehearse.sh` | install: commit → image → backup → preflight (secrets, probe in the image, rename) → units → engine → runtime → readiness → edge; a refusal changes nothing. migrate: reviewed plan digest, one transaction, Supabase CLI history. rollback: files back; a pilot is never returned to an unmetered runtime without the operator's statement that no pilot request was accepted (§8) |
+
 ## 6. Backup and restore per durable layer
 
 No EC2 snapshot, AMI or AWS Backup plan exists in us-east-1 (row `O-BACKUPS`);
@@ -1013,3 +1029,10 @@ target group.
     seventh-pass entry records that the "57" stated in both fifth-pass entries was
     wrong (55), why, and the complete list of log entries that were edited in place
     before this rule took effect.
+- 2026-09-22 (I2B, local only; no AWS call, nothing run against the pilot host or hosted
+  Supabase): added §5.2, the packaged backend. One design change against §2 is recorded
+  there rather than silently: the media root moved to the instance-store NVMe
+  (W3's proposal), and the root-EBS budget shrank accordingly. `install.sh` now installs
+  unit files **after** the env file is validated (I0 installed them before, inert), so a
+  refused install leaves the units untouched as well. The rollout is `rollout/README.md`,
+  coordinator-run. Row `O-FAILOPEN` still describes the deployed host.
