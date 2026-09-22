@@ -1460,3 +1460,35 @@ def test_gap__the_relay_never_receives_anything_the_journal_has_not_taken():
         assert received and all(committed for _, committed in received), received
         assert len(received) == result.committed == result.relayed
     run(case())
+
+
+def test_gap__a_cancellation_that_lands_between_the_last_append_and_complete_settles_nothing():
+    async def case():
+        world = World()
+        request, admission = await queued(world)
+        engine = ScriptEngine(events=(PROGRESS, delta("done "), usage_event(Usage.of(1200, 1))))
+
+        async def cancel_then_store(job_id, text):
+            await world.jobs.cancel(b.ORG_A, admission.job_handle)   # after the last append
+            return f"infrx-result:{job_id}"
+
+        result = await world.runner(engine, put_result=cancel_then_store).run(request.request_id)
+        assert not result.settled and result.refusal == "already_terminal", result
+        assert world.outcome(request.request_id).cause is TerminalCause.client_cancelled
+    run(case())
+
+
+def test_gap__a_stale_complete_settles_nothing():
+    async def case():
+        world = World()
+        request, _ = await queued(world)
+        engine = ScriptEngine(events=(PROGRESS, delta("done "), usage_event(Usage.of(1200, 1))))
+
+        def expire_then_store(job_id, text):
+            world.clock.advance(world.limits.lease_ttl_s + 1)
+            return f"infrx-result:{job_id}"
+
+        result = await world.runner(engine, put_result=expire_then_store).run(request.request_id)
+        assert not result.settled and result.refusal == "stale_lease", result
+        assert world.outcome(request.request_id) is None
+    run(case())
