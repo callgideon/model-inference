@@ -52,7 +52,7 @@ def flag(argv: list[str], name: str) -> list[str]:
 
 def stop_seconds(name: str) -> int:
     stop = shlex.split(unit(name)["ExecStop"][0])
-    assert stop[:4] == ["/usr/bin/docker", "stop", "-t", stop[3]], (name, stop)
+    assert stop[:3] == ["/usr/bin/docker", "stop", "-t"] and len(stop) == 5, (name, stop)
     assert stop[4:] == flag(docker_run(name), "--name"), f"{name} stops another container"
     return int(stop[3])
 
@@ -106,7 +106,7 @@ def test_ops_recover__every_container_unit_stops_later_than_docker_does():
     for name in LONG_RUNNING + ("marlin2b-vllm.service",):
         if name == "marlin2b-vllm.service":
             stop = shlex.split(unit(name)["ExecStop"][0])
-            assert stop[:4] == ["/usr/bin/docker", "stop", "-t", stop[3]], stop
+            assert stop[:3] == ["/usr/bin/docker", "stop", "-t"] and len(stop) == 5, stop
             seconds = int(stop[3])
         else:
             seconds = stop_seconds(name)
@@ -264,7 +264,7 @@ def test_deploy_failclosed__a_tunable_is_written_and_typed_by_the_runtime(
     made = support.stubs(tmp_path, monkeypatch)
     cfg = support.config(tmp_path, settings=("MAX_ACTIVE_JOBS=4",))
     assert preflight.apply(cfg) == 0
-    assert preflight.read_env(cfg.env_file)["MAX_ACTIVE_JOBS"] == "4"
+    assert preflight.read_env(cfg.env_file).get("MAX_ACTIVE_JOBS") == "4"
     installed = cfg.env_file.read_bytes()
     for bad in ("MAX_ACTIVE_JOBS=abc", "MAX_ACTIVE_JOBS=-1", "DATABASE_POOL_MAX_SIZE=0"):
         (made.dir / "systemctl.log").unlink(missing_ok=True)

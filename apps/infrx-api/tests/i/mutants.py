@@ -40,6 +40,20 @@ def _shared():
 _SHARED = _shared()
 Mutant, Outcome, Result = _SHARED.Mutant, _SHARED.Outcome, _SHARED.Result
 
+
+def _compile_python_only(source, filename, mode, *args, **kwargs):
+    """I2B mutates unit files, Caddyfiles, a Dockerfile and bash scripts as well as
+    Python. The shared runner's "a mutant that does not compile is `broken_runner`" rule
+    is a Python rule; applied to a unit file it refuses every edit. This keeps the rule
+    for `.py` targets and every other rule of the runner unchanged. Track-local until the
+    shared runner gates `compile()` on the suffix itself (I2B integration request)."""
+    if str(filename).endswith(".py"):
+        return compile(source, filename, mode, *args, **kwargs)
+    return None
+
+
+_SHARED.compile = _compile_python_only
+
 P = "deploy/preflight.py"               # relative to apps/infrx-api, not to `infrx`
 
 
