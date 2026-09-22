@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T17:18:38Z",
+  "updated": "2026-09-22T17:29:34Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -7,7 +7,7 @@
       "lane": "codex-f2r",
       "phase": "implementing",
       "since": "2026-09-22T15:51:21Z",
-      "note": "lane A: items 2\u20135,9 + relayed additions; lane B: items 6/7 done at 1cd5754, now applying consumer updates IR-1..4 to make the tree green"
+      "note": "lane A: items 2\u20135,9 + relayed additions in flight; lane B: round 2 green at 501c496, independent review running"
     },
     "I0": {
       "lane": "codex-i0",
@@ -35,7 +35,7 @@
     },
     "M2": {
       "lane": "codex-m2",
-      "phase": "fix round 1 (review fix_required: EBML uint width, profile segment in cache path)",
+      "phase": "round-2 re-review at 12f2cdb",
       "since": "2026-09-22T16:00:21Z",
       "note": "handed back: probe + preparation + cache; 132 mutants"
     },
@@ -50,12 +50,6 @@
       "phase": "fix round 1 (120 s clip, price \u26a0\ufe0f, KV wording, four test bindings)",
       "since": "2026-09-22T16:03:43Z",
       "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol"
-    },
-    "S1": {
-      "lane": "codex-s1fix / codex/s1fix-console-balance",
-      "phase": "S1-fix round 2 (test-only: source-level assertions for lib/credits.ts, layout, sidebar)",
-      "since": "2026-09-22T16:36:52Z",
-      "note": "S1 API side passed independent review; console fixes in flight"
     }
   },
   "reviews": {},
@@ -143,6 +137,10 @@
     {
       "at": "2026-09-22T16:36:52Z",
       "what": "S1 independent review: API/contract side pass; console B1/B2 fix lane dispatched; integration layer 2 recorded RED (E2R owns)"
+    },
+    {
+      "at": "2026-09-22T17:29:34Z",
+      "what": "S1-fix merged (6669e1f): console balance unavailable state, build-time preview gate; console targets green on merged tree"
     }
   ],
   "cadence_windows": [

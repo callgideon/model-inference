@@ -1,13 +1,13 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T17:18:38Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T17:29:34Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 1 done · 9 in progress · 20 remaining (of 30).**
+**Backend packages: 2 done · 8 in progress · 20 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
-| B0 Baseline & contracts | S1 | Reconcile pulled wave-2 baseline and publish product revision audit | **in-progress** | implemented | S1 API side passed independent review; console fixes in flight |
-| B0 Baseline & contracts | F2R | Close remaining wave-2 contract and verification carryovers | **in-progress** | planned | lane A: items 2–5,9 + relayed additions; lane B: items 6/7 done at 1cd5754, now applying consumer updates IR-1..4 to make the tree green |
+| B0 Baseline & contracts | S1 | Reconcile pulled wave-2 baseline and publish product revision audit | **done** | implemented |  |
+| B0 Baseline & contracts | F2R | Close remaining wave-2 contract and verification carryovers | **in-progress** | planned | lane A: items 2–5,9 + relayed additions in flight; lane B: round 2 green at 501c496, independent review running |
 | B0 Baseline & contracts | I0 | Repair installer atomicity and fail-closed startup prerequisite | **in-progress** | planned | handed back: preflight.py fail-closed installer; 77 tests, 45 mutants |
 | B0 Baseline & contracts | E2R | Repair service harness ownership, role matrix and shared test clock | **in-progress** | planned | harness ownership + five RLS inversions on real services |
 | B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **done** | implemented |  |
@@ -56,21 +56,20 @@ Generated 2026-09-22T17:18:38Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (23 packages): ~1.4 days at observed cadence, ~2.7 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (22 packages): ~1.3 days at observed cadence, ~2.6 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (I2B, I3B, E1B, M4, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
 ## In flight
 
-- F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: items 2–5,9 + relayed additions; lane B: items 6/7 done at 1cd5754, now applying consumer updates IR-1..4 to make the tree green
+- F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: items 2–5,9 + relayed additions in flight; lane B: round 2 green at 501c496, independent review running
 - I0: codex-i0 — fix round 1 (review: runner layout false-kill path; apply-level pilot digest case) since 2026-09-22T15:51:21Z — handed back: preflight.py fail-closed installer; 77 tests, 45 mutants
 - E2R: codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services
 - F2P: codex-f2p — additive design phase (new files only); wire-in after F2R since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - Q2: codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory
-- M2: codex-m2 — fix round 1 (review fix_required: EBML uint width, profile segment in cache path) since 2026-09-22T16:00:21Z — handed back: probe + preparation + cache; 132 mutants
+- M2: codex-m2 — round-2 re-review at 12f2cdb since 2026-09-22T16:00:21Z — handed back: probe + preparation + cache; 132 mutants
 - W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R
 - E1B: codex-e1b — fix round 1 (120 s clip, price ⚠️, KV wording, four test bindings) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol
-- S1: codex-s1fix / codex/s1fix-console-balance — S1-fix round 2 (test-only: source-level assertions for lib/credits.ts, layout, sidebar) since 2026-09-22T16:36:52Z — S1 API side passed independent review; console fixes in flight
 
 ## Checkpoints
 
@@ -82,6 +81,7 @@ Generated 2026-09-22T17:18:38Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-22T16:12:51Z: E2R item 1 (D harness ownership + port lock) merged as c23d804; tests/d 76 passed on merged tree; interim tests/d exclusion lifted
 - 2026-09-22T16:30:52Z: S2M merged after independent review + fix round; R62 recorded; served-bytes digests measured on pilot box
 - 2026-09-22T16:36:52Z: S1 independent review: API/contract side pass; console B1/B2 fix lane dispatched; integration layer 2 recorded RED (E2R owns)
+- 2026-09-22T17:29:34Z: S1-fix merged (6669e1f): console balance unavailable state, build-time preview gate; console targets green on merged tree
 
 ## Authorizations
 
