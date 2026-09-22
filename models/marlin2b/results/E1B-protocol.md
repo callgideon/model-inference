@@ -84,7 +84,7 @@ measurement**. None of it is a commitment, an SLO, or a target to tune toward."
 | Error rate | **provisional:** <1 % platform-caused failures (5xx, `platform_error`, `engine_error`, `lost_after_publication`) over a sweep, with rejections reported separately and not counted as failures | **provisional (P-18)** |
 | Latency | **provisional: no criterion.** The only measured tail is p50-grade on one GPU with two clips. E1B must **measure** p95/p99 on the target before any latency number is written down | **explicitly absent** |
 | Throughput | **provisional:** report successful **video-seconds processed per second** together with the clip/frame/output profile; do not quote clips/s without the duration mix. One GPU-hour processed 15.9–36.2 video-hours on L40S (`meas.`, corrected 2026-09-20) | **provisional (P-18)** |
-| Cost | **provisional:** report cost per successful video-hour at the measured envelope. L40S on-demand ≈ $2.24/h gave $0.06 (360p) – $0.14 (1080p) per video-hour. Prices come only from `research/cross-cutting/cloud-pricing.md` | **provisional (P-18)** |
+| Cost | **provisional:** report cost per successful video-hour at the measured envelope. The committed sketch is $0.06 (360p) – $0.14 (1080p) per video-hour at an **operational** rate of ≈ $2.24/h for the `g6e.2xlarge` dev box. ⚠️ **That rate is an operational figure from `HANDOFF.md:24`, not a priced row: it is not in [`cloud-pricing.md`](../../../research/cross-cutting/cloud-pricing.md)**, which carries L40S rows for other vendors (OCI `BM.GPU.L40S.4` $3.50, and $1.09-$1.57 single-card rows) but **no AWS `g6e` row at all**. Repository convention is that prices come only from `cloud-pricing.md`, so publishing a cost figure requires a sourced row being added there first — owner: whoever publishes it; E1B does not edit that file | **provisional (P-18)** |
 | Resources | **provisional:** flat host RSS and flat GPU memory over a soak; no growth in queue depth at steady arrival rate; preparation disk bounded | **provisional (P-18)** |
 | Soak duration | **⚠️ TO BE VERIFIED — no owner input.** A provisional engineering floor of 4 h continuous at the sustainable rate plus one induced restart, so E1B/I3B have something to execute; the real duration is an availability decision | **provisional (P-18)** |
 | Availability / recovery | **⚠️ TO BE VERIFIED — no owner input.** Measure and publish the recovery window; **do not state an availability target** and do not call single-GPU process recovery high availability | **absent by decision** |
@@ -112,7 +112,9 @@ A cell that shows any of these is reported as invalid rather than published:
    cells being compared (the report prints the profile fingerprint per cell);
 6. an accuracy claim of any kind, on the licensed corpus or on `sop-synth-v1`
    (**P-07**);
-7. a phase timing inferred from the wall clock rather than published by the target.
+7. a phase timing inferred from the wall clock rather than published by the target;
+8. a cost-per-video-hour figure quoted without the ⚠️ above, i.e. as though ≈ $2.24/h were a
+   priced row from `cloud-pricing.md`.
 
 ## 6. Pending inputs
 
@@ -121,6 +123,7 @@ A cell that shows any of these is reported as invalid rather than published:
 | **P-04** | allocated GPU target, artifact access and deploy owner | every measured cell in §3 |
 | **P-18** | workload owner's latency/throughput/error/quality/cost constraints, soak duration and availability expectations | promoting any §4 row from provisional to a target |
 | **P-07** | SOP rubric, event schema, temporal tolerance, ground truth, dataset rights, split, thresholds | any accuracy claim; parity (§4) is the only available quality gate |
+| **sourced `g6e` price row** | a sourced AWS `g6e.2xlarge` / L40S row in `research/cross-cutting/cloud-pricing.md`. The ≈ $2.24/h this repository quotes is an operational figure from `HANDOFF.md:24`, and `cloud-pricing.md` has no AWS `g6e` row at all | **publishing any cost-per-video-hour figure.** E1B may measure and report the cost *sketch* with the ⚠️ label above; it may not publish a cost number until the row exists. Owner: whoever publishes it — neither S2M nor E1B edits `cloud-pricing.md` |
 | W3 | pinned serving version: runtime image digest, both EOS ids (`[248044, 248046]`), profile-v1 flags | L0–L4, and calling the engine version "pinned" at all |
 | I2B | the refactored gateway deployed, with `Server-Timing` phases and the usage resource | L2–L5 and all phase timing |
 

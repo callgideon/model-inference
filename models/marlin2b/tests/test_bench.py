@@ -800,6 +800,11 @@ def test_the_predeclared_protocol_matches_the_client_that_implements_it():
     assert "no criterion" in text and "explicitly absent" in text, \
         "the absent latency criterion must stay absent"
     assert "CREDIT is not USD" in text
+    # B2: the cost sketch keeps S2M's warning. The =$2.24/h dev-box rate is an operational
+    # figure from HANDOFF.md, and cloud-pricing.md has no AWS g6e row at all, so a cost
+    # figure may not be published as though it came from the priced table.
+    assert "not a priced row" in text and "no AWS `g6e` row at all" in text
+    assert "HANDOFF.md:24" in text
     for pending in ("P-04", "P-18", "P-07"):
         assert pending in text
     assert "Server-Timing" in text and "declared_missing" in text, \
