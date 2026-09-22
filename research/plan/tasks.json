@@ -2184,7 +2184,7 @@
       "title": "Add product-v2 schema without rewriting USD pilot migrations",
       "track": "D",
       "handoff": "11-wave3-revision-handoffs.md",
-      "status": "planned",
+      "status": "implemented",
       "start_dependencies": [
         "F2P"
       ],
@@ -2198,9 +2198,12 @@
       ],
       "product": "shared",
       "milestone": "APP-M0",
-      "disposition": "new-revision",
+      "disposition": "new-revision Merged --no-ff on claude/backend-impl (2026-09-22) after independent review on both images (pass). Hosted apply pending I3B backup rehearsal.",
       "amendment": "New additive migrations, exact text RPCs, legacy/new regimes, provider/registry minimum.",
-      "execution_class": "core"
+      "execution_class": "core",
+      "evidence": [
+        "research/plan/evidence/d/D1R-e538c9a.md"
+      ]
     },
     {
       "id": "C0",

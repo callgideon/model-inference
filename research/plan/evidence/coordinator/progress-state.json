@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T20:40:26Z",
+  "updated": "2026-09-22T20:55:35Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -21,17 +21,17 @@
       "since": "2026-09-22T16:03:43Z",
       "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart"
     },
-    "D1R": {
-      "lane": "codex-d1r / codex/d1r-v2-schema",
-      "phase": "independent review at ce36cd3 (both images)",
-      "since": "2026-09-22T18:05:08Z",
-      "note": "migrations 0006\u20130009; 111 migration mutants; hosted apply is a separate coordinator operation"
-    },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
       "phase": "phase 1 handed back (gate exit 3: 23 pending); independent review running",
       "since": "2026-09-22T18:46:49Z",
       "note": "gate not passable until G/D/W/Q lanes merge"
+    },
+    "D2": {
+      "lane": "codex-d2 / codex/d2-admission-outbox",
+      "phase": "dispatched (admission transaction, outbox, M3 tables, D1R follow-ups)",
+      "since": "2026-09-22T20:55:35Z",
+      "note": "real JobStore over PostgreSQL"
     }
   },
   "reviews": {},
@@ -167,6 +167,10 @@
     {
       "at": "2026-09-22T19:36:54Z",
       "what": "G6B merged (ed6da07): operator adapter/CLI, protected publication, headless client"
+    },
+    {
+      "at": "2026-09-22T20:55:35Z",
+      "what": "D1R merged: migrations 0006\u20130009 (CREDIT, registry, read surface, operator seams); D2 dispatched"
     }
   ],
   "cadence_windows": [

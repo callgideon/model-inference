@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**119 records; 113 active; 6 retired; 89 planned; 19 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**119 records; 113 active; 6 retired; 88 planned; 20 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** complete the robust and measured Marlin endpoint backend first. The E4B dependency closure is the immediate implementation set; App/browser work follows backend acceptance and Lab follows App. See [backend-first handoffs](18-marlin-backend-first.md), [the full plan](12-complete-build-plan.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt](16-fresh-session-handoff.md).
 
@@ -34,7 +34,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | G4U | planned / G | [Owned upload HTTP adapter](09-amendment-workstreams.md) | G1R | M3 |
 | F2R | planned / F | [Close remaining wave-2 contract and verification carryovers](11-wave3-revision-handoffs.md) | S1 | — |
 | F2P | planned / F | [Encode product-v2 CREDIT, identity, serving and permission contracts](11-wave3-revision-handoffs.md) | F2R | — |
-| D1R | planned / D | [Add product-v2 schema without rewriting USD pilot migrations](11-wave3-revision-handoffs.md) | F2P | E2R |
+| D1R | implemented / D | [Add product-v2 schema without rewriting USD pilot migrations](11-wave3-revision-handoffs.md) | F2P | E2R |
 | I0 | implemented / I | [Repair installer atomicity and fail-closed startup prerequisite](11-wave3-revision-handoffs.md) | S1, I1 | — |
 | E2R | implemented / E | [Repair service harness ownership, role matrix and shared test clock](11-wave3-revision-handoffs.md) | S1 | — |
 | G1R | planned / G | [Revise ingress for consumer and provider endpoint audiences](11-wave3-revision-handoffs.md) | F2P | D1R, D2 |

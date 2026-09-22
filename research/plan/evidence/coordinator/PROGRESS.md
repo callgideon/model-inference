@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T20:40:26Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T20:55:35Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 9 done · 5 in progress · 16 remaining (of 30).**
+**Backend packages: 10 done · 5 in progress · 15 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -12,8 +12,8 @@ Generated 2026-09-22T20:40:26Z from `tasks.json` (manifest v4) and `progress-sta
 | B0 Baseline & contracts | E2R | Repair service harness ownership, role matrix and shared test clock | **done** | implemented |  |
 | B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **done** | implemented |  |
 | B0 Baseline & contracts | F2P | Encode product-v2 CREDIT, identity, serving and permission contracts | **in-progress** | planned | v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map |
-| B1 Durable endpoint | D1R | Add product-v2 schema without rewriting USD pilot migrations | **in-progress** | planned | migrations 0006–0009; 111 migration mutants; hosted apply is a separate coordinator operation |
-| B1 Durable endpoint | D2 | Atomic admission, durable preparation and dispatch outbox | **remaining** | planned |  |
+| B1 Durable endpoint | D1R | Add product-v2 schema without rewriting USD pilot migrations | **done** | implemented |  |
+| B1 Durable endpoint | D2 | Atomic admission, durable preparation and dispatch outbox | **in-progress** | planned | real JobStore over PostgreSQL |
 | B1 Durable endpoint | D3 | Fenced leases, recovery and cancellation | **remaining** | planned |  |
 | B1 Durable endpoint | D4 | Persistent stream journal and replay | **remaining** | planned |  |
 | B1 Durable endpoint | D5 | Terminal transaction, grants and reconciliation | **remaining** | planned |  |
@@ -56,7 +56,7 @@ Generated 2026-09-22T20:40:26Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (15 packages): ~21 h at observed cadence, ~1.8 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (14 packages): ~20 h at observed cadence, ~1.7 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (I2B, I3B, E1B, M4, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
@@ -65,8 +65,8 @@ Generated 2026-09-22T20:40:26Z from `tasks.json` (manifest v4) and `progress-sta
 - F2R: codex-f2r — lane A merged (e1a33d1) pending review; post-merge follow-ups IR-A1..A10 in flight on codex-f2r-int since 2026-09-22T15:51:21Z — integration head red at collection until IR-A8 lands; main held at f9ba5d2
 - F2P: codex-f2p — additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- D1R: codex-d1r / codex/d1r-v2-schema — independent review at ce36cd3 (both images) since 2026-09-22T18:05:08Z — migrations 0006–0009; 111 migration mutants; hosted apply is a separate coordinator operation
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1 handed back (gate exit 3: 23 pending); independent review running since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
+- D2: codex-d2 / codex/d2-admission-outbox — dispatched (admission transaction, outbox, M3 tables, D1R follow-ups) since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL
 
 ## Checkpoints
 
@@ -90,6 +90,7 @@ Generated 2026-09-22T20:40:26Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-22T19:04:25Z: Checkpoint 3: main ff to the integration head (E2R, W2 merged); composed evidence recorded
 - 2026-09-22T19:16:15Z: M3 merged (e2188f3): owned uploads, collector, consented reuse; M→W seam tests wired to the resolver
 - 2026-09-22T19:36:54Z: G6B merged (ed6da07): operator adapter/CLI, protected publication, headless client
+- 2026-09-22T20:55:35Z: D1R merged: migrations 0006–0009 (CREDIT, registry, read surface, operator seams); D2 dispatched
 
 ## Authorizations
 
