@@ -262,9 +262,13 @@ def test_a_failing_suite_fails_the_run():
     report = fresh_report()
     def one(argv, **_):
         failing = argv[:2] == ["make", "api-test"]
+        # E2R: the failing run still reports PASSING cases ("1 failed, 40 passed"), which is
+        # what a real one looks like. Otherwise the "reported no tests at all" check below
+        # also catches it, and dropping the exit-code check would survive mutation.
         return {"argv": " ".join(argv), "cwd": ".", "exit": 2 if failing else 0,
-                "seconds": 1.0, "counts": {"failed": 1} if failing else {"passed": 41},
-                "named": None, "tail": "1 failed" if failing else ""}
+                "seconds": 1.0,
+                "counts": {"failed": 1, "passed": 40} if failing else {"passed": 41},
+                "named": None, "tail": "1 failed, 40 passed" if failing else ""}
 
     with patched(runner, shell=one):
         runner.suites(report, own_only=False)
@@ -279,6 +283,67 @@ def test_a_failing_suite_fails_the_run():
             "counts": {"passed": 1}, "named": None, "tail": ""}):
         runner.suites(green, own_only=False)
     assert green.stages[-1]["status"] == runner.PASS
+
+
+def test_a_failing_role_matrix_row_fails_the_rls_stage_and_the_run():
+    """E2R review B1: the rls STAGE, not just `pgstate.run_check`, turns one failed row into
+    FAIL, names the case, and makes the run exit 1. Every other test patches `rls` out."""
+    import psycopg
+    from contextlib import nullcontext
+
+    def rows(passed):
+        return lambda conn, fixtures: [
+            {"id": "E2-RLS-01", "role": "anon", "passed": True},
+            {"id": "E2-RLS-15", "role": "authenticated", "passed": passed}]
+
+    for passed, status, failed, code in ((False, runner.FAIL, ["E2-RLS-15"], 1),
+                                         (True, runner.PASS, None, 0)):
+        report = fresh_report()
+        with patched(psycopg, connect=lambda *a, **k: nullcontext()), \
+                patched(harness, pg_dsn=lambda: "stub"), \
+                patched(pgstate, run_role_matrix=rows(passed)):
+            runner.rls(report, fixtures=None)
+        entry = report.stages[-1]
+        assert entry["stage"] == "rls" and entry["status"] == status
+        named = entry["detail"]["failed"]
+        assert (named and [row["id"] for row in named]) == failed
+        assert entry["detail"]["cases"] == 2
+        assert report.exit_code == code
+
+
+def test_a_suite_that_reports_no_tests_at_all_fails_the_run():
+    """E2R item 4: exit 0 is not evidence that anything ran.
+
+    `make bench-test` echoes "not run - models/marlin2b/tests does not exist yet (E1 owns
+    it)" and exits 0; a deleted testpath, an empty collection or a mistyped target does the
+    same. This stage exists to MEASURE cross-module discovery, so a runner that reports no
+    passing cases is a failure of the stage rather than a pass with an empty count.
+    """
+    report = fresh_report()
+
+    def silent(argv, **_):
+        quiet = argv[:2] == ["make", "bench-test"]
+        return {"argv": " ".join(argv), "cwd": ".", "exit": 0, "seconds": 0.1,
+                "counts": {} if quiet else {"passed": 41}, "named": None,
+                "tail": "bench-test: not run - models/marlin2b/tests does not exist yet"}
+
+    with patched(runner, shell=silent):
+        runner.suites(report, own_only=False)
+    entry = report.stages[-1]
+    assert entry["status"] == runner.FAIL, entry
+    assert entry["detail"]["reported_no_tests"] == ["make bench-test"], entry["detail"]
+    assert entry["detail"]["nonzero_exit"] is None, "it exited 0: that is the point"
+    assert report.exit_code == 1
+
+    # A node runner counts differently and must still count: `# pass 131`, not `131 passed`.
+    console = fresh_report()
+    with patched(runner, shell=lambda argv, **_: {
+            "argv": " ".join(argv), "cwd": ".", "exit": 0, "seconds": 0.1,
+            "counts": {"node_pass": 131} if argv[:2] == ["make", "console-test"]
+                      else {"passed": 7},
+            "named": None, "tail": ""}):
+        runner.suites(console, own_only=False)
+    assert console.stages[-1]["status"] == runner.PASS, console.stages[-1]
 
 
 def test_teardown_is_reported_and_its_failure_is_a_failure():
@@ -599,6 +664,13 @@ def test_a_real_orphaned_fake_server_is_found_by_its_command_line():
         assert os.getpid() not in found, "the scanning process is never its own orphan"
         # Another checkout's server is not ours to report.
         assert all(str(pid).isdigit() for pid in found)
+        # E2R: and the OTHER branch, which procfs otherwise hides on this host. Pointing the
+        # scan at a directory that does not exist takes the `ps` path, against the same real
+        # process - so the branch that only macOS would run is executed here too.
+        via_ps = runner.fake_server_orphans(proc=Path("/nonexistent-procfs"))
+        assert child.pid in via_ps, \
+            f"the ps branch missed pid {child.pid}; found {via_ps} (is `ps` truncating again?)"
+        assert os.getpid() not in via_ps
     finally:
         try:
             os.killpg(os.getpgid(child.pid), signal.SIGKILL)
@@ -610,6 +682,27 @@ def test_a_real_orphaned_fake_server_is_found_by_its_command_line():
             break
         time.sleep(0.05)
     assert child.pid not in runner.fake_server_orphans(), "a dead server is not an orphan"
+
+
+def test_the_ps_orphan_parser_reads_a_pid_and_a_whole_command_line():
+    """E2R: the `ps` branch is unreachable on a host with procfs, so the parser is driven
+    directly - a line with our marker is ours, a line naming another checkout's copy is not,
+    a header or a blank line is not a process, and a TRUNCATED line is (correctly) missed,
+    which is exactly the bug `-ww` exists to prevent and the reason this is testable at all.
+    """
+    marker = str((harness.HERE / "fake_vllm.py").resolve())
+    listing = "\n".join([
+        "  PID COMMAND",
+        "",
+        f" 4242 /usr/bin/python3 {marker} --port 55589 --fault none",
+        f" 4243 /usr/bin/python3 /another/checkout/tests/integration/fake_vllm.py --port 1",
+        f"{os.getpid()} /usr/bin/python3 {marker}",
+        f" 4244 /usr/bin/python3 {marker[:len(marker) - 5]}",     # truncated by a narrow ps
+        "notapid something",
+    ])
+    assert runner._orphans_from_ps(listing, marker) == [4242], \
+        "only this checkout's untruncated command lines are ours, and never our own pid"
+    assert runner._orphans_from_ps("", marker) == []
 
 
 def test_provision_database_refuses_a_container_outside_the_namespace():

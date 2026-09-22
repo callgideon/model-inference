@@ -20,6 +20,7 @@ from infrx.state import migrations
 from . import checks, pgharness
 
 UPGRADE_DB = f"{pgharness.DATABASE}_upgrade"
+VOLUME_DB = f"{pgharness.DATABASE}_volume"   # seed_volume's 3,000 rows stay out of the shared one
 PRODLIKE_DB = "prodlike_d1"                 # deliberately not infrx_*: see check_production_clock
 
 _reason = pgharness.unavailable()
@@ -29,16 +30,19 @@ pytestmark = pytest.mark.skipif(_reason is not None,
 _state: dict = {}
 
 
-def _fresh():
-    """The fresh-apply database, built once and shared by the read-only checks."""
-    if "fresh" not in _state:
+def _fresh(database: str = pgharness.DATABASE):
+    """The fresh-apply database, built once and shared by the read-only checks.
+
+    A check that WRITES (seed_volume) asks for its own database name, so what it writes
+    can never reach a read-only check that happens to run after it."""
+    if database not in _state:
         pgharness.ensure()
-        pgharness.recreate(pgharness.DATABASE)
-        pgharness.apply(pgharness.DATABASE, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
-        conn = pgharness.connect(pgharness.DATABASE)
+        pgharness.recreate(database)
+        pgharness.apply(database, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
+        conn = pgharness.connect(database)
         checks.seed_fixtures(conn)
-        _state["fresh"] = conn
-    return _state["fresh"]
+        _state[database] = conn
+    return _state[database]
 
 
 def _upgraded():
@@ -174,7 +178,7 @@ def test_every_row_check_refuses_its_violation() -> None:
 def test_bounded_access_paths_use_their_index() -> None:
     """Org/time/id pagination, pending outbox, expiring leases, aged holds and the
     journal cursor are index-served on a seeded database, with no sequential scan."""
-    conn = _fresh()
+    conn = _fresh(VOLUME_DB)
     if "volume" not in _state:
         checks.seed_volume(conn)
         _state["volume"] = True

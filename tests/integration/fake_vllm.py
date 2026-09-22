@@ -68,9 +68,15 @@ CHUNK_SIZE = 12
 
 
 SEEDED_CREATED = 1_758_000_000     # a fixed `created` base when --seed is given
-# Milliseconds between deltas on the cancellation path only, so a cancel can actually arrive
+# Time between deltas on the cancellation path only, so a cancel can actually arrive
 # mid-stream. Without it the whole body is emitted before any client could send one.
-CANCEL_GAP_S = 0.02
+# E2R: was 0.02, which gave the client's cancel POST 4 x 20 ms = 80 ms for a round trip.
+# Measured failing on this 16-core host at load average 14.5 (the E2 stack plus the other
+# suites running): `assert 5 < 5` - every chunk was out before the cancel landed, so the case
+# read as "it did not stop early" when nothing was wrong with the code under test. 0.2 s gives
+# that round trip 800 ms. It is still a race rather than a synchronisation; see README.md's
+# residual limit. This is the only fault path in this file that waits at all.
+CANCEL_GAP_S = 0.2
 
 
 class UnknownFault(ValueError):

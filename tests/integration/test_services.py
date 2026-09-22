@@ -228,8 +228,17 @@ def test_a_check_that_should_fail_does_fail():
                                   ("error", pgstate.PERMISSION_DENIED),
                                   "and the same case with the fragment it really emits",
                                   message_contains="not a member of organization")
+    # E2R review N1: and anon's 42501s are not exempt - anon's refusal checked against the
+    # wrong SQLSTATE must fail, or a role-conditional comparison would pass every anon row.
+    anon_wrong_sqlstate = pgstate.Check("E2-RLS-MUTANT6", "anon", None,
+                                        "select count(*) from public.organizations",
+                                        ("error", "42P01"),
+                                        "anon's real refusal, checked against the wrong SQLSTATE")
     with connect() as conn:
         assert pgstate.run_check(conn, wrong, fixtures)["passed"] is False
+        anon = pgstate.run_check(conn, anon_wrong_sqlstate, fixtures)
+        assert anon["observed"] == pgstate.PERMISSION_DENIED, anon
+        assert anon["passed"] is False, "an anon row is not exempt from the SQLSTATE check"
         assert pgstate.run_check(conn, wrong_error, fixtures)["passed"] is False
         observed = pgstate.run_check(conn, wrong_sqlstate, fixtures)
         assert observed["observed"] == pgstate.PERMISSION_DENIED, observed
@@ -246,25 +255,74 @@ def test_a_check_that_should_fail_does_fail():
 
 # ------------------------------------------------------------------ the movable clock
 
-def test_database_time_moves_only_inside_a_transaction_that_asks_for_it():
-    """R7 needs a database clock a test can move; 08 §10 needs a clock production cannot.
-    Both hold only if the offset is transaction-local and lives outside the migrations."""
+def test_the_shared_clock_moves_the_function_every_durable_decision_reads():
+    """E2R item 2: the clock under test is `infrx.now()` - D1's, the one the migrations
+    default every timestamp to - and not a private function of E2's that nothing reads.
+
+    Three measured facts, all three of which a caller gets wrong if they are not stated:
+    the offset moves `infrx.now()`; `advance()` returns the PRE-move value because
+    `infrx.now()` is STABLE within a statement; and the offset is a committed row, so it
+    outlives its statement and a rollback is what undoes it.
+    """
     stack_or_skip()
     with connect() as conn:
-        pgstate.install_test_clock(conn)
-        with conn.transaction():
-            pgstate.set_clock_offset(conn, 7200.0)
-            moved, real = conn.execute(
-                f"select {pgstate.CLOCK_SCHEMA}.now(), now()").fetchone()
-            assert 7195 < (moved - real).total_seconds() < 7205
-        after = conn.execute(f"select {pgstate.CLOCK_SCHEMA}.now() - now()").fetchone()[0]
-        assert abs(after.total_seconds()) < 1.0, "the offset leaked out of its transaction"
+        assert conn.execute(
+            f"select to_regprocedure('{pgstate.CLOCK_FUNCTION}') is not null").fetchone()[0], \
+            "the migrations must have created the clock this probe measures"
+        probe = pgstate.probe_clock(conn)
         # And backwards, which is what an expiry test needs.
-        with conn.transaction():
-            pgstate.set_clock_offset(conn, -3600.0)
-            behind = conn.execute(
-                f"select {pgstate.CLOCK_SCHEMA}.now() < now()").fetchone()[0]
-            assert behind is True
+        pgstate.set_clock_offset(conn, -1800.0)
+        behind = pgstate.clock_delta_s(conn)
+        pgstate.set_clock_offset(conn, 0.0)
+    assert probe["moved_s"] == 3600.0, probe
+    assert 3595.0 <= probe["advance_returned_pre_move_s"] <= 3605.0, \
+        "advance() must be measured as returning the pre-move time: move the clock in its " \
+        f"own statement, then read (E2 round-3 limit 3): {probe}"
+    assert abs(probe["at_rest_s"]) < 1.0, probe
+    assert probe["inside_rolled_back_tx_s"] == 1800.0, probe
+    assert abs(probe["after_rollback_s"]) < 1.0, \
+        f"a rolled-back move must leave the clock where it was: {probe}"
+    assert -1805.0 <= behind <= -1795.0, behind
+
+
+def test_only_the_legacy_claim_form_authenticates_on_the_pinned_image():
+    """E2R item 2, measured rather than assumed, and the reason `impersonate` sets BOTH forms.
+
+    On `supabase/postgres` 17.6.1.173 `auth.uid()` is
+    `nullif(current_setting('request.jwt.claim.sub', true), '')::uuid` - the LEGACY per-claim
+    GUC. Setting only the JSON `request.jwt.claims` form (which is what PostgREST 13 sends -
+    measured separately, see the evidence) authenticates NOBODY, and then every deny-case in
+    the matrix passes for the wrong reason. Pinning the asymmetry here means an image whose
+    `auth.uid()` starts reading the JSON form fails this case instead of silently changing
+    what the whole matrix means.
+    """
+    import json
+    fixtures = stack_or_skip()
+    principal = str(fixtures.user("member_alpha"))
+    claims = json.dumps({"sub": principal, "role": "authenticated"})
+    measured = {}
+    with connect() as conn:
+        for label, setters in (
+                ("legacy_only", [("request.jwt.claim.sub", principal)]),
+                ("json_only", [("request.jwt.claims", claims)]),
+                ("both", [("request.jwt.claim.sub", principal),
+                          ("request.jwt.claims", claims)])):
+            with conn.transaction():
+                conn.execute("set local role authenticated")
+                for name, value in setters:
+                    conn.execute("select set_config(%s, %s, true)", (name, value))
+                measured[label] = conn.execute("select auth.uid()::text").fetchone()[0]
+            conn.execute("reset role")
+        source = conn.execute(
+            "select prosrc from pg_proc p join pg_namespace n on n.oid = p.pronamespace"
+            " where n.nspname = 'auth' and p.proname = 'uid'").fetchone()[0]
+    assert "request.jwt.claim.sub" in source, source
+    assert "request.jwt.claims" not in source, \
+        f"this image's auth.uid() now reads the JSON form too; the evidence must say so: {source}"
+    assert measured["legacy_only"] == principal, measured
+    assert measured["json_only"] is None, \
+        f"the JSON claim form alone must be measured as authenticating nobody here: {measured}"
+    assert measured["both"] == principal, measured
 
 
 # ------------------------------------------------------------------ the other three stores
