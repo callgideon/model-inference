@@ -50,7 +50,7 @@ def test_the_manifest_validates_and_declares_all_four_cases():
     assert sorted(c["case"] for c in MANIFEST["clips"] if c["case"]) == sorted(
         ("steps_within_one_second", "steps_out_of_order", "step_absent",
          "step_spans_segment_boundary"))
-    assert sorted({c["duration_s"] for c in MANIFEST["clips"]}) == [8, 30, 60, 115]
+    assert sorted({c["duration_s"] for c in MANIFEST["clips"]}) == [8, 30, 60, 120]
     assert max(c["duration_s"] for c in MANIFEST["clips"]) <= \
         MANIFEST["api_limits"]["max_clip_duration_s"]
     assert len({(c["width"], c["height"]) for c in MANIFEST["clips"]}) == 3
@@ -94,13 +94,19 @@ def test_frames_and_pixel_budget_follow_the_pinned_profile():
     assert synth.profile_frames(8) == 16 and synth.profile_frames(115) == 230
     assert synth.profile_frames(0.5) == 4, "the floor is min_frames, not zero"
     assert synth.profile_frames(200) == 240, "the ceiling is max_frames"
+    # The 240-frame ceiling is first reached just above 119.25 s, and round-half-to-even
+    # makes exactly 119.25 s give 238 — which is why the long clip is 120.0 s, not 115 s
+    # (marlin-sop.md §3.8, corrected at f9853cc).
+    assert synth.profile_frames(119.25) == 238 and synth.profile_frames(119.26) == 240
+    assert synth.profile_frames(120) == 240 == synth.PROFILE["max_frames"]
     for clip in MANIFEST["clips"]:
         assert clip["frames_profile_v1"] == synth.profile_frames(clip["duration_s"])
         assert clip["longest_edge_profile_v1"] == \
             clip["frames_profile_v1"] * MANIFEST["profile"]["px_per_frame"]
     longest = max(MANIFEST["clips"], key=lambda c: c["duration_s"])
-    assert longest["frames_profile_v1"] == 230 <= MANIFEST["profile"]["max_frames"], \
-        "the 115 s clip is the fixture's frame-budget worst case, inside the 240-frame cap"
+    assert longest["duration_s"] == 120 == MANIFEST["api_limits"]["max_clip_duration_s"]
+    assert longest["frames_profile_v1"] == 240 == MANIFEST["profile"]["max_frames"], \
+        "the long clip is the real 240-frame worst case, not a 230-frame near miss"
 
 
 # ------------------------------------------------------------------ the validator itself

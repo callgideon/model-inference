@@ -22,7 +22,7 @@ Rules for this file:
 | Axis | Value | Where it comes from |
 |---|---|---|
 | Performance corpus | `models/marlin2b/corpus/manifest.json`, `--subset full` — 64 distinct clips, 4 CC-BY/public-domain sources, 16 geometries, 2–112 s, 16 prompts, plus 4 corrupt-media negatives | E1; `marlin-sop.md` §5.2 "Representative workload" |
-| SOP journey fixture | `models/marlin2b/corpus-synth/manifest.json` (`sop-synth-v1`) — 12 generated clips, 8/30/60/115 s, 55 scripted steps, 1 declared-absent step, one ≤1 s pair, one boundary-spanning step, one non-canonical pair | `marlin-sop.md` §3.8 |
+| SOP journey fixture | `models/marlin2b/corpus-synth/manifest.json` (`sop-synth-v1`) — 12 generated clips, 8/30/60/120 s (120.0 s is both the API cap and the real 240-frame worst case), 55 scripted steps, 1 declared-absent step, one ≤1 s pair, one boundary-spanning step, one non-canonical pair | `marlin-sop.md` §3.8 |
 | Media forms | `video_b64` and `video_url` now; `infrx-upload:upl_…` once the upload routes exist (R61(1)); `text` slots for the no-media control | `marlin-sop.md` §3.3 |
 | Preprocessing profile | `v1`: `frames = clamp(round(2.0 × duration_s), 4, 240)` rounded up to even, `size.longest_edge = frames × 200,704` as a whole-clip budget, `shortest_edge = 4096` | `marlin-sop.md` §1.5 |
 | Output lengths | declared distribution, `--max-tokens 128,512,1024` | E1B.a; a single ceiling hides the decode cost |

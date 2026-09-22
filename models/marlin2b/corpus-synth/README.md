@@ -48,9 +48,11 @@ how correlated segments end up counted as independent samples.
 
 ## Spread
 
-- durations **8 / 30 / 60 / 115 s**, three clips each, all inside the 120 s API cap;
-  115 s is this fixture's frame-budget worst case (230 frames at profile v1, under
-  the 240-frame ceiling)
+- durations **8 / 30 / 60 / 120 s**, three clips each, all inside the 120 s API cap;
+  120.0 s is both the cap and the real 240-frame worst case at profile v1. (115 s, this
+  fixture's first draft, is only 230 frames: the 240 ceiling is first reached just above
+  119.25 s, and round-half-to-even makes exactly 119.25 s give 238 — `marlin-sop.md` §3.8,
+  corrected at `f9853cc`.)
 - geometries 640×360, 854×480, 1280×720; source frame rates 10, 15, 30 fps
 - 2–7 steps per clip (2 only for the declared out-of-order clip), 55 rendered steps
   and 1 declared-absent step in total

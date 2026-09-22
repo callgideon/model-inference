@@ -66,9 +66,13 @@ STEP_LABELS = ("fetch tray", "place housing", "align bracket", "drive screw",
 PART_COLOURS = ("0xE05A4E", "0x4EA8E0", "0x8FD14F", "0xE0C34E",
                 "0xB06AE0", "0x4EE0C3", "0xE07FB0", "0x9AA0A6")
 
-# 12 clips: durations 8/30/60/115 s, three each (marlin-sop.md §3.8). 115 s is inside the
-# 120 s API cap and is the worst case for the frame budget in this fixture.
-DURATIONS_S = (8, 30, 60, 115)
+# 12 clips: durations 8/30/60/120 s, three each (marlin-sop.md §3.8, corrected at f9853cc).
+# 120.0 s is BOTH the API cap and the real 240-frame worst case: frames = clamp(round(2 x
+# duration), 4, 240) rounded up to even first reaches 240 just above 119.25 s (round(2 x
+# 119.26) = 239, bumped to 240), and round-half-to-even makes exactly 119.25 s give 238. An
+# earlier draft of this fixture used 115 s and called it the worst case, which is wrong:
+# 115 s is 230 frames.
+DURATIONS_S = (8, 30, 60, 120)
 GEOMETRIES = ((640, 360), (854, 480), (1280, 720))
 FPS = (10, 15, 30)
 # Steps per clip: 3..7, except the declared out-of-order clip, which §3.8 specifies as a
@@ -138,15 +142,20 @@ def clip_steps(index, clip_id, duration_s, n, case):
         windows[1] = [round(windows[0][1] + NEAR_GAP_S, 1),
                       round(windows[0][1] + NEAR_GAP_S + length, 1)]
     if case == "step_spans_segment_boundary":
-        # The first step that starts after the boundary is moved to straddle it, without
-        # closing the gap to its predecessor to within the 1 s resolution probe: only the
-        # steps_within_one_second clip may sit that close.
-        for i, (start, _) in enumerate(windows):
-            if start > SEGMENT_BOUNDARY_S:
-                floor = windows[i - 1][1] + 2.0 if i else 0.4
-                windows[i] = [round(max(SEGMENT_BOUNDARY_S - BOUNDARY_HALF_S, floor), 1),
-                              round(SEGMENT_BOUNDARY_S + BOUNDARY_HALF_S, 1)]
-                break
+        # The LAST step that starts before the boundary is extended past it. Moving a later
+        # step back instead can leave no room at all: at 120 s with seven steps a step ends
+        # exactly at 60.0, so the moved window came out inverted (62.0-61.5). Extending
+        # forward always has room, and it never closes the gap to the predecessor.
+        before = [i for i, (start, _) in enumerate(windows) if start < SEGMENT_BOUNDARY_S]
+        if not before:
+            raise RuntimeError(f"{clip_id}: no step starts before {SEGMENT_BOUNDARY_S}s")
+        i = before[-1]
+        end = round(SEGMENT_BOUNDARY_S + BOUNDARY_HALF_S, 1)
+        following = windows[i + 1][0] if i + 1 < len(windows) else duration_s
+        if end + 2.0 > following:
+            raise RuntimeError(f"{clip_id}: extending step {i} to {end}s would come within "
+                               f"2s of {following}s; the boundary case needs a wider gap")
+        windows[i][1] = end
     steps = []
     for position, (canon, (start, end)) in enumerate(zip(canonical, windows)):
         steps.append({"step_id": f"{clip_id}-s{canon}", "canonical_index": canon,
