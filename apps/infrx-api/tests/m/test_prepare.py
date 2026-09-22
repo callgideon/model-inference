@@ -1,0 +1,635 @@
+#!/usr/bin/env python3
+"""M2: preparation, the processing cache and the seam into W1's engine adapter.
+
+    uv run --frozen pytest -q tests/m/test_prepare.py
+
+Nothing here touches the network, the wall clock or a real decoder. The containers are
+built byte by byte (`support.mp4`/`support.webm`), the fetches are M1's injected transport,
+the cache lives in `tmp_path`, and the engine is W1's real adapter behind a mock transport.
+"""
+from __future__ import annotations
+
+import asyncio
+import base64
+import os
+
+import httpx
+import pytest
+from infrx.config import Settings
+from infrx.contracts import errors
+from infrx.contracts.conformance import SUITES, Harness, MissingHook
+from infrx.contracts.conformance import builders as b
+from infrx.contracts.fakes.support import FakeClock, SequentialIds
+from infrx.contracts.limits import DEFAULTS
+from infrx.contracts.records import Budgets, ExecutionMode, MediaKind, MediaRef, Work
+from infrx.media import fetch, prepare, probe, store
+from infrx.worker import engine as worker_engine
+
+from . import support
+
+CLIP = support.mp4(seconds=10.0)
+WEBM = support.webm(seconds=30.0)
+LONG = support.mp4(seconds=121.0)
+URL = "https://example.com/clips/v.mp4?token=secretvalue"
+OTHER_URL = "https://example.com/clips/second.mp4"
+SOURCE_KEY_PARTS = 5
+
+
+def data_url(body: bytes = CLIP, mime: str = "video/mp4") -> str:
+    return f"data:{mime};base64," + base64.b64encode(body).decode()
+
+
+class Clock:
+    """A float clock the cache reads; tests move it by hand."""
+
+    def __init__(self) -> None:
+        self.now = 1_000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def preparation(tmp_path=None, *, limits=DEFAULTS, transport=None, bodies=(),
+                probe_fn=probe.probe, clock=None, objects=None, jobs=None,
+                ttl_s=DEFAULTS.processing_cache_ttl_s, profile=None):
+    """The real adapter with M1's injected collaborators and a cache under `tmp_path`."""
+    jobs = {} if jobs is None else jobs
+    if transport is None and bodies:
+        transport = support.Transport(*[support.response(body=body) for body in bodies])
+    fetcher = fetch.MediaFetcher(limits, resolve=support.resolver([support.PUBLIC]),
+                                 transport=transport.transport if transport else None,
+                                 monotonic=support.Ticker(), log=support.Records())
+    cache = prepare.ProcessingCache(str(tmp_path) if tmp_path else "", ttl_s=ttl_s,
+                                    clock=clock or Clock())
+    adapter = prepare.MediaPreparation(
+        objects or store.InMemoryObjectStore(), cache=cache, probe=probe_fn, profile=profile,
+        limits=limits, fetcher=fetcher, job_org=lambda job_id: _org_of(jobs, job_id))
+    adapter.jobs = jobs
+    adapter.transport = transport
+    adapter.harness = Harness(port=adapter, clock=FakeClock(), ids=SequentialIds())
+    return adapter
+
+
+def _org_of(jobs, job_id):
+    org_id = jobs.get(job_id)
+    if org_id is None:
+        raise errors.NotFound(f"no job {job_id}")
+    return org_id
+
+
+def request_with(adapter, *sources, org_id=b.ORG_A, media=(), text="Describe this clip."):
+    """A normalized request shaped as G1's validator leaves it: the caller's own urls
+    still in the message parts, and `media` empty."""
+    base = b.request(adapter.harness, org_id=org_id, refs=media)
+    parts = [{"type": "text", "text": text}]
+    parts += [{"type": "video_url", "video_url": {"url": source}} for source in sources]
+    return base.model_copy(update={"messages": ({"role": "user", "content": parts},)})
+
+
+def run(coroutine):
+    return asyncio.run(coroutine)
+
+
+# --- what preparation establishes ---------------------------------------------
+def test_preparation_measures_the_clip_and_fills_the_record(tmp_path):
+    """MEDIA-PARITY: the prepared record carries one ref per video part, in order, with the
+    duration, type and size read from the stored bytes - and the customer's url is gone."""
+    adapter = preparation(tmp_path, bodies=[CLIP])
+    prepared = run(adapter.prepare_request(b.ORG_A, request_with(adapter, URL)))
+    assert len(prepared.media) == 1
+    ref = prepared.media[0]
+    assert ref.duration_s == pytest.approx(10.0)
+    assert ref.mime == "video/mp4" and ref.bytes == len(CLIP)
+    assert ref.digest == fetch.digest_of(CLIP)
+    assert ref.storage_ref == f"media/{b.ORG_A}/v1/{ref.digest.split(':')[1][:16]}/source"
+    part = prepared.messages[0]["content"][1]
+    assert part == {"type": "video_url", "video_url": {"ref": ref.handle}}
+    for leak in (URL, "token", "secretvalue", "example.com"):
+        assert leak not in str(prepared.messages)
+
+
+def test_an_inline_payload_is_measured_the_same_way(tmp_path):
+    """A `data:` url is bytes like any other: the same probe, the same refusals, and the
+    64 MiB of base64 does not survive into the staged payload."""
+    adapter = preparation(tmp_path)
+    prepared = run(adapter.prepare_request(b.ORG_A, request_with(adapter, data_url(WEBM,
+                                                                                  "video/webm"))))
+    ref = prepared.media[0]
+    assert ref.kind is MediaKind.inline and ref.duration_s == pytest.approx(30.0)
+    assert ref.mime == "video/webm"
+    assert "base64" not in str(prepared.messages)
+
+
+def test_the_duration_is_the_probes_and_never_the_callers(tmp_path):
+    """S2M D2/D9. The record the caller sends can carry any `media` it likes; preparation
+    rebuilds the tuple from the parts it materialized, so a 121 s clip declared as 1 s is
+    still refused and a forged ref never reaches the engine."""
+    adapter = preparation(tmp_path, bodies=[LONG])
+    forged = MediaRef(org_id=b.ORG_A, handle="med_forged", kind=MediaKind.url,
+                      digest=fetch.digest_of(LONG), bytes=len(LONG), mime="video/mp4",
+                      storage_ref=f"media/{b.ORG_A}/v1/0123456789abcdef/source",
+                      duration_s=1.0)
+    with pytest.raises(errors.UnsupportedMedia):
+        run(adapter.prepare_request(b.ORG_A, request_with(adapter, URL, media=(forged,))))
+    assert adapter.refs == {} and adapter.objects.objects == {}
+
+
+def test_a_clip_over_the_duration_cap_is_refused_before_it_is_stored(tmp_path):
+    """S2M D9: `MAX_VIDEO_SECONDS` is what keeps every accepted clip at the trained 2 fps,
+    and it is enforced on the measurement, before an object exists."""
+    adapter = preparation(tmp_path, bodies=[LONG])
+    with pytest.raises(errors.UnsupportedMedia) as raised:
+        run(adapter.prepare_request(b.ORG_A, request_with(adapter, URL)))
+    assert "120s" in str(raised.value)
+    assert adapter.objects.objects == {}
+
+
+@pytest.mark.parametrize("name, body", [
+    ("a truncated container", CLIP[:20]),
+    ("a corrupt container", b"\x00" * 64),
+    ("a container that loops", support.box(b"ftyp", b"isom" + b"\x00" * 8) + b"\x00\x00\x00\x04moov"),
+    ("an unservable codec", support.mp4(codec=b"apcn")),
+    ("an audio-only file", support.webm(codec=b"A_OPUS", track_type=2)),
+    ("a 65535-square declaration", support.webm(width=65_535, height=65_535)),
+])
+def test_media_the_profile_refuses_is_never_stored(name, body, tmp_path):
+    """The probe runs before the write, so a refusal costs no object, no cache file and no
+    index entry - a client hammering a corrupt clip fills nothing up."""
+    adapter = preparation(tmp_path, bodies=[body])
+    with pytest.raises(errors.UnsupportedMedia):
+        run(adapter.prepare_request(b.ORG_A, request_with(adapter, URL)))
+    assert adapter.objects.objects == {}
+    assert adapter.refs == {}
+    assert os.listdir(tmp_path) == []
+
+
+def test_an_oversize_body_never_reaches_the_probe(tmp_path):
+    """M1's byte cap still runs first: 64 MiB is the bound on what is decoded, so the probe
+    is never handed a body the fetcher should have abandoned."""
+    seen = []
+    adapter = preparation(tmp_path, limits=DEFAULTS.replace(max_media_bytes=64), bodies=[CLIP],
+                          probe_fn=lambda data: seen.append(data) or probe.probe(data))
+    with pytest.raises(errors.RequestTooLarge):
+        run(adapter.prepare_request(b.ORG_A, request_with(adapter, URL)))
+    assert seen == []
+
+
+def test_two_identical_parts_are_two_refs_over_one_object(tmp_path):
+    """R58 pairs parts with refs one to one, so a request naming the same clip twice has
+    two parts and two refs - over one content-addressed object, not two."""
+    adapter = preparation(tmp_path, limits=DEFAULTS.replace(max_media_bytes=len(CLIP) * 2),
+                          bodies=[CLIP, CLIP],
+                          profile=prepare.MediaProfile(max_parts=2, max_bytes=len(CLIP) * 2))
+    prepared = run(adapter.prepare_request(b.ORG_A, request_with(adapter, URL, OTHER_URL)))
+    assert len(prepared.media) == 2
+    assert prepared.media[0] == prepared.media[1]
+    assert len(adapter.objects.objects) == 1
+    refs = [part["video_url"]["ref"] for part in prepared.messages[0]["content"][1:]]
+    assert refs == [prepared.media[0].handle] * 2
+
+
+def test_more_parts_than_the_profile_allows_are_refused(tmp_path):
+    """One clip per request is a capacity fact (a 120 s clip is ~23,560 of 32,768 tokens),
+    so it is the profile's number and it is checked before anything is fetched."""
+    adapter = preparation(tmp_path, bodies=[CLIP, CLIP])
+    with pytest.raises(errors.UnsupportedMedia):
+        run(adapter.prepare_request(b.ORG_A, request_with(adapter, URL, OTHER_URL)))
+    assert adapter.transport.requests == []
+
+
+def test_a_request_may_only_be_prepared_for_its_own_org(tmp_path):
+    """R10: two tenant-bearing arguments that disagree are a refusal, never a preparation
+    into whichever tenant the caller named."""
+    adapter = preparation(tmp_path, bodies=[CLIP])
+    with pytest.raises(errors.Forbidden):
+        run(adapter.prepare_request(b.ORG_B, request_with(adapter, URL, org_id=b.ORG_A)))
+
+
+# --- bounded work -------------------------------------------------------------
+def test_preparation_runs_at_most_the_pool_width_at_once(tmp_path):
+    """r1 R1: `PREPARATION_CONCURRENCY` bounds how many clips are in memory at once. With
+    64 MiB each, an unbounded gather over a request's parts is the whole process."""
+    live, peak = [0], [0]
+
+    async def slow(data):
+        live[0] += 1
+        peak[0] = max(peak[0], live[0])
+        await asyncio.sleep(0)
+        live[0] -= 1
+        return probe.probe(data)
+
+    limits = DEFAULTS.replace(preparation_concurrency=2, max_media_bytes=len(CLIP) * 8)
+    adapter = preparation(tmp_path, limits=limits, probe_fn=slow,
+                          bodies=[CLIP] * 5,
+                          profile=prepare.MediaProfile(max_parts=5, max_bytes=len(CLIP) * 8))
+    sources = [data_url(support.mp4(seconds=n + 1.0)) for n in range(5)]
+    prepared = run(adapter.prepare_request(b.ORG_A, request_with(adapter, *sources)))
+    assert len(prepared.media) == 5
+    assert peak[0] <= 2, f"{peak[0]} probes ran at once"
+
+
+def test_one_request_cannot_exceed_the_media_budget(tmp_path):
+    """Per request, not per part: three clips inside the per-object cap can still be more
+    memory than one request may have."""
+    limits = DEFAULTS.replace(max_media_bytes=len(CLIP) * 3)
+    adapter = preparation(tmp_path, limits=limits, bodies=[CLIP] * 3,
+                          profile=prepare.MediaProfile(max_parts=3, max_bytes=len(CLIP) * 2))
+    sources = [data_url(support.mp4(seconds=n + 1.0)) for n in range(3)]
+    with pytest.raises(errors.RequestTooLarge):
+        run(adapter.prepare_request(b.ORG_A, request_with(adapter, *sources)))
+
+
+def test_a_probe_that_never_returns_is_bounded_by_its_deadline(tmp_path):
+    """A hung decoder is the classic preparation failure. `PROBE_TIMEOUT_S` is the bound,
+    and the refusal is platform-side (R21) rather than the customer's fault."""
+    async def never(data):
+        await asyncio.Future()
+
+    adapter = preparation(tmp_path, limits=DEFAULTS.replace(probe_timeout_s=0.01),
+                          probe_fn=never, bodies=[CLIP])
+
+    async def drive():
+        with pytest.raises(errors.DeadlineExceeded):
+            await adapter.prepare_request(b.ORG_A, request_with(adapter, URL))
+        # and nothing was stored on the way out
+        assert adapter.objects.objects == {}
+
+    run(asyncio.wait_for(drive(), 2.0))
+
+
+def test_a_store_failure_mid_batch_attaches_nothing(tmp_path):
+    """02: a staging failure creates no job or hold. The second object fails to write, so
+    the request is refused, no job is attached and nothing downstream sees half a request."""
+    class Failing(store.InMemoryObjectStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.writes = 0
+
+        async def put_if_absent(self, key, data, content_type):
+            self.writes += 1
+            if self.writes == 2:
+                raise errors.DependencyUnavailable("object store is unavailable")
+            return await super().put_if_absent(key, data, content_type)
+
+    objects = Failing()
+    adapter = preparation(tmp_path, objects=objects,
+                          limits=DEFAULTS.replace(max_media_bytes=len(CLIP) * 4),
+                          profile=prepare.MediaProfile(max_parts=2, max_bytes=len(CLIP) * 4))
+    sources = [data_url(CLIP), data_url(support.mp4(seconds=4.0))]
+    with pytest.raises(errors.DependencyUnavailable):
+        run(adapter.prepare_request(b.ORG_A, request_with(adapter, *sources)))
+    assert adapter.by_job == {} and adapter.prepared_by_job == {}
+    assert len(objects.objects) <= 1
+
+
+# --- the port operation and the processing cache -------------------------------
+def staged_job(adapter, *, org_id=b.ORG_A, body=CLIP, source=None):
+    """Materialize, stage, admit and attach - the state `prepare` runs against."""
+    prepared = run(adapter.prepare_request(org_id, request_with(adapter, source or data_url(body),
+                                                                org_id=org_id)))
+    refs = run(adapter.stage(org_id, prepared))
+    adapter.jobs[prepared.request_id] = org_id
+    run(adapter.attach(prepared.request_id, refs))
+    return prepared.request_id, refs
+
+
+def test_prepare_persists_the_artifact_and_a_file_the_engine_can_open(tmp_path):
+    """S2M D3: a bare object key is not something a decoder can open. Preparation persists
+    the prepared artifact durably *and* materializes it into the tenant's processing cache,
+    which is the `file://` path the worker hands vLLM."""
+    adapter = preparation(tmp_path)
+    job_id, _ = staged_job(adapter)
+    prepared = run(adapter.prepare(job_id, "v1"))
+    ref = prepared[0]
+    assert ref.storage_ref == f"media/{b.ORG_A}/v1/{ref.digest.split(':')[1][:16]}/prepared"
+    assert ref.duration_s == pytest.approx(10.0)
+    assert adapter.objects.objects[ref.storage_ref][1] == CLIP
+    uri = adapter.local_uri(ref)
+    assert uri.startswith("file://")
+    path = uri[len("file://"):]
+    assert path.startswith(str(tmp_path)) and b.ORG_A in path and path.endswith("source.mp4")
+    with open(path, "rb") as handle:
+        assert handle.read() == CLIP
+
+
+def test_the_profile_version_namespaces_the_prepared_artifact(tmp_path):
+    """01: the tenant, the source digest and the profile version namespace the cache. Two
+    profiles are two artifacts and two cache entries over one source."""
+    adapter = preparation(tmp_path)
+    job_id, _ = staged_job(adapter)
+    first = run(adapter.prepare(job_id, "v1"))[0]
+    second = run(adapter.prepare(job_id, "profile-2"))[0]
+    assert first.storage_ref != second.storage_ref
+    assert "profile-2" in second.storage_ref and second.profile_version == "profile-2"
+    assert first.digest == second.digest
+    assert len(adapter.cache.entries) == 2
+
+
+def test_preparing_twice_is_the_same_answer(tmp_path):
+    """R46 allows bounded preparation retries, so a second attempt must re-derive the same
+    refs - not prepare the first attempt's output under a second profile hop."""
+    adapter = preparation(tmp_path)
+    job_id, _ = staged_job(adapter)
+    assert run(adapter.prepare(job_id, "v1")) == run(adapter.prepare(job_id, "v1"))
+
+
+def test_the_cache_is_read_instead_of_probing_again(tmp_path):
+    """The processing cache exists so the second job on the same clip does not re-read,
+    re-probe and re-write 64 MiB."""
+    probes = []
+    adapter = preparation(tmp_path, probe_fn=lambda data: probes.append(1) or probe.probe(data))
+    job_id, _ = staged_job(adapter)
+    before = len(probes)
+    run(adapter.prepare(job_id, "v1"))
+    run(adapter.prepare(job_id, "v1"))
+    assert len(probes) == before + 1
+
+
+def test_one_tenants_cache_entry_is_not_another_tenants(tmp_path):
+    """MEDIA-SEC: identical bytes in two organizations are two cache entries under two
+    paths, and neither org's handle reaches the other's file."""
+    clock = Clock()
+    adapter = preparation(tmp_path, clock=clock,
+                          transport=support.Transport(support.response(body=CLIP)))
+    mine_job, _ = staged_job(adapter, org_id=b.ORG_A)
+    theirs_job, _ = staged_job(adapter, org_id=b.ORG_B)
+    mine = run(adapter.prepare(mine_job, "v1"))[0]
+    theirs = run(adapter.prepare(theirs_job, "v1"))[0]
+    assert mine.digest == theirs.digest
+    assert adapter.local_uri(mine) != adapter.local_uri(theirs)
+    assert b.ORG_A in adapter.local_uri(mine) and b.ORG_B in adapter.local_uri(theirs)
+    # the same handle in the other tenant resolves to that tenant's object or to nothing
+    assert adapter.cache.get(b.KEY_A, mine.digest, "v1") is None
+
+
+def test_a_cache_entry_expires_and_its_file_goes_with_it(tmp_path):
+    """7 days is a retention obligation, not an eviction preference: past it the entry is
+    unreadable and the bytes are actually gone from the disk."""
+    clock = Clock()
+    adapter = preparation(tmp_path, clock=clock, ttl_s=DEFAULTS.processing_cache_ttl_s)
+    job_id, _ = staged_job(adapter)
+    ref = run(adapter.prepare(job_id, "v1"))[0]
+    path = adapter.local_uri(ref)[len("file://"):]
+    clock.advance(DEFAULTS.processing_cache_ttl_s + 1)
+    assert adapter.cache.get(ref.org_id, ref.digest, "v1") is None
+    assert not os.path.exists(path)
+    with pytest.raises(errors.NotFound):
+        adapter.local_uri(ref)
+
+
+def test_a_sweep_removes_expired_entries_and_leaves_live_ones(tmp_path):
+    clock = Clock()
+    adapter = preparation(tmp_path, clock=clock)
+    old_job, _ = staged_job(adapter)
+    old = run(adapter.prepare(old_job, "v1"))[0]
+    clock.advance(DEFAULTS.processing_cache_ttl_s - 1)
+    new_job, _ = staged_job(adapter, body=support.mp4(seconds=4.0))
+    new = run(adapter.prepare(new_job, "v1"))[0]
+    old_path = adapter.cache.entries[(old.org_id, old.digest, "v1")].local_path
+    clock.advance(2)
+    assert adapter.cache.sweep() == 1
+    assert not os.path.exists(old_path)
+    assert (new.org_id, new.digest, "v1") in adapter.cache.entries
+    assert adapter.local_uri(new)
+
+
+def test_an_object_that_vanished_between_attach_and_prepare_is_not_found(tmp_path):
+    """The expiry drill on the durable side: preparation reads the object it was told
+    about, so an object that is gone is a typed `not_found` rather than a worker failing on
+    a file nobody can open."""
+    adapter = preparation(tmp_path)
+    job_id, refs = staged_job(adapter)
+    adapter.objects.objects.pop(refs[0].storage_ref)
+    with pytest.raises(errors.NotFound):
+        run(adapter.prepare(job_id, "v1"))
+
+
+def test_an_object_whose_content_changed_is_not_prepared(tmp_path):
+    """HEAD and digest, not HEAD alone: a store that says "yes" and then hands over other
+    bytes must not have them prepared, cached and answered about."""
+    adapter = preparation(tmp_path)
+    job_id, refs = staged_job(adapter)
+    key = refs[0].storage_ref
+    adapter.objects.objects[key] = (refs[0].digest, support.mp4(seconds=99.0), "video/mp4")
+    with pytest.raises(errors.NotFound):
+        run(adapter.prepare(job_id, "v1"))
+    assert adapter.cache.entries == {}
+
+
+def test_prepare_refuses_a_job_it_knows_nothing_about(tmp_path):
+    adapter = preparation(tmp_path)
+    with pytest.raises(errors.NotFound):
+        run(adapter.prepare(adapter.harness.ids.uuid(), "v1"))
+
+
+def test_a_profile_version_cannot_escape_the_cache_root(tmp_path):
+    """The profile version reaches an object key and the cache index, so it is an
+    identifier and nothing else."""
+    adapter = preparation(tmp_path)
+    job_id, _ = staged_job(adapter)
+    for version in ("../../etc", "v1/../../..", "/absolute", "v1\nx", ""):
+        with pytest.raises(errors.InvalidRequest):
+            run(adapter.prepare(job_id, version))
+
+
+def test_a_cross_tenant_handle_cannot_reach_another_tenants_media(tmp_path):
+    """MEDIA-SEC: the same content-addressed handle exists in both tenants, and each one
+    resolves to its own object. A job may only be attached its own org's refs (R52/R55)."""
+    adapter = preparation(tmp_path, transport=support.Transport(support.response(body=CLIP)))
+    mine_job, mine_refs = staged_job(adapter, org_id=b.ORG_A)
+    theirs_job, theirs_refs = staged_job(adapter, org_id=b.ORG_B)
+    assert mine_refs[0].handle == theirs_refs[0].handle
+    with pytest.raises(errors.NotFound):
+        run(adapter.attach(mine_job, theirs_refs))
+    mine = run(adapter.prepare(mine_job, "v1"))
+    assert [ref.org_id for ref in mine] == [b.ORG_A]
+    assert all(b.ORG_B not in ref.storage_ref for ref in mine)
+    theirs = run(adapter.prepare(theirs_job, "v1"))
+    assert [ref.org_id for ref in theirs] == [b.ORG_B]
+
+
+def test_the_cache_path_is_built_from_validated_parts_only(tmp_path):
+    """Nothing caller-shaped reaches a path: a malformed tenant or digest is a typed
+    refusal where the path is built, not a directory somewhere else."""
+    cache = prepare.ProcessingCache(str(tmp_path))
+    good = cache.path_for(b.ORG_A, "sha256:" + "ab" * 32, "video/mp4")
+    assert good.startswith(str(tmp_path)) and good.endswith("source.mp4")
+    for org in ("../../etc", "", "ORG", b.ORG_A + "/..", "not-a-uuid"):
+        with pytest.raises(errors.InvalidRequest):
+            cache.path_for(org, "sha256:" + "ab" * 32, "video/mp4")
+    for digest in ("../../etc/passwd", "sha256:zz", "", "sha256:" + "ab" * 31):
+        with pytest.raises(errors.InvalidRequest):
+            cache.path_for(b.ORG_A, digest, "video/mp4")
+    with pytest.raises(errors.UnsupportedMedia):
+        cache.path_for(b.ORG_A, "sha256:" + "ab" * 32, "application/zip")
+
+
+# --- the seam into W1 -----------------------------------------------------------
+def engine() -> worker_engine.VllmEngine:
+    """W1's real adapter behind a transport that never answers: `upstream_body` is built
+    and refused (or not) entirely before anything is sent."""
+    client = httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json={})), base_url="http://engine.invalid")
+    return worker_engine.VllmEngine(client, served_model="marlin2b", clock=lambda: 0.0,
+                                    media_settings=Settings())
+
+
+def work_for(request, refs):
+    return Work(request=request, media_refs=refs, prepared_refs=refs,
+                price_snapshot=b.DEFAULT_PRICE,
+                budgets=Budgets.of(DEFAULTS, ExecutionMode.stream))
+
+
+def test_what_preparation_produces_is_what_the_engine_adapter_accepts(tmp_path):
+    """The M -> W seam, end to end on the real adapter: the prepared record pairs one media
+    part with one ref in order (R58), its storage key passes W1's own grammar check, and the
+    measured duration becomes the pinned frame budget - the request M1 alone produced could
+    not reach the engine at all, because it carried no duration (S2M D2)."""
+    adapter = preparation(tmp_path)
+    prepared_request = run(adapter.prepare_request(b.ORG_A, request_with(adapter,
+                                                                         data_url(CLIP))))
+    refs = run(adapter.stage(b.ORG_A, prepared_request))
+    adapter.jobs[prepared_request.request_id] = b.ORG_A
+    run(adapter.attach(prepared_request.request_id, refs))
+    prepared_refs = run(adapter.prepare(prepared_request.request_id, "v1"))
+
+    body = engine().upstream_body(
+        worker_engine.prepared_request(work_for(prepared_request, prepared_refs), 2_061))
+    parts = body["messages"][0]["content"]
+    assert parts[1] == {"type": "video_url",
+                        "video_url": {"url": prepared_refs[0].storage_ref}}
+    # the pinned profile v1 budget, computed from the measured 10 s at 2 fps
+    assert body["mm_processor_kwargs"] == {"fps": 2.0, "min_frames": 4, "max_frames": 240,
+                                           "size": {"shortest_edge": 4096,
+                                                    "longest_edge": 20 * 200_704}}
+    assert body["cache_salt"].startswith("salt_") and len(body["mm_uuids"]) == 1
+    assert prepared_refs[0].duration_s == pytest.approx(10.0)
+
+
+def test_the_engine_adapter_refuses_the_record_m1_alone_produced(tmp_path):
+    """The other half of the seam, so the case above is not vacuous: without the probe the
+    ref carries no duration and W1's guard is what fires (S2M D2, `engine.py` 570-578)."""
+    adapter = preparation(tmp_path)
+    prepared_request = run(adapter.prepare_request(b.ORG_A, request_with(adapter,
+                                                                         data_url(CLIP))))
+    refs = run(adapter.stage(b.ORG_A, prepared_request))
+    undated = tuple(ref.model_copy(update={"duration_s": None,
+                                           "storage_ref": ref.storage_ref.replace("source",
+                                                                                  "prepared")})
+                    for ref in refs)
+    with pytest.raises(errors.UnsupportedMedia):
+        engine().upstream_body(
+            worker_engine.prepared_request(work_for(prepared_request, undated), 2_061))
+
+
+def test_a_prepared_ref_satisfies_the_engines_storage_ref_grammar(tmp_path):
+    """W1 checks the shape and the tenant of the key it is handed, because a
+    `PreparedRequest` can be hand-built. M's keys must pass it for every profile version."""
+    adapter = preparation(tmp_path)
+    job_id, _ = staged_job(adapter)
+    for version in ("v1", "profile-2", "marlin2b.video.v1"):
+        for ref in run(adapter.prepare(job_id, version)):
+            worker_engine.check_storage_ref(ref)
+            assert len(ref.storage_ref.split("/")) == SOURCE_KEY_PARTS
+
+
+# --- the exported conformance suite ---------------------------------------------
+class Deferred:
+    """M3's operations, reported as missing hooks rather than answered. Preparation is no
+    longer among them, which is the point of this task."""
+
+    OWNERS = {"create_upload": "M3", "finalize_upload": "M3"}
+
+    def __init__(self, adapter) -> None:
+        self.adapter = adapter
+
+    def __getattr__(self, name):
+        owner = self.OWNERS.get(name)
+        if owner is None:
+            return getattr(self.adapter, name)
+
+        async def deferred(*args, **kwargs):
+            raise MissingHook(f"{name} ({owner} owns it)")
+
+        return deferred
+
+
+def conformance_factory(tmp_path):
+    def factory(limits=None, **_kw):
+        adapter = preparation(tmp_path / str(len(os.listdir(tmp_path))),
+                              limits=limits or DEFAULTS)
+        return Harness(port=Deferred(adapter), clock=FakeClock(), ids=SequentialIds(),
+                       extra={"admitted": adapter.jobs.__setitem__})
+    return factory
+
+
+M3_CASES = {"media_sec__an_upload_is_owned_verified_and_immutable": "create_upload",
+            "media_sec__another_org_cannot_resolve_or_finalize": "create_upload",
+            "media_sec__oversize_and_unsupported_uploads_are_refused": "create_upload",
+            "media_sec__staging_never_replaces_an_existing_object": "create_upload",
+            "media_sec__a_refused_upload_stays_refused": "create_upload",
+            "media_sec__an_expired_upload_window_says_so": "create_upload"}
+M1_CASES = ("media_sec__a_foreign_media_reference_is_not_staged",
+            "media_sec__a_partial_request_stages_nothing")
+# The one case this adapter cannot pass, and exactly why. `builders.media()` hands `stage` a
+# ref to an object that was never materialized (M1's evidence, "Limits added or changed this
+# round" item 1), so `prepare` has no bytes to re-read, re-probe or cache - and a `prepare`
+# that produced an artifact anyway would be inventing a duration for media nobody stored.
+# F2R item 4 is the fix: `stage` accepts only store-produced refs and the shared builder
+# seeds them through a `materialized(org_id, ref)` hook. This is pinned rather than skipped,
+# so it fails the moment it starts failing for a different reason - or starts passing.
+PENDING_F2R = "media_parity__staging_is_content_addressed_and_tenant_namespaced"
+
+
+def test_the_exported_conformance_suite_runs_against_the_real_adapter(tmp_path, capsys):
+    """F-CONTRACT / r1 R32: the same cases the fake passes, against this adapter, with the
+    partition asserted - what ran, what is another task's, and the one case that is blocked
+    on a contract revision rather than on this code."""
+    cases, _runner = SUITES["mediastore"]
+    factory = conformance_factory(tmp_path)
+    outcomes: dict[str, str] = {}
+    for case in cases():
+        try:
+            asyncio.run(case(factory))
+            outcomes[case.__name__] = "pass"
+        except MissingHook as missing:
+            outcomes[case.__name__] = f"skip: needs {missing.hook}"
+        except errors.DomainError as refusal:
+            outcomes[case.__name__] = f"blocked: {refusal.code}: {refusal}"
+    print("\nmediastore conformance against infrx.media.prepare.MediaPreparation:")
+    for name, outcome in sorted(outcomes.items()):
+        print(f"  {outcome:<34} {name}")
+    assert {name for name, out in outcomes.items() if out == "pass"} == set(M1_CASES)
+    assert {name: out.split("needs ")[1].split(" ")[0]
+            for name, out in outcomes.items() if out.startswith("skip")} == M3_CASES
+    blocked = {name: out for name, out in outcomes.items() if out.startswith("blocked")}
+    assert list(blocked) == [PENDING_F2R], blocked
+    assert "the staged object for media upl_conformancefixture" in blocked[PENDING_F2R]
+    assert len(outcomes) == len(cases()) == 9
+
+
+def test_the_invariants_of_the_blocked_case_hold_on_materialized_media(tmp_path):
+    """The blocked case above is not an untested invariant: every assertion it makes about
+    `prepare` is made here against media this store really materialized."""
+    adapter = preparation(tmp_path, transport=support.Transport(support.response(body=CLIP)))
+    mine_job, staged = staged_job(adapter, org_id=b.ORG_A)
+    theirs_job, theirs = staged_job(adapter, org_id=b.ORG_B)
+    prepared = run(adapter.prepare(mine_job, "profile-2"))
+    assert prepared[0].profile_version == "profile-2"
+    assert prepared[0].storage_ref != staged[0].storage_ref
+    assert "profile-2" in prepared[0].storage_ref and b.ORG_A in prepared[0].storage_ref
+    assert prepared[0].digest == staged[0].digest          # same source content
+    with pytest.raises(errors.NotFound):                   # an unknown job invents nothing
+        run(adapter.prepare(adapter.harness.ids.uuid(), "profile-2"))
+    foreign = run(adapter.prepare(theirs_job, "profile-2"))
+    assert [ref.org_id for ref in foreign] == [b.ORG_B]
+    assert all(b.ORG_B in ref.storage_ref for ref in foreign)
+    # a refused attach leaves `prepare` with nothing, not a half-written set
+    adapter.jobs["00000099-0000-4000-8000-000000000099"] = b.ORG_A
+    with pytest.raises(errors.NotFound):
+        run(adapter.attach("00000099-0000-4000-8000-000000000099", theirs))
+    with pytest.raises(errors.NotFound):
+        run(adapter.prepare("00000099-0000-4000-8000-000000000099", "profile-2"))

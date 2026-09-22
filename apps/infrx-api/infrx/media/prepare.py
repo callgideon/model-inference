@@ -432,7 +432,7 @@ def _video_parts(messages):
     """(message index, part) for every video part, in order."""
     for index, message in enumerate(messages):
         content = message.get("content") if isinstance(message, dict) else None
-        if not isinstance(content, list):
+        if not isinstance(content, (list, tuple)):
             continue
         for part in content:
             if isinstance(part, dict) and part.get("type") == VIDEO_PART:
@@ -449,7 +449,7 @@ def _rewrite(messages, refs: tuple[MediaRef, ...]):
     rewritten = []
     for message in messages:
         content = message.get("content")
-        if not isinstance(content, list):
+        if not isinstance(content, (list, tuple)):
             rewritten.append(message)
             continue
         parts = []
@@ -459,7 +459,7 @@ def _rewrite(messages, refs: tuple[MediaRef, ...]):
                 consumed += 1
             else:
                 parts.append(part)
-        rewritten.append({**message, "content": tuple(parts)})
+        rewritten.append({**message, "content": parts})
     if consumed != len(refs):
         raise errors.InvalidRequest(f"{consumed} media parts but {len(refs)} references",
                                     param="messages")
