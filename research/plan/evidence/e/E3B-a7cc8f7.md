@@ -149,10 +149,11 @@ All UTC 2026-09-22 on the host above. Env var names only.
 | 3 | `run.py --layer 3 --canary` at `e501c38` (19:09:45Z) | 1 | backend PENDING (run 27, pending 23); then the mutants stage **crashed** in `_reprovision`: `There are 2 other sessions using the database` — PostgREST's pool on `infrx_e2`. Fixed in `f67a62f` (PostgREST stopped at the end of the backend stage) |
 | 4 | `run.py --layer 3 --canary` at `f67a62f` (19:20:10Z, 449.7 s) | 1 | every stage PASS except backend **PENDING** and mutants FAIL on exactly one **stale** E2 mutant, `e2m36` (my edit had split the teardown line it targets); suites PASS: `tests/integration` 117 passed / 25 skipped, **`make api-test` 2208 passed**, console 283/0, bench 67; mutants 83 / 79 killed / 3 controls / problems `['e2m36']`. Fixed in `a7cc8f7`; `mutants.py --only e2m36` → killed |
 | 5 | `run.py --layer 3 --canary` at `a7cc8f7` (19:28Z → 19:39:54Z, 420.6 s) | 1 | backend **PENDING** (27 run / 23 pending / 0 failed / 0 not-run); mutants **`{"mutants": 83, "killed": 80, "controls_survived": 3, "not_killed": 0, "pending": 0, "problems": null}`**; canary PASS; teardown PASS (`infrx-e3b-postgrest` then the four `infrx-e2-*`, `still_named_ours_but_not_ours: []`); **suites FAIL** again only on `make api-test` **69 failed, 2139 passed** in `tests/d` — the D port was again held by `codex-d1r` (lock holder read with `fuser` at 19:39:54Z: pid 1866028, cwd `…/codex-d1r/apps/infrx-api`) |
-| 6 | ⟨RUN6⟩ | | |
-| 7 | `make check` at `a7cc8f7` | ⟨CHECK⟩ | |
-| 8 | `make integration INTEGRATION_ARGS="--layer 1 --canary"` at `a7cc8f7` | ⟨L1⟩ | |
-| 9 | `mutants.py --only e3bc01 … e3bm09` individually (at `e501c38`, stack kept) | 0 | e3bc01 SURVIVED; e3bm01–09 killed (each `1 failed, N deselected`) |
+| 6 | `make integration INTEGRATION_ARGS="--layer 1 --canary"` at `a7cc8f7` (19:50:47Z → 19:56:12Z) | 2 (run exit 1) | preflight skip (layer 1); engine PASS 8; mutants PASS `{"mutants": 64, "killed": 62, "controls_survived": 2, "not_killed": 0, "pending": 0, "problems": null}` (all layer-1 mutants incl. e3bc01/e3bm01–09); canary PASS; **suites FAIL** only on `make api-test` 69 failed / 2139 passed — `tests/d` `HarnessBusy` again (codex-d1r); `tests/integration` 88 passed / 54 skipped (no stack: every layer-2 and backend case skips naming the command) |
+| 7 | **`make -k check`** at `3ee3826` (= `a7cc8f7` + this report's WIP; no code difference) (20:01:21Z → 20:26:26Z) | **2** | `api-test` **69 failed, 2139 passed** — all 69 in `tests/d`, every one `HarnessBusy` (codex-d1r held 55432; 456 `HarnessBusy` lines in the log); `api-mutants` **83 failed, 1228 passed** — all 83 in `tests/d/test_migration_mutants.py`, same cause; `console-test` `# tests 283 / # pass 283 / # fail 0 / # skipped 0`; `console-lint` `✖ 2 problems (0 errors, 2 warnings)` (pre-existing, `apps/app/lib/contracts/`); `console-typecheck` `✓ Types generated successfully`, no diagnostic; `console-mutants` contracts `160 mutants: 160 killed … 0 survived, 0 stale, 0 runner errors`, V `40/40`, U `2 self-checks … 64 mutants, 64 killed, 0 not killed`, C `4 self-tests, 0 failed` + `104 mutants: 104 killed …`, v2 `5/5 self-tests` + `23/23`; `bench-test` **67 passed**. **Skips: none** — no `skipped` in either pytest summary line and `# skipped 0` |
+| 8 | the D-port share of `make check`, when the port was free: `cd apps/infrx-api && INFRX_MUTANTS=all .venv/bin/python -m pytest -q tests/d` (20:27:26Z), then `… -q tests/d/test_migration_mutants.py` (20:28:43Z) | 0, 0 | **`109 passed in 76.20s`**; **`84 passed in 67.96s`** (first attempt each, no `HarnessBusy`) |
+| 9 | **the gate:** `run.py --layer 3 --canary` at `3ee3826` (20:29:51Z → 20:38:06Z, 494.2 s) | **3** | every stage PASS except **backend PENDING** — the stage table below |
+| 10 | `mutants.py --only e3bc01 … e3bm09` individually (at `e501c38`, stack kept) | 0 | e3bc01 SURVIVED; e3bm01–09 killed (each `1 failed, N deselected`) |
 
 ### The merged-tree layer-2 stage table (deliverable 1)
 
@@ -174,7 +175,23 @@ No red stage belongs to a module lane: the only red is harness contention on the
 (08 §8, E2R Limits 2). Run 4 is the same tree plus this task's files and shows `make api-test`
 **2208 passed** when the port was free.
 
-### Backend stage (runs 3–5, identical case outcomes)
+### The gate: `run.py --layer 3 --canary`, command 9, exit 3
+
+| Stage | Status | Measured |
+|---|---|---|
+| preflight | PASS | as above, nothing foreign |
+| services | PASS | PostgreSQL 17.6, Valkey 8.1.10, ClickHouse 25.8.33.6, MinIO |
+| migrate | PASS | 0001–0005 by sha256, clock probe as above |
+| rls | PASS | 40 cases, `failed: null` |
+| backend | **PENDING** | PostgREST `postgrest/13.0.4`; **run 27, pending 23, failed 0, not run 0**; detected `db03`, `db04`, `db05`; pending by id `D2 12 · D3 4 · D4 7 · D5 13 · G1R 12 · G2 7 · G3 5 · G4U 3 · G6B 10 · I2B 1 · M3 3 · Q3 3 · W3 9` |
+| backend-teardown | PASS | `infrx-e3b-postgrest` removed (end of stage), nothing left at the end of the run |
+| engine | PASS | 8 cases over HTTP |
+| suites | PASS | `tests/integration` 117 passed / 25 skipped (the skips are all in `tests/integration/backend`: its pending cases and the PostgREST cases, whose service the backend stage has already removed); **`make api-test` 2208 passed**; `make console-test` 283 / 0; `make bench-test` 67 |
+| mutants | PASS | `{"mutants": 83, "killed": 80, "controls_survived": 3, "not_killed": 0, "pending": 0, "problems": null}` |
+| canary | PASS | python exit 1 `4 failed, 3 passed`, named; console exit 1 `# fail 1`, named |
+| teardown | PASS | the four `infrx-e2-*` removed, `still_named_ours_but_not_ours: []` |
+
+### Backend stage (runs 3–5 and 9, identical case outcomes)
 
 `{"run": 27, "pending": 23, "failed": null, "not_run": null}`, detected (live drills)
 `db03`, `db04`, `db05`; pending by unblocking id (a case counts once per id it names):
@@ -204,7 +221,8 @@ rolled back; `infrx-e3b-postgrest` is removed by the stage and by the run's tear
 
 Raw outputs in the session scratch area (not committed): `<scratch>/e3b/l2-base.{log,json}`
 (run 2), `l3-e501c38.log` (run 3; no JSON, the run crashed), `l3-f67a62f.{log,json}` (run 4),
-`final-a7cc8f7.log` + `l3-a7cc8f7.json` (run 5 and the checks after it).
+`final-a7cc8f7.log` + `l3-a7cc8f7.json` + `l1-a7cc8f7.json` (runs 5, 6), `check-3ee3826.log`
++ `final2.log` + `d-1.log` (commands 7, 8), `l3-3ee3826-r1.{json,log}` (command 9, the gate).
 
 Owned-file sha256 at `a7cc8f7`:
 
@@ -281,8 +299,13 @@ migration; no deploy/rollback implication. Rolling back = reverting the four com
 4. **`dr13`'s durable snapshot is the fake's**, so DUR-OUTBOX is proven for the index half.
 5. **The PostgREST member case is environment-bound** (Findings 2): pending on I2B, not a
    failure of the backend path, which uses the service role.
-6. **A layer-3 run cannot be fully green while any lane holds the D port**; the rerun
-   (command 6) records whether a clean window was found.
+6. **A layer-3 run cannot be fully green while any lane holds the D port**; commands 2, 5, 6
+   and 7 lost `tests/d` to it, commands 4, 8 and 9 found a free window. `make check` is
+   therefore evidenced as command 7 (every non-D target) plus command 8 (the D share), not as
+   one green invocation.
+8. **Object storage is up but unused by product code.** `infrx.media.store` has only
+   `InMemoryObjectStore`; no S3-backed `ObjectStore` exists on this base, so no case exercises
+   E2's MinIO beyond E2's own smoke test. The upload journey cells name M3/G4U.
 7. `make check` does not run `tests/integration` (it is `make integration`'s job, E2R).
 
 ## Handback
@@ -303,3 +326,8 @@ migration; no deploy/rollback implication. Rolling back = reverting the four com
   this host (`infrx-d1-postgres` of codex-d1r, `infrx-q2-valkey`,
   `gideon-migration-order-test-…`) were never touched; every `infrx-e2-*`/`infrx-e3b-*`
   resource this session created was removed.
+- 2026-09-22 (same session, after the WIP evidence commit `3ee3826`): commands 6–9 added. The
+  gate (command 9) exited **3** with every stage PASS except `backend` PENDING and
+  `make api-test` 2208 passed in its `suites` stage; `make -k check` (command 7) passed every
+  non-D target with no skips and lost only `tests/d` to the D1R lane's lock, and the D share ran
+  green on its own (command 8). No code changed after `a7cc8f7`.
