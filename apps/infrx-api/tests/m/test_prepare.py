@@ -402,7 +402,7 @@ def test_prepare_persists_the_artifact_and_a_file_the_engine_can_open(tmp_path):
     ref = prepared[0]
     assert ref.storage_ref == f"media/{b.ORG_A}/v1/{ref.digest.split(':')[1][:16]}/prepared"
     assert ref.duration_s == pytest.approx(10.0)
-    assert adapter.objects.objects[ref.storage_ref][1] == CLIP
+    assert adapter.objects.objects.get(ref.storage_ref, (None, None))[1] == CLIP
     uri = adapter.local_uri(ref)
     assert uri.startswith("file://")
     path = uri[len("file://"):]
@@ -420,7 +420,7 @@ def test_a_prepared_artifact_that_is_gone_is_written_again(tmp_path):
     adapter.objects.objects.pop(ref.storage_ref)
     assert adapter.cache.get(ref.org_id, ref.digest, "v1") is not None
     assert run(adapter.prepare(job_id, "v1"))[0] == ref
-    assert adapter.objects.objects[ref.storage_ref][1] == CLIP
+    assert adapter.objects.objects.get(ref.storage_ref, (None, None))[1] == CLIP
 
 
 def test_the_profile_version_namespaces_the_prepared_artifact(tmp_path):

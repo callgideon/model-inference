@@ -487,12 +487,13 @@ MUTANTS: tuple[Mutant, ...] = (
        "a zero timescale is refused (declared: without it the kill is an unhandled "
        "ZeroDivisionError in the named case, not a typed refusal)",
        P, "    if not timescale or not duration:", "    if not duration:",
-       "test_a_container_that_states_no_usable_duration_is_refused"),
+       "test_a_container_that_states_no_usable_duration_is_refused",
+       dies_by=("ZeroDivisionError",)),
     _m("video_track_read_by_position",
        "the video track is the one whose sample entry is a video codec, not track 1",
        P, "    video = next((t for t in tracks if t.get(\"format\") in MP4_CODECS), None)",
        "    video = tracks[0] if tracks else None",
-       "test_the_video_track_is_chosen_by_its_codec_not_its_position"),
+       "test_the_video_track_is_chosen_by_its_codec_not_its_position", dies_by=("KeyError",)),
     _m("mp4_codec_allowlist_widened",
        "the MP4 codec table is the serving pin: ProRes, MPEG-4 part 2 and a JPEG track are "
        "refused whether or not a decoder would open them",
@@ -535,7 +536,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "absurd values, overflowed the arithmetic, or broke the refusal's own formatting - a "
        "500 where the contract says unsupported_media (review B1)",
        P, "    if size > 8:\n        raise _refuse(\"bad-uint\")", "    pass",
-       "test_a_hostile_length_is_refused_not_followed"),
+       "test_a_hostile_length_is_refused_not_followed", dies_by=("OverflowError", "ValueError")),
     _m("timecode_scale_assumed_default",
        "a Matroska duration is in timecode-scale units, and the scale is in the file",
        P, "                scale = _ebml_uint(data, body, size) or DEFAULT_TIMECODE_SCALE",
@@ -644,7 +645,7 @@ MUTANTS: tuple[Mutant, ...] = (
           '            raise errors.InvalidRequest("a video part carries exactly {url}", param="messages")',
        "        if False:\n"
           '            raise errors.InvalidRequest("a video part carries exactly {url}", param="messages")',
-       "test_a_video_part_that_is_not_exactly_a_url_is_refused"),
+       "test_a_video_part_that_is_not_exactly_a_url_is_refused", dies_by=("AttributeError",)),
     _m("preparation_pool_unbounded",
        "r1 R1: PREPARATION_CONCURRENCY bounds how many clips are in memory at once",
        R, "        self.gate = asyncio.Semaphore(max(1, self.limits.preparation_concurrency))",
@@ -658,7 +659,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "PROBE_TIMEOUT_S bounds a decoder that never returns",
        R, "            return await asyncio.wait_for(work, self.limits.probe_timeout_s)",
        "            return await work",
-       "test_a_probe_that_never_returns_is_bounded_by_its_deadline"),
+       "test_a_probe_that_never_returns_is_bounded_by_its_deadline", dies_by=("TimeoutError",)),
     _m("head_check_removed",
        "the cheap check answers first: HEAD says the object is gone, so 64 MiB is never read",
        R, "            if await self.objects.head(key) != ref.digest:", "            if False:",
