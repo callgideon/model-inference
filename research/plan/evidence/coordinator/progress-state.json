@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T17:03:02Z",
+  "updated": "2026-09-22T17:05:53Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -35,7 +35,7 @@
     },
     "M2": {
       "lane": "codex-m2",
-      "phase": "independent review at 969bb39",
+      "phase": "fix round 1 (review fix_required: EBML uint width, profile segment in cache path)",
       "since": "2026-09-22T16:00:21Z",
       "note": "handed back: probe + preparation + cache; 132 mutants"
     },
