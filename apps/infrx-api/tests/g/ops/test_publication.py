@@ -87,7 +87,12 @@ def test_api_auth__a_private_deployment_is_never_published_and_is_not_found():
                                           "state": v2.DeploymentState.ready_private})
         with pytest.raises(errors.InvalidRequest):
             await op.publish(serving, private, card, model, idempotency_key="p", reason=R)
+        draining = v2.DeploymentRevision(**{**deployment.model_dump(),
+                                           "state": v2.DeploymentState.draining})
+        with pytest.raises(errors.InvalidRequest):                        # public, not active
+            await op.publish(serving, draining, card, model, idempotency_key="pd", reason=R)
         assert serving.serving_version_id not in w.catalog.servings
+        assert deployment.deployment_revision_id not in w.catalog.deployments
         tenant = await w.ops.tenant(key.secret)
         with pytest.raises(errors.NotFound):
             await tenant.quote(v2fix.DEV_REQUESTED_MODEL)                # R70
