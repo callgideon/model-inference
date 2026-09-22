@@ -72,8 +72,13 @@ class Settings:
     # `validate_runtime` needs no second argument and no environment read of its own.
     # Defaulting to `PILOT_DEFAULTS` means `INFRX_MODE` is unset, i.e. legacy.
     pilot: PilotSettings = PILOT_DEFAULTS
+    # F2R item 7: the 08 §5 deployment table, validated by `validate_runtime` before
+    # anything mounts. Defaulting to `DEPLOYMENT_DEFAULTS` means nothing is configured.
+    deployment: "DeploymentSettings" = None
 
     def __post_init__(self):
+        if self.deployment is None:
+            self.deployment = DEPLOYMENT_DEFAULTS
         # only unset derives; USAGE_FAILED_LOG="" stayed "" in the old gateway
         if self.usage_failed_log is None:
             self.usage_failed_log = os.path.join(os.path.dirname(self.usage_log), "usage_failed.jsonl")
@@ -99,10 +104,11 @@ def from_env(env=None):
         supabase_key=e.get("SUPABASE_SERVICE_ROLE_KEY", ""),
         models_doc=e.get("MODELS_DOC", DEFAULT_MODELS_DOC),
         pilot=pilot_from_env(e),
+        deployment=deployment_from_env(e),
     )
 
 
-def _coerce(name, raw):
+def _coerce(name, raw, defaults=None):
     """Coerce by the default's type; error messages name the variable, never its
     value, because DATABASE_URL and friends carry credentials.
 
@@ -110,7 +116,7 @@ def _coerce(name, raw):
     would silently disable a bound, and money goes through `money.parse`, which
     rejects exponents and `NaN` outright.
     """
-    kind = type(getattr(PILOT_DEFAULTS, name))
+    kind = type(getattr(PILOT_DEFAULTS if defaults is None else defaults, name))
     try:
         if kind is bool:
             return raw.strip().lower() in ("1", "true", "yes", "on")
@@ -211,9 +217,16 @@ def validate_runtime(settings):
       shared `GATEWAY_API_KEY` (R51), or a typed `RuntimeMisconfigured` naming the setting
       names and nothing else. A whitespace-only value is not configuration.
     * anything else - refuses to start. A typo in a unit file is not a mode.
+
+    In every mode it first refuses a 08 §5 deployment value that cannot serve
+    (`validate_deployment`), and in `pilot` it requires a `CONSOLE_CURSOR_SECRET`.
     """
     pilot = getattr(settings, "pilot", PILOT_DEFAULTS)
     mode = pilot.infrx_mode
+    # Before the mode is even dispatched on: a deployment value that cannot serve is a
+    # startup failure in every mode, legacy included. A zero pool or an unrotatable spool
+    # segment is not something the legacy path is entitled to either.
+    validate_deployment(getattr(settings, "deployment", DEPLOYMENT_DEFAULTS), mode)
     if mode == MODE_UNSET:
         logging.getLogger("infrx").info(
             "INFRX_MODE is unset: serving legacy F1 behaviour (mode=legacy)")
@@ -232,6 +245,121 @@ def validate_runtime(settings):
         if missing or forbidden:
             raise RuntimeMisconfigured(mode, missing, forbidden=forbidden)
     return mode
+
+
+# --- 08 §5 deployment configuration (F2R item 7) ------------------------------------
+# Why these are here and not in `contracts/limits.PilotSettings`: that dataclass is
+# contract data - numbers both halves enforce, frozen by a contract revision - and it
+# lives under `infrx/contracts/`, which is owned by the contract lane. These are
+# *deployment* knobs: how large a spool segment is, how big the connection pool is, how
+# long a statement may run, how much structure one request body may contain, and the
+# secret that signs a console cursor. They are read here, by the same rules, and 08 §5
+# lists them in its own table. Folding them into `PilotSettings` later moves the names,
+# defaults and checks unchanged; it is an integration request, not a behaviour change.
+#
+# Every value is provisional (R17): shaped like the contract, numbers this round's
+# reading. `⚠️ TO BE VERIFIED` against a real pool and a real spool - D2 owns the pool
+# numbers, T2 the segment size.
+@dataclass(frozen=True)
+class DeploymentSettings:
+    # T1/T2: one spool segment. 16 MiB is small enough that a torn tail costs little to
+    # quarantine and large enough that rotation is not the hot path.
+    trace_spool_segment_bytes: int = 16_777_216
+    # Q1's scheduler index caps, today module constants in `scheduling/memory.py`.
+    max_index_items: int = 500
+    max_index_bytes: int = 268_435_456           # 256 MiB
+    # C's keyset cursors are opaque *and* tamper-proof only if they are signed. Read by
+    # the console runtime, not by this gateway - which is why an unset secret is not a
+    # gateway startup failure: a FastAPI process that serves no console page has nothing
+    # to sign, and coupling the inference path to it would refuse to serve inference over
+    # a console setting. What is enforced here is the *value*: set, it must be long enough
+    # to be a signing key in any mode. Requiring it to be set belongs to the console's own
+    # startup (C2) and to the deployment checklist (08 §5).
+    console_cursor_secret: str = ""
+    database_pool_min_size: int = 1
+    database_pool_max_size: int = 10
+    database_pool_connect_timeout_s: float = 5.0
+    # A statement with no timeout is a lock held until someone notices.
+    database_pool_statement_timeout_ms: int = 15_000
+    # G1's structure caps, today module constants in `gateway/routes/validate.py` and
+    # `intake.py`. They bound the *shape* of a body before it is parsed, which is what
+    # makes a pre-parse structural count possible at all.
+    max_messages: int = 64
+    max_parts: int = 16
+    max_text_codepoints: int = 131_072
+    max_url_chars: int = 8_192
+    max_number_digits: int = 20
+    # One `LargeBodies` per process: at most two bodies over the threshold at a time.
+    large_body_limit: int = 2
+    large_body_threshold_bytes: int = 1_048_576   # 1 MiB
+
+    def replace(self, **changes):
+        return dataclasses.replace(self, **changes)
+
+
+DEPLOYMENT_DEFAULTS = DeploymentSettings()
+
+# Set, it must be at least this long. Not a password: a signing key.
+MIN_CONSOLE_CURSOR_SECRET_CHARS = 16
+
+# 08 §5: what the *console* runtime requires that this gateway does not. C2 reads the
+# secret and signs its cursors with it; the deployment checklist (G2/I2) must write it.
+# Recorded here so "the gateway does not require it" is a decision rather than an omission.
+CONSOLE_ONLY_SETTINGS = ("CONSOLE_CURSOR_SECRET",)
+
+# Every one of these is a bound or a size a zero or negative value disables rather than
+# tightens: a zero pool admits no connection, a zero statement timeout means "no limit"
+# in PostgreSQL, a zero message cap refuses every request, a zero segment never rotates.
+DEPLOYMENT_MUST_BE_POSITIVE = tuple(
+    f.name for f in dataclasses.fields(DeploymentSettings)
+    if f.name != "console_cursor_secret"
+)
+
+
+def deployment_from_env(env=None):
+    """`DeploymentSettings` from the environment, by the 08 §5 name of each field.
+
+    Unlike `pilot_from_env`, an **empty** value is refused rather than read as unset:
+    `MAX_MESSAGES=` in a unit file is a mistake, and silently serving the default is how
+    an operator believes they configured something they did not. A name that is absent
+    altogether takes its default, which is what "unset" means.
+    """
+    e = os.environ if env is None else env
+    values = {}
+    for f in dataclasses.fields(DeploymentSettings):
+        name = env_name(f.name)
+        if name not in e:
+            continue
+        raw = e[name]
+        if raw.strip() == "":
+            raise ValueError(f"{name} is set to an empty value: unset it or give it one")
+        values[f.name] = (raw.strip() if f.name == "console_cursor_secret"
+                          else _coerce(f.name, raw, DEPLOYMENT_DEFAULTS))
+    return DeploymentSettings(**values)
+
+
+def validate_deployment(deployment, mode=MODE_UNSET):
+    """Refuse a deployment configuration that cannot serve, before anything mounts.
+
+    Called by `validate_runtime`, so a bad value is a startup failure rather than a
+    surprise on the first request that happens to reach the setting. Names only, never
+    values: `CONSOLE_CURSOR_SECRET` is a signing key.
+    """
+    for name in DEPLOYMENT_MUST_BE_POSITIVE:
+        if getattr(deployment, name) <= 0:
+            raise RuntimeMisconfigured(mode, detail=f"{env_name(name)} must be positive")
+    if deployment.database_pool_min_size > deployment.database_pool_max_size:
+        raise RuntimeMisconfigured(
+            mode, detail="DATABASE_POOL_MIN_SIZE must not exceed DATABASE_POOL_MAX_SIZE")
+    secret = deployment.console_cursor_secret
+    if _configured(secret) and len(secret) < MIN_CONSOLE_CURSOR_SECRET_CHARS:
+        # Never the value: this is a signing key, and a startup error is the most widely
+        # copied line of text a process ever emits.
+        raise RuntimeMisconfigured(
+            mode,
+            detail=f"CONSOLE_CURSOR_SECRET must be at least "
+                   f"{MIN_CONSOLE_CURSOR_SECRET_CHARS} characters")
+    return deployment
 
 
 def validate_pilot(pilot, gateway=None):
