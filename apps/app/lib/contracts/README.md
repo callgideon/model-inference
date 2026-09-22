@@ -502,3 +502,7 @@ Things U, V and C should not read as contract:
   killed, 0 survived, 0 stale, 0 runner errors; `--self-test` 12/12. `lib/services/console.ts`,
   `app/(console)/usage/*` and `app/(console)/traces/view-model.ts` must change to compile and to
   pass; those changes belong to C0/U1 and are filed as integration requests, not made here.
+- 2026-09-22: The last G0 leftover closed: the self-test filed as `SELF-V03-REPLICA` replicates the
+  **IDEM-05** variant, not V03 (V03 was the fake-only "record committed with its effect" finding), so
+  it is `SELF-IDEM-05-REPLICA` and its comment says which mutant it stands in for. A self-test named
+  after the wrong mutant is one nobody can check. `--self-test` 12/12.
