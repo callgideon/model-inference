@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T17:46:43Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T17:51:45Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 3 done · 7 in progress · 20 remaining (of 30).**
 
@@ -68,7 +68,7 @@ Generated 2026-09-22T17:46:43Z from `tasks.json` (manifest v4) and `progress-sta
 - F2P: codex-f2p — review resumed after restart; wire-in waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - Q2: codex-q2 — independent review at 10cd1c1 since 2026-09-22T16:00:21Z — handed back: Valkey adapter, 76 mutants, differential vs memory adapter
 - W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart
-- E1B: codex-e1b — fix round 1 (120 s clip, price ⚠️, KV wording, four test bindings) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
+- E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 
 ## Checkpoints
 
@@ -82,6 +82,7 @@ Generated 2026-09-22T17:46:43Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-22T16:36:52Z: S1 independent review: API/contract side pass; console B1/B2 fix lane dispatched; integration layer 2 recorded RED (E2R owns)
 - 2026-09-22T17:29:34Z: S1-fix merged (6669e1f): console balance unavailable state, build-time preview gate; console targets green on merged tree
 - 2026-09-22T17:45:34Z: Restart on rey account; M2 (8156f78) and F2R-B (2bfb0c4) merged; six implementer lanes resumed from WIP; F2P review resumed
+- 2026-09-22T17:51:45Z: E1B software slices merged (164e43e): bench client, sop-synth-v1 (120 s worst case), predeclared protocol
 
 ## Authorizations
 

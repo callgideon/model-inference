@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T17:46:43Z",
+  "updated": "2026-09-22T17:51:45Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -41,7 +41,7 @@
     },
     "E1B": {
       "lane": "codex-e1b",
-      "phase": "fix round 1 (120 s clip, price \u26a0\ufe0f, KV wording, four test bindings)",
+      "phase": "software slices MERGED (164e43e); GPU measurement slices pending W3 \u2192 I2B",
       "since": "2026-09-22T16:03:43Z",
       "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart"
     }
@@ -139,6 +139,10 @@
     {
       "at": "2026-09-22T17:45:34Z",
       "what": "Restart on rey account; M2 (8156f78) and F2R-B (2bfb0c4) merged; six implementer lanes resumed from WIP; F2P review resumed"
+    },
+    {
+      "at": "2026-09-22T17:51:45Z",
+      "what": "E1B software slices merged (164e43e): bench client, sop-synth-v1 (120 s worst case), predeclared protocol"
     }
   ],
   "cadence_windows": [

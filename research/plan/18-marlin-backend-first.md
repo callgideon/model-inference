@@ -127,7 +127,7 @@ Inject node/process loss and storage/network faults; no silent accepted-job loss
 
 **Owner:** E. **Start:** E1, S2M, F2P. **Real integration:** E3B, I2B, W3. **Status:** planned.
 
-**Owned paths:** `models/marlin2b/bench.py`; `models/marlin2b/results/ (new evidence only)`; `tests/integration/backend/performance/ (proposed)`.
+**Owned paths:** `models/marlin2b/bench.py`; `models/marlin2b/corpus-synth/`; `models/marlin2b/tests/`; `models/marlin2b/results/ (new evidence only)`. `tests/integration/backend/performance/` is withdrawn until I2B has deployed (coordinator, 2026-09-22: every case would be a skip without a live target; the run matrix is predeclared in `models/marlin2b/results/E1B-protocol.md`).
 
 ### Implementation slices
 

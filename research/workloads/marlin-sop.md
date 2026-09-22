@@ -648,7 +648,9 @@ customer or robotics-vendor data**, and with ground truth that exists by constru
   `models/marlin2b/corpus/manifest.json` does.
 - **Content.** A synthetic "work cell": coloured rectangles as parts, a moving rectangle
   as a gripper/hand, a text overlay naming the current step. No people, no logos, no
-  real footage. Generated from `lavfi` sources plus `drawbox`/`drawtext`.
+  real footage. Generated from `lavfi` sources plus `drawbox` (the pinned ffmpeg 7.0.2 static build
+  has no `drawtext` — 486 filters, none of them text; E1B replaces the overlay with a part colour +
+  tally, `meas.` 2026-09-22).
 - **Scripted procedure.** Each clip is a list of steps with exact start/end seconds. The
   script **is** the ground truth: `{step_id, label, start_s, end_s}`. Because the renderer
   is given those numbers, the labels are not annotations to be trusted — they are inputs.
@@ -658,8 +660,9 @@ customer or robotics-vendor data**, and with ground truth that exists by constru
   (`media/video.py:113-114`) makes 115 s **230** frames and 22,540 video tokens. The 240 cap is
   first reached just above **119.25 s** — `round(2 × 119.26) = 239`, bumped to 240 — and Python's
   round-half-to-even makes exactly 119.25 s give 238, so 120.0 s is the clip to build: it is the
-  worst case with margin and it is the API cap.) 3–7 steps each; one clip with two steps
-  ≤1 s apart (timestamp resolution), one with a step spanning a segment boundary
+  worst case with margin and it is the API cap.) 3–7 steps each (11 clips); one clip with exactly two steps
+  0.4 s apart — inside one profile-v1 frame period (0.5 s at 2 fps), which is the exclusive
+  resolution threshold the fixture asserts (E1B reading; the earlier "≤1 s" was satisfied incidentally by ordinary spacing), one with a step spanning a segment boundary
   (§3.2 overlap), one 2-step clip where the steps run **out of order** and one where a
   step is **absent** (so a rubric can be shown to punish a hallucinated step — `.find`
   "always emits some span").
@@ -841,3 +844,4 @@ plainly, because a reader who knows the word "VLA" will otherwise assume otherwi
   files (20 in total), not the two originally named. No conclusion of §1-§6 is reversed by any
   of this, and still no measurement, GPU run, cloud operation or code change.
 - 2026-09-22 (coordinator): corrected the digest method — the gated repository returns `*`×64 oids to unauthenticated tree calls (verified from the pilot box too; no local filter was involved); recorded the served-bytes sha256 of the three files from a read-only `sha256sum` on the pilot box and the chat-template match; registry equality stays ⚠️ until W3 runs the authenticated call. ⚠️ set now: registry oid equality, runtime image digest, engine decoder, measured hardware, `shortest_edge` 4096-vs-65,536.
+- 2026-09-22 (coordinator, at the E1B merge): §3.8 amended — `drawtext` absent from the pinned ffmpeg build (colour + tally instead); resolution case is 0.4 s < one 0.5 s frame period; 11 clips at 3–7 steps plus the one 2-step clip.
