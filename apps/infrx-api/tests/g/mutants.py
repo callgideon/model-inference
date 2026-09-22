@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+import shutil
 import sys
 
 from ..contracts import mutants as shared
@@ -235,6 +236,7 @@ MUTANTS: tuple[Mutant, ...] = (
        I, "        if public.retry_after_s is not None:", "        if False:",
        "test_f_base__retry_guidance_rides_with_every_429_and_503",
        "test_dur_cap__denied_capacity_is_retryable_and_the_retry_is_admitted_once",
+       "test_dur_cap__the_headless_client_retries_denied_capacity_with_its_own_key",
        dies_by=("KeyError",)),
     _m("unhandled_exception_text_leaks", "an unexpected exception never reaches the client",
        I, "            except Exception:\n"
@@ -821,6 +823,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
        "        if chat in composition.ROUTERS:",
        "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
+    # --- G1R item 5: the headless client's declared surface is served -------------
+    _m("https_video_refused", "an https video reference is served",
+       V, "    if not source.lower().startswith(HTTP_SCHEMES):", "    if True:",
+       "test_api_auth__the_headless_quickstart_is_served_over_both_media_forms"),
+    _m("inline_video_refused", "an inline data: video is served",
+       V, '    if match.group("mime").lower() not in allowed_mime:', "    if True:",
+       "test_api_auth__the_headless_quickstart_is_served_over_both_media_forms",
+       "test_dur_cap__the_headless_client_retries_denied_capacity_with_its_own_key"),
     # These two edit files G does not own, in the temporary copy only: they are the
     # cutover itself, and they say exactly which cases pin today's behaviour.
     _m("composition_root_mounts_the_ingress", "G1 mounts nothing until the cutover",
@@ -864,8 +874,23 @@ def case_names() -> set[str]:
     return set(_definitions())
 
 
-#: F2R item 9: the shared runner, with G's per-mutant file selection.
-RUNNER = Runner(name="g1", targets_for=lambda cases: sorted(files_for(cases)))
+def _layout(root: pathlib.Path) -> pathlib.Path:
+    """The repository's shape, because `test_client_smoke` drives `client_example.py`,
+    which imports `models/marlin2b/bench.py`: `<tmp>/apps/infrx-api/{infrx,tests,...}`
+    plus `<tmp>/models` linked to the real tree (read only; bytecode goes to the copy's
+    own `PYTHONPYCACHEPREFIX`)."""
+    api = root / "apps" / "infrx-api"
+    junk = shutil.ignore_patterns("__pycache__")
+    for name in (PACKAGE, "tests"):
+        shutil.copytree(API_DIR / name, api / name, ignore=junk)
+    for name in ("pyproject.toml", "client_example.py"):
+        shutil.copy2(API_DIR / name, api / name)
+    (root / "models").symlink_to(API_DIR.parents[1] / "models")
+    return api
+
+
+#: F2R item 9: the shared runner, with G's per-mutant file selection and layout.
+RUNNER = Runner(name="g1", targets_for=lambda cases: sorted(files_for(cases)), layout=_layout)
 
 
 def run_mutant(mutant) -> Result:
