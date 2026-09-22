@@ -14,6 +14,8 @@ import dataclasses
 from dataclasses import dataclass, fields
 from decimal import Decimal
 
+from .v2.money_units import Credit
+
 MODES = ("dev", "test", "pilot")
 # r1 R44: `INFRX_MODE` has **no default**. The empty string is "the variable is not
 # set", which `config.validate_runtime` maps to the legacy F1 behaviour F1 preserved by
@@ -136,6 +138,23 @@ class PilotSettings:
     # unknown-usage reconciliation window (02: release only after 24h + fencing;
     # named by r1 R14 and part of 08 §5)
     unknown_usage_reconcile_s: float = 86_400.0
+
+    # Q1/Q2's scheduler index caps (Q2 request 3): moved here from
+    # `config.DeploymentSettings` so the Valkey adapter's `getattr(limits, ...)` reads them.
+    max_index_items: int = 500
+    max_index_bytes: int = 268_435_456           # 256 MiB
+
+    # contracts v2 (F2P wire-in, item 5). Contract data, so empty is allowed and means:
+    # no CREDIT rate card is approved for serving yet (R69: unpriced is unserveable - a
+    # CREDIT-regime deployment refuses to start without one, `config.validate_runtime`).
+    # The catalog's card is authoritative per request; this names the one the operator
+    # approved for this deployment, so a start with no approved card is a refusal.
+    active_rate_card_version: str = ""
+    # The most CREDIT one audited operator allocation may move into a provider's dev
+    # wallet (02-credits: "an internal capped testing budget"). Zero until an operator sets
+    # it: no allocation is permitted by default. ⚠️ TO BE VERIFIED - the product number is
+    # an operator input (P-08, Lab onboarding); the unit is a type (R64), never a suffix.
+    provider_dev_allocation_ceiling_credit: Credit = Credit("0.00000000")
 
     def replace(self, **changes: object) -> PilotSettings:
         return dataclasses.replace(self, **changes)

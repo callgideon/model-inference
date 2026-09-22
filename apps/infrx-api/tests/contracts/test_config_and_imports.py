@@ -14,6 +14,7 @@ from decimal import Decimal
 import pytest
 from infrx import config
 from infrx.contracts import limits, tasklocal
+from infrx.contracts.v2.money_units import Credit
 
 # 08 §5, name by name. A rename or a changed default is a contract revision, so it
 # must fail here first.
@@ -55,6 +56,11 @@ EXPECTED = {
     "S3_MEDIA_BUCKET": "", "S3_TRACE_BUCKET": "",
     # r1 R14: the 24h window 02 requires before an unknown-usage hold is freed
     "UNKNOWN_USAGE_RECONCILE_S": 86400.0,
+    # Q2 request 3: the scheduler index caps, moved here from the deployment table
+    "MAX_INDEX_ITEMS": 500, "MAX_INDEX_BYTES": 268435456,
+    # contracts v2 (F2P wire-in item 5): contract data, empty allowed
+    "ACTIVE_RATE_CARD_VERSION": "",
+    "PROVIDER_DEV_ALLOCATION_CEILING_CREDIT": Credit("0.00000000"),
 }
 
 
@@ -146,6 +152,10 @@ def test_invalid_values_are_rejected_without_echoing_them():
     ("JUDGE_LIVE_BUDGET_USD", "1e9"), ("JUDGE_LIVE_BUDGET_USD", "-5"),
     ("LEASE_TTL_S", "nan"), ("LEASE_TTL_S", "inf"), ("LEASE_TTL_S", "-5"),
     ("MAX_ACTIVE_JOBS", "-1"), ("JOURNAL_TOTAL_BYTES", "-1"),
+    ("PROVIDER_DEV_ALLOCATION_CEILING_CREDIT", "-5"),
+    ("PROVIDER_DEV_ALLOCATION_CEILING_CREDIT", "NaN"),
+    ("PROVIDER_DEV_ALLOCATION_CEILING_CREDIT", "1e3"),
+    ("PROVIDER_DEV_ALLOCATION_CEILING_CREDIT", "0.000000001"),
 ])
 def test_nonsense_numbers_are_refused_at_the_boundary(name, raw):
     """A limit that parses as `nan`, `inf` or a negative silently disables itself."""
@@ -424,7 +434,7 @@ def _api_dir():
 # both language halves enforce; the split is recorded in 08 §5 and in config.py.
 DEPLOYMENT_EXPECTED = {
     "TRACE_SPOOL_SEGMENT_BYTES": 16777216,
-    "MAX_INDEX_ITEMS": 500, "MAX_INDEX_BYTES": 268435456,
+    "ACCOUNTING_REGIME": "legacy_usd",
     "CONSOLE_CURSOR_SECRET": "",
     "DATABASE_POOL_MIN_SIZE": 1, "DATABASE_POOL_MAX_SIZE": 10,
     "DATABASE_POOL_CONNECT_TIMEOUT_S": 5.0,
@@ -434,7 +444,7 @@ DEPLOYMENT_EXPECTED = {
     "LARGE_BODY_LIMIT": 2, "LARGE_BODY_THRESHOLD_BYTES": 1048576,
 }
 
-# Everything except the secret, which is text.
+# Everything except the text values (the secret, the accounting regime).
 DEPLOYMENT_NUMBERS = tuple(name for name, value in sorted(DEPLOYMENT_EXPECTED.items())
                            if not isinstance(value, str))
 
@@ -519,6 +529,71 @@ def test_a_short_cursor_secret_is_refused_without_echoing_it():
         {"CONSOLE_CURSOR_SECRET": long_enough})).console_cursor_secret == long_enough
 
 
+def test_the_cursor_secret_bound_is_exactly_sixteen_characters():
+    """F2R-B NB-3: the boundary itself. Fifteen characters is refused and sixteen is
+    accepted, so a bound that drifts by one in either direction fails here (the case above
+    only proves that an 8-character secret is refused)."""
+    assert config.MIN_CONSOLE_CURSOR_SECRET_CHARS == 16
+    refused = False
+    try:
+        config.validate_deployment(config.deployment_from_env({"CONSOLE_CURSOR_SECRET": "s" * 15}))
+    except config.RuntimeMisconfigured:
+        refused = True
+    assert refused, "a 15-character cursor secret was accepted"
+    try:
+        config.validate_deployment(config.deployment_from_env({"CONSOLE_CURSOR_SECRET": "s" * 16}))
+    except config.RuntimeMisconfigured:
+        raise AssertionError("a 16-character cursor secret was refused") from None
+
+
+@pytest.mark.parametrize("regime", ["legacy_usd", "credit"])
+def test_the_accounting_regime_is_a_v2_regime(regime):
+    """F2P wire-in item 5: ACCOUNTING_REGIME is one of the two v2 regimes; v1's
+    `pilot`, a case variant and a typo are refused before anything mounts."""
+    assert config.validate_deployment(config.deployment_from_env(
+        {"ACCOUNTING_REGIME": regime})).accounting_regime == regime
+    for bad in ("pilot", "CREDIT", "credits"):
+        refused = False
+        try:
+            config.validate_deployment(config.deployment_from_env({"ACCOUNTING_REGIME": bad}))
+        except config.RuntimeMisconfigured as caught:
+            refused = "ACCOUNTING_REGIME" in str(caught)
+        assert refused, f"ACCOUNTING_REGIME={bad!r} was accepted"
+
+
+def test_a_credit_deployment_needs_an_approved_rate_card():
+    """R69 at startup: the CREDIT regime without ACTIVE_RATE_CARD_VERSION refuses to start
+    in every mode, naming the setting; with one it starts; the legacy regime needs none."""
+    for mode in ("", "dev", "pilot"):
+        env = {"ACCOUNTING_REGIME": "credit", **({"INFRX_MODE": mode} if mode else {})}
+        if mode == "pilot":
+            env.update(METERED, **AUTHENTICATED)
+        refused = False
+        try:
+            _app(env)
+        except config.RuntimeMisconfigured as caught:
+            refused = "ACTIVE_RATE_CARD_VERSION" in str(caught)
+        assert refused, f"mode {mode!r} started a CREDIT deployment with no approved card"
+        assert _app({**env, "ACTIVE_RATE_CARD_VERSION": "rc_marlin2b_2026_09_provisional"})
+    assert _app({"ACCOUNTING_REGIME": "legacy_usd"}) is not None
+
+
+def test_the_allocation_ceiling_is_a_credit_amount_defaulting_to_nothing():
+    """The provider-dev allocation ceiling is a `Credit` (a unit is a type, R64): zero by
+    default - no allocation until an operator sets one - and parsed by the money rules."""
+    default = limits.DEFAULTS.provider_dev_allocation_ceiling_credit
+    assert type(default) is Credit and str(default) == "0.00000000"
+    parsed = config.pilot_from_env({"PROVIDER_DEV_ALLOCATION_CEILING_CREDIT": "250.5"})
+    assert parsed.provider_dev_allocation_ceiling_credit == Credit("250.5")
+
+
+def test_the_active_rate_card_version_is_exact_text():
+    for bad in (" rc_x", "rc_x ", "rc_x\n"):
+        with pytest.raises(ValueError, match="ACTIVE_RATE_CARD_VERSION"):
+            config.validate_pilot(limits.DEFAULTS.replace(active_rate_card_version=bad))
+    assert config.validate_pilot(limits.DEFAULTS.replace(active_rate_card_version="rc_x"))
+
+
 def test_the_cursor_secret_is_the_consoles_requirement_and_not_this_gateways():
     """Unset, it is not a gateway startup failure in any mode, including `pilot`: this
     process serves no console page, so it has nothing to sign, and refusing to serve
@@ -562,8 +637,9 @@ def test_the_g1_and_q1_constants_match_the_deployment_defaults():
     assert validate.MAX_TEXT_CODEPOINTS == d.max_text_codepoints
     assert validate.MAX_URL_CHARS == d.max_url_chars
     assert intake.MAX_NUMBER_DIGITS == d.max_number_digits
-    assert memory.MAX_INDEX_ITEMS == d.max_index_items
-    assert memory.MAX_INDEX_BYTES == d.max_index_bytes
+    # Q2 request 3: the index caps are pilot settings now (the Valkey adapter reads them).
+    assert memory.MAX_INDEX_ITEMS == limits.DEFAULTS.max_index_items
+    assert memory.MAX_INDEX_BYTES == limits.DEFAULTS.max_index_bytes
     # `LargeBodies` states its two numbers as parameter defaults rather than constants.
     slots = intake.LargeBodies()
     assert slots.limit == d.large_body_limit

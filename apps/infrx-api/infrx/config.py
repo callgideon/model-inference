@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
 from .contracts import money
+from .contracts.v2.money_units import ACCOUNTING_REGIMES, CREDIT_REGIME, LEGACY_USD_REGIME, Amount
 from .contracts.limits import DEFAULTS as PILOT_DEFAULTS
 from .contracts.limits import JUDGE_MODES, MODE_UNSET, MODES, PilotSettings, env_name
 
@@ -123,8 +124,14 @@ def _coerce(name, raw, defaults=None):
         if kind is bool:
             return raw.strip().lower() in ("1", "true", "yes", "on")
         value = money.parse(raw.strip()) if kind is Decimal else kind(raw)
-    except (ValueError, ArithmeticError, InvalidOperation):
+    except (ValueError, ArithmeticError, InvalidOperation, TypeError):
         raise ValueError(f"{env_name(name)} is not a valid {kind.__name__}") from None
+    if isinstance(value, Amount):
+        # A unit-typed amount (contracts v2): `money.parse` already refused NaN, exponents
+        # and more than eight places; a negative ceiling is a limit that disables itself.
+        if value.is_negative:
+            raise ValueError(f"{env_name(name)} must not be negative")
+        return value
     if kind is float and not math.isfinite(value):
         raise ValueError(f"{env_name(name)} must be a finite {kind.__name__}")
     if kind in (int, float, Decimal) and value < 0:
@@ -153,6 +160,7 @@ MUST_BE_POSITIVE = (
     "preparation_lease_ttl_s",
     "max_active_jobs", "max_active_jobs_per_org", "max_active_jobs_per_key",
     "max_preparing_jobs", "idempotency_ttl_s", "unknown_usage_reconcile_s",
+    "max_index_items", "max_index_bytes",
 )
 
 
@@ -234,7 +242,12 @@ def validate_runtime(settings):
     # Before the mode is even dispatched on: a deployment value that cannot serve is a
     # startup failure in every mode, legacy included. A zero pool or an unrotatable spool
     # segment is not something the legacy path is entitled to either.
-    validate_deployment(getattr(settings, "deployment", DEPLOYMENT_DEFAULTS), mode)
+    deployment = validate_deployment(getattr(settings, "deployment", DEPLOYMENT_DEFAULTS), mode)
+    # R69 at startup: a CREDIT-regime deployment with no approved card would admit nothing
+    # (every model unpriced) or, worse, be read as free. Any mode, legacy included.
+    if deployment.accounting_regime == CREDIT_REGIME \
+            and not _configured(pilot.active_rate_card_version):
+        raise RuntimeMisconfigured(mode, ("ACTIVE_RATE_CARD_VERSION",))
     if mode == MODE_UNSET:
         logging.getLogger("infrx").info(
             "INFRX_MODE is unset: serving legacy F1 behaviour (mode=legacy)")
@@ -273,9 +286,12 @@ class DeploymentSettings:
     # T1/T2: one spool segment. 16 MiB is small enough that a torn tail costs little to
     # quarantine and large enough that rotation is not the hot path.
     trace_spool_segment_bytes: int = 16_777_216
-    # Q1's scheduler index caps, today module constants in `scheduling/memory.py`.
-    max_index_items: int = 500
-    max_index_bytes: int = 268_435_456           # 256 MiB
+    # contracts v2 (F2P wire-in, item 5): which regime new admissions are written in,
+    # `legacy_usd` (today's behaviour) or `credit`. A deployment knob, so an empty value
+    # is refused like every other name here; `credit` also needs an approved card
+    # (`ACTIVE_RATE_CARD_VERSION`, contract data). D1R's database flags gate the same
+    # switch inside the transaction; this one is what the gateway dispatches on.
+    accounting_regime: str = LEGACY_USD_REGIME
     # C's keyset cursors are opaque *and* tamper-proof only if they are signed. Read by
     # the console runtime, not by this gateway - which is why an unset secret is not a
     # gateway startup failure: a FastAPI process that serves no console page has nothing
@@ -320,7 +336,7 @@ CONSOLE_ONLY_SETTINGS = ("CONSOLE_CURSOR_SECRET",)
 # in PostgreSQL, a zero message cap refuses every request, a zero segment never rotates.
 DEPLOYMENT_MUST_BE_POSITIVE = tuple(
     f.name for f in dataclasses.fields(DeploymentSettings)
-    if f.name != "console_cursor_secret"
+    if not isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), str)
 )
 
 
@@ -341,7 +357,7 @@ def deployment_from_env(env=None):
         raw = e[name]
         if raw.strip() == "":
             raise ValueError(f"{name} is set to an empty value: unset it or give it one")
-        values[f.name] = (raw.strip() if f.name == "console_cursor_secret"
+        values[f.name] = (raw.strip() if isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), str)
                           else _coerce(f.name, raw, DEPLOYMENT_DEFAULTS))
     return DeploymentSettings(**values)
 
@@ -356,6 +372,9 @@ def validate_deployment(deployment, mode=MODE_UNSET):
     for name in DEPLOYMENT_MUST_BE_POSITIVE:
         if getattr(deployment, name) <= 0:
             raise RuntimeMisconfigured(mode, detail=f"{env_name(name)} must be positive")
+    if deployment.accounting_regime not in ACCOUNTING_REGIMES:
+        raise RuntimeMisconfigured(
+            mode, detail="ACCOUNTING_REGIME must be one of " + ", ".join(ACCOUNTING_REGIMES))
     if deployment.database_pool_min_size > deployment.database_pool_max_size:
         raise RuntimeMisconfigured(
             mode, detail="DATABASE_POOL_MIN_SIZE must not exceed DATABASE_POOL_MAX_SIZE")
@@ -388,6 +407,9 @@ def validate_pilot(pilot, gateway=None):
     for name in MUST_BE_POSITIVE:
         if getattr(pilot, name) <= 0:
             raise ValueError(f"{env_name(name)} must be positive")
+    card = pilot.active_rate_card_version
+    if card != card.strip():
+        raise ValueError("ACTIVE_RATE_CARD_VERSION must not carry surrounding whitespace")
     for name in PATH_SETTINGS:
         path = getattr(pilot, name)
         if path and (path != path.strip() or not os.path.isabs(path)):
