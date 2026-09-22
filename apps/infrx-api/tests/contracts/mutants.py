@@ -1375,6 +1375,19 @@ MUTANTS: tuple[Mutant, ...] = (
        E, 'payload={"visible": visible, "raw": raw}))',
        'payload={"visible": visible, "raw": raw, "content": raw}))',
        "api_stream__canonical_events_end_with_authoritative_usage"),
+    # --- F2R lane A item 5: judge sample ids and the judge-sample DTO -------------------
+    _m("judge_run_duplicate_sample_ids", "a run's sample ids are unique",
+       R, "        if len(set(self.sample_ids)) != len(self.sample_ids):", "        if False:",
+       "test_judge_run_sample_ids_are_unique_lowercase_uuid4"),
+    _m("judge_run_sample_ids_any_string", "a sample id is a lower-case UUIDv4",
+       R, "    sample_ids: tuple[UuidStr, ...] = ()", "    sample_ids: tuple[str, ...] = ()",
+       "test_judge_run_sample_ids_are_unique_lowercase_uuid4"),
+    _m("judge_sample_request_id_optional", "a judge sample states its request, even as null",
+       R, "    request_id: UuidStr | None\n    scores:", "    request_id: UuidStr | None = None\n    scores:",
+       "test_the_judge_sample_dto_is_the_consoles_four_fields"),
+    _m("accounting_regime_respelled", "the regime is spelled as the console spells it (IR-7)",
+       R, '    legacy_usd = "legacy_usd"', '    legacy_usd = "legacy"',
+       "test_enum_values_are_frozen"),
     # --- F2R lane A item 3: the metadata reserve is charged the serialized row (R65) ----
     _m("metadata_charged_as_declared", "an under-declared record is charged what it costs",
        TA, "        return max(envelope.metadata_bytes, serialized)",
@@ -1697,7 +1710,11 @@ def run_mutant(mutant: "Mutant", runner: Runner | None = None) -> Result:
         return Result(Outcome.killed, summary)
 
 
-CONTRACTS = Runner(name="contracts", targets=("tests/contracts/test_conformance.py",))
+# The exported cases, plus the record/config tests a record-level invariant is proved by
+# (F2R items 5 and 7: a validator on `records` or `config` has no port case to die in).
+CONTRACTS = Runner(name="contracts", targets=("tests/contracts/test_conformance.py",
+                                              "tests/contracts/test_fixtures.py",
+                                              "tests/contracts/test_config_and_imports.py"))
 
 
 def main(mutants: "tuple[Mutant, ...]" = (), runner: Runner | None = None,

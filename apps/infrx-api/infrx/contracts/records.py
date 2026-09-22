@@ -863,7 +863,9 @@ def visible_feedback(items: tuple[Feedback, ...], *, operator: bool) -> tuple[Fe
 class JudgeRun(Record):
     run_id: UuidStr
     org_id: UuidStr
-    sample_ids: tuple[str, ...] = ()
+    # F2R item 5: each id is the frozen lower-case UUIDv4 form, and unique within the run
+    # (a duplicate would be graded, reserved for and billed twice).
+    sample_ids: tuple[UuidStr, ...] = ()
     consent: ConsentSnapshot
     # r1 R43: an integer everywhere - runs, samples, scores and calibration labels -
     # matching `research/traces/04`'s `UInt16` and the console's `rubric_version`.
@@ -877,3 +879,32 @@ class JudgeRun(Record):
     state: JudgeRunState
     created_at: Timestamp
     reconciled_at: Timestamp | None = None
+
+    @model_validator(mode="after")
+    def _unique_samples(self) -> JudgeRun:
+        if len(set(self.sample_ids)) != len(self.sample_ids):
+            raise ValueError("a judge run's sample ids are unique")
+        return self
+
+
+class JudgeSample(Record):
+    """F2R item 5 / IR-7: one evaluated sample, spelled exactly as the console's
+    `JudgeSample` and D1's `console_judge_runs` view emit it. `rubric_version` is the
+    sample's own; `request_id` is null once the scored trace is deleted; `scores` is
+    empty until something is collected (their shape is the console's `JudgeScore`)."""
+
+    sample_id: UuidStr
+    rubric_version: StrictInt = Field(ge=limits.MIN_RUBRIC_VERSION,
+                                      le=limits.MAX_RUBRIC_VERSION)
+    request_id: UuidStr | None
+    scores: tuple[JsonObject, ...] = ()
+
+
+class AccountingRegime(enum.StrEnum):
+    """IR-7: the console's `ACCOUNTING_REGIMES`, the name for D1's
+    `usage_events.settlement_regime` (`legacy` -> `legacy_usd`, `pilot` -> `pilot`).
+    A `legacy_usd` row is historical USD: it keeps NULL execution mode, job state, usage
+    certainty and trace mode, and is never replayed into a debit."""
+
+    legacy_usd = "legacy_usd"
+    pilot = "pilot"

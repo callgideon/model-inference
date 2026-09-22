@@ -32,6 +32,7 @@ SUITE = "tests/j"
 
 
 S = "judge/sampling.py"
+P = "contracts/ports.py"        # TraceCandidate moved here (F2R item 5)
 R = "judge/rubric.py"
 C = "judge/cost.py"
 D = "judge/dryrun.py"
@@ -83,11 +84,11 @@ MUTANTS: tuple[Mutant, ...] = (
 
     # --- the failure stratum is derived from raw facts (R56) -------------------------
     _m("schema_invalid_is_not_a_failure", "an invalid structured output is a failure sample",
-       S, "return self.finish_reason == FINISH_REASON_LENGTH or self.schema_valid is False",
+       P, "return self.finish_reason == FINISH_REASON_LENGTH or self.schema_valid is False",
        "return self.finish_reason == FINISH_REASON_LENGTH",
        "test_the_failure_stratum_is_derived_from_the_raw_facts"),
     _m("truncation_is_not_a_failure", "a truncated answer is a failure sample",
-       S, "return self.finish_reason == FINISH_REASON_LENGTH or self.schema_valid is False",
+       P, "return self.finish_reason == FINISH_REASON_LENGTH or self.schema_valid is False",
        "return self.schema_valid is False",
        "test_the_failure_stratum_is_derived_from_the_raw_facts",
        "test_the_design_is_25_uniform_15_failures_10_feedback",
@@ -131,32 +132,32 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "if candidate.labelled_against(rubric_version):", "if candidate.feedback:",
        "test_ordinary_customer_feedback_is_a_stratum_not_a_calibration_label"),
     _m("a_label_at_any_version_excludes", "a new rubric version is a new series (J4)",
-       S, "return any(entry.rubric_version == rubric_version for entry in self.calibration_labels)",
+       P, "return any(entry.rubric_version == rubric_version for entry in self.calibration_labels)",
        "return bool(self.calibration_labels)",
        "test_a_trace_already_labelled_at_this_rubric_version_is_excluded"),
     _m("judge_scores_count_as_customer_feedback",
        "the feedback stratum is customer signal, not the judge's own output",
-       S, "        return any(entry.author_role is AuthorRole.customer and not entry.calibration_set\n"
+       P, "        return any(entry.author_role is AuthorRole.customer and not entry.calibration_set\n"
           "                   and not entry.by_operator for entry in self.own_feedback)",
        "        return any(not entry.calibration_set\n"
        "                   and not entry.by_operator for entry in self.own_feedback)",
        "test_a_judges_own_score_is_not_customer_feedback"),
     _m("calibration_keys_on_by_operator",
        "calibration membership is calibration_set, not the by_operator marker (R56)",
-       S, "return tuple(entry for entry in self.own_feedback if entry.calibration_set)",
+       P, "return tuple(entry for entry in self.own_feedback if entry.calibration_set)",
        "return tuple(entry for entry in self.own_feedback if entry.by_operator)",
        "test_an_ordinary_entry_the_platform_made_is_neither_signal_nor_label"),
     _m("platform_entry_counts_as_customer_signal",
        "a by_operator ordinary entry is not customer signal (R56/R50)",
-       S, "                   and not entry.by_operator for entry in self.own_feedback)",
+       P, "                   and not entry.by_operator for entry in self.own_feedback)",
        "                   for entry in self.own_feedback)",
        "test_an_ordinary_entry_the_platform_made_is_neither_signal_nor_label"),
     _m("feedback_org_not_checked", "a feedback row counts only for its own organization (R56)",
-       S, "                     if entry.org_id == self.org_id and entry.request_id == self.request_id)",
+       P, "                     if entry.org_id == self.org_id and entry.request_id == self.request_id)",
        "                     if entry.request_id == self.request_id)",
        "test_another_orgs_label_cannot_exclude_this_orgs_trace"),
     _m("feedback_request_not_checked", "a feedback row counts only for its own request (R56)",
-       S, "                     if entry.org_id == self.org_id and entry.request_id == self.request_id)",
+       P, "                     if entry.org_id == self.org_id and entry.request_id == self.request_id)",
        "                     if entry.org_id == self.org_id)",
        "test_a_row_for_another_request_does_not_move_a_trace_into_the_feedback_stratum"),
 

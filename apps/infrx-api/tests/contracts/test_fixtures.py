@@ -186,6 +186,8 @@ EXPECTED_ENUMS = {
     records.UploadState: ["created", "finalized", "aborted", "expired"],
     records.Role: ["owner", "member", "operator", "service"],
     records.ContentState: ["available", "metadata_only", "pending", "lost", "expired", "off"],
+    # F2R IR-7: the console's ACCOUNTING_REGIMES
+    records.AccountingRegime: ["legacy_usd", "pilot"],
 }
 
 
@@ -640,3 +642,28 @@ def test_client_feedback_submission_cannot_set_provenance():
                   "calibration_set": "golden"}):
         with pytest.raises(Exception):
             wire.FeedbackSubmission.model_validate(body)
+
+
+# --- F2R item 5: judge sample ids and the frozen judge-sample DTO --------------------
+def test_judge_run_sample_ids_are_unique_lowercase_uuid4():
+    raw = fixtures.load("judge_runs.json")[0]
+    one = "00000000-0000-4000-8000-0000000000aa"
+    assert records.JudgeRun.model_validate({**raw, "sample_ids": [one]}).sample_ids == (one,)
+    for bad in ([one, one], [one.upper()], ["s1"], [one[:-1] + "g"]):
+        with pytest.raises(ValueError):
+            records.JudgeRun.model_validate({**raw, "sample_ids": bad})
+
+
+def test_the_judge_sample_dto_is_the_consoles_four_fields():
+    """IR-7: `{sample_id, rubric_version, request_id, scores}`, `request_id` nullable."""
+    assert [name for name in records.JudgeSample.model_fields if name != "schema_version"] \
+        == ["sample_id", "rubric_version", "request_id", "scores"]
+    one = "00000000-0000-4000-8000-0000000000aa"
+    sample = records.JudgeSample(sample_id=one, rubric_version=1, request_id=None)
+    assert sample.request_id is None and sample.scores == ()
+    for bad in ({"sample_id": "s1"}, {"rubric_version": True}, {"request_id": "r1"}):
+        with pytest.raises(ValueError):
+            records.JudgeSample.model_validate({"sample_id": one, "rubric_version": 1,
+                                                "request_id": one, **bad})
+    with pytest.raises(ValueError):                 # present, even when null
+        records.JudgeSample.model_validate({"sample_id": one, "rubric_version": 1})
