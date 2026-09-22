@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T17:05:53Z",
+  "updated": "2026-09-22T17:08:20Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "I0": {
       "lane": "codex-i0",
-      "phase": "independent review at 06aa170",
+      "phase": "fix round 1 (review: runner layout false-kill path; apply-level pilot digest case)",
       "since": "2026-09-22T15:51:21Z",
       "note": "handed back: preflight.py fail-closed installer; 77 tests, 45 mutants"
     },
