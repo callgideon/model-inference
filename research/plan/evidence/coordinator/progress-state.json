@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T16:15:14Z",
+  "updated": "2026-09-22T16:30:52Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -20,12 +20,6 @@
       "phase": "implementing (item 1 merged c23d804; items 2\u20134 in flight)",
       "since": "2026-09-22T15:51:21Z",
       "note": "harness ownership + five RLS inversions on real services"
-    },
-    "S2M": {
-      "lane": "codex-s2m / codex/s2m-marlin-profile",
-      "phase": "fix round 1 (review: fix_required \u2014 3 claims, 7 citations)",
-      "since": "2026-09-22T16:15:14Z",
-      "note": "docs-only; coordinator re-check on handback"
     },
     "F2P": {
       "lane": "codex-f2p",
@@ -134,6 +128,10 @@
     {
       "at": "2026-09-22T16:12:51Z",
       "what": "E2R item 1 (D harness ownership + port lock) merged as c23d804; tests/d 76 passed on merged tree; interim tests/d exclusion lifted"
+    },
+    {
+      "at": "2026-09-22T16:30:52Z",
+      "what": "S2M merged after independent review + fix round; R62 recorded; served-bytes digests measured on pilot box"
     }
   ],
   "cadence_windows": [
@@ -151,5 +149,12 @@
   ],
   "not_authorized": [
     "nothing withheld by the user; coordinator rules: log-before-act, bounded spend, backup/restore before hosted migration, fail-closed installer before cutover"
-  ]
+  ],
+  "done": {
+    "S2M": {
+      "merged": "S2M @ 3aa3535 merged --no-ff",
+      "at": "2026-09-22T16:30:52Z",
+      "note": "profile v1 frozen; digests measured on box; registry oid \u26a0\ufe0f HF_TOKEN (W3)"
+    }
+  }
 }

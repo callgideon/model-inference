@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T16:15:14Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T16:30:52Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 1 done · 9 in progress · 20 remaining (of 30).**
+**Backend packages: 2 done · 8 in progress · 20 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -10,7 +10,7 @@ Generated 2026-09-22T16:15:14Z from `tasks.json` (manifest v4) and `progress-sta
 | B0 Baseline & contracts | F2R | Close remaining wave-2 contract and verification carryovers | **in-progress** | planned | lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7) |
 | B0 Baseline & contracts | I0 | Repair installer atomicity and fail-closed startup prerequisite | **in-progress** | planned | fail-closed installer; stubs only |
 | B0 Baseline & contracts | E2R | Repair service harness ownership, role matrix and shared test clock | **in-progress** | planned | harness ownership + five RLS inversions on real services |
-| B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **in-progress** | planned | docs-only; coordinator re-check on handback |
+| B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **done** | implemented |  |
 | B0 Baseline & contracts | F2P | Encode product-v2 CREDIT, identity, serving and permission contracts | **in-progress** | planned | v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map |
 | B1 Durable endpoint | D1R | Add product-v2 schema without rewriting USD pilot migrations | **remaining** | planned |  |
 | B1 Durable endpoint | D2 | Atomic admission, durable preparation and dispatch outbox | **remaining** | planned |  |
@@ -55,7 +55,7 @@ Generated 2026-09-22T16:15:14Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (23 packages): ~1.4 days at observed cadence, ~2.7 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (22 packages): ~1.3 days at observed cadence, ~2.6 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (I2B, I3B, E1B, M4, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
@@ -64,7 +64,6 @@ Generated 2026-09-22T16:15:14Z from `tasks.json` (manifest v4) and `progress-sta
 - F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7)
 - I0: codex-i0 — implementing since 2026-09-22T15:51:21Z — fail-closed installer; stubs only
 - E2R: codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services
-- S2M: codex-s2m / codex/s2m-marlin-profile — fix round 1 (review: fix_required — 3 claims, 7 citations) since 2026-09-22T16:15:14Z — docs-only; coordinator re-check on handback
 - F2P: codex-f2p — additive design phase (new files only); wire-in after F2R since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - Q2: codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory
 - M2: codex-m2 — implementing since 2026-09-22T16:00:21Z — prepare(): probe real duration, url→ref rewrite, processing cache; rebases on F2R
@@ -80,6 +79,7 @@ Generated 2026-09-22T16:15:14Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-22T16:00:21Z: Max-parallel decision: F2R split into two lanes; F2P additive phase started; Q2/M2/W2 started early against v1 fakes (rebase after F2R). Interim rule: only E2R runs tests/d until the harness namespace fix lands.
 - 2026-09-22T16:07:02Z: Live-state inventory: P-02 resolved ($0 legacy USD), P-04 resolved (pilot box), hosted auth.uid() reads both claim forms; EBS snapshot snap-08732d3ac6376e850 taken and DeleteOnTermination disabled
 - 2026-09-22T16:12:51Z: E2R item 1 (D harness ownership + port lock) merged as c23d804; tests/d 76 passed on merged tree; interim tests/d exclusion lifted
+- 2026-09-22T16:30:52Z: S2M merged after independent review + fix round; R62 recorded; served-bytes digests measured on pilot box
 
 ## Authorizations
 

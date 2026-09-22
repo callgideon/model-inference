@@ -320,7 +320,7 @@
       "disposition": "modify",
       "product": "shared",
       "milestone": "APP-M1",
-      "amendment": "Preserve 0001\u20130005 byte-for-byte; D1R owns additive CREDIT and provider/registry migrations.",
+      "amendment": "Preserve 0001–0005 byte-for-byte; D1R owns additive CREDIT and provider/registry migrations.",
       "merged_commit": "7a0d86d",
       "integration_note": "migrations 0003-0005 + tests/d 103 passed with 82 mutants on postgres 16 + shim AND on the real supabase/postgres 17.6 image, no shim; not applied to any Supabase project",
       "baseline_status": "integrated",
@@ -858,7 +858,7 @@
       "milestone": "LAB-M1",
       "amendment": "Shared capture; consumer launch may disable it. All bounds/privacy tests required if enabled.",
       "merged_commit": "c13fb1a",
-      "integration_note": "real spool on local disk, conformance 17/17 against it; no gateway builds the sink; SEGMENT_VERSION 2 (08 \u00a75 update pending)",
+      "integration_note": "real spool on local disk, conformance 17/17 against it; no gateway builds the sink; SEGMENT_VERSION 2 (08 §5 update pending)",
       "baseline_status": "implemented",
       "amendment_status": "revision-required",
       "revision_tasks": [
@@ -1028,7 +1028,7 @@
       "milestone": "APP-M1",
       "amendment": "Separate consumer and provider entry points; minimal consumer usage comes from PG, independent of CH.",
       "merged_commit": "010b6ea",
-      "integration_note": "services against the in-memory query port; D1 is integrated, but C1 reads a real database only through C2's supabase-js QueryPort (Layer-2 tenant test with operator and service-role sessions) \u2014 waits on C2",
+      "integration_note": "services against the in-memory query port; D1 is integrated, but C1 reads a real database only through C2's supabase-js QueryPort (Layer-2 tenant test with operator and service-role sessions) — waits on C2",
       "baseline_status": "implemented",
       "amendment_status": "revision-required",
       "revision_tasks": [
@@ -2357,7 +2357,7 @@
       ],
       "acceptance": "All feature teams consume one reviewed schema/fixture commit. Existing serving contracts remain compatible; optional features default off. Specify server-derived identity and permission checks at scheduling, access, export and external submission.",
       "failure_oracle": "Cross-provider refs, mutable version refs, mixed USD/CREDIT and unknown schemas fail; role alone cannot authorize data reuse. Run fake/real conformance with the same fixtures.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "D7",
@@ -2391,7 +2391,7 @@
       ],
       "acceptance": "Immutable version publication is atomic; partial uploads remain invisible. One logical result per run/case/evaluator; receipts and reservations survive restart. Tenant filters do not rely on the UI.",
       "failure_oracle": "Race two publishers, duplicate checkpoint delivery and stale worker writes; kill around commit/ack and recover once. Foreign IDs and stale content grants fail actual DB/route tests.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "N1",
@@ -2426,7 +2426,7 @@
       ],
       "acceptance": "Provider can import an owned benchmark and a SAM/Gemini-style exported annotation fixture without replacing their pipeline or installing their tools. Publication reports accepted/rejected counts and cannot silently omit errors.",
       "failure_oracle": "Oversized/archive traversal/SSRF sources, invalid timestamp units, duplicate upload replay and cross-provider objects are rejected. Process crash cannot publish half a dataset.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "N2",
@@ -2460,7 +2460,7 @@
       ],
       "acceptance": "Same inputs/policy/seed produce the same version and split digest. Baselines and candidates use a frozen holdout; adding samples creates a new version. Export includes exact schema/rights and omitted-item reasons.",
       "failure_oracle": "Related clips or sessions cannot cross splits; revoked source blocks new reads/exports even if its immutable manifest survives as inaccessible metadata. Duplicate imports cannot silently change the holdout.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "N3",
@@ -2495,7 +2495,7 @@
       ],
       "acceptance": "Capture, provider analysis, annotation, external egress and training are independent purposes. Logical denial is immediate; physical purge follows recorded retention jobs. Never claim a trained model has been unlearned or an external export recalled.",
       "failure_oracle": "Revoke a source after selection, during queue wait and before external submission; no new unauthorized egress. Missing projection cannot substitute for permission; retained aggregate evidence contains no revoked content.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "N4",
@@ -2529,9 +2529,9 @@
         "N4.b: Build version/sample/timeline inspection, split summary, permissions and provenance views.",
         "N4.c: Connect real repositories and authorized exports; support accessible loading/empty/error/denied states and restricted-version explanations."
       ],
-      "acceptance": "A provider completes import \u2192 frozen version \u2192 inspect split \u2192 export through the UI. No placeholder navigation is published; data loading and failed authorization never render success.",
+      "acceptance": "A provider completes import → frozen version → inspect split → export through the UI. No placeholder navigation is published; data loading and failed authorization never render success.",
       "failure_oracle": "Cross-provider deep links, revoked media URLs, interrupted imports and malformed mappings are exercised through real server actions; browser never receives privileged storage credentials.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "H1",
@@ -2564,7 +2564,7 @@
       ],
       "acceptance": "Changing a prompt/processor changes the manifest identity. An unchanged candidate can be compared to a prompt-only variant. Unsupported replay behavior is visible and cannot silently invoke production tools.",
       "failure_oracle": "Attempt tool network mutation, actuator execution, missing recorded response and prompt/config mutation mid-run; block or mark unsupported rather than produce falsely comparable scores.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "B1",
@@ -2602,7 +2602,7 @@
       ],
       "acceptance": "Both baseline and candidate run on identical frozen cases. Every scheduled case ends with a result, explicit failure, cancellation or unresolved state; costs cover attempts and missing outputs remain in the denominator. A retry is permitted only under the declared idempotency/side-effect contract.",
       "failure_oracle": "Crash after submission/before acknowledgement, expire worker lease, revoke data, exhaust budget and cancel mid-batch; no ambiguous resubmission, unbounded spending, silent dropped case or stale result overwrite.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "B2",
@@ -2634,7 +2634,7 @@
       ],
       "acceptance": "A failing safety/SOP slice cannot be hidden by aggregate improvement; small samples do not become a confident win. Show observed facts separately from estimates and teacher judgments. Thresholds are workload inputs, not invented platform defaults.",
       "failure_oracle": "Inject missing failures, duplicate cases, unequal case sets, skewed source clusters and a severe slice regression; report denominator/coverage and refuse unsupported improvement claims.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "B3",
@@ -2663,11 +2663,11 @@
       "implementation_slices": [
         "B3.a: Implement authenticated signed checkpoint event/manual import with replay window, provider binding, artifact digest and external run reference.",
         "B3.b: Validate artifact registration through supported registry adapters; define pinned suite subscription, debounce/latest-only policy, concurrent-run and spending limits.",
-        "B3.c: Persist receipt \u2192 registration \u2192 evaluation lineage; expose failed/skipped/superseded events and reconcile partial failures without re-submitting paid work."
+        "B3.c: Persist receipt → registration → evaluation lineage; expose failed/skipped/superseded events and reconcile partial failures without re-submitting paid work."
       ],
       "acceptance": "An external training loop can submit a checkpoint and obtain one evaluation per subscription/version. Arrival order does not silently redefine latest; no checkpoint is automatically public or promoted.",
       "failure_oracle": "Replay/forge/reorder events, mutate artifact bytes under a URL, burst many checkpoints and crash between receipt/dispatch; stable dedup, bounded budget and visible skipped states.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "B4",
@@ -2705,7 +2705,7 @@
       ],
       "acceptance": "A provider imports a benchmark, runs a baseline and candidate, inspects failures and exports a reproducible comparison. Live jobs do not execute in Next.js handlers; inaccessible evidence is not embedded in responses.",
       "failure_oracle": "Reload during run, forbidden deep links, failed/cancelled cases and inconclusive results remain accurate in browser tests; CREDIT and USD are never summed.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "D8",
@@ -2740,8 +2740,8 @@
         "D8.c: Test role matrices, upgrade compatibility and cancellation/receipt/settlement races with actual services."
       ],
       "acceptance": "Review provenance cannot be forged by consumers; human ground truth and synthetic labels remain distinct. One budget reservation per logical operation includes outstanding/unknown submissions.",
-      "failure_oracle": "Duplicate callback, revoke consent before submit, simultaneous spends and stale workers cannot double settle, reclassify synthetic labels or expose another provider\u2019s datasets.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "failure_oracle": "Duplicate callback, revoke consent before submit, simultaneous spends and stale workers cannot double settle, reclassify synthetic labels or expose another provider’s datasets.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "P1",
@@ -2775,7 +2775,7 @@
       ],
       "acceptance": "Existing annotation pipeline output and later human correction round-trip with provenance. App feedback is evidence, not privileged calibration truth. Record rejected label mappings and missing evidence.",
       "failure_oracle": "Forge reviewer role, relabel synthetic output as human truth, replay a correction or include holdout descendants in training export; deny or quarantine and retain original history.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "P2",
@@ -2812,7 +2812,7 @@
       ],
       "acceptance": "Dry-run works without approved rates or external calls. Live execution requires a selected adapter/model, approved rate, source permission and budget. Teacher accuracy is evaluated on independent reviewed cases; no automatic ground-truth designation.",
       "failure_oracle": "Timeout after provider accepts, change consent/rate while queued, malformed labels, partial output and budget exhaustion cannot cause duplicate charges or unauthorized egress.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "P3",
@@ -2848,7 +2848,7 @@
       ],
       "acceptance": "A provider exports a training bundle, runs their existing SFT/LoRA or compatible preference workflow, imports a checkpoint and compares it on the frozen holdout. Managed RLHF, remote uploaded code and an unselected paid vendor are not required. LoRA is an adaptation method, not a competing objective to SFT.",
       "failure_oracle": "Missing/incompatible artifacts, duplicate checkpoint/callback, cancelled run returning a late checkpoint and unknown provider submission cannot auto-promote, duplicate paid work or lose lineage.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "P4",
@@ -2885,9 +2885,9 @@
         "P4.b: Build teacher dry-run/budget approval and batch status using supported adapters; make unavailable live capabilities explicit.",
         "P4.c: Build external training bundle, run/checkpoint tracking and held-out comparison links; separate observed training loss from deployment-quality evidence."
       ],
-      "acceptance": "Provider can complete a data correction \u2192 training export \u2192 external checkpoint \u2192 held-out comparison journey. No nonfunctional managed-training buttons or success state for unknown paid jobs.",
+      "acceptance": "Provider can complete a data correction → training export → external checkpoint → held-out comparison journey. No nonfunctional managed-training buttons or success state for unknown paid jobs.",
       "failure_oracle": "Unauthorized reviewer, revoked source, unknown job, partial artifact and comparison regression surface actionable states and cannot be bypassed by direct server action calls.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "D9",
@@ -2920,7 +2920,7 @@
       ],
       "acceptance": "D8/D9 migration ordering is reserved by the sole D owner; independent feature scheduling does not permit migration filename collisions. Rollback creates a new policy decision, not edits to history.",
       "failure_oracle": "Concurrent promotions, stale policy publisher and repeated assignment cannot mutate admitted jobs or allocate beyond defined policy. Pinned clients remain pinned.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "R1",
@@ -2955,7 +2955,7 @@
       ],
       "acceptance": "Shadow does not change user output or debit their wallet twice; provider-funded duplicate work has its own limits. Canary and A/B use declared stable cohorts; video/robot episode assignment requires the relevant extension contract.",
       "failure_oracle": "Retry admissions, change weights mid-session, revoke eligibility and overload candidate; no duplicate consumer billing, assignment drift for promised cohort, accidental shadow output or production tool execution.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "R2",
@@ -2989,7 +2989,7 @@
       ],
       "acceptance": "Repeated peeking does not become an unqualified statistical win. Failure to collect quality telemetry halts expansion; operational emergency rollback remains available independent of model judges.",
       "failure_oracle": "Kill controller, delay metrics, skew cohorts, breach a slice or fail candidate health; one audited decision, bounded exposure and correct future routing after recovery.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "R3",
@@ -3025,7 +3025,7 @@
       ],
       "acceptance": "Offline fixture/reporting integration works locally; actual optimization or non-NVIDIA support is claimed only for a measured supported adapter. Re-registering a checkpoint with a different engine/hardware/preprocessor creates a distinct serving identity.",
       "failure_oracle": "Variant lies about capability, changes tokenizer or uses different corpus/load regime; reject equivalence claims. Better throughput cannot override a failed required quality slice.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "R4",
@@ -3063,7 +3063,7 @@
       ],
       "acceptance": "Provider proposes and operator controls a bounded release, sees reasons for stop/inconclusive decisions, and can inspect rollback lineage. UI does not label synthetic performance fixtures as measurements.",
       "failure_oracle": "Role escalation through direct actions, stale revision approval, empty metrics and double-click rollback cannot corrupt policy or bypass publication controls.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "I5",
@@ -3098,7 +3098,7 @@
       ],
       "acceptance": "No long task runs in a frontend process. Lab worker outage does not block consumer inference. Local composition is reproducible; hosted evidence is separately recorded per enabled feature.",
       "failure_oracle": "Restart workers while jobs are active, lose object store, revoke credentials or fill spool/temp disk; no stale lease commits, unbounded retry or public inference outage.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "I6",
@@ -3132,7 +3132,7 @@
       ],
       "acceptance": "Dry-run and manual export/import work without external provider secrets. Unknown submission is visible and requires reconciliation; budget and data-use restrictions survive process restart.",
       "failure_oracle": "Restart after ambiguous submission, revoke a source while queued and fail secret lookup; worker does not double-submit or silently enable another provider.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "I7",
@@ -3166,7 +3166,7 @@
       ],
       "acceptance": "Losing Lab UI/controller never loses durable inference/accounting; current safe policy or explicit fail-closed admission behavior is documented and tested. No automatic capacity purchases.",
       "failure_oracle": "Controller outage/partition and stale telemetry cannot expand traffic; rollback preserves admitted request pins and consumer balances.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "E6L",
@@ -3209,12 +3209,12 @@
       ],
       "implementation_slices": [
         "E6L.a: Publish owned text/tool and finite-video benchmark fixtures, related-source split traps, deterministic evaluator and synthetic model endpoints with known wins/regressions.",
-        "E6L.b: Run real DB/object/services/browser journey import \u2192 frozen split \u2192 baseline/candidate \u2192 report \u2192 checkpoint event \u2192 comparison; inject restart, duplicate and denied-access cases.",
+        "E6L.b: Run real DB/object/services/browser journey import → frozen split → baseline/candidate → report → checkpoint event → comparison; inject restart, duplicate and denied-access cases.",
         "E6L.c: Demonstrate intentional defects are detected; attach environment/SHAs/artifact hashes and separately list staging/GPU/model-quality evidence still pending."
       ],
       "acceptance": "LAB-EVALUATE-LOCAL passes without production traces, teacher API or managed training. Actual model superiority is a separate measured claim. All LAB-08/09/10/11 requirements have exercised positive and negative paths.",
       "failure_oracle": "The suite must fail if a missing candidate output is dropped, a split leaks, a checkpoint duplicates a run or a foreign dataset is accepted; do not use implementation-generated expectations.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "E7L",
@@ -3250,13 +3250,13 @@
         "research/plan/evidence/e/"
       ],
       "implementation_slices": [
-        "E7L.a: Drive permitted deployment evidence \u2192 human/teacher annotation \u2192 new dataset/train export \u2192 external checkpoint \u2192 frozen held-out evaluation.",
+        "E7L.a: Drive permitted deployment evidence → human/teacher annotation → new dataset/train export → external checkpoint → frozen held-out evaluation.",
         "E7L.b: Propose/approve the candidate through L3/L4 in private or allocated staging deployment, collect permitted evidence pinned to that new serving version, then repeat correction/export/checkpoint/evaluation for a second iteration; revoke source rights at queue/submit/export boundaries.",
         "E7L.c: Run manual connector against real export/import artifacts and protocol server against automatic connector interface; separately record selected live adapter evidence when authorized."
       ],
       "acceptance": "Two iterations preserve source rights, original evidence, independent holdout and budget reconciliation. A seeded bad checkpoint is rejected for promotion even with improved training loss. No synthetic training fixture is presented as real model improvement.",
       "failure_oracle": "Suite catches holdout leakage, relabeled synthetic truth, duplicate paid submission, missing transitive revocation and promotion from training loss alone.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "E8L",
@@ -3295,7 +3295,7 @@
       ],
       "acceptance": "LAB-ROLLOUT-LOCAL can pass without training integrations. A live rollout still requires staged inference/quality/latency evidence and approval for affected traffic; unsupported chip/model combinations remain unavailable.",
       "failure_oracle": "Suite detects shadow output leakage, unstable session assignment, changed queued-job revision, unmeasured hardware claims and a regression hidden by aggregate scores.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "X1",
@@ -3325,7 +3325,7 @@
       "acceptance": "No native streaming claim follows from output SSE or clip inference. Discovery can draft synthetic fixtures immediately after F2P; approval needs a real workload owner and measured requirements.",
       "failure_oracle": "Contract has missing deadline, clock alignment, overload policy or causal labeling rule: mark trial blocked with exact missing input, keep App/Lab work running.",
       "activation": "Workload owner supplies the live-input task and constraints; absent inputs permit documented discovery only, not fabricated acceptance targets.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "X2",
@@ -3361,7 +3361,7 @@
       "acceptance": "Only the approved task and measured envelope are supported. No future frames enter a causal window; reused preprocessing preserves finite-clip parity. Billable units/rates are explicit before public availability.",
       "failure_oracle": "Inject clock jumps, out-of-order frames, stuck producer/consumer and session restart; bounded memory, honest loss/freshness and no duplicate accepted events.",
       "activation": "Approved X1 contract, recorded implementation slices, verified model capability and an allocated trial environment.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "X3",
@@ -3388,10 +3388,10 @@
         "X3.b: Measure end-to-end transport/queue/compute/freshness at intended edge/cloud placement; define local fallback/stop owner and proposed-versus-executed action evidence.",
         "X3.c: Define offline/simulator-first acceptance and authorized hardware trial, select adapter/MCAP mapping, then split X4 against that approved contract."
       ],
-      "acceptance": "\u03c00.5 is treated as a VLA policy; future world-model annotations are a different integration. No general WAN suitability or support for arbitrary modalities is asserted.",
+      "acceptance": "π0.5 is treated as a VLA policy; future world-model annotations are a different integration. No general WAN suitability or support for arbitrary modalities is asserted.",
       "failure_oracle": "Missing robot schema, latency/freshness target, stale-action rejection or local control owner prevents hardware enablement; architecture discovery remains useful.",
       "activation": "An identified design partner, robot/task and available recordings; missing inputs are explicit pending decisions.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "X4",
@@ -3426,7 +3426,7 @@
       "acceptance": "Serving emits schema-valid proposals and explicit stale/failed results; offline evaluation cannot actuate hardware. Compatibility is limited to the verified policy/robot/task contract.",
       "failure_oracle": "Delayed/reordered observations, unit mismatch, disconnect and late action chunks cause declared rejection/fallback, not stale actuation. Compare recorded execution/outcomes separately from proposals.",
       "activation": "Approved X3 contract, recorded implementation slices, simulator fixtures and explicit hardware-trial owner/allocation.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "X5",
@@ -3456,7 +3456,7 @@
       "acceptance": "Discovery produces a measured investment decision and explicit adapter contract; no new kernel or cloud capacity is assumed available.",
       "failure_oracle": "Model conversion loses required operators, claimed throughput uses incomparable inputs or economics omit idle capacity: trial cannot be certified.",
       "activation": "Chosen hardware/model workload and access to a trial target; research may proceed without purchases.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "X6",
@@ -3491,7 +3491,7 @@
       "acceptance": "One validated combination may be advertised; other chips/models remain unsupported. Scheduler/runtime never sacrifices durable acceptance or accounting for throughput.",
       "failure_oracle": "Backend crash, unsupported dtype/tokenizer, usage loss and late output cannot corrupt settlement or claim successful completion. Quality regressions block variant promotion.",
       "activation": "Approved X5 contract, allocated hardware, artifact access and adapter-specific implementation slices reviewed before coding.",
-      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2–8 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
     },
     {
       "id": "S2M",
@@ -3499,8 +3499,8 @@
       "track": "S",
       "product": "shared",
       "milestone": "BACKEND-M0",
-      "status": "planned",
-      "disposition": "complete-plan-addition",
+      "status": "implemented",
+      "disposition": "complete-plan-addition Merged --no-ff on claude/backend-impl at 3aa3535 (2026-09-22) after independent fact review (fix_required → fixed) and a coordinator digest correction.",
       "execution_class": "core",
       "start_dependencies": [
         "S1"
@@ -3520,7 +3520,11 @@
         "S2M.c: Separate endpoint conformance from SOP-quality validation. Record missing task rubric/ground truth/dataset access as Lab evaluation inputs; do not invent accuracy claims, actuation support or live-video capability."
       ],
       "acceptance": "A3 docs and W3/E4 can test the actual supported Marlin endpoint contract. Large dataset means many bounded inputs using explicit async as needed, not unlimited videos or a new batch/training product. Unknown task-specific SOP schema/quality thresholds do not prevent launching an honestly documented inference API, but prevent SOP accuracy claims.",
-      "failure_oracle": "Reject unsupported state/action inputs, over-limit media and advertised unsupported structured output/streaming. Resume sample dataset inference after interruption without duplicate accepted jobs or hidden failures."
+      "failure_oracle": "Reject unsupported state/action inputs, over-limit media and advertised unsupported structured output/streaming. Resume sample dataset inference after interruption without duplicate accepted jobs or hidden failures.",
+      "evidence": [
+        "research/plan/evidence/s/S2M-50e32f7.md",
+        "research/workloads/marlin-sop.md"
+      ]
     },
     {
       "id": "G6B",
@@ -3559,7 +3563,7 @@
       ],
       "acceptance": "A provisioned client can obtain scoped credentials, call the endpoint and reconcile its usage with both Next.js applications stopped. Preserve the individual 10,000-credit policy and historical USD. Public signup is not needed for this operated endpoint release; credentials still use the real auth/tenant model.",
       "failure_oracle": "Foreign tenant, forged operator, revoked key, replayed adjustment/grant, unpriced/private deployment and stale rate are denied or deduplicated. No production demo credentials, direct table balance edits or unmetered fallback.",
-      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance."
     },
     {
       "id": "E3B",
@@ -3615,7 +3619,7 @@
       ],
       "acceptance": "BACKEND-LOCAL passes on actual local services independently of signup/catalog/usage UI, Lab, ClickHouse content projections or judge. Every accepted job has one durable identity and terminal/reconciliation path; invalid/overloaded calls cannot leak capacity, holds or unauthorized content.",
       "failure_oracle": "Prove tests fail for missing durable acceptance, stale append, duplicate settlement, foreign result access and forced fallback to legacy unmetered ingress. Missing Docker/services is pending, not a skipped successful gate.",
-      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance."
     },
     {
       "id": "I2B",
@@ -3654,7 +3658,7 @@
       ],
       "acceptance": "No Vercel app, browser callback or signup email dependency. The endpoint is reproducibly deployable and has independently observable health/readiness. Actual target application requires allocated scope/resources; local script tests alone are implemented, not hosted integration.",
       "failure_oracle": "Partial secret/config/migration failure cannot restart into an unsafe state or expose the raw engine. Public health is sanitized; expired/revoked credentials and blocked URLs fail on the deployed path.",
-      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance."
     },
     {
       "id": "I3B",
@@ -3690,7 +3694,7 @@
       ],
       "acceptance": "Observed recovery and accepted-job/accounting invariants are evidenced independently of the App. Single-GPU outage behavior is explicit: automatic process recovery is not multi-host high availability. Alerts and recovery tools are operator-facing backend requirements.",
       "failure_oracle": "Inject node/process loss and storage/network faults; no silent accepted-job loss within declared durable boundaries, duplicate charge, leaked hold or unsafe downgrade. Backups must be restored and checked, not merely listed.",
-      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance."
     },
     {
       "id": "E1B",
@@ -3729,7 +3733,7 @@
       ],
       "acceptance": "An actual GPU baseline and bounded serving envelope exist before M4/W4 performance claims. Report successful videos per second or video-seconds processed per second together with clip/frame/output profile, token metrics, p50/p95 and supported tails, cost per successful unit and full service costs; CREDIT is not USD.",
       "failure_oracle": "Repeated single-clip/warm-cache-only results, undersampled p99, hidden rejections, queue growth, rising memory or changed preprocessing invalidate claims. Missing SOP labels prevents accuracy certification; processor/output parity still has to be measured.",
-      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance."
     },
     {
       "id": "M4",
@@ -3767,7 +3771,7 @@
       ],
       "acceptance": "Published settings improve a measured bottleneck or are explicitly rejected, with raw evidence. Frame sampling/resolution/timestamps/normalization changes are material serving changes requiring a separately versioned quality check; they cannot masquerade as lossless implementation tuning.",
       "failure_oracle": "Cache aliasing, reordered/time-shifted frames, cross-tenant reuse, decompression pressure, duplicate requests, expired content and cancellation are tested. Increased throughput with worse required quality/latency or unbounded memory is not a pass.",
-      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance."
     },
     {
       "id": "W4",
@@ -3807,7 +3811,7 @@
       ],
       "acceptance": "Optimized means measured settings on an identified GPU/model/workload satisfying predeclared correctness/quality/latency/error/resource constraints, not a promise of global optimality. Quantization, pruning, speculative methods or kernel rewrites are follow-on variant experiments unless baseline evidence justifies and separately validates them.",
       "failure_oracle": "OOM, growing KV/host memory, short-job starvation, cancellation failure, output/usage drift, severe tail latency or overload masking disqualify a candidate. No maximum-throughput setting is shipped solely from token/s on identical cached prompts.",
-      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance."
     },
     {
       "id": "E4B",
@@ -3851,7 +3855,7 @@
       ],
       "acceptance": "BACKEND-READY means a provisioned external client can use the real metered Marlin endpoint reliably within a measured envelope and operators can detect/recover failures. It requires allocated GPU/staging proof; software-only tests cannot close this gate. Public cutover is a separately recorded authorized action. App work consumes this certified backend next.",
       "failure_oracle": "Any missing real-service/model evidence, unresolved security/accounting defect, untested restore, uncontrolled resource growth or unsupported quality claim leaves the appropriate gate pending with a named owner; do not declare a vaguely super-robust endpoint.",
-      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance."
     }
   ],
   "product_revision": "2026-09-21-two-platforms-individual-grant",
