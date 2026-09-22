@@ -15,7 +15,8 @@ from . import loop_mutants, mutants as w1_list, w3_mutants as mutation_list
 ALL = mutation_list.MUTANTS
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 SUBSET = ("image_is_a_moving_tag", "published_beyond_loopback", "record_flag_drift",
-          "reaper_enqueues_nothing", "released_jobs_not_recorded", "ready_ignores_the_engine")
+          "reaper_enqueues_nothing", "released_jobs_not_recorded", "ready_ignores_the_engine",
+          "server_timing_in_seconds")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 CASE_FILES = ("tests.w.test_serving", "tests.w.test_service")
 

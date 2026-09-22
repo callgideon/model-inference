@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""W3 / OPS-RECOVER: the worker process - reaper, drain, readiness.
+"""W3 / OPS-RECOVER + PERF-PILOT: the worker process - reaper, drain, readiness, timings.
 
     uv run --frozen pytest -q tests/w/test_service.py
 
@@ -27,7 +27,8 @@ import pytest
 from infrx.contracts import errors
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import JobState, OutboxKind, TerminalCause, Usage
-from infrx.worker import VllmEngine, WorkerLoop, WorkerService, prepared_request
+from infrx.worker import VllmEngine, WorkerLoop, WorkerService, prepared_request, server_timing
+from infrx.worker.attempt import TIMED_PHASES
 from infrx.worker.fakes import SERVED_MODEL, FakeUpstream, m2_local_uri
 from tests.w.test_engine import Box, video_work
 from tests.w.test_loop import (PROGRESS, ScriptEngine, World, candidate, delta, queued, run,
@@ -529,4 +530,59 @@ def test_ops_recover__engine_process_loss_is_a_typed_failure_and_readiness_follo
         server.start()
         assert (await service.readiness())["engine"] == "up"
         await service.stop()
+    run(case())
+
+
+# --------------------------------------------------------------------------
+# PERF-PILOT: the worker's phases, in the bench client's vocabulary
+# --------------------------------------------------------------------------
+def test_perf_pilot__an_attempt_times_its_phases_in_the_bench_vocabulary():
+    """Prefill (to the first delta), generate (first delta to the end of the stream), the
+    journal appends, the result object and the settling call - each measured on the
+    injected clock, each named as `bench.py` expects a `Server-Timing` metric, and the
+    header value parses back to the same numbers."""
+    bench = module_at("infrx_w3_bench", REPO / "models" / "marlin2b" / "bench.py")
+
+    async def case():
+        world = World()
+        request, _ = await queued(world)
+        engine = ScriptEngine(events=(PROGRESS, delta("an "), delta("answer"),
+                                      usage_event(Usage.of(1200, 2))),
+                              clock=world.clock, advance_s=0.1)
+        appended = []
+        append = world.stream.append
+
+        async def slow_append(lease, events):
+            world.clock.advance(0.01)
+            appended.append(len(events))
+            return await append(lease, events)
+        world.stream.append = slow_append
+
+        async def slow_result(job_id, text):
+            world.clock.advance(0.25)
+            return f"infrx-result:{job_id}"
+
+        complete = world.jobs.complete
+
+        async def slow_complete(lease, outcome):
+            world.clock.advance(0.03)
+            return await complete(lease, outcome)
+        world.jobs.complete = slow_complete
+        result = await world.runner(engine, put_result=slow_result).run(request.request_id)
+        assert result.cause is TerminalCause.completed
+        # prefill: two 100 ms events to the first delta; generate: two more events plus
+        # every append (each 10 ms) from the first delta on; then the result and the settle
+        journal = 10.0 * len(appended)
+        assert result.timings == {"prefill": 200.0, "journal": journal,
+                                  "generate": 200.0 + journal, "persist": 250.0,
+                                  "settle": 30.0}, result.timings
+        assert set(result.timings) == set(TIMED_PHASES) <= set(bench.PHASES)
+        assert bench.parse_server_timing(server_timing(result.timings)) == result.timings
+
+        # a stream that never produced a delta has no prefill or generate - absent, not zero
+        silent = World()
+        request, _ = await queued(silent)
+        nothing = await silent.runner(ScriptEngine(events=(usage_event(Usage.of(1200, 0)),))
+                                      ).run(request.request_id)
+        assert not {"prefill", "generate"} & set(nothing.timings)
     run(case())

@@ -8,7 +8,7 @@ through their ports only, and neither touches the wallet - settlement is the sto
 single transaction. W3's `WorkerService` is the process around the loop: the `recover`
 reaper, signal-driven drain and loopback readiness.
 """
-from .attempt import AttemptResult, AttemptRunner
+from .attempt import AttemptResult, AttemptRunner, server_timing
 from .engine import (EngineError, EngineFailure, EngineIncomplete, EngineProtocolViolation,
                      EngineStream, EngineTransportError, EngineUnsupported, VllmEngine,
                      cache_salt, prepared_request)
@@ -19,4 +19,5 @@ from .service import WorkerService
 __all__ = ["AttemptResult", "AttemptRunner", "DrainReport", "EngineError", "EngineFailure",
            "EngineIncomplete", "EngineProtocolViolation", "EngineStream",
            "EngineTransportError", "EngineUnsupported", "ReasoningFilter", "VllmEngine",
-           "WorkerLoop", "WorkerService", "cache_salt", "filter_text", "prepared_request"]
+           "WorkerLoop", "WorkerService", "cache_salt", "filter_text", "prepared_request",
+           "server_timing"]

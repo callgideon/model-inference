@@ -142,6 +142,7 @@ RUNNER = Runner(name="w3", targets=("tests/w/test_service.py",), layout=_layout)
 
 E = "worker/engine.py"
 L = "worker/loop.py"
+A = "worker/attempt.py"
 V = "worker/service.py"
 
 ROOT = "test_api_stream__the_media_root_is_the_processing_cache_setting"
@@ -156,6 +157,7 @@ PUBLIC = "test_ops_recover__readiness_is_never_public_and_leaks_nothing"
 REAL_RELEASE = ("test_ops_recover__on_the_integration_engine_a_released_attempt_completes_"
                 "after_requeue")
 REAL_LOSS = "test_ops_recover__engine_process_loss_is_a_typed_failure_and_readiness_follows_it"
+TIMED = "test_perf_pilot__an_attempt_times_its_phases_in_the_bench_vocabulary"
 
 PY_MUTANTS: tuple[Mutant, ...] = (
     # --- (2) one media root -----------------------------------------------------------
@@ -236,6 +238,28 @@ PY_MUTANTS: tuple[Mutant, ...] = (
        "if path not in (READY_PATH, LIVE_PATH):", PUBLIC),
     _m("readiness_leaks_job_ids", "the readiness body carries counts, never a job id",
        V, 'if key in ("finished", "released", "claimed")}}', "}}", PUBLIC),
+    # --- (5) PERF-PILOT timings --------------------------------------------------------
+    _m("prefill_runs_to_the_end", "prefill ends at the first delta",
+       A, '"prefill", started, until=state.first_delta_at)', '"prefill", started)', TIMED),
+    _m("generate_from_the_request", "generate starts at the first delta",
+       A, 'self._time(result, "generate", state.first_delta_at)',
+       'self._time(result, "generate", started)', TIMED),
+    _m("first_delta_is_the_last", "the first delta's instant is kept",
+       A, "            if state.first_delta_at is None:\n                state.first_delta_at",
+       "            if True:\n                state.first_delta_at", TIMED),
+    _m("journal_keeps_one_append", "every append is timed, not only the last",
+       A, "result.timings[phase] = result.timings.get(phase, 0.0) + span",
+       "result.timings[phase] = span", TIMED),
+    _m("persist_untimed", "the result object's write is timed",
+       A, '                self._time(result, "persist", began)\n', "", TIMED),
+    _m("settle_untimed", "the settling call is timed",
+       A, '        self._time(result, "settle", began)\n', "", TIMED),
+    _m("server_timing_in_seconds", "Server-Timing durations are milliseconds",
+       A, 'f"{name};dur={ms:.1f}"', 'f"{name};dur={ms / 1000:.1f}"', TIMED),
+    _m("absent_phase_is_zero", "a phase that did not happen is absent, not zero",
+       A, "    timings: dict[str, float] = field(default_factory=dict)",
+       "    timings: dict[str, float] = field(default_factory=lambda: dict.fromkeys("
+       "TIMED_PHASES, 0.0))", TIMED),
 )
 
 MUTANTS: tuple[Mutant, ...] = PIN_MUTANTS + PY_MUTANTS

@@ -60,6 +60,14 @@ FINISHED_REASONS = ("stop", "length")
 # count as well, so a burst that arrives inside one clock tick is still committed in
 # pieces and the memory held between commits is bounded.
 BATCH_MAX_EVENTS = 32
+# PERF-PILOT (W3): the phases this worker times, in `bench.py`'s `PHASES` vocabulary, so a
+# gateway that publishes them as `Server-Timing` needs no translation table.
+TIMED_PHASES = ("prefill", "generate", "journal", "persist", "settle")
+
+
+def server_timing(timings: dict[str, float]) -> str:
+    """The `Server-Timing` value (08 §3) for an attempt's `timings`, milliseconds."""
+    return ", ".join(f"{name};dur={ms:.1f}" for name, ms in timings.items())
 
 
 class _JournalFailed(RuntimeError):
@@ -107,6 +115,9 @@ class AttemptResult:
     cancelled: bool = False                      # the store terminalized it under us
     engine_cancel: bool | None = None            # what `Engine.cancel` answered, if called
     detail: str = ""
+    # PERF-PILOT: milliseconds on the injected clock, per `TIMED_PHASES` name; a phase that
+    # did not happen is absent, never zero.
+    timings: dict[str, float] = field(default_factory=dict)
 
     @property
     def settled(self) -> bool:
@@ -126,6 +137,7 @@ class _State:
     usage_events: int = 0
     last_event: ChunkEventType | None = None
     stream: Any = None
+    first_delta_at: datetime | None = None
 
 
 class AttemptRunner:
@@ -195,6 +207,7 @@ class AttemptRunner:
         stream = self.engine.generate(state.lease, prepared)
         state.stream = stream
         cause: TerminalCause | None = None
+        started = self.clock.now()
         try:
             try:
                 # W1 limit: the adapter checks its bounds when a chunk arrives, so a silent
@@ -207,6 +220,9 @@ class AttemptRunner:
             finally:
                 # Deterministic: stop reading the engine now, whatever ended the loop.
                 await self._aclose(stream)
+                if state.first_delta_at is not None:
+                    self._time(result, "prefill", started, until=state.first_delta_at)
+                    self._time(result, "generate", state.first_delta_at)
         except TimeoutError:
             cause = TerminalCause.deadline_exceeded
             result.detail = "the attempt passed its generation deadline"
@@ -253,6 +269,8 @@ class AttemptRunner:
         journal = self._journal_event(event)
         if event.type is ChunkEventType.delta:
             result.deltas += 1
+            if state.first_delta_at is None:
+                state.first_delta_at = self.clock.now()
             result.visible_text += self._visible(event)
         elif event.type is ChunkEventType.usage:
             self._note_usage(state, result, event)
@@ -322,6 +340,7 @@ class AttemptRunner:
         if not state.batch:
             return
         events = tuple(state.batch)
+        began = self.clock.now()
         try:
             # Fenced like every other mutation, and it is also the cancellation poll while
             # output is flowing: a customer cancellation is discovered within one batch.
@@ -334,6 +353,7 @@ class AttemptRunner:
             # The write was acknowledged and the answer lost, or something unknown broke:
             # either way we cannot prove what is in the journal, so we do not relay it.
             raise _JournalFailed(f"{type(failed).__name__}: {failed}") from None
+        self._time(result, "journal", began)
         state.batch.clear()
         state.batch_opened_at = None
         result.committed += len(chunks)
@@ -455,9 +475,11 @@ class AttemptRunner:
         result.proposed_cause = cause
         result_ref = None
         if cause is TerminalCause.completed:
+            began = self.clock.now()
             try:
                 result_ref = await _maybe_await(self.put_result(state.lease.job_id,
                                                                 result.visible_text))
+                self._time(result, "persist", began)
             except Exception as failure:
                 # r1 R30: a success the customer cannot fetch is not a success. Nothing was
                 # stored, so this is ours to absorb, not theirs to be charged for.
@@ -477,6 +499,7 @@ class AttemptRunner:
             # recomputed, never trusted").
             settlement_state=SettlementState.released_free,
             settled_at=self.clock.now())
+        began = self.clock.now()
         try:
             settled = await self.jobs.complete(state.lease, outcome)
         except (errors.StaleLease, errors.AlreadyTerminal) as refused:
@@ -498,9 +521,16 @@ class AttemptRunner:
                 result.refusal = "settlement_unknown"
                 result.detail = f"{result.detail}; retry failed: {type(again).__name__}: {again}"
                 return result
+        self._time(result, "settle", began)
         result.outcome = settled
         result.cause = settled.cause
         return result
+
+    def _time(self, result: AttemptResult, phase: str, since: datetime,
+              until: datetime | None = None) -> None:
+        """Add one timed span to `phase` (the journal is many appends; the rest are one)."""
+        span = ((until or self.clock.now()) - since).total_seconds() * 1000
+        result.timings[phase] = result.timings.get(phase, 0.0) + span
 
 
 def _cause_for(refused: errors.DomainError) -> TerminalCause:
