@@ -908,6 +908,16 @@
       "cases": [
         "every case in this track asserts success through a helper, never as a bare ok check"
       ]
+    },
+    {
+      "id": "PREVIEW-01",
+      "note": "the build-time production gate is removed, so a production bundle serves fixture accounts when started with NODE_ENV=development INFRX_CONSOLE_PREVIEW=1",
+      "file": "app/(console)/usage/fake-console-context.ts",
+      "find": "  if (PRODUCTION_BUILD) return null;\n",
+      "replace": "",
+      "cases": [
+        "a production build serves no fixtures whatever environment it is handed"
+      ]
     }
   ]
 }
