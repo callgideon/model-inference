@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T17:29:34Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T17:36:32Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 2 done · 8 in progress · 20 remaining (of 30).**
 
@@ -65,7 +65,7 @@ Generated 2026-09-22T17:29:34Z from `tasks.json` (manifest v4) and `progress-sta
 - F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: items 2–5,9 + relayed additions in flight; lane B: round 2 green at 501c496, independent review running
 - I0: codex-i0 — fix round 1 (review: runner layout false-kill path; apply-level pilot digest case) since 2026-09-22T15:51:21Z — handed back: preflight.py fail-closed installer; 77 tests, 45 mutants
 - E2R: codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services
-- F2P: codex-f2p — additive design phase (new files only); wire-in after F2R since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
+- F2P: codex-f2p — additive phase handed back (c42b213); independent review + product-rule audit running; wire-in waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - Q2: codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory
 - M2: codex-m2 — round-2 re-review at 12f2cdb since 2026-09-22T16:00:21Z — handed back: probe + preparation + cache; 132 mutants
 - W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R

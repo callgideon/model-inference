@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T17:29:34Z",
+  "updated": "2026-09-22T17:36:32Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "F2P": {
       "lane": "codex-f2p",
-      "phase": "additive design phase (new files only); wire-in after F2R",
+      "phase": "additive phase handed back (c42b213); independent review + product-rule audit running; wire-in waits on F2R-A",
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
     },
