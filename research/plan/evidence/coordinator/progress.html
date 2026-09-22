@@ -27,17 +27,17 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T18:05:08Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T18:06:47Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
-<div class="tile done"><b>4</b><span>done</span></div>
-<div class="tile prog"><b>7</b><span>in progress</span></div>
+<div class="tile done"><b>5</b><span>done</span></div>
+<div class="tile prog"><b>6</b><span>in progress</span></div>
 <div class="tile rem"><b>19</b><span>remaining</span></div>
 <div class="tile blk"><b>6</b><span>GPU-gated</span></div>
-<div class="tile"><b>13%</b><span>of 30 backend packages</span></div>
+<div class="tile"><b>17%</b><span>of 30 backend packages</span></div>
 </section>
 <section class="panel"><h2>Bands (E4B dependency closure)</h2>
 <div class="band"><div class="n">B0 · Baseline &amp; contracts</div><div class="bar"><i class="d" style="width:50.0%"></i><i class="p" style="width:50.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">3 done · 3 in progress · 0 left</div></div>
-<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:5.9%"></i><i class="p" style="width:17.6%"></i><i class="r" style="width:76.5%"></i></div><div class="c">1 done · 3 in progress · 13 left</div></div>
+<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:11.8%"></i><i class="p" style="width:11.8%"></i><i class="r" style="width:76.5%"></i></div><div class="c">2 done · 2 in progress · 13 left</div></div>
 <div class="band"><div class="n">B2 · Integrate &amp; deploy</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:25.0%"></i><i class="r" style="width:75.0%"></i></div><div class="c">0 done · 1 in progress · 3 left</div></div>
 <div class="band"><div class="n">B3 · Measured tuning</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 2 left</div></div>
 <div class="band"><div class="n">B4 · Endpoint gate</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 1 left</div></div>
@@ -57,7 +57,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B1</td><td><code>A1</code></td><td>Verified individual signup entitlement and idempotent backfill</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>M2</code></td><td>Versioned preprocessing and tenant cache</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>M3</code></td><td>Owned uploads, expiry and orphan collection</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
-<tr><td>B1</td><td><code>Q2</code></td><td>Valkey adapter with atomic tested scripts</td><td><span class="pill prog">in-progress</span></td><td class="note">handed back: Valkey adapter, 76 mutants, differential vs memory adapter</td></tr>
+<tr><td>B1</td><td><code>Q2</code></td><td>Valkey adapter with atomic tested scripts</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>Q3</code></td><td>Outbox/reconciler integration and index loss recovery</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>W2</code></td><td>Lease-aware execution, cancellation and completion</td><td><span class="pill prog">in-progress</span></td><td class="note">attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart</td></tr>
 <tr><td>B1</td><td><code>W3</code></td><td>Drain, engine pin and measured concurrency</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
@@ -75,7 +75,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B4</td><td><code>E4B</code></td><td>Certify the robust and measured Marlin endpoint release candidate</td><td><span class="pill rem">remaining</span> <span class="pill gpu">needs GPU target</span></td><td class="note"></td></tr>
 </tbody></table></div></section>
 <section class="panel eta"><h2>ETA — provisional, cadence-based</h2>
-<p class="big">Local software (through E3B and the software half of the rest, 20 packages): ~1.2 days at the observed cadence, ~2.4 days at half of it.</p>
+<p class="big">Local software (through E3B and the software half of the rest, 19 packages): ~1.1 days at the observed cadence, ~2.3 days at half of it.</p>
 <p>Observed cadence: 11 tasks integrated in 15.7 h (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds, two rate-limit interruptions included). Wave-3 packages are larger and the D lane is serial, hence the range; the serial critical path D1R→D2→D3→D4→D5→E3B alone is at least ~22 h.</p>
 <p><b>GPU-gated packages (I2B, I3B, E1B, M4, W4, E4B): no ETA until P-04 is allocated.</b> Their harnesses, scripts and runbooks are built inside the local estimate; measurements wait for the target.</p>
 <p class="note">Assumes continuous coordination. Interruptions extend wall clock, not work. This is a projection, not a commitment; it is regenerated at every checkpoint.</p>
@@ -95,7 +95,6 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>F2R</code> — codex-f2r — implementing since 2026-09-22T15:51:21Z — lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions</li>
 <li><code>E2R</code> — codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services | resumed from WIP after restart</li>
 <li><code>F2P</code> — codex-f2p — additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>
-<li><code>Q2</code> — codex-q2 — fix round 1 (race test for the claim fence; evidence regeneration) since 2026-09-22T16:00:21Z — handed back: Valkey adapter, 76 mutants, differential vs memory adapter</li>
 <li><code>W2</code> — codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart</li>
 <li><code>E1B</code> — codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
 <li><code>D1R</code> — codex-d1r / codex/d1r-v2-schema — dispatched from 9faaa57 (reads 06a + v2 fixture base) since 2026-09-22T18:05:08Z — D owns migrations; additive over 0001–0005</li>
@@ -113,6 +112,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><span class="meta">2026-09-22T17:51:45Z</span> — E1B software slices merged (164e43e): bench client, sop-synth-v1 (120 s worst case), predeclared protocol</li>
 <li><span class="meta">2026-09-22T17:57:28Z</span> — I0 merged (0ac073e): fail-closed installer; Makefile mutant list extended</li>
 <li><span class="meta">2026-09-22T18:05:08Z</span> — F2P additive phase merged (9faaa57); rulings R64–R78; D1R dispatched</li>
+<li><span class="meta">2026-09-22T18:06:47Z</span> — Q2 merged (e86b1c0): Valkey scheduler adapter with race-fence test</li>
 </ul></section><section class="panel"><h2>Authorizations</h2><ul>
 <li>authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)</li>
 <li>authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step</li>

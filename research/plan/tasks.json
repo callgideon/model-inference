@@ -578,14 +578,17 @@
       ],
       "track": "Q",
       "handoff": "handoffs/Q-scheduling.md",
-      "status": "planned",
-      "disposition": "keep",
+      "status": "implemented",
+      "disposition": "keep Merged --no-ff on claude/backend-impl at e86b1c0 (2026-09-22) after independent review on real Valkey (fix_required → fixed).",
       "product": "shared",
       "milestone": "APP-M1",
       "amendment": "Keep rebuildable Valkey index.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "evidence": [
+        "research/plan/evidence/q/Q2-10571c7.md"
+      ]
     },
     {
       "id": "Q3",

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T18:05:08Z",
+  "updated": "2026-09-22T18:06:47Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -20,12 +20,6 @@
       "phase": "additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A",
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
-    },
-    "Q2": {
-      "lane": "codex-q2",
-      "phase": "fix round 1 (race test for the claim fence; evidence regeneration)",
-      "since": "2026-09-22T16:00:21Z",
-      "note": "handed back: Valkey adapter, 76 mutants, differential vs memory adapter"
     },
     "W2": {
       "lane": "codex-w2",
@@ -151,6 +145,10 @@
     {
       "at": "2026-09-22T18:05:08Z",
       "what": "F2P additive phase merged (9faaa57); rulings R64\u2013R78; D1R dispatched"
+    },
+    {
+      "at": "2026-09-22T18:06:47Z",
+      "what": "Q2 merged (e86b1c0): Valkey scheduler adapter with race-fence test"
     }
   ],
   "cadence_windows": [

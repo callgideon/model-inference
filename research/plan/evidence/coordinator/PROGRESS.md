@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T18:05:08Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T18:06:47Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 4 done · 7 in progress · 19 remaining (of 30).**
+**Backend packages: 5 done · 6 in progress · 19 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -20,7 +20,7 @@ Generated 2026-09-22T18:05:08Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | A1 | Verified individual signup entitlement and idempotent backfill | **remaining** | planned |  |
 | B1 Durable endpoint | M2 | Versioned preprocessing and tenant cache | **done** | implemented |  |
 | B1 Durable endpoint | M3 | Owned uploads, expiry and orphan collection | **remaining** | planned |  |
-| B1 Durable endpoint | Q2 | Valkey adapter with atomic tested scripts | **in-progress** | planned | handed back: Valkey adapter, 76 mutants, differential vs memory adapter |
+| B1 Durable endpoint | Q2 | Valkey adapter with atomic tested scripts | **done** | implemented |  |
 | B1 Durable endpoint | Q3 | Outbox/reconciler integration and index loss recovery | **remaining** | planned |  |
 | B1 Durable endpoint | W2 | Lease-aware execution, cancellation and completion | **in-progress** | planned | attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart |
 | B1 Durable endpoint | W3 | Drain, engine pin and measured concurrency | **remaining** | planned |  |
@@ -56,7 +56,7 @@ Generated 2026-09-22T18:05:08Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (20 packages): ~1.2 days at observed cadence, ~2.4 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (19 packages): ~1.1 days at observed cadence, ~2.3 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (I2B, I3B, E1B, M4, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
@@ -65,7 +65,6 @@ Generated 2026-09-22T18:05:08Z from `tasks.json` (manifest v4) and `progress-sta
 - F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions
 - E2R: codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services | resumed from WIP after restart
 - F2P: codex-f2p — additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
-- Q2: codex-q2 — fix round 1 (race test for the claim fence; evidence regeneration) since 2026-09-22T16:00:21Z — handed back: Valkey adapter, 76 mutants, differential vs memory adapter
 - W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - D1R: codex-d1r / codex/d1r-v2-schema — dispatched from 9faaa57 (reads 06a + v2 fixture base) since 2026-09-22T18:05:08Z — D owns migrations; additive over 0001–0005
@@ -85,6 +84,7 @@ Generated 2026-09-22T18:05:08Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-22T17:51:45Z: E1B software slices merged (164e43e): bench client, sop-synth-v1 (120 s worst case), predeclared protocol
 - 2026-09-22T17:57:28Z: I0 merged (0ac073e): fail-closed installer; Makefile mutant list extended
 - 2026-09-22T18:05:08Z: F2P additive phase merged (9faaa57); rulings R64–R78; D1R dispatched
+- 2026-09-22T18:06:47Z: Q2 merged (e86b1c0): Valkey scheduler adapter with race-fence test
 
 ## Authorizations
 
