@@ -62,3 +62,12 @@ def test_api_auth__the_cli_reports_a_refusal_without_the_secret(capsys):
     err = capsys.readouterr().err
     assert code == 1 and json.loads(err)["error"] == "invalid_api_key"
     assert "wrong-operator-secret" not in err
+
+
+def test_api_ops__the_secret_file_is_created_exclusively(tmp_path):
+    """O_EXCL on its own, independent of the os.path.exists pre-check."""
+    path = tmp_path / "raced.key"
+    path.write_text("keep me\n")
+    with pytest.raises(FileExistsError):
+        cli._write_secret_once(str(path), "sk-infrx-" + "x" * 40)
+    assert path.read_text() == "keep me\n"
