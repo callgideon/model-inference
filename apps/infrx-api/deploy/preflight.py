@@ -280,14 +280,14 @@ def collect(cfg: Config) -> tuple[dict[str, str], list[str]]:
             problems.append(problem)
             continue
         values[key.env] = value
-    for key in MANIFEST:
-        if key.needed(cfg.mode) and key.env not in values:
-            if not any(key.env in p for p in problems):
-                problems.append(f"{key.env} is required in {cfg.mode} mode ({key.role})")
-    for banned in WITHDRAWN_KEYS:
-        if banned in values:
-            problems.append(f"{banned} is withdrawn: PostgreSQL is the only price authority")
+    problems += withdrawn(values)
     return values, problems
+
+
+def withdrawn(values: dict[str, str]) -> list[str]:
+    """Keys no env file may carry, whatever the mode."""
+    return [f"{key} is withdrawn: D1's price_versions is the only price authority"
+            for key in WITHDRAWN_KEYS if key in values]
 
 
 def render(values: dict[str, str]) -> str:
