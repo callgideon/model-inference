@@ -22,12 +22,16 @@ fences the claim, so every race is resolved towards "index it again".
 """
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
 
 from ..contracts import errors
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -50,7 +54,34 @@ class Reconciler:
     # `dead_candidates`: candidates removed because their job no longer wants dispatch.
     metrics: dict[str, float] = field(default_factory=lambda: {
         "outbox_lag_s": 0.0, "missing_index": 0, "missing_lag_s": 0.0,
-        "dead_candidates": 0, "rebuilds": 0})
+        "dead_candidates": 0, "rebuilds": 0, "errors": 0})
+
+    # --- the loop ------------------------------------------------------------
+    async def run(self, stop: asyncio.Event, *, drain_every_s: float = 0.05,
+                  reconcile_every_s: float = 10.0) -> None:
+        """Drain every tick and reconcile every `reconcile_every_s` until `stop` is set.
+
+        A failure of either - Valkey restarting, PostgreSQL unreachable - is logged,
+        counted in `metrics["errors"]` and retried at the next tick (a failed pass stays
+        due): the relay has to outlive the outages it exists to repair. The first tick
+        reconciles, so a process starting against an index that lost its data repairs it
+        at once.
+        """
+        loop = asyncio.get_running_loop()
+        due = loop.time()
+        while not stop.is_set():
+            try:
+                if loop.time() >= due:
+                    await self.reconcile()
+                    due = loop.time() + reconcile_every_s
+                await self.drain()
+            except Exception:
+                self.metrics["errors"] += 1
+                log.warning("scheduling relay: pass failed, retrying", exc_info=True)
+            try:
+                await asyncio.wait_for(stop.wait(), drain_every_s)
+            except TimeoutError:
+                pass
 
     # --- (1) the drain -------------------------------------------------------
     async def drain(self) -> dict[str, int]:

@@ -357,6 +357,34 @@ def test_q3_fence__a_stale_candidate_never_acquires_a_second_lease(adapter):
     run(body)
 
 
+def test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass(adapter):
+    """The loop's first tick is a reconcile, and a pass that fails stays due: with an
+    hour between passes, the repair still lands on the tick after the failure."""
+    w = rig.world(adapter)
+
+    async def body():
+        jobs = [await rig.admit(w) for _ in range(2)]
+        await w.rec.drain()
+        await w.index.remove(jobs[0])                  # lost while the relay was down
+
+        async def outage():
+            raise ConnectionError("store unreachable")
+
+        w.rec.store = Interleave(w.outbox, 1, outage)
+        stop = asyncio.Event()
+        task = asyncio.create_task(w.rec.run(stop, drain_every_s=0.001,
+                                             reconcile_every_s=3600))
+        for _ in range(500):
+            if len(await rig.members(w)) == 2:
+                break
+            await asyncio.sleep(0.002)
+        stop.set()
+        await task
+        assert w.rec.metrics["errors"] == 1
+        assert sorted((await rig.members(w)).values()) == sorted(jobs)
+    run(body)
+
+
 # --- (3) switching adapters ---------------------------------------------------------
 
 @pytest.mark.parametrize("old,new", [("memory", "valkey"), ("valkey", "memory")])
@@ -512,14 +540,6 @@ def test_q3_drill__valkey_sigkilled_under_queued_and_running_traffic_loses_no_jo
                     felt[name] = felt.get(name, 0) + 1
                     await asyncio.sleep(0.01)
 
-        async def drain():
-            return (await w.rec.drain()).get("read")
-
-        async def reconcile():
-            await w.rec.reconcile()
-            await asyncio.sleep(0.02)
-            return True
-
         async def slow_gpu():
             step = await rig.infer_one(w, "gpu-slow", finish=False)
             if step is None:
@@ -530,8 +550,9 @@ def test_q3_drill__valkey_sigkilled_under_queued_and_running_traffic_loses_no_jo
                 await w.jobs.complete(lease, rig.b.outcome(candidate.job_id, w.h))
             return True
 
-        loops = [asyncio.create_task(forever(name, step)) for name, step in (
-            ("drain", drain), ("reconcile", reconcile),
+        loops = [asyncio.create_task(w.rec.run(stop, drain_every_s=0.002,
+                                               reconcile_every_s=0.02))]
+        loops += [asyncio.create_task(forever(name, step)) for name, step in (
             ("prep-1", lambda: rig.prepare_one(w, "prep-1")),
             ("prep-2", lambda: rig.prepare_one(w, "prep-2")),
             ("gpu-1", lambda: rig.infer_one(w, "gpu-1")),
@@ -550,14 +571,16 @@ def test_q3_drill__valkey_sigkilled_under_queued_and_running_traffic_loses_no_jo
                 break
             await asyncio.sleep(0.01)
         stop.set()
-        await asyncio.gather(*loops)
-        print(f"\nloops that felt the outage: {felt}; rebuilds "
-              f"{w.rec.metrics['rebuilds']}; leases {sum(w.leases.values())}")
-        assert felt, "no loop saw the outage: the kill did not happen under traffic"
+        ended = await asyncio.gather(*loops, return_exceptions=True)
+        print(f"\nworkers that felt the outage: {felt}; relay errors "
+              f"{w.rec.metrics['errors']}, rebuilds {w.rec.metrics['rebuilds']}; "
+              f"leases {sum(w.leases.values())}")
+        assert felt and w.rec.metrics["errors"], "the kill did not happen under traffic"
         rig.settled(w)
         assert sorted(w.leases) == sorted(w.admitted)
         assert all(w.jobs.jobs[job].state is rig.JobState.succeeded for job in w.admitted)
         assert w.outbox.unacknowledged() == []
+        assert [e for e in ended if isinstance(e, BaseException)] == [], ended
     run(body)
 
 
