@@ -194,7 +194,7 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_the_handle_grammar_is_enforced_at_both_edges",)),
     Mutant("r19", "a handle may not carry a dot or a slash, whatever its length",
            "bench.py", 'HANDLE_OK = re.compile(r"upl_[A-Za-z0-9_-]{22,64}")',
-           'HANDLE_OK = re.compile(r"upl_[\S]{22,64}")',
+           r'HANDLE_OK = re.compile(r"upl_[\S]{22,64}")',
            "handle_grammar",
            cases=("test_the_handle_grammar_is_enforced_at_both_edges",)),
     Mutant("r08", "EVERY tenant's key is checked, not just the first",
