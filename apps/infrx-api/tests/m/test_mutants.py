@@ -19,7 +19,7 @@ ALL = mutation_list.MUTANTS
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # One per mutated file, plus the two pins the whole path rests on.
 SUBSET = ("one_answer_is_enough", "connects_to_the_name_not_the_address",
-          "denied_networks_not_checked", "stage_indexes_as_it_goes", "key_without_the_tenant",
+          "denied_networks_not_checked", "stage_takes_a_ref_it_never_made", "key_without_the_tenant",
           "transport_logs_not_silenced", "attach_accepts_an_unstaged_ref",
           # M2: one per new file, plus the two pins the whole preparation path rests on -
           # the measured duration the engine budgets frames from and the tenant in the
@@ -58,7 +58,7 @@ def test_the_mutation_list_covers_the_owned_modules():
     assert files == {"media/fetch.py", "media/store.py", "media/video.py",
                      "media/probe.py", "media/prepare.py",
                      "media/uploads.py", "media/gc.py", "media/consent.py"}
-    assert len(ALL) >= 78 + 30, f"only {len(ALL)} mutants declared"
+    assert len(ALL) >= 77 + 30, f"only {len(ALL)} mutants declared"
     # M2's own floor, stated separately so widening M1's list cannot cover for a thin one
     m2 = [mutant for mutant in ALL if mutant.file in ("media/probe.py", "media/prepare.py")]
     assert len(m2) >= 30, f"only {len(m2)} mutants for M2's modules"
@@ -94,8 +94,8 @@ def test_the_runner_cannot_report_a_false_kill():
         (Outcome.survived, mutation_list.Mutant(
             name="self_wrong_test", invariant="the kill must come from the named test",
             file="media/store.py",
-            old="                raise errors.NotFound(\"media reference does not belong to this org\")",
-            new="                pass", cases=("test_an_unstaged_payload_is_not_found",))),
+            old="            if existing is None or existing.digest != ref.digest:",
+            new="            if False:", cases=("test_an_unstaged_payload_is_not_found",))),
         (Outcome.misdeclared, mutation_list.Mutant(
             name="self_missing_anchor", invariant="the list matches the code",
             file="media/store.py", old="this text is not in the module", new="nor is this",

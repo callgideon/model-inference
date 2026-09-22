@@ -29,6 +29,8 @@ async def media_sec__an_upload_is_owned_verified_and_immutable(factory):
     handle = ticket["upload_handle"]
     assert handle.startswith("upl_") and str(ticket["destination_ref"]).startswith("infrx-upload:")
     assert "?" not in str(ticket["destination_ref"])          # not a signed URL
+    # R61 (1): exactly `infrx-upload:upl_<id>`, no organization qualifier
+    assert ticket["destination_ref"] == f"infrx-upload:{handle}"
     hook(harness, "put_object")(handle, b"0123456789", "video/mp4")
     ref = await harness.port.finalize_upload(b.ORG_A, handle)
     assert ref.bytes == 10 and ref.digest.startswith("sha256:") and ref.org_id == b.ORG_A
@@ -89,8 +91,10 @@ async def media_parity__staging_is_content_addressed_and_tenant_namespaced(facto
     """MEDIA-PARITY: the storage key comes from the tenant, digest and profile;
     the caller never names a path, and two orgs never share an object."""
     harness = factory()
-    request_a = b.request(harness, refs=(b.media(b.ORG_A),))
-    request_b = b.request(harness, org_id=b.ORG_B, refs=(b.media(b.ORG_B),))
+    # F2R item 4: staged media is media the store produced, never a builder's claim.
+    request_a = b.request(harness, refs=(await b.materialized(harness, b.ORG_A),))
+    request_b = b.request(harness, org_id=b.ORG_B,
+                          refs=(await b.materialized(harness, b.ORG_B),))
     staged_a = await harness.port.stage(b.ORG_A, request_a)
     staged_b = await harness.port.stage(b.ORG_B, request_b)
     assert staged_a[0].storage_ref != staged_b[0].storage_ref
@@ -184,14 +188,14 @@ async def media_sec__staging_never_replaces_an_existing_object(factory):
     hook(harness, "put_object")(handle, b"the original bytes", "video/mp4")
     owned = await harness.port.finalize_upload(b.ORG_A, handle)
 
-    # another tenant staging the same handle touches nothing of org A's
-    foreign = b.media(b.ORG_B, handle=handle, kind=MediaKind.inline)
+    # another tenant's own content under the same handle touches nothing of org A's
+    foreign = await b.materialized(harness, b.ORG_B, handle=handle, kind=MediaKind.inline)
     staged = await harness.port.stage(b.ORG_B, b.request(harness, org_id=b.ORG_B,
                                                          refs=(foreign,)))
     assert await harness.port.resolve_owned(b.ORG_A, handle) == owned
     assert staged[0].storage_ref != owned.storage_ref
 
-    # and the owner cannot rewrite it either: immutable content, or a conflict
+    # and the owner cannot rewrite it either: a claim of other content under the handle
     clash = b.media(b.ORG_A, handle=handle, kind=MediaKind.inline)
     try:
         await harness.port.stage(b.ORG_A, b.request(harness, refs=(clash,)))
@@ -202,7 +206,7 @@ async def media_sec__staging_never_replaces_an_existing_object(factory):
     assert await harness.port.resolve_owned(b.ORG_A, handle) == owned
 
     # restaging identical content is idempotent, not a second object
-    ref = b.media(b.ORG_A)
+    ref = await b.materialized(harness, b.ORG_A)
     once = await harness.port.stage(b.ORG_A, b.request(harness, refs=(ref,)))
     assert await harness.port.stage(b.ORG_A, b.request(harness, refs=(ref,))) == once
 
@@ -212,7 +216,11 @@ async def media_sec__staging_never_replaces_an_existing_object(factory):
     # overwritten by completing that upload with different bytes.
     reused = await harness.port.create_upload(b.ORG_A, {"max_bytes": 1024})
     second = reused["upload_handle"]
-    squatted = b.media(b.ORG_A, handle=second, kind=MediaKind.inline)
+    squatted = await b.materialized(harness, b.ORG_A, handle=second, kind=MediaKind.inline)
+    if squatted.handle != second:
+        # R66: this store derives a materialized handle from the content, so no object of
+        # the tenant's can sit under an upload handle and there is nothing to replace.
+        return
     staged_first = await harness.port.stage(b.ORG_A, b.request(harness, refs=(squatted,)))
     hook(harness, "put_object")(second, b"different bytes entirely", "video/mp4")
     try:
@@ -311,13 +319,19 @@ async def media_sec__a_partial_request_stages_nothing(factory):
     not be left behind, or a client correcting the bad reference and retrying finds
     half its request already stored under a handle it can no longer change."""
     harness = factory()
-    good = b.media(b.ORG_A, handle="upl_partialfixture00000000000000000000001")
+    good = await b.materialized(harness, b.ORG_A,
+                                handle="upl_partialfixture00000000000000000000001")
     refusals = (
         b.media(b.ORG_A, handle="upl_partialfixture00000000000000000000002",
                 nbytes=DEFAULTS.max_media_bytes + 1),                 # oversize
         b.media(b.ORG_B, handle="upl_partialfixture00000000000000000000003"),  # not ours
         b.media(b.ORG_A, handle="upl_partialfixture00000000000000000000004",
                 kind=MediaKind.upload),                               # unresolvable upload
+        b.media(b.ORG_A, handle="upl_partialfixture00000000000000000000005"),  # never made
+        # the same handle as `good` claiming other content: last-wins would stage one
+        # object and hand the job the other one's digest
+        good.model_copy(update={"digest": b.digest("different content entirely"),
+                                "bytes": good.bytes + 1}),
     )
     for n, bad in enumerate(refusals):
         request = b.request(harness, refs=(good, bad))
@@ -327,32 +341,33 @@ async def media_sec__a_partial_request_stages_nothing(factory):
             assert errors.http_status(exc.code) in (400, 403, 404, 409, 413), exc.code
         else:
             raise AssertionError(f"refusal {n} was staged anyway")
-        try:
-            await harness.port.resolve_owned(b.ORG_A, good.handle)
-        except errors.NotFound:
-            pass
-        else:
-            raise AssertionError(f"refusal {n} left the first media item staged")
-    # the same handle twice in one request, with different content, is a 400: last-wins
-    # would stage one object and hand the job the other one's digest
-    twin = good.model_copy(update={"digest": b.digest("different content entirely"),
-                                   "bytes": good.bytes + 1})
-    try:
-        await harness.port.stage(b.ORG_A, b.request(harness, refs=(good, twin)))
-    except errors.InvalidRequest:
-        pass
-    else:
-        raise AssertionError("one handle carried two different objects in one request")
-    try:
-        await harness.port.resolve_owned(b.ORG_A, good.handle)
-    except errors.NotFound:
-        pass
-    else:
-        raise AssertionError("the duplicate-handle request staged something")
-    # and the corrected retry stages cleanly
+        # the object the good reference names is untouched by the refusal
+        assert await harness.port.resolve_owned(b.ORG_A, good.handle) == good
+    # and the corrected retry stages cleanly, as the store describes the object
     staged = await harness.port.stage(b.ORG_A, b.request(harness, refs=(good,)))
-    assert staged[0].handle == good.handle
-    assert await harness.port.resolve_owned(b.ORG_A, good.handle) == staged[0]
+    assert staged == (good,)
+    # F2R item 4: `stage` and `attach` take only refs this store produced. A ref it never
+    # materialized, a real one with a forged digest, and another tenant's real ref
+    # relabelled with this org are all `not_found` - at staging and at attach alike.
+    mine = await b.materialized(harness, b.ORG_A)
+    theirs = await b.materialized(harness, b.ORG_B,
+                                  handle="upl_theirsfixture0000000000000000000000001")
+    forged = (b.media(b.ORG_A, handle="upl_nevermaterialized000000000000000001"),
+              mine.model_copy(update={"digest": b.digest("not the stored bytes")}),
+              theirs.model_copy(update={"org_id": b.ORG_A}))
+    job_id = harness.ids.uuid()
+    hook(harness, "admitted")(job_id, b.ORG_A)
+    for n, ref in enumerate(forged):
+        for what, call in (("staged", harness.port.stage(b.ORG_A, b.request(harness, refs=(ref,)))),
+                           ("attached", harness.port.attach(job_id, (ref,)))):
+            try:
+                await call
+            except errors.NotFound:
+                pass
+            else:
+                raise AssertionError(f"forged ref {n} was {what}")
+    # and the store's own ref goes through, as the store describes it
+    assert await harness.port.stage(b.ORG_A, b.request(harness, refs=(mine,))) == (mine,)
 
 
 def mediastore_cases():
@@ -583,9 +598,11 @@ async def api_stream__canonical_events_end_with_authoritative_usage(factory):
     usage_events = [event for event in events if event.type is ChunkEventType.usage]
     assert len(usage_events) == 1 and usage_events[0].usage is not None
     assert usage_events[0].usage.certainty.value == "authoritative"
-    text = "".join(event.payload["content"] for event in events
-                   if event.type is ChunkEventType.delta)
-    assert text == hook(harness, "text")
+    deltas = [event.payload for event in events if event.type is ChunkEventType.delta]
+    # r1 R58: exactly `{visible, raw}`; a plain answer reads the same in both.
+    assert all(set(payload) == {"visible", "raw"} for payload in deltas)
+    assert "".join(payload["raw"] for payload in deltas) == hook(harness, "text")
+    assert "".join(payload["visible"] for payload in deltas) == hook(harness, "text")
 
 
 async def api_stream__reasoning_delimiters_split_across_chunks(factory):
@@ -593,12 +610,15 @@ async def api_stream__reasoning_delimiters_split_across_chunks(factory):
     only exist in the concatenation, never inside one delta."""
     harness = factory(fault="split_reasoning_delimiters")
     events = await _drain(harness.port, _lease(harness), _prepared(harness))
-    deltas = [event.payload["content"] for event in events
-              if event.type is ChunkEventType.delta]
+    payloads = [event.payload for event in events if event.type is ChunkEventType.delta]
+    deltas = [payload["raw"] for payload in payloads]
     joined = "".join(deltas)
     assert joined.count("<think>") == 1 and joined.count("</think>") == 1
     assert not any("<think>" in delta or "</think>" in delta for delta in deltas)
     assert joined.split("</think>")[-1] == "Two people unload boxes."
+    # r1 R58: what the customer reads is the answer alone, with no piece of the block.
+    visible = "".join(payload["visible"] for payload in payloads)
+    assert visible == "Two people unload boxes.", visible
 
 
 async def api_stream__a_prefill_stall_produces_no_delta_within_the_budget(factory):
@@ -734,8 +754,10 @@ async def trace_bounds__a_content_budget_breach_discards_the_whole_content(facto
     still flows and the loss is counted. The budget is a **running total**: envelopes
     that each fit on their own but not together must not all be kept, so a sink that
     only compares one envelope against the budget fails here."""
-    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=4096,
-                                              trace_metadata_reserve_bytes=1024))
+    # A reserve that holds every envelope below (each is charged its serialized size,
+    # well under 1 KiB, since F2R item 3) and leaves a 3,072-byte content budget.
+    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=3_072 + 8_192,
+                                              trace_metadata_reserve_bytes=8_192))
     budget = hook(harness, "content_budget")()              # 3,072 bytes
     for _ in range(3):
         # 1,024 each: three fit exactly, and each one alone is far inside the budget
@@ -769,17 +791,34 @@ async def trace_bounds__a_content_budget_breach_discards_the_whole_content(facto
 
 async def trace_bounds__metadata_exhaustion_drops_with_counters(factory):
     """TRACE-BOUNDS: when the metadata reserve is gone the record is dropped and
-    counted; inference is untouched either way."""
-    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=8192,
-                                              trace_metadata_reserve_bytes=64))
+    counted; inference is untouched either way.
+
+    Revised by F2R item 3 (R65): a record costs the reserve `max(declared metadata_bytes,
+    len(serialized envelope))`, so an under-declared envelope cannot buy a second place,
+    and an over-declared one is charged what it declared."""
+    from ..codec import compact_bytes
+    probe = factory()
+    actual = len(compact_bytes(b.trace(probe.ids.uuid(), content_bytes=0, metadata_bytes=1,
+                                       harness=probe)))
+    # room for one serialized row, not for two
+    limits = DEFAULTS.replace(trace_capture_bytes=1 << 20,
+                              trace_metadata_reserve_bytes=actual + actual // 2)
+    harness = factory(limits=limits)
     accepted = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0,
-                                                metadata_bytes=64, harness=harness))
+                                                metadata_bytes=1, harness=harness))
     dropped = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0,
-                                               metadata_bytes=64, harness=harness))
+                                               metadata_bytes=1, harness=harness))
     assert accepted is TraceOfferResult.accepted_in_memory
     assert dropped is TraceOfferResult.dropped
     stats = await harness.port.stats()
     assert stats["dropped"] == 1 and stats["loss_reasons"].get("metadata_budget", 0) == 1
+    # the declared number still binds when it is the larger one
+    fresh = factory(limits=limits)
+    assert await fresh.port.offer(b.trace(fresh.ids.uuid(), content_bytes=0,
+                                          metadata_bytes=actual * 2, harness=fresh)) \
+        is TraceOfferResult.dropped
+    stats = await fresh.port.stats()
+    assert stats["loss_reasons"].get("metadata_budget", 0) == 1
 
 
 async def trace_bounds__a_full_queue_drops_and_inference_continues(factory):
@@ -1306,11 +1345,13 @@ async def trace_bounds__a_dropped_finish_releases_its_charge(factory):
     # ... and the same for the *other* drop reason: a finish refused because the metadata
     # reserve is exhausted must release its charge too. The corpus mutant that keeps it
     # (m20b) dies here rather than only on the queue_full path.
-    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=9_000,
-                                              trace_metadata_reserve_bytes=64,
+    # (The reserve is charged max(declared, serialized) since F2R item 3, so the filler
+    # declares the whole reserve: a real row is well under 2 KiB.)
+    harness = factory(limits=DEFAULTS.replace(trace_capture_bytes=11_048,
+                                              trace_metadata_reserve_bytes=2_048,
                                               trace_queue_max=1_000))
     filler_id = harness.ids.uuid()
-    assert await harness.port.offer(b.trace(filler_id, content_bytes=0, metadata_bytes=64,
+    assert await harness.port.offer(b.trace(filler_id, content_bytes=0, metadata_bytes=2_048,
                                             harness=harness)) \
         is TraceOfferResult.accepted_in_memory          # the reserve is now exhausted
     starved_id = harness.ids.uuid()

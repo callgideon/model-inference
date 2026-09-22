@@ -27,7 +27,9 @@ from .contracts.limits import JUDGE_MODES, MODE_UNSET, MODES, PilotSettings, env
 _API_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DEFAULT_MODELS_DOC = os.path.join(_API_DIR, "openrouter", "provider-models.json")
-DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime,video/mpeg"
+# No `video/mpeg` (F2R, coordinator relay): the pilot's pinned profile does not serve it,
+# so ingress refuses it up front rather than fetching bytes preparation must reject.
+DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime"
 EXT_MIME = {".mp4": "video/mp4", ".m4v": "video/mp4", ".webm": "video/webm",
             ".mov": "video/quicktime", ".mpeg": "video/mpeg", ".mpg": "video/mpeg"}
 
@@ -152,6 +154,12 @@ MUST_BE_POSITIVE = (
     "max_active_jobs", "max_active_jobs_per_org", "max_active_jobs_per_key",
     "max_preparing_jobs", "idempotency_ttl_s", "unknown_usage_reconcile_s",
 )
+
+
+# Filesystem roots: unset (empty) disables the feature; set, the value must be an absolute
+# path with no surrounding whitespace - a relative root would follow the process's working
+# directory, and `" /var/x"` is a directory nobody meant.
+PATH_SETTINGS = ("trace_spool_dir", "processing_cache_dir")
 
 
 class RuntimeMisconfigured(ValueError):
@@ -380,6 +388,10 @@ def validate_pilot(pilot, gateway=None):
     for name in MUST_BE_POSITIVE:
         if getattr(pilot, name) <= 0:
             raise ValueError(f"{env_name(name)} must be positive")
+    for name in PATH_SETTINGS:
+        path = getattr(pilot, name)
+        if path and (path != path.strip() or not os.path.isabs(path)):
+            raise ValueError(f"{env_name(name)} must be unset or an absolute path")
     if pilot.infrx_mode == "pilot":
         if not _configured(pilot.database_url):
             raise ValueError("INFRX_MODE=pilot requires DATABASE_URL: admission must be metered")

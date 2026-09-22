@@ -7,14 +7,19 @@ that must notice. The runner applies one mutant at a time to a **copy** of the
 package in a temporary directory, runs the named cases there, and fails if the
 mutant survives. Nothing is ever written inside the worktree.
 
-    uv run --frozen pytest -q tests/contracts/test_mutants.py     # the whole list
-    make api-mutants                                             # same, from the root
-    uv run --frozen python tests/contracts/mutants.py --list      # names only
-    uv run --frozen python tests/contracts/mutants.py judge_settle_negative
+    uv run --frozen pytest -q tests/contracts/test_mutants.py       # the whole list
+    make api-mutants                                                # same, from the root
+    uv run --frozen python -m tests.contracts.mutants --list         # names only
+    uv run --frozen python -m tests.contracts.mutants judge_settle_negative
 
 Adding a conformance case means adding a mutant for the invariant it claims. A
 mutant whose anchor no longer exists fails loudly rather than being skipped: the
 list is part of the suite, not documentation of it.
+
+The second half of this file is the **shared runner** every track's list delegates to
+(F2R item 9): `Mutant`, `Outcome`, `Result`, `Runner`, `run_mutant`, `main` and - for
+track D's in-process migration checks - `assertion_kill`. A track supplies a `Runner`
+and keeps its own list; nobody keeps their own copy of the rules.
 """
 from __future__ import annotations
 
@@ -26,6 +31,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
@@ -42,32 +48,45 @@ class Mutant:
     old: str
     new: str
     cases: tuple[str, ...] = field(default_factory=tuple)
+    #: Exception class names, beyond an assertion, this mutant may legitimately die by.
+    #: Each use is a **documented** kill mode - an invariant whose content is "this never
+    #: raises" can only be broken by a raise - never a convenience for a crashing case.
+    dies_by: tuple[str, ...] = ()
+    #: How many places this ONE conceptual edit touches. Still a single edit; the count is
+    #: declared so a duplicated anchor is an error rather than a silent partial mutation.
+    occurrences: int = 1
 
     @property
     def path(self) -> pathlib.Path:
         return pathlib.Path(PACKAGE) / self.file
 
 
-def _m(name, invariant, file, old, new, *cases) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases)
+def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
+                  dies_by=tuple(dies_by), occurrences=occurrences)
 
 
 S = "contracts/fakes/state.py"          # JobStore + StreamStore
 J = "contracts/fakes/judge.py"
 M = "contracts/fakes/media.py"
-T = "contracts/fakes/traces.py"
+T = "contracts/traces_accounting.py"   # the shared trace accounting (F2R item 3)
+TF = "contracts/fakes/traces.py"          # the fake's own hooks: FakeClock default, crash
 F = "contracts/fakes/feedback.py"
 Q = "contracts/fakes/scheduling.py"
 R = "contracts/records.py"
 W = "contracts/wire.py"                 # public bodies: projections and input bounds
 MONEY = "contracts/money.py"
+E = "contracts/fakes/engine.py"
+TA = "contracts/traces_accounting.py"      # the accounting the fake and the spool share
 
-# --- how a mutant is allowed to die (r1 round-3 review) --------------------------------
+# --- how a mutant is allowed to die (r1 round-3 review; enforced since F2R item 9) ----
 # A port is a trust boundary, so a kill that depends on an *untyped* exception is a case a
 # real adapter could fail for the wrong reason: a store answering the typed `DomainError`
-# the contract promises must not crash the case. Every committed mutant now dies on an
-# assertion or on a typed `DomainError`, with exactly **two** deliberate exceptions, both
-# of which are guards whose entire purpose is to stop an untyped error escaping:
+# the contract promises must not crash the case. Every committed mutant dies on an
+# assertion, and the shared runner now **enforces** that: a death by any other exception
+# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **two**
+# mutants declare one, and both are guards whose entire purpose is to stop an untyped
+# error escaping:
 #
 # * `mime_string_accepted` - `create_upload`'s allow-list check. Removing it lets
 #   `tuple(5)` raise `TypeError` out of the port, which *is* the defect; adding a second
@@ -237,7 +256,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("fence_ignores_expiry", "an expired lease mutates nothing",
        S, 'raise errors.StaleLease(f"lease expired at {job.lease.expires_at}")', "pass",
        "dur_fence__an_expired_lease_can_neither_renew_nor_settle",
-       "dur_fence__a_stale_worker_cannot_append"),
+       "dur_fence__a_stale_worker_cannot_append", occurrences=2),
     _m("heartbeat_stores_the_callers_lease", "a lease is a fencing token, not a record (R29)",
        S, "            job.lease = job.lease.model_copy(update={",
        "            job.lease = lease.model_copy(update={",
@@ -280,7 +299,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "dur_output__an_accepted_job_keeps_its_admission_budgets"),
     _m("abandoned_preparation_never_reaped", "a preparation that never returns is reaped",
        S, "        if job.state is JobState.preparing and now >= job.admission.preparation_deadline_at:",
-       "        if False:", "dur_output__a_late_preparation_worker_finds_a_terminal_job"),
+       "        if False:", "dur_output__a_late_preparation_worker_finds_a_terminal_job", occurrences=2),
     # --- output and recovery --------------------------------------------------
     _m("publication_marker_never_set", "output committed forbids regeneration",
        S, "                job.published = True", "                pass",
@@ -422,7 +441,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "media_sec__oversize_and_unsupported_uploads_are_refused"),
     _m("mime_string_accepted", "accepted_mime is a list, not a string or a number",
        M, "        if not isinstance(raw_mimes, (list, tuple, set, frozenset, str, bytes)):",
-       "        if False:", "media_sec__a_refused_upload_stays_refused"),
+       "        if False:", "media_sec__a_refused_upload_stays_refused",
+       dies_by=("TypeError",)),
     _m("mime_string_split_into_characters", "a single type must still be a list",
        M, "        if isinstance(raw_mimes, (str, bytes)):", "        if False:",
        "media_sec__a_refused_upload_stays_refused"),
@@ -431,26 +451,36 @@ MUTANTS: tuple[Mutant, ...] = (
        "        media = next((value for (_o, handle), value in self.objects.items()\n"
        "                      if handle == ref), None)",
        "media_sec__another_org_cannot_resolve_or_finalize"),
-    _m("staging_overwrites_content", "staged content is immutable",
-       M, "                if existing.digest != ref.digest:", "                if False:",
-       "media_sec__staging_never_replaces_an_existing_object"),
-    _m("staging_commits_as_it_goes", "staging is all or nothing",
-       M, "        self.objects.update(pending)",
-       "        pass  # objects were written as the loop went (they are not, now)",
+    # F2R item 4: `stage` records nothing of the caller's any more (it takes only refs the
+    # store produced), so "commits as it goes" / "resolves after writing" have no code left
+    # to break; what they guarded is now these two refusals.
+    _m("staging_overwrites_content", "a handle keeps the content the store has (F2R 4)",
+       M, "            if existing is None or existing.digest != ref.digest:\n"
+          "                raise errors.NotFound(f\"media {ref.handle} was not materialized",
+       "            if existing is None:\n"
+       "                raise errors.NotFound(f\"media {ref.handle} was not materialized",
+       "media_sec__staging_never_replaces_an_existing_object",
        "media_sec__a_partial_request_stages_nothing"),
-    _m("staging_resolves_after_writing", "an unresolvable upload leaves nothing staged",
-       M, "                owned = await self.resolve_owned(org_id, ref.handle)",
-       "                self.objects.update(pending)\n"
-       "                owned = await self.resolve_owned(org_id, ref.handle)",
+    _m("staging_takes_a_ref_it_never_made", "only a ref the store produced is staged (F2R 4)",
+       M, "            if existing is None or existing.digest != ref.digest:\n"
+          "                raise errors.NotFound(f\"media {ref.handle} was not materialized",
+       "            if False:\n"
+       "                raise errors.NotFound(f\"media {ref.handle} was not materialized",
+       "media_sec__a_partial_request_stages_nothing"),
+    _m("attach_takes_a_ref_it_never_made", "only a ref the store produced is attached (F2R 4)",
+       M, "            if indexed is None or indexed.digest != ref.digest:", "            if False:",
        "media_sec__a_partial_request_stages_nothing"),
     _m("staging_validates_nothing_up_front", "staging is all or nothing",
-       M, "        for ref in request.media:\n            if ref.org_id != org_id:",
-       "        for ref in ():\n            if ref.org_id != org_id:",
+       M, "        for ref in request.media:\n            # No separate `ref.org_id` check",
+       "        for ref in ():\n            # No separate `ref.org_id` check",
        "media_sec__a_partial_request_stages_nothing",
        "media_sec__a_foreign_media_reference_is_not_staged"),
     _m("staging_ignores_the_org", "a body cannot name another tenant's object",
-       M, '                raise errors.NotFound("media reference does not belong to this org")',
-       "                pass", "media_sec__a_foreign_media_reference_is_not_staged"),
+       M, "            existing = self.objects.get((org_id, ref.handle))",
+       "            existing = next((value for (_o, handle), value in self.objects.items()\n"
+       "                             if handle == ref.handle), None)",
+       "media_sec__a_foreign_media_reference_is_not_staged",
+       "media_sec__a_partial_request_stages_nothing"),
     _m("finalize_overwrites_the_tenants_object", "finalizing replaces nothing",
        M, '            raise errors.Conflict(f"handle {upload_handle} already holds different content")',
        "            pass", "media_sec__staging_never_replaces_an_existing_object"),
@@ -469,7 +499,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "trace_bounds__an_open_capture_past_its_deadline_is_reaped"),
     _m("capture_accepts_any_envelope", "a capture belongs to its own request",
        T, "        if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):",
-       "        if False:", "trace_bounds__a_capture_belongs_to_its_own_request"),
+       "        if False:", "trace_bounds__a_capture_belongs_to_its_own_request", occurrences=2),
     _m("add_has_no_running_total", "the content budget is a running total",
        T, "        if self.sink.content_bytes + size > self.sink.content_budget:",
        "        if size > self.sink.content_budget:",
@@ -484,7 +514,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "trace_bounds__a_full_queue_drops_and_inference_continues",
        "trace_bounds__a_dropped_finish_releases_its_charge"),
     _m("metadata_reserve_ignored", "metadata exhaustion drops with counters",
-       T, "                       if self.metadata_bytes + envelope.metadata_bytes\n"
+       T, "                       if self.metadata_bytes + metadata\n"
           "                       > self.limits.trace_metadata_reserve_bytes else None):",
        "                       if False else None):",
        "trace_bounds__metadata_exhaustion_drops_with_counters"),
@@ -633,7 +663,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("preparation_retries_unbounded", "preparation retries are bounded (q08)",
        S, "            if job.preparation_attempts > self.limits.max_prepublication_retries:",
        "            if False:",
-       "dur_output__a_lost_preparation_worker_is_reaped_within_bounds"),
+       "dur_output__a_lost_preparation_worker_is_reaped_within_bounds", occurrences=2),
     _m("requeue_labelled_for_the_wrong_phase", "a requeue carries its own phase's kind (s18)",
        S, "                               kind=OutboxKind.inference_dispatch,\n"
           "                               execution_mode=job.request.execution_mode, available_at=now,",
@@ -651,9 +681,9 @@ MUTANTS: tuple[Mutant, ...] = (
        M, "        org_id = self.job_org(job_id)", '        org_id = refs[0].org_id if refs else ""',
        "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
     _m("attach_stores_before_validating", "a refused attach stores nothing (R55/s15)",
-       M, "        org_id = self.job_org(job_id)\n        for ref in refs:",
+       M, "        org_id = self.job_org(job_id)\n        owned: list[MediaRef] = []",
        "        org_id = self.job_org(job_id)\n        self.by_job[job_id] = tuple(refs)\n"
-       "        for ref in refs:",
+       "        owned: list[MediaRef] = []",
        "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
     _m("admit_accepts_a_zero_output_ceiling", "a zero ceiling never means a free request (R55)",
        S, "        if not 1 <= request.max_output_tokens <= limits.max_output_tokens:",
@@ -1068,7 +1098,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "trace_bounds__a_dropped_finish_releases_its_charge"),
     _m("add_raises_on_a_non_byte_part", "a malformed part is dropped, not raised",
        T, "        elif not isinstance(part, (bytes, bytearray, memoryview)):",
-       "        elif False:", "trace_bounds__a_capture_belongs_to_its_own_request"),
+       "        elif False:", "trace_bounds__a_capture_belongs_to_its_own_request",
+       dies_by=("TypeError",)),
     _m("drop_recounts_a_counted_loss", "one loss count per capture, not per call",
        T, "        self.counted = True\n        self.sink.loss_reasons[reason] += 1",
        "        self.sink.loss_reasons[reason] += 1",
@@ -1112,9 +1143,6 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("stuck_jobs_not_reported", "an unsettleable job is reported (F2)",
        S, "                    self.unsettleable[job.id] = refused.code", "                    pass",
        "dur_settle__one_unsettleable_job_does_not_stop_the_sweep"),
-    _m("duplicate_handle_last_wins", "one handle carries one object per request",
-       M, "            if clash is not None and clash.digest != stored.digest:", "            if False:",
-       "media_sec__a_partial_request_stages_nothing"),
     # --- r6 B1/B2: one mutant per branch of the no-op finish --------------------
     _m("no_op_finish_skips_the_identity_check", "a no-op capture checks identity too",
        T, "        if (envelope.request_id, envelope.org_id) != (self.request_id, self.org_id):\n"
@@ -1147,7 +1175,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "trace_bounds__a_no_op_capture_trusts_itself_not_the_envelope"),
     _m("live_capture_trusts_the_envelope_mode", "the capture decides on the live path too (n1)",
        T, "        if envelope.mode is not self.mode:", "        if False:",
-       "trace_bounds__a_live_capture_also_decides_its_own_mode"),
+       "trace_bounds__a_live_capture_also_decides_its_own_mode", occurrences=2),
     _m("unrecordable_capture_counts_no_loss", "a full capture that never captured counts one loss (n2)",
        T, "        if self.no_op and self.mode is not TraceMode.full:",
        "        if self.no_op:",
@@ -1225,7 +1253,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
     # --- F2.1: the lattice assertions the S1 review found vacuous --------------
     _m("shutdown_counted_for_nothing", "only a real loss names a reason (R42)",
-       T, "        if lost:\n            # Only a real loss names a reason.",
+       TF, "        if lost:\n            # Only a real loss names a reason.",
        "        if True:\n            # Only a real loss names a reason.",
        "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
     _m("closed_capture_still_queues", "a capture closed before any finish stores nothing (R42)",
@@ -1239,7 +1267,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "trace_bounds__every_bounded_capture_sequence_holds_the_invariants"),
     _m("raw_content_envelope_is_trusted", "the capture decides its mode, never the envelope (R12)",
        T, "        if envelope.mode is not self.mode:", "        if False:",
-       "trace_bounds__a_live_capture_also_decides_its_own_mode"),
+       "trace_bounds__a_live_capture_also_decides_its_own_mode", occurrences=2),
     # --- r8 R42: loss accounting cannot regress -------------------------------
     _m("count_is_not_idempotent", "one loss count per capture, whatever follows (R42)",
        T, "        if self.counted:\n            return\n        self.counted = True",
@@ -1314,7 +1342,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("feedback_outbox_missing", "a feedback projection is queued before the ack",
        F, "        self.outbox.append(OutboxEvent(event_id=self.ids.event_id(), aggregate_id=request_id,",
        "        _unused = (OutboxEvent(event_id=self.ids.event_id(), aggregate_id=request_id,",
-       "feedback_ack__acceptance_is_durable_and_provenance_is_server_set"),
+       "feedback_ack__acceptance_is_durable_and_provenance_is_server_set", occurrences=2),
     _m("media_key_ignores_the_tenant", "two orgs never share an object",
        M, '        return f"media/{org_id}/{profile_version}/{digest.split(\':\')[1][:16]}/{part}"',
        '        return f"media/{profile_version}/{digest.split(\':\')[1][:16]}/{part}"',
@@ -1324,8 +1352,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "ref.model_copy(update={\"profile_version\": ref.profile_version,",
        "media_parity__staging_is_content_addressed_and_tenant_namespaced"),
     _m("upload_handle_is_guessable", "an upload handle is opaque and server issued",
-       M, '                "destination_ref": f"infrx-upload:{org_id}:{handle}",',
+       M, '                "destination_ref": f"infrx-upload:{handle}",',
        '                "destination_ref": f"https://example.invalid/{handle}?Signature=abc",',
+       "media_sec__an_upload_is_owned_verified_and_immutable"),
+    _m("upload_reference_names_the_org", "an upload reference carries no organization (R61 (1))",
+       M, '                "destination_ref": f"infrx-upload:{handle}",',
+       '                "destination_ref": f"infrx-upload:{org_id}:{handle}",',
        "media_sec__an_upload_is_owned_verified_and_immutable"),
     _m("offer_claims_durability", "an accepted offer is in memory only",
        T, "        self.queued.append(envelope)\n        self.accepted += 1",
@@ -1338,22 +1370,96 @@ MUTANTS: tuple[Mutant, ...] = (
        "            resolved = run.model_copy(update={\"state\": JudgeRunState.quarantined})\n"
        "            self.runs[run_id] = resolved",
        "judge_budget__an_ambiguous_run_is_resolved_only_by_an_operator"),
+    # --- F2R lane A item 2: the delta payload is exactly `{visible, raw}` (R64) ------
+    _m("engine_fake_visible_is_raw", "the customer never reads the reasoning block (R58)",
+       E, 'SPLIT_REASONING_VISIBLE = ("", "", "", "Two people unload boxes.")',
+       "SPLIT_REASONING_VISIBLE = SPLIT_REASONING",
+       "api_stream__reasoning_delimiters_split_across_chunks"),
+    _m("engine_fake_keeps_the_content_alias", "a delta payload is exactly {visible, raw}",
+       E, 'payload={"visible": visible, "raw": raw}))',
+       'payload={"visible": visible, "raw": raw, "content": raw}))',
+       "api_stream__canonical_events_end_with_authoritative_usage"),
+    # --- F2R: filesystem roots are unset or absolute (PROCESSING_CACHE_DIR) -----------
+    Mutant(name="relative_root_accepted", invariant="a filesystem root is unset or absolute",
+           file="config.py",
+           old="        if path and (path != path.strip() or not os.path.isabs(path)):",
+           new="        if False:", cases=("test_a_filesystem_root_is_unset_or_absolute",)),
+    Mutant(name="mpeg_allowed_again", invariant="video/mpeg is not a pilot input",
+           file="config.py",
+           old='DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime"',
+           new='DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime,video/mpeg"',
+           cases=("test_the_default_video_allow_list_has_no_mpeg",)),
+    # --- F2R: the two money-context mutants the audit found surviving ----------------
+    _m("money_context_default_precision", "money arithmetic runs at 40 digits",
+       MONEY, "        prec=40, rounding=decimal.ROUND_HALF_EVEN,",
+       "        prec=28, rounding=decimal.ROUND_HALF_EVEN,", "test_the_money_context_is_pinned"),
+    _m("money_context_traps_nothing", "an invalid money operation raises, never NaN",
+       MONEY, "        traps=[decimal.InvalidOperation, decimal.DivisionByZero, decimal.Overflow],",
+       "        traps=[],", "test_the_money_context_is_pinned"),
+    # --- F2R lane A item 5: judge sample ids and the judge-sample DTO -------------------
+    _m("judge_run_duplicate_sample_ids", "a run's sample ids are unique",
+       R, "        if len(set(self.sample_ids)) != len(self.sample_ids):", "        if False:",
+       "test_judge_run_sample_ids_are_unique_lowercase_uuid4"),
+    _m("judge_run_sample_ids_any_string", "a sample id is a lower-case UUIDv4",
+       R, "    sample_ids: tuple[UuidStr, ...] = ()", "    sample_ids: tuple[str, ...] = ()",
+       "test_judge_run_sample_ids_are_unique_lowercase_uuid4"),
+    _m("judge_sample_request_id_optional", "a judge sample states its request, even as null",
+       R, "    request_id: UuidStr | None\n    scores:", "    request_id: UuidStr | None = None\n    scores:",
+       "test_the_judge_sample_dto_is_the_consoles_four_fields"),
+    _m("accounting_regime_respelled", "the regime is spelled as the console spells it (IR-7)",
+       R, '    legacy_usd = "legacy_usd"', '    legacy_usd = "legacy"',
+       "test_enum_values_are_frozen"),
+    # --- F2R lane A item 3: the metadata reserve is charged the serialized row (R65) ----
+    _m("metadata_charged_as_declared", "an under-declared record is charged what it costs",
+       TA, "        return max(envelope.metadata_bytes, serialized)",
+       "        return envelope.metadata_bytes",
+       "trace_bounds__metadata_exhaustion_drops_with_counters"),
+    _m("metadata_charged_as_serialized", "an over-declared record is charged what it declared",
+       TA, "        return max(envelope.metadata_bytes, serialized)", "        return serialized",
+       "trace_bounds__metadata_exhaustion_drops_with_counters"),
 )
 
+
+# ======================================================================================
+# The shared runner (F2R item 9)
+# ======================================================================================
+# Eight copies of `run_mutant` used to live under `tests/`, and they disagreed about
+# what a kill is: five classified a death by *no* rule at all (`--tb=no`, so an
+# undeclared `TypeError` counted as a kill), two copied pyproject.toml into the mutated
+# tree and five did not (so the copy collected under different import rules than the
+# suite was written for), one required every named case to notice and the others were
+# satisfied by any one of them, and none of them gave a subprocess its own bytecode
+# cache or temporary directory. This is the one runner; each track supplies a `Runner`
+# describing its target and keeps its own list, its own self-tests and its own
+# declared kill modes.
+#
+# The rules, in one place:
+#
+# * a mutant whose anchor appears **zero or two** times is `misdeclared` - it would
+#   otherwise edit nothing, or edit whichever line came first;
+# * a mutant that does not **compile** is `broken_runner`, decided by `compile()` here
+#   rather than inferred from a pytest exit code;
+# * every failing test must name one of the mutant's own cases, so a wider defect,
+#   an import error or a collection error is `broken_runner`;
+# * every death must be assertion-shaped (an `assert`, `AssertionError`, or pytest's
+#   `Failed` for a `raises` block that did not raise) or **declared** in `dies_by`;
+# * a run that collects nothing, skips its cases, or (where the track asks for it)
+#   leaves a named case unbroken is `misdeclared`;
+# * only `killed` is accepted by a suite.
 
 class Outcome(enum.StrEnum):
     """What one mutant run proved. Only `killed` counts."""
 
     killed = "killed"                  # pytest failed, and only named cases failed
     survived = "survived"              # the suite passed with the defect in place
-    broken_runner = "broken_runner"    # syntax, import, collection or usage error
-    misdeclared = "misdeclared"        # anchor missing, no case, or a case that never ran
+    broken_runner = "broken_runner"    # syntax, import, collection, crash or timeout
+    misdeclared = "misdeclared"        # anchor count wrong, no case, or a case that never ran
 
 
 @dataclass(frozen=True)
 class Result:
     outcome: Outcome
-    detail: str
+    detail: str = ""
 
     @property
     def killed(self) -> bool:
@@ -1365,15 +1471,78 @@ class Result:
         return self.killed
 
 
+#: How an honest kill dies. A rewritten assert reports as the bare expression
+#: (`path:12: assert 3 == 4`) rather than as `AssertionError`, so both spellings are the
+#: same outcome; `Failed` is `pytest.raises` reporting DID NOT RAISE.
+ASSERTION_DEATHS = frozenset({"AssertionError", "Failed"})
+
+
+def _domain_deaths() -> frozenset[str]:
+    """Every `DomainError` subclass name, read from the contract rather than listed.
+
+    r1 round 3 fixed the rule this enforces: a port is a trust boundary, so a kill that
+    depends on an **untyped** exception is a case a real adapter could fail for the wrong
+    reason - but the typed refusal the contract *promises* is a different thing. A case
+    that says "this call is `not_found`" and gets `NotFound` out of a mutated store has
+    observed exactly the invariant it claims, so the whole typed hierarchy is an honest
+    death. `TypeError`, `NameError`, `KeyError`, `AttributeError`, `ValidationError`,
+    `RecursionError` and the rest are not, and must be declared per mutant in `dies_by`.
+    """
+    from infrx.contracts import errors
+
+    found, pending = set(), [errors.DomainError]
+    while pending:
+        cls = pending.pop()
+        if cls.__name__ in found:
+            continue
+        found.add(cls.__name__)
+        pending.extend(cls.__subclasses__())
+    return frozenset(found)
+
+
+DOMAIN_DEATHS = _domain_deaths()
+#: Anything that is not one of these has to be declared by the mutant that dies by it.
+HONEST_DEATHS = ASSERTION_DEATHS | DOMAIN_DEATHS
+# Generous for a handful of cases with no sleeps in them: this exists so a mutant that
+# makes a case hang cannot hang the suite, not as a performance budget.
+NESTED_TIMEOUT_S = 300
 # pytest exit codes: 0 all passed, 1 tests failed, 2 interrupted, 3 internal error,
 # 4 usage error, 5 no tests collected. Only 1 can mean "the case noticed".
-PYTEST_TESTS_FAILED = 1
-PYTEST_ALL_PASSED = 0
+PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED = 0, 1
 _FAILED_LINE = re.compile(r"^(?:FAILED|ERROR) ([^\s:]+(?:::[^\s]+)?)")
+# `--tb=line` prints one `path:lineno: <message>` line per failure.
+_DEATH = re.compile(r"^(?P<where>\S*?):\d+: (?P<message>.+)$")
+_CLASS = re.compile(r"^(?P<cls>[A-Za-z_][A-Za-z0-9_.]*)(?::|$)")
+_RAN = re.compile(r"(\d+) (?:passed|failed|skipped)")
+
+
+@dataclass(frozen=True)
+class Runner:
+    """One track's target for the shared runner.
+
+    `targets` are pytest paths; `targets_for` narrows them per mutant (track G collects
+    only the files defining the named cases, because collecting its whole suite imports
+    FastAPI once per mutant). `require_every_case` is track Q's stricter rule: a mutant
+    may not claim coverage from a case that cannot see it.
+    """
+
+    name: str
+    targets: tuple[str, ...] = ()
+    extra_args: tuple[str, ...] = ()
+    package: str = PACKAGE
+    timeout_s: float = NESTED_TIMEOUT_S
+    require_every_case: bool = False
+    targets_for: "Callable[[tuple[str, ...]], Sequence[str]] | None" = None
+
+    def select(self, cases: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(self.targets_for(cases)) if self.targets_for else self.targets
+
+
+CONTRACTS = None          # set below, once `Runner` exists (the module's own target)
 
 
 def _failing_ids(stdout: str) -> tuple[list[str], list[str]]:
-    """(failed test ids, errored test ids) from a `-q -rA`-style summary."""
+    """(failed test ids, errored test ids) from a `-rf`-style summary."""
     failed, errored = [], []
     for line in stdout.splitlines():
         match = _FAILED_LINE.match(line.strip())
@@ -1382,92 +1551,245 @@ def _failing_ids(stdout: str) -> tuple[list[str], list[str]]:
     return failed, errored
 
 
-def run_mutant(mutant: Mutant) -> Result:
-    """Apply one mutant to a throwaway copy of the package and run its cases.
+def _death_kinds(stdout: str) -> list[tuple[str, str]]:
+    """Every failure as `(where it was raised, how it died)`.
 
-    A kill requires all three of:
-
-    * pytest exited 1 (tests failed) - not 2-5, which mean the *runner* broke, and not
-      0, which means the defect went unnoticed;
-    * at least one test failed;
-    * every failing test id names one of the mutant's own cases.
-
-    That last condition is what stops a syntax error, an import-time `NameError` or a
-    collection error from counting as a kill: those fail tests the mutant never named
-    (or fail before any test exists), and they are reported as `broken_runner`, which
-    fails the run just as a survivor does. The worktree is never written to.
+    `--tb=line` prints one `path:lineno: <message>` line per failure, so both halves are
+    there. Only the FAILURES section is read: `path:lineno: Something: text` is also the
+    shape of pytest's *warnings* summary, and scanning the whole output reported every
+    `DeprecationWarning` a suite emits as a death (measured on track G: 17 lethal mutants
+    turned into `broken_runner`). The class name is reduced to its last dotted component,
+    so a declaration names a class (`RuntimeMisconfigured`), not an import path that moves
+    when the module does.
     """
+    deaths: list[tuple[str, str]] = []
+    inside = False
+    for line in stdout.splitlines():
+        if line.startswith("=") and "FAILURES" in line:
+            inside = True
+            continue
+        if line.startswith("=") and "FAILURES" not in line:
+            inside = False
+        if not inside:
+            continue
+        line = line.strip()
+        if line.startswith(("FAILED", "ERROR", "E ")):
+            continue
+        match = _DEATH.match(line)
+        if not match:
+            continue
+        where, message = match.group("where"), match.group("message")
+        if message.startswith("assert"):
+            deaths.append((where, "AssertionError"))
+            continue
+        named = _CLASS.match(message)
+        deaths.append((where, named.group("cls").rsplit(".", 1)[-1] if named else "unknown"))
+    return deaths
+
+
+def _undeclared(deaths: list[tuple[str, str]], allowed: set[str]) -> list[str]:
+    """The deaths that are not evidence, as `class@file`.
+
+    Two kinds of death are evidence: an assertion (including pytest's `Failed` for a
+    `raises` block that did not raise), and the typed answer the contract promises - any
+    `DomainError` subclass. Everything else is a case that **crashed** rather than
+    asserted; it may well have noticed the defect, but "noticed something" is not the
+    invariant it claims, so the mutant has to say so: `dies_by=("KeyError",)` names the
+    kill mode and makes it reviewable. This is track J's round-3 review rule, applied to
+    every list (`a test that crashed is not a test that noticed`); the file is reported
+    with the class so a reader can see *where* it crashed without opening the log.
+    """
+    return [f"{kind}@{where.rsplit('/', 1)[-1]}" for where, kind in deaths
+            if kind not in allowed]
+
+
+def case_of(test_id: str, cases: tuple[str, ...]) -> str | None:
+    """Which of `cases` this node id names, or None.
+
+    Two spellings, because both are how a track names a case: the test **function**
+    (`tests/w/test_engine.py::test_api_stream__x`) and a **parametrization id** (the
+    exported conformance cases run as `test_suite[jobs-dur_admit__x]`). Substring
+    matching was the old rule in four copies and it let `test_a` claim `test_ab`'s
+    failure; both spellings here are exact.
+    """
+    # The parametrization is stripped BEFORE the `::` split, because a parameter may
+    # contain one: `test_no_internal_address_form_is_reachable[2001:20::1]` splits to
+    # `1]` the other way round, and the case then reads as a stray failure.
+    head, _, params = test_id.partition("[")
+    function = head.rsplit("::", 1)[-1]
+    parts = params.rstrip("]").split("-") if params else []
+    for case in cases:
+        if function == case or case in parts:
+            return case
+    return None
+
+
+def _prepare(root: pathlib.Path, mutant: "Mutant", runner: Runner) -> Result | None:
+    """Copy the tree, apply the one edit, and refuse an edit that cannot be evidence."""
+    junk = shutil.ignore_patterns("__pycache__")
+    shutil.copytree(API_DIR / runner.package, root / runner.package, ignore=junk)
+    shutil.copytree(API_DIR / "tests", root / "tests", ignore=junk)
+    # The committed pytest configuration travels with the copy (R48: importlib import
+    # mode, `pythonpath=["."]`), or the copy collects under different import rules than
+    # the suite was written for.
+    shutil.copy2(API_DIR / "pyproject.toml", root / "pyproject.toml")
+    target = root / runner.package / mutant.file
+    source = target.read_text()
+    found = source.count(mutant.old)
+    if found != mutant.occurrences:
+        # Zero: the list no longer matches the code. Two: the edit would land on
+        # whichever line came first, which is not the declared defect.
+        return Result(Outcome.misdeclared,
+                      f"anchor appears {found} times in {mutant.file}, expected "
+                      f"{mutant.occurrences}: {mutant.old[:60]!r}")
+    mutated = source.replace(mutant.old, mutant.new, mutant.occurrences)
+    try:
+        compile(mutated, str(target), "exec")
+    except SyntaxError as broken:
+        # Decided here rather than read out of a pytest exit code: a copy that does not
+        # compile proves nothing, whatever the suite then says about it.
+        return Result(Outcome.broken_runner,
+                      f"the mutated {mutant.file} does not compile: {broken.msg} "
+                      f"(line {broken.lineno})")
+    target.write_text(mutated)
+    return None
+
+
+def run_mutant(mutant: "Mutant", runner: Runner | None = None) -> Result:
+    """Apply one mutant to a throwaway copy of the tree and run the cases it names.
+
+    Every subprocess gets its **own** bytecode cache and temporary directory inside that
+    copy (`PYTHONPYCACHEPREFIX`, `TMPDIR`), so two mutants running in parallel - or a
+    mutant whose case writes a temporary file - cannot share state with each other or
+    with the worktree. Nothing is ever written inside the worktree.
+    """
+    runner = runner or CONTRACTS
     if not mutant.cases:
         return Result(Outcome.misdeclared, "declares no case")
-    with tempfile.TemporaryDirectory(prefix=f"mutant-{mutant.name}-") as tmp:
+    targets = runner.select(mutant.cases)
+    if not targets:
+        return Result(Outcome.misdeclared,
+                      f"no target defines any of {list(mutant.cases)}")
+    with tempfile.TemporaryDirectory(prefix=f"{runner.name}-mutant-{mutant.name}-") as tmp:
         root = pathlib.Path(tmp)
-        shutil.copytree(API_DIR / PACKAGE, root / PACKAGE,
-                        ignore=shutil.ignore_patterns("__pycache__"))
-        shutil.copytree(API_DIR / "tests", root / "tests",
-                        ignore=shutil.ignore_patterns("__pycache__"))
-        target = root / mutant.path
-        source = target.read_text()
-        if mutant.old not in source:
-            return Result(Outcome.misdeclared,
-                          f"anchor not found in {mutant.file}: {mutant.old[:60]!r}")
-        target.write_text(source.replace(mutant.old, mutant.new, 1))
+        refused = _prepare(root, mutant, runner)
+        if refused is not None:
+            return refused
+        cache, temp = root / ".pycache", root / ".tmp"
+        cache.mkdir()
+        temp.mkdir()
         selection = " or ".join(mutant.cases)
-        done = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-             "-rf", "--tb=no", "tests/contracts/test_conformance.py", "-k", selection],
-            cwd=root, capture_output=True, text=True,
-            env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
+        try:
+            done = subprocess.run(
+                [sys.executable, "-m", "pytest", "-q", "--no-header",
+                 "-p", "no:cacheprovider", "-rf", "--tb=line",
+                 *runner.extra_args, *targets, "-k", selection],
+                cwd=root, capture_output=True, text=True, timeout=runner.timeout_s,
+                env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin",
+                     "PYTHONPYCACHEPREFIX": str(cache), "TMPDIR": str(temp)})
+        except subprocess.TimeoutExpired:
+            # A defect that makes a case hang is real, but a hang is not the proof the
+            # contract asks for, and a runner that waits for ever proves nothing at all.
+            return Result(Outcome.broken_runner,
+                          f"the named cases did not finish within {runner.timeout_s}s")
         stdout = done.stdout or ""
         lines = (stdout or done.stderr).strip().splitlines()
         summary = lines[-1] if lines else "no output"
         if done.returncode not in (PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED):
             # 2-5: interrupted, internal error, usage error, nothing collected. The
             # mutant may well be lethal, but this run did not prove it.
-            return Result(Outcome.broken_runner,
-                          f"pytest exit {done.returncode}: {summary}")
-        ran = re.search(r"(\d+) (?:passed|failed|skipped)", summary)
-        if not ran or "no tests ran" in summary:
+            return Result(Outcome.broken_runner, f"pytest exit {done.returncode}: {summary}")
+        if not _RAN.search(summary) or "no tests ran" in summary:
             return Result(Outcome.misdeclared, f"no case matched {selection!r}: {summary}")
         failed, errored = _failing_ids(stdout)
         if errored:
             return Result(Outcome.broken_runner, f"errors outside the named cases: {errored[:3]}")
         if done.returncode == PYTEST_ALL_PASSED or not failed:
+            if "skipped" in summary and not failed:
+                return Result(Outcome.misdeclared, f"its cases were skipped: {summary}")
             return Result(Outcome.survived, summary)
-        stray = [test_id for test_id in failed
-                 if not any(f"-{case}]" in test_id or test_id.endswith(case)
-                            for case in mutant.cases)]
+        noticed = {case_of(test_id, mutant.cases) for test_id in failed}
+        stray = [test_id for test_id in failed if case_of(test_id, mutant.cases) is None]
         if stray:
-            # Something the mutant did not name broke: a syntax error, an import-time
-            # failure, or a defect with wider reach than the declaration claims.
+            # Something the mutant did not name broke: an import-time failure, or a
+            # defect with wider reach than the declaration claims.
             return Result(Outcome.broken_runner,
                           f"failures outside the named cases: {stray[:3]}")
-        if "skipped" in summary and not failed:
-            return Result(Outcome.misdeclared, f"its cases were skipped: {summary}")
+        crashed = sorted(set(_undeclared(_death_kinds(stdout),
+                                         HONEST_DEATHS | set(mutant.dies_by))))
+        if crashed:
+            # The mutated code blew up rather than answering. The case may well have
+            # noticed the defect, but a crash inside the package is not a proof: declare
+            # the exception in `dies_by` if the invariant really is "this never raises".
+            return Result(Outcome.broken_runner,
+                          f"undeclared exception deaths {crashed}: {summary}")
+        if runner.require_every_case:
+            unproven = [case for case in mutant.cases if case not in noticed]
+            if unproven:
+                return Result(Outcome.misdeclared,
+                              f"named cases that did not notice: {unproven}")
         return Result(Outcome.killed, summary)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="run the contracts-v1 mutation list")
+# The exported cases, plus the record/config tests a record-level invariant is proved by
+# (F2R items 5 and 7: a validator on `records` or `config` has no port case to die in).
+CONTRACTS = Runner(name="contracts", targets=("tests/contracts/test_conformance.py",
+                                              "tests/contracts/test_fixtures.py",
+                                              "tests/contracts/test_money.py",
+                                              "tests/contracts/test_config_and_imports.py"))
+
+
+def main(mutants: "tuple[Mutant, ...]" = (), runner: Runner | None = None,
+         description: str = "run the contracts-v1 mutation list") -> int:
+    """The `python -m tests.<track>.mutants` entry point, shared by every list."""
+    mutants = mutants or MUTANTS
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("names", nargs="*", help="mutants to run (default: all)")
     parser.add_argument("--list", action="store_true", help="print the list and exit")
     args = parser.parse_args()
     if args.list:
-        for mutant in MUTANTS:
-            print(f"{mutant.name:42s} {mutant.invariant}")
-        print(f"\n{len(MUTANTS)} mutants over "
-              f"{len({case for m in MUTANTS for case in m.cases})} named cases")
+        for mutant in mutants:
+            print(f"{mutant.name:52s} {mutant.invariant}")
+        print(f"\n{len(mutants)} mutants over "
+              f"{len({case for m in mutants for case in m.cases})} named cases")
         return 0
-    chosen = [m for m in MUTANTS if not args.names or m.name in args.names]
+    chosen = [m for m in mutants if not args.names or m.name in args.names]
     bad: dict[str, list[str]] = {}
     for mutant in chosen:
-        result = run_mutant(mutant)
-        print(f"[{result.outcome:13s}] {mutant.name}: {result.detail}")
+        result = run_mutant(mutant, runner)
+        print(f"[{result.outcome:13s}] {mutant.name}: {result.detail}", flush=True)
         if not result.killed:
             bad.setdefault(result.outcome.value, []).append(mutant.name)
     failures = sum(len(names) for names in bad.values())
     print(f"\n{len(chosen) - failures}/{len(chosen)} killed"
           + "".join(f"; {outcome}: {names}" for outcome, names in sorted(bad.items())))
     return 1 if bad else 0
+
+
+def assertion_kill(check, *args, dies_by: tuple[type[BaseException], ...] = ()) -> Result:
+    """The same kill rule for a check that runs **in process** instead of as a pytest
+    subprocess: only an `AssertionError` (or a declared exception class) is a kill.
+
+    Track D's migration list builds a database from mutated SQL and calls one of its
+    checks; it cannot use the pytest runner above, but the rule that decides what its
+    result means is the same one, so it lives here rather than in a second copy. A check
+    that raises anything else blew up instead of asserting, which is a broken check and
+    must be visible as such - `Outcome.broken_runner`, exactly as a crashed pytest case is.
+    """
+    try:
+        check(*args)
+    except AssertionError as failure:
+        return Result(Outcome.killed, _first_line(failure))
+    except dies_by as declared:                          # type: ignore[misc]
+        return Result(Outcome.killed, _first_line(declared))
+    except BaseException as wrong_class:                 # noqa: BLE001
+        return Result(Outcome.broken_runner,
+                      f"the check raised instead of asserting: {_first_line(wrong_class)}")
+    return Result(Outcome.survived, "")
+
+
+def _first_line(error: BaseException) -> str:
+    return f"{type(error).__name__}: {str(error).strip().splitlines()[0][:160]}"
 
 
 if __name__ == "__main__":

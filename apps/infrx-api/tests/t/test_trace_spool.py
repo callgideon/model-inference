@@ -35,12 +35,12 @@ from infrx.contracts.conformance import (Harness, MissingHook, OPTIONAL_HOOKS, r
                                          run_tracesink_sequence_properties)
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.conformance.services import tracesink_cases
-from infrx.contracts.fakes.support import FailurePlan, FakeClock, SequentialIds
+from infrx.contracts.fakes.support import FailurePlan, FakeClock, SequentialIds, failure_hooks
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import (TraceEnvelope, TraceLossReason, TraceMode,
                                      TraceOfferResult)
 from infrx.traces.spool import (FRAME, HEADER, MAX_ENVELOPE_BYTES, SEGMENT_MAGIC,
-                                SEGMENT_VERSION, SpoolIO,
+                                SEGMENT_VERSION, SpoolCapture, SpoolIO,
                                 SpoolTraceSink, frame_checksum, recover, scan_segment,
                                 segment_header)
 
@@ -135,11 +135,70 @@ class DrillIO(SpoolIO):
         return super().open_append(path)
 
 
+class DrillSpool(SpoolTraceSink):
+    """Test-only (F2R item 3): the production sink plus the harness hooks it must not carry -
+    `FailurePlan` injection before `open`/`offer`/`flush`, and the crash drill."""
+
+    def __init__(self, *args, failures: FailurePlan | None = None, **kw) -> None:
+        super().__init__(*args, **kw)
+        self.failures = failure_hooks(failures)
+
+    def open(self, request_id, org_id, mode, deadline_at=None):
+        self.failures.before("open")
+        return super().open(request_id, org_id, mode, deadline_at)
+
+    async def offer(self, envelope):
+        self.failures.before("offer")
+        return await super().offer(envelope)
+
+    async def flush(self, deadline=None):
+        self.failures.before("flush")
+        return await super().flush(deadline)
+
+    def crash(self) -> int:
+        """Model the host dying: everything not fsynced is gone.
+
+        Unsynced bytes are truncated away rather than left in place, because that is the
+        state a power loss leaves and the state recovery has to cope with. Every segment
+        is sealed afterwards: a restarted process must never append behind a torn tail,
+        since the reader stops there and would lose whatever followed.
+
+        No lock: a crashed process has no writer thread, which is what this models.
+        """
+        lost = self.appended_records - self.fsynced_records
+        for segment in self._segments:
+            self._close_segment(segment)
+            if segment.written > segment.synced:
+                try:
+                    self.io.truncate(segment.path, segment.synced)
+                except OSError:
+                    pass
+                segment.written = segment.synced
+                segment.records = segment.synced_records
+                segment.unsynced_counted = []
+            segment.sealed = True
+        self.spool_bytes = sum(segment.written for segment in self._segments)
+        self.appended_records = self.fsynced_records
+        self.queued.clear()
+        self._pending.clear()
+        for capture in self.captures:
+            capture.closed = True
+            capture.content_bytes = 0
+            if isinstance(capture, SpoolCapture):
+                capture.parts.clear()
+        self.captures.clear()
+        self.content_bytes = self.metadata_bytes = 0
+        self.queued_payload_bytes = 0
+        if lost:
+            self.loss_reasons[TraceLossReason.shutdown] += lost
+        return lost
+
+
 def sink(limits=None, *, io: SpoolIO | None = None, clock: FakeClock | None = None,
          tag: str = "sink", **kw) -> SpoolTraceSink:
-    return SpoolTraceSink(clock or FakeClock(), limits=limits or DEFAULTS,
-                          failures=FailurePlan(), spool_dir=_dir(tag),
-                          io=io if io is not None else DrillIO(), **kw)
+    return DrillSpool(clock or FakeClock(), limits=limits or DEFAULTS,
+                      failures=FailurePlan(), spool_dir=_dir(tag),
+                      io=io if io is not None else DrillIO(), **kw)
 
 
 # The suites build a fresh sink per case and the lattice one per sequence - a quarter of a
@@ -241,6 +300,22 @@ def test_a_sink_without_a_clock_refuses_to_exist():
         assert "clock" in str(error)
     else:
         raise AssertionError("a sink was built with no clock")
+
+
+def test_the_production_sink_carries_no_test_hook():
+    """F2R item 3: the spool subclasses the neutral accounting, not the fake. Failure
+    injection and the crash drill are `DrillSpool`'s, here in the tests, and the module
+    imports nothing from `contracts.fakes`."""
+    import infrx.traces.spool as spool_module
+    from infrx.contracts.traces_accounting import TraceSinkBase
+    assert SpoolTraceSink.__mro__[1] is TraceSinkBase
+    for hook in ("crash", "failures"):
+        assert not hasattr(SpoolTraceSink, hook), hook
+    real = SpoolTraceSink(FakeClock(), limits=DEFAULTS, spool_dir=_dir("hookless"),
+                          io=DrillIO())
+    assert not hasattr(real, "failures")
+    assert "fakes" not in Path(spool_module.__file__).read_text().split('"""', 2)[2]
+    asyncio.run(real.close())
 
 
 def test_a_sink_without_a_spool_directory_refuses_to_exist():
@@ -1216,19 +1291,20 @@ def test_a_cancelling_flusher_cannot_take_a_second_batch():
 
 
 def test_the_queue_is_bounded_in_bytes_as_well_as_in_rows():
-    """Ruling 5 (interim). The metadata reserve charges what the *caller declared*, because
-    the frozen conformance case requires that number, and a caller can declare zero for a
-    20 KB envelope. The row ceiling then lets 10,000 of them into memory: the reviewer
-    measured 435 MiB resident for records that claimed to cost nothing.
+    """Ruling 5, settled by F2R item 3 (R65). A caller can declare zero metadata bytes for a
+    20 KB envelope; charged the declared number, the row ceiling let 10,000 of them into
+    memory (the reviewer measured 435 MiB resident for records that claimed to cost nothing).
 
-    So the queue also has a byte bound on the serialized payloads it is really holding, over
-    which a record is `queue_full` - the same refusal the row ceiling makes. The oracle is
-    the byte counter, not resident memory.
+    The metadata reserve is now charged `max(declared, len(serialized row))`, so the same
+    scenario stops at the reserve with `metadata_budget`, and T1's interim 32 MiB
+    `QUEUED_PAYLOAD_MAX_BYTES` is gone. The oracle is the byte counters, queued plus in
+    flight, not resident memory.
     """
     async def scenario():
         block, entered = threading.Event(), threading.Event()
         spool = sink(io=DrillIO(block=block, entered=entered))
-        cap = traces.spool.QUEUED_PAYLOAD_MAX_BYTES
+        cap = DEFAULTS.trace_metadata_reserve_bytes
+        assert not hasattr(traces.spool, "QUEUED_PAYLOAD_MAX_BYTES")
         # 20 KB of envelope declared as costing nothing at all
         big = "m" * 20_000
         accepted = 0
@@ -1241,13 +1317,13 @@ def test_the_queue_is_bounded_in_bytes_as_well_as_in_rows():
                 asyncio.create_task(spool.flush(spool.clock.now()))
                 await asyncio.to_thread(entered.wait, 5)
         stats = await spool.stats()
-        assert stats["queued_payload_bytes"] <= cap, stats["queued_payload_bytes"]
+        # queued plus in flight: every serialized byte is charged to the reserve
+        assert stats["queued_payload_bytes"] <= stats["in_memory_metadata_bytes"] <= cap, stats
         assert stats["in_memory"] < DEFAULTS.trace_queue_max, \
             "the row ceiling was reached before the byte ceiling"
-        assert stats["loss_reasons"]["queue_full"] == 4_000 - accepted
-        assert stats["loss_reasons"].get("metadata_budget") is None
-        # in flight plus queued, never more than two capfuls
-        assert accepted * 20_000 <= 2 * cap + 20_000
+        assert stats["loss_reasons"]["metadata_budget"] == 4_000 - accepted
+        assert stats["loss_reasons"].get("queue_full") is None
+        assert accepted * 20_000 <= cap
         block.set()
         await spool.drain()                      # the batch in flight settles
         stats = await spool.flush(spool.clock.now())          # and the queue drains
@@ -1259,7 +1335,7 @@ def test_the_queue_is_bounded_in_bytes_as_well_as_in_rows():
                                          metadata_bytes=0)) \
             is TraceOfferResult.accepted_in_memory
         print(f"\nqueued payload bound: {accepted:,} of 4,000 under-declared 20 KB "
-              f"envelopes accepted against a {cap:,} B cap")
+              f"envelopes accepted against a {cap:,} B metadata reserve")
         await spool.close()
     asyncio.run(scenario())
 
@@ -1431,8 +1507,10 @@ def test_the_metadata_reserve_is_released_as_rows_are_written():
     everything as `metadata_budget` for ever once 8 MiB of rows have passed through - a
     process that spools perfectly and then goes silent."""
     async def scenario():
-        spool = sink(DEFAULTS.replace(trace_metadata_reserve_bytes=128))
-        for index in range(10):                  # 10 x 64 B, against a 128 B reserve
+        # ten rows of ~400 serialized bytes (the charge since F2R item 3) against a reserve
+        # that holds two
+        spool = sink(DEFAULTS.replace(trace_metadata_reserve_bytes=1_024))
+        for index in range(10):
             spool.clock.advance(DEFAULTS.trace_fsync_interval_s + 1)
             assert await spool.offer(b.trace(request_id(index), content_bytes=0,
                                              metadata_bytes=64)) \

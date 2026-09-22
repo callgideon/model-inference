@@ -5,7 +5,7 @@
     "video/quicktime",
     "video/mpeg"
   ],
-  "destination_ref": "infrx-upload:pilot:upl_9Zt4hLmQ2sVbXeR7nKdJ0oPyWcA5uF1gHi8jTlB3vNs",
+  "destination_ref": "infrx-upload:upl_9Zt4hLmQ2sVbXeR7nKdJ0oPyWcA5uF1gHi8jTlB3vNs",
   "expires_at": "2026-09-20T13:00:00Z",
   "max_bytes": 67108864,
   "state": "created",

@@ -2,13 +2,12 @@
 
 Two layers, deliberately:
 
-* **Accounting** (R27/R37/R42) is inherited from `contracts.fakes.traces`, which is the
-  coordinator's *executable specification* of it - 250 lines of loss accounting pinned by
-  an exhaustive sequence lattice and ~20 mutants. Copying it here would fork the spec on
-  the next ruling, so `SpoolTraceSink` subclasses it and overrides only what durability
-  changes (`open`, `_enqueue`, `flush`, `stats`, `crash`). If the coordinator would rather
-  the shared accounting lived under a name without "Fake" in it, that is a contract
-  revision, not something this module should decide.
+* **Accounting** (R27/R37/R42) is inherited from `contracts.traces_accounting`, the one
+  implementation of it that the in-memory fake subclasses too - loss accounting pinned by
+  an exhaustive sequence lattice and ~20 mutants. `SpoolTraceSink` overrides only what
+  durability changes (`open`, `_enqueue`, `flush`, `stats`). No fake and no test hook is
+  imported here: failure injection and the crash drill are a test-only subclass in
+  `tests/t` (F2R item 3).
 * **Durability** is this module: a dedicated writer thread, versioned length-prefixed
   checksummed segments, batched fsync, host disk caps, an ack-based deletion interface for
   the shipper (T2) and a recovery scan that tolerates a torn tail.
@@ -74,7 +73,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..contracts import codec
-from ..contracts.fakes.traces import FakeTraceCapture, FakeTraceSink
+from ..contracts.traces_accounting import TraceCaptureBase, TraceSinkBase
 from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import TraceEnvelope, TraceLossReason, TraceMode, TraceOfferResult
 
@@ -92,23 +91,19 @@ LENGTHS = struct.Struct("!IIQ")
 # A metadata row is a few KiB. A torn tail can claim any length at all, so an envelope
 # length past this is corruption rather than a record we are missing bytes for.
 MAX_ENVELOPE_BYTES = 1 << 20
-# Rotation size. There is no 08 §5 name for it, so it is a local default and a constructor
-# argument; `TRACE_SPOOL_SEGMENT_BYTES` is an integration request. Small enough that a
+# Rotation size: the default of 08 §5.1 `TRACE_SPOOL_SEGMENT_BYTES` (F2R item 7), a
+# constructor argument here; passing the configured value in is G's composition. Small enough that a
 # recovery scan reads one segment at a time without a memory spike.
 SEGMENT_MAX_BYTES = 16 * 1024 * 1024
 # Amortised pruning of the capture list `reap` walks: a process that never pruned it grew
 # by one dead capture per request for ever, which is the leak a bounded sink cannot have.
 CAPTURE_PRUNE_AT = 1_024
-# The serialized envelope bytes this process will hold for records that are queued or with
-# the writer. It exists because the *contract* counter charges the metadata reserve the
-# caller-declared `envelope.metadata_bytes`, which a caller may under-declare (the frozen
-# case `trace_bounds__metadata_exhaustion_drops_with_counters` requires the declared number,
-# and F2.2 will let a real sink charge `max(declared, len(payload))`). Until then this is
-# the honest bound on what the queue can actually cost: 32 MiB is ~80,000 ordinary metadata
-# rows, far past `TRACE_QUEUE_MAX`, while 10,000 under-declared 20 KB envelopes - the
-# reviewer's measurement, 435 MiB resident - stop at 32 MiB. Over the cap is `queue_full`,
-# the same reason the row ceiling uses, because it is the same refusal.
-QUEUED_PAYLOAD_MAX_BYTES = 32 * 1024 * 1024
+# No separate byte cap on the queue (F2R item 3, R65): the metadata reserve is charged
+# `max(declared, len(serialized row))` per record, so the serialized bytes queued and in
+# flight never exceed `TRACE_METADATA_RESERVE_BYTES`. T1's interim 32 MiB
+# `QUEUED_PAYLOAD_MAX_BYTES` bounded the same thing against under-declared envelopes and was
+# retired with it; `test_the_queue_is_bounded_in_bytes_as_well_as_in_rows` replays the
+# reviewer's 20 KB under-declared scenario against the reserve.
 
 
 # --------------------------------------------------------------------------------------
@@ -460,7 +455,7 @@ class _WriteResult:
 # --------------------------------------------------------------------------------------
 # the sink
 # --------------------------------------------------------------------------------------
-class SpoolCapture(FakeTraceCapture):
+class SpoolCapture(TraceCaptureBase):
     """The accounting capture plus the bytes it is accounting for.
 
     The shared accounting charges content as it accumulates but keeps none of it: it is
@@ -503,7 +498,7 @@ class SpoolCapture(FakeTraceCapture):
         return parts, total
 
 
-class SpoolTraceSink(FakeTraceSink):
+class SpoolTraceSink(TraceSinkBase):
     """`ports.TraceSink` over a durable spool.
 
     ponytail: one lock, guarding the segment list and the spool byte total - the only
@@ -512,17 +507,13 @@ class SpoolTraceSink(FakeTraceSink):
     ever needs parallel writers, that is where to start.
     """
 
-    def __init__(self, clock, *, limits: PilotSettings = DEFAULTS, failures=None,
+    def __init__(self, clock, *, limits: PilotSettings = DEFAULTS,
                  spool_dir: Path | str | None = None, io: SpoolIO | None = None,
                  segment_max_bytes: int = SEGMENT_MAX_BYTES,
                  boot_id: str | None = None, lock_dir: bool = True) -> None:
-        if clock is None:
-            # Ruling 7. The shared accounting defaults to a `FakeClock` because a fake needs
-            # one; a durable sink on a clock that never advances never fsyncs and never
-            # reaps, and would report a batch interval that has not elapsed for ever. The
-            # clock is the caller's to supply, and G supplies the real one.
-            raise ValueError("a spool sink needs the clock it reads; None is not one")
-        super().__init__(clock, limits=limits, failures=failures)
+        # Ruling 7: the clock is required, and the shared accounting refuses None - a
+        # durable sink on a clock that never advances never fsyncs and never reaps.
+        super().__init__(clock, limits=limits)
         configured = str(spool_dir if spool_dir is not None else limits.trace_spool_dir).strip()
         if not configured:
             # 08 §5: `TRACE_SPOOL_DIR` unset *disables capture*. A sink with nowhere to
@@ -618,7 +609,6 @@ class SpoolTraceSink(FakeTraceSink):
     def open(self, request_id: str, org_id: str, mode: TraceMode,
              deadline_at: datetime | None = None) -> SpoolCapture:
         """As the accounting specifies (R27/R37), with a capture that keeps its bytes."""
-        self.failures.before("open")
         if len(self.captures) >= self._prune_at:
             # Amortised: a closed capture is dead weight `reap` would walk for ever.
             self.captures = [capture for capture in self.captures if not capture.closed]
@@ -671,13 +661,6 @@ class SpoolTraceSink(FakeTraceSink):
                     # The reader refuses a frame this long, so writing one would spool
                     # bytes nothing can replay. Writer and reader agree or neither works.
                     reason = TraceLossReason.malformed
-                elif (self.queued_payload_bytes + len(payload)
-                      > QUEUED_PAYLOAD_MAX_BYTES):
-                    # What the queue really costs, as opposed to what the caller declared it
-                    # would. The row ceiling counts rows and the metadata reserve counts a
-                    # caller's number; this counts bytes, so an under-declared 20 KB envelope
-                    # cannot buy 10,000 places in a queue sized for metadata.
-                    reason = TraceLossReason.queue_full
         if reason is not None:
             self.content_bytes = max(0, self.content_bytes - charged)
             if capture is not None:
@@ -685,12 +668,14 @@ class SpoolTraceSink(FakeTraceSink):
             return self._drop(reason,
                               counted=capture.counted if capture is not None else False)
         counted = capture.counted if capture is not None else False
-        result = super()._enqueue(envelope, charged=charged, capture=capture)
+        result = super()._enqueue(envelope, charged=charged, capture=capture,
+                                  serialized=len(payload))
         if result is TraceOfferResult.accepted_in_memory:
             self.queued_payload_bytes += len(payload)
             self._pending.append(_Row(payload=payload, parts=parts,
                                       content_bytes=content_bytes,
-                                      metadata_bytes=envelope.metadata_bytes,
+                                      metadata_bytes=self.metadata_charge(
+                                          envelope, len(payload)),
                                       counted=counted))
         return result
 
@@ -704,7 +689,6 @@ class SpoolTraceSink(FakeTraceSink):
         bounds this call is the batch, which `TRACE_QUEUE_MAX` bounds; a hung disk blocks
         the flusher and nothing else, which is why the writer is its own thread.
         """
-        self.failures.before("flush")
         if self._closed:
             return await self.stats()
         if self._in_flight is not None:
@@ -921,44 +905,6 @@ class SpoolTraceSink(FakeTraceSink):
         if self._dir_lock is not None:
             self.io.unlock_dir(self._dir_lock)
             self._dir_lock = None
-        return lost
-
-    def crash(self) -> int:
-        """Model the host dying: everything not fsynced is gone.
-
-        Unsynced bytes are truncated away rather than left in place, because that is the
-        state a power loss leaves and the state recovery has to cope with. Every segment
-        is sealed afterwards: a restarted process must never append behind a torn tail,
-        since the reader stops there and would lose whatever followed.
-
-        No lock: a crashed process has no writer thread, which is what this models.
-        """
-        lost = self.appended_records - self.fsynced_records
-        for segment in self._segments:
-            self._close_segment(segment)
-            if segment.written > segment.synced:
-                try:
-                    self.io.truncate(segment.path, segment.synced)
-                except OSError:
-                    pass
-                segment.written = segment.synced
-                segment.records = segment.synced_records
-                segment.unsynced_counted = []
-            segment.sealed = True
-        self.spool_bytes = sum(segment.written for segment in self._segments)
-        self.appended_records = self.fsynced_records
-        self.queued.clear()
-        self._pending.clear()
-        for capture in self.captures:
-            capture.closed = True
-            capture.content_bytes = 0
-            if isinstance(capture, SpoolCapture):
-                capture.parts.clear()
-        self.captures.clear()
-        self.content_bytes = self.metadata_bytes = 0
-        self.queued_payload_bytes = 0
-        if lost:
-            self.loss_reasons[TraceLossReason.shutdown] += lost
         return lost
 
     # --- the writer thread ------------------------------------------------------------

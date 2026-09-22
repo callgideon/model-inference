@@ -24,7 +24,8 @@ Rules that exist because the obvious implementation is wrong:
   entry is neither (R56): the platform typed it, so it is not the customer telling us
   something.
 
-Nothing in this module performs I/O. `CandidateSource` is the injected port.
+Nothing in this module performs I/O. `CandidateSource` is the injected port
+(`contracts.ports`, F2R item 5).
 """
 from __future__ import annotations
 
@@ -32,16 +33,15 @@ import enum
 import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
 
 from ..contracts import errors, ids, limits
-from ..contracts.records import AuthorRole, ConsentSnapshot, ContentState, Feedback, TraceMode
+# F2R item 5: the candidate port and row are shared contracts now; re-exported here so
+# J's callers keep their import path.
+from ..contracts.ports import (FINISH_REASON_LENGTH, NO_OUTPUT_STATUS,  # noqa: F401
+                               CandidateSource, TraceCandidate)
+from ..contracts.records import ConsentSnapshot, ContentState, Feedback, TraceMode
 from .rubric import describe
 
-#: `research/traces/06` §3.1: a truncated answer is the failure stratum's first member.
-FINISH_REASON_LENGTH = "length"
-#: R56: a 5xx produced no answer to grade.
-NO_OUTPUT_STATUS = 500
 #: The range a gateway can actually have produced.
 MIN_HTTP_STATUS, MAX_HTTP_STATUS = 100, 599
 
@@ -114,103 +114,6 @@ class CalibrationDesign:
 
 
 DEFAULT_DESIGN = CalibrationDesign()
-
-
-@dataclass(frozen=True)
-class TraceCandidate:
-    """One candidate trace, as the source reports it: **raw facts only**.
-
-    R56: the sampler derives the strata from `finish_reason`, `http_status` and
-    `schema_valid` rather than trusting a `failure` flag the query computed, so the
-    policy lives in one place and a query change cannot quietly redefine it.
-    `feedback` carries the trace's feedback *rows* rather than two booleans, so the
-    R43 distinction between a customer signal and an operator label is decided from
-    the persisted shape - and only from rows that actually belong to this trace.
-    """
-
-    request_id: str
-    org_id: str
-    trace_mode: TraceMode
-    content_state: ContentState
-    started_at: datetime
-    model_revision: str
-    http_status: int = 200
-    finish_reason: str | None = None
-    schema_valid: bool = True
-    media_available: bool = False
-    feedback: tuple[Feedback, ...] = ()
-
-    @property
-    def own_feedback(self) -> tuple[Feedback, ...]:
-        """R56: a row counts only when its organization **and** request match.
-
-        Without both checks an org-B label attached to an org-A candidate excluded that
-        candidate as already labelled, and an org-B thumb for another request moved an
-        org-A trace into the customer-feedback stratum - a cross-tenant fact deciding a
-        tenant's calibration set.
-        """
-        return tuple(entry for entry in self.feedback
-                     if entry.org_id == self.org_id and entry.request_id == self.request_id)
-
-    @property
-    def calibration_labels(self) -> tuple[Feedback, ...]:
-        """r1 R43: membership is the boolean on a `calibration_label` entry. The record
-        already refuses any disagreement between name, flag and rubric version, so this
-        one field is the whole test - and `by_operator` is *not* it (R56): the platform
-        typing an ordinary comment is not an operator verdict against a rubric."""
-        return tuple(entry for entry in self.own_feedback if entry.calibration_set)
-
-    @property
-    def has_customer_feedback(self) -> bool:
-        """The `feedback` stratum: a *customer* told us something about this answer.
-        A judge's own score is not customer feedback, a label is not, and neither is an
-        ordinary entry the platform made on the customer's behalf (R56/R50)."""
-        return any(entry.author_role is AuthorRole.customer and not entry.calibration_set
-                   and not entry.by_operator for entry in self.own_feedback)
-
-    @property
-    def failed(self) -> bool:
-        """R56 / `06` §3.1: the failure stratum is a truncated answer or an invalid
-        structured output. Derived here, never taken from the source."""
-        return self.finish_reason == FINISH_REASON_LENGTH or self.schema_valid is False
-
-    @property
-    def produced_no_output(self) -> bool:
-        return self.http_status >= NO_OUTPUT_STATUS
-
-    def labelled_against(self, rubric_version: int) -> bool:
-        return any(entry.rubric_version == rubric_version for entry in self.calibration_labels)
-
-
-class CandidateSource(Protocol):
-    """J's read side over T's trace projection plus D's feedback rows. Injected.
-
-    Contract for an adapter (the coordinator may move this and `TraceCandidate` into
-    `contracts/ports.py`, so the shape stays minimal and tenant-scoped):
-
-    * answer a **synchronous iterable** (a tuple, a list, a generator - not an async
-      generator and not a coroutine), of rows for **`org_id` only**, `trace_mode = full`,
-      started at or after `since`, at most `limit` of them;
-    * carry `request_id` in the **frozen lower-case UUIDv4 form** every contract record
-      uses (`ids.is_request_id`): there is exactly one spelling of an id here, and a row
-      carrying any other is excluded as `malformed_row` rather than normalized (R3-B1);
-    * return rows **deduplicated by `request_id` and in a stable order** (`06` §3.1 queries
-      `FINAL` for exactly this reason). The sampler enforces both anyway - it truncates to
-      the bound and deduplicates on the exact id - but only a stable order makes *which*
-      rows fall inside the bound reproducible;
-    * carry the **raw**, **typed** facts and let the sampler derive the strata:
-      `http_status` an `int`, `schema_valid`/`media_available` a `bool`, `started_at` a
-      UTC-aware `datetime` no later than the plan's `now`, `trace_mode`/`content_state`
-      the enums, and `finish_reason` either `None` or the engine's token **exactly as
-      lower-case text** (`"length"`, `"stop"`; the sampler does not fold case, so a
-      differently-spelled value is simply not a truncation). A row that breaks any of
-      this is excluded on its own as `malformed_row` rather than interpreted;
-    * attach only feedback rows belonging to that organization and request.
-    """
-
-    async def candidates(self, org_id: str, *, since: datetime,
-                         limit: int) -> tuple[TraceCandidate, ...]:
-        ...
 
 
 @dataclass(frozen=True)

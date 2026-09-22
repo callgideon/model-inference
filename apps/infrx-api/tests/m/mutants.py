@@ -8,20 +8,20 @@ error, an import error or a defect with wider reach than the declaration is a br
 runner, which fails the suite exactly as a survivor does. Nothing is written inside the
 worktree.
 
-The runner is M's own because the target is different: `tests/m`, not the shared
-conformance suite. `Mutant`, `Outcome` and `Result` are the shared declarations, so a
-verdict here means what it means there.
+The runner is `tests/contracts/mutants.py`'s (F2R item 9); this file supplies the
+target (`tests/m`, not the shared conformance suite) and the list. `Mutant`, `Outcome`
+and `Result` are the shared declarations, so a verdict here means what it means there.
+
+    uv run --frozen pytest -q tests/m/test_mutants.py
+    uv run --frozen python -m tests.m.mutants --list
 """
 from __future__ import annotations
 
 import pathlib
-import re
-import shutil
-import subprocess
 import sys
-import tempfile
 
-from ..contracts.mutants import Mutant, Outcome, Result
+from ..contracts import mutants as shared
+from ..contracts.mutants import Mutant, Outcome, Result, Runner   # noqa: F401
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
 PACKAGE = "infrx"
@@ -44,10 +44,16 @@ _B1_FIXED = '        listed = await store.objects.keys(UPLOAD_KEY_PREFIX)\n     
 _B1_STALE = '        open_destinations = set()\n        for handle, upload in list(store.uploads.items()):\n            if upload.state is UploadState.created and now >= upload.expires_at:\n                upload.state = UploadState.expired\n                swept.uploads_expired += 1\n            if upload.state is UploadState.created:\n                open_destinations.add(store.upload_key(upload.org_id, handle))\n            elif upload.state is not UploadState.finalized and now >= upload.expires_at + self.grace:\n                del store.uploads[handle]      # a refused record is not kept forever\n        for key in await store.objects.keys(UPLOAD_KEY_PREFIX):\n'
 
 
-def _m(name, invariant, file, old, new, *cases) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases)
+def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
+                  dies_by=tuple(dies_by), occurrences=occurrences)
 
 
+# Five mutants declare a kill mode (F2R item 9): two let a forged organization reach the
+# record constructor (`ValidationError` is the refusal, one layer late), two are timeouts
+# that must be impossible (the real-clock backstop, the transport translation), and one
+# reads a stored payload the mutant never stored. An exception from the mutant text is
+# still a broken copy, which the self-tests below prove.
 MUTANTS: tuple[Mutant, ...] = (
     # --- the address policy ---------------------------------------------------
     # Review B1 (r2 correction): every check in `address_allowed` is load bearing, and the
@@ -163,7 +169,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("hop_deadline_not_checked",
        "the budget is checked at the start of every hop, before resolving or connecting",
        F, "                if remaining <= 0:\n                    raise refused(\"timeout\", host=host)",
-       "                pass", "test_a_slow_redirect_chain_stops_at_the_aggregate_deadline"),
+       "                pass", "test_a_slow_redirect_chain_stops_at_the_aggregate_deadline", occurrences=2),
     _m("request_budget_is_the_whole_budget",
        "each request carries what is left of the aggregate budget, not all of it",
        F, "        connect = min(self.limits.media_fetch_connect_timeout_s, remaining)\n"
@@ -181,7 +187,7 @@ MUTANTS: tuple[Mutant, ...] = (
        F, "            async with asyncio.timeout(self.limits.media_fetch_timeout_s + BACKSTOP_GRACE_S):\n"
           "                return await self._fetch(url)",
        "            return await self._fetch(url)",
-       "test_a_body_that_stalls_for_ever_is_bounded_by_the_backstop"),
+       "test_a_body_that_stalls_for_ever_is_bounded_by_the_backstop", dies_by=("TimeoutError",)),
     _m("asks_for_compression", "the request asks for no content coding",
        F, "\"Accept-Encoding\": \"identity\"", "\"Accept-Encoding\": \"gzip, br\"",
        "test_a_compressed_body_is_refused_outright"),
@@ -272,7 +278,7 @@ MUTANTS: tuple[Mutant, ...] = (
           "            self.log.warning(\"media fetch refused: reason=%s\", \"timeout\")\n"
           "            raise refused(\"timeout\") from None",
        "        except (TimeoutError, httpx.TimeoutException):\n            raise",
-       "test_a_transport_timeout_is_a_timeout_refusal"),
+       "test_a_transport_timeout_is_a_timeout_refusal", dies_by=("ReadTimeout",)),
 
     # --- data: URLs -----------------------------------------------------------
     _m("base64_not_validated", "strict base64: no whitespace or stray characters",
@@ -296,8 +302,11 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "            raise errors.Forbidden(\"a request may only be staged for its own org\")",
        "            pass", "test_a_request_may_only_be_staged_for_its_own_org"),
     _m("stage_accepts_a_foreign_reference", "a body cannot name another tenant's object",
-       S, "                raise errors.NotFound(\"media reference does not belong to this org\")",
-       "                pass", "test_a_foreign_or_oversize_reference_is_not_staged"),
+       S, "            existing = self.refs.get((org_id, ref.handle))",
+       "            existing = next((value for (_o, handle), value in self.refs.items()\n"
+       "                             if handle == ref.handle), None)",
+       "test_a_foreign_or_oversize_reference_is_not_staged",
+       "test_stage_takes_only_refs_this_store_materialized"),
     _m("stage_ignores_the_byte_cap", "a source over MAX_MEDIA_BYTES is refused",
        S, "            if ref.bytes > self.limits.max_media_bytes:", "            if False:",
        "test_a_foreign_or_oversize_reference_is_not_staged"),
@@ -308,7 +317,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_an_upload_reference_is_resolved_not_trusted"),
     _m("stage_returns_the_callers_ref",
        "an owned object is staged as the store has it, not as the request describes it",
-       S, "                resolved.append(existing)", "                resolved.append(ref)",
+       S, "            resolved.append(existing)\n", "            resolved.append(ref)\n",
        "test_a_known_handle_is_staged_as_the_object_the_store_has"),
     _m("materialize_indexes_before_the_write",
        "no ref is indexed without an object behind it",
@@ -323,34 +332,20 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("digest_taken_from_the_fetcher", "the stored object's digest is measured here",
        S, "        digest = digest_of(fetched.data)", "        digest = fetched.digest",
        "test_the_digest_is_measured_not_taken_from_the_fetcher"),
-    _m("stage_replaces_an_existing_object", "a staged handle keeps the content it has",
-       S, "                    raise errors.Conflict(\n"
-          "                        f\"media handle {ref.handle} already holds different content\")",
-       "                    existing = ref", "test_a_staged_handle_keeps_the_content_it_has"),
-    _m("stage_takes_the_last_of_two_handles", "one handle cannot carry two objects",
-       S, "                raise errors.InvalidRequest(\n"
-          "                    f\"media handle {ref.handle} appears twice with different content\")",
-       "                pass", "test_one_handle_cannot_carry_two_different_objects_in_one_request"),
-    _m("stage_indexes_as_it_goes", "staging is all or nothing",
-       S, "            pending[(org_id, staged.handle)] = staged",
-       "            pending[(org_id, staged.handle)] = staged\n"
-       "            self.refs[(org_id, staged.handle)] = staged",
-       "test_a_refused_request_stages_nothing_at_all"),
+    # F2R item 4: `stage` no longer indexes a caller's ref, so the three mutants of the
+    # code that did (replace-on-conflict, last-of-two-handles, index-as-it-goes) went with
+    # it; this is the one rule left, and it is the one they were approximating.
+    _m("stage_takes_a_ref_it_never_made", "only a ref this store materialized is staged",
+       S, "            if existing is None or existing.digest != ref.digest:",
+       "            if False:",
+       "test_stage_takes_only_refs_this_store_materialized"),
     _m("payload_key_from_the_request", "the caller never names the payload's path",
        S, "        key = f\"payloads/{valid_org(org_id)}/{request.request_id}.json\"",
        "        key = request.payload_ref",
        "test_staging_makes_the_canonical_payload_durable_with_a_digest_and_a_size"),
-    _m("index_before_the_payload",
-       "nothing is indexed until the durable payload write has succeeded",
-       S, "        await self._write_once(key, payload, \"application/json\")\n"
-          "        # One visible step: nothing above wrote to `self.refs`.\n"
-          "        self.refs.update(pending)",
-       "        self.refs.update(pending)\n"
-       "        await self._write_once(key, payload, \"application/json\")",
-       "test_a_fault_at_the_payload_write_stages_nothing_and_the_retry_completes_it"),
     _m("payload_not_stored", "the canonical payload is durable before acceptance",
        S, "        await self._write_once(key, payload, \"application/json\")", "        pass",
-       "test_staging_makes_the_canonical_payload_durable_with_a_digest_and_a_size"),
+       "test_staging_makes_the_canonical_payload_durable_with_a_digest_and_a_size", dies_by=("KeyError",)),
     _m("payload_size_from_the_reference", "the durable payload's digest and size are measured",
        S, "        self.payloads[request.request_id] = StagedPayload(ref=key, digest=digest_of(payload),\n"
           "                                                          bytes=len(payload))",
@@ -391,12 +386,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_a_digest_cannot_carry_a_path_into_a_key"),
     _m("org_unvalidated", "the tenant every key is namespaced by is validated first",
        S, "    if not isinstance(org_id, str) or not UUID_RE.fullmatch(org_id):",
-       "    if False:", "test_a_malformed_tenant_is_refused_before_anything_is_fetched"),
+       "    if False:", "test_a_malformed_tenant_is_refused_before_anything_is_fetched", dies_by=("ValidationError",)),
     _m("org_matched_as_a_prefix",
        "the tenant is the whole string, not a UUID with something after it (B-R2-1.5)",
        S, "    if not isinstance(org_id, str) or not UUID_RE.fullmatch(org_id):",
        "    if not isinstance(org_id, str) or not UUID_RE.match(org_id):",
-       "test_a_malformed_tenant_is_refused_before_anything_is_fetched"),
+       "test_a_malformed_tenant_is_refused_before_anything_is_fetched", dies_by=("ValidationError",)),
     _m("any_source_materialized", "a media source is an http(s) or data: URL",
        S, "            raise errors.InvalidRequest(\"a media source must be an http(s) or data: URL\")",
        "            fetched, kind = await self.fetcher.fetch(source), MediaKind.url",
@@ -1085,58 +1080,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_an_oversize_object_is_refused_without_being_downloaded"),
 )
 
-# pytest exit codes: 0 all passed, 1 tests failed; 2-5 mean the runner broke.
-PYTEST_TESTS_FAILED = 1
-PYTEST_ALL_PASSED = 0
-_FAILED_LINE = re.compile(r"^(?:FAILED|ERROR) ([^\s:]+(?:::[^\s]+)?)")
-
-
-def _failing_ids(stdout: str) -> tuple[list[str], list[str]]:
-    failed, errored = [], []
-    for line in stdout.splitlines():
-        match = _FAILED_LINE.match(line.strip())
-        if match:
-            (errored if line.strip().startswith("ERROR") else failed).append(match.group(1))
-    return failed, errored
+#: F2R item 9: the shared runner, aimed at `tests/m`.
+RUNNER = Runner(name="m1", targets=SUITE)
 
 
 def run_mutant(mutant: Mutant) -> Result:
     """Apply one mutant to a throwaway copy and run the tests it names."""
-    if not mutant.cases:
-        return Result(Outcome.misdeclared, "declares no case")
-    with tempfile.TemporaryDirectory(prefix=f"m1-mutant-{mutant.name}-") as tmp:
-        root = pathlib.Path(tmp)
-        for tree in (PACKAGE, "tests"):
-            shutil.copytree(API_DIR / tree, root / tree,
-                            ignore=shutil.ignore_patterns("__pycache__"))
-        # the pinned pytest configuration travels too, or the copy collects under
-        # different import rules than the suite was written for
-        shutil.copy(API_DIR / "pyproject.toml", root / "pyproject.toml")
-        target = root / PACKAGE / mutant.file
-        source = target.read_text()
-        if mutant.old not in source:
-            return Result(Outcome.misdeclared,
-                          f"anchor not found in {mutant.file}: {mutant.old[:60]!r}")
-        target.write_text(source.replace(mutant.old, mutant.new, 1))
-        done = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-             "-rf", "--tb=no", *SUITE, "-k", " or ".join(mutant.cases)],
-            cwd=root, capture_output=True, text=True,
-            env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
-        stdout = done.stdout or ""
-        lines = (stdout or done.stderr).strip().splitlines()
-        summary = lines[-1] if lines else "no output"
-        if done.returncode not in (PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED):
-            return Result(Outcome.broken_runner, f"pytest exit {done.returncode}: {summary}")
-        if not re.search(r"(\d+) (?:passed|failed|skipped)", summary) or "no tests ran" in summary:
-            return Result(Outcome.misdeclared, f"no test matched {mutant.cases}: {summary}")
-        failed, errored = _failing_ids(stdout)
-        if errored:
-            return Result(Outcome.broken_runner, f"errors outside the named tests: {errored[:3]}")
-        if done.returncode == PYTEST_ALL_PASSED or not failed:
-            return Result(Outcome.survived, summary)
-        stray = [test_id for test_id in failed
-                 if not any(case in test_id for case in mutant.cases)]
-        if stray:
-            return Result(Outcome.broken_runner, f"failures outside the named tests: {stray[:3]}")
-        return Result(Outcome.killed, summary)
+    return shared.run_mutant(mutant, RUNNER)
+
+
+if __name__ == "__main__":
+    sys.exit(shared.main(MUTANTS, RUNNER, "run track M's mutation list"))

@@ -575,6 +575,7 @@ def test_a_data_url_must_be_base64_and_an_allowed_video_type():
             ("data:video/mp4;charset=utf-8," + encoded, "bad-data-url"),
             ("data:video/mp4;base64" + encoded, "bad-data-url"),    # no comma
             ("data:text/html;base64," + encoded, "unsupported-type"),
+            ("data:video/mpeg;base64," + encoded, "unsupported-type"),    # F2R: not served
             ("data:;base64," + encoded, "unsupported-type"),
             ("data:video/mp4;base64,", "unsupported-source")):
         with pytest.raises(errors.DomainError) as caught:

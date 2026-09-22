@@ -21,9 +21,13 @@ import pytest
 from infrx.contracts.conformance import SUITES
 
 from . import mutants as mutation_list
+from . import test_config_and_imports, test_fixtures, test_money
 
 ALL = mutation_list.MUTANTS
 CASE_NAMES = {case.__name__ for _name, (cases, _runner) in SUITES.items() for case in cases()}
+# F2R: record and config invariants die in these modules, which the runner also targets.
+RECORD_TESTS = {name for module in (test_fixtures, test_money, test_config_and_imports)
+                for name in vars(module) if name.startswith("test_")}
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # The default suite runs one mutant per fake plus every mutant of the money path, so a
 # broken runner or a vacuous case in the core settlement logic is caught in CI time;
@@ -44,7 +48,7 @@ def test_the_list_is_well_formed():
         assert mutant.cases, f"{mutant.name} names no case"
         assert mutant.invariant, f"{mutant.name} states no invariant"
         for case in mutant.cases:
-            assert case in CASE_NAMES, f"{mutant.name} names unknown case {case}"
+            assert case in CASE_NAMES | RECORD_TESTS, f"{mutant.name} names unknown case {case}"
     assert set(SUBSET) <= {m.name for m in ALL}
 
 
@@ -106,6 +110,24 @@ SELF_TESTS = (
          name="self_no_case", invariant="every mutant names a case",
          file="contracts/fakes/state.py", old="MAX_READ_LIMIT = 1000",
          new="MAX_READ_LIMIT = 1", cases=())),
+    # F2R item 9: an anchor that appears twice would mutate whichever line came first,
+    # which is not the declared defect. Two copies used to accept it silently.
+    ("an_anchor_that_appears_twice_is_a_failure", mutation_list.Outcome.misdeclared,
+     mutation_list.Mutant(
+         name="self_two_anchors", invariant="one anchor, one edit",
+         file="contracts/fakes/state.py", old="        now = self.clock.now()",
+         new="        now = self.clock.at(1)",
+         cases=("dur_admit__a_request_uuid_is_admitted_once",))),
+    # ... and an undeclared exception death is not a kill. This is the *declared*
+    # `add_raises_on_a_non_byte_part` edit with its declaration removed, so the only
+    # difference between a kill and a runner error is the declaration.
+    ("an_undeclared_exception_death_is_not_a_kill", mutation_list.Outcome.broken_runner,
+     mutation_list.Mutant(
+         name="self_undeclared_crash", invariant="a kill is assertion-shaped",
+         file="contracts/traces_accounting.py",
+         old="        elif not isinstance(part, (bytes, bytearray, memoryview)):",
+         new="        elif False:",
+         cases=("trace_bounds__a_capture_belongs_to_its_own_request",))),
 )
 
 
@@ -116,6 +138,44 @@ def test_the_runner_cannot_report_a_false_kill(name, expected, mutant):
     assert not result.killed or expected is mutation_list.Outcome.killed
     # and only `killed` is accepted by the suite
     assert result.ok is (expected is mutation_list.Outcome.killed)
+
+
+def test_the_same_defect_is_a_kill_once_its_exception_is_declared():
+    """The other half of the classification: an invariant whose honest kill *is* an
+    exception (`TraceCapture.add` never raises, R37) declares it, and then the **same
+    edit** is a kill rather than a runner error - the self-test above runs it
+    undeclared."""
+    undeclared = next(mutant for name, _expected, mutant in SELF_TESTS
+                      if name == "an_undeclared_exception_death_is_not_a_kill")
+    declared = next(m for m in ALL if m.name == "add_raises_on_a_non_byte_part")
+    assert declared.dies_by == ("TypeError",)
+    assert (declared.old, declared.new) == (undeclared.old, undeclared.new)
+    assert mutation_list.run_mutant(declared).killed
+
+
+def test_a_mutant_that_makes_its_case_hang_is_not_a_kill():
+    """A hang is not the proof the contract asks for, and a runner that waits for ever
+    proves nothing at all. Two seconds against a thirty-second sleep."""
+    impatient = mutation_list.Runner(name="contracts-timeout",
+                                     targets=mutation_list.CONTRACTS.targets, timeout_s=2)
+    hangs = mutation_list.Mutant(
+        name="self_hang", invariant="a hang is not evidence",
+        file="contracts/fakes/state.py", old="MAX_READ_LIMIT = 1000",
+        new="MAX_READ_LIMIT = 1000\nimport time as _t; _t.sleep(30)",
+        cases=("dur_admit__a_request_uuid_is_admitted_once",))
+    result = mutation_list.run_mutant(hangs, impatient)
+    assert result.outcome is mutation_list.Outcome.broken_runner, result
+    assert "did not finish" in result.detail
+
+
+def test_every_subprocess_gets_its_own_cache_and_temporary_directory():
+    """F2R item 9: two mutants running at once must not share a bytecode cache or a
+    `TMPDIR`, and neither may be the worktree's. The runner sets both to directories
+    inside the throwaway copy, which is what `--list` cannot prove and a source read can."""
+    source = (mutation_list.API_DIR / "tests" / "contracts" / "mutants.py").read_text()
+    for name in ("PYTHONPYCACHEPREFIX", "TMPDIR"):
+        assert f'"{name}": str(' in source, name
+    assert 'cache, temp = root / ".pycache", root / ".tmp"' in source
 
 
 def test_a_known_lethal_mutant_is_killed_for_the_right_reason():
@@ -139,3 +199,21 @@ def test_the_fakes_skip_no_conformance_case():
         provided = set(harness.extra) | ({"failures"} if harness.failures is not None else set())
         missing = OPTIONAL_HOOKS.get(port, frozenset()) - provided
         assert missing == set(), f"the {port} fake is missing hooks {sorted(missing)}"
+
+
+def test_the_in_process_kill_rule_is_the_same_rule():
+    """F2R item 9: track D's in-process checks use `assertion_kill`, so its classification is
+    proved here without a database: an assertion is a kill, silence is a survivor, any other
+    exception is a broken check unless declared."""
+    Outcome = mutation_list.Outcome
+
+    def asserts():
+        raise AssertionError("noticed")
+
+    def crashes():
+        raise KeyError("boom")
+
+    assert mutation_list.assertion_kill(asserts).outcome is Outcome.killed
+    assert mutation_list.assertion_kill(lambda: None).outcome is Outcome.survived
+    assert mutation_list.assertion_kill(crashes).outcome is Outcome.broken_runner
+    assert mutation_list.assertion_kill(crashes, dies_by=(KeyError,)).outcome is Outcome.killed

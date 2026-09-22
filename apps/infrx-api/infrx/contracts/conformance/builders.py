@@ -71,6 +71,21 @@ def media(org_id: str = ORG_A, handle: str = "upl_conformancefixture000000000000
                     mime="video/mp4", storage_ref=f"media/{org_id}/v1/source", duration_s=12.5)
 
 
+async def materialized(harness, org_id: str = ORG_A, **kw) -> MediaRef:
+    """A ref **the store** produced (F2R item 4): `stage` accepts nothing else, so a case
+    that means to stage media asks the adapter's `materialized` hook for it."""
+    from .harness import hook
+    return await hook(harness, "materialized")(org_id, media(org_id, **kw))
+
+
+def message_content(refs: tuple[MediaRef, ...]) -> str | list[dict[str, Any]]:
+    """R58's canonical content: the text, then one `video_url` part per ref, in order."""
+    if not refs:
+        return "Describe this clip."
+    return [{"type": "text", "text": "Describe this clip."},
+            *({"type": "video_url", "video_url": {"ref": ref.handle}} for ref in refs)]
+
+
 def request(harness, *, org_id: str = ORG_A, key_id: str = KEY_A,
             mode: ExecutionMode = ExecutionMode.stream, max_input_tokens: int = 30_720,
             max_output_tokens: int = 2_048, model_revision: str = MODEL,
@@ -89,7 +104,7 @@ def request(harness, *, org_id: str = ORG_A, key_id: str = KEY_A,
     request_id = harness.ids.uuid()
     return NormalizedRequest(
         request_id=request_id, org_id=org_id, key_id=key_id, model_revision=model_revision,
-        messages=({"role": "user", "content": "Describe this clip."},),
+        messages=({"role": "user", "content": message_content(refs)},),
         parameters=dict(parameters or {}),
         payload_ref=f"payloads/{org_id}/{request_id}.json", payload_digest=digest(request_id),
         media=refs, execution_mode=mode, max_input_tokens=max_input_tokens,

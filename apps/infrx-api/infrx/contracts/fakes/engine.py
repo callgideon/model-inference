@@ -19,6 +19,9 @@ DEFAULT_TEXT = "Two people unload boxes from a van onto a trolley."
 # Reasoning delimiters deliberately split across chunk boundaries: a parser that
 # looks for "<think>" inside one chunk fails here, which is the point (API-STREAM).
 SPLIT_REASONING = ("<th", "ink>the van is", " stationary</thi", "nk>Two people unload boxes.")
+# What the customer reads of each piece (r1 R58 `visible`): nothing until the block
+# closes. Scripted rather than computed, so the fake needs no reasoning filter of its own.
+SPLIT_REASONING_VISIBLE = ("", "", "", "Two people unload boxes.")
 
 
 class EngineFault(enum.StrEnum):
@@ -68,14 +71,22 @@ class FakeEngine:
         return tuple(self.text[i:i + self.chunk_size]
                      for i in range(0, len(self.text), self.chunk_size))
 
+    def visibles(self) -> tuple[str, ...]:
+        """The customer's part of each delta; `self.text` carries no reasoning block."""
+        if self.fault is EngineFault.split_reasoning_delimiters:
+            return SPLIT_REASONING_VISIBLE
+        return self.deltas()
+
     def _usage(self, pieces: int) -> Usage:
         return Usage.of(self.prompt_tokens, max(pieces, 0))
 
     def _script(self) -> list[_Step]:
         progress = _Step(EngineEvent(type=ChunkEventType.progress, payload={"phase": "running"}))
         pieces = self.deltas()
-        deltas = [_Step(EngineEvent(type=ChunkEventType.delta, payload={"content": piece}))
-                  for piece in pieces]
+        # r1 R58 / R64: a delta payload is exactly `{visible, raw}`.
+        deltas = [_Step(EngineEvent(type=ChunkEventType.delta,
+                                    payload={"visible": visible, "raw": raw}))
+                  for raw, visible in zip(pieces, self.visibles(), strict=True)]
         usage = _Step(EngineEvent(type=ChunkEventType.usage, payload={},
                                   usage=self._usage(len(pieces))))
         if self.fault is EngineFault.prefill_stall:

@@ -55,22 +55,20 @@ def test_the_runner_cannot_report_a_false_kill():
     """A runner that counted a syntax error as a kill would let the whole list pass while
     proving nothing, so each outcome is exercised deliberately."""
     case = mutation_list.ACK
+    _m = mutation_list._m
     checks = (
         (mutation_list.Outcome.broken_runner,
-         mutation_list.Mutant(name="self_syntax_error", invariant="a broken copy is not a kill",
-                              old="class SpoolIO:", new="class SpoolIO:::", cases=(case,))),
+         _m("self_syntax_error", "a broken copy is not a kill",
+            "class SpoolIO:", "class SpoolIO:::", case)),
         (mutation_list.Outcome.survived,
-         mutation_list.Mutant(name="self_no_op", invariant="an edit that changes nothing survives",
-                              old="SEGMENT_VERSION = 2",
-                              new="SEGMENT_VERSION = 2  # a comment changes no behaviour",
-                              cases=(case,))),
+         _m("self_no_op", "an edit that changes nothing survives",
+            "SEGMENT_VERSION = 2", "SEGMENT_VERSION = 2  # a comment changes no behaviour", case)),
         (mutation_list.Outcome.misdeclared,
-         mutation_list.Mutant(name="self_missing_anchor", invariant="the list matches the code",
-                              old="this text is not in the module", new="nor is this",
-                              cases=(case,))),
+         _m("self_missing_anchor", "the list matches the code",
+            "this text is not in the module", "nor is this", case)),
         (mutation_list.Outcome.misdeclared,
-         mutation_list.Mutant(name="self_no_case", invariant="every mutant names a case",
-                              old="SEGMENT_VERSION = 2", new="SEGMENT_VERSION = 3", cases=())),
+         _m("self_no_case", "every mutant names a case",
+            "SEGMENT_VERSION = 2", "SEGMENT_VERSION = 3")),
     )
     for expected, mutant in checks:
         result = mutation_list.run_mutant(mutant)

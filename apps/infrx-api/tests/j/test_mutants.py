@@ -17,6 +17,7 @@ import re
 import pytest
 
 from . import mutants as mutation_list
+from .mutants import HONEST_DEATHS
 
 ALL = mutation_list.MUTANTS
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
@@ -204,10 +205,27 @@ def test_the_same_defect_is_a_kill_once_its_exception_is_declared():
 
 
 def test_the_death_classifier_reads_each_shape():
-    """Unit-level, because the classifier is what the honesty above rests on."""
-    kinds = mutation_list._death_kinds(
-        "/x/test_a.py:1: assert 1 == 2\n"
-        "/x/test_b.py:2: TypeError: boom\n"
-        "/x/test_c.py:5: Failed: DID NOT RAISE <class 'ValueError'>\n"
-        "FAILED /x/test_a.py::test_a\n")
-    assert kinds == ["AssertionError", "TypeError", "Failed"]
+    """Unit-level, because the classifier is what the honesty above rests on.
+
+    It reports **where** as well as **how**: only the FAILURES section is read (a warnings
+    summary has the same line shape), and a crash inside the package is a broken copy
+    while the same class raised inside the suite is the case's own observation.
+    """
+    report = ("=================================== FAILURES ===================================\n"
+              "/x/tests/j/test_a.py:1: assert 1 == 2\n"
+              "/x/infrx/judge/cost.py:2: TypeError: boom\n"
+              "/x/tests/j/test_c.py:5: Failed: DID NOT RAISE <class 'ValueError'>\n"
+              "/x/tests/j/test_d.py:7: KeyError: 'error'\n"
+              "=============================== warnings summary ===============================\n"
+              "/x/other.py:3: DeprecationWarning: old\n"
+              "=========================== short test summary info ============================\n"
+              "FAILED /x/tests/j/test_a.py::test_a\n")
+    deaths = mutation_list._death_kinds(report)
+    assert [kind for _where, kind in deaths] == [
+        "AssertionError", "TypeError", "Failed", "KeyError"]
+    # the warnings summary is not a death; the two crashes are undeclared until a mutant
+    # names their classes, and an assertion never needs declaring
+    assert mutation_list._undeclared(deaths, set(HONEST_DEATHS)) == [
+        "TypeError@cost.py", "KeyError@test_d.py"]
+    assert mutation_list._undeclared(deaths,
+                                     set(HONEST_DEATHS) | {"TypeError", "KeyError"}) == []

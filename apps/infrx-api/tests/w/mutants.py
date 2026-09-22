@@ -8,66 +8,38 @@ cases, and fails if the mutant survives. The worktree is never written to.
 
     uv run --frozen pytest -q tests/w/test_mutants.py            # fast subset
     INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_mutants.py
-    uv run --frozen python tests/w/mutants.py --list
+    uv run --frozen python -m tests.w.mutants --list
 
 **A kill must be an assertion.** pytest exits 1, at least one named case fails, every
 failure is one of the mutant's own cases, *and* every failure is an `AssertionError` or a
 pytest `Failed` (`DID NOT RAISE`). A `NameError` or a `TypeError` from the mutant text is
 a broken copy, not a proof - so a mutant whose honest kill is a *different typed failure*
 (the adapter raising `EngineIncomplete` where the case expected a stall, say) declares
-that exception in `allowed_errors`, and nothing else may die that way. This is the rule
-the console runners use, and it is what stops a syntax error from reading as evidence.
+that exception in `dies_by`, and nothing else may die that way.
 
-ponytail: `tests/contracts/mutants.py` has the same machinery but hardcodes its own
-pytest target, and it is not this track's file to parameterise. If a third track needs
-it, ask the coordinator to move `Mutant`/`run_mutant` into the contracts package with the
-target and the kill rule as arguments, and delete this copy.
+The runner itself is the shared one in `tests/contracts/mutants.py` (F2R item 9), which
+is the coordinator revision this file's previous `ponytail:` note asked for: the target
+and the declared kill modes are arguments, and this copy is gone.
 """
 from __future__ import annotations
 
-import argparse
-import enum
 import pathlib
-import re
-import shutil
-import subprocess
 import sys
-import tempfile
-from dataclasses import dataclass, field
+
+from ..contracts import mutants as shared
+from ..contracts.mutants import (ASSERTION_DEATHS, Mutant, Outcome,  # noqa: F401
+                                 Result, Runner, _m)
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
 PACKAGE = "infrx"
 SUITE = ("tests/w/test_engine.py", "tests/w/test_reasoning.py")
-# The only ways a case may legitimately notice a mutant: its own assertion, or the
-# absence of an exception it demanded. A rewritten assert reports as the bare expression
-# (`path:12: assert 3 == 4`) rather than as `AssertionError`, so both spellings are the
-# same outcome; `Failed` is `pytest.raises` reporting DID NOT RAISE.
-KILL_ERRORS = ("AssertionError", "assert", "Failed")
+#: The only ways a case may legitimately notice a mutant: its own assertion, or the
+#: absence of an exception it demanded. The shared classifier folds a rewritten `assert`
+#: into `AssertionError`, so this is exactly the shared set.
+KILL_ERRORS = ASSERTION_DEATHS
 
 E = "worker/engine.py"
 R = "worker/reasoning.py"
-
-
-@dataclass(frozen=True)
-class Mutant:
-    name: str
-    invariant: str
-    file: str
-    old: str
-    new: str
-    cases: tuple[str, ...] = field(default_factory=tuple)
-    # Exception names, beyond `KILL_ERRORS`, this mutant may die by. Each use is a
-    # documented kill mode, never a convenience.
-    allowed_errors: tuple[str, ...] = field(default_factory=tuple)
-
-    @property
-    def path(self) -> pathlib.Path:
-        return pathlib.Path(PACKAGE) / self.file
-
-
-def _m(name, invariant, file, old, new, *cases, allowed_errors=()) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
-                  allowed_errors=tuple(allowed_errors))
 
 
 # Case names as constants, so a typo is a `NameError` here rather than a mutant that
@@ -136,7 +108,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "        return dict(part), consumed", ALLOW, NO_URL),
     _m("role_allowlist_dropped", "only system, user and assistant exist (R58)",
        E, "            if role not in ALLOWED_ROLES:", "            if False:", ALLOW,
-       allowed_errors=("EngineFailure",)),
+       dies_by=("EngineFailure",)),
     _m("message_extra_keys_allowed", "a message is exactly {role, content} (R58)",
        E, '            extra = sorted(set(message) - {"role", "content"})',
        "            extra = []", ALLOW),
@@ -147,10 +119,10 @@ MUTANTS: tuple[Mutant, ...] = (
        E, '            if set(part) != {"type", "video_url"}:', "            if False:", ALLOW),
     _m("content_shape_unchecked", "content is text or a list of parts (R58)",
        E, "            if not isinstance(content, list):", "            if False:", ALLOW,
-       allowed_errors=("EngineFailure",)),
+       dies_by=("EngineFailure",)),
     _m("non_object_part_accepted", "a content part is an object (R58)",
        E, "        if not isinstance(part, dict):", "        if False:", ALLOW,
-       allowed_errors=("EngineFailure",)),
+       dies_by=("EngineFailure",)),
     _m("media_parts_not_counted", "prepared refs and media parts must agree",
        E, "        if consumed != len(refs):", "        if False:", MEDIA),
     _m("two_videos_accepted", "one video per request",
@@ -235,7 +207,7 @@ MUTANTS: tuple[Mutant, ...] = (
           "                                                    fillvalue=\"\"):",
        "        for raw_piece, visible_piece in ((raw, visible),):", BOUNDS, JOURNAL),
     _m("event_bytes_sized_for_ascii", "an event is sized in bytes, not code points (R58)",
-       E, "PAYLOAD_COPIES = 3               # `visible`, `raw`, and the transitional `content` alias",
+       E, "PAYLOAD_COPIES = 2               # `visible` and `raw`",
        "PAYLOAD_COPIES = 1", JOURNAL),
     _m("json_escape_cost_ignored", "a control character costs six bytes in JSON",
        E, "    if code < 0x20:\n        return 2 if char in _SHORT_ESCAPES else 6",
@@ -258,7 +230,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("duration_not_finite", "a duration must be finite",
        E, "            if videos[0].duration_s is None or not math.isfinite(videos[0].duration_s) \\\n                    or videos[0].duration_s <= 0:",
        "            if videos[0].duration_s is None or videos[0].duration_s <= 0:", MEASURED,
-       allowed_errors=("TypeError", "OverflowError", "ValueError")),
+       dies_by=("TypeError", "OverflowError", "ValueError")),
     _m("reported_prompt_unbounded", "a reported prompt count outside the context is unknown",
        E, "        elif stream.usage_candidate.prompt_tokens > self.limits.max_context_tokens:",
        "        elif False:", USAGE),
@@ -353,8 +325,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("output_bytes_unbounded", "the accumulated output is bounded (R58)",
        E, "        if len(stream.raw_text) + len(content) > budget:", "        if False:", BOUNDS),
     _m("visible_and_raw_collapsed", "visible is filtered, raw is not (R58)",
-       E, '    return {"visible": visible, "raw": raw, "content": raw}',
-       '    return {"visible": raw, "raw": raw, "content": raw}', TEXTS, ADAPTER_SPLITS),
+       E, '    return {"visible": visible, "raw": raw}',
+       '    return {"visible": raw, "raw": raw}', TEXTS, ADAPTER_SPLITS),
     _m("held_tail_never_emitted", "the filter's final tail reaches the events (R58)",
        E, "        if stream.held_tail:", "        if False:", TAIL, ADAPTER_SPLITS),
     # --- usage (r1 R58) -------------------------------------------------------
@@ -396,10 +368,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if not isinstance(value, int) or value < 0:", USAGE),
     _m("usage_nonints_trusted", "a count that is not a nonnegative integer is not a count",
        E, "        if isinstance(value, bool) or not isinstance(value, int) or value < 0:",
-       "        if value is None:", USAGE, allowed_errors=("EngineFailure",)),
+       "        if value is None:", USAGE, dies_by=("EngineFailure",)),
     _m("usage_nondict_trusted", "a usage object is an object",
        E, "    if not isinstance(raw, dict):\n        return None",
-       "    if False:\n        return None", USAGE, allowed_errors=("EngineFailure",)),
+       "    if False:\n        return None", USAGE, dies_by=("EngineFailure",)),
     _m("usage_totals_not_checked", "a usage object that does not add up is unknown",
        E, "    if total is not None and (isinstance(total, bool) or not isinstance(total, int)\n"
           "                             or total != prompt + completion):",
@@ -446,7 +418,7 @@ MUTANTS: tuple[Mutant, ...] = (
           "            # unknown exception is not one.\n"
           '            raise EngineFailure(f"{type(failure).__name__}: {failure}", stage="adapter") from None',
        "        except EngineFailure:\n            raise",
-       TYPED, allowed_errors=("OSError",)),
+       TYPED, dies_by=("OSError",)),
     _m("incomplete_looks_complete", "output that just stopped is not a clean answer",
        E, "        if not stream.complete and stream.stall is None and stream.finish_reason is None \\\n"
           "                and not stream.cancelled:",
@@ -635,7 +607,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("missing_duration_is_zero", "a prepared video carries its duration",
        E, "            if videos[0].duration_s is None or not math.isfinite(videos[0].duration_s) \\\n                    or videos[0].duration_s <= 0:",
        "            if not math.isfinite(videos[0].duration_s) or videos[0].duration_s <= 0:",
-       MEASURED, allowed_errors=("TypeError",)),
+       MEASURED, dies_by=("TypeError",)),
     _m("roles_widened", "the role vocabulary is closed (R58)",
        E, 'ALLOWED_ROLES = ("system", "user", "assistant")',
        'ALLOWED_ROLES = ("system", "user", "assistant", "tool")', PINNED, ALLOW),
@@ -687,140 +659,19 @@ MUTANTS: tuple[Mutant, ...] = (
 )
 
 
-class Outcome(enum.StrEnum):
-    killed = "killed"
-    survived = "survived"
-    broken_runner = "broken_runner"
-    misdeclared = "misdeclared"
-
-
-@dataclass(frozen=True)
-class Result:
-    outcome: Outcome
-    detail: str
-
-    @property
-    def killed(self) -> bool:
-        return self.outcome is Outcome.killed
-
-    @property
-    def ok(self) -> bool:
-        return self.killed
-
-
-PYTEST_ALL_PASSED = 0
-PYTEST_TESTS_FAILED = 1
-_FAILED_LINE = re.compile(r"^(?:FAILED|ERROR) ([^\s:]+(?:::[^\s]+)?)")
-# `--tb=line` prints one line per failure: `path:lineno: ExceptionName: message`.
-_REASON_LINE = re.compile(r"^.*?:\d+: ([A-Za-z_][\w.]*)")
-
-
-def _failing_ids(stdout: str) -> tuple[list[str], list[str]]:
-    failed, errored = [], []
-    for line in stdout.splitlines():
-        match = _FAILED_LINE.match(line.strip())
-        if match:
-            (errored if line.strip().startswith("ERROR") else failed).append(match.group(1))
-    return failed, errored
-
-
-def _reasons(stdout: str) -> list[str]:
-    """The exception name of every reported failure, last dotted component only."""
-    names, inside = [], False
-    for line in stdout.splitlines():
-        if line.startswith("=") and "FAILURES" in line:
-            inside = True
-            continue
-        if line.startswith("=") and "short test summary" in line:
-            inside = False
-        if inside:
-            match = _REASON_LINE.match(line.strip())
-            if match:
-                names.append(match.group(1).rsplit(".", 1)[-1])
-    return names
+#: F2R item 9: the shared runner, aimed at W's two suites.
+RUNNER = Runner(name="w", targets=SUITE)
 
 
 def run_mutant(mutant: Mutant, suite: tuple[str, ...] = SUITE) -> Result:
     """Apply one mutant to a throwaway copy and run the cases it names.
 
-    `suite` is the pytest target: W2's list (`tests/w/loop_mutants.py`) passes its own
-    file, so the machinery is shared rather than copied a third time.
+    `suite` is the pytest target, so another W list (W2's `loop_mutants.py`) can aim the
+    same shared runner at its own file.
     """
-    if not mutant.cases:
-        return Result(Outcome.misdeclared, "declares no case")
-    with tempfile.TemporaryDirectory(prefix=f"w-mutant-{mutant.name}-") as tmp:
-        root = pathlib.Path(tmp)
-        shutil.copytree(API_DIR / PACKAGE, root / PACKAGE,
-                        ignore=shutil.ignore_patterns("__pycache__"))
-        shutil.copytree(API_DIR / "tests", root / "tests",
-                        ignore=shutil.ignore_patterns("__pycache__"))
-        # the committed pytest configuration, so the copy collects exactly as the
-        # worktree does (importlib mode, `pythonpath=["."]`)
-        shutil.copy2(API_DIR / "pyproject.toml", root / "pyproject.toml")
-        target = root / mutant.path
-        source = target.read_text()
-        if mutant.old not in source:
-            return Result(Outcome.misdeclared,
-                          f"anchor not found in {mutant.file}: {mutant.old[:60]!r}")
-        target.write_text(source.replace(mutant.old, mutant.new, 1))
-        done = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-             "-rf", "--tb=line", *suite, "-k", " or ".join(mutant.cases)],
-            cwd=root, capture_output=True, text=True,
-            env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
-        stdout = done.stdout or ""
-        lines = (stdout or done.stderr).strip().splitlines()
-        summary = lines[-1] if lines else "no output"
-        if done.returncode not in (PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED):
-            return Result(Outcome.broken_runner, f"pytest exit {done.returncode}: {summary}")
-        ran = re.search(r"(\d+) (?:passed|failed|skipped)", summary)
-        if not ran or "no tests ran" in summary:
-            return Result(Outcome.misdeclared, f"no case matched: {summary}")
-        failed, errored = _failing_ids(stdout)
-        if errored:
-            return Result(Outcome.broken_runner, f"errors outside the named cases: {errored[:3]}")
-        if done.returncode == PYTEST_ALL_PASSED or not failed:
-            return Result(Outcome.survived, summary)
-        stray = [test_id for test_id in failed
-                 if not any(test_id.endswith(case) for case in mutant.cases)]
-        if stray:
-            return Result(Outcome.broken_runner, f"failures outside the named cases: {stray[:3]}")
-        reasons = _reasons(stdout)
-        if not reasons:
-            return Result(Outcome.broken_runner, f"no failure reason reported: {summary}")
-        allowed = set(KILL_ERRORS) | set(mutant.allowed_errors)
-        undeclared = sorted({name for name in reasons if name not in allowed})
-        if undeclared:
-            # A runtime error the mutant did not declare is a broken copy, not a proof: the
-            # case noticed *something*, but not the invariant it claims.
-            return Result(Outcome.broken_runner,
-                          f"undeclared failure mode {undeclared}: {summary}")
-        return Result(Outcome.killed, f"{summary} via {sorted(set(reasons))}")
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="run the W1 adapter's mutation list")
-    parser.add_argument("names", nargs="*")
-    parser.add_argument("--list", action="store_true")
-    args = parser.parse_args()
-    if args.list:
-        for mutant in MUTANTS:
-            print(f"{mutant.name:42s} {mutant.invariant}")
-        print(f"\n{len(MUTANTS)} mutants over "
-              f"{len({case for m in MUTANTS for case in m.cases})} named cases")
-        return 0
-    chosen = [m for m in MUTANTS if not args.names or m.name in args.names]
-    bad: dict[str, list[str]] = {}
-    for mutant in chosen:
-        result = run_mutant(mutant)
-        print(f"[{result.outcome:13s}] {mutant.name}: {result.detail}")
-        if not result.killed:
-            bad.setdefault(result.outcome.value, []).append(mutant.name)
-    failures = sum(len(names) for names in bad.values())
-    print(f"\n{len(chosen) - failures}/{len(chosen)} killed"
-          + "".join(f"; {outcome}: {names}" for outcome, names in sorted(bad.items())))
-    return 1 if bad else 0
+    runner = RUNNER if tuple(suite) == tuple(SUITE) else Runner(name="w", targets=tuple(suite))
+    return shared.run_mutant(mutant, runner)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(shared.main(MUTANTS, RUNNER, "run the W1 adapter's mutation list"))

@@ -1,41 +1,33 @@
 #!/usr/bin/env python3
 """R32 for the Q adapter: one single-edit defect per invariant the Q suite claims.
 
-Same rules as the coordinator's list for the fakes (`tests/contracts/mutants.py`,
-whose `Mutant`/`Outcome`/`Result` this reuses): the edit is applied to a **copy** of
-the package in a temporary directory, the named cases are run there, and a mutant that
+Same rules as the coordinator's list for the fakes, because it is the same runner
+(`tests/contracts/mutants.py`, F2R item 9): the edit is applied to a **copy** of the
+package in a temporary directory, the named cases are run there, and a mutant that
 survives means the case asserting that invariant proves nothing. Nothing is ever
-written inside the worktree. The runner differs in one thing only - it runs `tests/q`
-instead of `tests/contracts/test_conformance.py`, because the cases that must notice
-are Q's own plus the exported scheduler suite applied to Q's adapter.
+written inside the worktree. This file supplies the target - `tests/q` instead of
+`tests/contracts/test_conformance.py`, because the cases that must notice are Q's own
+plus the exported scheduler suite applied to Q's adapter - and the list.
 
     uv run --frozen pytest -q tests/q/test_mutants.py     # the whole list
-    uv run --frozen python tests/q/mutants.py --list
-    uv run --frozen python tests/q/mutants.py the_kind_filter_is_inverted
+    uv run --frozen python -m tests.q.mutants --list
+    uv run --frozen python -m tests.q.mutants the_kind_filter_is_inverted
 """
 from __future__ import annotations
 
-import argparse
 import pathlib
-import shutil
-import subprocess
 import sys
-import tempfile
+
+from ..contracts import mutants as shared
+from ..contracts.mutants import Mutant, Outcome, Result, Runner   # noqa: F401
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
 Q = "scheduling/memory.py"
 
-if str(API_DIR) not in sys.path:        # `python tests/q/mutants.py` starts in tests/q
-    sys.path.insert(0, str(API_DIR))
 
-# The coordinator's runner is hard-wired to `tests/contracts/test_conformance.py`, so Q
-# brings its own `run_mutant`; the declaration, the outcome vocabulary and the "only a
-# kill counts" result are shared rather than re-invented.
-from tests.contracts.mutants import Mutant, Outcome, Result, _failing_ids  # noqa: E402
-
-
-def _m(name, invariant, old, new, *cases) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=Q, old=old, new=new, cases=cases)
+def _m(name, invariant, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=Q, old=old, new=new, cases=cases,
+                  dies_by=tuple(dies_by), occurrences=occurrences)
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -164,7 +156,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "R52: preparation and inference are separate pools, so separate fairness state",
        "        key = (kind.value, org_id)",
        '        key = ("any", org_id)',
-       "test_q1_kind__preparation_and_inference_are_separately_fair"),
+       "test_q1_kind__preparation_and_inference_are_separately_fair", dies_by=("KeyError",)),
     # --- R60: unfiltered claims (r2 B6/B7) -----------------------------------
     _m("the_kind_tag_does_not_advance",
        "R60 level 1: a dispatched kind is charged, so an unfiltered worker cannot serve "
@@ -356,89 +348,20 @@ MUTANTS: tuple[Mutant, ...] = (
 )
 
 
+#: F2R item 9: the shared runner, aimed at `tests/q`. `require_every_case` is Q's own
+#: stricter rule, now a runner option: a mutant may not claim coverage from a case that
+#: cannot see it (the r2 review found exactly that - a service-time fixture whose
+#: preparation cost hid the defect its second case was named for).
+RUNNER = Runner(name="q", targets=("tests/q",), require_every_case=True)
+
+
 def run_mutant(mutant: Mutant, *, paths: str = "tests/q") -> Result:
-    """Apply one mutant to a throwaway copy and run the cases it names under `tests/q`.
-
-    A kill needs all three of the coordinator runner's conditions: pytest exited 1,
-    at least one test failed, and every failing id names one of the mutant's own cases
-    - so a syntax error or an import failure is `broken_runner`, never a kill. The
-    anchor must appear **exactly once**, because two identical lines (there are two
-    `self._virtual_time = 0.0`) would otherwise silently mutate the wrong one.
-    """
-    if not mutant.cases:
-        return Result(Outcome.misdeclared, "declares no case")
-    with tempfile.TemporaryDirectory(prefix=f"q-mutant-{mutant.name}-") as tmp:
-        root = pathlib.Path(tmp)
-        junk = shutil.ignore_patterns("__pycache__")
-        shutil.copytree(API_DIR / "infrx", root / "infrx", ignore=junk)
-        shutil.copytree(API_DIR / "tests", root / "tests", ignore=junk)
-        target = root / "infrx" / mutant.file
-        source = target.read_text()
-        found = source.count(mutant.old)
-        if found != 1:
-            return Result(Outcome.misdeclared,
-                          f"anchor appears {found} times in {mutant.file}: {mutant.old[:60]!r}")
-        target.write_text(source.replace(mutant.old, mutant.new, 1))
-        selection = " or ".join(mutant.cases)
-        done = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-             "-rf", "--tb=no", "-o", "addopts=--import-mode=importlib",
-             "-o", "testpaths=tests", paths, "-k", selection],
-            cwd=root, capture_output=True, text=True,
-            env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
-        stdout = done.stdout or ""
-        lines = (stdout or done.stderr).strip().splitlines()
-        summary = lines[-1] if lines else "no output"
-        if done.returncode not in (0, 1):
-            return Result(Outcome.broken_runner, f"pytest exit {done.returncode}: {summary}")
-        if "no tests ran" in summary or not any(word in summary for word in
-                                                ("passed", "failed", "skipped")):
-            return Result(Outcome.misdeclared, f"no case matched {selection!r}: {summary}")
-        failed, errored = _failing_ids(stdout)
-        if errored:
-            return Result(Outcome.broken_runner, f"errors outside the named cases: {errored[:3]}")
-        if done.returncode == 0 or not failed:
-            return Result(Outcome.survived, summary)
-        stray = [test_id for test_id in failed
-                 if not any(case in test_id for case in mutant.cases)]
-        if stray:
-            return Result(Outcome.broken_runner,
-                          f"failures outside the named cases: {stray[:3]}")
-        # r2: **every** named case must notice. The coordinator's runner is satisfied by
-        # one failure among the names, and that let a mutant claim coverage from a case it
-        # could not kill - this list had exactly that shape (a service-time fixture whose
-        # preparation cost hid the defect it was named for).
-        unproven = [case for case in mutant.cases
-                    if not any(case in test_id for test_id in failed)]
-        if unproven:
-            return Result(Outcome.misdeclared,
-                          f"named cases that did not notice: {unproven}")
-        return Result(Outcome.killed, summary)
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="run the Q1 mutation list")
-    parser.add_argument("names", nargs="*", help="mutants to run (default: all)")
-    parser.add_argument("--list", action="store_true")
-    args = parser.parse_args()
-    if args.list:
-        for mutant in MUTANTS:
-            print(f"{mutant.name:52s} {mutant.invariant}")
-        print(f"\n{len(MUTANTS)} mutants over "
-              f"{len({case for m in MUTANTS for case in m.cases})} named cases")
-        return 0
-    chosen = [m for m in MUTANTS if not args.names or m.name in args.names]
-    bad: dict[str, list[str]] = {}
-    for mutant in chosen:
-        result = run_mutant(mutant)
-        print(f"[{result.outcome:13s}] {mutant.name}: {result.detail}")
-        if not result.killed:
-            bad.setdefault(str(result.outcome), []).append(mutant.name)
-    failures = sum(len(names) for names in bad.values())
-    print(f"\n{len(chosen) - failures}/{len(chosen)} killed"
-          + "".join(f"; {outcome}: {names}" for outcome, names in sorted(bad.items())))
-    return 1 if bad else 0
+    """Apply one mutant to a throwaway copy and run the cases it names under `paths`
+    (`tests/q` by default; Q2's Valkey list aims the same runner at its own file)."""
+    runner = RUNNER if paths == "tests/q" else Runner(name="q", targets=(paths,),
+                                                      require_every_case=True)
+    return shared.run_mutant(mutant, runner)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(shared.main(MUTANTS, RUNNER, "run the Q1 mutation list"))

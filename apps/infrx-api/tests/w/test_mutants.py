@@ -36,12 +36,12 @@ def test_the_list_is_well_formed():
         assert mutant.invariant, f"{mutant.name} states no invariant"
         assert mutant.file in ("worker/engine.py", "worker/reasoning.py"), mutant.file
         # a declared kill mode is an exception name, never a blanket "anything goes"
-        for name in mutant.allowed_errors:
+        for name in mutant.dies_by:
             assert name.isidentifier() and name not in mutation_list.KILL_ERRORS, name
     assert set(SUBSET) <= {m.name for m in ALL}
     # the declared-failure-mode escape hatch stays rare: it is a documented kill, and a
     # list where most mutants need one is a list of broken mutants
-    declared = [m.name for m in ALL if m.allowed_errors]
+    declared = [m.name for m in ALL if m.dies_by]
     assert len(declared) <= len(ALL) // 5, declared
 
 
@@ -120,7 +120,7 @@ SELF_TESTS = (
                           old="            ready = response.status_code == 200",
                           new="            ready = _undefined_name_at_runtime(response)",
                           cases=("test_f_contract__health_drain_and_the_capability_probe",),
-                          allowed_errors=("NameError",))),
+                          dies_by=("NameError",))),
     # the second false-kill channel: a crash on the *generate* path is wrapped by `_run` as
     # EngineFailure(stage="adapter"), which `drained()` re-raises for exactly this reason
     ("a_crash_on_the_generate_path_is_not_a_kill", mutation_list.Outcome.broken_runner,
@@ -137,7 +137,7 @@ SELF_TESTS = (
                           old="        stream.raw_text += content",
                           new="        stream.raw_text += _undefined_name_at_runtime(content)",
                           cases=("test_api_stream__a_slow_but_steady_stream_is_not_a_stall",),
-                          allowed_errors=("EngineFailure",))),
+                          dies_by=("EngineFailure",))),
     ("a_mutant_with_no_case_is_a_failure", mutation_list.Outcome.misdeclared,
      mutation_list.Mutant(name="self_no_case", invariant="every mutant names a case",
                           file="worker/engine.py", old="DETAIL_MAX_CHARS = 500",

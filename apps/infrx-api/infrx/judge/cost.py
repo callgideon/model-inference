@@ -40,9 +40,9 @@ import decimal
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Protocol
-
 from ..contracts import errors, money
+# F2R item 5: the price-source port is a shared contract; re-exported for J's callers.
+from ..contracts.ports import RateTable  # noqa: F401
 from ..contracts.limits import PilotSettings
 
 #: R57: the mode is matched exactly, and this is the only accepted value.
@@ -125,18 +125,6 @@ class TokenCeilings:
     def billed_output_tokens(self) -> int:
         """Reasoning tokens are billed as output (`06` §3.8)."""
         return self.output_tokens + self.reasoning_tokens
-
-
-class RateTable(Protocol):
-    """Injected price source, mirroring `JobStore`'s `price_for` (r1 R45).
-
-    `rate_for` answers with the row **effective at `at`**, or `None`. It raises a
-    `DomainError` only for a caller bug (a naive instant); an unpriced model is `None`,
-    never an exception and never a zero.
-    """
-
-    def rate_for(self, model: str, at: datetime) -> ProviderRate | None:
-        ...
 
 
 @dataclass(frozen=True)

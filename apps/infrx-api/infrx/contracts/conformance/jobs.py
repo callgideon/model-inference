@@ -311,6 +311,7 @@ async def dur_admit__an_idempotency_scope_belongs_to_the_requests_own_org(factor
 
 
 async def dur_admit__a_deadline_must_be_one_the_store_can_keep(factory):
+    # D2 must run this case on the movable DB clock (the store's `db_now`), not a host clock.
     """DUR-ADMIT / r1 R29: a deadline already past is a job nothing may ever run, and
     one beyond preparation + queue + generation is a promise the store cannot keep -
     it would pin a preparation unit, a journal reservation and a hold for as long as

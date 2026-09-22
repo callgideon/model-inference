@@ -564,8 +564,8 @@ def test_api_stream__canonical_events_are_progress_deltas_and_one_usage():
 def test_api_stream__deltas_carry_the_visible_and_raw_text():
     """r1 R58: the delta payload keeps `visible` (what the customer reads) beside `raw`
     (the model's own text, which trace capture records, DEC-05), so the delimiter filter
-    runs once, here, and not again in every consumer. `content` is the transitional alias
-    of `raw` the exported suite still reads."""
+    runs once, here, and not again in every consumer. Exactly those two keys: the
+    transitional `content` alias is gone (F2R item 2, R64)."""
     upstream, engine, held, prepared = drive("split_reasoning_delimiters")
     stream = engine.generate(held, prepared)
     events = asyncio.run(collect(stream))
@@ -573,8 +573,6 @@ def test_api_stream__deltas_carry_the_visible_and_raw_text():
     assert raw == "".join(upstream.deltas()) == stream.raw_text
     assert raw.count("<think>") == 1 and "<think>" not in visible
     assert visible == stream.visible_text == filter_text(raw) == "Two people unload boxes."
-    assert [event.payload["content"] for event in events
-            if event.type is ChunkEventType.delta] == raws(events)
 
 
 def test_api_stream__the_filters_final_tail_reaches_the_event_stream():

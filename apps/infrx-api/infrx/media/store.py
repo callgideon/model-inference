@@ -261,10 +261,9 @@ class MediaStaging:
         if request.org_id != org_id:
             raise errors.Forbidden("a request may only be staged for its own org")
         resolved: list[MediaRef] = []
-        pending: dict[tuple[str, str], MediaRef] = {}
         for ref in request.media:
-            if ref.org_id != org_id:
-                raise errors.NotFound("media reference does not belong to this org")
+            # Every lookup below is inside this org's namespace, which is the tenant guard:
+            # another org's ref, or one relabelled with this org, is not there (F2R item 4).
             if ref.bytes > self.limits.max_media_bytes:
                 raise errors.RequestTooLarge(
                     f"{ref.bytes} bytes exceeds MAX_MEDIA_BYTES {self.limits.max_media_bytes}")
@@ -277,34 +276,18 @@ class MediaStaging:
                 resolved.append(owned)
                 continue
             existing = self.refs.get((org_id, ref.handle))
-            if existing is not None:
-                # Staged content is immutable: the same handle keeps the object it has,
-                # and different content under it is a conflict rather than a replacement.
-                if existing.digest != ref.digest:
-                    raise errors.Conflict(
-                        f"media handle {ref.handle} already holds different content")
-                # The **indexed** ref, never the caller's copy of it: the request's
-                # `bytes`, `mime`, `duration_s` and `storage_ref` are claims, and the
-                # object's own facts are what a job must carry (review B4/S03).
-                resolved.append(existing)
-                continue
-            staged = ref.model_copy(update={
-                "storage_ref": self._key(org_id, ref.digest, ref.profile_version, "source")})
-            clash = pending.get((org_id, staged.handle))
-            if clash is not None and clash.digest != staged.digest:
-                # The same handle twice in one request with different content: last-wins
-                # would stage one object and hand the job the other one's digest.
-                raise errors.InvalidRequest(
-                    f"media handle {ref.handle} appears twice with different content")
-            pending[(org_id, staged.handle)] = staged
-            resolved.append(staged)
+            if existing is None or existing.digest != ref.digest:
+                # F2R item 4: only a ref this store materialized for this org is staged -
+                # never one it did not produce, nor a real handle claiming other content.
+                raise errors.NotFound(f"media {ref.handle} was not materialized for org {org_id}")
+            # The **indexed** ref, never the caller's copy of it: the request's `bytes`,
+            # `mime`, `duration_s` and `storage_ref` are claims (review B4/S03).
+            resolved.append(existing)
         payload = codec.canonical_bytes(request)
         # A server-built key from server-known identity; `request.payload_ref` is not read,
         # because a caller-named path is exactly what a media store must never accept.
         key = f"payloads/{valid_org(org_id)}/{request.request_id}.json"
         await self._write_once(key, payload, "application/json")
-        # One visible step: nothing above wrote to `self.refs`.
-        self.refs.update(pending)
         self.payloads[request.request_id] = StagedPayload(ref=key, digest=digest_of(payload),
                                                           bytes=len(payload))
         return tuple(resolved)
