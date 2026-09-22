@@ -79,8 +79,10 @@ returns void language sql security definer set search_path = infrx, public, pg_t
 $$;
 
 -- ================================================== terminalize without usage ===
--- Any nonterminal job -> terminal, with no usage and no debit, in the caller's
--- transaction. Returns the committed outcome (`records.TerminalOutcome`).
+-- A nonterminal job -> terminal, with no usage and no debit, in the caller's transaction.
+-- Every caller has checked, under the job row lock, that the job is not terminal; a caller
+-- that forgot would be refused by `jobs_guard` (a terminal job is immutable). Returns the
+-- committed outcome (`records.TerminalOutcome`).
 create or replace function infrx.terminalize_no_usage(p_request_id uuid, p_cause text,
                                                       p_state text, p_reconcile_s float8)
 returns jsonb language plpgsql security definer set search_path = infrx, public, pg_temp as $$
@@ -91,9 +93,6 @@ declare
   v_reconcile timestamptz;
 begin
   select * into j from infrx.jobs where request_id = p_request_id for update;
-  if not found or j.settled_at is not null then
-    return infrx.job_admission(p_request_id)->'outcome';
-  end if;
   if j.published then
     -- Output was committed and nobody counted it: reconcile, never bill later (02, R21).
     v_settlement := 'held_unknown';
@@ -452,8 +451,9 @@ returns jsonb language plpgsql security definer set search_path = infrx, public,
 declare
   j infrx.jobs%rowtype;
 begin
+  -- Rechecked under the lock: a concurrent sweep may have released it already.
   select * into j from infrx.jobs
-   where request_id = p_id and settlement_state = 'held_unknown' and reconcile_after <= p_now
+   where request_id = p_id and settlement_state = 'held_unknown'
    for update skip locked;
   if not found then
     return '[]';

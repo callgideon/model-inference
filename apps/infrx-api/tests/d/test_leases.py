@@ -72,3 +72,14 @@ def test_recover__one_unreapable_job_never_stops_the_sweep() -> None:
 # --- item 5: the boundary surface ---------------------------------------------------------------
 def test_privileges__service_operations_and_internal_bodies() -> None:
     print(checks_leases.check_lease_privileges(_db()))
+
+
+# --- item 6: the concurrency check the migration mutants run (committed rows: own DB) --------
+def test_races__claim_heartbeat_and_cancel_serialize_on_the_job_row() -> None:
+    _db()
+    race_db = f"{DB}_race"
+    pgharness.recreate(race_db)
+    pgharness.apply(race_db, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
+    with pgharness.connect(race_db) as conn:
+        checks_admission.seed_admission(conn)
+    print(checks_leases.check_lease_races(pgharness.connect, race_db))

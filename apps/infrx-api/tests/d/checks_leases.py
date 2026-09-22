@@ -6,8 +6,11 @@ checks never see each other's rows. The clock is the frozen test clock (`advance
 """
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
+
+import threading
+import time
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -15,7 +18,7 @@ from psycopg.types.json import Jsonb
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import Lease, LeaseKind
-from infrx.state.jobstore import PgJobStore
+from infrx.state.jobstore import PgJobStore, domain_error
 
 from . import checks_admission as ca
 from . import checks_credit as cc
@@ -86,6 +89,12 @@ def publish(conn, lease: Lease) -> None:
                  (lease.job_id,))
 
 
+def reaped(produced: list, key: str = "outcome") -> dict:
+    """The one item a sweep produced, as an assertion (never an unpacking error)."""
+    assert len(produced) == 1 and key in produced[0], f"expected one {key}: {produced}"
+    return produced[0][key]
+
+
 def assert_released(conn, request_id: str, what: str) -> None:
     """A terminalization with nothing to reconcile: hold, reservations, attempts."""
     hold = conn.execute("select state from infrx.credit_holds where request_id = %s",
@@ -139,6 +148,13 @@ def check_claim_generation(conn) -> str:
         call(conn, "recover", {"limits": LIMITS})
         code, answer = d3(conn, "claim", job_id=request.request_id, worker_id="w1")
         assert code is None and lease_of(answer).generation == 2, (code, answer)
+        # R20: with less time left than the budgets, both instants are the deadline
+        tight = queued(conn, world, deadline_s=30)
+        code, answer = d3(conn, "claim", job_id=tight.request_id, worker_id="w1")
+        edge = row(conn, tight.request_id)["deadline_at"]
+        assert code is None and (lease_of(answer).generation_deadline_at,
+                                 lease_of(answer).first_token_deadline_at) == (edge, edge), \
+            f"a phase instant outlived the accepted deadline: {code} {answer}"
         # past the persisted queue instant: refused, and nothing changes
         late = queued(conn, world)
         advance(conn, DEFAULTS.queue_wait_interactive_s)
@@ -196,6 +212,14 @@ def check_fence(conn) -> str:
         # the live holder may execute; the settlement after the fence is D5's
         code, work = d3(conn, "load_work", lease=lease.model_dump(mode="json"))
         assert code is None and work["request"]["request_id"] == request.request_id, code
+        media = b.request(world)
+        ca.admit(conn, media, b.idem(media, media.request_id))
+        _, prep = claim(conn, media.request_id)
+        refs = [b.media(b.ORG_A).model_dump(mode="json")]
+        prepare(conn, prep["lease"], (b.media(b.ORG_A),))
+        _, took = d3(conn, "claim", job_id=media.request_id, worker_id="wm")
+        code, work = d3(conn, "load_work", lease=took["lease"])
+        assert work["prepared_refs"] == refs, f"load_work lost the prepared refs: {work}"
         assert d3(conn, "terminalize", lease=lease.model_dump(mode="json"),
                   outcome={})[0] == "untyped 0A000", "terminalize's settlement is not D5's stub"
         # expired (before any deadline): stale, and nothing changes
@@ -246,6 +270,16 @@ def check_preparation_fence(conn) -> str:
         prep = lease_of(answer)
         code, work = d3(conn, "load_work", lease=prep.model_dump(mode="json"))
         assert code is None and work["prepared_refs"] == [], (code, work)
+        assert d3(conn, "terminalize", lease=prep.model_dump(mode="json"),
+                  outcome={})[0] == "stale_lease", "a preparation lease reached the settlement"
+        # R29: the work carries the deadline the store keeps, not the caller's
+        far = b.request(world, deadline_s=10_000)
+        ca.admit(conn, far, b.idem(far, far.request_id))
+        _, far_lease = claim(conn, far.request_id)
+        _, far_work = d3(conn, "load_work", lease=far_lease["lease"])
+        kept = row(conn, far.request_id)["deadline_at"]
+        assert datetime.fromisoformat(far_work["request"]["deadline_at"]) == kept, \
+            (far_work["request"]["deadline_at"], kept)
         assert work["admission"]["price_snapshot"] == admitted["price_snapshot"], 'failed: work["admission"]["price_snapshot"] == admitted["price_snapshot"]'
         phase = row(conn, request.request_id)["preparation_deadline_at"]
         while world.clock.now() + timedelta(seconds=PREP_TTL * 0.75) < phase:
@@ -341,55 +375,68 @@ def _recover(conn) -> list[dict]:
     return call(conn, "recover", {"limits": LIMITS})
 
 
+def _decide(conn, request_id: str) -> list:
+    """The reaper's per-job decision on its own, from the fresh row - what it does when a
+    renewal (or any other commit) lands between its candidate scan and its row lock."""
+    return conn.execute("select infrx.recover_job(%s, infrx.now(), %s, %s)",
+                        (request_id, DEFAULTS.max_prepublication_retries,
+                         DEFAULTS.unknown_usage_reconcile_s)).fetchone()[0]
+
+
 def check_recover_requeue(conn) -> str:
-    """The reaper, inference side: a live lease is left alone; an expired one BEFORE
-    publication is requeued as a new attempt (attempts + 1, the attempt released, the job
-    queued with only the unspent queue remainder, R38) with exactly one inference_dispatch,
-    returned as an IndexEvent carrying that row's own id; after the retry counter is spent
-    it is `retries_exhausted`; AFTER publication it is `lost_after_publication` and never
+    """The reaper, inference side: a live lease is left alone (by the sweep AND by the
+    per-job decision under the lock); an expired one BEFORE publication is requeued as a
+    new attempt (attempts + 1, the attempt released, the job queued with only the unspent
+    queue remainder, R38) with exactly one inference_dispatch, returned as an IndexEvent
+    carrying that row's own id; after MAX_PREPUBLICATION_RETRIES requeues it is
+    `retries_exhausted`; AFTER publication it is `lost_after_publication` and never
     requeued; past the generation instant (lease live) it is `deadline_exceeded`; a queued
-    job past its queue instant is `queue_wait_expired` (released_free)."""
+    job is left alone until its queue instant, then `queue_wait_expired` (released_free)."""
     world = ca.World(conn)
 
     def body():
-        request, lease = running(conn, world)
+        request = queued(conn, world)
+        advance(conn, 3)                              # 3 s of the queue budget used
+        code, answer = d3(conn, "claim", job_id=request.request_id, worker_id="w1")
+        assert code is None, code
         advance(conn, TTL - 1)
-        assert _recover(conn) == [], "a live lease was reaped"
+        assert _recover(conn) == [] and _decide(conn, request.request_id) == [], \
+            "a live lease was reaped"
         advance(conn, 1)
         now = world.clock.now()
-        produced = _recover(conn)
-        assert len(produced) == 1 and "index_event" in produced[0], produced
-        event = produced[0]["index_event"]
+        event = reaped(_recover(conn), "index_event")
         job = row(conn, request.request_id)
         assert (job["state"], job["attempts"], job["published"]) == ("queued", 1, False), job
-        assert job["queue_deadline_at"] == min(now + timedelta(
-            seconds=job["budget_queue_wait_s"] - job["queue_wait_used_s"]),
-            job["deadline_at"]), "the requeue did not keep only the unspent remainder (R38)"
+        assert job["queue_wait_used_s"] == 3.0 and job["queue_deadline_at"] == min(
+            now + timedelta(seconds=job["budget_queue_wait_s"] - 3.0), job["deadline_at"]), \
+            "the requeue did not keep only the unspent queue remainder (R38)"
         assert live_attempts(conn, request.request_id) == [], "the lost attempt is still live"
         dispatches = conn.execute(
-            "select event_id, payload->>'attempt' from infrx.outbox where aggregate_id = %s "
+            "select event_id from infrx.outbox where aggregate_id = %s "
             "and kind = 'inference_dispatch' order by created_at, event_id",
             (request.request_id,)).fetchall()
         assert len(dispatches) == 2 and str(dispatches[-1][0]) == event["event_id"] and \
             event["attempt"] == 1 and event["kind"] == "inference_dispatch", \
             (dispatches, event)
+        assert _decide(conn, request.request_id) == [], "a queued job was reaped early"
         # the retry counter: MAX_PREPUBLICATION_RETRIES requeues, then retries_exhausted
         for attempt in range(2, DEFAULTS.max_prepublication_retries + 1):
             d3(conn, "claim", job_id=request.request_id, worker_id="w1")
             advance(conn, TTL)
-            _recover(conn)
-            assert row(conn, request.request_id)["attempts"] == attempt, 'failed: row(conn, request.request_id)["attempts"] == attempt'
+            reaped(_recover(conn), "index_event")
+            assert row(conn, request.request_id)["attempts"] == attempt, \
+                f"requeue {attempt} was not counted"
         d3(conn, "claim", job_id=request.request_id, worker_id="w1")
         advance(conn, TTL)
-        [out] = _recover(conn)
-        assert out["outcome"]["cause"] == "retries_exhausted", out
+        out = reaped(_recover(conn))
+        assert out["cause"] == "retries_exhausted", out
         assert_released(conn, request.request_id, "retries_exhausted")
         # after publication: never requeued
         shown, lease = running(conn, world)
         publish(conn, lease)
         advance(conn, TTL)
-        [out] = _recover(conn)
-        assert (out["outcome"]["cause"], out["outcome"]["settlement_state"]) == \
+        out = reaped(_recover(conn))
+        assert (out["cause"], out["settlement_state"]) == \
             ("lost_after_publication", "held_unknown"), out
         assert kinds(conn, shown.request_id).count("inference_dispatch") == 1, \
             "a published job was redispatched"
@@ -398,25 +445,24 @@ def check_recover_requeue(conn) -> str:
         conn.execute("update infrx.attempts set expires_at = expires_at + interval '1 day' "
                      "where job_id = %s", (slow.request_id,))
         advance(conn, DEFAULTS.generation_timeout_s)
-        [out] = _recover(conn)
-        assert out["outcome"]["cause"] == "deadline_exceeded", out
+        out = reaped(_recover(conn))
+        assert out["cause"] == "deadline_exceeded", out
         # a queued job past its queue instant
         waiting = queued(conn, world)
         advance(conn, DEFAULTS.queue_wait_interactive_s)
-        [out] = _recover(conn)
-        assert (out["outcome"]["job_id"], out["outcome"]["state"], out["outcome"]["cause"],
-                out["outcome"]["settlement_state"]) == (waiting.request_id, "expired",
-                                                        "queue_wait_expired",
-                                                        "released_free"), out
+        out = reaped(_recover(conn))
+        assert (out["job_id"], out["state"], out["cause"], out["settlement_state"]) == \
+            (waiting.request_id, "expired", "queue_wait_expired", "released_free"), out
         return "requeue before publication (bounded, R38), fail after; phase instants bind"
     return ca._in_rollback(conn, body)
 
 
 def check_recover_preparation(conn) -> str:
-    """The reaper, preparation side (R46/R52): an expired preparation lease is released and
-    the job redispatched (`prepare_dispatch`, still preparing, no index event); after the
-    first claim plus MAX_PREPUBLICATION_RETRIES it is settled `preparation_failed` without a
-    further dispatch; past `preparation_deadline_at` it is `preparation_failed`."""
+    """The reaper, preparation side (R46/R52): a live preparation lease is left alone; an
+    expired one is released and the job redispatched (`prepare_dispatch`, still preparing,
+    no index event); after the first claim plus MAX_PREPUBLICATION_RETRIES it is settled
+    `preparation_failed` without a further dispatch; past `preparation_deadline_at` it is
+    `preparation_failed`."""
     world = ca.World(conn)
 
     def body():
@@ -426,17 +472,20 @@ def check_recover_preparation(conn) -> str:
             code, answer = claim(conn, request.request_id, f"p{attempt}")
             assert code is None and answer["lease"]["generation"] == attempt, (code, answer)
             advance(conn, PREP_TTL - 1)
-            assert _recover(conn) == [], "a live preparation lease was reaped"
+            assert _recover(conn) == [] and _decide(conn, request.request_id) == [], \
+                "a live preparation lease was reaped"
+            assert live_attempts(conn, request.request_id), "a live preparation was released"
             advance(conn, 1)
             assert _recover(conn) == [], "a preparation reap produced an index event"
-            assert row(conn, request.request_id)["state"] == "preparing", 'failed: row(conn, request.request_id)["state"] == "preparing"'
+            assert row(conn, request.request_id)["state"] == "preparing", \
+                "a reaped preparation left the preparing state"
             assert live_attempts(conn, request.request_id) == [], "the lost lease is live"
             assert kinds(conn, request.request_id).count("prepare_dispatch") == attempt + 1, \
                 "the reaped preparation was not redispatched"
         claim(conn, request.request_id, "last")
         advance(conn, PREP_TTL)
-        [out] = _recover(conn)
-        assert out["outcome"]["cause"] == "preparation_failed", out
+        out = reaped(_recover(conn))
+        assert out["cause"] == "preparation_failed", out
         assert kinds(conn, request.request_id).count("prepare_dispatch") == \
             DEFAULTS.max_prepublication_retries + 1, "an exhausted preparation was redispatched"
         assert_released(conn, request.request_id, "preparation retries")
@@ -444,19 +493,28 @@ def check_recover_preparation(conn) -> str:
         late = b.request(world)
         ca.admit(conn, late, b.idem(late, late.request_id))
         advance(conn, DEFAULTS.preparation_timeout_s)
-        [out] = _recover(conn)
-        assert (out["outcome"]["job_id"], out["outcome"]["cause"]) == \
-            (late.request_id, "preparation_failed"), out
+        out = reaped(_recover(conn))
+        assert (out["job_id"], out["cause"]) == (late.request_id, "preparation_failed"), out
         return "lost preparation redispatched within the bound, then settled"
     return ca._in_rollback(conn, body)
 
 
 def check_recover_unknown_release(conn) -> str:
     """02/R21: an unknown-usage hold is released platform-absorbed by the reaper only at
-    `reconcile_after` on the database clock (not a microsecond before), with its usage
+    `reconcile_after` on the database clock (not a second before), once, with its usage
     projection; the ledger never moves; the terminal settlement changes only along
     held_unknown -> released_platform_absorbed (the 0003 guard amendment)."""
     world = ca.World(conn)
+
+    def refused(request_id: str, to: str) -> bool:
+        try:
+            with conn.transaction():
+                conn.execute("update infrx.jobs set settlement_state = %s, reconcile_after = "
+                             "case when %s = 'held_unknown' then infrx.now() end "
+                             "where request_id = %s", (to, to, request_id))
+        except psycopg.errors.CheckViolation:
+            return True
+        return False
 
     def body():
         request, lease = running(conn, world)
@@ -464,41 +522,26 @@ def check_recover_unknown_release(conn) -> str:
         ledger = conn.execute("select ledger_total from infrx.wallets where org_id = %s",
                               (b.ORG_A,)).fetchone()[0]
         advance(conn, TTL)
-        _recover(conn)
+        assert reaped(_recover(conn))["settlement_state"] == "held_unknown", 'failed: held_unknown'
         held = reserved(conn)
-        try:                                      # held_unknown may go nowhere else
-            with conn.transaction():
-                conn.execute("update infrx.jobs set settlement_state = 'settled', "
-                             "reconcile_after = null where request_id = %s",
-                             (request.request_id,))
-        except psycopg.errors.CheckViolation:
-            pass
-        else:
-            raise AssertionError("a held_unknown settlement became settled")
+        assert refused(request.request_id, "settled"), "a held_unknown settlement became settled"
         advance(conn, DEFAULTS.unknown_usage_reconcile_s - 1)
         assert _recover(conn) == [] and reserved(conn) == held, "released before the window"
         advance(conn, 1)
-        [out] = _recover(conn)
-        assert (out["outcome"]["settlement_state"], out["outcome"]["reconcile_after"],
-                out["outcome"]["debit"]) == ("released_platform_absorbed", None,
-                                             "0.00000000"), out
+        out = reaped(_recover(conn))
+        assert (out["settlement_state"], out["reconcile_after"], out["debit"]) == \
+            ("released_platform_absorbed", None, "0.00000000"), out
         maximum = row(conn, request.request_id)["maximum_hold"]
         assert reserved(conn) == held - maximum, "the unknown hold was not released"
         assert conn.execute("select ledger_total from infrx.wallets where org_id = %s",
                             (b.ORG_A,)).fetchone()[0] == ledger, "unknown usage was debited"
-        assert kinds(conn, request.request_id).count("usage_projection") == 2, 'failed: kinds(conn, request.request_id).count("usage_projection") == 2'
-        assert _recover(conn) == [], "a released hold was released again"
-        # the guard: that one transition, nothing else
-        for bad in ("settled", "held_unknown", "released_free"):
-            try:
-                with conn.transaction():
-                    conn.execute("update infrx.jobs set settlement_state = %s, "
-                                 "reconcile_after = case when %s = 'held_unknown' "
-                                 "then infrx.now() end where request_id = %s",
-                                 (bad, bad, request.request_id))
-            except psycopg.errors.CheckViolation:
-                continue
-            raise AssertionError(f"a terminal settlement moved to {bad}")
+        assert kinds(conn, request.request_id).count("usage_projection") == 2, \
+            "the release did not write its usage projection"
+        assert conn.execute("select infrx.release_aged_unknown(%s, infrx.now())",
+                            (request.request_id,)).fetchone()[0] == [], \
+            "a released hold was released again"
+        for to in ("settled", "held_unknown", "released_free"):
+            assert refused(request.request_id, to), f"a terminal settlement moved to {to}"
         return "unknown usage released platform-absorbed at the window, never debited"
     return ca._in_rollback(conn, body)
 
@@ -519,19 +562,106 @@ def check_recover_isolation(conn) -> str:
               return new;
             end $$""")
         conn.execute("create trigger zz_stuck before update on infrx.jobs for each row "
-                      "execute function pg_temp.stuck()")
+                     "execute function pg_temp.stuck()")
         advance(conn, DEFAULTS.queue_wait_interactive_s)
-        produced = _recover(conn)
-        reaped = {item["outcome"]["job_id"] for item in produced if "outcome" in item}
+        try:
+            with conn.transaction():
+                produced = _recover(conn)
+        except psycopg.Error as failed:
+            raise AssertionError(f"the sweep stopped at the stuck job: {failed}") from None
+        reaped_ids = {item["outcome"]["job_id"] for item in produced if "outcome" in item}
         stuck_items = [item["unsettleable"] for item in produced if "unsettleable" in item]
-        assert reaped == {o.request_id for o in others}, f"the sweep stopped: {produced}"
+        assert reaped_ids == {o.request_id for o in others}, f"the sweep stopped: {produced}"
         assert [(s["job_id"], s["code"]) for s in stuck_items] == \
             [(stuck.request_id, "P0003")], stuck_items
         assert row(conn, stuck.request_id)["state"] == "queued" and \
             active_reservations(conn, stuck.request_id), "the stuck job half-terminalized"
-        conn.execute("drop trigger zz_stuck on infrx.jobs")
         return "one unreapable job is reported and rolled back alone"
     return ca._in_rollback(conn, body)
+
+
+# --------------------------------------------------------------------- item 6 (SQL half)
+def rpc(conn, function: str, args: dict):
+    """(error code or None, answer) of one boundary call on its own connection; a refusal
+    after a committed terminalization is its code."""
+    try:
+        answer = conn.execute(f"select infrx.{function}(%s)", (Jsonb(args),)).fetchone()[0]
+    except psycopg.Error as failed:
+        mapped = domain_error(failed)
+        return getattr(mapped, "code", f"untyped {failed.sqlstate}"), None
+    if isinstance(answer, dict) and answer.get("refusal"):
+        return answer["refusal"]["code"], answer
+    return None, answer
+
+
+def waiting_on_a_lock(observer, pid: int, within_s: float = 10.0) -> None:
+    deadline = time.monotonic() + within_s
+    while time.monotonic() < deadline:
+        state = observer.execute("select wait_event_type from pg_stat_activity where pid = %s",
+                                 (pid,)).fetchone()
+        if state and state[0] == "Lock":
+            return
+        time.sleep(0.02)
+    raise AssertionError(f"backend {pid} never waited on the first transaction's lock")
+
+
+def lockstep(observer, first, second):
+    """`first = (conn, call)` runs in an OPEN transaction; `second` starts in a thread and
+    must be seen WAITING on a lock; then the first commits (an aborted one rolls back).
+    Returns both answers."""
+    a, other = first[0], second[0]
+    a.execute("begin")
+    one = first[1](a)
+    out: dict = {}
+    thread = threading.Thread(target=lambda: out.setdefault("two", second[1](other)))
+    thread.start()
+    try:
+        waiting_on_a_lock(observer, other.info.backend_pid)
+    finally:
+        a.execute("commit")
+        thread.join(10)
+    assert not thread.is_alive(), "the second transaction never finished"
+    return one, out["two"]
+
+
+def check_lease_races(connect, database: str) -> str:
+    """DUR-FENCE under real transactions (the migration mutants' concurrency check; the full
+    set is tests/d/test_lease_races.py): two claimers serialize on the job row (the second
+    waits, then is `not_claimable`); a heartbeat after an uncommitted requeue waits on the
+    job row and is then `stale_lease`; a cancel behind complete's R29 terminalization waits
+    and answers the committed outcome."""
+    owner = connect(database)
+
+    def service():
+        conn = connect(database)
+        conn.execute("set role service_role")
+        return conn
+
+    world = ca.World(owner)
+    job = queued(owner, world)
+    claim_args = {"job_id": job.request_id, "worker_id": "w1", "limits": LIMITS}
+    first, second = lockstep(owner, (service(), lambda c: rpc(c, "claim", claim_args)),
+                             (service(), lambda c: rpc(c, "claim",
+                                                       dict(claim_args, worker_id="w2"))))
+    assert first[0] is None and second[0] == "not_claimable", (first, second)
+    lease = lease_of(first[1])
+    advance(owner, TTL)
+    first, second = lockstep(
+        owner, (service(), lambda c: rpc(c, "recover", {"limits": LIMITS})),
+        (service(), lambda c: rpc(c, "heartbeat", {"lease": lease.model_dump(mode="json"),
+                                                   "limits": LIMITS})))
+    assert second[0] == "stale_lease", (first, second)
+    _, again = rpc(service(), "claim", dict(claim_args, worker_id="w3"))
+    advance(owner, DEFAULTS.generation_timeout_s)
+    first, second = lockstep(
+        owner, (service(), lambda c: rpc(c, "terminalize", {
+            "lease": again["lease"], "outcome": {}, "limits": LIMITS})),
+        (service(), lambda c: rpc(c, "cancel", {
+            "org_id": b.ORG_A, "job_handle": row(owner, job.request_id)["job_handle"],
+            "limits": LIMITS})))
+    assert first[0] == "already_terminal" and second[0] is None and \
+        second[1]["cause"] == "deadline_exceeded", (first, second)
+    return "claim, heartbeat and cancel serialize on the job row"
 
 
 def check_lease_privileges(conn) -> str:

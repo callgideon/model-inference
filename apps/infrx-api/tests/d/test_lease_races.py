@@ -33,6 +33,7 @@ from infrx.state.jobstore import domain_error
 from . import checks_admission as ca
 from . import checks_leases as cl
 from . import pgharness, pgstore
+from .checks_leases import lockstep, rpc
 
 _reason = pgharness.unavailable()
 pytestmark = pytest.mark.skipif(_reason is not None,
@@ -83,17 +84,6 @@ class Rig:
         return self.job(job_id)["job_handle"]
 
 
-def rpc(conn, function: str, args: dict):
-    """(error code or None, answer): a refusal after a committed terminalization is its code."""
-    try:
-        answer = conn.execute(f"select infrx.{function}(%s)", (Jsonb(args),)).fetchone()[0]
-    except psycopg.Error as failed:
-        return getattr(domain_error(failed), "code", f"untyped {failed.sqlstate}"), None
-    if isinstance(answer, dict) and answer.get("refusal"):
-        return answer["refusal"]["code"], answer
-    return None, answer
-
-
 def lease_args(lease: Lease, **extra) -> dict:
     return {"lease": lease.model_dump(mode="json"), "limits": cl.LIMITS, **extra}
 
@@ -112,34 +102,6 @@ def publish(conn, lease: Lease):
     conn.execute("update infrx.jobs set published = true where request_id = %s",
                  (lease.job_id,))
     return None, True
-
-
-def waiting_on_a_lock(rig: Rig, pid: int, within_s: float = 10.0) -> None:
-    deadline = time.monotonic() + within_s
-    while time.monotonic() < deadline:
-        state = rig.owner.execute("select wait_event_type from pg_stat_activity where pid = %s",
-                                  (pid,)).fetchone()
-        if state and state[0] == "Lock":
-            return
-        time.sleep(0.02)
-    raise AssertionError(f"backend {pid} never waited on the first transaction's lock")
-
-
-def lockstep(rig: Rig, first, second):
-    """`first(conn)` runs in an OPEN transaction; `second(conn)` starts in a thread and must
-    block on a lock; then the first commits (an aborted one rolls back). Returns both
-    answers."""
-    a, other = first[0], second[0]
-    a.execute("begin")
-    one = first[1](a)
-    out: dict = {}
-    thread = threading.Thread(target=lambda: out.setdefault("two", second[1](other)))
-    thread.start()
-    waiting_on_a_lock(rig, other.info.backend_pid)
-    a.execute("commit")
-    thread.join(10)
-    assert not thread.is_alive(), "the second transaction never finished"
-    return one, out["two"]
 
 
 def together(calls) -> list:
@@ -171,7 +133,7 @@ def test_race__two_claimers_mint_exactly_one_generation() -> None:
     rig = Rig()
     job = rig.queued()
     claim = {"job_id": job, "worker_id": "w1", "limits": cl.LIMITS}
-    first, second = lockstep(rig, (rig.service(), lambda c: rpc(c, "claim", claim)),
+    first, second = lockstep(rig.owner, (rig.service(), lambda c: rpc(c, "claim", claim)),
                              (rig.service(), lambda c: rpc(c, "claim",
                                                            dict(claim, worker_id="w2"))))
     assert first[0] is None and second[0] == "not_claimable", (first, second)
@@ -217,7 +179,7 @@ def test_race__recover_and_heartbeat_never_both_win() -> None:
     lost = rig.running("w2")
     rig.advance(TTL)
     first, second = lockstep(
-        rig, (rig.service(), lambda c: rpc(c, "recover", {"limits": cl.LIMITS})),
+        rig.owner, (rig.service(), lambda c: rpc(c, "recover", {"limits": cl.LIMITS})),
         (rig.service(), lambda c: rpc(c, "heartbeat", lease_args(lost))))
     assert first[0] is None and [i for i in first[1] if "index_event" in i], first
     assert second[0] == "stale_lease", second
@@ -244,14 +206,14 @@ def test_race__cancel_and_complete_have_one_terminal_outcome() -> None:
     # complete first
     lease = rig.running()
     rig.advance(GEN)
-    first, second = lockstep(rig, (rig.service(), settle(lease)),
+    first, second = lockstep(rig.owner, (rig.service(), settle(lease)),
                              (rig.service(), cancel(lease.job_id)))
     assert first[0] == "already_terminal" and second[0] is None, (first, second)
     assert second[1]["cause"] == "deadline_exceeded", "the waiting cancel invented an outcome"
     # cancel first
     other = rig.running()
     rig.advance(GEN)
-    first, second = lockstep(rig, (rig.service(), cancel(other.job_id)),
+    first, second = lockstep(rig.owner, (rig.service(), cancel(other.job_id)),
                              (rig.service(), settle(other)))
     assert first[1]["cause"] == "client_cancelled" and second[0] == "already_terminal", \
         (first, second)
@@ -307,7 +269,7 @@ def test_race__publication_is_honoured_and_a_late_append_is_fenced() -> None:
     lost = rig.running("w2")
     rig.advance(TTL)
     first, second = lockstep(
-        rig, (rig.service(), lambda c: rpc(c, "recover", {"limits": cl.LIMITS})),
+        rig.owner, (rig.service(), lambda c: rpc(c, "recover", {"limits": cl.LIMITS})),
         (pgharness.connect(rig.db), lambda c: publish(c, lost)))
     assert second[0] == "stale_lease", second
     job = rig.job(lost.job_id)
@@ -315,13 +277,13 @@ def test_race__publication_is_honoured_and_a_late_append_is_fenced() -> None:
     # publication vs cancel, both orders
     shown = rig.running("w3")
     first, second = lockstep(
-        rig, (pgharness.connect(rig.db), lambda c: publish(c, shown)),
+        rig.owner, (pgharness.connect(rig.db), lambda c: publish(c, shown)),
         (rig.service(), lambda c: rpc(c, "cancel", {
             "org_id": b.ORG_A, "job_handle": rig.handle(shown.job_id), "limits": cl.LIMITS})))
     assert second[1]["settlement_state"] == "held_unknown", "a published cancel was released"
     unseen = rig.running("w4")
     first, second = lockstep(
-        rig, (rig.service(), lambda c: rpc(c, "cancel", {
+        rig.owner, (rig.service(), lambda c: rpc(c, "cancel", {
             "org_id": b.ORG_A, "job_handle": rig.handle(unseen.job_id), "limits": cl.LIMITS})),
         (pgharness.connect(rig.db), lambda c: publish(c, unseen)))
     assert first[1]["settlement_state"] == "released_free" and \
