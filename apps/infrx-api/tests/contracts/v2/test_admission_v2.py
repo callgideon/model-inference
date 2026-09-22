@@ -134,7 +134,7 @@ def test_a_consumer_credential_is_refused_a_private_dev_deployment():
     dev_card = v2.RateCardSnapshot.model_validate(
         dict(CARD, deployment_revision_id=dev.deployment_revision_id,
              rate_card_version="rc_internal_preview"))
-    kwargs = dict(requested_model="marlin-2b-dev", deployment=dev, serving=serving,
+    kwargs = dict(requested_model=v2fix.DEV_REQUESTED_MODEL, deployment=dev, serving=serving,
                   rate_card=dev_card, policy=policy)
     with pytest.raises(errors.NotFound):
         v2ports.pin_admission(auth=auth, **kwargs)

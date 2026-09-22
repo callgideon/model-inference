@@ -132,7 +132,7 @@ def fake_v2_harness() -> V2Harness:
         by_provider={IDS.provider_org: built["wallet_provider_dev.json"]})
     catalog = FakeCatalogDirectory(
         aliases={v2fix.REQUESTED_MODEL: prod.deployment_revision_id,
-                 v2fix.REQUESTED_MODEL + "-dev": dev.deployment_revision_id},
+                 v2fix.DEV_REQUESTED_MODEL: dev.deployment_revision_id},
         deployments={prod.deployment_revision_id: prod, dev.deployment_revision_id: dev},
         servings={serving.serving_version_id: serving},
         # The dev deployment is deliberately *unpriced*: an operator-funded preview

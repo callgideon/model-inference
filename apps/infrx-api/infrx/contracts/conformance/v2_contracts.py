@@ -72,7 +72,7 @@ async def split_contract__a_consumer_credential_cannot_reach_a_private_dev_endpo
     """A public consumer key resolving a private dev deployment gets `not_found` —
     not a 403 that confirms the artifact exists, and never a successful pin."""
     harness = factory()
-    dev_model = v2fix.REQUESTED_MODEL + "-dev"
+    dev_model = v2fix.DEV_REQUESTED_MODEL
     try:
         await _pin(harness, _consumer_auth(), dev_model)
     except errors.NotFound as refused:
@@ -91,7 +91,7 @@ async def split_contract__a_provider_credential_cannot_borrow_another_endpoint(f
     at an endpoint it was not issued for resolves nothing."""
     harness = factory()
     auth = _provider_auth().model_copy(update={"endpoint_id": IDS.prod_endpoint})
-    assert await harness.catalog.resolve(v2fix.REQUESTED_MODEL + "-dev",
+    assert await harness.catalog.resolve(v2fix.DEV_REQUESTED_MODEL,
                                          audience=auth.audience,
                                          endpoint_id=auth.endpoint_id) is None
 
@@ -119,6 +119,31 @@ async def split_contract__an_internal_v1_payload_is_refused_not_upgraded(factory
 def _v1_price_snapshot() -> dict:
     from .. import fixtures as v1fix
     return v1fix.load("price_snapshot.json")
+
+
+async def split_contract__the_v1_model_revision_string_is_unchanged_r62(factory):
+    """r1 R62: the consumer-facing identifier keeps its v1 form
+    `<public_model_id>@<revision>` — byte-identical to what the v1 fixtures carry —
+    and the artifact is pinned by the SERVING revision, not by that string. Reading
+    an artifact identity out of `model_revision` is the confusion this case blocks."""
+    harness = factory()
+    serving = await harness.catalog.serving_revision(IDS.serving_version)
+    assert serving.model_revision == v2fix.REQUESTED_MODEL == _v1_price_snapshot()[
+        "model_revision"]
+    assert "@" in serving.model_revision and serving.model_revision.count("@") == 1
+    request = v2.NormalizedRequestV2.model_validate(v2fix.load("normalized_request.json"))
+    assert request.request.model_revision == serving.model_revision
+    assert request.pins.requested_model == serving.model_revision
+    # the artifact identity lives here, and nowhere in the consumer string
+    assert serving.model_commit == "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965"
+    assert len(serving.weight_shard_digests) == 2
+    assert serving.digest_source is v2.DigestSource.served_bytes, (
+        "the registry-oid equality is still pending (W3); the record must say which "
+        "kind of digest it holds rather than implying an upstream confirmation")
+    assert serving.image_is_pinned is False, (
+        "serve.sh pins the moving tag vllm/vllm-openai:nightly, so no image digest "
+        "exists yet; W3 pulls by digest and fills it")
+    assert serving.runtime_image_ref == "vllm/vllm-openai:nightly"
 
 
 async def split_contract__the_surface_carries_one_reviewed_version(factory):
@@ -470,7 +495,7 @@ async def credit_rate__an_unknown_private_or_unpriced_model_is_refused(factory):
     is `invalid_request`, because unpriced is unserveable, not free."""
     harness = factory()
     consumer = _consumer_auth()
-    for model in ("no/such-model", v2fix.REQUESTED_MODEL + "-dev"):
+    for model in ("no/such-model", v2fix.DEV_REQUESTED_MODEL):
         try:
             await _pin(harness, consumer, model)
         except errors.NotFound:
@@ -478,7 +503,7 @@ async def credit_rate__an_unknown_private_or_unpriced_model_is_refused(factory):
         raise AssertionError(f"{model} resolved for a consumer credential")
     provider = _provider_auth()
     try:
-        await _pin(harness, provider, v2fix.REQUESTED_MODEL + "-dev")
+        await _pin(harness, provider, v2fix.DEV_REQUESTED_MODEL)
     except errors.InvalidRequest as refused:
         assert "rate card" in str(refused), refused
     else:
@@ -670,6 +695,7 @@ def cases() -> list[Callable]:
         split_contract__a_consumer_credential_cannot_reach_a_private_dev_endpoint,
         split_contract__a_provider_credential_cannot_borrow_another_endpoint,
         split_contract__an_internal_v1_payload_is_refused_not_upgraded,
+        split_contract__the_v1_model_revision_string_is_unchanged_r62,
         split_contract__the_surface_carries_one_reviewed_version,
         credit_units__mixed_unit_arithmetic_is_refused_by_construction,
         credit_units__a_mixed_history_totals_per_unit_and_never_once,

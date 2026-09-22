@@ -10,7 +10,7 @@
     "model_id": "d0000001-0000-4000-8000-000000000001",
     "policy_version": "dap_2026_09_01",
     "rate_card_version": "rc_marlin2b_2026_09_provisional",
-    "requested_model": "nemostation/marlin-2b",
+    "requested_model": "nemostation/marlin-2b@2026-09-01",
     "schema_version": 2,
     "serving_version_id": "d0000003-0000-4000-8000-000000000003"
   },

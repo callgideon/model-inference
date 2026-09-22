@@ -73,13 +73,36 @@ class IDS:
 
 T0 = datetime(2026, 9, 1, tzinfo=timezone.utc)
 T1 = datetime(2026, 9, 22, 12, 0, 0, tzinfo=timezone.utc)
-DIGEST = "sha256:" + "11" * 32
-DIGEST2 = "sha256:" + "22" * 32
-DIGEST3 = "sha256:" + "33" * 32
-DIGEST4 = "sha256:" + "44" * 32
+# --- the Marlin artifact identity (S2M, research/workloads/marlin-sop.md) -----
+# Real measured values, not placeholders: the served-bytes sha256 of each weight
+# shard and of `tokenizer.json`, hashed read-only on the pilot box 2026-09-22
+# (§1.3), plus the chat template's sha256 (§1.3, needs no gate) and the HF commit
+# (§2.6). `digest_source` records that these are SERVED BYTES: the repository is
+# gated, so the registry `.lfs.oid` equality is still ⚠️ and W3/I2B confirms it on
+# the serving host. The runtime image has no digest at all yet, because `serve.sh`
+# pins the moving tag `vllm/vllm-openai:nightly` — W3 pulls by digest and fills it.
+MODEL_REPO = "NemoStation/Marlin-2B"
+MODEL_COMMIT = "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965"
+SHARD_DIGESTS = (
+    "sha256:5d78fa4dbd856dc89c01b99ffa92072fe31b8a1e6b31e87893734c80304983b7",
+    "sha256:01d40ec9ccf4c2ad8e755604468dd6ee4a5c6551553e5739a03beb4c0673d0db",
+)
+TOKENIZER_DIGEST = "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523"
+CHAT_TEMPLATE_DIGEST = \
+    "sha256:273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80"
+RUNTIME_IMAGE_REF = "vllm/vllm-openai:nightly"
+# The validated engine options of the profile, hashed by the operator that approved
+# them. Placeholder shape until W3 records the options it actually launched with.
+ENGINE_OPTIONS_DIGEST = "sha256:" + "44" * 32
 PAYLOAD_DIGEST = "sha256:" + "55" * 32
 
-REQUESTED_MODEL = "nemostation/marlin-2b"
+# r1 R62: the consumer-facing model identifier keeps its v1 form
+# `<public_model_id>@<revision>` — byte-identical to `fixtures/v1/*.json`. The
+# artifact is pinned by the serving revision, not by this string.
+PUBLIC_MODEL_ID = "nemostation/marlin-2b"
+REVISION_LABEL = "2026-09-01"
+REQUESTED_MODEL = f"{PUBLIC_MODEL_ID}@{REVISION_LABEL}"
+DEV_REQUESTED_MODEL = f"{PUBLIC_MODEL_ID}-dev@{REVISION_LABEL}"
 RATE_CARD_VERSION = "rc_marlin2b_2026_09_provisional"
 POLICY_VERSION = "dap_2026_09_01"
 
@@ -113,20 +136,25 @@ RATE_CARD_APPROVER = "provisional - P-01 pending"
 
 
 def _capability() -> v2.CapabilityRecord:
+    """S2M §2.6's actual values, not 07-api-contracts.md's illustrative ones."""
     return v2.CapabilityRecord(
         input_modalities=("text", "video"), output_modalities=("text",), stream_output=True,
-        input_schema_ref="chat_completions_v2", output_schema_ref="chat_completion_v2",
-        preprocessing_profile_ref="marlin2b_video_v1")
+        input_schema_ref="infrx.request.chat.v1", output_schema_ref="infrx.response.chat.v1",
+        preprocessing_profile_ref="marlin2b.video.v1")
 
 
 def _serving() -> v2.ServingRevision:
     return v2.ServingRevision(
         serving_version_id=IDS.serving_version, model_id=IDS.model,
         model_version_id=IDS.model_version, provider_org_id=IDS.provider_org,
-        weights_digest=DIGEST, tokenizer_digest=DIGEST2, prompt_harness_ref="marlin2b_chat_v1",
-        preprocessor_profile_version="v1", runtime_image_digest=DIGEST3,
-        engine_options_digest=DIGEST4, precision="bf16", capability=_capability(),
-        created_at=T0)
+        public_model_id=PUBLIC_MODEL_ID, revision_label=REVISION_LABEL,
+        model_repo=MODEL_REPO, model_commit=MODEL_COMMIT,
+        weight_shard_digests=SHARD_DIGESTS, tokenizer_digest=TOKENIZER_DIGEST,
+        chat_template_digest=CHAT_TEMPLATE_DIGEST,
+        digest_source=v2.DigestSource.served_bytes, prompt_harness_ref="marlin2b.chat.v1",
+        preprocessor_profile_version="marlin2b.video.v1",
+        runtime_image_ref=RUNTIME_IMAGE_REF, engine_options_digest=ENGINE_OPTIONS_DIGEST,
+        precision="bfloat16", capability=_capability(), created_at=T0)
 
 
 def _prod_deployment() -> v2.DeploymentRevision:
@@ -445,8 +473,14 @@ def field_map() -> dict[str, Any]:
                        note="new DTO: CREDIT total, reserved and derived available, with the "
                             "legacy USD statement alongside rather than added in."),
             _map_entry(v2.ServingRevision, None,
-                       note="new: immutable weights/adapter/tokenizer/prompt/preprocessor/"
-                            "runtime identity. Optimization makes a new one."),
+                       note="new: immutable repository/commit/per-shard weight/adapter/"
+                            "tokenizer/chat-template/prompt/preprocessor/engine/runtime "
+                            "identity. r1 R62: the v1 model_revision string "
+                            "<public_model_id>@<revision> is unchanged and is NOT an "
+                            "artifact identity; this record is. digest_source records "
+                            "that the Marlin digests are served bytes, with registry-oid "
+                            "equality still pending (W3), and runtime_image_digest is "
+                            "absent while serve.sh pins a moving tag."),
             _map_entry(v2.DeploymentRevision, None,
                        note="new: endpoint -> serving revision, with environment, visibility "
                             "and lifecycle state. Dev is never public."),

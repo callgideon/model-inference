@@ -5,12 +5,12 @@
     "text",
     "video"
   ],
-  "input_schema_ref": "chat_completions_v2",
+  "input_schema_ref": "infrx.request.chat.v1",
   "output_modalities": [
     "text"
   ],
-  "output_schema_ref": "chat_completion_v2",
-  "preprocessing_profile_ref": "marlin2b_video_v1",
+  "output_schema_ref": "infrx.response.chat.v1",
+  "preprocessing_profile_ref": "marlin2b.video.v1",
   "schema_version": 2,
   "stream_input": false,
   "stream_output": true,

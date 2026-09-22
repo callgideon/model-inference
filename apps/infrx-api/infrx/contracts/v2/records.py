@@ -327,27 +327,75 @@ class CapabilityRecord(RecordV2):
     billing_meter: Literal["tokens-v1"] = METER_TOKENS_V1
 
 
+class DigestSource(enum.StrEnum):
+    """How an artifact digest was obtained, recorded rather than assumed.
+
+    `served_bytes` is a hash of the file the serving host actually reads;
+    `registry_oid` is the registry's own claim (for LFS the oid *is* the sha256).
+    They should be equal, and S2M's Marlin profile
+    (`research/workloads/marlin-sop.md` §1.3) records that the equality is **not
+    yet verified**: the repository is gated, so an unauthenticated tree read
+    returns each oid masked. W3/I2B runs the authenticated comparison on the
+    serving host; a mismatch is a fail-stop. Keeping the provenance in the record
+    is what stops "measured on the box" being read later as "confirmed upstream".
+    """
+
+    served_bytes = "served_bytes"
+    registry_oid = "registry_oid"
+    registry_oid_confirmed = "registry_oid_confirmed"
+
+
 class ServingRevision(RecordV2):
     """Everything that changes what the model *does*, pinned by one identifier.
 
     Optimization creates a new serving revision without pretending the weights
     were retrained: the artifact digests are what distinguish the two cases.
+
+    r1 R62: the consumer-facing `model_revision` keeps its v1 form
+    `<public_model_id>@<revision>` and is **not** an artifact identity. This record
+    is where the artifact is pinned — repository, commit, per-shard weight digests,
+    tokenizer, chat template, preprocessing profile, engine options and runtime
+    image. `runtime_image_digest` is optional for exactly one reason, stated in the
+    field: `serve.sh` pins a moving tag today, so no registry read can supply the
+    digest until W3 pulls by digest. A serving revision with no image digest is
+    therefore honest, not complete, and W3 fills it.
     """
 
     serving_version_id: UuidStr
     model_id: UuidStr
     model_version_id: UuidStr
     provider_org_id: UuidStr
-    weights_digest: Sha256
+    # The public identity the R62 `model_revision` string is built from.
+    public_model_id: str
+    revision_label: str
+    model_repo: str
+    model_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
+    # One digest per weight shard, in shard order: a single "weights digest" would
+    # have to be invented for a sharded artifact, and an invented digest proves
+    # nothing at load time.
+    weight_shard_digests: tuple[Sha256, ...] = Field(min_length=1)
     adapter_digest: Sha256 | None = None
     tokenizer_digest: Sha256
+    chat_template_digest: Sha256
+    digest_source: DigestSource
     prompt_harness_ref: str
     preprocessor_profile_version: str
-    runtime_image_digest: Sha256
+    runtime_image_ref: str
+    runtime_image_digest: Sha256 | None = None
     engine_options_digest: Sha256
     precision: str
     capability: CapabilityRecord
     created_at: Timestamp
+
+    @property
+    def model_revision(self) -> str:
+        """The v1 consumer-facing string (R62), derived and never stored twice."""
+        return f"{self.public_model_id}@{self.revision_label}"
+
+    @property
+    def image_is_pinned(self) -> bool:
+        """False while the runtime is a moving tag. W3 makes it true."""
+        return self.runtime_image_digest is not None
 
 
 class DeploymentRevision(RecordV2):
