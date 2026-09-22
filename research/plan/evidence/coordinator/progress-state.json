@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T16:51:55Z",
+  "updated": "2026-09-22T16:58:00Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -53,7 +53,7 @@
     },
     "S1": {
       "lane": "codex-s1fix / codex/s1fix-console-balance",
-      "phase": "review fix round (B1 balance unavailable state, B2 preview gate inlining)",
+      "phase": "S1-fix re-review at 3ba9411",
       "since": "2026-09-22T16:36:52Z",
       "note": "S1 API side passed independent review; console fixes in flight"
     }
