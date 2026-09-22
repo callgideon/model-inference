@@ -63,7 +63,7 @@ collected by its `suites` stage too, where the PostgREST ones skip naming `--lay
 | `test_an_unknown_pending_id_is_refused` | The pending vocabulary is closed | runs |
 | `test_postgrest_refuses_anon_on_the_tenant_tables` | Through real HTTP: `anon` on `/organizations` is 401/403 with SQLSTATE `42501`, not an empty 200 (R59-4) | runs (real PostgREST) |
 | `test_postgrest_service_role_reads_every_tenant` | The service-role path sees every tenant, i.e. tenant safety on it is route-side (E2R Limits 4) | runs (real PostgREST) |
-| `test_postgrest_member_session_sees_its_own_organization` | A member JWT reads its own org | **PENDING[I2B]** — observed `200`, rows `[]` (see Findings 2) |
+| `test_postgrest_member_session_is_nobody_on_the_pinned_pairing` (renamed in review round 1) | A MEASUREMENT: a member JWT over HTTP to the pinned pairing is answered `200` with `[]` (the pinned image's `auth.uid()` reads only the legacy GUC); it fails the day the pairing changes | runs (real PostgREST). Round 0 had it PENDING[I2B], a reverse edge (Findings 2) |
 
 Journey cells and their unblocking ids (every cell: G1R, G6B, D2, D5, W3):
 
@@ -201,7 +201,7 @@ The 27 run: `dr01`–`dr10 [fake]`, `dr12`, `dr13` (real Valkey), `dr14`, `dr15`
 `dr16`, the provisioning fixture, the vocabulary guard, 2 PostgREST cases, `db01`–`db05`
 (real PostgreSQL), 3 stage cases. The 23 pending, each with its ids: the 9 journey cells and
 the dataset resume (table above), `dr01`–`dr10 [postgres]` (D ids as tabled), `dr11`
-(G1R,G2), `dr17` (G1R), the PostgREST member session (I2B).
+(G1R,G2), `dr17` (G1R), and (round 0 only) the PostgREST member session.
 
 ## Failure drill
 
@@ -266,12 +266,15 @@ migration; no deploy/rollback implication. Rolling back = reverting the four com
    then make `validate_runtime` refuse `pilot` when the metered ingress is not the mounted
    router, so a pilot configuration can never serve the unmetered path. When that lands, `dr17`
    stops being pending and every journey case fails until its body is written (by design).
-2. **I2B / C (input, not a defect in the backend path).** `test_postgrest_member_session_sees_its_own_organization`:
-   a member JWT (HS256, `role=authenticated`, `sub=<owner_alpha>`) through PostgREST 13.0.4 to
-   the pinned `supabase/postgres` 17.6.1.173 returns **200 with `[]`** — `auth.uid()` reads only
-   the legacy claim GUC, which PostgREST 13 does not set (E2R's measurement, now reproduced
-   end-to-end over HTTP). The deployed PostgREST/auth pairing must be confirmed before any RLS
-   claim about browser sessions.
+2. **E (this lane) — bump the pinned `supabase/postgres` image.** Case (a measurement, now
+   passing): `tests/integration/backend/test_journey.py::test_postgrest_member_session_is_nobody_on_the_pinned_pairing`
+   — a member JWT through PostgREST 13.0.4 to the pinned 17.6.1.173 image is answered `200`
+   with `[]`, because the image's `auth.uid()` reads only `request.jwt.claim.sub` and PostgREST
+   13 sets only `request.jwt.claims`. Hosted `auth.uid()` reads both forms (I1B), so the pinned
+   image is the odd one out. Request: pin a `supabase/postgres` digest whose `auth.uid()` reads
+   the JSON claims (E's compose/harness change, coordinator-approved digest), then turn the
+   case into "the member sees exactly its own organization". Not an I2B dependency: I2B
+   integration-depends on E3B, not the reverse (review round 1).
 3. **D / coordinator — one D port for many lanes.** Runs 2 and 5 lost `tests/d` (69 cases)
    to `HarnessBusy` while `codex-d1r` held 55432; run 4 on the same tests had 2208 passed. A
    whole-tree check needs a D-port-free window or a second allocated port (E2R Limits 2).
@@ -280,9 +283,9 @@ migration; no deploy/rollback implication. Rolling back = reverting the four com
    publications; the drills call it explicitly. A timer/worker must own it (also W2 review).
 5. **Q3 — the rebuild snapshot.** `dr13` builds the non-terminal snapshot from the fake
    JobStore; the PostgreSQL query + reconciler that produce it are Q3's (Q2 Limits).
-6. **E (this lane) / coordinator — `mutants.py`'s mutation stage has no guard for a
-   `HarnessError` inside `_reprovision`** (run 3 lost the whole JSON report to it). Pre-existing
-   E2 behaviour; now avoided by stopping PostgREST, not fixed.
+6. **Done in review round 1** (was: the mutation stage had no guard for an exception inside
+   `_reprovision`; run 3 lost its JSON report to it). `run.mutation()` now reports it as a
+   FAIL stage and the report is always written.
 7. **F2P wire-in / D1R.** The provisioning fixture holds v2 identities (CREDIT wallets, pins)
    but grants and drills use the v1 fake JobStore's USD-shaped pilot numbers; no conversion is
    attempted (R64/R65). The drills switch to CREDIT when the v2 JobStore/wire-in lands.
@@ -293,20 +296,20 @@ migration; no deploy/rollback implication. Rolling back = reverting the four com
    `[fake]` drills are fake-only (implemented). Real-store coverage today: Valkey (dr12, dr13),
    the migrated PostgreSQL schema (db01–db05), PostgREST (2 cases), M2's probe/fetcher, the
    composition root's startup refusal. No journey ran; no durable RPC was crashed.
-2. **No GPU, no engine, no latency/throughput.** P-04 and W3; E1B/E4B.
+2. **No GPU, no engine, no latency/throughput.** W3 and I2B/E1B/E4B (P-04 is resolved as a target; nothing here used it).
 3. **The DB drills assert the schema's backstops, not D2–D5's operations.** A correct
    operation that never tries a duplicate is not proven by them.
 4. **`dr13`'s durable snapshot is the fake's**, so DUR-OUTBOX is proven for the index half.
-5. **The PostgREST member case is environment-bound** (Findings 2): pending on I2B, not a
+5. **The PostgREST member case measures the pinned pairing** (Findings 2), not a hosted one; it is not a
    failure of the backend path, which uses the service role.
 6. **A layer-3 run cannot be fully green while any lane holds the D port**; commands 2, 5, 6
    and 7 lost `tests/d` to it, commands 4, 8 and 9 found a free window. `make check` is
    therefore evidenced as command 7 (every non-D target) plus command 8 (the D share), not as
    one green invocation.
-8. **Object storage is up but unused by product code.** `infrx.media.store` has only
+7. **Object storage is up but unused by product code.** `infrx.media.store` has only
    `InMemoryObjectStore`; no S3-backed `ObjectStore` exists on this base, so no case exercises
    E2's MinIO beyond E2's own smoke test. The upload journey cells name M3/G4U.
-7. `make check` does not run `tests/integration` (it is `make integration`'s job, E2R).
+8. `make check` does not run `tests/integration` (it is `make integration`'s job, E2R).
 
 ## Handback
 
@@ -314,7 +317,7 @@ migration; no deploy/rollback implication. Rolling back = reverting the four com
   case, which then fail until written), D2/D3/D4/D5 (swap `rig("postgres")` to the real adapter
   factory; the drills are already written against the ports), G6B (replace the body of
   `stack.provision_two_tenants`), Q3 (feed `dr13`'s snapshot from PostgreSQL), M3/G4U (upload
-  cells), I2B (member session case).
+  cells), the image bump of Findings 2 (member session case).
 - **Coordinator wiring:** none required for phase 1. `make integration` behaviour is unchanged;
   `run.py --layer 3` is the gate command (optional Makefile target
   `make backend-gate` = `run.py --layer 3 --canary`, not added: Makefile is coordinator-owned).
@@ -331,3 +334,38 @@ migration; no deploy/rollback implication. Rolling back = reverting the four com
   `make api-test` 2208 passed in its `suites` stage; `make -k check` (command 7) passed every
   non-D target with no skips and lost only `tests/d` to the D1R lane's lock, and the D share ran
   green on its own (command 8). No code changed after `a7cc8f7`.
+
+## Review round 1 (independent review at `10a0a2e`: fix_required)
+
+| Item | Commit | Change | Proof |
+|---|---|---|---|
+| 1 pending-but-green must surface | `7958478` | `rig("postgres")` first measures `stack.unimplemented_rpcs()` (`select count(*) from pg_proc … where n.nspname='infrx' and p.prosrc like '%infrx.unimplemented%'` on E2's database; the migrations' text without a stack) and FAILS with "wire rig('postgres') to the real adapter (E3B phase 2)" at 0; `dr11` fails once `ingress_is_mounted()`, like `dr17` and the journeys | measured in the gate: pending message `11 infrx RPCs are infrx.unimplemented stubs` |
+| 2 I2B was a reverse edge | `f462cdb` | `I2B` and `P-04` removed from `stack.PENDING`; the member-session case is the measured assertion `(200, [])`; the image bump is Findings 2 (E) | the case passes in the gate |
+| 3 stage wiring | `a769d39` | `backend_summary(cases, exit)` is the one status+detail (`passed`, `pending`, `failed`, `failed_cases`, `not_run`, `detected`, `pending_by_id`); `backend()` reports its status; `classify` never counts a `pytest.xfail` skip as pending; `test_stage.py` asserts the summary for the sample XML, an xfail row → `skipped` → FAIL, and drives `backend()` itself with PostgREST and the pytest run stubbed | new mutants `e3bm10` (summary status = PASS), `e3bm11` (xfail pending), `e3bm12` (call site reports PASS) all killed |
+| fold-in: mutation stage | `a769d39` | exception in the mutant loop → `mutants` FAIL stage, JSON still written | — |
+| fold-in: db04 / rv04 | `865d1a7` | an accepted second usage debit is now kept inside the fixture transaction (not rolled back), so conservation sees it; db04 asserts both `a second usage debit` and `the wallet total moved by more than the one accepted debit` | db01 still green; db04 green with the index dropped |
+| fold-in: detail names, dr13 loop, Limits numbering | `a769d39`, `865d1a7`, this commit | `run` → `passed` + `failed`; dr13's dispatch loop is bounded (`len(admissions)+1`, else AssertionError) | — |
+
+**Re-run at `865d1a7`, in E's namespace.**
+
+`run.py --layer 3 --canary` (21:04:09Z, 456.7 s): **exit 3**.
+
+| Stage | Status | Measured |
+|---|---|---|
+| preflight / services / migrate | PASS | as before |
+| rls | PASS | 40 cases, `failed: null` |
+| backend | **PENDING** | `{"postgrest": "postgrest/13.0.4", "passed": 30, "pending": 22, "failed": 0, "failed_cases": null, "not_run": null}`, detected `db03`, `db04`, `db05`; pending by id `D2 12 · D3 4 · D4 7 · D5 13 · G1R 12 · G2 7 · G3 5 · G4U 3 · G6B 10 · M3 3 · Q3 3 · W3 9` |
+| backend-teardown | PASS | PostgREST removed at the end of the stage |
+| engine | PASS | 8 cases |
+| suites | PASS | `tests/integration` 119 passed / 25 skipped; `make api-test` **2208 passed**; console 283 / 0; bench 67 |
+| mutants | PASS | `{"mutants": 86, "killed": 83, "controls_survived": 3, "not_killed": 0, "pending": 0, "problems": null}` |
+| canary | PASS | python exit 1 `4 failed, 3 passed`, named; console exit 1 `# fail 1`, named |
+| teardown | PASS | four `infrx-e2-*` removed, `still_named_ours_but_not_ours: []` |
+
+Counts moved from 27/23 to 30/22: +1 the member session (now a measurement), +2 stage cases.
+
+`INFRX_MUTANTS=all tests/integration/mutants.py --layer all` on a kept stack (`run.py --layer 2
+--keep`, exit 0), ended 21:14:06Z: **exit 0**, `{'mutants': 86, 'killed': 83,
+'controls_survived': 3, 'not_killed': 0, 'pending': 0, 'problems': None}`; e3bc01 SURVIVED,
+e3bm01–e3bm12 killed. The kept stack was then removed with `harness.down()` (exit 0).
+Raw: `<scratch>/e3b/rv-865d1a7-1.{json,log}`, `rv-mutants-865d1a7.{json,log}`, `review.log`.
