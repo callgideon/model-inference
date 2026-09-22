@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T15:51:21Z",
+  "updated": "2026-09-22T15:55:30Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -94,6 +94,10 @@
     {
       "at": "2026-09-22T15:51:21Z",
       "what": "Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched"
+    },
+    {
+      "at": "2026-09-22T15:55:30Z",
+      "what": "Baseline make check exit 0 on ec6c548 (api-test + all mutant lists, console 255, bench 40); main fast-forwarded to claude/backend-impl and pushed (first checkpoint under full authorization)"
     }
   ],
   "cadence_windows": [
