@@ -303,6 +303,11 @@ class MemoryScheduler:
         """Pending plus in flight, as the fake reports it."""
         return len(self._entries)
 
+    async def members(self) -> dict[str, str]:
+        """Q3: every indexed candidate, pending or in flight, as `event_id -> job_id` -
+        what the reconciler compares with PostgreSQL's dispatch snapshot."""
+        return {event_id: entry.event.job_id for event_id, entry in self._entries.items()}
+
     def stats(self) -> dict[str, object]:
         """Index depth, bytes and waiting age.
 
