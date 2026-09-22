@@ -663,14 +663,17 @@
       ],
       "track": "W",
       "handoff": "handoffs/W-worker.md",
-      "status": "planned",
-      "disposition": "keep",
+      "status": "implemented",
+      "disposition": "keep Merged --no-ff on claude/backend-impl at 32cc0cb (2026-09-22) after independent review (fix_required → fixed). Fakes only; W3 wires the media root and engine pin.",
       "product": "shared",
       "milestone": "APP-M1",
       "amendment": "Keep lease-aware execution and completion.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "evidence": [
+        "research/plan/evidence/w/W2-be521e4.md"
+      ]
     },
     {
       "id": "W3",

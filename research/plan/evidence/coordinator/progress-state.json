@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T18:46:49Z",
+  "updated": "2026-09-22T18:49:10Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -15,12 +15,6 @@
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
     },
-    "W2": {
-      "lane": "codex-w2",
-      "phase": "fix round 1 (five test gaps from the review)",
-      "since": "2026-09-22T16:00:21Z",
-      "note": "attempt loop + vLLM adapter with R61 media form; 59 + 149 mutants"
-    },
     "E1B": {
       "lane": "codex-e1b",
       "phase": "software slices MERGED (164e43e); GPU measurement slices pending W3 \u2192 I2B",
@@ -35,7 +29,7 @@
     },
     "M3": {
       "lane": "codex-m3 / codex/m3-owned-uploads",
-      "phase": "implementing (early start on accepted v2 contracts)",
+      "phase": "independent review at 9cdb618",
       "since": "2026-09-22T18:12:19Z",
       "note": "uploads, GC, consent resolver; six conformance cases to unskip"
     },
@@ -169,6 +163,10 @@
     {
       "at": "2026-09-22T18:45:43Z",
       "what": "E2R merged (9cc3be1): role matrix on real services, shared clock, layer-2 green with canary"
+    },
+    {
+      "at": "2026-09-22T18:49:10Z",
+      "what": "W2 merged (32cc0cb): worker attempt loop + vLLM adapter with pilot media form"
     }
   ],
   "cadence_windows": [
