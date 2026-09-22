@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T19:03:55Z",
+  "updated": "2026-09-22T19:04:25Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -167,6 +167,10 @@
     {
       "at": "2026-09-22T18:49:10Z",
       "what": "W2 merged (32cc0cb): worker attempt loop + vLLM adapter with pilot media form"
+    },
+    {
+      "at": "2026-09-22T19:04:25Z",
+      "what": "Checkpoint 3: main ff to the integration head (E2R, W2 merged); composed evidence recorded"
     }
   ],
   "cadence_windows": [
