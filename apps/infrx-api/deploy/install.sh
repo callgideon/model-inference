@@ -41,6 +41,9 @@ systemctl enable marlin2b-vllm marlin2b-gateway
 # The engine reads no env file and takes ~minutes to load weights, so it is *started*
 # (idempotent: a no-op if it is already up) rather than restarted. Restarting it on
 # every install would kill in-flight generation for a change it cannot even see.
+# This blocks until the unit is active - up to the unit's TimeoutStartSec=900 on a cold
+# start - and `set -e` stops the install if the engine cannot come up, which is the
+# order infra/README.md §7 asks for: each step waits for the previous readiness signal.
 systemctl start marlin2b-vllm
 
 # Only the gateway reads the env file, so only the gateway is restarted - and only

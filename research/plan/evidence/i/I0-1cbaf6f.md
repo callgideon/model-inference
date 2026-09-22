@@ -3,10 +3,10 @@
 | Field | Value |
 |---|---|
 | Task | **I0** (track I), brief `research/plan/11-wave3-revision-handoffs.md` §I0 and `.claude/handoff/wave3/I0.md` |
-| Status | **implemented** (fakes and local stubs only; nothing integrated, nothing deployed) |
+| Status | **implemented**, review round 2 applied (fakes and local stubs only; nothing integrated, nothing deployed). Round 1 was `fix_required`: two test-side defects, both fixed — see **Review round 2** below |
 | Owner/session | Opus 5 implementation session, 2026-09-22 |
 | Base SHA | `ec6c5483f472ee84e10d48ca3c51ba474b4efed2` |
-| Implementation SHA | `1cbaf6f` (`b13ce06` item 1, `8931285` item 2, `1cbaf6f` item 3; this report is item 4's commit) |
+| Implementation SHA | **round 2: `b818f89`** (`d44ea83` review B1, `92e366d` review B2, `b818f89` the six small review fixes). Round 1, reviewed: `1cbaf6f` (`b13ce06` item 1, `8931285` item 2, `1cbaf6f` item 3) |
 | Branch / worktree | `codex/i0-installer-failclosed` in `.claude/worktrees/codex-i0` |
 | Integrated SHA | none — coordinator owns integration into `claude/backend-impl` |
 | Oracle | `DEPLOY-FAILCLOSED` (`research/plan/04-verification.md`), row `M-FAILCLOSED`, hazard row `O-FAILOPEN` |
@@ -34,10 +34,10 @@ file's bytes **and** the recorded `systemctl` calls, never an exit code alone.
 |---|---|
 | `tests/i/test_prereqs.py::test_deploy_failclosed__the_manifest_is_the_only_source_of_env_keys` | Every key has one declared shape and a role; `MODES` equals `infrx.contracts.limits.MODES`; `render` emits only declared keys, in manifest order |
 | `…::test_deploy_failclosed__a_failed_read_is_classified_before_it_is_tolerated` | `ParameterNotFound` is matched on the exact code; five denial/throttle/KMS codes classify as `denied`; anything unrecognised is `unknown`, never `not_found` |
-| `…::test_deploy_failclosed__a_refusal_says_which_rule_the_value_broke` | An opaque secret has no pattern, so empty, whitespace-only, newline-bearing and padded values are each refused with the rule they broke named |
+| `…::test_deploy_failclosed__a_refusal_says_which_rule_the_value_broke` | An opaque secret has no pattern, so empty, whitespace-only, newline-bearing, padded and quote/backslash-bearing values are each refused with the rule they broke named. The quoting characters were added in round 2: systemd's `EnvironmentFile` gives `'`, `"` and `\` meaning (quoted values, escapes, continuation) that neither `render` nor `read_env` models, so such a value is refused rather than guessed at |
 | `test_install.py::test_deploy_failclosed__a_denied_or_unexplained_read_installs_nothing` (5 cases) | `AccessDeniedException`, `ThrottlingException`, `ExpiredTokenException`, `KMSAccessDeniedException` and an **unclassified** code each leave the env file byte-identical with no `systemctl` call |
 | `…::test_deploy_failclosed__a_required_parameter_that_is_missing_is_a_failure` | `ParameterNotFound` on a key the mode requires is a refusal naming the parameter and the env key, not a warning |
-| `…::test_deploy_failclosed__an_optional_parameter_is_omitted_only_when_absent` | The `infra/README.md` §5 distinction: absent optional key -> omitted, install proceeds; **denied** on the same key -> refusal |
+| `…::test_deploy_failclosed__an_optional_parameter_is_omitted_only_when_absent` (3 cases) | The `infra/README.md` §5 distinction, on the **same** key: absent optional key -> omitted, install proceeds; `AccessDeniedException`, `ThrottlingException` or an unclassified code on that same key -> refusal. Parametrised in round 2 so throttling is refused behaviourally and not only by `classify`'s unit case |
 | `…::test_deploy_failclosed__a_value_of_the_wrong_shape_installs_nothing` (10 cases) | Empty, whitespace, padded, plaintext-http, non-URL, wrong DSN scheme, truncated secret, whitespace-only secret, newline-bearing secret, padded secret |
 | `…::test_deploy_failclosed__a_value_cannot_write_a_second_variable` | A value containing a newline would append its own `KEY=VALUE` line, i.e. whoever can write an SSM parameter would choose `GATEWAY_API_KEY`; refused, and the value is not echoed |
 | `…::test_deploy_failclosed__a_withdrawn_price_key_is_refused` | No env file carries `PRICE_TABLE_VERSION`/`PRICE_SOURCE`: D1's `price_versions` is the only price authority (`infra/README.md` §5, withdrawn parameter) |
@@ -92,13 +92,15 @@ Caddy site.
 
 | Test ID | Invariant |
 |---|---|
-| `test_prereqs.py::test_deploy_failclosed__the_runtime_interpreter_must_be_new_enough` | Python >= 3.12.4 in the **runtime** interpreter (M1: CPython 3.12.0–3.12.3 answer `is_private` from older special-purpose tables). A hard refusal in `pilot`, a warning in the explicitly permissive dev/test modes |
+| `test_prereqs.py::test_deploy_failclosed__the_runtime_interpreter_must_be_new_enough` | Python >= 3.12.4 in the **runtime** interpreter (M1: CPython 3.12.0–3.12.3 answer `is_private` from older special-purpose tables), and the pin is that number exactly, asserted since round 2. A hard refusal in `pilot`, a warning in the explicitly permissive dev/test modes |
+| `…::test_deploy_failclosed__a_runtime_that_does_not_import_is_not_a_pass` | **Added in round 2.** Every later check needs the runtime package, so an import failure is fatal rather than a verdict with nothing in it, and the problem names the exception **type** only — a traceback in an installer's output is where paths and configuration leak |
 | `…::test_deploy_failclosed__a_transport_logger_below_warning_refuses_the_install` | `httpx`/`httpcore` at or above WARNING, asserted in the probe's verdict as well as in the check: at INFO httpx writes the validated IP and the caller's signed query for every hop |
 | `…::test_deploy_failclosed__an_unset_transport_level_is_not_good_enough` | Stricter than M1 integration request 5's snippet on purpose: the two root transport names must carry an **explicit** level, because `NOTSET` inherits a root that a process may set to DEBUG |
 | `…::test_deploy_failclosed__a_child_transport_logger_cannot_reopen_the_leak` | A `dictConfig` naming `httpcore.http11` overrides what the module set at import |
 | `…::test_deploy_failclosed__an_unsupported_engine_flag_refuses_the_install` (2 cases) | No `--reasoning-parser`, no `continuous_usage_stats` in the script the vLLM unit starts |
 | `test_install.py::test_deploy_failclosed__an_engine_the_adapter_cannot_read_installs_nothing` | The same check reaching the install decision: the env file is not touched |
-| `test_prereqs.py::test_deploy_failclosed__the_engine_image_must_be_pinned_by_digest_in_pilot` | A floating tag is refused in pilot, accepted in dev |
+| `test_prereqs.py::test_deploy_failclosed__the_engine_image_must_be_pinned_by_digest_in_pilot` | A floating tag is refused in pilot, accepted in dev — at `engine_problems` level |
+| `test_install.py::test_deploy_failclosed__a_pilot_install_stops_on_the_unpinned_engine_image` | **Added in round 2 (review B2).** The same requirement at `apply` level: a pilot install with the default floating-tag script and every parameter present and valid refuses, the env file is byte-identical, nothing restarts, `digest` is in the refusal and no secret is |
 | `…::test_deploy_failclosed__a_missing_engine_script_is_not_a_pass` | An absent or unnamed script is an unchecked flag set, not an empty one |
 | `…::test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` | The **real** `models/marlin2b/serve.sh`: exactly one pilot problem, and it is the missing digest pin. This pins the pending gap as a test |
 
@@ -117,7 +119,7 @@ Caddy site.
 
 ## Commands
 
-Run from the worktree root unless noted. Environment variable **names** only.
+Round 1's run, at `1cbaf6f`. Round 2's numbers are in the **Review round 2** table below; the two are kept separate rather than overwritten. Run from the worktree root unless noted. Environment variable **names** only.
 
 | # | Command | Exit | Result (tail of output) |
 |---|---|---|---|
@@ -157,13 +159,15 @@ checkout and were left untouched. No container was removed, stopped or inspected
 
 ## Results
 
-* `tests/i`: **77 passed**, 0 failed, 0 skipped (35 cases; the count is higher because
-  four cases are parametrised — 5 denial codes, 10 bad values, 4 bad modes, 2 install
-  shapes).
-* Mutation: **45 mutants, all killed**, each by a named case. Four runner self-tests pin
+* `tests/i` at round 1: **77 passed**, 0 failed, 0 skipped (35 cases; the count is
+  higher because four cases are parametrised — 5 denial codes, 10 bad values, 4 bad
+  modes, 2 install shapes). Round 2: **82 passed**, 37 cases, 48 mutants.
+* Mutation: **45 mutants, all killed** at round 1, **48 at round 2**, each by a named
+  case. Five runner self-tests (four at round 1) pin
   the outcomes that must **not** count as a kill: a mutant naming no case and a missing
-  anchor are `misdeclared`, a syntax error is `broken_runner`, and a defect no named case
-  notices is `survived`. A kill requires pytest exit 1 with every failing id belonging to
+  anchor are `misdeclared`, a syntax error is `broken_runner`, a defect no named case
+  notices is `survived`, and (round 2) a **no-op** edit naming the case that reads the
+  real engine script is `survived` rather than `killed`. A kill requires pytest exit 1 with every failing id belonging to
   the mutant's own cases, so an import error or a syntax error fails the run exactly as a
   survivor does.
 * Three survivors and one unkillable claim were found and fixed rather than explained
@@ -172,8 +176,8 @@ checkout and were left untouched. No container was removed, stopped or inspected
   pattern shapes (a case on an **opaque** secret, which has no pattern, now isolates
   each); and `collect`'s second required-key loop was unreachable, so it was **deleted**
   instead of left as code no mutant could kill. One claim was dropped rather than faked:
-  `os.fsync` before the rename is implemented but no test asserts it, so no mutant claims
-  it (see Limits).
+  the two `os.fsync` calls (the file in `stage`, the directory in `commit`) are
+  implemented but no test asserts them, so no mutant claims them (see Limits).
 * Affected conformance suites: the whole API suite minus `tests/d` passes (command 3),
   including `tests/contracts`, `tests/g` (which owns `validate_runtime`'s cases) and
   `tests/m` (which asserts the transport logger levels this task also reads). Both
@@ -270,7 +274,18 @@ package manifest, `apps/app` or `tests/integration` edit.
    and inert until a restart, and the restart is inside `preflight.py`, so the two
    operations a failed run must not perform are both guarded; this is stated in
    `install.sh` and in §5.1 rather than hidden.
-10. **`deploy/preflight.py` is loaded by path in the tests** (`importlib`), because
+10. **`withdrawn()` is unreachable from `collect`.** No manifest key is named
+    `PRICE_TABLE_VERSION` or `PRICE_SOURCE`, so `collect` can never produce one and the
+    check is **defensive only**: it guards a future manifest edit, and
+    `test_deploy_failclosed__a_withdrawn_price_key_is_refused` therefore calls it
+    directly with a hand-built mapping rather than driving `apply`. Stated so the row is
+    not read as an install-level assertion.
+11. **The quoting refusal is a policy, not systemd's grammar.** `FORBIDDEN_CHARS` refuses
+    `'`, `"` and `\` rather than implementing systemd's `EnvironmentFile` quoting, so a
+    value that legitimately contains one must be URL-encoded (modelling the parser is a
+    bigger change than this guard). No Supabase key, Postgres DSN or model id in use
+    contains one.
+12. **`deploy/preflight.py` is loaded by path in the tests** (`importlib`), because
     `deploy/` is a directory of scripts with no `__init__.py`. That is deliberate: it
     behaves identically under pytest, under the mutation runner's copied tree and when
     the file is run directly.
@@ -285,9 +300,12 @@ mandatory for the G2 composition, and G2 can now call
 **Pending coordinator wiring / integration requests** (no shared file was edited):
 
 1. **`Makefile`** — add `tests/i/test_mutants.py` to the `api-mutants` target's list, so
-   track I's 45 mutants run with the others:
+   track I's 48 mutants run with the others:
    `… tests/g/test_mutants.py tests/i/test_mutants.py`. (`api-test` already discovers
-   `tests/i` through `testpaths = ["tests"]`; no change needed there.)
+   `tests/i` through `testpaths = ["tests"]`; no change needed there.) **Land this after
+   review B1's commit `d44ea83`**: before it, the runner's copied tree made one case fail
+   in every copy, so a shared target would have been wired to a runner that could report
+   a kill for an edit that changed nothing.
 2. **`apps/infrx-api/pyproject.toml`** — `requires-python = "==3.12.*"` permits 3.12.0–3.
    The runtime pin this task enforces at install time is **>= 3.12.4**; the manifest
    should say `>=3.12.4,<3.13` so a fresh environment cannot be built below the pin.
@@ -297,7 +315,11 @@ mandatory for the G2 composition, and G2 can now call
    installer's composition gate starts passing on its own; nothing in `preflight.py`
    needs editing. G2 should also call `infrx.media.fetch.silence_transport_logs()` **after**
    its logging configuration (M1 integration request 5 item 1): the installer asserts the
-   levels but cannot configure a process it does not run. G's `unset_mode_refuses` mutant
+   levels but cannot configure a process it does not run. Note that `probe` imports
+   `infrx.gateway.routes.ingress` **in every mode**, not only in pilot, because the
+   composition check compares module identity against `ROUTERS`: if G2 moves, renames or
+   splits that module, `preflight.py`'s import list changes with it. G's
+   `unset_mode_refuses` mutant
    and `validate_runtime`'s `unset -> legacy` branch stay as they are until that change;
    `tests/i` pins that expectation, so G2 must update
    `test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer` and
@@ -320,6 +342,84 @@ mandatory for the G2 composition, and G2 can now call
 | 7 (config limits, "invalid config fails before mounting pilot ingress" — the I0 half: fail-closed deployment settings) | `b13ce06`, `8931285` | `test_deploy_failclosed__the_staged_bytes_are_what_the_runtime_validates` (mutant `runtime_not_validated`) and `test_deploy_failclosed__a_value_of_the_wrong_shape_installs_nothing` (mutant `shape_unchecked`) |
 | 14 (unset-mode refusal inversion — **kept open**, as the audit requires) | `8931285` | `test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer` (mutant `unset_mode_refuses`, the same defect G's list carries) |
 
+## Review round 2 (independent review at `1cbaf6f`: `fix_required`)
+
+The installer code held every fail-closed invariant the reviewer attacked (25 reviewer
+mutants; every behavioural one killed). Two **test-side** defects blocked merge, and both
+were real: in each case a test claimed something it could not have noticed.
+
+### B1 — the mutation runner could report a kill for an edit that changed nothing
+
+`d44ea83`. The runner copied `infrx/`, `tests/` and `deploy/` **flat** into the temporary
+directory, but `support.REPO` is `API_DIR.parents[1]`, which in that layout resolved to
+`/`. So `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands`
+failed in **every** copied tree — its first assertion is
+`assert REAL_SERVE_SCRIPT.exists()` — regardless of the edit under test, and any mutant
+naming that case would have been reported `killed`. No committed mutant named it alone,
+so no result in round 1 was wrong; the runner was simply able to lie.
+
+The copy is now `<tmp>/apps/infrx-api/{infrx,tests,deploy,pyproject.toml,tmp}` with
+`<tmp>/models/marlin2b/serve.sh` beside it, and pytest runs from `<tmp>/apps/infrx-api`.
+A fifth `SELF_TESTS` row asserts that a no-op edit naming that case is **`survived`**.
+That row is not vacuous: reproduced by hand, the same case under the old flat layout fails
+with `AssertionError: PosixPath('/models/marlin2b/serve.sh')`, and under the new layout
+the no-op mutant reports `survived`.
+
+### B2 — the pilot engine-digest fail-stop was asserted at function level only
+
+`92e366d`. **Correction to round 1**: the report's Item 4 row read as though the digest
+requirement was enforced at install level. It was not. `engine_problems(script, "pilot")`
+was tested directly, but the edit
+`problems += engine_problems(cfg.serve_script, cfg.mode) if cfg.mode != "pilot" else []`
+survived all 53 cases, because the only pilot case that reached `apply` used a
+digest-pinned script, the flag case ran in `dev`, and the real-script case called
+`engine_problems` directly.
+
+`test_deploy_failclosed__a_pilot_install_stops_on_the_unpinned_engine_image` now runs
+`apply` in pilot mode with the default floating-tag script and every parameter present and
+valid: `REFUSED`, the env file byte-identical, no `systemctl` call, `digest` in the
+refusal and no secret in it. Mutant `engine_checks_skipped_in_pilot` is that exact edit
+and is killed by it.
+
+### The six smaller fixes
+
+`b818f89`.
+
+1. `an_optional_parameter_is_omitted_only_when_absent` is parametrised over
+   `AccessDeniedException`, `ThrottlingException` and an unclassified code, so throttling
+   is refused **behaviourally** and not only by `classify`'s unit case.
+2. The interpreter case asserts `preflight.REQUIRED_PYTHON == (3, 12, 4)`; mutant
+   `python_pin_lowered` makes the number itself killable.
+3. New probe case: `sys.modules["infrx.config"] = None` -> `ok` is `False` and the single
+   problem is `the runtime package does not import: ModuleNotFoundError` — the exception
+   type, never a traceback. Mutant `import_failure_is_not_fatal`.
+4. `commit` now fsyncs the target's **directory** after `os.replace`. `stage` already
+   fsynced the file; the rename lives in the directory, and a power loss between the two
+   leaves the target pointing at nothing. Still unasserted by a test, so still no mutant
+   (Limits 5).
+5. `FORBIDDEN_CHARS` gains `'`, `"` and `\`. systemd's `EnvironmentFile` gives all three
+   meaning — quoted values, escape sequences, line continuation — that neither `render`
+   nor `read_env` models, so a value carrying one would not arrive at the process as it
+   was read. Refused rather than guessed at; operators URL-encode (Limits 11).
+6. `install.sh`: a `case` guard rejects an unusable `INFRX_MODE` **before** pip, apt and
+   the unit files, because `${VAR:?}` only catches unset and empty and a typo would
+   otherwise have run every host mutation before being refused at the end;
+   `mkdir -p /etc/caddy` is its own statement, since a failure on the left of `&&` is a
+   tested condition that `set -e` ignores; and the engine is `systemctl start`ed
+   idempotently rather than restarted — it reads no env file and takes minutes to load
+   weights, so restarting it on every install would kill in-flight generation for a change
+   it cannot see. Only the gateway is passed to `--restart`, and the `one_unit_restarted`
+   invariant now reads "every unit passed to `--restart` is restarted, in one call".
+
+### Round-2 command results
+
+| Command | Exit | Result |
+|---|---|---|
+| `uv run --frozen pytest -q tests/i` | 0 | `82 passed in 47.45s` |
+| `uv run --frozen python tests/i/mutants.py` | 0 | `all killed` — **48 mutants over 37 named cases** |
+| `uv run --frozen pytest -q --ignore=tests/d` | 0 | `1600 passed, 2 warnings in 418.70s (0:06:58)` — five more than round 1's 1595: the three new cases, one extra parametrisation of the optional-parameter case and the fifth runner self-test |
+| the shared mutant list, `INFRX_MUTANTS=all`, `tests/d` excluded and `tests/i` added | ROUND2_MUT_EXIT | `ROUND2_MUT_TAIL` |
+
 ## Verification log
 
 - 2026-09-22: Authored from the commands transcribed above, all of them local. No AWS
@@ -327,5 +427,12 @@ mandatory for the G2 composition, and G2 can now call
   host, no paid provider. The deployed host's `O-FAILOPEN` exposure is **not** fixed by
   this task. Mutation survivors found during the session were fixed by strengthening the
   cases (opaque-secret guards, dev-mode shape cases) and by deleting one unreachable
-  branch; one unasserted claim (`fsync` before rename) is recorded as a limit instead of
+  branch; one unasserted claim (the two `fsync` calls) is recorded as a limit instead of
   being given a mutant it could not honestly kill.
+
+- 2026-09-22 (review round 2, still local only; no AWS call, no `systemctl`, no `docker`
+  create/stop/remove, nothing against the pilot host): fixed the two test-side defects the
+  independent review found at `1cbaf6f` and the six smaller items, as recorded in **Review
+  round 2** above. One round-1 claim is **corrected, not rewritten**: the pilot
+  engine-digest fail-stop was asserted at `engine_problems` level only and is now asserted
+  at `apply` level as well. The deployed host is still not fixed by this task.
