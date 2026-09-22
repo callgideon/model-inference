@@ -56,7 +56,24 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           "wallet_insert_may_fund_the_row", "pilot_usage_key_tenant_unchecked",
           "console_usage_joins_any_key", "outbox_tenant_trigger_on_insert_only",
           "ledger_grant_drops_the_description",
-          "failed_requests_excludes_the_boundary")
+          "failed_requests_excludes_the_boundary",
+          # D1R: one per claimed check, plus the money path.
+          "d1r_total_moved_without_ledger", "d1r_ledger_does_not_move_the_wallet",
+          "d1r_grant_retry_mints_again", "d1r_grant_key_includes_campaign",
+          "d1r_signup_grant_any_amount", "d1r_ledger_has_a_transfer",
+          "d1r_hold_reserves_nothing", "d1r_hold_never_released",
+          "d1r_unknown_usage_debited_later", "d1r_two_debits_per_request",
+          "d1r_settled_at_another_card", "d1r_job_repinned_to_the_next_card",
+          "d1r_wallet_not_the_admissions", "d1r_legacy_row_carries_credit",
+          "d1r_public_dev_deployment", "d1r_rate_card_editable",
+          "d1r_credit_admission_ignores_flag", "d1r_grant_callable_by_browsers",
+          "d1r_service_writes_money_directly", "d1r_resolve_serves_unpriced",
+          "d1r_wallet_page_shows_every_wallet", "d1r_ledger_page_without_barrier",
+          "d1r_seam_renamed", "d1r_seed_card_not_provisional", "d1r_rerun_resets_flags",
+          "d1r_signup_enabled_on_apply", "d1r_upgrade_imports_usd_as_credit",
+          "d1r_gateway_row_needs_a_regime", "d1r_regrants_a_legacy_view",
+          "d1r_credit_ledger_without_rls", "d1r_new_views_keep_default_acl",
+          "d1r_summary_callable_by_anon")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 

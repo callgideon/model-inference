@@ -787,7 +787,7 @@ def _registry_cases() -> tuple[tuple, tuple]:
           "model_commit, weight_shard_digests, tokenizer_digest, chat_template_digest, "
           "digest_source, created_by) values ")
     sha = "'sha256:" + "a" * 64 + "'"
-    good_mv = (f"'{MODEL}', '{NEMO}', 'r', '{'f' * 40}', array[{sha}], {sha}, {sha}, "
+    good_mv = (f"('{MODEL}', '{NEMO}', 'r', '{'f' * 40}', array[{sha}], {sha}, {sha}, "
                f"'served_bytes', 'ops')")
     listing = ("insert into infrx.catalog_listings (public_model_id, version, model_id, "
                "deployment_revision_id, serving_version_id, rate_card_version, effective_at, "
@@ -922,6 +922,7 @@ def _registry_cases() -> tuple[tuple, tuple]:
          f"update infrx.provider_orgs set slug = 'x' where provider_org_id = '{NEMO}'"),
     )
     accepted = (
+        ("a well-formed model version of the owner's model", mv + good_mv),
         ("two providers may share display text (it is not a key)",
          "select 1 from infrx.provider_orgs where display_name = 'NemoStation' having count(*) = 2"),
         ("a dev deployment moves forward to retired",
@@ -1516,7 +1517,10 @@ def check_rerun_is_noop(conn, apply_again) -> str:
     """Item 5: applying D1R's migrations a second time - after an operator has enabled a
     flag and granted credit - changes no schema object, no row and no flag."""
     set_flag(conn, "signup_grant", True)
-    grant(conn, checks.USER_OWNER)
+    fresh = "c1000000-0000-4000-8000-0000000000ff"       # one personal org, one member
+    conn.execute("insert into auth.users (id, email) values (%s, 'rerun@example.com')",
+                 (fresh,))
+    grant(conn, fresh)
     before = snapshot(conn)
     apply_again()
     after = snapshot(conn)
@@ -1587,6 +1591,17 @@ def check_legacy_read_path(conn, before: dict) -> str:
                        f"select ledger_total from public.org_wallet_summary('{org}')")
     want = dict((str(o), t) for o, t in before["legacy"]["balances"])[org]
     assert usd == [(f"{want:.8f}",)], f"USD summary {usd} vs history {want}"
+    try:
+        regimes = _legacy_writes(conn, org)
+    except psycopg.Error as refused:
+        raise AssertionError(f"a legacy USD writer was refused: {refused}") from None
+    assert regimes == [("legacy_usd",)], f"a legacy writer's row changed regime: {regimes}"
+    return (f"{len(_legacy_member_reads(org))} member reads and 5 admin reads execute; USD "
+            f"summary = history; addCredit and gateway writes stay legacy_usd")
+
+
+def _legacy_writes(conn, org: str) -> list:
+    """The admin page's addCredit and the deployed gateway's usage row, as service_role."""
     with conn.transaction():
         conn.execute(checks.SESSIONS["service"])
         conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, reason, "
@@ -1598,9 +1613,7 @@ def check_legacy_read_path(conn, before: dict) -> str:
         regimes = conn.execute("select distinct accounting_regime from public.usage_events"
                                ).fetchall()
         raise psycopg.Rollback()
-    assert regimes == [("legacy_usd",)], f"a legacy writer's row changed regime: {regimes}"
-    return (f"{len(_legacy_member_reads(org))} member reads and 5 admin reads execute; USD "
-            f"summary = history; addCredit and gateway writes stay legacy_usd")
+    return regimes
 
 
 def rows_as_user(conn, user: str, sql: str) -> list:

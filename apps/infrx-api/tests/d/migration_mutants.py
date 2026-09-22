@@ -632,7 +632,11 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
     _m("d1r_two_wallets_per_individual", CREDIT,
        "create unique index if not exists credit_wallets_one_per_user\n"
        "  on infrx.credit_wallets (owner_user_id) where kind = 'consumer';", "",
-       "credit", "credit_identity", "one individual holds two promotional wallets"),
+       "credit", "credit_identity", "one individual holds two promotional wallets",
+       # Declared (R40): without the index the grant's ON CONFLICT has no arbiter, so the
+       # fixture's own grant fails - the grant cannot run at all, which is the observable
+       # consequence. The runner still never scores this as a kill.
+       expects=SETUP_ERROR, expects_detail="ON CONFLICT"),
     _m("d1r_two_wallets_per_personal_org", CREDIT,
        "create unique index if not exists credit_wallets_one_per_personal_org\n"
        "  on infrx.credit_wallets (personal_org_id) where kind = 'consumer';", "",
@@ -752,8 +756,8 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
        "grant execute on function infrx.grant_signup_credit(uuid, text, text, uuid) to "
        "service_role;",
        "grant execute on function infrx.grant_signup_credit(uuid, text, text, uuid) to "
-       "service_role, authenticated;", "credit", "credit_role_matrix",
-       "a browser session mints its own grant"),
+       "service_role, authenticated;", "fresh", "function_privileges",
+       "a browser session mints its own grant (the schema USAGE revoke is the second wall)"),
     _m("d1r_service_writes_money_directly", CREDIT,
        "              infrx.signup_entitlements, infrx.credit_wallet_holds\n"
        "  from public, anon, authenticated, service_role;",
@@ -1010,7 +1014,7 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
     _m("d1r_resolve_callable_by_browsers", SURFACE,
        "grant execute on function infrx.resolve_admission_pins(text) to service_role;",
        "grant execute on function infrx.resolve_admission_pins(text) to service_role, "
-       "authenticated;", "credit", "credit_role_matrix",
+       "authenticated;", "fresh", "function_privileges",
        "a browser enumerates deployments and rates through the admission resolver"),
     _m("d1r_wallet_page_shows_every_wallet", SURFACE,
        "left join infrx.signup_entitlements e on e.wallet_id = w.wallet_id\n"
@@ -1047,9 +1051,10 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
        "  from public, anon, authenticated;\n", "",
        "fresh", "privileges", "anon and members may write through the new views"),
     _m("d1r_summary_callable_by_anon", SURFACE,
-       "revoke all on function public.console_wallet_summary(uuid) from public, anon, "
-       "authenticated;",
-       "revoke all on function public.console_wallet_summary(uuid) from public, authenticated;",
+       "grant execute on function public.console_wallet_summary(uuid) to authenticated, "
+       "service_role;",
+       "grant execute on function public.console_wallet_summary(uuid) to anon, authenticated, "
+       "service_role;",
        "fresh", "function_privileges", "Supabase's default grant keeps anon executing it"),
     _m("d1r_regrants_a_legacy_view", SURFACE,
        "-- `console_usage` keeps 0005's grants: `create or replace view` keeps the ACL.",
