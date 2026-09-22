@@ -1184,7 +1184,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       id: deterministicUuid(6060, 0),
       at: new Date(CLOCK_MS - 60000).toISOString(),
       actor_principal: orgsFixture.sessions.operator.email,
-      action: "entitlements_set",
+      action: "admin_set_entitlements",
       target_org_id: null,
       reason: "closed the account's entitlements before deletion",
       before: { model_ids: null },
@@ -2240,7 +2240,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         target.ledger.sort((a, b) => -compareKeys(timeKey(a), timeKey(b)));
         appendAudit(
           session,
-          "grant",
+          "admin_grant",
           target.org_id,
           reason,
           { ledger_total: current.ledger_total },
@@ -2294,7 +2294,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         target.suspension_reason = reason;
         // R34: a restore *adds* an entry. The earlier suspension and its reason stay readable
         // through `adminAudit` however many times the status flips afterwards.
-        appendAudit(session, "suspension_set", target.org_id, reason, before, {
+        appendAudit(session, "admin_set_suspension", target.org_id, reason, before, {
           suspended: target.suspended,
           suspension_reason: target.suspension_reason,
         }, input.idempotency_key);
@@ -2365,7 +2365,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
         // is where "why does this tenant have these models" is answered (R34).
         appendAudit(
           session,
-          "entitlements_set",
+          "admin_set_entitlements",
           target.org_id,
           input.reason.trim(),
           { model_ids: before.model_ids, limits: before.limits },

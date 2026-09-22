@@ -15,8 +15,8 @@
       "id": "AUDIT-02",
       "note": "a restore overwrites the earlier suspension entry instead of appending",
       "file": "lib/contracts/fake-services.ts",
-      "find": "        appendAudit(session, \"suspension_set\", target.org_id, reason, before, {",
-      "replace": "        while (audit.length > 0 && audit[audit.length - 1].action === \"suspension_set\") audit.pop();\n        appendAudit(session, \"suspension_set\", target.org_id, reason, before, {",
+      "find": "        appendAudit(session, \"admin_set_suspension\", target.org_id, reason, before, {",
+      "replace": "        while (audit.length > 0 && audit[audit.length - 1].action === \"admin_set_suspension\") audit.pop();\n        appendAudit(session, \"admin_set_suspension\", target.org_id, reason, before, {",
       "cases": [
         "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
       ]
@@ -35,8 +35,8 @@
       "id": "AUDIT-04",
       "note": "the entitlement audit entry loses the reason",
       "file": "lib/contracts/fake-services.ts",
-      "find": "          \"entitlements_set\",\n          target.org_id,\n          input.reason.trim(),",
-      "replace": "          \"entitlements_set\",\n          target.org_id,\n          \"\",",
+      "find": "          \"admin_set_entitlements\",\n          target.org_id,\n          input.reason.trim(),",
+      "replace": "          \"admin_set_entitlements\",\n          target.org_id,\n          \"\",",
       "cases": [
         "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
       ]
@@ -2003,6 +2003,16 @@
       "replace": "  if (membership.revoked_at !== undefined && membership.revoked_at <= now) return false;",
       "cases": [
         "grant and membership checks compare instants, never mixed spellings"
+      ]
+    },
+    {
+      "id": "AUDIT-ACTION-01",
+      "note": "an operator grant is audited under the console's old spelling, not D1's `admin_grant` (F2P wire-in, AuditAction alignment)",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        appendAudit(\n          session,\n          \"admin_grant\",",
+      "replace": "        appendAudit(\n          session,\n          \"grant\" as never,",
+      "cases": [
+        "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
       ]
     }
   ]

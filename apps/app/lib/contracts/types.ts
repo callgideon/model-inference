@@ -768,12 +768,26 @@ export const ADMIN_SUSPENSION_FIELDS = [
 // Operator audit trail (R34)
 // ---------------------------------------------------------------------------
 
-/** Every operator write names itself. The list is closed: a new operator write adds a value here. */
+/**
+ * Every operator write names itself. The list is closed: a new operator write adds a value here.
+ *
+ * D1's `infrx.audit_entries.action` vocabulary, value for value and in its order (0003's four, then
+ * 0009's six): the console reads these rows, so a spelling of its own (`grant`, `suspension_set`,
+ * `entitlements_set`, as before the F2P wire-in) would refuse every real entry. The first four are
+ * the writes the console services make; the rest are written by the operator seams (key issue and
+ * revoke, publication, job cancel, reconciliation, adjustment) and are read-only here.
+ */
 export const AUDIT_ACTIONS = [
-  "grant",
-  "suspension_set",
-  "entitlements_set",
+  "admin_grant",
+  "admin_set_suspension",
+  "admin_set_entitlements",
   "calibration_label",
+  "admin_key_issue",
+  "admin_key_revoke",
+  "admin_publish",
+  "admin_job_cancel",
+  "admin_reconcile",
+  "admin_adjust",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

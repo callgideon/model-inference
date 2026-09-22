@@ -2116,7 +2116,7 @@ export function runConsoleServicesConformance(
       assert.equal(appended, 3, "suspend, grant and restore each append one entry");
       const suspensions = auditAfter
         .slice(0, appended)
-        .filter((entry) => entry.action === "suspension_set")
+        .filter((entry) => entry.action === "admin_set_suspension")
         .map((entry) => entry.reason)
         .sort();
       assert.deepEqual(suspensions, ["lift probe: restore", "lift probe: suspend"], "both statuses are recorded");
@@ -2781,11 +2781,17 @@ export function runConsoleServicesConformance(
         assert.ok(entry.after !== null && typeof entry.after === "object", "and what it changed to");
       }
       const actions = added.map((entry) => entry.action).sort();
-      assert.deepEqual(actions, ["calibration_label", "entitlements_set", "grant", "suspension_set", "suspension_set"]);
+      assert.deepEqual(actions, [
+        "admin_grant",
+        "admin_set_entitlements",
+        "admin_set_suspension",
+        "admin_set_suspension",
+        "calibration_label",
+      ]);
 
       // The restore did not overwrite the suspension: both entries are there, with their own
       // reasons, and the before/after of each says what changed.
-      const suspensions = added.filter((entry) => entry.action === "suspension_set");
+      const suspensions = added.filter((entry) => entry.action === "admin_set_suspension");
       assert.equal(suspensions.length, 2, "a restore adds an entry rather than replacing one");
       const reasons = suspensions.map((entry) => entry.reason).sort();
       assert.deepEqual(reasons, ["audit: restore", "audit: suspend"], "each keeps its own reason");
@@ -2793,7 +2799,7 @@ export function runConsoleServicesConformance(
         assert.ok(entry.before !== null, "a status change records what it changed from");
         assert.notDeepEqual(entry.before, entry.after, "and that something actually changed");
       }
-      const entitled = added.find((entry) => entry.action === "entitlements_set");
+      const entitled = added.find((entry) => entry.action === "admin_set_entitlements");
       assert.ok(entitled !== undefined);
       assert.equal(entitled.reason, "audit: entitle", "the entitlement reason is kept in the audit");
       assert.ok(entitled.after !== null && typeof entitled.after === "object");
@@ -2864,7 +2870,7 @@ export function runConsoleServicesConformance(
       assert.deepEqual(await auditFor(ids.otherOrgId), afterFive, "a conflict must not append an audit entry");
 
       // before/after, pinned for each action rather than only for suspension.
-      const grantEntry = added.find((entry) => entry.action === "grant");
+      const grantEntry = added.find((entry) => entry.action === "admin_grant");
       assert.ok(grantEntry !== undefined);
       const balanceNow = expectOk(await services.balances(sessions.otherOwner), "their balance");
       assert.equal(
