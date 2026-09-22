@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T18:12:19Z",
+  "updated": "2026-09-22T18:13:15Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -161,6 +161,10 @@
     {
       "at": "2026-09-22T18:06:47Z",
       "what": "Q2 merged (e86b1c0): Valkey scheduler adapter with race-fence test"
+    },
+    {
+      "at": "2026-09-22T18:13:15Z",
+      "what": "Checkpoint 2: main ff to 2bfb0c4 after a full green check (api-mutants 1103, api 1729+76, console 266)"
     }
   ],
   "cadence_windows": [
