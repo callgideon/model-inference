@@ -28,6 +28,10 @@ Connect = Callable[[], Awaitable[Any]]
 
 #: The admission fields the port's `Admission` record carries (the SQL document has more).
 _ADMISSION_FIELDS = tuple(name for name in Admission.model_fields if name != "schema_version")
+#: How long an acknowledged outbox row is kept before `gc_outbox` may delete it.
+#: ponytail: a constant (7 days, the processing-cache horizon); a `PilotSettings` field when
+#: an operator needs to tune it.
+OUTBOX_RETENTION_S = 7 * 86_400.0
 _OUTCOME_FIELDS = ("job_id", "state", "cause", "result_ref", "settlement_state", "debit",
                    "settled_at", "reconcile_after")
 
@@ -231,6 +235,12 @@ class PgJobStore:
         """PostgreSQL truth for `Scheduler.rebuild`."""
         rows = await self._query("select infrx.dispatch_snapshot()", ())
         return tuple(IndexEvent.model_validate(doc) for doc in rows[0][0])
+
+    async def gc_outbox(self, *, retention_s: float = OUTBOX_RETENTION_S,
+                        limit: int = 1000) -> dict[str, int]:
+        """Expire dispatch rows of terminal jobs; delete acknowledged rows past
+        `retention_s` that no live job or consumer can still need (0013). Bounded."""
+        return await self._call("gc_outbox", {"retention_s": retention_s, "limit": limit})
 
     # --- D3 / D5 (fail closed) ---------------------------------------------------
     async def claim(self, job_id: str, worker_id: str):

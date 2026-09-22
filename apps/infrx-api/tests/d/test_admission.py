@@ -76,3 +76,11 @@ def test_outbox__pending_redelivery_superseded_and_snapshot() -> None:
     """DUR-OUTBOX: at-least-once rows, superseded acks, the rebuild snapshot."""
     from . import checks_dispatch
     print(checks_dispatch.check_dispatch_relay(_db()))
+
+
+# --- item 3: outbox expiry and GC ---------------------------------------------------
+def test_outbox__expiry_and_gc_never_delete_what_a_consumer_needs() -> None:
+    """DUR-OUTBOX: terminal dispatch rows expire; old acknowledged rows are deleted,
+    bounded, never a live job's, an unacknowledged or a callback delivery's."""
+    from . import checks_dispatch
+    print(checks_dispatch.check_outbox_gc(_db()))

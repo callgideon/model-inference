@@ -265,3 +265,61 @@ def check_dispatch_relay(conn) -> str:
         assert a.request_id not in {e["job_id"] for e in snap}, "a terminal job was indexed"
         return "at-least-once with a redelivery window, superseded rows acked, snapshot exact"
     return ca._in_rollback(conn, body)
+
+
+def check_outbox_gc(conn) -> str:
+    """Outbox expiry/GC (0013): a terminal job's unacknowledged dispatch row is expired
+    (acknowledged, never deleted outright); an acknowledged row older than the retention
+    is deleted unless its job is live or it is a callback delivery; nothing unacknowledged
+    and nothing inside the retention is deleted; `limit` bounds a call."""
+    world = ca.World(conn)
+
+    def body():
+        # start from a collected outbox, so the counts below are this check's rows only
+        conn.execute("select infrx.gc_outbox('{\"retention_s\": 0, \"limit\": 10000}')")
+        advance(conn, 1)
+        conn.execute("select infrx.gc_outbox('{\"retention_s\": 0, \"limit\": 10000}')")
+        live = _admitted(conn, world)
+        dead = _admitted(conn, world)
+        conn.execute("select infrx.terminalize_unstarted(%s, 'preparation_failed')",
+                     (dead.request_id,))
+        # an acknowledged row of the live job, and a callback row nobody may delete
+        conn.execute("update infrx.outbox set acknowledged_at = infrx.now() where "
+                     "aggregate_id = %s", (live.request_id,))
+        conn.execute("insert into infrx.outbox (event_id, aggregate_id, org_id, kind, "
+                     "available_at, acknowledged_at) values (gen_random_uuid(), %s, %s, "
+                     "'callback_delivery', infrx.now(), infrx.now())",
+                     (dead.request_id, b.ORG_A))
+
+        def rows(request_id):
+            return sorted(conn.execute(
+                "select kind, acknowledged_at is not null, coalesce(last_error, '') from "
+                "infrx.outbox where aggregate_id = %s", (request_id,)).fetchall())
+
+        first = call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1000})
+        assert first == {"expired": 1, "deleted": 0}, first
+        assert rows(dead.request_id) == [
+            ("callback_delivery", True, ""), ("prepare_dispatch", True, "expired: job terminal"),
+            ("trace_projection", False, ""), ("usage_projection", False, "")], \
+            rows(dead.request_id)
+        advance(conn, 3600)
+        assert call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1000}) == \
+            {"expired": 0, "deleted": 0}, "a row inside its retention was deleted"
+        advance(conn, 1)
+        second = call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1000})
+        assert second == {"expired": 0, "deleted": 1}, second
+        assert rows(dead.request_id) == [
+            ("callback_delivery", True, ""), ("trace_projection", False, ""),
+            ("usage_projection", False, "")], rows(dead.request_id)
+        assert rows(live.request_id) == [("prepare_dispatch", True, "")], \
+            "a live job lost its dispatch row"
+        # bounded: three expired rows, one per call
+        more = [_admitted(conn, world) for _ in range(3)]
+        for m in more:
+            conn.execute("select infrx.terminalize_unstarted(%s, 'preparation_failed')",
+                         (m.request_id,))
+        counts = [call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1})["expired"]
+                  for _ in range(4)]
+        assert counts == [1, 1, 1, 0], counts
+        return "terminal dispatch rows expired; acknowledged rows past retention deleted, bounded"
+    return ca._in_rollback(conn, body)
