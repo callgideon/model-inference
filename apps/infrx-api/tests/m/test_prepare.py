@@ -52,6 +52,19 @@ class Clock:
         self.now += seconds
 
 
+class Counting(store.InMemoryObjectStore):
+    """An object store that says how often it was really read, so a test can prove that a
+    cheap check ran *instead of* a 64 MiB download and not merely as well as one."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.gets = 0
+
+    async def get(self, key):
+        self.gets += 1
+        return await super().get(key)
+
+
 def preparation(tmp_path=None, *, limits=DEFAULTS, transport=None, bodies=(),
                 probe_fn=probe.probe, clock=None, objects=None, jobs=None,
                 ttl_s=DEFAULTS.processing_cache_ttl_s, profile=None):
@@ -123,18 +136,84 @@ def test_an_inline_payload_is_measured_the_same_way(tmp_path):
     assert "base64" not in str(prepared.messages)
 
 
-def test_the_duration_is_the_probes_and_never_the_callers(tmp_path):
-    """S2M D2/D9. The record the caller sends can carry any `media` it likes; preparation
-    rebuilds the tuple from the parts it materialized, so a 121 s clip declared as 1 s is
-    still refused and a forged ref never reaches the engine."""
-    adapter = preparation(tmp_path, bodies=[LONG])
+def test_a_ref_the_caller_put_in_the_record_is_discarded(tmp_path):
+    """S2M D2. `NormalizedRequest.media` is an argument, so it is a claim: preparation
+    rebuilds the tuple from the parts it actually materialized. A forged ref carrying a
+    convenient duration, size and key must not survive into the record a job executes on."""
+    adapter = preparation(tmp_path, bodies=[CLIP])
     forged = MediaRef(org_id=b.ORG_A, handle="med_forged", kind=MediaKind.url,
-                      digest=fetch.digest_of(LONG), bytes=len(LONG), mime="video/mp4",
+                      digest=fetch.digest_of(LONG), bytes=1, mime="video/mp4",
                       storage_ref=f"media/{b.ORG_A}/v1/0123456789abcdef/source",
                       duration_s=1.0)
-    with pytest.raises(errors.UnsupportedMedia):
-        run(adapter.prepare_request(b.ORG_A, request_with(adapter, URL, media=(forged,))))
-    assert adapter.refs == {} and adapter.objects.objects == {}
+    prepared = run(adapter.prepare_request(b.ORG_A, request_with(adapter, URL, media=(forged,))))
+    assert [ref.handle for ref in prepared.media] != [forged.handle]
+    assert len(prepared.media) == 1 and prepared.media[0].duration_s == pytest.approx(10.0)
+    assert prepared.media[0].digest == fetch.digest_of(CLIP)
+
+
+def test_the_container_wins_over_the_declared_type(tmp_path):
+    """Never the caller's word: a WebM served as `video/mp4` is recorded, stored and cached
+    as the WebM it is, so the object's content type and the file the engine opens agree with
+    its bytes rather than with a header."""
+    adapter = preparation(tmp_path,
+                          transport=support.Transport(support.response(body=WEBM,
+                                                                      mime="video/mp4")))
+    prepared = run(adapter.prepare_request(b.ORG_A, request_with(adapter, URL)))
+    ref = prepared.media[0]
+    assert ref.mime == "video/webm"
+    assert adapter.objects.objects[ref.storage_ref][2] == "video/webm"
+    refs = run(adapter.stage(b.ORG_A, prepared))
+    adapter.jobs[prepared.request_id] = b.ORG_A
+    run(adapter.attach(prepared.request_id, refs))
+    assert adapter.local_uri(run(adapter.prepare(prepared.request_id, "v1"))[0]) \
+        .endswith("source.webm")
+
+
+def test_a_tightened_profile_refuses_media_the_probe_can_read(tmp_path):
+    """One constants table: S2M may tighten the pin, and every bound preparation enforces is
+    read from the profile - not from what the parser happens to understand."""
+    webm = data_url(WEBM, "video/webm")
+    for name, profile in (
+            ("container", prepare.MediaProfile(allowed_mime=frozenset({"video/mp4"}))),
+            ("codec", prepare.MediaProfile(allowed_codecs=frozenset({"h264"}))),
+            ("bytes", prepare.MediaProfile(max_bytes=len(WEBM) - 1)),
+            ("duration", prepare.MediaProfile(max_duration_s=5.0))):
+        adapter = preparation(tmp_path / name, profile=profile)
+        with pytest.raises((errors.UnsupportedMedia, errors.RequestTooLarge)):
+            run(adapter.prepare_request(b.ORG_A, request_with(adapter, webm)))
+        assert adapter.objects.objects == {}
+    # and the same media passes the pinned profile, so the cases above are not vacuous
+    passing = preparation(tmp_path / "pinned")
+    assert run(passing.prepare_request(b.ORG_A, request_with(passing, webm))).media
+
+
+def test_the_parts_and_the_refs_stay_in_order(tmp_path):
+    """R58 pairs the n-th media part with the n-th ref, and W1 rebuilds the message from
+    that pairing - so an out-of-order rewrite answers about the wrong clip."""
+    clips = [support.mp4(seconds=n + 2.0) for n in range(3)]
+    adapter = preparation(tmp_path, limits=DEFAULTS.replace(max_media_bytes=sum(map(len, clips))),
+                          profile=prepare.MediaProfile(max_parts=3,
+                                                       max_bytes=sum(map(len, clips))))
+    prepared = run(adapter.prepare_request(b.ORG_A,
+                                           request_with(adapter, *[data_url(c) for c in clips])))
+    assert [ref.duration_s for ref in prepared.media] == [2.0, 3.0, 4.0]
+    named = [part["video_url"]["ref"] for part in prepared.messages[0]["content"][1:]]
+    assert named == [ref.handle for ref in prepared.media]
+    assert len(set(named)) == 3
+
+
+def test_a_video_part_that_is_not_exactly_a_url_is_refused(tmp_path):
+    """The port takes a record, so the shape G1 validated is still checked here: a part with
+    no url, or a url that is not a string, is a typed refusal naming the part - not a
+    silently skipped part that puts the parts and the refs out of step."""
+    adapter = preparation(tmp_path, bodies=[CLIP])
+    base = request_with(adapter, URL)
+    for broken in ({}, {"ref": "med_x"}, {"url": 7}, {"url": ""}, {"url": None}):
+        request = base.model_copy(update={"messages": (
+            {"role": "user", "content": [{"type": "video_url", "video_url": broken}]},)})
+        with pytest.raises(errors.InvalidRequest) as raised:
+            run(adapter.prepare_request(b.ORG_A, request))
+        assert "carries exactly {url}" in str(raised.value)
 
 
 def test_a_clip_over_the_duration_cap_is_refused_before_it_is_stored(tmp_path):
@@ -315,6 +394,18 @@ def test_prepare_persists_the_artifact_and_a_file_the_engine_can_open(tmp_path):
         assert handle.read() == CLIP
 
 
+def test_a_prepared_artifact_that_is_gone_is_written_again(tmp_path):
+    """The durable artifact is the record and the cache file is a copy of it, so a cache hit
+    must not stand in for an object that is not there any more."""
+    adapter = preparation(tmp_path)
+    job_id, _ = staged_job(adapter)
+    ref = run(adapter.prepare(job_id, "v1"))[0]
+    adapter.objects.objects.pop(ref.storage_ref)
+    assert adapter.cache.get(ref.org_id, ref.digest, "v1") is not None
+    assert run(adapter.prepare(job_id, "v1"))[0] == ref
+    assert adapter.objects.objects[ref.storage_ref][1] == CLIP
+
+
 def test_the_profile_version_namespaces_the_prepared_artifact(tmp_path):
     """01: the tenant, the source digest and the profile version namespace the cache. Two
     profiles are two artifacts and two cache entries over one source."""
@@ -333,6 +424,9 @@ def test_preparing_twice_is_the_same_answer(tmp_path):
     refs - not prepare the first attempt's output under a second profile hop."""
     adapter = preparation(tmp_path)
     job_id, _ = staged_job(adapter)
+    # A profile other than the source's, because that is where a store that replaced the
+    # attached sources with its own output would prepare the previous attempt's artifact.
+    assert run(adapter.prepare(job_id, "profile-2")) == run(adapter.prepare(job_id, "profile-2"))
     assert run(adapter.prepare(job_id, "v1")) == run(adapter.prepare(job_id, "v1"))
 
 
@@ -396,15 +490,30 @@ def test_a_sweep_removes_expired_entries_and_leaves_live_ones(tmp_path):
     assert adapter.local_uri(new)
 
 
+def test_a_cache_file_deleted_behind_the_index_is_a_miss(tmp_path):
+    """The index is a hint about the disk, not the truth: an operator, a reboot or a sweep
+    can remove the file, and a worker must never be handed a path to nothing."""
+    adapter = preparation(tmp_path)
+    job_id, _ = staged_job(adapter)
+    ref = run(adapter.prepare(job_id, "v1"))[0]
+    os.remove(adapter.local_uri(ref)[len("file://"):])
+    with pytest.raises(errors.NotFound):
+        adapter.local_uri(ref)
+    # and the next preparation re-materializes it rather than trusting the stale entry
+    assert adapter.local_uri(run(adapter.prepare(job_id, "v1"))[0])
+
+
 def test_an_object_that_vanished_between_attach_and_prepare_is_not_found(tmp_path):
     """The expiry drill on the durable side: preparation reads the object it was told
     about, so an object that is gone is a typed `not_found` rather than a worker failing on
     a file nobody can open."""
-    adapter = preparation(tmp_path)
+    adapter = preparation(tmp_path, objects=Counting())
     job_id, refs = staged_job(adapter)
     adapter.objects.objects.pop(refs[0].storage_ref)
     with pytest.raises(errors.NotFound):
         run(adapter.prepare(job_id, "v1"))
+    # and the cheap check is what answered: HEAD said no, so no 64 MiB was ever read
+    assert adapter.objects.gets == 0
 
 
 def test_an_object_whose_content_changed_is_not_prepared(tmp_path):
@@ -428,11 +537,22 @@ def test_prepare_refuses_a_job_it_knows_nothing_about(tmp_path):
 def test_a_profile_version_cannot_escape_the_cache_root(tmp_path):
     """The profile version reaches an object key and the cache index, so it is an
     identifier and nothing else."""
-    adapter = preparation(tmp_path)
+    adapter = preparation(tmp_path, objects=Counting())
     job_id, _ = staged_job(adapter)
     for version in ("../../etc", "v1/../../..", "/absolute", "v1\nx", ""):
         with pytest.raises(errors.InvalidRequest):
             run(adapter.prepare(job_id, version))
+    # refused before anything is read, and nothing landed outside the cache root
+    assert adapter.objects.gets == 0
+    assert adapter.cache.entries == {}
+    # including for a text-only job, where no key is built and nothing else would look at
+    # the version at all
+    empty = "00000042-0000-4000-8000-000000000042"
+    adapter.jobs[empty] = b.ORG_A
+    run(adapter.attach(empty, ()))
+    assert run(adapter.prepare(empty, "v1")) == ()
+    with pytest.raises(errors.InvalidRequest):
+        run(adapter.prepare(empty, "../../etc"))
 
 
 def test_a_cross_tenant_handle_cannot_reach_another_tenants_media(tmp_path):

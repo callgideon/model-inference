@@ -174,8 +174,10 @@ def mvhd(duration: int = 10_000, timescale: int = 1_000, version: int = 0) -> by
     return box(b"mvhd", head + b"\x00" * 80)
 
 
-def tkhd(width: int = 640, height: int = 480) -> bytes:
-    return box(b"tkhd", b"\x00" * 4 + b"\x00" * 20 + b"\x00" * 8 + b"\x00" * 8 + b"\x00" * 36
+def tkhd(width: int = 640, height: int = 480, version: int = 0) -> bytes:
+    """A track header. Version 1 widens the three time fields, which moves the geometry."""
+    head = bytes([version, 0, 0, 0]) + (b"\x00" * 32 if version == 1 else b"\x00" * 20)
+    return box(b"tkhd", head + b"\x00" * 8 + b"\x00" * 8 + b"\x00" * 36
                + struct.pack(">II", width << 16, height << 16))
 
 
@@ -184,8 +186,9 @@ def stsd(codec: bytes = b"avc1") -> bytes:
     return box(b"stsd", b"\x00" * 4 + struct.pack(">I", 1) + entry)
 
 
-def trak(*, width: int = 640, height: int = 480, codec: bytes = b"avc1") -> bytes:
-    return box(b"trak", tkhd(width, height),
+def trak(*, width: int = 640, height: int = 480, codec: bytes = b"avc1",
+         tkhd_version: int = 0) -> bytes:
+    return box(b"trak", tkhd(width, height, tkhd_version),
                box(b"mdia", box(b"minf", box(b"stbl", stsd(codec)))))
 
 
@@ -223,3 +226,18 @@ def webm(*, seconds: float = 10.0, width: int = 640, height: int = 480,
                               + element(0xBA, height.to_bytes(2, "big"))))
     return (element(0x1A45DFA3, b"\x00")
             + element(0x18538067, info + element(0x1654AE6B, track)))
+
+
+def webm_info(seconds: float = 10.0, scale: int = 1_000_000) -> bytes:
+    """The Info payload on its own, for a case that has to place it by hand."""
+    return (element(0x2AD7B1, scale.to_bytes(4, "big"))
+            + element(0x4489, struct.pack(">d", seconds * 1e9 / scale)))
+
+
+def webm_tracks(codec: bytes = b"V_VP9", width: int = 640, height: int = 480,
+                track_type: int = 1) -> bytes:
+    """The Tracks element on its own, likewise."""
+    return element(0x1654AE6B,
+                   element(0xAE, element(0x83, bytes([track_type])) + element(0x86, codec)
+                           + element(0xE0, element(0xB0, width.to_bytes(2, "big"))
+                                     + element(0xBA, height.to_bytes(2, "big")))))

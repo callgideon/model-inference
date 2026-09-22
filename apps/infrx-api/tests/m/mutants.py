@@ -25,11 +25,14 @@ from ..contracts.mutants import Mutant, Outcome, Result
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
 PACKAGE = "infrx"
-SUITE = ("tests/m/test_fetch.py", "tests/m/test_store.py")
+SUITE = ("tests/m/test_fetch.py", "tests/m/test_store.py",
+         "tests/m/test_probe.py", "tests/m/test_prepare.py")
 
 F = "media/fetch.py"
 S = "media/store.py"
 V = "media/video.py"          # F1's address policy, reused by the new path
+P = "media/probe.py"          # M2: the container probe
+R = "media/prepare.py"        # M2: preparation, the profile and the cache
 
 
 def _m(name, invariant, file, old, new, *cases) -> Mutant:
@@ -300,10 +303,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_a_known_handle_is_staged_as_the_object_the_store_has"),
     _m("materialize_indexes_before_the_write",
        "no ref is indexed without an object behind it",
-       S, "        await self._write_once(ref.storage_ref, fetched.data, fetched.mime)\n"
+       S, "        await self._write_once(ref.storage_ref, fetched.data, ref.mime)\n"
           "        self.refs[(org_id, ref.handle)] = ref",
        "        self.refs[(org_id, ref.handle)] = ref\n"
-       "        await self._write_once(ref.storage_ref, fetched.data, fetched.mime)",
+       "        await self._write_once(ref.storage_ref, fetched.data, ref.mime)",
        "test_no_ref_is_indexed_without_an_object_behind_it"),
     _m("handle_clash_ignored", "a handle never comes to name different content",
        S, "            raise errors.Conflict(f\"handle {ref.handle} already names different content\")",
@@ -418,6 +421,314 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "        media = self.refs.get((org_id, ref))",
        "        media = next((m for (_o, h), m in self.refs.items() if h == ref), None)",
        "test_two_organizations_never_share_an_object"),
+    # ======================================================================
+    # M2: the container probe (`media/probe.py`)
+    #
+    # Two guards here deliberately have **no** mutant, for the reason M1 gave for `::/96`:
+    # every single-edit version of them either produces the same refusal by another route or
+    # makes the walk stop advancing, i.e. hang. They are the lower half of the ISO box-length
+    # check (`size < body - at`, a termination guard, proved by the bounded-time assertion in
+    # `test_a_hostile_length_is_refused_not_followed`) and the EBML `first == 0` width check
+    # (a width of nine is refused by the truncation guard on any file short enough to matter).
+    # ----------------------------------------------------------------------
+    _m("box_length_not_compared_with_the_file",
+       "a box may not claim more bytes than the file has (the content being there is not the "
+       "same as the length being right)",
+       P, "        if size < body - at or at + size > end:", "        if size < body - at:",
+       "test_a_box_longer_than_the_file_is_refused_although_its_content_is_there"),
+    _m("extended_64_bit_length_ignored",
+       "`size == 1` is a 64-bit length; reading the literal 1 walks into the header",
+       P, "        if size == 1:\n            size = _u(data, body, 8)\n            body += 8",
+       "        if False:\n            size = _u(data, body, 8)\n            body += 8",
+       "test_a_64_bit_box_length_is_read"),
+    _m("to_end_of_file_length_ignored",
+       "`size == 0` is \"to the end of the file\"; an empty box instead parses the payload "
+       "after it as boxes",
+       P, "        elif size == 0:\n            size = end - at",
+       "        elif size == 0:\n            size = BOX_HEADER",
+       "test_a_box_that_runs_to_the_end_of_the_file_is_read"),
+    _m("mvhd_version_1_offsets",
+       "version 1 of the movie header has 64-bit times, so the timescale and duration move",
+       P, "    if version == 1:\n        return _u(data, start + 20, 4), _u(data, start + 24, 8)",
+       "    if version == 1:\n        return _u(data, start + 12, 4), _u(data, start + 16, 4)",
+       "test_the_probe_reads_the_container_the_bytes_describe"),
+    _m("mvhd_version_unchecked",
+       "an undefined movie-header version is refused, not read as version 0",
+       P, '    raise _refuse("mvhd-version")',
+       "    return _u(data, start + 12, 4), _u(data, start + 16, 4)",
+       "test_a_container_that_states_no_usable_duration_is_refused"),
+    _m("tkhd_version_1_offsets",
+       "version 1 of the track header moves the geometry by twelve bytes",
+       P, "    at = start + (88 if version == 1 else 76)", "    at = start + 76",
+       "test_the_probe_reads_the_container_the_bytes_describe"),
+    _m("tkhd_fixed_point_not_converted",
+       "a track header stores 16.16 fixed point, so 640 is 0x02800000",
+       P, "    return _u(data, at, 4) >> 16, _u(data, at + 4, 4) >> 16",
+       "    return _u(data, at, 4), _u(data, at + 4, 4)",
+       "test_the_probe_reads_the_container_the_bytes_describe"),
+    _m("zero_timescale_not_refused",
+       "a zero timescale is refused (declared: without it the kill is an unhandled "
+       "ZeroDivisionError in the named case, not a typed refusal)",
+       P, "    if not timescale or not duration:", "    if not duration:",
+       "test_a_container_that_states_no_usable_duration_is_refused"),
+    _m("video_track_read_by_position",
+       "the video track is the one whose sample entry is a video codec, not track 1",
+       P, "    video = next((t for t in tracks if t.get(\"format\") in MP4_CODECS), None)",
+       "    video = tracks[0] if tracks else None",
+       "test_the_video_track_is_chosen_by_its_codec_not_its_position"),
+    _m("mp4_codec_allowlist_widened",
+       "the MP4 codec table is the serving pin: ProRes, MPEG-4 part 2 and a JPEG track are "
+       "refused whether or not a decoder would open them",
+       P, '"av01": "av1", "vp08": "vp8", "vp09": "vp9"}',
+       '"av01": "av1", "vp08": "vp8", "vp09": "vp9", "apcn": "prores", "mp4v": "mpeg4",\n'
+       '              "jpeg": "jpeg"}',
+       "test_a_container_with_no_servable_video_track_is_refused"),
+    _m("quicktime_brand_ignored",
+       "a `qt  ` major brand is QuickTime, which is a different accepted type and a "
+       "different cache extension",
+       P, "    return Probed(mime=QUICKTIME_MIME if brand.startswith(b\"qt\") else MP4_MIME,",
+       "    return Probed(mime=MP4_MIME,",
+       "test_the_probe_reads_the_container_the_bytes_describe"),
+    _m("iso_element_budget_removed",
+       "the walk stops after MAX_ELEMENTS headers, so a few kilobytes of empty boxes cannot "
+       "cost seconds of CPU",
+       P, '            if walked > MAX_ELEMENTS:\n                raise _refuse("too-many-boxes")',
+       '            if walked > MAX_ELEMENTS * 1000:\n                raise _refuse("too-many-boxes")',
+       "test_many_empty_boxes_stop_at_the_element_budget"),
+    _m("iso_depth_limit_removed",
+       "nesting is bounded, so caller-controlled depth is not a stack",
+       P, '            elif kind in ("moov", "trak", "mdia", "minf", "stbl"):\n'
+          "                if depth >= MAX_DEPTH:",
+       '            elif kind in ("moov", "trak", "mdia", "minf", "stbl"):\n'
+          "                if False:",
+       "test_a_deeply_nested_container_stops_at_the_depth_limit"),
+    _m("ebml_unknown_size_accepted_anywhere",
+       "an unknown size is legal on a streamed Segment only; anywhere else it lets the rest "
+       "of the file be read as that element's children",
+       P, '            if unknown:\n                if element != SEGMENT:\n'
+          '                    raise _refuse("unknown-size")\n                size = end - body',
+       "            if unknown:\n                size = end - body",
+       "test_a_hostile_length_is_refused_not_followed"),
+    _m("ebml_element_length_unchecked",
+       "an EBML element may not claim more bytes than its parent has",
+       P, "            if size < 0 or body + size > end:", "            if size < 0:",
+       "test_a_hostile_length_is_refused_not_followed"),
+    _m("timecode_scale_assumed_default",
+       "a Matroska duration is in timecode-scale units, and the scale is in the file",
+       P, "                scale = _u(data, body, size) or DEFAULT_TIMECODE_SCALE",
+       "                scale = DEFAULT_TIMECODE_SCALE",
+       "test_the_probe_reads_the_container_the_bytes_describe"),
+    _m("matroska_codec_allowlist_widened",
+       "the Matroska codec table is the same serving pin: Theora is refused",
+       P, '"V_AV1": "av1", "V_VP8": "vp8", "V_VP9": "vp9"}',
+       '"V_AV1": "av1", "V_VP8": "vp8", "V_VP9": "vp9",\n                     '
+       '"V_THEORA": "theora"}',
+       "test_a_container_with_no_servable_video_track_is_refused"),
+    _m("matroska_track_type_ignored",
+       "the track type is what says there are frames: a video codec on an audio track is "
+       "not a video",
+       P, '    video = next((t for t in tracks\n                  if t["type"] == VIDEO_TRACK_TYPE '
+          'and t["codec"] in MATROSKA_CODECS), None)',
+       '    video = next((t for t in tracks\n                  if t["codec"] in MATROSKA_CODECS), None)',
+       "test_a_container_with_no_servable_video_track_is_refused"),
+    _m("frame_size_unchecked",
+       "0x0 and 65535x65535 are declarations, not frames: the cheapest decode bombs there are",
+       P, "    if not 0 < probed.width <= MAX_DIMENSION or not 0 < probed.height <= MAX_DIMENSION:\n"
+          '        raise _refuse(f"dimensions:{probed.width}x{probed.height}")',
+       "    pass",
+       "test_a_frame_size_that_is_a_declaration_is_refused"),
+    _m("non_finite_duration_allowed_out",
+       "`inf`, `nan` and a negative duration never leave the probe (the engine computes a "
+       "frame budget from this number)",
+       P, '    if not (0 < probed.duration_s < float("inf")):\n'
+          '        raise _refuse(f"duration:{probed.duration_s}")',
+       "    pass",
+       "test_a_non_finite_duration_never_leaves_the_probe",
+       "test_a_container_that_states_no_usable_duration_is_refused"),
+
+    # ======================================================================
+    # M2: preparation, the profile table and the processing cache (`media/prepare.py`)
+    # ----------------------------------------------------------------------
+    _m("no_probe_at_materialization",
+       "the ref's duration and type are measured from the bytes; without the probe the "
+       "engine refuses every video request (S2M D2)",
+       R, "        probed = await self.probed(data)\n        self.profile.check(probed, len(data))\n"
+          "        return probed.mime, probed.duration_s",
+       "        return mime, None",
+       "test_preparation_measures_the_clip_and_fills_the_record",
+       "test_what_preparation_produces_is_what_the_engine_adapter_accepts"),
+    _m("declared_type_kept_over_the_container",
+       "the sniffed container wins over the `Content-Type`, because the extension the engine "
+       "opens and the object's content type must match its bytes",
+       R, "        return probed.mime, probed.duration_s", "        return mime, probed.duration_s",
+       "test_the_container_wins_over_the_declared_type"),
+    _m("profile_not_checked_before_the_write",
+       "media the profile refuses is never stored: the check runs on the measurement, before "
+       "the object exists",
+       R, "        self.profile.check(probed, len(data))\n        return probed.mime",
+       "        return probed.mime",
+       "test_a_clip_over_the_duration_cap_is_refused_before_it_is_stored",
+       "test_media_the_profile_refuses_is_never_stored"),
+    _m("duration_cap_removed",
+       "MAX_VIDEO_SECONDS is what keeps an accepted clip at the trained 2 fps (S2M D9)",
+       R, "        if probed.duration_s > self.max_duration_s:", "        if False:",
+       "test_a_clip_over_the_duration_cap_is_refused_before_it_is_stored",
+       "test_a_tightened_profile_refuses_media_the_probe_can_read"),
+    _m("profile_codec_allowlist_removed",
+       "the profile's codec set is the pin, which may be tighter than what the probe parses",
+       R, "        if probed.codec not in self.allowed_codecs:", "        if False:",
+       "test_a_tightened_profile_refuses_media_the_probe_can_read"),
+    _m("profile_mime_allowlist_removed",
+       "the profile's container set is the pin, likewise",
+       R, "        if probed.mime not in self.allowed_mime:", "        if False:",
+       "test_a_tightened_profile_refuses_media_the_probe_can_read"),
+    _m("profile_byte_cap_removed",
+       "the profile's byte cap is enforced on what was really decoded",
+       R, "        if nbytes > self.max_bytes:", "        if False:",
+       "test_a_tightened_profile_refuses_media_the_probe_can_read"),
+    _m("duration_cap_not_read_from_the_settings",
+       "the pinned profile reads MAX_VIDEO_SECONDS from the settings, not a literal",
+       R, "        return cls(version=valid_profile(version), max_duration_s=limits.max_video_seconds,",
+       "        return cls(version=valid_profile(version), max_duration_s=1e9,",
+       "test_a_clip_over_the_duration_cap_is_refused_before_it_is_stored"),
+    _m("parts_per_request_uncapped",
+       "one clip per request is a capacity fact, and it is checked before anything is fetched",
+       R, "        if len(sources) > self.profile.max_parts:", "        if False:",
+       "test_more_parts_than_the_profile_allows_are_refused"),
+    _m("request_org_coherence_removed",
+       "R10: a request is prepared for its own organization or not at all",
+       R, "        if request.org_id != org_id:\n"
+          '            raise errors.Forbidden("a request may only be prepared for its own org")',
+       "        if False:\n"
+          '            raise errors.Forbidden("a request may only be prepared for its own org")',
+       "test_a_request_may_only_be_prepared_for_its_own_org"),
+    _m("callers_media_tuple_kept",
+       "`NormalizedRequest.media` is a claim: the prepared record carries the refs "
+       "preparation actually materialized",
+       R, '                                          "media": refs})',
+       '                                          "media": request.media or refs})',
+       "test_a_ref_the_caller_put_in_the_record_is_discarded"),
+    _m("rewrite_out_of_order",
+       "R58 pairs the n-th media part with the n-th ref; out of order is an answer about "
+       "another clip",
+       R, "                parts.append({\"type\": VIDEO_PART, VIDEO_PART: {REF_KEY: refs[consumed].handle}})",
+       "                parts.append({\"type\": VIDEO_PART, VIDEO_PART: {REF_KEY: refs[-1].handle}})",
+       "test_the_parts_and_the_refs_stay_in_order"),
+    _m("video_part_shape_unchecked",
+       "a part with no url, or one that is not a string, is a typed refusal naming the part "
+       "(declared: without it the kill is an AttributeError inside materialization)",
+       R, "        if not isinstance(source, str) or not source:\n"
+          '            raise errors.InvalidRequest("a video part carries exactly {url}", param="messages")',
+       "        if False:\n"
+          '            raise errors.InvalidRequest("a video part carries exactly {url}", param="messages")',
+       "test_a_video_part_that_is_not_exactly_a_url_is_refused"),
+    _m("preparation_pool_unbounded",
+       "r1 R1: PREPARATION_CONCURRENCY bounds how many clips are in memory at once",
+       R, "        self.gate = asyncio.Semaphore(max(1, self.limits.preparation_concurrency))",
+       "        self.gate = asyncio.Semaphore(1024)",
+       "test_preparation_runs_at_most_the_pool_width_at_once"),
+    _m("request_memory_budget_removed",
+       "one request has one media budget, however many parts it spreads it over",
+       R, "        if self.spent > self.allowed:", "        if False:",
+       "test_one_request_cannot_exceed_the_media_budget"),
+    _m("probe_deadline_removed",
+       "PROBE_TIMEOUT_S bounds a decoder that never returns",
+       R, "            return await asyncio.wait_for(work, self.limits.probe_timeout_s)",
+       "            return await work",
+       "test_a_probe_that_never_returns_is_bounded_by_its_deadline"),
+    _m("head_check_removed",
+       "the cheap check answers first: HEAD says the object is gone, so 64 MiB is never read",
+       R, "            if await self.objects.head(key) != ref.digest:", "            if False:",
+       "test_an_object_that_vanished_between_attach_and_prepare_is_not_found"),
+    _m("digest_not_rechecked_after_the_read",
+       "HEAD and digest, not HEAD alone: a store that answers with other bytes must not have "
+       "them prepared and answered about",
+       R, "                if data is None or digest_of(data) != ref.digest:",
+       "                if data is None:",
+       "test_an_object_whose_content_changed_is_not_prepared"),
+    _m("cache_hit_stands_in_for_the_durable_artifact",
+       "a cache hit is a hit on the local copy; the durable prepared artifact is the record, "
+       "so its absence runs the whole path again",
+       R, "            if entry is None or await self.objects.head(prepared_key) is None:",
+       "            if entry is None:",
+       "test_a_prepared_artifact_that_is_gone_is_written_again"),
+    _m("prepared_key_uses_the_sources_profile",
+       "01: the profile version namespaces the cache, so it is the *requested* profile in "
+       "the prepared key",
+       R, '                "profile_version": version, "storage_ref": prepared_key,',
+       '                "profile_version": version,\n                "storage_ref": self._key('
+       'ref.org_id, ref.digest, ref.profile_version, "prepared"),',
+       "test_the_profile_version_namespaces_the_prepared_artifact"),
+    _m("prepared_artifact_not_persisted",
+       "the prepared artifact is durable before anything downstream is told the job is "
+       "prepared; the local cache is a copy, not the record",
+       R, "                await self._write_once(prepared_key, body, probed.mime)",
+       "                pass",
+       "test_prepare_persists_the_artifact_and_a_file_the_engine_can_open"),
+    _m("prepared_ref_carries_no_duration",
+       "the prepared ref carries the measured duration, which is what the engine budgets "
+       "frames from",
+       R, '                "duration_s": entry.probed.duration_s}))', '                "duration_s": None}))',
+       "test_prepare_persists_the_artifact_and_a_file_the_engine_can_open",
+       "test_what_preparation_produces_is_what_the_engine_adapter_accepts"),
+    _m("prepared_refs_replace_the_attached_sources",
+       "R46 allows bounded preparation retries, so a second attempt re-derives the same "
+       "answer instead of preparing the first attempt's output",
+       R, "        self.prepared_by_job[job_id] = tuple(prepared)",
+       "        self.by_job[job_id] = tuple(prepared)",
+       "test_preparing_twice_is_the_same_answer"),
+    _m("unknown_job_prepared_as_empty",
+       "r1 R46/q23: `prepare` resolves this job's refs or nothing; an empty prepared set for "
+       "an unknown job looks like a finished preparation",
+       R, "        if sources is None:\n"
+          '            raise errors.NotFound(f"no staged media for job {job_id}")',
+       "        if sources is None:\n            sources = ()",
+       "test_prepare_refuses_a_job_it_knows_nothing_about"),
+    _m("profile_version_unvalidated_before_the_read",
+       "the profile version is validated before the object is read, so a malformed one costs "
+       "no download and reaches no path",
+       R, "        version = valid_profile(profile)", "        version = profile",
+       "test_a_profile_version_cannot_escape_the_cache_root"),
+    _m("cache_expiry_removed",
+       "PROCESSING_CACHE_TTL_S is a retention obligation: past it the entry is unreadable",
+       R, "        if self.clock() - entry.stored_at >= self.ttl_s:", "        if False:",
+       "test_a_cache_entry_expires_and_its_file_goes_with_it"),
+    _m("cache_file_existence_unchecked",
+       "the index is a hint about the disk: an entry pointing at a file that is gone is a "
+       "miss, not a path handed to a worker",
+       R, "        if not os.path.exists(entry.local_path):", "        if False:",
+       "test_a_cache_file_deleted_behind_the_index_is_a_miss"),
+    _m("cache_path_without_the_tenant",
+       "MEDIA-SEC: the organization is in the path, so identical bytes in two tenants are two "
+       "files and neither tenant can reach the other's",
+       R, "        path = os.path.join(self.root, valid_org(org_id), valid_digest(digest),",
+       "        path = os.path.join(self.root, valid_digest(digest),",
+       "test_one_tenants_cache_entry_is_not_another_tenants",
+       "test_the_cache_path_is_built_from_validated_parts_only"),
+    _m("cache_extension_unchecked",
+       "a cache file is named for a container the profile serves; `source.None` is not a "
+       "file any decoder opens",
+       R, "        extension = EXTENSIONS.get(mime)\n        if extension is None:",
+       "        extension = EXTENSIONS.get(mime)\n        if False:",
+       "test_the_cache_path_is_built_from_validated_parts_only"),
+    _m("sweep_removes_live_entries",
+       "a sweep removes what is past its life and nothing else",
+       R, "                   if now - entry.stored_at >= self.ttl_s]", "                   if True]",
+       "test_a_sweep_removes_expired_entries_and_leaves_live_ones"),
+
+    # --- M1's store, where M2's probe hook meets it ------------------------
+    _m("facts_hook_not_consulted",
+       "what a ref records about the bytes comes from `facts`, which M2 overrides with a "
+       "probe; hard-coding the fetcher's answer loses the duration and the container",
+       S, "        mime, duration_s = await self.facts(fetched.data, fetched.mime)",
+       "        mime, duration_s = fetched.mime, None",
+       "test_preparation_measures_the_clip_and_fills_the_record",
+       "test_the_container_wins_over_the_declared_type"),
+    _m("stored_content_type_is_the_declared_one",
+       "the object is stored as the container it is, not as the type the server declared",
+       S, "        await self._write_once(ref.storage_ref, fetched.data, ref.mime)",
+       "        await self._write_once(ref.storage_ref, fetched.data, fetched.mime)",
+       "test_the_container_wins_over_the_declared_type"),
 )
 
 # pytest exit codes: 0 all passed, 1 tests failed; 2-5 mean the runner broke.

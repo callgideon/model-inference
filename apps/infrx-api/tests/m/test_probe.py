@@ -32,6 +32,12 @@ from . import support
     (support.webm(seconds=30.0, codec=b"V_VP8", width=1280, height=720),
      "video/webm", 30.0, (1280, 720), "vp8"),
     (support.webm(codec=b"V_MPEG4/ISO/AVC"), "video/webm", 10.0, (640, 480), "h264"),
+    # A duration is in timecode-scale units, so the scale is half the number.
+    (support.webm(seconds=45.0, scale=1_000), "video/webm", 45.0, (640, 480), "vp9"),
+    (support.webm(seconds=8.0, scale=100_000_000), "video/webm", 8.0, (640, 480), "vp9"),
+    # Version 1 of the track header moves the geometry by twelve bytes.
+    (support.mp4(tracks=support.trak(width=3840, height=2160, tkhd_version=1)),
+     "video/mp4", 10.0, (3840, 2160), "h264"),
 ])
 def test_the_probe_reads_the_container_the_bytes_describe(data, mime, seconds, size, codec):
     """Duration, geometry and codec come from the header, and the container is identified
@@ -59,6 +65,29 @@ def test_a_64_bit_box_length_is_read():
     assert probe.probe(data).duration_s == 5.0
 
 
+def test_a_box_that_runs_to_the_end_of_the_file_is_read():
+    """`size == 0` means "to the end", which real files use for the last `mdat`. Treating it
+    as an empty box parses the payload that follows as if it were boxes."""
+    data = support.mp4()[:-40] + struct.pack(">I", 0) + b"mdat" + b"\x00\x00\x00\x01" * 8
+    assert probe.probe(data).duration_s == 10.0
+
+
+def test_a_box_longer_than_the_file_is_refused_although_its_content_is_there():
+    """The case that separates "checked the length" from "happened to refuse": the container
+    is complete and parseable, and only `moov`'s declared length is too big. A probe that
+    does not compare the length with what is really there reports a duration for a file it
+    has not got."""
+    data = support.mp4()
+    inflated = data[:20] + struct.pack(">I", int.from_bytes(data[20:24], "big") + 100) + data[24:]
+    assert probe.probe(data).duration_s == 10.0
+    with pytest.raises(errors.UnsupportedMedia) as raised:
+        probe.probe(inflated)
+    # The *reason* matters here: a walk that only notices when it falls off the end of the
+    # buffer has read another box's bytes as this one's on the way, and would have believed a
+    # file whose trailing garbage happened to parse.
+    assert raised.value.reason == "bad-box-length"
+
+
 # --- lengths, depths and declarations ----------------------------------------
 @pytest.mark.parametrize("name, data", [
     # A box that claims to be shorter than its own header: advancing by it never moves,
@@ -80,10 +109,27 @@ def test_a_64_bit_box_length_is_read():
      + support.element(0x18538067, b"\x00" * 4, size=support.vint(1 << 40))),
     # A vint whose first byte is zero declares a width of more than eight bytes.
     ("an EBML width of nine", b"\x1a\x45\xdf\xa3" + b"\x00" + b"\x00" * 16),
+    # Unknown-size *and* otherwise complete: an element that says "I go on until something
+    # ends me" is a length nobody can bound, and accepting it anywhere but on a streamed
+    # Segment lets the rest of the file be read as that element's children.
+    # Unknown-size *and* otherwise complete: with the restriction dropped this parses
+    # perfectly, because everything the probe reads is inside the element that claims to run
+    # to the end. "I go on until something ends me" is a length nobody can bound, and it is
+    # legal on a streamed Segment and nowhere else.
     ("an unknown size on a leaf", support.element(0x1A45DFA3, b"\x00")
-     + support.element(0x18538067,
-                       support.element(0x1549A966, b"", size=b"\xff") + b"\x00" * 8)),
+     + support.element(0x18538067, support.element(
+         0x1549A966, support.webm_info() + support.webm_tracks(), size=b"\xff"))),
     ("a truncated EBML element", support.webm()[:12]),
+    # Overlapping siblings: Info claims one byte more than the elements after it, so with the
+    # parent bound gone it swallows Tracks and the file parses perfectly. This is the case
+    # that separates "an element may not claim past its parent" from "may not claim past the
+    # file" - the buffer has bytes there, they just belong to something else.
+    ("an element that overlaps its siblings", support.element(0x1A45DFA3, b"\x00")
+     + support.element(0x18538067,
+                       (0x1549A966).to_bytes(4, "big")
+                       + support.vint(len(support.webm_info()) + len(support.webm_tracks()) + 1)
+                       + support.webm_info() + support.webm_tracks())
+     + support.element(0xEC, b"\x00")),
 ])
 def test_a_hostile_length_is_refused_not_followed(name, data):
     """MEDIA-SEC: every declared length is checked against what is really there. A probe
@@ -102,10 +148,15 @@ def test_a_deeply_nested_container_stops_at_the_depth_limit():
     payload = support.stsd()
     for _ in range(40):
         payload = support.box(b"stbl", support.box(b"minf", support.box(b"mdia", payload)))
+    # Otherwise complete - a track header and a movie header - so the depth is the only
+    # reason to refuse it and the case cannot pass for the wrong one.
     data = (support.box(b"ftyp", b"isom" + b"\x00" * 8)
-            + support.box(b"moov", support.mvhd(), support.box(b"trak", payload)))
-    with pytest.raises(errors.UnsupportedMedia):
+            + support.box(b"moov", support.mvhd(),
+                          support.box(b"trak", support.tkhd(), payload)))
+    assert probe.probe(support.mp4()).duration_s == 10.0
+    with pytest.raises(errors.UnsupportedMedia) as raised:
         probe.probe(data)
+    assert raised.value.reason == "too-deep"
 
 
 def test_many_empty_boxes_stop_at_the_element_budget():
@@ -136,10 +187,17 @@ def test_a_container_with_no_parser_is_refused_rather_than_guessed(name, data):
 @pytest.mark.parametrize("name, data", [
     ("no moov at all", support.box(b"ftyp", b"isom" + b"\x00" * 8) + support.box(b"mdat")),
     ("a zero duration", support.mp4(seconds=0.0)),
-    ("a zero timescale", support.mp4(timescale=0)),
+    # A zero timescale with a *non-zero* duration: the pair is what has to be checked, and
+    # dividing by it is not a refusal.
+    ("a zero timescale", support.box(b"ftyp", b"isom" + b"\x00" * 8)
+     + support.box(b"moov", support.mvhd(10_000, 0), support.trak())),
+    # A version nobody has defined, with a *plausible* version-0 body behind it: a probe
+    # that ignores the version reads 5 s out of a header it does not understand.
     ("an unknown mvhd version",
      support.box(b"ftyp", b"isom" + b"\x00" * 8)
-     + support.box(b"moov", support.box(b"mvhd", bytes([7]) + b"\x00" * 100), support.trak())),
+     + support.box(b"moov", support.box(b"mvhd", bytes([7, 0, 0, 0]) + b"\x00" * 8
+                                       + struct.pack(">II", 1_000, 5_000) + b"\x00" * 80),
+                   support.trak())),
     ("a WebM with no duration", support.element(0x1A45DFA3, b"\x00")
      + support.element(0x18538067, support.element(0x1654AE6B, b""))),
     ("a WebM duration of zero", support.webm(seconds=0.0)),
@@ -183,6 +241,9 @@ def test_a_frame_size_that_is_a_declaration_is_refused(name, data):
     ("Theora", support.webm(codec=b"V_THEORA")),
     ("an audio-only Matroska", support.webm(codec=b"A_OPUS", track_type=2)),
     ("a subtitle track", support.webm(codec=b"S_TEXT/UTF8", track_type=17)),
+    # A video codec declared on an audio track: the track type is what says whether there
+    # are frames, so a probe that reads only the codec reports a video that is not one.
+    ("a video codec on an audio track", support.webm(codec=b"V_VP9", track_type=2)),
     ("a track with no sample description",
      support.mp4(tracks=support.box(b"trak", support.tkhd()))),
 ])

@@ -286,6 +286,12 @@ class MediaPreparation(MediaStaging):
         All or nothing: a source that cannot be fetched, read or served refuses the whole
         request, so no half-prepared record reaches admission (02: "a staging failure
         creates no job or hold").
+
+        `payload_digest` is deliberately **not** recomputed. It identifies the customer's
+        body for idempotency (`IdempotencyRef.payload_hash`, and `validate.payload_digest`
+        already tokenises inline media), so a rewrite that changed it would make every
+        retried request a `409` against its own first attempt. What `stage` makes durable is
+        this record; what the digest names is the request that asked for it.
         """
         org_id = valid_org(org_id)
         if request.org_id != org_id:
@@ -345,8 +351,12 @@ class MediaPreparation(MediaStaging):
             key = self._key(ref.org_id, ref.digest, ref.profile_version, "source")
             if await self.objects.head(key) != ref.digest:
                 raise errors.NotFound(f"the staged object for media {ref.handle} is gone")
+            prepared_key = self._key(ref.org_id, ref.digest, version, "prepared")
             entry = self.cache.get(ref.org_id, ref.digest, version) if self.cache.enabled else None
-            if entry is None:
+            # A cache hit is a hit on the *local copy*, and the durable artifact is the
+            # record. If it is gone the whole path runs again, so "persisted before the job
+            # is told it is prepared" holds on the second attempt as well as the first.
+            if entry is None or await self.objects.head(prepared_key) is None:
                 data = await self.objects.get(key)
                 if data is None or digest_of(data) != ref.digest:
                     # Between the HEAD and the read: an object store that answered "yes"
@@ -357,14 +367,12 @@ class MediaPreparation(MediaStaging):
                 body = self._prepared_bytes(data, probed)
                 # Durable before local: the prepared artifact exists in the object store
                 # before anything downstream can be told the job is prepared.
-                await self._write_once(self._key(ref.org_id, ref.digest, version, "prepared"),
-                                       body, probed.mime)
+                await self._write_once(prepared_key, body, probed.mime)
                 entry = (self.cache.put(ref.org_id, ref.digest, version, body, probed)
                          if self.cache.enabled
                          else CacheEntry("", probed, len(body), 0.0))
             prepared.append(ref.model_copy(update={
-                "profile_version": version,
-                "storage_ref": self._key(ref.org_id, ref.digest, version, "prepared"),
+                "profile_version": version, "storage_ref": prepared_key,
                 "mime": entry.probed.mime, "bytes": entry.bytes,
                 "duration_s": entry.probed.duration_s}))
         self.prepared_by_job[job_id] = tuple(prepared)
