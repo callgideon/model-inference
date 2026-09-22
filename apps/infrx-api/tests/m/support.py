@@ -312,7 +312,8 @@ async def prepared_facts(adapter, org_id: str, source: str, job_id: str) -> dict
     Materialize one source, attach it to a job, prepare it at profile v1 and read back
     what was produced: the prepared ref, the digest of the durable prepared object and of
     the local file the engine opens, that file's place under the cache root, and the
-    frame/pixel budget the engine derives from the measured duration. MEDIA-PARITY is
+    frame/pixel budget the engine derives from the measured duration, plus the frame size and
+    codec the probe read. MEDIA-PARITY is
     "these facts are equal" across runs, stores and cache expiry."""
     ref = await adapter.materialize(org_id, source)
     await adapter.attach(job_id, (ref,))
@@ -320,7 +321,9 @@ async def prepared_facts(adapter, org_id: str, source: str, job_id: str) -> dict
     local = adapter.local_uri(prepared).removeprefix("file://")
     with open(local, "rb") as handle:
         local_digest = digest_of(handle.read())
+    probed = adapter.cache.get(prepared.org_id, prepared.digest, prepared.profile_version).probed
     return {"source_digest": ref.digest,
+            "probed": {"width": probed.width, "height": probed.height, "codec": probed.codec},
             "ref": prepared.model_dump(mode="json", exclude={"kind"}),
             "prepared_digest": digest_of(await adapter.objects.get(prepared.storage_ref)),
             "local_digest": local_digest,
