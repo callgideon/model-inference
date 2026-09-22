@@ -779,8 +779,20 @@ def conformance_factory(tmp_path):
         adapter = preparation(tmp_path / str(len(os.listdir(tmp_path))),
                               limits=limits or DEFAULTS)
         return Harness(port=Deferred(adapter), clock=FakeClock(), ids=SequentialIds(),
-                       extra={"admitted": adapter.jobs.__setitem__})
+                       extra={"admitted": adapter.jobs.__setitem__,
+                              "materialized": materialized(adapter)})
     return factory
+
+
+def materialized(adapter):
+    """F2R item 4's hook: a real clip this store materializes. The length is derived from
+    the builder's handle, so distinct refs are distinct content (equal content would give
+    equal digest-derived handles, and a relabelled foreign ref would then resolve to the
+    tenant's own object)."""
+    async def hook(org_id, ref):
+        seconds = 5.0 + int(fetch.digest_of(ref.handle.encode())[7:15], 16) % 97 / 10
+        return await adapter.materialize(org_id, data_url(support.mp4(seconds=seconds)))
+    return hook
 
 
 M3_CASES = {"media_sec__an_upload_is_owned_verified_and_immutable": "create_upload",
@@ -791,20 +803,15 @@ M3_CASES = {"media_sec__an_upload_is_owned_verified_and_immutable": "create_uplo
             "media_sec__an_expired_upload_window_says_so": "create_upload"}
 M1_CASES = ("media_sec__a_foreign_media_reference_is_not_staged",
             "media_sec__a_partial_request_stages_nothing")
-# The one case this adapter cannot pass, and exactly why. `builders.media()` hands `stage` a
-# ref to an object that was never materialized (M1's evidence, "Limits added or changed this
-# round" item 1), so `prepare` has no bytes to re-read, re-probe or cache - and a `prepare`
-# that produced an artifact anyway would be inventing a duration for media nobody stored.
-# F2R item 4 is the fix: `stage` accepts only store-produced refs and the shared builder
-# seeds them through a `materialized(org_id, ref)` hook. This is pinned rather than skipped,
-# so it fails the moment it starts failing for a different reason - or starts passing.
-PENDING_F2R = "media_parity__staging_is_content_addressed_and_tenant_namespaced"
+# F2R item 4 made this case runnable here: `stage` takes only store-produced refs, seeded
+# through the `materialized` hook above.
+PARITY = "media_parity__staging_is_content_addressed_and_tenant_namespaced"
 
 
 def test_the_exported_conformance_suite_runs_against_the_real_adapter(tmp_path, capsys):
     """F-CONTRACT / r1 R32: the same cases the fake passes, against this adapter, with the
-    partition asserted - what ran, what is another task's, and the one case that is blocked
-    on a contract revision rather than on this code."""
+    partition asserted - what ran and what is another task's; nothing is blocked (the
+    parity case runs on media this store materialized)."""
     cases, _runner = SUITES["mediastore"]
     factory = conformance_factory(tmp_path)
     outcomes: dict[str, str] = {}
@@ -819,18 +826,16 @@ def test_the_exported_conformance_suite_runs_against_the_real_adapter(tmp_path, 
     print("\nmediastore conformance against infrx.media.prepare.MediaPreparation:")
     for name, outcome in sorted(outcomes.items()):
         print(f"  {outcome:<34} {name}")
-    assert {name for name, out in outcomes.items() if out == "pass"} == set(M1_CASES)
+    assert {name for name, out in outcomes.items() if out == "pass"} == {*M1_CASES, PARITY}
     assert {name: out.split("needs ")[1].split(" ")[0]
             for name, out in outcomes.items() if out.startswith("skip")} == M3_CASES
-    blocked = {name: out for name, out in outcomes.items() if out.startswith("blocked")}
-    assert list(blocked) == [PENDING_F2R], blocked
-    assert "the staged object for media upl_conformancefixture" in blocked[PENDING_F2R]
+    assert not [name for name, out in outcomes.items() if out.startswith("blocked")], outcomes
     assert len(outcomes) == len(cases()) == 9
 
 
 def test_the_invariants_of_the_blocked_case_hold_on_materialized_media(tmp_path):
-    """The blocked case above is not an untested invariant: every assertion it makes about
-    `prepare` is made here against media this store really materialized."""
+    """The parity case's assertions about `prepare`, made directly against media this store
+    really materialized."""
     adapter = preparation(tmp_path, transport=support.Transport(support.response(body=CLIP)))
     mine_job, staged = staged_job(adapter, org_id=b.ORG_A)
     theirs_job, theirs = staged_job(adapter, org_id=b.ORG_B)
