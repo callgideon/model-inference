@@ -133,6 +133,42 @@ def test_a_failed_stage_blob_is_eventually_removed():
     assert run(sweeper.sweep()).deleted == [orphan]
 
 
+def test_a_stage_during_the_delete_is_refused_not_admitted():
+    """The index forgets an object before its delete is sent: a stage racing the delete
+    round trip is not_found, never a ref to an object that is about to vanish."""
+    class SlowDelete(store.InMemoryObjectStore):
+        def __init__(self):
+            super().__init__()
+            self.deleting, self.release = asyncio.Event(), asyncio.Event()
+
+        async def delete(self, key):
+            if key.startswith("media/"):
+                self.deleting.set()
+                await self.release.wait()
+            await super().delete(key)
+
+    objects = SlowDelete()
+    adapter = adapter_for(objects=objects)
+    _, ref = finalized(adapter)
+    sweeper = collector(adapter)
+    run(sweeper.sweep())
+    adapter.clock.advance(GRACE)
+
+    async def race():
+        sweep = asyncio.ensure_future(sweeper.sweep())
+        await objects.deleting.wait()
+        try:
+            await adapter.stage(b.ORG_A, b.request(adapter.harness, refs=(ref,)))
+        except errors.NotFound:
+            return "refused"
+        finally:
+            objects.release.set()
+            await sweep
+        return "staged"
+
+    assert run(race()) == "refused"
+
+
 def test_media_staged_for_a_request_never_admitted_is_removed():
     """And once removed, nothing resolves to it: not the upload, not a materialized ref."""
     adapter = adapter_for()

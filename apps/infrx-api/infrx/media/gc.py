@@ -103,8 +103,10 @@ class MediaCollector:
                 continue
             # Read after every await above, so a stage or attach during this pass counts.
             if now - store.idle_since.setdefault(key, now) >= self.grace:
-                await store.objects.delete(key)
+                # Forgotten first: a stage during the delete's round trip is not_found
+                # rather than admitted on an object that is about to vanish (review).
                 self._forget(key)
+                await store.objects.delete(key)
                 swept.deleted.append(key)
 
         # 4. The processing cache.
