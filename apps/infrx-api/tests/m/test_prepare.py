@@ -676,13 +676,16 @@ def test_the_cache_path_is_built_from_validated_parts_only(tmp_path):
 
 
 # --- the seam into W1 -----------------------------------------------------------
-def engine() -> worker_engine.VllmEngine:
+def engine(root: str, local_uri) -> worker_engine.VllmEngine:
     """W1's real adapter behind a transport that never answers: `upstream_body` is built
-    and refused (or not) entirely before anything is sent."""
+    and refused (or not) entirely before anything is sent. Since W2 the adapter takes M2's
+    `local_uri` resolver and the shared media root (R61 (2)); the coordinator wired the
+    seam at the M3/W2 merge."""
     client = httpx.AsyncClient(transport=httpx.MockTransport(
         lambda request: httpx.Response(200, json={})), base_url="http://engine.invalid")
     return worker_engine.VllmEngine(client, served_model="marlin2b", clock=lambda: 0.0,
-                                    media_settings=Settings())
+                                    media_settings=Settings(), local_media_root=root,
+                                    local_uri=local_uri)
 
 
 def work_for(request, refs):
@@ -704,11 +707,14 @@ def test_what_preparation_produces_is_what_the_engine_adapter_accepts(tmp_path):
     run(adapter.attach(prepared_request.request_id, refs))
     prepared_refs = run(adapter.prepare(prepared_request.request_id, "v1"))
 
-    body = engine().upstream_body(
+    body = engine(str(tmp_path), adapter.local_uri).upstream_body(
         worker_engine.prepared_request(work_for(prepared_request, prepared_refs), 2_061))
     parts = body["messages"][0]["content"]
+    # the engine receives the pilot `file://` form under the shared root (R61 (2)), never
+    # the durable object key
     assert parts[1] == {"type": "video_url",
-                        "video_url": {"url": prepared_refs[0].storage_ref}}
+                        "video_url": {"url": adapter.local_uri(prepared_refs[0])}}
+    assert adapter.local_uri(prepared_refs[0]).startswith(f"file://{tmp_path}/")
     # the pinned profile v1 budget, computed from the measured 10 s at 2 fps
     assert body["mm_processor_kwargs"] == {"fps": 2.0, "min_frames": 4, "max_frames": 240,
                                            "size": {"shortest_edge": 4096,
@@ -728,8 +734,11 @@ def test_the_engine_adapter_refuses_the_record_m1_alone_produced(tmp_path):
                                            "storage_ref": ref.storage_ref.replace("source",
                                                                                   "prepared")})
                     for ref in refs)
+    # a resolver that answers a well-formed local path, so the only guard left is W1's
+    shaped = (lambda ref: f"file://{tmp_path}/{ref.org_id}/{ref.profile_version}/"
+              f"{ref.digest[len('sha256:'):][:16]}/source.mp4")
     with pytest.raises(errors.UnsupportedMedia):
-        engine().upstream_body(
+        engine(str(tmp_path), shaped).upstream_body(
             worker_engine.prepared_request(work_for(prepared_request, undated), 2_061))
 
 
