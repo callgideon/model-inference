@@ -217,6 +217,26 @@ def test_q2_fair__weight_buys_a_proportional_share():
     run(body)
 
 
+def test_q2_fair__one_dispatch_moves_the_tag_by_exactly_cost_over_weight():
+    """Point 4, arithmetic rather than order: with a non-unit cost the tag advance is the
+    estimator's answer divided by the weight, and nothing else. A Lua that charged a flat
+    1 s would pass every ordering test above and price the machine wrongly."""
+    async def body(harness_):
+        h = harness_(weights={ORG_B: 4.0}, cost=lambda e: 2.5)
+        port = h.port
+        for org in (ORG_A, ORG_A, ORG_B, ORG_B):
+            assert await port.enqueue(event(h, org_id=org))
+        # claimed, not acknowledged: the flows must still be there to be inspected
+        assert (await port.claim_candidate("worker-a")).org_id == ORG_A
+        assert (await port.claim_candidate("worker-a")).org_id == ORG_B
+        assert await port.tags() == {(INFER.value, ORG_A): 2.5,
+                                     (INFER.value, ORG_B): 0.625}, await port.tags()
+        # level 1 is charged the raw cost, with no weight anywhere in it
+        assert (await port.kind_tags())[INFER.value] == 5.0
+        assert await port.top_virtual_time() == 2.5
+    run(body)
+
+
 def test_q2_fair__a_candidate_that_waited_catches_up_once_and_cannot_hoard():
     """Point 4: the clamp. A flow whose candidates were not available yet gets one slot
     of catch-up and is then pulled up to its pool's virtual time; without the clamp it
@@ -233,7 +253,14 @@ def test_q2_fair__a_candidate_that_waited_catches_up_once_and_cannot_hoard():
         assert early == [ORG_A] * 4, early
         assert (await port.virtual_times())[INFER.value] == 3.0
         h.clock.advance(60)
-        late = [c.org_id for c in await _unfiltered(port, 4)]
+        first_late = await port.claim_candidate("worker-any")
+        assert first_late is not None and first_late.org_id == ORG_B
+        # the pool's virtual time is the *clamped start* of this dispatch (3.0), never the
+        # arriving flow's own tag (0.0), or it walks backwards and the newcomer keeps the
+        # credit for every dispatch it missed
+        assert (await port.virtual_times())[INFER.value] == 3.0
+        await port.acknowledge(first_late)
+        late = [first_late.org_id] + [c.org_id for c in await _unfiltered(port, 3)]
         assert late == [ORG_B, ORG_A, ORG_B, ORG_A], late
         # the newcomer was clamped up to 3.0 once and then advanced in step, so the pool's
         # virtual time is the clamped start of the last dispatch, not the tag behind it
@@ -392,14 +419,17 @@ def test_q2_stats__a_candidate_is_not_offered_before_it_is_available():
     async def body(harness_):
         h = harness_()
         port = h.port
-        later = event(h, org_id=ORG_A, available_in_s=30)
+        # a *fractional* availability on purpose: an instant that crossed into the script
+        # as anything coarser than a microsecond (an epoch float truncated to seconds, say)
+        # would offer this candidate half a second early
+        later = event(h, org_id=ORG_A, available_in_s=30.5)
         now = event(h, org_id=ORG_A)
         assert await port.enqueue(later) and await port.enqueue(now)
         first = await port.claim_candidate("worker-a")
         assert first is not None and first.event_id == now.event_id
         await port.acknowledge(first)
         assert await port.claim_candidate("worker-a") is None
-        h.clock.advance(29.999_999)
+        h.clock.advance(30.499_999)
         assert await port.claim_candidate("worker-a") is None
         h.clock.advance(0.000_001)
         arrived = await port.claim_candidate("worker-a")
@@ -790,8 +820,15 @@ def test_q2_rebuild__clears_in_flight_acknowledged_and_both_fairness_levels():
         assert await port.top_virtual_time() == 0.0
         stats = await port.stats()
         assert (stats["inflight"], stats["acknowledged"], stats["flows"]) == (0, 0, 1)
+        # a fresh accounting epoch: the byte total is the snapshot's, not the snapshot's
+        # plus whatever the lost index had charged
+        assert stats["bytes"] == len(compact_bytes(fresh))
         # the acknowledged set is cleared, so a requeued job is indexable again
         assert await port.enqueue(inflight) is True
+        # ... and the rebuild left no stale key behind for a re-created flow to inherit:
+        # every candidate the index holds is pending or in flight, and nothing else is
+        assert await _consistent(port) == {"items": 2, "bytes": stats["bytes"]
+                                           + len(compact_bytes(inflight)), "inflight": 0}
     run(body)
 
 
