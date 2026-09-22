@@ -663,9 +663,14 @@ MUTANTS: tuple[Mutant, ...] = (
 RUNNER = Runner(name="w", targets=SUITE)
 
 
-def run_mutant(mutant: Mutant) -> Result:
-    """Apply one mutant to a throwaway copy and run the cases it names."""
-    return shared.run_mutant(mutant, RUNNER)
+def run_mutant(mutant: Mutant, suite: tuple[str, ...] = SUITE) -> Result:
+    """Apply one mutant to a throwaway copy and run the cases it names.
+
+    `suite` is the pytest target, so another W list (W2's `loop_mutants.py`) can aim the
+    same shared runner at its own file.
+    """
+    runner = RUNNER if tuple(suite) == tuple(SUITE) else Runner(name="w", targets=tuple(suite))
+    return shared.run_mutant(mutant, runner)
 
 
 if __name__ == "__main__":
