@@ -31,8 +31,13 @@ def make_clips(n, tmp):
         with open(path, "wb") as f:
             f.write(b"\x00\x00\x00 ftypisom" + bytes([i]) * 512)
         clips.append({"id": f"clip{i:03d}", "path": path, "file": f"clips/clip{i:03d}.mp4",
-                      "duration_s": 2.0 + i, "width": 1920, "height": 1080, "aspect": "16:9",
-                      "sha256": "0" * 64, "prompt_id": f"p{i % 4:02d}", "prompt": f"prompt {i % 4}",
+                      "duration_s": 2.0 + i, "width": 1920 - 640 * (i % 2),
+                      "height": 1080 - 360 * (i % 2), "aspect": "16:9",
+                      "codec": ["h264", "vp9"][i % 2], "fps": [30.0, 24.0][i % 2],
+                      "frames": int((2.0 + i) * 30),
+                      # distinct per clip: the item key folds in a content digest, and two
+                      # clips sharing one would collide in it
+                      "sha256": f"{i:064x}", "prompt_id": f"p{i % 4:02d}", "prompt": f"prompt {i % 4}",
                       "prompt_kind": ["caption", "find", "count", "motion"][i % 4]})
     return clips
 
@@ -104,7 +109,8 @@ def virtual_time(idle_rounds=8, tick=0.001):
 def run_bench(argv, gateway, env=None):
     """Run bench.main() against a fake gateway, returning (summary, raw rows, stdout)."""
     bench.load_transport = lambda spec: gateway.transport()          # no network, no server
-    old = {k: os.environ.get(k) for k in ("MARLIN_API_KEY", "INFRX_API_KEY", "MM_KWARGS")}
+    old = {k: os.environ.get(k) for k in
+           ("MARLIN_API_KEY", "INFRX_API_KEY", "MM_KWARGS", *(env or {}))}
     os.environ.update({k: v for k, v in (env or {}).items()})
     buf = io.StringIO()
     try:
@@ -364,8 +370,10 @@ def test_rejections_and_failures_are_counted_apart_from_accepted():
         assert summary["rejected"] == 2 and summary["failed"] == 2      # 429/402 rejected, 500/503 failed
         assert summary["status_counts"] == {"429": 1, "402": 1, "500": 1, "503": 1, "200": 4}
         assert summary["denominators"] == {"latency_samples": 4, "rejected_excluded": 2,
-                                           "failed_excluded": 2, "scheduled": 8, "attempts": 8,
-                                           "rejected_attempts": 2, "failed_attempts": 2,
+                                           "failed_excluded": 2, "cancelled_excluded": 0,
+                                           "scheduled": 8, "skipped_terminal_on_resume": 0,
+                                           "attempts": 8, "rejected_attempts": 2,
+                                           "failed_attempts": 2, "cancelled_attempts": 0,
                                            "retried_requests": 0}
         assert summary["error_codes"]["rate_limit_exceeded"] == 1
         assert summary["error_codes"]["insufficient_credit"] == 1
@@ -440,9 +448,145 @@ def test_request_forms_and_upload_flow():
         refs = [p["video_url"]["url"] for parts in sent.values() if isinstance(parts, list)
                 for p in parts if p["type"] == "video_url"]
         assert any(r.startswith("data:video/mp4;base64,") for r in refs)
-        assert any(r.startswith("upload://up_") for r in refs)
+        # R61(1): `infrx-upload:upl_…` is the only reference ingress accepts, and the handle
+        # grammar is contracts/ids.py's. `upload://…` never passed validate.check_video_ref.
+        assert any(r.startswith("infrx-upload:upl_") for r in refs), refs
+        assert not any(r.startswith("upload://") for r in refs)
         assert any(r == "https://media.invalid/clips/clip000.mp4" or
                    r.startswith("https://media.invalid/clips/") for r in refs)
+
+
+def test_item_key_is_the_sop_recipe_and_a_function_of_the_payload_only():
+    """marlin-sop.md §3.1. Every field must change the key, and nothing else may."""
+    fields = dict(dataset_version="ds1", source_id="src", episode_id="ep", segment_index=0,
+                  start_s=0, end_s=30, prompt_version="p00", profile_version="v1")
+    key = bench.item_key(**fields)
+    assert len(key) == 32 and key == bench.item_key(**fields), "the key must be stable"
+    for name, other in (("dataset_version", "ds2"), ("source_id", "src2"), ("episode_id", "ep2"),
+                        ("segment_index", 1), ("end_s", 31), ("prompt_version", "p01"),
+                        ("profile_version", "v2")):
+        assert bench.item_key(**{**fields, name: other}) != key, f"{name} must change the key"
+    # The separator is a unit separator on purpose: without it "a"+"bc" and "ab"+"c" collide.
+    assert bench.item_key("a", "bc", "e", 0, 0, 1, "p", "v") != \
+        bench.item_key("ab", "c", "e", 0, 0, 1, "p", "v")
+
+
+def test_every_scheduled_item_carries_a_distinct_idempotency_key():
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(4, tmp)
+        # 12 items over 4 clips: each clip is scheduled three times, and the three copies
+        # must be three items (distinct segment_index), not one item replayed twice.
+        schedule = bench.build_schedule(12, clips, ["video_b64", "text"], dataset_version="ds",
+                                        seed=5)
+        keys = [i["idempotency_key"] for i in schedule]
+        assert len(set(keys)) == 12, "a reused key would replay an earlier answer"
+        assert all(k.startswith("sop1.") and len(k) == len("sop1.") + 32 for k in keys)
+        assert max(i["segment_index"] for i in schedule) == 2
+        again = bench.build_schedule(12, clips, ["video_b64", "text"], dataset_version="ds", seed=5)
+        assert [i["idempotency_key"] for i in again] == keys, "resume re-derives, never remembers"
+        other = bench.build_schedule(12, clips, ["video_b64", "text"], dataset_version="ds",
+                                     seed=5, profile_version="v2")
+        assert not set(keys) & {i["idempotency_key"] for i in other}, \
+            "a different preprocessing profile is a different question about the same clip"
+
+        with_clips(clips)
+        summary, raw, _, _ = run_bench(base_argv(tmp, requests=6, concurrency=2,
+                                                dataset_version="ds"),
+                                       gw := FakeGateway(), env={"MARLIN_API_KEY": KEY})
+        assert summary["accepted"] == 6
+        sent = [s["idempotency_key"] for s in gw.seen]
+        assert len(set(sent)) == 6 and all(k for k in sent), "every request carried its own key"
+        assert {r["idempotency_key"] for r in raw} == set(sent)
+        assert summary["idempotency"]["distinct_item_keys"] == 6
+
+
+def test_resume_after_a_lost_ack_creates_no_second_accepted_item():
+    """The MARLIN-SOP invariant: interruption and resume create no second accepted job.
+
+    The gateway accepts items 3-5 and then tears the response, so the client records them
+    as failed while the server holds them. The resumed run re-sends the SAME keys and the
+    SAME payloads; the server replays and creates nothing.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(3, tmp)
+        with_clips(clips)
+        gw = FakeGateway(idempotent=True, lose_ack=(3, 4, 5))
+        first = os.path.join(tmp, "raw1.jsonl")
+        argv = base_argv(tmp, requests=6, concurrency=1, dataset_version="ds")
+        argv[argv.index("--raw") + 1] = first
+        summary, raw, _, rc = run_bench(argv, gw, env={"MARLIN_API_KEY": KEY})
+        assert (summary["accepted"], summary["failed"]) == (3, 3), summary["error_classes"]
+        assert len(gw.accepted_keys) == 6, "the server really accepted all six items"
+
+        argv2 = base_argv(tmp, requests=6, concurrency=1, dataset_version="ds")
+        argv2[argv2.index("--raw") + 1] = os.path.join(tmp, "raw2.jsonl")
+        argv2 += ["--resume", first]
+        resumed, raw2, _, rc2 = run_bench(argv2, gw, env={"MARLIN_API_KEY": KEY})
+        assert rc2 == 0
+        assert resumed["denominators"]["skipped_terminal_on_resume"] == 3, "accepted items are done"
+        assert resumed["accepted"] == 3 and resumed["idempotency"]["replayed"] == 3
+        assert len(gw.accepted_keys) == 6, \
+            f"resume created {len(gw.accepted_keys) - 6} duplicate accepted item(s)"
+        assert len(set(gw.accepted_keys)) == 6
+        assert resumed["idempotency"]["conflicts"] == 0, "the resumed payload must be identical"
+        assert resumed["idempotency"]["resumed_from"] == "raw1.jsonl"
+
+
+def test_a_resumed_upload_item_reuses_its_handle_instead_of_conflicting():
+    """Staging again would change the payload under the same key: 409, not a retry (§3.3)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(2, tmp)
+        with_clips(clips)
+        gw = FakeGateway(idempotent=True, lose_ack=(0, 1))
+        first = os.path.join(tmp, "raw1.jsonl")
+        argv = base_argv(tmp, requests=2, concurrency=1, forms="upload", dataset_version="ds")
+        argv[argv.index("--raw") + 1] = first
+        summary, raw, _, _ = run_bench(argv, gw, env={"MARLIN_API_KEY": KEY})
+        assert summary["failed"] == 2 and len(gw.uploads) == 2
+        handles = [r["upload_handle"] for r in raw]
+        assert all(h and h.startswith("upl_") for h in handles)
+
+        argv2 = base_argv(tmp, requests=2, concurrency=1, forms="upload", dataset_version="ds")
+        argv2[argv2.index("--raw") + 1] = os.path.join(tmp, "raw2.jsonl")
+        argv2 += ["--resume", first]
+        resumed, raw2, _, _ = run_bench(argv2, gw, env={"MARLIN_API_KEY": KEY})
+        assert resumed["accepted"] == 2 and resumed["idempotency"]["replayed"] == 2
+        assert resumed["idempotency"]["conflicts"] == 0
+        assert len(gw.uploads) == 2, "the resumed run staged the object a second time"
+        assert [r["upload_handle"] for r in raw2] == handles
+        assert all(r["upload_s"] is None for r in raw2), "no second staging means no upload time"
+
+
+def test_an_upload_handle_that_is_not_a_contract_handle_is_never_sent_back():
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(2, tmp)
+        with_clips(clips)
+        gw = FakeGateway(bad_handle=True)
+        summary, raw, _, _ = run_bench(base_argv(tmp, requests=2, concurrency=1, forms="upload"),
+                                       gw, env={"MARLIN_API_KEY": KEY})
+        assert summary["accepted"] == 0 and summary["failed"] == 2
+        assert all(r["error_class"] == "UploadFailed" for r in raw)
+        assert not gw.seen, "no chat request may carry a reference we cannot vouch for"
+
+
+def test_two_tenants_may_hold_identical_item_keys():
+    """The idempotency scope is org + operation + key, so two tenants never collide."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(2, tmp)
+        with_clips(clips)
+        gw = FakeGateway(idempotent=True)
+        env = {"MARLIN_API_KEY": KEY, "T_ONE": KEY, "T_TWO": "sk-test-SECOND-TENANT-8a7b6c5d"}
+        summary, raw, stdout, _ = run_bench(
+            base_argv(tmp, requests=4, concurrency=1, tenant_keys="T_ONE,T_TWO",
+                      dataset_version="ds"), gw, env=env)
+        assert summary["accepted"] == 4 and summary["profile"]["tenants"] == 2
+        assert summary["idempotency"]["replayed"] == 0, "a cross-tenant replay would be a leak"
+        bearers = {s["authorization"] for s in gw.seen}
+        assert len(bearers) == 2, "each tenant sent its own key"
+        assert {r["tenant"] for r in raw} == {0, 1}
+        for blob in all_output(tmp, summary, raw, stdout):
+            for secret in (KEY, env["T_TWO"]):
+                assert secret not in blob, "a tenant key leaked into client output"
 
 
 def test_real_load_corpus_reads_the_committed_manifest():
@@ -465,6 +609,161 @@ def test_real_load_corpus_reads_the_committed_manifest():
         bench.load_corpus = saved
         os.environ.pop("CORPUS_CACHE", None) if old_cache is None else \
             os.environ.__setitem__("CORPUS_CACHE", old_cache)
+
+
+def test_bursty_arrivals_are_bursts_and_keep_the_mean_rate():
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(4, tmp)
+        plain = bench.build_schedule(64, clips, ["text"], rate=8.0, seed=9)
+        bursty = bench.build_schedule(64, clips, ["text"], rate=8.0, seed=9, burst=4)
+        groups = {}
+        for item in bursty:
+            groups.setdefault(item["arrival_s"], []).append(item["seq"])
+        assert len(groups) == 16 and all(len(g) == 4 for g in groups.values()), \
+            "arrivals must land in bursts of four instants, not 64 of them"
+        assert len(groups) < len({i["arrival_s"] for i in plain})
+        # Same mean rate: the gap before a burst is drawn at rate/burst, so the total span is
+        # the same stream, only lumpier. Exact per seed, so this is not a statistical hope.
+        assert abs(bursty[-1]["arrival_s"] - plain[-1]["arrival_s"]) < 0.5 * plain[-1]["arrival_s"]
+        assert [i["arrival_s"] for i in bursty] == sorted(i["arrival_s"] for i in bursty)
+
+        with_clips(clips)
+        with virtual_time():
+            summary, raw, _, _ = run_bench(base_argv(tmp, requests=16, rate=20, burst=4, seed=9),
+                                           FakeGateway(ttft=0.02), env={"MARLIN_API_KEY": KEY})
+        assert summary["accepted"] == 16 and summary["profile"]["arrival"]["burst"] == 4
+        assert len({r["scheduled_s"] for r in raw}) == 4, "the driver flattened the bursts"
+
+
+def test_cancellation_is_its_own_outcome_and_stays_in_the_denominators():
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(4, tmp)
+        with_clips(clips)
+        with virtual_time():
+            summary, raw, _, rc = run_bench(
+                base_argv(tmp, requests=8, concurrency=1, cancel_after=0.05,
+                          cancel_fraction=1.0), FakeGateway(ttft=0.01, token_gap=0.1, tokens=6),
+                env={"MARLIN_API_KEY": KEY})
+        assert summary["cancelled"] == 8 and summary["accepted"] == 0 and summary["failed"] == 0
+        d = summary["denominators"]
+        assert d["cancelled_excluded"] == 8 and d["cancelled_attempts"] == 8 and d["scheduled"] == 8
+        assert summary["percentiles"]["ttft_s"]["samples"] == 0, \
+            "a cancelled request is not a latency sample"
+        for r in raw:
+            assert r["outcome"] == "cancelled" and r["error_class"] == "client_cancelled"
+            assert r["http_status"] == 200 and r["content_chars"] > 0, "it really started streaming"
+            assert r["end_s"] - r["send_s"] >= 0.05 and r["stream_complete"] is None
+        # Nothing is cancelled when the fraction is zero, on the same clock and gateway.
+        with virtual_time():
+            summary, _, _, _ = run_bench(base_argv(tmp, requests=4, concurrency=1),
+                                         FakeGateway(ttft=0.01, token_gap=0.1, tokens=6),
+                                         env={"MARLIN_API_KEY": KEY})
+        assert summary["cancelled"] == 0 and summary["accepted"] == 4
+
+
+def test_phase_timings_come_from_server_timing_and_absent_phases_are_named():
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(2, tmp)
+        with_clips(clips)
+        gw = FakeGateway(extra_headers={"server-timing":
+                                        "retrieval;dur=120, decode;dur=310.5, queue;dur=12.5, "
+                                        "prefill;dur=700, settle;dur=4, wibble;dur=1"})
+        summary, raw, _, _ = run_bench(base_argv(tmp, requests=6, concurrency=1), gw,
+                                       env={"MARLIN_API_KEY": KEY})
+        phases = summary["phases"]
+        assert phases["unit"] == "ms" and phases["source"].startswith("Server-Timing")
+        assert phases["observed"]["retrieval"]["p50"] == 120.0
+        assert phases["observed"]["prefill"]["samples"] == 6
+        assert phases["observed"]["prefill"]["p95"] is None, "6 samples cannot support a p95"
+        # The phases E1B.b asks for and this target does not publish, named rather than guessed.
+        assert phases["declared_missing"] == ["prepare", "generate", "journal", "persist"]
+        assert phases["undeclared_observed"] == ["wibble"]
+        assert all(r["server_timing"]["queue"] == 12.5 for r in raw)
+
+
+def test_resource_samples_are_written_to_the_raw_file_and_summarised():
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(2, tmp)
+        with_clips(clips)
+        with virtual_time():
+            summary, rows, _, _ = run_bench(
+                base_argv(tmp, requests=6, concurrency=1, sample_interval=0.01),
+                FakeGateway(ttft=0.02, token_gap=0.01), env={"MARLIN_API_KEY": KEY})
+        raw_path = os.path.join(tmp, "raw.jsonl")
+        lines = [json.loads(line) for line in open(raw_path, encoding="utf-8")]
+        samples = [line for line in lines if line.get("kind") == "resource_sample"]
+        attempts = [line for line in lines if line.get("kind") is None]
+        assert len(attempts) == 6 and len(samples) >= 2, f"{len(samples)} samples"
+        assert samples[-1].get("final") is True, "the last sample is taken at the end of the run"
+        assert all("t_s" in s for s in samples)
+        series = summary["resources"]["series"]
+        assert summary["resources"]["samples"] == len(samples)
+        assert "client_cpu_user_s" in series and series["client_cpu_user_s"]["growth"] >= 0
+        assert set(series["client_cpu_user_s"]) == {"first", "last", "min", "max", "growth"}
+        # A sample line must not be read back as an attempt by the resume reader.
+        assert len(bench.read_attempts(raw_path)) == 6
+        # Sampling off by default: no sample lines at all, so the raw file stays attempt-only.
+        summary2, _, _, _ = run_bench(base_argv(tmp, requests=2, concurrency=1), FakeGateway(),
+                                      env={"MARLIN_API_KEY": KEY})
+        assert summary2["resources"]["samples"] == 0
+
+
+def test_the_report_refuses_unsupported_tails_and_names_every_cell_limit():
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(4, tmp)
+        with_clips(clips)
+        out = os.path.join(tmp, "bench.jsonl")
+        run_bench(base_argv(tmp, requests=8, concurrency=2, label="conc-2"), FakeGateway(),
+                  env={"MARLIN_API_KEY": KEY})
+        argv = base_argv(tmp, requests=8, concurrency=2, label="failing", seed=3)
+        argv[argv.index("--raw") + 1] = os.path.join(tmp, "raw2.jsonl")
+        run_bench(argv, FakeGateway(statuses={i: 500 for i in range(8)}),
+                  env={"MARLIN_API_KEY": KEY})
+        buf = io.StringIO()
+        assert bench.report(out, stream=buf) == 0
+        text = buf.getvalue()
+        assert "2 cell(s)" in text and "| conc-2 |" in text and "| failing |" in text
+        # p50 is supported at 8 samples, p95 is not, and an unsupported tail is a dash.
+        row = [line for line in text.splitlines() if line.startswith("| conc-2 ")][0]
+        cells = [c.strip() for c in row.strip("|").split("|")]
+        assert cells[-1] == "—" and cells[-3] == "—", row       # both p95 columns refused
+        assert float(cells[-2]) > 0 and float(cells[-4]) > 0, row   # both p50 columns reported
+        assert row.count("—") == 2, row
+        assert "ttft_s p95 needs >= 60 samples, have 8" in text
+        assert "exceed the provisional 1 % criterion (P-18, provisional)" in text
+        assert "no accepted request: nothing in this row is a measurement" in text
+        assert "a cold claim needs a restarted engine" in text
+        assert "phases not published by the target: " in text
+        assert "distinct workload profile" in text
+        empty = os.path.join(tmp, "empty.jsonl")
+        open(empty, "w").close()
+        buf = io.StringIO()
+        assert bench.report(empty, stream=buf) == 1 and "no summaries" in buf.getvalue()
+
+
+def test_the_declared_profile_carries_every_axis_a_throughput_number_needs():
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(4, tmp)
+        with_clips(clips)
+        summary, raw, _, _ = run_bench(
+            base_argv(tmp, requests=8, concurrency=2, forms="video_b64,text",
+                      max_tokens="128,512", dataset_version="ds-1", engine_state="restarted"),
+            FakeGateway(), env={"MARLIN_API_KEY": KEY})
+        p = summary["profile"]
+        assert p["dataset_version"] == "ds-1" and p["profile_version"] == "v1"
+        assert p["engine_state"] == "restarted" and p["max_tokens_mix"] == [128, 512]
+        assert p["clip_duration_s"] == {"distinct": 4, "min": 2.0, "max": 5.0}
+        assert p["clip_frames_profile_v1"] == {"distinct": 4, "min": 4, "max": 10}
+        assert p["clip_resolutions"] == ["1280x720", "1920x1080"]
+        assert p["clip_codecs"] == ["h264", "vp9"] and p["clip_source_fps"]["distinct"] == 2
+        assert p["arrival"] == {"mode": "closed-loop", "rate_per_s": None, "burst": 1,
+                                "concurrency": 2}
+        # The output-length distribution is really sent, not just declared.
+        assert sorted({r["max_tokens"] for r in raw}) == [128, 512]
+        # Successful work in video-seconds, with the accepted count it came from.
+        assert summary["video_seconds_accepted"] == sum(r["duration_s"] for r in raw
+                                                       if r["media_sent"])
+        assert summary["video_s_per_s"] > 0
 
 
 def test_historical_cli_still_parses_and_refuses_command_line_keys():

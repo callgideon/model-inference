@@ -1,14 +1,27 @@
 #!/usr/bin/env python3
 """Load test for the Marlin-2B endpoint: closed-loop concurrency (historical mode)
-or open-loop Poisson arrivals over a corpus of distinct clips.
+or open-loop Poisson arrivals (optionally bursty) over a corpus of distinct clips.
 
     python models/marlin2b/bench.py video.mp4 --concurrency 8 --requests 32
     python models/marlin2b/bench.py video.mp4 -c 1 -n 5 --max-tokens 256        # latency floor
     python models/marlin2b/bench.py --corpus models/marlin2b/corpus/manifest.json \
         --subset fast --rate 2 --requests 120 --seed 7 --target gateway --forms video_b64,text
+    python models/marlin2b/bench.py --corpus … --resume results/raw/<previous>.jsonl
+    python models/marlin2b/bench.py --report models/marlin2b/results/bench.jsonl
+
+The run protocol, the frozen profile and the provisional acceptance criteria are
+predeclared in models/marlin2b/results/E1B-protocol.md; this client only measures.
 
 Writes one summary JSON line to --out (default models/marlin2b/results/bench.jsonl)
-and one raw line per attempt to --raw (default <out dir>/raw/<run>.jsonl).
+and one raw line per attempt to --raw (default <out dir>/raw/<run>.jsonl); resource
+samples go to the same raw file as {"kind": "resource_sample", …} lines.
+
+Every scheduled item carries the SOP dataset identity of research/workloads/marlin-sop.md
+§3.1 — an `item_key` over (dataset_version, source_id, episode_id, segment_index,
+start-end, prompt_version, profile_version) and `Idempotency-Key: sop1.<item_key>`.
+Because the schedule is a pure function of the seed, `--resume <previous raw file>`
+re-derives the same keys and the same payloads, which is what makes the MARLIN-SOP
+"no second accepted item after an interruption" property testable at all.
 
 Auth comes from $MARLIN_API_KEY or $INFRX_API_KEY only, sent as a Bearer header;
 the value is never printed, logged or written to any output file. Passing a key on
@@ -56,11 +69,23 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 KEY_ENV = ("MARLIN_API_KEY", "INFRX_API_KEY")
 DEFAULT_OUT = os.path.join(HERE, "results", "bench.jsonl")
 REJECT_STATUS = {400, 401, 402, 403, 404, 409, 410, 413, 415, 422, 429}
+# A rejection a resume must NOT repeat: marlin-sop.md §3.6 quarantines these and retrying
+# them unchanged is pointless. 402 and 429 are explicitly resumable (fund, or back off).
+TERMINAL_REJECT_STATUS = {400, 401, 403, 404, 409, 410, 413, 415, 422}
 MIN_TAIL = 3            # a reported quantile needs this many samples strictly beyond it
 PCTS = (50, 90, 95, 99)
-# Upload-flow and handle-reference shapes follow research/plan/01-contracts.md §HTTP
-# behaviour. Nothing has implemented them yet: unverifiable until M3/G4 land.
-UPLOAD_REF_SCHEME = "upload://"
+# R61(1) / marlin-sop.md §3.3: the customer-facing upload reference is `infrx-upload:upl_…`
+# and nothing else. `upload://` (this client's previous spelling) is refused at ingress by
+# validate.check_video_ref, so the `upload` form could never have passed it (S2M D11).
+UPLOAD_REF_SCHEME = "infrx-upload:"
+# marlin-sop.md §3.1: `Idempotency-Key = sop1.<item_key>`, scoped org + operation + key.
+IDEMPOTENCY_PREFIX = "sop1."
+ITEM_KEY_HEX = 32
+# The phases a run wants timed end to end (18-marlin-backend-first.md E1B.b). The gateway
+# publishes them as Server-Timing metrics; a name that is absent is reported as absent,
+# never inferred from the wall clock.
+PHASES = ("retrieval", "decode", "prepare", "queue", "prefill", "generate",
+          "journal", "persist", "settle")
 # Only a standalone CLI run may leave SIGINT ignored after writing its summary; an
 # in-process caller (the tests, any future harness) keeps its own signal disposition.
 CLI_PROCESS = False
@@ -131,7 +156,13 @@ def carries_key(value, key):
     punctuation rewritten).
 
     Membership of the value's own 8-grams in a set of the key's: O(len(value)), no regex
-    over a caller-supplied string. Used both at the argv gate and inside allow()."""
+    over a caller-supplied string. Used both at the argv gate and inside allow().
+
+    `key` may be several keys (mixed tenants): EVERY tenant's key is secret, so a value
+    carrying any of them is refused. Checking only the first would make tenant 2's key the
+    one field a hostile gateway could echo back into a row."""
+    if isinstance(key, (list, tuple, set, frozenset)):
+        return any(carries_key(value, one) for one in key)
     if not key or len(key) < KEY_MIN_SUBSTRING:
         return False
     n = KEY_MIN_SUBSTRING
@@ -168,6 +199,10 @@ def refuse_key_in_args(a, key):
 CODE_OK = re.compile(r"[a-z0-9_]{1,64}")            # error.code / error.type / finish_reason
 ID_OK = re.compile(r"[A-Za-z0-9-]{1,64}")           # Inference-Id (a UUID passes)
 TIMING_NAME_OK = re.compile(r"[a-z0-9_-]{1,32}")    # Server-Timing metric names
+# An upload handle is server-controlled and it goes into the request body AND into the
+# resume state, so it is allowlisted like every other server string: contracts/ids.py
+# spells it `upl_` + 22..64 of [A-Za-z0-9_-] and nothing else may be sent back as a ref.
+HANDLE_OK = re.compile(r"upl_[A-Za-z0-9_-]{22,64}")
 LABEL_OK = re.compile(r"[a-z0-9-]{1,64}")           # our own slugged --label
 # A URL label is a digest, never text from the URL: a capability URL can carry its secret
 # in the FILE NAME (cdn.invalid/v/<token>.mp4) or in the HOST (a tunnel subdomain), so
@@ -274,12 +309,14 @@ def redact(text, key):
     idempotent so applying it twice is free.
     """
     text = str(text)
-    if key:
-        text = text.replace(key, KEY_MARK)              # the whole key reads better as one mark
-        if len(key) >= KEY_MIN_SUBSTRING:
+    for one in (key if isinstance(key, (list, tuple, set, frozenset)) else [key]):
+        if not one:
+            continue
+        text = text.replace(one, KEY_MARK)              # the whole key reads better as one mark
+        if len(one) >= KEY_MIN_SUBSTRING:
             # Any longer run of key characters contains an 8-window, so nothing >= 8 survives;
             # what is left over around a replaced window is shorter than that by construction.
-            text = MARK_RUN.sub(KEY_MARK, _key_grams(key).sub(KEY_MARK, text))
+            text = MARK_RUN.sub(KEY_MARK, _key_grams(one).sub(KEY_MARK, text))
     return QUERY_ISH.sub("?" + QUERY_MARK, text)
 
 
@@ -324,7 +361,9 @@ def parse_args(argv=None):
     ap.add_argument("video", nargs="?", help="local file or http(s) URL; omit when --corpus is used")
     ap.add_argument("-c", "--concurrency", type=int, default=4)
     ap.add_argument("-n", "--requests", type=int, default=16)
-    ap.add_argument("--max-tokens", type=int, default=512)
+    ap.add_argument("--max-tokens", default="512",
+                    help="output-length budget; a comma list is a declared distribution "
+                         "assigned round-robin (e.g. 128,512,1024)")
     ap.add_argument("--prompt", default=None, help="defaults to the canonical caption prompt via smoke.py's finder")
     ap.add_argument("--base-url", default=os.environ.get("BASE_URL", "http://localhost:8000/v1"))
     ap.add_argument("--weights", default=os.environ.get("WEIGHTS", "/opt/dlami/nvme/marlin2b"))
@@ -345,15 +384,60 @@ def parse_args(argv=None):
                     help="public prefix for the video_url form: <prefix>/<clip file>")
     ap.add_argument("--rate", type=float, default=None,
                     help="open-loop arrivals per second (Poisson); ignores completions")
+    ap.add_argument("--burst", type=int, default=1,
+                    help="open-loop only: arrivals land in bursts of this size; the gap between "
+                         "bursts is drawn at rate/burst so the mean arrival rate is unchanged")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--dataset-version", default=None,
+                    help="SOP dataset identity (marlin-sop.md §3.1); defaults to the corpus version")
+    ap.add_argument("--profile-version", default="v1",
+                    help="preprocessing profile in the item key: a different profile is a "
+                         "different question about the same clip, so it must change the key")
+    ap.add_argument("--tenant-keys", default="",
+                    help="comma list of environment variable NAMES holding one API key each, "
+                         "assigned round-robin (mixed tenants). Never a key value.")
+    ap.add_argument("--resume", default=None,
+                    help="a previous run's raw JSONL: items with a terminal outcome are not "
+                         "re-sent, the rest keep their Idempotency-Key, payload and upload handle")
+    ap.add_argument("--cancel-after", type=float, default=None,
+                    help="cancel a selected request this many seconds after it was sent "
+                         "(client disconnect)")
+    ap.add_argument("--cancel-fraction", type=float, default=0.0,
+                    help="fraction of scheduled items selected for cancellation, by seed")
+    ap.add_argument("--sampler", default=None,
+                    help="import path 'module:callable' returning a zero-argument resource "
+                         "sampler; the default samples host RSS/CPU/load only")
+    ap.add_argument("--sample-interval", type=float, default=0.0,
+                    help="seconds between resource samples; 0 disables sampling")
+    ap.add_argument("--engine-state", choices=["restarted", "warm", "unknown"], default="unknown",
+                    help="declared cache state of the target at t0. A cold/warm claim needs "
+                         "'restarted' (or genuinely unseen clips); 'unknown' is reported as such")
+    ap.add_argument("--report", default=None,
+                    help="read a summary JSONL (--out) and print the sweep report; runs nothing")
     ap.add_argument("--retries", type=int, default=0, help="retry 429/503 this many times, honouring Retry-After")
     ap.add_argument("--timeout", type=float, default=600.0)
     ap.add_argument("--no-warmup", action="store_true")
     ap.add_argument("--dry-run-transport", default=None,
                     help="import path 'module:callable' returning an httpx transport (tests/dry runs, no network)")
     a = ap.parse_args(argv)
+    if a.report:
+        return a
     if not a.video and not a.corpus:
         ap.error("pass a video or --corpus")
+    try:
+        a.max_tokens_mix = [int(t) for t in str(a.max_tokens).split(",") if t.strip()]
+    except ValueError:
+        a.max_tokens_mix = []
+    if not a.max_tokens_mix or any(t <= 0 for t in a.max_tokens_mix):
+        ap.error("--max-tokens takes one positive integer or a comma list of them")
+    a.max_tokens = a.max_tokens_mix[0]          # the historical scalar, still the first value
+    if a.burst < 1:
+        ap.error("--burst is at least 1")
+    if not 0.0 <= a.cancel_fraction <= 1.0:
+        ap.error("--cancel-fraction is a fraction of the schedule, 0..1")
+    if a.cancel_fraction and a.cancel_after is None:
+        ap.error("--cancel-fraction needs --cancel-after")
+    a.tenant_env = [t.strip() for t in a.tenant_keys.split(",") if t.strip()]
     return a
 
 
@@ -433,6 +517,10 @@ def load_corpus(path, subset="fast"):
         clips.append({"id": c["id"], "path": os.path.join(root, c["file"]), "file": c["file"],
                       "duration_s": c["derived"]["duration_s"], "width": c["derived"]["width"],
                       "height": c["derived"]["height"], "aspect": c["derived"]["aspect"],
+                      # codec / source fps / frame count are profile axes PERF-ENVELOPE asks
+                      # to be declared with any throughput number, not decoration.
+                      "codec": c["derived"].get("codec"), "fps": c["derived"].get("fps"),
+                      "frames": c["derived"].get("frames"),
                       "sha256": c["derived"]["sha256"], "prompt_id": c["prompt"],
                       "prompt": prompts[c["prompt"]]["text"], "prompt_kind": prompts[c["prompt"]]["kind"]})
     if not clips:
@@ -443,28 +531,132 @@ def load_corpus(path, subset="fast"):
 # ---------------------------------------------------------------- schedule (pure)
 
 
-def build_schedule(n, clips, forms, prompt=None, rate=None, seed=0, video=None):
+def item_key(dataset_version, source_id, episode_id, segment_index, start_s, end_s,
+             prompt_version, profile_version):
+    """marlin-sop.md §3.1, exactly: sha256 of the seven identity fields joined by US,
+    first 32 hex. It is a function of the PAYLOAD, never of the attempt, which is the
+    whole point: a client that regenerates keys per attempt defeats the no-duplicate
+    property the idempotency scope provides."""
+    parts = (dataset_version, source_id, episode_id, str(segment_index),
+             f"{start_s}-{end_s}", prompt_version, profile_version)
+    return sha256("\x1f".join(parts).encode("utf-8")).hexdigest()[:ITEM_KEY_HEX]
+
+
+def profile_frames(duration_s, fps=2.0, min_frames=4, max_frames=240):
+    """Frames the pinned profile v1 samples from a clip of this duration (marlin-sop.md
+    §1.5): the frame count a throughput number has to be quoted against."""
+    if duration_s is None:
+        return None
+    frames = int(min(max_frames, max(min_frames, round(duration_s * fps))))
+    return frames + frames % 2
+
+
+def build_schedule(n, clips, forms, prompt=None, rate=None, seed=0, video=None, burst=1,
+                   max_tokens_mix=(512,), tenants=1, dataset_version="adhoc",
+                   profile_version="v1", cancel_fraction=0.0, cancel_after=None):
     """Deterministic arrival schedule. Pure function of its arguments: same seed ->
-    same clips, prompts, forms and arrival times, whatever the server does."""
+    same clips, prompts, forms, tenants, item keys and arrival times, whatever the
+    server does. `--resume` depends on that: a re-derived schedule must produce the
+    same Idempotency-Key and the same payload for every item."""
     rng = random.Random(seed)
     order = list(range(len(clips)))
     rng.shuffle(order)
-    out, seen, t = [], set(), 0.0
+    out, seen, occurrences, t = [], set(), {}, 0.0
     for i in range(n):
         form = forms[i % len(forms)]
         clip = clips[order[i % len(order)]] if clips else None
         if rate:
-            t += rng.expovariate(rate)
+            # A burst is `burst` arrivals at one instant; the gap before each burst is drawn
+            # at rate/burst, so the MEAN arrival rate is the one that was asked for and only
+            # its shape changed. burst=1 is the plain Poisson stream, unchanged.
+            if i % burst == 0:
+                t += rng.expovariate(rate / burst)
         cold = None
         if clip is not None and form != "text":
             cold = clip["id"] not in seen
             seen.add(clip["id"])
+        source_id = clip["id"] if clip else (video_label(video) if video else "adhoc")
+        # segment_index distinguishes the repeats of one clip inside a sweep: reusing a key
+        # for the second scheduled copy would replay the first answer and measure nothing.
+        # Keyed by the source alone, not by (source, form): the form changes the PAYLOAD but
+        # not the key, so two forms of one clip sharing a segment index would be a
+        # 409 idempotency_conflict — a client bug, per §3.6.
+        segment = occurrences.get(source_id, 0)
+        occurrences[source_id] = segment + 1
+        duration = (clip or {}).get("duration_s")
+        # episode_id carries the content digest §3.1 recommends, so re-cutting a clip
+        # changes the key instead of replaying the old clip's answer under a new payload.
+        episode = ((clip or {}).get("sha256") or "nomedia")[:16]
+        prompt_version = "override" if prompt else ((clip or {}).get("prompt_id") or "p-none")
+        key = item_key(dataset_version, source_id, episode, segment, 0,
+                       duration if duration is not None else 0, prompt_version, profile_version)
         out.append({"seq": i, "arrival_s": round(t, 6), "form": form, "cold": cold,
-                    "clip_id": clip["id"] if clip else (video_label(video) if video else None),
+                    "clip_id": source_id if (clip or video) else None,
                     "clip": clip, "prompt": (prompt or (clip or {}).get("prompt") or ""),
                     "prompt_kind": (clip or {}).get("prompt_kind") if not prompt else "override",
-                    "duration_s": (clip or {}).get("duration_s")})
+                    "duration_s": duration,
+                    "max_tokens": max_tokens_mix[i % len(max_tokens_mix)],
+                    "tenant": i % max(tenants, 1),
+                    "segment_index": segment, "item_key": key,
+                    "idempotency_key": IDEMPOTENCY_PREFIX + key,
+                    "upload_handle": None,
+                    # Short-circuited on purpose: with the knob off the rng stream is
+                    # untouched, so every seed keeps the arrival times it always had.
+                    "cancel_at_s": (cancel_after if cancel_fraction
+                                    and rng.random() < cancel_fraction else None)})
     return out
+
+
+# ---------------------------------------------------------------- resume (pure)
+
+
+def read_attempts(path):
+    """The attempt rows of a previous raw file; resource samples and junk lines are skipped."""
+    rows = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue                        # a half-written final line after a crash
+            if isinstance(row, dict) and row.get("kind") is None and row.get("item_key"):
+                rows.append(row)
+    return rows
+
+
+def is_terminal(row):
+    """marlin-sop.md §3.5/§3.6: an item is done when it was accepted or quarantined.
+
+    A failure, a 429, a 402 and a cancelled request are all NOT terminal, so a resume
+    re-sends them — with the same key, which is what makes the re-send safe."""
+    if row.get("outcome") == "accepted":
+        return True
+    return row.get("outcome") == "rejected" and row.get("http_status") in TERMINAL_REJECT_STATUS
+
+
+def apply_resume(schedule, previous):
+    """Fold a previous run's rows into this schedule: (remaining items, skipped count).
+
+    Only the LAST attempt of an item decides it, and an item the previous file never
+    reached is simply still due. The upload handle is carried over so the resumed payload
+    is byte-identical to the interrupted one (§3.3); the key is already identical because
+    build_schedule is a pure function of the seed."""
+    last = {}
+    for row in previous:
+        last[row["item_key"]] = row
+    remaining, skipped = [], 0
+    for item in schedule:
+        row = last.get(item["item_key"])
+        if row is not None and is_terminal(row):
+            skipped += 1
+            continue
+        if row is not None and row.get("upload_handle"):
+            item["upload_handle"] = row["upload_handle"]
+        remaining.append(item)
+    return remaining, skipped
 
 
 # ---------------------------------------------------------------- request bodies
@@ -502,9 +694,15 @@ async def media_ref_for(item, cfg, client, row):
         # arrival delays every other arrival and the open-loop rate is a fiction.
         return await asyncio.to_thread(data_url, path)
     if form == "upload":
-        t = CLOCK()
-        handle = await upload(client, cfg, path, row)
-        row["upload_s"] = round(CLOCK() - t, 4)
+        # A resumed item re-uses the handle the interrupted run staged (§3.3: the object is
+        # staged once and a retry re-uses it). Staging again would change the payload under
+        # the same Idempotency-Key, which is a 409, not a retry.
+        handle = item.get("upload_handle")
+        if handle is None:
+            t = CLOCK()
+            handle = await upload(client, cfg, path, row, item["tenant"])
+            row["upload_s"] = round(CLOCK() - t, 4)
+        row["upload_handle"] = handle
         return UPLOAD_REF_SCHEME + handle
     raise ValueError(f"unknown form {form}")
 
@@ -520,11 +718,12 @@ class UploadFailed(RuntimeError):
     httpx's raise_for_status() message would quote the signed destination URL."""
 
 
-async def upload(client, cfg, path, row):
+async def upload(client, cfg, path, row, tenant=0):
     """POST /v1/uploads -> PUT to the returned constrained destination ->
     POST /v1/uploads/{handle}/complete. Contracts v1 shape; unverified until M3/G4."""
     body, digest = await asyncio.to_thread(read_and_digest, path)   # 35 MB read + sha off the loop
     mime = mimetypes.guess_type(path)[0] or "video/mp4"
+    cfg = {**cfg, "headers": cfg["headers_for"](tenant)}   # the staging tenant owns the object
     r = await client.post(cfg["base"] + "/uploads", headers=cfg["headers"],
                           json={"purpose": "video", "filename": os.path.basename(path),
                                 "bytes": len(body), "sha256": digest, "content_type": mime})
@@ -543,7 +742,13 @@ async def upload(client, cfg, path, row):
     row["upload_status"] = done.status_code
     if done.status_code >= 400:
         raise UploadFailed()
-    return (done.json() or {}).get("handle", created["handle"])
+    # The handle goes back out in the request body and into the resume state, so it is
+    # allowlisted like any other server string: `upl_` + 22..64 (contracts/ids.py).
+    handle = allow((done.json() or {}).get("handle", created["handle"]), HANDLE_OK, cfg["key"],
+                   fallback=None)
+    if handle is None:
+        raise UploadFailed()
+    return handle
 
 
 def parse_server_timing(value, key=""):
@@ -572,6 +777,11 @@ async def attempt(client, cfg, item, t0, attempt_no):
     """One HTTP attempt. Every path fills the same row schema, rejections included."""
     row = {"seq": item["seq"], "attempt": attempt_no, "clip_id": item["clip_id"], "form": item["form"],
            "prompt_kind": item["prompt_kind"], "cold": item["cold"], "duration_s": item["duration_s"],
+           # SOP dataset identity: ours, derived, and the same on every attempt of this item.
+           "item_key": item["item_key"], "idempotency_key": item["idempotency_key"],
+           "segment_index": item["segment_index"], "tenant": item["tenant"],
+           "max_tokens": item["max_tokens"], "idempotency_replayed": None,
+           "upload_handle": item.get("upload_handle"), "cancel_at_s": item.get("cancel_at_s"),
            "scheduled_s": item["arrival_s"], "send_s": None, "first_byte_s": None, "first_token_s": None,
            "last_token_s": None, "end_s": None, "http_status": None, "outcome": None, "error_class": None,
            # error_code/error_type are allowlisted server strings; the body itself is a
@@ -609,7 +819,8 @@ async def attempt(client, cfg, item, t0, attempt_no):
 async def _send(client, cfg, item, row, now):
     """Issue the request and fill `row`. Returning early is fine: attempt() finalises."""
     ref = await media_ref_for(item, cfg, client, row)
-    payload = {"model": cfg["model"], "messages": messages_for(item, ref), "max_tokens": cfg["max_tokens"],
+    payload = {"model": cfg["model"], "messages": messages_for(item, ref),
+               "max_tokens": item["max_tokens"],
                "temperature": 0, "stream": True, "stream_options": {"include_usage": True}}
     # A corpus clip knows its duration; the single-video path does not, and 'auto' there
     # means an ffprobe subprocess, so make_config() resolved it once instead of per attempt.
@@ -619,11 +830,14 @@ async def _send(client, cfg, item, row, now):
         payload["mm_processor_kwargs"] = mm
     row["send_s"] = now()
     row["media_sent"] = ref is not None    # this clip's bytes/handle really went out
+    headers = {**cfg["headers_for"](item["tenant"]),
+               "idempotency-key": item["idempotency_key"]}
     async with client.stream("POST", cfg["base"] + "/chat/completions", json=payload,
-                             headers=cfg["headers"]) as resp:
+                             headers=headers) as resp:
         row["first_byte_s"] = now()
         row["http_status"] = resp.status_code
         # Headers are server-controlled: allowlist or fixed literal, never verbatim.
+        row["idempotency_replayed"] = resp.headers.get("idempotency-replayed") == "true"
         row["inference_id"] = allow(resp.headers.get("inference-id"), ID_OK, cfg["key"])
         row["retry_after"] = as_float(resp.headers.get("retry-after"))
         row["server_timing"] = parse_server_timing(resp.headers.get("server-timing"), cfg["key"])
@@ -649,7 +863,15 @@ async def _send(client, cfg, item, row, now):
             row["end_s"] = now()
             return
         usage, saw_done = None, False
+        cancel_at = item.get("cancel_at_s")
         async for line in resp.aiter_lines():
+            # A client disconnect, not a timeout: leaving the `stream` block closes the
+            # connection. R21 makes client_cancelled billable with authoritative usage, so
+            # it is its own outcome and never counted as an accepted or a failed request.
+            if cancel_at is not None and now() - row["send_s"] >= cancel_at:
+                row["outcome"], row["error_class"] = "cancelled", "client_cancelled"
+                row["end_s"] = now()
+                return
             if not line.startswith("data:"):
                 continue
             data = line[5:].strip()
@@ -759,6 +981,75 @@ async def run_one(client, cfg, item, t0, rows):
         await SLEEP(min(max(wait, 0.0), 30.0))
 
 
+# ---------------------------------------------------------------- resource sampling
+
+
+def _rss_kb():
+    try:
+        with open("/proc/self/statm", encoding="ascii") as f:
+            return int(f.read().split()[1]) * (os.sysconf("SC_PAGE_SIZE") // 1024)
+    except (OSError, ValueError, IndexError):       # not Linux, or /proc unavailable
+        return None
+
+
+def default_sampler():
+    """Host CPU/memory only, stdlib only. GPU utilisation, GPU memory and device I/O need
+    a device library that is not a dependency of this client and is not installed on the
+    dev box, so they plug in via `--sampler module:callable` on the measurement host —
+    the series are simply absent here rather than invented."""
+    import resource as _resource
+
+    def sample():
+        usage = _resource.getrusage(_resource.RUSAGE_SELF)
+        out = {"client_cpu_user_s": round(usage.ru_utime, 3),
+               "client_cpu_sys_s": round(usage.ru_stime, 3),
+               "client_read_blocks": usage.ru_inblock, "client_write_blocks": usage.ru_oublock}
+        rss = _rss_kb()
+        if rss is not None:
+            out["client_rss_kb"] = rss              # current, not the ru_maxrss high-water mark
+        try:
+            out["load1"] = round(os.getloadavg()[0], 2)
+        except OSError:
+            pass
+        return out
+    return sample
+
+
+async def sample_resources(cfg, t0, samples):
+    """Sample on the injected clock, write each sample to the raw file as it is taken.
+
+    Cancelled by the caller when the run ends; the final sample is taken then, so a soak
+    always has a first and a last point to compare (the 'flat RSS' criterion of P-18)."""
+    interval, sampler = cfg["sample_interval"], cfg["sampler"]
+    try:
+        while True:
+            row = {"kind": "resource_sample", "t_s": round(CLOCK() - t0, 6), **sampler()}
+            samples.append(row)
+            write_row(cfg, row)
+            await SLEEP(interval)
+    except asyncio.CancelledError:
+        row = {"kind": "resource_sample", "t_s": round(CLOCK() - t0, 6), "final": True, **sampler()}
+        samples.append(row)
+        write_row(cfg, row)
+        raise
+
+
+def resource_summary(samples):
+    """first/last/min/max/growth per numeric series, so growth is visible without the raw file."""
+    series = {}
+    for row in samples:
+        for name, value in row.items():
+            if name in ("kind", "t_s", "final") or not isinstance(value, (int, float)) \
+                    or isinstance(value, bool):
+                continue
+            series.setdefault(name, []).append(value)
+    out = {"samples": len(samples), "series": {}}
+    for name, values in sorted(series.items()):
+        out["series"][name] = {"first": values[0], "last": values[-1], "min": min(values),
+                               "max": max(values), "growth": round(values[-1] - values[0], 3)}
+    return out
+
+
 # ---------------------------------------------------------------- drivers
 
 
@@ -808,8 +1099,12 @@ def percentile(values, q):
     return round(statistics.quantiles(sorted(values), n=100, method="inclusive")[q - 1], 4), n, None
 
 
-def percentile_block(rows, field, scale=1.0):
-    vals = [r[field] * scale for r in rows if r.get(field) is not None]
+def percentile_block(rows, field, scale=1.0, get=None, label=None):
+    """`get` reads a nested value (a Server-Timing phase); `field` names it in the
+    suppression message, which is what a reader is told when a pN is refused."""
+    get = get or (lambda r: r.get(field))
+    vals = [get(r) * scale for r in rows if get(r) is not None]
+    field = label or field
     block, suppressed = {"samples": len(vals)}, []
     for q in PCTS:
         v, n, why = percentile(vals, q)
@@ -817,6 +1112,57 @@ def percentile_block(rows, field, scale=1.0):
         if why:
             suppressed.append(f"{field} {why}")
     return block, suppressed
+
+
+def phase_blocks(accepted):
+    """Per-phase percentiles in milliseconds, plus the declared phases nothing reported.
+
+    E1B.b wants retrieval/decode/preparation, queue, prefill, decode, journal, persistence
+    and settlement timed. They come from the gateway's Server-Timing header; a phase the
+    server does not publish is listed as MISSING, never reconstructed from the wall clock.
+    """
+    seen = sorted({name for r in accepted for name in (r.get("server_timing") or {})
+                   if name != "dropped_metrics"})
+    blocks = {}
+    for name in seen:
+        block, _ = percentile_block(accepted, f"phase {name} (ms)",
+                                    get=lambda r, n=name: (r.get("server_timing") or {}).get(n))
+        blocks[name] = block
+    return {"unit": "ms", "source": "Server-Timing response header",
+            "observed": blocks, "declared_missing": [p for p in PHASES if p not in seen],
+            "undeclared_observed": [n for n in seen if n not in PHASES]}
+
+
+def profile_block(cfg):
+    """The declared workload profile: every axis a throughput or latency number has to be
+    quoted with (PERF-ENVELOPE; marlin-sop.md §5.2 "Representative workload").
+
+    Declared from the SCHEDULE, not from what came back: this block says what the run set
+    out to send, which is the thing a later run has to match to be comparable."""
+    def spread(values):
+        clean = sorted({v for v in values if v is not None})
+        return {"distinct": len(clean), "min": clean[0] if clean else None,
+                "max": clean[-1] if clean else None}
+    a = cfg["args"]
+    clips = {item["clip"]["id"]: item["clip"] for item in cfg.get("schedule") or []
+             if item.get("clip")}.values()
+    durations = [c.get("duration_s") for c in clips]
+    return {
+        "dataset_version": cfg["dataset_version"], "profile_version": a.profile_version,
+        "seed": a.seed, "forms": cfg["forms"], "tenants": cfg["tenants"],
+        "engine_state": a.engine_state,
+        "max_tokens_mix": list(a.max_tokens_mix),
+        "arrival": {"mode": "open-loop" if a.rate else "closed-loop", "rate_per_s": a.rate,
+                    "burst": a.burst, "concurrency": None if a.rate else cfg["concurrency"]},
+        "clips_scheduled": len(clips),
+        "clip_duration_s": spread(durations),
+        "clip_frames_profile_v1": spread([profile_frames(d) for d in durations]),
+        "clip_resolutions": sorted({f"{c.get('width')}x{c.get('height')}" for c in clips
+                                    if c.get("width")}),
+        "clip_codecs": sorted({c.get("codec") for c in clips if c.get("codec")}),
+        "clip_source_fps": spread([c.get("fps") for c in clips]),
+        "cancellation": {"fraction": a.cancel_fraction, "after_s": a.cancel_after},
+    }
 
 
 def summarize(rows, wall, cfg):
@@ -827,7 +1173,11 @@ def summarize(rows, wall, cfg):
     accepted = [r for r in finals if r["outcome"] == "accepted"]
     rejected = [r for r in finals if r["outcome"] == "rejected"]
     failed = [r for r in finals if r["outcome"] == "failed"]
+    cancelled = [r for r in finals if r["outcome"] == "cancelled"]
     out_tokens = sum(r["completion_tokens"] or 0 for r in accepted)
+    # The throughput unit P-18 requires: successful VIDEO-SECONDS per second, never clips
+    # per second on its own (a clips/s number without the duration mix means nothing).
+    video_seconds = sum(r["duration_s"] or 0 for r in accepted if r["media_sent"])
     suppressed = []
     pct = {}
     for field, src, scale in (("ttft_s", "ttft_s", 1.0), ("latency_s", "request_latency_s", 1.0),
@@ -860,16 +1210,29 @@ def summarize(rows, wall, cfg):
         "concurrency": None if cfg["args"].rate else cfg["concurrency"],
         "requests": len(finals), "attempts": len(rows),
         "max_tokens": cfg["max_tokens"],
+        "profile": profile_block(cfg),
         "accepted": len(accepted), "rejected": len(rejected), "failed": len(failed),
+        "cancelled": len(cancelled),
         "accepted_without_usage": sum(1 for r in accepted if r["usage_missing"]),
         # Retries collapse a request to its final attempt, so every rejected or failed
         # ATTEMPT is reported too: a 429 that a retry papered over stays visible.
         "denominators": {"latency_samples": len(accepted), "rejected_excluded": len(rejected),
-                         "failed_excluded": len(failed), "scheduled": len(finals),
+                         "failed_excluded": len(failed), "cancelled_excluded": len(cancelled),
+                         "scheduled": len(finals),
+                         "skipped_terminal_on_resume": cfg.get("skipped_terminal", 0),
                          "attempts": len(rows),
                          "rejected_attempts": sum(1 for r in rows if r["outcome"] == "rejected"),
                          "failed_attempts": sum(1 for r in rows if r["outcome"] == "failed"),
+                         "cancelled_attempts": sum(1 for r in rows if r["outcome"] == "cancelled"),
                          "retried_requests": sum(1 for r in finals if r.get("retries"))},
+        # MARLIN-SOP: one accepted item per distinct key, and a replay is not a second item.
+        "idempotency": {"distinct_item_keys": len({r["item_key"] for r in rows if r.get("item_key")}),
+                        "accepted_distinct_keys": len({r["item_key"] for r in accepted
+                                                       if r.get("item_key")}),
+                        "replayed": sum(1 for r in finals if r.get("idempotency_replayed")),
+                        "conflicts": sum(1 for r in rows if r.get("error_code") ==
+                                         "idempotency_conflict"),
+                        "resumed_from": cfg.get("resumed_from")},
         "status_counts": _counts(finals, "http_status"), "error_classes": _counts(finals, "error_class"),
         "error_codes": _counts(finals, "error_code"),
         "attempt_status_counts": _counts(rows, "http_status"), "attempt_outcomes": _counts(rows, "outcome"),
@@ -885,6 +1248,11 @@ def summarize(rows, wall, cfg):
         "wall_s": round(wall, 2),
         "req_per_s": round(len(accepted) / wall, 3) if wall else None,
         "out_tok_per_s": round(out_tokens / wall, 1) if wall else None,
+        # Successful work, in the unit P-18 asks for, always beside its profile block.
+        "video_seconds_accepted": round(video_seconds, 3),
+        "video_s_per_s": round(video_seconds / wall, 3) if wall else None,
+        "phases": phase_blocks(accepted),
+        "resources": resource_summary(cfg.get("samples") or []),
         "percentiles": pct, "schedule_lag_s": lag_block,
         "suppressed_percentiles": sorted(set(suppressed)),
         "percentile_rule": f"a reported pN needs >= {MIN_TAIL} accepted samples beyond it "
@@ -918,19 +1286,43 @@ def load_transport(spec):
     return getattr(obj, fn or "transport")()
 
 
+def tenant_keys(a):
+    """One API key per declared tenant, read from the NAMED environment variables only.
+
+    Mixed tenants are a profile axis (PERF-ENVELOPE) and also the only way to show that the
+    idempotency scope is org + operation + key: two tenants may use identical item keys and
+    must both be accepted. A name that is unset is refused here rather than silently
+    collapsing the run onto one tenant."""
+    keys = []
+    for name in a.tenant_env:
+        value = os.environ.get(name, "").strip()
+        if not value:
+            sys.exit(f"--tenant-keys names {name}, which is unset or empty in the environment")
+        keys.append(value)
+    return keys or [api_key()]
+
+
 def make_config(a, clips=None, manifest=None):
     key = api_key()
-    if a.target == "gateway" and not key:
+    keys = tenant_keys(a)
+    if a.target == "gateway" and not all(keys):
         sys.exit(f"--target gateway needs {KEY_ENV[0]} or {KEY_ENV[1]} in the environment")
     headers = {"content-type": "application/json", "accept": "text/event-stream"}
     if key:
         headers["authorization"] = f"Bearer {key}"
+
+    def headers_for(tenant):
+        value = keys[tenant % len(keys)] if keys else ""
+        return {**headers, "authorization": f"Bearer {value}"} if value else dict(headers)
+
     forms = [f.strip() for f in a.forms.split(",") if f.strip()]
     if a.target == "gateway" and a.mm_kwargs and a.mm_kwargs != "":
         print("note: --target gateway does not send mm_processor_kwargs (server-side budget)",
               file=sys.stderr)
     mm_fixed = resolve_mm_kwargs(a, video=a.video) if not a.corpus else None   # probes once
-    return {"args": a, "key": key, "headers": headers, "base": a.base_url.rstrip("/"),
+    return {"args": a, "key": tuple(dict.fromkeys([key, *keys])), "headers": headers,
+            "headers_for": headers_for, "tenants": len(keys),
+            "base": a.base_url.rstrip("/"),
             "model": a.model, "max_tokens": a.max_tokens, "concurrency": a.concurrency,
             "retries": a.retries, "video": a.video, "forms": forms, "open_loop": bool(a.rate),
             "media_base_url": a.media_base_url, "mm_fixed": mm_fixed,
@@ -956,24 +1348,121 @@ async def execute(a, state):
         clips, _, manifest = load_corpus(a.corpus, a.subset)
     cfg = state["cfg"] = make_config(a, clips, manifest)
     cfg["raw_file"], cfg["state"] = state["raw_file"], state
+    cfg["dataset_version"] = a.dataset_version or (manifest or {}).get("corpus_version") or "adhoc"
     prompt = a.prompt
     if not a.corpus and prompt is None:
         prompt = smoke_namespace()["canonical_prompt"](a.weights, "caption")
-    schedule = build_schedule(a.requests, clips, cfg["forms"], prompt=prompt, rate=a.rate,
-                              seed=a.seed, video=a.video)
+    make = functools.partial(build_schedule, clips=clips, forms=cfg["forms"], prompt=prompt,
+                             seed=a.seed, video=a.video, burst=a.burst,
+                             max_tokens_mix=a.max_tokens_mix, tenants=cfg["tenants"],
+                             dataset_version=cfg["dataset_version"],
+                             profile_version=a.profile_version,
+                             cancel_fraction=a.cancel_fraction, cancel_after=a.cancel_after)
+    schedule = make(a.requests, rate=a.rate)
+    cfg["schedule"] = schedule              # the DECLARED profile, before any resume filtering
+    if a.resume:
+        # The keys and payloads are re-derived, not remembered: only the outcomes come from
+        # the previous file. A key that is a function of the attempt would defeat this.
+        schedule, cfg["skipped_terminal"] = apply_resume(schedule, read_attempts(a.resume))
+        cfg["resumed_from"] = os.path.basename(a.resume)
     rows = state["rows"]
     # asyncio's default handler prints the exception MESSAGE of an unretrieved task.
     asyncio.get_running_loop().set_exception_handler(
         lambda loop, ctx: print(f"loop: {type(ctx.get('exception')).__name__} "
                                 f"({len(ctx)} context keys withheld)", file=sys.stderr))
     transport = load_transport(a.dry_run_transport) if a.dry_run_transport else None
+    cfg["sampler"] = load_transport(a.sampler) if a.sampler else default_sampler()
+    cfg["sample_interval"] = a.sample_interval
+    cfg["samples"] = state["samples"] = []
     async with httpx.AsyncClient(timeout=a.timeout, transport=transport) as client:
         if not a.rate and not a.corpus and not a.no_warmup:
-            warm = build_schedule(1, clips, cfg["forms"], prompt=prompt, seed=a.seed, video=a.video)
+            # Its own dataset identity: sharing item 0's key would make the first MEASURED
+            # request an idempotent replay of the warm-up instead of a request.
+            warm = make(1, rate=None, dataset_version=cfg["dataset_version"] + ".warmup")
             await run_one(client, cfg, warm[0], CLOCK(), [])   # warm-up, not counted
         state["t0"] = CLOCK()
-        state["wall"] = await (run_open_loop(client, cfg, schedule, rows) if a.rate
-                               else run_closed_loop(client, cfg, schedule, rows))
+        sampler_task = (asyncio.create_task(sample_resources(cfg, state["t0"], cfg["samples"]))
+                        if a.sample_interval > 0 else None)
+        try:
+            state["wall"] = await (run_open_loop(client, cfg, schedule, rows) if a.rate
+                                   else run_closed_loop(client, cfg, schedule, rows))
+        finally:
+            if sampler_task is not None:
+                sampler_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await sampler_task
+
+
+# ---------------------------------------------------------------- sweep report
+
+
+def cell_warnings(s):
+    """Everything that makes a cell's headline numbers unquotable, in one place.
+
+    The E1B protocol's rule is that tuning may not move the goalposts, so a cell states
+    what it cannot support instead of quietly reporting a smaller number."""
+    out = list(s.get("suppressed_percentiles") or [])
+    d = s.get("denominators") or {}
+    attempts = d.get("attempts") or 0
+    platform = (d.get("failed_attempts") or 0)
+    if attempts and platform / attempts > 0.01:
+        out.append(f"platform-caused failures {platform}/{attempts} exceed the provisional "
+                   f"1 % criterion (P-18, provisional)")
+    if s.get("interrupted"):
+        out.append("run was interrupted: partial")
+    profile = s.get("profile") or {}
+    if s.get("cold_requests") and profile.get("engine_state") != "restarted":
+        out.append(f"cold/warm split reported with engine_state="
+                   f"{profile.get('engine_state', 'unknown')!r}: a cold claim needs a restarted "
+                   f"engine or clips the target has never seen")
+    missing = (s.get("phases") or {}).get("declared_missing")
+    if missing:
+        out.append("phases not published by the target: " + ",".join(missing))
+    if not s.get("accepted"):
+        out.append("no accepted request: nothing in this row is a measurement")
+    return out
+
+
+def report(path, stream=sys.stdout):
+    """Read a summary JSONL (--out) and print the sweep table. Reads only; runs nothing."""
+    with open(path, encoding="utf-8") as f:
+        cells = [json.loads(line) for line in f if line.strip()]
+    if not cells:
+        print(f"no summaries in {path}", file=stream)
+        return 1
+    fingerprints = {json.dumps({k: (c.get("profile") or {}).get(k) for k in
+                                ("dataset_version", "profile_version", "seed", "forms",
+                                 "max_tokens_mix", "tenants")}, sort_keys=True) for c in cells}
+    print(f"# Marlin-2B sweep report — {os.path.basename(path)}", file=stream)
+    print(f"\n{len(cells)} cell(s); {len(fingerprints)} distinct workload profile(s)", file=stream)
+    if len(fingerprints) > 1:
+        print("\n**Cells span more than one profile: the rows below are not comparable with "
+              "each other.**", file=stream)
+    print("\n| label | mode | rate/conc | acc | rej | fail | canc | video-s/s | req/s | "
+          "TTFT p50 | TTFT p95 | latency p50 | latency p95 |", file=stream)
+    print("|---|---|---|---|---|---|---|---|---|---|---|---|---|", file=stream)
+    for c in cells:
+        a = (c.get("profile") or {}).get("arrival") or {}
+        load = a.get("rate_per_s") if c.get("mode") == "open-loop" else a.get("concurrency")
+        pct = c.get("percentiles") or {}
+        cell = lambda block, q: ("—" if (pct.get(block) or {}).get(f"p{q}") is None
+                                 else (pct[block][f"p{q}"]))
+        print(f"| {c.get('label') or '(none)'} | {c.get('mode')} | {load} | {c.get('accepted')} | "
+              f"{c.get('rejected')} | {c.get('failed')} | {c.get('cancelled')} | "
+              f"{c.get('video_s_per_s')} | {c.get('req_per_s')} | {cell('ttft_s', 50)} | "
+              f"{cell('ttft_s', 95)} | {cell('latency_s', 50)} | {cell('latency_s', 95)} |",
+              file=stream)
+    print("\n`—` is a percentile the sample count cannot support; it is never replaced by a "
+          "smaller quantile or by the maximum.", file=stream)
+    print("\n## Per-cell limits\n", file=stream)
+    for c in cells:
+        warnings = cell_warnings(c)
+        print(f"- **{c.get('label') or '(none)'}** ({c.get('ts')}): "
+              + ("; ".join(warnings) if warnings else "no reported limit"), file=stream)
+    print("\nProvisional criteria (marlin-sop.md §5.2, P-18) are **provisional**: quoting a "
+          "row of this report without its label promotes it to a target, which it is not.",
+          file=stream)
+    return 0
 
 
 def main(argv=None):
@@ -991,12 +1480,14 @@ def main(argv=None):
 def _run(argv=None):
     mute_library_logging()
     a = parse_args(argv)
-    refuse_key_in_args(a, api_key())         # exit 2 before anything is opened or printed
-    raw = raw_path(a)
+    if a.report:
+        return report(a.report)
+    refuse_key_in_args(a, tuple(dict.fromkeys([api_key(), *tenant_keys(a)])))
+    raw = raw_path(a)                        # exit 2 before anything is opened or printed
     for path in (raw, a.out):
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     state = {"rows": [], "cfg": None, "wall": None, "t0": None, "raw_file": None,
-             "interrupted": False}
+             "samples": [], "interrupted": False}
     # Rows are appended and flushed as each attempt finishes: a Ctrl-C or a crash keeps
     # every completed row instead of losing the whole run's raw data.
     with open(raw, "w", encoding="utf-8") as raw_file:
@@ -1027,7 +1518,11 @@ def _run(argv=None):
                   redact("; ".join(res["suppressed_percentiles"]), key), file=sys.stderr)
         with open(a.out, "a", encoding="utf-8") as f:
             f.write(dump_line(res, key) + "\n")
-        return 130 if state["interrupted"] else (0 if res["accepted"] else 1)
+        if state["interrupted"]:
+            return 130
+        # A resume whose items were all already terminal has nothing to send and is a
+        # success, not the "no accepted request" failure an empty run is.
+        return 0 if res["accepted"] or res["denominators"]["skipped_terminal_on_resume"] else 1
 
 
 if __name__ == "__main__":
