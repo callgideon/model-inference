@@ -1,0 +1,329 @@
+#!/usr/bin/env python3
+"""D3 item 6: the lease races under REAL PostgreSQL transactions (both images).
+
+Two kinds of proof, per race:
+
+* LOCK-STEP, both orders, deterministic: the first transaction runs its boundary call and
+  stays OPEN; the second is started in a thread and must be seen waiting on a lock (in
+  `pg_stat_activity`) - or, for the reaper, must return at once, because it takes job rows
+  SKIP LOCKED - and only then does the first commit. The answer of each order is asserted.
+* STRESS: N callers released together by a barrier, several rounds, on fresh jobs.
+
+Every boundary is called as `service_role` with the adapter's arguments. The "publication"
+side is D4's append protocol written out (the fence, then the marker, in one transaction)
+until D4 exists - so the append races prove the fence and the marker, not the journal.
+
+    uv run --frozen pytest -q tests/d/test_lease_races.py
+"""
+from __future__ import annotations
+
+import threading
+import time
+
+import psycopg
+import pytest
+from psycopg.types.json import Jsonb
+
+from infrx.contracts.conformance import builders as b
+from infrx.contracts.fakes.support import DEFAULT_START
+from infrx.contracts.limits import DEFAULTS
+from infrx.contracts.records import Lease
+from infrx.state.jobstore import domain_error
+
+from . import checks_admission as ca
+from . import checks_leases as cl
+from . import pgharness, pgstore
+
+_reason = pgharness.unavailable()
+pytestmark = pytest.mark.skipif(_reason is not None,
+                                reason=f"task-local PostgreSQL unavailable: {_reason}")
+TTL, GEN = DEFAULTS.lease_ttl_s, DEFAULTS.generation_timeout_s
+ROUNDS, CALLERS = 5, 8
+
+
+class Rig:
+    """A fresh migrated, seeded, FROZEN database (a template clone), funded."""
+
+    def __init__(self) -> None:
+        self.db = pgstore.fresh_database()
+        self.owner = pgharness.connect(self.db)
+        self.owner.execute("select infrx_test.freeze(%s)", (DEFAULT_START,))
+        self.owner.execute("insert into public.credit_ledger (org_id, delta_usd, kind, "
+                           "reason) values (%s, 100, 'grant', 'races')", (b.ORG_A,))
+        self.world = ca.World(self.owner)
+
+    def service(self):
+        conn = pgharness.connect(self.db)
+        conn.execute("set role service_role")
+        return conn
+
+    def advance(self, seconds: float) -> None:
+        self.owner.execute("select infrx_test.advance(%s)", (float(seconds),))
+
+    def queued(self) -> str:
+        return cl.queued(self.owner, self.world).request_id
+
+    def running(self, worker: str = "w1") -> Lease:
+        job = self.queued()
+        code, answer = rpc(self.service(), "claim", {"job_id": job, "worker_id": worker,
+                                                     "limits": cl.LIMITS})
+        assert code is None, code
+        return Lease.model_validate(answer["lease"])
+
+    def job(self, job_id: str) -> dict:
+        return cl.row(self.owner, job_id)
+
+    def reserved(self):
+        return cl.reserved(self.owner)
+
+    def projections(self, job_id: str) -> int:
+        return cl.kinds(self.owner, job_id).count("usage_projection")
+
+    def handle(self, job_id: str) -> str:
+        return self.job(job_id)["job_handle"]
+
+
+def rpc(conn, function: str, args: dict):
+    """(error code or None, answer): a refusal after a committed terminalization is its code."""
+    try:
+        answer = conn.execute(f"select infrx.{function}(%s)", (Jsonb(args),)).fetchone()[0]
+    except psycopg.Error as failed:
+        return getattr(domain_error(failed), "code", f"untyped {failed.sqlstate}"), None
+    if isinstance(answer, dict) and answer.get("refusal"):
+        return answer["refusal"]["code"], answer
+    return None, answer
+
+
+def lease_args(lease: Lease, **extra) -> dict:
+    return {"lease": lease.model_dump(mode="json"), "limits": cl.LIMITS, **extra}
+
+
+def publish(conn, lease: Lease):
+    """D4's append protocol, written out: the fence, then the marker, one transaction
+    (the caller's). Runs as the owner: `fence_lease` is internal, as D4's body will be."""
+    try:
+        refusal = conn.execute("select infrx.fence_lease(%s, array['inference'], %s)",
+                               (Jsonb(lease.model_dump(mode="json")),
+                                DEFAULTS.unknown_usage_reconcile_s)).fetchone()[0]
+    except psycopg.Error as failed:
+        return domain_error(failed).code, None
+    if refusal:
+        return refusal["code"], None
+    conn.execute("update infrx.jobs set published = true where request_id = %s",
+                 (lease.job_id,))
+    return None, True
+
+
+def waiting_on_a_lock(rig: Rig, pid: int, within_s: float = 10.0) -> None:
+    deadline = time.monotonic() + within_s
+    while time.monotonic() < deadline:
+        state = rig.owner.execute("select wait_event_type from pg_stat_activity where pid = %s",
+                                  (pid,)).fetchone()
+        if state and state[0] == "Lock":
+            return
+        time.sleep(0.02)
+    raise AssertionError(f"backend {pid} never waited on the first transaction's lock")
+
+
+def lockstep(rig: Rig, first, second):
+    """`first(conn)` runs in an OPEN transaction; `second(conn)` starts in a thread and must
+    block on a lock; then the first commits (an aborted one rolls back). Returns both
+    answers."""
+    a, other = first[0], second[0]
+    a.execute("begin")
+    one = first[1](a)
+    out: dict = {}
+    thread = threading.Thread(target=lambda: out.setdefault("two", second[1](other)))
+    thread.start()
+    waiting_on_a_lock(rig, other.info.backend_pid)
+    a.execute("commit")
+    thread.join(10)
+    assert not thread.is_alive(), "the second transaction never finished"
+    return one, out["two"]
+
+
+def together(calls) -> list:
+    """Release every call at once (a barrier), each on its own connection; answers in order."""
+    barrier = threading.Barrier(len(calls))
+    out: list = [None] * len(calls)
+
+    def run(i, conn, call):
+        barrier.wait()
+        out[i] = call(conn)
+    threads = [threading.Thread(target=run, args=(i, conn, call))
+               for i, (conn, call) in enumerate(calls)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    assert not any(thread.is_alive() for thread in threads), "a racer never finished"
+    return out
+
+
+def live(rig: Rig, job_id: str) -> list[tuple]:
+    return cl.live_attempts(rig.owner, job_id)
+
+
+# --------------------------------------------------------------------- two claimers
+def test_race__two_claimers_mint_exactly_one_generation() -> None:
+    """DUR-FENCE: claims of one queued job serialize on its row; the loser is
+    `not_claimable` and leaves no attempt; one generation exists."""
+    rig = Rig()
+    job = rig.queued()
+    claim = {"job_id": job, "worker_id": "w1", "limits": cl.LIMITS}
+    first, second = lockstep(rig, (rig.service(), lambda c: rpc(c, "claim", claim)),
+                             (rig.service(), lambda c: rpc(c, "claim",
+                                                           dict(claim, worker_id="w2"))))
+    assert first[0] is None and second[0] == "not_claimable", (first, second)
+    assert live(rig, job) == [("inference", 1, "w1")], live(rig, job)
+    for _ in range(ROUNDS):
+        job = rig.queued()
+        answers = together([(rig.service(), lambda c, w=w: rpc(c, "claim", {
+            "job_id": job, "worker_id": f"w{w}", "limits": cl.LIMITS}))
+            for w in range(CALLERS)])
+        leases = [a for code, a in answers if code is None]
+        assert len(leases) == 1 and sorted(code for code, _ in answers if code) == \
+            ["not_claimable"] * (CALLERS - 1), answers
+        assert [(k, g) for k, g, _ in live(rig, job)] == [("inference", 1)], live(rig, job)
+        rpc(rig.service(), "cancel", {"org_id": b.ORG_A, "job_handle": rig.handle(job),
+                                      "limits": cl.LIMITS})
+
+
+# --------------------------------------------------------------------- recover vs heartbeat
+def test_race__recover_and_heartbeat_never_both_win() -> None:
+    """DUR-FENCE: a heartbeat in flight is never requeued under it (the reaper skips a
+    locked job and decides from the fresh row next time), and a heartbeat that lands after
+    the requeue is `stale_lease` - never a renewed lease on a queued job."""
+    rig = Rig()
+    # heartbeat first: renewed inside the old expiry, committed after it
+    lease = rig.running()
+    rig.advance(TTL - 20)
+    a, reaper = rig.service(), rig.service()
+    a.execute("begin")
+    code, renewed = rpc(a, "heartbeat", lease_args(lease))
+    assert code is None, code
+    rig.advance(21)                                   # past the ORIGINAL expiry
+    started = time.monotonic()
+    assert rpc(reaper, "recover", {"limits": cl.LIMITS}) == (None, []), \
+        "the reaper acted on a job whose heartbeat was in flight"
+    assert time.monotonic() - started < 5, "the reaper waited on a locked job"
+    a.execute("commit")
+    assert rpc(reaper, "recover", {"limits": cl.LIMITS}) == (None, []), \
+        "the reaper requeued a renewed lease"
+    job = rig.job(lease.job_id)
+    assert job["state"] == "running" and live(rig, lease.job_id) == [("inference", 1, "w1")]
+    assert Lease.model_validate(renewed["lease"]).expires_at > lease.expires_at
+    # recover first: the requeue commits, then the heartbeat is stale
+    lost = rig.running("w2")
+    rig.advance(TTL)
+    first, second = lockstep(
+        rig, (rig.service(), lambda c: rpc(c, "recover", {"limits": cl.LIMITS})),
+        (rig.service(), lambda c: rpc(c, "heartbeat", lease_args(lost))))
+    assert first[0] is None and [i for i in first[1] if "index_event" in i], first
+    assert second[0] == "stale_lease", second
+    job = rig.job(lost.job_id)
+    assert (job["state"], job["attempts"], live(rig, lost.job_id)) == ("queued", 1, []), job
+
+
+# --------------------------------------------------------------------- cancel vs complete
+def test_race__cancel_and_complete_have_one_terminal_outcome() -> None:
+    """DUR-SETTLE/DUR-FENCE: cancel and complete's fenced terminalization (R29, past the
+    generation deadline) serialize on the job row. Whichever commits first is the outcome;
+    the other answers it (cancel) or is refused `already_terminal` (complete). The hold is
+    released once and one usage projection exists. A complete whose fence holds (the D5
+    settlement raises) leaves nothing, and a cancel after it wins."""
+    rig = Rig()
+    baseline = rig.reserved()
+
+    def settle(lease):
+        return lambda c: rpc(c, "terminalize", lease_args(lease, outcome={}))
+
+    def cancel(job):
+        return lambda c: rpc(c, "cancel", {"org_id": b.ORG_A, "job_handle": rig.handle(job),
+                                           "limits": cl.LIMITS})
+    # complete first
+    lease = rig.running()
+    rig.advance(GEN)
+    first, second = lockstep(rig, (rig.service(), settle(lease)),
+                             (rig.service(), cancel(lease.job_id)))
+    assert first[0] == "already_terminal" and second[0] is None, (first, second)
+    assert second[1]["cause"] == "deadline_exceeded", "the waiting cancel invented an outcome"
+    # cancel first
+    other = rig.running()
+    rig.advance(GEN)
+    first, second = lockstep(rig, (rig.service(), cancel(other.job_id)),
+                             (rig.service(), settle(other)))
+    assert first[1]["cause"] == "client_cancelled" and second[0] == "already_terminal", \
+        (first, second)
+    # a complete whose fence holds: the settlement (D5) raises, and the error aborts its
+    # transaction at once (locks included) - nothing of it remains, the cancel then wins
+    held = rig.running()
+    assert settle(held)(rig.service())[0] == "untyped 0A000"
+    assert rig.job(held.job_id)["state"] == "running" and rig.projections(held.job_id) == 0
+    assert cancel(held.job_id)(rig.service())[1]["cause"] == "client_cancelled"
+    for job in (lease.job_id, other.job_id, held.job_id):
+        assert rig.projections(job) == 1, f"{job}: two terminal projections"
+    assert rig.reserved() == baseline, "a hold was released twice or not at all"
+    # stress: cancels and past-deadline heartbeats released together
+    for _ in range(ROUNDS):
+        lease = rig.running()
+        rig.advance(GEN)
+        half = CALLERS // 2
+        answers = together([(rig.service(), cancel(lease.job_id)) for _ in range(half)] +
+                           [(rig.service(), lambda c, l=lease: rpc(c, "heartbeat",
+                                                                   lease_args(l)))
+                            for _ in range(half)])
+        causes = {a["cause"] for code, a in answers[:half] if code is None}
+        assert len(causes) == 1 and all(code is None for code, _ in answers[:half]), answers
+        assert all(code == "already_terminal" for code, _ in answers[half:]), answers
+        assert rig.job(lease.job_id)["outcome_cause"] in causes
+        assert rig.projections(lease.job_id) == 1 and rig.reserved() == baseline
+
+
+# --------------------------------------------------------------------- append after publication
+def test_race__publication_is_honoured_and_a_late_append_is_fenced() -> None:
+    """DUR-OUTPUT: a publication committed while the reaper runs is never regenerated (the
+    reaper skipped the locked job and then fails it `lost_after_publication`); an append
+    that lands after a requeue is `stale_lease` and publishes nothing; publication vs
+    cancel decides held_unknown vs released_free by commit order; an append after
+    `lost_after_publication` is `already_terminal`."""
+    rig = Rig()
+    # publication first, the reaper in the middle, then the lease is lost
+    lease = rig.running()
+    writer = pgharness.connect(rig.db)
+    writer.execute("begin")
+    assert publish(writer, lease) == (None, True)
+    rig.advance(TTL)
+    assert rpc(rig.service(), "recover", {"limits": cl.LIMITS}) == (None, []), \
+        "the reaper acted under an uncommitted publication"
+    writer.execute("commit")
+    code, produced = rpc(rig.service(), "recover", {"limits": cl.LIMITS})
+    assert [i["outcome"]["cause"] for i in produced] == ["lost_after_publication"], produced
+    assert cl.kinds(rig.owner, lease.job_id).count("inference_dispatch") == 1, \
+        "a published job was redispatched"
+    assert publish(pgharness.connect(rig.db), lease)[0] == "already_terminal", \
+        "an append after lost_after_publication was accepted"
+    # the requeue first: the late append is stale and publishes nothing
+    lost = rig.running("w2")
+    rig.advance(TTL)
+    first, second = lockstep(
+        rig, (rig.service(), lambda c: rpc(c, "recover", {"limits": cl.LIMITS})),
+        (pgharness.connect(rig.db), lambda c: publish(c, lost)))
+    assert second[0] == "stale_lease", second
+    job = rig.job(lost.job_id)
+    assert (job["state"], job["published"]) == ("queued", False), job
+    # publication vs cancel, both orders
+    shown = rig.running("w3")
+    first, second = lockstep(
+        rig, (pgharness.connect(rig.db), lambda c: publish(c, shown)),
+        (rig.service(), lambda c: rpc(c, "cancel", {
+            "org_id": b.ORG_A, "job_handle": rig.handle(shown.job_id), "limits": cl.LIMITS})))
+    assert second[1]["settlement_state"] == "held_unknown", "a published cancel was released"
+    unseen = rig.running("w4")
+    first, second = lockstep(
+        rig, (rig.service(), lambda c: rpc(c, "cancel", {
+            "org_id": b.ORG_A, "job_handle": rig.handle(unseen.job_id), "limits": cl.LIMITS})),
+        (pgharness.connect(rig.db), lambda c: publish(c, unseen)))
+    assert first[1]["settlement_state"] == "released_free" and \
+        second[0] == "already_terminal", (first, second)
+    assert rig.job(unseen.job_id)["published"] is False, "a cancelled job was published"
