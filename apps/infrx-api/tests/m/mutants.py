@@ -163,9 +163,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_the_allow_list_the_fetcher_was_given_is_the_one_that_is_used"),
     _m("data_urls_ignore_the_configured_allow_list",
        "the same allow-list decides a data: URL",
-       S, "            fetched, kind = decode_data_url(source, self.limits, self.fetcher.allowed_mime), \\\n"
-          "                MediaKind.inline",
-       "            fetched, kind = decode_data_url(source, self.limits), MediaKind.inline",
+       S, "                decode_data_url, source, self.limits, self.fetcher.allowed_mime), MediaKind.inline",
+       "                decode_data_url, source, self.limits), MediaKind.inline",
        "test_the_allow_list_the_fetcher_was_given_is_the_one_that_is_used"),
     _m("hop_deadline_not_checked",
        "the budget is checked at the start of every hop, before resolving or connecting",
@@ -283,8 +282,8 @@ MUTANTS: tuple[Mutant, ...] = (
 
     # --- data: URLs -----------------------------------------------------------
     _m("base64_not_validated", "strict base64: no whitespace or stray characters",
-       F, "        data = base64.b64decode(payload, validate=True)",
-       "        data = base64.b64decode(payload + \"===\", validate=False)",
+       F, "        data = binascii.a2b_base64(payload, strict_mode=True)",
+       "        data = binascii.a2b_base64(payload + \"===\", strict_mode=False)",
        "test_a_data_url_is_decoded_strictly_and_within_a_bound"),
     _m("data_url_bound_after_decode", "the bound is applied before anything is decoded",
        F, "    if len(payload) > (cap + 2) // 3 * 4:\n"
@@ -1093,6 +1092,18 @@ MUTANTS: tuple[Mutant, ...] = (
        "prepare's full-body digest runs in a worker thread, not on the event loop",
        R, "await asyncio.to_thread(digest_of, data) != ref.digest:",
        "digest_of(data) != ref.digest:",
+       "test_no_full_body_digest_runs_on_the_event_loop"),
+    # === M4: data: URLs - one copy of the text, the digest off the loop ======================
+    _m("data_url_text_copied_again",
+       "a data: URL is decoded from one slice of its text (high-water under 3x the output)",
+       F, "        data = binascii.a2b_base64(payload, strict_mode=True)",
+       "        data = binascii.a2b_base64(payload.encode(\"ascii\"), strict_mode=True)",
+       "test_a_data_url_is_decoded_from_one_copy_of_its_text"),
+    _m("data_url_decoded_on_the_loop",
+       "a data: URL is decoded, and its digest taken, in a worker thread",
+       S, "            fetched, kind = await asyncio.to_thread(\n"
+          "                decode_data_url, source, self.limits, self.fetcher.allowed_mime), MediaKind.inline",
+       "            fetched, kind = decode_data_url(source, self.limits, self.fetcher.allowed_mime), MediaKind.inline",
        "test_no_full_body_digest_runs_on_the_event_loop"),
     # === M4: MEDIA-PARITY (tests/m/test_parity.py) ============================================
     _m("prepared_bytes_are_not_the_source",

@@ -218,8 +218,10 @@ class MediaStaging:
         """
         org_id = valid_org(org_id)          # before any outbound request is made
         if source.startswith(DATA_PREFIX):
-            fetched, kind = decode_data_url(source, self.limits, self.fetcher.allowed_mime), \
-                MediaKind.inline
+            # M4: in a worker thread, so decoding's digest (hashlib releases the GIL) is
+            # off the event loop; the base64 decode itself still holds the GIL.
+            fetched, kind = await asyncio.to_thread(
+                decode_data_url, source, self.limits, self.fetcher.allowed_mime), MediaKind.inline
         elif source.startswith(HTTP_PREFIXES):
             fetched, kind = await self.fetcher.fetch(source), MediaKind.url
         else:

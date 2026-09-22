@@ -614,3 +614,24 @@ def test_a_fetched_body_is_held_at_most_about_twice():
         tracemalloc.stop()
     assert got.data == body
     assert peak < 2.5 * size, f"peak {peak / size:.2f}x the body"
+
+
+def test_a_data_url_is_decoded_from_one_copy_of_its_text():
+    """M4, bounded memory: the base64 payload is sliced out once and decoded from the text.
+    Before M4 the high-water was ~3.7x the decoded size (a slice, a partition and an ASCII
+    re-encoding of the text, each ~1.33x); one slice plus the output is ~2.3x."""
+    import base64
+    import tracemalloc
+
+    size = 8 << 20
+    body = b"\x00\x00\x00 ftypmp42" + bytes(size - 16)
+    url = "data:video/mp4;base64," + base64.b64encode(body).decode()
+    tracemalloc.start()
+    try:
+        base = tracemalloc.get_traced_memory()[0]
+        got = fetch.decode_data_url(url)
+        peak = tracemalloc.get_traced_memory()[1] - base
+    finally:
+        tracemalloc.stop()
+    assert got.data == body and got.digest == fetch.digest_of(body)
+    assert peak < 3.0 * size, f"peak {peak / size:.2f}x the decoded size"

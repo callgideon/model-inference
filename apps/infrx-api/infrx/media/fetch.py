@@ -23,7 +23,6 @@ fixtures in `tests/m` need neither.
 from __future__ import annotations
 
 import asyncio
-import base64
 import binascii
 import hashlib
 import logging
@@ -160,9 +159,14 @@ def decode_data_url(url: str, limits: PilotSettings = DEFAULTS, allowed=ALLOWED_
     memory, and `validate=True` refuses the padding and whitespace tricks that make
     two different texts decode to the same bytes.
     """
-    header, comma, payload = url[len(DATA_PREFIX):].partition(",")
-    if not comma:
+    # M4: the payload is sliced out of the text once and decoded from it directly; the
+    # slice-then-partition and `b64decode`'s ASCII re-encoding were two more full copies of
+    # up to 85 MiB of text (M4 evidence). `a2b_base64(strict_mode=True)` is exactly what
+    # `b64decode(validate=True)` calls, and a non-ASCII text is a ValueError in both.
+    comma = url.find(",", len(DATA_PREFIX))
+    if comma < 0:
         raise refused("bad-data-url")
+    header, payload = url[len(DATA_PREFIX):comma], url[comma + 1:]
     parameters = [part.strip().lower() for part in header.split(";")]
     if "base64" not in parameters[1:]:
         raise refused("bad-data-url")            # only base64 is a bounded encoding
@@ -173,7 +177,7 @@ def decode_data_url(url: str, limits: PilotSettings = DEFAULTS, allowed=ALLOWED_
     if len(payload) > (cap + 2) // 3 * 4:
         raise refused("too-large", exc=errors.RequestTooLarge)
     try:
-        data = base64.b64decode(payload, validate=True)
+        data = binascii.a2b_base64(payload, strict_mode=True)
     except (binascii.Error, ValueError):
         raise refused("bad-base64") from None
     if len(data) > cap:
