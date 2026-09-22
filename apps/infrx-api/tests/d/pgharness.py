@@ -325,8 +325,8 @@ def _sb(database: str, statement: str, *, check: bool = True):
     Supabase's `postgres` role is not a superuser on this image (measured), so the
     database copy has to be done by one - and locally it needs no password.
     """
-    done = _docker("exec", assert_ours("exec into"), "psql", "-U", "supabase_admin", "-d", database,
-                   "-v", "ON_ERROR_STOP=1", "-c", statement, check=False)
+    done = _docker("exec", assert_ours("exec into"), "psql", "-U", "supabase_admin",
+                   "-d", database, "-v", "ON_ERROR_STOP=1", "-c", statement, check=False)
     if check and done.returncode != 0:
         raise AssertionError(f"supabase_admin could not run `{statement[:50]}…`: "
                              f"{done.stderr.strip()[-300:]}")
