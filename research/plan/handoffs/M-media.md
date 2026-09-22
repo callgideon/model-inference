@@ -1,6 +1,6 @@
 # M — Secure media ingestion and preparation
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset.
 
@@ -57,7 +57,7 @@ Resolving then allowing HTTP client re-resolution is still vulnerable. Limit pix
 
 **Start after:** F2. **Integrate after:** none beyond the start/code gate.
 
-**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `M2`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `M2`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement connection pinned to validated IP with TLS hostname verification, every-hop validation, public IPv4/IPv6 policy, DNS rebinding protection and no proxy-env bypass. Stream fetch with aggregate byte/time limits and redirect budget. Strictly decode bounded base64 and preserve current once-only fetch behavior. Stage canonical request and source metadata durably; sanitize logs.
 
@@ -69,7 +69,7 @@ Resolving then allowing HTTP client re-resolution is still vulnerable. Limit pix
 
 ### M2 — Versioned preprocessing and tenant cache
 
-**Start after:** F2P, M1. **Integrate after:** D2, W1. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** F2P, M1. **Integrate after:** D2, W1. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement bounded probe/transcode pool, cancellation/kill of process groups, duration/frame/token budgets and no-upsize aspect-preserving even dimensions without pixel-area overshoot. Keep CRF23 until CRF28 parity is measured; quantized budgets stay disabled pending evidence. Hash source plus tenant/profile; namespace engine multimodal identifiers as well as prefix cache. Persist prepared artifact before JobStore.prepared.
 
@@ -81,7 +81,7 @@ Resolving then allowing HTTP client re-resolution is still vulnerable. Limit pix
 
 ### M3 — Owned uploads, expiry and orphan collection
 
-**Start after:** F2P, M1. **Integrate after:** D2. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** F2P, M1. **Integrate after:** D2. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement constrained upload creation/finalization, immutable completed handles, authoritative checksum/size/object-owner validation and upload-to-job references. Prevent mutable object replacement after finalization. Add aborted/staged/orphan GC with active-job references respected and processing-cache logical expiry. Supply owned resolver for trace/judge reuse under independent consent.
 

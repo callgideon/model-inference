@@ -1,6 +1,6 @@
 # F — Foundation and shared contracts
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset.
 
@@ -61,7 +61,7 @@ Existing cache bounds and non-stream cleanup are already fixed. Preserve externa
 
 **Start after:** none. **Integrate after:** none beyond the start/code gate.
 
-**Imported baseline status:** `integrated` at wave 2; preserve completed work. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `integrated` at wave 2; preserve completed work. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Inventory imports and behavior with the current 23 tests. Move auth, request validation, media and usage boundaries into named modules with a compatibility gateway entry point. Inject clients/clock/config, preserve deployment import path and isolate side effects from import. Keep extraction small enough to compare old/new fixtures.
 
@@ -75,7 +75,7 @@ Existing cache bounds and non-stream cleanup are already fixed. Preserve externa
 
 **Start after:** F1. **Integrate after:** none beyond the start/code gate.
 
-**Imported baseline status:** `integrated` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `F2P`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `integrated` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `F2P`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Encode contracts v1 and serialized success/error/job/feedback/decimal fixtures. Define exact configuration names and concrete bounded capacities, including journal byte reservations, task-local ports and schema versions. Add fake adapters for each port with deterministic failure injection. Pin Python and engine-independent dependencies; update recursive console test discovery and central CI commands through the coordinator. Document any design refinement before consumers branch.
 

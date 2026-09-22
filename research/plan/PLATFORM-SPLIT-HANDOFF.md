@@ -1,6 +1,6 @@
 # Handoff — continue after the wave-2 product audit
 
-> **Superseded entry point:** use [the complete fresh-session handoff](16-fresh-session-handoff.md) and [build plan](12-complete-build-plan.md). This audit handoff remains historical context. The latest priority is Marlin SOP inference App first; the prompt below predates that priority and the fully decomposed Lab backlog. Its 77-record counts refer to manifest v3 at audit time.
+> **Superseded entry point:** use [the complete fresh-session handoff](16-fresh-session-handoff.md) and [build plan](12-complete-build-plan.md). This audit handoff remains historical context. The latest priority is the robust Marlin inference backend first, then App; the prompt below predates that priority and the fully decomposed Lab backlog. Its 77-record counts refer to manifest v3 at audit time.
 
 ## Session Metadata
 

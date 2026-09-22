@@ -1,5 +1,7 @@
 # Platform 2 — roadmap and release gates
 
+**Latest sequence (2026-09-22):** finish the [Marlin endpoint backend](../plan/18-marlin-backend-first.md), including recovery and measured optimization; then launch App, then build Lab. Product requirements below are retained. Headless provisioning and backend gates remove the App UI from endpoint readiness.
+
 The Lab roadmap is separate from [App's roadmap](04-app-roadmap.md). Shared foundation is reused, while Lab features have their own release evidence. Dates and staffing remain unestimated. Lab is follow-on to the accepted Marlin App launch candidate. LAB-M2–M4 now have [detailed task/slice handoffs](../plan/13-lab-improvement-handoffs.md); specialized M5/hardware trials use [explicit discovery/activation gates](../plan/14-expansion-gates.md).
 
 | Milestone | Deliverable / value | Dependency and scope | Exit gate |

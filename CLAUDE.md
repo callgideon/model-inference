@@ -6,8 +6,8 @@ Repository conventions for all implementation sessions; the filename is historic
 
 Read `research/platforms/README.md` for the current two-product architecture and
 `research/plan/16-fresh-session-handoff.md` and `12-complete-build-plan.md` before continuing implementation.
-Current execution scope is Marlin SOP inference App first; Lab feature work follows
-an accepted App launch candidate. `15-pending-inputs.md` records all remaining inputs.
+Current execution scope is Marlin backend first; see `research/plan/18-marlin-backend-first.md`.
+Complete E3B/E4B endpoint integration/recovery/optimization before App feature work; Lab follows the App. `15-pending-inputs.md` records all remaining inputs.
 `HANDOFF.md` contains historical operational context. Read manifest v4, the
 platform-split amendment, shared contracts and your assigned brief before coding.
 Wave 2 is imported at `271add9`; read `research/plan/10-wave2-platform-audit.md`

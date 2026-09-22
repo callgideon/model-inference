@@ -1,5 +1,7 @@
 # Task pipeline board (coordinator-owned, restart reconciliation source)
 
+> **2026-09-22 dispatch:** backend-first Marlin endpoint. Follow [the backend plan](../../18-marlin-backend-first.md) and [updated prompt](../../16-fresh-session-handoff.md). App and Lab are subsequent. Historical entries and counts below remain unchanged.
+
 > Follow-on scheduling: [complete build plan](../../12-complete-build-plan.md) and [fresh-session handoff](../../16-fresh-session-handoff.md). Historical counts/status evidence below describe the audit boundary; current manifest v4 includes later planned work and App-first Marlin priority.
 
 > **Current reconciliation, 2026-09-21:** Imported main `271add9`; [wave-2 product audit](../../10-wave2-platform-audit.md) and manifest v3 govern continuation. Original board/log below is retained as historical evidence. S1 local audit implemented; F2R/F2P/D1R/C0/I0/E2R/G1R/V1M/U1R are explicit new revisions, not resets of original completion. New local fixes have no independent reviewer signoff or deployment claim.
@@ -110,3 +112,5 @@ Integration dependencies (manifest): U1 needs C1 + D5, V1 needs C1 + T2, C1 need
 - 2026-09-21 audit final verification: `make check` exit 0 (API 1518/70 skipped; full mutations 955/84 skipped; console 255; mutation lists 144/39/61/88; benchmark 40). Layer-1 integration exit 0, socket engine 8/8, service-independent tests 67/21 skips, 42 detected mutants plus expected survivor control and canaries. Final manifest 77 records/71 active, nine revision tasks including explicit U1R credit-aware UI migration. Docker service layers and independent review remain pending; no deployment or push.
 
 - 2026-09-21 complete-plan follow-on: manifest v4 preserves all prior states and adds 34 planned packages (111 total, 105 active, six retired). Current scope is App-first for Marlin SOP verification over large robotics datasets; S2M pins actual capabilities, while detailed Lab improvement/rollout and conditional extensions follow later. New handoff is `../../16-fresh-session-handoff.md`; task ledger and pending-input register are linked there. Documentation consistency checks and limitations are in `../complete-plan-review.md`; no feature implementation, runtime retest, hosted operation or independent signoff is implied.
+
+- 2026-09-22 backend-first revision: preserved all 111 prior task states; added eight planned packages G6B/E3B/I2B/I3B/E1B/M4/W4/E4B. Current backend closure has 37 tasks and no frontend/Lab dependency; App reuses it in a 50-task closure. Full manifest has 119 records/113 active/six retired. Documentation verification is in `../backend-first-plan-review.md`; no runtime/GPU/deployment result is implied.

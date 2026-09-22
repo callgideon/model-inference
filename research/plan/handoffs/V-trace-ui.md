@@ -1,6 +1,6 @@
 # V — Trace explorer and feedback UI
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. Provider trace/review/judge UI belongs in apps/lab; do not implement the old apps/app destinations.
 
@@ -57,7 +57,7 @@ Canonical logical content is not guaranteed raw HTTP bytes. Lost/expired/off tra
 
 **Start after:** F2. **Integrate after:** V1M.
 
-**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `V1M`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `V1M`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Build bounded list with model/key/time/outcome/quality filters, stable cursors and URL state. Show content availability and projection lag/loss without conflating absent off-mode traces with failures. Provide loading/empty/error/retry and keyboard-accessible navigation.
 
@@ -69,7 +69,7 @@ Canonical logical content is not guaranteed raw HTTP bytes. Lost/expired/off tra
 
 ### V2 — Trace detail, content and feedback
 
-**Start after:** V1M. **Integrate after:** C2, C3F. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** V1M. **Integrate after:** C2, C3F. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Render timings/usage/request versions and safe text/media content with metadata-only/pending/lost/expired states. Provide feedback submission and provenance history using durable action results; handle CH lag immediately after acceptance. Never render model HTML unsanitized.
 
@@ -81,7 +81,7 @@ Canonical logical content is not guaranteed raw HTTP bytes. Lost/expired/off tra
 
 ### V3 — Judge score and calibration presentation
 
-**Start after:** V2, F2P. **Integrate after:** J2. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** V2, F2P. **Integrate after:** J2. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Show rubric/model versions, sample/run state, limited evaluations, budget/ambiguous submit status and operator calibration affordance through C actions. Link to U consent settings. Distinguish estimated/dry-run outputs from real provider results and statistical targets from achieved quality.
 

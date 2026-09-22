@@ -1,6 +1,8 @@
 # Coordinator handoff — implementation continuation
 
-**Dispatch authority:** [complete build plan](12-complete-build-plan.md), [fresh-session handoff](16-fresh-session-handoff.md), [pending inputs](15-pending-inputs.md) and manifest v4. Current scope is APP-FIRST-MARLIN-SOP. Follow S2M with App work; activate Lab only after App candidate acceptance. Older next-session text below is historical where it differs.
+**Current priority (2026-09-22):** [Marlin backend first](18-marlin-backend-first.md). E3B/I2B/I3B/E1B/M4/W4/E4B separate endpoint readiness and measured optimization from the later App browser/deployment gates; G6B provides protected headless operations. Use the updated [fresh-session handoff](16-fresh-session-handoff.md) and manifest for dispatch.
+
+**Dispatch authority:** [complete build plan](12-complete-build-plan.md), [fresh-session handoff](16-fresh-session-handoff.md), [pending inputs](15-pending-inputs.md) and manifest v4. Current scope is BACKEND-FIRST-MARLIN. Follow S2M with endpoint completion and measured tuning; App then Lab follow accepted candidates. Older next-session text below is historical where it differs.
 
 > **Current authority:** [wave-2 audit](10-wave2-platform-audit.md), [revision handoffs](11-wave3-revision-handoffs.md), [continuation prompt](PLATFORM-SPLIT-HANDOFF.md) and manifest v4. Wave 2 is imported at `271add9`; preserve its completion evidence. The older coordinator instructions below are historical where they conflict.
 
@@ -16,7 +18,7 @@ The complete authority begins with [product architecture](../platforms/README.md
 
 ## Immediate Next Steps
 
-Follow the continuation handoff: S1 review/commit → F2R (parallel I0/E2R) → F2P → parallel D1R/C0/G1R/runtime/App/Lab slices. Integrate the full durable runtime before G2 cutover. Manifest v4 gives exact dependencies; the old G2-before-W2 sequence is withdrawn. Preserve code and evidence from the original package.
+Follow the continuation handoff: S1 review → F2R (parallel I0/E2R/S2M) → F2P → D1R/D/M/Q/W/G/A1 backend slices → E3B → I2B/I3B/E1B → M4/W4/E4B. Integrate the full durable runtime before G2 cutover. Frontend and Lab slices follow accepted backend readiness. Manifest v4 gives exact dependencies; the old G2-before-W2 sequence is withdrawn. Preserve code and evidence from the original package.
 
 ## Architecture Overview
 

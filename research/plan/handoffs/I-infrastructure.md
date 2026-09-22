@@ -1,6 +1,6 @@
 # I — Infrastructure and operations
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. I2 is split into I2A/I2L; use independent App/Lab gates.
 
@@ -59,7 +59,7 @@ Historical live inventory may be stale. GPU is east1 while PG is east2: journal 
 
 **Start after:** none. **Integrate after:** none beyond the start/code gate.
 
-**Imported baseline status:** `integrated` at wave 2; preserve completed work. Product revision/integration follow-up: `I0`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `integrated` at wave 2; preserve completed work. Product revision/integration follow-up: `I0`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Verify repository/deployment versions, resource topology, IAM/secret references and storage durability without printing secret values. Inventory required vs existing resources and priced estimates; include DB/journal network latency probe design, backup needs and allocated test environments. Do not create resources in this task.
 
@@ -83,7 +83,7 @@ Historical live inventory may be stale. GPU is east1 while PG is east2: journal 
 
 ### I3 — Recovery, alarms and rollback runbooks
 
-**Start after:** I2A, F2P. **Integrate after:** E3A. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** I2A, F2P. **Integrate after:** E3A. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Exercise backup restore, spool recovery, object expiry, disk/queue/budget/unknown-use alerts and planned maintenance. Record RPO/RTO measured per durable layer; test compatible rollback with admission paused and jobs drained/fenced. Supply operational dashboards from actual exported metrics.
 
@@ -95,7 +95,7 @@ Historical live inventory may be stale. GPU is east1 while PG is east2: journal 
 
 ### I4 — Separately gated fleet deployment
 
-**Start after:** I3, E4, F2P. **Integrate after:** none beyond the start/code gate. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** I3, E4, F2P. **Integrate after:** none beyond the start/code gate. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement multiworker routing/scaling/AMI and capacity plan from measured pilot data, with staged rollout/drain and failover evidence. If ALB least-outstanding-requests is selected, slow-start remains0. Use Valkey only as index with PG reconciliation; evaluate capacity purchases separately, do not purchase from this task alone.
 
@@ -126,3 +126,7 @@ Implement one eligible task from research/plan/handoffs/I-infrastructure.md in a
 ## Verification log
 
 - 2026-09-20: Authored from reviewed repository/specs and accepted decisions. All tasks remain planned; test IDs are required future evidence.
+
+## Current backend-first ownership
+
+I2B/I3B in [the backend handoffs](../18-marlin-backend-first.md) implement runtime deployment/metrics/alerts/recovery/restore before any App hosting requirement. The I2A and I3 descriptions above now cover reuse plus App-specific deltas. I4 starts from I3B/E4B/F2P when its capacity/availability trigger and allocated target exist; it no longer depends on E4 App release. No status has been reset or inferred complete by this scope change.

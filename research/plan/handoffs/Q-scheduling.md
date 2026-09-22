@@ -1,6 +1,6 @@
 # Q — Scheduling indices and fair dispatch
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset.
 
@@ -55,7 +55,7 @@ Old Lua snippets are design sketches, not drop-in scripts: key namespaces, decla
 
 **Start after:** F2. **Integrate after:** none beyond the start/code gate.
 
-**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `Q2`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `Q2`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement per-org weighted fair selection, tie-breaking, finish-time advancement at dispatch, queued-item count/bytes and cancellation removal. Use injected clock and seeded workload fixtures. Outbox event replay replaces/indexes once; filter candidate eligibility through JobStore.
 
@@ -67,7 +67,7 @@ Old Lua snippets are design sketches, not drop-in scripts: key namespaces, decla
 
 ### Q2 — Valkey adapter with atomic tested scripts
 
-**Start after:** Q1, F2P. **Integrate after:** none beyond the start/code gate. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** Q1, F2P. **Integrate after:** none beyond the start/code gate. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Port the tested model to namespaced keys/scripts with all accessed keys declared, complete byte/count accounting and atomic transitions. Pin supported server version and persistence expectations; verify script behavior with real Valkey and randomized differential tests versus Q1.
 
@@ -79,7 +79,7 @@ Old Lua snippets are design sketches, not drop-in scripts: key namespaces, decla
 
 ### Q3 — Outbox/reconciler integration and index loss recovery
 
-**Start after:** Q2, F2P. **Integrate after:** D2, D3. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** Q2, F2P. **Integrate after:** D2, D3. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement outbox drain/ack with retry and bounded scan checkpoints; rebuild from PG nonterminal snapshots, clean dead candidates and expose lag/missing-index metrics. Reconcile concurrently with normal dispatch without duplicate execution. Switch adapters only through coordinator drain/rebuild protocol.
 

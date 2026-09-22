@@ -82,3 +82,22 @@ The original source map above is historical where it says later Lab work is unde
 | LAB-16 specialized modalities | X1/X2 video, X3/X4 robotics | Approved contract then VIDEO-CAUSAL/ROBOT-REPLAY; conditional, not App launch |
 
 I5/I6/I7 package later workers and per-enabled-feature staging evidence. E6L does not depend on E5L/customer capture; E8L does not depend on training. Core local completeness covers App plus Lab M0–M4. Speech/commercial/fleet/new chip or transport claims require their own scope/activation; nothing is silently counted complete.
+
+## Backend-first coverage (2026-09-22)
+
+These requirements define current completion independently of the App/Lab presentation layers. The individual-credit and later product mappings above remain valid.
+
+| Requirement | Owners | Gate / evidence |
+|---|---|---|
+| BACKEND-01 supported Marlin protocol and immutable artifact/processor | S2M/F2P/W3/G1R | MARLIN-SOP/F-CONTRACT; actual model smoke |
+| BACKEND-02 headless identities, keys, limits and operator actions | D1R/A1/D5/G6B/G1R | API-OPS/API-AUTH; two-tenant denial and revocation |
+| BACKEND-03 secure bounded finite-video upload/retrieval/preparation | M1–M3/G4U | MEDIA-SEC/PARITY |
+| BACKEND-04 durable acceptance, scheduling, leases and exact accounting | D2–D5/Q2/Q3/W2 | DUR-ADMIT/CAP/FENCE/SETTLE/OUTBOX |
+| BACKEND-05 sync/SSE/explicit async/replay/cancel and dataset resume | G2/G3/G6B/W2 | API-MODES/STREAM/BACKEND-JOURNEY |
+| BACKEND-06 independent reproducible runtime deployment | I0/I2B/W3 | BACKEND-DEPLOY/DEPLOY-FAILCLOSED |
+| BACKEND-07 metrics, recovery, restore and rollback | I3B | BACKEND-OBSERVE/OPS-RECOVER |
+| BACKEND-08 representative real-GPU workload baseline/envelope | E1/E1B | PERF-ENVELOPE/MARLIN-SOP |
+| BACKEND-09 measured preparation and engine optimization | M4/W4/Q3 | MEDIA-OPT/ENGINE-OPT/MEDIA-PARITY |
+| BACKEND-10 combined final endpoint certification | E3B/E4B | Actual-service faults, final GPU soak/load/quality/accounting with App/Lab absent |
+
+E3A adds browser/onboarding evidence on top of E3B; I2A reuses I2B, I3 reuses I3B, E4 reuses E4B and verifies the consumer release delta. I4 can be activated from backend evidence without waiting for UI. These dependencies prevent both premature UI gating and duplicate runtime implementations.

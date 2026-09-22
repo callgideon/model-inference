@@ -1,6 +1,6 @@
 # C — Console data services and actions
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. C3 is replaced by C3A/C3F/C3L; consumer actions stay in App and provider actions belong in Lab.
 
@@ -62,7 +62,7 @@ Current credits fetch/sum entire ledger; replace with reconciled summary plus pa
 
 **Start after:** F2. **Integrate after:** D1, C0.
 
-**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `F2P`, `C0`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `F2P`, `C0`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement server-only sessions/role checks and named PG/CH queries with bounded cursor pagination/filter allowlists. Reserve tenant parameter names; bind trusted tenant after validating user filters. Provide matching fixtures for U/V. Migrate credits to wallet/hold views and test current selected-org behavior without adding org switching.
 
@@ -74,7 +74,7 @@ Current credits fetch/sum entire ledger; replace with reconciled summary plus pa
 
 ### C2 — Content access, expiry and safe signed references
 
-**Start after:** F2P, C0. **Integrate after:** M3, T3, L2. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** F2P, C0. **Integrate after:** M3, T3, L2. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Resolve owned trace metadata before object ref; check prefix/object metadata and logical expiry, issue short-lived bounded signed access. Support metadata-only, lost-content, expired and pending projection states. Normalize renderable text safely; never accept raw storage paths.
 

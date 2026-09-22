@@ -1,6 +1,8 @@
 # Architecture and shared boundaries
 
-Current delivery priority is the Marlin SOP-use-case consumer App. The wider architecture is retained for sequential Lab delivery; see [the complete plan](../plan/12-complete-build-plan.md). A robotics dataset or VLA application context does not imply that the served Marlin artifact emits robot actions or supports live input. S2M verifies its actual protocol.
+**Latest sequence (2026-09-22):** finish the [Marlin endpoint backend](../plan/18-marlin-backend-first.md), including recovery and measured optimization; then launch App, then build Lab. Product requirements below are retained. Headless provisioning and backend gates remove the App UI from endpoint readiness.
+
+Current delivery priority is the robust Marlin backend endpoint, followed by the SOP-use-case consumer App. The wider architecture is retained for sequential Lab delivery; see [the complete plan](../plan/12-complete-build-plan.md). A robotics dataset or VLA application context does not imply that the served Marlin artifact emits robot actions or supports live input. S2M verifies its actual protocol.
 
 Status: target architecture. Existing and proposed locations are distinguished below. Product scope follows the [index](README.md).
 

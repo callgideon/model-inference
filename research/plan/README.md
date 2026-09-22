@@ -1,6 +1,8 @@
 # Implementation handoffs — consumer App and provider Lab
 
-**Current start:** [complete build plan](12-complete-build-plan.md), [fresh-session prompt/context](16-fresh-session-handoff.md), [all task statuses](17-task-ledger.md) and [pending inputs](15-pending-inputs.md). Immediate scope is the Marlin SOP-use-case consumer App launch; Lab follows an accepted App candidate. Manifest v4 adds detailed Lab M2–M4 packages and conditional extensions without resetting original work.
+**Current priority (2026-09-22):** [Marlin backend first](18-marlin-backend-first.md). E3B/I2B/I3B/E1B/M4/W4/E4B separate endpoint readiness and measured optimization from the later App browser/deployment gates; G6B provides protected headless operations. Use the updated [fresh-session handoff](16-fresh-session-handoff.md) and manifest for dispatch.
+
+**Current start:** [complete build plan](12-complete-build-plan.md), [fresh-session prompt/context](16-fresh-session-handoff.md), [all task statuses](17-task-ledger.md) and [pending inputs](15-pending-inputs.md). Immediate scope is the robust Marlin backend endpoint; the App and then Lab follow accepted candidates. Manifest v4 adds detailed Lab M2–M4 packages and conditional extensions without resetting original work.
 
 Status: **wave 2 imported from main `271add9` and audited; wave-3 feature work has not started**. See [audit findings](10-wave2-platform-audit.md), [new revision handoffs](11-wave3-revision-handoffs.md) and [actual local verification](evidence/wave2-platform-audit.md). Original v1 completion evidence remains historical evidence, not product-v2 compatibility or live status.
 
@@ -32,9 +34,9 @@ F/S establish the revised common contracts. Independent tracks then develop agai
 ## Delivery sequence
 
 1. Review/commit S1 audit; retain F1/F2/D1 and all wave-2 history. F2R closes carryovers while I0, E2R and S2M can work independently.
-2. F2P encodes the revised contract; D1R adds migrations after 0005. C0 wires consumer database reporting independently of Lab content.
-3. Parallel runtime/App tasks use the revised fixtures, then integrate real D2–D5/M/Q/W before G2 mounts anything. I0's installer prerequisite is mandatory.
-4. E3A → I2A/I3/E4 proves the consumer release. L1–L4/E3L/I2L prove provider operations independently; V1M/C2/T/J feed E5L observation.
+2. F2P encodes the revised contract; D1R adds migrations after 0005. D/A1 and G6B supply shared headless identities/keys/rates/accounting; C0 browser reporting follows backend acceptance.
+3. Parallel runtime D/M/Q/W/G tasks use revised fixtures; integrate real durable/runtime prerequisites before G2 mounts anything. I0 is mandatory. E3B proves the endpoint independently of App/Lab.
+4. I2B/I3B/E1B → M4/W4 → E4B proves backend deployment, recovery and measured optimization. App follows using E3A/I2A/I3/E4 as frontend delta gates; later L1–L4/E3L/I2L and V/T/J/C prove provider operation/observation.
 5. After the App candidate is accepted, activate Lab milestones: F3/D7/N/H/B/I5/E6L for evaluation, D8/N3/P/I6/E7L for improvement, D9/R/I7/E8L for rollout. [Detailed briefs](13-lab-improvement-handoffs.md) and [conditional expansion gates](14-expansion-gates.md) replace the earlier undecomposed roadmap. Speech remains deferred. No old wave-3 linear sequence overrides the manifest.
 
 See [risks and review dispositions](05-risk-register.md) for the changes made after review. No elapsed-time promise substitutes for a passed gate.

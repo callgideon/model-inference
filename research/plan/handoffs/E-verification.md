@@ -1,6 +1,6 @@
 # E — Independent verification and release evidence
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. E3 is split into E3A/E3L/E5L; E4 now verifies the consumer pilot independently.
 
@@ -60,7 +60,7 @@ Existing benchmark has no usable auth configuration and repeats one clip. Warm-c
 
 **Start after:** none. **Integrate after:** none beyond the start/code gate.
 
-**Imported baseline status:** `integrated` at wave 2; preserve completed work. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `integrated` at wave 2; preserve completed work. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Create corpus manifest with licenses/consent/hashes and at least 64 distinct clips plus 32 fast subset. Extend benchmark with explicit auth from environment, text/video/upload forms, open-loop arrival rate, stable seeds and raw timing/outcome output. Preserve historical bench rows. Record baseline tool limits; avoid private media in git.
 
@@ -74,7 +74,7 @@ Existing benchmark has no usable auth configuration and repeats one clip. Warm-c
 
 **Start after:** E1, F2. **Integrate after:** none beyond the start/code gate.
 
-**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `E2R`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `E2R`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Create local isolated compose for PG/Valkey/CH/S3-compatible store and controllable fake vLLM. Add seeded fixture generation, migration/RLS role runners, process-kill/network/drop/clock injection and cleanup scoped to test namespace. Map original test IDs to namespaced cases; prove nested console tests and cross-module suites are discovered.
 
@@ -98,7 +98,7 @@ Existing benchmark has no usable auth configuration and repeats one clip. Warm-c
 
 ### E4 — Single-GPU release evidence and launch decision
 
-**Start after:** E3A, F2P. **Integrate after:** I3. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** E3A, F2P. **Integrate after:** I3. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Run assigned live corpus/latency/overhead/recovery tests on pinned deployment, document actual pilot envelope and unresolved SLO gaps. Validate GPU parity, journal RTT/batching and resource budgets; separate dry-run judge from authorized live judge evidence. Publish pass/fail/conditional decision per gate with raw evidence and rollback trigger.
 
@@ -129,3 +129,7 @@ Implement one eligible task from research/plan/handoffs/E-verification.md in an 
 ## Verification log
 
 - 2026-09-20: Authored from reviewed repository/specs and accepted decisions. All tasks remain planned; test IDs are required future evidence.
+
+## Current backend-first evidence ownership
+
+E3B is the no-frontend actual-service integration gate. E1B extends the already integrated corpus/client with measured full-path Marlin profiling; M4/W4 tune from that evidence. E4B validates final combined endpoint correctness, quality/parity, load, soak, recovery and accounting. E3A and E4 later add browser/signup/usage release deltas and reuse backend artifacts with affected-check reruns. See [the new detailed briefs](../18-marlin-backend-first.md); no synthetic endpoint benchmark establishes actual model performance.

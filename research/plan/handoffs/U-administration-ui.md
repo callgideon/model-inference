@@ -1,6 +1,6 @@
 # U — Usage, balances, keys and administration UI
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset.
 
@@ -62,7 +62,7 @@ Promotional balance is not cash revenue and held funds are not spendable. Do not
 
 **Start after:** F2. **Integrate after:** C0, D5.
 
-**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `U1R`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `U1R`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Build usage filters/pagination, token/cost/outcome breakdown and balance total/reserved/available with explicit promotional labels. Explain pending reconciliation and platform-absorbed failures without showing estimated tokens as authoritative charges. Build from C fixtures first.
 
@@ -74,7 +74,7 @@ Promotional balance is not cash revenue and held funds are not spendable. Do not
 
 ### U2 — Keys and privacy/settings controls
 
-**Start after:** U1R, F2P. **Integrate after:** C3A. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** U1R, F2P. **Integrate after:** C3A. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Preserve create-once secret presentation and revoke flows; add allowed model/limit controls only to authorized roles. Add trace mode, capped retention and separate evaluation consent settings with consequences explained. Handle save errors, stale form state and keyboard navigation; no org-switcher.
 
@@ -86,7 +86,7 @@ Promotional balance is not cash revenue and held funds are not spendable. Do not
 
 ### U3 — Operator grants, suspension and pilot operations
 
-**Start after:** U1R, F2P. **Integrate after:** C3A. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** U1R, F2P. **Integrate after:** C3A. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Build operator-only grant form with required reason and replay-safe submit ID, ledger audit pagination, org suspension/entitlement controls and reconciliation indicators. Keep customer billing separate from operator actions; prevent double-click grants visually and server-side.
 

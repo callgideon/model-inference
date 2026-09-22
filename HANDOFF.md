@@ -1,6 +1,8 @@
 # Handoff — product amendment 2026-09-21; historical operations below
 
-**Latest handoff:** [ready-to-copy implementation prompt](research/plan/16-fresh-session-handoff.md), [complete plan](research/plan/12-complete-build-plan.md) and [pending work](research/plan/15-pending-inputs.md). The immediate objective is launching `apps/app` for Marlin2B inference supporting SOP verification over large robotics datasets. Lab and later extensions have detailed follow-on plans; do not dispatch them ahead of the accepted App candidate.
+**2026-09-22 priority:** complete the robust, measured Marlin2B inference backend first, then the consumer App, then Lab. [Backend execution plan](research/plan/18-marlin-backend-first.md) and [fresh-session prompt](research/plan/16-fresh-session-handoff.md) supersede the earlier App-first dispatch order.
+
+**Latest handoff:** [ready-to-copy implementation prompt](research/plan/16-fresh-session-handoff.md), [complete plan](research/plan/12-complete-build-plan.md) and [pending work](research/plan/15-pending-inputs.md). The immediate objective is completing the Marlin2B inference backend supporting SOP verification over large robotics datasets; `apps/app` follows. Lab and later extensions have detailed follow-on plans; do not dispatch them ahead of the accepted App candidate.
 
 **Start with [the wave-2 audit](research/plan/10-wave2-platform-audit.md), [two-platform architecture](research/platforms/README.md) and [the continuation handoff](research/plan/PLATFORM-SPLIT-HANDOFF.md).** Main was pulled at `271add9`; all eleven wave-2 modules are preserved. F2R/F2P and additive D1R revisions precede product-v2 integration. Manifest v4 preserves original completion statuses separately from amendment requirements. Wave 3 feature implementation has not started.
 
@@ -8,7 +10,7 @@ Read `CLAUDE.md` first, then the new package and your assigned module. The packa
 
 ## 0. Current objective and accepted changes
 
-Deliver `apps/app` as the **free consumer inference platform**: public verified signup, 10,000 promotional credits once per individual user, catalog, API keys, exact reservations/settlement, durable inference and own usage. Build `apps/lab` separately for provider models, dev/prod endpoints, authorized traces, evaluation and later data/improvement workflows. Shared runtime remains durable; App launch does not wait for Lab judge or provider trace UI. Payments/OpenRouter remain later decisions; fleet follows measured pilot evidence.
+First complete the robust optimized endpoint using [backend-first gates](research/plan/18-marlin-backend-first.md). Then deliver `apps/app` as the **free consumer inference platform**: public verified signup, 10,000 promotional credits once per individual user, catalog, API keys, exact reservations/settlement, durable inference and own usage. Build `apps/lab` separately for provider models, dev/prod endpoints, authorized traces, evaluation and later data/improvement workflows. Shared runtime remains durable; App launch does not wait for Lab judge or provider trace UI. Payments/OpenRouter remain later decisions; fleet follows measured pilot evidence.
 
 Requests remain synchronous unless async is explicitly requested. PostgreSQL owns acceptance, leases, stream journal and accounting; Valkey is rebuildable scheduling state. Inference continues when optional trace capture drops, with loss metrics and fsync-defined durability. Retention is24h results,7d processing cache, up to90d full trace content and13mo metadata. New CREDIT grants are unique by individual user, not organization. Historical USD balances are preserved separately; no implicit conversion or retrocharge. See [credit policy](research/platforms/02-credits.md).
 

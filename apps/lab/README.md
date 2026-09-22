@@ -1,5 +1,7 @@
 # Provider Lab (`apps/lab`)
 
+**2026-09-22 sequence:** [Marlin inference backend first](../../research/plan/18-marlin-backend-first.md), consumer App next, provider Lab afterward. The backend has independent headless deployment/recovery/performance gates; frontend feature work is subsequent.
+
 **Sequencing:** consumer Marlin App launch comes first. [Complete plan](../../research/plan/12-complete-build-plan.md), [detailed later Lab packages](../../research/plan/13-lab-improvement-handoffs.md) and [fresh-session handoff](../../research/plan/16-fresh-session-handoff.md) are ready for the next accepted Lab scope.
 
 **Documentation scaffold only. No runnable application, dependencies or deployment has been created yet.**

@@ -1,6 +1,6 @@
 # J — Evaluation workflow and calibration
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. This is Lab scope with explicit Lab budgets and purpose grants, not a consumer launch dependency.
 
@@ -56,7 +56,7 @@ Worst-case reservation includes reasoning/output limits, not average estimate. S
 
 **Start after:** F2. **Integrate after:** none beyond the start/code gate.
 
-**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `J2`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `J2`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement deterministic eligible sampling over owned consenting full traces, exclusions for missing/expired material, rubric/schema versioning and validated score parsing. Reproduce planned ~50-label stratification (25 uniform/15 failures/10 feedback) without labeling ordinary customer feedback as calibration. Dry-run outputs costs/sample IDs with zero network egress.
 
@@ -68,7 +68,7 @@ Worst-case reservation includes reasoning/output limits, not average estimate. S
 
 ### J2 — Consent/budget coordinated submission and collection
 
-**Start after:** J1, F2P. **Integrate after:** D6J, T2I, L2. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** J1, F2P. **Integrate after:** D6J, T2I, L2. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Recheck current consent and content immediately before egress; reserve versioned worst-case amount including outstanding runs. Persist submit intent, disable unsafe auto retries, record provider ID and poll/collect idempotently. Timeout with unknown ID quarantines reservation; provide explicit evidence-based reconciliation. Bind provider rate/model versions from approved pricing inputs.
 
@@ -80,7 +80,7 @@ Worst-case reservation includes reasoning/output limits, not average estimate. S
 
 ### J3 — Operator calibration and quality report
 
-**Start after:** J2, F2P. **Integrate after:** C3L, V2. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** J2, F2P. **Integrate after:** C3L, V2. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement explicit authorized calibration workflow, agreement analysis, rubric drift/version comparison and report export. Compute planned kappa>=0.6 and rank rho>=0.6 targets only on appropriate labeled pairs with sample sizes/uncertainty; flag insufficient evidence. Publish failure exemplars without leaking other tenants.
 

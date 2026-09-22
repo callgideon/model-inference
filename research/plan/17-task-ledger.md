@@ -2,11 +2,11 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**111 records; 105 active; 6 retired; 89 planned; 11 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**119 records; 113 active; 6 retired; 97 planned; 11 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
-**Current scope:** Marlin SOP inference App first. The App gate closure below is the immediate implementation set; completed prerequisites are retained as evidence. Lab tasks are next milestones after an accepted App candidate, not an automatic fallback when a release input is missing. See [the complete plan](12-complete-build-plan.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt](16-fresh-session-handoff.md).
+**Current scope:** complete the robust and measured Marlin endpoint backend first. The E4B dependency closure is the immediate implementation set; App/browser work follows backend acceptance and Lab follows App. See [backend-first handoffs](18-marlin-backend-first.md), [the full plan](12-complete-build-plan.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt](16-fresh-session-handoff.md).
 
-## App launch gate closure
+## Backend endpoint gate closure — current scope
 
 | ID | Status / owner | Deliverable / brief | Start dependencies | Real integration dependencies |
 |---|---|---|---|---|
@@ -27,31 +27,44 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | W3 | planned / W | [Drain, engine pin and measured concurrency](handoffs/W-worker.md) | W2, F2P | E1, S2M |
 | G2 | planned / G | [Synchronous chat and persistent SSE relay](handoffs/G-gateway.md) | G1R | D5, W2, M2, Q3, I0 |
 | G3 | planned / G | [Explicit jobs, status, cancellation and replay](handoffs/G-gateway.md) | G1R | D5, W2, I0 |
-| U1 | implemented / U | [Usage and promotional balance views](handoffs/U-administration-ui.md) | F2 | C0, D5 |
-| U2 | planned / U | [Keys and privacy/settings controls](handoffs/U-administration-ui.md) | U1R, F2P | C3A |
-| U3 | planned / U | [Operator grants, suspension and pilot operations](handoffs/U-administration-ui.md) | U1R, F2P | C3A |
 | I1 | integrated / I | [Read-only inventory and deploy design](handoffs/I-infrastructure.md) | — | — |
-| I3 | planned / I | [Recovery, alarms and rollback runbooks](handoffs/I-infrastructure.md) | I2A, F2P | E3A |
 | E1 | integrated / E | [Distinct corpus and authenticated benchmark client](handoffs/E-verification.md) | — | — |
-| E2 | implemented / E | [Pinned integration services and fault harness](handoffs/E-verification.md) | E1, F2 | — |
-| E4 | planned / E | [Single-GPU release evidence and launch decision](handoffs/E-verification.md) | E3A, F2P | I3, S2M |
 | S1 | implemented / S | [Reconcile pulled wave-2 baseline and publish product revision audit](09-amendment-workstreams.md) | — | — |
 | A1 | planned / D | [Verified individual signup entitlement and idempotent backfill](09-amendment-workstreams.md) | D1R | D5 |
-| A2 | planned / A | [Consumer signup verification and credited onboarding](09-amendment-workstreams.md) | F2P | A1, C3A |
-| A3 | planned / A | [Published catalog, credit rates and capability-matched examples](09-amendment-workstreams.md) | F2P | D1R, G1R, C0, S2M |
 | G4U | planned / G | [Owned upload HTTP adapter](09-amendment-workstreams.md) | G1R | M3 |
-| C3A | planned / C | [Consumer key/privacy and platform operator actions](09-amendment-workstreams.md) | F2P, C0 | D5 |
-| I2A | planned / I | [Reproducible App and single-GPU runtime deployment](09-amendment-workstreams.md) | I1, F2P | D5, G2, G3, G4U, W3, C3A, U2, U3, A2, A3, C0, I0, D1R |
-| E3A | planned / E | [Consumer failure, security and signup-to-spend integration gate](09-amendment-workstreams.md) | E2, F2P | D5, A1, A2, A3, M3, Q3, W3, G2, G3, G4U, C3A, U2, U3, C0, E2R, I0, D1R |
 | F2R | planned / F | [Close remaining wave-2 contract and verification carryovers](11-wave3-revision-handoffs.md) | S1 | — |
 | F2P | planned / F | [Encode product-v2 CREDIT, identity, serving and permission contracts](11-wave3-revision-handoffs.md) | F2R | — |
 | D1R | planned / D | [Add product-v2 schema without rewriting USD pilot migrations](11-wave3-revision-handoffs.md) | F2P | E2R |
-| C0 | planned / C | [Wire the consumer database query port and real account context](11-wave3-revision-handoffs.md) | F2P | D1R |
 | I0 | planned / I | [Repair installer atomicity and fail-closed startup prerequisite](11-wave3-revision-handoffs.md) | S1, I1 | — |
 | E2R | planned / E | [Repair service harness ownership, role matrix and shared test clock](11-wave3-revision-handoffs.md) | S1 | — |
 | G1R | planned / G | [Revise ingress for consumer and provider endpoint audiences](11-wave3-revision-handoffs.md) | F2P | D1R, D2 |
-| U1R | planned / U | [Adapt consumer usage and balance views to CREDIT and explicit legacy USD](11-wave3-revision-handoffs.md) | F2P, U1 | C0, D5 |
 | S2M | planned / S | [Freeze Marlin SOP inference launch profile](12-complete-build-plan.md) | S1 | — |
+| G6B | planned / G | [Headless endpoint provisioning and operations](18-marlin-backend-first.md) | F2P | D1R, D5, A1, G1R |
+| E3B | planned / E | [Backend-only durability, security and protocol integration gate](18-marlin-backend-first.md) | E2R, F2P | D1R, D5, G1R, G2, G3, G4U, G6B, M3, Q3, W3, I0, S2M |
+| I2B | planned / I | [Reproducible Marlin endpoint deployment independent of frontends](18-marlin-backend-first.md) | I1, F2P | E3B, I0, W3, G6B |
+| I3B | planned / I | [Backend recovery, observability, restore and rollback proof](18-marlin-backend-first.md) | I2B, F2P | E3B |
+| E1B | planned / E | [Measure the end-to-end Marlin baseline and operating envelope](18-marlin-backend-first.md) | E1, S2M, F2P | E3B, I2B, W3 |
+| M4 | planned / M | [Optimize bounded video retrieval, decoding and preparation](18-marlin-backend-first.md) | M2, M3, F2P | E1B, W2 |
+| W4 | planned / W | [Tune Marlin GPU serving and scheduler admission from measured evidence](18-marlin-backend-first.md) | W3, F2P | E1B, M4, Q3 |
+| E4B | planned / E | [Certify the robust and measured Marlin endpoint release candidate](18-marlin-backend-first.md) | E3B, F2P | I3B, E1B, M4, W4 |
+
+## App launch additions — after backend acceptance
+
+| ID | Status / owner | Deliverable / brief | Start dependencies | Real integration dependencies |
+|---|---|---|---|---|
+| U1 | implemented / U | [Usage and promotional balance views](handoffs/U-administration-ui.md) | F2 | C0, D5 |
+| U2 | planned / U | [Keys and privacy/settings controls](handoffs/U-administration-ui.md) | U1R, F2P | C3A |
+| U3 | planned / U | [Operator grants, suspension and pilot operations](handoffs/U-administration-ui.md) | U1R, F2P | C3A |
+| I3 | planned / I | [Recovery, alarms and rollback runbooks](handoffs/I-infrastructure.md) | I2A, F2P | E3A, I3B |
+| E2 | implemented / E | [Pinned integration services and fault harness](handoffs/E-verification.md) | E1, F2 | — |
+| E4 | planned / E | [Single-GPU release evidence and launch decision](handoffs/E-verification.md) | E3A, F2P | I3, S2M, E4B |
+| A2 | planned / A | [Consumer signup verification and credited onboarding](09-amendment-workstreams.md) | F2P | A1, C3A |
+| A3 | planned / A | [Published catalog, credit rates and capability-matched examples](09-amendment-workstreams.md) | F2P | D1R, G1R, C0, S2M |
+| C3A | planned / C | [Consumer key/privacy and platform operator actions](09-amendment-workstreams.md) | F2P, C0 | D5 |
+| I2A | planned / I | [Reproducible App and single-GPU runtime deployment](09-amendment-workstreams.md) | I1, F2P | D5, G2, G3, G4U, W3, C3A, U2, U3, A2, A3, C0, I0, D1R, I2B |
+| E3A | planned / E | [Consumer failure, security and signup-to-spend integration gate](09-amendment-workstreams.md) | E2, F2P, E3B | D5, A1, A2, A3, M3, Q3, W3, G2, G3, G4U, C3A, U2, U3, C0, E2R, I0, D1R |
+| C0 | planned / C | [Wire the consumer database query port and real account context](11-wave3-revision-handoffs.md) | F2P | D1R |
+| U1R | planned / U | [Adapt consumer usage and balance views to CREDIT and explicit legacy USD](11-wave3-revision-handoffs.md) | F2P, U1 | C0, D5 |
 
 ## Later core platform work and preserved module baselines
 
@@ -118,7 +131,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | ID | Status / owner | Deliverable / brief | Start dependencies | Real integration dependencies |
 |---|---|---|---|---|
 | G5 | planned / G | [Signed async completion callbacks](handoffs/G-gateway.md) | G3, F2P | D5, M1 |
-| I4 | planned / I | [Separately gated fleet deployment](handoffs/I-infrastructure.md) | I3, E4, F2P | — |
+| I4 | planned / I | [Separately gated fleet deployment](handoffs/I-infrastructure.md) | I3B, E4B, F2P | — |
 | X1 | planned / X | [Specify a bounded live-video workload and trial contract](14-expansion-gates.md) | F2P | — |
 | X2 | planned / X | [Implement and verify the approved video session adapter](14-expansion-gates.md) | X1 | W3, M3, E6L |
 | X3 | planned / X | [Specify a robot/task and inference freshness contract](14-expansion-gates.md) | F2P | — |

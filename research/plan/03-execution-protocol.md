@@ -1,10 +1,12 @@
 # Worktree and integration protocol
 
+**Current priority (2026-09-22):** [Marlin backend first](18-marlin-backend-first.md). E3B/I2B/I3B/E1B/M4/W4/E4B separate endpoint readiness and measured optimization from the later App browser/deployment gates; G6B provides protected headless operations. Use the updated [fresh-session handoff](16-fresh-session-handoff.md) and manifest for dispatch.
+
 ## Session start
 
 First read [the fresh-session handoff](16-fresh-session-handoff.md), [current complete plan](12-complete-build-plan.md) and the wave-2 audit and reconcile any commits after `271add9`. Manifest v4 is authoritative for active task IDs, current paths and separate App/Lab release gates. Existing worktree owners retain their files until a coordinated handback; do not reset their status because this documentation uses `planned`.
 
-Read root CLAUDE and HANDOFF, this package, and the selected module brief. Inspect actual branch/worktree status and newer evidence before coding. The manifest is the planned dependency graph, not a live scheduler. Its current_execution_scope restricts dispatch to App-first work; graph readiness alone does not authorize Lab or conditional extensions. Coordinator records assigned task, owner, base SHA and integration target in an append-only session record under `research/plan/evidence/`; do not have every worker rewrite the shared manifest.
+Read root CLAUDE and HANDOFF, this package, and the selected module brief. Inspect actual branch/worktree status and newer evidence before coding. The manifest is the planned dependency graph, not a live scheduler. Its current_execution_scope restricts dispatch to backend-first work; graph readiness alone does not authorize Lab or conditional extensions. Coordinator records assigned task, owner, base SHA and integration target in an append-only session record under `research/plan/evidence/`; do not have every worker rewrite the shared manifest.
 
 Use an isolated checkout of the coordinator's **committed integration SHA**. Do not branch from uncommitted foundation changes. Example after selecting task D1 and a verified SHA:
 
@@ -31,9 +33,9 @@ Each task is one reviewable unit. Start dependencies need committed/reviewed cod
 
 ## Merge lanes
 
-- Critical execution: F2R -> F2P -> D1R/D2 -> D3/D4/D5 + M/Q/W -> G2 composition -> E3A. I0 is a cutover prerequisite. C0 connects App reporting independently.
+- Current backend execution: F2R -> F2P -> D1R/D2 -> D3/D4/D5 + M/Q/W/G6B/A1 -> G2/G3 -> E3B. I0 is mandatory. I2B/I3B/E1B then M4/W4/E4B establish measured readiness without App.
 - Provider lane: F2P -> L1/L2/L3/L4; V1M moves the existing explorer, then C2/T/D6F/D6J/J/V2/V3 feed E5L. Trace loss must not block execution lane tests.
-- Deployment: I1 and E1 early; I2 after pilot runtime integration; I3 recovery; E4 pilot decision; I4 fleet only after E4. Infrastructure code can be drafted against contracts earlier only where the manifest permits it.
+- Backend deployment: I2B after E3B, I3B recovery, E1B baseline, E4B final candidate. Conditional I4 fleet follows backend evidence, not UI. App I2A/I3/E4 later reuse those artifacts and add frontend checks. Infrastructure drafting follows manifest start gates.
 
 UI sessions build with contract fixtures while C implements services. They may not create alternate server actions to unblock themselves. J uses coordinator fakes until D6; it may not create separate budget tables. Q never invents a second durable job store. G never duplicates financial settlement in route handlers.
 

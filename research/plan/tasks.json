@@ -1,7 +1,7 @@
 {
   "schema_version": 4,
   "baseline_commit": "1db98e9",
-  "status": "complete two-platform implementation package; wave-2 baseline preserved; product-v2 revisions and Lab improvement/rollout additions planned, not implemented",
+  "status": "backend-first Marlin endpoint plan; wave-2/audit evidence preserved; endpoint completion and optimization are planned, not implemented",
   "dependency_semantics": {
     "start_dependencies": "Code-ready dependencies: committed and reviewed interfaces/fixtures must exist before coding; implemented baseline modules may supply code without live integration. New shared revision gates F2R/F2P/D1R require their acceptance evidence before consumers start. A dirty coordinator tree is never a worktree base.",
     "integration_dependencies": "Must have real adapter evidence before dependent task is integrated. Code-ready fake implementations satisfy only start dependencies. Baseline integrated status never certifies a later product revision.",
@@ -68,7 +68,8 @@
         "apps/infrx-api/infrx/gateway/routes/",
         "apps/infrx-api/infrx/auth/",
         "apps/infrx-api/tests/g/",
-        "apps/infrx-api/client_example.py"
+        "apps/infrx-api/client_example.py",
+        "apps/infrx-api/infrx/operations/ (G6B headless tooling; shared database mutations remain D-owned)"
       ]
     },
     {
@@ -1328,7 +1329,8 @@
         "F2P"
       ],
       "integration_dependencies": [
-        "E3A"
+        "E3A",
+        "I3B"
       ],
       "test_ids": [
         "OPS-RECOVER",
@@ -1340,7 +1342,7 @@
       "disposition": "modify",
       "product": "shared",
       "milestone": "APP-M2",
-      "amendment": "Consumer recovery gate depends on E3A; Lab recovery is separate and conditional services tested if enabled.",
+      "amendment": "Reuse backend recovery from I3B; add App/auth/consumer-flow recovery and changed integration checks.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core"
@@ -1349,8 +1351,8 @@
       "id": "I4",
       "title": "Separately gated fleet deployment",
       "start_dependencies": [
-        "I3",
-        "E4",
+        "I3B",
+        "E4B",
         "F2P"
       ],
       "integration_dependencies": [],
@@ -1368,7 +1370,7 @@
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "conditional",
-      "activation": "Measured E4 pilot envelope demonstrates fleet need, with capacity/topology design and allocated staging resources; no automatic purchases."
+      "activation": "Measured E4B endpoint capacity/recovery or an explicit availability target demonstrates fleet need, with allocated topology/resources; independent of App UI. No automatic purchases."
     },
     {
       "id": "E1",
@@ -1486,7 +1488,8 @@
       ],
       "integration_dependencies": [
         "I3",
-        "S2M"
+        "S2M",
+        "E4B"
       ],
       "test_ids": [
         "PERF-PILOT",
@@ -1501,7 +1504,7 @@
       "disposition": "modify",
       "product": "app",
       "milestone": "APP-M2",
-      "amendment": "Consumer pilot includes verified signup/grant/rates and usage; judge and provider UI are not prerequisites.",
+      "amendment": "Reuse certified E4B backend and add consumer signup/key/catalog/usage release evidence; rerun backend for changed deployment/config only.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
       "execution_class": "core"
@@ -1528,7 +1531,7 @@
       "id": "A1",
       "title": "Verified individual signup entitlement and idempotent backfill",
       "track": "D",
-      "product": "app",
+      "product": "shared",
       "milestone": "APP-M1",
       "start_dependencies": [
         "D1R"
@@ -1545,7 +1548,8 @@
       "status": "planned",
       "disposition": "new",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "amendment": "Database-owned individual entitlement is reusable by operated endpoint provisioning and later public signup; no frontend requirement. Preserve unique grant/backfill invariants."
     },
     {
       "id": "A2",
@@ -1951,7 +1955,8 @@
         "A3",
         "C0",
         "I0",
-        "D1R"
+        "D1R",
+        "I2B"
       ],
       "test_ids": [
         "OPS-RECOVER",
@@ -1963,7 +1968,8 @@
       "disposition": "split-successor",
       "supersedes_part_of": "I2",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "amendment": "Reuse the independently deployed I2B endpoint; this task adds App hosting, auth callbacks/signup and browser journey. Do not duplicate runtime infrastructure."
     },
     {
       "id": "I2L",
@@ -2001,7 +2007,8 @@
       "milestone": "APP-M1",
       "start_dependencies": [
         "E2",
-        "F2P"
+        "F2P",
+        "E3B"
       ],
       "integration_dependencies": [
         "D5",
@@ -2046,7 +2053,8 @@
       "disposition": "split-successor",
       "supersedes_part_of": "E3",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "amendment": "Reuse E3B backend failure/security evidence, add full signup/console journey; rerun impacted backend cases on merged tree."
     },
     {
       "id": "E3L",
@@ -3489,8 +3497,8 @@
       "id": "S2M",
       "title": "Freeze Marlin SOP inference launch profile",
       "track": "S",
-      "product": "app",
-      "milestone": "APP-M0",
+      "product": "shared",
+      "milestone": "BACKEND-M0",
       "status": "planned",
       "disposition": "complete-plan-addition",
       "execution_class": "core",
@@ -3513,12 +3521,344 @@
       ],
       "acceptance": "A3 docs and W3/E4 can test the actual supported Marlin endpoint contract. Large dataset means many bounded inputs using explicit async as needed, not unlimited videos or a new batch/training product. Unknown task-specific SOP schema/quality thresholds do not prevent launching an honestly documented inference API, but prevent SOP accuracy claims.",
       "failure_oracle": "Reject unsupported state/action inputs, over-limit media and advertised unsupported structured output/streaming. Resume sample dataset inference after interruption without duplicate accepted jobs or hidden failures."
+    },
+    {
+      "id": "G6B",
+      "title": "Headless endpoint provisioning and operations",
+      "track": "G",
+      "product": "shared",
+      "milestone": "BACKEND-M1",
+      "status": "planned",
+      "disposition": "backend-first-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "D1R",
+        "D5",
+        "A1",
+        "G1R"
+      ],
+      "test_ids": [
+        "API-OPS",
+        "API-AUTH",
+        "CREDIT-IDENTITY",
+        "CREDIT-RATE"
+      ],
+      "handoff": "18-marlin-backend-first.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/operations/ (proposed)",
+        "apps/infrx-api/tests/g/",
+        "apps/infrx-api/client_example.py (coordinate with G owner)"
+      ],
+      "implementation_slices": [
+        "G6B.a: Build an operator-only CLI or narrow service adapter over shared auth/state for existing verified consumer identities, personal wallet binding, scoped key issue/revoke/rotate and suspension. Reuse A1/D5 for grants and audited adjustments; never mint credits directly in a script.",
+        "G6B.b: Publish the pinned Marlin deployment/capability/rate records through protected operations; inspect own usage/holds and durable jobs, request cancellation and reconciliation with audit records. D owns any needed database mutations.",
+        "G6B.c: Add a headless quickstart and per-item large-dataset client recipe with stable idempotency, bounded concurrency, upload/poll/resume and explicit failures. Secrets come from environment/secure input, are revealed once where needed and never enter argv/logs."
+      ],
+      "acceptance": "A provisioned client can obtain scoped credentials, call the endpoint and reconcile its usage with both Next.js applications stopped. Preserve the individual 10,000-credit policy and historical USD. Public signup is not needed for this operated endpoint release; credentials still use the real auth/tenant model.",
+      "failure_oracle": "Foreign tenant, forged operator, revoked key, replayed adjustment/grant, unpriced/private deployment and stale rate are denied or deduplicated. No production demo credentials, direct table balance edits or unmetered fallback.",
+      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+    },
+    {
+      "id": "E3B",
+      "title": "Backend-only durability, security and protocol integration gate",
+      "track": "E",
+      "product": "shared",
+      "milestone": "BACKEND-M1",
+      "status": "planned",
+      "disposition": "backend-first-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "E2R",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "D1R",
+        "D5",
+        "G1R",
+        "G2",
+        "G3",
+        "G4U",
+        "G6B",
+        "M3",
+        "Q3",
+        "W3",
+        "I0",
+        "S2M"
+      ],
+      "test_ids": [
+        "BACKEND-JOURNEY",
+        "DUR-ADMIT",
+        "DUR-FENCE",
+        "DUR-OUTPUT",
+        "DUR-SETTLE",
+        "DUR-CAP",
+        "DUR-OUTBOX",
+        "DUR-RLS",
+        "MEDIA-SEC",
+        "API-MODES",
+        "API-STREAM",
+        "API-OPS",
+        "CREDIT-SPEND"
+      ],
+      "handoff": "18-marlin-backend-first.md",
+      "owned_paths": [
+        "tests/integration/backend/ (proposed)",
+        "research/plan/evidence/e/"
+      ],
+      "implementation_slices": [
+        "E3B.a: Compose actual PostgreSQL/PostgREST, object storage and the selected queue mode with controlled engine; provision two real tenants/keys through G6B and run URL/upload/text/video supported sync/SSE and explicit async journeys with no App/Lab process.",
+        "E3B.b: Exercise acceptance/preparation/dispatch/output/settlement crash boundaries, retry/idempotency, stale leases, revocation, malformed media, disconnect/backpressure, cancellation, saturation and queue rebuild; assert durable rows and accounting conservation.",
+        "E3B.c: Run intentional defect detection and merged-tree checks; publish API conformance fixtures, required telemetry and unresolved environment-only cases. If capture/callbacks are enabled, add their feature suites; off is a valid initial configuration."
+      ],
+      "acceptance": "BACKEND-LOCAL passes on actual local services independently of signup/catalog/usage UI, Lab, ClickHouse content projections or judge. Every accepted job has one durable identity and terminal/reconciliation path; invalid/overloaded calls cannot leak capacity, holds or unauthorized content.",
+      "failure_oracle": "Prove tests fail for missing durable acceptance, stale append, duplicate settlement, foreign result access and forced fallback to legacy unmetered ingress. Missing Docker/services is pending, not a skipped successful gate.",
+      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+    },
+    {
+      "id": "I2B",
+      "title": "Reproducible Marlin endpoint deployment independent of frontends",
+      "track": "I",
+      "product": "shared",
+      "milestone": "BACKEND-M2",
+      "status": "planned",
+      "disposition": "backend-first-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "I1",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "E3B",
+        "I0",
+        "W3",
+        "G6B"
+      ],
+      "test_ids": [
+        "BACKEND-DEPLOY",
+        "DEPLOY-FAILCLOSED",
+        "OPS-RECOVER"
+      ],
+      "handoff": "18-marlin-backend-first.md",
+      "owned_paths": [
+        "infra/ backend deployment (exclude T-owned ClickHouse)",
+        "apps/infrx-api/deploy/",
+        "research/plan/evidence/i/"
+      ],
+      "implementation_slices": [
+        "I2B.a: Package gateway, preparation/worker, selected queue mode and durable services with pinned image/model/processor, config schema, least-privilege identities, resource/disk budgets and startup/readiness rules.",
+        "I2B.b: Provide deploy/preflight/migrate/drain/rollback scripts and local rehearsal; configure TLS/ingress, private engine, protected metrics and names-only secret references. Reuse I0 atomic installation and D-owned additive migrations.",
+        "I2B.c: On an allocated staging/GPU target, deploy the headless endpoint and prove authenticated external calls, internal-engine isolation, owned uploads/results and observed accounting with App/Lab absent; record precise SHA/config/region and legacy-account transition."
+      ],
+      "acceptance": "No Vercel app, browser callback or signup email dependency. The endpoint is reproducibly deployable and has independently observable health/readiness. Actual target application requires allocated scope/resources; local script tests alone are implemented, not hosted integration.",
+      "failure_oracle": "Partial secret/config/migration failure cannot restart into an unsafe state or expose the raw engine. Public health is sanitized; expired/revoked credentials and blocked URLs fail on the deployed path.",
+      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+    },
+    {
+      "id": "I3B",
+      "title": "Backend recovery, observability, restore and rollback proof",
+      "track": "I",
+      "product": "shared",
+      "milestone": "BACKEND-M2",
+      "status": "planned",
+      "disposition": "backend-first-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "I2B",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "E3B"
+      ],
+      "test_ids": [
+        "OPS-RECOVER",
+        "BACKEND-OBSERVE",
+        "DUR-OUTBOX"
+      ],
+      "handoff": "18-marlin-backend-first.md",
+      "owned_paths": [
+        "infra/ backend metrics/alerts/runbooks",
+        "apps/infrx-api/deploy/",
+        "research/plan/evidence/i/"
+      ],
+      "implementation_slices": [
+        "I3B.a: Publish operational metrics for preparation/queue/prefill/decode/journal/settlement phases, CPU/GPU/memory/disk, saturation/rejections, accepted outcomes, lease loss and reconciliation; define sanitized dashboards/alerts without customer payloads.",
+        "I3B.b: Drill gateway/worker/engine/host restart, DB and object-store interruption, queue-index loss, backup restore, disk exhaustion, drain and rollout rollback; reconcile accepted jobs, pins, holds and terminal usage after each.",
+        "I3B.c: Record measured recovery windows, durability boundaries, runbooks and alert delivery. Test compatibility during additive migration and rollback; use maintenance refusal when no safe metered runtime exists."
+      ],
+      "acceptance": "Observed recovery and accepted-job/accounting invariants are evidenced independently of the App. Single-GPU outage behavior is explicit: automatic process recovery is not multi-host high availability. Alerts and recovery tools are operator-facing backend requirements.",
+      "failure_oracle": "Inject node/process loss and storage/network faults; no silent accepted-job loss within declared durable boundaries, duplicate charge, leaked hold or unsafe downgrade. Backups must be restored and checked, not merely listed.",
+      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+    },
+    {
+      "id": "E1B",
+      "title": "Measure the end-to-end Marlin baseline and operating envelope",
+      "track": "E",
+      "product": "shared",
+      "milestone": "BACKEND-M2",
+      "status": "planned",
+      "disposition": "backend-first-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "E1",
+        "S2M",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "E3B",
+        "I2B",
+        "W3"
+      ],
+      "test_ids": [
+        "PERF-ENVELOPE",
+        "MARLIN-SOP",
+        "MEDIA-PARITY"
+      ],
+      "handoff": "18-marlin-backend-first.md",
+      "owned_paths": [
+        "models/marlin2b/bench.py",
+        "models/marlin2b/results/ (new evidence only)",
+        "tests/integration/backend/performance/ (proposed)"
+      ],
+      "implementation_slices": [
+        "E1B.a: Extend the existing E1 corpus/client only where needed to cover clip duration/resolution/codec/frame-count/output-length distributions, upload/URL paths, cold/warm preparation and mixed tenants; freeze profile/seed/reference and predeclare latency/error/quality/cost acceptance before tuning.",
+        "E1B.b: Measure direct engine and full gateway on identical pinned input/processor semantics; capture retrieval/decode/preparation, queue, prefill/TTFT, decode, journal/DB, persistence and settlement time alongside CPU/GPU/memory/I/O.",
+        "E1B.c: Run open-loop sustained and burst traffic, concurrency/rate sweeps, cancellation and long-duration stability; include rejects/timeouts/failures in denominators. Publish raw observations, confidence/sample sufficiency, bottlenecks and honest recommended capacity limits."
+      ],
+      "acceptance": "An actual GPU baseline and bounded serving envelope exist before M4/W4 performance claims. Report successful videos per second or video-seconds processed per second together with clip/frame/output profile, token metrics, p50/p95 and supported tails, cost per successful unit and full service costs; CREDIT is not USD.",
+      "failure_oracle": "Repeated single-clip/warm-cache-only results, undersampled p99, hidden rejections, queue growth, rising memory or changed preprocessing invalidate claims. Missing SOP labels prevents accuracy certification; processor/output parity still has to be measured.",
+      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+    },
+    {
+      "id": "M4",
+      "title": "Optimize bounded video retrieval, decoding and preparation",
+      "track": "M",
+      "product": "shared",
+      "milestone": "BACKEND-M3",
+      "status": "planned",
+      "disposition": "backend-first-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "M2",
+        "M3",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "E1B",
+        "W2"
+      ],
+      "test_ids": [
+        "MEDIA-OPT",
+        "MEDIA-SEC",
+        "MEDIA-PARITY",
+        "PERF-ENVELOPE"
+      ],
+      "handoff": "18-marlin-backend-first.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/media/",
+        "apps/infrx-api/tests/m/"
+      ],
+      "implementation_slices": [
+        "M4.a: Profile the E1B bottleneck; reduce duplicate fetch/decode/copy work and tune bounded preprocessing concurrency/prefetch/materialization against actual CPU, RAM, disk and GPU transfer limits.",
+        "M4.b: Reuse the existing versioned tenant-scoped preprocessing cache only within its source/expiry semantics; validate media/processor identity and garbage collection under simultaneous jobs. Do not introduce response caching or cross-tenant content reuse.",
+        "M4.c: Run controlled before/after cold/warm and adverse-media trials, correctness/security/parity tests and load/fault cases; ship only supported improvements, or retain baseline with evidence that proposed changes failed the criteria."
+      ],
+      "acceptance": "Published settings improve a measured bottleneck or are explicitly rejected, with raw evidence. Frame sampling/resolution/timestamps/normalization changes are material serving changes requiring a separately versioned quality check; they cannot masquerade as lossless implementation tuning.",
+      "failure_oracle": "Cache aliasing, reordered/time-shifted frames, cross-tenant reuse, decompression pressure, duplicate requests, expired content and cancellation are tested. Increased throughput with worse required quality/latency or unbounded memory is not a pass.",
+      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+    },
+    {
+      "id": "W4",
+      "title": "Tune Marlin GPU serving and scheduler admission from measured evidence",
+      "track": "W",
+      "product": "shared",
+      "milestone": "BACKEND-M3",
+      "status": "planned",
+      "disposition": "backend-first-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "W3",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "E1B",
+        "M4",
+        "Q3"
+      ],
+      "test_ids": [
+        "ENGINE-OPT",
+        "PERF-ENVELOPE",
+        "MEDIA-PARITY",
+        "OPS-RECOVER"
+      ],
+      "handoff": "18-marlin-backend-first.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/worker/",
+        "apps/infrx-api/tests/w/",
+        "models/marlin2b/serve.sh",
+        "Scheduler/config changes via Q/coordinator"
+      ],
+      "implementation_slices": [
+        "W4.a: Use E1B phase/resource evidence to choose a bounded experiment matrix for engine batch/concurrency/token/KV-memory limits, context bounds, scheduling/admission and other capabilities actually supported by the pinned engine; verify available flags in its source/docs before use.",
+        "W4.b: Compare one controlled change at a time under mixed clips/output lengths and tenants; coordinate Q/config changes rather than building a second scheduler. Keep raw/visible output, usage, cancellation, fencing and journal ordering conformance intact.",
+        "W4.c: Run sustained/burst/cold/recovery trials on the chosen candidate and paired baseline, attach quality/parity and cost/tail evidence, then freeze the selected reproducible runtime profile and overload limits with rollback."
+      ],
+      "acceptance": "Optimized means measured settings on an identified GPU/model/workload satisfying predeclared correctness/quality/latency/error/resource constraints, not a promise of global optimality. Quantization, pruning, speculative methods or kernel rewrites are follow-on variant experiments unless baseline evidence justifies and separately validates them.",
+      "failure_oracle": "OOM, growing KV/host memory, short-job starvation, cancellation failure, output/usage drift, severe tail latency or overload masking disqualify a candidate. No maximum-throughput setting is shipped solely from token/s on identical cached prompts.",
+      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
+    },
+    {
+      "id": "E4B",
+      "title": "Certify the robust and measured Marlin endpoint release candidate",
+      "track": "E",
+      "product": "shared",
+      "milestone": "BACKEND-M3",
+      "status": "planned",
+      "disposition": "backend-first-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "E3B",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "I3B",
+        "E1B",
+        "M4",
+        "W4"
+      ],
+      "test_ids": [
+        "BACKEND-JOURNEY",
+        "BACKEND-DEPLOY",
+        "BACKEND-OBSERVE",
+        "PERF-ENVELOPE",
+        "ENGINE-OPT",
+        "MEDIA-OPT",
+        "OPS-RECOVER",
+        "MARLIN-SOP"
+      ],
+      "handoff": "18-marlin-backend-first.md",
+      "owned_paths": [
+        "tests/integration/backend/",
+        "models/marlin2b/results/ (new evidence only)",
+        "research/plan/evidence/e/"
+      ],
+      "implementation_slices": [
+        "E4B.a: Re-run the backend protocol/security/durability suite and actual Marlin corpus at the final combined deployment/config; execute the large-dataset client recipe with interruption/resume and exact usage reconciliation.",
+        "E4B.b: Run the declared load envelope, soak, overload and recovery matrix with final M4/W4 settings, actual media/object/DB network placement and App/Lab stopped; reject any optimization that invalidates earlier evidence.",
+        "E4B.c: Produce a release decision with SHA/image/artifact/config hashes, measured limits/SLOs/cost/quality coverage, remaining inputs, failure/rollback triggers and operator runbook. Deliver headless request examples and endpoint capability docs."
+      ],
+      "acceptance": "BACKEND-READY means a provisioned external client can use the real metered Marlin endpoint reliably within a measured envelope and operators can detect/recover failures. It requires allocated GPU/staging proof; software-only tests cannot close this gate. Public cutover is a separately recorded authorized action. App work consumes this certified backend next.",
+      "failure_oracle": "Any missing real-service/model evidence, unresolved security/accounting defect, untested restore, uncontrolled resource growth or unsupported quality claim leaves the appropriate gate pending with a named owner; do not declare a vaguely super-robust endpoint.",
+      "slice_sizing": "Target 2\u20138 hour review slices; split larger units before assignment while preserving parent acceptance."
     }
   ],
   "product_revision": "2026-09-21-two-platforms-individual-grant",
   "implementation_baseline_commit": "271add946771ddc4efc3cbc2044758443080759b",
   "authority": [
     "../platforms/README.md",
+    "18-marlin-backend-first.md",
     "12-complete-build-plan.md",
     "15-pending-inputs.md",
     "16-fresh-session-handoff.md",
@@ -3531,6 +3871,18 @@
   ],
   "status_semantics": "Baseline integrated/implemented records describe the original v1 evidence, not product-v2 compatibility. amendment_status and revision_tasks record outstanding work. S1 audit is implemented and prepared for independent review; no deployment is implied.",
   "release_gates": {
+    "BACKEND-LOCAL": {
+      "requires": [
+        "E3B"
+      ],
+      "conditional": "Actual local DB/object/queue/auth adapters with controlled engine, headless client, no Next.js App/Lab dependency; not real model/hosted/performance proof."
+    },
+    "BACKEND-READY": {
+      "requires": [
+        "E4B"
+      ],
+      "conditional": "Allocated real GPU/staging target, exact pinned model/runtime/config, measured operating envelope and quality parity, final combined faults/soak/restore evidence, approved rates and account transition where applicable. Public cutover remains explicit."
+    },
     "APP-LOCAL": {
       "requires": [
         "E3A"
@@ -3577,6 +3929,7 @@
     },
     "COMPLETE-LOCAL": {
       "requires": [
+        "E3B",
         "E3A",
         "E3L",
         "E5L",
@@ -3614,15 +3967,17 @@
   ],
   "audit_commit": "07dfb64",
   "delivery_scopes": {
-    "core": "Existing active implementation tasks plus new F3/D7-D9/N/H/B/P/R/I5-I7/E6L-E8L. G5 callbacks and I4 fleet are conditional. Complete local product journeys and enabled integrations; actual deployment/paid/model-quality claims require their separate evidence.",
+    "core": "Current priority: E4B backend closure including durable runtime, headless identity/keys/registry/rates/accounting, operated deployment/recovery and measured M4/W4 optimization. Existing App and Lab core plans remain sequenced follow-ons. Conditional/deferred expansion rules are unchanged.",
     "conditional": "G5 optional callbacks, I4 fleet, X1-X6 specialized workloads/hardware. Activation conditions must be satisfied before implementation/enablement; missing inputs cannot be silently defaulted.",
     "deferred": "Consumer payments/pooling, payouts, arbitrary provider code execution, fully managed training/RL infrastructure, response caching, OpenRouter, speech. No task is implicitly authorized by the words complete platform."
   },
   "current_execution_scope": {
-    "id": "APP-FIRST-MARLIN-SOP",
-    "objective": "Launch apps/app for Marlin2B inference, serving the SOP-verification use case over large robotics datasets. Lab plans are subsequent implementation milestones.",
-    "dispatch_now": "S1 current-HEAD review, F2R, I0, E2R and S2M; then F2P and App closure only.",
-    "dispatch_later": "Lab M0-M4 after the App launch candidate is accepted by the coordinator/user; no diversion into dataset/training/UI or modality extensions during App-first work. External launch blockers permit App hardening and release preparation, not automatic scope expansion.",
-    "terminology": "The user describes the Marlin workload in a VLA context. Verify actual input/output capabilities; do not infer robot action generation, closed-loop actuation or native live input from that context."
+    "id": "BACKEND-FIRST-MARLIN",
+    "objective": "Complete robust, measured and optimized Marlin2B inference through a headless authenticated endpoint for SOP verification over large robotics datasets; then launch the consumer App, then provider Lab.",
+    "dispatch_now": "Review S1/current HEAD; F2R, I0, E2R, S2M in independent lanes; F2P then the E4B dependency closure. Include only backend identity/grant/key/rate/accounting operations needed by real clients; no frontend feature work.",
+    "dispatch_later": "After accepted E4B backend candidate, activate App onboarding/catalog/credits/usage UI and its E3A/I2A/I3/E4 delta gates; Lab follows the App. Missing GPU/staging inputs permit further backend hardening/release preparation, not automatic UI scope expansion.",
+    "robustness": "Durable accepted work, exact accounting, isolated tenants, bounded overload, tested restart/restore/rollback and observable recovery inside a measured serving envelope. Single-GPU recovery does not establish high availability.",
+    "optimization": "Baseline and profile first; controlled media/engine experiments and final combined load/soak/parity proof. No invented latency/throughput target or quality-preserving quantization claim.",
+    "terminology": "SOP verification over robotics data is the application; verify the actual Marlin protocol. Native live-video transport and robot actuation are not inferred."
   }
 }

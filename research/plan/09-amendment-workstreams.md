@@ -1,5 +1,7 @@
 # Implementation briefs for the platform split
 
+**Current priority (2026-09-22):** [Marlin backend first](18-marlin-backend-first.md). E3B/I2B/I3B/E1B/M4/W4/E4B separate endpoint readiness and measured optimization from the later App browser/deployment gates; G6B provides protected headless operations. Use the updated [fresh-session handoff](16-fresh-session-handoff.md) and manifest for dispatch.
+
 **Current scheduling overlay:** [complete plan](12-complete-build-plan.md), manifest v4 and [fresh-session handoff](16-fresh-session-handoff.md). Marlin App launch is the immediate scope; compatible brief details below remain binding. S2M adds the Marlin profile; Lab M2–M4 are now decomposed separately.
 
 Use with [task manifest v3](tasks.json), [impact mapping](08-platform-split.md), [execution protocol](03-execution-protocol.md) and [test oracles](04-verification.md). The original module briefs supply unchanged detailed algorithms. Each task below inherits its track's ownership restrictions. Start dependencies require reviewed code/fixtures; new F2R/F2P/D1R gates require acceptance evidence; additional integration dependencies may be mocked during development but require real evidence before handback.
@@ -157,3 +159,7 @@ Owner: E; test harness after E2, actual dependencies per manifest. Record raw lo
 ## Handback format
 
 Use [evidence template](evidence/README.md). Include old/new task mapping, commit/base SHA, changed paths, contract/schema version, fixtures and exact test output, integration dependencies still missing, rollout/rollback effects, and ownership for follow-up. Do not mark mock-only UI/backend work integrated. Larger Lab roadmap packages require new briefs before sessions claim them as implementation tasks.
+
+## Backend-first extraction and later reuse (2026-09-22)
+
+[Eight new backend briefs](18-marlin-backend-first.md) remove the UI dependency from endpoint readiness. A1 is shared D-owned entitlement and G6B is the protected headless adapter. E3B owns backend service/security/durability proof; E3A adds the later browser/signup journey. I2B owns runtime deployment; I2A adds App deployment/auth callbacks. I3B owns backend recovery/restore; I3 adds consumer-flow recovery. E4B owns final model/runtime/load evidence; E4 adds consumer launch acceptance and reruns backend checks affected by subsequent changes. Reuse artifacts and common scripts, not parallel implementations.

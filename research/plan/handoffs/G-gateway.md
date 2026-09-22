@@ -1,6 +1,6 @@
 # G — Public API and streaming relay
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. G4 is split into G4U/G4F/G4T; consumer upload delivery does not depend on judge or trace export.
 
@@ -59,7 +59,7 @@ Body must be bounded before JSON parse. Increment bounded preparation admission 
 
 **Start after:** F2. **Integrate after:** D2.
 
-**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `G1R`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `G1R`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Mint ingress IDs, enforce intake limits/deadline before parsing, validate content/parameters and authenticate through bounded caches with revocation-safe admission. Remove exception text from public errors/health. Define dev/test-only unauthenticated mode with production startup rejection. Reconcile legacy key mapping for pilot cutover.
 
@@ -71,7 +71,7 @@ Body must be bounded before JSON parse. Increment bounded preparation admission 
 
 ### G2 — Synchronous chat and persistent SSE relay
 
-**Start after:** G1R. **Integrate after:** D5, W2, M2, Q3, I0. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** G1R. **Integrate after:** D5, W2, M2, Q3, I0. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement nonstream wait and accepted SSE relay from committed journal. Keepalive/progress stays distinct from model chunks; handle upstream error before/after headers. Parse reasoning markers across arbitrary chunk boundaries. On sync disconnect/timeout durably cancel, including generator-never-started paths; never emit 202 after SSE starts.
 
@@ -83,7 +83,7 @@ Body must be bounded before JSON parse. Increment bounded preparation admission 
 
 ### G3 — Explicit jobs, status, cancellation and replay
 
-**Start after:** G1R. **Integrate after:** D5, W2, I0. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** G1R. **Integrate after:** D5, W2, I0. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement explicit preference and jobs routes, owned opaque handles, idempotency conflict/replay, async observer detach, DELETE cancellation, status/result expiry and event cursor semantics. Update client example with authenticated sync and explicit async flows without embedding credentials.
 
@@ -107,7 +107,7 @@ Body must be bounded before JSON parse. Increment bounded preparation admission 
 
 ### G5 — Signed async completion callbacks
 
-**Start after:** G3, F2P. **Integrate after:** D5, M1. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** G3, F2P. **Integrate after:** D5, M1. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Support optional registered callback destinations for explicit async jobs. Write callback delivery intent in the terminal outbox transaction; deliver outside execution/settlement. Reuse M's pinned public-destination policy on each connection/redirect, bound response bytes/time, sign immutable body plus timestamp/event ID with a versioned per-org secret supplied outside code. Deliver at least once, with stable delivery ID, capped exponential retry (1min, 5min, 30min, 2h, 8h; stop after 24h) and operator-visible dead letter. Never rerun inference on callback failure. Prevent caller-supplied callback headers/credentials from becoming an egress primitive; only registered owned destinations are accepted. Disable redirect following by default. Provide receiver-side signature/replay-window documentation and safe manual redelivery.
 

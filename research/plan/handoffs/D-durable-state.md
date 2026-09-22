@@ -1,6 +1,6 @@
 # D — Durable state and promotional accounting
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. Signup grants are now 10,000 CREDIT once per individual user; preserve historical USD separately. D6 is split into D6F/D6J.
 
@@ -58,7 +58,7 @@ Existing models.limits already exists. Existing HTTP status stays numeric. Broad
 
 **Start after:** F2. **Integrate after:** none beyond the start/code gate.
 
-**Imported baseline status:** `integrated` at wave 2; preserve completed work. Product revision/integration follow-up: `D1R`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `integrated` at wave 2; preserve completed work. Product revision/integration follow-up: `D1R`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Create jobs, attempts/leases, staged refs, capacity reservations, holds, price versions, stream chunks, outbox, idempotency tombstones, feedback and judge coordination tables. Add stable unique keys and state checks/indexes. Preserve historical USD separately; add CREDIT wallets and one-time 10,000 grants unique by individual, with exact decimal arithmetic and migration fixtures. Add role/RLS/column-grant matrix, explicit RPC permissions and service-only mutation boundaries. Reserve migration numbers centrally.
 
@@ -70,7 +70,7 @@ Existing models.limits already exists. Existing HTTP status stays numeric. Broad
 
 ### D2 — Atomic admission, durable preparation and dispatch outbox
 
-**Start after:** D1R. **Integrate after:** none beyond the start/code gate. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** D1R. **Integrate after:** none beyond the start/code gate. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement stage-ref validation, idempotency payload comparison, authorization recheck, stable lock order, admission capacity and maximum hold in one transaction. Include prepare-to-queued transition, both outbox types, expiry/GC and delivery acknowledgment. Test lost acknowledgment and duplicate delivery independently of queue backend.
 
@@ -82,7 +82,7 @@ Existing models.limits already exists. Existing HTTP status stays numeric. Broad
 
 ### D3 — Fenced leases, recovery and cancellation
 
-**Start after:** D2, F2P. **Integrate after:** none beyond the start/code gate. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** D2, F2P. **Integrate after:** none beyond the start/code gate. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement atomic claim/generation increment, DB-clock heartbeat, cancellation and lease reaper. Fence preparation too. Define prepublication retry counter and absolute deadline checks. Expose typed conflicts for stale attempts. Race cancel/complete and recovery/heartbeat under actual PostgreSQL transactions.
 
@@ -94,7 +94,7 @@ Existing models.limits already exists. Existing HTTP status stays numeric. Broad
 
 ### D4 — Persistent stream journal and replay
 
-**Start after:** D3, F2P. **Integrate after:** none beyond the start/code gate. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** D3, F2P. **Integrate after:** none beyond the start/code gate. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement bounded batch append, output-owner marker, generation/sequence IDs, tenant-scoped cursor reads and expiry. Reserve journal capacity at admission using F2 limits; implement explicit gap handling, pruning and usage metrics. Append checks state/generation/lease in the same transaction; commit before any subscriber notification.
 
@@ -106,7 +106,7 @@ Existing models.limits already exists. Existing HTTP status stays numeric. Broad
 
 ### D5 — Terminal transaction, grants and reconciliation
 
-**Start after:** D4, F2P. **Integrate after:** none beyond the start/code gate. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** D4, F2P. **Integrate after:** none beyond the start/code gate. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Complete result-ref validation, outcome/usage insert, fixed-price decimal settlement, hold/capacity release, terminal journal event and outbox atomically. Implement audited idempotent operator grants and summary/ledger reconciliation. Cover platform-free errors, known-use cancellation, unknown-use quarantine and fenced terminal release after 24h; late data internal-only.
 

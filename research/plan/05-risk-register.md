@@ -71,3 +71,13 @@ See [the audit](10-wave2-platform-audit.md) for findings A01–A14 and dispositi
 | Fixed metric hides failures or sequential testing overclaims | Bad model promoted | B2 full denominators/required slices; R2 predeclared analysis, coverage and inconclusive states |
 | Synthetic quality/performance fixture presented as real measurement | False readiness and unsupported hardware claims | Separate software/local/staging/model/hardware evidence in every E gate; R3/X5/X6 pins |
 | Main push implicitly deploys unintegrated work | Consumer regression | Dedicated integration/review branch; release-specific evidence and authorized deployment context |
+
+## Backend-first priority revision (2026-09-22)
+
+| Risk | Consequence | Owner / disposition |
+|---|---|---|
+| Runtime release still depends on App signup/dashboard tasks | Backend-first priority cannot be executed | New E3B/I2B/I3B/E4B gates and G6B headless operations; validator rejects any frontend/Lab dependency in the backend closure |
+| Headless scripts bypass grants/keys/rates/accounting | Temporary path becomes unsafe production infrastructure | G6B uses protected shared D/A1/auth primitives; API-OPS denial/replay/tenant tests |
+| More throughput harms SOP evidence, fairness or tail latency | Faster benchmark but worse supported service | E1B predeclares workload/constraints; M4/W4 controlled comparisons; E4B final combined parity/soak/fault gate |
+| Single-GPU restart presented as high availability | Reliability expectations exceed demonstrated topology | I3B records measured interruption/recovery; P-18 captures availability requirement; I4 remains separately triggered |
+| Optimization work has no bounded stopping criterion | Endless tuning delays usable endpoint | Freeze an operating envelope and experiment matrix; select verified settings or retain baseline with rejected-candidate evidence; separately record future optimizations |

@@ -1,6 +1,6 @@
 # Decisions, assumptions and research context
 
-Updated 2026-09-21. Recommendations below are explicit so later sessions do not mistake them for user-confirmed commercial terms.
+Updated 2026-09-22. Recommendations below are explicit so later sessions do not mistake them for user-confirmed commercial terms.
 
 ## Confirmed by the user
 
@@ -9,7 +9,7 @@ Updated 2026-09-21. Recommendations below are explicit so later sessions do not 
 - **One-time 10,000 promotional credits per individual user.**
 - Provider models/endpoints, input/output configuration, inference analysis, datasets, benchmarking and improvement workflows; OpenAI-style standards where practical.
 - Inference optimization, scaling, throughput, cost and heterogeneous compute are the company's internal business focus. Model optimization may remain an internal service whose outputs are benchmarked as new variants.
-- Latest priority: Marlin2B SOP verification over large robotics datasets; **launch the inference App first**. The user describes a VLA application context; validate actual endpoint modalities/output before advertising action or streaming capability. Lab follows the accepted App candidate. Video/robotics/LLM remain broader directions; speech is deferred.
+- Latest priority: Marlin2B SOP verification over large robotics datasets; **complete the robust and optimized inference backend first**, then launch the inference App. The user describes a VLA application context; validate actual endpoint modalities/output before advertising action or streaming capability. Backend readiness is E3B/E4B; App follows the backend and Lab follows the accepted App candidate. Video/robotics/LLM remain broader directions; speech is deferred.
 - Wave-2 implementation from the other system is now pulled at `271add9`; the repository is audited. Unpushed work, remote worktrees and current hosted state remain unverified. See the wave-2 audit for present versus target behavior.
 
 ## Architecture defaults adopted by this amendment

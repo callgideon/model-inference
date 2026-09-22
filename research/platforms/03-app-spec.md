@@ -1,10 +1,12 @@
 # Platform 1 — Inference App requirements
 
+**Latest sequence (2026-09-22):** finish the [Marlin endpoint backend](../plan/18-marlin-backend-first.md), including recovery and measured optimization; then launch App, then build Lab. Product requirements below are retained. Headless provisioning and backend gates remove the App UI from endpoint readiness.
+
 Location: `apps/app`. The product lets an individual developer obtain a usable model API, manage keys and understand the credits consumed. It is the consumer surface for the shared inference business.
 
 ## Lead workload and launch boundary
 
-Marlin2B SOP verification over large robotics datasets is the current end application. Launch the inference App first. S2M freezes the actual model/processor/input/output contract and a tested finite-video SOP example. Many examples are processed through bounded inputs, stable source/episode identifiers, idempotency and explicit async polling/resume; a general dataset-management or batch-training product is not a launch requirement.
+Marlin2B SOP verification over large robotics datasets is the current end application. Complete the endpoint backend first, then launch this inference App. S2M freezes the actual model/processor/input/output contract and a tested finite-video SOP example. Many examples are processed through bounded inputs, stable source/episode identifiers, idempotency and explicit async polling/resume; a general dataset-management or batch-training product is not a launch requirement.
 
 The user describes the application in a VLA context. Do not advertise robot actions, closed-loop control, arbitrary sensor modalities, strict structured output or native live video unless the actual artifact/adapter demonstrates them. Distinguish endpoint correctness from task accuracy on a labeled SOP benchmark; missing benchmark/rubric inputs block accuracy claims, not a disclosed working inference API.
 

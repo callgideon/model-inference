@@ -1,122 +1,119 @@
-# Handoff — build the Marlin consumer App, then the provider Lab
+# Handoff — complete the Marlin2B inference backend first
 
 ## Session Metadata
 
-Prepared 2026-09-21 in `model-inference`, branch `codex/wave2-platform-audit`. Main implementation baseline: `271add946771ddc4efc3cbc2044758443080759b`. Audited baseline: `07dfb64`. This package is a follow-on documentation commit; use the current committed branch tip containing this file, not an uncommitted tree. Continues [the platform-split handoff](PLATFORM-SPLIT-HANDOFF.md) and supersedes its dispatch scope/prompt with the App-first priority. Historical evidence remains valid only for its recorded SHA/environment.
+Updated 2026-09-22 in `model-inference`, branch `codex/wave2-platform-audit`. Imported implementation main: `271add946771ddc4efc3cbc2044758443080759b`; audit: `07dfb64`; complete App/Lab plan: `2ea562a`. Use the latest committed branch tip containing [the backend-first handoffs](18-marlin-backend-first.md), not the old App-first prompt at `2ea562a` alone. Reconcile newer main/other-session commits before choosing an integration base. This handoff supersedes the previous dispatch order, not its completed evidence or later product scope.
 
 ## Current State Summary
 
-Wave 2 is imported and audited; wave-3 feature implementation has not started here. Five original foundation/data/test/infrastructure tasks are integrated and ten wave-2 modules are implemented under the old v1 contract. S1 audit is implemented pending independent review. There is no composed new runtime or product-v2 CREDIT schema yet. `apps/lab` is only a README. The latest user priority is **Marlin2B SOP verification over large robotics datasets**, starting with **launching the consumer inference App**. Full later Lab implementation is planned, not the immediate dispatch scope.
+Wave 2 is imported/audited; subsequent runtime/product features have not been implemented here. Original foundation/data/test/infrastructure integration and ten implemented wave-2 modules remain valuable, but the new durable runtime is not composed and CREDIT/identity revisions remain pending. `apps/lab` is a README only. The user's latest direction is to **complete all backend work for robust and optimized Marlin2B inference via an endpoint first**, then launch App, then build Lab. SOP verification over large robotics datasets remains the lead end application.
 
 ## Important Context
 
-- `apps/app`: public verified signup, only a free plan, **10,000 CREDIT once per individual user**, keys, published Marlin endpoint, secure finite-video inference, explicit async, exact balances/holds/usage and recovery.
-- `apps/lab`: later provider roles, model/serving versions, dev/prod, permitted traces/review, datasets/evaluation, external annotation/training and controlled rollout. App launch does not depend on Lab.
-- The user calls the application a VLA use case. Verify the actual Marlin artifact/request/response contract; do not assume action output, closed-loop actuation or native live-video input. Recorded robotics-data SOP analysis is the current context.
-- Preserve historical USD without conversion. Grants are unique per individual, not org/campaign. Provider_dev CREDIT starts at zero; paid external USD budgets are separate. All decimal quantities are exact/string encoded.
-- PostgreSQL owns accepted jobs, holds, leases, journal and settlement; Valkey is rebuildable. Optional trace loss must not lose accounting. Ordinary chat never silently becomes async202. No regeneration after committed output.
-- Provider membership/model ownership is not customer-content permission. Recheck source-purpose grants for access/export/teacher/training and revocation; capture consent alone is insufficient.
-- Main auto-deploys App. Integrate on a review branch; do not make a main merge/push, hosted migration, paid provider call or deployment an implicit step of this prompt.
+- The current deliverable is a **headless authenticated endpoint**, with real key/tenant controls, rate/serving pins, secure finite-video preparation, sync/output SSE and explicit async, durable jobs/journal/settlement, recovery/restore and operational telemetry. Both Next.js applications can remain stopped.
+- G6B provisions/operates real clients using shared auth/state, A1 individual entitlement and D financial functions. Public signup pages/email flows, catalog/usage/balance dashboards and Lab are later. Never create a temporary unmetered or shared-secret shortcut.
+- App product policy is unchanged: free plan, **10,000 CREDIT once per individual user**, no refill. Preserve historical USD without conversion; provider_dev wallets start at zero; external paid-provider USD budgets are separate. All amounts remain exact/string encoded.
+- PostgreSQL owns accepted jobs, holds, leases, stream journal and settlement. Valkey is rebuildable. Optional trace capture may be off and may drop with metrics; accounting cannot. Ordinary chat never silently becomes async202; committed output cannot be regenerated.
+- S2M pins the actual Marlin artifact/processor/protocol. A VLA application context or robotics dataset does not establish action generation, closed-loop actuation or native live input. Use bounded finite-video items and resumable client workflows for the large dataset.
+- Optimization starts with E1B's measured representative baseline, then M4 video preparation and W4 engine/scheduling experiments, then E4B combined final evidence. “Optimized” means a measured supported configuration, not a universal maximum or unverified quality-preserving compression.
+- Provider membership is not customer-content permission. Main auto-deploys App. Review-branch implementation does not implicitly authorize public cutover, hosted migration, paid calls or new compute purchases.
 
 ## Immediate Next Steps
 
-1. Inspect status, branch, log, worktrees and remotes. Fetch the audit/complete-plan branch and identify a committed integration base containing this file and `07dfb64`. Preserve newer main or other-session work. Review the audit diff at current HEAD; do not redo wave 2.
-2. Read [the complete plan](12-complete-build-plan.md), [pending inputs](15-pending-inputs.md), [manifest](tasks.json), [App spec](../platforms/03-app-spec.md), [credits](../platforms/02-credits.md), [revision briefs](11-wave3-revision-handoffs.md) and root repository conventions. Load other module briefs only when assigned; the old wave-2 prompt is historical.
-3. Start F2R while I0, E2R and S2M run in disjoint worktrees if resources/agents are available. S2M pins actual Marlin launch capabilities and the bounded large-dataset API recipe. F2P follows reviewed F2R contracts.
-4. Dispatch only the current App closure: D1R/D2–D5, C0/C3A, G1R/G2/G3/G4U, M/Q/W, A1–A3, U1R/U2/U3 and I/E gates, following exact manifest edges. One D migration owner and one coordinator for common wiring. Integrate actual dependencies before mounting G2.
-5. Complete E3A with real local services, then prepare I2A/I3/E4. Missing staging/rate/GPU inputs remain release blockers; finish independent App tests, docs, operational scripts and review. Do not switch to broad Lab feature work just because live release is waiting.
-6. Once the App launch candidate is accepted and the next scope is activated, use the already prepared Lab L0–L4 handoffs. Imported dataset evaluation can start without production capture; rollout need not await training. Conditional modality/hardware tasks require their activation contracts.
+1. Inspect status/log/worktrees/remotes, fetch the latest audit-plan branch, identify its committed SHA containing `18-marlin-backend-first.md`, and preserve newer work. Read root conventions plus the files below. Review current audit HEAD; do not restart wave 2.
+2. Start F2R while I0, E2R and S2M run in disjoint worktrees where available. Publish reviewed F2P contracts before their consumers. Preserve original fixes and shared v1 rulings where unchanged.
+3. Dispatch the **E4B dependency closure** only: D1R/D2–D5 and D-owned A1; G1R/G2/G3/G4U/G6B; M2/M3, Q2/Q3, W2/W3 plus existing foundations. Only D edits migrations; one coordinator owns common contracts/config/wiring/lockfiles. No frontend C/U/A2/A3 lane is required.
+4. E3B proves actual local DB/auth/storage/queue integration and endpoint behavior with controlled engine and App/Lab absent. Integrate real durable/runtime/media/scheduler/installer prerequisites before mounting G2; fake-only work is not integrated.
+5. I2B deploys the backend on an allocated target. I3B proves telemetry, recovery, restore and rollback; E1B establishes real-GPU phase measurements and capacity baseline. M4/W4 then test controlled optimizations. E4B repeats protocol/security/accounting/parity/load/soak/fault checks on the combined final candidate.
+6. Record missing GPU/rate/legacy-account/workload inputs precisely and continue independent backend work. Do not substitute App UI work for a blocked backend gate. Once the backend candidate is accepted, activate App and reuse E3B/I2B/I3B/E4B; Lab follows App. The full later roadmap remains ready.
 
 ## Architecture Overview
 
-Two separately deployed frontends reuse identity/registry/rates and durable inference. Shared migrations remain physically under `apps/app/supabase/migrations/` with D ownership. Serving revisions pin weights, adapters, tokenizer/preprocessing, prompt/harness and engine/hardware; admission also pins deployment/rate. Lab workers perform long evaluation/pipeline work outside Next.js handlers. Immutable manifests and current authorization coexist: preserving lineage never grants continued access to revoked content.
+The API/runtime serves real clients independently of the presentation apps. Shared protected operations own identities, keys, registry/rates and exact accounting; the future App invokes those same primitives. Shared migrations remain at `apps/app/supabase/migrations/` under D ownership without requiring a running frontend. Serving pins cover model, processor, prompt/harness, runtime and hardware; accepted jobs also pin rate/deployment. Single-GPU restart/recovery is distinct from multi-host availability; I4 is a separately justified backend fleet gate, independent of UI readiness.
 
 ## Critical Files
 
 | File | Purpose |
 |---|---|
-| [Complete build plan](12-complete-build-plan.md) | Current scope, phase order, S2M brief, worktree boundaries and completion levels |
-| [Task ledger](17-task-ledger.md) / [manifest](tasks.json) | Every original, revised, new and retired task; exact dependencies and status |
-| [Pending inputs](15-pending-inputs.md) | All 16 F2.2 carryovers, decisions, environment inputs and block handling |
-| [Revision briefs](11-wave3-revision-handoffs.md) | F2R/F2P/D1R/C0/I0/E2R/G1R/V1M/U1R |
-| [Additional Lab briefs](13-lab-improvement-handoffs.md) | Detailed dataset/eval/annotation/training/rollout packages and failure proof |
-| [Conditional extensions](14-expansion-gates.md) | Video/robotics/hardware discovery and trial boundaries |
-| [Contracts](01-contracts.md) / [protocols](02-durable-protocols.md) | Shared runtime invariants; v1 encoding retained separately |
-| [Execution](03-execution-protocol.md) / [verification](04-verification.md) | Isolated worktrees, single writers, current-HEAD review and evidence |
-| [Audit evidence](evidence/wave2-platform-audit.md) | What was actually tested at the audit boundary |
+| [Backend-first scope and handoffs](18-marlin-backend-first.md) | Current objective, eight added packages, measured optimization and acceptance |
+| [Complete platform plan](12-complete-build-plan.md) | Backend → App → Lab sequencing, S2M and ownership |
+| [Manifest](tasks.json) / [task ledger](17-task-ledger.md) | Exact active dependencies, preserved statuses and current dispatch scope |
+| [Pending inputs](15-pending-inputs.md) | F2.2 dispositions and 18 product/environment inputs, including performance/availability criteria |
+| [Revision briefs](11-wave3-revision-handoffs.md) | F2R/F2P/D1R/I0/E2R/G1R and later UI revisions |
+| [Contracts](01-contracts.md) / [protocols](02-durable-protocols.md) | Durable runtime and compatibility invariants |
+| [Execution](03-execution-protocol.md) / [verification](04-verification.md) | Worktree ownership, failure oracles and evidence rules |
+| [Audit evidence](evidence/wave2-platform-audit.md) | Actual previous tests and environment limitations |
+| [Later Lab briefs](13-lab-improvement-handoffs.md) / [extensions](14-expansion-gates.md) | Follow-on scope; not backend blockers |
 
 ## Files Modified
 
-This follow-on package updates plans, roadmaps, task routing and handoff documents; adds complete Lab packages, conditional extension gates, a pending-input register, a generated task ledger and documentation validation tooling. It does not implement CREDIT wallets, Lab, migrations, runtime composition or deployments. The earlier audit commit contains the bounded code fixes listed in its evidence.
+This priority revision changes documentation, task graph, gate definitions, requirement mapping, ledger validator and prompts. It adds G6B/E3B/I2B/I3B/E1B/M4/W4/E4B as planned backend packages and reuses their results from later App tasks. It preserves all previous task statuses and source implementation. No backend optimization, runtime cutover, GPU trial or hosted operation is claimed by authoring this plan.
 
 ## Decisions Made
 
 | Decision | Rationale |
 |---|---|
-| App-first execution; full Lab plan retained | Matches the user's latest immediate launch priority without losing the broader platform architecture |
-| Marlin SOP profile S2M is explicit | Makes documented inference capabilities and large-dataset usage testable without inventing action/streaming support |
-| Keep original task statuses and revision tasks separate | Reuse wave-2 work while accurately reporting incompatible target contracts |
-| Manual external training connector is the initial real workflow | Integrates existing provider pipelines; avoids claiming an unselected paid training service works |
-| Separate local/staging/live gates | Tests against a fake model cannot certify model quality or a deployed endpoint |
-| Conditional extensions have explicit activation records | Robotics/streaming/hardware requirements remain workload-specific; speech stays deferred |
+| Backend readiness independent of App | Old I2A/E3A/I3/E4 tied runtime proof to browser features, contrary to latest priority |
+| Headless provisioning over real shared primitives | A usable endpoint needs keys/tenants/accounting even before self-service signup |
+| Profile then tune then revalidate combined candidate | Prevent throughput improvements from hiding preprocessing, tail-latency, fairness or recovery regressions |
+| Keep one durable state/financial implementation | Backend-first is a sequence change, not a new legacy mode or separate wallet system |
+| App gates become reuse plus frontend deltas | Avoid duplicating runtime deployment/recovery and wasting previous evidence |
+| I4 follows backend envelope, conditionally | Capacity/availability may require fleet independently of a consumer dashboard; no unsupported HA claim |
 
 ## Assumptions Made
 
-Verified onboarding before grant, no expiry/refill, protected personal-wallet binding and operator-approved publication are current defaults. SOP rubric/dataset labels and live rates/environment may require provider/operator inputs. The next session has this Git branch or a merge containing it. Credentials are supplied through the environment/secret manager, never this handoff. No extra platform or framework migration is presumed.
+S2M/E1B will freeze actual inputs/limits and predeclare workload targets or explicitly provisional engineering criteria. Existing model and GPU access must be verified before live evidence. Production rates and legacy-account transition remain release inputs. Test identities use the real backend auth model; provider/customer data rights stay explicit. Credentials are supplied through approved secret/environment flows, never in this handoff.
 
 ## Potential Gotchas
 
-- `main` alone still may not contain this package. Do not restart from the old handoff because it says main.
-- Migrations 0003–0005 already exist; add compatible migrations after them. Never convert historical USD rows in place.
-- Audit machine had Docker unavailable: `make check` passed with Docker skips; Layer 1 engine tests are not Layer 2 database proof.
-- `implemented` v1 modules need amended integration; Lab README is not a working app.
-- Fixture account reporting is disabled in production. Missing/failed real context must be explicit, never a demo balance or zero success.
-- Stash from the pre-pull documentation preservation may still exist locally; do not pop/drop it blindly. All necessary audit changes were committed.
-- Additional task paths are proposed. F/coordinator must add shared discovery/config once; workers do not invent parallel auth/wallet/job stores.
-- No reviewer has yet independently signed off on this complete package. Validate, review and fix before claiming that signoff.
+- Starting from `main` or `2ea562a` alone may miss this new sequence; fetch the committed tip containing the backend-first file.
+- Never rewrite migrations 0001–0005 into CREDIT or convert USD history in place. A1 is D-owned backend entitlement, not a dependency on signup UI.
+- Audit `make check` passed with Docker-dependent skips. Actual service integration remains required; Layer1 socket tests are not DB proof.
+- Existing `serve.sh` defaults to a nightly image. W3 pins the supported image/model/processor; W4 validates tuning on that exact build rather than assuming current engine flags.
+- Large-dataset throughput needs representative diverse inputs and rejection/error accounting; repeated cached clips and undersampled percentiles do not establish an operating envelope.
+- Full content tracing, judge, Lab datasets/training, native streaming, action-policy hosting and new chips are not implicit endpoint requirements. Operational metrics and recovery tools are required.
+- The pre-pull preservation stash may remain; do not pop/drop it blindly. No independent reviewer signoff is invented.
 
 ## Verification
 
-Prior audit evidence records `make check` exit0 (API 1518 passed/70 skipped; API mutation suite 955 passed/84 skipped; console255 passed; bench40 passed; lint/typecheck and console mutation oracles passed) and integration Layer1/canary exit0 (engine8/8; integration67 passed/21 skipped; 42 defects detected plus an expected survivor control). These are historical results from the audit, not tests rerun for this documentation package. Full real-service, hosted, GPU and paid-provider checks remain unverified here.
-
-Run documentation consistency with:
+The earlier audit evidence records passing root checks with explicit skips and Layer1 integration/canaries; actual Docker services, hosted state and GPU evidence were unavailable in that audit. This planning revision uses documentation consistency checks, not runtime retesting. No model-quality, throughput, cost or reliability result is newly claimed.
 
 ```bash
 python3 research/plan/scripts/validate_plan.py
 ```
 
-Implementation uses the root `make` targets and environment requirements in [verification](04-verification.md). Add Lab/test discovery only when that code exists. Record all skips, actual SHAs and failed drills. Keep [evidence format](evidence/README.md) and append-only coordinator history.
+Implementation uses the root `make` targets and the relevant module/integration commands from [verification](04-verification.md). Record command/environment/seed/SHAs/results/skips/raw artifact hashes; review current HEAD, fix defects and rerun affected merged-tree checks. Use [the evidence format](evidence/README.md).
 
 ## Copyable coordinator prompt
 
 ```text
-Implement model-inference from the completed two-platform plan, with APP-FIRST priority: launch apps/app for Marlin2B inference serving SOP verification over large robotics datasets. Lab is subsequent work; do not divert into building datasets/training/provider UI before the App launch candidate is accepted.
+Complete the model-inference backend for robust, measured and optimized Marlin2B inference via an endpoint FIRST. SOP verification over large robotics datasets is the lead application. App UI launch comes after the backend; provider Lab comes after App.
 
-First inspect git status/log/worktrees. Fetch origin and use the committed tip of codex/wave2-platform-audit containing research/plan/16-fresh-session-handoff.md (or a reviewed branch/merge containing it). It includes the audit of main 271add946771ddc4efc3cbc2044758443080759b and audit commit 07dfb64. Preserve newer work. Main alone may still contain only the old plan. Create an integration branch from the selected committed SHA; do not reset anyone’s checkout.
+Inspect git status/log/worktrees and fetch origin/codex/wave2-platform-audit. Use its latest committed tip containing research/plan/18-marlin-backend-first.md, preserving newer work. Main was imported at 271add946771ddc4efc3cbc2044758443080759b; 07dfb64 is the audit and 2ea562a the earlier App-first plan. The current backend-first amendment supersedes that dispatch order. Create isolated worktrees from a recorded committed integration SHA.
 
-Read CLAUDE.md (model-neutral repository conventions), research/plan/16-fresh-session-handoff.md, 12-complete-build-plan.md, 15-pending-inputs.md, tasks.json and the App/credit product specs. Then load 11-wave3-revision-handoffs.md, shared contracts/protocols and the selected module briefs. Historical Claude-specific terms are not required tooling. Implement the work; do not stop after another plan.
+Read CLAUDE.md, research/plan/16-fresh-session-handoff.md, 18-marlin-backend-first.md, 12-complete-build-plan.md, 15-pending-inputs.md and tasks.json; then shared contracts/protocols and your module briefs. Ignore historical model-specific orchestration terms. Preserve wave-2 code/evidence. Implement the backend, not another planning-only pass.
 
-Preserve wave-2 code/evidence. Review audit HEAD, then F2R with I0/E2R/S2M in isolated worktrees where available, followed by F2P. Use reviewed fixtures and single-owner paths to maximize useful parallel work. Only D edits migrations; the coordinator owns common wiring/lockfiles/manifest. Follow start versus real integration dependencies. Do not mount the new gateway before durable state, worker/media/scheduler and installer prerequisites are integrated.
+Review audit HEAD, close F2R with I0/E2R/S2M in independent worktrees where available, then F2P. Dispatch the E4B dependency closure: durable D/M/Q/W/G runtime plus D-owned A1 and G6B headless provisioning. Only D edits migrations; coordinator owns common wiring/config/lockfiles. Integrate real dependencies before G2 cutover. Do not build signup/catalog/usage dashboards or Lab now.
 
-apps/app has only a free plan: public verified signup, 10,000 CREDIT ONCE PER INDIVIDUAL USER, API keys, actual published Marlin capabilities/rates/examples, secure finite-video inference, explicit async, exact balances/holds and own usage. Preserve legacy USD without conversion. App works while Lab/optional capture/judge are unavailable. Pin the actual Marlin artifact and input/output contract through S2M; the VLA/SOP context does not imply robot actuation or native live streaming. Support large datasets with tested bounded inputs, stable per-item IDs, idempotency and async resume; do not invent a new batch product or claim unmeasured SOP accuracy.
+The endpoint must use real scoped credentials, tenant authorization, model/rate pins, CREDIT holds/settlement, bounded secure media, supported sync/SSE and explicit async, idempotency, cancellation/replay and recovery. Preserve legacy USD and one-time 10,000 CREDIT per individual; reuse shared financial functions rather than scripts that edit balances. App and Lab must be unnecessary for backend acceptance. Pin actual Marlin capabilities; the VLA/SOP context does not imply robot actuation or native live input.
 
-Complete the App task closure and E3A with real local services, then prepare I2A/I3/E4 release evidence. Run focused tests, failure injections and current-HEAD review; fix findings and rerun affected tests on the merged tree. Report all skips and external blockers exactly. Missing live resources do not justify claiming integrated/live status or diverting into a broad Lab build. Finish independent App implementation and release preparation.
+Pass E3B against actual local services. Use I2B for allocated backend deployment; I3B for telemetry/recovery/restore/rollback; E1B for actual-GPU baseline and phase profiling. Then M4/W4 optimize video preparation and engine/scheduling using controlled experiments. E4B validates the combined final candidate with representative sustained/burst/soak/fault loads, exact accounting and quality/parity. Report cost, error/rejection denominator and latency/throughput within the measured envelope; do not invent performance targets or claim single-GPU high availability.
 
-Record task/slice assignments, SHAs, commands, evidence, reviews and remaining inputs after each integration. Keep working until the current App scope is complete or genuinely externally blocked. Once the App launch candidate is accepted and the next milestone is activated, follow the prepared Lab M0–M4 handoffs in 13-lab-improvement-handoffs.md; conditional X tasks require 14-expansion-gates.md. Speech and managed RL infrastructure remain deferred.
+Keep working through backend implementation, review and closed-loop tests. When live resources or rate/workload inputs are missing, record the exact blocked gate and finish independent backend work. Do not substitute UI work or treat skips/fakes as passing live evidence. After accepted backend readiness, the existing App and Lab plans define subsequent phases.
 
-Integrate on a review branch. Do not implicitly merge/push main (it auto-deploys), apply hosted migrations, buy compute, call paid teacher/training services, expose customer content or actuate hardware. Surface exact release inputs when local work makes the action reviewable. End each session with a committed handback, actual test evidence, pending gates and the next unblocked task.
+Integrate and hand back on a review branch with committed code, actual evidence, unresolved inputs and next task. Main auto-deploys; public cutover, hosted migration and additional paid infrastructure require their actual release scope. Never implicitly expose customer content or actuate hardware.
 ```
 
 ## Module-session prompt template
 
 ```text
-Implement task <TASK_ID>, slices <SLICES>, from committed base <BASE_SHA> in isolated worktree/branch <PATH_AND_BRANCH>. Integrate toward <INTEGRATION_BRANCH>; owned paths are <OWNED_PATHS>. These substitutions must be filled by the coordinator before dispatch.
+Implement <TASK_ID>, slices <SLICES>, in <WORKTREE/BRANCH> from reviewed committed <BASE_SHA>, integrating toward <INTEGRATION_BRANCH>. Owned paths: <OWNED_PATHS>. Coordinator fills these values before dispatch.
 
-Read research/plan/16-fresh-session-handoff.md, tasks.json, 03-execution-protocol.md, the task brief and named oracle definitions. Use the current App-first scope; do not rewrite the overall architecture or duplicate shared auth/wallet/registry/state. Confirm start dependencies are reviewed and committed. Keep real integration dependencies explicit; fakes permit development only.
+Read research/plan/16-fresh-session-handoff.md, 18-marlin-backend-first.md, tasks.json, the selected brief and oracle definitions. Backend-first scope governs. Reuse the shared state/auth/financial model; do not duplicate it or edit other owners’ files. Start-ready fakes permit coding, not integrated status.
 
-Implement and test the assigned slices, inject the brief’s failure cases, review at current HEAD and fix findings. Request shared wiring/schema changes through the coordinator. Hand back committed code, exact tests/skips/environment/SHAs, failure proof, changed contracts, migration/rollback, unresolved inputs and next task. Do not edit other owners’ files, production, the shared task manifest or unrelated worktrees.
+Implement and test the assigned slices, inject the stated faults, review current HEAD, fix findings and rerun affected checks. Request common wiring/schema changes through the coordinator. Return code SHA, exact commands/environment/skips/raw evidence, reviewed findings, changed contracts, migration/rollback, missing inputs and next unblocked task. No production or shared task-manifest edits by module workers.
 ```
 
-## Continuation record for subsequent sessions
+## Continuation record
 
-Each implementation handback records: active scope; integration SHA/branch; task/slice owner/worktree/base; files changed; reviewed SHA/findings; test command/environment/results/skips/artifact paths; implemented versus integrated versus release state; unresolved P-input IDs; migration and rollback notes; next task. Append under `research/plan/evidence/coordinator/` and update manifest statuses only after the relevant evidence exists. Never replace prior evidence or mark a parent complete because its plan was authored.
+Append current scope/integration SHA, task/slice/owner/worktree/base, changed paths, review SHA/findings, test commands/environment/results/skips/artifacts, status by gate, unresolved P-input IDs, rollback and next task under `research/plan/evidence/coordinator/`. Coordinator updates manifest states only after evidence; retain historical records and distinguish implemented, locally integrated, release-ready and deployed.

@@ -54,14 +54,16 @@ def markdown_destinations(source):
 
 def ledger(manifest, tasks):
     app = closure(tasks, ['E4', 'I2A'])
+    backend = closure(tasks, ['E4B'])
     counts = collections.Counter(t['status'] for t in tasks.values())
     retired = sum(t['status'].startswith('superseded') for t in tasks.values())
     lines = ['# Complete task ledger', '',
              'Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.', '',
              f"**{len(tasks)} records; {len(tasks)-retired} active; {retired} retired; {counts['planned']} planned; {counts['implemented']} implemented; {counts['integrated']} integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).", '',
-             '**Current scope:** Marlin SOP inference App first. The App gate closure below is the immediate implementation set; completed prerequisites are retained as evidence. Lab tasks are next milestones after an accepted App candidate, not an automatic fallback when a release input is missing. See [the complete plan](12-complete-build-plan.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt](16-fresh-session-handoff.md).', '']
+             '**Current scope:** complete the robust and measured Marlin endpoint backend first. The E4B dependency closure is the immediate implementation set; App/browser work follows backend acceptance and Lab follows App. See [backend-first handoffs](18-marlin-backend-first.md), [the full plan](12-complete-build-plan.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt](16-fresh-session-handoff.md).', '']
     groups = [
-        ('App launch gate closure', lambda t: t['id'] in app),
+        ('Backend endpoint gate closure — current scope', lambda t: t['id'] in backend),
+        ('App launch additions — after backend acceptance', lambda t: t['id'] in app and t['id'] not in backend),
         ('Later core platform work and preserved module baselines', lambda t: t['id'] not in app and t.get('execution_class') == 'core'),
         ('Conditional work — activation required', lambda t: t.get('execution_class') == 'conditional'),
         ('Retired mixed tasks — never dispatch', lambda t: t['status'].startswith('superseded')),
@@ -112,7 +114,7 @@ def main():
                 errors.append(f"Undefined oracle {t['id']}: {test_id}")
         if t.get('execution_class') == 'conditional' and not t.get('activation'):
             errors.append(f"No activation condition for {t['id']}")
-        if t.get('disposition') == 'complete-plan-addition':
+        if t.get('disposition') in ('complete-plan-addition', 'backend-first-addition'):
             for field in ('owned_paths', 'implementation_slices', 'acceptance', 'failure_oracle'):
                 if not t.get(field):
                     errors.append(f"Missing {field}: {t['id']}")
@@ -141,9 +143,19 @@ def main():
             errors.append(f"Audit implemented evidence regressed: {task_id}")
     if not errors:
         app = closure(tasks, ['E4', 'I2A'])
+        backend = closure(tasks, ['E4B'])
         forbidden = {t['id'] for t in rows if t.get('product') == 'lab' or t['id'] in ('F3','D7','D8','D9','I5','I6','I7')}
         if app & forbidden:
             errors.append('App depends on later Lab: ' + ', '.join(sorted(app & forbidden)))
+        frontend = set('A2 A3 C0 C3A U1 U1R U2 U3 E3A I2A I3 E4 V1M'.split())
+        if backend & (forbidden | frontend):
+            errors.append('Backend depends on frontend/Lab: ' + ', '.join(sorted(backend & (forbidden | frontend))))
+        if not backend <= app:
+            errors.append('App does not reuse the complete backend gate closure')
+        if {'E4', 'I3', 'I2A', 'E3A'} & closure(tasks, ['I4']):
+            errors.append('Conditional backend fleet still depends on frontend release')
+        if manifest['current_execution_scope']['id'] != 'BACKEND-FIRST-MARLIN':
+            errors.append('Current dispatch scope is not backend first')
         if 'E5L' in closure(tasks, ['E6L']):
             errors.append('Imported evaluation depends on trace observation gate')
         if {'P1','P2','P3','P4','E7L'} & closure(tasks, ['E8L']):
@@ -153,7 +165,7 @@ def main():
             if task_id not in tasks or tasks[task_id]['status'].startswith('superseded'):
                 errors.append(f"Invalid release gate {gate}: {task_id}")
     coverage = (PLAN/'07-requirement-coverage.md').read_text()
-    for prefix, maximum in [('APP',13),('LAB',16)]:
+    for prefix, maximum in [('BACKEND',10),('APP',13),('LAB',16)]:
         for i in range(1,maximum+1):
             if not re.search(r'^\| '+prefix+f'-{i:02d}'+r'\b',coverage,re.M):
                 errors.append(f'Missing requirement mapping: {prefix}-{i:02d}')
@@ -182,8 +194,9 @@ def main():
         print('\n'.join('ERROR: '+e for e in errors))
         return 1
     print(f'PASS: {len(rows)} tasks, acyclic combined dependencies, preserved audit statuses, defined oracles and valid release gates.')
+    print(f'PASS: backend closure {len(backend)} tasks excludes frontend/Lab and is reused by App; fleet independent of UI.')
     print(f'PASS: App closure {len(app)} tasks excludes Lab; E6L independent of E5L; E8L independent of training.')
-    print(f'PASS: 13 App + 16 Lab requirements mapped; {links} local Markdown links checked across {len(files)} documents; ledger current.')
+    print(f'PASS: 10 backend + 13 App + 16 Lab requirements mapped; {links} local Markdown links checked across {len(files)} documents; ledger current.')
     return 0
 
 if __name__ == '__main__':

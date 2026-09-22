@@ -1,6 +1,6 @@
 # W — Engine execution and lifecycle
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset.
 
@@ -57,7 +57,7 @@ No postpublication regeneration. Do not pass upstream DONE before settlement. En
 
 **Start after:** F2. **Integrate after:** none beyond the start/code gate.
 
-**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `W2`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `W2`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement engine request/response translation, video ref handling, version checks and authoritative usage parsing. Validate supported parameters/context after preparation. Provide fakes for prefill stall, split tokens, missing usage, engine error and abrupt exit. Preserve raw final text needed by canonical trace capture.
 
@@ -69,7 +69,7 @@ No postpublication regeneration. Do not pass upstream DONE before settlement. En
 
 ### W2 — Lease-aware execution, cancellation and completion
 
-**Start after:** W1, F2P. **Integrate after:** D5, M2, Q3. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** W1, F2P. **Integrate after:** D5, M2, Q3. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement claim/heartbeat loop, preparation handoff, bounded generation/TTFT/stall timers and engine cancellation acknowledgment. Append through StreamStore before publication; persist result then complete transaction. On lease loss stop generation immediately; race cancellation and completion through JobStore.
 
@@ -81,7 +81,7 @@ No postpublication regeneration. Do not pass upstream DONE before settlement. En
 
 ### W3 — Drain, engine pin and measured concurrency
 
-**Start after:** W2, F2P. **Integrate after:** E1. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** W2, F2P. **Integrate after:** E1. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Pin image/model/tokenizer revisions, configure serving limits and expose protected readiness/liveness. Drain stops new claims, waits within deadline, fences/cancels remainder and records outcomes. Run measured concurrency and media UUID capability probes with E; request service-unit changes from I.
 

@@ -1,6 +1,6 @@
 # T — Trace capture, projection and retention
 
-**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch App launch work first; later Lab or conditional tasks require their milestone activation.
+**Current assignment scope:** [complete plan](../12-complete-build-plan.md), [fresh-session handoff](../16-fresh-session-handoff.md) and manifest v4. Preserve these module algorithms subject to the audited revisions. Dispatch the [Marlin backend closure](../18-marlin-backend-first.md) first. App/browser and Lab work follow their acceptance gates.
 
 > **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v4](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. T2 is split into T2I/T2F; capture can be disabled for App launch and is shared infrastructure for Lab.
 
@@ -59,7 +59,7 @@ An async function still blocks the event loop if it writes synchronously. Count 
 
 **Start after:** F2. **Integrate after:** none beyond the start/code gate.
 
-**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `T2I`. Manifest v3 and the revision handoffs govern current scope.
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `T2I`. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement budgets during active accumulation and queued capture, metadata reserve, whole-content discard on overflow and bounded offer. Use dedicated spool writer with checksummed/versioned segments, fsync state and disk/free-space caps; separate shipping. Capture final canonical logical content plus raw model text, not raw request-wire byte claims.
 
@@ -83,7 +83,7 @@ An async function still blocks the event loop if it writes synchronously. Count 
 
 ### T3 — Logical retention, deletion and observability
 
-**Start after:** T2I, F2P. **Integrate after:** T2F. Manifest v3 and the revision handoffs govern current scope.
+**Start after:** T2I, F2P. **Integrate after:** T2F. Manifest v4, the backend-first overlay and revision handoffs govern current scope.
 
 **Implementation:** Implement result/content/cache/metadata logical expiry integration, deletion queue and physical-cleanup lag alarms. TTLs cannot expose expired rows. Add capture/spool/projection metrics and dashboards specification for I, including off/minimal/full denominators and bytes. Prove no copytruncate path.
 

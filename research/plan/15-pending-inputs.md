@@ -1,6 +1,6 @@
 # Pending work, decisions and environment inputs
 
-Updated 2026-09-21. Current priority is the Marlin SOP-use-case **App launch**. This register complements [all task statuses](17-task-ledger.md); it is not permission to skip unresolved acceptance criteria. Owners record resolved values/evidence and date here without secrets. Missing inputs block only the stated boundary; continue independent work inside the active scope.
+Updated 2026-09-22. Current priority is the **Marlin inference backend**; App launch follows. This register complements [all task statuses](17-task-ledger.md); it is not permission to skip unresolved acceptance criteria. Owners record resolved values/evidence and date here without secrets. Missing inputs block only the stated boundary; continue independent work inside the active scope.
 
 ## Release and product inputs
 
@@ -22,9 +22,12 @@ Updated 2026-09-21. Current priority is the Marlin SOP-use-case **App launch**. 
 | P-14 | Robot/task/policy, clocks/action schema/local control owner and placement latency | X3 owner; approved trial contract | X4 and physical robot trial | SOP analysis of recorded robotics videos; offline model evaluation |
 | P-15 | Non-NVIDIA chip/model/runtime choice and hardware access | X5 owner; measured go/no-go and trial contract | X6 and chip support claims | Variant registration and importing optimization evidence |
 | P-16 | Measured fleet need and allocated topology/capacity | I4/E4/operator; fleet gate design and load/fault report | Fleet rollout | Single-GPU pilot and recovery; capacity purchases remain separate |
-| P-17 | Accept App launch candidate, then activate next Lab milestone | Coordinator/user; dated scope/assignment record | Dispatch of Lab feature work during App-first scope | All App work, shared compatibility contracts and release readiness |
+| P-17 | Accept E4B backend candidate, activate App next; then accept App before Lab | Coordinator/user; dated scope/assignment record | Frontend feature dispatch before backend acceptance; Lab before App | Backend completion, optimization and release preparation |
+| P-18 | Representative Marlin workload, latency/throughput/error/quality/cost constraints, soak duration and availability/recovery expectations | S2M/E1B/I3B with workload owner; predeclared benchmark protocol, provisional criteria explicitly labeled | E4B performance/robustness certification and any high-availability claim | Secure durable endpoint implementation, profiling harness and allocated baseline measurements |
 
 No pending commercial decision changes the confirmed **one-time 10,000 credits per individual** policy. No promotional expiry or refill is introduced. Lab provider_dev wallets start at zero and require audited funding; they cannot reuse consumer signup grants. External USD reservations are separate.
+
+G6B allows operated endpoint clients without P-05 public signup/email/callback setup or App pages. E3B/I2B/I3B/E1B/M4/W4/E4B consume the backend-relevant inputs directly. Do not postpone backend auth, credit/accounting, rate publication or API key revocation because the frontend is deferred.
 
 ## All 16 original F2.2 carryovers
 
