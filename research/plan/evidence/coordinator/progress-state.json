@@ -1,0 +1,35 @@
+{
+  "updated": "2026-09-22T15:51:21Z",
+  "integration_branch": "claude/backend-impl",
+  "base": "ec6c548",
+  "in_progress": {
+    "F2R": {"lane": "codex-f2r", "phase": "implementing", "since": "2026-09-22T15:51:21Z", "note": "shared-contract carryovers 2–7, 9; shared mutation runner first"},
+    "I0":  {"lane": "codex-i0",  "phase": "implementing", "since": "2026-09-22T15:51:21Z", "note": "fail-closed installer; stubs only"},
+    "E2R": {"lane": "codex-e2r", "phase": "implementing", "since": "2026-09-22T15:51:21Z", "note": "harness ownership + five RLS inversions on real services"},
+    "S2M": {"lane": "codex-s2m", "phase": "implementing", "since": "2026-09-22T15:51:21Z", "note": "pinned Marlin profile (docs); records P-06/P-07/P-18"}
+  },
+  "reviews": {
+    "S1": {"phase": "independent review of the audit's code at ec6c548", "since": "2026-09-22T15:51:21Z"}
+  },
+  "gates": {
+    "BACKEND-LOCAL": {"requires": "E3B", "state": "not started", "blocked_by": []},
+    "BACKEND-READY": {"requires": "E4B", "state": "not started", "blocked_by": ["P-04 allocated GPU/staging target", "P-18 workload targets (provisional criteria allowed)"]}
+  },
+  "inputs": [
+    {"id": "P-04", "what": "Allocated staging/GPU target, artifact access, deploy owner", "blocks": "I2B, I3B, E1B, M4/W4 measurements, E4B", "owner": "user/operator"},
+    {"id": "P-06", "what": "Exact Marlin artifact/capabilities and finite-video limits", "blocks": "honest published capability; W3 pins", "owner": "S2M records; user confirms HF/model access"},
+    {"id": "P-07", "what": "SOP rubric, ground truth, dataset rights", "blocks": "SOP accuracy claims only", "owner": "user/product"},
+    {"id": "P-18", "what": "Representative workload + latency/throughput/error/cost constraints, soak duration", "blocks": "E4B certification; provisional criteria allowed", "owner": "workload owner"},
+    {"id": "P-01 / P-02", "what": "Approved CREDIT rate card; legacy USD account transition", "blocks": "public metered publication and cutover only", "owner": "user/operator"},
+    {"id": "P-03", "what": "Local Docker/services", "blocks": "nothing — Docker is available on this host", "owner": "resolved here"}
+  ],
+  "checkpoints": [
+    {"at": "2026-09-21T22:44Z", "what": "Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9"},
+    {"at": "2026-09-22T15:51:21Z", "what": "Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched"}
+  ],
+  "cadence_windows": [
+    {"label": "wave 2 (11 module tasks)", "start": "2026-09-21T06:32:00Z", "end": "2026-09-21T22:14:11Z", "tasks": 11, "lanes": "4–6 concurrent"}
+  ],
+  "authorizations": ["merge to main at reviewed green checkpoints (user, 2026-09-22)"],
+  "not_authorized": ["hosted migration apply", "gateway public cutover", "paid provider calls", "compute purchases", "pilot-host operations"]
+}
