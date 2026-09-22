@@ -133,10 +133,9 @@ def test_the_console_reads_the_python_fixture_base_rather_than_a_copy():
         if "fixtures/v2" not in source:
             continue
         assert "infrx-api/infrx/contracts/fixtures/v2" in source, test_file
-    # `mutants-v2.json` is the console's own mutation list, not a fixture copy; every
-    # other JSON file here would be one, and a copy is a thing that can drift.
-    copies = [path.name for path in (CONSOLE / "tests" / "contracts" / "v2").glob("*.json")
-              if path.name != "mutants-v2.json"]
+    # Any JSON file here would be a fixture copy, and a copy is a thing that can drift. (The
+    # v2 mutation list lives in `tests/contracts/mutants.json` since the wire-in, item 11.)
+    copies = [path.name for path in (CONSOLE / "tests" / "contracts" / "v2").glob("*.json")]
     assert copies == [], f"v2 fixtures must not be copied into the console: {copies}"
 
 

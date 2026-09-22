@@ -174,9 +174,9 @@ test("the v1 contract module carries the v2 revision as a namespace, not a shado
   // F2P wire-in item 9: `v2.X` from lib/contracts/types.ts is the v2 module itself, and the one
   // name both revisions declare differently stays distinct in each.
   const v1 = await import("../../../lib/contracts/types.ts");
-  assert.deepEqual([...v1.v2.ACCOUNTING_REGIMES], ["legacy_usd", "credit"]);
-  assert.deepEqual([...v1.ACCOUNTING_REGIMES], ["legacy_usd", "pilot"]);
-  assert.deepEqual([...v1.v2.CREDENTIAL_AUDIENCES], ["consumer", "provider_dev", "operator"]);
-  assert.equal(v1.v2.availableCredit, availableCredit);
-  assert.equal(v1.v2.SURFACE_VERSION, "contracts-v2.0");
+  assert.equal(v1.v2.availableCredit, availableCredit, "v2 is not the v2 DTO module");
+  assert.equal(v1.v2.SURFACE_VERSION, "contracts-v2.0", "the v2 namespace lost the unit module");
+  assert.deepEqual(v1.v2.ACCOUNTING_REGIMES, ["legacy_usd", "credit"]);
+  assert.deepEqual(v1.ACCOUNTING_REGIMES, ["legacy_usd", "pilot"]);
+  assert.deepEqual(v1.v2.CREDENTIAL_AUDIENCES, ["consumer", "provider_dev", "operator"]);
 });

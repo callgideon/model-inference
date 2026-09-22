@@ -31,12 +31,12 @@ console-typecheck:
 
 # R32/R36: exported console conformance must kill every declared mutant.
 # Track runners join here as their task merges (V1, U1, C1). Each exits non-zero on a survivor.
+# The contracts runner covers both entries (v1 conformance and the v2 suites, F2P wire-in item 11).
 console-mutants:
-	cd apps/app && pnpm test:mutants
+	cd apps/app && node tests/contracts/run-mutants.mjs --self-test && pnpm test:mutants
 	cd apps/app && node tests/v/run-mutants.mjs
 	cd apps/app && node tests/u/run-mutants.mjs
 	cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs
-	cd apps/app && node tests/contracts/v2/run-mutants-v2.mjs --self-test && node tests/contracts/v2/run-mutants-v2.mjs
 
 # E1 owns models/marlin2b/tests. Until it exists this target reports "not run"
 # rather than pretending a pass.
