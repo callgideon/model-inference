@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T18:06:47Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T18:12:19Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 5 done · 6 in progress · 19 remaining (of 30).**
+**Backend packages: 5 done · 8 in progress · 17 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -19,7 +19,7 @@ Generated 2026-09-22T18:06:47Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | D5 | Terminal transaction, grants and reconciliation | **remaining** | planned |  |
 | B1 Durable endpoint | A1 | Verified individual signup entitlement and idempotent backfill | **remaining** | planned |  |
 | B1 Durable endpoint | M2 | Versioned preprocessing and tenant cache | **done** | implemented |  |
-| B1 Durable endpoint | M3 | Owned uploads, expiry and orphan collection | **remaining** | planned |  |
+| B1 Durable endpoint | M3 | Owned uploads, expiry and orphan collection | **in-progress** | planned | uploads, GC, consent resolver; six conformance cases to unskip |
 | B1 Durable endpoint | Q2 | Valkey adapter with atomic tested scripts | **done** | implemented |  |
 | B1 Durable endpoint | Q3 | Outbox/reconciler integration and index loss recovery | **remaining** | planned |  |
 | B1 Durable endpoint | W2 | Lease-aware execution, cancellation and completion | **in-progress** | planned | attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart |
@@ -28,7 +28,7 @@ Generated 2026-09-22T18:06:47Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | G2 | Synchronous chat and persistent SSE relay | **remaining** | planned |  |
 | B1 Durable endpoint | G3 | Explicit jobs, status, cancellation and replay | **remaining** | planned |  |
 | B1 Durable endpoint | G4U | Owned upload HTTP adapter | **remaining** | planned |  |
-| B1 Durable endpoint | G6B | Headless endpoint provisioning and operations | **remaining** | planned |  |
+| B1 Durable endpoint | G6B | Headless endpoint provisioning and operations | **in-progress** | planned | operator CLI, protected publish/inspect, headless quickstart |
 | B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **remaining** | planned |  |
 | B2 Integrate & deploy | I2B | Reproducible Marlin endpoint deployment independent of frontends | **remaining** | planned | needs allocated GPU/staging (P-04) |
 | B2 Integrate & deploy | I3B | Backend recovery, observability, restore and rollback proof | **remaining** | planned | needs allocated GPU/staging (P-04) |
@@ -68,6 +68,8 @@ Generated 2026-09-22T18:06:47Z from `tasks.json` (manifest v4) and `progress-sta
 - W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - D1R: codex-d1r / codex/d1r-v2-schema — dispatched from 9faaa57 (reads 06a + v2 fixture base) since 2026-09-22T18:05:08Z — D owns migrations; additive over 0001–0005
+- M3: codex-m3 / codex/m3-owned-uploads — implementing (early start on accepted v2 contracts) since 2026-09-22T18:12:19Z — uploads, GC, consent resolver; six conformance cases to unskip
+- G6B: codex-g6b / codex/g6b-headless-ops — implementing (early start on accepted v2 contracts) since 2026-09-22T18:12:19Z — operator CLI, protected publish/inspect, headless quickstart
 
 ## Checkpoints
 

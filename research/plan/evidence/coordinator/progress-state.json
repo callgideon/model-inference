@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T18:06:47Z",
+  "updated": "2026-09-22T18:12:19Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -38,6 +38,18 @@
       "phase": "dispatched from 9faaa57 (reads 06a + v2 fixture base)",
       "since": "2026-09-22T18:05:08Z",
       "note": "D owns migrations; additive over 0001\u20130005"
+    },
+    "M3": {
+      "lane": "codex-m3 / codex/m3-owned-uploads",
+      "phase": "implementing (early start on accepted v2 contracts)",
+      "since": "2026-09-22T18:12:19Z",
+      "note": "uploads, GC, consent resolver; six conformance cases to unskip"
+    },
+    "G6B": {
+      "lane": "codex-g6b / codex/g6b-headless-ops",
+      "phase": "implementing (early start on accepted v2 contracts)",
+      "since": "2026-09-22T18:12:19Z",
+      "note": "operator CLI, protected publish/inspect, headless quickstart"
     }
   },
   "reviews": {},
