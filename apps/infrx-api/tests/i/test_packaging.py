@@ -393,6 +393,9 @@ def test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health():
     assert set(re.findall(r"reverse_proxy (\S+)", text)) == {"127.0.0.1:8001"}
     size = re.search(r"max_size (\d+)MiB", text).group(1)
     assert int(size) * 2**20 == DEFAULTS.max_request_bytes
+    declared = re.search(r"int\(\{http.request.header.Content-Length\}\) > (\d+)`", text)
+    assert declared and int(declared.group(1)) == DEFAULTS.max_request_bytes
+    assert re.search(r"handle @oversized \{\s*error 413\s*\}", text)
     bodies = _responses(text)
     assert ('{"ok":true}', 200) in bodies and ('{"ok":false}', 503) in bodies
     health = text[text.index("handle /health"):text.index("\thandle {")]

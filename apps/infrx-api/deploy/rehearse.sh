@@ -382,6 +382,8 @@ print(data.split(b"\r\n", 1)[0].decode(), "sent", sent // 2**20, "MiB",
       "request_too_large" if b"request_too_large" in data else "no-envelope")')
 echo "97 MiB body -> $r"
 check "a body over MAX_REQUEST_BYTES is 413 request_too_large at the edge" "[[ '$r' == 'HTTP/1.1 413'*request_too_large ]]"
+r=$(status_of POST http://127.0.0.1:8080/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer $KEY\"}" "$body")
+check "a normal body still passes the edge after it ($r)" '[ "$r" = 200 ]'
 
 step "6. drain: maintenance at the edge first, then the runtime stops; resume after readiness"
 "$here/drain.sh" pause
