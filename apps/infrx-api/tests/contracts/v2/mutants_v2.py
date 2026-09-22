@@ -35,8 +35,12 @@ import subprocess
 import sys
 import tempfile
 
-from .. import mutants as v1runner
-from ..mutants import Mutant, Outcome, Result
+if __package__:
+    from .. import mutants as v1runner
+else:                                   # run as a script: `python tests/contracts/v2/mutants_v2.py`
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+    import mutants as v1runner
+Mutant, Outcome, Result = v1runner.Mutant, v1runner.Outcome, v1runner.Result
 
 API_DIR = pathlib.Path(__file__).resolve().parents[3]
 PACKAGE = "infrx"
