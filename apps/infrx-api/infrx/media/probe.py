@@ -24,6 +24,23 @@ for hostile input rather than for well-formed files:
 
 A container this module cannot parse is `unsupported_media`, not a guess: a probe that
 falls back to "probably fine" is a probe that admits a media bomb.
+
+**What it deliberately does not read**, each one measured rather than assumed:
+
+* **Edit lists.** `edts`/`elst` are ignored, so a clip whose edit list trims or repeats a
+  span is reported at its untrimmed `mvhd` duration. The engine samples the same untrimmed
+  clip, so the frame budget still matches what is decoded; a decoder that honours edit
+  lists would see a shorter clip than the budget was sized for, which costs frames and
+  never gains any.
+* **A `mvhd` duration of `0xFFFFFFFF`** ("unknown", the version-0 sentinel) is read as
+  4,294,967.295 s at a 1 kHz timescale and then refused by the duration cap, not by the
+  probe. The outcome is a refusal either way; it is recorded because the refusal says "too
+  long" rather than "no duration".
+* **Fragmented MP4.** A file whose duration lives in `mvex`/`mehd` with `mvhd.duration = 0`
+  is refused as `no-duration`, so fMP4 and DASH/CMAF segments are not served. Reading
+  `mehd` would be a few lines, but a fragmented file's real duration is the sum of its
+  fragments and `mehd` is only a hint, so the cap would be enforced against a number the
+  file is free to understate.
 """
 from __future__ import annotations
 
