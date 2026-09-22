@@ -51,9 +51,10 @@ class WorkerLoop:
     worker_id: str = "worker"
     kind: OutboxKind = OutboxKind.inference_dispatch
     limits: PilotSettings = DEFAULTS
-    # A real deployment polls an empty index; every test stops instead, so nothing here
-    # ever sleeps unless a caller asks it to.
-    idle_sleep_s: float = 0.0
+    # How long an idle runner waits before polling an empty index again. Zero would be a
+    # busy loop on a real deployment. ponytail: a fixed poll; Q's notification (or
+    # LISTEN/NOTIFY) replaces it if 50 ms of pickup latency ever matters.
+    idle_sleep_s: float = 0.05
     results: list[AttemptResult] = field(default_factory=list)
     # A runner that died - the store unreachable, say - stops claiming and must not do it
     # silently. `gather` would otherwise swallow it into a list nobody reads.
