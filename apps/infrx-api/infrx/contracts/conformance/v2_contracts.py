@@ -13,7 +13,7 @@ case that publishes a rate card or revokes a grant cannot leak into the next one
 Green against the fakes means implemented; only green against D1R's psycopg
 directories means integrated.
 
-Every case here is killable: `tests/contracts/v2/mutants_v2.py` declares a
+Every case here is killable: `tests/contracts/mutants.py` (the one list) declares a
 single-edit defect in `contracts/v2/*.py` for each invariant claimed below, and
 the runner requires the *named* case to fail.
 """

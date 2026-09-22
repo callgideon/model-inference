@@ -18,15 +18,19 @@ from __future__ import annotations
 import os
 
 import pytest
-from infrx.contracts.conformance import SUITES
+from infrx.contracts.conformance import SUITES, V2_SUITES
 
 from . import mutants as mutation_list
 from . import test_config_and_imports, test_fixtures, test_money
+from .v2 import test_conformance_v2
 
 ALL = mutation_list.MUTANTS
-CASE_NAMES = {case.__name__ for _name, (cases, _runner) in SUITES.items() for case in cases()}
+# F2P wire-in item 6: the v2 cases are named by the same list and killed by the same runner.
+CASE_NAMES = {case.__name__ for suites in (SUITES, V2_SUITES)
+              for _name, (cases, _runner) in suites.items() for case in cases()}
 # F2R: record and config invariants die in these modules, which the runner also targets.
-RECORD_TESTS = {name for module in (test_fixtures, test_money, test_config_and_imports)
+RECORD_TESTS = {name for module in (test_fixtures, test_money, test_config_and_imports,
+                                    test_conformance_v2)
                 for name in vars(module) if name.startswith("test_")}
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # The default suite runs one mutant per fake plus every mutant of the money path, so a
@@ -35,7 +39,12 @@ FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 SUBSET = ("heartbeat_stores_the_callers_lease", "cap_org_not_counted", "debit_rounds_up",
           "settles_any_cause", "capture_bytes_not_charged", "judge_settle_negative",
           "upload_expiry_ignored", "visibility_from_the_event_time",
-          "feedback_operator_role_from_session")
+          "feedback_operator_role_from_session",
+          # contracts v2 (the subset `test_mutants_v2.py` ran before the fold)
+          "units_are_interchangeable", "raw_answers_any_unit", "a_request_may_name_a_wallet",
+          "the_grant_key_includes_the_campaign", "the_hold_rounds_like_a_charge",
+          "the_charge_rounds_up", "settle_ignores_certainty", "revocation_is_ignored",
+          "a_v1_payload_is_silently_accepted", "the_grant_amount_changes")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 

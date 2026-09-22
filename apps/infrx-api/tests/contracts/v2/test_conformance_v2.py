@@ -5,8 +5,8 @@ Each test id is the oracle plus the invariant, so `-k credit_rate` runs everythi
 that serves CREDIT-RATE and D1R/G1R can see which cases their adapters must also
 pass. Green here means implemented, never integrated.
 
-This is the file `mutants_v2.py` selects from: a mutant is killed only when a case
-named **here** fails.
+This is the v2 target of the one mutation runner (`tests/contracts/mutants.py`): a v2
+mutant is killed only when a case named **here** fails.
 
     uv run --frozen pytest -q tests/contracts/v2/test_conformance_v2.py
     uv run --frozen pytest -q tests/contracts/v2/test_conformance_v2.py -k lab_access
@@ -71,3 +71,14 @@ def test_the_fakes_satisfy_the_three_v2_protocols():
         for name in protocol.__protocol_attrs__:
             operation = getattr(directory, name)
             assert inspect.iscoroutinefunction(operation), f"{name} is not async"
+
+
+def test_the_conformance_package_exports_the_v2_suite():
+    """F2P wire-in item 2: a track reaches the v2 suite from the same package as v1's,
+    and `V2_SUITES` runs the whole exported list, not a subset of it."""
+    from infrx.contracts import conformance
+    assert "run_v2_conformance" in conformance.__all__
+    assert "V2_SUITES" in conformance.__all__
+    cases, runner = conformance.V2_SUITES["v2"]
+    assert [case.__name__ for case in cases()] == [c.__name__ for c in v2_contracts.cases()]
+    assert runner(fake_v2_harness) == len(v2_contracts.cases())
