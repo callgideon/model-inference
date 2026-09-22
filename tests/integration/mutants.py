@@ -36,6 +36,8 @@ import harness                                          # noqa: E402
 # Its test loads `pgharness.py` by path relative to its own `__file__`, so in the copy it
 # loads the MUTATED one; `infrx` itself comes from the real checkout through PYTHONPATH.
 OWNED_TREES = ("tests/integration", "models/marlin2b", "apps/infrx-api/tests/d")
+# E3B.c only: module code a defect mutant may edit, copied per mutant and never in place.
+API_TREE = "apps/infrx-api/infrx"
 
 
 @dataclass(frozen=True)
@@ -584,6 +586,74 @@ MUTANTS: tuple[Mutant, ...] = (
            "                             f\"template {PG_TEMPLATE_SOURCE}\")],",
            "tests/integration/test_run.py", "provision_database_statements",
            cases=("test_provision_database_statements_are_the_ones_r_a_requires",)),
+
+    # ---------------- E3B.c: intentional defects the backend drills must DETECT. Each edits
+    # a temporary copy of `apps/infrx-api/infrx` (see `run_one`), never the checkout: the
+    # defect lives in the merged fake store or the composition root, and the named drill in
+    # tests/integration/backend must fail. The PostgreSQL-side defects are drills that inject
+    # themselves inside a rolled-back transaction (`test_schema.py` e3b_db03-05).
+    Mutant("e3bc01", "CONTROL: a comment in the fake store changes nothing and must SURVIVE",
+           "apps/infrx-api/infrx/contracts/fakes/state.py",
+           "        wallet.reserved_total = wallet.reserved_total + hold\n",
+           "        wallet.reserved_total = wallet.reserved_total + hold  # control\n",
+           "tests/integration/backend/test_drills.py", "fake", must_survive=True),
+    Mutant("e3bm01", "E3B defect: a missing durable acceptance (no hold reserved) is detected",
+           "apps/infrx-api/infrx/contracts/fakes/state.py",
+           "        wallet.reserved_total = wallet.reserved_total + hold\n",
+           "        wallet.reserved_total = wallet.reserved_total\n",
+           "tests/integration/backend/test_drills.py", "dr01 and fake",
+           cases=("test_e3b_dr01_acceptance_crash_after_commit_retries_to_one_identity",)),
+    Mutant("e3bm02", "E3B defect: a missing durable acceptance (no dispatch outbox) is detected",
+           "apps/infrx-api/infrx/contracts/fakes/state.py",
+           "        self.outbox.append(event)\n",
+           "        self.outbox.append(event) if kind is not OutboxKind.prepare_dispatch "
+           "else None\n",
+           "tests/integration/backend/test_drills.py", "dr01 and fake",
+           cases=("test_e3b_dr01_acceptance_crash_after_commit_retries_to_one_identity",)),
+    Mutant("e3bm03", "E3B defect: a stale generation's append is detected",
+           "apps/infrx-api/infrx/contracts/fakes/state.py",
+           "        if job.generation != lease.generation:\n",
+           "        if False:\n",
+           "tests/integration/backend/test_drills.py", "dr05 and fake",
+           cases=("test_e3b_dr05_a_stale_generation_cannot_append",)),
+    Mutant("e3bm04", "E3B defect: a duplicate settlement (cancel re-settles) is detected",
+           "apps/infrx-api/infrx/contracts/fakes/state.py",
+           "            if job.terminal:\n"
+           "                # Completion won the race; a completed job stays completed.\n",
+           "            if False:\n"
+           "                # Completion won the race; a completed job stays completed.\n",
+           "tests/integration/backend/test_drills.py", "dr07 and fake",
+           cases=("test_e3b_dr07_a_duplicate_settlement_settles_once",)),
+    Mutant("e3bm05", "E3B defect: foreign result access (owner check dropped) is detected",
+           "apps/infrx-api/infrx/contracts/fakes/state.py",
+           "        if job is None or job.request.org_id != org_id:\n",
+           "        if job is None:\n",
+           "tests/integration/backend/test_drills.py", "dr08 and fake",
+           cases=("test_e3b_dr08_a_foreign_tenant_cannot_read_cancel_or_see_a_result",)),
+    Mutant("e3bm06", "E3B defect: a pilot falling back to the legacy shared key is detected",
+           "apps/infrx-api/infrx/config.py",
+           "        if missing or forbidden:\n",
+           "        if missing:\n",
+           "tests/integration/backend/test_drills.py", "dr16",
+           cases=("test_e3b_dr16_pilot_refuses_the_legacy_shared_key",)),
+    Mutant("e3bm07", "E3B stage: a pending backend case is never counted as a pass",
+           "tests/integration/run.py",
+           '    return PENDING if cases["pending"] else PASS\n',
+           "    return PASS\n",
+           "tests/integration/backend/test_stage.py", "pending_cases",
+           cases=("test_pending_cases_are_counted_by_their_unblocking_id_and_never_as_passes",)),
+    Mutant("e3bm08", "E3B stage: a plain skip at layer 3 is a case that did not run",
+           "tests/integration/run.py",
+           'if cases["failed"] or cases["skipped"] or',
+           'if cases["failed"] or',
+           "tests/integration/backend/test_stage.py", "plain_skip",
+           cases=("test_a_failure_a_plain_skip_or_an_empty_run_fails_the_stage",)),
+    Mutant("e3bm09", "E3B stage: only a PENDING[...] message makes a skip pending",
+           "tests/integration/run.py",
+           '                cases["skipped"].append(name)\n',
+           '                cases["pending"].setdefault("?", []).append(name)\n',
+           "tests/integration/backend/test_stage.py", "plain_skip",
+           cases=("test_a_failure_a_plain_skip_or_an_empty_run_fails_the_stage",)),
 )
 
 
@@ -611,6 +681,13 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
     with tempfile.TemporaryDirectory(prefix=f"infrx-e2-{mutant.id}-") as tmp:
         root = Path(tmp)
         _copy_trees(root)
+        # E3B: a defect in module code is injected into a copy of `infrx`, which the suite
+        # then imports through PYTHONPATH instead of the checkout's.
+        api_root = harness.API_ROOT
+        if mutant.path.startswith(API_TREE + "/"):
+            shutil.copytree(harness.REPO_ROOT / API_TREE, root / API_TREE,
+                            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            api_root = root / "apps" / "infrx-api"
         target = root / mutant.path
         source = target.read_text()
         found = source.count(mutant.before)
@@ -626,7 +703,7 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
             env={**os.environ, "INFRX_E2_REPO_ROOT": str(harness.REPO_ROOT),
                  # `infrx` (the pinned contracts package) always comes from the real
                  # checkout; only the owned trees above are the copy's.
-                 "PYTHONPATH": str(harness.API_ROOT),
+                 "PYTHONPATH": str(api_root),
                  # The copy must claim the provisioning checkout's identity or B1's ownership
                  # label correctly makes the live stack foreign, and every layer-2 mutant is
                  # skipped instead of killed.

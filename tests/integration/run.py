@@ -14,14 +14,17 @@ Stages, in order, each reported with its own status:
   engine     the exported engine conformance suite against the fake vLLM over real HTTP
   suites     the canonical `make` targets plus this suite, so cross-module discovery is
              measured rather than assumed
+  backend    (--layer 3 only, E3B) PostgREST beside the stack, then the backend gate
+             suite: journeys, crash drills, schema backstops. Pending cases are counted
+             by the id that unblocks them and make the run exit 3, never 0
   teardown   remove exactly what this project created, and prove nothing is left
 
 Exit codes:  0 everything ran and passed
              1 something failed
              3 a service-backed stage could not run (reported PENDING, never PASS)
 
-`--layer 1` runs only what needs no container. `--canary` additionally proves an
-INTENTIONAL failure is detected rather than skipped.
+`--layer 1` runs only what needs no container. `--layer 3` is `all` plus the E3B backend
+stage. `--canary` additionally proves an INTENTIONAL failure is detected rather than skipped.
 """
 from __future__ import annotations
 
@@ -198,6 +201,10 @@ def preflight(report: Report, *, want_services: bool) -> bool:
         # FRESH services" is the acceptance criterion, and a leftover stack would otherwise
         # look like a busy port below.
         if harness.owned_containers():
+            # E3B: a PostgREST of ours left by an interrupted --layer 3 run sits on E2's
+            # network and would make this removal fail; it goes first (a foreign one is
+            # refused).
+            _backend_stack().postgrest_down()
             harness.down()
         busy = harness.busy_ports()
         if busy:
@@ -422,6 +429,86 @@ def canary(report: Report) -> None:
                          for half, run in runs.items()}}, runs=runs)
 
 
+def _backend_stack():
+    """`backend/stack.py`, imported on first use (it pulls in the contracts package)."""
+    if str(harness.HERE / "backend") not in sys.path:
+        sys.path.insert(0, str(harness.HERE / "backend"))
+    import stack
+    return stack
+
+
+BACKEND_SUITE = "tests/integration/backend"
+PENDING_MARK = re.compile(r"PENDING\[([A-Z0-9,-]+)\]")
+
+
+def classify(junit_xml: str) -> dict:
+    """Per-case outcome from pytest's JUnit XML: passed / failed / pending(ids) / skipped.
+
+    A skip is PENDING only when its message carries `PENDING[<ids>]` (backend/stack.py's
+    closed vocabulary); any other skip at layer 3 means a case that should have run did not.
+    """
+    import xml.etree.ElementTree as ET
+    cases = {"passed": [], "failed": [], "pending": {}, "skipped": []}
+    for case in ET.fromstring(junit_xml).iter("testcase"):
+        name = f"{case.get('classname', '')}::{case.get('name', '')}"
+        if case.find("failure") is not None or case.find("error") is not None:
+            cases["failed"].append(name)
+        elif (skip := case.find("skipped")) is not None:
+            mark = PENDING_MARK.search(skip.get("message", "") + (skip.text or ""))
+            if mark:
+                for task in mark.group(1).split(","):
+                    cases["pending"].setdefault(task, []).append(name)
+            else:
+                cases["skipped"].append(name)
+        else:
+            cases["passed"].append(name)
+    return cases
+
+
+def backend_verdict(cases: dict, exit_code: int) -> str:
+    """FAIL beats PENDING beats PASS. A pending case is never a pass, a plain skip at layer 3
+    is a case that did not run, and a run that ran nothing proves nothing."""
+    if cases["failed"] or cases["skipped"] or not cases["passed"] or exit_code not in (0,):
+        return FAIL
+    return PENDING if cases["pending"] else PASS
+
+
+def backend(report: Report) -> None:
+    """E3B phase 1: PostgREST beside E2's stack, then the backend gate suite."""
+    import tempfile
+    backend_stack = _backend_stack()
+    try:
+        postgrest = backend_stack.postgrest_up()
+    except harness.HarnessError as exc:
+        report.add("backend", PENDING, f"could not start PostgREST: {exc}")
+        return
+    with tempfile.TemporaryDirectory(prefix=f"{harness.PROJECT}-e3b-") as tmp:
+        junit = Path(tmp) / "backend.xml"
+        run = shell([sys.executable, "-m", "pytest", "-q", BACKEND_SUITE, "-p",
+                     "no:cacheprovider", "-rs", f"--junitxml={junit}"], cwd=harness.REPO_ROOT,
+                    env={"INFRX_E2_CANARY": "off"})
+        cases = classify(junit.read_text()) if junit.exists() else \
+            {"passed": [], "failed": ["<no junit report>"], "pending": {}, "skipped": []}
+    distinct = {name for names in cases["pending"].values() for name in names}
+    report.add("backend", backend_verdict(cases, run["exit"]),
+               {"postgrest": postgrest, "run": len(cases["passed"]),
+                "pending": len(distinct), "failed": cases["failed"] or None,
+                "not_run": cases["skipped"] or None,
+                "detected": sorted(name.split("::")[-1] for name in cases["passed"]
+                                   if "detects" in name),
+                "pending_by_id": {task: len(names)
+                                  for task, names in sorted(cases["pending"].items())}},
+               cases=cases, runs=[run])
+
+
+def backend_teardown(report: Report) -> None:
+    """E3B's PostgREST sits on E2's network, which cannot go while it is attached."""
+    try:
+        report.add("backend-teardown", PASS, {"removed": _backend_stack().postgrest_down()})
+    except harness.HarnessError as exc:
+        report.add("backend-teardown", FAIL, str(exc))
+
+
 def teardown(report: Report) -> None:
     try:
         removed = harness.down()
@@ -440,8 +527,9 @@ def main(argv: list[str] | None = None) -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--seed", type=int, default=20260921,
                         help="fixture seed; the same seed gives the same uuids and rows")
-    parser.add_argument("--layer", choices=("1", "2", "all"), default="all",
-                        help="1 = nothing that needs a container")
+    parser.add_argument("--layer", choices=("1", "2", "all", "3"), default="all",
+                        help="1 = nothing that needs a container; 3 = all + the E3B backend "
+                             "gate (exits 3 while any backend case is pending)")
     parser.add_argument("--keep", action="store_true",
                         help="leave the stack running (still only infrx-e2-* containers)")
     parser.add_argument("--pull", action="store_true", help="pull the pinned digests first")
@@ -455,7 +543,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     report = Report()
-    want_services = args.layer in ("2", "all")
+    want_services = args.layer in ("2", "all", "3")
     with signals_handled():
         return _run(report, args, want_services)
 
@@ -468,9 +556,13 @@ def _run(report: Report, args, want_services: bool) -> int:
             fixtures = migrate(report, args.seed)
             if fixtures is not None:
                 rls(report, fixtures)
+                if args.layer == "3":
+                    backend(report)
         elif want_services:
             report.add("migrate", PENDING, "no services: migration and RLS cannot run")
             report.add("rls", PENDING, "no services: the role matrix cannot run")
+            if args.layer == "3":
+                report.add("backend", PENDING, "no services: the backend gate cannot run")
         if args.layer != "2":
             engine(report)
             suites(report, own_only=args.only_suites)
@@ -483,6 +575,8 @@ def _run(report: Report, args, want_services: bool) -> int:
         report.add("interrupted", FAIL, f"signal {stop.signum}: tearing the stack down")
     finally:
         if have_services and not args.keep:
+            if args.layer == "3":
+                backend_teardown(report)
             teardown(report)
         elif args.keep:
             report.add("teardown", SKIP, "--keep: the stack is still up")

@@ -183,6 +183,9 @@ def _compose(*args: str, check: bool = True):
 
 def postgrest_owner() -> str | None:
     """`None` if absent, "ours" if this checkout created it, else the foreign label."""
+    import shutil
+    if shutil.which("docker") is None:
+        return None
     probe = harness.run(["docker", "inspect", POSTGREST, "--format",
                          "{{json .Config.Labels}}"], check=False, timeout=60)
     if probe.returncode != 0:

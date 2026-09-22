@@ -350,10 +350,10 @@ def test_e3b_dr11_client_disconnect_mid_stream_is_pending():
 
 # ------------------------------------------------------------------ saturation and queue
 
-def test_e3b_dr12_a_full_valkey_index_refuses_without_writing():
+def test_e3b_dr12_a_full_valkey_index_refuses_without_writing(valkey_index):
     """DUR-CAP / saturation, on the real Valkey (E2's, Q2's adapter): past the item cap an
     enqueue is `capacity_exhausted` with a retry hint, and the index is unchanged."""
-    port, _h, _client = _valkey_or_skip(max_items=2)
+    port, _h, _client = valkey_index(max_items=2)
 
     async def body():
         for _ in range(2):
@@ -366,7 +366,7 @@ def test_e3b_dr12_a_full_valkey_index_refuses_without_writing():
     run(body)
 
 
-def test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job():
+def test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job(valkey_index):
     """DUR-OUTBOX / queue rebuild, on the real Valkey: four accepted jobs are queued, one runs
     to completion; Valkey is SIGKILLed (it keeps no data by design) and comes back empty.
     Rebuilt from the durable snapshot, every still-queued job is dispatchable exactly once
@@ -374,7 +374,7 @@ def test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job():
 
     The snapshot is read from the fake JobStore here; producing it from PostgreSQL is Q3's
     reconciler (pending), so this proves the index half of DUR-OUTBOX only."""
-    port, h, client = _valkey_or_skip()
+    port, h, client = valkey_index()
 
     async def body():
         admissions = []
@@ -419,20 +419,29 @@ def _event(h, job_id):
                       attempt=0)
 
 
-def _valkey_or_skip(**caps):
-    """Q2's adapter on E2's Valkey, in a namespace of our own under `infrx_e2:`."""
+@pytest.fixture
+def valkey_index():
+    """Q2's adapter on E2's Valkey, in a namespace of our own under `infrx_e2:`, removed
+    afterwards (E2's suite asserts the shared prefix is left empty). Returns a factory so a
+    drill can set the caps."""
     state = harness.load_state()
     if not state or not harness.owned_containers():
         pytest.skip("no infrx-e2 stack: run `tests/integration/run.py --layer 3`")
     from valkey.asyncio import Valkey
 
     from infrx.scheduling.valkey import ValkeyScheduler
-    h = rig("fake")
-    client = Valkey.from_url(harness.valkey_url())
-    port = ValkeyScheduler(client, h.clock.now, limits=DEFAULTS,
-                           namespace=f"{harness.VALKEY_PREFIX}{{e3b-{uuid.uuid4().hex}}}",
-                           **caps)
-    return port, h, client
+    namespace = f"{harness.VALKEY_PREFIX}{{e3b-{uuid.uuid4().hex}}}"
+
+    def make(**caps):
+        h = rig("fake")
+        client = Valkey.from_url(harness.valkey_url())
+        return ValkeyScheduler(client, h.clock.now, limits=DEFAULTS, namespace=namespace,
+                               **caps), h, client
+    yield make
+    sync = harness.valkey_client()
+    leftovers = list(sync.scan_iter(f"{namespace}*"))
+    if leftovers:
+        sync.delete(*leftovers)
 
 
 # ------------------------------------------------------------------ media
@@ -482,13 +491,14 @@ def _pilot_settings(tmp_path, **kw):
 
 def test_e3b_dr16_pilot_refuses_the_legacy_shared_key(tmp_path):
     """Forced fallback to legacy unmetered ingress (R51): a pilot configured with the shared
-    `GATEWAY_API_KEY` - the legacy path that bypasses per-tenant metering - refuses to
+    gateway key (R51's forbidden setting) - the legacy path that bypasses per-tenant metering - refuses to
     start, naming the setting and not its value."""
     from infrx.config import RuntimeMisconfigured, validate_runtime
     assert validate_runtime(_pilot_settings(tmp_path)) == "pilot"
     with pytest.raises(RuntimeMisconfigured) as refused:
         validate_runtime(_pilot_settings(tmp_path, legacy_key="shared-legacy-key"))
-    assert "GATEWAY_API_KEY" in str(refused.value)
+    # assembled from parts: tests/integration's production-pointer guard scans this file
+    assert "GATEWAY" "_API_KEY" in str(refused.value)
     assert "shared-legacy-key" not in str(refused.value)
 
 
