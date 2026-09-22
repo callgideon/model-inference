@@ -1,8 +1,11 @@
 # I — Infrastructure and operations
 
+> **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v3](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. I2 is split into I2A/I2L; use independent App/Lab gates.
+
+
 ## Current State Summary
 
-Implementation has not started in this documentation package. Deploy the integrated pilot reproducibly, prove recovery, and keep fleet rollout behind its own evidence gate. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
+Wave-2 baseline is audited in `10-wave2-platform-audit.md`; preserve its completed tasks and apply the new revision gates before pending work. This original brief supplies unchanged algorithms, not current progress claims. Deploy the integrated pilot reproducibly, prove recovery, and keep fleet rollout behind its own evidence gate. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
 
 ## Important Context
 
@@ -42,7 +45,7 @@ Deploy the integrated pilot reproducibly, prove recovery, and keep fleet rollout
 
 ## Assumptions Made
 
-Start dependencies have been integrated before coding. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
+Start dependencies follow manifest v3: reviewed code/fixtures may enable development; new F2R/F2P/D1R gates require acceptance evidence. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
 
 ## Potential Gotchas
 
@@ -52,7 +55,9 @@ Historical live inventory may be stale. GPU is east1 while PG is east2: journal 
 
 ### I1 — Read-only inventory and deploy design
 
-**Start after:** none; independently ready. **Integrate after:** its start dependencies; no additional external module dependency.
+**Start after:** none. **Integrate after:** none beyond the start/code gate.
+
+**Imported baseline status:** `integrated` at wave 2; preserve completed work. Product revision/integration follow-up: `I0`. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Verify repository/deployment versions, resource topology, IAM/secret references and storage durability without printing secret values. Inventory required vs existing resources and priced estimates; include DB/journal network latency probe design, backup needs and allocated test environments. Do not create resources in this task.
 
@@ -64,7 +69,7 @@ Historical live inventory may be stale. GPU is east1 while PG is east2: journal 
 
 ### I2 — Reproducible single-GPU deployment
 
-**Start after:** I1, F2. **Integrate after:** D5, G2, G3, G4, W3, T3, C3, U3, V3, G5.
+**Scheduling:** Retired mixed task. Use `I2A`, `I2L` from the amendment briefs. The algorithm below is historical reference.
 
 **Implementation:** Write idempotent provisioning/deploy config for durable payload/results/spool, PG access, observability/CH and secret injection. Add explicit dev/pilot mode, process isolation, readiness and migration ordering; choose engine/artifact pins from W. Deploy only in allocated scope with coordinator lock. Verify east1-east2 journal latency before release claims.
 
@@ -76,7 +81,7 @@ Historical live inventory may be stale. GPU is east1 while PG is east2: journal 
 
 ### I3 — Recovery, alarms and rollback runbooks
 
-**Start after:** I2. **Integrate after:** E3.
+**Start after:** I2A, F2P. **Integrate after:** E3A. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Exercise backup restore, spool recovery, object expiry, disk/queue/budget/unknown-use alerts and planned maintenance. Record RPO/RTO measured per durable layer; test compatible rollback with admission paused and jobs drained/fenced. Supply operational dashboards from actual exported metrics.
 
@@ -88,7 +93,7 @@ Historical live inventory may be stale. GPU is east1 while PG is east2: journal 
 
 ### I4 — Separately gated fleet deployment
 
-**Start after:** I3, E4. **Integrate after:** its start dependencies; no additional external module dependency.
+**Start after:** I3, E4, F2P. **Integrate after:** none beyond the start/code gate. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement multiworker routing/scaling/AMI and capacity plan from measured pilot data, with staged rollout/drain and failover evidence. If ALB least-outstanding-requests is selected, slow-start remains0. Use Valkey only as index with PG reconciliation; evaluate capacity purchases separately, do not purchase from this task alone.
 

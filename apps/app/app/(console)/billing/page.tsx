@@ -1,3 +1,4 @@
+import { ConsoleDataUnavailable, ConsolePreviewNotice } from "@/components/console-data-state";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +20,9 @@ export const metadata = { title: "Balance · infrx" };
 
 export default async function BillingPage({ searchParams }: PageProps<"/billing">) {
   const params = await searchParams;
-  const { services, session } = consoleContext();
+  const context = consoleContext();
+  if (context === null) return <ConsoleDataUnavailable title="Balance" />;
+  const { services, session } = context;
   const state = parsePageCursor(params);
 
   const [balance, ledger] = await Promise.all([
@@ -31,9 +34,10 @@ export default async function BillingPage({ searchParams }: PageProps<"/billing"
 
   return (
     <>
+      <ConsolePreviewNotice />
       <PageHeader
         title="Balance"
-        subtitle="The free pilot runs on promotional credit granted by the infrx team. There is nothing to pay."
+        subtitle="Example balances and ledger entries from the legacy USD pilot."
       />
 
       {model.balance.kind === "ready" ? <PromotionalBalanceCard model={model.balance.value} /> : null}

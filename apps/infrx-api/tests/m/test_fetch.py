@@ -108,7 +108,8 @@ def test_the_address_policy_does_not_depend_on_the_interpreters_tables():
     itself instead of inheriting whatever the interpreter happens to know."""
     from infrx.media.video import address_allowed
 
-    for address in support.INTERNAL:
+    for address in (*support.INTERNAL, "::ffff:192.88.99.1", "::ffff:192.0.0.9",
+                    "::ffff:198.18.0.1"):
         assert not address_allowed(address), address
     for address in (support.PUBLIC, support.PUBLIC_V6, support.PUBLIC_MAPPED,
                     "1.1.1.1", "8.8.8.8", "2620:fe::fe"):
@@ -117,7 +118,9 @@ def test_the_address_policy_does_not_depend_on_the_interpreters_tables():
 
 def test_a_v4_mapped_public_address_is_judged_as_the_v4_it_names():
     """The other half of B1: the mapped unwrap is a decision, not decoration. Without it
-    every `::ffff:` form is refused as reserved space, so this is the case that dies."""
+    mapped addresses must retain the embedded IPv4 policy, including explicit deny ranges.
+    Newer interpreter builds already classify mapped public space as public; the
+    denied mapped forms below still distinguish correct unwrapping on those builds."""
     transport = support.Transport(support.response(body=MP4))
     resolve = support.resolver([support.PUBLIC_MAPPED])
     got = asyncio.run(fetcher(resolve=resolve, transport=transport).fetch(URL))

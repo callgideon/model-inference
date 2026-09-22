@@ -1,5 +1,8 @@
 # Console and API — requirements and architecture
 
+> **Current product scope (2026-09-21):** [Two-platform architecture](../research/platforms/README.md) supersedes conflicting product and launch assumptions below. apps/app is the free consumer product with 10,000 credits once per individual; apps/lab is the provider product. Historical research and measurements remain context, not current implementation instructions.
+
+
 > **Implementation amendment — 2026-09-20.** Use [the unified handoff package](../research/plan/README.md) for current scope, dependencies and acceptance. First release is a free single-GPU pilot with promotional holds/settlement, existing organization roles, explicit async, opt-in trace content and separately consented evaluation. Payments, OpenRouter and commercial second-owner launch are deferred; do not treat old auth, payment, no-content-storage or ZDR assumptions as current implementation instructions.
 
 

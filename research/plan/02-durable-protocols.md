@@ -24,9 +24,9 @@ Known authoritative usage on customer cancellation may consume promotional credi
 
 ## Promotional credit migration
 
-D owns all migrations. Extend `models.limits`; do not add a duplicate column. Preserve numeric `usage_events.status` HTTP field and add textual outcome separately. Expand precision transactionally and preserve prior ledger entries exactly. Import existing ledger totals into wallet summaries with a reconciliation query. Mark historical usage as outside the new settlement regime; never replay it into debits. New organizations receive a wallet with zero total and no automatic grant.
+D owns all migrations. Extend `models.limits`; do not add a duplicate column. Preserve numeric `usage_events.status` HTTP field and add textual outcome separately. Preserve prior USD ledger entries exactly and reconcile their legacy summaries separately. Mark historical usage as outside the CREDIT settlement regime; never replay it into debits or reinterpret USD as credits. Add user-owned CREDIT wallets linked to personal consumer orgs and an atomic, unique-by-user initial grant of 10,000 after verified onboarding. Retries and organization changes cannot issue a second grant. Read [credit migration policy](../platforms/02-credits.md) before cutting over already implemented USD holds or live accounts.
 
-Grant operations need a stable idempotency key, operator identity, allowed grant kind, nonempty reason and append-only audit record. Corrections are compensating entries, never edits/deletes. Admission snapshots prices before dispatch, not at usage shipping. Unknown/unpriced models fail closed. RLS alone is insufficient when broad existing update grants cover new protected fields: explicitly restrict column grants and expose narrowly authorized RPCs/services. Browser roles must not write balances, holds, entitlements, suspension, job ownership, author provenance or platform roles.
+Operator grant adjustments need a stable idempotency key, operator identity, allowed grant kind, nonempty reason and append-only audit record. The initial signup grant uses an authoritative verified-user entitlement, not an operator action or browser claim. Corrections are compensating entries, never edits/deletes. Admission snapshots approved CREDIT rates and serving/deployment identity before dispatch, not at usage shipping. Unknown/unpriced models fail closed; public requests require published listings, while private dev requests need explicit matching credentials/entitlements and funded provider-dev wallets. RLS alone is insufficient when broad existing update grants cover new protected fields: explicitly restrict column grants and expose narrowly authorized RPCs/services. Browser roles must not write balances, holds, entitlements, suspension, job ownership, author provenance or platform roles.
 
 ## Trace loss and projections
 
@@ -47,3 +47,5 @@ Submission timeout without a known provider ID is `ambiguous`, with its reservat
 ## Verification log
 
 - 2026-09-20: Review fixes codified for durable acceptance, first-output fencing, terminal settlement, trace loss and external submission ambiguity. No live fault tests performed in this documentation change.
+
+- 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.

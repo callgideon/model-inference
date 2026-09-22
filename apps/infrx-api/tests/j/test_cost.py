@@ -162,7 +162,7 @@ def test_no_decimal_arithmetic_in_the_judge_escapes_the_explicit_context():
             touched = {named(node.left), named(node.right)} & money_names
             if touched:
                 bare.append(f"{path.name}:{node.lineno}: {sorted(touched)}")
-    assert bare == [], "Decimal arithmetic outside money.CONTEXT"
+    assert bare == [], "Decimal arithmetic outside money.arithmetic_context()"
 
 
 # --- rates come from an approved source, and there is not one yet ------------------

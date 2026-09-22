@@ -319,7 +319,7 @@ async def dur_admit__a_deadline_must_be_one_the_store_can_keep(factory):
     harness.extra["grant"](b.ORG_A, "25.00")
     journal_bytes = hook(harness, "journal_bytes")
     horizon = b.default_deadline_s(ExecutionMode.stream)
-    for deadline_s in (-1, 0, horizon + 1, horizon * 100):
+    for deadline_s in (-1, 0):
         request = b.request(harness, deadline_s=deadline_s)
         try:
             await harness.port.admit(request, b.idem(request, f"dl-{deadline_s}"), ())
@@ -330,10 +330,20 @@ async def dur_admit__a_deadline_must_be_one_the_store_can_keep(factory):
     assert len(harness.extra["active_jobs"]()) == 0
     assert harness.extra["balance"](b.ORG_A)["reserved"] == 0
     assert journal_bytes() == 0
-    # the longest deadline the budgets allow is accepted
-    request = b.request(harness, deadline_s=horizon)
-    admitted = await harness.port.admit(request, b.idem(request, "dl-ok"), ())
-    assert admitted.deadline_at == request.deadline_at
+    # The store clamps a future deadline to its own clock/budgets. A gateway clock
+    # slightly ahead is not an invalid customer request (F2.2 / R-3).
+    for deadline_s in (horizon - 1, horizon, horizon + 1, horizon * 100):
+        local = factory()
+        local.extra["grant"](b.ORG_A, "25.00")
+        request = b.request(local, deadline_s=deadline_s)
+        original = request.deadline_at
+        expected = min(original, local.clock.now() + timedelta(seconds=horizon))
+        key = b.idem(request, f"dl-{deadline_s}")
+        admitted = await local.port.admit(request, key, ())
+        assert admitted.deadline_at == expected
+        assert request.deadline_at == original, "admission mutated the caller's request"
+        replay = await local.port.admit(request, key, ())
+        assert replay.deadline_at == expected
 
 
 async def dur_cap__a_credit_grant_is_never_negative(factory):

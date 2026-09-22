@@ -1,5 +1,8 @@
 # research/platform/ — index and reading guide
 
+> **Current product scope (2026-09-21):** [Two-platform architecture](../platforms/README.md) supersedes conflicting product and launch assumptions below. apps/app is the free consumer product with 10,000 credits once per individual; apps/lab is the provider product. Historical research and measurements remain context, not current implementation instructions.
+
+
 ## 1. What this is
 
 Fact-checked research on building a **closed-loop model-replacement platform**:

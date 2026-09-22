@@ -1,8 +1,11 @@
 # F — Foundation and shared contracts
 
+> **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v3](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset.
+
+
 ## Current State Summary
 
-Implementation has not started in this documentation package. Create a stable seam around existing behavior, then executable contracts so twelve feature tracks can work independently. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
+Wave-2 baseline is audited in `10-wave2-platform-audit.md`; preserve its completed tasks and apply the new revision gates before pending work. This original brief supplies unchanged algorithms, not current progress claims. Create a stable seam around existing behavior, then executable contracts so twelve feature tracks can work independently. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
 
 ## Important Context
 
@@ -44,17 +47,19 @@ Create a stable seam around existing behavior, then executable contracts so twel
 
 ## Assumptions Made
 
-Start dependencies have been integrated before coding. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
+Start dependencies follow manifest v3: reviewed code/fixtures may enable development; new F2R/F2P/D1R gates require acceptance evidence. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
 
 ## Potential Gotchas
 
-Existing cache bounds and non-stream cleanup are already fixed. Preserve externally visible behavior in F1; security behavior changes belong to G/M. The Python name queue shadows the standard library: use infrx/scheduling. Console test discovery currently misses nested suites.
+Existing cache bounds and non-stream cleanup are already fixed. Preserve externally visible behavior in F1; security behavior changes belong to G/M. The Python name queue shadows the standard library: use infrx/scheduling. F2 fixed recursive console test discovery; preserve it when adding Lab tests.
 
 ## Task breakdown
 
 ### F1 — Extract current gateway behind an application factory
 
-**Start after:** none; independently ready. **Integrate after:** its start dependencies; no additional external module dependency.
+**Start after:** none. **Integrate after:** none beyond the start/code gate.
+
+**Imported baseline status:** `integrated` at wave 2; preserve completed work. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Inventory imports and behavior with the current 23 tests. Move auth, request validation, media and usage boundaries into named modules with a compatibility gateway entry point. Inject clients/clock/config, preserve deployment import path and isolate side effects from import. Keep extraction small enough to compare old/new fixtures.
 
@@ -66,7 +71,9 @@ Existing cache bounds and non-stream cleanup are already fixed. Preserve externa
 
 ### F2 — Freeze typed contracts, pins and executable fixtures
 
-**Start after:** F1. **Integrate after:** its start dependencies; no additional external module dependency.
+**Start after:** F1. **Integrate after:** none beyond the start/code gate.
+
+**Imported baseline status:** `integrated` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `F2P`. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Encode contracts v1 and serialized success/error/job/feedback/decimal fixtures. Define exact configuration names and concrete bounded capacities, including journal byte reservations, task-local ports and schema versions. Add fake adapters for each port with deterministic failure injection. Pin Python and engine-independent dependencies; update recursive console test discovery and central CI commands through the coordinator. Document any design refinement before consumers branch.
 

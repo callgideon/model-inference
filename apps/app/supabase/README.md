@@ -2,7 +2,11 @@
 
 Schema for the console: `migrations/0001_init.sql` (tables, RLS, signup
 trigger, reporting functions) and `migrations/0002_seed_models.sql` (model
-catalog; re-runnable, upserts by id).
+catalog; re-runnable, upserts by id). Migrations `0003`–`0005` add the original
+USD pilot durable schema and RPCs. They are committed and tested in the wave-2
+record; this audit has not applied them to any hosted project. The two-platform
+CREDIT/user-wallet schema requires new additive migrations under D1R. Never edit
+0001–0005 to erase their history.
 
 ## Apply
 
@@ -18,6 +22,8 @@ without a new migration file:
 
 ```bash
 psql "$SUPABASE_DB_URL" -f supabase/migrations/0002_seed_models.sql
+# After 0003 is installed, extend the new models' limit rows as well:
+psql "$SUPABASE_DB_URL" -c "select infrx.extend_model_limits();"
 ```
 
 ## Auth setup (dashboard → Authentication)
@@ -84,3 +90,15 @@ supabase db push --yes --db-url \
 The password is in AWS SSM as `/INFRX-SUPABASE-PROD/db_password`; the
 publishable and secret API keys are `/INFRX-SUPABASE-PROD/publishable_key`
 and `/INFRX-SUPABASE-PROD/secret_key`. Applied 2026-09-20 (0001, 0002).
+
+## Durable pilot exposure rules
+
+Keep PostgREST `db-schemas` set to `public`; never expose `infrx` directly.
+Every future migration adding a public table or function must revoke inherited
+PUBLIC/anon/authenticated privileges first, then grant only the intended verbs or
+RPC entry points. Supabase default ACLs are broader than a plain PostgreSQL instance;
+verify both grants and RLS using real anon, authenticated, operator and service roles.
+
+The historical role table above describes 0001–0002. For 0003–0005 the authority is
+`0004_pilot_roles_and_rpcs.sql` and `0005_console_read_surface.sql` (exact names in migrations/),
+including restricted financial RPCs. App and Lab share this one migration history.

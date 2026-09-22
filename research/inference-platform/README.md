@@ -1,5 +1,8 @@
 # Model-to-API platform: product and market research
 
+> **Current product scope (2026-09-21):** [Two-platform architecture](../platforms/README.md) supersedes conflicting product and launch assumptions below. apps/app is the free consumer product with 10,000 credits once per individual; apps/lab is the provider product. Historical research and measurements remain context, not current implementation instructions.
+
+
 Research date: **2026-09-19**. Scope confirmed with the user: **our AWS first**.
 
 The product is a platform that turns a startup's model into an operated, metered, commercial API. Marlin-2B is the first model and internal proving ground. The initial deliverable is a paid Marlin endpoint; the platform milestone is a second model owner launching without bespoke billing or serving work.

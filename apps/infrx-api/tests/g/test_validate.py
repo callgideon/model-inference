@@ -9,6 +9,7 @@ accepts them" is proven by admission rather than by a matching constant here.
 """
 import asyncio
 import json
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -314,13 +315,13 @@ def test_dur_admit__admit_accepts_the_ingress_ceilings_and_derives_the_hold():
 
 
 def test_dur_admit__the_ingress_deadline_is_one_the_store_can_keep():
-    """r1 R29: `admit` refuses a deadline beyond preparation + queue + generation.
+    """r1 R29: `admit` clamps a deadline beyond preparation + queue + generation.
     The ingress derives exactly that sum, from the same `Budgets.of`."""
     _harness, admission = admitted()
     assert admission.budgets.queue_wait_s == 10.0            # sync: interactive budget
     assert (admission.deadline_at - admission.admitted_at).total_seconds() == (
         admission.budgets.preparation_s + admission.budgets.queue_wait_s
-        + admission.budgets.generation_s - validate.DEADLINE_SKEW_MARGIN_S)
+        + admission.budgets.generation_s)
 
 
 def test_dur_admit__an_async_request_gets_the_async_queue_budget():
@@ -337,7 +338,7 @@ def test_dur_admit__an_async_request_gets_the_async_queue_budget():
     admission = asyncio.run(harness.port.admit(request, idem))
     assert admission.budgets.queue_wait_s == 600.0
     assert (admission.deadline_at - admission.admitted_at).total_seconds() == (
-        1_020.0 - validate.DEADLINE_SKEW_MARGIN_S)
+        1_020.0)
 
 
 # --- survivors the first review named, each now killable ---------------------------
@@ -398,33 +399,28 @@ def test_f_base__there_is_no_second_clock():
     assert request.created_at.timestamp() == fixed
     assert request.created_at.tzinfo is not None
     assert (request.deadline_at - request.created_at).total_seconds() == (
-        120.0 + 10.0 + 300.0 - validate.DEADLINE_SKEW_MARGIN_S)
+        120.0 + 10.0 + 300.0)
 
 
-SKEWS = ((0.0, 202), (0.001, 202), (validate.DEADLINE_SKEW_MARGIN_S - 0.001, 202),
-         (validate.DEADLINE_SKEW_MARGIN_S + 1.0, 400), (-5.0, 202))
+SKEWS = (0.0, 0.001, 1.999, 3.0, -5.0)
 
 
-@pytest.mark.parametrize("behind_s,expected", SKEWS, ids=[str(s[0]) for s in SKEWS])
-def test_dur_admit__the_deadline_survives_clock_skew(behind_s, expected):
-    """r1 R7: `admit` measures its ceiling from the database clock. Everything inside
-    the margin is admitted; past it the store is right to refuse, and the gateway's
-    own answer is what a caller sees."""
+@pytest.mark.parametrize("behind_s", SKEWS)
+def test_dur_admit__the_deadline_survives_clock_skew(behind_s):
+    """R-3: a future request is accepted, bounded by the database clock and caller."""
     harness = FACTORIES["jobstore"]()
     harness.extra["grant"](support.ORG, "1.00")
     tc, calls = client()
     assert tc.post(support.CHAT_PATH, headers=support.AUTH,
                    json=message(model=support.PUBLIC_MODEL)).status_code == 202
     request = calls[0][1]
-    # the store's clock, `behind_s` behind the gateway's
     harness.clock.advance((request.created_at - harness.clock.now()).total_seconds() - behind_s)
-    if expected == 202:
-        admission = asyncio.run(harness.port.admit(request, calls[0][2]))
-        assert admission.state.value == "preparing"
-    else:
-        with pytest.raises(Exception) as raised:
-            asyncio.run(harness.port.admit(request, calls[0][2]))
-        assert raised.value.code == "invalid_request"
+    admission = asyncio.run(harness.port.admit(request, calls[0][2]))
+    assert admission.state.value == "preparing"
+    assert admission.deadline_at == min(
+        request.deadline_at,
+        harness.clock.now() + timedelta(seconds=b.default_deadline_s(request.execution_mode)),
+    )
 
 
 

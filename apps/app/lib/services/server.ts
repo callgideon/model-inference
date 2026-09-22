@@ -52,9 +52,9 @@ export async function resolveSessionContext(): Promise<SessionContext> {
  * Build the services with the injected query ports.
  *
  * The ports themselves are **integration-pending**: the named queries of `./query.ts` are rendered
- * against the relations of 06, which D1 owns and which do not exist yet, and this console has no
- * PostgreSQL or ClickHouse client in its frozen dependency set. The coordinator wires the real ports
- * at integration (see the integration request in this task's evidence); until then the only executor
+ * against D1's committed 0003–0005 schema; product-v2 additions belong to D1R. C0 supplies the
+ * real Supabase/PostgREST consumer port independently of Lab content/ClickHouse work in C2.
+ * The coordinator wires the authenticated context at integration; until then the only executor
  * is the in-memory port the track tests inject.
  */
 export function createServerConsoleServices(ports: Omit<ConsoleServicesConfig, "cursorSecret">): ConsoleServices {

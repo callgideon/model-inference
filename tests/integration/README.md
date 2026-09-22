@@ -10,7 +10,7 @@ AWS.
 
 ```bash
 make api-env                                                   # once: the pinned Python env
-apps/infrx-api/.venv/bin/python tests/integration/run.py
+make integration
 ```
 
 It provisions a fresh stack, applies the console migrations, seeds deterministic fixtures,
@@ -39,8 +39,8 @@ Ports 55500–55599 also lie inside the kernel's ephemeral range (32768–60999)
 bind failure is possible: provisioning retries once after a short wait and then reports
 PENDING (exit 3), never a pass.
 
-`make integration` would be the natural spelling and is an **integration request**: the root
-`Makefile` is coordinator-owned.
+`make integration INTEGRATION_ARGS="--layer 1 --no-mutants"` runs the container-free slice.
+A passed `make check` can include Docker-dependent skips; it does not prove real-service integration.
 
 Preflight removes whatever a previous run of *this* project left (fresh services are the
 acceptance criterion), then refuses to continue if any task-local port is still held by

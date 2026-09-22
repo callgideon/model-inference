@@ -1,10 +1,10 @@
-# Implementation handoffs — free pilot and traces
+# Implementation handoffs — consumer App and provider Lab
 
-Status: **wave 2 merged on `claude/infrx-impl` (2026-09-21); wave 3 not started** — start at [the wave-2 handoff](evidence/coordinator/2026-09-21-wave2-handoff.md); live status is the [pipeline board](evidence/coordinator/STATUS.md) and `tasks.json`; binding contract rulings are in [the encoding](08-contracts-v1-encoding.md) §10. Prepared 2026-09-20 for independent Claude Opus 5 sessions. This package supersedes conflicting implementation instructions in the original production API and traces research. Historical measurements remain historical measurements; this plan does not certify the live system.
+Status: **wave 2 imported from main `271add9` and audited; wave-3 feature work has not started**. See [audit findings](10-wave2-platform-audit.md), [new revision handoffs](11-wave3-revision-handoffs.md) and [actual local verification](evidence/wave2-platform-audit.md). Original v1 completion evidence remains historical evidence, not product-v2 compatibility or live status.
 
 ## Start here
 
-Read [the coordinator handoff](COORDINATOR.md), [accepted decisions](00-decisions-and-scope.md), [contracts](01-contracts.md), and [durable protocols](02-durable-protocols.md). Then select exactly one task from [the task manifest](tasks.json) and its module handoff. Follow [worktree and integration rules](03-execution-protocol.md); attach [verification evidence](04-verification.md) before handing it back.
+Read [the wave-2 audit](10-wave2-platform-audit.md) and [revision briefs](11-wave3-revision-handoffs.md), then [product architecture](../platforms/README.md), [the cross-system handoff](PLATFORM-SPLIT-HANDOFF.md), [implementation impact](08-platform-split.md) and [amendment briefs](09-amendment-workstreams.md), then [accepted decisions](00-decisions-and-scope.md), [contracts](01-contracts.md) and [durable protocols](02-durable-protocols.md). Reconcile current work before selecting one active task from [manifest v3](tasks.json). Follow [worktree rules](03-execution-protocol.md); attach [verification evidence](04-verification.md). Six old mixed tasks are superseded; their IDs remain for mapping prior work.
 
 | Track | Handoff | Owns | Earliest useful work |
 |---|---|---|---|
@@ -18,19 +18,22 @@ Read [the coordinator handoff](COORDINATOR.md), [accepted decisions](00-decision
 | J | [Judge](handoffs/J-judge.md) | Evaluation workflow, calibration, provider adapter | F2 |
 | C | [Console services](handoffs/C-console-services.md) | Tenant-safe repositories and server actions | F2 |
 | U | [Administration UI](handoffs/U-administration-ui.md) | Usage, balances, keys, settings, operator pages | F2 |
-| V | [Trace UI](handoffs/V-trace-ui.md) | Trace list/detail and feedback/judge presentation | F2 |
+| V | [Trace UI](handoffs/V-trace-ui.md) | Provider trace/detail/review/judge UI in apps/lab | Amended F2; integrate Lab access/shell |
 | I | [Infrastructure](handoffs/I-infrastructure.md) | Pilot deployment, observability, later fleet | Inventory immediately |
 | E | [Verification](handoffs/E-verification.md) | Corpus, harness, adversarial integration, release evidence | Corpus immediately |
+| S | [Reconciliation](09-amendment-workstreams.md) | Remote state, amended contracts, shared wiring | Immediately |
+| A | [Consumer additions](09-amendment-workstreams.md) | Signup/onboarding, catalog/rates/docs; grant transaction D-owned | Amended F2; D1 for A1 |
+| L | [Lab foundation](09-amendment-workstreams.md) | Provider shell/roles, model and endpoint workflows | Amended F2 |
 
-F is a short prerequisite track; the other twelve can then develop against the same fakes and interfaces. Development readiness does not imply merge or deployment readiness. Dependencies in the manifest are **implementation-start dependencies**; each task also lists **integration dependencies** that must pass before integrated status. Mock tests alone cannot satisfy those dependencies.
+F/S establish the revised common contracts. Independent tracks then develop against committed fixtures; tasks sharing owned paths remain serialized within their track. Development readiness does not imply merge or deployment readiness. Start dependencies require committed/reviewed code and fixtures; real integration dependencies require actual adapter evidence. New F2R/F2P/D1R gates must pass before their consumers start. Mock tests alone cannot satisfy integration dependencies.
 
 ## Delivery sequence
 
-1. F1 extraction, E1 benchmark/corpus preparation, I1 read-only inventory run independently.
-2. Merge F2 contracts and test discovery. Start twelve isolated module tracks; D is the critical path.
-3. Integrate real admission, media, scheduling, worker, journal and gateway. Integrate traces and console independently, then feedback/judge coordination.
-4. E3 verifies cross-module failure boundaries; I2/I3 and E4 produce single-GPU pilot evidence.
-5. I4 fleet rollout is separately gated after pilot acceptance. Payments, second-owner workflow, OpenRouter listing and distillation remain later work.
+1. Review/commit S1 audit; retain F1/F2/D1 and all wave-2 history. F2R closes carryovers while I0 and E2R can work independently.
+2. F2P encodes the revised contract; D1R adds migrations after 0005. C0 wires consumer database reporting independently of Lab content.
+3. Parallel runtime/App tasks use the revised fixtures, then integrate real D2–D5/M/Q/W before G2 mounts anything. I0's installer prerequisite is mandatory.
+4. E3A → I2A/I3/E4 proves the consumer release. L1–L4/E3L/I2L prove provider operations independently; V1M/C2/T/J feed E5L observation.
+5. Fleet, datasets/training, streaming/robotics and speech follow their separate roadmap gates. No old wave-3 linear sequence overrides the manifest.
 
 See [risks and review dispositions](05-risk-register.md) for the changes made after review. No elapsed-time promise substitutes for a passed gate.
 
@@ -42,3 +45,7 @@ The [contracts v1 encoding](08-contracts-v1-encoding.md) fixes the layout, vocab
 - 2026-09-20: Implementation coordination started ([session 01](evidence/coordinator/2026-09-20-session-01.md)); added the contracts v1 encoding refinement for F2. No task is marked integrated by this entry.
 - 2026-09-21: Status line updated; F1, F2, E1 and I1 are integrated on `claude/infrx-impl` (gate G0), nothing is deployed or live-verified.
 - 2026-09-21: Wave 2 complete — all eleven module tasks (D1, M1, Q1, W1, G1, T1, J1, C1, U1, V1, E2) reviewed and merged on `claude/infrx-impl`; stage review S2 `pass`; D1 `integrated` (real PostgreSQL, both images), the other ten `implemented` behind fakes or a local real service. Nothing deployed, mounted or applied to a Supabase project. Next: F2.2 then wave 3 per the handoff.
+
+- 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.
+
+- 2026-09-21: Imported `271add9`, audited wave 2 and reconciled product-v2 revisions in manifest v3; see `10-wave2-platform-audit.md`. Earlier remote-unverified statements are superseded for committed repository work only.

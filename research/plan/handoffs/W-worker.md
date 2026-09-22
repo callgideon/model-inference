@@ -1,8 +1,11 @@
 # W — Engine execution and lifecycle
 
+> **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v3](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset.
+
+
 ## Current State Summary
 
-Implementation has not started in this documentation package. Execute one fenced attempt at a time and carry cancellation, results and authoritative usage through durable terminalization. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
+Wave-2 baseline is audited in `10-wave2-platform-audit.md`; preserve its completed tasks and apply the new revision gates before pending work. This original brief supplies unchanged algorithms, not current progress claims. Execute one fenced attempt at a time and carry cancellation, results and authoritative usage through durable terminalization. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
 
 ## Important Context
 
@@ -40,7 +43,7 @@ Execute one fenced attempt at a time and carry cancellation, results and authori
 
 ## Assumptions Made
 
-Start dependencies have been integrated before coding. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
+Start dependencies follow manifest v3: reviewed code/fixtures may enable development; new F2R/F2P/D1R gates require acceptance evidence. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
 
 ## Potential Gotchas
 
@@ -50,7 +53,9 @@ No postpublication regeneration. Do not pass upstream DONE before settlement. En
 
 ### W1 — Engine adapter and deterministic execution fakes
 
-**Start after:** F2. **Integrate after:** its start dependencies; no additional external module dependency.
+**Start after:** F2. **Integrate after:** none beyond the start/code gate.
+
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `W2`. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement engine request/response translation, video ref handling, version checks and authoritative usage parsing. Validate supported parameters/context after preparation. Provide fakes for prefill stall, split tokens, missing usage, engine error and abrupt exit. Preserve raw final text needed by canonical trace capture.
 
@@ -62,7 +67,7 @@ No postpublication regeneration. Do not pass upstream DONE before settlement. En
 
 ### W2 — Lease-aware execution, cancellation and completion
 
-**Start after:** W1. **Integrate after:** D5, M2, Q3.
+**Start after:** W1, F2P. **Integrate after:** D5, M2, Q3. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement claim/heartbeat loop, preparation handoff, bounded generation/TTFT/stall timers and engine cancellation acknowledgment. Append through StreamStore before publication; persist result then complete transaction. On lease loss stop generation immediately; race cancellation and completion through JobStore.
 
@@ -74,7 +79,7 @@ No postpublication regeneration. Do not pass upstream DONE before settlement. En
 
 ### W3 — Drain, engine pin and measured concurrency
 
-**Start after:** W2. **Integrate after:** E1.
+**Start after:** W2, F2P. **Integrate after:** E1. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Pin image/model/tokenizer revisions, configure serving limits and expose protected readiness/liveness. Drain stops new claims, waits within deadline, fences/cancels remainder and records outcomes. Run measured concurrency and media UUID capability probes with E; request service-unit changes from I.
 

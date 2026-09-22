@@ -144,7 +144,7 @@ export function walletSummaryOutcome(
     throw new Error(`the wallet summary could not be read: ${code || "unknown error"}`);
   }
   if (data === null || data === undefined) {
-    return { kind: "fallback", reason: "no wallet row for this organization" };
+    throw new Error("the wallet summary could not be read: missing wallet row");
   }
   return { kind: "summary", row: data };
 }

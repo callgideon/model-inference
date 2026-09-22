@@ -134,7 +134,10 @@ def test_the_movable_clock_cannot_exist_in_a_deployed_database():
 
 def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     files = pgstate.migration_files()
-    assert [path.name for path in files] == ["0001_init.sql", "0002_seed_models.sql"]
+    assert [path.name for path in files] == [
+        "0001_init.sql", "0002_seed_models.sql", "0003_pilot_durable_schema.sql",
+        "0004_pilot_roles_and_rpcs.sql", "0005_console_read_surface.sql",
+    ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()
     assert [name for name, _ in digests] == [path.name for path in files]

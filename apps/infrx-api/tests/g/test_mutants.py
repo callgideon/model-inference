@@ -25,7 +25,7 @@ SUBSET = ("body_cap_removed", "anonymous_request_accepted", "unhandled_exception
           # One per blocking finding of review round 1, so the default suite would
           # have caught each of them.
           "recursion_error_escapes", "envelope_render_unprotected", "messages_unbounded",
-          "param_echoed_unfiltered", "no_skew_margin", "cap_counts_one_chunk",
+          "param_echoed_unfiltered", "admission_ignores_db_deadline", "cap_counts_one_chunk",
           "http_exceptions_unwrapped", "trace_default_is_full")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 

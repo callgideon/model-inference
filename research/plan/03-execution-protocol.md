@@ -2,6 +2,8 @@
 
 ## Session start
 
+First read [the platform-split handoff](PLATFORM-SPLIT-HANDOFF.md) and read the wave-2 audit and reconcile any commits after `271add9`. Manifest v3 is authoritative for active task IDs, current paths and separate App/Lab release gates. Existing worktree owners retain their files until a coordinated handback; do not reset their status because this documentation uses `planned`.
+
 Read root CLAUDE and HANDOFF, this package, and the selected module brief. Inspect actual branch/worktree status and newer evidence before coding. The manifest is the planned dependency graph, not a live scheduler. Coordinator records assigned task, owner, base SHA and integration target in an append-only session record under `research/plan/evidence/`; do not have every worker rewrite the shared manifest.
 
 Use an isolated checkout of the coordinator's **committed integration SHA**. Do not branch from uncommitted foundation changes. Example after selecting task D1 and a verified SHA:
@@ -17,7 +19,7 @@ Replace the angle-bracket argument with the recorded SHA; it is intentionally no
 
 F1 owns extraction first. F2 owns global types/fixtures/dependency locks and test discovery. After F2, ownership transfers for feature roots in the manifest; F does not keep editing feature code. Coordinator alone changes composition roots, shared CI/package manifests/lockfiles, navigation/layout wiring, shared global types and the task manifest. Workers submit a small integration request describing imports/routes/dependencies rather than editing shared wiring concurrently. D alone owns SQL migrations; reserve migration sequence numbers centrally.
 
-Each task is one reviewable unit. Start dependencies must be integrated before coding except explicitly independent tasks. Integration dependencies may be faked during development but must be real and tested before the task is marked integrated. All module test directories are separate; E owns cross-module tests, never replaces modules' unit tests. The module handoff's paths are planned ownership, not evidence of existing files.
+Each task is one reviewable unit. Start dependencies need committed/reviewed code and fixtures; an implemented baseline adapter can enable development without a false integrated claim. New revision gates F2R/F2P/D1R require their acceptance evidence before consumers start. Integration dependencies may be faked during development but must be real and tested before the task is marked integrated. All module test directories are separate; E owns cross-module tests, never replaces modules' unit tests. The module handoff's paths are planned ownership, not evidence of existing files.
 
 ## Definition of done
 
@@ -29,8 +31,8 @@ Each task is one reviewable unit. Start dependencies must be integrated before c
 
 ## Merge lanes
 
-- Critical execution: F -> D1/D2 -> D3/D4/D5 + M -> Q/W -> G -> E3.
-- Observability: F -> T; then durable feedback D6 -> C/J/G -> V; U consumes C. Trace loss must not block execution lane tests.
+- Critical execution: F2R -> F2P -> D1R/D2 -> D3/D4/D5 + M/Q/W -> G2 composition -> E3A. I0 is a cutover prerequisite. C0 connects App reporting independently.
+- Provider lane: F2P -> L1/L2/L3/L4; V1M moves the existing explorer, then C2/T/D6F/D6J/J/V2/V3 feed E5L. Trace loss must not block execution lane tests.
 - Deployment: I1 and E1 early; I2 after pilot runtime integration; I3 recovery; E4 pilot decision; I4 fleet only after E4. Infrastructure code can be drafted against contracts earlier only where the manifest permits it.
 
 UI sessions build with contract fixtures while C implements services. They may not create alternate server actions to unblock themselves. J uses coordinator fakes until D6; it may not create separate budget tables. Q never invents a second durable job store. G never duplicates financial settlement in route handlers.

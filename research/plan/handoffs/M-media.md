@@ -1,8 +1,11 @@
 # M — Secure media ingestion and preparation
 
+> **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v3](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset.
+
+
 ## Current State Summary
 
-Implementation has not started in this documentation package. Deliver tenant-safe, bounded, reproducible media suitable for both immediate and deferred execution. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
+Wave-2 baseline is audited in `10-wave2-platform-audit.md`; preserve its completed tasks and apply the new revision gates before pending work. This original brief supplies unchanged algorithms, not current progress claims. Deliver tenant-safe, bounded, reproducible media suitable for both immediate and deferred execution. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
 
 ## Important Context
 
@@ -40,7 +43,7 @@ Deliver tenant-safe, bounded, reproducible media suitable for both immediate and
 
 ## Assumptions Made
 
-Start dependencies have been integrated before coding. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
+Start dependencies follow manifest v3: reviewed code/fixtures may enable development; new F2R/F2P/D1R gates require acceptance evidence. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
 
 ## Potential Gotchas
 
@@ -50,7 +53,9 @@ Resolving then allowing HTTP client re-resolution is still vulnerable. Limit pix
 
 ### M1 — Bound and secure URL/base64 materialization
 
-**Start after:** F2. **Integrate after:** its start dependencies; no additional external module dependency.
+**Start after:** F2. **Integrate after:** none beyond the start/code gate.
+
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `M2`. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement connection pinned to validated IP with TLS hostname verification, every-hop validation, public IPv4/IPv6 policy, DNS rebinding protection and no proxy-env bypass. Stream fetch with aggregate byte/time limits and redirect budget. Strictly decode bounded base64 and preserve current once-only fetch behavior. Stage canonical request and source metadata durably; sanitize logs.
 
@@ -62,7 +67,7 @@ Resolving then allowing HTTP client re-resolution is still vulnerable. Limit pix
 
 ### M2 — Versioned preprocessing and tenant cache
 
-**Start after:** M1. **Integrate after:** D2, W1.
+**Start after:** F2P, M1. **Integrate after:** D2, W1. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement bounded probe/transcode pool, cancellation/kill of process groups, duration/frame/token budgets and no-upsize aspect-preserving even dimensions without pixel-area overshoot. Keep CRF23 until CRF28 parity is measured; quantized budgets stay disabled pending evidence. Hash source plus tenant/profile; namespace engine multimodal identifiers as well as prefix cache. Persist prepared artifact before JobStore.prepared.
 
@@ -74,7 +79,7 @@ Resolving then allowing HTTP client re-resolution is still vulnerable. Limit pix
 
 ### M3 — Owned uploads, expiry and orphan collection
 
-**Start after:** M1. **Integrate after:** D2.
+**Start after:** F2P, M1. **Integrate after:** D2. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement constrained upload creation/finalization, immutable completed handles, authoritative checksum/size/object-owner validation and upload-to-job references. Prevent mutable object replacement after finalization. Add aborted/staged/orphan GC with active-job references respected and processing-cache logical expiry. Supply owned resolver for trace/judge reuse under independent consent.
 

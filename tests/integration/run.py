@@ -221,9 +221,20 @@ def fake_server_orphans() -> list[int]:
     checkout's server is not ours to report as our leak, and nothing here kills anything.
     """
     marker = str((harness.HERE / "fake_vllm.py").resolve())
-    # `/proc`, not `ps`: `ps -eo args=` truncates each line to the terminal width, and under
-    # pytest that is 80 columns - shorter than this repository's absolute paths, so the scan
-    # silently found nothing. The r2 review's first real test of it caught that immediately.
+    # Linux exposes untruncated argv through procfs. macOS has no procfs;
+    # double-wide ps explicitly disables the terminal-width truncation that the
+    # original reviewer caught. This function reports PIDs; it never kills them.
+    if not Path("/proc").is_dir():
+        result = subprocess.run(["ps", "-axww", "-o", "pid=,command="],
+                                capture_output=True, text=True, check=True)
+        pids = []
+        for line in result.stdout.splitlines():
+            columns = line.strip().split(None, 1)
+            if len(columns) == 2 and columns[0].isdigit():
+                pid = int(columns[0])
+                if pid != os.getpid() and marker in columns[1]:
+                    pids.append(pid)
+        return sorted(pids)
     pids = []
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit() or int(entry.name) == os.getpid():

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 import binascii
+import errno
 import inspect
 import os
 import resource
@@ -974,16 +975,35 @@ def test_a_failed_segment_open_leaks_no_descriptor_and_no_file():
     header-less file behind, once per flush: 300 flushes against a full disk meant 300
     orphans and 300 descriptors, i.e. `EMFILE` on the gateway. Neither is tracked anywhere,
     so nothing would ever clean them up."""
+    class DescriptorIO(DrillIO):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.opened = []
+
+        def open_append(self, path):
+            fd = super().open_append(path)
+            self.opened.append(fd)
+            return fd
+
+        def assert_last_closed(self):
+            # Portable to macOS and Linux; inspect the actual descriptor after each
+            # failure, before a later open can reuse its number.
+            try:
+                os.fstat(self.opened[-1])
+            except OSError as exc:
+                assert exc.errno == errno.EBADF
+            else:
+                raise AssertionError("the failed header write leaked its descriptor")
+
     async def scenario():
-        io = DrillIO(fail_write_on=1)                    # even the header fails
+        io = DescriptorIO(fail_write_on=1)                    # even the header fails
         spool = sink(io=io)
-        before = len(os.listdir("/proc/self/fd"))
         for index in range(60):
             await capture_one(spool, request_id(index), b"x" * 100)
             await spool.flush(spool.clock.now())
-        after = len(os.listdir("/proc/self/fd"))
+            io.assert_last_closed()
         stats = await spool.stats()
-        assert after == before, f"descriptors leaked: {before} -> {after}"
+        assert len(io.opened) == 60
         assert [name for name in os.listdir(spool.spool_dir)
                 if name.endswith(".seg")] == [], "orphan segments were left on disk"
         assert stats["spool_segments"] == 0 and stats["spool_bytes"] == 0
@@ -994,13 +1014,13 @@ def test_a_failed_segment_open_leaks_no_descriptor_and_no_file():
 
         # and a failure that is not an OSError leaks no more than one that is: whatever the
         # exception, the descriptor and the header-less file are ours to clean up (N29)
-        io = DrillIO(fail_write_on=1, write_error=RuntimeError("not a disk error"))
+        io = DescriptorIO(fail_write_on=1, write_error=RuntimeError("not a disk error"))
         spool = sink(io=io)
-        before = len(os.listdir("/proc/self/fd"))
         for index in range(20):
             await capture_one(spool, request_id(index), b"x" * 100)
             await spool.flush(spool.clock.now())
-        assert len(os.listdir("/proc/self/fd")) == before, "a RuntimeError leaked descriptors"
+            io.assert_last_closed()
+        assert len(io.opened) == 20
         assert [name for name in os.listdir(spool.spool_dir)
                 if name.endswith(".seg")] == [], "a RuntimeError left orphan segments"
         assert (await spool.stats())["loss_reasons"]["disk_error"] == 20

@@ -1,8 +1,20 @@
-# infrx console (`apps/app`)
+# Consumer inference App (`apps/app`)
 
 The customer console: sign in, browse models, copy a working request, manage API
 keys, see usage and balance, read the docs. Next.js (App Router) on Vercel,
-Supabase for auth and Postgres. Spec: [`../README.md`](../README.md).
+Supabase for auth and Postgres. Current [requirements](../../research/platforms/03-app-spec.md)
+and [roadmap](../../research/platforms/04-app-roadmap.md) supersede the historical
+single-console spec. Provider models/endpoints/traces/evaluation belong in
+[`apps/lab`](../lab/README.md).
+
+Target onboarding is public verified signup with **10,000 credits once per
+individual user**, only a free plan initially. This README's invite-only setup
+below describes the existing baseline, not the target. The [implementation
+audit](../../research/plan/10-wave2-platform-audit.md) reconciles wave 2 at `271add9`.
+Usage/Balance/Traces currently have development-only fixture previews, enabled by
+`INFRX_CONSOLE_PREVIEW=1` under `next dev`; production always shows an unavailable
+state until C0 supplies real account reporting. Sidebar amounts remain exact legacy
+USD, including holds. No public signup or CREDIT grant implementation is claimed.
 
 ## Run locally
 

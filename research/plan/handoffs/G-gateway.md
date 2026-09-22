@@ -1,8 +1,11 @@
 # G — Public API and streaming relay
 
+> **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v3](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. G4 is split into G4U/G4F/G4T; consumer upload delivery does not depend on judge or trace export.
+
+
 ## Current State Summary
 
-Implementation has not started in this documentation package. Expose a consistent authenticated API that acknowledges durable acceptance and reports honest synchronous/asynchronous outcomes. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
+Wave-2 baseline is audited in `10-wave2-platform-audit.md`; preserve its completed tasks and apply the new revision gates before pending work. This original brief supplies unchanged algorithms, not current progress claims. Expose a consistent authenticated API that acknowledges durable acceptance and reports honest synchronous/asynchronous outcomes. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
 
 ## Important Context
 
@@ -42,7 +45,7 @@ Expose a consistent authenticated API that acknowledges durable acceptance and r
 
 ## Assumptions Made
 
-Start dependencies have been integrated before coding. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
+Start dependencies follow manifest v3: reviewed code/fixtures may enable development; new F2R/F2P/D1R gates require acceptance evidence. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
 
 ## Potential Gotchas
 
@@ -54,6 +57,8 @@ Body must be bounded before JSON parse. Increment bounded preparation admission 
 
 **Start after:** F2. **Integrate after:** D2.
 
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `G1R`. Manifest v3 and the revision handoffs govern current scope.
+
 **Implementation:** Mint ingress IDs, enforce intake limits/deadline before parsing, validate content/parameters and authenticate through bounded caches with revocation-safe admission. Remove exception text from public errors/health. Define dev/test-only unauthenticated mode with production startup rejection. Reconcile legacy key mapping for pilot cutover.
 
 **Acceptance:** Malformed/oversized/unsupported/auth failures have stable status and no secret leak; cache bounds preserved; no accepted production request lacks tenant identity.
@@ -64,7 +69,7 @@ Body must be bounded before JSON parse. Increment bounded preparation admission 
 
 ### G2 — Synchronous chat and persistent SSE relay
 
-**Start after:** G1. **Integrate after:** D5, W2, M2, Q3.
+**Start after:** G1R. **Integrate after:** D5, W2, M2, Q3, I0. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement nonstream wait and accepted SSE relay from committed journal. Keepalive/progress stays distinct from model chunks; handle upstream error before/after headers. Parse reasoning markers across arbitrary chunk boundaries. On sync disconnect/timeout durably cancel, including generator-never-started paths; never emit 202 after SSE starts.
 
@@ -76,7 +81,7 @@ Body must be bounded before JSON parse. Increment bounded preparation admission 
 
 ### G3 — Explicit jobs, status, cancellation and replay
 
-**Start after:** G1. **Integrate after:** D5, W2.
+**Start after:** G1R. **Integrate after:** D5, W2, I0. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement explicit preference and jobs routes, owned opaque handles, idempotency conflict/replay, async observer detach, DELETE cancellation, status/result expiry and event cursor semantics. Update client example with authenticated sync and explicit async flows without embedding credentials.
 
@@ -88,7 +93,7 @@ Body must be bounded before JSON parse. Increment bounded preparation admission 
 
 ### G4 — Uploads, feedback and trace export adapters
 
-**Start after:** G1. **Integrate after:** M3, D6, T2.
+**Scheduling:** Retired mixed task. Use `G4U`, `G4F`, `G4T` from the amendment briefs. The algorithm below is historical reference.
 
 **Implementation:** Expose upload initiation/finalization with MediaStore; accept feedback through shared durable service; expose owned trace export with logical expiry/consent and bounded response size. Validate filters/IDs and propagate stable domain errors. Do not query arbitrary object keys from user input.
 
@@ -100,7 +105,7 @@ Body must be bounded before JSON parse. Increment bounded preparation admission 
 
 ### G5 — Signed async completion callbacks
 
-**Start after:** G3. **Integrate after:** D5, M1.
+**Start after:** G3, F2P. **Integrate after:** D5, M1. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Support optional registered callback destinations for explicit async jobs. Write callback delivery intent in the terminal outbox transaction; deliver outside execution/settlement. Reuse M's pinned public-destination policy on each connection/redirect, bound response bytes/time, sign immutable body plus timestamp/event ID with a versioned per-org secret supplied outside code. Deliver at least once, with stable delivery ID, capped exponential retry (1min, 5min, 30min, 2h, 8h; stop after 24h) and operator-visible dead letter. Never rerun inference on callback failure. Prevent caller-supplied callback headers/credentials from becoming an egress primitive; only registered owned destinations are accepted. Disable redirect following by default. Provide receiver-side signature/replay-window documentation and safe manual redelivery.
 

@@ -203,7 +203,7 @@ def _sample_count(samples: object) -> int:
 def worst_case(rate: ProviderRate, ceilings: TokenCeilings, samples: int) -> Decimal:
     """`ceiling(per_sample x samples)`, the one place the arithmetic lives.
 
-    Every operation runs in `money.CONTEXT` (prec 40), **never** the ambient decimal
+    Every operation runs in `money.arithmetic_context()` (prec 40), **never** the ambient decimal
     context (R2-B2): `per_sample * samples` used the caller's context, so a process whose
     context carried a small precision or `ROUND_DOWN` rounded the worst case *down* and
     the guard authorized a budget below what the run could spend. Nothing in `infrx/`
@@ -217,7 +217,7 @@ def worst_case(rate: ProviderRate, ceilings: TokenCeilings, samples: int) -> Dec
     try:
         per_sample = money.maximum_hold(ceilings.input_tokens, ceilings.billed_output_tokens,
                                         rate.input_per_million, rate.output_per_million)
-        product = money.CONTEXT.multiply(per_sample, Decimal(samples))
+        product = money.arithmetic_context().multiply(per_sample, Decimal(samples))
         # `money.parse` enforces the `numeric(20, 8)` domain: `ceiling` alone quantizes
         # happily past 10^12, so a large enough sample count produced a reservation no
         # ledger column could hold.

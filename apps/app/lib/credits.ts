@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import type { Money } from "@/lib/contracts/money";
 import type { LedgerRow } from "@/lib/types";
 import { MAX_PAGE_LIMIT } from "@/lib/contracts/types";
 import {
@@ -10,11 +11,11 @@ import {
 
 export type Credits = {
   rows: LedgerRow[];
-  available: number;
-  loaded: number;
-  spent: number;
+  available: Money;
+  loaded: Money;
+  spent: Money;
   /** Outstanding reservations: money committed to accepted work and not available to spend again. */
-  reserved: number;
+  reserved: Money;
 };
 
 /**
@@ -31,8 +32,7 @@ export type Credits = {
  * session resolved and adds no organization selection of its own. The decisions — which source
  * answers, and what a failing read means — live in `lib/services/credits.ts`, where they are tested.
  *
- * `Credits` still crosses as `number` because `components/credits-card.tsx` renders it that way and
- * is not this task's file; the typed boundary (`ConsoleServices.balances`, `.ledger`) uses `Money`.
+ * All figures remain exact Money strings through rendering. These are legacy USD amounts.
  */
 export async function getCredits(orgId: string): Promise<Credits> {
   const supabase = await createClient();
@@ -46,24 +46,29 @@ export async function getCredits(orgId: string): Promise<Credits> {
       .limit(MAX_PAGE_LIMIT),
   ]);
 
+  if (ledger.error) throw new Error("The ledger could not be read");
   const rows = (ledger.data ?? []) as LedgerRow[];
   const outcome = walletSummaryOutcome(summary.data, summary.error);
-  const figures =
-    outcome.kind === "summary"
-      ? creditsFromSummary(outcome.row)
-      : // Expand/contract compatibility (03 §Rollback): `wallets`, `credit_holds` and the reconciled
-        // `org_wallet_summary` function are D1's migration. Against the schema deployed today there
-        // are no holds at all, so the ledger balance *is* the available balance, and the existing
-        // `org_balance` function still answers it. Once the summary function exists, a *failing* call
-        // is raised rather than answered from `org_balance` — which ignores reservations and would
-        // report an inflated available balance.
-        creditsFromLedgerPage((await supabase.rpc("org_balance", { p_org: orgId })).data, rows);
+  let figures;
+  if (outcome.kind === "summary") {
+    figures = creditsFromSummary(outcome.row);
+  } else {
+    // Only a missing summary function permits this pre-D1 compatibility path.
+    const legacy = await supabase.rpc("org_balance", { p_org: orgId });
+    if (legacy.error) throw new Error("The legacy balance could not be read");
+    figures = creditsFromLedgerPage(legacy.data, rows);
+  }
 
   return {
     rows,
-    loaded: Number(figures.loaded),
-    spent: Number(figures.spent),
-    reserved: Number(figures.reserved),
-    available: Number(figures.available),
+    loaded: figures.loaded,
+    spent: figures.spent,
+    reserved: figures.reserved,
+    available: figures.available,
   };
+}
+
+/** Available legacy USD, including reservations; keep this out of the session/action import graph. */
+export async function getBalance(orgId: string): Promise<Money> {
+  return (await getCredits(orgId)).available;
 }

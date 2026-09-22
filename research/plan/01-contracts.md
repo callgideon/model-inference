@@ -1,12 +1,13 @@
-# Shared contracts — version 1
+# Shared contracts — version 2 product amendment
 
-The [database map](06-database-map.md) specifies persistence keys and constraints. F2 must encode this document as executable types, fixtures and contract tests before feature branches diverge. This is a specification, not a claim those files exist. Changes require a coordinator-owned contract revision and affected consumers' tests.
+The [database map](06-database-map.md) specifies persistence keys and constraints. Read [architecture](../platforms/01-architecture.md), [credits](../platforms/02-credits.md) and [API boundaries](../platforms/07-api-contracts.md) for the 2026-09-21 amendment. F2R repairs the implemented v1 contract at `271add9`; F2P must encode this revision 2 as executable types, fixtures and contract tests. This document is the target, not a claim that product-v2 code or SQL exists. Preserve the implemented signatures in [ports.py](../../apps/infrx-api/infrx/contracts/ports.py) and accepted v1 rulings except explicitly revised behavior. Changes require a coordinator-owned revision and affected consumers' tests.
 
 ## Identity, authorization and errors
 
 - `request_id`: UUID minted at ingress, also the accepted job/usage/trace identity and `Inference-Id`. Rejected requests retain a request ID but are not accepted jobs or billable usage.
 - Public `job_handle`: opaque cryptographically random lookup identifier, separate from the UUID. Every lookup verifies organization ownership; possession is insufficient. Chat response ID is `chatcmpl-<request_id>`.
 - `AuthContext`: org_id, key_id, authenticated principal, role, entitlement_version. Admission rechecks key revocation, org suspension and current entitlement in its transaction; cached identity never bypasses that check. Legacy key must map to an explicit org/key for accepted pilot requests or be disabled at cutover.
+- Revision 2 adds trusted consumer wallet binding and distinct `ProviderAuthContext`/credential audience. Requests pin provider_org_id, model/serving/deployment revision and access-policy version. Neither consumer org ownership nor the `models.provider` display label establishes provider access. Public listings can be operator-managed before Lab exists.
 - `ErrorEnvelope`: OpenAI-style error object with stable code, safe message and request_id; no upstream exception, signed URL, storage key or secret. Error classes: validation/unsupported 400, auth 401, ownership 404, forbidden 403, exhausted credit 402, capacity/rate 429 with retry guidance, unavailable durable dependency 503, synchronous deadline 504. Oversized intake 413. Public health is generic; protected readiness explains component state.
 
 ## Core records
@@ -14,7 +15,7 @@ The [database map](06-database-map.md) specifies persistence keys and constraint
 | Type | Required content |
 |---|---|
 | NormalizedRequest | schema_version, request_id, org/key, model revision, canonical messages and parameters, immutable payload ref/digest, media refs, execution mode, timestamps/deadlines, trace policy snapshot |
-| PriceSnapshot | immutable version, currency USD, input/output per-million rates as decimals, token rules/model revision, captured_at; missing model/rates reject admission |
+| PriceSnapshot | immutable approved rate-card version, unit CREDIT, input/output per-million rates as decimals, meter rules and serving/deployment revision, captured_at; public calls require a published listing, private dev calls require matching endpoint credential/entitlement |
 | Admission | job ID/handle, idempotency scope/hash, payload hash, price snapshot, maximum hold, capacity reservations, state and outbox events |
 | Lease | job_id, generation integer, worker_id, expires_at from database clock; every execution mutation includes this token |
 | Chunk | job_id, generation, sequence integer, canonical event payload, event type, persisted_at; unique composite key |
@@ -23,25 +24,30 @@ The [database map](06-database-map.md) specifies persistence keys and constraint
 | Feedback | stable ID, request/org, author principal and role, submission channel, rating/correction, optional explicit calibration set, created_at |
 | JudgeRun | stable run/sample IDs, consent snapshot, budget reservation, submit intent, external batch ID if known, state and reconciliation timestamps |
 
-Money: migrate ledger and holds to `numeric(20, 8)` USD; migrate usage cost to the same precision without changing prior values. Compute with decimals, never binary floats. Round each final request debit once to eight decimal places using round-half-up; maximum reservations round upward. Grants are positive, debits negative, holds are separate reservations. Balance view exposes ledger total, reserved total and available = total minus reserved. Database transaction locks serialize grant/admit/settle updates per wallet. Monetary values cross JSON as decimal strings. Token counts are nonnegative integers from authoritative engine usage; output chunks are never a token estimator for billing.
+Consumer amounts: use `numeric(20, 8)` CREDIT in separate wallet/ledger/hold records; preserve baseline USD history exactly, never relabel it or mix units. Internal costs and Lab judge budgets remain explicitly denominated USD. Compute with decimals, never binary floats. Round each final request debit once to eight decimal places using round-half-up; maximum reservations round upward. Grants are positive, debits negative, holds are separate reservations. Balance view exposes ledger total, reserved total and available = total minus reserved. Database transaction locks serialize grant/admit/settle updates per wallet. Amounts cross JSON as decimal strings. Token counts are nonnegative integers from authoritative engine usage; output chunks are never a token estimator for billing.
+
+`SignupGrant`: unique initial entitlement by individual user, immutable wallet, +10000.00000000 CREDIT, verification evidence reference, campaign metadata and ledger operation. Campaign revisions/org creation do not reset eligibility. Wallet is user-owned and linked to the initial personal consumer org. Atomic issuance is server-only and idempotent. See [full credit and migration policy](../platforms/02-credits.md).
+
+Wallet kind distinguishes individual consumer wallets from operator-funded provider dev budgets. Provider dev wallets receive no signup grant and cannot transfer into consumer wallets. A private dev credential binds provider, endpoint/environment and dev wallet; public consumer keys cannot access private dev endpoints. Both use the same CREDIT hold/settlement invariant. Judge/training budgets remain separate USD records.
 
 Maximum hold uses the accepted model's validated input ceiling and requested output ceiling at the immutable rates. Before preparation determines actual media tokens, reserve the conservative input ceiling (context limit minus requested maximum output); reject preparation if the exact prompt exceeds that ceiling. Actual charged tokens cannot exceed the validated/reserved envelope. Serving preprocessing is included in the pilot price rather than adding an unspecified fee. A provider/engine protocol violation exceeding the envelope is a platform failure requiring reconciliation, not an unreserved customer debit.
 
 ## Ports and return semantics
 
-These are logical async signatures; F2 chooses concrete import/type syntax once. All return typed domain errors and accept injected clock/IDs/storage clients for tests.
+These are summaries of operations; `ports.py` is the implemented v1 signature authority and F2P publishes the v2 diff. All return typed domain errors and accept injected clock/IDs/storage clients for tests.
 
 | Port / owner | Operations | Contract |
 |---|---|---|
-| JobStore / D | admit(request, idem, caps, hold); get_owned(org, handle); prepared(job, media); claim(job, worker); heartbeat(lease); cancel(org, handle); complete(lease, outcome); recover(now) | Atomic operations, idempotent terminal transitions, DB time and generation checks. Never expose unrestricted tenant reads to route callers. |
+| JobStore / D | admit(request, idem, caps); get_owned(org, handle); claim_preparation(job, worker); prepared(lease, media); load_work(lease); claim(job, worker); heartbeat(lease); cancel(org, handle); complete(lease, outcome); recover() | Atomic operations, idempotent terminal transitions, DB time and generation checks. Never expose unrestricted tenant reads to route callers. |
 | StreamStore / D | append(lease, events); read_owned(org, job, cursor, limit); finalize_in_transaction(outcome); expire(now) | Commit before relay; cursor includes generation/sequence. Explicit gap/expiry error; no synthetic replay from regenerated output. |
-| MediaStore / M | stage(org, request); prepare(job, profile); create_upload(org, constraints); finalize_upload(org, handle); resolve_owned(org, ref) | Immutable source content, checksum/size validation, tenant-scoped references, no caller-selected filesystem path. |
+| MediaStore / M | stage/attach per F2R produced-ref revision; prepare per fenced job/profile; create_upload(org, constraints); finalize_upload(org, handle); resolve_owned(org, ref) | Immutable source content, checksum/size validation, tenant-scoped references, no caller-selected filesystem path. |
 | Scheduler / Q | enqueue(index_event); claim_candidate(worker); acknowledge(index_event); remove(job); rebuild(snapshot) | Index only; a candidate becomes executable only through JobStore.claim. Replays cannot duplicate durable jobs or capacity reservations. |
 | Engine / W | generate(lease, prepared_request); cancel(lease); health(); drain() | Canonical events plus authoritative usage/result; enforce attempt fencing before persistence and output. |
 | TraceSink / T | offer(envelope); stats(); flush(deadline) | Bounded, nonblocking request-path offer. Returns accepted-in-memory/dropped, never promises fsync immediately. |
 | FeedbackService / D, adapter C/G | accept(auth, request, feedback, idem); list_owned(auth, request) | PG commit plus outbox before acknowledgment; tenant ownership independent of ClickHouse projection lag. |
 | JudgeCoordinator / D | reserve(run, consent, max_cost); begin_submit(run); record_submission(run, external_id); settle(run, actual); quarantine(run, reason) | Atomic budget and submission state; duplicate calls produce one run/intent. |
-| Console services / C | usage, balances, traces, trace_content, feedback, settings, admin_grant, judge_runs | Named operations, bounded pagination, server-side auth on every invocation, no generic caller SQL or arbitrary object key. |
+| Consumer services / C3A | own usage, CREDIT balances, keys, settings, operator grant | Named operations, bounded pagination, trusted consumer wallet/org identity; no trace/judge dependency for core usage. |
+| Lab and data services / C2/C3F/C3L, L | provider registry, deployment, authorized traces/content/review, judge runs | Provider membership plus purpose-specific source grants; no generic SQL/object resolver or implicit customer-data access. |
 
 ## HTTP behavior
 
@@ -68,7 +74,7 @@ These are logical async signatures; F2 chooses concrete import/type syntax once.
 | Preparation/capacity | 2 active preparation processes per pilot host; 64 total accepted nonterminal jobs, 16 per org, 8 per key, subject to journal/credit caps; all provisional and configurable |
 | Initial engine limits | Engine sequences target 8, worker admission target 10; validate against real KV/memory/latency before enabling |
 
-Non-stream deadline = preparation + queue + generation budgets subject to the absolute accepted deadline. Async mode detaches client lifetime, not these deadlines. Sync timeout/disconnect requests durable cancellation; do not leave silently executing work. Async event-observer disconnect detaches only. Explicit DELETE always attempts cancellation. A timeout racing a committed result returns that result where possible; durable state wins.
+Admission rejects elapsed deadlines and clamps a future caller bound to min(caller deadline, DB now + preparation + queue + generation budgets), persisting that accepted bound for replay (R-3). No gateway skew margin substitutes for the DB clock. Async mode detaches client lifetime, not these deadlines. Sync timeout/disconnect requests durable cancellation; do not leave silently executing work. Async event-observer disconnect detaches only. Explicit DELETE always attempts cancellation. A timeout racing a committed result returns that result where possible; durable state wins.
 
 ## Privacy and retention
 
@@ -79,3 +85,5 @@ Result access expires at 24h, processing cache at 7d, full trace content at owne
 ## Verification log
 
 - 2026-09-20: Frozen proposed v1 semantics for F2 implementation. All configuration values here require tests and, where performance-dependent, pilot measurement.
+
+- 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.

@@ -154,3 +154,27 @@ def test_property_token_counts_must_be_nonnegative_integers():
     for bad in (-1, 1.0, "5", None, True):
         with pytest.raises(ValueError):
             money.debit(bad, 0, Decimal("0.2"), Decimal("0.6"))
+
+
+def test_money_is_independent_of_ambient_decimal_settings():
+    import decimal
+
+    with decimal.localcontext() as context:
+        context.prec = 4
+        context.rounding = decimal.ROUND_DOWN
+        context.traps[decimal.Inexact] = True
+        context.traps[decimal.Rounded] = True
+        for edge in ("999999999999.99999999", "-999999999999.99999999"):
+            assert money.format_money(money.parse(edge)) == edge
+        assert money.debit(3, 7, Decimal("0.12345678"), Decimal("0.87654321")) == Decimal("0.00000651")
+        assert money.available(Decimal("999999999999.99999999"), Decimal("0.00000001")) == Decimal("999999999999.99999998")
+
+
+def test_money_contexts_cannot_poison_subsequent_operations():
+    import decimal
+
+    context = money.arithmetic_context()
+    context.prec = 2
+    context.traps[decimal.Rounded] = True
+    assert money.format_money(money.parse("123456789.12345678")) == "123456789.12345678"
+    assert money.maximum_hold(1, 0, Decimal("0.00400000"), Decimal("0")) == Decimal("0.00000001")

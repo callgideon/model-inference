@@ -1,25 +1,20 @@
-# Coordinator handoff — Claude Opus 5 implementation
+# Coordinator handoff — implementation continuation
+
+> **Current authority:** [wave-2 audit](10-wave2-platform-audit.md), [revision handoffs](11-wave3-revision-handoffs.md), [continuation prompt](PLATFORM-SPLIT-HANDOFF.md) and manifest v3. Wave 2 is imported at `271add9`; preserve its completion evidence. The older coordinator instructions below are historical where they conflict.
 
 ## Current State Summary
 
-**Updated 2026-09-21 — read [the wave-2 handoff](evidence/coordinator/2026-09-21-wave2-handoff.md) first; it supersedes the next-steps list below.** Foundations (F1, F2, F2.1, E1, I1) and all eleven wave-2 module tasks are merged on `claude/infrx-impl` after adversarial review; stage reviews S1 and S2 passed; the manifest marks D1 `integrated` and the rest `implemented`. Nothing is deployed. The paragraph that follows is the original 2026-09-20 state, kept for history.
-
-The user requested detailed implementation handoffs, documentation updates, commit and push; application implementation is delegated to later Claude Opus 5 sessions. This package contains foundation plus twelve module tracks and a machine-readable task dependency graph. All implementation tasks remain planned. Repository analysis baseline is commit `1db98e9`; use the current documentation commit as the initial implementation base after checking for newer changes.
+Wave 2 is merged at the imported main SHA `271add9`. The local audit reconciles the two-platform requirements, adds explicit contract/schema revisions and fixes bounded defects. Original integrated/implemented statuses remain intact; product-v2 compatibility is tracked separately. Use the actual committed audit handback as the base for new worktrees.
 
 ## Important Context
 
-The first release is a free single-GPU pilot using promotional holds/settlement, explicit async, secure URLs/uploads, opt-in traces, feedback and budgeted evaluation. Payments, second-owner commercial launch, OpenRouter and training remain later. User selected continued inference on trace loss and retention of 24h results/7d processing cache/90d optional content/13mo metadata. Production state and account access in root HANDOFF are historical and need read-only revalidation before deployment.
+The consumer release is a free single-GPU pilot with public verified signup, 10,000 CREDIT once per individual, exact holds/settlement, explicit async, secure media and own usage. Provider operations, trace analysis and evaluation have separate Lab gates. Payments, commercial second-owner onboarding, OpenRouter and managed training remain later. Continue inference on optional capture loss; retain the 24h results/7d cache/up-to-90d content/13mo metadata policies. Historical production state requires read-only revalidation before deployment.
 
-The complete implementation authority is [scope](00-decisions-and-scope.md), [contracts](01-contracts.md), [durable protocols](02-durable-protocols.md), then the assigned module brief. Historical research remains supporting context. Preserve research verification history; append new evidence. No secret values belong in handoffs, logs or commits.
+The complete authority begins with [product architecture](../platforms/README.md) and [the amendment](08-platform-split.md), then [scope](00-decisions-and-scope.md), [contracts](01-contracts.md), [durable protocols](02-durable-protocols.md), manifest v3 and the assigned brief. Historical research remains supporting context. Preserve research verification history; append new evidence. No secret values belong in handoffs, logs or commits.
 
 ## Immediate Next Steps
 
-**Superseded on 2026-09-21** by §5 of the wave-2 handoff (F2.2 → D2 → G2 + I2 cutover → M2/M3 → W2 → T2/T3 → Q2 → C2 → E3 → J2 → I2/I3 → E4). The original list follows for history.
-
-1. Read [execution rules](03-execution-protocol.md), [test gates](04-verification.md), [risks](05-risk-register.md) and [manifest](tasks.json).
-2. Record a coordinator integration SHA and assign F1, E1 and I1 to distinct isolated worktrees; they are the only immediately independent starting tasks. I1 is read-only inventory; E1 is corpus/benchmark tooling, not a production load test.
-3. Integrate F1 then F2, run shared contract/baseline tests and publish the new base. Only then dispatch module tasks whose start dependencies are met.
-4. Review each handback with its integration dependencies and tests before merging; publish evidence and unblock successors. Twelve-track development does not mean twelve simultaneous live deployments.
+Follow the continuation handoff: S1 review/commit → F2R (parallel I0/E2R) → F2P → parallel D1R/C0/G1R/runtime/App/Lab slices. Integrate the full durable runtime before G2 cutover. Manifest v3 gives exact dependencies; the old G2-before-W2 sequence is withdrawn. Preserve code and evidence from the original package.
 
 ## Architecture Overview
 
@@ -35,11 +30,11 @@ PostgreSQL owns durable jobs, holds, leases, stream journal, usage, feedback and
 
 ## Files Modified
 
-This preparation changes only Markdown documentation and the documentation task manifest: the new plan package, root handoff/conventions/index, and relevant research/application spec supersession notices. No runtime code, migrations, dependencies, infrastructure resources or implementation worktrees were created. An old plaintext development-account password was removed from the current handoff; no credential value is copied into this package.
+Historical initial preparation changed only Markdown documentation and the documentation task manifest: the new plan package, root handoff/conventions/index, and relevant research/application spec supersession notices. No runtime code, migrations, dependencies, infrastructure resources or implementation worktrees were created. An old plaintext development-account password was removed from the current handoff; no credential value is copied into this package.
 
 ## Decisions Made
 
-User scope decisions are recorded as DEC-01 through DEC-08. The review resolves durability in favor of PostgreSQL authority and makes async opt-in explicit. Worktree boundaries keep migrations with D, server actions with C, ClickHouse schema with T and integration tests with E. Foundation freezes interfaces first. Shared composition, dependency locks and navigation have one coordinator owner to reduce merge conflicts.
+Current scope is recorded in the two-platform product docs and amended DEC-01 through DEC-10: individual 10,000-credit grant, separate CREDIT/USD units and independent App/Lab releases. PostgreSQL authority and explicit async remain. Worktree boundaries keep migrations with D, actions with C, ClickHouse schema with T and integration tests with E. Provider UI V goes to Lab. Shared composition, dependency locks and package extraction have one coordinator owner.
 
 ## Assumptions Made
 
@@ -54,7 +49,7 @@ Do not treat historical A0 fixes as new work: several already exist. Do not chan
 Planning observed 23 Python tests, 4 console tests and console lint passing before this documentation work; these are baseline observations only. Documentation validation is recorded separately in [the preparation report](evidence/documentation-review.md). Future tests, live fault drills and rollout gates remain unexecuted.
 
 ```text
-Act as implementation coordinator for this repository. Read CLAUDE.md, HANDOFF.md and research/plan/README.md, then COORDINATOR.md, shared contracts, durable protocols, execution rules and tasks.json. Check for newer integrated evidence and record the starting SHA. Assign independent F1/E1/I1 work first, in separate worktrees, and freeze F2 contracts before broad parallel implementation. Keep a single owner for shared wiring and dependency files. Enforce task-specific test oracles and real integration dependencies; publish evidence per research/plan/evidence/README.md. Do not expand deferred scope or claim live verification from mocks. Coordinate only the work and environments explicitly assigned in this session.
+Act as implementation coordinator. Start with research/plan/PLATFORM-SPLIT-HANDOFF.md and reconcile the work already running on this system. Read product architecture, amendment mapping/briefs and manifest v3 before assigning active tasks. Preserve compatible completed work and amend F2 contracts before merging conflicting credit/ownership changes. Follow independent App/Lab gates, shared-file ownership, durable protocols and evidence rules. Do not claim mock-only work integrated or exceed this session's environment authorization.
 ```
 
 ## Verification log

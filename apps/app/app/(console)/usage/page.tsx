@@ -1,3 +1,4 @@
+import { ConsoleDataUnavailable, ConsolePreviewNotice } from "@/components/console-data-state";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatTile } from "@/components/stat-tile";
@@ -29,7 +30,9 @@ export const metadata = { title: "Usage · infrx" };
 
 export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
   const params = await searchParams;
-  const { services, session, now } = consoleContext();
+  const context = consoleContext();
+  if (context === null) return <ConsoleDataUnavailable title="Usage" />;
+  const { services, session, now } = context;
   const filters = parseUsageFilters(params);
   const scope = usageScopeQuery(filters, now);
 
@@ -47,9 +50,10 @@ export default async function UsagePage({ searchParams }: PageProps<"/usage">) {
 
   return (
     <>
+      <ConsolePreviewNotice />
       <PageHeader
         title="Usage"
-        subtitle="Metadata only — no prompts or video are stored. Amounts are drawn from promotional pilot credit."
+        subtitle="Example request metadata and legacy USD balances."
         action={
           <UsageControls filters={model.filters} keys={model.keyOptions} models={model.models} />
         }

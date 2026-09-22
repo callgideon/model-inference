@@ -120,13 +120,6 @@ MAX_OPENERS = STRUCTURE_OPENERS + MAX_TEXT_CODEPOINTS + TEXT_BESIDE_MESSAGES
 STRUCTURE_SEPARATORS = (len(SUPPORTED) + MAX_MESSAGES * (2 + MAX_PARTS_PER_MESSAGE * 2)
                         + MAX_STOP_SEQUENCES)
 MAX_SEPARATORS = STRUCTURE_SEPARATORS + MAX_TEXT_CODEPOINTS + TEXT_BESIDE_MESSAGES
-# r1 R7: `admit` derives its ceiling from the *database* clock. Without a margin a
-# store clock a millisecond behind the gateway refuses every request, and the first
-# review's tests could not see it because they pinned the fake's clock to
-# `created_at` exactly. Two seconds of tolerance, spent from our own budget.
-DEADLINE_SKEW_MARGIN_S = 2.0
-
-
 def _int(body: dict, name: str) -> int | None:
     value = body.get(name)
     if value is None:
@@ -525,10 +518,7 @@ class Validator:
             # upload handle; the ingress validates the reference and stages nothing.
             media=(), execution_mode=mode,
             max_input_tokens=max_input, max_output_tokens=max_output, created_at=now,
-            # The skew margin is subtracted, not added: `admit` measures this ceiling
-            # from the database clock, and a store a moment behind us must still find
-            # the deadline acceptable.
+            # Admission clamps this caller bound against the database clock (R-3).
             deadline_at=now + timedelta(seconds=(budgets.preparation_s + budgets.queue_wait_s
-                                                 + budgets.generation_s
-                                                 - DEADLINE_SKEW_MARGIN_S)),
+                                                 + budgets.generation_s)),
             trace_policy=self.consent_for(auth.org_id, now))

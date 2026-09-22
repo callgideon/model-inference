@@ -1,8 +1,11 @@
 # T — Trace capture, projection and retention
 
+> **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v3](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. T2 is split into T2I/T2F; capture can be disabled for App launch and is shared infrastructure for Lab.
+
+
 ## Current State Summary
 
-Implementation has not started in this documentation package. Capture useful opted-in traces without unbounded resource use or making inference depend on the analytics stack. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
+Wave-2 baseline is audited in `10-wave2-platform-audit.md`; preserve its completed tasks and apply the new revision gates before pending work. This original brief supplies unchanged algorithms, not current progress claims. Capture useful opted-in traces without unbounded resource use or making inference depend on the analytics stack. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
 
 ## Important Context
 
@@ -42,7 +45,7 @@ Capture useful opted-in traces without unbounded resource use or making inferenc
 
 ## Assumptions Made
 
-Start dependencies have been integrated before coding. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
+Start dependencies follow manifest v3: reviewed code/fixtures may enable development; new F2R/F2P/D1R gates require acceptance evidence. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
 
 ## Potential Gotchas
 
@@ -52,7 +55,9 @@ An async function still blocks the event loop if it writes synchronously. Count 
 
 ### T1 — Byte-budgeted capture and persistent spool
 
-**Start after:** F2. **Integrate after:** its start dependencies; no additional external module dependency.
+**Start after:** F2. **Integrate after:** none beyond the start/code gate.
+
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `T2I`. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement budgets during active accumulation and queued capture, metadata reserve, whole-content discard on overflow and bounded offer. Use dedicated spool writer with checksummed/versioned segments, fsync state and disk/free-space caps; separate shipping. Capture final canonical logical content plus raw model text, not raw request-wire byte claims.
 
@@ -64,7 +69,7 @@ An async function still blocks the event loop if it writes synchronously. Count 
 
 ### T2 — Idempotent analytics and content shipping
 
-**Start after:** T1. **Integrate after:** D5, D6.
+**Scheduling:** Retired mixed task. Use `T2I`, `T2F` from the amendment briefs. The algorithm below is historical reference.
 
 **Implementation:** Execute/version real ClickHouse DDL, nonnullable versioning and deduplicating views; implement idempotent object writes, spool segment acknowledgment, outbox projection and poison-record quarantine. Keep accounting metadata separate from optional content. Test CH outage, duplicate events and restart before/after fsync.
 
@@ -76,7 +81,7 @@ An async function still blocks the event loop if it writes synchronously. Count 
 
 ### T3 — Logical retention, deletion and observability
 
-**Start after:** T2. **Integrate after:** its start dependencies; no additional external module dependency.
+**Start after:** T2I, F2P. **Integrate after:** T2F. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement result/content/cache/metadata logical expiry integration, deletion queue and physical-cleanup lag alarms. TTLs cannot expose expired rows. Add capture/spool/projection metrics and dashboards specification for I, including off/minimal/full denominators and bytes. Prove no copytruncate path.
 

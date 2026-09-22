@@ -315,7 +315,7 @@ class FakeJobStore:
             if not self.is_entitled(request.org_id, request.model_revision):
                 raise errors.ModelNotEntitled(
                     f"org {request.org_id} is not entitled to {request.model_revision}")
-            self._check_deadline(request, now)
+            request = self._check_deadline(request, now)
             self._check_ceilings(request)
             self._check_capacity(request)
             # Everything that can refuse the admission runs before anything is
@@ -400,7 +400,7 @@ class FakeJobStore:
                 f"max_input_tokens + max_output_tokens ({total}) exceeds "
                 f"MAX_CONTEXT_TOKENS {limits.max_context_tokens}")
 
-    def _check_deadline(self, request: NormalizedRequest, now: datetime) -> None:
+    def _check_deadline(self, request: NormalizedRequest, now: datetime) -> NormalizedRequest:
         """r1 R29: a deadline is a promise the store can keep. One already past is a
         job nothing may ever run; one years out would pin a preparation unit, a
         journal reservation and a hold for as long as the caller likes."""
@@ -410,8 +410,8 @@ class FakeJobStore:
         ceiling = now + timedelta(seconds=(budgets.preparation_s + budgets.queue_wait_s
                                            + budgets.generation_s))
         if request.deadline_at > ceiling:
-            raise errors.InvalidRequest(
-                "the request deadline exceeds the preparation, queue and generation budgets")
+            return request.model_copy(update={"deadline_at": ceiling})
+        return request
 
     def _check_balance(self, org_id: str, hold: Decimal) -> None:
         # A *read*: a refused admission must not leave an empty wallet row behind.

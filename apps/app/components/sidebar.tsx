@@ -6,9 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   Boxes,
   BarChart3,
-  Server,
   CreditCard,
-  Users,
   KeyRound,
   BookOpen,
   ExternalLink,
@@ -34,9 +32,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/models", label: "Models", icon: Boxes },
   { href: "/usage", label: "Usage", icon: BarChart3 },
-  { href: "/dedicated", label: "Dedicated", icon: Server },
-  { href: "/billing", label: "Billing", icon: CreditCard },
-  { href: "/teams", label: "Teams", icon: Users },
+  { href: "/billing", label: "Balance", icon: CreditCard },
   { href: "/api-keys", label: "API Keys", icon: KeyRound },
 ];
 

@@ -1,8 +1,9 @@
 # model-inference
 
-New implementation session? Start with the [structured handoff package](research/plan/README.md)
-and [coordinator guide](research/plan/COORDINATOR.md). [HANDOFF.md](HANDOFF.md) preserves
-operational context and historical measurements. Module implementation remains pending.
+Start with the [two-platform architecture and roadmaps](research/platforms/README.md).
+`apps/app` serves model consumers; `apps/lab` serves model providers. Wave 2 was pulled at `271add9`: read the [audit and revised sequence](research/plan/10-wave2-platform-audit.md)
+and [continuation handoff](research/plan/PLATFORM-SPLIT-HANDOFF.md) before wave 3.
+[HANDOFF.md](HANDOFF.md) preserves historical operational context.
 
 Per-experiment inference and benchmarking code for the Gideon GPU work.
 
@@ -19,8 +20,10 @@ models/deepseek41fnvfp4/ nvidia/DeepSeek-V4.1-Flash-NVFP4        ~492GB
 models/qwen3827b/       Qwen/Qwen3.8-27B                          ~54GB
 models/kimik3/          moonshotai/Kimi-K3                      ~1400GB
 models/marlin2b/        NemoStation/Marlin-2B (gated)              ~5GB
-apps/app/               customer console (Next.js, Vercel, Supabase)
-apps/infrx-api/         AWS-side API gateway + deployment (spec: apps/README.md)
+apps/app/               consumer inference App (Next.js, Vercel, Supabase)
+apps/lab/               provider Lab (documentation scaffold; implementation planned)
+apps/infrx-api/         shared inference gateway/runtime + deployment
+research/platforms/    current architecture, separate specs and roadmaps
 research/               sizing, scaling and platform research
 ```
 

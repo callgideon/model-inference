@@ -1,8 +1,11 @@
 # J — Evaluation workflow and calibration
 
+> **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v3](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. This is Lab scope with explicit Lab budgets and purpose grants, not a consumer launch dependency.
+
+
 ## Current State Summary
 
-Implementation has not started in this documentation package. Build an auditable, consented and budget-bounded judge that starts in offline dry-run mode. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
+Wave-2 baseline is audited in `10-wave2-platform-audit.md`; preserve its completed tasks and apply the new revision gates before pending work. This original brief supplies unchanged algorithms, not current progress claims. Build an auditable, consented and budget-bounded judge that starts in offline dry-run mode. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
 
 ## Important Context
 
@@ -39,7 +42,7 @@ Build an auditable, consented and budget-bounded judge that starts in offline dr
 
 ## Assumptions Made
 
-Start dependencies have been integrated before coding. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
+Start dependencies follow manifest v3: reviewed code/fixtures may enable development; new F2R/F2P/D1R gates require acceptance evidence. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
 
 ## Potential Gotchas
 
@@ -49,7 +52,9 @@ Worst-case reservation includes reasoning/output limits, not average estimate. S
 
 ### J1 — Dry-run sampler, rubric and score validation
 
-**Start after:** F2. **Integrate after:** its start dependencies; no additional external module dependency.
+**Start after:** F2. **Integrate after:** none beyond the start/code gate.
+
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `J2`. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement deterministic eligible sampling over owned consenting full traces, exclusions for missing/expired material, rubric/schema versioning and validated score parsing. Reproduce planned ~50-label stratification (25 uniform/15 failures/10 feedback) without labeling ordinary customer feedback as calibration. Dry-run outputs costs/sample IDs with zero network egress.
 
@@ -61,7 +66,7 @@ Worst-case reservation includes reasoning/output limits, not average estimate. S
 
 ### J2 — Consent/budget coordinated submission and collection
 
-**Start after:** J1. **Integrate after:** D6, T2.
+**Start after:** J1, F2P. **Integrate after:** D6J, T2I, L2. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Recheck current consent and content immediately before egress; reserve versioned worst-case amount including outstanding runs. Persist submit intent, disable unsafe auto retries, record provider ID and poll/collect idempotently. Timeout with unknown ID quarantines reservation; provide explicit evidence-based reconciliation. Bind provider rate/model versions from approved pricing inputs.
 
@@ -73,7 +78,7 @@ Worst-case reservation includes reasoning/output limits, not average estimate. S
 
 ### J3 — Operator calibration and quality report
 
-**Start after:** J2. **Integrate after:** C3, V2.
+**Start after:** J2, F2P. **Integrate after:** C3L, V2. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement explicit authorized calibration workflow, agreement analysis, rubric drift/version comparison and report export. Compute planned kappa>=0.6 and rank rho>=0.6 targets only on appropriate labeled pairs with sample sizes/uncertainty; flag insufficient evidence. Publish failure exemplars without leaking other tenants.
 

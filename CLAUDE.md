@@ -1,19 +1,26 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Repository conventions for all implementation sessions; the filename is historical.
 
 ## What this repo is
 
-Read `HANDOFF.md` for historical operational context and `research/plan/README.md`
-for the authoritative implementation handoffs. Read the shared contracts and your
-assigned module brief before coding; no live-state claim is implied by the docs.
+Read `research/platforms/README.md` for the current two-product architecture and
+`research/plan/PLATFORM-SPLIT-HANDOFF.md` before continuing implementation.
+`HANDOFF.md` contains historical operational context. Read manifest v3, the
+platform-split amendment, shared contracts and your assigned brief before coding.
+Wave 2 is imported at `271add9`; read `research/plan/10-wave2-platform-audit.md`
+and `11-wave3-revision-handoffs.md`. Preserve completed v1 evidence; new revision
+tasks gate product-v2 integration. No live-state claim is implied.
 
 Per-experiment inference and benchmarking for the Gideon GPU work, plus the
 research that sizes it. Five model experiments under `models/`, one directory each:
 `deepseek41f`, `deepseek41fnvfp4`, `qwen3827b`, `kimik3`, `marlin2b`; shared
-scripts in `models/common/`. `apps/app` is the customer console (Next.js on
-Vercel, Supabase auth/DB) and `apps/infrx-api` the AWS-side API gateway and
-deployment files; `apps/README.md` is their spec.
+scripts in `models/common/`. `apps/app` is the consumer inference product (Next.js,
+Supabase auth/DB); `apps/lab` is the planned provider product, currently a README
+scaffold. `apps/infrx-api` is their shared inference gateway/runtime. Consumer
+signup receives 10,000 CREDIT once per individual user. Preserve historical USD
+separately. Provider roles and source-data permissions are distinct from consumer
+ownership. `research/platforms/` is the current product specification.
 Target hardware is 8×B300 HGX nodes (268 GB/GPU as deployed, ~2,144 GB per
 node; 288 GB is the GB300 NVL72 figure, not ours) with local NVMe, plus AWS
 p6 nodes for burst. Development happens on AWS GPU instances until the

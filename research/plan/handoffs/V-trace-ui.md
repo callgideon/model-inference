@@ -1,8 +1,11 @@
 # V — Trace explorer and feedback UI
 
+> **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v3](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset. Provider trace/review/judge UI belongs in apps/lab; do not implement the old apps/app destinations.
+
+
 ## Current State Summary
 
-Implementation has not started in this documentation package. Deliver a usable trace explorer with clear completeness, retention, feedback and evaluation provenance. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
+Wave-2 baseline is audited in `10-wave2-platform-audit.md`; preserve its completed tasks and apply the new revision gates before pending work. This original brief supplies unchanged algorithms, not current progress claims. Deliver a usable trace explorer with clear completeness, retention, feedback and evaluation provenance. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
 
 ## Important Context
 
@@ -22,9 +25,9 @@ Consume C repositories/actions and J score DTOs; no direct CH/S3 access. Request
 
 No application files were modified when this handoff was authored. Planned ownership for this track (paths may not exist until implementation):
 
-- apps/app/app/(console)/traces/
-- apps/app/components/traces/
-- apps/app/tests/v/
+- apps/lab/app/(provider)/requests/
+- apps/lab/components/traces/
+- apps/lab/tests/v/
 
 Shared composition roots, global types/manifests/locks and navigation remain coordinator-owned after foundation. Feature tests belong to this track; root integration tests belong to E. Request shared changes with exact imports/config needed.
 
@@ -40,7 +43,7 @@ Deliver a usable trace explorer with clear completeness, retention, feedback and
 
 ## Assumptions Made
 
-Start dependencies have been integrated before coding. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
+Start dependencies follow manifest v3: reviewed code/fixtures may enable development; new F2R/F2P/D1R gates require acceptance evidence. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
 
 ## Potential Gotchas
 
@@ -50,7 +53,9 @@ Canonical logical content is not guaranteed raw HTTP bytes. Lost/expired/off tra
 
 ### V1 — Paginated trace list and filters
 
-**Start after:** F2. **Integrate after:** C1, T2.
+**Start after:** F2. **Integrate after:** V1M.
+
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `V1M`. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Build bounded list with model/key/time/outcome/quality filters, stable cursors and URL state. Show content availability and projection lag/loss without conflating absent off-mode traces with failures. Provide loading/empty/error/retry and keyboard-accessible navigation.
 
@@ -62,7 +67,7 @@ Canonical logical content is not guaranteed raw HTTP bytes. Lost/expired/off tra
 
 ### V2 — Trace detail, content and feedback
 
-**Start after:** V1. **Integrate after:** C2, C3.
+**Start after:** V1M. **Integrate after:** C2, C3F. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Render timings/usage/request versions and safe text/media content with metadata-only/pending/lost/expired states. Provide feedback submission and provenance history using durable action results; handle CH lag immediately after acceptance. Never render model HTML unsanitized.
 
@@ -74,7 +79,7 @@ Canonical logical content is not guaranteed raw HTTP bytes. Lost/expired/off tra
 
 ### V3 — Judge score and calibration presentation
 
-**Start after:** V2. **Integrate after:** J2.
+**Start after:** V2, F2P. **Integrate after:** J2. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Show rubric/model versions, sample/run state, limited evaluations, budget/ambiguous submit status and operator calibration affordance through C actions. Link to U consent settings. Distinguish estimated/dry-run outputs from real provider results and statistical targets from achieved quality.
 
@@ -88,7 +93,7 @@ Canonical logical content is not guaranteed raw HTTP bytes. Lost/expired/off tra
 
 Use the test IDs above as explicit pass/fail oracles, not checklist prose. Unit tests prove local behavior; shared contract fixtures prove interchangeability; real service tests prove integration. Exercise failure paths as well as success, retain a failing reproduction, fix in the owning module and rerun affected cases.
 
-Planned focused suite: apps/app/tests/v/
+Planned focused suite: apps/lab/tests/v/
 
 After F2 establishes discovery, run the focused suite and relevant contract suite. Also run the existing Python baseline for gateway/runtime changes; console tests and lint for console changes; full console build for integrated UI/runtime changes. Record exact executable commands from the pinned environment in evidence. Unavailable external tests are pending, not skipped passes.
 

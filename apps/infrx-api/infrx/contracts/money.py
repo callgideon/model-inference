@@ -10,20 +10,28 @@ import decimal
 import re
 from decimal import Decimal
 
-CONTEXT = decimal.Context(prec=40)      # >= 40 per contracts v1
 SCALE = Decimal("0.00000001")           # numeric(20, 8) USD
 FRACTIONAL_DIGITS = 8
 PER_MILLION = Decimal(1_000_000)
 MAX_DIGITS = 20                         # numeric(20, 8): 12 integral + 8 fractional
 # r1 R11: the money domain is exactly numeric(20, 8), i.e. |value| < 10^12, and
 # both languages accept and reject the same set (fixtures/v1/money_cases.json).
-MAX_VALUE = Decimal(10) ** 12
+MAX_VALUE = Decimal("1000000000000")
 
 # No exponent, no leading '+', no leading zeros, at most eight fractional digits.
 # Matched with `fullmatch`: `$` alone would also accept a trailing newline.
 _PLAIN = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]{1,8})?")
 
 ZERO = Decimal("0.00000000")
+
+
+def arithmetic_context() -> decimal.Context:
+    """A fresh, explicit context: neither ambient settings nor a previous caller can alter money."""
+    return decimal.Context(
+        prec=40, rounding=decimal.ROUND_HALF_EVEN, Emin=-999999, Emax=999999,
+        capitals=1, clamp=0, flags=[],
+        traps=[decimal.InvalidOperation, decimal.DivisionByZero, decimal.Overflow],
+    )
 
 
 def parse(raw: object) -> Decimal:
@@ -53,10 +61,10 @@ def parse(raw: object) -> Decimal:
         # Finer than 1e-8 is rejected, never silently rounded into the ledger.
         raise ValueError(f"money is finer than 1e-8 and would need rounding: {raw!r}")
     try:
-        quantized = value.quantize(SCALE, rounding=decimal.ROUND_HALF_UP, context=CONTEXT)
+        quantized = value.quantize(SCALE, rounding=decimal.ROUND_HALF_UP, context=arithmetic_context())
     except decimal.DecimalException as exc:
         raise ValueError(f"money is not representable as numeric(20, 8): {raw!r}") from exc
-    if abs(quantized) >= MAX_VALUE or (len(quantized.as_tuple().digits) > MAX_DIGITS
+    if quantized.copy_abs() >= MAX_VALUE or (len(quantized.as_tuple().digits) > MAX_DIGITS
                                        and quantized != 0):
         raise ValueError(f"money exceeds numeric(20, 8), i.e. |value| < 10^12: {raw!r}")
     return quantized
@@ -71,7 +79,7 @@ def format_money(value: object) -> str:
 
 
 def _q(value: Decimal, rounding: str) -> Decimal:
-    return value.quantize(SCALE, rounding=rounding, context=CONTEXT)
+    return value.quantize(SCALE, rounding=rounding, context=arithmetic_context())
 
 
 def half_up(value: Decimal) -> Decimal:
@@ -95,8 +103,9 @@ def cost(prompt_tokens: int, completion_tokens: int, input_rate: Decimal, output
     finite decimal by a power of ten only shifts the exponent."""
     prompt = _tokens(prompt_tokens, "prompt_tokens")
     completion = _tokens(completion_tokens, "completion_tokens")
-    total = CONTEXT.add(CONTEXT.multiply(prompt, input_rate), CONTEXT.multiply(completion, output_rate))
-    return CONTEXT.divide(total, PER_MILLION)
+    context = arithmetic_context()
+    total = context.add(context.multiply(prompt, input_rate), context.multiply(completion, output_rate))
+    return context.divide(total, PER_MILLION)
 
 
 def debit(prompt_tokens: int, completion_tokens: int, input_rate: Decimal, output_rate: Decimal) -> Decimal:
@@ -111,4 +120,4 @@ def maximum_hold(max_input_tokens: int, max_output_tokens: int, input_rate: Deci
 
 def available(ledger_total: Decimal, reserved_total: Decimal) -> Decimal:
     """The balance view's third column; may be zero but reservations never exceed it."""
-    return CONTEXT.subtract(ledger_total, reserved_total)
+    return arithmetic_context().subtract(ledger_total, reserved_total)

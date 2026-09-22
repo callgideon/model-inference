@@ -1,8 +1,11 @@
 # U — Usage, balances, keys and administration UI
 
+> **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v3](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset.
+
+
 ## Current State Summary
 
-Implementation has not started in this documentation package. Make pilot consumption, limits and controls understandable while preserving the existing console design and organization model. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
+Wave-2 baseline is audited in `10-wave2-platform-audit.md`; preserve its completed tasks and apply the new revision gates before pending work. This original brief supplies unchanged algorithms, not current progress claims. Make pilot consumption, limits and controls understandable while preserving the existing console design and organization model. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
 
 ## Important Context
 
@@ -45,7 +48,7 @@ Make pilot consumption, limits and controls understandable while preserving the 
 
 ## Assumptions Made
 
-Start dependencies have been integrated before coding. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
+Start dependencies follow manifest v3: reviewed code/fixtures may enable development; new F2R/F2P/D1R gates require acceptance evidence. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
 
 ## Potential Gotchas
 
@@ -55,11 +58,13 @@ Promotional balance is not cash revenue and held funds are not spendable. Do not
 
 ### U1 — Usage and promotional balance views
 
-**Start after:** F2. **Integrate after:** C1, D5.
+**Start after:** F2. **Integrate after:** C0, D5.
+
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `U1R`. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Build usage filters/pagination, token/cost/outcome breakdown and balance total/reserved/available with explicit promotional labels. Explain pending reconciliation and platform-absorbed failures without showing estimated tokens as authoritative charges. Build from C fixtures first.
 
-**Acceptance:** Empty/new org displays zero with operator-grant guidance; concurrent holds update available balance; large usage sets paginate and money formatting remains exact.
+**Acceptance:** Verified new user displays the persisted one-time 10,000-credit grant; pending/failed eligibility has an explicit state; concurrent holds update available balance; usage paginates and CREDIT formatting remains exact, with legacy USD separate.
 
 **Required test oracles:** CONSOLE-FLOWS.
 
@@ -67,7 +72,7 @@ Promotional balance is not cash revenue and held funds are not spendable. Do not
 
 ### U2 — Keys and privacy/settings controls
 
-**Start after:** U1. **Integrate after:** C3.
+**Start after:** U1R, F2P. **Integrate after:** C3A. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Preserve create-once secret presentation and revoke flows; add allowed model/limit controls only to authorized roles. Add trace mode, capped retention and separate evaluation consent settings with consequences explained. Handle save errors, stale form state and keyboard navigation; no org-switcher.
 
@@ -79,7 +84,7 @@ Promotional balance is not cash revenue and held funds are not spendable. Do not
 
 ### U3 — Operator grants, suspension and pilot operations
 
-**Start after:** U1. **Integrate after:** C3.
+**Start after:** U1R, F2P. **Integrate after:** C3A. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Build operator-only grant form with required reason and replay-safe submit ID, ledger audit pagination, org suspension/entitlement controls and reconciliation indicators. Keep customer billing separate from operator actions; prevent double-click grants visually and server-side.
 

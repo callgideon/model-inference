@@ -1,8 +1,11 @@
 # Q — Scheduling indices and fair dispatch
 
+> **2026-09-21 amendment:** Read [platform split](../08-platform-split.md), [new task briefs](../09-amendment-workstreams.md) and [manifest v3](../tasks.json) before this brief. They supersede conflicting paths, signup/unit rules and dependencies below. Wave 2 is imported at `271add9`; [audit](../10-wave2-platform-audit.md) and [revision handoffs](../11-wave3-revision-handoffs.md) govern continuation; existing evidence is not reset.
+
+
 ## Current State Summary
 
-Implementation has not started in this documentation package. Provide bounded fair candidate selection while PostgreSQL owns admission and execution truth. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
+Wave-2 baseline is audited in `10-wave2-platform-audit.md`; preserve its completed tasks and apply the new revision gates before pending work. This original brief supplies unchanged algorithms, not current progress claims. Provide bounded fair candidate selection while PostgreSQL owns admission and execution truth. Start from the coordinator-assigned committed base, inspect newer evidence, and claim exactly one task below.
 
 ## Important Context
 
@@ -38,7 +41,7 @@ Provide bounded fair candidate selection while PostgreSQL owns admission and exe
 
 ## Assumptions Made
 
-Start dependencies have been integrated before coding. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
+Start dependencies follow manifest v3: reviewed code/fixtures may enable development; new F2R/F2P/D1R gates require acceptance evidence. Integration dependencies may be replaced with contract fakes only during development. Environment defaults are provisional until measured; cloud/GPU/provider tests require an allocated environment and secrets supplied outside the repository.
 
 ## Potential Gotchas
 
@@ -48,7 +51,9 @@ Old Lua snippets are design sketches, not drop-in scripts: key namespaces, decla
 
 ### Q1 — Deterministic memory scheduler and fairness model
 
-**Start after:** F2. **Integrate after:** its start dependencies; no additional external module dependency.
+**Start after:** F2. **Integrate after:** none beyond the start/code gate.
+
+**Imported baseline status:** `implemented` at wave 2; preserve completed work. Product revision/integration follow-up: `F2R`, `Q2`. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement per-org weighted fair selection, tie-breaking, finish-time advancement at dispatch, queued-item count/bytes and cancellation removal. Use injected clock and seeded workload fixtures. Outbox event replay replaces/indexes once; filter candidate eligibility through JobStore.
 
@@ -60,7 +65,7 @@ Old Lua snippets are design sketches, not drop-in scripts: key namespaces, decla
 
 ### Q2 — Valkey adapter with atomic tested scripts
 
-**Start after:** Q1. **Integrate after:** its start dependencies; no additional external module dependency.
+**Start after:** Q1, F2P. **Integrate after:** none beyond the start/code gate. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Port the tested model to namespaced keys/scripts with all accessed keys declared, complete byte/count accounting and atomic transitions. Pin supported server version and persistence expectations; verify script behavior with real Valkey and randomized differential tests versus Q1.
 
@@ -72,7 +77,7 @@ Old Lua snippets are design sketches, not drop-in scripts: key namespaces, decla
 
 ### Q3 — Outbox/reconciler integration and index loss recovery
 
-**Start after:** Q2. **Integrate after:** D2, D3.
+**Start after:** Q2, F2P. **Integrate after:** D2, D3. Manifest v3 and the revision handoffs govern current scope.
 
 **Implementation:** Implement outbox drain/ack with retry and bounded scan checkpoints; rebuild from PG nonterminal snapshots, clean dead candidates and expose lag/missing-index metrics. Reconcile concurrently with normal dispatch without duplicate execution. Switch adapters only through coordinator drain/rebuild protocol.
 

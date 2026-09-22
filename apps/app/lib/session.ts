@@ -48,9 +48,3 @@ export const getSession = cache(async (): Promise<Session> => {
     role: membership.role as "owner" | "member",
   };
 });
-
-export async function getBalance(orgId: string): Promise<number> {
-  const supabase = await createClient();
-  const { data } = await supabase.rpc("org_balance", { p_org: orgId });
-  return Number(data ?? 0);
-}

@@ -1,10 +1,11 @@
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "baseline_commit": "1db98e9",
-  "status": "wave-2 merged on claude/infrx-impl (2026-09-21); status vocabulary: planned | in-progress | implemented (merged, green against fakes or a local real service, integration dependencies not all integrated) | integrated (integration dependencies integrated and the real-service suite passed)",
+  "status": "wave-2 baseline imported and audited; local corrections and two-platform plan prepared; wave-3 feature implementation not started",
   "dependency_semantics": {
-    "start_dependencies": "Must be integrated before coding this task",
-    "integration_dependencies": "Additional tasks required before marking this task integrated; fakes permitted during development"
+    "start_dependencies": "Code-ready dependencies: committed and reviewed interfaces/fixtures must exist before coding; implemented baseline modules may supply code without live integration. New shared revision gates F2R/F2P/D1R require their acceptance evidence before consumers start. A dirty coordinator tree is never a worktree base.",
+    "integration_dependencies": "Must have real adapter evidence before dependent task is integrated. Code-ready fake implementations satisfy only start dependencies. Baseline integrated status never certifies a later product revision.",
+    "superseded_tasks": "Never schedule; use replaced_by tasks. Dependencies must name active tasks."
   },
   "tracks": [
     {
@@ -26,7 +27,8 @@
       "ownership": [
         "apps/app/supabase/migrations/ (all future migrations)",
         "apps/infrx-api/infrx/state/",
-        "apps/infrx-api/tests/d/"
+        "apps/infrx-api/tests/d/",
+        "All new A/L-related migrations remain D-owned; user CREDIT wallets separate from legacy USD"
       ]
     },
     {
@@ -97,7 +99,8 @@
         "apps/app/app/actions.ts (service migration)",
         "apps/app/app/(console)/api-keys/actions.ts",
         "apps/app/app/(console)/admin/actions.ts",
-        "apps/app/tests/c/"
+        "apps/app/tests/c/",
+        "Consumer actions stay in apps/app; provider actions in apps/lab; shared server package extraction coordinated; see amendment"
       ]
     },
     {
@@ -115,12 +118,12 @@
     },
     {
       "id": "V",
-      "title": "Trace explorer and feedback UI",
+      "title": "Provider Lab trace and evaluation UI",
       "handoff": "handoffs/V-trace-ui.md",
       "ownership": [
-        "apps/app/app/(console)/traces/",
-        "apps/app/components/traces/",
-        "apps/app/tests/v/"
+        "apps/lab/app/(provider)/requests/ (planned)",
+        "apps/lab/components/traces/ (planned)",
+        "apps/lab/tests/v/ (planned)"
       ]
     },
     {
@@ -144,6 +147,36 @@
         "apps/app/tests/e2e/",
         "research/plan/evidence/e/"
       ]
+    },
+    {
+      "id": "S",
+      "title": "Cross-system reconciliation and shared wiring",
+      "handoff": "09-amendment-workstreams.md",
+      "ownership": [
+        "research/plan/evidence/ reconciliation record",
+        "workspace/lockfiles/shared package extraction and composition (coordinator only)"
+      ]
+    },
+    {
+      "id": "A",
+      "title": "Consumer onboarding and published catalog",
+      "handoff": "09-amendment-workstreams.md",
+      "ownership": [
+        "apps/app/app/(auth)/ signup and callback changes",
+        "apps/app/app/(console)/models/",
+        "apps/app/app/(console)/docs/",
+        "A1 domain mutations remain D-owned; server actions C-owned"
+      ]
+    },
+    {
+      "id": "L",
+      "title": "Provider Lab foundation and control workflows",
+      "handoff": "09-amendment-workstreams.md",
+      "ownership": [
+        "apps/lab/ excluding C actions and V trace views",
+        "provider authorization/registry services assigned after F2",
+        "schema changes D-owned; runtime changes G/W-owned"
+      ]
     }
   ],
   "tasks": [
@@ -157,7 +190,14 @@
       ],
       "track": "F",
       "handoff": "handoffs/F-foundation.md",
-      "status": "integrated"
+      "status": "integrated",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M0",
+      "amendment": "Preserve completed extraction and existing security fixes.",
+      "baseline_status": "integrated",
+      "amendment_status": "compatible-baseline",
+      "revision_tasks": []
     },
     {
       "id": "F2",
@@ -168,11 +208,22 @@
       "integration_dependencies": [],
       "test_ids": [
         "F-CONTRACT",
-        "F-BASE"
+        "F-BASE",
+        "SPLIT-CONTRACT"
       ],
       "track": "F",
       "handoff": "handoffs/F-foundation.md",
-      "status": "integrated"
+      "status": "integrated",
+      "disposition": "modify",
+      "product": "shared",
+      "milestone": "APP-M0",
+      "amendment": "Original v1 encoding is integrated; F2R repairs its carryovers, F2P encodes the product split.",
+      "baseline_status": "integrated",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "F2R",
+        "F2P"
+      ]
     },
     {
       "id": "D1",
@@ -183,19 +234,30 @@
       "integration_dependencies": [],
       "test_ids": [
         "DUR-RLS",
-        "DUR-CAP"
+        "DUR-CAP",
+        "CREDIT-UNITS",
+        "CREDIT-IDENTITY"
       ],
       "track": "D",
       "handoff": "handoffs/D-durable-state.md",
       "status": "integrated",
+      "disposition": "modify",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Preserve 0001\u20130005 byte-for-byte; D1R owns additive CREDIT and provider/registry migrations.",
       "merged_commit": "7a0d86d",
-      "integration_note": "migrations 0003-0005 + tests/d 103 passed with 82 mutants on postgres 16 + shim AND on the real supabase/postgres 17.6 image, no shim; not applied to any Supabase project"
+      "integration_note": "migrations 0003-0005 + tests/d 103 passed with 82 mutants on postgres 16 + shim AND on the real supabase/postgres 17.6 image, no shim; not applied to any Supabase project",
+      "baseline_status": "integrated",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "D1R"
+      ]
     },
     {
       "id": "D2",
       "title": "Atomic admission, durable preparation and dispatch outbox",
       "start_dependencies": [
-        "D1"
+        "D1R"
       ],
       "integration_dependencies": [],
       "test_ids": [
@@ -205,13 +267,20 @@
       ],
       "track": "D",
       "handoff": "handoffs/D-durable-state.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "modify",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Resolve wallet from trusted consumer context; pin deployment and CREDIT rates in the admission transaction.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "D3",
       "title": "Fenced leases, recovery and cancellation",
       "start_dependencies": [
-        "D2"
+        "D2",
+        "F2P"
       ],
       "integration_dependencies": [],
       "test_ids": [
@@ -220,13 +289,20 @@
       ],
       "track": "D",
       "handoff": "handoffs/D-durable-state.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Preserve fenced execution, recovery and cancellation.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "D4",
       "title": "Persistent stream journal and replay",
       "start_dependencies": [
-        "D3"
+        "D3",
+        "F2P"
       ],
       "integration_dependencies": [],
       "test_ids": [
@@ -235,31 +311,42 @@
       ],
       "track": "D",
       "handoff": "handoffs/D-durable-state.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Preserve committed journal and replay guarantees.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "D5",
       "title": "Terminal transaction, grants and reconciliation",
       "start_dependencies": [
-        "D4"
+        "D4",
+        "F2P"
       ],
       "integration_dependencies": [],
       "test_ids": [
         "DUR-SETTLE",
         "DUR-CAP",
-        "DUR-OUTPUT"
+        "DUR-OUTPUT",
+        "CREDIT-SPEND",
+        "CREDIT-RATE"
       ],
       "track": "D",
       "handoff": "handoffs/D-durable-state.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "modify",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Settle CREDIT once; preserve legacy USD regime; grant operations support A1.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "D6",
       "title": "Durable feedback and judge coordination",
-      "start_dependencies": [
-        "D5"
-      ],
-      "integration_dependencies": [],
       "test_ids": [
         "FEEDBACK-ACK",
         "JUDGE-BUDGET",
@@ -267,7 +354,24 @@
       ],
       "track": "D",
       "handoff": "handoffs/D-durable-state.md",
-      "status": "planned"
+      "status": "superseded-for-scheduling",
+      "disposition": "split",
+      "product": "shared",
+      "milestone": "LAB-M1",
+      "amendment": "Separate feedback acceptance from judge-budget coordination.",
+      "replaced_by": [
+        "D6F",
+        "D6J"
+      ],
+      "historical_dependencies": {
+        "start": [
+          "D5"
+        ],
+        "integration": []
+      },
+      "start_dependencies": [],
+      "integration_dependencies": [],
+      "baseline_status": "planned"
     },
     {
       "id": "M1",
@@ -283,13 +387,24 @@
       "track": "M",
       "handoff": "handoffs/M-media.md",
       "status": "implemented",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Keep URL/base64 security and bounded materialization.",
       "merged_commit": "4c7a29f",
-      "integration_note": "materialization against an in-memory object store; attach at admission needs D2/G2; stage accepts never-materialized refs until F2.2"
+      "integration_note": "materialization against an in-memory object store; attach at admission needs D2/G2; stage accepts never-materialized refs until F2.2",
+      "baseline_status": "implemented",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "F2R",
+        "M2"
+      ]
     },
     {
       "id": "M2",
       "title": "Versioned preprocessing and tenant cache",
       "start_dependencies": [
+        "F2P",
         "M1"
       ],
       "integration_dependencies": [
@@ -302,12 +417,19 @@
       ],
       "track": "M",
       "handoff": "handoffs/M-media.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Keep versioned preprocessing and tenant-separated caches.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "M3",
       "title": "Owned uploads, expiry and orphan collection",
       "start_dependencies": [
+        "F2P",
         "M1"
       ],
       "integration_dependencies": [
@@ -319,7 +441,13 @@
       ],
       "track": "M",
       "handoff": "handoffs/M-media.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Keep owned upload lifecycle.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "Q1",
@@ -335,14 +463,25 @@
       "track": "Q",
       "handoff": "handoffs/Q-scheduling.md",
       "status": "implemented",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Keep deterministic scheduling interface.",
       "merged_commit": "d6f26e5",
-      "integration_note": "in-memory adapter (the deliverable); not constructed by the composition root; Q2 reproduces the 14-point list on Valkey"
+      "integration_note": "in-memory adapter (the deliverable); not constructed by the composition root; Q2 reproduces the 14-point list on Valkey",
+      "baseline_status": "implemented",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "F2R",
+        "Q2"
+      ]
     },
     {
       "id": "Q2",
       "title": "Valkey adapter with atomic tested scripts",
       "start_dependencies": [
-        "Q1"
+        "Q1",
+        "F2P"
       ],
       "integration_dependencies": [],
       "test_ids": [
@@ -351,13 +490,20 @@
       ],
       "track": "Q",
       "handoff": "handoffs/Q-scheduling.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Keep rebuildable Valkey index.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "Q3",
       "title": "Outbox/reconciler integration and index loss recovery",
       "start_dependencies": [
-        "Q2"
+        "Q2",
+        "F2P"
       ],
       "integration_dependencies": [
         "D2",
@@ -369,7 +515,13 @@
       ],
       "track": "Q",
       "handoff": "handoffs/Q-scheduling.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Keep outbox and index recovery.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "W1",
@@ -385,14 +537,25 @@
       "track": "W",
       "handoff": "handoffs/W-worker.md",
       "status": "implemented",
+      "disposition": "modify",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Include immutable serving revision/capabilities; no generic robotics runtime yet.",
       "merged_commit": "9a2eec2",
-      "integration_note": "fakes only; 'content' alias of 'raw' stays until F2.2; engine must not run with --reasoning-parser or continuous_usage_stats"
+      "integration_note": "fakes only; 'content' alias of 'raw' stays until F2.2; engine must not run with --reasoning-parser or continuous_usage_stats",
+      "baseline_status": "implemented",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "F2R",
+        "W2"
+      ]
     },
     {
       "id": "W2",
       "title": "Lease-aware execution, cancellation and completion",
       "start_dependencies": [
-        "W1"
+        "W1",
+        "F2P"
       ],
       "integration_dependencies": [
         "D5",
@@ -406,13 +569,20 @@
       ],
       "track": "W",
       "handoff": "handoffs/W-worker.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Keep lease-aware execution and completion.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "W3",
       "title": "Drain, engine pin and measured concurrency",
       "start_dependencies": [
-        "W2"
+        "W2",
+        "F2P"
       ],
       "integration_dependencies": [
         "E1"
@@ -423,7 +593,13 @@
       ],
       "track": "W",
       "handoff": "handoffs/W-worker.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Keep measured capacity, pin and drain work.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "G1",
@@ -442,20 +618,31 @@
       "track": "G",
       "handoff": "handoffs/G-gateway.md",
       "status": "implemented",
+      "disposition": "modify",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Separate credential audiences; enforce published model capability/rate and trusted wallet mapping.",
       "merged_commit": "49eafd2",
-      "integration_note": "NOT mounted: ROUTERS byte-identical; cutover at the G2/D2 integration together with I2's fail-closed installer; waits on D2"
+      "integration_note": "NOT mounted: ROUTERS byte-identical; cutover at the G2/D2 integration together with I2's fail-closed installer; waits on D2",
+      "baseline_status": "implemented",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "F2R",
+        "G1R"
+      ]
     },
     {
       "id": "G2",
       "title": "Synchronous chat and persistent SSE relay",
       "start_dependencies": [
-        "G1"
+        "G1R"
       ],
       "integration_dependencies": [
         "D5",
         "W2",
         "M2",
-        "Q3"
+        "Q3",
+        "I0"
       ],
       "test_ids": [
         "API-MODES",
@@ -464,17 +651,24 @@
       ],
       "track": "G",
       "handoff": "handoffs/G-gateway.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Keep sync/SSE behavior; consume revised snapshots.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "G3",
       "title": "Explicit jobs, status, cancellation and replay",
       "start_dependencies": [
-        "G1"
+        "G1R"
       ],
       "integration_dependencies": [
         "D5",
-        "W2"
+        "W2",
+        "I0"
       ],
       "test_ids": [
         "API-MODES",
@@ -483,19 +677,17 @@
       ],
       "track": "G",
       "handoff": "handoffs/G-gateway.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Keep explicit async, cancellation and owned replay.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "G4",
       "title": "Uploads, feedback and trace export adapters",
-      "start_dependencies": [
-        "G1"
-      ],
-      "integration_dependencies": [
-        "M3",
-        "D6",
-        "T2"
-      ],
       "test_ids": [
         "FEEDBACK-ACK",
         "TRACE-TENANT",
@@ -503,13 +695,36 @@
       ],
       "track": "G",
       "handoff": "handoffs/G-gateway.md",
-      "status": "planned"
+      "status": "superseded-for-scheduling",
+      "disposition": "split",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Uploads must not depend on feedback/judge/traces.",
+      "replaced_by": [
+        "G4U",
+        "G4F",
+        "G4T"
+      ],
+      "historical_dependencies": {
+        "start": [
+          "G1"
+        ],
+        "integration": [
+          "M3",
+          "D6",
+          "T2"
+        ]
+      },
+      "start_dependencies": [],
+      "integration_dependencies": [],
+      "baseline_status": "planned"
     },
     {
       "id": "G5",
       "title": "Signed async completion callbacks",
       "start_dependencies": [
-        "G3"
+        "G3",
+        "F2P"
       ],
       "integration_dependencies": [
         "D5",
@@ -520,7 +735,13 @@
       ],
       "track": "G",
       "handoff": "handoffs/G-gateway.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "defer-from-launch",
+      "product": "shared",
+      "milestone": "APP-M3",
+      "amendment": "Useful optional callbacks; no consumer M2 dependency.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "T1",
@@ -536,34 +757,60 @@
       "track": "T",
       "handoff": "handoffs/T-traces.md",
       "status": "implemented",
+      "disposition": "reuse-later",
+      "product": "shared",
+      "milestone": "LAB-M1",
+      "amendment": "Shared capture; consumer launch may disable it. All bounds/privacy tests required if enabled.",
       "merged_commit": "c13fb1a",
-      "integration_note": "real spool on local disk, conformance 17/17 against it; no gateway builds the sink; SEGMENT_VERSION 2 (08 \u00a75 update pending)"
+      "integration_note": "real spool on local disk, conformance 17/17 against it; no gateway builds the sink; SEGMENT_VERSION 2 (08 \u00a75 update pending)",
+      "baseline_status": "implemented",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "F2R",
+        "T2I"
+      ]
     },
     {
       "id": "T2",
       "title": "Idempotent analytics and content shipping",
-      "start_dependencies": [
-        "T1"
-      ],
-      "integration_dependencies": [
-        "D5",
-        "D6"
-      ],
       "test_ids": [
         "TRACE-RECOVER",
         "FEEDBACK-ACK"
       ],
       "track": "T",
       "handoff": "handoffs/T-traces.md",
-      "status": "planned"
+      "status": "superseded-for-scheduling",
+      "disposition": "split",
+      "product": "shared",
+      "milestone": "LAB-M1",
+      "amendment": "Inference projection must not depend on judge coordination; feedback is a separate projection adapter.",
+      "replaced_by": [
+        "T2I",
+        "T2F"
+      ],
+      "historical_dependencies": {
+        "start": [
+          "T1"
+        ],
+        "integration": [
+          "D5",
+          "D6"
+        ]
+      },
+      "start_dependencies": [],
+      "integration_dependencies": [],
+      "baseline_status": "planned"
     },
     {
       "id": "T3",
       "title": "Logical retention, deletion and observability",
       "start_dependencies": [
-        "T2"
+        "T2I",
+        "F2P"
       ],
-      "integration_dependencies": [],
+      "integration_dependencies": [
+        "T2F"
+      ],
       "test_ids": [
         "TRACE-TENANT",
         "TRACE-RECOVER",
@@ -571,7 +818,13 @@
       ],
       "track": "T",
       "handoff": "handoffs/T-traces.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "reuse-later",
+      "product": "shared",
+      "milestone": "LAB-M1",
+      "amendment": "Keep retention/deletion; apply provider access grants at read/export boundary.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "J1",
@@ -587,18 +840,30 @@
       "track": "J",
       "handoff": "handoffs/J-judge.md",
       "status": "implemented",
+      "disposition": "reuse-later",
+      "product": "lab",
+      "milestone": "LAB-M1",
+      "amendment": "Judge dry-run is Lab scope, independent of consumer launch.",
       "merged_commit": "b1b84a1",
-      "integration_note": "shared fake only; live submission disabled until an approved per-MTok price row with effective_at exists"
+      "integration_note": "shared fake only; live submission disabled until an approved per-MTok price row with effective_at exists",
+      "baseline_status": "implemented",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "F2R",
+        "J2"
+      ]
     },
     {
       "id": "J2",
       "title": "Consent/budget coordinated submission and collection",
       "start_dependencies": [
-        "J1"
+        "J1",
+        "F2P"
       ],
       "integration_dependencies": [
-        "D6",
-        "T2"
+        "D6J",
+        "T2I",
+        "L2"
       ],
       "test_ids": [
         "JUDGE-BUDGET",
@@ -606,16 +871,23 @@
       ],
       "track": "J",
       "handoff": "handoffs/J-judge.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "modify",
+      "product": "lab",
+      "milestone": "LAB-M1",
+      "amendment": "Use provider-purpose grants and explicit Lab USD budgets; never consume consumer credits implicitly.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "J3",
       "title": "Operator calibration and quality report",
       "start_dependencies": [
-        "J2"
+        "J2",
+        "F2P"
       ],
       "integration_dependencies": [
-        "C3",
+        "C3L",
         "V2"
       ],
       "test_ids": [
@@ -624,7 +896,13 @@
       ],
       "track": "J",
       "handoff": "handoffs/J-judge.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "move-ui-dependencies",
+      "product": "lab",
+      "milestone": "LAB-M1",
+      "amendment": "Calibration uses Lab actions/review permissions.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "C1",
@@ -633,7 +911,8 @@
         "F2"
       ],
       "integration_dependencies": [
-        "D1"
+        "D1",
+        "C0"
       ],
       "test_ids": [
         "TRACE-TENANT",
@@ -643,18 +922,31 @@
       "track": "C",
       "handoff": "handoffs/C-console-services.md",
       "status": "implemented",
+      "disposition": "modify",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Separate consumer and provider entry points; minimal consumer usage comes from PG, independent of CH.",
       "merged_commit": "010b6ea",
-      "integration_note": "services against the in-memory query port; D1 is integrated, but C1 reads a real database only through C2's supabase-js QueryPort (Layer-2 tenant test with operator and service-role sessions) \u2014 waits on C2"
+      "integration_note": "services against the in-memory query port; D1 is integrated, but C1 reads a real database only through C2's supabase-js QueryPort (Layer-2 tenant test with operator and service-role sessions) \u2014 waits on C2",
+      "baseline_status": "implemented",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "F2R",
+        "F2P",
+        "C0"
+      ]
     },
     {
       "id": "C2",
-      "title": "Content access, expiry and safe signed references",
+      "title": "Lab content access, expiry and safe signed references",
       "start_dependencies": [
-        "C1"
+        "F2P",
+        "C0"
       ],
       "integration_dependencies": [
         "M3",
-        "T3"
+        "T3",
+        "L2"
       ],
       "test_ids": [
         "TRACE-TENANT",
@@ -662,18 +954,17 @@
       ],
       "track": "C",
       "handoff": "handoffs/C-console-services.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "modify",
+      "product": "shared",
+      "milestone": "LAB-M1",
+      "amendment": "Real consumer PostgREST QueryPort is C0, not C2. C2 adds only authorized Lab/content adapters.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "C3",
       "title": "Shared key/settings/grant/feedback/judge actions",
-      "start_dependencies": [
-        "C1"
-      ],
-      "integration_dependencies": [
-        "D6",
-        "J2"
-      ],
       "test_ids": [
         "FEEDBACK-ACK",
         "JUDGE-BUDGET",
@@ -682,7 +973,28 @@
       ],
       "track": "C",
       "handoff": "handoffs/C-console-services.md",
-      "status": "planned"
+      "status": "superseded-for-scheduling",
+      "disposition": "split",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Separate consumer actions from feedback and Lab judge actions.",
+      "replaced_by": [
+        "C3A",
+        "C3F",
+        "C3L"
+      ],
+      "historical_dependencies": {
+        "start": [
+          "C1"
+        ],
+        "integration": [
+          "D6",
+          "J2"
+        ]
+      },
+      "start_dependencies": [],
+      "integration_dependencies": [],
+      "baseline_status": "planned"
     },
     {
       "id": "U1",
@@ -691,7 +1003,7 @@
         "F2"
       ],
       "integration_dependencies": [
-        "C1",
+        "C0",
         "D5"
       ],
       "test_ids": [
@@ -700,17 +1012,27 @@
       "track": "U",
       "handoff": "handoffs/U-administration-ui.md",
       "status": "implemented",
+      "disposition": "modify",
+      "product": "app",
+      "milestone": "APP-M1",
+      "amendment": "Credits instead of USD; own request history from authoritative usage; legacy USD separately labeled.",
       "merged_commit": "184c5fb",
-      "integration_note": "fixture-backed UI; C1 provider swap and D5 pending; waits on C1, D5"
+      "integration_note": "fixture-backed UI; C1 provider swap and D5 pending; waits on C1, D5",
+      "baseline_status": "implemented",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "U1R"
+      ]
     },
     {
       "id": "U2",
       "title": "Keys and privacy/settings controls",
       "start_dependencies": [
-        "U1"
+        "U1R",
+        "F2P"
       ],
       "integration_dependencies": [
-        "C3"
+        "C3A"
       ],
       "test_ids": [
         "CONSOLE-FLOWS",
@@ -718,16 +1040,23 @@
       ],
       "track": "U",
       "handoff": "handoffs/U-administration-ui.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "modify",
+      "product": "app",
+      "milestone": "APP-M1",
+      "amendment": "Consumer keys/privacy remain in App; no Lab settings.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "U3",
       "title": "Operator grants, suspension and pilot operations",
       "start_dependencies": [
-        "U1"
+        "U1R",
+        "F2P"
       ],
       "integration_dependencies": [
-        "C3"
+        "C3A"
       ],
       "test_ids": [
         "CONSOLE-FLOWS",
@@ -736,7 +1065,13 @@
       ],
       "track": "U",
       "handoff": "handoffs/U-administration-ui.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "modify",
+      "product": "app",
+      "milestone": "APP-M1",
+      "amendment": "Protected platform operator controls remain temporarily in App; provider role never mints credits.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "V1",
@@ -745,8 +1080,7 @@
         "F2"
       ],
       "integration_dependencies": [
-        "C1",
-        "T2"
+        "V1M"
       ],
       "test_ids": [
         "CONSOLE-FLOWS",
@@ -755,18 +1089,27 @@
       "track": "V",
       "handoff": "handoffs/V-trace-ui.md",
       "status": "implemented",
+      "disposition": "move",
+      "product": "lab",
+      "milestone": "LAB-M1",
+      "amendment": "Provider trace explorer goes to apps/lab, using explicit authorized dataset/request scope.",
       "merged_commit": "9617a2e",
-      "integration_note": "fixture-backed UI; sidebar entry and C1/T2 wiring pending; waits on C1, T2"
+      "integration_note": "fixture-backed UI; sidebar entry and C1/T2 wiring pending; waits on C1, T2",
+      "baseline_status": "implemented",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "V1M"
+      ]
     },
     {
       "id": "V2",
       "title": "Trace detail, content and feedback",
       "start_dependencies": [
-        "V1"
+        "V1M"
       ],
       "integration_dependencies": [
         "C2",
-        "C3"
+        "C3F"
       ],
       "test_ids": [
         "CONSOLE-FLOWS",
@@ -775,13 +1118,20 @@
       ],
       "track": "V",
       "handoff": "handoffs/V-trace-ui.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "move",
+      "product": "lab",
+      "milestone": "LAB-M1",
+      "amendment": "Provider content/review UI goes to Lab; reusable own-request components can later serve App.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "V3",
       "title": "Judge score and calibration presentation",
       "start_dependencies": [
-        "V2"
+        "V2",
+        "F2P"
       ],
       "integration_dependencies": [
         "J2"
@@ -792,7 +1142,13 @@
       ],
       "track": "V",
       "handoff": "handoffs/V-trace-ui.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "move",
+      "product": "lab",
+      "milestone": "LAB-M1",
+      "amendment": "Judge/calibration presentation goes to Lab.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "I1",
@@ -804,59 +1160,88 @@
       ],
       "track": "I",
       "handoff": "handoffs/I-infrastructure.md",
-      "status": "integrated"
+      "status": "integrated",
+      "disposition": "modify",
+      "product": "shared",
+      "milestone": "APP-M0",
+      "amendment": "Inventory current remote state and separate App/Lab deploy identities; no infrastructure mutation.",
+      "baseline_status": "integrated",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "I0"
+      ]
     },
     {
       "id": "I2",
       "title": "Reproducible single-GPU deployment",
-      "start_dependencies": [
-        "I1",
-        "F2"
-      ],
-      "integration_dependencies": [
-        "D5",
-        "G2",
-        "G3",
-        "G4",
-        "W3",
-        "T3",
-        "C3",
-        "U3",
-        "V3",
-        "G5"
-      ],
       "test_ids": [
         "OPS-RECOVER",
         "PERF-PILOT"
       ],
       "track": "I",
       "handoff": "handoffs/I-infrastructure.md",
-      "status": "planned"
+      "status": "superseded-for-scheduling",
+      "disposition": "split",
+      "product": "shared",
+      "milestone": "APP-M2",
+      "amendment": "Separate consumer runtime deployment from Lab deployment.",
+      "replaced_by": [
+        "I2A",
+        "I2L"
+      ],
+      "historical_dependencies": {
+        "start": [
+          "I1",
+          "F2"
+        ],
+        "integration": [
+          "D5",
+          "G2",
+          "G3",
+          "G4",
+          "W3",
+          "T3",
+          "C3",
+          "U3",
+          "V3",
+          "G5"
+        ]
+      },
+      "start_dependencies": [],
+      "integration_dependencies": [],
+      "baseline_status": "planned"
     },
     {
       "id": "I3",
       "title": "Recovery, alarms and rollback runbooks",
       "start_dependencies": [
-        "I2"
+        "I2A",
+        "F2P"
       ],
       "integration_dependencies": [
-        "E3"
+        "E3A"
       ],
       "test_ids": [
         "OPS-RECOVER",
-        "TRACE-RECOVER",
         "DUR-OUTBOX"
       ],
       "track": "I",
       "handoff": "handoffs/I-infrastructure.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "modify",
+      "product": "shared",
+      "milestone": "APP-M2",
+      "amendment": "Consumer recovery gate depends on E3A; Lab recovery is separate and conditional services tested if enabled.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "I4",
       "title": "Separately gated fleet deployment",
       "start_dependencies": [
         "I3",
-        "E4"
+        "E4",
+        "F2P"
       ],
       "integration_dependencies": [],
       "test_ids": [
@@ -865,7 +1250,13 @@
       ],
       "track": "I",
       "handoff": "handoffs/I-infrastructure.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M3",
+      "amendment": "Fleet remains separately gated after pilot.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
     },
     {
       "id": "E1",
@@ -878,7 +1269,14 @@
       ],
       "track": "E",
       "handoff": "handoffs/E-verification.md",
-      "status": "integrated"
+      "status": "integrated",
+      "disposition": "keep",
+      "product": "shared",
+      "milestone": "APP-M0",
+      "amendment": "Reuse representative corpus/benchmark evidence; no repeated-clip shortcut.",
+      "baseline_status": "integrated",
+      "amendment_status": "compatible-baseline",
+      "revision_tasks": []
     },
     {
       "id": "E2",
@@ -895,29 +1293,21 @@
       "track": "E",
       "handoff": "handoffs/E-verification.md",
       "status": "implemented",
+      "disposition": "modify",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Add two-user/two-provider fixtures and separate App/Lab test discovery.",
       "merged_commit": "cb04382",
-      "integration_note": "real compose stack (Supabase PG 17.6, Valkey, ClickHouse, MinIO) with an ownership label; RLS matrix 39 cases; engine conformance 8/8 over a socket; sound mutation runner; E3 inverts E2-RLS-01..04/44 when D1's migrations enter the harness"
+      "integration_note": "real compose stack (Supabase PG 17.6, Valkey, ClickHouse, MinIO) with an ownership label; RLS matrix 39 cases; engine conformance 8/8 over a socket; sound mutation runner; E3 inverts E2-RLS-01..04/44 when D1's migrations enter the harness",
+      "baseline_status": "implemented",
+      "amendment_status": "revision-required",
+      "revision_tasks": [
+        "E2R"
+      ]
     },
     {
       "id": "E3",
       "title": "Cross-module failures and security gate",
-      "start_dependencies": [
-        "E2"
-      ],
-      "integration_dependencies": [
-        "D6",
-        "M3",
-        "Q3",
-        "W3",
-        "G4",
-        "T3",
-        "J2",
-        "C3",
-        "U3",
-        "V3",
-        "G5",
-        "J3"
-      ],
       "test_ids": [
         "DUR-ADMIT",
         "DUR-CAP",
@@ -940,13 +1330,45 @@
       ],
       "track": "E",
       "handoff": "handoffs/E-verification.md",
-      "status": "planned"
+      "status": "superseded-for-scheduling",
+      "disposition": "split",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "amendment": "Separate consumer integration, Lab operations and Lab observation gates.",
+      "replaced_by": [
+        "E3A",
+        "E3L",
+        "E5L"
+      ],
+      "historical_dependencies": {
+        "start": [
+          "E2"
+        ],
+        "integration": [
+          "D6",
+          "M3",
+          "Q3",
+          "W3",
+          "G4",
+          "T3",
+          "J2",
+          "C3",
+          "U3",
+          "V3",
+          "G5",
+          "J3"
+        ]
+      },
+      "start_dependencies": [],
+      "integration_dependencies": [],
+      "baseline_status": "planned"
     },
     {
       "id": "E4",
       "title": "Single-GPU release evidence and launch decision",
       "start_dependencies": [
-        "E3"
+        "E3A",
+        "F2P"
       ],
       "integration_dependencies": [
         "I3"
@@ -955,11 +1377,847 @@
         "PERF-PILOT",
         "OPS-RECOVER",
         "MEDIA-PARITY",
-        "TRACE-BOUNDS"
+        "APP-JOURNEY",
+        "CREDIT-SPEND"
       ],
       "track": "E",
       "handoff": "handoffs/E-verification.md",
-      "status": "planned"
+      "status": "planned",
+      "disposition": "modify",
+      "product": "app",
+      "milestone": "APP-M2",
+      "amendment": "Consumer pilot includes verified signup/grant/rates and usage; judge and provider UI are not prerequisites.",
+      "baseline_status": "planned",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "S1",
+      "title": "Reconcile pulled wave-2 baseline and publish product revision audit",
+      "track": "S",
+      "product": "shared",
+      "milestone": "APP-M0",
+      "start_dependencies": [],
+      "integration_dependencies": [],
+      "test_ids": [
+        "SPLIT-CONTRACT"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "implemented",
+      "disposition": "new",
+      "amendment_status": "local-audit-complete-awaiting-independent-review",
+      "evidence": "10-wave2-platform-audit.md"
+    },
+    {
+      "id": "A1",
+      "title": "Verified individual signup entitlement and idempotent backfill",
+      "track": "D",
+      "product": "app",
+      "milestone": "APP-M1",
+      "start_dependencies": [
+        "D1R"
+      ],
+      "integration_dependencies": [
+        "D5"
+      ],
+      "test_ids": [
+        "CREDIT-GRANT",
+        "CREDIT-IDENTITY",
+        "CREDIT-UNITS"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "new",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "A2",
+      "title": "Consumer signup verification and credited onboarding",
+      "track": "A",
+      "product": "app",
+      "milestone": "APP-M1",
+      "start_dependencies": [
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "A1",
+        "C3A"
+      ],
+      "test_ids": [
+        "APP-JOURNEY",
+        "CREDIT-GRANT"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "new",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "A3",
+      "title": "Published catalog, credit rates and capability-matched examples",
+      "track": "A",
+      "product": "app",
+      "milestone": "APP-M1",
+      "start_dependencies": [
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "D1R",
+        "G1R",
+        "C0"
+      ],
+      "test_ids": [
+        "CREDIT-RATE",
+        "SPLIT-CONTRACT",
+        "APP-JOURNEY"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "new",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "D6F",
+      "title": "Durable feedback and immutable author provenance",
+      "track": "D",
+      "product": "shared",
+      "milestone": "LAB-M1",
+      "start_dependencies": [
+        "D5",
+        "F2P"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "FEEDBACK-ACK",
+        "DUR-RLS"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "D6",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "D6J",
+      "title": "Lab consent, USD budget and external submission coordination",
+      "track": "D",
+      "product": "lab",
+      "milestone": "LAB-M1",
+      "start_dependencies": [
+        "D5",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "L2"
+      ],
+      "test_ids": [
+        "JUDGE-BUDGET",
+        "LAB-ACCESS"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "D6",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "G4U",
+      "title": "Owned upload HTTP adapter",
+      "track": "G",
+      "product": "shared",
+      "milestone": "APP-M1",
+      "start_dependencies": [
+        "G1R"
+      ],
+      "integration_dependencies": [
+        "M3"
+      ],
+      "test_ids": [
+        "MEDIA-SEC",
+        "DUR-RLS"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "G4",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "G4F",
+      "title": "Owned feedback HTTP adapter",
+      "track": "G",
+      "product": "shared",
+      "milestone": "LAB-M1",
+      "start_dependencies": [
+        "G1R"
+      ],
+      "integration_dependencies": [
+        "D6F"
+      ],
+      "test_ids": [
+        "FEEDBACK-ACK"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "G4",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "G4T",
+      "title": "Owned trace export HTTP adapter",
+      "track": "G",
+      "product": "shared",
+      "milestone": "LAB-M1",
+      "start_dependencies": [
+        "G1R"
+      ],
+      "integration_dependencies": [
+        "T2I",
+        "T3",
+        "C2"
+      ],
+      "test_ids": [
+        "TRACE-TENANT",
+        "LAB-ACCESS"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "G4",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "T2I",
+      "title": "Inference analytics and content projection",
+      "track": "T",
+      "product": "shared",
+      "milestone": "LAB-M1",
+      "start_dependencies": [
+        "T1",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "D5"
+      ],
+      "test_ids": [
+        "TRACE-RECOVER",
+        "TRACE-TENANT"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "T2",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "T2F",
+      "title": "Feedback analytics projection",
+      "track": "T",
+      "product": "shared",
+      "milestone": "LAB-M1",
+      "start_dependencies": [
+        "T2I",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "D6F"
+      ],
+      "test_ids": [
+        "FEEDBACK-ACK",
+        "TRACE-RECOVER"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "T2",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "C3A",
+      "title": "Consumer key/privacy and platform operator actions",
+      "track": "C",
+      "product": "app",
+      "milestone": "APP-M1",
+      "start_dependencies": [
+        "F2P",
+        "C0"
+      ],
+      "integration_dependencies": [
+        "D5"
+      ],
+      "test_ids": [
+        "DUR-RLS",
+        "CONSOLE-FLOWS",
+        "CREDIT-SPEND"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "C3",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "C3F",
+      "title": "Authorized feedback and review actions",
+      "track": "C",
+      "product": "shared",
+      "milestone": "LAB-M1",
+      "start_dependencies": [
+        "F2P",
+        "C0"
+      ],
+      "integration_dependencies": [
+        "D6F",
+        "L2"
+      ],
+      "test_ids": [
+        "FEEDBACK-ACK",
+        "LAB-ACCESS"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "C3",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "C3L",
+      "title": "Lab judge and calibration control actions",
+      "track": "C",
+      "product": "lab",
+      "milestone": "LAB-M1",
+      "start_dependencies": [
+        "F2P",
+        "C0"
+      ],
+      "integration_dependencies": [
+        "D6J",
+        "J2",
+        "L2"
+      ],
+      "test_ids": [
+        "JUDGE-BUDGET",
+        "LAB-ACCESS"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "C3",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "L1",
+      "title": "Provider app shell and separate build/auth boundary",
+      "track": "L",
+      "product": "lab",
+      "milestone": "LAB-M0",
+      "start_dependencies": [
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "L2"
+      ],
+      "test_ids": [
+        "LAB-ACCESS",
+        "SPLIT-CONTRACT"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "new",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "L2",
+      "title": "Provider role and purpose-specific data-access services",
+      "track": "L",
+      "product": "lab",
+      "milestone": "LAB-M0",
+      "start_dependencies": [
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "D1R"
+      ],
+      "test_ids": [
+        "LAB-ACCESS"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "new",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "L3",
+      "title": "Assisted model registration and dev/prod revision services",
+      "track": "L",
+      "product": "lab",
+      "milestone": "LAB-M0",
+      "start_dependencies": [
+        "L2",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "G1R",
+        "W2",
+        "A3"
+      ],
+      "test_ids": [
+        "LAB-PUBLISH",
+        "LAB-ACCESS"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "new",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "L4",
+      "title": "Model/deployment/publication UI and aggregate health",
+      "track": "L",
+      "product": "lab",
+      "milestone": "LAB-M0",
+      "start_dependencies": [
+        "L1",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "L3"
+      ],
+      "test_ids": [
+        "LAB-PUBLISH",
+        "LAB-ACCESS",
+        "CONSOLE-FLOWS"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "new",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "I2A",
+      "title": "Reproducible App and single-GPU runtime deployment",
+      "track": "I",
+      "product": "app",
+      "milestone": "APP-M2",
+      "start_dependencies": [
+        "I1",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "D5",
+        "G2",
+        "G3",
+        "G4U",
+        "W3",
+        "C3A",
+        "U2",
+        "U3",
+        "A2",
+        "A3",
+        "C0",
+        "I0",
+        "D1R"
+      ],
+      "test_ids": [
+        "OPS-RECOVER",
+        "PERF-PILOT",
+        "APP-JOURNEY"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "I2",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "I2L",
+      "title": "Independent Lab app and control-service deployment",
+      "track": "I",
+      "product": "lab",
+      "milestone": "LAB-M0",
+      "start_dependencies": [
+        "I1",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "L1",
+        "L2",
+        "L3",
+        "L4"
+      ],
+      "test_ids": [
+        "LAB-ACCESS",
+        "LAB-PUBLISH",
+        "OPS-RECOVER"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "I2",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "E3A",
+      "title": "Consumer failure, security and signup-to-spend integration gate",
+      "track": "E",
+      "product": "app",
+      "milestone": "APP-M1",
+      "start_dependencies": [
+        "E2",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "D5",
+        "A1",
+        "A2",
+        "A3",
+        "M3",
+        "Q3",
+        "W3",
+        "G2",
+        "G3",
+        "G4U",
+        "C3A",
+        "U2",
+        "U3",
+        "C0",
+        "E2R",
+        "I0",
+        "D1R"
+      ],
+      "test_ids": [
+        "DUR-ADMIT",
+        "DUR-CAP",
+        "DUR-FENCE",
+        "DUR-OUTPUT",
+        "DUR-SETTLE",
+        "DUR-OUTBOX",
+        "DUR-RLS",
+        "MEDIA-SEC",
+        "API-MODES",
+        "API-STREAM",
+        "CONSOLE-FLOWS",
+        "CREDIT-GRANT",
+        "CREDIT-IDENTITY",
+        "CREDIT-UNITS",
+        "CREDIT-RATE",
+        "CREDIT-SPEND",
+        "APP-JOURNEY"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "E3",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "E3L",
+      "title": "Provider access, publication and rollback integration gate",
+      "track": "E",
+      "product": "lab",
+      "milestone": "LAB-M0",
+      "start_dependencies": [
+        "E2",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "E2R",
+        "D1R"
+      ],
+      "test_ids": [
+        "LAB-ACCESS",
+        "LAB-PUBLISH",
+        "SPLIT-CONTRACT"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "E3",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "E5L",
+      "title": "Provider traces, review and evaluation integration gate",
+      "track": "E",
+      "product": "lab",
+      "milestone": "LAB-M1",
+      "start_dependencies": [
+        "E3L",
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "D6F",
+        "D6J",
+        "G4F",
+        "G4T",
+        "T3",
+        "J2",
+        "J3",
+        "C3F",
+        "C3L",
+        "V3"
+      ],
+      "test_ids": [
+        "TRACE-BOUNDS",
+        "TRACE-RECOVER",
+        "TRACE-TENANT",
+        "FEEDBACK-ACK",
+        "JUDGE-BUDGET",
+        "JUDGE-SCORES",
+        "LAB-ACCESS",
+        "CONSOLE-FLOWS"
+      ],
+      "handoff": "09-amendment-workstreams.md",
+      "status": "planned",
+      "disposition": "split-successor",
+      "supersedes_part_of": "E3",
+      "amendment_status": "awaits-product-v2-contract"
+    },
+    {
+      "id": "F2R",
+      "title": "Close remaining wave-2 contract and verification carryovers",
+      "track": "F",
+      "handoff": "11-wave3-revision-handoffs.md",
+      "status": "planned",
+      "start_dependencies": [
+        "S1"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "F-CONTRACT",
+        "TRACE-BOUNDS",
+        "MEDIA-SEC"
+      ],
+      "product": "shared",
+      "milestone": "APP-M0",
+      "disposition": "new-revision",
+      "amendment": "Account for all 16 old F2.2 items; audit fixes are partial, not whole-task completion."
+    },
+    {
+      "id": "F2P",
+      "title": "Encode product-v2 CREDIT, identity, serving and permission contracts",
+      "track": "F",
+      "handoff": "11-wave3-revision-handoffs.md",
+      "status": "planned",
+      "start_dependencies": [
+        "F2R"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "SPLIT-CONTRACT",
+        "CREDIT-UNITS",
+        "LAB-ACCESS"
+      ],
+      "product": "shared",
+      "milestone": "APP-M0",
+      "disposition": "new-revision",
+      "amendment": "Update both languages/fakes/fixtures atomically; retain explicit v1 USD projections."
+    },
+    {
+      "id": "D1R",
+      "title": "Add product-v2 schema without rewriting USD pilot migrations",
+      "track": "D",
+      "handoff": "11-wave3-revision-handoffs.md",
+      "status": "planned",
+      "start_dependencies": [
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "E2R"
+      ],
+      "test_ids": [
+        "CREDIT-UNITS",
+        "DUR-RLS",
+        "SPLIT-CONTRACT"
+      ],
+      "product": "shared",
+      "milestone": "APP-M0",
+      "disposition": "new-revision",
+      "amendment": "New additive migrations, exact text RPCs, legacy/new regimes, provider/registry minimum."
+    },
+    {
+      "id": "C0",
+      "title": "Wire the consumer database query port and real account context",
+      "track": "C",
+      "handoff": "11-wave3-revision-handoffs.md",
+      "status": "planned",
+      "start_dependencies": [
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "D1R"
+      ],
+      "test_ids": [
+        "CONSOLE-TENANT",
+        "CREDIT-UNITS",
+        "APP-JOURNEY"
+      ],
+      "product": "app",
+      "milestone": "APP-M1",
+      "disposition": "new-revision",
+      "amendment": "Supabase/PostgREST adapter, legacy projection, real user context; independent of Lab traces and judge."
+    },
+    {
+      "id": "I0",
+      "title": "Repair installer atomicity and fail-closed startup prerequisite",
+      "track": "I",
+      "handoff": "11-wave3-revision-handoffs.md",
+      "status": "planned",
+      "start_dependencies": [
+        "S1",
+        "I1"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "DEPLOY-FAILCLOSED"
+      ],
+      "product": "shared",
+      "milestone": "APP-M0",
+      "disposition": "new-revision",
+      "amendment": "Local script/runtime tests only; no production install and no early ingress cutover."
+    },
+    {
+      "id": "E2R",
+      "title": "Repair service harness ownership, role matrix and shared test clock",
+      "track": "E",
+      "handoff": "11-wave3-revision-handoffs.md",
+      "status": "planned",
+      "start_dependencies": [
+        "S1"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "DUR-RLS",
+        "HARNESS-ISOLATION"
+      ],
+      "product": "shared",
+      "milestone": "APP-M0",
+      "disposition": "new-revision",
+      "amendment": "Reproduce real PG evidence with safe test resource ownership; no borrowed containers."
+    },
+    {
+      "id": "G1R",
+      "title": "Revise ingress for consumer and provider endpoint audiences",
+      "track": "G",
+      "handoff": "11-wave3-revision-handoffs.md",
+      "status": "planned",
+      "start_dependencies": [
+        "F2P"
+      ],
+      "integration_dependencies": [
+        "D1R",
+        "D2"
+      ],
+      "test_ids": [
+        "API-AUTH",
+        "SPLIT-CONTRACT",
+        "CREDIT-RATE"
+      ],
+      "product": "shared",
+      "milestone": "APP-M0",
+      "disposition": "new-revision",
+      "amendment": "Keep legacy router unmounted until G2 composition gate; audience and wallet are server-derived."
+    },
+    {
+      "id": "V1M",
+      "title": "Move the implemented trace explorer into the authorized Lab shell",
+      "track": "V",
+      "handoff": "11-wave3-revision-handoffs.md",
+      "status": "planned",
+      "start_dependencies": [
+        "F2P",
+        "L1"
+      ],
+      "integration_dependencies": [
+        "L2",
+        "C0",
+        "T2I"
+      ],
+      "test_ids": [
+        "CONSOLE-TENANT",
+        "LAB-ACCESS"
+      ],
+      "product": "lab",
+      "milestone": "LAB-M1",
+      "disposition": "new-revision",
+      "amendment": "Move existing V1 tests/components; remove App provider route; no cross-app server-action imports."
+    },
+    {
+      "id": "U1R",
+      "title": "Adapt consumer usage and balance views to CREDIT and explicit legacy USD",
+      "track": "U",
+      "handoff": "11-wave3-revision-handoffs.md",
+      "status": "planned",
+      "start_dependencies": [
+        "F2P",
+        "U1"
+      ],
+      "integration_dependencies": [
+        "C0",
+        "D5"
+      ],
+      "test_ids": [
+        "CREDIT-UNITS",
+        "CONSOLE-FLOWS",
+        "APP-JOURNEY"
+      ],
+      "product": "app",
+      "milestone": "APP-M1",
+      "disposition": "new-revision",
+      "amendment": "Preserve U1 view logic; revise units/labels/formatters and real context without erasing USD history."
     }
+  ],
+  "product_revision": "2026-09-21-two-platforms-individual-grant",
+  "implementation_baseline_commit": "271add946771ddc4efc3cbc2044758443080759b",
+  "authority": [
+    "../platforms/README.md",
+    "10-wave2-platform-audit.md",
+    "11-wave3-revision-handoffs.md",
+    "08-platform-split.md",
+    "09-amendment-workstreams.md"
+  ],
+  "status_semantics": "Baseline integrated/implemented records describe the original v1 evidence, not product-v2 compatibility. amendment_status and revision_tasks record outstanding work. S1 audit is implemented and prepared for independent review; no deployment is implied.",
+  "release_gates": {
+    "APP-LOCAL": {
+      "requires": [
+        "E3A"
+      ],
+      "conditional": "If optional trace capture or callbacks enabled, relevant T/G5 integration suites must pass; Lab UI/judge not required. New CREDIT contracts/migrations and real consumer context required; no fixture account data."
+    },
+    "APP-PILOT": {
+      "requires": [
+        "E4"
+      ],
+      "conditional": "Published rates, legacy-account cutover policy and allocated staging/GPU evidence required."
+    },
+    "LAB-OPERATE": {
+      "requires": [
+        "E3L",
+        "I2L"
+      ],
+      "conditional": "Staging provider access/publication/rollback evidence; no customer-content sharing without grants."
+    },
+    "LAB-OBSERVE": {
+      "requires": [
+        "E5L",
+        "I2L"
+      ],
+      "conditional": "Trace/data/judge workers need deployment evidence before enablement; live judge needs explicit consent/budget beyond dry-run. V1M must remove the App provider route and prove both app boundaries."
+    }
+  },
+  "revision_tasks": [
+    "F2R",
+    "F2P",
+    "D1R",
+    "C0",
+    "I0",
+    "E2R",
+    "G1R",
+    "V1M",
+    "U1R"
   ]
 }

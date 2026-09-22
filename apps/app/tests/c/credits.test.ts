@@ -171,8 +171,8 @@ test("a missing function falls back; a broken one does not", () => {
     );
   }
 
-  // No row and no error is a new organization: zero, through the fallback.
-  assert.equal(walletSummaryOutcome(null, null).kind, "fallback");
+  // A deployed summary function returning no row must not bypass reservations.
+  assert.throws(() => walletSummaryOutcome(null, null), /missing wallet row/);
   assert.equal(
     walletSummaryOutcome({ ledger_total: "1.00000000", reserved_total: "0", loaded: "1", spent: "0" }, null).kind,
     "summary",

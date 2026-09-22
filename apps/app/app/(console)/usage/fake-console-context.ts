@@ -1,16 +1,4 @@
-/**
- * The one seam where the usage and billing pages get their data (U1).
- *
- * U1 is built against the fixture-backed fake by instruction: C1 implements the same
- * `ConsoleServices` interface over PostgreSQL, and swapping it in is this file and nothing else.
- * Nothing here is a claim that the pages read real data — they read fixtures, and the fake's clock
- * is frozen at the fixture instant, so the ranges the pages compute land on fixture rows.
- *
- * INTEGRATION REQUEST (coordinator): replace this with the real provider once C1 lands —
- * `services` from C1's factory, `session` mapped from `getSession()` (`lib/session.ts`) and `now`
- * from `new Date()`. The pages import only `consoleContext()`.
- */
-
+/** Development-only fixture context. C0 supplies the authenticated database context at integration. */
 import { createFakeConsoleServices } from "../../../lib/contracts/fake-services.ts";
 import type { ConsoleServices } from "../../../lib/contracts/services.ts";
 import type { SessionContext } from "../../../lib/contracts/types.ts";
@@ -26,7 +14,10 @@ export type ConsoleContext = {
  * A fresh fake per request: it is deterministic, so two requests render the same rows, and a
  * mutation in one request cannot leak into another.
  */
-export function consoleContext(): ConsoleContext {
+export function consoleContext(env: { NODE_ENV?: string; INFRX_CONSOLE_PREVIEW?: string } = process.env): ConsoleContext | null {
+  if (env.INFRX_CONSOLE_PREVIEW !== "1" || !["development", "test"].includes(env.NODE_ENV ?? "")) {
+    return null;
+  }
   const services = createFakeConsoleServices();
   return {
     services,

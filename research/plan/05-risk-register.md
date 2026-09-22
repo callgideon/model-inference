@@ -2,6 +2,8 @@
 
 Open means implementation/evidence is pending, not that the design decision is missing. All rows begin open at this documentation baseline. Coordinator closes a row only with a merged implementation SHA and the named test evidence.
 
+Amended 2026-09-21: reconcile actual remote progress before interpreting status. Original mixed task IDs below map to successors in [the platform split](08-platform-split.md).
+
 | Finding / risk | Required resolution | Tasks | Evidence |
 |---|---|---|---|
 | Volatile acceptance and Valkey failover could lose acknowledged jobs | PG job/hold/outbox transaction is authority; index rebuild is routine | D2/Q3 | DUR-ADMIT, DUR-OUTBOX |
@@ -33,6 +35,12 @@ Open means implementation/evidence is pending, not that the design decision is m
 | Rollback drops queue or removes metering | Pause/drain/fence; compatible runtime or maintenance503 | I3/D5 | OPS-RECOVER |
 | Shared-file conflicts defeat parallel work | Foundation freeze; sole migration owner; coordinator wiring/locks; per-track roots | F2/all | F-CONTRACT |
 | Historical A0 fixes are repeated work | Preserve already-fixed cache/inflight/base64/notes behavior | F1 | F-BASE |
+| Org creation or campaign changes repeat the individual grant | Unique user initial entitlement, verified issuance, immutable wallet mapping | A1/D1/A2 | CREDIT-GRANT, CREDIT-IDENTITY |
+| USD history silently reinterpreted as credits | Separate unit/ledger, explicit legacy-account cutover policy, original-regime job drain | D1/D5/I2A | CREDIT-UNITS |
+| Provider role leaks customer data or grants operator authority | Explicit provider membership and purpose-scoped source grants; test DB and privileged services | L2/C2/C3L | LAB-ACCESS |
+| Provider changes model/rate under in-flight calls | Immutable deployment/rate snapshots and audited publication | A3/L3/D2 | CREDIT-RATE, LAB-PUBLISH |
+| Lab scope prevents consumer release | Split mixed tasks and remove Lab from App gate closure | S1/E3A/E4 | SPLIT-CONTRACT, APP-JOURNEY |
+| Documentation overwrites unseen remote implementation | Inventory current work; map old/new IDs; move code only through active owners | S1 | Reconciliation record with actual SHAs |
 
 ## Source verification and outstanding experiments
 
@@ -43,3 +51,9 @@ Historical ⚠️ research items remain experiments, not launch facts. E1/E4 own
 ## Verification log
 
 - 2026-09-20: Converted review findings into named implementation owners and objective test oracles. No risk is marked closed based on documentation alone.
+
+- 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.
+
+## Wave-2 audit additions (2026-09-21)
+
+See [the audit](10-wave2-platform-audit.md) for findings A01–A14 and disposition. Original USD contracts/schema, absent consumer database adapter, uncomposed runtime and absent provider authorization are release blockers until F2P/D1R/C0/G2/L2 evidence exists. Production fixture account reporting is disabled by the local audit correction. Existing hosted installer fail-open exposure remains a deployment risk; I0 is code/test preparation, not proof of a live repair. E2R must repair D harness ownership before parallel database suites. Real-service tests are pending on this host because Docker is unavailable; no unit count substitutes for them.

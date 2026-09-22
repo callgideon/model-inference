@@ -2,7 +2,7 @@
 # invocations, so every track runs the same thing (research/plan/08 §7).
 API := apps/infrx-api
 
-.PHONY: check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test
+.PHONY: integration check api-env api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test
 
 # Pinned Python environment in apps/infrx-api/.venv. --frozen = use uv.lock as
 # committed; only the coordinator regenerates it.
@@ -47,3 +47,8 @@ bench-test:
 	fi
 
 check: api-test api-mutants console-test console-lint console-typecheck console-mutants bench-test
+
+# Real service evidence is separate from unit checks; Docker absence must fail visibly.
+# Optional arguments: make integration INTEGRATION_ARGS="--layer 1 --no-mutants"
+integration:
+	$(API)/.venv/bin/python tests/integration/run.py $(INTEGRATION_ARGS)

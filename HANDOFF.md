@@ -1,20 +1,18 @@
-# Handoff — state, plans and objectives of the platform on 2026-09-20
+# Handoff — product amendment 2026-09-21; historical operations below
 
-> **2026-09-21 update:** implementation has started and wave 2 is merged on `claude/infrx-impl`. The current entry point is [research/plan/evidence/coordinator/2026-09-21-wave2-handoff.md](research/plan/evidence/coordinator/2026-09-21-wave2-handoff.md). The live-state and access sections below are historical (2026-09-20) and were not re-verified; the fail-open installer risk (`O-FAILOPEN`, `infra/README.md`) is recorded and not yet acted on.
-
-**Start implementation with [research/plan/README.md](research/plan/README.md) and the [coordinator handoff](research/plan/COORDINATOR.md).** The detailed module briefs, dependency manifest, contracts and verification gates are now ready for Claude Opus 5 sessions. Implementation has not started in this documentation update.
+**Start with [the wave-2 audit](research/plan/10-wave2-platform-audit.md), [two-platform architecture](research/platforms/README.md) and [the continuation handoff](research/plan/PLATFORM-SPLIT-HANDOFF.md).** Main was pulled at `271add9`; all eleven wave-2 modules are preserved. F2R/F2P and additive D1R revisions precede product-v2 integration. Manifest v3 preserves original completion statuses separately from amendment requirements. Wave 3 feature implementation has not started.
 
 Read `CLAUDE.md` first, then the new package and your assigned module. The package supersedes conflicting scope, architecture, sequencing and acceptance instructions in this original handoff and the older research specs. Historical measurements/access inventory below are retained for context; they are not newly verified live state. Old branch/worktree claims must be checked, not assumed.
 
 ## 0. Current objective and accepted changes
 
-Deliver a **free single-GPU pilot** with promotional balances, atomic reservations/settlement, durable jobs and results, explicit asynchronous requests, secure public URL/upload ingestion, opt-in traces, feedback and consented budgeted evaluation. Retain the existing organization/owner/member model. Payments, commercial second-owner gate, OpenRouter and fleet rollout are later gates; fleet follows verified single-GPU pilot evidence.
+Deliver `apps/app` as the **free consumer inference platform**: public verified signup, 10,000 promotional credits once per individual user, catalog, API keys, exact reservations/settlement, durable inference and own usage. Build `apps/lab` separately for provider models, dev/prod endpoints, authorized traces, evaluation and later data/improvement workflows. Shared runtime remains durable; App launch does not wait for Lab judge or provider trace UI. Payments/OpenRouter remain later decisions; fleet follows measured pilot evidence.
 
-Requests remain synchronous unless async is explicitly requested. PostgreSQL owns acceptance, leases, stream journal and accounting; Valkey is rebuildable scheduling state. Inference continues when optional trace capture drops, with loss metrics and fsync-defined durability. Retention is24h results,7d processing cache, up to90d full trace content and13mo metadata. New org balances start zero; historical balances are preserved and historical usage is not retrocharged.
+Requests remain synchronous unless async is explicitly requested. PostgreSQL owns acceptance, leases, stream journal and accounting; Valkey is rebuildable scheduling state. Inference continues when optional trace capture drops, with loss metrics and fsync-defined durability. Retention is24h results,7d processing cache, up to90d full trace content and13mo metadata. New CREDIT grants are unique by individual user, not organization. Historical USD balances are preserved separately; no implicit conversion or retrocharge. See [credit policy](research/platforms/02-credits.md).
 
 The [contracts](research/plan/01-contracts.md), [durable protocols](research/plan/02-durable-protocols.md) and [release gates](research/plan/04-verification.md) are authoritative. Sections4–10 below describe the original research/planning input, not the current execution backlog. Do not implement superseded examples or repeat already-completed fixes.
 
-## 1. What is live right now
+## 1. Historical live inventory (2026-09-20; revalidate before operations)
 
 | thing | where | notes |
 |---|---|---|
@@ -65,7 +63,9 @@ CLAUDE.md, README.md, HANDOFF.md (this file)
 models/common/            download.sh + env.sh (shared)
 models/<exp>/             deepseek41f, deepseek41fnvfp4, qwen3827b, kimik3, marlin2b (model.env, download.sh; marlin2b also serve.sh, smoke.py, bench.py, reference.py, tokens.py, results/)
 apps/README.md            console + gateway spec (requirements F1–F10, data model, deployment)
-apps/app/                 Next.js console; supabase/migrations; README with run/deploy notes
+apps/app/                 consumer App; shared migrations remain here initially
+apps/lab/                 provider Lab README scaffold; actual app not yet created by this plan
+research/platforms/       current two-product architecture, specs and roadmaps
 apps/infrx-api/           gateway.py (compatibility entry point; the gateway code was extracted to infrx/ by task F1), infrx/ (auth, media, usage, gateway app factory, contracts v1), tests/ (legacy gateway tests + tests/contracts + per-track suites), deploy/ (systemd units, Caddyfile, install.sh, replay_usage.py), openrouter/ (provider document + listing plan), client_example.py
 research/                 METHODOLOGY.md (formulas, units, pinned inputs) and the trees below, each with a README index
   gpus/, cross-cutting/, models/<exp>/, matrix/   per-GPU × per-model sizing, costs, recommendations (the 8×B300 destination)
