@@ -1,0 +1,64 @@
+{
+  "about": "The pinned Marlin-2B serving version (W3). `flags` is exactly what serve.sh passes after the image, with ${NAME} for the two settings; `engine_options_digest` is sha256 of their compact JSON with `settings` substituted. tests/w/test_serving.py keeps this file and serve.sh in agreement.",
+  "recorded_at": "2026-09-22",
+  "model": {
+    "repo": "NemoStation/Marlin-2B",
+    "commit": "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965",
+    "weight_shard_digests": [
+      "sha256:5d78fa4dbd856dc89c01b99ffa92072fe31b8a1e6b31e87893734c80304983b7",
+      "sha256:01d40ec9ccf4c2ad8e755604468dd6ee4a5c6551553e5739a03beb4c0673d0db"
+    ],
+    "tokenizer_digest": "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+    "chat_template_digest": "sha256:273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+    "digest_source": "served_bytes",
+    "registry_oid_equality": "⚠️ TO BE VERIFIED: needs HF_TOKEN on the serving host (research/workloads/marlin-sop.md §1.3); measure/inventory.sh prints both sides when HF_TOKEN is exported"
+  },
+  "profile_version": "v1",
+  "eos_token_ids": [
+    248044,
+    248046
+  ],
+  "eos_supplied_by": "stop_token_ids on every request (infrx/worker/engine.py MODEL_EOS_TOKEN_IDS); honoured by the pinned image: pending measure/capability.sh",
+  "runtime_image": {
+    "ref": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+    "digest": "sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
+    "digest_source": "registry_oid",
+    "resolved_from": "vllm/vllm-openai:nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b",
+    "resolved_at": "2026-09-22T22:42:53Z",
+    "resolved_by": "docker buildx imagetools inspect (read-only registry call); sha256 of the raw manifest list equals the digest",
+    "linux_amd64_manifest": "sha256:a1da81e8784aacd6e9efa0e8667575f4551c8492e103fc10e3ecc034d212072b",
+    "vllm_build_commit": "a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b",
+    "created": "2026-09-19T05:47:54Z",
+    "pilot_box": "⚠️ TO BE VERIFIED: the box's image id begins sha256:4cbfd34aac14 (I1B, 12 hex digits); measure/inventory.sh prints the full id, and equality makes digest_source registry_oid_confirmed"
+  },
+  "flags": [
+    "--served-model-name",
+    "marlin2b",
+    "--hf-overrides",
+    "{\"architectures\":[\"Qwen3_5ForConditionalGeneration\"]}",
+    "--max-model-len",
+    "32768",
+    "--max-num-seqs",
+    "${ENGINE_MAX_NUM_SEQS}",
+    "--gpu-memory-utilization",
+    "0.90",
+    "--limit-mm-per-prompt",
+    "{\"video\":1,\"image\":4}",
+    "--dtype",
+    "bfloat16",
+    "--allowed-local-media-path",
+    "${PROCESSING_CACHE_DIR}"
+  ],
+  "settings": {
+    "ENGINE_MAX_NUM_SEQS": "8",
+    "PROCESSING_CACHE_DIR": "/opt/dlami/nvme/processing"
+  },
+  "settings_status": {
+    "ENGINE_MAX_NUM_SEQS": "⚠️ TO BE VERIFIED: the pilot value (contracts limits engine_max_num_seqs); the pilot box ran 32 (I1B). measure/concurrency.sh measures it and the W3 evidence's predeclared rule sets it",
+    "PROCESSING_CACHE_DIR": "proposed for I2B: on the box's NVMe (I1B: /opt/dlami/nvme, 386 G free); the same value for the gateway, the worker and serve.sh"
+  },
+  "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
+  "not_passed": "the B300 recommendations (--mamba-cache-mode=align, --block-size 128, --media-io-kwargs, --mm-processor-cache-type shm): never measured on the L40S pilot; adopting one is a new serving version (marlin-sop.md D13)",
+  "kv_capacity": "pending: num_gpu_blocks x block_size as the engine reports them (measure/inventory.sh)",
+  "engine_version": "pending: GET /version on the pinned image (measure/inventory.sh)"
+}
