@@ -251,6 +251,9 @@ def test_api_ops__an_adjustment_moves_only_the_individuals_wallet():
         assert entry.actor == fakes.OPERATOR_KEY and entry.reason == R
         with pytest.raises(errors.InvalidRequest):
             await op.adjust(USER_A, "0", idempotency_key="a0", reason=R)
+        for bad in ("1e3", "0.000000001", "five", 5.5):
+            with pytest.raises(errors.InvalidRequest):
+                await op.adjust(USER_A, bad, idempotency_key="ab", reason=R)
     run(go())
 
 

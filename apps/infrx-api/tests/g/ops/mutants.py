@@ -126,6 +126,11 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("zero_adjustment_accepted", "an adjustment moves a nonzero amount",
        S, "        if value.is_zero:", "        if False:",
        "test_api_ops__an_adjustment_moves_only_the_individuals_wallet"),
+    _m("malformed_amount_untyped",
+       "a malformed amount is a typed invalid_request (declared: the defect surfaces as the "
+       "parser's own exception instead)",
+       S, "        except (ValueError, ArithmeticError, TypeError):", "        except ArithmeticError:",
+       "test_api_ops__an_adjustment_moves_only_the_individuals_wallet"),
     _m("direct_balance_edit", "operations never edit a balance directly",
        S, "        wallet = await self.ops.bound_wallet(identity)\n\n        async def write(operation_id):\n            entry,",
        "        wallet = (await self.ops.bound_wallet(identity)).model_copy(update={\"ledger_total\": value})\n\n        async def write(operation_id):\n            entry,",

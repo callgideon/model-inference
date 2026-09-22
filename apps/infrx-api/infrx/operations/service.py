@@ -308,7 +308,10 @@ class OperatorSession:
     async def adjust(self, user_id: str, amount: str, *, idempotency_key: str,
                      reason: str) -> dict:
         """A signed, audited D5 adjustment to the individual's own wallet."""
-        value = Credit(amount)
+        try:
+            value = Credit(amount)
+        except (ValueError, ArithmeticError, TypeError):
+            raise errors.InvalidRequest("an adjustment is an exact CREDIT decimal") from None
         if value.is_zero:
             raise errors.InvalidRequest("an adjustment moves a nonzero amount")
         identity = await self._identity(user_id)

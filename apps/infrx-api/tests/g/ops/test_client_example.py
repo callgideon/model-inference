@@ -11,6 +11,7 @@ import pathlib
 import httpx
 import pytest
 
+from infrx.gateway.routes import validate
 from infrx.operations import service
 
 API_DIR = pathlib.Path(__file__).resolve().parents[3]
@@ -75,6 +76,9 @@ def test_api_ops__the_quickstart_runs_on_the_sync_path(key, capsys):
     assert "prefer" not in req.headers                      # ordinary chat never asks for 202
     # The pilot ingress refuses these by name (marlin-sop §2.2); the client never sends them.
     assert not {"mm_processor_kwargs", "stream_options", "stream"} & body.keys()
+    assert body.keys() <= validate.SUPPORTED                # G1's own allow-list
+    validate.check_messages(body)
+    assert validate.execution_mode(body, req.headers).value == "sync"
     assert body["model"] == client.MODEL and '"a white bus"' in body["messages"][0]["content"][1]["text"]
 
 
