@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T16:30:52Z",
+  "updated": "2026-09-22T16:36:52Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -50,14 +50,15 @@
       "phase": "implementing (software slices; GPU slices wait for W3/I2B)",
       "since": "2026-09-22T16:03:43Z",
       "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol"
-    }
-  },
-  "reviews": {
+    },
     "S1": {
-      "phase": "independent review of the audit's code at ec6c548",
-      "since": "2026-09-22T15:51:21Z"
+      "lane": "codex-s1fix / codex/s1fix-console-balance",
+      "phase": "review fix round (B1 balance unavailable state, B2 preview gate inlining)",
+      "since": "2026-09-22T16:36:52Z",
+      "note": "S1 API side passed independent review; console fixes in flight"
     }
   },
+  "reviews": {},
   "gates": {
     "BACKEND-LOCAL": {
       "requires": "E3B",
@@ -132,6 +133,10 @@
     {
       "at": "2026-09-22T16:30:52Z",
       "what": "S2M merged after independent review + fix round; R62 recorded; served-bytes digests measured on pilot box"
+    },
+    {
+      "at": "2026-09-22T16:36:52Z",
+      "what": "S1 independent review: API/contract side pass; console B1/B2 fix lane dispatched; integration layer 2 recorded RED (E2R owns)"
     }
   ],
   "cadence_windows": [
