@@ -19,61 +19,16 @@ two of them legitimately do, because the invariant they break *is* "this never r
 """
 from __future__ import annotations
 
-import argparse
-import enum
 import pathlib
-import re
-import shutil
-import subprocess
 import sys
-import tempfile
-from dataclasses import dataclass, field
+
+from ..contracts import mutants as shared
+from ..contracts.mutants import (ASSERTION_DEATHS, HONEST_DEATHS, Mutant,  # noqa: F401
+                                 Outcome, Result, Runner, _death_kinds, _m, _undeclared)
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
 PACKAGE = "infrx"
 SUITE = "tests/j"
-PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED = 0, 1
-#: How an honest kill dies: an assertion, or pytest's own `Failed` (a `pytest.raises`
-#: block that did not raise). Anything else is an exception escaping into the test body.
-ASSERTION_DEATHS = frozenset({"AssertionError", "Failed"})
-
-
-class Outcome(enum.StrEnum):
-    killed = "killed"
-    survived = "survived"
-    misdeclared = "misdeclared"
-    broken_runner = "broken_runner"
-
-
-@dataclass(frozen=True)
-class Result:
-    outcome: Outcome
-    detail: str = ""
-
-    @property
-    def killed(self) -> bool:
-        return self.outcome is Outcome.killed
-
-
-@dataclass(frozen=True)
-class Mutant:
-    name: str
-    invariant: str
-    file: str
-    old: str
-    new: str
-    cases: tuple[str, ...] = field(default_factory=tuple)
-    #: Exception classes this mutant may legitimately die by, beyond an assertion.
-    dies_by: tuple[str, ...] = ()
-
-    @property
-    def path(self) -> pathlib.Path:
-        return pathlib.Path(PACKAGE) / self.file
-
-
-def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
-                  dies_by=tuple(dies_by))
 
 
 S = "judge/sampling.py"
@@ -627,129 +582,15 @@ MUTANTS: tuple[Mutant, ...] = (
 )
 
 
-_NODE = re.compile(r"^(FAILED|ERROR)\s+(\S+)")
-# `--tb=line` prints one `path:lineno: <message>` line per failure. An assertion reads
-# `assert ...`, a `pytest.raises` miss reads `Failed: DID NOT RAISE`, and anything else
-# leads with its exception class - which is what we have to be able to tell apart.
-_DEATH = re.compile(r"^\S*?:\d+: (?P<message>.+)$")
-_CLASS = re.compile(r"^(?P<cls>[A-Za-z_][A-Za-z0-9_.]*)(?::|$)")
-
-
-def _failing_ids(stdout: str) -> tuple[list[str], list[str]]:
-    failed, errored = [], []
-    for line in stdout.splitlines():
-        match = _NODE.match(line.strip())
-        if match:
-            (failed if match.group(1) == "FAILED" else errored).append(match.group(2))
-    return failed, errored
-
-
-def _death_kinds(stdout: str) -> list[str]:
-    """How each failure died: `AssertionError`, `Failed`, or an exception class."""
-    kinds: list[str] = []
-    for line in stdout.splitlines():
-        line = line.strip()
-        if line.startswith(("FAILED", "ERROR", "E ")):
-            continue
-        match = _DEATH.match(line)
-        if not match:
-            continue
-        message = match.group("message")
-        if message.startswith("assert"):
-            kinds.append("AssertionError")
-            continue
-        named = _CLASS.match(message)
-        kinds.append(named.group("cls") if named else "unknown")
-    return kinds
-
-
-def _names(test_id: str) -> str:
-    """The function name out of a node id, parametrization and all: a mutant names a
-    case, and `case[param]` is that case."""
-    tail = test_id.rsplit("::", 1)[-1]
-    return tail.split("[", 1)[0]
+#: F2R item 9: the shared runner, aimed at `tests/j`. `test_mutants.py` is excluded from
+#: the target because its cases are claims about this list, not about the judge.
+RUNNER = Runner(name="j1", targets=(SUITE,), extra_args=(f"--ignore={SUITE}/test_mutants.py",))
 
 
 def run_mutant(mutant: Mutant) -> Result:
-    """Apply one mutant to a throwaway copy and run its cases there.
-
-    A kill requires pytest exit 1, at least one failure, every failing test naming one of
-    the mutant's own cases, and every death being assertion-shaped or declared in
-    `dies_by`. So a syntax error, an import-time failure, a defect with wider reach than
-    the declaration, or a test that crashed instead of failing is `broken_runner`, which
-    fails the run exactly as a survivor does.
-    """
-    if not mutant.cases:
-        return Result(Outcome.misdeclared, "declares no case")
-    with tempfile.TemporaryDirectory(prefix=f"j1-mutant-{mutant.name}-") as tmp:
-        root = pathlib.Path(tmp)
-        ignore = shutil.ignore_patterns("__pycache__")
-        shutil.copytree(API_DIR / PACKAGE, root / PACKAGE, ignore=ignore)
-        shutil.copytree(API_DIR / "tests", root / "tests", ignore=ignore)
-        # the pytest configuration too (importlib import mode, pythonpath), so the copy
-        # collects the suite exactly as the worktree does (R48)
-        shutil.copy2(API_DIR / "pyproject.toml", root / "pyproject.toml")
-        target = root / mutant.path
-        source = target.read_text()
-        if mutant.old not in source:
-            return Result(Outcome.misdeclared,
-                          f"anchor not found in {mutant.file}: {mutant.old[:60]!r}")
-        target.write_text(source.replace(mutant.old, mutant.new, 1))
-        done = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-             "-rf", "--tb=line", SUITE, f"--ignore={SUITE}/test_mutants.py",
-             "-k", " or ".join(mutant.cases)],
-            cwd=root, capture_output=True, text=True,
-            env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
-        stdout = done.stdout or ""
-        lines = (stdout or done.stderr).strip().splitlines()
-        summary = lines[-1] if lines else "no output"
-        if done.returncode not in (PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED):
-            return Result(Outcome.broken_runner, f"pytest exit {done.returncode}: {summary}")
-        if not re.search(r"(\d+) (?:passed|failed|skipped)", summary) or "no tests ran" in summary:
-            return Result(Outcome.misdeclared, f"no case matched: {summary}")
-        failed, errored = _failing_ids(stdout)
-        if errored:
-            return Result(Outcome.broken_runner, f"collection errors: {errored[:3]}")
-        if done.returncode == PYTEST_ALL_PASSED or not failed:
-            return Result(Outcome.survived, summary)
-        stray = [test_id for test_id in failed if _names(test_id) not in mutant.cases]
-        if stray:
-            return Result(Outcome.broken_runner, f"failures outside the named cases: {stray[:3]}")
-        allowed = ASSERTION_DEATHS | set(mutant.dies_by)
-        crashed = [kind for kind in _death_kinds(stdout) if kind not in allowed]
-        if crashed:
-            # The case blew up rather than asserting. It may well have noticed the defect,
-            # but a crash is not a proof: declare the exception in `dies_by` if the
-            # invariant really is "this never raises".
-            return Result(Outcome.broken_runner,
-                          f"undeclared exception deaths {sorted(set(crashed))}: {summary}")
-        return Result(Outcome.killed, summary)
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="run track J's mutation list")
-    parser.add_argument("names", nargs="*")
-    parser.add_argument("--list", action="store_true")
-    args = parser.parse_args()
-    if args.list:
-        for mutant in MUTANTS:
-            print(f"{mutant.name:44s} {mutant.invariant}")
-        print(f"\n{len(MUTANTS)} mutants over "
-              f"{len({case for m in MUTANTS for case in m.cases})} named cases")
-        return 0
-    chosen = [m for m in MUTANTS if not args.names or m.name in args.names]
-    bad: dict[str, list[str]] = {}
-    for mutant in chosen:
-        result = run_mutant(mutant)
-        print(f"[{result.outcome:13s}] {mutant.name}: {result.detail}")
-        if not result.killed:
-            bad.setdefault(result.outcome.value, []).append(mutant.name)
-    failures = sum(len(names) for names in bad.values())
-    print(f"\n{len(chosen) - failures}/{len(chosen)} killed"
-          + "".join(f"; {outcome}: {names}" for outcome, names in sorted(bad.items())))
-    return 1 if bad else 0
+    """Apply one mutant to a throwaway copy and run its cases there."""
+    return shared.run_mutant(mutant, RUNNER)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(shared.main(MUTANTS, RUNNER, "run track J's mutation list"))

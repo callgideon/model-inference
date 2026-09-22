@@ -1,51 +1,31 @@
 #!/usr/bin/env python3
 """r1 R32 for track G: one single-edit defect per invariant this suite claims.
 
-Same contract as `tests/contracts/mutants.py`, which is where `Mutant`, `Outcome`
-and `Result` come from - the list is G's, the vocabulary is shared. The runner is
-G's own because it runs G's cases: one mutant at a time, applied to a **copy** of
-the package in a temporary directory, with the named cases run there. A mutant that
-survives means the case claiming that invariant proves nothing.
+Same contract *and* the same runner as `tests/contracts/mutants.py` (F2R item 9): the
+list is G's, the vocabulary and the rules are shared. One mutant at a time, applied to a
+**copy** of the package in a temporary directory, with the named cases run there. A
+mutant that survives means the case claiming that invariant proves nothing.
+
+G's one local need is which files to collect: collecting the whole suite for every
+mutant imports FastAPI and the contracts fakes 50 times over, so `files_for` narrows the
+target to the files defining the named cases. That is a `Runner` argument now.
 
     uv run --frozen pytest -q tests/g/test_mutants.py     # the whole list
-    uv run --frozen python tests/g/mutants.py --list
-    uv run --frozen python tests/g/mutants.py body_cap_removed
+    uv run --frozen python -m tests.g.mutants --list
+    uv run --frozen python -m tests.g.mutants body_cap_removed
 """
 from __future__ import annotations
 
-import argparse
-import importlib.util
 import pathlib
 import re
-import shutil
-import subprocess
 import sys
-import tempfile
+
+from ..contracts import mutants as shared
+from ..contracts.mutants import Mutant, Outcome, Result, Runner   # noqa: F401
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
 PACKAGE = "infrx"
 SUITE = "tests/g"
-
-
-def _shared():
-    """`Mutant`/`Outcome`/`Result`/`_failing_ids` from the contracts list.
-
-    Loaded by path rather than imported as `tests.contracts.mutants`: under
-    `--import-mode=importlib` the `tests` package is synthesised by pytest and has no
-    `__path__`, so a cross-directory import is not reliably available.
-    """
-    path = API_DIR / "tests" / "contracts" / "mutants.py"
-    spec = importlib.util.spec_from_file_location("g_shared_mutants", path)
-    module = importlib.util.module_from_spec(spec)
-    # `dataclass` resolves annotations through `sys.modules[cls.__module__]`, so the
-    # module has to be registered before it is executed.
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-_SHARED = _shared()
-Mutant, Outcome, Result = _SHARED.Mutant, _SHARED.Outcome, _SHARED.Result
 
 I = "gateway/routes/intake.py"
 V = "gateway/routes/validate.py"
@@ -54,10 +34,22 @@ A = "auth/context.py"
 K = "auth/keys.py"                      # F1's caches: G owns the file, and the bounds
 
 
-def _m(name, invariant, file, old, new, *cases) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases)
+def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
+                  dies_by=tuple(dies_by), occurrences=occurrences)
 
 
+# --- declared kill modes (F2R item 9) -------------------------------------------------
+# The shared runner requires every death to be assertion-shaped or a typed `DomainError`,
+# so a case that **crashes** must say which class it crashes with. Twenty-one mutants here
+# do, and they are almost all one shape: the case reads the error envelope or a header out
+# of a response the mutant emptied - `body["error"]["code"]`, `headers["Retry-After"]`,
+# `headers["Inference-Id"]` - so the missing key IS the invariant's negation. `KeyError`
+# therefore names the kill rather than hiding a broken copy. The four others are their own
+# invariants stated backwards: a raise that must not happen (`malformed_row_raises_a_...`,
+# `probe_exception_escapes`, `unhandled_exceptions_unwrapped`) and a stall that must not be
+# possible (`stalled_peer_deadline_removed`). None of them is an exception from the mutant
+# **text**: that is still a `broken_runner`, which the self-tests below prove.
 MUTANTS: tuple[Mutant, ...] = (
     # --- intake: bounded and deadlined before the parse -----------------------
     _m("body_cap_removed", "the body is bounded before it is parsed",
@@ -89,16 +81,20 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_f_base__a_caller_string_is_never_reflected_or_logged"),
     _m("param_never_echoed", "a parameter name that is one is still named",
        I, "    return param if isinstance(param, str) and SAFE_PARAM.fullmatch(param) else None",
-       "    return None", "test_f_base__a_parameter_name_that_is_a_name_is_still_echoed"),
+       "    return None", "test_f_base__a_parameter_name_that_is_a_name_is_still_echoed", dies_by=("KeyError",)),
     _m("internal_code_reaches_http_status", "an internal-only code is answered as internal_error",
        I, "        public = error if error.code in errors.HTTP_ERRORS else errors.InternalError()",
        "        public = error",
        "test_f_base__an_internal_only_code_escaping_a_route_is_a_500_envelope"),
+    # The invariant is the ABSENCE of an exception - the envelope of last resort renders
+    # whatever the request carried - so the only way to break it is to let the raise out,
+    # and the only honest kill is that raise (F2R item 9: declared, not assumed).
     _m("envelope_render_unprotected", "rendering the envelope cannot fail",
        I, "    except Exception:\n"
           '        log.exception("the error envelope could not be rendered for request %s", request_id)',
        "    except KeyboardInterrupt:\n        raise",
-       "test_f_base__the_envelope_of_last_resort"),
+       "test_f_base__the_envelope_of_last_resort",
+       dies_by=("PydanticSerializationError",)),
     # --- review r1 item 3: structure, liveness and identity-first -------------
     _m("messages_unbounded", "the message count is bounded",
        V, "    if len(messages) > MAX_MESSAGES:", "    if False:",
@@ -114,7 +110,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "            continue", "test_media_sec__the_total_text_is_bounded"),
     _m("url_unbounded", "a public url is bounded",
        V, "    if len(source) > MAX_URL_CHARS:", "    if False:",
-       "test_media_sec__a_public_url_is_bounded"),
+       "test_media_sec__a_public_url_is_bounded", dies_by=("KeyError",)),
     _m("identity_after_the_body", "identity is resolved before the body is read or parsed",
        N, "        auth = await self.auth.context(request)\n        intake.check_content_type(request)",
        "        intake.check_content_type(request)",
@@ -150,7 +146,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("model_copied_into_the_revision", "a public model id is mapped, never copied",
        V, "        revision = self.served_models.get(model)",
        "        revision = self.served_models.get(model, model)",
-       "test_f_base__an_unserved_model_is_refused_without_naming_what_is_served"),
+       "test_f_base__an_unserved_model_is_refused_without_naming_what_is_served", dies_by=("KeyError",)),
     _m("model_length_unbounded", "a model name is bounded",
        V, "        if len(model) > MAX_MODEL_CHARS:", "        if False:",
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code",
@@ -174,7 +170,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_media_sec__a_malformed_shape_is_refused_with_a_stable_code"),
     _m("content_type_unchecked", "the body is application/json",
        I, "    if declared != JSON_MEDIA_TYPE:", "    if False:",
-       "test_f_base__a_body_that_is_not_json_is_refused"),
+       "test_f_base__a_body_that_is_not_json_is_refused", dies_by=("KeyError",)),
     _m("digest_over_the_raw_bytes", "the payload digest is canonical",
        V, "    if not media:\n        return \"sha256:\" + hashlib.sha256(canonical_bytes(body)).hexdigest()",
        "    if not media:\n        return \"sha256:\" + hashlib.sha256(repr(body).encode()).hexdigest()",
@@ -206,30 +202,33 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_dur_rls__an_identity_row_without_a_tenant_is_not_an_identity"),
     _m("malformed_row_raises_a_validation_error", "a malformed identity row is a typed failure",
        A, "        except ValueError:", "        except KeyboardInterrupt:",
-       "test_dur_rls__a_malformed_identity_row_fails_closed_without_a_trace"),
+       "test_dur_rls__a_malformed_identity_row_fails_closed_without_a_trace", dies_by=("ValidationError",)),
     # --- review r1 item 7: FastAPI's own answers -------------------------------
+    # Without the handler Starlette's own 404 body has no `error` key, so the case reads
+    # one that is not there. Declared: the missing envelope IS the defect.
     _m("http_exceptions_unwrapped", "404 and a wrong method are envelopes",
        N, "    app.add_exception_handler(StarletteHTTPException, http_exception)", "    pass",
-       "test_f_base__an_unknown_path_and_a_wrong_method_are_envelopes"),
+       "test_f_base__an_unknown_path_and_a_wrong_method_are_envelopes",
+       dies_by=("KeyError",)),
     _m("unhandled_exceptions_unwrapped", "an error outside a route is an envelope",
        N, "    app.add_exception_handler(Exception, unhandled)", "    pass",
-       "test_f_base__an_unhandled_error_outside_a_route_is_still_an_envelope"),
+       "test_f_base__an_unhandled_error_outside_a_route_is_still_an_envelope", dies_by=("JSONDecodeError",)),
     _m("slow_body_deadline_removed", "a slow body cannot outlast INTAKE_TIMEOUT_S",
        I, "                if clock() > deadline:", "                if False:",
        "test_media_sec__a_slow_body_hits_the_intake_deadline"),
     _m("stalled_peer_deadline_removed", "a peer that sends nothing is still deadlined",
        I, "        async with asyncio.timeout(timeout_s):", "        async with asyncio.timeout(None):",
-       "test_media_sec__a_peer_that_sends_nothing_hits_the_intake_deadline"),
+       "test_media_sec__a_peer_that_sends_nothing_hits_the_intake_deadline", dies_by=("TimeoutError",)),
     _m("non_object_body_accepted", "the body must be a JSON object",
        I, "    if not isinstance(body, dict):", "    if False:",
        "test_media_sec__a_non_object_body_is_refused"),
     # --- the envelope ---------------------------------------------------------
     _m("error_omits_the_request_id_header", "every answer names its request",
        I, "    headers = {wire.HEADER_INFERENCE_ID: request_id}", "    headers = {}",
-       "test_f_base__every_answer_carries_a_freshly_minted_inference_id"),
+       "test_f_base__every_answer_carries_a_freshly_minted_inference_id", dies_by=("KeyError",)),
     _m("retry_after_header_dropped", "429/503 carry retry guidance",
        I, "        if public.retry_after_s is not None:", "        if False:",
-       "test_f_base__retry_guidance_rides_with_every_429_and_503"),
+       "test_f_base__retry_guidance_rides_with_every_429_and_503", dies_by=("KeyError",)),
     _m("unhandled_exception_text_leaks", "an unexpected exception never reaches the client",
        I, "            except Exception:\n"
           "                log.exception(\"%s: unhandled error on request %s\", request.url.path, request_id)\n"
@@ -242,12 +241,16 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_f_base__an_unexpected_exception_never_reaches_the_client",
        "test_f_base__every_failure_is_a_fixed_envelope_with_no_leak"),
     # --- identity ------------------------------------------------------------
+    # Dropping the refusal returns `None` where the cases expect an `AuthContext`, so they
+    # die reading `.org_id` off it. Declared, because "there is no context at all" is
+    # exactly what an accepted anonymous request looks like from the caller's side.
     _m("anonymous_request_accepted", "no accepted request without tenant identity",
        A, '            raise errors.InvalidApiKey("the request carries no per-organization identity")',
        "            pass",
        "test_dur_rls__an_unconfigured_gateway_accepts_no_request",
        "test_dur_rls__a_configuration_with_no_identity_source_accepts_nothing",
-       "test_dur_rls__the_shared_legacy_key_is_not_an_identity"),
+       "test_dur_rls__the_shared_legacy_key_is_not_an_identity",
+       dies_by=("AttributeError",)),
     _m("unreachable_identity_source_is_a_401", "an unreachable identity source is retryable",
        A, '            raise errors.DependencyUnavailable("the api_keys identity source is unreachable")',
        '            raise errors.InvalidApiKey("the api_keys identity source is unreachable")',
@@ -276,15 +279,18 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_f_base__an_unsupported_parameter_is_named_and_refused"),
     _m("n_greater_than_one_accepted", "only n=1 is supported",
        V, "        if count is not None and count != 1:", "        if False:",
-       "test_f_base__only_n_equals_one_is_supported"),
+       "test_f_base__only_n_equals_one_is_supported", dies_by=("KeyError",)),
     _m("output_ceiling_unchecked", "the output ceiling is 1..MAX_OUTPUT_TOKENS",
        V, "        if not 1 <= output <= ceiling:", "        if False:",
        "test_f_base__the_output_ceiling_is_range_checked"),
+    # A ceiling pair that does not fit the context window is refused by the store (R55), so
+    # the honest kill is that typed refusal rather than an assertion about a number.
     _m("input_ceiling_ignores_the_output", "the input ceiling is the context limit minus output",
        V, "        return self.limits.max_context_tokens - output, output",
        "        return self.limits.max_context_tokens, output",
        "test_dur_admit__admit_accepts_the_ingress_ceilings_and_derives_the_hold",
-       "test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor"),
+       "test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor",
+       dies_by=("ContextLengthExceeded",)),
     _m("deadline_beyond_the_budgets", "the deadline is one the store can keep (R29)",
        V, "                                                 + budgets.generation_s)),",
        "                                                 + 2 * budgets.generation_s)),",
@@ -359,7 +365,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_media_sec__a_number_json_does_not_have_is_refused"),
     _m("idempotency_key_unbounded", "the idempotency key is bounded",
        V, "    if key is not None and (not key or len(key) > MAX_IDEMPOTENCY_KEY_CHARS):",
-       "    if False:", "test_f_base__an_over_long_idempotency_key_is_refused"),
+       "    if False:", "test_f_base__an_over_long_idempotency_key_is_refused", dies_by=("KeyError",)),
     # --- startup, readiness and ordering -------------------------------------
     _m("pilot_starts_unreachable", "pilot refuses to start with an unreachable component",
        N, '    if rt.mode == "pilot" and unavailable:', "    if False:",
@@ -378,7 +384,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_f_base__public_health_is_generic"),
     _m("success_omits_the_inference_id", "a success answer names its request too",
        N, "        accepted.headers.setdefault(wire.HEADER_INFERENCE_ID, request_id)", "        pass",
-       "test_f_base__every_answer_carries_a_freshly_minted_inference_id"),
+       "test_f_base__every_answer_carries_a_freshly_minted_inference_id", dies_by=("KeyError",)),
     _m("missing_acceptor_is_not_honest", "nothing is accepted before durable acceptance exists",
        N, "        if deps.accept is None:", "        if False:",
        "test_f_base__every_failure_is_a_fixed_envelope_with_no_leak"),
@@ -433,7 +439,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_media_sec__text_within_the_code_point_cap_is_accepted_in_every_form"),
     _m("text_cap_off_by_one", "the text cap is exact",
        V, "            if text_chars > MAX_TEXT_CODEPOINTS:", "            if text_chars > MAX_TEXT_CODEPOINTS + 1:",
-       "test_media_sec__one_code_point_past_the_cap_is_refused"),
+       "test_media_sec__one_code_point_past_the_cap_is_refused", occurrences=2),
     _m("text_cap_off_for_text_parts", "the cap counts text parts too",
        V, "                text_chars += len(storable(part[\"text\"], \"messages\"))",
        "                storable(part[\"text\"], \"messages\")",
@@ -462,7 +468,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("refusal_keeps_the_socket", "a refusal before the body closes the connection",
        I, '        if public.code in CLOSE_CODES:\n            headers["Connection"] = "close"',
        "        pass",
-       "test_f_base__a_refusal_before_the_body_closes_the_connection"),
+       "test_f_base__a_refusal_before_the_body_closes_the_connection", dies_by=("KeyError",)),
     _m("safe_param_length_6400", "a param name is bounded at 64 characters",
        I, 'SAFE_PARAM = re.compile(r"[A-Za-z0-9_.-]{1,64}")',
        'SAFE_PARAM = re.compile(r"[A-Za-z0-9_.-]{1,6400}")',
@@ -480,14 +486,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_media_sec__an_idempotency_key_is_storable_text"),
     _m("data_url_mime_unchecked", "an inline video is a supported video type",
        V, '    if match.group("mime").lower() not in allowed_mime:', "    if False:",
-       "test_media_sec__an_inline_video_must_be_a_supported_video_type"),
+       "test_media_sec__an_inline_video_must_be_a_supported_video_type", dies_by=("KeyError",)),
     _m("data_url_payload_may_be_empty", "an inline video carries a payload",
        V, "    if len(source) <= match.end():", "    if False:",
-       "test_media_sec__an_inline_video_must_be_a_supported_video_type"),
+       "test_media_sec__an_inline_video_must_be_a_supported_video_type", dies_by=("KeyError",)),
     _m("url_control_only_crlf", "url hygiene covers more than CRLF",
        V, r'UNSAFE_IN_URL = re.compile(r"[\x00-\x20\x7f-\x9f\u2028\u2029@\\]")',
        r'UNSAFE_IN_URL = re.compile(r"[\r\n]")',
-       "test_media_sec__a_reference_url_carries_no_smuggling_characters"),
+       "test_media_sec__a_reference_url_carries_no_smuggling_characters", dies_by=("KeyError",)),
     _m("content_type_prefix_match", "the content type is compared exactly",
        I, '    if declared != JSON_MEDIA_TYPE:', "    if not declared.startswith(JSON_MEDIA_TYPE):",
        "test_f_base__the_content_type_and_prefer_checks_are_case_insensitive"),
@@ -509,7 +515,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_media_sec__an_upload_handle_is_anchored_and_exact"),
     _m("retry_hint_not_defaulted", "a 429/503 always carries retry guidance",
        I, "    elif error.code in errors.RETRY_AFTER_CODES:", "    elif False:",
-       "test_f_base__retry_guidance_rides_with_every_429_and_503"),
+       "test_f_base__retry_guidance_rides_with_every_429_and_503", dies_by=("KeyError",)),
     _m("empty_idempotency_key_accepted", "an empty idempotency key is not a key",
        V, "    if key is not None and (not key or len(key) > MAX_IDEMPOTENCY_KEY_CHARS):",
        "    if key is not None and len(key) > MAX_IDEMPOTENCY_KEY_CHARS:",
@@ -575,7 +581,7 @@ MUTANTS: tuple[Mutant, ...] = (
        I, 'CLOSE_CODES = frozenset({"invalid_api_key", "request_too_large", "capacity_exhausted",\n'
           '                         "deadline_exceeded"})',
        'CLOSE_CODES = frozenset({"invalid_api_key"})',
-       "test_f_base__a_429_and_a_504_also_close_the_connection"),
+       "test_f_base__a_429_and_a_504_also_close_the_connection", dies_by=("KeyError",)),
     _m("last_resort_keeps_stale_headers", "the last resort drops the failed envelope's headers",
        I, "        return JSONResponse(body, status_code=500,\n"
           "                            headers={wire.HEADER_INFERENCE_ID: request_id})",
@@ -591,7 +597,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("backslash_allowed_in_urls", "a backslash alone is enough to refuse a url",
        V, r'UNSAFE_IN_URL = re.compile(r"[\x00-\x20\x7f-\x9f\u2028\u2029@\\]")',
        r'UNSAFE_IN_URL = re.compile(r"[\x00-\x20\x7f-\x9f\u2028\u2029@]")',
-       "test_media_sec__a_backslash_alone_is_enough_to_refuse_a_url"),
+       "test_media_sec__a_backslash_alone_is_enough_to_refuse_a_url", dies_by=("KeyError",)),
     _m("slow_deadline_doubled", "the intake deadline is the configured one",
        I, "    deadline = clock() + timeout_s", "    deadline = clock() + timeout_s * 2",
        "test_media_sec__a_slow_body_hits_the_intake_deadline"),
@@ -623,7 +629,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_media_sec__a_number_literal_is_bounded_by_its_length"),
     _m("number_sign_counted_as_a_digit", "a sign is not a digit",
        I, '    if len(literal.lstrip("-")) > MAX_NUMBER_DIGITS:', "    if len(literal) > MAX_NUMBER_DIGITS:",
-       "test_media_sec__a_number_literal_is_bounded_by_its_length"),
+       "test_media_sec__a_number_literal_is_bounded_by_its_length", dies_by=("KeyError",)),
     _m("content_length_non_ascii_digits", "a non-ASCII digit never reaches int()",
        I, "        if declared.isascii() and declared.isdigit() and len(declared) <= 19:",
        "        if declared.isdigit() and len(declared) <= 19:",
@@ -682,90 +688,23 @@ MUTANTS: tuple[Mutant, ...] = (
           "            state[name] = UNAVAILABLE",
        "        except Exception:\n            raise",
        "test_f_base__a_readiness_probe_that_raises_is_unavailable_not_a_500",
-       "test_f_base__pilot_refuses_to_start_when_a_component_is_unreachable"),
+       "test_f_base__pilot_refuses_to_start_when_a_component_is_unreachable", dies_by=("ConnectionError",)),
     # These two edit files G does not own, in the temporary copy only: they are the
     # cutover itself, and they say exactly which cases pin today's behaviour.
     _m("composition_root_mounts_the_ingress", "G1 mounts nothing until the cutover",
        "gateway/app.py", "ROUTERS = (health, models, chat)",
        "from .routes import ingress as _ingress\nROUTERS = (health, models, chat, _ingress)",
        "test_f_base__the_composition_root_still_mounts_only_the_legacy_routers"),
+    # R44/item 14: while `INFRX_MODE` is unset the legacy entry keeps F1 behaviour, so the
+    # honest kill is the refusal this mutant introduces. G2/I0 retire this mutant at cutover.
     _m("unset_mode_refuses", "an unset INFRX_MODE is still legacy behaviour",
        "config.py", '        return "legacy"',
        '        raise RuntimeMisconfigured(mode, detail="INFRX_MODE must be set")',
        "test_f_base__an_unset_mode_is_still_legacy_behaviour",
        "test_f_base__the_composition_root_still_mounts_only_the_legacy_routers",
-       "test_f_base__registering_the_ingress_never_replaces_the_legacy_chat_route"),
+       "test_f_base__registering_the_ingress_never_replaces_the_legacy_chat_route",
+       dies_by=("RuntimeMisconfigured",)),
 )
-
-
-PYTEST_TESTS_FAILED = 1
-PYTEST_ALL_PASSED = 0
-# Generous for a handful of cases with no sleeps in them: this exists so a mutant that
-# makes a case hang cannot hang the suite, not as a performance budget.
-NESTED_TIMEOUT_S = 120
-
-
-def _pytest(root: pathlib.Path, files, selection: str):
-    return subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-         "--import-mode=importlib", "-rf", "--tb=no", *files, "-k", selection],
-        cwd=root, capture_output=True, text=True, timeout=NESTED_TIMEOUT_S,
-        env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
-
-
-def run_mutant(mutant) -> Result:
-    """Apply one mutant to a throwaway copy and run the cases it names.
-
-    A kill needs all three: pytest exited 1 (not 2-5, which mean the runner broke,
-    and not 0, which means nothing noticed), at least one test failed, and every
-    failing id names one of the mutant's own cases. The worktree is never written to.
-    """
-    if not mutant.cases:
-        return Result(Outcome.misdeclared, "declares no case")
-    with tempfile.TemporaryDirectory(prefix=f"g1-mutant-{mutant.name}-") as tmp:
-        root = pathlib.Path(tmp)
-        ignore = shutil.ignore_patterns("__pycache__")
-        shutil.copytree(API_DIR / PACKAGE, root / PACKAGE, ignore=ignore)
-        shutil.copytree(API_DIR / "tests", root / "tests", ignore=ignore)
-        target = root / PACKAGE / mutant.file
-        source = target.read_text()
-        if mutant.old not in source:
-            return Result(Outcome.misdeclared,
-                          f"anchor not found in {mutant.file}: {mutant.old[:60]!r}")
-        target.write_text(source.replace(mutant.old, mutant.new, 1))
-        selection = " or ".join(mutant.cases)
-        # Only the files that define the named cases: collecting the whole suite for
-        # every mutant imports FastAPI and the contracts fakes 50 times over, which is
-        # most of the wall clock of a full run.
-        files = sorted(files_for(mutant.cases))
-        if not files:
-            return Result(Outcome.misdeclared, f"no file defines any of {list(mutant.cases)}")
-        try:
-            done = _pytest(root, files, selection)
-        except subprocess.TimeoutExpired:
-            # A defect that makes a case hang is real, but a hang is not the proof the
-            # contract asks for, and a runner that waits forever proves nothing at all.
-            return Result(Outcome.broken_runner,
-                          f"the named cases did not finish within {NESTED_TIMEOUT_S}s")
-        stdout = done.stdout or ""
-        lines = (stdout or done.stderr).strip().splitlines()
-        summary = lines[-1] if lines else "no output"
-        if done.returncode not in (PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED):
-            return Result(Outcome.broken_runner, f"pytest exit {done.returncode}: {summary}")
-        if not re.search(r"(\d+) (?:passed|failed|skipped)", summary) or "no tests ran" in summary:
-            return Result(Outcome.misdeclared, f"no case matched {selection!r}: {summary}")
-        failed, errored = _SHARED._failing_ids(stdout)
-        if errored:
-            return Result(Outcome.broken_runner, f"errors outside the named cases: {errored[:3]}")
-        if done.returncode == PYTEST_ALL_PASSED or not failed:
-            return Result(Outcome.survived, summary)
-        stray = [test_id for test_id in failed
-                 if not any(case in test_id for case in mutant.cases)]
-        if stray:
-            return Result(Outcome.broken_runner, f"failures outside the named cases: {stray[:3]}")
-        if "skipped" in summary and not failed:
-            return Result(Outcome.misdeclared, f"its cases were skipped: {summary}")
-        return Result(Outcome.killed, summary)
 
 
 def _definitions() -> dict[str, str]:
@@ -793,26 +732,14 @@ def case_names() -> set[str]:
     return set(_definitions())
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="run track G's mutation list")
-    parser.add_argument("names", nargs="*")
-    parser.add_argument("--list", action="store_true")
-    args = parser.parse_args()
-    if args.list:
-        for mutant in MUTANTS:
-            print(f"{mutant.name:42s} {mutant.invariant}")
-        print(f"\n{len(MUTANTS)} mutants over "
-              f"{len({case for m in MUTANTS for case in m.cases})} named cases")
-        return 0
-    bad = {}
-    for mutant in (m for m in MUTANTS if not args.names or m.name in args.names):
-        result = run_mutant(mutant)
-        print(f"[{result.outcome:13s}] {mutant.name}: {result.detail}")
-        if not result.killed:
-            bad[mutant.name] = result.detail
-    print(f"\n{len(bad)} not killed" if bad else "\nall killed")
-    return 1 if bad else 0
+#: F2R item 9: the shared runner, with G's per-mutant file selection.
+RUNNER = Runner(name="g1", targets_for=lambda cases: sorted(files_for(cases)))
+
+
+def run_mutant(mutant) -> Result:
+    """Apply one mutant to a throwaway copy and run the cases it names."""
+    return shared.run_mutant(mutant, RUNNER)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(shared.main(MUTANTS, RUNNER, "run track G's mutation list"))

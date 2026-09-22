@@ -8,20 +8,20 @@ error, an import error or a defect with wider reach than the declaration is a br
 runner, which fails the suite exactly as a survivor does. Nothing is written inside the
 worktree.
 
-The runner is M's own because the target is different: `tests/m`, not the shared
-conformance suite. `Mutant`, `Outcome` and `Result` are the shared declarations, so a
-verdict here means what it means there.
+The runner is `tests/contracts/mutants.py`'s (F2R item 9); this file supplies the
+target (`tests/m`, not the shared conformance suite) and the list. `Mutant`, `Outcome`
+and `Result` are the shared declarations, so a verdict here means what it means there.
+
+    uv run --frozen pytest -q tests/m/test_mutants.py
+    uv run --frozen python -m tests.m.mutants --list
 """
 from __future__ import annotations
 
 import pathlib
-import re
-import shutil
-import subprocess
 import sys
-import tempfile
 
-from ..contracts.mutants import Mutant, Outcome, Result
+from ..contracts import mutants as shared
+from ..contracts.mutants import Mutant, Outcome, Result, Runner   # noqa: F401
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
 PACKAGE = "infrx"
@@ -32,10 +32,16 @@ S = "media/store.py"
 V = "media/video.py"          # F1's address policy, reused by the new path
 
 
-def _m(name, invariant, file, old, new, *cases) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases)
+def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
+                  dies_by=tuple(dies_by), occurrences=occurrences)
 
 
+# Five mutants declare a kill mode (F2R item 9): two let a forged organization reach the
+# record constructor (`ValidationError` is the refusal, one layer late), two are timeouts
+# that must be impossible (the real-clock backstop, the transport translation), and one
+# reads a stored payload the mutant never stored. An exception from the mutant text is
+# still a broken copy, which the self-tests below prove.
 MUTANTS: tuple[Mutant, ...] = (
     # --- the address policy ---------------------------------------------------
     # Review B1 (r2 correction): every check in `address_allowed` is load bearing, and the
@@ -151,7 +157,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("hop_deadline_not_checked",
        "the budget is checked at the start of every hop, before resolving or connecting",
        F, "                if remaining <= 0:\n                    raise refused(\"timeout\", host=host)",
-       "                pass", "test_a_slow_redirect_chain_stops_at_the_aggregate_deadline"),
+       "                pass", "test_a_slow_redirect_chain_stops_at_the_aggregate_deadline", occurrences=2),
     _m("request_budget_is_the_whole_budget",
        "each request carries what is left of the aggregate budget, not all of it",
        F, "        connect = min(self.limits.media_fetch_connect_timeout_s, remaining)\n"
@@ -169,7 +175,7 @@ MUTANTS: tuple[Mutant, ...] = (
        F, "            async with asyncio.timeout(self.limits.media_fetch_timeout_s + BACKSTOP_GRACE_S):\n"
           "                return await self._fetch(url)",
        "            return await self._fetch(url)",
-       "test_a_body_that_stalls_for_ever_is_bounded_by_the_backstop"),
+       "test_a_body_that_stalls_for_ever_is_bounded_by_the_backstop", dies_by=("TimeoutError",)),
     _m("asks_for_compression", "the request asks for no content coding",
        F, "\"Accept-Encoding\": \"identity\"", "\"Accept-Encoding\": \"gzip, br\"",
        "test_a_compressed_body_is_refused_outright"),
@@ -260,7 +266,7 @@ MUTANTS: tuple[Mutant, ...] = (
           "            self.log.warning(\"media fetch refused: reason=%s\", \"timeout\")\n"
           "            raise refused(\"timeout\") from None",
        "        except (TimeoutError, httpx.TimeoutException):\n            raise",
-       "test_a_transport_timeout_is_a_timeout_refusal"),
+       "test_a_transport_timeout_is_a_timeout_refusal", dies_by=("ReadTimeout",)),
 
     # --- data: URLs -----------------------------------------------------------
     _m("base64_not_validated", "strict base64: no whitespace or stray characters",
@@ -338,7 +344,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_a_fault_at_the_payload_write_stages_nothing_and_the_retry_completes_it"),
     _m("payload_not_stored", "the canonical payload is durable before acceptance",
        S, "        await self._write_once(key, payload, \"application/json\")", "        pass",
-       "test_staging_makes_the_canonical_payload_durable_with_a_digest_and_a_size"),
+       "test_staging_makes_the_canonical_payload_durable_with_a_digest_and_a_size", dies_by=("KeyError",)),
     _m("payload_size_from_the_reference", "the durable payload's digest and size are measured",
        S, "        self.payloads[request.request_id] = StagedPayload(ref=key, digest=digest_of(payload),\n"
           "                                                          bytes=len(payload))",
@@ -379,12 +385,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_a_digest_cannot_carry_a_path_into_a_key"),
     _m("org_unvalidated", "the tenant every key is namespaced by is validated first",
        S, "    if not isinstance(org_id, str) or not UUID_RE.fullmatch(org_id):",
-       "    if False:", "test_a_malformed_tenant_is_refused_before_anything_is_fetched"),
+       "    if False:", "test_a_malformed_tenant_is_refused_before_anything_is_fetched", dies_by=("ValidationError",)),
     _m("org_matched_as_a_prefix",
        "the tenant is the whole string, not a UUID with something after it (B-R2-1.5)",
        S, "    if not isinstance(org_id, str) or not UUID_RE.fullmatch(org_id):",
        "    if not isinstance(org_id, str) or not UUID_RE.match(org_id):",
-       "test_a_malformed_tenant_is_refused_before_anything_is_fetched"),
+       "test_a_malformed_tenant_is_refused_before_anything_is_fetched", dies_by=("ValidationError",)),
     _m("any_source_materialized", "a media source is an http(s) or data: URL",
        S, "            raise errors.InvalidRequest(\"a media source must be an http(s) or data: URL\")",
        "            fetched, kind = await self.fetcher.fetch(source), MediaKind.url",
@@ -420,58 +426,14 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_two_organizations_never_share_an_object"),
 )
 
-# pytest exit codes: 0 all passed, 1 tests failed; 2-5 mean the runner broke.
-PYTEST_TESTS_FAILED = 1
-PYTEST_ALL_PASSED = 0
-_FAILED_LINE = re.compile(r"^(?:FAILED|ERROR) ([^\s:]+(?:::[^\s]+)?)")
-
-
-def _failing_ids(stdout: str) -> tuple[list[str], list[str]]:
-    failed, errored = [], []
-    for line in stdout.splitlines():
-        match = _FAILED_LINE.match(line.strip())
-        if match:
-            (errored if line.strip().startswith("ERROR") else failed).append(match.group(1))
-    return failed, errored
+#: F2R item 9: the shared runner, aimed at `tests/m`.
+RUNNER = Runner(name="m1", targets=SUITE)
 
 
 def run_mutant(mutant: Mutant) -> Result:
     """Apply one mutant to a throwaway copy and run the tests it names."""
-    if not mutant.cases:
-        return Result(Outcome.misdeclared, "declares no case")
-    with tempfile.TemporaryDirectory(prefix=f"m1-mutant-{mutant.name}-") as tmp:
-        root = pathlib.Path(tmp)
-        for tree in (PACKAGE, "tests"):
-            shutil.copytree(API_DIR / tree, root / tree,
-                            ignore=shutil.ignore_patterns("__pycache__"))
-        # the pinned pytest configuration travels too, or the copy collects under
-        # different import rules than the suite was written for
-        shutil.copy(API_DIR / "pyproject.toml", root / "pyproject.toml")
-        target = root / PACKAGE / mutant.file
-        source = target.read_text()
-        if mutant.old not in source:
-            return Result(Outcome.misdeclared,
-                          f"anchor not found in {mutant.file}: {mutant.old[:60]!r}")
-        target.write_text(source.replace(mutant.old, mutant.new, 1))
-        done = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-             "-rf", "--tb=no", *SUITE, "-k", " or ".join(mutant.cases)],
-            cwd=root, capture_output=True, text=True,
-            env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
-        stdout = done.stdout or ""
-        lines = (stdout or done.stderr).strip().splitlines()
-        summary = lines[-1] if lines else "no output"
-        if done.returncode not in (PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED):
-            return Result(Outcome.broken_runner, f"pytest exit {done.returncode}: {summary}")
-        if not re.search(r"(\d+) (?:passed|failed|skipped)", summary) or "no tests ran" in summary:
-            return Result(Outcome.misdeclared, f"no test matched {mutant.cases}: {summary}")
-        failed, errored = _failing_ids(stdout)
-        if errored:
-            return Result(Outcome.broken_runner, f"errors outside the named tests: {errored[:3]}")
-        if done.returncode == PYTEST_ALL_PASSED or not failed:
-            return Result(Outcome.survived, summary)
-        stray = [test_id for test_id in failed
-                 if not any(case in test_id for case in mutant.cases)]
-        if stray:
-            return Result(Outcome.broken_runner, f"failures outside the named tests: {stray[:3]}")
-        return Result(Outcome.killed, summary)
+    return shared.run_mutant(mutant, RUNNER)
+
+
+if __name__ == "__main__":
+    sys.exit(shared.main(MUTANTS, RUNNER, "run track M's mutation list"))

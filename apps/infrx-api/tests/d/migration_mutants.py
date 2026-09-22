@@ -23,6 +23,8 @@ from tempfile import TemporaryDirectory
 import psycopg
 from infrx.state import migrations
 
+from ..contracts import mutants as shared
+from ..contracts.mutants import Outcome
 from . import checks, pgharness
 
 SCHEMA = "0003_pilot_durable_schema.sql"
@@ -33,10 +35,20 @@ MUT_DB = f"{pgharness.DATABASE}_mut"
 MUT_PRODLIKE_DB = "prodlike_d1_mut"       # deliberately not infrx_*
 
 
-KILLED = "killed"
-SURVIVED = "survived"
+# F2R item 9: the outcome vocabulary and the kill rule are the shared ones
+# (`tests/contracts/mutants.py`). This list cannot use the shared *pytest* runner - a
+# mutant here is an edit to SQL, proved by building a database and calling one check in
+# process - but what a result MEANS is the same contract, so `Outcome` and
+# `shared.assertion_kill` come from there rather than from a second copy of the rules.
+# `apply_error` and `setup_error` are this track's two refinements of
+# `Outcome.broken_runner`: they name which half of the build failed, which a pytest
+# target has no analogue for. Neither is ever scored as a kill.
+KILLED = Outcome.killed.value
+SURVIVED = Outcome.survived.value
 APPLY_ERROR = "apply_error"
 SETUP_ERROR = "setup_error"
+#: Everything that is not a kill and not a survivor: `Outcome.broken_runner`, refined.
+BROKEN = (APPLY_ERROR, SETUP_ERROR)
 
 
 @dataclass(frozen=True)
@@ -696,16 +708,15 @@ def kill(mutant: Mutant) -> tuple[str, str]:
 
 
 def _run(check, *args) -> tuple[str, str]:
-    """Only an AssertionError from the named check is a kill."""
-    try:
-        check(*args)
-    except AssertionError as failure:
-        return KILLED, _first_line(failure)
-    except psycopg.Error as wrong_class:
-        # The check blew up instead of asserting: that is a broken check, not a
-        # defended invariant, and it must be visible as such.
-        return SETUP_ERROR, f"the check raised instead of asserting: {_first_line(wrong_class)}"
-    return SURVIVED, ""
+    """Only an AssertionError from the named check is a kill (the shared rule).
+
+    A check that raises anything else - `psycopg.Error` above all - blew up instead of
+    asserting: a broken check, not a defended invariant, and it must be visible as such.
+    """
+    result = shared.assertion_kill(check, *args)
+    if result.outcome is Outcome.broken_runner:
+        return SETUP_ERROR, result.detail
+    return (KILLED if result.killed else SURVIVED), result.detail
 
 def _first_line(error: BaseException) -> str:
     return f"{type(error).__name__}: {str(error).strip().splitlines()[0][:160]}"

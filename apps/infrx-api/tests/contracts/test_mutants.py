@@ -106,6 +106,24 @@ SELF_TESTS = (
          name="self_no_case", invariant="every mutant names a case",
          file="contracts/fakes/state.py", old="MAX_READ_LIMIT = 1000",
          new="MAX_READ_LIMIT = 1", cases=())),
+    # F2R item 9: an anchor that appears twice would mutate whichever line came first,
+    # which is not the declared defect. Two copies used to accept it silently.
+    ("an_anchor_that_appears_twice_is_a_failure", mutation_list.Outcome.misdeclared,
+     mutation_list.Mutant(
+         name="self_two_anchors", invariant="one anchor, one edit",
+         file="contracts/fakes/state.py", old="        now = self.clock.now()",
+         new="        now = self.clock.at(1)",
+         cases=("dur_admit__a_request_uuid_is_admitted_once",))),
+    # ... and an undeclared exception death is not a kill. This is the *declared*
+    # `add_raises_on_a_non_byte_part` edit with its declaration removed, so the only
+    # difference between a kill and a runner error is the declaration.
+    ("an_undeclared_exception_death_is_not_a_kill", mutation_list.Outcome.broken_runner,
+     mutation_list.Mutant(
+         name="self_undeclared_crash", invariant="a kill is assertion-shaped",
+         file="contracts/fakes/traces.py",
+         old="        elif not isinstance(part, (bytes, bytearray, memoryview)):",
+         new="        elif False:",
+         cases=("trace_bounds__a_capture_belongs_to_its_own_request",))),
 )
 
 
@@ -116,6 +134,44 @@ def test_the_runner_cannot_report_a_false_kill(name, expected, mutant):
     assert not result.killed or expected is mutation_list.Outcome.killed
     # and only `killed` is accepted by the suite
     assert result.ok is (expected is mutation_list.Outcome.killed)
+
+
+def test_the_same_defect_is_a_kill_once_its_exception_is_declared():
+    """The other half of the classification: an invariant whose honest kill *is* an
+    exception (`TraceCapture.add` never raises, R37) declares it, and then the **same
+    edit** is a kill rather than a runner error - the self-test above runs it
+    undeclared."""
+    undeclared = next(mutant for name, _expected, mutant in SELF_TESTS
+                      if name == "an_undeclared_exception_death_is_not_a_kill")
+    declared = next(m for m in ALL if m.name == "add_raises_on_a_non_byte_part")
+    assert declared.dies_by == ("TypeError",)
+    assert (declared.old, declared.new) == (undeclared.old, undeclared.new)
+    assert mutation_list.run_mutant(declared).killed
+
+
+def test_a_mutant_that_makes_its_case_hang_is_not_a_kill():
+    """A hang is not the proof the contract asks for, and a runner that waits for ever
+    proves nothing at all. Two seconds against a thirty-second sleep."""
+    impatient = mutation_list.Runner(name="contracts-timeout",
+                                     targets=mutation_list.CONTRACTS.targets, timeout_s=2)
+    hangs = mutation_list.Mutant(
+        name="self_hang", invariant="a hang is not evidence",
+        file="contracts/fakes/state.py", old="MAX_READ_LIMIT = 1000",
+        new="MAX_READ_LIMIT = 1000\nimport time as _t; _t.sleep(30)",
+        cases=("dur_admit__a_request_uuid_is_admitted_once",))
+    result = mutation_list.run_mutant(hangs, impatient)
+    assert result.outcome is mutation_list.Outcome.broken_runner, result
+    assert "did not finish" in result.detail
+
+
+def test_every_subprocess_gets_its_own_cache_and_temporary_directory():
+    """F2R item 9: two mutants running at once must not share a bytecode cache or a
+    `TMPDIR`, and neither may be the worktree's. The runner sets both to directories
+    inside the throwaway copy, which is what `--list` cannot prove and a source read can."""
+    source = (mutation_list.API_DIR / "tests" / "contracts" / "mutants.py").read_text()
+    for name in ("PYTHONPYCACHEPREFIX", "TMPDIR"):
+        assert f'"{name}": str(' in source, name
+    assert 'cache, temp = root / ".pycache", root / ".tmp"' in source
 
 
 def test_a_known_lethal_mutant_is_killed_for_the_right_reason():

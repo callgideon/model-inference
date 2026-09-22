@@ -15,18 +15,17 @@ proves the inheritance is that the same exported suite and lattice run green aga
     uv run --frozen pytest -q tests/t/test_trace_mutants.py            # fast subset
     INFRX_MUTANTS=all uv run --frozen pytest -q tests/t/test_trace_mutants.py
     uv run --frozen python -m tests.t.mutants --list
+
+The runner is the shared one in `tests/contracts/mutants.py` (F2R item 9); this file
+supplies the target and the list.
 """
 from __future__ import annotations
 
-import argparse
-import enum
 import pathlib
-import re
-import shutil
-import subprocess
 import sys
-import tempfile
-from dataclasses import dataclass, field
+
+from ..contracts import mutants as shared
+from ..contracts.mutants import Mutant, Outcome, Result, Runner   # noqa: F401
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
 PACKAGE = "infrx"
@@ -89,26 +88,21 @@ MOVED_FRAME = "test_a_frame_excised_or_duplicated_mid_segment_is_the_tail"
 PARTS_RELEASE = PARTS
 
 
-@dataclass(frozen=True)
-class Mutant:
-    """One single-edit defect and the cases that must fail because of it."""
+def _m(name, invariant, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
+    """One single-edit defect in `spool.py` and the cases that must fail because of it.
 
-    name: str
-    invariant: str
-    old: str
-    new: str
-    cases: tuple[str, ...] = field(default_factory=tuple)
-    file: str = SPOOL
-
-    @property
-    def path(self) -> pathlib.Path:
-        return pathlib.Path(PACKAGE) / self.file
+    The declaration is the shared `Mutant` (F2R item 9); every mutant in this list edits
+    the same file, so the factory fills it in.
+    """
+    return Mutant(name=name, invariant=invariant, file=SPOOL, old=old, new=new, cases=cases,
+                  dies_by=tuple(dies_by), occurrences=occurrences)
 
 
-def _m(name, invariant, old, new, *cases) -> Mutant:
-    return Mutant(name=name, invariant=invariant, old=old, new=new, cases=cases)
-
-
+# Eight mutants declare a kill mode (F2R item 9). Five of them are the same invariant
+# stated backwards - the spool must not raise into the request path, the reader must not
+# crash on a torn tail, a failed boot must not keep the lock - so the raise is the only way
+# to break them and the only honest kill. The other three are a case reading a `stats()` key
+# the mutant stopped reporting. An exception from the mutant text is still a broken copy.
 MUTANTS: tuple[Mutant, ...] = (
     # --- the segment format and its reader -------------------------------------
     _m("checksum_not_verified", "a corrupt record is never replayed",
@@ -139,7 +133,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "            _torn(scan, name, offset, len(data))\n            break",
        "        if False:\n"
        "            _torn(scan, name, offset, len(data))\n            break",
-       RECOVER),
+       RECOVER, dies_by=("error",)),
     _m("a_frame_past_the_reader_ceiling_is_read", "the reader's frame ceiling is the writer's",
        "        if envelope_bytes > MAX_ENVELOPE_BYTES or len(data) - body",
        "        if False or len(data) - body", CEILING),
@@ -215,11 +209,11 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("the_writer_runs_on_the_event_loop", "the request path never waits for the disk",
        "            future = self._submit(self._write_batch, batch, fsync_due)",
        "            future = asyncio.get_running_loop().create_future()\n"
-       "            future.set_result(self._write_batch(batch, fsync_due))", SLOW, LOOP),
+       "            future.set_result(self._write_batch(batch, fsync_due))", SLOW, LOOP, dies_by=("TypeError",)),
     _m("an_unserializable_envelope_raises", "nothing in the trace path raises into the request",
        "            except Exception:                 # noqa: BLE001 - R37: never raise into the",
        "            except ZeroDivisionError:         # noqa: BLE001 - R37: never raise into the",
-       LATTICE),
+       LATTICE, dies_by=("PydanticSerializationError",)),
     _m("an_oversized_envelope_is_written", "the writer never spools a frame the reader refuses",
        "                if len(payload) > MAX_ENVELOPE_BYTES:", "                if False:",
        OVERSIZE),
@@ -230,7 +224,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "            self.loss_reasons[TraceLossReason.shutdown] += lost\n"
        "            self.content_bytes = self.metadata_bytes = 0",
        "            self.content_bytes = self.metadata_bytes = 0",
-       SHUTDOWN),
+       SHUTDOWN, dies_by=("KeyError",)),
     _m("the_capture_list_grows_for_ever", "the capture list is bounded",
        "        if len(self.captures) >= self._prune_at:", "        if False:", PRUNE),
 
@@ -240,7 +234,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "                # Nothing to write, but the pause is this thread's to re-evaluate",
        "            if False:\n"
        "                # Nothing to write, but the pause is this thread's to re-evaluate",
-       LOOP, FLOOR),
+       LOOP, FLOOR, dies_by=("TypeError",)),
     _m("ack_unlinks_on_the_callers_thread", "an ack's syscalls belong to the writer (B1)",
        "        await self._run(self._unlink_acked, segment.path)",
        "        self._unlink_acked(segment.path)", LOOP),
@@ -271,7 +265,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("settlement_ignores_a_failed_writer", "a failed writer batch is counted (B3)",
        "            result = _WriteResult(dropped=[(TraceLossReason.disk_error, row.counted)\n"
        "                                           for row in self.batch])",
-       "            result = _WriteResult()", WRITER_BUG),
+       "            result = _WriteResult()", WRITER_BUG, dies_by=("KeyError",)),
     # --- stable ids -------------------------------------------------------------------
     _m("segment_names_forget_the_boot", "a segment name is unique for all time (B4)",
        'name = (f"{SEGMENT_PREFIX}{self.boot_id}-"\n'
@@ -413,7 +407,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "            # A writer failure is already counted by the settlement. Raising it here",
        "        except asyncio.TimeoutError:\n"
        "            # A writer failure is already counted by the settlement. Raising it here",
-       WRITER_BUG),
+       WRITER_BUG, dies_by=("RuntimeError",)),
     _m("ack_forgets_the_segment_before_deleting_it", "a failed ack keeps its segment",
        "        await self._run(self._unlink_acked, segment.path)\n        with self._lock:\n"
        "            if segment in self._segments:",
@@ -423,7 +417,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "            if self._dir_lock is not None:\n"
        "                self.io.unlock_dir(self._dir_lock)\n                self._dir_lock = None\n"
        "            raise",
-       "            raise", OWNERSHIP),
+       "            raise", OWNERSHIP, dies_by=("RuntimeError",)),
     _m("a_reused_boot_id_is_accepted", "a boot id already on disk is refused",
        '                raise ValueError(f"boot id {boot_id!r} already has segments in {self.spool_dir}")',
        "                pass", OWNERSHIP),
@@ -465,96 +459,14 @@ MUTANTS: tuple[Mutant, ...] = (
 )
 
 
-class Outcome(enum.StrEnum):
-    """What one mutant run proved. Only `killed` counts."""
-
-    killed = "killed"
-    survived = "survived"
-    broken_runner = "broken_runner"
-    misdeclared = "misdeclared"
-
-
-@dataclass(frozen=True)
-class Result:
-    outcome: Outcome
-    detail: str
-
-    @property
-    def killed(self) -> bool:
-        return self.outcome is Outcome.killed
-
-
-PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED = 0, 1
-_FAILED_LINE = re.compile(r"^(?:FAILED|ERROR) ([^\s:]+(?:::[^\s]+)?)")
+#: F2R item 9: the shared runner, aimed at T1's spool suite.
+RUNNER = Runner(name="t1", targets=(SUITE,))
 
 
 def run_mutant(mutant: Mutant) -> Result:
-    """Apply one mutant to a throwaway copy and run the cases it names.
-
-    A kill needs all of: pytest exited 1 (not 2-5, which mean the *runner* broke, and not
-    0, which means the defect went unnoticed); at least one test failed; and every failing
-    test names one of this mutant's own cases, so a syntax error or an import-time crash
-    cannot be counted as a kill. The worktree is never written to.
-    """
-    if not mutant.cases:
-        return Result(Outcome.misdeclared, "declares no case")
-    with tempfile.TemporaryDirectory(prefix=f"t1-mutant-{mutant.name}-") as tmp:
-        root = pathlib.Path(tmp)
-        ignore = shutil.ignore_patterns("__pycache__")
-        shutil.copytree(API_DIR / PACKAGE, root / PACKAGE, ignore=ignore)
-        shutil.copytree(API_DIR / "tests", root / "tests", ignore=ignore)
-        target = root / mutant.path
-        source = target.read_text()
-        if mutant.old not in source:
-            return Result(Outcome.misdeclared,
-                          f"anchor not found in {mutant.file}: {mutant.old[:60]!r}")
-        target.write_text(source.replace(mutant.old, mutant.new, 1))
-        done = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-             "-rf", "--tb=no", SUITE, "-k", " or ".join(mutant.cases)],
-            cwd=root, capture_output=True, text=True,
-            env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
-        stdout = done.stdout or ""
-        lines = (stdout or done.stderr).strip().splitlines()
-        summary = lines[-1] if lines else "no output"
-        if done.returncode not in (PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED):
-            return Result(Outcome.broken_runner, f"pytest exit {done.returncode}: {summary}")
-        if not re.search(r"(\d+) (?:passed|failed|skipped)", summary) or "no tests ran" in summary:
-            return Result(Outcome.misdeclared, f"no case matched: {summary}")
-        failed = [match.group(1) for match in
-                  (_FAILED_LINE.match(line.strip()) for line in stdout.splitlines()) if match]
-        if done.returncode == PYTEST_ALL_PASSED or not failed:
-            return Result(Outcome.survived, summary)
-        stray = [test for test in failed
-                 if not any(test.endswith(case) for case in mutant.cases)]
-        if stray:
-            return Result(Outcome.broken_runner, f"failures outside the named cases: {stray[:3]}")
-        return Result(Outcome.killed, summary)
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="run T1's mutation list")
-    parser.add_argument("names", nargs="*")
-    parser.add_argument("--list", action="store_true")
-    args = parser.parse_args()
-    if args.list:
-        for mutant in MUTANTS:
-            print(f"{mutant.name:42s} {mutant.invariant}")
-        print(f"\n{len(MUTANTS)} mutants over "
-              f"{len({case for m in MUTANTS for case in m.cases})} named cases")
-        return 0
-    chosen = [m for m in MUTANTS if not args.names or m.name in args.names]
-    bad: dict[str, list[str]] = {}
-    for mutant in chosen:
-        result = run_mutant(mutant)
-        print(f"[{result.outcome:13s}] {mutant.name}: {result.detail}", flush=True)
-        if not result.killed:
-            bad.setdefault(result.outcome.value, []).append(mutant.name)
-    failures = sum(len(names) for names in bad.values())
-    print(f"\n{len(chosen) - failures}/{len(chosen)} killed"
-          + "".join(f"; {outcome}: {names}" for outcome, names in sorted(bad.items())))
-    return 1 if bad else 0
+    """Apply one mutant to a throwaway copy and run the cases it names."""
+    return shared.run_mutant(mutant, RUNNER)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(shared.main(MUTANTS, RUNNER, "run T1's mutation list"))
