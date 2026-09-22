@@ -14,6 +14,7 @@ import { describe, it } from "node:test";
 import moneyCases from "../../tests/contracts/money_cases.json" with { type: "json" };
 import { addMoney, compareMoney, isMoney, parseMoney, subMoney, ZERO_MONEY, type Money } from "./money.ts";
 import {
+  ACCOUNTING_REGIMES,
   AUDIT_ACTIONS,
   AUTHOR_ROLES,
   CALIBRATION_LABELS,
@@ -29,6 +30,7 @@ import {
   INTERNAL_ONLY_CODES,
   JOB_STATES,
   JUDGE_MODES,
+  JUDGE_RUN_SAMPLE_CAP,
   JUDGE_RUN_STATES,
   JUDGE_SCORE_KINDS,
   LEDGER_ENTRY_KINDS,
@@ -47,6 +49,7 @@ import {
   TRACE_LOSS_REASONS,
   TRACE_MODES,
   USAGE_CERTAINTIES,
+  traceModeOf,
   type AdminOrgSummary,
   type AuditEntry,
   type AuditQuery,
@@ -103,6 +106,18 @@ export type ConsoleHarness = {
     /** R18: an organization that is suspended before the suite touches anything. */
     suspendedOrgId: string;
   };
+  /**
+   * True when the harness holds the pre-pilot and nullable history the projection has to survive:
+   * at least one `legacy_usd` usage row carrying a charge, at least one usage row whose key has
+   * since been deleted, at least one api key with no recorded capture mode, at least one audit
+   * entry whose target organization is gone, and at least one judge run that never reached a
+   * provider (no model version, no consent snapshot, a sample whose trace is gone).
+   *
+   * The cases that prove it are **skipped, naming this flag**, on a harness that declares nothing —
+   * a skip is visible in the report and is never a pass. A harness that declares it and does not
+   * have the rows fails, which is the direction that matters: the flag cannot buy a green run.
+   */
+  hasLegacyRows?: boolean;
 };
 
 /**
@@ -115,6 +130,13 @@ export type ConsoleHarness = {
 export type ConsoleHarnessFactory = () => ConsoleHarness | Promise<ConsoleHarness>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/**
+ * The widest window the two aggregates accept. They require `from` and `to` — an unbounded
+ * aggregate is a full-table scan whose answer nobody can check — so every case that wants "all of
+ * it" says so explicitly instead of relying on an implicit all-time default.
+ */
+const ALL_TIME = { from: "2000-01-01T00:00:00.000Z", to: "2100-01-01T00:00:00.000Z" } as const;
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
 function inSet(allowed: readonly string[], value: unknown): boolean {
@@ -300,27 +322,86 @@ function assertFeedbackEntry(entry: FeedbackEntry, what: string): void {
   }
 }
 
+const USAGE_ROW_FIELDS = [
+  "request_id",
+  "created_at",
+  "model",
+  "key_id",
+  "key_name",
+  "accounting_regime",
+  "execution_mode",
+  "job_state",
+  "terminal_cause",
+  "http_status",
+  "prompt_tokens",
+  "completion_tokens",
+  "usage_certainty",
+  "settlement_state",
+  "cost",
+  "max_hold",
+  "trace_mode",
+] as const;
+
 function assertUsageRow(row: UsageRow): void {
+  // Q16: the exact field set, so `accounting_regime` cannot quietly stop being projected and a
+  // row cannot arrive carrying a column the contract does not declare.
+  assertExactFields(row, USAGE_ROW_FIELDS, `usage ${row.request_id}`);
   assert.match(row.request_id, UUID, "usage request_id");
   assert.match(row.created_at, RFC3339, "usage created_at");
-  assert.ok(inSet(JOB_STATES, row.job_state), "usage job_state");
+  // The regime is what says which of the rules below apply to this row. It is read from the row,
+  // never guessed from which columns are null.
+  assert.ok(inSet(ACCOUNTING_REGIMES, row.accounting_regime), "usage accounting_regime");
+  const pilot = row.accounting_regime === "pilot";
+  // The key pair is null together or not at all: D1's view LEFT JOINs the key, so a deleted key
+  // yields both as null. Exactly one null is a shape no query can produce.
+  assert.equal(
+    row.key_id === null,
+    row.key_name === null,
+    `usage ${row.request_id}: key_id and key_name are null together or not at all`,
+  );
+  assert.ok(row.key_id === null || row.key_id.length > 0, "a present key_id is not empty");
   assert.ok(row.terminal_cause === null || inSet(TERMINAL_CAUSES, row.terminal_cause), "usage terminal_cause");
-  assert.ok(inSet(EXECUTION_MODES, row.execution_mode), "usage execution_mode");
-  assert.ok(inSet(USAGE_CERTAINTIES, row.usage_certainty), "usage usage_certainty");
   // R13: the settlement column is null until the request is terminal, and set once it is.
   assert.ok(
     row.settlement_state === null || inSet(SETTLEMENT_STATES, row.settlement_state),
     "usage settlement_state",
   );
+  assert.ok(isMoney(row.cost), `usage cost is not canonical money: ${row.cost}`);
+  assert.ok(row.max_hold === null || isMoney(row.max_hold), "usage max_hold");
+  assert.ok(Number.isInteger(row.http_status), "usage http_status");
+  if (!pilot) {
+    // A legacy row keeps its NULLs. They are the truth about a row that was never a job, and a
+    // projection that filled any of them in would be inventing history rather than reading it.
+    assert.deepEqual(
+      {
+        execution_mode: row.execution_mode,
+        job_state: row.job_state,
+        usage_certainty: row.usage_certainty,
+        trace_mode: row.trace_mode,
+        settlement_state: row.settlement_state,
+        max_hold: row.max_hold,
+      },
+      {
+        execution_mode: null,
+        job_state: null,
+        usage_certainty: null,
+        trace_mode: null,
+        settlement_state: null,
+        max_hold: null,
+      },
+      `usage ${row.request_id}: a ${row.accounting_regime} row has no pilot columns to fill in`,
+    );
+    return;
+  }
+  assert.ok(inSet(JOB_STATES, row.job_state), "usage job_state");
+  assert.ok(inSet(EXECUTION_MODES, row.execution_mode), "usage execution_mode");
+  assert.ok(inSet(USAGE_CERTAINTIES, row.usage_certainty), "usage usage_certainty");
   assert.equal(
     row.settlement_state === null,
     !inSet(TERMINAL_JOB_STATES, row.job_state),
     `usage ${row.request_id}: ${row.job_state} must ${inSet(TERMINAL_JOB_STATES, row.job_state) ? "" : "not "}carry a settlement state`,
   );
   assert.ok(inSet(TRACE_MODES, row.trace_mode), "usage trace_mode");
-  assert.ok(isMoney(row.cost), `usage cost is not canonical money: ${row.cost}`);
-  assert.ok(row.max_hold === null || isMoney(row.max_hold), "usage max_hold");
-  assert.ok(Number.isInteger(row.http_status), "usage http_status");
   // An estimate never masquerades as an authoritative charge.
   if (row.usage_certainty === "unknown") {
     assert.equal(row.prompt_tokens, null, "unknown usage must not report prompt tokens");
@@ -396,17 +477,44 @@ function assertTraceDetail(detail: TraceDetail): void {
   );
 }
 
+const JUDGE_SAMPLE_FIELDS = ["sample_id", "rubric_version", "request_id", "scores"] as const;
+
 function assertJudgeRun(run: JudgeRun): void {
   assert.ok(inSet(JUDGE_RUN_STATES, run.state), "judge state");
   assert.ok(inSet(JUDGE_MODES, run.mode), "judge mode");
   assert.ok(isMoney(run.budget_reserved), "judge budget_reserved");
   assert.ok(run.budget_settled === null || isMoney(run.budget_settled), "judge budget_settled");
-  assert.equal(run.sample_count, run.samples.length, "judge sample_count");
-  assert.equal(
-    run.limited_evaluation_count,
-    run.samples.filter((sample) => sample.limited_evaluation).length,
-    "judge limited_evaluation_count",
+  assert.ok(run.judge_model_version === null || run.judge_model_version.length > 0, "judge model version");
+  if (run.mode === "dry_run") {
+    // A dry run makes no provider call, so there is no served revision to name. Filling one in
+    // would make an estimate look like a result produced by a particular model build.
+    assert.equal(run.judge_model_version, null, `judge run ${run.id}: a dry run has no served version`);
+  }
+  assert.ok(run.consent_snapshot_at === null || RFC3339.test(run.consent_snapshot_at), "consent snapshot");
+  // D1 caps the embedded array, so `sample_count` is the run's own count and must never be *less*
+  // than what the row carries: a count derived from the capped array is the N1 defect (every run
+  // reporting one sample) wearing a different hat.
+  assert.ok(run.samples.length <= JUDGE_RUN_SAMPLE_CAP, `judge run ${run.id}: more samples than the cap`);
+  assert.ok(
+    run.sample_count >= run.samples.length,
+    `judge run ${run.id}: sample_count ${run.sample_count} is below the ${run.samples.length} samples it carries`,
   );
+  if (run.samples.length < JUDGE_RUN_SAMPLE_CAP) {
+    // The cap explains a count larger than the array only when the array is *full*. Below the cap
+    // nothing was truncated, so the count is exactly what the row carries — otherwise "capped" is
+    // an excuse for any wrong number at all.
+    assert.equal(
+      run.sample_count,
+      run.samples.length,
+      `judge run ${run.id}: the sample array is not capped, so sample_count must be what it carries`,
+    );
+  }
+  assert.ok(
+    run.limited_evaluation_count >= 0 && run.limited_evaluation_count <= run.sample_count,
+    `judge run ${run.id}: limited_evaluation_count is not within the sample count`,
+  );
+  const sampleIds = run.samples.map((sample) => sample.sample_id);
+  assert.equal(new Set(sampleIds).size, sampleIds.length, `judge run ${run.id}: a sample id repeats`);
   if (run.state === "ambiguous") {
     // 02: an ambiguous submission holds its reservation and is never resubmitted.
     assert.equal(run.budget_settled, null, "an ambiguous run is not settled");
@@ -414,19 +522,23 @@ function assertJudgeRun(run: JudgeRun): void {
     assert.ok(run.quarantine_reason !== null, "an ambiguous run records why");
   }
   for (const sample of run.samples) {
-    assert.equal(sample.run_id, run.id, "sample run_id");
-    if (sample.limited_evaluation) {
-      assert.ok(sample.limited_reason !== null, "a limited evaluation says why");
-      assert.equal(
-        sample.scores.filter((score) => score.name === "groundedness").length,
-        0,
-        "no media means no groundedness score",
-      );
-    }
+    // The frozen shape, field for field: exactly what D1's `console_judge_runs` emits. A richer
+    // sample would be one only a fake could fill.
+    assertExactFields(sample, JUDGE_SAMPLE_FIELDS, `judge sample ${sample.sample_id}`);
+    assert.match(sample.sample_id, UUID, "sample id is a lower-case UUIDv4");
+    // Null: the trace it scored has been deleted. An invented id would point at another request.
+    assert.ok(sample.request_id === null || UUID.test(sample.request_id), "sample request_id");
+    assert.ok(
+      Number.isInteger(sample.rubric_version) && sample.rubric_version > 0,
+      "sample rubric_version",
+    );
     for (const score of sample.scores) {
       assert.ok(inSet(JUDGE_SCORE_KINDS, score.kind), "score kind");
-      assert.equal(score.rubric_version, run.rubric_version, "score rubric version");
+      // The *sample's* version, not the run's: a late result deduplicates by (run, sample,
+      // rubric version), so one run may hold samples from more than one version.
+      assert.equal(score.rubric_version, sample.rubric_version, "score rubric version");
       assert.equal(score.judge_model, run.judge_model, "score judge model");
+      assert.equal(score.judge_model_version, run.judge_model_version, "score judge model version");
       // A dry run produces estimates only; a provider result is never an estimate.
       assert.equal(score.estimated, run.mode === "dry_run", "score estimated flag follows the run mode");
     }
@@ -476,13 +588,13 @@ export function operationProbes(
     },
     usageSummary: {
       asGiven: (session, input) => services.usageSummary(session, input as never),
-      call: (session) => services.usageSummary(session, {}),
-      withExtraField: (session) => services.usageSummary(session, { ...extra }),
+      call: (session) => services.usageSummary(session, { ...ALL_TIME }),
+      withExtraField: (session) => services.usageSummary(session, { ...ALL_TIME, ...extra }),
     },
     usageDaily: {
       asGiven: (session, input) => services.usageDaily(session, input as never),
-      call: (session) => services.usageDaily(session, {}),
-      withExtraField: (session) => services.usageDaily(session, { ...extra }),
+      call: (session) => services.usageDaily(session, { ...ALL_TIME }),
+      withExtraField: (session) => services.usageDaily(session, { ...ALL_TIME, ...extra }),
     },
     balances: {
       call: (session) => services.balances(session),
@@ -846,7 +958,7 @@ export function runConsoleServicesConformance(
       assert.equal(compareMoney(balance.reserved_total, ZERO_MONEY), 1, "and that sum is not zero here");
       assert.equal(compareMoney(balance.available, balance.ledger_total), -1, "a hold must reduce available");
 
-      const usage = expectOk(await services.usageSummary(sessions.owner, {}), "usage summary");
+      const usage = expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME }), "usage summary");
       assert.ok(isMoney(usage.cost), "summary cost");
       assert.ok(isMoney(usage.pending_reconciliation), "summary pending_reconciliation");
       // Unknown usage is held, not charged, so the figure a customer reads as "awaiting
@@ -935,7 +1047,12 @@ export function runConsoleServicesConformance(
         expectOk(await services.traces(sessions.owner, { key_id: ids.otherOrgKeyId }), "traces by foreign key").items,
       ]) {
         for (const row of rows) {
-          assert.ok(ownKeys.has(row.key_id), `a foreign key filter returned ${row.key_id}`);
+          // A row with no key at all may not appear either: the filter is a key identifier, and
+          // no identifier matches "this row names no key".
+          assert.ok(
+            row.key_id !== null && ownKeys.has(row.key_id),
+            `a foreign key filter returned ${row.key_id}`,
+          );
         }
       }
 
@@ -1641,8 +1758,8 @@ export function runConsoleServicesConformance(
       // Every read keeps working. A suspended tenant that cannot see its own usage cannot find out
       // why it was suspended.
       expectOk(await services.usage(suspended, { limit: 5 }), "suspended usage");
-      expectOk(await services.usageSummary(suspended, {}), "suspended usage summary");
-      expectOk(await services.usageDaily(suspended, {}), "suspended usage daily");
+      expectOk(await services.usageSummary(suspended, { ...ALL_TIME }), "suspended usage summary");
+      expectOk(await services.usageDaily(suspended, { ...ALL_TIME }), "suspended usage daily");
       expectOk(await services.balances(suspended), "suspended balances");
       expectOk(await services.ledger(suspended, { limit: 5 }), "suspended ledger");
       expectOk(await services.traces(suspended, { limit: 5 }), "suspended traces");
@@ -2021,7 +2138,7 @@ export function runConsoleServicesConformance(
           usage: usage.map((row) => [row.request_id, row.cost, row.settlement_state, row.max_hold, row.usage_certainty]),
           ledger: ledger.map((entry) => [entry.id, entry.delta, entry.kind, entry.reason, entry.ref, entry.actor]),
           balance: expectOk(await services.balances(sessions.owner), "balance"),
-          summary: expectOk(await services.usageSummary(sessions.owner, {}), "summary"),
+          summary: expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME }), "summary"),
           adminBalance: expectOk(
             await services.adminOrgs(sessions.operator, { limit: MAX_PAGE_LIMIT }),
             "operator org list",
@@ -2535,8 +2652,8 @@ export function runConsoleServicesConformance(
       ] as [SessionContext, string][]) {
         const views: [string, unknown][] = [
           ["usage", await services.usage(session, { limit: MAX_PAGE_LIMIT })],
-          ["usageSummary", await services.usageSummary(session, {})],
-          ["usageDaily", await services.usageDaily(session, {})],
+          ["usageSummary", await services.usageSummary(session, { ...ALL_TIME })],
+          ["usageDaily", await services.usageDaily(session, { ...ALL_TIME })],
           ["balances", await services.balances(session)],
           ["ledger", await services.ledger(session, { limit: MAX_PAGE_LIMIT })],
           ["traces", await services.traces(session, { limit: MAX_PAGE_LIMIT })],
@@ -2933,8 +3050,8 @@ export function runConsoleServicesConformance(
       // owner or for the operator. This is the portable half of "it is stored nowhere".
       const responses: unknown[] = [
         await services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT }),
-        await services.usageSummary(sessions.owner, {}),
-        await services.usageDaily(sessions.owner, {}),
+        await services.usageSummary(sessions.owner, { ...ALL_TIME }),
+        await services.usageDaily(sessions.owner, { ...ALL_TIME }),
         await services.balances(sessions.owner),
         await services.ledger(sessions.owner, { limit: MAX_PAGE_LIMIT }),
         await services.traces(sessions.owner, { limit: MAX_PAGE_LIMIT }),
@@ -2962,6 +3079,187 @@ export function runConsoleServicesConformance(
         "judge runs",
       );
       for (const run of runs) assertJudgeRun(run);
+    });
+
+    it("an aggregate without a window is invalid_request, not an all-time total", async () => {
+      const { services, sessions } = await makeHarness();
+      // `as never` at each call site: no input type declares a window-less aggregate, so the
+      // compiler refuses these calls and the runtime has to refuse them too — a service that
+      // defaulted to "all time" would answer a question nobody asked, over history that mixes
+      // accounting regimes, with a scan that grows without bound.
+      for (const [what, query] of [
+        ["no window at all", {}],
+        ["only from", { from: ALL_TIME.from }],
+        ["only to", { to: ALL_TIME.to }],
+      ] as [string, unknown][]) {
+        expectError(
+          await settle(`usageSummary with ${what}`, () => services.usageSummary(sessions.owner, query as never)),
+          "invalid_request",
+          `usageSummary must refuse ${what}`,
+        );
+        expectError(
+          await settle(`usageDaily with ${what}`, () => services.usageDaily(sessions.owner, query as never)),
+          "invalid_request",
+          `usageDaily must refuse ${what}`,
+        );
+      }
+      // And the same call with both bounds is fine, so the refusal is about the window and not
+      // about the operation being broken.
+      expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME }), "bounded summary");
+      expectOk(await services.usageDaily(sessions.owner, { ...ALL_TIME }), "bounded daily");
+    });
+
+    it("legacy and key-less usage rows keep their nulls and are still counted", async (t) => {
+      const harness = await makeHarness();
+      if (harness.hasLegacyRows !== true) {
+        return t.skip("the harness declares no legacy history (ConsoleHarness.hasLegacyRows)");
+      }
+      const { services, sessions } = harness;
+      const all = await walkAll<UsageRow>(
+        (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+        "usage",
+      );
+      const legacy = all.filter((row) => row.accounting_regime === "legacy_usd");
+      assert.ok(legacy.length > 0, "the harness declared legacy rows and has none");
+      // Not a curiosity to be hidden: a legacy row is a real charge, so at least one carries one.
+      // Without this the "still counted" assertions below would hold over a set of zeroes.
+      assert.ok(
+        legacy.some((row) => compareMoney(row.cost, ZERO_MONEY) === 1),
+        "a legacy row is a real charge, and the harness needs one that is not zero",
+      );
+      // The pilot rules do not reach them, and nothing fills their nulls in (assertUsageRow pins
+      // the whole null set; this is the half that says the regime is *read*, not inferred).
+      for (const row of legacy) {
+        assert.equal(row.job_state, null, `legacy ${row.request_id}: no job state`);
+        assert.equal(row.trace_mode, null, `legacy ${row.request_id}: no capture mode`);
+        assert.equal(row.settlement_state, null, `legacy ${row.request_id}: outside settlement`);
+      }
+      const pilot = all.filter((row) => row.accounting_regime === "pilot");
+      assert.ok(pilot.length > 0, "the harness needs both regimes, or nothing is being told apart");
+
+      // Counted, not filtered: the aggregate over the whole window is the whole window.
+      let cost = ZERO_MONEY;
+      for (const row of all) cost = addMoney(cost, row.cost);
+      const summary = expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME }), "summary");
+      assert.equal(summary.requests, all.length, "the summary counts legacy rows too");
+      assert.equal(summary.cost, cost, "and totals their charges");
+      // A window holding legacy rows only still answers with them, so they are reachable and not
+      // merely swept into a total.
+      const oldest = legacy.reduce((a, b) => (a.created_at < b.created_at ? a : b)).created_at;
+      const newestLegacy = legacy.reduce((a, b) => (a.created_at > b.created_at ? a : b)).created_at;
+      const window = { from: oldest, to: newestLegacy };
+      const onlyLegacy = await walkAll<UsageRow>(
+        (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, ...window }),
+        "legacy window",
+      );
+      assert.deepEqual(
+        onlyLegacy.map((row) => row.request_id).sort(),
+        all.filter((row) => row.created_at >= oldest && row.created_at <= newestLegacy)
+          .map((row) => row.request_id)
+          .sort(),
+        "a window over legacy rows returns exactly them",
+      );
+      assert.ok(
+        onlyLegacy.some((row) => row.accounting_regime === "legacy_usd"),
+        "and they are still legacy rows when read back",
+      );
+      const legacySummary = expectOk(await services.usageSummary(sessions.owner, window), "legacy summary");
+      assert.equal(legacySummary.requests, onlyLegacy.length, "the aggregate over that window counts them");
+
+      // A row whose key has been deleted: both identity fields null, still present, and no key
+      // filter can claim it — including the empty string, which a sentinel projection would use.
+      const keyless = all.filter((row) => row.key_id === null);
+      assert.ok(keyless.length > 0, "the harness declared a deleted key and has no row for it");
+      for (const row of keyless) assert.equal(row.key_name, null, "the name goes with the id");
+      for (const keyId of new Set(all.map((row) => row.key_id).filter((id): id is string => id !== null))) {
+        const filtered = await walkAll<UsageRow>(
+          (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor, key_id: keyId }),
+          `usage by key ${keyId}`,
+        );
+        assert.equal(
+          filtered.filter((row) => row.key_id === null).length,
+          0,
+          "a key filter must not return a row that names no key",
+        );
+      }
+      expectError(
+        await settle("usage filtered by an empty key id", () =>
+          services.usage(sessions.owner, { key_id: "" }),
+        ),
+        "invalid_request",
+        "an empty key id is not an identifier, so no caller can filter for the deleted-key rows",
+      );
+    });
+
+    it("an unrecorded capture mode, an orphaned audit target and an unreached provider are nulls, not defaults", async (t) => {
+      const harness = await makeHarness();
+      if (harness.hasLegacyRows !== true) {
+        return t.skip("the harness declares no legacy history (ConsoleHarness.hasLegacyRows)");
+      }
+      const { services, sessions, ids } = harness;
+      const keys = expectOk(await services.keys.list(sessions.owner), "keys");
+      const unset = keys.filter((key) => key.trace_mode === null);
+      assert.ok(unset.length > 0, "the harness declared a key with no capture mode and has none");
+      for (const key of unset) {
+        // Capture is consent: the absence of a recorded choice can only read as `off`. Anything
+        // else would start capturing content nobody opted into.
+        assert.equal(traceModeOf(key), "off", `key ${key.id}: an unrecorded capture mode is off`);
+      }
+      for (const key of keys) {
+        assert.ok(key.trace_mode === null || inSet(TRACE_MODES, key.trace_mode), "key trace_mode");
+      }
+
+      const audit = await walkAll<AuditEntry>(
+        (cursor) => services.adminAudit(sessions.operator, { limit: MAX_PAGE_LIMIT, cursor }),
+        "audit",
+      );
+      const orphaned = audit.filter((entry) => entry.target_org_id === null);
+      assert.ok(orphaned.length > 0, "the harness declared an entry with no target and has none");
+      for (const entry of orphaned) {
+        assert.ok(inSet(AUDIT_ACTIONS, entry.action), `unknown audit action ${entry.action}`);
+        assert.ok(entry.actor_principal.length > 0, "an audit entry names who acted");
+        assert.match(entry.at, RFC3339, "audit at");
+        assert.ok(entry.reason.length > 0, "an audit entry keeps its reason");
+      }
+      // The write still happened, and it is attributed to nobody else: a filter for an
+      // organization must not sweep in an entry whose target is gone.
+      for (const orgId of [ids.orgId, ids.otherOrgId, ids.suspendedOrgId]) {
+        const filtered = await walkAll<AuditEntry>(
+          (cursor) => services.adminAudit(sessions.operator, { limit: MAX_PAGE_LIMIT, cursor, target_org_id: orgId }),
+          `audit for ${orgId}`,
+        );
+        assert.equal(
+          filtered.filter((entry) => entry.target_org_id !== orgId).length,
+          0,
+          `the audit filter for ${orgId} returned an entry with another target`,
+        );
+      }
+
+      // A run that never reached a provider: no served model version, no surviving consent row,
+      // and a sample whose trace has been deleted. Each is a null the projection reports rather
+      // than a value it makes up — an invented model version would attribute an estimate to a
+      // build that never ran it, and an invented request id would point at another request.
+      const runs = await walkAll<JudgeRun>(
+        (cursor) => services.judgeRuns(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+        "judge runs",
+      );
+      assert.ok(
+        runs.some((run) => run.judge_model_version === null),
+        "the harness declared a run with no provider version and has none",
+      );
+      assert.ok(
+        runs.some((run) => run.consent_snapshot_at === null),
+        "the harness declared a run whose consent row is gone and has none",
+      );
+      const samples = runs.flatMap((run) => run.samples);
+      assert.ok(
+        samples.some((sample) => sample.request_id === null),
+        "the harness declared a sample whose trace is gone and has none",
+      );
+      for (const sample of samples) {
+        if (sample.request_id === null) continue;
+        assert.match(sample.request_id, UUID, "a present sample request_id is a request id");
+      }
     });
   });
 
@@ -3945,7 +4243,7 @@ export function runMutationSafetyConformance(
         [sessions.otherOwner, "second organization"],
       ] as [SessionContext, string][]) {
         const rows = await rowsOf(session);
-        const summary = expectOk(await services.usageSummary(session, {}), `${who} summary`);
+        const summary = expectOk(await services.usageSummary(session, { ...ALL_TIME }), `${who} summary`);
         const expected = expectedSummary(rows);
         assert.equal(summary.requests, expected.requests, `${who}: the summary counts this organization's rows only`);
         assert.equal(summary.cost, expected.cost, `${who}: and totals this organization's cost only`);
@@ -3953,7 +4251,7 @@ export function runMutationSafetyConformance(
         assert.equal(summary.completion_tokens, expected.completion_tokens, `${who}: completion tokens`);
         assert.equal(summary.failed_requests, expected.failed_requests, `${who}: failed requests`);
 
-        const daily = expectOk(await services.usageDaily(session, {}), `${who} daily`);
+        const daily = expectOk(await services.usageDaily(session, { ...ALL_TIME }), `${who} daily`);
         assert.equal(
           daily.reduce((sum, day) => sum + day.requests, 0),
           rows.length,
@@ -3964,8 +4262,8 @@ export function runMutationSafetyConformance(
       }
 
       // Two organizations with different data must not report the same figures.
-      const ourSummary = expectOk(await services.usageSummary(sessions.owner, {}), "our summary");
-      const theirSummary = expectOk(await services.usageSummary(sessions.otherOwner, {}), "their summary");
+      const ourSummary = expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME }), "our summary");
+      const theirSummary = expectOk(await services.usageSummary(sessions.otherOwner, { ...ALL_TIME }), "their summary");
       assert.notEqual(ourSummary.requests, theirSummary.requests, "the harness needs differently sized tenants");
 
       // Settings are per organization, and a write on one is invisible to the other.
@@ -4040,7 +4338,9 @@ export function runMutationSafetyConformance(
         assert.ok(filtered.length < all.length, "and fewer than all of them");
       }
 
-      const keyIds = new Set(all.map((row) => row.key_id));
+      // A row whose key has been deleted carries no key id, and no filter value can match it:
+      // the filter is a key identifier, and null is not one.
+      const keyIds = new Set(all.map((row) => row.key_id).filter((id): id is string => id !== null));
       assert.ok(keyIds.size > 1, "the harness needs rows from more than one key");
       const [someKey] = [...keyIds];
       const byKey = await walkAll<UsageRow>(

@@ -1413,7 +1413,7 @@
     },
     {
       "id": "XJUDGE-02",
-      "note": "the sample count does not match the samples",
+      "note": "the sample count does not match the samples it carries, although nothing was capped",
       "file": "lib/contracts/fake-services.ts",
       "find": "        sample_count: samples.length,",
       "replace": "        sample_count: samples.length + 1,",
@@ -1499,6 +1499,167 @@
       "replace": "      if (typeof value === \"boolean\") continue;\n      if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > MAX_ENTITLEMENT_LIMIT) {",
       "cases": [
         "the provisional input bounds hold"
+      ]
+    },
+    {
+      "id": "REGIME-01",
+      "note": "every row claims the pilot regime, so pre-pilot history is presented as metered traffic",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      accounting_regime: \"legacy_usd\",",
+      "replace": "      accounting_regime: \"pilot\",",
+      "cases": [
+        "legacy and key-less usage rows keep their nulls and are still counted",
+        "usage pages walk every row exactly once, newest first"
+      ]
+    },
+    {
+      "id": "REGIME-02",
+      "note": "a legacy row is given a job state and an execution mode it never had",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      execution_mode: null,\n      job_state: null,\n      terminal_cause: null,\n      http_status: 200,",
+      "replace": "      execution_mode: \"sync\",\n      job_state: \"succeeded\",\n      terminal_cause: null,\n      http_status: 200,",
+      "cases": [
+        "usage pages walk every row exactly once, newest first"
+      ]
+    },
+    {
+      "id": "REGIME-03",
+      "note": "the list silently drops everything outside the pilot regime, so old history disappears instead of being read",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "    return org.usage.filter(\n      (row) =>\n        inRange(row.created_at, query) &&",
+      "replace": "    return org.usage.filter(\n      (row) =>\n        row.accounting_regime === \"pilot\" &&\n        inRange(row.created_at, query) &&",
+      "cases": [
+        "legacy and key-less usage rows keep their nulls and are still counted"
+      ]
+    },
+    {
+      "id": "REGIME-04",
+      "note": "the summary totals pilot rows only, so a legacy charge vanishes from the figure a customer reconciles against",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      for (const row of rows) {\n        costUnits += moneyUnits(row.cost);",
+      "replace": "      for (const row of rows) {\n        if (row.accounting_regime !== \"pilot\") continue;\n        costUnits += moneyUnits(row.cost);",
+      "cases": [
+        "legacy and key-less usage rows keep their nulls and are still counted"
+      ]
+    },
+    {
+      "id": "KEYNULL-01",
+      "note": "only the id is nulled for a deleted key, so a row carries a name with no identity",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      key_name: keyDeleted ? null : key.name,",
+      "replace": "      key_name: key.name,",
+      "cases": [
+        "usage pages walk every row exactly once, newest first"
+      ]
+    },
+    {
+      "id": "KEYNULL-02",
+      "note": "a deleted key is projected as the empty-string sentinel instead of null",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      key_id: keyDeleted ? null : key.id,",
+      "replace": "      key_id: keyDeleted ? \"\" : key.id,",
+      "cases": [
+        "usage pages walk every row exactly once, newest first"
+      ]
+    },
+    {
+      "id": "WINDOW-01",
+      "note": "the aggregates accept a call with no window, answering over all history",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      if (query[name] === undefined) return `${name} is required: an aggregate needs a window`;",
+      "replace": "      if (query[name] === null) return `${name} is required: an aggregate needs a window`;",
+      "cases": [
+        "an aggregate without a window is invalid_request, not an all-time total"
+      ]
+    },
+    {
+      "id": "WINDOW-02",
+      "note": "only `from` is required, so a half-open window scans to the end of history",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "  function missingWindow(query: UsageQuery): string | null {\n    for (const name of [\"from\", \"to\"] as const) {",
+      "replace": "  function missingWindow(query: UsageQuery): string | null {\n    for (const name of [\"from\"] as const) {",
+      "cases": [
+        "an aggregate without a window is invalid_request, not an all-time total"
+      ]
+    },
+    {
+      "id": "TRACEMODE-01",
+      "note": "an api key with no recorded capture mode defaults to full capture, so content nobody opted into is stored",
+      "file": "lib/contracts/types.ts",
+      "find": "  return key.trace_mode ?? \"off\";",
+      "replace": "  return key.trace_mode ?? \"full\";",
+      "cases": [
+        "an unrecorded capture mode, an orphaned audit target and an unreached provider are nulls, not defaults"
+      ]
+    },
+    {
+      "id": "AUDITTARGET-01",
+      "note": "an audit entry whose target organization is gone is attributed to a surviving one",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      target_org_id: null,\n      reason: \"closed the account's entitlements before deletion\",",
+      "replace": "      target_org_id: orgsFixture.orgs[0].org_id,\n      reason: \"closed the account's entitlements before deletion\",",
+      "cases": [
+        "an unrecorded capture mode, an orphaned audit target and an unreached provider are nulls, not defaults"
+      ]
+    },
+    {
+      "id": "AUDITTARGET-02",
+      "note": "a target filter also matches entries with no target, so one organization's audit page shows another's write",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "      const rows = audit.filter(\n        (entry) => query.target_org_id === undefined || entry.target_org_id === query.target_org_id,\n      );",
+      "replace": "      const rows = audit.filter(\n        (entry) =>\n          query.target_org_id === undefined ||\n          entry.target_org_id === query.target_org_id ||\n          entry.target_org_id === null,\n      );",
+      "cases": [
+        "an unrecorded capture mode, an orphaned audit target and an unreached provider are nulls, not defaults"
+      ]
+    },
+    {
+      "id": "JUDGESAMPLE-01",
+      "note": "the sample carries a field D1's view cannot produce, so the console depends on a shape only the fake has",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          sample_id: sample.id,",
+      "replace": "          sample_id: sample.id,\n          run_id: run.id,",
+      "cases": [
+        "judge runs separate estimates, limited evaluations and held budgets"
+      ]
+    },
+    {
+      "id": "JUDGESAMPLE-02",
+      "note": "a sample whose trace is gone is given an invented request id pointing at another request",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "          request_id: trace === undefined ? null : trace.request_id,",
+      "replace": "          request_id: trace === undefined ? deterministicUuid(spec.namespace, 1) : trace.request_id,",
+      "cases": [
+        "an unrecorded capture mode, an orphaned audit target and an unreached provider are nulls, not defaults"
+      ]
+    },
+    {
+      "id": "JUDGESAMPLE-03",
+      "note": "sample_count is one less than the samples the row carries, which is how a capped array becomes a wrong count",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        sample_count: samples.length,",
+      "replace": "        sample_count: Math.max(0, samples.length - 1),",
+      "cases": [
+        "judge runs separate estimates, limited evaluations and held budgets"
+      ]
+    },
+    {
+      "id": "JUDGEVERSION-01",
+      "note": "a dry run is given a served model version, so an estimate looks like a result from a particular build",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        judge_model_version: run.judge_model_version,\n        // The run's own count",
+      "replace": "        judge_model_version: run.judge_model_version ?? \"2026-08-01\",\n        // The run's own count",
+      "cases": [
+        "judge runs separate estimates, limited evaluations and held budgets"
+      ]
+    },
+    {
+      "id": "JUDGECONSENT-01",
+      "note": "a run with no surviving consent row is given its own creation instant as the snapshot",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        consent_snapshot_at: run.consent_snapshot_at,",
+      "replace": "        consent_snapshot_at: run.consent_snapshot_at ?? run.created_at,",
+      "cases": [
+        "an unrecorded capture mode, an orphaned audit target and an unreached provider are nulls, not defaults"
       ]
     }
   ]

@@ -46,7 +46,7 @@ import { createFakeConsoleServices } from "../../lib/contracts/fake-services.ts"
 
 runConsoleServicesConformance(() => {
   const services = createFakeConsoleServices();
-  return { services, sessions: services.sessions, ids: services.ids };
+  return { services, sessions: services.sessions, ids: services.ids, hasLegacyRows: services.hasLegacyRows };
 }, "mutation target");
 `;
 

@@ -334,6 +334,43 @@ What that means in this directory:
   partition the union exactly.
 - **R26**: platform operators are platform-wide; no org-subset scoping in contracts v1.
 
+## Contract revision r2 (F2R): legacy history is read, not rejected
+
+The v1 DTOs assumed every row was written by the pilot metering path. D1's schema does not: the
+pilot columns were added to existing relations, so real history has NULLs in them, and the wave-2
+audit (A07) found the console refusing that history instead of showing it. What changed here:
+
+- `UsageRow.accounting_regime` (`legacy_usd` | `pilot`) is an explicit field. Which rules apply to a
+  row is *read*, never inferred from which columns are null — "every pilot column happens to be
+  null" is also what a broken projection looks like. It is the console name for D1's
+  `usage_events.settlement_regime`.
+- `UsageRow.execution_mode`, `job_state`, `usage_certainty` and `trace_mode` are nullable, and on a
+  `legacy_usd` row they are null together with `settlement_state` and `max_hold`. Nothing is filled
+  in for them. A legacy row is a real charge: it is displayed and totalled, and R13's settlement
+  rules do not reach it.
+- `UsageRow.key_id`/`key_name` are null **together** when the key has been deleted
+  (`api_key_id on delete set null`, so the view's join yields both or neither). Not a sentinel: the
+  empty string was filterable-adjacent and `(deleted key)` was a name nobody chose. The row is still
+  counted, and no key filter can match it — an empty `key_id` filter is `invalid_request`.
+- `ApiKeySummary.trace_mode` is nullable and **null is off**. Capture is consent, so the absence of
+  a recorded choice cannot read as anything else. `traceModeOf(key)` is the only reading of it.
+- `usageSummary`/`usageDaily` take `UsageWindowQuery`: `from` and `to` are required. An unbounded
+  aggregate is a scan whose answer nobody can check and which silently mixes the two regimes.
+- `AuditEntry.target_org_id` is nullable: the trail is append-only and outlives its targets. A
+  `target_org_id` filter never matches an entry whose target is gone.
+- `JudgeRun.judge_model_version` and `consent_snapshot_at` are nullable (a dry run reaches no
+  provider; a consent row can be revoked), and `JudgeSample` is frozen to exactly what D1's
+  `console_judge_runs` view emits: `{sample_id, rubric_version, request_id, scores}`. The
+  per-sample `limited_evaluation`/`limited_reason` are gone — no query produces them, so they were
+  fields only a fake could fill; the run's `limited_evaluation_count` is what the console renders.
+  `sample_count` is the run's own count, which is larger than `samples.length` only when the array
+  is full at `JUDGE_RUN_SAMPLE_CAP`.
+
+`ConsoleHarness.hasLegacyRows` is how a harness declares that it holds this history. The cases that
+prove the projection survives it are **skipped, naming the flag**, on a harness that declares
+nothing — a skip is visible and is never a pass — and a harness that declares it without the rows
+fails, so the flag cannot buy a green run.
+
 ## `pnpm test:mutants` — the suite's own test
 
 A conformance case that names an invariant it cannot enforce is worse than no case: it tells C the
@@ -457,3 +494,11 @@ Things U, V and C should not read as contract:
   scope on every mutating operation, the refusal of unknown input fields, the keyset cursors, and
   `runMutationSafetyConformance` as the second entry point C runs. Row counts change with the
   fixture: 160 usage rows, 107 trace rows, 137 ledger entries.
+- 2026-09-22: Contract revision r2 (F2R item 6), the section above: legacy/nullable usage and key
+  fields, the explicit accounting regime, the required aggregate window, the nullable audit target
+  and judge-run fields, and the judge sample frozen to D1's shape. Sixteen new declared mutants and
+  one re-expressed (`XJUDGE-02`, which the old `sample_count == samples.length` equality made
+  unkillable once D1's cap was admitted): `node tests/contracts/run-mutants.mjs` 160 mutants, 160
+  killed, 0 survived, 0 stale, 0 runner errors; `--self-test` 12/12. `lib/services/console.ts`,
+  `app/(console)/usage/*` and `app/(console)/traces/view-model.ts` must change to compile and to
+  pass; those changes belong to C0/U1 and are filed as integration requests, not made here.

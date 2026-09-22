@@ -50,7 +50,7 @@ const orgs = orgsFixture as unknown as {
     adjustment: { amount: string; reason: string } | null;
     legacy_purchase: { amount: string; reason: string; created_at: string } | null;
     entitlements: { model_ids: string[] | null; limits: Record<string, number> };
-    keys: { id: string; prefix: string; trace_mode: string; revoked_at: string | null }[];
+    keys: { id: string; prefix: string; trace_mode: string | null; revoked_at: string | null }[];
     settings: {
       trace_mode: string;
       content_retention_days: number;
@@ -90,10 +90,11 @@ const judge = judgeFixture as unknown as {
     budget_settled: string | null;
     external_batch_id: string | null;
     quarantine_reason: string | null;
-    consent_snapshot_at: string;
+    consent_snapshot_at: string | null;
+    judge_model_version: string | null;
     samples: {
       id: string;
-      trace_index: number;
+      trace_index: number | null;
       limited_evaluation: boolean;
       limited_reason: string | null;
       scores: { name: string; kind: string; estimated: boolean }[];
@@ -159,7 +160,11 @@ test("the organization fixtures match the contract vocabulary", () => {
     for (const key of org.keys) {
       assert.match(key.id, UUID, `${org.name} key id`);
       assert.match(key.prefix, /^sk-infrx-[A-Za-z0-9]+$/, "key prefix");
-      assert.ok(inSet(TRACE_MODES, key.trace_mode), "key trace_mode");
+      // Null: a key from before `api_keys.trace_mode` existed. It reads as off and is not a
+      // vocabulary violation — but only a revoked key may have one here, because an active key
+      // with no recorded mode would generate traffic whose capture nobody chose.
+      assert.ok(key.trace_mode === null || inSet(TRACE_MODES, key.trace_mode), "key trace_mode");
+      assert.ok(key.trace_mode !== null || key.revoked_at !== null, "an active key records its mode");
       assert.ok(key.revoked_at === null || RFC3339.test(key.revoked_at), "key revoked_at");
     }
     // No fixture may carry anything that looks like a live credential.
@@ -313,7 +318,19 @@ test("the judge fixtures keep dry-run, live and ambiguous runs honest", () => {
     assert.ok(inSet(JUDGE_RUN_STATES, run.state), `judge state ${run.state}`);
     assert.ok(inSet(JUDGE_MODES, run.mode), `judge mode ${run.mode}`);
     assert.ok(Number.isInteger(run.rubric_version) && run.rubric_version > 0, "rubric version");
-    assert.match(run.consent_snapshot_at, RFC3339, "a run snapshots the consent it relied on");
+    // Null: the consent-history row this run relied on has since been revoked and removed. The
+    // run is still a fact; a snapshot instant is not invented for it.
+    assert.ok(
+      run.consent_snapshot_at === null || RFC3339.test(run.consent_snapshot_at),
+      "a run snapshots the consent it relied on, or records that the row is gone",
+    );
+    assert.ok(
+      run.judge_model_version === null || run.judge_model_version.length > 0,
+      "a model version is a version or nothing",
+    );
+    if (run.mode === "dry_run") {
+      assert.equal(run.judge_model_version, null, "a dry run learns no served model version");
+    }
     assert.ok(isMoney(run.budget_reserved), "budget_reserved");
     assert.ok(run.budget_settled === null || isMoney(run.budget_settled), "budget_settled");
     if (run.state === "ambiguous") {
@@ -326,7 +343,11 @@ test("the judge fixtures keep dry-run, live and ambiguous runs honest", () => {
     }
     for (const sample of run.samples) {
       assert.match(sample.id, UUID);
-      assert.ok(Number.isInteger(sample.trace_index) && sample.trace_index >= 0);
+      // Null: the trace this sample scored has been deleted, so the projected `request_id` is
+      // null rather than an invented identifier pointing at some other request.
+      assert.ok(
+        sample.trace_index === null || (Number.isInteger(sample.trace_index) && sample.trace_index >= 0),
+      );
       if (sample.limited_evaluation) {
         assert.ok(sample.limited_reason !== null, "a limited evaluation says why");
         assert.equal(

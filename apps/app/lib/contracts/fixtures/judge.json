@@ -1,5 +1,5 @@
 {
-  "_comment": "Judge runs for the established org (02 §Feedback and judge). One dry-run estimate, one settled live run, one ambiguous run whose worst-case budget stays reserved. `trace_index` indexes the org's generated trace list (newest first).",
+  "_comment": "Judge runs for the established org (02 §Feedback and judge). One dry-run estimate whose model version is null because no provider was ever called, one settled live run with a sample whose trace has since been deleted (`trace_index: null` -> `request_id: null`), and one ambiguous run whose worst-case budget stays reserved and whose consent-history row has been revoked (`consent_snapshot_at: null`). `trace_index` indexes the org's generated trace list (newest first); `limited_evaluation` is input data for the run's `limited_evaluation_count` and is not itself a field of the frozen sample DTO.",
   "runs": [
     {
       "id": "c1000000-0000-4000-8000-000000000001",
@@ -8,7 +8,7 @@
       "mode": "dry_run",
       "rubric_version": 3,
       "judge_model": "claude-opus-5",
-      "judge_model_version": "2026-08-01",
+      "judge_model_version": null,
       "budget_reserved": "0.00000000",
       "budget_settled": null,
       "consent_snapshot_at": "2026-09-18T08:59:30.000Z",
@@ -79,7 +79,7 @@
         },
         {
           "id": "c1100000-0000-4000-8000-000000000003",
-          "trace_index": 1,
+          "trace_index": null,
           "limited_evaluation": true,
           "limited_reason": "no_media",
           "scores": [
@@ -107,7 +107,7 @@
       "judge_model_version": "2026-08-01",
       "budget_reserved": "0.18000000",
       "budget_settled": null,
-      "consent_snapshot_at": "2026-09-20T08:59:30.000Z",
+      "consent_snapshot_at": null,
       "external_batch_id": null,
       "quarantine_reason": "submission timed out without a provider batch id; reservation held pending reconciliation",
       "samples": []

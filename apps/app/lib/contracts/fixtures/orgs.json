@@ -1,5 +1,5 @@
 {
-  "_comment": "Console contract fixtures v1 (08 \u00a79). Three organizations: an established pilot tenant, a brand-new zero-balance tenant, and a suspended one so org_suspended is reachable (R18). Row-level data is generated deterministically from these parameters by fake-services.ts; nothing here is a real key, customer prompt or secret.",
+  "_comment": "Console contract fixtures v1 (08 §9). Three organizations: an established pilot tenant, a brand-new zero-balance tenant, and a suspended one so org_suspended is reachable (R18). Row-level data is generated deterministically from these parameters by fake-services.ts; nothing here is a real key, customer prompt or secret. `legacy_usage_rows` are rows from before the pilot accounting regime (legacy_usd: a real USD charge, no job state, no capture mode); a key with `trace_mode: null` predates the column, and null reads as off.",
   "clock": "2026-09-20T12:00:00.000Z",
   "models": [
     "marlin-2b@2026-09-01",
@@ -21,6 +21,7 @@
       "created_at": "2026-08-01T09:00:00.000Z",
       "suspended": false,
       "usage_rows": 160,
+      "legacy_usage_rows": 3,
       "grants": [
         {
           "amount": "25.00000000",
@@ -78,7 +79,7 @@
           "created_at": "2026-08-22T11:00:00.000Z",
           "last_used_at": "2026-08-31T07:30:00.000Z",
           "revoked_at": "2026-09-02T12:00:00.000Z",
-          "trace_mode": "minimal"
+          "trace_mode": null
         }
       ],
       "settings": {
@@ -114,6 +115,7 @@
       "created_at": "2026-09-19T16:00:00.000Z",
       "suspended": false,
       "usage_rows": 4,
+      "legacy_usage_rows": 0,
       "grants": [],
       "adjustment": null,
       "legacy_purchase": null,
@@ -149,6 +151,7 @@
       "suspended": true,
       "suspension_reason": "payment dispute raised by the platform operator",
       "usage_rows": 9,
+      "legacy_usage_rows": 0,
       "grants": [
         {
           "amount": "2.00000000",
