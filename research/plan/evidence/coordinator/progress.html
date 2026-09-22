@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T20:16:57Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T20:30:38Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>9</b><span>done</span></div>
 <div class="tile prog"><b>5</b><span>in progress</span></div>
@@ -49,7 +49,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B0</td><td><code>E2R</code></td><td>Repair service harness ownership, role matrix and shared test clock</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B0</td><td><code>S2M</code></td><td>Freeze Marlin SOP inference launch profile</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B0</td><td><code>F2P</code></td><td>Encode product-v2 CREDIT, identity, serving and permission contracts</td><td><span class="pill prog">in-progress</span></td><td class="note">v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</td></tr>
-<tr><td>B1</td><td><code>D1R</code></td><td>Add product-v2 schema without rewriting USD pilot migrations</td><td><span class="pill prog">in-progress</span></td><td class="note">D owns migrations; additive over 0001–0005</td></tr>
+<tr><td>B1</td><td><code>D1R</code></td><td>Add product-v2 schema without rewriting USD pilot migrations</td><td><span class="pill prog">in-progress</span></td><td class="note">migrations 0006–0009; 111 migration mutants; hosted apply is a separate coordinator operation</td></tr>
 <tr><td>B1</td><td><code>D2</code></td><td>Atomic admission, durable preparation and dispatch outbox</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>D3</code></td><td>Fenced leases, recovery and cancellation</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>D4</code></td><td>Persistent stream journal and replay</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
@@ -95,7 +95,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>F2R</code> — codex-f2r — lane A merged (e1a33d1) pending review; post-merge follow-ups IR-A1..A10 in flight on codex-f2r-int since 2026-09-22T15:51:21Z — integration head red at collection until IR-A8 lands; main held at f9ba5d2</li>
 <li><code>F2P</code> — codex-f2p — additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>
 <li><code>E1B</code> — codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
-<li><code>D1R</code> — codex-d1r / codex/d1r-v2-schema — dispatched from 9faaa57 (reads 06a + v2 fixture base) since 2026-09-22T18:05:08Z — D owns migrations; additive over 0001–0005</li>
+<li><code>D1R</code> — codex-d1r / codex/d1r-v2-schema — independent review at ce36cd3 (both images) since 2026-09-22T18:05:08Z — migrations 0006–0009; 111 migration mutants; hosted apply is a separate coordinator operation</li>
 <li><code>E3B</code> — codex-e3b / codex/e3b-backend-gate — phase 1: merged-tree layer 2, backend suite skeleton with pending journeys, drills, canaries since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T20:16:57Z",
+  "updated": "2026-09-22T20:30:38Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,9 +23,9 @@
     },
     "D1R": {
       "lane": "codex-d1r / codex/d1r-v2-schema",
-      "phase": "dispatched from 9faaa57 (reads 06a + v2 fixture base)",
+      "phase": "independent review at ce36cd3 (both images)",
       "since": "2026-09-22T18:05:08Z",
-      "note": "D owns migrations; additive over 0001\u20130005"
+      "note": "migrations 0006\u20130009; 111 migration mutants; hosted apply is a separate coordinator operation"
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
