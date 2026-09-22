@@ -326,6 +326,116 @@ class OperatorSession:
                                      {"user_id": user_id, "amount": str(value)}, write)
         return result
 
+    # --- G6B.b: publication, cancellation, reconciliation ---------------------
+    async def publish(self, serving: ServingRevision, deployment: DeploymentRevision,
+                      card: RateCardSnapshot, requested_model: str, *, idempotency_key: str,
+                      reason: str) -> dict:
+        """Serving, deployment and card as one audited publication, then the alias.
+
+        Refused before anything is written: a private or not-active deployment (never
+        in the public catalog, R70), a card that prices another revision (R69), and a
+        card no newer than the one it would replace (stale).
+        """
+        if deployment.serving_version_id != serving.serving_version_id:
+            raise errors.InvalidRequest("the deployment pins a different serving revision")
+        if (deployment.visibility is not Visibility.public
+                or deployment.state is not DeploymentState.active):
+            raise errors.InvalidRequest("only an active public deployment is published")
+        if (card.deployment_revision_id != deployment.deployment_revision_id
+                or card.serving_version_id != serving.serving_version_id
+                or card.model_id != serving.model_id):
+            raise errors.InvalidRequest("the rate card prices a different revision")
+        active = await self.ops.catalog.active_rate_card(deployment.deployment_revision_id)
+        if (active is not None and active.rate_card_version != card.rate_card_version
+                and card.effective_at <= active.effective_at):
+            raise errors.StateConflict("the card is not newer than the active card")
+
+        async def write(_):
+            written = [await self.ops.registry.put(r) for r in (serving, deployment, card)]
+            await self.ops.registry.move_alias(requested_model, deployment.deployment_revision_id)
+            return ({"rate_card_version": active.rate_card_version if active else None},
+                    {"requested_model": requested_model,
+                     "serving_version_id": serving.serving_version_id,
+                     "deployment_revision_id": deployment.deployment_revision_id,
+                     "rate_card_version": card.rate_card_version,
+                     "digest_source": serving.digest_source.value,
+                     "approved_by": card.approved_by, "written": written})
+
+        request = {"requested_model": requested_model,
+                   "serving": serving.model_dump(mode="json"),
+                   "deployment": deployment.model_dump(mode="json"),
+                   "card": card.model_dump(mode="json")}
+        result, _ = await self._once("publish", idempotency_key, reason, None, request, write)
+        return result
+
+    async def cancel_job(self, org_id: str, job_handle: str, *, idempotency_key: str,
+                         reason: str) -> dict:
+        async def write(_):
+            outcome = await self.ops.jobs.cancel(org_id, job_handle)
+            return None, {"job_id": outcome.job_id, "state": outcome.state.value,
+                          "cause": outcome.cause.value}
+
+        result, _ = await self._once("job_cancel", idempotency_key, reason, org_id,
+                                     {"org_id": org_id, "job_handle": job_handle}, write)
+        return result
+
+    async def reconcile(self, org_id: str, request_id: str, *, idempotency_key: str,
+                        reason: str) -> dict:
+        async def write(operation_id):
+            state = await self.ops.ledger.reconcile(org_id, request_id, operation_id,
+                                                    self.principal, self.ops.clock())
+            return None, {"request_id": request_id, "settlement": state}
+
+        result, _ = await self._once("reconcile", idempotency_key, reason, org_id,
+                                     {"org_id": org_id, "request_id": request_id}, write)
+        return result
+
 
 def _iso(value: datetime | None) -> str | None:
     return None if value is None else value.isoformat()
+
+
+def marlin_release(*, provider_org_id: str, created_at: datetime, effective_at: datetime,
+                   input_rate_per_million: str = v2fix.INPUT_RATE_PER_MILLION,
+                   output_rate_per_million: str = v2fix.OUTPUT_RATE_PER_MILLION,
+                   approved_by: str = v2fix.RATE_CARD_APPROVER):
+    """The pinned Marlin serving/deployment/card, from S2M's recorded values.
+
+    Artifact digests are the served-bytes values `contracts/v2/fixtures.py` carries
+    (`digest_source=served_bytes`; registry equality is W3's). The runtime image has no
+    digest (a moving tag) and the engine-options digest is the fixture's placeholder
+    until W3 records the launched options. The rate defaults to the provisional card
+    and says so in `approved_by` and the version label until P-01 is decided.
+    Ids are a function of the revision label, so re-running publishes the same rows.
+    """
+    label = v2fix.REVISION_LABEL
+    shape = v2fix.BUILDERS["deployment_revision_public.json"]()     # prod/public/active, limits
+    model_id, version_id = stable_id("marlin2b", "model"), stable_id("marlin2b", label, "version")
+    serving = ServingRevision(
+        serving_version_id=stable_id("marlin2b", label, "serving"), model_id=model_id,
+        model_version_id=version_id, provider_org_id=provider_org_id,
+        public_model_id=v2fix.PUBLIC_MODEL_ID, revision_label=label,
+        model_repo=v2fix.MODEL_REPO, model_commit=v2fix.MODEL_COMMIT,
+        weight_shard_digests=v2fix.SHARD_DIGESTS, tokenizer_digest=v2fix.TOKENIZER_DIGEST,
+        chat_template_digest=v2fix.CHAT_TEMPLATE_DIGEST,
+        digest_source=DigestSource.served_bytes, prompt_harness_ref="marlin2b.chat.v1",
+        preprocessor_profile_version="marlin2b.video.v1",
+        runtime_image_ref=v2fix.RUNTIME_IMAGE_REF,
+        engine_options_digest=v2fix.ENGINE_OPTIONS_DIGEST, precision="bfloat16",
+        capability=v2fix.BUILDERS["serving_revision.json"]().capability, created_at=created_at)
+    deployment = DeploymentRevision(
+        deployment_revision_id=stable_id("marlin2b", label, "deployment", "prod"),
+        endpoint_id=stable_id("marlin2b", "endpoint", "prod"), provider_org_id=provider_org_id,
+        serving_version_id=serving.serving_version_id, environment=shape.environment,
+        visibility=shape.visibility, state=shape.state, max_input_tokens=shape.max_input_tokens,
+        max_output_tokens=shape.max_output_tokens, created_at=created_at)
+    provisional = "P-01" in approved_by
+    card = RateCardSnapshot(
+        rate_card_version=(f"rc_marlin2b_{effective_at:%Y%m%dT%H%M%SZ}"
+                           + ("_provisional_p01" if provisional else "")),
+        model_id=model_id, deployment_revision_id=deployment.deployment_revision_id,
+        serving_version_id=serving.serving_version_id,
+        input_rate_per_million=input_rate_per_million,
+        output_rate_per_million=output_rate_per_million, effective_at=effective_at,
+        approved_by=approved_by)
+    return serving, deployment, card, v2fix.REQUESTED_MODEL

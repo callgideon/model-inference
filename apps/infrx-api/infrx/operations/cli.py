@@ -22,6 +22,7 @@ import getpass
 import json
 import os
 import sys
+from datetime import datetime
 
 from ..contracts import errors
 from . import service
@@ -58,6 +59,11 @@ def parser() -> argparse.ArgumentParser:
     cmd("rotate-key", "--org", "--key-id", "--name", "--secret-file")
     cmd("revoke-key", "--org", "--key-id")
     cmd("suspend", "--org", "--code")                 # no --code lifts the suspension
+    # RFC 3339 with offset. `--created-at` names the serving/deployment rows and stays
+    # fixed across rate changes; a new `--effective-at` is a new rate card version.
+    cmd("publish-marlin", "--provider-org", "--created-at", "--effective-at")
+    cmd("cancel", "--org", "--job")
+    cmd("reconcile", "--org", "--request")
     return p
 
 
@@ -94,6 +100,17 @@ async def dispatch(ops: service.Operations, secret: str, a) -> dict:
         return await op.revoke_key(a.org, a.key_id, **k)
     if a.cmd == "suspend":
         return await op.set_suspension(a.org, a.code, **k)
+    if a.cmd == "publish-marlin":
+        created, effective = (datetime.fromisoformat(v) for v in (a.created_at, a.effective_at))
+        if created.utcoffset() is None or effective.utcoffset() is None:
+            raise SystemExit("--created-at/--effective-at need an explicit UTC offset")
+        serving, deployment, card, model = service.marlin_release(
+            provider_org_id=a.provider_org, created_at=created, effective_at=effective)
+        return await op.publish(serving, deployment, card, model, **k)
+    if a.cmd == "cancel":
+        return await op.cancel_job(a.org, a.job, **k)
+    if a.cmd == "reconcile":
+        return await op.reconcile(a.org, a.request, **k)
     raise SystemExit(f"unknown command {a.cmd}")
 
 
