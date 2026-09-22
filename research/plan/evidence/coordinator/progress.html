@@ -82,9 +82,9 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 </section>
 <section class="panel"><h2>Gates and blocking inputs</h2><ul>
 <li><b>BACKEND-LOCAL</b> (requires E3B): not started</li>
-<li><b>BACKEND-READY</b> (requires E4B): not started — blocked by: P-04 allocated GPU/staging target; P-18 workload targets (provisional criteria allowed)</li>
+<li><b>BACKEND-READY</b> (requires E4B): not started — blocked by: P-18 workload targets (provisional criteria allowed)</li>
 </ul><div class="scroll"><table><thead><tr><th>Input</th><th>What</th><th>Blocks</th><th>Owner</th></tr></thead><tbody>
-<tr><td><code>P-04</code></td><td>Allocated staging/GPU target, artifact access, deploy owner</td><td>I2B, I3B, E1B, M4/W4 measurements, E4B</td><td>user/operator</td></tr>
+<tr><td><code>P-04</code></td><td>Allocated staging/GPU target — coordinator allocates (existing g6e.2xlarge dev box or a new instance)</td><td>nothing now; measurements start when the target is up</td><td>coordinator (authorized)</td></tr>
 <tr><td><code>P-06</code></td><td>Exact Marlin artifact/capabilities and finite-video limits</td><td>honest published capability; W3 pins</td><td>S2M records; user confirms HF/model access</td></tr>
 <tr><td><code>P-07</code></td><td>SOP rubric, ground truth, dataset rights</td><td>SOP accuracy claims only</td><td>user/product</td></tr>
 <tr><td><code>P-18</code></td><td>Representative workload + latency/throughput/error/cost constraints, soak duration</td><td>E4B certification; provisional criteria allowed</td><td>workload owner</td></tr>
@@ -102,9 +102,6 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>
 </ul></section><section class="panel"><h2>Authorizations</h2><ul>
 <li>authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)</li>
-<li>not authorized: hosted migration apply</li>
-<li>not authorized: gateway public cutover</li>
-<li>not authorized: paid provider calls</li>
-<li>not authorized: compute purchases</li>
-<li>not authorized: pilot-host operations</li>
+<li>authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step</li>
+<li>not authorized: nothing withheld by the user; coordinator rules: log-before-act, bounded spend, backup/restore before hosted migration, fail-closed installer before cutover</li>
 </ul></section></div>

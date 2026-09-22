@@ -40,13 +40,13 @@ Generated 2026-09-22T15:51:21Z from `tasks.json` (manifest v4) and `progress-sta
 ## Gates
 
 - **BACKEND-LOCAL** (requires E3B): not started
-- **BACKEND-READY** (requires E4B): not started — blocked by: P-04 allocated GPU/staging target; P-18 workload targets (provisional criteria allowed)
+- **BACKEND-READY** (requires E4B): not started — blocked by: P-18 workload targets (provisional criteria allowed)
 
 ## Inputs that block specific gates (not the coding)
 
 | Input | What | Blocks | Owner |
 |---|---|---|---|
-| P-04 | Allocated staging/GPU target, artifact access, deploy owner | I2B, I3B, E1B, M4/W4 measurements, E4B | user/operator |
+| P-04 | Allocated staging/GPU target — coordinator allocates (existing g6e.2xlarge dev box or a new instance) | nothing now; measurements start when the target is up | coordinator (authorized) |
 | P-06 | Exact Marlin artifact/capabilities and finite-video limits | honest published capability; W3 pins | S2M records; user confirms HF/model access |
 | P-07 | SOP rubric, ground truth, dataset rights | SOP accuracy claims only | user/product |
 | P-18 | Representative workload + latency/throughput/error/cost constraints, soak duration | E4B certification; provisional criteria allowed | workload owner |
@@ -76,8 +76,5 @@ Generated 2026-09-22T15:51:21Z from `tasks.json` (manifest v4) and `progress-sta
 ## Authorizations
 
 - authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)
-- NOT authorized: hosted migration apply
-- NOT authorized: gateway public cutover
-- NOT authorized: paid provider calls
-- NOT authorized: compute purchases
-- NOT authorized: pilot-host operations
+- authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step
+- NOT authorized: nothing withheld by the user; coordinator rules: log-before-act, bounded spend, backup/restore before hosted migration, fail-closed installer before cutover
