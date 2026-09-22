@@ -452,7 +452,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("second_movie_header_ignored",
        "two movie headers stating the duration is refused, not resolved first-wins - the "
        "second copy is then a free rewrite of the number the frame budget uses (review R20)",
-       P, '            if kind == "mvhd":\n                if timescale or duration:',
+       P, '            if kind == "mvhd":\n                if seen_movie_header:',
        '            if kind == "mvhd":\n                if False:',
        "test_a_duplicate_duration_header_is_refused"),
     _m("second_matroska_duration_ignored",
@@ -530,7 +530,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "an EBML unsigned integer is at most eight bytes wide: wider ones were accepted as "
        "absurd values, overflowed the arithmetic, or broke the refusal's own formatting - a "
        "500 where the contract says unsupported_media (review B1)",
-       P, "    if not 0 < size <= 8:\n        raise _refuse(\"bad-uint\")", "    pass",
+       P, "    if size > 8:\n        raise _refuse(\"bad-uint\")", "    pass",
        "test_a_hostile_length_is_refused_not_followed"),
     _m("timecode_scale_assumed_default",
        "a Matroska duration is in timecode-scale units, and the scale is in the file",

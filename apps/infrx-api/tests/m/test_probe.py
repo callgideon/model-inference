@@ -285,6 +285,10 @@ def test_a_container_with_no_servable_video_track_is_refused(name, data):
     ("two movie headers", support.box(b"ftyp", b"isom" + b"\x00" * 8)
      + support.box(b"moov", support.mvhd(10_000, 1_000), support.mvhd(600_000, 1_000),
                    support.trak())),
+    # A first header of all zeros must not license a second one: "have I got a duration yet"
+    # would have let this through and used the second header's numbers.
+    ("a zero movie header then a real one", support.box(b"ftyp", b"isom" + b"\x00" * 8)
+     + support.box(b"moov", support.mvhd(0, 0), support.mvhd(600_000, 1_000), support.trak())),
     ("two durations in one Info", support.element(0x1A45DFA3, b"\x00")
      + support.element(0x18538067,
                        support.element(0x1549A966,

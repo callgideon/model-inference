@@ -182,6 +182,7 @@ def probe_iso(data: bytes) -> Probed:
     is a video codec, which is also the fact the allow-list needs, so no `hdlr` detour.
     """
     timescale = duration = 0
+    seen_movie_header = False
     tracks: list[dict] = []
     walked = 0
     # (start, end, depth, the trak this subtree belongs to or None)
@@ -193,11 +194,14 @@ def probe_iso(data: bytes) -> Probed:
             if walked > MAX_ELEMENTS:
                 raise _refuse("too-many-boxes")
             if kind == "mvhd":
-                if timescale or duration:
+                if seen_movie_header:
                     # Two movie headers disagree about the one number the frame budget is
                     # computed from, and first-wins means the second one is a free rewrite
-                    # of whatever a checker looked at (review R20).
+                    # of whatever a checker looked at (review R20). A flag rather than
+                    # "have I got a duration yet", so a first header of all zeros cannot
+                    # license a second one.
                     raise _refuse("duplicate-header")
+                seen_movie_header = True
                 timescale, duration = _mvhd(data, body)
             elif kind == "tkhd" and track is not None:
                 track["width"], track["height"] = _tkhd(data, body)
@@ -252,8 +256,11 @@ def _ebml_uint(data: bytes, at: int, size: int) -> int:
     while formatting the refusal. All three were a 500 where the contract says
     `unsupported_media` (review B1).
     """
-    if not 0 < size <= 8:
+    if size > 8:
         raise _refuse("bad-uint")
+    # A zero-length unsigned integer is legal and means zero, which is what `_u` returns and
+    # what every reader of one here already treats as "absent": the timecode scale falls back
+    # to the default, and a zero track type or dimension is refused further down.
     return _u(data, at, size)
 
 
