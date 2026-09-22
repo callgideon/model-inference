@@ -122,7 +122,7 @@ class MediaCollector:
                         break
                     if key in in_use:
                         continue
-                    cache._remove(key, entry)  # prepare.py's own removal (file + index)
+                    cache.evict(key)
                     total -= entry.bytes
                     swept.cache_evicted += 1
             swept.cache_bytes = total
