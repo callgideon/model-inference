@@ -82,3 +82,23 @@ def test_the_conformance_package_exports_the_v2_suite():
     cases, runner = conformance.V2_SUITES["v2"]
     assert [case.__name__ for case in cases()] == [c.__name__ for c in v2_contracts.cases()]
     assert runner(fake_v2_harness) == len(v2_contracts.cases())
+
+
+# --- the CREDIT regime of the JobStore (F2P wire-in, items 3-4) ----------------------
+CREDIT_CASES = v2_contracts.credit_jobstore_cases()
+
+
+@pytest.mark.parametrize("case", CREDIT_CASES, ids=[case.__name__ for case in CREDIT_CASES])
+def test_the_fake_store_passes_every_credit_jobstore_case(case):
+    from infrx.contracts.fakes.factories import credit_jobstore_factory
+    asyncio.run(case(credit_jobstore_factory))
+
+
+def test_the_fake_store_satisfies_both_jobstore_protocols():
+    """One store, two regimes: the v1 port stays whole beside its CREDIT sibling."""
+    from infrx.contracts import ports
+    from infrx.contracts.fakes.factories import V2_FACTORIES, credit_jobstore_factory
+    store = credit_jobstore_factory().port
+    assert isinstance(store, ports.JobStore) and isinstance(store, ports.CreditJobStore)
+    assert set(V2_FACTORIES) == set(__import__("infrx.contracts.conformance",
+                                               fromlist=["V2_SUITES"]).V2_SUITES)

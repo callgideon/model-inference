@@ -13,6 +13,8 @@ from ..conformance import Harness
 from ..conformance import builders as b
 from ..limits import DEFAULTS, PilotSettings
 from ..records import FeedbackChannel
+from ..conformance.v2_fakes import fake_v2_harness
+from ..v2 import fixtures as v2fix
 from .engine import EngineFault, FakeEngine
 from .feedback import FakeFeedbackService
 from .judge import FakeJudgeCoordinator
@@ -92,6 +94,36 @@ def jobstore_factory(limits: PilotSettings | None = None, **_: object) -> Harnes
     # The journal half of the same store, for the cases that must prove a rule holds
     # for `append` as well as for the JobStore's own operations.
     hooks["stream"] = stream
+    return Harness(port=jobs, clock=clock, ids=ids, failures=failures, extra=hooks)
+
+
+def credit_jobstore_factory(limits: PilotSettings | None = None, **_: object) -> Harness:
+    """contracts v2 (F2P wire-in, item 3): the same fake store, in the CREDIT regime.
+
+    Its trusted rows are the v2 fixture directories (`fake_v2_harness`) plus the two
+    fixture key rows (consumer, provider dev). A real factory seeds its key, wallet and
+    registry rows instead - D1R's seed is the same fixture set.
+    """
+    jobs, clock, ids, failures = _jobstore(limits)
+    directories = fake_v2_harness()
+    jobs.wallet_directory, jobs.catalog = directories.wallets, directories.catalog
+    for name in ("auth_context_consumer.json", "auth_context_provider_dev.json"):
+        jobs.register_credential(v2fix.BUILDERS[name]())
+    stream = FakeStreamStore(jobs, failures=failures)
+    hooks = _job_hooks(jobs, stream)
+
+    for wallet in (*directories.wallets.by_user.values(),
+                   *directories.wallets.by_provider.values()):
+        jobs.seed_credit_wallet(wallet)
+
+    def credit_balance(wallet_id):
+        wallet = jobs.credit_wallet(wallet_id)
+        return {"ledger": wallet.ledger_total, "reserved": wallet.reserved_total,
+                "available": wallet.available}
+
+    hooks.update(credit_balance=credit_balance, credit_grant=jobs.credit_grant,
+                 register_credential=jobs.register_credential,
+                 publish_rate_card=directories.catalog.publish, stream=stream)
     return Harness(port=jobs, clock=clock, ids=ids, failures=failures, extra=hooks)
 
 
@@ -175,4 +207,11 @@ FACTORIES = {
     "tracesink": tracesink_factory,
     "feedback": feedback_factory,
     "judge": judge_factory,
+}
+
+# contracts v2 (F2P wire-in, item 3): beside the v1 factories, not in `FACTORIES`, because
+# `v2` returns a `V2Harness` of trusted directories rather than a port `Harness`.
+V2_FACTORIES = {
+    "v2": fake_v2_harness,
+    "credit_jobstore": credit_jobstore_factory,
 }

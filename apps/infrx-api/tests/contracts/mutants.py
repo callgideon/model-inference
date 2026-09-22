@@ -91,9 +91,9 @@ V2_FAKE = "contracts/conformance/v2_fakes.py"
 # real adapter could fail for the wrong reason: a store answering the typed `DomainError`
 # the contract promises must not crash the case. Every committed mutant dies on an
 # assertion, and the shared runner now **enforces** that: a death by any other exception
-# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **four**
-# mutants declare one; the first two are guards whose entire purpose is to stop an untyped
-# error escaping:
+# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **five**
+# mutants declare one; the first two and the last are guards whose entire purpose is to
+# stop an untyped error escaping:
 #
 # * `mime_string_accepted` - `create_upload`'s allow-list check. Removing it lets
 #   `tuple(5)` raise `TypeError` out of the port, which *is* the defect; adding a second
@@ -108,6 +108,9 @@ V2_FAKE = "contracts/conformance/v2_fakes.py"
 # * `drop_reason_falls_back_on_truthiness` - an `AssertionError` raised inside the package
 #   is not the case's observation (R83 amendment (a)); here it is the accounting base's
 #   own `_drop` guard, which is the invariant's enforcement in every sink.
+# * `load_work_serves_a_credit_job` - a v1 `Work` cannot be built for a CREDIT job (it has
+#   no USD price), so without the guard `load_work` raises pydantic's `ValidationError` out
+#   of the port instead of the typed `not_found`: that escape is the defect.
 #
 # The six `ValidationError` kills the review found are gone: `FakeFeedbackService._row`
 # maps a record-validation failure to `internal_error`, because the row's fields are
@@ -172,19 +175,19 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if False:",
        "dur_admit__a_refused_admission_reserves_nothing"),
     _m("admit_reserves_before_validating", "a refused admission reserves nothing",
-       S, "            price = self._price(request, now)\n"
-          "            hold = self._derive_hold(request, price)\n"
-          "            self._check_balance(request.org_id, hold)\n"
+       S, "            price = None if terms else self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price, terms)\n"
+          "            self._check_balance(request.org_id, hold, terms)\n"
           "            self.journal.reserve(request.request_id)",
        "            self.journal.reserve(request.request_id)\n"
-          "            price = self._price(request, now)\n"
-          "            hold = self._derive_hold(request, price)\n"
-          "            self._check_balance(request.org_id, hold)",
+          "            price = None if terms else self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price, terms)\n"
+          "            self._check_balance(request.org_id, hold, terms)",
        "dur_admit__a_refused_admission_reserves_nothing"),
     # r1 R53: the hold is the store's, from the snapshot it took in the same
     # transaction. These are the two ways to get that wrong.
     _m("admit_uses_a_caller_supplied_hold", "no caller-supplied hold (R53)",
-       S, "            hold = self._derive_hold(request, price)",
+       S, "            hold = self._derive_hold(request, price, terms)",
        '            hold = money.parse(request.parameters.get("hold", "0.00070000"))',
        "dur_settle__a_price_change_never_undersizes_the_hold",
        "dur_cap__a_negative_maximum_hold_is_refused"),
@@ -194,18 +197,18 @@ MUTANTS: tuple[Mutant, ...] = (
        "dur_settle__a_price_change_never_undersizes_the_hold",
        "dur_cap__a_hold_is_checked_against_available_not_the_ledger"),
     _m("admit_checks_the_balance_before_pricing", "the balance gate sees the derived hold (R53)",
-       S, "            price = self._price(request, now)\n"
-          "            hold = self._derive_hold(request, price)\n"
-          "            self._check_balance(request.org_id, hold)",
-       "            self._check_balance(request.org_id, money.ZERO)\n"
-          "            price = self._price(request, now)\n"
-          "            hold = self._derive_hold(request, price)",
+       S, "            price = None if terms else self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price, terms)\n"
+          "            self._check_balance(request.org_id, hold, terms)",
+       "            self._check_balance(request.org_id, money.ZERO, terms)\n"
+          "            price = None if terms else self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price, terms)",
        "dur_cap__hold_cannot_exceed_the_available_balance",
        "dur_cap__a_hold_is_checked_against_available_not_the_ledger"),
     _m("settlement_prices_at_the_current_rate", "settlement uses the admitted snapshot (R53)",
-       S, "            candidate = job.admission.price_snapshot.debit(usage.prompt_tokens,",
-       "            candidate = (self.price_for(job.request.model_revision, now)\n"
-          "                         or job.admission.price_snapshot).debit(usage.prompt_tokens,",
+       S, "                         else job.admission.price_snapshot.debit(usage.prompt_tokens,",
+       "                         else (self.price_for(job.request.model_revision, now)\n"
+          "                               or job.admission.price_snapshot).debit(usage.prompt_tokens,",
        "dur_settle__a_price_change_never_undersizes_the_hold"),
     _m("load_work_reports_the_current_price", "load_work carries the admitted snapshot (R53)",
        S, "                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets)",
@@ -582,12 +585,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if False:",
        "dur_output__a_lost_preparation_worker_is_reaped_within_bounds"),
     _m("load_work_is_unfenced", "load_work hands out nothing to a fenced lease (R46)",
-       S, "            job = (self._fence_preparation(lease) if lease.kind is LeaseKind.preparation\n"
-          "                   else self._fence(lease))",
-       "            job = self.jobs[lease.job_id]",
+       S, "        return (self._fence_preparation(lease) if lease.kind is LeaseKind.preparation\n"
+          "                else self._fence(lease))",
+       "        return self.jobs[lease.job_id]",
        "dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise"),
     _m("load_work_hides_the_prepared_refs", "load_work carries what preparation produced (R46)",
-       S, "                        prepared_refs=job.prepared,", "                        prepared_refs=(),",
+       S, "                        prepared_refs=job.prepared,\n", "                        prepared_refs=(),\n",
        "dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise"),
     # --- feedback -------------------------------------------------------------
     _m("feedback_operator_role_from_session", "accept always records customer (R31)",
@@ -656,20 +659,16 @@ MUTANTS: tuple[Mutant, ...] = (
        "    return half_up(cost(max_input_tokens, max_output_tokens, input_rate, output_rate))",
        "dur_cap__the_hold_rounds_up_never_half_up"),
     _m("replay_rederives_the_hold", "a replay reports the original hold and price (s05)",
-       S, "        job = self.jobs[record.request_id]\n"
-          '        return self._snapshot(job).model_copy(update={"replayed": True})',
-       "        job = self.jobs[record.request_id]\n"
-          "        current = self.price_for(job.request.model_revision, now)\n"
+       S, '        return self._snapshot(job).model_copy(update={"replayed": True})',
+       "        current = self.price_for(job.request.model_revision, now)\n"
           '        return self._snapshot(job).model_copy(update={"replayed": True,\n'
           '            "price_snapshot": current or job.admission.price_snapshot,\n'
           "            \"maximum_hold\": self._derive_hold(job.request,\n"
           "                                              current or job.admission.price_snapshot)})",
        "dur_admit__a_replay_reports_the_original_hold_and_price"),
     _m("replay_refreshes_the_admitted_at", "a replay reports the original admission (t15)",
-       S, "        job = self.jobs[record.request_id]\n"
-          '        return self._snapshot(job).model_copy(update={"replayed": True})',
-       "        job = self.jobs[record.request_id]\n"
-          '        return self._snapshot(job).model_copy(update={"replayed": True,\n'
+       S, '        return self._snapshot(job).model_copy(update={"replayed": True})',
+       '        return self._snapshot(job).model_copy(update={"replayed": True,\n'
           '                                                     "admitted_at": now})',
        "dur_admit__a_replay_reports_the_original_hold_and_price"),
     _m("preparation_retries_unbounded", "preparation retries are bounded (q08)",
@@ -1760,6 +1759,67 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("contracts_v2_not_a_submodule", "contracts.v2 resolves by attribute access (item 1)",
        "contracts/__init__.py", '"tasklocal", "v2", "wire")', '"tasklocal", "wire")',
        "test_contracts_v2_resolves_by_attribute_access_like_every_submodule"),
+    # items 3-4: the CREDIT regime of the fake JobStore (`ports.CreditJobStore`). Layered
+    # refusals with no single store edit that breaks them - private/unknown/unpriced models
+    # (the catalog's visibility *and* `pin_admission`), an operator or foreign wallet
+    # (`resolve_wallet`), a mismatched card on the worker's view (`WorkV2`'s validator) -
+    # are killed at the layer that owns them by the v2 mutants above.
+    _m("credit_hold_lands_on_the_usd_wallet", "a CREDIT hold is reserved on the CREDIT wallet",
+       S, "        wallet = self.credit_wallet(wallet_id) if terms is not None else self.wallet(request.org_id)",
+       "        wallet = self.wallet(request.org_id)",
+       "credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit"),
+    _m("credit_hold_ignores_the_ceilings", "the CREDIT hold covers both validated ceilings",
+       S, "                                         request.max_output_tokens).raw(CREDIT)",
+       "                                         0).raw(CREDIT)",
+       "credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit"),
+    _m("credit_balance_checked_on_the_usd_wallet", "a CREDIT hold is checked on the CREDIT wallet",
+       S, "        wallet = (self.credit_wallets.get(terms[3]) if terms is not None\n"
+          "                  else self.wallets.get(org_id)) or _Wallet()",
+       "        wallet = self.wallets.get(org_id) or _Wallet()",
+       "credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit",
+       "credit_admit__refusals_leave_no_job_and_no_hold"),
+    _m("get_owned_serves_a_credit_job", "a v1 read of a CREDIT job is not_found",
+       S, "        if job.credit is not None:\n"
+          '            raise errors.NotFound(f"job {job_handle} is a CREDIT job: use get_owned_credit")',
+       "        if False:\n            pass",
+       "credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit"),
+    _m("credit_wallet_by_organization", "the wallet comes from resolve_wallet, never the org (R66)",
+       S, "        wallet = v2ports.resolve_wallet(auth, candidate)",
+       "        wallet = next((w for w in self.wallet_directory.by_user.values()\n"
+       "                       if w.personal_org_id == request.org_id), None) \\\n"
+       "            or v2ports.resolve_wallet(auth, candidate)",
+       "credit_admit__refusals_leave_no_job_and_no_hold"),
+    _m("credit_replay_crosses_regimes", "one idempotency key never replays across regimes",
+       S, "        if (job.credit is not None) is not credit:", "        if False:",
+       "credit_admit__a_replay_is_pinned_and_never_crosses_regimes"),
+    _m("credit_replay_not_marked", "a CREDIT replay is marked replayed",
+       S, '                                               "replayed": True})',
+       '                                               "replayed": False})',
+       "credit_admit__a_replay_is_pinned_and_never_crosses_regimes"),
+    _m("credit_settles_at_the_published_card", "a CREDIT job settles at its admitted card (R68)",
+       S, "            candidate = (job.credit.rate_card.debit(usage.prompt_tokens,",
+       "            candidate = (self.catalog.rate_cards[job.credit.pins.deployment_revision_id]"
+       ".debit(usage.prompt_tokens,",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only"),
+    _m("credit_charge_in_the_usd_field", "a CREDIT charge never enters the USD debit field",
+       S, "                    debit = money.ZERO\n", "",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only"),
+    _m("credit_settles_on_the_usd_wallet", "settlement moves the CREDIT wallet, not the USD one",
+       S, "        wallet = self._wallet_of(job)", "        wallet = self.wallet(job.request.org_id)",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only",
+       "credit_settle__a_free_outcome_moves_no_credit"),
+    _m("load_work_serves_a_credit_job", "the v1 work of a CREDIT job is not_found",
+       S, "            if job.credit is not None:\n"
+          '                raise errors.NotFound(f"job {job.id} is a CREDIT job: use load_work_credit")',
+       "            if False:\n                pass",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only",
+       dies_by=("ValidationError",)),
+    _m("credit_free_outcome_settles", "a free CREDIT outcome has no settlement record",
+       S, "        return settled, self.jobs[lease.job_id].settlement",
+       "        return settled, (self.jobs[lease.job_id].settlement\n"
+       "                         or settle(self.jobs[lease.job_id].credit, Usage.of(0, 0),\n"
+       "                                   settled.settled_at))",
+       "credit_settle__a_free_outcome_moves_no_credit"),
     _m("v2_suite_runs_nothing", "V2_SUITES runs the whole exported v2 list (item 2)",
        "contracts/conformance/__init__.py", '"v2": (v2_cases, run_v2_conformance),',
        '"v2": (v2_cases, lambda factory=None: 0),',
