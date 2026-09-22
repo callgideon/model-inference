@@ -262,9 +262,13 @@ def test_a_failing_suite_fails_the_run():
     report = fresh_report()
     def one(argv, **_):
         failing = argv[:2] == ["make", "api-test"]
+        # E2R: the failing run still reports PASSING cases ("1 failed, 40 passed"), which is
+        # what a real one looks like. Otherwise the "reported no tests at all" check below
+        # also catches it, and dropping the exit-code check would survive mutation.
         return {"argv": " ".join(argv), "cwd": ".", "exit": 2 if failing else 0,
-                "seconds": 1.0, "counts": {"failed": 1} if failing else {"passed": 41},
-                "named": None, "tail": "1 failed" if failing else ""}
+                "seconds": 1.0,
+                "counts": {"failed": 1, "passed": 40} if failing else {"passed": 41},
+                "named": None, "tail": "1 failed, 40 passed" if failing else ""}
 
     with patched(runner, shell=one):
         runner.suites(report, own_only=False)

@@ -176,7 +176,7 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_a_suite_that_reports_no_tests_at_all_fails_the_run",)),
     Mutant("e2m35", "r1 B2: a failing suite fails the run",
            "tests/integration/run.py",
-           '    failed = [run for run in runs if run["exit"] != 0]',
+           '    failed = [run["argv"] for run in runs if run["exit"] != 0]',
            "    failed = []",
            "tests/integration/test_run.py", "failing_suite",
            cases=("test_a_failing_suite_fails_the_run",)),
