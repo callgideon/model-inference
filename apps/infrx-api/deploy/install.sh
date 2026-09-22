@@ -1,41 +1,71 @@
 #!/usr/bin/env bash
 # Install/refresh the marlin2b stack on the box: vLLM (systemd, docker),
 # gateway (systemd, /opt/pytorch), Caddy (docker, TLS). Idempotent; run as root.
-#   sudo ./apps/infrx-api/deploy/install.sh
+#   sudo INFRX_MODE=dev ./apps/infrx-api/deploy/install.sh
+#
+# INFRX_MODE has no default (infra/README.md §5): a default is how an unmetered pilot
+# happens by accident. `preflight.py apply` reads and validates every required SSM
+# parameter before it replaces /etc/marlin2b-gateway.env, and a failed read, a bad
+# value or an unmet runtime prerequisite leaves the previous file byte-identical and
+# restarts nothing (evidence row `O-FAILOPEN`, matrix row `M-FAILCLOSED`).
+#
+# Order note: pip, the unit files and the Caddyfile are installed before the env file.
+# They are idempotent and inert - systemd keeps serving the old configuration until a
+# restart, and the restart only happens after a successful install - so the two
+# operations a failed run must never perform, replacing the env file and restarting,
+# are both inside preflight.py. Running this against the pilot host needs the
+# deployment lock of infra/README.md §1.
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REGION=${AWS_REGION:-us-east-1}
+# Before pip, apt or any unit file: an unusable mode must not leave half a deploy
+# behind. `${VAR:?}` only catches unset and empty, so a typo would have run everything
+# below and been refused at the very end.
+case "${INFRX_MODE:-}" in
+  dev|test|pilot) ;;
+  *) echo "INFRX_MODE must be dev, test or pilot (no default); got '${INFRX_MODE:-}'" >&2
+     exit 2 ;;
+esac
+ENV_FILE=${ENV_FILE:-/etc/marlin2b-gateway.env}
+RUNTIME_PYTHON=${RUNTIME_PYTHON:-/opt/pytorch/bin/python}
+SERVE_SCRIPT=${SERVE_SCRIPT:-$here/../../../models/marlin2b/serve.sh}
 
-# gateway secrets from SSM, never in the repo. A missing parameter is a warning,
-# not an error: the gateway runs with the legacy key alone (no Supabase auth or
-# usage rows) and with Supabase alone (no legacy key).
-ssm() {
-  aws ssm get-parameter --name "$1" --with-decryption --region "$REGION" \
-      --query Parameter.Value --output text 2>/dev/null || {
-    echo "warning: SSM $1 missing; leaving it out of /etc/marlin2b-gateway.env" >&2; }
-}
-key=$(ssm /model-inference/marlin2b_api_key)
-supabase_url=$(ssm /model-inference/supabase_url)
-supabase_key=$(ssm /model-inference/supabase_service_role_key)
-
-install -m 600 -o ubuntu /dev/null /etc/marlin2b-gateway.env
-{ printf 'MODEL_ID=nemostation/marlin-2b\nMAX_INFLIGHT=16\n'
-  if [ -n "$key" ]; then printf 'GATEWAY_API_KEY=%s\n' "$key"; fi
-  if [ -n "$supabase_url" ]; then printf 'SUPABASE_URL=%s\n' "$supabase_url"; fi
-  if [ -n "$supabase_key" ]; then printf 'SUPABASE_SERVICE_ROLE_KEY=%s\n' "$supabase_key"; fi
-} > /etc/marlin2b-gateway.env
-
-/opt/pytorch/bin/pip install -q fastapi uvicorn httpx
+"$RUNTIME_PYTHON" -m pip install -q fastapi uvicorn httpx
 command -v ffprobe >/dev/null || apt-get install -y -qq ffmpeg
 
 install -m 644 "$here/marlin2b-vllm.service" "$here/marlin2b-gateway.service" /etc/systemd/system/
-mkdir -p /etc/caddy && install -m 644 "$here/Caddyfile" /etc/caddy/Caddyfile
 systemctl daemon-reload
-systemctl enable --now marlin2b-vllm marlin2b-gateway
-systemctl restart marlin2b-gateway
+# `enable`, not `enable --now`: the gateway must not start before its env file exists,
+# which is the fail-open case this script is being fixed for.
+systemctl enable marlin2b-vllm marlin2b-gateway
+# The engine reads no env file and takes ~minutes to load weights, so it is *started*
+# (idempotent: a no-op if it is already up) rather than restarted. Restarting it on
+# every install would kill in-flight generation for a change it cannot even see.
+# This blocks until the unit is active - up to the unit's TimeoutStartSec=900 on a cold
+# start - and `set -e` stops the install if the engine cannot come up, which is the
+# order infra/README.md §7 asks for: each step waits for the previous readiness signal.
+systemctl start marlin2b-vllm
 
-docker rm -f caddy >/dev/null 2>&1 || true
-docker run -d --name caddy --restart unless-stopped --network host \
-  -v /etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro -v caddy_data:/data -v caddy_config:/config \
-  caddy:2 >/dev/null
-echo "installed; check: systemctl status marlin2b-vllm marlin2b-gateway; docker logs caddy"
+# Only the gateway reads the env file, so only the gateway is restarted - and only
+# after a validated file is in place.
+"$RUNTIME_PYTHON" "$here/preflight.py" apply \
+  --mode "$INFRX_MODE" --env-file "$ENV_FILE" --owner ubuntu --region "$REGION" \
+  --runtime-python "$RUNTIME_PYTHON" --serve-script "$SERVE_SCRIPT" \
+  --restart marlin2b-gateway
+
+if [ "$INFRX_MODE" = pilot ]; then
+  # Two statements, not `mkdir … && install …`: a command that fails on the left of
+  # `&&` is a tested condition, so `set -e` does not stop the script there.
+  mkdir -p /etc/caddy
+  install -m 644 "$here/Caddyfile" /etc/caddy/Caddyfile
+  docker rm -f caddy >/dev/null 2>&1 || true
+  docker run -d --name caddy --restart unless-stopped --network host \
+    -v /etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro -v caddy_data:/data -v caddy_config:/config \
+    caddy:2 >/dev/null
+  echo "installed; check: systemctl status marlin2b-vllm marlin2b-gateway; docker logs caddy"
+else
+  # infra/README.md §5: a dev host answering on the pilot's DNS name is the same
+  # failure as an unmetered pilot, so no public listener and no ACME account.
+  echo "INFRX_MODE=$INFRX_MODE: the public Caddy site is not installed" >&2
+  echo "installed; check: systemctl status marlin2b-vllm marlin2b-gateway"
+fi
