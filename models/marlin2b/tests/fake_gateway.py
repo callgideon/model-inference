@@ -28,7 +28,8 @@ class FakeGateway:
                  echo_key_in_long_body=None, echo_key_in_json_message=None, echo_pad=0,
                  escape_key=False, upload_url=None, put_status=200, truncate_stream=False,
                  finish_reason="stop", retry_after="3", chat_override=None, stream_error=None,
-                 hostile_fields=None, extra_headers=None):
+                 hostile_fields=None, extra_headers=None, idempotent=False, lose_ack=(),
+                 bad_handle=False):
         self.ttft, self.token_gap, self.tokens, self.usage = ttft, token_gap, tokens, usage
         self.statuses = statuses or {}
         self.require_bearer, self.server_timing = require_bearer, server_timing
@@ -54,6 +55,17 @@ class FakeGateway:
         # usage counts and in the Inference-Id / Server-Timing / Retry-After headers at
         # once -- every field a client might copy into a row without thinking.
         self.hostile_fields, self.extra_headers = hostile_fields, extra_headers or {}
+        # marlin-sop.md §3.1, the only part of idempotency a CLIENT can be tested against:
+        # the store is keyed by (bearer, operation, Idempotency-Key) - org + operation +
+        # key - and holds the canonical payload digest. Same key + same payload replays the
+        # first outcome and creates NO second accepted item; same key + a different payload
+        # is 409 idempotency_conflict. `lose_ack` accepts an item and then tears the
+        # response, which is the interruption a resume has to survive without duplicating.
+        # bad_handle: True for a too-short handle, or a literal handle string to plant one
+        # of the grammar's edge cases (21 characters, or 22 containing '.' or '/').
+        self.idempotent, self.lose_ack, self.bad_handle = idempotent, set(lose_ack), bad_handle
+        self.idempotency = {}     # (bearer, key) -> payload digest
+        self.accepted_keys = []   # one entry per item the server really created, in order
         self.seen = []            # one dict per chat request, for assertions
         self.uploads = {}
 
@@ -69,7 +81,11 @@ class FakeGateway:
                 return httpx.Response(self.put_status, text="AccessDenied")
             return httpx.Response(200, json={"ok": True})
         if path.endswith("/uploads"):
-            handle = f"up_{len(self.uploads):04d}"
+            # contracts/ids.py: `upl_` + 22..64 of [A-Za-z0-9_-]. A shorter handle is what
+            # the client must refuse rather than send back as a reference.
+            handle = (self.bad_handle if isinstance(self.bad_handle, str)
+                      else "up_short" if self.bad_handle
+                      else f"upl_{len(self.uploads):04d}" + "z" * 18)
             self.uploads[handle] = json.loads(request.content or b"{}")
             url = self.upload_url or ("https://fake-upload.invalid/" + handle)
             return httpx.Response(200, json={"handle": handle, "upload": {
@@ -85,6 +101,8 @@ class FakeGateway:
         self.seen.append({"index": index, "authorization_present": bool(auth),
                           "has_mm_processor_kwargs": "mm_processor_kwargs" in body,
                           "content": body.get("messages", [{}])[0].get("content"),
+                          "idempotency_key": request.headers.get("idempotency-key"),
+                          "authorization": auth,
                           "max_tokens": body.get("max_tokens")})
         if self.chat_override:
             r = self.chat_override(request)
@@ -114,6 +132,23 @@ class FakeGateway:
             return self._error(status, {429: "rate_limit_exceeded", 402: "insufficient_credit",
                                         400: "invalid_request", 503: "unavailable"}.get(status, "error"),
                                f"scripted status {status}")
+        key = request.headers.get("idempotency-key")
+        digest = json.dumps(body, sort_keys=True)     # stands in for validate.payload_digest
+        if self.idempotent and key:
+            stored = self.idempotency.get((auth, key))
+            if stored is not None:
+                if stored != digest:
+                    return self._error(409, "idempotency_conflict", "same key, other payload")
+                rid = uuid.uuid4().hex                # replay: no second accepted item
+                return httpx.Response(200, headers={"content-type": "text/event-stream",
+                                                    "inference-id": rid,
+                                                    "idempotency-replayed": "true"},
+                                      content=self._stream(rid, body))
+            self.idempotency[(auth, key)] = digest
+            self.accepted_keys.append(key)
+        if index in self.lose_ack:
+            # The item is already accepted above; the client never learns that.
+            raise httpx.ReadError("connection torn after the item was accepted")
         rid = uuid.uuid4().hex
         headers = {"content-type": "text/event-stream", "inference-id": rid}
         if self.server_timing:
