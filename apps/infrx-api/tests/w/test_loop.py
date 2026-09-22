@@ -272,6 +272,8 @@ def test_dur_output__the_answer_is_journalled_visible_only_then_relayed_and_sett
         assert outcome.result_ref == f"infrx-result:{request.request_id}"
         assert outcome.usage is not None and outcome.usage.prompt_tokens == 1200
         assert outcome.settlement_state is SettlementState.settled and outcome.debit > 0
+        # the engine's own count reaches the store unchanged: one token per upstream delta
+        assert outcome.usage.completion_tokens == len(upstream.deltas())
 
         whole = "".join(upstream.deltas())
         assert world.results[request.request_id] == filter_text(whole) == "Two people unload boxes."
@@ -1503,4 +1505,17 @@ def test_gap__the_task_deadline_is_the_clamped_instant_not_the_generation_budget
         result = await asyncio.wait_for(world.runner(engine).run(request.request_id), timeout=2)
         assert result.proposed_cause is TerminalCause.deadline_exceeded
         assert engine.closed == 1
+    run(case())
+
+
+def test_gap__the_usage_settled_is_the_engines_authoritative_record_unchanged():
+    async def case():
+        world = World()
+        request, _ = await queued(world)
+        engine = ScriptEngine(events=(PROGRESS, delta("a "), delta("b "), delta("c "),
+                                      usage_event(Usage.of(1200, 7))))
+        result = await world.runner(engine).run(request.request_id)
+        assert result.cause is TerminalCause.completed
+        assert result.outcome.usage == Usage.of(1200, 7)
+        assert result.outcome.debit == b.DEFAULT_PRICE.debit(1200, 7)
     run(case())

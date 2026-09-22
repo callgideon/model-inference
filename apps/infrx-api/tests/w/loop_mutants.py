@@ -82,6 +82,7 @@ CANCEL_AT_COMPLETE = ("test_gap__a_cancellation_that_lands_between_the_last_appe
                       "complete_settles_nothing")
 STALE_COMPLETE = "test_gap__a_stale_complete_settles_nothing"
 CLAMP = "test_gap__the_task_deadline_is_the_clamped_instant_not_the_generation_budget"
+EXACT_USAGE = "test_gap__the_usage_settled_is_the_engines_authoritative_record_unchanged"
 RECORDING_RELAY = "test_gap__the_relay_never_receives_anything_the_journal_has_not_taken"
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -118,6 +119,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "        return float(self.limits.generation_timeout_s)", CLAMP,
        # with the 300 s budget the case's own 2 s bound reports it
        allowed_errors=("TimeoutError",)),
+    _m("usage_minus_one_token", "the authoritative count reaches `complete` unchanged",
+       A, "        state.usage = event.usage\n",
+       "        state.usage = event.usage.model_copy(update={\"completion_tokens\": "
+       "max(0, event.usage.completion_tokens - 1), \"total_tokens\": "
+       "event.usage.total_tokens - (1 if event.usage.completion_tokens else 0)})\n",
+       HAPPY, EXACT_USAGE),
     _m("write_failure_is_a_success", "a journal write that failed is not a completed answer",
        A, "            cause = TerminalCause.journal_write_failed",
        "            cause = None", WRITE_FAILED, UNCONFIRMED),
