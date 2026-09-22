@@ -1415,8 +1415,8 @@
       "id": "XJUDGE-02",
       "note": "the sample count does not match the samples it carries, although nothing was capped",
       "file": "lib/contracts/fake-services.ts",
-      "find": "        sample_count: samples.length,",
-      "replace": "        sample_count: samples.length + 1,",
+      "find": "        sample_count: run.sample_count ?? samples.length,",
+      "replace": "        sample_count: run.sample_count ?? samples.length + 1,",
       "cases": [
         "judge runs separate estimates, limited evaluations and held budgets"
       ]
@@ -1811,7 +1811,7 @@
       "entry": "v2",
       "note": "a revoked membership still permits",
       "file": "lib/contracts/v2/types.ts",
-      "find": "  if (membership.revoked_at !== undefined && membership.revoked_at <= now) return false;",
+      "find": "  if (membership.revoked_at !== undefined && instantKey(membership.revoked_at) <= at) return false;",
       "replace": "  if (false) return false;",
       "cases": [
         "no provider role reaches customer content, and roles default deny"
@@ -1834,7 +1834,7 @@
       "entry": "v2",
       "note": "revocation is ignored",
       "file": "lib/contracts/v2/types.ts",
-      "find": "  if (grant.revoked_at !== undefined && options.now >= grant.revoked_at) return false;",
+      "find": "  if (grant.revoked_at !== undefined && at >= instantKey(grant.revoked_at)) return false;",
       "replace": "  if (false) return false;",
       "cases": [
         "a grant is checked current, and every dimension must match",
@@ -1846,7 +1846,7 @@
       "entry": "v2",
       "note": "expiry is ignored",
       "file": "lib/contracts/v2/types.ts",
-      "find": "  if (grant.expires_at !== undefined && options.now >= grant.expires_at) return false;",
+      "find": "  if (grant.expires_at !== undefined && at >= instantKey(grant.expires_at)) return false;",
       "replace": "  if (false) return false;",
       "cases": [
         "a grant is checked current, and every dimension must match"
