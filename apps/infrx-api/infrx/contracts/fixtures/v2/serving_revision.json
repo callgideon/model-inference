@@ -1,0 +1,43 @@
+{
+  "capability": {
+    "api_family": "chat_completions",
+    "billing_meter": "tokens-v1",
+    "input_modalities": [
+      "text",
+      "video"
+    ],
+    "input_schema_ref": "infrx.request.chat.v1",
+    "output_modalities": [
+      "text"
+    ],
+    "output_schema_ref": "infrx.response.chat.v1",
+    "preprocessing_profile_ref": "marlin2b.video.v1",
+    "schema_version": 2,
+    "stream_input": false,
+    "stream_output": true,
+    "structured_output": false,
+    "tools": false
+  },
+  "chat_template_digest": "sha256:273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+  "created_at": "2026-09-01T00:00:00Z",
+  "digest_source": "served_bytes",
+  "engine_options_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "model_commit": "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965",
+  "model_id": "d0000001-0000-4000-8000-000000000001",
+  "model_repo": "NemoStation/Marlin-2B",
+  "model_version_id": "d0000002-0000-4000-8000-000000000002",
+  "precision": "bfloat16",
+  "preprocessor_profile_version": "marlin2b.video.v1",
+  "prompt_harness_ref": "marlin2b.chat.v1",
+  "provider_org_id": "b0000001-0000-4000-8000-000000000001",
+  "public_model_id": "nemostation/marlin-2b",
+  "revision_label": "2026-09-01",
+  "runtime_image_ref": "vllm/vllm-openai:nightly",
+  "schema_version": 2,
+  "serving_version_id": "d0000003-0000-4000-8000-000000000003",
+  "tokenizer_digest": "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+  "weight_shard_digests": [
+    "sha256:5d78fa4dbd856dc89c01b99ffa92072fe31b8a1e6b31e87893734c80304983b7",
+    "sha256:01d40ec9ccf4c2ad8e755604468dd6ee4a5c6551553e5739a03beb4c0673d0db"
+  ]
+}

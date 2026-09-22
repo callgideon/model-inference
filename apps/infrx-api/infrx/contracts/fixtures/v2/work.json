@@ -1,0 +1,81 @@
+{
+  "budgets": {
+    "first_token_s": 60.0,
+    "generation_s": 300.0,
+    "preparation_s": 120.0,
+    "queue_wait_s": 10.0,
+    "schema_version": 1,
+    "stall_s": 20.0
+  },
+  "media_refs": [],
+  "prepared_refs": [],
+  "rate_card": {
+    "approved_by": "provisional - P-01 pending",
+    "debit_rounding": "half_up_8",
+    "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+    "effective_at": "2026-09-01T00:00:00Z",
+    "hold_rounding": "ceiling_8",
+    "input_rate_per_million": "400.00000000",
+    "meter": "tokens-v1",
+    "model_id": "d0000001-0000-4000-8000-000000000001",
+    "output_rate_per_million": "1200.00000000",
+    "rate_card_version": "rc_marlin2b_2026_09_provisional",
+    "schema_version": 2,
+    "serving_version_id": "d0000003-0000-4000-8000-000000000003",
+    "status": "approved",
+    "unit": "CREDIT"
+  },
+  "request": {
+    "pins": {
+      "accounting_regime": "credit",
+      "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+      "model_id": "d0000001-0000-4000-8000-000000000001",
+      "policy_version": "dap_2026_09_01",
+      "rate_card_version": "rc_marlin2b_2026_09_provisional",
+      "requested_model": "nemostation/marlin-2b@2026-09-01",
+      "schema_version": 2,
+      "serving_version_id": "d0000003-0000-4000-8000-000000000003"
+    },
+    "policy": {
+      "consent_version": 1,
+      "effective_at": "2026-09-01T00:00:00Z",
+      "policy_version": "dap_2026_09_01",
+      "schema_version": 2,
+      "trace_mode": "off"
+    },
+    "request": {
+      "created_at": "2026-09-22T12:00:00Z",
+      "deadline_at": "2026-09-22T12:05:00Z",
+      "execution_mode": "sync",
+      "key_id": "a0000003-0000-4000-8000-000000000003",
+      "max_input_tokens": 23500,
+      "max_output_tokens": 512,
+      "media": [],
+      "messages": [
+        {
+          "content": "hello",
+          "role": "user"
+        }
+      ],
+      "model_revision": "nemostation/marlin-2b@2026-09-01",
+      "org_id": "a0000002-0000-4000-8000-000000000002",
+      "parameters": {},
+      "payload_digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "payload_ref": "payloads/2026/09/22/request",
+      "request_id": "f0000001-0000-4000-8000-000000000001",
+      "schema_version": 1,
+      "trace_policy": {
+        "consent_version": 1,
+        "content_retention_days": 30,
+        "effective_at": "2026-09-01T00:00:00Z",
+        "evaluation_consent": false,
+        "org_id": "a0000002-0000-4000-8000-000000000002",
+        "schema_version": 1,
+        "trace_mode": "off"
+      }
+    },
+    "schema_version": 2,
+    "wallet_id": "a0000004-0000-4000-8000-000000000004"
+  },
+  "schema_version": 2
+}

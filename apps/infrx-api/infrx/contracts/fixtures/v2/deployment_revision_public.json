@@ -1,0 +1,13 @@
+{
+  "created_at": "2026-09-01T00:00:00Z",
+  "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+  "endpoint_id": "c0000002-0000-4000-8000-000000000002",
+  "environment": "prod",
+  "max_input_tokens": 30720,
+  "max_output_tokens": 2048,
+  "provider_org_id": "b0000001-0000-4000-8000-000000000001",
+  "schema_version": 2,
+  "serving_version_id": "d0000003-0000-4000-8000-000000000003",
+  "state": "active",
+  "visibility": "public"
+}

@@ -1,0 +1,10 @@
+{
+  "kind": "provider_dev",
+  "ledger_total": "0.00000000",
+  "owner_provider_org_id": "b0000001-0000-4000-8000-000000000001",
+  "reserved_total": "0.00000000",
+  "revision": 1,
+  "schema_version": 2,
+  "unit": "CREDIT",
+  "wallet_id": "b0000003-0000-4000-8000-000000000003"
+}

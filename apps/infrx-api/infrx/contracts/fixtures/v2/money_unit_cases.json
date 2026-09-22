@@ -1,0 +1,110 @@
+[
+  {
+    "canonical": null,
+    "input": "1.00000000",
+    "unit": "",
+    "valid": false
+  },
+  {
+    "canonical": null,
+    "input": "$10.00",
+    "unit": "CREDIT",
+    "valid": false
+  },
+  {
+    "canonical": null,
+    "input": "-0",
+    "unit": "CREDIT",
+    "valid": false
+  },
+  {
+    "canonical": "-1.50000000",
+    "input": "-1.50000000",
+    "unit": "CREDIT",
+    "valid": true
+  },
+  {
+    "canonical": "0.00000000",
+    "input": "0",
+    "unit": "CREDIT",
+    "valid": true
+  },
+  {
+    "canonical": null,
+    "input": "0.000000001",
+    "unit": "CREDIT",
+    "valid": false
+  },
+  {
+    "canonical": null,
+    "input": "10 credits",
+    "unit": "CREDIT",
+    "valid": false
+  },
+  {
+    "canonical": "10000.00000000",
+    "input": "10000",
+    "unit": "CREDIT",
+    "valid": true
+  },
+  {
+    "canonical": "10000.00000000",
+    "input": "10000.00000000",
+    "unit": "CREDIT",
+    "valid": true
+  },
+  {
+    "canonical": null,
+    "input": "1000000000000.00000000",
+    "unit": "CREDIT",
+    "valid": false
+  },
+  {
+    "canonical": null,
+    "input": "1e3",
+    "unit": "CREDIT",
+    "valid": false
+  },
+  {
+    "canonical": "999999999999.99999999",
+    "input": "999999999999.99999999",
+    "unit": "CREDIT",
+    "valid": true
+  },
+  {
+    "canonical": null,
+    "input": "1.00000000",
+    "unit": "CREDITS",
+    "valid": false
+  },
+  {
+    "canonical": null,
+    "input": "+1.00000000",
+    "unit": "PROVIDER_USD",
+    "valid": false
+  },
+  {
+    "canonical": "500.00000000",
+    "input": "500.00000000",
+    "unit": "PROVIDER_USD",
+    "valid": true
+  },
+  {
+    "canonical": "-3.00000000",
+    "input": "-3.00000000",
+    "unit": "USD",
+    "valid": true
+  },
+  {
+    "canonical": "4.21500000",
+    "input": "4.21500000",
+    "unit": "USD",
+    "valid": true
+  },
+  {
+    "canonical": null,
+    "input": "NaN",
+    "unit": "USD",
+    "valid": false
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "amount": "10000.00000000",
+  "campaign_version": "launch_2026_09",
+  "entitlement": "initial_signup_grant",
+  "granted_at": "2026-09-22T12:00:00Z",
+  "ledger_operation_id": "e0000002-0000-4000-8000-000000000002",
+  "schema_version": 2,
+  "user_id": "a0000001-0000-4000-8000-000000000001",
+  "verification_evidence_ref": "email_verification/2026-09-22/a0000001",
+  "wallet_id": "a0000004-0000-4000-8000-000000000004"
+}
