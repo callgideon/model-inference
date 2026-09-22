@@ -159,7 +159,7 @@ await services.adminSetSuspension(operatorSession, {
   target_org_id, suspended: true, reason: "payment dispute", idempotency_key: token,
 });
 await services.adminSetEntitlements(operatorSession, {
-  target_org_id, model_ids: ["marlin-2b@2026-09-01"],
+  target_org_id, model_ids: ["nemostation/marlin-2b@2026-09-01"],
   limits: { max_concurrent_requests: 4 }, reason: "pilot tier", idempotency_key: token,
 });
 await services.calibration.label(operatorSession, {

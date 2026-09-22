@@ -2,7 +2,7 @@
   "_comment": "Console contract fixtures v1 (08 §9). Three organizations: an established pilot tenant, a brand-new zero-balance tenant, and a suspended one so org_suspended is reachable (R18). Row-level data is generated deterministically from these parameters by fake-services.ts; nothing here is a real key, customer prompt or secret. `legacy_usage_rows` are rows from before the pilot accounting regime (legacy_usd: a real USD charge, no job state, no capture mode); a key with `trace_mode: null` predates the column, and null reads as off.",
   "clock": "2026-09-20T12:00:00.000Z",
   "models": [
-    "marlin-2b@2026-09-01",
+    "nemostation/marlin-2b@2026-09-01",
     "deepseek-v41-flash@2026-08-15"
   ],
   "rate_units_per_token": {
@@ -97,7 +97,7 @@
       "all_free": false,
       "entitlements": {
         "model_ids": [
-          "marlin-2b@2026-09-01",
+          "nemostation/marlin-2b@2026-09-01",
           "deepseek-v41-flash@2026-08-15"
         ],
         "limits": {

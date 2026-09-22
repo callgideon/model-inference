@@ -31,6 +31,8 @@ import {
 
 /** A fixed instant, so every window in these cases is exact rather than "about now". */
 const NOW = Date.parse("2026-09-21T12:00:00.000Z");
+/** R62: a model revision always carries the public model id. The fixtures' first model. */
+const MODEL_REVISION = "nemostation/marlin-2b@2026-09-01";
 const OWN_KEYS = ["a1000000-0000-4000-8000-000000000001", "a1000000-0000-4000-8000-000000000002"];
 
 function parse(raw: RawParams, keyIds: readonly string[] = OWN_KEYS) {
@@ -162,7 +164,7 @@ test("V1-Q04 a key filter must name one of this organization's keys", () => {
     assert.match(parsed.rejected[0].why, /identifier/);
   }
   // The shapes served ids actually have.
-  for (const value of ["marlin-2b@2026-09-01", "deepseek-v41-flash@2026-08-15", "a/b+c:d._-1"]) {
+  for (const value of [MODEL_REVISION, "deepseek-v41-flash@2026-08-15", "a/b+c:d._-1"]) {
     const parsed = parse({ model: value });
     assert.deepEqual(parsed.rejected, [], `${value} is an identifier`);
     assert.equal(parsed.query.model, value);
@@ -296,7 +298,7 @@ test("V1-Q09 changing a filter drops the cursor; a page link keeps the window", 
     { content: "lost" as const },
     { mode: "full" as const },
     { key: OWN_KEYS[0] },
-    { model: "marlin-2b@2026-09-01" },
+    { model: MODEL_REVISION },
     { feedback: "yes" as const },
     { range: "1h" as const },
     { size: 50 },
@@ -385,9 +387,10 @@ test("V1-Q10 every query this page builds is one the service accepts, and its wa
       expectRows: true,
     },
     {
-      raw: { range: "30d", at: anchor, key: keyIds[0], model: "marlin-2b@2026-09-01", size: "50" },
-      expect: { limit: 50, ...window, key_id: keyIds[0], model: "marlin-2b@2026-09-01" },
-      satisfies: (row) => row.key_id === keyIds[0] && row.model === "marlin-2b@2026-09-01",
+      // R62: a model revision carries its public model id.
+      raw: { range: "30d", at: anchor, key: keyIds[0], model: MODEL_REVISION, size: "50" },
+      expect: { limit: 50, ...window, key_id: keyIds[0], model: MODEL_REVISION },
+      satisfies: (row) => row.key_id === keyIds[0] && row.model === MODEL_REVISION,
       expectRows: true,
     },
     {
