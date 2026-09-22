@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T17:36:32Z",
+  "updated": "2026-09-22T17:45:34Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -7,23 +7,23 @@
       "lane": "codex-f2r",
       "phase": "implementing",
       "since": "2026-09-22T15:51:21Z",
-      "note": "lane A: items 2\u20135,9 + relayed additions in flight; lane B: round 2 green at 501c496, independent review running"
+      "note": "lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions"
     },
     "I0": {
       "lane": "codex-i0",
       "phase": "fix round 1 (review: runner layout false-kill path; apply-level pilot digest case)",
       "since": "2026-09-22T15:51:21Z",
-      "note": "handed back: preflight.py fail-closed installer; 77 tests, 45 mutants"
+      "note": "handed back: preflight.py fail-closed installer; 77 tests, 45 mutants | resumed from WIP after restart"
     },
     "E2R": {
       "lane": "codex-e2r",
       "phase": "implementing (item 1 merged c23d804; items 2\u20134 in flight)",
       "since": "2026-09-22T15:51:21Z",
-      "note": "harness ownership + five RLS inversions on real services"
+      "note": "harness ownership + five RLS inversions on real services | resumed from WIP after restart"
     },
     "F2P": {
       "lane": "codex-f2p",
-      "phase": "additive phase handed back (c42b213); independent review + product-rule audit running; wire-in waits on F2R-A",
+      "phase": "review resumed after restart; wire-in waits on F2R-A",
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
     },
@@ -31,25 +31,19 @@
       "lane": "codex-q2",
       "phase": "implementing",
       "since": "2026-09-22T16:00:21Z",
-      "note": "Valkey adapter reproducing the 14-point list; differential vs memory"
-    },
-    "M2": {
-      "lane": "codex-m2",
-      "phase": "round-2 re-review at 12f2cdb",
-      "since": "2026-09-22T16:00:21Z",
-      "note": "handed back: probe + preparation + cache; 132 mutants"
+      "note": "Valkey adapter reproducing the 14-point list; differential vs memory | resumed from WIP after restart"
     },
     "W2": {
       "lane": "codex-w2",
       "phase": "implementing",
       "since": "2026-09-22T16:00:21Z",
-      "note": "attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R"
+      "note": "attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart"
     },
     "E1B": {
       "lane": "codex-e1b",
       "phase": "fix round 1 (120 s clip, price \u26a0\ufe0f, KV wording, four test bindings)",
       "since": "2026-09-22T16:03:43Z",
-      "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol"
+      "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart"
     }
   },
   "reviews": {},
@@ -141,6 +135,10 @@
     {
       "at": "2026-09-22T17:29:34Z",
       "what": "S1-fix merged (6669e1f): console balance unavailable state, build-time preview gate; console targets green on merged tree"
+    },
+    {
+      "at": "2026-09-22T17:45:34Z",
+      "what": "Restart on rey account; M2 (8156f78) and F2R-B (2bfb0c4) merged; six implementer lanes resumed from WIP; F2P review resumed"
     }
   ],
   "cadence_windows": [

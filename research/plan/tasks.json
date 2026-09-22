@@ -499,14 +499,17 @@
       ],
       "track": "M",
       "handoff": "handoffs/M-media.md",
-      "status": "planned",
-      "disposition": "keep",
+      "status": "implemented",
+      "disposition": "keep Merged --no-ff on claude/backend-impl at 8156f78 (2026-09-22) after independent review (fix_required → round 2 pass).",
       "product": "shared",
       "milestone": "APP-M1",
       "amendment": "Keep versioned preprocessing and tenant-separated caches.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "evidence": [
+        "research/plan/evidence/m/M2-911dd7c.md"
+      ]
     },
     {
       "id": "M3",
