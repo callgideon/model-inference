@@ -387,8 +387,13 @@ def mutation(report: Report, *, layer: str) -> None:
     """R32: every invariant this task claims must be killable, on a temp copy."""
     import mutants
     stack = bool(harness.load_state())
-    results = [mutants.run_one(mutant, stack_available=stack) for mutant in mutants.MUTANTS
-               if layer == "all" or mutant.layer == 1]
+    try:
+        results = [mutants.run_one(mutant, stack_available=stack) for mutant in mutants.MUTANTS
+                   if layer == "all" or mutant.layer == 1]
+    except Exception as exc:                       # noqa: BLE001 - reported, and the JSON
+        # report is still written (E3B run 3 lost it to a HarnessError in _reprovision).
+        report.add("mutants", FAIL, f"the mutation run itself failed: {exc!r}")
+        return
     # `mutants.summarise` is the ONE place the verdict is counted: this stage used to apply its
     # own rule and reported the two controls - which MUST survive - as survivors, failing a run
     # whose mutation list was perfectly healthy.
@@ -455,7 +460,9 @@ def classify(junit_xml: str) -> dict:
             cases["failed"].append(name)
         elif (skip := case.find("skipped")) is not None:
             mark = PENDING_MARK.search(skip.get("message", "") + (skip.text or ""))
-            if mark:
+            # An expected failure is not a pending case whatever its message says: only
+            # `stack.pending()`'s skip is (review rv08).
+            if mark and skip.get("type") != "pytest.xfail":
                 for task in mark.group(1).split(","):
                     cases["pending"].setdefault(task, []).append(name)
             else:
@@ -471,6 +478,19 @@ def backend_verdict(cases: dict, exit_code: int) -> str:
     if cases["failed"] or cases["skipped"] or not cases["passed"] or exit_code not in (0,):
         return FAIL
     return PENDING if cases["pending"] else PASS
+
+
+def backend_summary(cases: dict, exit_code: int) -> tuple[str, dict]:
+    """The backend stage's status and detail, from the classified cases - the ONE place both
+    are computed, so the stage cannot report a status its own counts contradict."""
+    distinct = {name for names in cases["pending"].values() for name in names}
+    return backend_verdict(cases, exit_code), {
+        "passed": len(cases["passed"]), "pending": len(distinct),
+        "failed": len(cases["failed"]), "failed_cases": cases["failed"] or None,
+        "not_run": cases["skipped"] or None,
+        "detected": sorted(name.split("::")[-1] for name in cases["passed"]
+                           if "detects" in name),
+        "pending_by_id": {task: len(names) for task, names in sorted(cases["pending"].items())}}
 
 
 def backend(report: Report) -> None:
@@ -494,15 +514,8 @@ def backend(report: Report) -> None:
         # Measured: PostgREST's pool holds sessions on `infrx_e2`, so a dirtying mutant's
         # re-provision (DROP DATABASE) later in the run is refused while it is up.
         backend_teardown(report)
-    distinct = {name for names in cases["pending"].values() for name in names}
-    report.add("backend", backend_verdict(cases, run["exit"]),
-               {"postgrest": postgrest, "run": len(cases["passed"]),
-                "pending": len(distinct), "failed": cases["failed"] or None,
-                "not_run": cases["skipped"] or None,
-                "detected": sorted(name.split("::")[-1] for name in cases["passed"]
-                                   if "detects" in name),
-                "pending_by_id": {task: len(names)
-                                  for task, names in sorted(cases["pending"].items())}},
+    status, summary = backend_summary(cases, run["exit"])
+    report.add("backend", status, {"postgrest": postgrest, **summary},
                cases=cases, runs=[run])
 
 
