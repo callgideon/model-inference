@@ -450,6 +450,10 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
         Check("E2-RLS-14", "authenticated", "member_alpha",
               "select count(*) from public.api_keys where org_id = {alpha}",
               ("value", alpha_keys), "a member still reads their own tenant's keys"),
+        Check("E2-RLS-15", "authenticated", "member_alpha",
+              "select count(*) from public.org_members where org_id = {beta}",
+              ("value", 0), "another tenant's membership rows are invisible "
+              "(E2R review N2: `org_members_select using (true)` left the matrix green)"),
 
         # -------- writes a member must not have
         Check("E2-RLS-20", "authenticated", "member_alpha",

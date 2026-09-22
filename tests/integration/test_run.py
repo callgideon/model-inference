@@ -285,6 +285,32 @@ def test_a_failing_suite_fails_the_run():
     assert green.stages[-1]["status"] == runner.PASS
 
 
+def test_a_failing_role_matrix_row_fails_the_rls_stage_and_the_run():
+    """E2R review B1: the rls STAGE, not just `pgstate.run_check`, turns one failed row into
+    FAIL, names the case, and makes the run exit 1. Every other test patches `rls` out."""
+    import psycopg
+    from contextlib import nullcontext
+
+    def rows(passed):
+        return lambda conn, fixtures: [
+            {"id": "E2-RLS-01", "role": "anon", "passed": True},
+            {"id": "E2-RLS-15", "role": "authenticated", "passed": passed}]
+
+    for passed, status, failed, code in ((False, runner.FAIL, ["E2-RLS-15"], 1),
+                                         (True, runner.PASS, None, 0)):
+        report = fresh_report()
+        with patched(psycopg, connect=lambda *a, **k: nullcontext()), \
+                patched(harness, pg_dsn=lambda: "stub"), \
+                patched(pgstate, run_role_matrix=rows(passed)):
+            runner.rls(report, fixtures=None)
+        entry = report.stages[-1]
+        assert entry["stage"] == "rls" and entry["status"] == status
+        named = entry["detail"]["failed"]
+        assert (named and [row["id"] for row in named]) == failed
+        assert entry["detail"]["cases"] == 2
+        assert report.exit_code == code
+
+
 def test_a_suite_that_reports_no_tests_at_all_fails_the_run():
     """E2R item 4: exit 0 is not evidence that anything ran.
 

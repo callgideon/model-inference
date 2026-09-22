@@ -228,8 +228,17 @@ def test_a_check_that_should_fail_does_fail():
                                   ("error", pgstate.PERMISSION_DENIED),
                                   "and the same case with the fragment it really emits",
                                   message_contains="not a member of organization")
+    # E2R review N1: and anon's 42501s are not exempt - anon's refusal checked against the
+    # wrong SQLSTATE must fail, or a role-conditional comparison would pass every anon row.
+    anon_wrong_sqlstate = pgstate.Check("E2-RLS-MUTANT6", "anon", None,
+                                        "select count(*) from public.organizations",
+                                        ("error", "42P01"),
+                                        "anon's real refusal, checked against the wrong SQLSTATE")
     with connect() as conn:
         assert pgstate.run_check(conn, wrong, fixtures)["passed"] is False
+        anon = pgstate.run_check(conn, anon_wrong_sqlstate, fixtures)
+        assert anon["observed"] == pgstate.PERMISSION_DENIED, anon
+        assert anon["passed"] is False, "an anon row is not exempt from the SQLSTATE check"
         assert pgstate.run_check(conn, wrong_error, fixtures)["passed"] is False
         observed = pgstate.run_check(conn, wrong_sqlstate, fixtures)
         assert observed["observed"] == pgstate.PERMISSION_DENIED, observed
