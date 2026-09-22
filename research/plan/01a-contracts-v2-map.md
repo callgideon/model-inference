@@ -193,9 +193,8 @@ must run against real pre-cutover rows produced by 0001–0005 (D1R's fixtures).
 
 ## 8. Rulings this encoding needed (proposed for `08` §10)
 
-Numbers are deliberately not assigned: R60 was the last ruling F2P read and the
-coordinator has since added R61–R62, so the coordinator assigns numbers when
-folding these into `08-contracts-v1-encoding.md` §10 at wire-in.
+Numbered by the coordinator at the additive merge (2026-09-22): V1–V15 are **R64–R78** in
+`08-contracts-v1-encoding.md` §10, in this order.
 
 | # | Ruling |
 |---|---|

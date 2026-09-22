@@ -16,7 +16,7 @@ api-test:
 # suite runs a subset; a surviving mutant is a failed suite either way.
 # Track mutant lists join here as their task merges (M1, Q1, J1, W1, T1, D1, G1 — D's list needs Docker and skips visibly without it); each gates on INFRX_MUTANTS.
 api-mutants:
-	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/q/test_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/t/test_trace_mutants.py tests/d/test_migration_mutants.py tests/g/test_mutants.py tests/i/test_mutants.py
+	cd $(API) && INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/q/test_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/t/test_trace_mutants.py tests/d/test_migration_mutants.py tests/g/test_mutants.py tests/i/test_mutants.py tests/contracts/v2/test_mutants_v2.py
 
 console-test:
 	cd apps/app && pnpm test
@@ -36,6 +36,7 @@ console-mutants:
 	cd apps/app && node tests/v/run-mutants.mjs
 	cd apps/app && node tests/u/run-mutants.mjs
 	cd apps/app && node tests/c/run-mutants.mjs --self-test && node tests/c/run-mutants.mjs
+	cd apps/app && node tests/contracts/v2/run-mutants-v2.mjs --self-test && node tests/contracts/v2/run-mutants-v2.mjs
 
 # E1 owns models/marlin2b/tests. Until it exists this target reports "not run"
 # rather than pretending a pass.

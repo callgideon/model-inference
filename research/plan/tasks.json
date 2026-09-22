@@ -2166,7 +2166,7 @@
       ],
       "product": "shared",
       "milestone": "APP-M0",
-      "disposition": "new-revision",
+      "disposition": "new-revision Additive phase merged --no-ff on claude/backend-impl at 9faaa57 (2026-09-22) after independent review + product-rule audit (fix_required → fixed; rulings R64–R78). Wire-in phase (01a §7, 13 files) pending F2R-A acceptance; status stays planned until wire-in merges.",
       "amendment": "Update both languages/fakes/fixtures atomically; retain explicit v1 USD projections.",
       "execution_class": "core"
     },
