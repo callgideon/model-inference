@@ -291,6 +291,23 @@ export function unitOfRow(row: Pick<UsageRecordV2, "accounting_regime">): MoneyU
   return unitOfRegime(row.accounting_regime);
 }
 
+/**
+ * The comparison key of a contract instant (F2P wire-in; 01a §7). The checks below order
+ * instants as strings, which is exact only for one spelling: `Z`, and fractional seconds padded
+ * to one width. `12:00:00Z` sorts *after* `12:00:00.5Z` as text, and `+00:00` sorts anywhere, so a
+ * raw comparison of mixed spellings can call a revoked grant current. Every instant is therefore
+ * reduced to `YYYY-MM-DDTHH:MM:SS.ffffffZ`, and anything that is not the contract's `Z` form
+ * (an offset, a lowercase `z`, more than microseconds, no zone) is refused rather than compared.
+ * Normalizing an offset form belongs to C, which accepts both (R59 (9)).
+ */
+const CONTRACT_INSTANT = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?Z$/;
+
+export function instantKey(value: string): string {
+  const match = typeof value === "string" ? CONTRACT_INSTANT.exec(value) : null;
+  if (match === null) throw new TypeError(`not a contract instant (UTC, Z): ${String(value)}`);
+  return `${match[1]}.${(match[2] ?? "").padEnd(6, "0")}Z`;
+}
+
 /** Default deny: an unknown capability, another provider or a revoked membership. */
 export function membershipPermits(
   membership: ProviderMembership | null,
@@ -300,8 +317,9 @@ export function membershipPermits(
 ): boolean {
   if (membership === null) return false;
   if (membership.provider_org_id !== providerOrgId) return false;
-  if (membership.granted_at > now) return false;
-  if (membership.revoked_at !== undefined && membership.revoked_at <= now) return false;
+  const at = instantKey(now);
+  if (instantKey(membership.granted_at) > at) return false;
+  if (membership.revoked_at !== undefined && instantKey(membership.revoked_at) <= at) return false;
   return ROLE_CAPABILITIES[membership.role].includes(capability);
 }
 
@@ -317,9 +335,10 @@ export function grantPermits(
   },
 ): boolean {
   if (grant === null) return false;
-  if (options.now < grant.effective_at) return false;
-  if (grant.revoked_at !== undefined && options.now >= grant.revoked_at) return false;
-  if (grant.expires_at !== undefined && options.now >= grant.expires_at) return false;
+  const at = instantKey(options.now);
+  if (at < instantKey(grant.effective_at)) return false;
+  if (grant.revoked_at !== undefined && at >= instantKey(grant.revoked_at)) return false;
+  if (grant.expires_at !== undefined && at >= instantKey(grant.expires_at)) return false;
   return (
     grant.recipient_provider_org_id === options.providerOrgId &&
     grant.model_ids.includes(options.modelId) &&

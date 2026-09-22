@@ -1960,6 +1960,50 @@
       "cases": [
         "every model a trace template names carries its public model id (R62)"
       ]
+    },
+    {
+      "id": "V2-INSTANT-01",
+      "entry": "v2",
+      "note": "a grant's revocation is compared as raw text (01a §7)",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (grant.revoked_at !== undefined && at >= instantKey(grant.revoked_at)) return false;",
+      "replace": "  if (grant.revoked_at !== undefined && options.now >= grant.revoked_at) return false;",
+      "cases": [
+        "grant and membership checks compare instants, never mixed spellings"
+      ]
+    },
+    {
+      "id": "V2-INSTANT-02",
+      "entry": "v2",
+      "note": "fractional seconds are not padded to one width",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  return `${match[1]}.${(match[2] ?? \"\").padEnd(6, \"0\")}Z`;",
+      "replace": "  return `${match[1]}.${match[2] ?? \"\"}Z`;",
+      "cases": [
+        "grant and membership checks compare instants, never mixed spellings"
+      ]
+    },
+    {
+      "id": "V2-INSTANT-03",
+      "entry": "v2",
+      "note": "an offset spelling is compared instead of refused",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "(?:\\.(\\d{1,6}))?Z$/;",
+      "replace": "(?:\\.(\\d{1,6}))?(?:Z|[+-]\\d{2}:\\d{2})$/;",
+      "cases": [
+        "grant and membership checks compare instants, never mixed spellings"
+      ]
+    },
+    {
+      "id": "V2-INSTANT-04",
+      "entry": "v2",
+      "note": "a membership's revocation is compared as raw text",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (membership.revoked_at !== undefined && instantKey(membership.revoked_at) <= at) return false;",
+      "replace": "  if (membership.revoked_at !== undefined && membership.revoked_at <= now) return false;",
+      "cases": [
+        "grant and membership checks compare instants, never mixed spellings"
+      ]
     }
   ]
 }
