@@ -766,8 +766,11 @@ class UsageRecordV2(RecordV2):
     accounting_regime: AccountingRegime
     unit: Literal["CREDIT", "USD"]
     charged_amount: str
-    usage: Usage
-    outcome: records.SettlementState
+    # Absent on a pre-cutover row that recorded none (F2P wire-in, item 10: D1R's upgrade
+    # fixture has legacy rows with NULL tokens and NULL settlement state - what 0001-0005
+    # actually wrote). A CREDIT row always carries both.
+    usage: Usage | None = None
+    outcome: records.SettlementState | None = None
     rate_card_version: str | None = None
     serving_version_id: UuidStr | None = None
     deployment_revision_id: UuidStr | None = None
@@ -789,6 +792,9 @@ class UsageRecordV2(RecordV2):
             raise ValueError(f"an amount crosses JSON in its canonical eight-digit form, "
                              f"not {self.charged_amount!r}")
         if self.accounting_regime is AccountingRegime.credit:
+            if self.usage is None or self.outcome is None:
+                raise ValueError("a CREDIT row is settled by the metering path: it carries its "
+                                 "usage and its settlement outcome")
             if self.rate_card_version is None or self.serving_version_id is None:
                 raise ValueError("a CREDIT row names the rate card and serving revision it "
                                  "was admitted at")
@@ -958,11 +964,19 @@ def project_v1_usage(row: dict, *, org_id: str) -> UsageRecordV2:
     if "charged_credits" in row or row.get("accounting_regime") == CREDIT_REGIME:
         raise ValueError("this row is already a CREDIT-regime row; project_v1_usage reads "
                          "pre-cutover history only")
+    # NULL stays absent (item 10, against D1R's real 0001-0005 rows): a row that recorded no
+    # tokens has no usage, and a row from before settlement has no outcome. Recorded tokens
+    # are the engine's own usage report, which is what `authoritative` means; a recorded
+    # certainty is kept as it is.
+    prompt, completion = row.get("prompt_tokens"), row.get("completion_tokens")
+    usage = None
+    if prompt is not None and completion is not None:
+        usage = Usage.of(int(prompt), int(completion),
+                         records.UsageCertainty(row.get("usage_certainty") or "authoritative"))
+    outcome = row.get("settlement_state")
     return UsageRecordV2(
-        request_id=row["request_id"], org_id=org_id,
+        request_id=str(row["request_id"]), org_id=org_id,
         accounting_regime=AccountingRegime.legacy_usd, unit=USD,
-        charged_amount=str(Usd(row["cost_usd"])),
-        usage=Usage.of(int(row["prompt_tokens"]), int(row["completion_tokens"]),
-                       records.UsageCertainty(row.get("usage_certainty", "authoritative"))),
-        outcome=records.SettlementState(row.get("settlement_state", "settled")),
+        charged_amount=str(Usd(row["cost_usd"])), usage=usage,
+        outcome=records.SettlementState(outcome) if outcome is not None else None,
         price_version=row.get("price_version"), settled_at=row["settled_at"])

@@ -115,3 +115,26 @@ def test_work_v2_carries_the_prompt_count_within_the_admitted_ceiling():
     assert v2.WorkV2.model_validate({**body, "prompt_tokens": ceiling}).prompt_tokens == ceiling
     with pytest.raises(pydantic.ValidationError):
         v2.WorkV2.model_validate({**body, "prompt_tokens": ceiling + 1})
+
+
+def test_a_pre_cutover_row_keeps_its_absences_and_a_credit_row_cannot_have_them():
+    """Item 10, found against D1R's real 0001-0005 rows: a legacy row may have recorded no
+    tokens and no settlement state, and the projection keeps both absent instead of inventing
+    `settled`; a CREDIT row, which the metering path always settles, cannot omit either."""
+    import pydantic
+    from infrx.contracts.v2 import fixtures as v2fix, records as v2
+    raw = {"request_id": "90000000-0000-4000-8000-000000000003", "cost_usd": "1.99999999",
+           "prompt_tokens": None, "completion_tokens": None, "usage_certainty": None,
+           "settlement_state": None, "price_version": None,
+           "settled_at": "2026-09-20T00:00:00Z"}
+    legacy = v2.project_v1_usage(raw, org_id=v2fix.IDS.consumer_org)
+    assert (legacy.usage, legacy.outcome) == (None, None)
+    assert str(legacy.amount()) == "1.99999999"
+    tokens = v2.project_v1_usage({**raw, "prompt_tokens": 1000, "completion_tokens": 250},
+                                 org_id=v2fix.IDS.consumer_org)
+    assert tokens.usage is not None and tokens.usage.total_tokens == 1250
+    assert tokens.outcome is None
+    body = v2fix.BUILDERS["usage_credit.json"]().model_dump(mode="json")
+    for missing in ("usage", "outcome"):
+        with pytest.raises(pydantic.ValidationError):
+            v2.UsageRecordV2.model_validate({k: v for k, v in body.items() if k != missing})

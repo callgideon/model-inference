@@ -177,8 +177,9 @@ export type UsageRecordV2 = {
   accounting_regime: AccountingRegime;
   unit: "CREDIT" | "USD";
   charged_amount: string;
-  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-  outcome: string;
+  /** Absent on a pre-cutover row that recorded none; a CREDIT row always carries both. */
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  outcome?: string;
   rate_card_version?: string;
   serving_version_id?: string;
   deployment_revision_id?: string;
