@@ -74,7 +74,7 @@ class Settings:
     pilot: PilotSettings = PILOT_DEFAULTS
     # F2R item 7: the 08 §5 deployment table, validated by `validate_runtime` before
     # anything mounts. Defaulting to `DEPLOYMENT_DEFAULTS` means nothing is configured.
-    deployment: "DeploymentSettings" = None
+    deployment: "DeploymentSettings | None" = None
 
     def __post_init__(self):
         if self.deployment is None:
@@ -219,7 +219,7 @@ def validate_runtime(settings):
     * anything else - refuses to start. A typo in a unit file is not a mode.
 
     In every mode it first refuses a 08 §5 deployment value that cannot serve
-    (`validate_deployment`), and in `pilot` it requires a `CONSOLE_CURSOR_SECRET`.
+    (`validate_deployment`), before the mode is even dispatched on.
     """
     pilot = getattr(settings, "pilot", PILOT_DEFAULTS)
     mode = pilot.infrx_mode
