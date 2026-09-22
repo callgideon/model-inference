@@ -164,6 +164,9 @@ def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
     assert [path.name for path in files] == [
         "0001_init.sql", "0002_seed_models.sql", "0003_pilot_durable_schema.sql",
         "0004_pilot_roles_and_rpcs.sql", "0005_console_read_surface.sql",
+        # D1R (additive CREDIT accounting, provider registry, read surface, operator seams)
+        "0006_credit_accounting.sql", "0007_provider_registry.sql",
+        "0008_credit_read_surface.sql", "0009_operator_seams.sql",
     ]
     assert files[0].parent == harness.MIGRATIONS_DIR
     digests = pgstate.migration_digests()

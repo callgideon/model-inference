@@ -183,7 +183,7 @@ def test_malformed_and_missing_usage_never_become_authoritative_tokens():
 
 def test_split_reasoning_delimiters_never_appear_whole_in_one_chunk():
     events = asyncio.run(drain(adapter("split_reasoning_delimiters"), lease()))
-    deltas = [event.payload["content"] for event in events
+    deltas = [event.payload["raw"] for event in events
               if event.type is ChunkEventType.delta]
     joined = "".join(deltas)
     assert joined.count("<think>") == 1 and joined.count("</think>") == 1

@@ -56,6 +56,7 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = Path(os.environ.get("INFRX_E2_REPO_ROOT") or HERE.parents[1])
 sys.path.insert(0, str(REPO_ROOT / "apps" / "infrx-api"))
 
+from infrx.worker.reasoning import ReasoningFilter
 from infrx.contracts.fakes.engine import DEFAULT_TEXT, SPLIT_REASONING, EngineFault  # noqa: E402
 from infrx.contracts.fakes.support import FakeClock  # noqa: E402
 from infrx.contracts.limits import DEFAULTS, PilotSettings  # noqa: E402
@@ -509,6 +510,9 @@ class HttpEngine:
                    "messages": [dict(message) for message in prepared.messages],
                    "infrx_fault": self.fault, "infrx_job_id": str(lease.job_id)}
         saw_terminator = False
+        # R80 (`{visible, raw}`): the customer's text is the reasoning-filtered one, computed
+        # with the same filter the real adapter uses; the held tail is emitted at the end.
+        reasoning = ReasoningFilter()
         try:
             async with self.client_factory(timeout=self.timeout) as client:
                 async with client.stream("POST", f"{self.base_url}/v1/chat/completions",
@@ -529,17 +533,20 @@ class HttpEngine:
                         if data == "[DONE]":
                             saw_terminator = True
                             break
-                        for event in self._events(data):
+                        for event in self._events(data, reasoning):
                             yield event
         except httpx.HTTPError as exc:
             raise EngineProcessExited(f"engine stream failed: {type(exc).__name__}") from exc
+        tail = reasoning.close()
+        if tail:
+            yield EngineEvent(type=ChunkEventType.delta, payload={"visible": tail, "raw": ""})
         if not saw_terminator:
             # A 200 that stops without its terminator is not a finished generation. E1
             # measured the same shape on the client side; treating it as success is how a
             # truncated stream becomes an accepted, billable request.
             raise EngineProcessExited("engine stream ended without [DONE]")
 
-    def _events(self, data: str) -> list[EngineEvent]:
+    def _events(self, data: str, reasoning: ReasoningFilter) -> list[EngineEvent]:
         try:
             chunk = json.loads(data)
         except json.JSONDecodeError:
@@ -553,8 +560,9 @@ class HttpEngine:
             events.append(EngineEvent(type=ChunkEventType.progress,
                                       payload={"phase": "running"}))
         if delta.get("content"):
+            raw = delta["content"]
             events.append(EngineEvent(type=ChunkEventType.delta,
-                                      payload={"content": delta["content"]}))
+                                      payload={"visible": reasoning.feed(raw), "raw": raw}))
         if "usage" in chunk:
             events.append(EngineEvent(type=ChunkEventType.usage, payload={"usage": chunk["usage"]},
                                       usage=self._usage(chunk["usage"])))
