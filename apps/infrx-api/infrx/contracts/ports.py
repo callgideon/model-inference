@@ -69,7 +69,13 @@ class JobStore(Protocol):
         The transaction rechecks key revocation, org suspension *and* current
         entitlement (`ModelNotEntitled`), reserves a `preparation` unit against
         `MAX_PREPARING_JOBS` (R1) and captures the deadline `budgets` on the
-        admission (R4). `idem` must name the request's own organization (R10)."""
+        admission (R4). `idem` must name the request's own organization (R10).
+
+        R29 (as amended in 08 §10 by the R-3 audit correction): a `deadline_at` at or
+        before the store's `db_now` is refused (`invalid_request`, no side effects);
+        otherwise the store keeps `min(caller_deadline, db_now + preparation + queue +
+        generation budgets)`, derived from its own clock and budgets snapshot, never the
+        gateway's, and pinned for idempotent replays."""
 
     async def get_owned(self, org_id: str, job_handle: str) -> tuple[Admission, TerminalOutcome | None]:
         """Ownership-checked lookup. Possession of a handle is never enough."""
