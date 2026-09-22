@@ -3550,8 +3550,8 @@
       "track": "G",
       "product": "shared",
       "milestone": "BACKEND-M1",
-      "status": "planned",
-      "disposition": "backend-first-addition",
+      "status": "implemented",
+      "disposition": "backend-first-addition Merged --no-ff on claude/backend-impl at ed6da07 (2026-09-22) after independent review with secret-handling audit (pass; test gaps closed). Fakes only; real ports at D1R/D5/A1/G1R.",
       "execution_class": "core",
       "start_dependencies": [
         "F2P"
@@ -3581,7 +3581,10 @@
       ],
       "acceptance": "A provisioned client can obtain scoped credentials, call the endpoint and reconcile its usage with both Next.js applications stopped. Preserve the individual 10,000-credit policy and historical USD. Public signup is not needed for this operated endpoint release; credentials still use the real auth/tenant model.",
       "failure_oracle": "Foreign tenant, forged operator, revoked key, replayed adjustment/grant, unpriced/private deployment and stale rate are denied or deduplicated. No production demo credentials, direct table balance edits or unmetered fallback.",
-      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance."
+      "slice_sizing": "Target 2–8 hour review slices; split larger units before assignment while preserving parent acceptance.",
+      "evidence": [
+        "research/plan/evidence/g/G6B-db03f0b.md"
+      ]
     },
     {
       "id": "E3B",

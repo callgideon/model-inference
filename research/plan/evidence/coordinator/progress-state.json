@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T19:31:41Z",
+  "updated": "2026-09-22T19:36:54Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -26,12 +26,6 @@
       "phase": "dispatched from 9faaa57 (reads 06a + v2 fixture base)",
       "since": "2026-09-22T18:05:08Z",
       "note": "D owns migrations; additive over 0001\u20130005"
-    },
-    "G6B": {
-      "lane": "codex-g6b / codex/g6b-headless-ops",
-      "phase": "review PASS; short test-gap round before merge",
-      "since": "2026-09-22T18:12:19Z",
-      "note": "operator CLI, protected publish/inspect, headless quickstart"
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
@@ -169,6 +163,10 @@
     {
       "at": "2026-09-22T19:16:15Z",
       "what": "M3 merged (e2188f3): owned uploads, collector, consented reuse; M\u2192W seam tests wired to the resolver"
+    },
+    {
+      "at": "2026-09-22T19:36:54Z",
+      "what": "G6B merged (ed6da07): operator adapter/CLI, protected publication, headless client"
     }
   ],
   "cadence_windows": [
