@@ -18,7 +18,7 @@ import pytest
 from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.records import UploadState
-from infrx.media import gc
+from infrx.media import gc, store
 
 from . import support
 from .test_uploads import CLIP, TTL, adapter_for, arrive, created, finalized, run
@@ -209,6 +209,38 @@ def test_upload_destinations_live_exactly_as_long_as_the_upload_is_open():
     assert key(b.ORG_A, open_handle) in adapter.objects.objects
     assert ref.storage_ref in adapter.objects.objects        # the copy stays
     assert run(adapter.resolve_owned(b.ORG_A, done)) == ref
+
+
+def test_an_upload_created_during_the_listing_keeps_its_destination():
+    """Review B1: a listing is a network round trip. An upload created and PUT while it
+    is in flight is listed, so the open set must be taken after the listing or the new
+    destination is deleted as record-less."""
+    class Yielding(store.InMemoryObjectStore):
+        def __init__(self):
+            super().__init__()
+            self.listing, self.release = asyncio.Event(), asyncio.Event()
+
+        async def keys(self, prefix):
+            if prefix.startswith("uploads/"):
+                self.listing.set()
+                await self.release.wait()
+            return await super().keys(prefix)
+
+    objects = Yielding()
+    adapter = adapter_for(objects=objects)
+
+    async def race():
+        sweep = asyncio.ensure_future(collector(adapter).sweep())
+        await objects.listing.wait()
+        ticket = await adapter.create_upload(b.ORG_A, {})
+        await adapter.put_upload(b.ORG_A, ticket["upload_handle"], CLIP, "video/mp4")
+        objects.release.set()
+        await sweep
+        return ticket["upload_handle"]
+
+    handle = run(race())
+    assert adapter.upload_key(b.ORG_A, handle) in objects.objects
+    assert run(adapter.finalize_upload(b.ORG_A, handle)).bytes == len(CLIP)
 
 
 def test_a_lapsed_upload_window_is_closed_and_its_bytes_removed():

@@ -80,6 +80,9 @@ class MediaCollector:
             store.idle_since[key] = now        # grace counts from the last pass that saw it live
 
         # 2. Uploads: close lapsed windows; only an open upload's destination is kept.
+        # Listed first: an upload created while the listing is in flight must be in the
+        # open set, or its destination is deleted as record-less (review B1).
+        listed = await store.objects.keys(UPLOAD_KEY_PREFIX)
         open_destinations = set()
         for handle, upload in list(store.uploads.items()):
             if upload.state is UploadState.created and now >= upload.expires_at:
@@ -89,7 +92,7 @@ class MediaCollector:
                 open_destinations.add(store.upload_key(upload.org_id, handle))
             elif upload.state is not UploadState.finalized and now >= upload.expires_at + self.grace:
                 del store.uploads[handle]      # a refused record is not kept forever
-        for key in await store.objects.keys(UPLOAD_KEY_PREFIX):
+        for key in listed:
             if key not in open_destinations:
                 await store.objects.delete(key)
                 swept.deleted.append(key)

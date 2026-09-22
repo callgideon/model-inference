@@ -39,6 +39,11 @@ G = "media/gc.py"             # M3: collection
 C = "media/consent.py"        # M3: consented reuse
 
 
+# Review B1: the open set taken before the listing (the pre-fix order), as one block edit.
+_B1_FIXED = '        listed = await store.objects.keys(UPLOAD_KEY_PREFIX)\n        open_destinations = set()\n        for handle, upload in list(store.uploads.items()):\n            if upload.state is UploadState.created and now >= upload.expires_at:\n                upload.state = UploadState.expired\n                swept.uploads_expired += 1\n            if upload.state is UploadState.created:\n                open_destinations.add(store.upload_key(upload.org_id, handle))\n            elif upload.state is not UploadState.finalized and now >= upload.expires_at + self.grace:\n                del store.uploads[handle]      # a refused record is not kept forever\n        for key in listed:\n'
+_B1_STALE = '        open_destinations = set()\n        for handle, upload in list(store.uploads.items()):\n            if upload.state is UploadState.created and now >= upload.expires_at:\n                upload.state = UploadState.expired\n                swept.uploads_expired += 1\n            if upload.state is UploadState.created:\n                open_destinations.add(store.upload_key(upload.org_id, handle))\n            elif upload.state is not UploadState.finalized and now >= upload.expires_at + self.grace:\n                del store.uploads[handle]      # a refused record is not kept forever\n        for key in await store.objects.keys(UPLOAD_KEY_PREFIX):\n'
+
+
 def _m(name, invariant, file, old, new, *cases) -> Mutant:
     return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases)
 
@@ -974,6 +979,10 @@ MUTANTS: tuple[Mutant, ...] = (
        G, "                del store.uploads[handle]\n\n    def _stray_files",
        "                pass\n\n    def _stray_files",
        "test_input_is_collected_after_the_job_ends_and_the_grace_passes"),
+    _m("open_set_taken_before_the_listing",
+       "an upload created while the listing is in flight keeps its destination (review B1)",
+       G, _B1_FIXED, _B1_STALE,
+       "test_an_upload_created_during_the_listing_keeps_its_destination"),
     _m("open_destination_collected", "an open upload's destination is kept",
        G, "            if upload.state is UploadState.created:\n                open_destinations",
        "            if False:\n                open_destinations",
