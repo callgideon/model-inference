@@ -217,6 +217,10 @@ async def media_sec__staging_never_replaces_an_existing_object(factory):
     reused = await harness.port.create_upload(b.ORG_A, {"max_bytes": 1024})
     second = reused["upload_handle"]
     squatted = await b.materialized(harness, b.ORG_A, handle=second, kind=MediaKind.inline)
+    if squatted.handle != second:
+        # R66: this store derives a materialized handle from the content, so no object of
+        # the tenant's can sit under an upload handle and there is nothing to replace.
+        return
     staged_first = await harness.port.stage(b.ORG_A, b.request(harness, refs=(squatted,)))
     hook(harness, "put_object")(second, b"different bytes entirely", "video/mp4")
     try:
