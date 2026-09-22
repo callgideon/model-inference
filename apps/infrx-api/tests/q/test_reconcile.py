@@ -11,7 +11,9 @@ never a pass.
 from __future__ import annotations
 
 import asyncio
+import collections
 import dataclasses
+import os
 
 import pytest
 
@@ -19,6 +21,7 @@ from infrx.contracts import errors
 from infrx.contracts.limits import PilotSettings
 from infrx.scheduling import MAX_INDEX_BYTES, MAX_INDEX_ITEMS
 
+from . import q3differential as differential
 from . import q3rig as rig
 from . import vkharness
 from .outboxfake import OutboxLost
@@ -610,6 +613,47 @@ def test_q3_caps__both_adapters_take_the_caps_from_the_settings(adapter):
         assert await w.rec.drain() == {"read": 3, "indexed": 2, "deferred": 1,
                                        "acknowledged": 2}
     run(body)
+
+
+# --- the differential ---------------------------------------------------------------
+FULL_DIFFERENTIAL = os.environ.get("INFRX_Q3_DIFFERENTIAL", "").lower() in ("all", "1")
+
+
+def test_q3_differential__the_reconciler_agrees_on_both_adapters():
+    """No stream of drains, passes, rebuilds, worker steps, losses, faults and clock jumps
+    tells the two adapters apart, and on each one no job ever holds a lease it should not
+    and no pass leaves a wanted job unindexed. `INFRX_Q3_DIFFERENTIAL=all`: 20 x 1,000."""
+    _need_valkey()
+    seeds = differential.SEEDS if FULL_DIFFERENTIAL else (1, 2, 3, 4)
+    steps = differential.STEPS if FULL_DIFFERENTIAL else 250
+    counters: collections.Counter = collections.Counter()
+    compared = asyncio.run(differential.run_seeds(seeds, steps, counters))
+    print(f"\nq3 differential: {len(seeds)} seeds x {steps} operations = {compared} "
+          f"compared states; outcomes {dict(sorted(counters.items()))}")
+    assert compared == len(seeds) * steps
+    for path in ("reconcile:missing", "reconcile:dead", "reconcile:rebuilt",
+                 "drain:raised:OutboxLost", "lose", "transit"):
+        assert counters[path] > 0, f"the stream never took {path}"
+
+
+def test_q3_differential__the_harness_notices_a_divergence():
+    """R32 honesty: an adapter whose `members()` forgets in-flight candidates makes the
+    pass think they are missing, and the run must fail on it."""
+    _need_valkey()
+
+    class ForgetsInFlight(rig.ValkeyScheduler):
+        async def members(self):
+            held = {v.decode() if isinstance(v, bytes) else v
+                    for v in await self.client.zrange(self._keys[3], 0, -1)}
+            return {k: v for k, v in (await super().members()).items() if k not in held}
+
+    def broken(w):
+        return ForgetsInFlight(vkharness.client(), w.h.clock.now,
+                               namespace=vkharness.namespace())
+
+    with pytest.raises(AssertionError) as caught:
+        asyncio.run(differential.run_stream(1, 250, valkey=broken))
+    assert "diverged" in str(caught.value), caught.value
 
 
 async def _fairness(index):
