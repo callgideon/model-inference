@@ -110,6 +110,18 @@ def _wait_ready(timeout_s: float = 30.0) -> None:
     raise RuntimeError(f"{CONTAINER} did not accept connections within {timeout_s}s")
 
 
+def kill_and_restart() -> None:
+    """SIGKILL the task-local server and start it again. It runs with `--save ''
+    --appendonly no`, so it comes back empty: the index is lost, exactly what DUR-OUTBOX
+    drills. Only ever this lane's own container (R63)."""
+    ensure()
+    for step in (("kill", "--signal", "KILL", CONTAINER), ("start", CONTAINER)):
+        done = _docker(*step, check=False)
+        if done.returncode != 0:
+            raise RuntimeError(f"docker {step[0]} {CONTAINER}: {done.stderr.strip()}")
+    _wait_ready()
+
+
 def remove() -> None:
     _docker("rm", "-f", "-v", CONTAINER, check=False)
 

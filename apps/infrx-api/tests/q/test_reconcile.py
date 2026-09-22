@@ -418,6 +418,146 @@ def test_q3_switch__a_delivery_into_the_old_index_during_the_switch_reaches_the_
     run(body)
 
 
+# --- (4) index loss ----------------------------------------------------------------
+
+def _need_valkey():
+    if _valkey_down:
+        pytest.skip(f"task-local Valkey unavailable: {_valkey_down}")
+
+
+async def _lost(w) -> None:
+    """SIGKILL the server under the adapter; prove the index really went (a sentinel key
+    written before is gone after), and drop the pool's dead connections."""
+    sentinel = f"{w.index.namespace}:sentinel"
+    await w.index.client.set(sentinel, "1")
+    await asyncio.to_thread(vkharness.kill_and_restart)
+    await w.index.client.connection_pool.disconnect()
+    assert await w.index.client.exists(sentinel) == 0, "the index survived: not a loss"
+
+
+def test_q3_drill__dr13_shape_the_rebuild_after_a_sigkill_comes_from_postgresql():
+    """E3B dr13 with the snapshot read from the store (request 5): four accepted jobs
+    queued, one run to completion, Valkey SIGKILLed; the rebuild from `dispatch_snapshot`
+    dispatches the three still queued exactly once and the finished one never."""
+    _need_valkey()
+    w = rig.world("valkey")
+
+    async def body():
+        jobs = [await rig.admit(w) for _ in range(4)]
+        await w.rec.drain()
+        for _ in jobs:
+            await rig.prepare_one(w)
+        await w.rec.drain()
+        (first, _lease) = await rig.infer_one(w)
+        await _lost(w)
+        assert await w.index.depth() == 0
+        assert await w.rec.rebuild() == 3
+        dispatched = []
+        while (step := await rig.infer_one(w)) is not None:
+            dispatched.append(step[0].job_id)
+            assert len(dispatched) <= 3, dispatched
+        assert sorted(dispatched) == sorted(set(jobs) - {first.job_id})
+        assert w.outbox.unacknowledged() == []
+        rig.settled(w)
+    run(body)
+
+
+def test_q3_drill__an_acknowledgment_after_a_rebuild_is_repaired_by_the_next_pass(adapter):
+    """The other half of Q2's hole. A worker holds a candidate across a rebuild that
+    re-indexes it, its claim never reaches the store, and it acknowledges the candidate:
+    the re-indexed copy is gone and the event is remembered as done. The next pass sees
+    a job PostgreSQL wants and the index will not take, and rebuilds."""
+    w = rig.world(adapter)
+
+    async def body():
+        job = await rig.admit(w)
+        await w.rec.drain()
+        held = await w.index.claim_candidate("prep", kind=rig.PREP)
+        assert await w.rec.rebuild() == 1                     # re-indexed: still wanted
+        await w.index.acknowledge(held)                       # the claim never landed
+        assert await rig.members(w) == {}
+        assert await w.rec.reconcile() == {"missing": 1, "rebuilt": 1}
+        assert list((await rig.members(w)).values()) == [job]
+        await rig.finish(w)
+        rig.settled(w)
+    run(body)
+
+
+def test_q3_drill__valkey_sigkilled_under_queued_and_running_traffic_loses_no_job():
+    """The acceptance. A drain loop, a reconcile loop, two preparation and two inference
+    workers run concurrently over real Valkey while jobs keep arriving; one inference
+    worker holds its lease across the kill. Valkey is SIGKILLed mid-run and comes back
+    empty. Every loop survives the outage by retrying. At the end every accepted job is
+    terminal, no job ever held a second lease, and every dispatch row is acknowledged."""
+    _need_valkey()
+    import valkey.exceptions
+
+    w = rig.world("valkey")
+    transient = (ConnectionError, OSError, valkey.exceptions.ValkeyError,
+                 errors.InternalError)            # Q2: claim-attempt exhaustion retries
+
+    async def body():
+        stop, killed = asyncio.Event(), asyncio.Event()
+        felt: dict[str, int] = {}
+
+        async def forever(name, step):
+            while not stop.is_set():
+                try:
+                    if not await step():
+                        await asyncio.sleep(0.002)
+                except transient:
+                    felt[name] = felt.get(name, 0) + 1
+                    await asyncio.sleep(0.01)
+
+        async def drain():
+            return (await w.rec.drain()).get("read")
+
+        async def reconcile():
+            await w.rec.reconcile()
+            await asyncio.sleep(0.02)
+            return True
+
+        async def slow_gpu():
+            step = await rig.infer_one(w, "gpu-slow", finish=False)
+            if step is None:
+                return False
+            candidate, lease = step
+            if lease is not None:
+                await killed.wait()                  # holds the lease across the kill
+                await w.jobs.complete(lease, rig.b.outcome(candidate.job_id, w.h))
+            return True
+
+        loops = [asyncio.create_task(forever(name, step)) for name, step in (
+            ("drain", drain), ("reconcile", reconcile),
+            ("prep-1", lambda: rig.prepare_one(w, "prep-1")),
+            ("prep-2", lambda: rig.prepare_one(w, "prep-2")),
+            ("gpu-1", lambda: rig.infer_one(w, "gpu-1")),
+            ("gpu-slow", slow_gpu))]
+        for wave in range(2):
+            for index in range(12):
+                await rig.admit(w, (rig.ORG_A, rig.ORG_B)[index % 2])
+                await asyncio.sleep(0.003)
+            if wave == 0:
+                while not w.leases:                  # something is running
+                    await asyncio.sleep(0.005)
+                await _lost(w)
+                killed.set()
+        for _ in range(3000):
+            if all(w.jobs.jobs[job].terminal for job in w.admitted):
+                break
+            await asyncio.sleep(0.01)
+        stop.set()
+        await asyncio.gather(*loops)
+        print(f"\nloops that felt the outage: {felt}; rebuilds "
+              f"{w.rec.metrics['rebuilds']}; leases {sum(w.leases.values())}")
+        assert felt, "no loop saw the outage: the kill did not happen under traffic"
+        rig.settled(w)
+        assert sorted(w.leases) == sorted(w.admitted)
+        assert all(w.jobs.jobs[job].state is rig.JobState.succeeded for job in w.admitted)
+        assert w.outbox.unacknowledged() == []
+    run(body)
+
+
 async def _fairness(index):
     if isinstance(index, rig.ValkeyScheduler):
         snap = await index.snapshot()
