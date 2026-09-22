@@ -71,8 +71,9 @@ from ..contracts.conformance import Harness
 from ..contracts.fakes.engine import DEFAULT_TEXT, SPLIT_REASONING
 from ..contracts.fakes.support import FakeClock, SequentialIds
 from ..contracts.limits import DEFAULTS, PilotSettings
-from .engine import LOCAL_MEDIA_ROOT, VllmEngine
+from .engine import VllmEngine
 
+FAKE_MEDIA_ROOT = "/srv/infrx/processing"       # a PROCESSING_CACHE_DIR for scripted cases
 SERVED_MODEL = "marlin2b"           # vLLM's `--served-model-name`, as F1 sends it
 ENGINE_VERSION = "0.11.0"
 # 7 s, deliberately not a divisor of the 60 s TTFT or the 20 s stall budget: a
@@ -435,9 +436,13 @@ class FakeUpstream:
                                  transport=httpx.MockTransport(self.handle))
 
     def engine(self, **kw) -> VllmEngine:
-        kw.setdefault("local_uri", m2_local_uri(kw.get("local_media_root", LOCAL_MEDIA_ROOT)))
+        # A deployment sets PROCESSING_CACHE_DIR; the scripted upstream stands in for one that
+        # did, unless the case configured its own root.
+        limits = self.limits if self.limits.processing_cache_dir \
+            else self.limits.replace(processing_cache_dir=FAKE_MEDIA_ROOT)
+        kw.setdefault("local_uri", m2_local_uri(limits.processing_cache_dir))
         return VllmEngine(self.client(), served_model=self.served_model, clock=self.clock,
-                          limits=self.limits, path=self.path, **kw)
+                          limits=limits, path=self.path, **kw)
 
 
 def m2_local_uri(root: str):

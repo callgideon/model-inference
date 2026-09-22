@@ -132,11 +132,10 @@ STORAGE_REF_PATTERN = re.compile(
 # `--allowed-local-media-path <that root>`. A bare object key is not something vLLM can
 # open, and the customer's own URL is never forwarded whatever it said.
 #
-# The root is a **deployment** fact - it must be the same path the engine was started with -
-# so W3 passes it to the constructor, together with M2's processing cache, whose root must
-# be the same path. This default exists so nothing here reads the environment (integration
-# request: a `Settings` field).
-LOCAL_MEDIA_ROOT = "/mnt/nvme/processing"
+# The root is a **deployment** fact, and one setting: `PROCESSING_CACHE_DIR`
+# (`PilotSettings.processing_cache_dir`), which is also M2's `ProcessingCache` root and
+# serve.sh's `--allowed-local-media-path` (W3). Unset, no video can be served: the adapter
+# refuses rather than guessing a path.
 LOCAL_MEDIA_SCHEME = "file://"
 # M2's file name inside a digest directory (`prepare.SOURCE_FILENAME` + a probed extension).
 LOCAL_MEDIA_FILE = re.compile(r"source\.[a-z0-9]{1,8}")
@@ -353,6 +352,8 @@ def local_media_url(ref: MediaRef, root: str, org_id: str, local_uri) -> str:
     """
     if local_uri is None:
         raise errors.DependencyUnavailable("no local media resolver is configured")
+    if not root:
+        raise errors.DependencyUnavailable("no processing cache root is configured")
     uri = local_uri(ref)
     path = uri[len(LOCAL_MEDIA_SCHEME):] if isinstance(uri, str) \
         and uri.startswith(LOCAL_MEDIA_SCHEME) else ""
@@ -461,14 +462,16 @@ class VllmEngine:
     def __init__(self, client: httpx.AsyncClient, *, served_model: str, clock,
                  limits: PilotSettings = DEFAULTS, path: str = "/v1/chat/completions",
                  media_settings: Settings | None = None, require_version: str | None = None,
-                 local_media_root: str = LOCAL_MEDIA_ROOT, local_uri=None) -> None:
+                 local_uri=None, local_media_root: str | None = None) -> None:
         self.client = client
         # R61 (2): M2's `MediaPreparation.local_uri`, the one producer of the local path.
         # Without it a video request is refused (`dependency_unavailable`), never guessed.
         self.local_uri = local_uri
         # S2M §2/D3: the same path the engine was started with
-        # (`--allowed-local-media-path`). W3 pins it; nothing here reads the environment.
-        self.local_media_root = local_media_root
+        # (`--allowed-local-media-path`): `PROCESSING_CACHE_DIR`, one setting (W3). The
+        # argument exists for a case that builds an adapter over its own directory.
+        self.local_media_root = limits.processing_cache_dir if local_media_root is None \
+            else local_media_root
         self.served_model = served_model
         self.clock = clock
         self.limits = limits

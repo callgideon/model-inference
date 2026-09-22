@@ -34,11 +34,11 @@ from infrx.media.video import Media
 from infrx.worker import (EngineError, EngineFailure, EngineIncomplete, EngineProtocolViolation,
                           EngineTransportError, EngineUnsupported, VllmEngine, cache_salt,
                           prepared_request)
-from infrx.worker.engine import (LOCAL_MEDIA_ROOT, LOCAL_MEDIA_SCHEME, MAX_CANCEL_INTENTS,
+from infrx.worker.engine import (LOCAL_MEDIA_SCHEME, MAX_CANCEL_INTENTS,
                                  MIN_JOURNAL_EVENT_BYTES, MODEL_EOS_TOKEN_IDS,
                                  PAYLOAD_OVERHEAD_BYTES, _delta_payload, check_storage_ref,
                                  media_uuid)
-from infrx.worker.fakes import (ERROR_BODY_CHUNK, SERVED_MODEL, FakeUpstream, m2_local_uri,
+from infrx.worker.fakes import (ERROR_BODY_CHUNK, FAKE_MEDIA_ROOT, SERVED_MODEL, FakeUpstream, m2_local_uri,
                                engine_factory)
 from infrx.worker.reasoning import filter_text
 
@@ -329,7 +329,7 @@ def test_api_stream__messages_are_rebuilt_from_an_allow_list():
         # S2M §2/D3: the local file the prepared reference materialized to, under the
         # root the engine was started with - never the customer's own url
         {"type": "video_url",
-         "video_url": {"url": m2_local_uri(LOCAL_MEDIA_ROOT)(prepared.media[0])}}]
+         "video_url": {"url": m2_local_uri(FAKE_MEDIA_ROOT)(prepared.media[0])}}]
     for role in ("system", "user", "assistant"):
         engine.upstream_body(text_prepared(Box(), messages=({"role": role, "content": "hi"},)))
 
@@ -350,7 +350,7 @@ def test_api_stream__no_outbound_body_ever_carries_a_foreign_url():
         assert events, url
         sent = json.dumps(upstream.requests[0])
         assert sent.count("://") == 1, (url, sent)          # exactly the one file:// we built
-        assert m2_local_uri(LOCAL_MEDIA_ROOT)(prepared.media[0]) in sent
+        assert m2_local_uri(FAKE_MEDIA_ROOT)(prepared.media[0]) in sent
         for scheme in ("http", "data:", "gopher", "ftp", "s3", "//169.254"):
             assert scheme not in sent.replace(LOCAL_MEDIA_SCHEME, ""), (url, scheme)
 
@@ -364,7 +364,7 @@ def test_api_stream__prepared_media_replaces_the_customers_url():
     prepared = prepared_request(work, prompt_tokens=1200)
     body = engine.upstream_body(prepared)
     assert body["messages"][0]["content"][1]["video_url"] == {
-        "url": m2_local_uri(LOCAL_MEDIA_ROOT)(work.prepared_refs[0])}
+        "url": m2_local_uri(FAKE_MEDIA_ROOT)(work.prepared_refs[0])}
     assert EVIL not in json.dumps(body)
 
     # a prepared ref with no media part at all: only the count check can refuse this
@@ -1100,7 +1100,7 @@ def test_api_stream__a_prepared_reference_must_be_one_the_store_could_have_made(
     # R61's path check does not stand in for this link: a resolver that answers with the
     # request organization's path whatever the ref says passes the path check, and only
     # the salt/ref link refuses org B's object under org A's namespace
-    lenient = m2_local_uri(LOCAL_MEDIA_ROOT)
+    lenient = m2_local_uri(FAKE_MEDIA_ROOT)
     blind = FakeUpstream(clock=Box().clock).engine(
         local_uri=lambda ref: lenient(ref.model_copy(update={"org_id": b.ORG_A})))
     assert refusal(blind, foreign) == "refused: not_found"

@@ -337,7 +337,7 @@ MUTANTS: tuple[Mutant, ...] = (
        '"video_url": {"url": ref.storage_ref}},', MEDIA_FILE),
     _m("media_root_is_not_the_engines", "the root is the one the engine was started with",
        E, "local_media_url(ref, self.local_media_root, org_id,",
-       "local_media_url(ref, LOCAL_MEDIA_ROOT, org_id,", MEDIA_FILE,
+       'local_media_url(ref, "/srv/infrx/processing", org_id,', MEDIA_FILE,
        # M2's path under the pinned root fails the default root's check: that is the kill
        dies_by=("NotFound",)),
     _m("media_path_unchecked", "R61: M2's path is checked, not trusted",
