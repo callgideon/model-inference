@@ -1375,6 +1375,13 @@ MUTANTS: tuple[Mutant, ...] = (
        E, 'payload={"visible": visible, "raw": raw}))',
        'payload={"visible": visible, "raw": raw, "content": raw}))',
        "api_stream__canonical_events_end_with_authoritative_usage"),
+    # --- F2R: the two money-context mutants the audit found surviving ----------------
+    _m("money_context_default_precision", "money arithmetic runs at 40 digits",
+       MONEY, "        prec=40, rounding=decimal.ROUND_HALF_EVEN,",
+       "        prec=28, rounding=decimal.ROUND_HALF_EVEN,", "test_the_money_context_is_pinned"),
+    _m("money_context_traps_nothing", "an invalid money operation raises, never NaN",
+       MONEY, "        traps=[decimal.InvalidOperation, decimal.DivisionByZero, decimal.Overflow],",
+       "        traps=[],", "test_the_money_context_is_pinned"),
     # --- F2R lane A item 5: judge sample ids and the judge-sample DTO -------------------
     _m("judge_run_duplicate_sample_ids", "a run's sample ids are unique",
        R, "        if len(set(self.sample_ids)) != len(self.sample_ids):", "        if False:",
@@ -1714,6 +1721,7 @@ def run_mutant(mutant: "Mutant", runner: Runner | None = None) -> Result:
 # (F2R items 5 and 7: a validator on `records` or `config` has no port case to die in).
 CONTRACTS = Runner(name="contracts", targets=("tests/contracts/test_conformance.py",
                                               "tests/contracts/test_fixtures.py",
+                                              "tests/contracts/test_money.py",
                                               "tests/contracts/test_config_and_imports.py"))
 
 

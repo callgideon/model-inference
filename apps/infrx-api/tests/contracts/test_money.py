@@ -170,6 +170,18 @@ def test_money_is_independent_of_ambient_decimal_settings():
         assert money.available(Decimal("999999999999.99999999"), Decimal("0.00000001")) == Decimal("999999999999.99999998")
 
 
+def test_the_money_context_is_pinned():
+    """F2R: the explicit context's precision and traps are the contract, not an accident -
+    28 digits (the ambient default) cannot hold `numeric(20, 8)` products exactly, and a
+    context that traps nothing turns an invalid operation into a silent NaN."""
+    import decimal
+
+    context = money.arithmetic_context()
+    assert context.prec >= 40
+    assert {trap for trap, on in context.traps.items() if on} == {
+        decimal.InvalidOperation, decimal.DivisionByZero, decimal.Overflow}
+
+
 def test_money_contexts_cannot_poison_subsequent_operations():
     import decimal
 
