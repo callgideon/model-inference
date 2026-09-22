@@ -28,6 +28,7 @@ if str(API_DIR) not in sys.path:        # `python tests/q/valkey_mutants.py`
     sys.path.insert(0, str(API_DIR))
 
 from tests.contracts.mutants import Mutant, Outcome  # noqa: E402
+from tests.q import vkharness                        # noqa: E402
 from tests.q.mutants import run_mutant               # noqa: E402
 
 #: The only suite a Q2 mutant may be killed by: the cases that drive the real adapter.
@@ -198,7 +199,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("a_claimed_candidate_stays_claimable",
        "a claim takes the candidate out of its flow, so two workers never hold one",
        "redis.call('ZREM', pending_key(pick.flow), pick.id)",
-       "redis.call('ZCARD', pending_key(pick.flow), pick.id)",
+       # R83: remove the effect, keep the call well formed (a wrong-arity command is a
+       # ResponseError before any invariant is checked, which is not a kill)
+       "redis.call('ZSCORE', pending_key(pick.flow), pick.id)",
        "test_q2_replay__enqueue_is_replay_safe_across_pending_inflight_and_acknowledged",
        "dur_outbox__enqueue_is_replay_safe"),
     # --- R60 level 1 (points 5, 6) -------------------------------------------
@@ -288,8 +291,13 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_q2_none__a_kind_that_waited_catches_up_once_and_cannot_hoard"),
     _m("a_filtered_claim_moves_the_kind_state",
        "R60: kind-filtered claims never read or write level-1 state",
-       "if top_level then\n  -- level 1 writes",
-       "if true then\n  -- level 1 writes",
+       # R83: a filtered claim has no level-1 pick tag, so `if true` alone died on a nil
+       # comparison (ResponseError); the one edit now also reads the kind's own tag, so
+       # the filtered claim really writes level-1 state and the case sees it move.
+       "if top_level then\n  -- level 1 writes, BEFORE the level-2 writes, no weight\n"
+       "  local top_start = pick.ktag\n",
+       "if true then\n  -- level 1 writes, BEFORE the level-2 writes, no weight\n"
+       "  local top_start = pick.ktag or score(CLOCK, 'kt|' .. pick.kind)\n",
        "test_q2_none__a_filtered_worker_never_moves_the_kind_state"),
     _m("an_unfiltered_claim_serves_one_kind_only",
        "R60: an unfiltered claim is served through the two-level rule across both kinds",
@@ -323,7 +331,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("acknowledge_does_not_remember_the_candidate",
        "the acknowledgment is remembered, so a replayed outbox event cannot re-index it",
        "redis.call('SADD', ACKED, ARGV[1])",
-       "redis.call('SCARD', ACKED, ARGV[1])",
+       "redis.call('SISMEMBER', ACKED, ARGV[1])",              # R83: no effect, no error
        "test_q2_replay__enqueue_is_replay_safe_across_pending_inflight_and_acknowledged",
        "dur_outbox__acknowledged_candidates_do_not_come_back"),
     _m("the_item_cap_is_not_enforced",
@@ -355,7 +363,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("bytes_are_never_returned",
        "byte accounting is symmetric: what enqueue charges, leaving gives back",
        "  redis.call('HINCRBY', COUNTERS, 'bytes', int_text(-e.size))",
-       "  redis.call('HSTRLEN', COUNTERS, 'bytes', int_text(-e.size))",
+       "  redis.call('HGET', COUNTERS, 'bytes')",                # R83: no effect, no error
        "test_q2_caps__queued_bytes_are_counted_per_candidate_and_returned"),
     _m("the_index_is_not_namespaced",
        "each index owns its keys, so two indices in one server cannot corrupt each "
@@ -515,6 +523,7 @@ def main() -> int:
               f"{len({case for m in MUTANTS for case in m.cases})} named cases")
         return 0
     chosen = [m for m in MUTANTS if not args.names or m.name in args.names]
+    vkharness.ensure()          # one server for the whole run, owned by this process
     bad: dict[str, list[str]] = {}
     for mutant in chosen:
         result = run_mutant(mutant, paths=PATHS)

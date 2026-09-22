@@ -30,6 +30,15 @@ SUBSET = ("the_row_is_acknowledged_before_it_is_indexed",
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
+@pytest.fixture(autouse=True, scope="module")
+def _one_server_for_the_whole_list():
+    """Start the task-local server once, in this process, so every mutant subprocess finds
+    it running. Otherwise the first subprocess of each run starts it and removes it at
+    exit, and the next one starts it again - a docker run and a readiness wait per mutant,
+    which is where the list failed under host load."""
+    vkharness.ensure()
+
+
 def test_the_list_is_well_formed():
     """Unique names, an invariant and a case each, every anchor exactly once in its file,
     and every case a test that exists in the suite the runner aims at."""

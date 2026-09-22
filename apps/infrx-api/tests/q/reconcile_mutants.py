@@ -25,6 +25,7 @@ if str(API_DIR) not in sys.path:        # `python tests/q/reconcile_mutants.py`
     sys.path.insert(0, str(API_DIR))
 
 from tests.contracts.mutants import Mutant, Outcome  # noqa: E402,F401
+from tests.q import vkharness                        # noqa: E402
 from tests.q.mutants import run_mutant               # noqa: E402
 
 #: The only suite a Q3 mutant may be killed by.
@@ -238,6 +239,7 @@ def main() -> int:
               f"{len({case for m in MUTANTS for case in m.cases})} named cases")
         return 0
     chosen = [m for m in MUTANTS if not args.names or m.name in args.names]
+    vkharness.ensure()          # one server for the whole run, owned by this process
     bad: dict[str, list[str]] = {}
     for mutant in chosen:
         result = run_mutant(mutant, paths=PATHS)

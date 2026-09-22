@@ -95,7 +95,7 @@ def ensure() -> None:
     _started = True
 
 
-def _wait_ready(timeout_s: float = 30.0) -> None:
+def _wait_ready(timeout_s: float = 90.0) -> None:       # generous: a loaded host is slow
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         # docker's proxy accepts TCP before the server does, so wait for a PONG
