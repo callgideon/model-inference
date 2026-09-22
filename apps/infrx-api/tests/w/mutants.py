@@ -740,8 +740,12 @@ def _reasons(stdout: str) -> list[str]:
     return names
 
 
-def run_mutant(mutant: Mutant) -> Result:
-    """Apply one mutant to a throwaway copy and run the cases it names."""
+def run_mutant(mutant: Mutant, suite: tuple[str, ...] = SUITE) -> Result:
+    """Apply one mutant to a throwaway copy and run the cases it names.
+
+    `suite` is the pytest target: W2's list (`tests/w/loop_mutants.py`) passes its own
+    file, so the machinery is shared rather than copied a third time.
+    """
     if not mutant.cases:
         return Result(Outcome.misdeclared, "declares no case")
     with tempfile.TemporaryDirectory(prefix=f"w-mutant-{mutant.name}-") as tmp:
@@ -761,7 +765,7 @@ def run_mutant(mutant: Mutant) -> Result:
         target.write_text(source.replace(mutant.old, mutant.new, 1))
         done = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-             "-rf", "--tb=line", *SUITE, "-k", " or ".join(mutant.cases)],
+             "-rf", "--tb=line", *suite, "-k", " or ".join(mutant.cases)],
             cwd=root, capture_output=True, text=True,
             env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
         stdout = done.stdout or ""

@@ -58,6 +58,7 @@ import codecs
 import hashlib
 import json
 import math
+import posixpath
 import re
 from datetime import datetime, timedelta
 from itertools import zip_longest
@@ -124,6 +125,31 @@ STORAGE_REF_SEGMENT = r"[A-Za-z0-9][A-Za-z0-9._-]*"
 STORAGE_REF_PATTERN = re.compile(
     r"^media/(?P<org>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/"
     rf"(?:{STORAGE_REF_SEGMENT}/){{1,3}}{STORAGE_REF_SEGMENT}")
+
+# S2M's pinned serving profile (`research/workloads/marlin-sop.md` §2, discrepancy D3)
+# settles the media form: the engine is handed `file://<path>` for the prepared object
+# materialized under the processing-cache root, tenant-prefixed, with vLLM started as
+# `--allowed-local-media-path <that root>`. A bare object key is not something vLLM can
+# open, and the customer's own URL is never forwarded whatever it said.
+#
+# The root is a **deployment** fact - it must be the same path the engine was started with -
+# so W3 passes it to the constructor, together with M2's processing cache, whose root must
+# be the same path. This default exists so nothing here reads the environment (integration
+# request: a `Settings` field).
+LOCAL_MEDIA_ROOT = "/mnt/nvme/processing"
+LOCAL_MEDIA_SCHEME = "file://"
+# M2's file name inside a digest directory (`prepare.SOURCE_FILENAME` + a probed extension).
+LOCAL_MEDIA_FILE = re.compile(r"source\.[a-z0-9]{1,8}")
+
+# S2M §1.2 consequence 1: the `--hf-overrides` architecture remap loads Marlin as plain
+# `Qwen3_5ForConditionalGeneration` and loses its custom code, the second EOS id with it.
+# `config.eos_token_id` is 248046, `config.text_config.eos_token_id` is 248044, and
+# `generation_config.json` lists both; an engine reading only the top-level id misses a
+# stop token and runs to the output ceiling, which the customer pays for. Both are
+# re-supplied on every request, so a serving profile that forgot the flag is still correct.
+# (Consequence 2, the `<think>` prefix, is `reasoning.py`: R58's `visible` never carries it.
+# Neither is a caller parameter - `stop_token_ids` is not in `PASSTHROUGH_PARAMETERS`.)
+MODEL_EOS_TOKEN_IDS = (248044, 248046)
 
 DETAIL_MAX_CHARS = 500          # operator-only text, bounded so a log line stays a log line
 ERROR_BODY_MAX_BYTES = 64 * 1024        # an engine's error body is read bounded, never whole
@@ -294,6 +320,50 @@ def check_storage_ref(ref: MediaRef) -> None:
         raise errors.NotFound(f"media {ref.handle} has no usable prepared reference")
 
 
+def _inside_tenant_root(path: str, root: str, org_id: str, ref: MediaRef) -> bool:
+    """Is `path` the file the engine may open for **this** request's `ref`?
+
+    R61 (2) as amended: M2 materializes a prepared object at
+    `<root>/<org uuid>/<profile_version>/<digest16>/source.<ext>`. The path is checked
+    segment by segment against facts this adapter already holds - the request's
+    organization, the ref's profile version and its digest - so the organization is read
+    **from the path** and compared, never taken from whatever produced the path. Inside the
+    root vLLM was started with (`--allowed-local-media-path`) is necessary but not
+    sufficient: a path that only satisfies that is another organization's video with a
+    legal name.
+    """
+    if not root.startswith("/") or not path.startswith("/") or not org_id:
+        # A relative root cannot be compared with anything, vLLM's allow-list is absolute,
+        # and a request with no organization owns nothing: refusing is the only safe answer.
+        return False
+    # No normalization step: after the literal root prefix exactly four segments must
+    # equal known values or M2's file name, so `.`, `..` and `` can never pass.
+    prefix = posixpath.normpath(root) + "/"
+    if not path.startswith(prefix):
+        return False
+    segments = path[len(prefix):].split("/")
+    digest16 = ref.digest.removeprefix("sha256:")[:16]
+    return (len(segments) == 4 and segments[:3] == [org_id, ref.profile_version, digest16]
+            and LOCAL_MEDIA_FILE.fullmatch(segments[3]) is not None)
+
+
+def local_media_url(ref: MediaRef, root: str, org_id: str, local_uri) -> str:
+    """The `file://` URL the pinned engine opens the prepared object with (R61 (2), S2M D3).
+
+    `local_uri` is preparation's (M2 `MediaPreparation.local_uri`): the path is M2's to
+    build and ours to check. Whatever it returns is validated against the configured root
+    and the **request's** organization before it can reach the engine.
+    """
+    if local_uri is None:
+        raise errors.DependencyUnavailable("no local media resolver is configured")
+    uri = local_uri(ref)
+    path = uri[len(LOCAL_MEDIA_SCHEME):] if isinstance(uri, str) \
+        and uri.startswith(LOCAL_MEDIA_SCHEME) else ""
+    if not _inside_tenant_root(path, root, org_id, ref):
+        raise errors.NotFound(f"media {ref.handle} is not inside this tenant's media root")
+    return f"{LOCAL_MEDIA_SCHEME}{path}"
+
+
 def _encodable(text: str) -> bool:
     """False for an unpaired surrogate: such a string cannot be serialised, so an event
     carrying it could not be journalled or relayed (it would break W2's `append`)."""
@@ -396,8 +466,15 @@ class VllmEngine:
 
     def __init__(self, client: httpx.AsyncClient, *, served_model: str, clock,
                  limits: PilotSettings = DEFAULTS, path: str = "/v1/chat/completions",
-                 media_settings: Settings | None = None, require_version: str | None = None) -> None:
+                 media_settings: Settings | None = None, require_version: str | None = None,
+                 local_media_root: str = LOCAL_MEDIA_ROOT, local_uri=None) -> None:
         self.client = client
+        # R61 (2): M2's `MediaPreparation.local_uri`, the one producer of the local path.
+        # Without it a video request is refused (`dependency_unavailable`), never guessed.
+        self.local_uri = local_uri
+        # S2M §2/D3: the same path the engine was started with
+        # (`--allowed-local-media-path`). W3 pins it; nothing here reads the environment.
+        self.local_media_root = local_media_root
         self.served_model = served_model
         self.clock = clock
         self.limits = limits
@@ -478,6 +555,9 @@ class VllmEngine:
         our network.
         """
         refs = list(prepared.media)
+        # The request's organization: `prepared_request` overwrites `tenant_salt` with
+        # `work.request.org_id`, so it is the one tenant fact a ref did not bring with it.
+        org_id = str((prepared.parameters or {}).get("tenant_salt") or "").strip()
         messages, consumed = [], 0
         for message in prepared.messages:
             if not isinstance(message, dict):
@@ -498,7 +578,7 @@ class VllmEngine:
                 raise errors.InvalidRequest("content is text or a list of parts", param="messages")
             parts = []
             for part in content:
-                rebuilt, consumed = self._part(part, refs, consumed)
+                rebuilt, consumed = self._part(part, refs, consumed, org_id)
                 parts.append(rebuilt)
             messages.append({"role": role, "content": parts})
         if consumed != len(refs):
@@ -506,7 +586,8 @@ class VllmEngine:
                 f"{consumed} media parts but {len(refs)} prepared references", param="messages")
         return messages
 
-    def _part(self, part: object, refs: list[MediaRef], consumed: int) -> tuple[dict, int]:
+    def _part(self, part: object, refs: list[MediaRef], consumed: int,
+              org_id: str) -> tuple[dict, int]:
         """One content part, rebuilt; returns it and how many refs are now consumed."""
         if not isinstance(part, dict):
             raise errors.InvalidRequest("a content part is an object", param="messages")
@@ -526,8 +607,12 @@ class VllmEngine:
             if not ref.mime.startswith(VIDEO_MIME_PREFIX):
                 raise errors.InvalidRequest(f"a video part cannot carry {ref.mime}",
                                            param="messages")
-            # The customer's own `video_url` value is never read: the reference is ours.
-            return {"type": VIDEO_PART, "video_url": {"url": ref.storage_ref}}, consumed + 1
+            # The customer's own `video_url` value is never read: the reference is ours,
+            # and what the engine gets is the local file that reference materialized to.
+            return ({"type": VIDEO_PART,
+                     "video_url": {"url": local_media_url(ref, self.local_media_root, org_id,
+                                                           self.local_uri)}},
+                    consumed + 1)
         raise errors.UnsupportedParameter(
             f"{kind!r} content parts are not supported; the pilot is text and video",
             param="messages")
@@ -563,6 +648,8 @@ class VllmEngine:
             "n": 1,
             "stream": True,
             "stream_options": {"include_usage": True},
+            # S2M §1.2: both EOS ids, because the architecture remap drops one of them.
+            "stop_token_ids": list(MODEL_EOS_TOKEN_IDS),
             CACHE_SALT_FIELD: salt,
             **forwarded,
         }

@@ -71,7 +71,7 @@ from ..contracts.conformance import Harness
 from ..contracts.fakes.engine import DEFAULT_TEXT, SPLIT_REASONING
 from ..contracts.fakes.support import FakeClock, SequentialIds
 from ..contracts.limits import DEFAULTS, PilotSettings
-from .engine import VllmEngine
+from .engine import LOCAL_MEDIA_ROOT, VllmEngine
 
 SERVED_MODEL = "marlin2b"           # vLLM's `--served-model-name`, as F1 sends it
 ENGINE_VERSION = "0.11.0"
@@ -435,8 +435,17 @@ class FakeUpstream:
                                  transport=httpx.MockTransport(self.handle))
 
     def engine(self, **kw) -> VllmEngine:
+        kw.setdefault("local_uri", m2_local_uri(kw.get("local_media_root", LOCAL_MEDIA_ROOT)))
         return VllmEngine(self.client(), served_model=self.served_model, clock=self.clock,
                           limits=self.limits, path=self.path, **kw)
+
+
+def m2_local_uri(root: str):
+    """M2's `MediaPreparation.local_uri` layout without a processing cache (R61 (2)):
+    `file://<root>/<org>/<profile>/<digest16>/source.mp4`. A stand-in, not a copy - the
+    adapter checks what M2 returns rather than trusting this shape."""
+    return lambda ref: (f"file://{root}/{ref.org_id}/{ref.profile_version}/"
+                        f"{ref.digest.removeprefix('sha256:')[:16]}/source.mp4")
 
 
 def engine_factory(limits: PilotSettings | None = None, *, fault: str = "none",

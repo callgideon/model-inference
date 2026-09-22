@@ -34,9 +34,11 @@ from infrx.media.video import Media
 from infrx.worker import (EngineError, EngineFailure, EngineIncomplete, EngineProtocolViolation,
                           EngineTransportError, EngineUnsupported, VllmEngine, cache_salt,
                           prepared_request)
-from infrx.worker.engine import (MAX_CANCEL_INTENTS, MIN_JOURNAL_EVENT_BYTES,
-                                 PAYLOAD_OVERHEAD_BYTES, _delta_payload, media_uuid)
-from infrx.worker.fakes import (ERROR_BODY_CHUNK, SERVED_MODEL, FakeUpstream,
+from infrx.worker.engine import (LOCAL_MEDIA_ROOT, LOCAL_MEDIA_SCHEME, MAX_CANCEL_INTENTS,
+                                 MIN_JOURNAL_EVENT_BYTES, MODEL_EOS_TOKEN_IDS,
+                                 PAYLOAD_OVERHEAD_BYTES, _delta_payload, check_storage_ref,
+                                 media_uuid)
+from infrx.worker.fakes import (ERROR_BODY_CHUNK, SERVED_MODEL, FakeUpstream, m2_local_uri,
                                engine_factory)
 from infrx.worker.reasoning import filter_text
 
@@ -324,15 +326,19 @@ def test_api_stream__messages_are_rebuilt_from_an_allow_list():
     assert [sorted(message) for message in body["messages"]] == [["content", "role"]]
     assert body["messages"][0]["content"] == [
         {"type": "text", "text": "Describe this clip."},
-        {"type": "video_url", "video_url": {"url": prepared.media[0].storage_ref}}]
+        # S2M §2/D3: the local file the prepared reference materialized to, under the
+        # root the engine was started with - never the customer's own url
+        {"type": "video_url",
+         "video_url": {"url": m2_local_uri(LOCAL_MEDIA_ROOT)(prepared.media[0])}}]
     for role in ("system", "user", "assistant"):
         engine.upstream_body(text_prepared(Box(), messages=({"role": role, "content": "hi"},)))
 
 
 def test_api_stream__no_outbound_body_ever_carries_a_foreign_url():
     """MEDIA-SEC: the positive half of the allow-list. Whatever the customer put in the
-    message, the only reference in the outbound JSON is the prepared one, which carries no
-    URL scheme at all (W3/M2 add `file://` plus an allowed media path for real vLLM)."""
+    message, the only reference in the outbound JSON is the prepared one, as a `file://`
+    path under the root the engine was started with (S2M §2/D3) - so the one scheme that
+    can appear names a local file of this tenant's, and no network scheme ever does."""
     box = Box()
     for url in (EVIL, "https://videos.example.com/clip.mp4", "data:video/mp4;base64,AAAA",
                 "file:///etc/passwd", "gopher://internal/"):
@@ -343,8 +349,10 @@ def test_api_stream__no_outbound_body_ever_carries_a_foreign_url():
         events = asyncio.run(collect(engine.generate(lease(box), prepared)))
         assert events, url
         sent = json.dumps(upstream.requests[0])
-        assert "://" not in sent and "data:" not in sent, url
-        assert prepared.media[0].storage_ref in sent
+        assert sent.count("://") == 1, (url, sent)          # exactly the one file:// we built
+        assert m2_local_uri(LOCAL_MEDIA_ROOT)(prepared.media[0]) in sent
+        for scheme in ("http", "data:", "gopher", "ftp", "s3", "//169.254"):
+            assert scheme not in sent.replace(LOCAL_MEDIA_SCHEME, ""), (url, scheme)
 
 
 def test_api_stream__prepared_media_replaces_the_customers_url():
@@ -356,7 +364,7 @@ def test_api_stream__prepared_media_replaces_the_customers_url():
     prepared = prepared_request(work, prompt_tokens=1200)
     body = engine.upstream_body(prepared)
     assert body["messages"][0]["content"][1]["video_url"] == {
-        "url": work.prepared_refs[0].storage_ref}
+        "url": m2_local_uri(LOCAL_MEDIA_ROOT)(work.prepared_refs[0])}
     assert EVIL not in json.dumps(body)
 
     # a prepared ref with no media part at all: only the count check can refuse this
@@ -1091,6 +1099,23 @@ def test_api_stream__a_prepared_reference_must_be_one_the_store_could_have_made(
     foreign = prepared.model_copy(update={"media": (b.media(b.ORG_B).model_copy(update={
         "storage_ref": f"media/{b.ORG_B}/v1/source"}),)})
     assert refusal(engine, foreign) == "refused: not_found"
+    # R61's path check does not stand in for this link: a resolver that answers with the
+    # request organization's path whatever the ref says passes the path check, and only
+    # the salt/ref link refuses org B's object under org A's namespace
+    lenient = m2_local_uri(LOCAL_MEDIA_ROOT)
+    blind = FakeUpstream(clock=Box().clock).engine(
+        local_uri=lambda ref: lenient(ref.model_copy(update={"org_id": b.ORG_A})))
+    assert refusal(blind, foreign) == "refused: not_found"
+    assert refusal(blind, prepared) == "accepted"
+
+    # the guard is also asserted on its own, because the local-path check (S2M D3) refuses
+    # a foreign prefix too: with only the end-to-end assertions above, a `check_storage_ref`
+    # that stopped comparing tenants would be masked by the second check.
+    check_storage_ref(good)
+    for storage_ref in (f"media/{b.ORG_B}/v1/source", "http://169.254.169.254/",
+                        f"media/{b.ORG_A}/v1/source\n"):
+        with pytest.raises(errors.NotFound):
+            check_storage_ref(good.model_copy(update={"storage_ref": storage_ref}))
 
     # the store's own five-segment key is accepted too, not only the fixture's shorter one
     real = good.model_copy(update={
