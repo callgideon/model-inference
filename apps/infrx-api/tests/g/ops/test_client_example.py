@@ -123,15 +123,18 @@ def test_api_ops__failures_are_explicit_and_never_retried_blindly(key, tmp_path)
     assert secret[9:] not in open(state).read()
 
 
-def test_api_ops__an_exhausted_wallet_pauses_the_sweep(key, tmp_path):
+@pytest.mark.parametrize("status,expected", [(401, "stopped_credential"),
+                                             (402, "paused_wallet"),
+                                             (403, "stopped_credential")])
+def test_api_ops__an_exhausted_wallet_pauses_the_sweep(key, tmp_path, status, expected):
     sent = []
 
     def handler(request):
         sent.append(request)
-        return httpx.Response(402, json={"error": {"code": "insufficient_credit"}})
+        return httpx.Response(status, json={"error": {"code": "insufficient_credit"}})
     code, rows, _ = sweep(tmp_path, handler, "--concurrency", "1")
     assert code == 1 and len(sent) == 1
-    assert [r["status"] for r in rows] == ["paused_wallet"]  # nothing burned after the 402
+    assert [r["status"] for r in rows] == [expected]         # nothing burned after it
 
 
 def test_api_ops__concurrency_is_bounded_per_key(key, tmp_path):
