@@ -59,8 +59,14 @@ All three guard on `is_org_member(p_org) or is_operator()` and are granted to
 ```sql
 select * from org_usage_summary('<org>', now() - interval '24 hours', now());
 select * from org_usage_daily('<org>', now() - interval '30 days', now(), '<key id>');
-select org_balance('<org>');
+select org_balance('<org>');   -- legacy USD sum; NOT the console's balance source
 ```
+
+The console reads its balance from `org_wallet_summary` (0005) only; there is no
+`org_balance` fallback any more (it was deleted in the console, S1-fix B1). The
+comments in `0005_console_read_surface.sql` that still mention that fallback are
+historical and, like every file 0001–0005, are not edited. The CREDIT balance is
+`console_wallet_summary(user)` (0008); legacy USD is `console_legacy_usd_statement(org)`.
 
 `org_usage_summary` returns one row: requests, error_requests, avg_rps,
 ttft_p50_ms, tok_s_p50, latency_p50_ms, cache_hit_ratio, prompt_tokens,
@@ -102,3 +108,49 @@ verify both grants and RLS using real anon, authenticated, operator and service 
 The historical role table above describes 0001–0002. For 0003–0005 the authority is
 `0004_pilot_roles_and_rpcs.sql` and `0005_console_read_surface.sql` (exact names in migrations/),
 including restricted financial RPCs. App and Lab share this one migration history.
+
+## CREDIT, the provider registry and operator seams (D1R: 0006–0009)
+
+`0006_credit_accounting.sql` (CREDIT wallets, ledger, holds, the individual signup
+entitlement, the accounting regime on jobs and usage, feature flags, the grant
+function), `0007_provider_registry.sql` (provider orgs/roles, model/serving versions,
+endpoints, deployment revisions, rate cards, listings) and
+`0008_credit_read_surface.sql` (admission-pin resolution, console CREDIT views/RPCs)
+are additive and re-runnable. Historical USD is never copied, converted or relabelled.
+
+Applying them enables nothing: `infrx.feature_flags` starts with `signup_grant` and
+`credit_admission` **off** (those paths refuse with SQLSTATE 55000, maintenance) and
+`legacy_usd_admission` on. Enabling is a separate, attributed operator action:
+
+```sql
+update infrx.feature_flags set enabled = true, updated_by = '<operator>', reason = '<why>'
+ where name = 'credit_admission';
+```
+
+The Marlin registry rows and a **provisional** rate card (P-01 pending) are an operator
+seed, not a migration: `apps/infrx-api/infrx/state/seed_marlin_provisional.sql`
+(`psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f …`; idempotent).
+
+Legacy-account transition is a rollout input, not a migration decision (02 §"Existing
+USD records"; P-02 is the read-only inventory of real accounts and balances): an
+organization with a nonzero legacy USD balance is reported with `rollout_hold = true`
+by `console_legacy_usd_statement`; an existing organization with several members gets no
+individual wallet binding until its billing owner is resolved (the grant refuses it as a
+rollout hold); no exchange rate exists anywhere in the schema.
+
+`0009_operator_seams.sql` (coordinator ruling on the G6B handback) extends the closed
+audit action list, makes audit idempotency keys unique, adds the key audience
+(`consumer | provider_dev | operator`) with its scope and a one-way revocation, and
+service-only operations: `infrx.key_by_hash`, `infrx.revoke_key`,
+`infrx.bootstrap_operator_key`, `infrx.verified_user`, `infrx.set_suspension`,
+`infrx.usage_records`, `infrx.active_holds`, `infrx.audit_by_idempotency_key`.
+The single operator key is bootstrapped from its sha256 only (the plaintext never
+reaches the database), once, audited:
+
+```sql
+select infrx.bootstrap_operator_key('<operator org uuid>', 'operator', '<prefix>',
+                                    '<sha256 hex of the key>', '<operator>', '<reason>');
+```
+
+Hosted state: only 0001–0002 are applied to the hosted project. 0003–0009 are not;
+the coordinator applies them only after the backup/restore rehearsal (I3B).

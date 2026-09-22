@@ -78,7 +78,8 @@ _JOB_COLUMNS = """
   operation, payload_ref, payload_digest, max_input_tokens, max_output_tokens,
   price_version, price_snapshot, maximum_hold, consent_version, trace_mode,
   admitted_at, deadline_at, budget_preparation_s, budget_queue_wait_s,
-  budget_generation_s, budget_first_token_s, budget_stall_s, preparation_deadline_at
+  budget_generation_s, budget_first_token_s, budget_stall_s, preparation_deadline_at,
+  accounting_regime
 """
 
 
@@ -91,7 +92,7 @@ def _job_values(request_id: str, handle: str, *, org: str = ORG_A, state: str = 
       'infrx-payload:{request_id}', '{DIGEST}', 4096, 512,
       'pv-1', '{{"price_version":"pv-1"}}'::jsonb, 1.25000000, 1, 'full',
       '2026-09-21T00:00:00Z', '2026-09-21T00:10:00Z', 120, 10, 300, 60, 20,
-      '2026-09-21T00:02:00Z'"""
+      '2026-09-21T00:02:00Z', 'legacy_usd'"""
 
 
 # --- seeding -----------------------------------------------------------------
@@ -456,7 +457,7 @@ def seed_volume(conn, rows: int = 3000) -> None:
            now() - make_interval(secs => i),
            now() - make_interval(secs => i) + interval '2 hours',
            120, 10, 300, 60, 20,
-           now() - make_interval(secs => i) + interval '2 minutes'
+           now() - make_interval(secs => i) + interval '2 minutes', 'legacy_usd'
     from generate_series(1, {rows}) as g(i);
 
     -- Most jobs in a live table are terminal; the partial "active" indexes exist
@@ -1637,7 +1638,9 @@ EXPECTED_PRIVILEGES = {
            ("public.console_usage", ""), ("public.org_settings", ""),
            ("public.consent_history", ""), ("public.feedback", ""),
            ("public.calibration_labels", ""), ("public.console_judge_runs", ""),
-           ("public.console_admin_orgs", ""), ("public.operator_audit", ""))},
+           ("public.console_admin_orgs", ""), ("public.operator_audit", ""),
+           # D1R (0008): the CREDIT wallet and ledger pages.
+           ("public.console_credit_wallets", ""), ("public.console_credit_ledger", ""))},
 }
 
 #: Relations whose whole point is that nothing is ever removed (0003's trigger list).
@@ -1675,13 +1678,25 @@ EXPECTED_FUNCTION_CALLERS = {
     "text,uuid)": {"authenticated", "service_role"},
     "public.console_usage_daily(uuid,timestamp with time zone,timestamp with time zone,"
     "text,uuid)": {"authenticated", "service_role"},
+    # D1R (0008): the CREDIT balance and the separate legacy USD statement.
+    "public.console_wallet_summary(uuid)": {"authenticated", "service_role"},
+    "public.console_legacy_usd_statement(uuid)": {"authenticated", "service_role"},
 }
 
 
 #: The `infrx` functions a platform client may call. Everything else in that schema is a
 #: trigger or a guard, which fires with the table owner's rights and needs no EXECUTE.
 INFRX_CALLABLE = tuple(f"infrx.{name}(jsonb)" for name in RPC_NAMES) + (
-    "infrx.now()", "infrx.extend_model_limits()")
+    "infrx.now()", "infrx.extend_model_limits()",
+    # D1R: the A1 grant seam and the D2 pin resolver.
+    "infrx.grant_signup_credit(uuid,text,text,uuid)", "infrx.resolve_admission_pins(text)",
+    # D1R 0009: the headless operator seams (G6B).
+    "infrx.audit_by_idempotency_key(text)", "infrx.key_by_hash(text)",
+    "infrx.revoke_key(uuid,text,text,text)",
+    "infrx.bootstrap_operator_key(uuid,text,text,text,text,text)", "infrx.verified_user(uuid)",
+    "infrx.set_suspension(uuid,boolean,text,text,text,text)",
+    "infrx.usage_records(uuid,timestamp with time zone,uuid,integer)",
+    "infrx.active_holds(uuid)")
 
 
 def check_function_privileges(conn) -> str:
