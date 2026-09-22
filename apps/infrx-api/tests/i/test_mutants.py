@@ -77,6 +77,17 @@ SELF_TESTS = (
                           'parser = argparse.ArgumentParser(description="")',
                           ("test_deploy_failclosed__a_valid_install_replaces_the_file_and_restarts",)),
      mutation_list.Outcome.survived),
+    # review r1 B1: the copied tree used to be flat, which made `support.REPO` resolve
+    # to `/` and the real-engine-script case fail in **every** copy whatever the edit -
+    # so a mutant that changed nothing reported `killed`. A no-op edit naming that case
+    # is the smallest thing that notices, and it only passes if the copy reproduces the
+    # repository's layout.
+    ("a no-op edit cannot kill the case that reads the real engine script",
+     mutation_list.Mutant("noop", "nothing", mutation_list.P,
+                          "REFUSED, RESTART_FAILED = 2, 3",
+                          "REFUSED, RESTART_FAILED = 2, 3  # no-op",
+                          ("test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands",)),
+     mutation_list.Outcome.survived),
 )
 
 

@@ -246,13 +246,23 @@ MUTANTS: tuple[Mutant, ...] = (
 )
 
 
+# The copy reproduces the repository's shape, not just the package's: `support.REPO` is
+# `API_DIR.parents[1]`, so a flat copy made it `/` and
+# `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in
+# every copied tree whatever the edit - which reports `killed` for a mutant that changed
+# nothing (review r1 B1). `SELF_TESTS` now pins that a no-op mutant naming that case is
+# `survived`.
+COPY_ROOT = pathlib.Path("apps/infrx-api")
+
+
 def _pytest(root: pathlib.Path, files: list[str], selection: str):
+    api = root / COPY_ROOT
     return subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
          "-rf", "--tb=no", *files, "-k", selection],
-        cwd=root, capture_output=True, text=True, timeout=NESTED_TIMEOUT_S,
-        env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin",
-             "HOME": str(root), "TMPDIR": str(root / "tmp")})
+        cwd=api, capture_output=True, text=True, timeout=NESTED_TIMEOUT_S,
+        env={"PYTHONPATH": str(api), "PATH": "/usr/bin:/bin",
+             "HOME": str(api), "TMPDIR": str(api / "tmp")})
 
 
 def run_mutant(mutant) -> Result:
@@ -265,16 +275,19 @@ def run_mutant(mutant) -> Result:
         return Result(Outcome.misdeclared, "declares no case")
     with tempfile.TemporaryDirectory(prefix=f"i0-mutant-{mutant.name}-") as tmp:
         root = pathlib.Path(tmp)
+        api = root / COPY_ROOT
+        api.mkdir(parents=True)
         ignore = shutil.ignore_patterns("__pycache__", ".venv")
         for name in ("infrx", "tests", "deploy"):
-            shutil.copytree(API_DIR / name, root / name, ignore=ignore)
-        # One case reads `models/marlin2b/serve.sh` as it stands, so the copy needs it.
+            shutil.copytree(API_DIR / name, api / name, ignore=ignore)
+        # One case reads `models/marlin2b/serve.sh` as it stands, and finds it through
+        # `support.REPO`, which is two levels above the package - hence the layout.
         engine = root / "models" / "marlin2b"
         engine.mkdir(parents=True)
         shutil.copy2(REPO / "models" / "marlin2b" / "serve.sh", engine / "serve.sh")
-        (root / "tmp").mkdir()
-        shutil.copy2(API_DIR / "pyproject.toml", root / "pyproject.toml")
-        target = root / mutant.file
+        (api / "tmp").mkdir()
+        shutil.copy2(API_DIR / "pyproject.toml", api / "pyproject.toml")
+        target = api / mutant.file
         source = target.read_text()
         if mutant.old not in source:
             return Result(Outcome.misdeclared,
