@@ -1578,3 +1578,49 @@ def refused_as_user(conn, user: str, sql: str) -> str | None:
     except psycopg.Error as refused:
         return f"{refused.sqlstate} {str(refused).splitlines()[0][:100]}"
     return None
+
+
+# =============================================================================
+# item 6: the seams handed to A1, D2 and C0
+# =============================================================================
+def check_seams(conn) -> str:
+    """`infrx/state/credit_schema.py` is the live catalog: every seam's signature, result
+    columns (names, types, order) and callers; every page view's columns; every CREDIT
+    pin column exists on `infrx.jobs`."""
+    from infrx.state import credit_schema
+    problems = []
+    for signature, (callers, columns) in credit_schema.SEAMS.items():
+        row = conn.execute("""
+            select p.oid, array(select a.name || ':' || format_type(a.typ, null)
+                                from unnest(p.proargnames, p.proallargtypes, p.proargmodes)
+                                  with ordinality as a(name, typ, mode, n)
+                                where a.mode = 't' order by a.n)
+            from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname || '.' || p.proname
+                  || regexp_replace(p.oid::regprocedure::text, '^[^(]*', '') = %s""",
+            (signature.replace(" ", ""),)).fetchone()
+        if row is None:
+            problems.append(f"{signature} does not exist")
+            continue
+        declared = [f"{n}:{t}" for n, t in columns]
+        if list(row[1]) != declared:
+            problems.append(f"{signature} returns {row[1]}, the map says {declared}")
+        for role in ("anon", "authenticated", "service_role"):
+            may = conn.execute("select has_function_privilege(%s, %s, 'execute')",
+                               (role, row[0])).fetchone()[0]
+            if may != (role in callers):
+                problems.append(f"{signature}: {role} execute={may}")
+    for view, columns in credit_schema.VIEWS.items():
+        got = [c for c, in conn.execute(
+            "select attname from pg_attribute where attrelid = %s::regclass and attnum > 0 "
+            "order by attnum", (view,)).fetchall()]
+        if got != list(columns):
+            problems.append(f"{view} columns {got}, the map says {list(columns)}")
+    jobs = {c for c, in conn.execute("select attname from pg_attribute where attrelid = "
+                                     "'infrx.jobs'::regclass and attnum > 0").fetchall()}
+    missing = [c for c in credit_schema.CREDIT_JOB_PINS if c not in jobs]
+    if missing:
+        problems.append(f"infrx.jobs lacks the pins {missing}")
+    assert not problems, "the seam map and the database disagree:\n  " + "\n  ".join(problems)
+    return (f"{len(credit_schema.SEAMS)} seams and {len(credit_schema.VIEWS)} pages match "
+            f"credit_schema.py")

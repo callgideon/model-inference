@@ -170,3 +170,8 @@ def test_rerun__applying_d1r_twice_is_a_no_op() -> None:
     _, d1r = checks_credit.split(migrations.sql_for(shim=pgharness.NEEDS_SHIM))
     print(checks_credit.check_rerun_is_noop(
         conn, lambda: pgharness.apply(UPGRADE05_DB, d1r)))
+
+
+# --- item 6: the seams -----------------------------------------------------------
+def test_seams__the_map_handed_to_a1_d2_c0_is_the_catalog() -> None:
+    print(checks_credit.check_seams(_credit()))
