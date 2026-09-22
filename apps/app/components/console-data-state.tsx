@@ -1,5 +1,11 @@
 import { PageHeader } from "@/components/page-header";
 
+/**
+ * The sidebar's copy for a balance that could not be read: no amount (not even a zero) and no error
+ * text, because the reason for a failed read is a server log, not something to show a customer.
+ */
+export const BALANCE_UNAVAILABLE = "Balance unavailable";
+
 export function ConsoleDataUnavailable({ title }: { title: string }) {
   return (
     <>

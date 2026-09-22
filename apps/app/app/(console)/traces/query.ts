@@ -127,14 +127,6 @@ export type ParsedTraceParams = {
   narrowed: boolean;
 };
 
-/**
- * The window anchor to use when the URL does not pin one. Reading the clock is the page's single
- * impure input; it lives here so the parser stays pure and `tests/v` can drive any instant.
- */
-export function currentAnchor(): number {
-  return Date.now();
-}
-
 function resolveWindow(range: RangeKey, anchorMs: number): { from: string; to: string } {
   return {
     from: new Date(anchorMs - RANGES[range]).toISOString(),
