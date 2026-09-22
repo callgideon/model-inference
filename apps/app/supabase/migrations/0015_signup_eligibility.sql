@@ -169,8 +169,10 @@ begin
   else
     v_digest := encode(sha256(convert_to(lower(btrim(v_email)), 'UTF8')), 'hex');
     begin
+      -- No conflict target: a racing retry for the same individual can collide on the
+      -- digest OR the per-user key first, and either means "already claimed".
       insert into infrx.signup_identity_claims (identity_digest, user_id)
-      values (v_digest, p_user_id) on conflict (identity_digest) do nothing;
+      values (v_digest, p_user_id) on conflict do nothing;
       select c.user_id into v_claimant from infrx.signup_identity_claims c
        where c.identity_digest = v_digest;
       if v_claimant is distinct from p_user_id then

@@ -88,7 +88,7 @@ MIGRATION_MUTANTS = (
        "infrx.retired_individuals\n  from public, anon, authenticated;",
        "signup_privileges", "the platform role forges identity claims or retirements"),
     _m("a1_claim_race_raises",
-       "      values (v_digest, p_user_id) on conflict (identity_digest) do nothing;",
+       "      values (v_digest, p_user_id) on conflict do nothing;",
        "      values (v_digest, p_user_id);",
        "signup_race", "concurrent callback retries fail instead of answering the grant"),
     _m("a1_retired_wallet_spends",

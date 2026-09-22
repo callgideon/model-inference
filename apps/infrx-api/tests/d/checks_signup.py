@@ -175,10 +175,10 @@ def check_eligibility(conn) -> str:
                             (shared,)).fetchone(), "a refused grant kept its identity claim"
 
     usd = ("insert into public.credit_ledger (org_id, delta_usd, kind, reason) "
-           "values (%s, %s, 'grant', 'legacy')")
-    conn.execute(usd, (personal_org(conn, h), "5.000000"))
-    conn.execute(usd, (personal_org(conn, z), "5.000000"))
-    conn.execute(usd, (personal_org(conn, z), "-5.000000"))
+           "values (%s, %s, %s, 'legacy')")
+    conn.execute(usd, (personal_org(conn, h), "5.000000", "grant"))
+    conn.execute(usd, (personal_org(conn, z), "5.000000", "grant"))
+    conn.execute(usd, (personal_org(conn, z), "-5.000000", "usage"))
     before = conn.execute("select org_id, delta_usd::text from public.credit_ledger "
                           "order by id").fetchall()
     hold = claim(conn, h)
