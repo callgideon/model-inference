@@ -35,6 +35,7 @@ HOST = "apps/infrx-api/infrx/observe/host.py"
 ALERTS = "apps/infrx-api/infrx/observe/alerts.py"
 RULES = "infra/alerts/alerts.json"
 DASHBOARD = "infra/alerts/dashboard.json"
+PGRESTORE = "infra/runbooks/pgrestore.py"
 
 MUTANTS: tuple[Mutant, ...] = (
     Mutant("i3bc01", "CONTROL: a comment-only edit in the metrics module must SURVIVE",
@@ -150,19 +151,45 @@ MUTANTS += (
     Mutant("i3bm33", "the index is rebuilt from the durable snapshot of queued jobs", KIT,
            "if job.state is JobState.queued)", "if job.state is JobState.running)",
            DRILLS, "rc06", layer=2),
-    # ---------------- the restore procedure (the runbook's steps), on the real PostgreSQL
+    # ---------------- the restore procedure (the runbook's tool), on the real PostgreSQL
     Mutant("i3bm40", "a restore empties the template's default privileges first (else anon "
-                     "gets ALL on the tenant tables)", RESTORE,
+                     "gets ALL on the tenant tables)", PGRESTORE,
            "    if neutralize:\n", "    if False:\n", RESTORE, "bk01_a", layer=2),
-    Mutant("i3bm41", "a restore re-creates the project's triggers on auth tables", RESTORE,
-           "        for definition in triggers:\n", "        for definition in ():\n",
+    Mutant("i3bm41", "a restore re-creates the project's triggers on auth tables", PGRESTORE,
+           '        for definition in meta["auth_triggers"]:\n',
+           "        for definition in []:\n", RESTORE, "bk01_a", layer=2),
+    Mutant("i3bm42", "a restore carries 0004's global function default", PGRESTORE,
+           "        if not public_executes:\n", "        if False:\n",
            RESTORE, "bk01_a", layer=2),
-    Mutant("i3bm42", "a restore carries 0004's global function default", RESTORE,
-           "            if not public_executes:\n", "            if False:\n",
-           RESTORE, "bk01_a", layer=2),
+    Mutant("i3bm44", "a damaged backup is refused before anything is restored", PGRESTORE,
+           "        if hashlib.sha256((backup / name).read_bytes()).hexdigest() != digest:",
+           "        if False:", RESTORE, "bk01d", layer=2),
+    Mutant("i3bm45", "the check compares catalog facts, not only rows", PGRESTORE,
+           "    for name, rows in source[\"catalog\"].items():",
+           "    for name, rows in {}.items():", RESTORE, "bk01c", layer=2),
     Mutant("i3bm43", "the maintenance switch turns off BOTH admission flags", RESTORE,
            "\"('legacy_usd_admission', 'credit_admission')\")", "\"('credit_admission')\")",
            RESTORE, "bk04", layer=2),
+)
+
+RUNBOOK_CASES = "tests/integration/backend/recovery/test_runbooks.py"
+MUTANTS += (
+    # ---------------- the runbooks stay the drilled procedures (I3B.c)
+    Mutant("i3bm50", "every alert names a runbook section that exists", RULES,
+           '"runbook": "infra/runbooks/disk.md#disk-almost-full"',
+           '"runbook": "infra/runbooks/disk.md#disk-almost-ful"', RUNBOOK_CASES, "rb01"),
+    Mutant("i3bm51", "restore.md runs the drilled tool's own subcommands",
+           "infra/runbooks/restore.md",
+           "$PY infra/runbooks/pgrestore.py dump --conninfo",
+           "$PY infra/runbooks/pgrestore.py backup --conninfo", RUNBOOK_CASES, "rb02"),
+    Mutant("i3bm52", "rollback.md's maintenance switch is bk04's", "infra/runbooks/rollback.md",
+           "where name in ('legacy_usd_admission', 'credit_admission');",
+           "where name in ('credit_admission');", RUNBOOK_CASES, "rb03"),
+    Mutant("i3bm53", "every runbook step block parses as bash", "infra/runbooks/restart.md",
+           "for i in $(seq 1 120); do", "for i in $(seq 1 120) do", RUNBOOK_CASES, "rb04"),
+    Mutant("i3bm54", "links between runbooks resolve", "infra/runbooks/rollback.md",
+           "[restart.md](restart.md#drain)", "[restart.md](restart.md#draining)",
+           RUNBOOK_CASES, "rb05"),
 )
 
 
