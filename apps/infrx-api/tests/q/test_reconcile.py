@@ -182,6 +182,175 @@ def test_q3_metrics__the_outbox_lag_is_the_oldest_waiting_dispatch(adapter):
     run(body)
 
 
+# --- (2) the reconciler -------------------------------------------------------------
+
+class StaleFirst:
+    """The store, except that its next `dispatch_snapshot` answers with one read earlier:
+    the interleaving "snapshot, then a delivery, then the rebuild" made deterministic."""
+
+    def __init__(self, store, stale) -> None:
+        self.store, self.stale = store, stale
+
+    async def dispatch_snapshot(self):
+        if self.stale is not None:
+            stale, self.stale = self.stale, None
+            return stale
+        return await self.store.dispatch_snapshot()
+
+    def __getattr__(self, name):
+        return getattr(self.store, name)
+
+
+def test_q3_reconcile__a_consistent_index_is_left_alone(adapter):
+    w = rig.world(adapter)
+
+    async def body():
+        for org in (rig.ORG_A, rig.ORG_B, rig.ORG_A):
+            await rig.admit(w, org)
+        await w.rec.drain()
+        await rig.prepare_one(w)
+        await w.rec.drain()
+        before = await _fairness(w.index)
+        assert await w.rec.reconcile() == {}
+        assert await _fairness(w.index) == before
+        assert w.rec.metrics["rebuilds"] == 0
+    run(body)
+
+
+def test_q3_reconcile__a_queued_job_missing_from_the_index_is_indexed_again(adapter):
+    """A candidate lost from the index while its outbox row is acknowledged: nothing but
+    the reconciler will ever bring it back."""
+    w = rig.world(adapter)
+
+    async def body():
+        jobs = [await rig.admit(w) for _ in range(2)]
+        await w.rec.drain()
+        await w.index.remove(jobs[0])
+        w.h.clock.advance(4.0)
+        assert await w.rec.reconcile() == {"missing": 1, "repaired": 1}
+        assert w.rec.metrics["missing_index"] == 1
+        assert w.rec.metrics["missing_lag_s"] == 4.0
+        assert sorted((await rig.members(w)).values()) == sorted(jobs)
+        assert await w.rec.reconcile() == {}
+        assert w.rec.metrics["missing_index"] == 0
+        await rig.finish(w)
+        rig.settled(w)
+    run(body)
+
+
+def test_q3_reconcile__a_dead_candidate_is_removed(adapter):
+    """Cancelled while indexed, and running while its candidate is still in flight: both
+    candidates are dead; the live job's candidate stays."""
+    w = rig.world(adapter)
+
+    async def body():
+        cancelled, running, live = [await rig.admit(w) for _ in range(3)]
+        await w.rec.drain()
+        await w.jobs.cancel(rig.ORG_A, w.jobs.jobs[cancelled].admission.job_handle)
+        held = await w.index.claim_candidate("prep", kind=rig.PREP)      # FIFO: cancelled
+        held = await w.index.claim_candidate("prep", kind=rig.PREP)      # running's
+        assert held.job_id == running
+        lease = await w.jobs.claim_preparation(running, "prep")          # not acked yet
+        assert await w.rec.reconcile() == {"dead": 2}
+        assert w.rec.metrics["dead_candidates"] == 2
+        assert list((await rig.members(w)).values()) == [live]
+        await w.jobs.prepared(lease, ())
+        await w.index.acknowledge(held)
+        await rig.finish(w)
+        rig.settled(w)
+    run(body)
+
+
+def test_q3_reconcile__an_acknowledged_candidate_postgresql_still_wants_forces_a_rebuild(
+        adapter):
+    """A worker took the candidate, its claim never reached the store, and it acknowledged
+    the candidate anyway (the W2 loop always does). The outbox row is acknowledged and
+    the index remembers the event as done: `enqueue` alone can never bring it back."""
+    w = rig.world(adapter)
+
+    async def body():
+        job = await rig.admit(w)
+        await w.rec.drain()
+        taken = await w.index.claim_candidate("prep", kind=rig.PREP)
+        await w.index.acknowledge(taken)                  # the claim failed in transit
+        assert await w.index.enqueue(taken) is False      # the index will not re-take it
+        assert await w.rec.reconcile() == {"missing": 1, "rebuilt": 1}
+        assert w.rec.metrics["rebuilds"] == 1
+        assert list((await rig.members(w)).values()) == [job]
+        await rig.finish(w)
+        rig.settled(w)
+    run(body)
+
+
+def test_q3_reconcile__the_rebuild_is_postgresql_truth(adapter):
+    """Preparing and queued jobs are candidates; a job preparing under a live lease, a
+    running one and a terminal one are not - whatever the index held before."""
+    w = rig.world(adapter)
+
+    async def body():
+        waiting, preparing, queued, running, done = [await rig.admit(w) for _ in range(5)]
+        await w.rec.drain()
+        await w.jobs.claim_preparation(preparing, "prep")
+        for job in (queued, running, done):
+            await w.jobs.prepared(await w.jobs.claim_preparation(job, "prep"), ())
+        await w.jobs.claim(running, "gpu")
+        await w.jobs.complete(await w.jobs.claim(done, "gpu"), rig.b.outcome(done, w.h))
+        assert await w.rec.rebuild() == 2
+        assert sorted((await rig.members(w)).values()) == sorted([waiting, queued])
+        assert w.rec.metrics["rebuilds"] == 1
+    run(body)
+
+
+def test_q3_reconcile__a_delivery_behind_a_stale_snapshot_survives_the_rebuild(adapter):
+    """Q2's hole: snapshot read, then a job prepared and its dispatch delivered and
+    acknowledged, then the rebuild. The rebuild wipes the delivery and the outbox will
+    never repeat it; the snapshot read after the rebuild puts it back."""
+    w = rig.world(adapter)
+
+    async def body():
+        first = await rig.admit(w)
+        stale = await w.outbox.dispatch_snapshot()
+        second = await rig.admit(w)
+        assert await w.rec.drain() == {"read": 2, "indexed": 2, "acknowledged": 2}
+        w.rec.store = StaleFirst(w.outbox, stale)
+        assert await w.rec.rebuild() == 2
+        assert sorted((await rig.members(w)).values()) == sorted([first, second])
+        assert w.outbox.unacknowledged() == []
+        await rig.finish(w)
+        rig.settled(w)
+    run(body)
+
+
+def test_q3_fence__a_stale_candidate_never_acquires_a_second_lease(adapter):
+    """A rebuild from a snapshot read before a claim re-indexes a job that is already
+    running. The candidate is offered again; the store refuses it; one lease."""
+    w = rig.world(adapter)
+
+    async def body():
+        job = await rig.admit(w)
+        await w.rec.drain()
+        await rig.prepare_one(w)                             # prepared, queued
+        await w.rec.drain()
+        stale = await w.outbox.dispatch_snapshot()
+        candidate, lease = await rig.infer_one(w, "gpu-1", finish=False)
+        assert lease is not None and rig.state(w, job) is rig.JobState.running
+        w.rec.store = StaleFirst(w.outbox, stale)
+        await w.rec.rebuild()
+        again, refused = await rig.infer_one(w, "gpu-2")
+        assert again.job_id == job and refused is None
+        assert w.leases[job] == 1
+        await w.jobs.complete(lease, rig.b.outcome(job, w.h))
+        rig.settled(w)
+    run(body)
+
+
+async def _fairness(index):
+    if isinstance(index, rig.ValkeyScheduler):
+        snap = await index.snapshot()
+        return snap["tags"], snap["virtual_times"], snap["stats"]
+    return index.tags(), index.virtual_times(), index.stats()
+
+
 async def _stats(index):
     stats = index.stats()
     return await stats if asyncio.iscoroutine(stats) else stats
