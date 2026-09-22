@@ -379,7 +379,9 @@ def check_claim_race(connect, database: str, attempts: int = 8, rounds: int = 10
         users = [uid(5, n * 100 + k) for k in range(attempts)]
         with connect(database) as c:
             for k, user in enumerate(users):
-                individual(c, user, f"Same{n}@example.com" if k % 2 else f"same{n}@example.com")
+                # Distinct strings (GoTrue's auth.users keeps addresses unique), one address.
+                individual(c, user, " " * k + (f"Same{n}@example.com" if k % 2
+                                               else f"same{n}@example.com"))
         out, _, errors = race(users, False)
         assert not errors and len(out) == attempts, f"identity round {n}: {errors}"
         statuses = sorted(row[0] for row in out)
