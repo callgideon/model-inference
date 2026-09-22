@@ -1398,6 +1398,10 @@ MUTANTS: tuple[Mutant, ...] = (
            old='DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime"',
            new='DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime,video/mpeg"',
            cases=("test_the_default_video_allow_list_has_no_mpeg",)),
+    Mutant(name="mpeg_extension_mapped_again", invariant="no extension guess names video/mpeg",
+           file="config.py", old='            ".mov": "video/quicktime"}',
+           new='            ".mov": "video/quicktime", ".mpg": "video/mpeg"}',
+           cases=("test_the_default_video_allow_list_has_no_mpeg",)),
     # --- lane B IR-6: deployment settings (config.py) --------------------------------
     Mutant(name="DEPLOY-01", invariant="an empty deployment value is refused, not defaulted",
            file="config.py", old='        if raw.strip() == "":', new="        if False:",

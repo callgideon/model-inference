@@ -98,6 +98,8 @@ def test_the_default_video_allow_list_has_no_mpeg():
     assert config.DEFAULT_ALLOWED_VIDEO_MIME.split(",") == [
         "video/mp4", "video/webm", "video/quicktime"]
     assert "video/mpeg" not in config.Settings().allowed_video_mime
+    # nor does an extension guess name it
+    assert "video/mpeg" not in config.EXT_MIME.values()
 
 
 @pytest.mark.parametrize("name", ["TRACE_SPOOL_DIR", "PROCESSING_CACHE_DIR"])
