@@ -92,6 +92,14 @@ def test_each_name_is_read_from_the_environment(name):
     assert getattr(pilot, field_name) == kind(raw)
 
 
+def test_the_default_video_allow_list_has_no_mpeg():
+    """F2R: `video/mpeg` is not a pilot input; the default allow-list M's fetcher and the
+    F1 gateway both read leaves it out, so ingress refuses it."""
+    assert config.DEFAULT_ALLOWED_VIDEO_MIME.split(",") == [
+        "video/mp4", "video/webm", "video/quicktime"]
+    assert "video/mpeg" not in config.Settings().allowed_video_mime
+
+
 @pytest.mark.parametrize("name", ["TRACE_SPOOL_DIR", "PROCESSING_CACHE_DIR"])
 def test_a_filesystem_root_is_unset_or_absolute(name):
     """F2R: an empty root disables the feature; a set one is an absolute path."""

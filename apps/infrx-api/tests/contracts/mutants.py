@@ -1380,6 +1380,11 @@ MUTANTS: tuple[Mutant, ...] = (
            file="config.py",
            old="        if path and (path != path.strip() or not os.path.isabs(path)):",
            new="        if False:", cases=("test_a_filesystem_root_is_unset_or_absolute",)),
+    Mutant(name="mpeg_allowed_again", invariant="video/mpeg is not a pilot input",
+           file="config.py",
+           old='DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime"',
+           new='DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime,video/mpeg"',
+           cases=("test_the_default_video_allow_list_has_no_mpeg",)),
     # --- F2R: the two money-context mutants the audit found surviving ----------------
     _m("money_context_default_precision", "money arithmetic runs at 40 digits",
        MONEY, "        prec=40, rounding=decimal.ROUND_HALF_EVEN,",
