@@ -119,10 +119,12 @@ def test_an_upload_destination_is_a_constrained_reference_not_a_url():
     assert created.destination_ref.startswith("infrx-upload:")
     assert "://" not in created.destination_ref and "?" not in created.destination_ref
     # R61 (1): no organization qualifier. The fixture carried `infrx-upload:pilot:upl_…`
-    # until the F2R lane-A revision; that is the one sanctioned v1 fixture byte change
-    # (coordinator ruling: R61 supersedes the wave-2 byte).
+    # until the F2R lane-A revision (coordinator ruling: R61 supersedes the wave-2 byte).
     assert created.destination_ref == f"infrx-upload:{created.upload_handle}"
     assert ids.UPLOAD_HANDLE_RE.fullmatch(created.upload_handle)
+    # F2R coordinator addition 5: `video/mpeg` is not a pilot input, so the example no
+    # longer offers it. These are the two sanctioned v1 fixture byte changes.
+    assert created.accepted_mime == ("video/mp4", "video/webm", "video/quicktime")
 
 
 @pytest.mark.parametrize("name", sorted(fixtures.LIST_MODELS))
