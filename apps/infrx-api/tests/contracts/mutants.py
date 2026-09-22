@@ -84,8 +84,8 @@ TA = "contracts/traces_accounting.py"      # the accounting the fake and the spo
 # real adapter could fail for the wrong reason: a store answering the typed `DomainError`
 # the contract promises must not crash the case. Every committed mutant dies on an
 # assertion, and the shared runner now **enforces** that: a death by any other exception
-# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **two**
-# mutants declare one, and both are guards whose entire purpose is to stop an untyped
+# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **three**
+# mutants declare one; the first two are guards whose entire purpose is to stop an untyped
 # error escaping:
 #
 # * `mime_string_accepted` - `create_upload`'s allow-list check. Removing it lets
@@ -96,6 +96,8 @@ TA = "contracts/traces_accounting.py"      # the accounting the fake and the spo
 # * `add_raises_on_a_non_byte_part` - R37 says `TraceCapture.add` **never raises into the
 #   request path**. The invariant is the absence of an exception, so the only way to break
 #   it is to raise one, and the only honest kill is the raise.
+# * `DEPLOY-04` - with `>=`, an equal pool (min == max, valid) is refused by the typed
+#   `RuntimeMisconfigured` the case asserts is NOT raised: that refusal is the defect.
 #
 # The six `ValidationError` kills the review found are gone: `FakeFeedbackService._row`
 # maps a record-validation failure to `internal_error`, because the row's fields are
@@ -1389,6 +1391,28 @@ MUTANTS: tuple[Mutant, ...] = (
            old='DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime"',
            new='DEFAULT_ALLOWED_VIDEO_MIME = "video/mp4,video/webm,video/quicktime,video/mpeg"',
            cases=("test_the_default_video_allow_list_has_no_mpeg",)),
+    # --- lane B IR-6: deployment settings (config.py) --------------------------------
+    Mutant(name="DEPLOY-01", invariant="an empty deployment value is refused, not defaulted",
+           file="config.py", old='        if raw.strip() == "":', new="        if False:",
+           cases=("test_an_empty_deployment_value_is_refused",)),
+    Mutant(name="DEPLOY-02", invariant="a deployment bound a zero would disable is refused",
+           file="config.py", old="        if getattr(deployment, name) <= 0:",
+           new="        if getattr(deployment, name) < 0:",
+           cases=("test_a_deployment_bound_a_zero_would_disable_is_refused",)),
+    Mutant(name="DEPLOY-03", invariant="a bad deployment value refuses before anything mounts",
+           file="config.py",
+           old='    validate_deployment(getattr(settings, "deployment", DEPLOYMENT_DEFAULTS), mode)\n',
+           new="", cases=("test_a_bad_deployment_value_refuses_before_anything_mounts",)),
+    Mutant(name="DEPLOY-04", invariant="the pool bounds are ordered (min == max is valid)",
+           file="config.py",
+           old="    if deployment.database_pool_min_size > deployment.database_pool_max_size:",
+           new="    if deployment.database_pool_min_size >= deployment.database_pool_max_size:",
+           cases=("test_the_pool_bounds_must_be_ordered",), dies_by=("RuntimeMisconfigured",)),
+    Mutant(name="DEPLOY-05", invariant="a short console cursor secret is refused",
+           file="config.py",
+           old="    if _configured(secret) and len(secret) < MIN_CONSOLE_CURSOR_SECRET_CHARS:",
+           new="    if _configured(secret) and len(secret) < 1:",
+           cases=("test_a_short_cursor_secret_is_refused_without_echoing_it",)),
     # --- F2R: the two money-context mutants the audit found surviving ----------------
     _m("money_context_default_precision", "money arithmetic runs at 40 digits",
        MONEY, "        prec=40, rounding=decimal.ROUND_HALF_EVEN,",
