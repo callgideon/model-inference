@@ -25,7 +25,8 @@ from infrx.state import migrations
 
 from ..contracts import mutants as shared
 from ..contracts.mutants import Outcome
-from . import checks, checks_credit, pgharness
+from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_media,
+               pgharness)
 
 SCHEMA = "0003_pilot_durable_schema.sql"
 ROLES = "0004_pilot_roles_and_rpcs.sql"
@@ -35,6 +36,12 @@ CREDIT = "0006_credit_accounting.sql"
 REGISTRY = "0007_provider_registry.sql"
 SURFACE = "0008_credit_read_surface.sql"
 OPS = "0009_operator_seams.sql"
+# D2
+MEDIA = "0010_media_uploads.sql"
+ADMISSION = "0011_admission.sql"
+DISPATCH = "0012_dispatch_outbox.sql"
+GC = "0013_outbox_gc.sql"
+RESULTS = "0014_job_results.sql"
 SEED = migrations.SEED_MARLIN.name           # an operator seed, not a migration
 
 MUT_DB = f"{pgharness.DATABASE}_mut"
@@ -1172,6 +1179,278 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
 MUTANTS = MUTANTS + D1R_MUTANTS
 
 
+#: D2 (0010-0014, scenario "admission": every migration, the frozen clock and
+#: `checks_admission.seed_admission`). One per claimed invariant.
+_DEADLINE_BLOCK = ("  if v_now >= j.preparation_deadline_at then\n"
+                   "    perform infrx.terminalize_unstarted(j.request_id, 'preparation_failed');\n"
+                   "    return jsonb_build_object('refusal', jsonb_build_object('code', "
+                   "'already_terminal',\n"
+                   "      'detail', 'job ' || j.request_id || ' passed its preparation deadline'));\n"
+                   "  end if;\n")
+D2_MUTANTS: tuple[Mutant, ...] = (
+    # --- 0011: admission --------------------------------------------------------------
+    _m("d2_replay_ignores_the_payload", ADMISSION,
+       "  if i.payload_digest <> p_idem->>'payload_hash' then", "  if false then",
+       "admission", "admission_idempotency", "a changed body replays another request's job"),
+    _m("d2_tombstone_expires_a_tick_late", ADMISSION,
+       "  if v_expires is not null and p_now >= v_expires then",
+       "  if v_expires is not null and p_now > v_expires then",
+       "admission", "admission_idempotency", "a key replays past its 24 h tombstone"),
+    _m("d2_tombstone_runs_from_admission", ADMISSION,
+       "  select coalesce(i.expires_at, j.settled_at + make_interval(secs => p_ttl_s))",
+       "  select coalesce(i.expires_at, j.admitted_at + make_interval(secs => p_ttl_s))",
+       "admission", "admission_idempotency",
+       "a long job's retry mints a second billable job (01: active mappings never expire)"),
+    _m("d2_readmits_a_request_uuid", ADMISSION,
+       "  if exists (select 1 from infrx.jobs where request_id = (r->>'request_id')::uuid) then",
+       "  if false then", "admission", "admission_idempotency",
+       "R6: a retry without its key is a 500, not a typed 409", occurrences=2),
+    _m("d2_revoked_key_admitted", ADMISSION,
+       "   where k.id = v_key and k.org_id = v_org and k.revoked_at is null",
+       "   where k.id = v_key and k.org_id = v_org",
+       "admission", "admission_refusals", "a revoked key buys one more billable job"),
+    _m("d2_foreign_key_admitted", ADMISSION,
+       "   where k.id = v_key and k.org_id = v_org and k.revoked_at is null",
+       "   where k.id = v_key and k.revoked_at is null",
+       "admission", "admission_refusals", "another organization's key admits into this one"),
+    _m("d2_suspension_ignored", ADMISSION, "  if v_suspended then", "  if false then",
+       "admission", "admission_refusals", "a suspended organization keeps admitting (R33)"),
+    _m("d2_entitlement_ignored", ADMISSION,
+       "  if not infrx.is_entitled(v_org, p_model) then", "  if false then",
+       "admission", "admission_refusals", "a withdrawn model keeps being served (R10)"),
+    _m("d2_deadline_at_the_store_clock_admitted", ADMISSION,
+       "  if v_deadline is null or v_deadline <= p_now then",
+       "  if v_deadline is null or v_deadline < p_now then",
+       "admission", "admission_refusals", "a job nothing may ever run is accepted (R29)"),
+    _m("d2_deadline_not_clamped", ADMISSION,
+       "  v_deadline := least(v_deadline, v_ceiling);", "  v_deadline := v_deadline;",
+       "admission", "admission_accepts",
+       "a caller's far horizon pins a hold and capacity for as long as it likes (R79)"),
+    _m("d2_output_ceiling_unbounded", ADMISSION,
+       "  if v_out is null or v_out < 1 or v_out > (p_limits->>'max_output_tokens')::int then",
+       "  if v_out is null or v_out < 1 then",
+       "admission", "admission_refusals", "a request past MAX_OUTPUT_TOKENS is admitted (R55)"),
+    _m("d2_zero_input_ceiling_admitted", ADMISSION,
+       "  if v_in is null or v_in < 1 then", "  if v_in is null then",
+       "admission", "admission_refusals", "a zero input ceiling reaches the table as a 500"),
+    _m("d2_context_unbounded", ADMISSION,
+       "  if v_in + v_out > (p_limits->>'max_context_tokens')::int then", "  if false then",
+       "admission", "admission_refusals", "a reserved envelope the model cannot keep (R55)"),
+    _m("d2_total_capacity_unbounded", ADMISSION,
+       "  if v_count >= (p_limits->>'max_active_jobs')::int then", "  if false then",
+       "admission", "admission_capacity", "the platform-wide cap is oversubscribed"),
+    _m("d2_org_capacity_unbounded", ADMISSION,
+       "  if v_count >= (p_limits->>'max_active_jobs_per_org')::int then", "  if false then",
+       "admission", "admission_capacity", "one organization takes every slot"),
+    _m("d2_key_capacity_unbounded", ADMISSION,
+       "  if v_count >= (p_limits->>'max_active_jobs_per_key')::int then", "  if false then",
+       "admission", "admission_capacity", "one key takes every slot"),
+    _m("d2_preparation_capacity_unbounded", ADMISSION,
+       "  if v_count >= (p_limits->>'max_preparing_jobs')::int then", "  if false then",
+       "admission", "admission_capacity", "preparation is oversubscribed (R1)"),
+    _m("d2_journal_budget_unbounded", ADMISSION,
+       "  if infrx.journal_bytes_charged() + v_reserve > (p_limits->>'journal_total_bytes')"
+       "::bigint then", "  if false then",
+       "admission", "admission_capacity", "the journal disk is oversubscribed"),
+    _m("d2_admission_takes_another_tenants_media", ADMISSION,
+       "             where (m->>'org_id')::uuid is distinct from v_org) then",
+       "             where false) then",
+       "admission", "admission_refusals", "a request carries another tenant's media (R55)"),
+    _m("d2_withdrawn_price_still_charged", ADMISSION,
+       "     and (pv.effective_to is null or pv.effective_to > v_now)", "",
+       "admission", "admission_refusals", "a withdrawn price keeps admitting (R45)"),
+    _m("d2_hold_rounds_to_nearest", ADMISSION,
+       "  select (ceil((p_in::numeric * p_in_rate + p_out::numeric * p_out_rate) * 100)",
+       "  select (round((p_in::numeric * p_in_rate + p_out::numeric * p_out_rate) * 100)",
+       "admission", "admission_accepts", "a hold smaller than the reserved envelope (R53, §4)"),
+    _m("d2_usd_balance_unchecked", ADMISSION,
+       "  if v_hold > coalesce(v_available, 0) then", "  if false then",
+       "admission", "admission_refusals", "a hold past the available balance (DUR-CAP)"),
+    _m("d2_usd_hold_reserves_nothing", ADMISSION,
+       "  update infrx.wallets set reserved_total = reserved_total + v_hold, "
+       "revision = revision + 1,",
+       "  update infrx.wallets set reserved_total = reserved_total + 0, "
+       "revision = revision + 1,",
+       "admission", "admission_accepts", "two jobs reserve the same credit"),
+    _m("d2_usd_hold_row_missing", ADMISSION,
+       "  values (j.request_id, j.org_id, j.key_id, v_hold, 'held', v_now, v_now);",
+       "  select j.request_id, j.org_id, j.key_id, v_hold, 'held', v_now, v_now where false;",
+       "admission", "admission_accepts", "an acceptance without its hold (DUR-ADMIT)"),
+    _m("d2_admission_without_prepare_dispatch", ADMISSION,
+       "  values (gen_random_uuid(), v_id, v_org, 'prepare_dispatch',",
+       "  values (gen_random_uuid(), v_id, v_org, 'inference_dispatch',",
+       "admission", "admission_accepts", "an accepted job nothing ever dispatches"),
+    _m("d2_admission_without_mapping", ADMISSION,
+       "  if p_idem->>'key' is not null then\n    insert into infrx.idempotency",
+       "  if false then\n    insert into infrx.idempotency",
+       "admission", "admission_accepts", "a retried request becomes a second billable job"),
+    _m("d2_credit_wallet_reached_through_any_org", ADMISSION,
+       "  if w.personal_org_id is distinct from (r->>'org_id')::uuid then", "  if false then",
+       "admission", "admission_refusals",
+       "an individual's wallet is spent through another organization (R66)"),
+    _m("d2_zero_credit_hold_written", ADMISSION, "  if v_hold <= 0 then", "  if false then",
+       "admission", "admission_refusals", "a zero hold meters nothing (D1R review (d))"),
+    _m("d2_operator_key_spends_a_wallet", ADMISSION,
+       "  if k.audience = 'operator' then", "  if false then",
+       "admission", "admission_refusals", "an operator credential spends a wallet (R66)"),
+    _m("d2_credit_ceilings_past_the_deployment", ADMISSION,
+       "  if (r->>'max_input_tokens')::int > pin.max_input_tokens\n"
+       "     or (r->>'max_output_tokens')::int > pin.max_output_tokens then",
+       "  if false then", "admission", "admission_refusals",
+       "a request past the deployment's validated limits is admitted"),
+    _m("d2_idempotency_scope_of_another_org", ADMISSION,
+       "  if p_args->'idem'->>'org_id' is distinct from p_args->'request'->>'org_id' then",
+       "  if false then", "admission", "admission_refusals",
+       "one tenant's scope answers another's request (R10)"),
+    _m("d2_admitted_request_rewritable", ADMISSION,
+       "  if new.request_record is distinct from old.request_record\n     or ",
+       "  if ", "admission", "admission_accepts",
+       "the request a worker loads is not the one that was priced (R53)"),
+    _m("d2_admission_lock_dropped", ADMISSION,
+       "  perform pg_advisory_xact_lock(infrx.admission_lock_key());\n", "",
+       "admission", "admission_concurrency",
+       "concurrent admissions count capacity from stale snapshots and oversubscribe"),
+    # --- 0012: preparation and the relay --------------------------------------------
+    _m("d2_prepare_any_generation", DISPATCH,
+       "  if a.generation is distinct from (l->>'generation')::int then", "  if false then",
+       "admission", "prepare_transition", "a superseded preparation worker queues the job"),
+    _m("d2_prepare_any_worker", DISPATCH,
+       "  if a.worker_id is distinct from l->>'worker_id' then", "  if false then",
+       "admission", "prepare_transition", "a foreign worker queues the job"),
+    _m("d2_prepare_any_kind", DISPATCH,
+       "  if l->>'kind' is distinct from 'preparation' then", "  if false then",
+       "admission", "prepare_transition", "an inference token fences preparation (R46)"),
+    _m("d2_prepare_on_an_expired_lease", DISPATCH,
+       "  if v_now >= a.expires_at then\n    perform infrx.refuse('stale_lease', "
+       "'preparation lease expired at '",
+       "  if false then\n    perform infrx.refuse('stale_lease', 'preparation lease expired at '",
+       "admission", "prepare_transition", "a lost preparation worker still queues the job"),
+    _m("d2_prepare_stores_another_tenants_media", DISPATCH,
+       "             where (m->>'org_id')::uuid is distinct from j.org_id) then",
+       "             where false) then", "admission", "prepare_transition",
+       "another tenant's prepared content is filed under this job (R10)"),
+    _m("d2_late_prepared_not_terminalized", DISPATCH,
+       _DEADLINE_BLOCK + "  if v_now >= a.expires_at then",
+       _DEADLINE_BLOCK.replace("  if v_now >= j", "  if false and v_now >= j", 1)
+       + "  if v_now >= a.expires_at then", "admission", "preparation_deadline",
+       "a late preparation worker leaves the job preparing with its hold (R29/R55)"),
+    _m("d2_late_claim_not_terminalized", DISPATCH,
+       _DEADLINE_BLOCK + "  select * into a from infrx.attempts",
+       _DEADLINE_BLOCK.replace("  if v_now >= j", "  if false and v_now >= j", 1)
+       + "  select * into a from infrx.attempts", "admission", "preparation_deadline",
+       "a job past its preparation phase is claimed again (R29)"),
+    _m("d2_two_live_preparation_leases", DISPATCH,
+       "  if found and v_now < a.expires_at then", "  if false then",
+       "admission", "prepare_transition", "two preparation workers own one job"),
+    _m("d2_unbounded_preparation_retries", DISPATCH,
+       "  if j.preparation_attempts > (p_args->'limits'->>'max_prepublication_retries')::int "
+       "then", "  if false then", "admission", "preparation_deadline",
+       "a job is retried for ever below its deadline (R46)"),
+    _m("d2_terminalize_keeps_the_usd_reservation", DISPATCH,
+       "    update infrx.wallets set reserved_total = reserved_total - h.amount,",
+       "    update infrx.wallets set reserved_total = reserved_total - 0,",
+       "admission", "preparation_deadline", "a failed job's credit stays reserved for ever"),
+    _m("d2_terminalize_keeps_the_credit_hold", DISPATCH,
+       "   where request_id = p_request_id and state in ('held', 'unknown');",
+       "   where request_id = p_request_id and false;",
+       "admission", "credit_terminalization", "a failed CREDIT job's hold is never released"),
+    _m("d2_terminalize_keeps_reservations", DISPATCH,
+       "   where request_id = p_request_id and active;", "   where request_id = p_request_id "
+       "and false;", "admission", "preparation_deadline", "a dead job pins capacity"),
+    _m("d2_prepare_keeps_the_preparation_unit", DISPATCH,
+       "   where request_id = j.request_id and kind = 'preparation' and active;",
+       "   where request_id = j.request_id and false;",
+       "admission", "prepare_transition", "a queued job still blocks preparation (R1)"),
+    _m("d2_prepare_without_inference_dispatch", DISPATCH,
+       "  values (gen_random_uuid(), j.request_id, j.org_id, 'inference_dispatch',",
+       "  values (gen_random_uuid(), j.request_id, j.org_id, 'usage_projection',",
+       "admission", "prepare_transition", "a queued job no worker ever hears of"),
+    _m("d2_queue_deadline_past_the_budget", DISPATCH,
+       "queue_deadline_at = least(v_now + make_interval(secs => v_remaining),",
+       "queue_deadline_at = greatest(v_now + make_interval(secs => v_remaining),",
+       "admission", "prepare_transition", "a job waits past its queue budget (R38)"),
+    _m("d2_redelivered_inside_the_window", DISPATCH,
+       "       and (o.claimed_at is null or o.claimed_at <= v_now - make_interval(",
+       "       and (true or o.claimed_at <= v_now - make_interval(",
+       "admission", "dispatch_relay", "every pump re-sends what it just sent"),
+    _m("d2_superseded_rows_dispatched", DISPATCH,
+       "    if infrx.dispatch_wanted((r.ev).kind, (r.job).state) then", "    if true then",
+       "admission", "dispatch_relay", "a stale prepare_dispatch reaches a preparation pool"),
+    _m("d2_acknowledgment_not_recorded", DISPATCH,
+       "    update infrx.outbox set acknowledged_at = infrx.now()\n     where event_id in",
+       "    update infrx.outbox set acknowledged_at = null\n     where event_id in",
+       "admission", "dispatch_relay", "an acknowledged row is delivered for ever"),
+    _m("d2_snapshot_indexes_a_leased_job", DISPATCH,
+       "                       and a.released_at is null and a.expires_at > infrx.now());",
+       "                       and false);", "admission", "dispatch_relay",
+       "a rebuild hands a job being prepared to a second pool member"),
+    # --- 0013: GC ---------------------------------------------------------------------
+    _m("d2_gc_deletes_a_live_jobs_rows", GC,
+       "                       and j.settled_at is null)", "                       and false)",
+       "admission", "outbox_gc", "a live job loses the event id its rebuild relies on"),
+    _m("d2_gc_deletes_inside_the_retention", GC,
+       "       and o.acknowledged_at < v_now - make_interval(secs => v_retention)",
+       "       and o.acknowledged_at <= v_now - make_interval(secs => v_retention)",
+       "admission", "outbox_gc", "rows are deleted at the retention instant, not after it"),
+    _m("d2_gc_deletes_callbacks", GC, "       and o.kind <> 'callback_delivery'",
+       "       and true", "admission", "outbox_gc", "callback deliveries cascade away"),
+    _m("d2_gc_unbounded", GC,
+       "     limit v_limit\n     for update of o skip locked),\n  acked as",
+       "     for update of o skip locked),\n  acked as",
+       "admission", "outbox_gc", "one GC call locks the whole outbox"),
+    _m("d2_gc_expires_projections", GC,
+       "       and o.kind in ('prepare_dispatch', 'inference_dispatch')\n"
+       "       and j.settled_at is not null",
+       "       and true\n       and j.settled_at is not null",
+       "admission", "outbox_gc", "an unconsumed usage projection is acknowledged away"),
+    # --- 0014 and the prompt count --------------------------------------------------
+    _m("d2_result_rewritable", RESULTS, "  if r.digest <> v_digest then", "  if false then",
+       "admission", "results_and_prompt_tokens",
+       "a second writer's answer silently stands for the stored one"),
+    _m("d2_result_read_across_tenants", RESULTS,
+       "     and r.request_id = substr(p_ref, 14)::uuid and r.org_id = p_org;",
+       "     and r.request_id = substr(p_ref, 14)::uuid;",
+       "admission", "results_and_prompt_tokens", "a tenant reads another tenant's answer"),
+    _m("d2_prompt_past_the_ceiling", DISPATCH,
+       "     or (p_args->>'prompt_tokens')::int > j.max_input_tokens then",
+       "     or false then", "admission", "results_and_prompt_tokens",
+       "a prompt past the hold's input envelope reaches the table as a 500"),
+    # --- 0010: M3's tables --------------------------------------------------------------
+    _m("d2_upload_handle_any_shape", MEDIA,
+       "  handle text primary key check (handle ~ '^upl_[A-Za-z0-9_-]{22,64}$'),",
+       "  handle text primary key,", "admission", "media_uploads",
+       "a guessable or foreign-kind handle names an upload"),
+    _m("d2_upload_facts_before_finalize", MEDIA,
+       "    (state = 'finalized' or num_nonnulls(digest, bytes, mime, duration_s, storage_ref,\n"
+       "                                         profile_version) = 0)),",
+       "    true),", "admission", "media_uploads",
+       "an unfinalized upload already names content"),
+    _m("d2_finalized_upload_rewritable", MEDIA,
+       "  if old.state <> 'created' and row(new.*) is distinct from row(old.*) then",
+       "  if false then", "admission", "media_uploads",
+       "a finalized upload's content changes under the refs that name it"),
+    _m("d2_finalized_upload_deleted_early", MEDIA,
+       "    if old.state = 'finalized' and infrx.now() < old.expires_at then",
+       "    if false then", "admission", "media_uploads",
+       "a live upload record vanishes and its handle stops resolving (R82)"),
+    _m("d2_media_touch_any_tenant", MEDIA,
+       "    where infrx.media_objects.org_id = excluded.org_id\n", "",
+       "admission", "media_objects", "another tenant keeps an object alive"),
+    _m("d2_media_delete_ignores_last_use", MEDIA,
+       "                 where storage_ref = p_storage_ref and last_used_at = p_observed",
+       "                 where storage_ref = p_storage_ref",
+       "admission", "media_objects", "the collector deletes an object a stage just re-used"),
+    _m("d2_media_objects_truncatable", MEDIA,
+       "grant select, insert, update, delete on infrx.media_objects to service_role;",
+       "grant all on infrx.media_objects to service_role;",
+       "admission", "media_privileges", "the platform role can TRUNCATE the object index"),
+    _m("d2_media_uploads_without_rls", MEDIA,
+       "alter table infrx.media_uploads enable row level security;\n", "",
+       "admission", "media_privileges", "a future exposure of infrx leaks every upload"),
+)
+MUTANTS = MUTANTS + D2_MUTANTS
+
+
 def _mutate(directory: Path, mutant: Mutant) -> None:
     for path in (*migrations.migrations(), migrations.SEED_MARLIN):
         shutil.copy(path, directory / path.name)
@@ -1237,6 +1516,22 @@ _CHECKS = {
     "legacy_read_path": None,
     "flag_defaults": None,
     "rerun": None,
+    # D2, scenario "admission" (all migrations + frozen clock + seed_admission).
+    "admission_accepts": checks_admission.check_admission_accepts,
+    "admission_refusals": checks_admission.check_admission_refusals,
+    "admission_capacity": checks_admission.check_admission_capacity,
+    "admission_idempotency": checks_admission.check_admission_idempotency,
+    "admission_concurrency": lambda conn: checks_admission.check_admission_concurrency(
+        pgharness.connect, MUT_DB),
+    "prepare_transition": checks_dispatch.check_prepare_transition,
+    "preparation_deadline": checks_dispatch.check_preparation_deadline_terminalizes,
+    "credit_terminalization": checks_dispatch.check_credit_job_terminalization_releases_credit,
+    "dispatch_relay": checks_dispatch.check_dispatch_relay,
+    "outbox_gc": checks_dispatch.check_outbox_gc,
+    "results_and_prompt_tokens": checks_dispatch.check_results_and_prompt_tokens,
+    "media_uploads": checks_media.check_media_uploads,
+    "media_objects": checks_media.check_media_objects,
+    "media_privileges": checks_media.check_media_privileges,
 }
 
 
@@ -1267,7 +1562,7 @@ def kill(mutant: Mutant) -> tuple[str, str]:
         directory = Path(tmp)
         _mutate(directory, mutant)
         files = migrations.sql_for(shim=pgharness.NEEDS_SHIM, directory=directory)
-        if mutant.scenario in ("credit", "upgrade05", "credit_volume"):
+        if mutant.scenario in ("credit", "upgrade05", "credit_volume", "admission"):
             seed, migrations.SEED_MARLIN = migrations.SEED_MARLIN, directory / SEED
             try:
                 return _kill_d1r(mutant, files)
@@ -1321,6 +1616,13 @@ def _kill_d1r(mutant: Mutant, files) -> tuple[str, str]:
         pgharness.apply(MUT_DB, files)
     except (AssertionError, psycopg.Error) as broken:
         return APPLY_ERROR, _first_line(broken)
+    if mutant.scenario == "admission":
+        try:
+            with pgharness.connect(MUT_DB) as conn:
+                checks_admission.seed_admission(conn)
+                return _run(_CHECKS[mutant.check], conn)
+        except (AssertionError, psycopg.Error) as during_setup:
+            return SETUP_ERROR, _first_line(during_setup)
     try:
         with pgharness.connect(MUT_DB) as conn:
             checks.seed_fixtures(conn)

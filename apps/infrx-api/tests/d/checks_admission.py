@@ -181,6 +181,25 @@ def check_admission_accepts(conn) -> str:
         assert doc["maximum_hold"] == f"{hold:f}" and doc["replayed"] is False
         assert Decimal(doc["price_snapshot"]["input_rate_per_million"]) == \
             b.DEFAULT_PRICE.input_rate_per_million
+        # R53 is immutable on the row (the admitted request too)
+        why = cc.attempt(conn, "update infrx.jobs set request_record = '{}'::jsonb "
+                               "where request_id = %s", (request.request_id,))
+        assert why is not None and why.startswith("23514"), f"request_record rewritten: {why}"
+        # R29/R79: a horizon the store cannot keep is clamped to its own clock + budgets
+        far = b.request(world, deadline_s=horizon * 100)
+        admit(conn, far, b.idem(far, "accept-far"))
+        kept, = conn.execute("select deadline_at from infrx.jobs where request_id = %s",
+                             (far.request_id,)).fetchone()
+        assert kept == now + timedelta(seconds=horizon), f"not clamped: {kept}"
+        # the hold rounds UP (ceiling_8) on a rate whose exact cost has more digits
+        conn.execute("insert into infrx.price_versions (price_version, model_revision, "
+                     "input_rate_per_million, output_rate_per_million, token_rules_version, "
+                     "effective_from) values ('pv_odd', 'odd/model@1', 0.33333333, "
+                     "0.33333333, 'tr_v1', '2026-01-01T00:00:00Z')")
+        odd = b.request(world, model_revision="odd/model@1", max_input_tokens=1,
+                        max_output_tokens=1)
+        odd_doc = admit(conn, odd, b.idem(odd, "accept-odd"))
+        assert odd_doc["maximum_hold"] == "0.00000067", odd_doc["maximum_hold"]
 
         # CREDIT
         org = cc.personal_org(conn, cc.CONSUMER_1)
@@ -241,6 +260,11 @@ def check_admission_refusals(conn) -> str:
                       "where name = 'legacy_usd_admission'",
         "expensive listing": _listing(2, "rc_expensive", "100000000", "100000000"),
         "zero listing": _listing(3, "rc_free", "0", "0"),
+        "withdrawn price": "alter table infrx.price_versions disable trigger "
+                           "price_versions_immutable; update infrx.price_versions set "
+                           "effective_to = infrx.now() where price_version = 'pv_test'; "
+                           "alter table infrx.price_versions enable trigger "
+                           "price_versions_immutable",
     }
     cases = (
         # (label, request factory, idem key/override, regime, staged setup, expected code)
@@ -264,6 +288,7 @@ def check_admission_refusals(conn) -> str:
          "legacy_usd", None, "context_length_exceeded"),
         ("an unpriced model", lambda: req(model_revision=f"{b.MODEL}-unpriced"), None,
          "legacy_usd", None, "invalid_request"),
+        ("a withdrawn price", req, None, "legacy_usd", "withdrawn price", "invalid_request"),
         ("a hold past the available USD", lambda: req(org_id=b.ORG_B, key_id=b.KEY_B,
                                                       max_input_tokens=30_000), None,
          "legacy_usd", "drain org b", "insufficient_credit"),
