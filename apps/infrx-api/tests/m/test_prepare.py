@@ -216,14 +216,31 @@ def test_a_video_part_that_is_not_exactly_a_url_is_refused(tmp_path):
         assert "carries exactly {url}" in str(raised.value)
 
 
-def test_a_clip_over_the_duration_cap_is_refused_before_it_is_stored(tmp_path):
+@pytest.mark.parametrize("cap, seconds", [(120.0, 121.0), (5.0, 10.0), (30.0, 30.5)])
+def test_a_clip_over_the_duration_cap_is_refused_before_it_is_stored(cap, seconds, tmp_path):
     """S2M D9: `MAX_VIDEO_SECONDS` is what keeps every accepted clip at the trained 2 fps,
-    and it is enforced on the measurement, before an object exists."""
-    adapter = preparation(tmp_path, bodies=[LONG])
+    and it is enforced on the measurement, before an object exists.
+
+    Three caps, because one is indistinguishable from the literal 120.0: the bound has to
+    come from the settings this deployment is running with (review R7)."""
+    limits = DEFAULTS.replace(max_video_seconds=cap)
+    adapter = preparation(tmp_path / str(cap), limits=limits,
+                          bodies=[support.mp4(seconds=seconds)])
     with pytest.raises(errors.UnsupportedMedia) as raised:
         run(adapter.prepare_request(b.ORG_A, request_with(adapter, URL)))
-    assert "120s" in str(raised.value)
+    assert f"{cap:.0f}s" in str(raised.value)
     assert adapter.objects.objects == {}
+
+
+@pytest.mark.parametrize("cap", [120.0, 5.0])
+def test_a_clip_exactly_at_the_cap_is_accepted(cap, tmp_path):
+    """The bound is inclusive: a 120.000 s clip is 240 frames at the trained 2 fps, which is
+    the worst case the profile is sized for, not one frame past it (review R24)."""
+    limits = DEFAULTS.replace(max_video_seconds=cap)
+    adapter = preparation(tmp_path / str(cap), limits=limits,
+                          bodies=[support.mp4(seconds=cap)])
+    prepared = run(adapter.prepare_request(b.ORG_A, request_with(adapter, URL)))
+    assert prepared.media[0].duration_s == pytest.approx(cap)
 
 
 @pytest.mark.parametrize("name, body", [
@@ -509,6 +526,25 @@ def test_a_sweep_removes_expired_entries_and_leaves_live_ones(tmp_path):
     assert not os.path.exists(old_path)
     assert (new.org_id, new.digest, "v1") in adapter.cache.entries
     assert adapter.local_uri(new)
+
+
+def test_a_failed_durable_write_leaves_no_local_copy(tmp_path):
+    """Durable before local, and provably in that order: if the prepared artifact cannot be
+    persisted there must be no cache entry claiming it was, or the next attempt hits the
+    cache and reports a job prepared against an object that does not exist (review R12)."""
+    class FailsPrepared(store.InMemoryObjectStore):
+        async def put_if_absent(self, key, data, content_type):
+            if key.endswith("/prepared"):
+                raise errors.DependencyUnavailable("object store is unavailable")
+            return await super().put_if_absent(key, data, content_type)
+
+    adapter = preparation(tmp_path, objects=FailsPrepared())
+    job_id, _ = staged_job(adapter)
+    with pytest.raises(errors.DependencyUnavailable):
+        run(adapter.prepare(job_id, "v1"))
+    assert adapter.cache.entries == {}
+    assert os.listdir(tmp_path) == []
+    assert adapter.prepared_by_job == {}
 
 
 def test_a_cache_file_deleted_behind_the_index_is_a_miss(tmp_path):

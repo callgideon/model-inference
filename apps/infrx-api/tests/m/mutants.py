@@ -678,6 +678,33 @@ MUTANTS: tuple[Mutant, ...] = (
        '                "profile_version": version,\n                "storage_ref": self._key('
        'ref.org_id, ref.digest, ref.profile_version, "prepared"),',
        "test_the_profile_version_namespaces_the_prepared_artifact"),
+    _m("local_copy_written_before_the_durable_artifact",
+       "durable before local: a cache entry written first survives a failed durable write "
+       "and the next attempt reports a job prepared against an object that is not there "
+       "(review R12)",
+       R, "                # Durable before local: the prepared artifact exists in the object store\n"
+          "                # before anything downstream can be told the job is prepared.\n"
+          "                await self._write_once(prepared_key, body, probed.mime)\n"
+          "                entry = (self.cache.put(ref.org_id, ref.digest, version, body, probed)\n"
+          "                         if self.cache.enabled\n"
+          '                         else CacheEntry("", probed, len(body), 0.0))',
+       "                entry = (self.cache.put(ref.org_id, ref.digest, version, body, probed)\n"
+          "                         if self.cache.enabled\n"
+          '                         else CacheEntry("", probed, len(body), 0.0))\n'
+          "                await self._write_once(prepared_key, body, probed.mime)",
+       "test_a_failed_durable_write_leaves_no_local_copy"),
+    _m("duration_cap_is_a_literal",
+       "the duration bound is this deployment's MAX_VIDEO_SECONDS, not the number the "
+       "default happens to carry (review R7)",
+       R, "        return cls(version=valid_profile(version), max_duration_s=limits.max_video_seconds,",
+       "        return cls(version=valid_profile(version), max_duration_s=120.0,",
+       "test_a_clip_over_the_duration_cap_is_refused_before_it_is_stored"),
+    _m("duration_cap_excludes_its_own_bound",
+       "the cap is inclusive: 120.000 s is 240 frames at 2 fps, the worst case the profile "
+       "is sized for (review R24)",
+       R, "        if probed.duration_s > self.max_duration_s:",
+       "        if probed.duration_s >= self.max_duration_s:",
+       "test_a_clip_exactly_at_the_cap_is_accepted"),
     _m("prepared_artifact_not_persisted",
        "the prepared artifact is durable before anything downstream is told the job is "
        "prepared; the local cache is a copy, not the record",
