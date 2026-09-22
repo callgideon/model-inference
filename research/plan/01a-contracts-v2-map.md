@@ -5,6 +5,15 @@ executable encoding of revision 2 that now exists in
 `apps/infrx-api/infrx/contracts/v2/` and `apps/app/lib/contracts/v2/`, and the
 rulings F2P had to make to get there.
 
+**Wire-in (2026-09-22).** The composition §7 lists has been made on `codex/f2p-wirein`
+(its evidence report in `evidence/f/` names the commits): `contracts.v2`, `V2_SUITES`, the
+`CreditJobStore` port siblings and the fake store's CREDIT regime, the v2 configuration names,
+the one mutation runner per language, the console `v2` namespace, the fixture and parity
+guards, and the v1 read projection against D1R's real pre-cutover rows. Not made: the swap of
+the console's `WalletBalance`/`LedgerEntry`/`UsageRow` to the v2 DTOs, which needs C1/U1
+consumer changes (listed there as integration requests). The paragraph below is the
+additive phase's status, kept as written.
+
 **Status.** This is the *additive* half of F2P: v1 is untouched, nothing imports v2
 yet, and no adapter, migration or UI consumes it. The committed artefacts are the
 types, the fixture base and the conformance cases D1R/D2–D5, A1, G1R/G6B and
@@ -231,3 +240,9 @@ Numbered by the coordinator at the additive merge (2026-09-22): V1–V15 are **R
   do not run under `model_copy(update=)`/`model_construct`, so the wallet-kind and
   audience checks are load-bearing. V3 amended accordingly; V15 added. Wire-in
   notes on `wallet_id` provenance and canonical-`Z` string comparison added to §7.
+- 2026-09-22: F2P wire-in phase. §7's files composed as recorded above the Status paragraph.
+  Found against D1R's real rows: 0001-0005 wrote legacy usage with NULL tokens and NULL
+  settlement state, so `UsageRecordV2.usage`/`outcome` are absent-able on a `legacy_usd` row
+  (required on `credit`) and `project_v1_usage` no longer invents `settled`. The canonical-`Z`
+  note is now enforced (`instantKey`); `wallet_id` is written only by `resolve_wallet` in the
+  fake store (mutant `credit_wallet_by_organization`).

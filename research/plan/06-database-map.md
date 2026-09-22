@@ -2,6 +2,8 @@
 
 This is the product-v2 target. Existing D1 migrations 0003–0005 implement USD/org wallets and must remain unchanged. D1R adds migrations after F2P freezes revision 2 types. D owns all physical migrations. Read [architecture](../platforms/01-architecture.md) and [credits](../platforms/02-credits.md). Consumer records carry trusted consumer org identity; provider resources carry provider org identity; jobs link both. User-owned wallets retain a protected personal-org billing binding. Never accept ownership from untrusted body fields. Existing organization/profile/key tables remain authoritative. Inspect actual remote schema before generating migrations; keep migration history in its current physical path initially.
 
+**Appendix.** [06a-database-map-v2.md](06a-database-map-v2.md) binds each executable v2 record ([01a](01a-contracts-v2-map.md)) to the relation and constraint that carries its invariant; D1R's migrations 0006–0009 implement it (physical names in `apps/infrx-api/infrx/state/credit_schema.py`).
+
 | Logical relation | Keys, fields and constraints | Required index / lifecycle |
 |---|---|---|
 | price_versions / rate_cards | Immutable ID, deployment applicability, unit CREDIT, approved decimal input/output rates, meter rules, author/approver/effective time | Active published lookup; snapshots immutable; USD costs separate |
@@ -47,6 +49,8 @@ Store bounded canonical refs rather than large trace/video payloads in PG. Keep 
 - 2026-09-20: Proposed relations, keys and role boundaries mapped to D1–D6. No migrations generated or applied by the documentation task.
 
 - 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.
+
+- 2026-09-22: F2P wire-in (item 7, file 13): linked the v2 persistence appendix (06a) and 01a. No relation here changed.
 
 ## D7–D9 follow-on Lab persistence map
 
