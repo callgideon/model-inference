@@ -23,11 +23,16 @@ from tempfile import TemporaryDirectory
 import psycopg
 from infrx.state import migrations
 
-from . import checks, pgharness
+from . import checks, checks_credit, pgharness
 
 SCHEMA = "0003_pilot_durable_schema.sql"
 ROLES = "0004_pilot_roles_and_rpcs.sql"
 CONSOLE = "0005_console_read_surface.sql"
+# D1R
+CREDIT = "0006_credit_accounting.sql"
+REGISTRY = "0007_provider_registry.sql"
+SURFACE = "0008_credit_read_surface.sql"
+SEED = migrations.SEED_MARLIN.name           # an operator seed, not a migration
 
 MUT_DB = f"{pgharness.DATABASE}_mut"
 MUT_PRODLIKE_DB = "prodlike_d1_mut"       # deliberately not infrx_*
@@ -45,7 +50,7 @@ class Mutant:
     file: str
     old: str
     new: str
-    scenario: str            # fresh | upgrade | volume | prodlike
+    scenario: str            # fresh | upgrade | volume | prodlike | credit | upgrade05 | credit_volume
     check: str               # the check that must fail
     why: str                 # what would be wrong in production
     #: How many places this ONE conceptual edit touches (the three console RPCs share a
@@ -611,8 +616,470 @@ MUTANTS: tuple[Mutant, ...] = (
 )
 
 
+def _m(name, file, old, new, scenario, check, why, **kw) -> Mutant:
+    return Mutant(name, file, old, new, scenario, check, why, **kw)
+
+
+#: D1R (0006-0008 and the operator seed). One per claimed invariant; each target text is
+#: counted, so a stale target is an error rather than a silent partial mutation.
+D1R_MUTANTS: tuple[Mutant, ...] = (
+    # --- 0006: wallets --------------------------------------------------------------
+    _m("d1r_wallet_owner_not_exclusive", CREDIT,
+       "    when 'consumer' then owner_user_id is not null and personal_org_id is not null\n"
+       "                         and owner_provider_org_id is null",
+       "    when 'consumer' then owner_user_id is not null and personal_org_id is not null",
+       "credit", "credit_identity", "a consumer wallet is also owned by a provider"),
+    _m("d1r_two_wallets_per_individual", CREDIT,
+       "create unique index if not exists credit_wallets_one_per_user\n"
+       "  on infrx.credit_wallets (owner_user_id) where kind = 'consumer';", "",
+       "credit", "credit_identity", "one individual holds two promotional wallets"),
+    _m("d1r_two_wallets_per_personal_org", CREDIT,
+       "create unique index if not exists credit_wallets_one_per_personal_org\n"
+       "  on infrx.credit_wallets (personal_org_id) where kind = 'consumer';", "",
+       "credit", "credit_identity", "two individuals' grants fund one shared organization"),
+    _m("d1r_wallet_in_usd", CREDIT,
+       "  unit text not null default 'CREDIT' check (unit = 'CREDIT'),\n  owner_user_id",
+       "  unit text not null default 'CREDIT',\n  owner_user_id",
+       "credit", "credit_identity", "a CREDIT wallet is relabelled USD"),
+    _m("d1r_wallet_born_with_money", CREDIT,
+       "    if new.ledger_total <> 0 or new.reserved_total <> 0 or new.revision <> 0 then",
+       "    if false then", "credit", "credit_identity",
+       "a wallet is created holding a balance no ledger row explains"),
+    _m("d1r_wallet_rebound_to_another_org", CREDIT,
+       "     or new.personal_org_id is distinct from old.personal_org_id\n", "",
+       "credit", "credit_identity", "an individual's wallet starts funding another org"),
+    _m("d1r_provider_wallet_changes_owner", CREDIT,
+       "     or new.owner_provider_org_id is distinct from old.owner_provider_org_id\n", "",
+       "credit", "registry", "a provider's dev budget moves to another provider"),
+    _m("d1r_total_moved_without_ledger", CREDIT,
+       "  if pg_trigger_depth() < 2 and (new.ledger_total", "  if false and (new.ledger_total",
+       "credit", "credit_identity", "a writer moves the CREDIT total with no ledger row (R59-7)"),
+    # --- 0006: ledger -----------------------------------------------------------------
+    _m("d1r_ledger_does_not_move_the_wallet", CREDIT,
+       "create or replace trigger credit_ledger_moves_wallet after insert on infrx.credit_ledger\n"
+       "  for each row execute function infrx.credit_ledger_moves_wallet();", "",
+       "credit", "grant", "the ledger says 10000 and the wallet says 0"),
+    _m("d1r_ledger_has_a_transfer", CREDIT,
+       "                                     'operator_adjustment', 'inference_debit')),",
+       "                                     'operator_adjustment', 'inference_debit', "
+       "'transfer')),", "credit", "credit_identity",
+       "provider or consumer credit moves between wallets (R67)"),
+    _m("d1r_signup_grant_any_amount", CREDIT,
+       "    when 'signup_grant' then wallet_kind = 'consumer' and amount = 10000.00000000",
+       "    when 'signup_grant' then wallet_kind = 'consumer' and amount > 0",
+       "credit", "credit_identity", "the promotional grant is not exactly 10000"),
+    _m("d1r_signup_grant_to_provider", CREDIT,
+       "    when 'signup_grant' then wallet_kind = 'consumer' and amount = 10000.00000000",
+       "    when 'signup_grant' then amount = 10000.00000000",
+       "credit", "registry", "a provider dev wallet receives a signup grant"),
+    _m("d1r_allocation_mints_consumer_credit", CREDIT,
+       "    when 'operator_allocation' then wallet_kind = 'provider_dev' and amount > 0",
+       "    when 'operator_allocation' then amount > 0",
+       "credit", "credit_identity", "an allocation mints consumer credit"),
+    _m("d1r_positive_debit", CREDIT,
+       "    when 'inference_debit' then amount < 0 and request_id is not null",
+       "    when 'inference_debit' then request_id is not null",
+       "credit", "credit_identity", "a settlement credits the wallet"),
+    _m("d1r_debit_without_request", CREDIT,
+       "    when 'inference_debit' then amount < 0 and request_id is not null",
+       "    when 'inference_debit' then amount < 0",
+       "credit", "credit_identity", "a debit no request explains"),
+    _m("d1r_grant_settles_a_request", CREDIT,
+       "  constraint credit_ledger_request_only_on_debits\n"
+       "    check (kind = 'inference_debit' or request_id is null)\n",
+       "  constraint credit_ledger_request_only_on_debits check (true)\n",
+       "credit", "credit_identity", "an adjustment masquerades as a request's settlement"),
+    _m("d1r_second_signup_row_per_wallet", CREDIT,
+       "create unique index if not exists credit_ledger_one_signup_grant_per_wallet\n"
+       "  on infrx.credit_ledger (wallet_id) where kind = 'signup_grant';", "",
+       "credit", "credit_identity", "a second signup row without an entitlement"),
+    _m("d1r_two_debits_per_request", CREDIT,
+       "create unique index if not exists credit_ledger_one_debit_per_request\n"
+       "  on infrx.credit_ledger (request_id) where kind = 'inference_debit';", "",
+       "credit", "credit_admission", "a request is settled twice"),
+    _m("d1r_ledger_is_editable", CREDIT,
+       "create or replace trigger credit_ledger_append_only before update or delete\n"
+       "  on infrx.credit_ledger for each row execute function infrx.forbid_update_delete();",
+       "", "credit", "credit_identity", "CREDIT history is rewritten"),
+    _m("d1r_holds_truncatable", CREDIT,
+       "                           'infrx.signup_entitlements', 'infrx.credit_wallet_holds']",
+       "                           'infrx.signup_entitlements']",
+       "credit", "credit_identity", "every active reservation vanishes in one statement"),
+    _m("d1r_debit_from_another_wallet", CREDIT,
+       "    alter table infrx.credit_ledger add constraint credit_ledger_debit_is_the_jobs\n"
+       "      foreign key (request_id, wallet_id) references infrx.jobs (request_id, wallet_id)\n"
+       "      on delete restrict;\n", "",
+       "credit", "credit_admission", "a request is charged to another wallet"),
+    # --- 0006: entitlements and the grant ----------------------------------------------
+    _m("d1r_grant_key_includes_campaign", CREDIT,
+       "  constraint signup_entitlements_pkey primary key (user_id, entitlement),",
+       "  constraint signup_entitlements_pkey primary key (user_id, entitlement, "
+       "campaign_version),", "credit", "credit_identity",
+       "a campaign bump re-opens eligibility (R71)"),
+    _m("d1r_grant_into_someone_elses_wallet", CREDIT,
+       "  constraint signup_entitlements_own_wallet foreign key (wallet_id, user_id)\n"
+       "    references infrx.credit_wallets (wallet_id, owner_user_id) on delete restrict,\n", "",
+       "credit", "credit_identity", "an individual's grant lands in another wallet"),
+    _m("d1r_grant_without_its_money_row", CREDIT,
+       "  constraint signup_entitlements_is_the_grant_row\n"
+       "    foreign key (ledger_operation_id, wallet_id, ledger_kind)\n"
+       "    references infrx.credit_ledger (operation_id, wallet_id, kind) on delete restrict\n",
+       "  constraint signup_entitlements_is_the_grant_row check (true)\n",
+       "credit", "credit_identity", "an entitlement whose money is some other movement"),
+    _m("d1r_entitlement_editable", CREDIT,
+       "create or replace trigger signup_entitlements_immutable before update or delete\n"
+       "  on infrx.signup_entitlements for each row execute function "
+       "infrx.forbid_update_delete();", "",
+       "credit", "credit_identity", "the grant's evidence or campaign is rewritten"),
+    _m("d1r_grant_retry_mints_again", CREDIT,
+       "  if not exists (select 1 from infrx.signup_entitlements e\n"
+       "                 where e.user_id = p_user_id and e.entitlement = "
+       "'initial_signup_grant') then",
+       "  if true then", "credit", "grant",
+       "an auth-callback retry is a second entitlement (CREDIT-GRANT)"),
+    _m("d1r_grant_binds_a_shared_org", CREDIT,
+       "    if (select count(*) from public.org_members m where m.org_id = v_org) > 1 then",
+       "    if false then", "credit", "grant",
+       "one individual's grant silently funds a multi-member organization"),
+    _m("d1r_grant_ignores_its_flag", CREDIT,
+       "  perform infrx.require_feature('signup_grant');\n", "", "credit", "grant",
+       "the grant mints before the rollout enables it"),
+    _m("d1r_grant_without_evidence_check", CREDIT,
+       "  if p_user_id is null or length(btrim(coalesce(p_verification_evidence_ref, ''))) = 0 then",
+       "  if p_user_id is null then", "credit", "grant",
+       "a blank evidence reference is not an invalid_request"),
+    _m("d1r_grant_callable_by_browsers", CREDIT,
+       "grant execute on function infrx.grant_signup_credit(uuid, text, text, uuid) to "
+       "service_role;",
+       "grant execute on function infrx.grant_signup_credit(uuid, text, text, uuid) to "
+       "service_role, authenticated;", "credit", "credit_role_matrix",
+       "a browser session mints its own grant"),
+    _m("d1r_service_writes_money_directly", CREDIT,
+       "              infrx.signup_entitlements, infrx.credit_wallet_holds\n"
+       "  from public, anon, authenticated, service_role;",
+       "              infrx.signup_entitlements, infrx.credit_wallet_holds\n"
+       "  from public, anon, authenticated;", "credit", "credit_privileges",
+       "the platform role inserts ledger rows and holds outside D's operations"),
+    _m("d1r_credit_ledger_without_rls", CREDIT,
+       "alter table infrx.credit_ledger enable row level security;\n", "",
+       "fresh", "relations_exist", "a future exposure of infrx leaks every CREDIT ledger"),
+    _m("d1r_missing_flag_row_is_open", CREDIT,
+       "  if not coalesce((select f.enabled from infrx.feature_flags f where f.name = p_name), false)",
+       "  if not coalesce((select f.enabled from infrx.feature_flags f where f.name = p_name), true)",
+       "credit", "fail_closed", "a deleted flag row enables the feature"),
+    _m("d1r_rerun_resets_flags", CREDIT,
+       "  ('legacy_usd_admission', true, 'migration 0006', 'pre-cutover default')\n"
+       "on conflict (name) do nothing;",
+       "  ('legacy_usd_admission', true, 'migration 0006', 'pre-cutover default')\n"
+       "on conflict (name) do update set enabled = excluded.enabled;",
+       "upgrade05", "rerun", "re-applying the migration silently switches a live flag"),
+    _m("d1r_signup_enabled_on_apply", CREDIT,
+       "  ('signup_grant', false, 'migration 0006', 'applied; not enabled'),",
+       "  ('signup_grant', true, 'migration 0006', 'applied; not enabled'),",
+       "upgrade05", "flag_defaults", "applying the migration starts minting"),
+    _m("d1r_upgrade_imports_usd_as_credit", CREDIT,
+       "-- ======================================================= signup entitlements ===",
+       "insert into infrx.credit_wallets (kind, owner_user_id, personal_org_id)\n"
+       "select 'consumer', o.created_by, o.id from public.organizations o\n"
+       "where o.created_by is not null and exists (select 1 from public.credit_ledger l\n"
+       "  where l.org_id = o.id) on conflict do nothing;\n"
+       "-- ======================================================= signup entitlements ===",
+       "upgrade05", "old_regime_preserved",
+       "the upgrade turns USD history into CREDIT wallets (CREDIT-UNITS)"),
+    # --- 0006: regimes, pins, admission guards ------------------------------------------
+    _m("d1r_usd_job_may_carry_pins", CREDIT,
+       "          and num_nulls(wallet_id, model_id, requested_model, deployment_revision_id,\n"
+       "                        serving_version_id, rate_card_version, policy_version) = 7",
+       "          and num_nulls(wallet_id, model_id, requested_model, deployment_revision_id,\n"
+       "                        serving_version_id, rate_card_version, policy_version) >= 0",
+       "credit", "credit_admission", "a USD job half-pinned to a CREDIT card"),
+    _m("d1r_credit_job_may_carry_usd_price", CREDIT,
+       "        else price_version is null and price_snapshot is null\n",
+       "        else price_snapshot is null\n",
+       "credit", "credit_admission", "a CREDIT job also priced in USD"),
+    _m("d1r_regime_defaults_silently", CREDIT,
+       "  alter column accounting_regime drop default,\n", "",
+       "credit", "credit_admission", "a job that names no regime is admitted as USD"),
+    _m("d1r_job_repinned_to_the_next_card", CREDIT,
+       "     or new.rate_card_version is distinct from old.rate_card_version\n", "",
+       "credit", "credit_admission", "a queued job moves to a newly published rate (R78)"),
+    _m("d1r_wallet_not_the_admissions", CREDIT,
+       "  if w.kind = 'consumer' and w.personal_org_id is distinct from new.org_id then",
+       "  if false then", "credit", "credit_admission",
+       "one organization's request spends another individual's wallet (R66)"),
+    _m("d1r_dev_budget_pays_for_prod", CREDIT,
+       "  if w.kind = 'provider_dev' and not exists (",
+       "  if false and not exists (", "credit", "credit_admission",
+       "internal preview credit pays for public production traffic"),
+    _m("d1r_credit_admission_ignores_flag", CREDIT,
+       "  perform infrx.require_feature('credit_admission');\n  select * into w",
+       "  select * into w", "credit", "fail_closed",
+       "CREDIT jobs are admitted before the rollout enables them"),
+    _m("d1r_legacy_admission_ignores_cutover", CREDIT,
+       "    perform infrx.require_feature('legacy_usd_admission');\n", "",
+       "credit", "fail_closed", "old-regime admission continues after the cutover freeze"),
+    # --- 0006: holds -----------------------------------------------------------------------
+    _m("d1r_hold_on_another_wallet", CREDIT,
+       "  constraint credit_wallet_holds_job_fk\n"
+       "    foreign key (request_id, org_id, wallet_id, rate_card_version)\n"
+       "    references infrx.jobs (request_id, org_id, wallet_id, rate_card_version)\n"
+       "    on delete restrict\n",
+       "  constraint credit_wallet_holds_job_fk check (true)\n",
+       "credit", "credit_admission", "a job reserves someone else's credit"),
+    _m("d1r_hold_reserves_nothing", CREDIT,
+       "    update infrx.credit_wallets set reserved_total = reserved_total + new.amount,",
+       "    update infrx.credit_wallets set reserved_total = reserved_total + 0,",
+       "credit", "credit_admission", "a hold beyond the balance is accepted (no 402)"),
+    _m("d1r_hold_never_released", CREDIT,
+       "    update infrx.credit_wallets set reserved_total = reserved_total - old.amount,",
+       "    update infrx.credit_wallets set reserved_total = reserved_total - 0,",
+       "credit", "credit_admission", "settled credit stays reserved for ever"),
+    _m("d1r_unknown_usage_debited_later", CREDIT,
+       "    or (old.state = 'unknown' and new.state = 'released')) then",
+       "    or (old.state = 'unknown' and new.state in ('released', 'settled'))) then",
+       "credit", "credit_admission", "unknown usage is charged after the fact (02)"),
+    _m("d1r_hold_born_settled", CREDIT,
+       "    if new.state <> 'held' then", "    if false then",
+       "credit", "credit_admission", "a settled hold that never reserved"),
+    _m("d1r_hold_resized", CREDIT,
+       "     or new.wallet_id is distinct from old.wallet_id or new.amount is distinct from "
+       "old.amount\n",
+       "     or new.wallet_id is distinct from old.wallet_id\n",
+       "credit", "credit_admission", "a hold shrinks after admission"),
+    # --- 0006: usage regime --------------------------------------------------------------
+    _m("d1r_legacy_row_carries_credit", CREDIT,
+       "                                         serving_version_id, deployment_revision_id) = 4",
+       "                                         serving_version_id, deployment_revision_id) >= 0",
+       "credit", "regime_on_usage", "a USD row also charges CREDIT"),
+    _m("d1r_credit_row_carries_usd_cost", CREDIT,
+       "          and price_version is null and cost_usd = 0 and settlement_regime = 'pilot' end),",
+       "          and price_version is null and settlement_regime = 'pilot' end),",
+       "credit", "credit_admission", "one request costs in two units"),
+    _m("d1r_settled_at_another_card", CREDIT,
+       "      add constraint usage_events_credit_row_is_the_job\n"
+       "        foreign key (id, rate_card_version, serving_version_id, deployment_revision_id)\n"
+       "        references infrx.jobs (request_id, rate_card_version, serving_version_id,\n"
+       "                               deployment_revision_id);",
+       "      add constraint usage_events_credit_row_is_the_job check (true);",
+       "credit", "credit_rate", "a queued job settles at the newly published card"),
+    _m("d1r_gateway_row_needs_a_regime", CREDIT,
+       "-- ================================================================ privileges ===",
+       "alter table public.usage_events alter column accounting_regime drop default;\n"
+       "-- ================================================================ privileges ===",
+       "upgrade05", "legacy_read_path", "the deployed gateway's usage inserts start failing"),
+    # --- 0007: registry ---------------------------------------------------------------------
+    _m("d1r_public_dev_deployment", REGISTRY,
+       "    when 'public' then environment = 'prod'\n                       and state in",
+       "    when 'public' then true\n                       and state in",
+       "credit", "registry", "a dev deployment is publicly listed (R70)"),
+    _m("d1r_public_before_validation", REGISTRY,
+       "                       and state in ('proposed_public', 'active', 'draining', 'retired')",
+       "", "credit", "registry", "an unvalidated revision is public"),
+    _m("d1r_private_in_public_state", REGISTRY,
+       "    else state in ('draft', 'validating', 'ready_private', 'retired') end),",
+       "    else true end),", "credit", "registry", "a private revision serves as active"),
+    _m("d1r_deploy_another_providers_serving", REGISTRY,
+       "  constraint deployment_revisions_serving_fk foreign key (serving_version_id, "
+       "provider_org_id)\n"
+       "    references infrx.serving_versions (serving_version_id, provider_org_id) on delete "
+       "restrict,",
+       "  constraint deployment_revisions_serving_fk foreign key (serving_version_id)\n"
+       "    references infrx.serving_versions (serving_version_id) on delete restrict,",
+       "credit", "registry", "a provider deploys another provider's model"),
+    _m("d1r_deployment_limits_editable", REGISTRY,
+       "     or new.max_output_tokens is distinct from old.max_output_tokens\n", "",
+       "credit", "registry", "validated limits widen under admitted jobs"),
+    _m("d1r_deployment_state_unconstrained", REGISTRY,
+       "  if new.state is distinct from old.state and not (",
+       "  if false and not (", "credit", "registry", "a retired revision is resurrected"),
+    _m("d1r_rate_card_editable", REGISTRY,
+       "                           'infrx.rate_card_versions', 'infrx.data_access_policies',\n"
+       "                           'infrx.catalog_listings']\n  loop\n"
+       "    execute format('create or replace trigger %I before update or delete",
+       "                           'infrx.data_access_policies',\n"
+       "                           'infrx.catalog_listings']\n  loop\n"
+       "    execute format('create or replace trigger %I before update or delete",
+       "credit", "registry", "an admitted card is re-priced (CREDIT-RATE)"),
+    _m("d1r_rate_card_any_meter", REGISTRY,
+       "  meter text not null default 'tokens-v1' check (meter = 'tokens-v1'),",
+       "  meter text not null default 'tokens-v1',", "credit", "registry",
+       "an arbitrary billing formula is admissible"),
+    _m("d1r_rate_card_unapproved", REGISTRY,
+       "  status text not null default 'approved' check (status = 'approved'),",
+       "  status text not null default 'approved',", "credit", "registry",
+       "a proposed card prices traffic"),
+    _m("d1r_negative_rate", REGISTRY,
+       "  input_rate_per_million numeric(20,8) not null check (input_rate_per_million >= 0),",
+       "  input_rate_per_million numeric(20,8) not null,", "credit", "registry",
+       "a debit becomes a credit at settlement"),
+    _m("d1r_listing_of_private_deployment", REGISTRY,
+       "  constraint catalog_listings_public_fk foreign key (deployment_revision_id, visibility)\n"
+       "    references infrx.deployment_revisions (deployment_revision_id, visibility)\n"
+       "    on delete restrict\n",
+       "  constraint catalog_listings_public_fk check (true)\n",
+       "credit", "registry", "a private dev artifact appears in the catalog"),
+    _m("d1r_listing_priced_by_another_card", REGISTRY,
+       "    foreign key (rate_card_version, deployment_revision_id, serving_version_id, model_id)\n"
+       "    references infrx.rate_card_versions\n"
+       "      (rate_card_version, deployment_revision_id, serving_version_id, model_id)\n"
+       "    on delete restrict,\n  constraint catalog_listings_public_fk",
+       "    foreign key (rate_card_version) references infrx.rate_card_versions\n"
+       "    on delete restrict,\n  constraint catalog_listings_public_fk",
+       "credit", "registry", "an alias is priced by another deployment's card"),
+    _m("d1r_listing_under_any_alias", REGISTRY,
+       "  constraint catalog_listings_model_fk foreign key (public_model_id, model_id)\n"
+       "    references public.models (id, model_uuid) on update restrict on delete restrict,",
+       "  constraint catalog_listings_model_fk foreign key (public_model_id)\n"
+       "    references public.models (id) on update restrict on delete restrict,",
+       "credit", "registry", "one model's deployment is sold under another alias"),
+    _m("d1r_shard_digest_unchecked", REGISTRY,
+       "    and array_to_string(weight_shard_digests, ',')\n"
+       "        ~ '^sha256:[0-9a-f]{64}(,sha256:[0-9a-f]{64})*$'),",
+       "    and true),", "credit", "registry", "a malformed weight digest pins nothing"),
+    _m("d1r_digest_provenance_free_text", REGISTRY,
+       "    check (digest_source in ('served_bytes', 'registry_oid', 'registry_oid_confirmed')),",
+       "    ,", "credit", "registry", "provenance is asserted, not recorded (R76)"),
+    _m("d1r_revision_label_ambiguous", REGISTRY,
+       "  constraint serving_versions_label_key unique (model_id, revision_label),\n", "",
+       "credit", "registry", "one R62 pin names two serving versions"),
+    _m("d1r_capability_any_meter", REGISTRY,
+       "    and capability->>'billing_meter' = 'tokens-v1'\n", "\n",
+       "credit", "registry", "a serving version bills by an unknown meter"),
+    _m("d1r_serving_version_editable", REGISTRY,
+       "  foreach r in array array['infrx.provider_orgs', 'infrx.model_versions',\n"
+       "                           'infrx.serving_versions', 'infrx.endpoints',",
+       "  foreach r in array array['infrx.provider_orgs', 'infrx.model_versions',\n"
+       "                           'infrx.endpoints',", "credit", "registry",
+       "a pinned serving version changes under admitted jobs"),
+    _m("d1r_two_current_memberships", REGISTRY,
+       "create unique index if not exists provider_memberships_one_current\n"
+       "  on infrx.provider_memberships (provider_org_id, user_id) where revoked_at is null;",
+       "", "credit", "registry", "a member holds two roles at once"),
+    _m("d1r_membership_promoted_in_place", REGISTRY,
+       "     or new.user_id is distinct from old.user_id or new.role is distinct from old.role\n",
+       "     or new.user_id is distinct from old.user_id\n",
+       "credit", "registry", "a role change leaves no revocation trail"),
+    _m("d1r_membership_unrevoked", REGISTRY,
+       "     or (old.revoked_at is not null and new.revoked_at is distinct from old.revoked_at) then",
+       "     then", "credit", "registry", "a revoked provider role comes back"),
+    _m("d1r_provider_role_is_a_consumer_role", REGISTRY,
+       "  role text not null check (role in ('viewer', 'developer', 'administrator')),",
+       "  role text not null,", "credit", "registry",
+       "an owner role leaks into the provider vocabulary"),
+    _m("d1r_two_dev_wallets_per_provider", CREDIT,
+       "create unique index if not exists credit_wallets_one_per_provider\n"
+       "  on infrx.credit_wallets (owner_provider_org_id) where kind = 'provider_dev';", "",
+       "credit", "registry", "a provider doubles its internal budget"),
+    _m("d1r_dev_wallet_for_nobody", REGISTRY,
+       "    alter table infrx.credit_wallets add constraint credit_wallets_provider_fk\n"
+       "      foreign key (owner_provider_org_id) references infrx.provider_orgs on delete "
+       "restrict;",
+       "    null;", "credit", "registry", "a dev wallet owned by no provider"),
+    _m("d1r_job_pins_not_one_card", REGISTRY,
+       "      add constraint jobs_pins_are_one_card\n"
+       "        foreign key (rate_card_version, deployment_revision_id, serving_version_id, "
+       "model_id)\n"
+       "        references infrx.rate_card_versions\n"
+       "          (rate_card_version, deployment_revision_id, serving_version_id, model_id)\n"
+       "        on delete restrict,",
+       "      add constraint jobs_pins_are_one_card check (true),",
+       "credit", "credit_admission", "a job pins a card that prices another deployment (R69)"),
+    _m("d1r_job_pins_unknown_policy", REGISTRY,
+       "      add constraint jobs_policy_version_fk foreign key (policy_version)\n"
+       "        references infrx.data_access_policies on delete restrict;",
+       "      add constraint jobs_policy_version_fk check (true);",
+       "credit", "credit_admission", "a job pins a policy nobody recorded"),
+    _m("d1r_provider_renamed", REGISTRY,
+       "  foreach r in array array['infrx.provider_orgs', 'infrx.model_versions',\n"
+       "                           'infrx.serving_versions', 'infrx.endpoints',\n"
+       "                           'infrx.rate_card_versions'",
+       "  foreach r in array array['infrx.model_versions',\n"
+       "                           'infrx.serving_versions', 'infrx.endpoints',\n"
+       "                           'infrx.rate_card_versions'",
+       "credit", "registry", "an ownership row is edited in place"),
+    # --- 0008: resolution and read surface --------------------------------------------------
+    _m("d1r_resolve_serves_retired", SURFACE,
+       "  if d.state <> 'active' or d.visibility <> 'public' then", "  if false then",
+       "credit", "resolve_pins", "a retired or draining deployment admits new work"),
+    _m("d1r_resolve_serves_unpriced", SURFACE,
+       "  if c.effective_at > v_now then", "  if false then",
+       "credit", "resolve_pins", "a card not yet in force prices traffic (R69)"),
+    _m("d1r_resolve_ignores_flag", SURFACE,
+       "  perform infrx.require_feature('credit_admission');\n  if p_model", "  if p_model",
+       "credit", "fail_closed", "pins resolve before CREDIT admission is enabled"),
+    _m("d1r_resolve_callable_by_browsers", SURFACE,
+       "grant execute on function infrx.resolve_admission_pins(text) to service_role;",
+       "grant execute on function infrx.resolve_admission_pins(text) to service_role, "
+       "authenticated;", "credit", "credit_role_matrix",
+       "a browser enumerates deployments and rates through the admission resolver"),
+    _m("d1r_wallet_page_shows_every_wallet", SURFACE,
+       "left join infrx.signup_entitlements e on e.wallet_id = w.wallet_id\n"
+       "where (w.kind = 'consumer' and w.owner_user_id = auth.uid())",
+       "left join infrx.signup_entitlements e on e.wallet_id = w.wallet_id\n"
+       "where (w.kind = 'consumer')", "credit", "credit_read_surface",
+       "an individual reads every other individual's balance"),
+    _m("d1r_ledger_page_shows_every_ledger", SURFACE,
+       "join infrx.credit_wallets w on w.wallet_id = l.wallet_id\n"
+       "where (w.kind = 'consumer' and w.owner_user_id = auth.uid())",
+       "join infrx.credit_wallets w on w.wallet_id = l.wallet_id\n"
+       "where (w.kind = 'consumer')", "credit", "credit_read_surface",
+       "an individual reads every other individual's ledger"),
+    _m("d1r_ledger_page_without_barrier", SURFACE,
+       "create or replace view public.console_credit_ledger with (security_barrier = true) as",
+       "create or replace view public.console_credit_ledger as",
+       "credit", "credit_leaky_probe", "a cheap caller function reads other ledgers (R59-5)"),
+    _m("d1r_ledger_actor_unmasked", SURFACE,
+       "       public.visible_principal(w.personal_org_id, l.actor) as actor",
+       "       l.actor as actor", "credit", "credit_read_surface",
+       "the operator's identity reaches a customer (R59-1)"),
+    _m("d1r_money_leaves_as_a_number", SURFACE,
+       "       l.amount::text as amount, l.unit,", "       l.amount as amount, l.unit,",
+       "credit", "credit_read_surface", "the browser parses CREDIT into a double"),
+    _m("d1r_summary_answers_for_anyone", SURFACE,
+       "  if not (p_user = auth.uid() or public.is_operator() or public.is_service_client()) then",
+       "  if false then", "credit", "credit_read_surface",
+       "another user's id answers an empty wallet instead of 42501"),
+    _m("d1r_legacy_balance_never_held", SURFACE,
+       "         coalesce(sum(l.delta_usd), 0) <> 0\n", "         false\n",
+       "credit", "credit_read_surface", "a nonzero USD balance is silently not a rollout hold"),
+    _m("d1r_new_views_keep_default_acl", SURFACE,
+       "revoke all on public.console_credit_wallets, public.console_credit_ledger\n"
+       "  from public, anon, authenticated;\n", "",
+       "fresh", "privileges", "anon and members may write through the new views"),
+    _m("d1r_summary_callable_by_anon", SURFACE,
+       "revoke all on function public.console_wallet_summary(uuid) from public, anon, "
+       "authenticated;",
+       "revoke all on function public.console_wallet_summary(uuid) from public, authenticated;",
+       "fresh", "function_privileges", "Supabase's default grant keeps anon executing it"),
+    _m("d1r_regrants_a_legacy_view", SURFACE,
+       "-- `console_usage` keeps 0005's grants: `create or replace view` keeps the ACL.",
+       "grant select on public.console_usage to anon;", "upgrade05", "legacy_schema_unchanged",
+       "D1R widens a 0005 object's ACL"),
+    _m("d1r_seam_renamed", SURFACE,
+       "               reserved_total text, available text, revision bigint,\n"
+       "               signup_granted_at timestamptz)",
+       "               reserved_total text, available text, revision bigint,\n"
+       "               granted_at timestamptz)", "credit", "seams",
+       "C0 reads a column the database no longer has"),
+    # --- plans at 10^5 rows per tenant (slow; full run only) -----------------------------------
+    _m("d1r_no_ledger_keyset_index", CREDIT,
+       "create index if not exists credit_ledger_wallet_created_idx\n"
+       "  on infrx.credit_ledger (wallet_id, created_at desc, entry_id desc);", "",
+       "credit_volume", "credit_plans", "every ledger page scans and sorts the tenant"),
+    # --- the operator seed (not a migration; the runner swaps in a mutated copy) --------------
+    _m("d1r_seed_card_not_provisional", SEED,
+       "        400.00000000, 1200.00000000, '2026-09-01T00:00:00Z', 'provisional - P-01 pending',\n"
+       "        true)",
+       "        400.00000000, 1200.00000000, '2026-09-01T00:00:00Z', 'provisional - P-01 pending',\n"
+       "        false)", "credit", "seed_is_the_fixtures",
+       "an unapproved price is indistinguishable from the launch price (P-01)"),
+)
+
+MUTANTS = MUTANTS + D1R_MUTANTS
+
+
 def _mutate(directory: Path, mutant: Mutant) -> None:
-    for path in migrations.migrations():
+    for path in (*migrations.migrations(), migrations.SEED_MARLIN):
         shutil.copy(path, directory / path.name)
     target = directory / mutant.file
     text = target.read_text()
@@ -649,7 +1116,42 @@ _CHECKS = {
     "production_clock": checks.check_production_clock,
     "console_read_surface": checks.check_console_read_surface,
     "upgrade_preserved": None,        # needs the captured "before" state
+    # D1R, scenario "credit" (fresh + D1 fixture + CREDIT fixture).
+    "credit_identity": checks_credit.check_credit_identity,
+    "grant": checks_credit.check_grant,
+    "registry": checks_credit.check_registry,
+    "credit_admission": checks_credit.check_credit_admission_rows,
+    "credit_rate": checks_credit.check_credit_rate,
+    "regime_on_usage": checks_credit.check_regime_on_usage,
+    "fail_closed": checks_credit.check_fail_closed,
+    "credit_role_matrix": checks_credit.check_credit_role_matrix,
+    "credit_privileges": checks_credit.check_credit_privileges,
+    "resolve_pins": checks_credit.check_resolve_pins,
+    "credit_read_surface": checks_credit.check_credit_read_surface,
+    "credit_leaky_probe": checks_credit.check_credit_leaky_probe,
+    "seams": checks_credit.check_seams,
+    "seed_is_the_fixtures": checks_credit.check_seed_is_the_fixtures,
+    "credit_plans": checks_credit.check_credit_plans,       # scenario "credit_volume"
+    # D1R, scenario "upgrade05": need the captured state (see `_upgrade05_check`).
+    "legacy_schema_unchanged": None,
+    "old_regime_preserved": None,
+    "legacy_read_path": None,
+    "flag_defaults": None,
+    "rerun": None,
 }
+
+
+def _upgrade05_check(name: str, conn, before: dict, database: str, d1r):
+    """The upgrade-from-0005 checks, bound to their captured state."""
+    return {
+        "legacy_schema_unchanged": lambda: checks_credit.check_legacy_schema_unchanged(
+            conn, before["inventory"]),
+        "old_regime_preserved": lambda: checks_credit.check_old_regime_preserved(conn, before),
+        "legacy_read_path": lambda: checks_credit.check_legacy_read_path(conn, before),
+        "flag_defaults": lambda: checks_credit.check_flag_defaults(conn),
+        "rerun": lambda: checks_credit.check_rerun_is_noop(
+            conn, lambda: pgharness.apply(database, d1r)),
+    }[name]
 
 
 #: R40 / B10: a kill is an ASSERTION FAILURE RAISED BY THE NAMED CHECK. Anything else
@@ -666,6 +1168,12 @@ def kill(mutant: Mutant) -> tuple[str, str]:
         directory = Path(tmp)
         _mutate(directory, mutant)
         files = migrations.sql_for(shim=pgharness.NEEDS_SHIM, directory=directory)
+        if mutant.scenario in ("credit", "upgrade05", "credit_volume"):
+            seed, migrations.SEED_MARLIN = migrations.SEED_MARLIN, directory / SEED
+            try:
+                return _kill_d1r(mutant, files)
+            finally:
+                migrations.SEED_MARLIN = seed
         database = MUT_PRODLIKE_DB if mutant.scenario == "prodlike" else MUT_DB
         current = tuple(f for f in files if f[0] in (
             "supabase_shim.sql", "0001_init.sql", "0002_seed_models.sql"))
@@ -693,6 +1201,36 @@ def kill(mutant: Mutant) -> tuple[str, str]:
                 return _run(_CHECKS[mutant.check], conn)
         except (AssertionError, psycopg.Error) as during_setup:
             return SETUP_ERROR, _first_line(during_setup)
+
+
+def _kill_d1r(mutant: Mutant, files) -> tuple[str, str]:
+    """D1R's scenarios. Same classification as `kill`: an apply failure is APPLY_ERROR, a
+    fixture that cannot be built is SETUP_ERROR, only the named check's assertion kills."""
+    if mutant.scenario == "upgrade05":
+        try:
+            conn, before = checks_credit.upgrade05(pgharness, MUT_DB, files)
+        except AssertionError as broken:
+            return (APPLY_ERROR if "failed to apply" in str(broken) else SETUP_ERROR,
+                    _first_line(broken))
+        except psycopg.Error as broken:
+            return SETUP_ERROR, _first_line(broken)
+        with conn:
+            _, d1r = checks_credit.split(files)
+            return _run(_upgrade05_check(mutant.check, conn, before, MUT_DB, d1r))
+    try:
+        pgharness.recreate(MUT_DB)
+        pgharness.apply(MUT_DB, files)
+    except (AssertionError, psycopg.Error) as broken:
+        return APPLY_ERROR, _first_line(broken)
+    try:
+        with pgharness.connect(MUT_DB) as conn:
+            checks.seed_fixtures(conn)
+            checks_credit.seed_credit(conn)
+            if mutant.scenario == "credit_volume":
+                checks_credit.seed_credit_volume(conn)
+            return _run(_CHECKS[mutant.check], conn)
+    except (AssertionError, psycopg.Error) as during_setup:
+        return SETUP_ERROR, _first_line(during_setup)
 
 
 def _run(check, *args) -> tuple[str, str]:

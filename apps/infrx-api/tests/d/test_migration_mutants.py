@@ -69,7 +69,8 @@ def test_the_mutant_list_is_well_formed() -> None:
     """Distinct names, a known scenario and a known check for each."""
     assert len({m.name for m in ALL}) == len(ALL), "two mutants share a name"
     for mutant in ALL:
-        assert mutant.scenario in ("fresh", "upgrade", "volume", "prodlike"), mutant.name
+        assert mutant.scenario in ("fresh", "upgrade", "volume", "prodlike", "credit",
+                                   "upgrade05", "credit_volume"), mutant.name
         assert mutant.check in mutation_list._CHECKS, f"{mutant.name}: unknown check"
     covered = {m.check for m in ALL}
     uncovered = sorted(set(mutation_list._CHECKS) - covered)
