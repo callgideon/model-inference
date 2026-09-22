@@ -154,3 +154,19 @@ def test_fail_closed__a_disabled_or_missing_flag_is_maintenance() -> None:
 def test_flags__applying_the_migrations_enables_nothing() -> None:
     conn, _ = _upgraded05()
     print(checks_credit.check_flag_defaults(conn))
+
+
+def test_legacy_read_path__deployed_console_and_admin_reads_still_execute() -> None:
+    """The deployed console's reads, the admin page's reads and the legacy USD writers
+    work unchanged on the upgraded database."""
+    conn, before = _upgraded05()
+    print(checks_credit.check_legacy_read_path(conn, before))
+
+
+def test_rerun__applying_d1r_twice_is_a_no_op() -> None:
+    """Upgrade re-run: a second application changes no object, row or flag. Runs last on
+    the upgrade database (it enables a flag and grants)."""
+    conn, _ = _upgraded05()
+    _, d1r = checks_credit.split(migrations.sql_for(shim=pgharness.NEEDS_SHIM))
+    print(checks_credit.check_rerun_is_noop(
+        conn, lambda: pgharness.apply(UPGRADE05_DB, d1r)))

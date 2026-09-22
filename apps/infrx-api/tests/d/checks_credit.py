@@ -1453,3 +1453,128 @@ def check_credit_role_matrix(conn) -> str:
         assert str(uid) == user, f"the {session} session is nobody: {uid}"
     return (f"{len(ATTACKS)} attacks x {len(BROWSER)} browser sessions refused; service: "
             f"{len(SERVICE_ALLOWED)} seams allowed, {len(SERVICE_REFUSED)} direct writes refused")
+
+
+# =============================================================================
+# item 5: re-run, legacy read path
+# =============================================================================
+def snapshot(conn) -> dict:
+    """The schema inventory plus every row D1R's relations and flags hold."""
+    data = {}
+    for table in ("feature_flags", "credit_wallets", "credit_ledger", "signup_entitlements",
+                  "credit_wallet_holds", "provider_orgs", "provider_memberships",
+                  "model_versions", "serving_versions", "endpoints", "deployment_revisions",
+                  "rate_card_versions", "data_access_policies", "catalog_listings"):
+        data[table] = conn.execute(f"select to_jsonb(t)::text from infrx.{table} t "
+                                   f"order by 1").fetchall()
+    data["models"] = conn.execute("select id, model_uuid, provider_org_id from public.models "
+                                  "order by id").fetchall()
+    data["jobs"] = conn.execute("select to_jsonb(j)::text from infrx.jobs j order by 1").fetchall()
+    return {"inventory": inventory(conn), "data": data}
+
+
+def check_rerun_is_noop(conn, apply_again) -> str:
+    """Item 5: applying D1R's migrations a second time - after an operator has enabled a
+    flag and granted credit - changes no schema object, no row and no flag."""
+    set_flag(conn, "signup_grant", True)
+    grant(conn, checks.USER_OWNER)
+    before = snapshot(conn)
+    apply_again()
+    after = snapshot(conn)
+    changed = sorted(k for k in before["inventory"]
+                     if after["inventory"].get(k) != before["inventory"][k])
+    added = sorted(set(after["inventory"]) - set(before["inventory"]))
+    assert not changed and not added, f"a re-run changed the schema: {(changed + added)[:10]}"
+    moved = [t for t in before["data"] if after["data"][t] != before["data"][t]]
+    assert not moved, f"a re-run changed rows of {moved}"
+    return (f"re-run: {len(before['inventory'])} objects and "
+            f"{sum(map(len, before['data'].values()))} rows unchanged, flags kept")
+
+
+#: The deployed console's reads (apps/app/lib, apps/app/app) and README reporting calls,
+#: as the SQL PostgREST sends, for a member of the organization.
+def _legacy_member_reads(org: str) -> tuple:
+    return (
+        ("session: own profile", "select email, is_operator from public.profiles "
+                                 "where id = auth.uid()"),
+        ("session: memberships with org names",
+         "select m.org_id, m.role, o.name from public.org_members m "
+         "join public.organizations o on o.id = m.org_id"),
+        ("teams: members' emails", "select m.role, p.email from public.org_members m "
+                                   "join public.profiles p on p.id = m.user_id"),
+        ("credits.ts: org_wallet_summary", f"select * from public.org_wallet_summary('{org}')"),
+        ("credits.ts: ledger select list", f"select id, delta_usd, kind, reason, ref, created_at "
+                                           f"from public.credit_ledger where org_id = '{org}'"),
+        ("api-keys page", "select id, name, prefix, created_at, last_used_at, revoked_at "
+                          "from public.api_keys"),
+        ("models page", "select * from public.models where status <> 'retired' order by sort"),
+        ("README: org_usage_summary",
+         f"select * from public.org_usage_summary('{org}', now() - interval '365 days', now())"),
+        ("README: org_usage_daily",
+         f"select * from public.org_usage_daily('{org}', now() - interval '365 days', now())"),
+        ("README: org_balance", f"select public.org_balance('{org}')"),
+        ("0005: console_usage", "select * from public.console_usage"),
+        ("0005: console_ledger", "select * from public.console_ledger"),
+        ("0005: wallets", "select * from public.wallets"),
+        ("0005: console_usage_summary", f"select * from public.console_usage_summary('{org}', "
+                                        f"now() - interval '365 days', now())"),
+        ("0005: console_usage_daily", f"select * from public.console_usage_daily('{org}', "
+                                      f"now() - interval '365 days', now())"),
+    )
+
+
+def check_legacy_read_path(conn, before: dict) -> str:
+    """Item 5: after D1R the deployed console's reads and the admin page's service reads
+    still execute, the USD figures they return are the historical ones, and the admin
+    `addCredit` USD insert and the deployed gateway's usage insert still work and stay in
+    the legacy regime."""
+    org = before["legacy"]["org_a"]
+    failed = []
+    for label, sql in _legacy_member_reads(org):
+        why = refused_as_user(conn, checks.USER_MEMBER, sql)
+        if why is not None:
+            failed.append(f"member {label}: {why}")
+    for label, sql in (
+        ("admin: organizations", "select id, name, slug, created_at from public.organizations"),
+        ("admin: org_members", "select org_id from public.org_members"),
+        ("admin: api_keys", "select org_id, revoked_at from public.api_keys"),
+        ("admin: usage_events", "select org_id, cost_usd from public.usage_events"),
+        ("admin: credit_ledger", "select org_id, delta_usd from public.credit_ledger"),
+    ):
+        if (why := refused_as(conn, "service", sql)) is not None:
+            failed.append(f"service {label}: {why}")
+    assert not failed, "the legacy read path broke:\n  " + "\n  ".join(failed)
+    usd = rows_as_user(conn, checks.USER_MEMBER,
+                       f"select ledger_total from public.org_wallet_summary('{org}')")
+    want = dict((str(o), t) for o, t in before["legacy"]["balances"])[org]
+    assert usd == [(f"{want:.8f}",)], f"USD summary {usd} vs history {want}"
+    with conn.transaction():
+        conn.execute(checks.SESSIONS["service"])
+        conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, reason, "
+                     "created_by) values (%s, 5, 'grant', 'admin addCredit', %s)",
+                     (org, checks.USER_OPERATOR))
+        conn.execute("insert into public.usage_events (id, org_id, model_id, status, "
+                     "prompt_tokens, completion_tokens, cost_usd) values (gen_random_uuid(), "
+                     "%s, 'nemostation/marlin-2b', 200, 10, 5, 0.00000350)", (org,))
+        regimes = conn.execute("select distinct accounting_regime from public.usage_events"
+                               ).fetchall()
+        raise psycopg.Rollback()
+    assert regimes == [("legacy_usd",)], f"a legacy writer's row changed regime: {regimes}"
+    return (f"{len(_legacy_member_reads(org))} member reads and 5 admin reads execute; USD "
+            f"summary = history; addCredit and gateway writes stay legacy_usd")
+
+
+def rows_as_user(conn, user: str, sql: str) -> list:
+    with conn.transaction():
+        conn.execute(checks._jwt(user))
+        out = conn.execute(sql).fetchall()
+        raise psycopg.Rollback()
+    return out
+
+
+def refused_as_user(conn, user: str, sql: str) -> str | None:
+    try:
+        rows_as_user(conn, user, sql)
+    except psycopg.Error as refused:
+        return f"{refused.sqlstate} {str(refused).splitlines()[0][:100]}"
+    return None
