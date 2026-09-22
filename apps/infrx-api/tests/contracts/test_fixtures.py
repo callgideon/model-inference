@@ -674,3 +674,24 @@ def test_the_judge_sample_dto_is_the_consoles_four_fields():
                                                 "request_id": one, **bad})
     with pytest.raises(ValueError):                 # present, even when null
         records.JudgeSample.model_validate({"sample_id": one, "rubric_version": 1})
+
+
+def test_work_carries_preparations_prompt_count_within_the_admitted_ceiling():
+    """`Work.prompt_tokens` (W2's request, D3 fills it): absent until preparation counted,
+    a nonnegative integer, and never past `max_input_tokens` - the hold was sized for that
+    ceiling, so a larger count is a platform incident, not a work item."""
+    import pydantic
+    from infrx.contracts.conformance import builders as b
+    from infrx.contracts.fakes.support import FakeClock, SequentialIds
+
+    class _H:
+        clock, ids = FakeClock(), SequentialIds()
+
+    request = b.request(_H, max_input_tokens=1_000)
+    base = dict(request=request, price_snapshot=b.DEFAULT_PRICE,
+                budgets=records.Budgets.of(limits.DEFAULTS, request.execution_mode))
+    assert records.Work(**base).prompt_tokens is None
+    assert records.Work(**base, prompt_tokens=1_000).prompt_tokens == 1_000
+    for bad in (-1, 1_001):
+        with pytest.raises(pydantic.ValidationError):
+            records.Work(**base, prompt_tokens=bad)

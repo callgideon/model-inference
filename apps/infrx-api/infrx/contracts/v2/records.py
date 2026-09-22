@@ -559,9 +559,14 @@ class WorkV2(RecordV2):
     prepared_refs: tuple[records.MediaRef, ...] = ()
     rate_card: RateCardSnapshot
     budgets: records.Budgets
+    # As v1 `Work.prompt_tokens`: preparation's count, never past the admitted ceiling.
+    prompt_tokens: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def _the_work_carries_its_own_pins(self) -> WorkV2:
+        if (self.prompt_tokens is not None
+                and self.prompt_tokens > self.request.request.max_input_tokens):
+            raise ValueError("prompt_tokens exceeds the request's max_input_tokens")
         if self.rate_card.rate_card_version != self.request.pins.rate_card_version:
             raise ValueError("the work's rate card is not the request's pinned card")
         if self.rate_card.serving_version_id != self.request.pins.serving_version_id:

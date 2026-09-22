@@ -102,3 +102,16 @@ def test_the_fake_store_satisfies_both_jobstore_protocols():
     assert isinstance(store, ports.JobStore) and isinstance(store, ports.CreditJobStore)
     assert set(V2_FACTORIES) == set(__import__("infrx.contracts.conformance",
                                                fromlist=["V2_SUITES"]).V2_SUITES)
+
+
+def test_work_v2_carries_the_prompt_count_within_the_admitted_ceiling():
+    """`WorkV2.prompt_tokens` mirrors v1 `Work.prompt_tokens`: never past the ceiling the
+    CREDIT hold was sized for."""
+    import pydantic
+    from infrx.contracts.v2 import fixtures as v2fix, records as v2
+    work = v2fix.BUILDERS["work.json"]()
+    ceiling = work.request.request.max_input_tokens
+    body = work.model_dump(mode="json")
+    assert v2.WorkV2.model_validate({**body, "prompt_tokens": ceiling}).prompt_tokens == ceiling
+    with pytest.raises(pydantic.ValidationError):
+        v2.WorkV2.model_validate({**body, "prompt_tokens": ceiling + 1})
