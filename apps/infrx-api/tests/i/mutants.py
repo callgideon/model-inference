@@ -75,15 +75,27 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("newline_injection_accepted", "a value cannot write a second env variable",
        P, "    if any(bad in value for bad in FORBIDDEN_CHARS):", "    if False:",
        "test_deploy_failclosed__a_value_cannot_write_a_second_variable",
-       "test_deploy_failclosed__a_refusal_says_which_rule_the_value_broke"),
+       "test_deploy_failclosed__a_refusal_says_which_rule_the_value_broke",
+       # the refusal-message case reads `"…" in shape_problem(...)`: with the guard gone
+       # the refusal is `None` and the membership test raises TypeError - the missing
+       # refusal, observed as a crash (IR: make it `(shape_problem(...) or "")`)
+       dies_by=("TypeError",)),
     _m("padding_accepted", "a padded value is refused, never silently trimmed",
        P, "    if value != value.strip():", "    if False:",
        "test_deploy_failclosed__a_value_of_the_wrong_shape_installs_nothing",
-       "test_deploy_failclosed__a_refusal_says_which_rule_the_value_broke"),
+       "test_deploy_failclosed__a_refusal_says_which_rule_the_value_broke",
+       # the refusal-message case reads `"…" in shape_problem(...)`: with the guard gone
+       # the refusal is `None` and the membership test raises TypeError - the missing
+       # refusal, observed as a crash (IR: make it `(shape_problem(...) or "")`)
+       dies_by=("TypeError",)),
     _m("shape_unchecked", "every value matches its declared shape",
        P, "    if not SHAPES[key.shape](value):", "    if False:",
        "test_deploy_failclosed__a_value_of_the_wrong_shape_installs_nothing",
-       "test_deploy_failclosed__a_refusal_says_which_rule_the_value_broke"),
+       "test_deploy_failclosed__a_refusal_says_which_rule_the_value_broke",
+       # the refusal-message case reads `"…" in shape_problem(...)`: with the guard gone
+       # the refusal is `None` and the membership test raises TypeError - the missing
+       # refusal, observed as a crash (IR: make it `(shape_problem(...) or "")`)
+       dies_by=("TypeError",)),
     _m("plaintext_identity_url_accepted", "the identity source is https",
        P, r'return bool(re.fullmatch(r"https://[A-Za-z0-9.-]+(?::\d{1,5})?/?", value))',
        r'return bool(re.fullmatch(r"https?://[A-Za-z0-9.-]+(?::\d{1,5})?/?", value))',

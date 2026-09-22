@@ -128,3 +128,54 @@ Item 3: the reviewer's under-declared-envelope scenario with a writer blocked mi
 
 ## Handback
 Next unblocked: F2P from the accepted F2R commit. What the v1 Python base now guarantees: a delta payload is exactly `{visible, raw}` in the fake and W's adapter; trace accounting is one neutral implementation with a required clock, and no production class carries a test hook; the metadata reserve bounds real queued bytes; a store stages and attaches only media it produced; the candidate port, price-source port and judge sample shape are shared contracts with UUIDv4 unique sample ids; one mutation runner decides what a kill is for every Python list.
+
+## Post-merge follow-ups (branch `codex/f2r-int-followups`, base `e1a33d1`)
+
+Worktree `.claude/worktrees/codex-f2r-int`. Red at base, confirmed first: `pytest -q tests/w/test_loop_mutants.py` → `TypeError: Mutant.__init__() got an unexpected keyword argument 'allowed_errors'` (collection error), and `tests/m/test_uploads.py` `4 failed, 57 passed` (the three squat tests plus the pinned-blocked conformance case).
+
+| Item | Commit | Change | Proof |
+|---|---|---|---|
+| IR-A8 | `b5b32c6` | W2 loop list: `allowed_errors` → shared `dies_by` (list + its test) | `tests/w/test_loop_mutants.py` `11 passed` (was a collection error) |
+| IR-A6 | `a05c095` | `R58Engine` shim deleted; `FakeEngine` used directly at its three uses | `tests/w/test_loop.py` `45 passed` |
+| IR-A2 | `3385b48` | M2 `conformance_factory` gains `materialized` (clip length derived from the handle); `PENDING_F2R` → `PARITY`; passes `== {*M1_CASES, PARITY}`, no `blocked` | parity case prints `pass` against `MediaPreparation`; `tests/m/test_prepare.py` `49 passed` |
+| IR-A7 | `90bdf8d` | M3: the three squats seeded directly (`adapter.refs[(org, handle)] = …`); `materialized` hook; every mediastore case passes | `tests/m/test_uploads.py` `61 passed` |
+| IR-A9 | `d03ebef` | five M2 `dies_by` declarations; two `objects[...]` lookups → `.get(..., (None, None))` | the seven + two neighbours `9/9 killed` |
+| IR-A10 | `b6e7359`, `9d699dd` | `tests/i/mutants.py` and `tests/contracts/v2/mutants_v2.py` delegate to the shared runner. The shared `Runner` gains `layout` (I's repo-shaped copy: `apps/infrx-api/{infrx,tests,deploy}` + `models/marlin2b/serve.sh`, `package=""`); the subprocess gets `HOME` inside the copy; the shared module makes `infrx` importable when a list runs as a script (both script entry points were broken since the shared `_domain_deaths` import). Under the shared rule five mutants declare their kill mode: I `unset_mode_refuses` (`RuntimeMisconfigured`), `newline_injection_accepted`/`padding_accepted`/`shape_unchecked` (`TypeError`: the refusal-message case reads `"…" in shape_problem(...)`, which crashes on the missing refusal), v2 `the_pin_hardcodes_a_rate_card_version` (`ValidationError` from the admission's own pin/card validator) | I self-tests incl. "a no-op edit cannot kill the case that reads the real engine script" pass; v2 self-tests pass |
+| IR-A1 | `83144ff` | DEPLOY-01…05 in the contracts list; DEPLOY-04 `dies_by=("RuntimeMisconfigured",)`; the "exactly N declare" comment updated | `5/5 killed` |
+| IR-A3 | `fab0ec7` | `ACCOUNTING_REGIMES: records.AccountingRegime` in `SHARED_ENUMS`; `UNPAIRED_CONSOLE_ENUMS` + its test removed | `test_parity_console.py` `28 passed` |
+| IR-A4 | `10159a3` | README `ALLOWED_VIDEO_MIME` default (line 47) and the type bullet (line 92) without mpeg | doc |
+| rulings | `83b6bc2` | lane-authored `R63…R67` → `R79…R83` in 11 files and this report (not `tasklocal.py`/`vkharness.py`'s R63, the coordinator's Valkey ruling) | `grep` clean except the historical renumbering sentence |
+| merge note | `40a8b67` | `upload_created.json` `accepted_mime` drops `video/mpeg`; the fixture guard pins it exactly | `test_fixtures.py` pass |
+| review 11 | `4b444f2` | `trace_bounds__metadata_exhaustion_drops_with_counters` probe and both offers declare `metadata_bytes=0`; mutant `metadata_charge_skips_zero` | killed |
+| review 12 | `b7008d2` | W mutant `content_alias_reintroduced` | killed by `test_f_contract__the_real_adapter_passes_the_exported_engine_suite` |
+| review 13 | `e0664f5` | R83 amendment in the shared runner: (a) an `AssertionError` raised under `infrx/` (not `contracts/conformance/`) is undeclared unless in `dies_by` — `replay_returns_a_row_of_another_kind` retargeted (the case checks the label-side replay first, where the missing operation check returns the wrong row to the case), `drop_reason_falls_back_on_truthiness` declares `AssertionError` (the base's `_drop` guard); (b) `pristine(cases, runner)`: once per list+runner per process, the union of the list's named cases runs unmutated and a failure refuses every mutant of that list (`run_mutant` finds the list as the loaded module `MUTANTS` holding the mutant; one-off self-test mutants have none); (c) `_RAN` counts `error(s)` and pytest runs with `-rfE` — without `E` a fixture error listed no id and read as **survived** | new self-tests: `test_an_assertion_inside_the_package_is_not_the_cases_observation`, `test_a_list_whose_cases_fail_unmutated_is_refused`, `test_a_fixture_error_with_no_test_run_is_a_broken_runner` |
+| review 14 | `7532424` | 08 §5 `spool segment **2**` restored; log entry | doc |
+| review 15 | `bf7af62` | `EXT_MIME` drops `.mpeg`/`.mpg`; pinned in `test_the_default_video_allow_list_has_no_mpeg`; mutant `mpeg_extension_mapped_again` | killed |
+| review 16 | `85cbc7d` | "contracts 277" → 278 above | doc |
+
+Not changed here: IR-A5 (G composition, G2's). `PROCESSING_CACHE_DIR` is `PilotSettings.processing_cache_dir` (`infrx/contracts/limits.py:103`, default `""` = no local cache), read by `config.pilot_from_env` and validated by `validate_pilot` (`PATH_SETTINGS`, unset or absolute); no production code reads it yet (`prepare.py` builds `ProcessingCache("")` by default) — that is what W3/G2 wire.
+
+### Commands and results at `9d699dd` (in `apps/infrx-api` unless noted; tails quoted from the logs)
+
+`make api-env` (root) was needed first: this worktree's venv had been synced without extras by a bare `uv run`, and the first full run failed only `test_the_extras_are_installed_so_the_check_is_meaningful` (`1 failed, 2296 passed, 53 skipped`); after `make api-env` (exit 0) the extras import.
+
+| Command | Exit | Tail |
+|---|---|---|
+| `uv run --frozen pytest -q -p no:cacheprovider --ignore=tests/d` | 0 | `2353 passed, 2 warnings in 447.19s` |
+| legacy-first (`tests/test_*.py tests/contracts tests/g tests/i tests/j tests/m tests/q tests/t tests/w`) | 0 | `2353 passed, 2 warnings in 452.60s` |
+| track-first (`tests/w tests/t tests/q tests/m tests/j tests/i tests/g tests/contracts tests/test_*.py`) | 0 | `2353 passed, 2 warnings in 444.27s` |
+| `pytest tests/contracts` / `tests/m` / `tests/w` / `tests/i` / `tests/g` / `tests/q` | 0 each | `1022 passed` / `337 passed` / `124 passed` / `82 passed` / `320 passed, 2 warnings` / `113 passed` |
+| `INFRX_MUTANTS=all python -m tests.contracts.mutants DEPLOY-01 … DEPLOY-05` | 0 | `5/5 killed` |
+| `INFRX_MUTANTS=all pytest` per list (sequential, one process each): contracts, m, q, j, w, w-loop, t, g, g/ops | 0 each | `304 passed` / `215 passed` / `61 passed` / `124 passed` / `162 passed` / `69 passed` / `84 passed` / `164 passed` / `68 passed` |
+| same, `tests/i/test_mutants.py`, `tests/contracts/v2/test_mutants_v2.py` (after the `9d699dd` declarations; before them `3 failed, 52 passed` and `1 failed, 70 passed`) | 0 each | `55 passed in 116.58s` / `71 passed in 105.96s` |
+| same, `tests/q/test_valkey_mutants.py` | 1 | `6 failed, 76 passed` — all six fail identically on the base `e1a33d1` (checked on a `git archive` copy with this venv): Q2's list meets the shared rule; not fixed here (Q's file), see IR below |
+| same, `tests/d/test_migration_mutants.py` | 1 | `83 failed, 1 passed` — every one `HarnessBusy` (the D port's lock was held by another checkout); D's list uses `assertion_kill`, which nothing here changed |
+| `make api-mutants` (root, detached) | 2 | `92 failed, 1451 passed in 3301.00s (0:55:00)`: 83 D mutants + D's runner self-test = `HarnessBusy` (lock held by `codex-a1`); 9 Q2 Valkey — the six above plus `rebuild_does_not_count_what_it_indexed`, `the_state_snapshot_expires_visibilities` (`RuntimeError@vkharness.py`) and `the_waiting_age_is_reported_in_microseconds` (`CalledProcessError`), harness errors that passed in the per-list run minutes earlier (shared Valkey host under other lanes' load) |
+| `make bench-test` (root) | 0 | `67 passed in 7.34s` |
+| `ruff check` on every changed `.py` | — | 14 findings, all pre-existing (34 in the same files at base); none added |
+
+### Integration requests (post-merge)
+- **IR-A11 (Q2, `tests/q/valkey_mutants.py`)**: under the shared rule six mutants are not honest kills (identical at `e1a33d1`): `a_claimed_candidate_stays_claimable`, `acknowledge_does_not_remember_the_candidate`, `bytes_are_never_returned` swap a Redis command for one with the wrong arity (`ZCARD`/`SCARD`/`HSTRLEN` with extra arguments), so the Lua script dies with `ResponseError` before any invariant is observed — the edit should remove the effect instead (e.g. drop the `ZREM`/`SADD`/`HINCRBY` line); `a_filtered_claim_moves_the_kind_state` (`ResponseError`) and `a_flow_is_deleted_while_it_still_holds_work` (`AttributeError@valkey.py`) crash likewise; `an_unset_valkey_url_is_not_refused` dies by the client's own `ValueError` parsing an empty URL — declare it (`dies_by=("ValueError",)`) or assert the refusal type.
+- **IR-A12 (I, `tests/i/test_prereqs.py:72-79`)**: `"…" in preflight.shape_problem(...)` should read `(preflight.shape_problem(...) or "")`, after which the three `TypeError` declarations in `tests/i/mutants.py` can go.
+- **IR-A13 (G6B, `tests/g/ops/mutants.py`)**: still carries its own runner copy (`run_mutant` with `--tb=no`, so no death is classified); delegate to the shared runner like the others (not in this lane's file list).
+- IR-A5 (G composition) unchanged.
