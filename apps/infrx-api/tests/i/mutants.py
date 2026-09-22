@@ -592,6 +592,33 @@ MUTANTS += (
        MIG + "refuses_a_history_it_cannot_explain"),
 )
 
+# --- I2B.c: the rollout scripts (paths relative to apps/infrx-api in the copy) ---------
+SSM, STEP = "../../infra/rollout/ssm.sh", "../../infra/rollout/steps/"
+MUTANTS += (
+    _m("ssm_drops_arguments", "a step runs with the arguments it was given",
+       SSM, """b64=$( { printf '%s' "$header"; cat "$step"; } | base64 -w0)""",
+       """b64=$( { cat "$step"; } | base64 -w0)""",
+       "test_backend_deploy__ssm_carries_a_step_byte_for_byte"),
+    _m("ssm_ignores_status", "a failed invocation is a failed step",
+       SSM, '[ "$status" = Success ]', "true",
+       "test_backend_deploy__ssm_carries_a_step_byte_for_byte"),
+    _m("ssm_accepts_any_argument", "only NAME=VALUE travels, as an export",
+       SSM, """*) echo "not NAME=VALUE: $pair" >&2; exit 2 ;; esac""",
+       """*) header+="$pair"$'\\n' ;; esac""",
+       "test_backend_deploy__ssm_carries_a_step_byte_for_byte"),
+    _m("revert_runtime_before_tree", "the revert restores the tree before the runtime",
+       STEP + "90-revert.sh",
+       'sudo -u ubuntu git -C "$repo" checkout --quiet --detach "$previous"\n"$d/rollback.sh"',
+       '"$d/rollback.sh"', "test_ops_recover__the_revert_restores_the_tree_before_the_runtime"),
+    _m("pause_forgets_previous_head", "the pause records the HEAD a revert returns to",
+       STEP + "30-pause.sh",
+       'sudo -u ubuntu git -C "$repo" rev-parse HEAD > "/var/backups/infrx/pre-$RELEASE.head"\n', "",
+       "test_ops_recover__the_revert_restores_the_tree_before_the_runtime"),
+    _m("step_without_release_guard", "a step never runs without its release",
+       STEP + "50-install.sh", ': "${RELEASE:?the release commit}"\n', "",
+       "test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret"),
+)
+
 
 # The copy reproduces the repository's shape, not just the package's: `support.REPO` is
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
@@ -611,6 +638,8 @@ def _layout(root: pathlib.Path) -> pathlib.Path:
     engine = root / "models" / "marlin2b"
     engine.mkdir(parents=True)
     shutil.copy2(REPO / "models" / "marlin2b" / "serve.sh", engine / "serve.sh")
+    # I2B.c: the rollout scripts one suite file reads, at their repository path
+    shutil.copytree(REPO / "infra" / "rollout", root / "infra" / "rollout", ignore=ignore)
     shutil.copy2(API_DIR / "pyproject.toml", api / "pyproject.toml")
     return api
 
