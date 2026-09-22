@@ -293,3 +293,6 @@ class PgJobStore:
 
     async def recover(self):
         raise NotImplementedError("JobStore.recover is D3's")
+
+    async def load_work(self, lease):
+        raise NotImplementedError("JobStore.load_work is D3's (fenced like claim)")
