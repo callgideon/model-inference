@@ -91,3 +91,12 @@ def test_results__write_once_owner_read_and_the_prepared_prompt_count() -> None:
     """W2 requests: put_result / read_result, prepared prompt_tokens within the ceiling."""
     from . import checks_dispatch
     print(checks_dispatch.check_results_and_prompt_tokens(_db()))
+
+
+# --- item 5: M3's upload rows and media last-use (0010) --------------------------------
+def test_media__uploads_finalize_once_and_objects_delete_only_when_idle() -> None:
+    """M3 integration request 1 (verbatim shape), RLS and the conditional delete."""
+    from . import checks_media
+    print(checks_media.check_media_uploads(_db()))
+    print(checks_media.check_media_objects(_db()))
+    print(checks_media.check_media_privileges(_db()))
