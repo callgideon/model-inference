@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T16:03:43Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T16:07:02Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>1</b><span>done</span></div>
 <div class="tile prog"><b>9</b><span>in progress</span></div>
@@ -84,12 +84,11 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><b>BACKEND-LOCAL</b> (requires E3B): not started</li>
 <li><b>BACKEND-READY</b> (requires E4B): not started — blocked by: P-18 workload targets (provisional criteria allowed)</li>
 </ul><div class="scroll"><table><thead><tr><th>Input</th><th>What</th><th>Blocks</th><th>Owner</th></tr></thead><tbody>
-<tr><td><code>P-04</code></td><td>Allocated staging/GPU target — coordinator allocates (existing g6e.2xlarge dev box or a new instance)</td><td>nothing now; measurements start when the target is up</td><td>coordinator (authorized)</td></tr>
+<tr><td><code>P-04</code></td><td>GPU target RESOLVED: pilot box i-0e8449a4ffca29bab (L40S), snapshot taken; I2B redeploys the refactored app onto it</td><td>nothing</td><td>coordinator</td></tr>
 <tr><td><code>P-06</code></td><td>Marlin artifact/capabilities — RESOLVED AS A PROFILE (S2M): fd111fca, Qwen3-VL processor, profile v1; 4 digests ⚠️ need HF_TOKEN + pinned image</td><td>publishing externally until the three fail-stops (D2/D3/D12) close</td><td>M2/W/G2 (fixes); W3 (digests)</td></tr>
 <tr><td><code>P-07</code></td><td>SOP rubric, ground truth, dataset rights — RECORDED (10 missing inputs; no accuracy baseline exists)</td><td>SOP accuracy claims only</td><td>user/product</td></tr>
 <tr><td><code>P-18</code></td><td>Workload + criteria — PROVISIONAL criteria predeclared by S2M (labelled); latency/availability targets deliberately absent</td><td>E4B certification; provisional criteria allowed</td><td>workload owner</td></tr>
-<tr><td><code>P-01 / P-02</code></td><td>Approved CREDIT rate card; legacy USD account transition</td><td>public metered publication and cutover only</td><td>user/operator</td></tr>
-<tr><td><code>P-03</code></td><td>Local Docker/services</td><td>nothing — Docker is available on this host</td><td>resolved here</td></tr>
+<tr><td><code>P-01</code></td><td>Approved CREDIT rate card (P-02 legacy transition RESOLVED: $0 legacy USD, nothing to migrate)</td><td>public metered publication only; a provisional fixture rate is used meanwhile</td><td>user/operator</td></tr>
 </tbody></table></div></section>
 <section class="panel"><h2>In flight now</h2><ul>
 <li><code>F2R</code> — codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7)</li>
@@ -102,13 +101,13 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>W2</code> — codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R</li>
 <li><code>E1B</code> — codex-e1b — implementing (software slices; GPU slices wait for W3/I2B) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol</li>
 <li>review <code>S1</code> — independent review of the audit&#x27;s code at ec6c548 since 2026-09-22T15:51:21Z</li>
-<li>review <code>inventory</code> — read-only live-state inventory: GPU box + hosted Supabase (P-02/P-04/P-06 facts) since 2026-09-22T16:00:21Z</li>
 <li>review <code>S2M</code> — fact audit of the pinned profile at 343e685 since 2026-09-22T16:03:43Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>
 <li><span class="meta">2026-09-22T15:55:30Z</span> — Baseline make check exit 0 on ec6c548 (api-test + all mutant lists, console 255, bench 40); main fast-forwarded to claude/backend-impl and pushed (first checkpoint under full authorization)</li>
 <li><span class="meta">2026-09-22T16:00:21Z</span> — Max-parallel decision: F2R split into two lanes; F2P additive phase started; Q2/M2/W2 started early against v1 fakes (rebase after F2R). Interim rule: only E2R runs tests/d until the harness namespace fix lands.</li>
+<li><span class="meta">2026-09-22T16:07:02Z</span> — Live-state inventory: P-02 resolved ($0 legacy USD), P-04 resolved (pilot box), hosted auth.uid() reads both claim forms; EBS snapshot snap-08732d3ac6376e850 taken and DeleteOnTermination disabled</li>
 </ul></section><section class="panel"><h2>Authorizations</h2><ul>
 <li>authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)</li>
 <li>authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step</li>

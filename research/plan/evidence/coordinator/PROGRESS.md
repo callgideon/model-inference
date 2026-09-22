@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T16:03:43Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T16:07:02Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 1 done · 9 in progress · 20 remaining (of 30).**
 
@@ -46,12 +46,11 @@ Generated 2026-09-22T16:03:43Z from `tasks.json` (manifest v4) and `progress-sta
 
 | Input | What | Blocks | Owner |
 |---|---|---|---|
-| P-04 | Allocated staging/GPU target — coordinator allocates (existing g6e.2xlarge dev box or a new instance) | nothing now; measurements start when the target is up | coordinator (authorized) |
+| P-04 | GPU target RESOLVED: pilot box i-0e8449a4ffca29bab (L40S), snapshot taken; I2B redeploys the refactored app onto it | nothing | coordinator |
 | P-06 | Marlin artifact/capabilities — RESOLVED AS A PROFILE (S2M): fd111fca, Qwen3-VL processor, profile v1; 4 digests ⚠️ need HF_TOKEN + pinned image | publishing externally until the three fail-stops (D2/D3/D12) close | M2/W/G2 (fixes); W3 (digests) |
 | P-07 | SOP rubric, ground truth, dataset rights — RECORDED (10 missing inputs; no accuracy baseline exists) | SOP accuracy claims only | user/product |
 | P-18 | Workload + criteria — PROVISIONAL criteria predeclared by S2M (labelled); latency/availability targets deliberately absent | E4B certification; provisional criteria allowed | workload owner |
-| P-01 / P-02 | Approved CREDIT rate card; legacy USD account transition | public metered publication and cutover only | user/operator |
-| P-03 | Local Docker/services | nothing — Docker is available on this host | resolved here |
+| P-01 | Approved CREDIT rate card (P-02 legacy transition RESOLVED: $0 legacy USD, nothing to migrate) | public metered publication only; a provisional fixture rate is used meanwhile | user/operator |
 
 ## ETA (provisional, cadence-based — not a commitment)
 
@@ -72,7 +71,6 @@ Generated 2026-09-22T16:03:43Z from `tasks.json` (manifest v4) and `progress-sta
 - W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R
 - E1B: codex-e1b — implementing (software slices; GPU slices wait for W3/I2B) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol
 - review S1: independent review of the audit's code at ec6c548 since 2026-09-22T15:51:21Z
-- review inventory: read-only live-state inventory: GPU box + hosted Supabase (P-02/P-04/P-06 facts) since 2026-09-22T16:00:21Z
 - review S2M: fact audit of the pinned profile at 343e685 since 2026-09-22T16:03:43Z
 
 ## Checkpoints
@@ -81,6 +79,7 @@ Generated 2026-09-22T16:03:43Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-22T15:51:21Z: Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched
 - 2026-09-22T15:55:30Z: Baseline make check exit 0 on ec6c548 (api-test + all mutant lists, console 255, bench 40); main fast-forwarded to claude/backend-impl and pushed (first checkpoint under full authorization)
 - 2026-09-22T16:00:21Z: Max-parallel decision: F2R split into two lanes; F2P additive phase started; Q2/M2/W2 started early against v1 fakes (rebase after F2R). Interim rule: only E2R runs tests/d until the harness namespace fix lands.
+- 2026-09-22T16:07:02Z: Live-state inventory: P-02 resolved ($0 legacy USD), P-04 resolved (pilot box), hosted auth.uid() reads both claim forms; EBS snapshot snap-08732d3ac6376e850 taken and DeleteOnTermination disabled
 
 ## Authorizations
 

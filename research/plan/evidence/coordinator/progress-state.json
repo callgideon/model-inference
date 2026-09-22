@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T16:03:43Z",
+  "updated": "2026-09-22T16:07:02Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -63,10 +63,6 @@
       "phase": "independent review of the audit's code at ec6c548",
       "since": "2026-09-22T15:51:21Z"
     },
-    "inventory": {
-      "phase": "read-only live-state inventory: GPU box + hosted Supabase (P-02/P-04/P-06 facts)",
-      "since": "2026-09-22T16:00:21Z"
-    },
     "S2M": {
       "phase": "fact audit of the pinned profile at 343e685",
       "since": "2026-09-22T16:03:43Z"
@@ -89,9 +85,9 @@
   "inputs": [
     {
       "id": "P-04",
-      "what": "Allocated staging/GPU target \u2014 coordinator allocates (existing g6e.2xlarge dev box or a new instance)",
-      "blocks": "nothing now; measurements start when the target is up",
-      "owner": "coordinator (authorized)"
+      "what": "GPU target RESOLVED: pilot box i-0e8449a4ffca29bab (L40S), snapshot taken; I2B redeploys the refactored app onto it",
+      "blocks": "nothing",
+      "owner": "coordinator"
     },
     {
       "id": "P-06",
@@ -112,16 +108,10 @@
       "owner": "workload owner"
     },
     {
-      "id": "P-01 / P-02",
-      "what": "Approved CREDIT rate card; legacy USD account transition",
-      "blocks": "public metered publication and cutover only",
+      "id": "P-01",
+      "what": "Approved CREDIT rate card (P-02 legacy transition RESOLVED: $0 legacy USD, nothing to migrate)",
+      "blocks": "public metered publication only; a provisional fixture rate is used meanwhile",
       "owner": "user/operator"
-    },
-    {
-      "id": "P-03",
-      "what": "Local Docker/services",
-      "blocks": "nothing \u2014 Docker is available on this host",
-      "owner": "resolved here"
     }
   ],
   "checkpoints": [
@@ -140,6 +130,10 @@
     {
       "at": "2026-09-22T16:00:21Z",
       "what": "Max-parallel decision: F2R split into two lanes; F2P additive phase started; Q2/M2/W2 started early against v1 fakes (rebase after F2R). Interim rule: only E2R runs tests/d until the harness namespace fix lands."
+    },
+    {
+      "at": "2026-09-22T16:07:02Z",
+      "what": "Live-state inventory: P-02 resolved ($0 legacy USD), P-04 resolved (pilot box), hosted auth.uid() reads both claim forms; EBS snapshot snap-08732d3ac6376e850 taken and DeleteOnTermination disabled"
     }
   ],
   "cadence_windows": [

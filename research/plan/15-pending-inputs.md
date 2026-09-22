@@ -65,3 +65,13 @@ Additional audit work is assigned to F2P/D1R (product-v2 units/identity), C0 (re
 ## Handling a block during implementation
 
 Record task/slice, command/evidence, exact missing input, affected gate and next independent task in the coordinator log. Keep `planned` or `implemented` as appropriate with a blocked reason; never mark integrated because the environment is missing. Do not infer budget, permission or a workload threshold from silence. Ask only for the missing decision when the relevant boundary is ready, not again for already authorized local work.
+
+## Resolutions recorded by the coordinator (2026-09-22)
+
+| ID | Resolution | Evidence |
+|---|---|---|
+| P-02 | **Resolved.** Hosted `credit_ledger` has 0 rows; total legacy USD = $0.00 across 4 organizations (all single-owner test accounts created 2026-09-20); 1 usage event ($0.00019660); 0003–0005 not applied. No transition, no conversion rate. Decision: keep the four accounts; no grant until verified (A1). | [I1B inventory](evidence/i/I1B-inventory-2026-09-22.md) |
+| P-03 | **Resolved.** Docker available on the coordinator host; E2R repairs the harness namespace. | session 02 record |
+| P-04 | **Resolved.** Target = the running pilot box `i-0e8449a4ffca29bab` (g6e.2xlarge, L40S) for I2B/E1B; snapshot `snap-08732d3ac6376e850` taken first. Full operational authorization granted by the user on 2026-09-22 (logged with cost/rollback per operation). | I1B inventory; session 02 |
+| P-06 | **Resolved as a profile** (S2M, `research/workloads/marlin-sop.md`): artifact `fd111fca…`, Qwen3-VL processor, profile v1; four digests ⚠️ pending an authenticated host + pinned image; on-disk artifact facts confirmed by I1B. Publishing waits on the three fail-stops D2/D3/D12. | S2M evidence; I1B inventory |
+| P-18 | Provisional criteria predeclared and labelled by S2M; latency/availability targets deliberately absent until measured. | S2M profile §5 |
