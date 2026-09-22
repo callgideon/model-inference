@@ -18,6 +18,7 @@ from . import checks_credit, pgharness
 
 UPGRADE05_DB = f"{pgharness.DATABASE}_upgrade05"
 CREDIT_DB = f"{pgharness.DATABASE}_credit"
+VOLUME_DB = f"{pgharness.DATABASE}_credit_volume"
 
 _reason = pgharness.unavailable()
 pytestmark = pytest.mark.skipif(_reason is not None,
@@ -128,6 +129,7 @@ def test_credit_rate__a_published_rate_never_reaches_an_admitted_job() -> None:
 def test_credit_read_surface__exact_text_scoped_and_legacy_separate() -> None:
     """C0's result shapes: wallet summary, wallet/ledger pages, legacy USD statement."""
     print(checks_credit.check_credit_read_surface(_credit()))
+    print(checks_credit.check_credit_leaky_probe(_credit()))
 
 
 def test_credit_privileges__service_reads_money_and_writes_through_seams() -> None:
@@ -175,3 +177,19 @@ def test_rerun__applying_d1r_twice_is_a_no_op() -> None:
 # --- item 6: the seams -----------------------------------------------------------
 def test_seams__the_map_handed_to_a1_d2_c0_is_the_catalog() -> None:
     print(checks_credit.check_seams(_credit()))
+
+
+# --- query plans at 10^5 rows per tenant --------------------------------------------
+def test_plans__credit_ledger_keyset_at_realistic_tenant_size() -> None:
+    """10^5 ledger rows in each of two tenants; the page and next page are ordered
+    index ranges; the barrier view pushes the wallet qual down."""
+    from . import checks
+    pgharness.ensure()
+    pgharness.recreate(VOLUME_DB)
+    pgharness.apply(VOLUME_DB, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
+    with pgharness.connect(VOLUME_DB) as conn:
+        checks.seed_fixtures(conn)
+        checks_credit.seed_credit(conn)
+        checks_credit.seed_credit_volume(conn)
+        print(checks_credit.check_credit_plans(conn))
+        print(checks_credit.check_credit_reconciles(conn))
