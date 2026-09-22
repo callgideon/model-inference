@@ -193,3 +193,8 @@ def test_plans__credit_ledger_keyset_at_realistic_tenant_size() -> None:
         checks_credit.seed_credit_volume(conn)
         print(checks_credit.check_credit_plans(conn))
         print(checks_credit.check_credit_reconciles(conn))
+
+
+# --- 0009: headless operator seams (coordinator ruling, G6B handback) --------------
+def test_operator_seams__audit_keys_suspension_usage_holds() -> None:
+    print(checks_credit.check_operator_seams(_credit()))

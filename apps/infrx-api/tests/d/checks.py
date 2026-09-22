@@ -1689,7 +1689,14 @@ EXPECTED_FUNCTION_CALLERS = {
 INFRX_CALLABLE = tuple(f"infrx.{name}(jsonb)" for name in RPC_NAMES) + (
     "infrx.now()", "infrx.extend_model_limits()",
     # D1R: the A1 grant seam and the D2 pin resolver.
-    "infrx.grant_signup_credit(uuid,text,text,uuid)", "infrx.resolve_admission_pins(text)")
+    "infrx.grant_signup_credit(uuid,text,text,uuid)", "infrx.resolve_admission_pins(text)",
+    # D1R 0009: the headless operator seams (G6B).
+    "infrx.audit_by_idempotency_key(text)", "infrx.key_by_hash(text)",
+    "infrx.revoke_key(uuid,text,text,text)",
+    "infrx.bootstrap_operator_key(uuid,text,text,text,text,text)", "infrx.verified_user(uuid)",
+    "infrx.set_suspension(uuid,boolean,text,text,text,text)",
+    "infrx.usage_records(uuid,timestamp with time zone,uuid,integer)",
+    "infrx.active_holds(uuid)")
 
 
 def check_function_privileges(conn) -> str:

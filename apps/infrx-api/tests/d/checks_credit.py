@@ -118,6 +118,10 @@ ALLOWED_LEGACY_CHANGES = {
     # 0008 appends the CREDIT columns to the legacy usage view; every old column keeps its
     # position and type, which the per-column entries (with attnum) still check.
     ("view", "public.console_usage", "definition"): "columns appended, none changed",
+    # Coordinator ruling (G6B handback): the closed AuditAction list is extended in 0009,
+    # its four 0003 values kept.
+    ("constraint", "infrx.audit_entries", "audit_entries_action_check"):
+        "six headless operator actions appended",
 }
 
 
@@ -629,7 +633,8 @@ def check_no_unit_conversion(conn) -> str:
            "price_versions", "public.credit_ledger")
     credit = ("credit_wallets", "infrx.credit_ledger", "credit_wallet_holds",
               "charged_credits", "signup_entitlements", "rate_card_versions")
-    side_by_side = {"public.console_usage"}
+    # Row-per-request projections that label each amount with its own unit.
+    side_by_side = {"public.console_usage", "infrx.usage_records", "infrx.active_holds"}
     found = []
     objects = conn.execute("""
         select n.nspname || '.' || p.proname, lower(p.prosrc) from pg_proc p
@@ -1778,3 +1783,127 @@ def check_credit_leaky_probe(conn) -> str:
                             "'%%security_barrier=true%%' from pg_class where oid = %s::regclass",
                             (view,)).fetchone()[0], f"{view} is not security_barrier"
     return f"2 CREDIT views probed ({len(seen)} evaluations); nothing foreign seen"
+
+
+# =============================================================================
+# 0009: the headless operator seams (coordinator ruling on the G6B handback)
+# =============================================================================
+def check_operator_seams(conn) -> str:
+    """AuditAction extended and idempotent; key audience/scope/revocation rules; one
+    audited operator key from a hash; verified_user; audited, replayable suspension;
+    UsageRecordV2-shaped usage and per-regime holds - all as the platform role."""
+    o1, w1 = personal_org(conn, CONSUMER_1), wallet_of(conn, CONSUMER_1)
+    key = ("insert into public.api_keys (org_id, created_by, name, prefix, key_hash, audience, "
+           "user_id, provider_org_id, endpoint_id) values ")
+    audit = ("insert into infrx.audit_entries (id, actor_principal, action, reason, "
+             "idempotency_key) values ")
+    n = _all_refused(conn, (
+        ("an audit action outside the closed list",
+         audit + "(gen_random_uuid(), 'ops', 'admin_bogus', 'r', null)"),
+        ("one idempotency key on two audit rows",
+         audit + "(gen_random_uuid(), 'ops', 'admin_adjust', 'r', 'k1'), "
+                 "(gen_random_uuid(), 'ops', 'admin_reconcile', 'r', 'k1')"),
+        ("a provider_dev key with no endpoint scope",
+         key + f"('{o1}', null, 'p', 'sk-infrx-p0000001', 'hash-p1', 'provider_dev', null, "
+               f"'{NEMO}', null)"),
+        ("a provider_dev key scoped to another provider's endpoint",
+         key + f"('{o1}', null, 'p', 'sk-infrx-p0000002', 'hash-p2', 'provider_dev', null, "
+               f"'{NEMO}', '{OTHER_ENDPOINT}')"),
+        ("a consumer key scoped to an endpoint",
+         key + f"('{o1}', '{CONSUMER_1}', 'c', 'sk-infrx-c0000001', 'hash-c1', 'consumer', "
+               f"null, '{NEMO}', '{DEV_ENDPOINT}')"),
+        ("a consumer key that names no individual",
+         key + f"('{o1}', null, 'c', 'sk-infrx-c0000002', 'hash-c2', 'consumer', null, null, "
+               f"null)"),
+        ("an unknown audience",
+         key + f"('{o1}', '{CONSUMER_1}', 'c', 'sk-infrx-c0000003', 'hash-c3', 'admin', null, "
+               f"null, null)"),
+        ("changing a key's audience",
+         f"update public.api_keys set audience = 'operator' where key_hash = 'hash-a'"),
+        ("un-revoking a key",
+         f"update public.api_keys set revoked_at = now() where key_hash = 'hash-a'; "
+         f"update public.api_keys set revoked_at = null where key_hash = 'hash-a'"),
+        ("a second active operator key",
+         f"select infrx.bootstrap_operator_key('{o1}', 'ops', 'sk-infrx-o1', '{'1' * 64}', "
+         f"'ops', 'bootstrap'); select infrx.bootstrap_operator_key('{o1}', 'ops', "
+         f"'sk-infrx-o2', '{'2' * 64}', 'ops', 'bootstrap')"),
+        ("a plaintext key given to the bootstrap",
+         f"select infrx.bootstrap_operator_key('{o1}', 'ops', 'sk-infrx-o1', "
+         f"'sk-infrx-secret', 'ops', 'bootstrap')"),
+        ("a suspension with a free-text reason code",
+         f"select infrx.set_suspension('{o1}', true, 'because', 'ops', 'r', 'sus-x')"),
+    ), "operator seams")
+    m = _all_accepted(conn, (
+        ("an extended audit action", audit + "(gen_random_uuid(), 'ops', 'admin_adjust', 'r', "
+                                             "'k2')"),
+        ("a provider_dev key scoped to its provider's dev endpoint",
+         key + f"('{o1}', null, 'p', 'sk-infrx-p0000003', 'hash-p3', 'provider_dev', null, "
+               f"'{NEMO}', '{DEV_ENDPOINT}')"),
+    ), "operator seam controls")
+    with conn.transaction():
+        # The deployed console's own insert: the individual is its creator.
+        conn.execute(checks._jwt(CONSUMER_1))
+        conn.execute("insert into public.api_keys (org_id, created_by, name, prefix, key_hash) "
+                     "values (%s, %s, 'mine', 'sk-infrx-mine0001', 'hash-mine')",
+                     (o1, CONSUMER_1))
+        conn.execute("reset role")
+        row = conn.execute("select audience, user_id from public.api_keys "
+                           "where key_hash = 'hash-mine'").fetchone()
+        assert row == ("consumer", uuid.UUID(CONSUMER_1)), f"console key identity: {row}"
+        conn.execute(checks.SESSIONS["service"])
+        first = conn.execute("select infrx.bootstrap_operator_key(%s, 'ops', 'sk-infrx-op', "
+                             "%s, 'ops@infrx', 'bootstrap')", (o1, "a" * 64)).fetchone()[0]
+        again = conn.execute("select infrx.bootstrap_operator_key(%s, 'ops', 'sk-infrx-op', "
+                             "%s, 'ops@infrx', 'bootstrap')", (o1, "a" * 64)).fetchone()[0]
+        assert first == again, "the operator bootstrap is not idempotent"
+        found = conn.execute("select audience, org_suspended from infrx.key_by_hash(%s)",
+                             ("a" * 64,)).fetchall()
+        assert found == [("operator", False)], found
+        kid = conn.execute("select id from public.api_keys where key_hash = 'hash-mine'"
+                           ).fetchone()[0]
+        t1 = conn.execute("select infrx.revoke_key(%s, 'ops', 'leak', 'rev-1')", (kid,)).fetchone()
+        t2 = conn.execute("select infrx.revoke_key(%s, 'ops', 'leak', 'rev-2')", (kid,)).fetchone()
+        assert t1 == t2 and t1[0] is not None, f"revocation is not one-way/idempotent: {t1} {t2}"
+        s1 = conn.execute("select infrx.set_suspension(%s, true, 'abuse', 'ops', 'r', 'sus-1')",
+                          (o1,)).fetchone()
+        try:
+            with conn.transaction():
+                s2 = conn.execute("select infrx.set_suspension(%s, false, 'abuse', 'ops', 'r', "
+                                  "'sus-1')", (o1,)).fetchone()
+        except psycopg.Error as raised:
+            raise AssertionError(f"a replayed suspension raised: {raised}") from None
+        assert s1 == s2 == (True,), f"a replayed suspension acted twice: {s1} {s2}"
+        audits = conn.execute("select action, count(*) from infrx.audit_entries group by 1 "
+                              "order by 1").fetchall()
+        assert ("admin_key_issue", 1) in audits and ("admin_key_revoke", 1) in audits \
+            and ("admin_set_suspension", 1) in audits, f"audit trail: {audits}"
+        replay = conn.execute("select action from infrx.audit_by_idempotency_key('sus-1')"
+                              ).fetchall()
+        assert replay == [("admin_set_suspension",)], replay
+        raise psycopg.Rollback()
+    with conn.transaction():
+        unverified = conn.execute("select * from infrx.verified_user(%s)", (UNGRANTED,)
+                                  ).fetchone()
+        conn.execute("update auth.users set email_confirmed_at = '2026-09-22T12:00:00Z' "
+                     "where id = %s", (UNGRANTED,))
+        verified = conn.execute("select * from infrx.verified_user(%s)", (UNGRANTED,)).fetchone()
+        raise psycopg.Rollback()
+    assert unverified[2] is None and str(unverified[1]) == personal_org(conn, UNGRANTED), \
+        f"an unconfirmed user reads as verified: {unverified}"
+    assert verified[2] and verified[2].startswith("email_confirmed_at/"), verified
+    with conn.transaction():
+        conn.execute(_admission_cases(conn)[1][0][1])       # a settled CREDIT request
+        conn.execute(credit_job("5c000000-0000-4000-8000-0000000000c2", "job_h", o1, w1) + "; "
+                     + hold("5c000000-0000-4000-8000-0000000000c2", o1, w1))
+        usage = conn.execute("select accounting_regime, unit, charged_amount, rate_card_version "
+                             "from infrx.usage_records(%s)", (o1,)).fetchall()
+        holds = conn.execute("select accounting_regime, unit, amount, state "
+                             "from infrx.active_holds(%s)", (o1,)).fetchall()
+        raise psycopg.Rollback()
+    assert usage == [("credit", "CREDIT", "9.97600000", CARD)], f"usage records: {usage}"
+    assert holds == [("credit", "CREDIT", "10.01440000", "held")], f"holds: {holds}"
+    legacy = conn.execute("select accounting_regime, unit, charged_amount from "
+                          "infrx.usage_records(%s, null, null, 1)", (checks.ORG_A,)).fetchall()
+    assert len(legacy) == 1 and legacy[0][:2] == ("legacy_usd", "USD"), legacy
+    return (f"{n} refusals, {m} controls; bootstrap/revoke/suspension idempotent and audited; "
+            f"verified_user; usage and holds per regime")

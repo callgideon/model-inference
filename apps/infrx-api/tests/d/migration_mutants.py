@@ -32,6 +32,7 @@ CONSOLE = "0005_console_read_surface.sql"
 CREDIT = "0006_credit_accounting.sql"
 REGISTRY = "0007_provider_registry.sql"
 SURFACE = "0008_credit_read_surface.sql"
+OPS = "0009_operator_seams.sql"
 SEED = migrations.SEED_MARLIN.name           # an operator seed, not a migration
 
 MUT_DB = f"{pgharness.DATABASE}_mut"
@@ -1072,6 +1073,52 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
        "               reserved_total text, available text, revision bigint,\n"
        "               granted_at timestamptz)", "credit", "seams",
        "C0 reads a column the database no longer has"),
+    # --- 0009: headless operator seams ---------------------------------------------------------
+    _m("d1r_audit_action_open", OPS,
+       "                        'admin_adjust'));", "                        'admin_adjust', "
+       "'admin_bogus'));", "credit", "operator_seams", "an unaudited action name is recorded"),
+    _m("d1r_audit_replays_twice", OPS,
+       "create unique index if not exists audit_entries_idempotency_key_idx\n"
+       "  on infrx.audit_entries (idempotency_key) where idempotency_key is not null;", "",
+       "credit", "operator_seams", "a retried operator action is audited twice"),
+    _m("d1r_provider_key_unscoped", OPS,
+       "        when 'provider_dev' then provider_org_id is not null and endpoint_id is not null",
+       "        when 'provider_dev' then provider_org_id is not null",
+       "credit", "operator_seams", "a preview credential reaches every endpoint"),
+    _m("d1r_key_scoped_to_foreign_endpoint", OPS,
+       "      add constraint api_keys_endpoint_fk foreign key (endpoint_id, provider_org_id)\n"
+       "        references infrx.endpoints (endpoint_id, provider_org_id) on delete restrict,",
+       "      add constraint api_keys_endpoint_fk foreign key (endpoint_id)\n"
+       "        references infrx.endpoints (endpoint_id) on delete restrict,",
+       "credit", "operator_seams", "a provider's key is scoped to another provider's endpoint"),
+    _m("d1r_consumer_key_for_nobody", OPS,
+       "    if new.audience = 'consumer' and new.user_id is null then\n"
+       "      raise exception", "    if false then\n      raise exception",
+       "credit", "operator_seams", "a consumer key resolves no individual's wallet"),
+    _m("d1r_key_unrevoked", OPS,
+       "     or (old.revoked_at is not null and new.revoked_at is distinct from old.revoked_at) then\n"
+       "    raise exception 'api key", "     then\n    raise exception 'api key",
+       "credit", "operator_seams", "a leaked, revoked key comes back"),
+    _m("d1r_two_operator_keys", OPS,
+       "create unique index if not exists api_keys_one_active_operator\n"
+       "  on public.api_keys ((true)) where audience = 'operator' and revoked_at is null;", "",
+       "credit", "operator_seams", "a second operator credential exists unaudited"),
+    _m("d1r_bootstrap_takes_plaintext", OPS,
+       "  if p_key_hash !~ '^[0-9a-f]{64}$' then", "  if false then",
+       "credit", "operator_seams", "a plaintext key is stored as its own hash"),
+    _m("d1r_suspension_replays_act_twice", OPS,
+       "  if exists (select 1 from infrx.audit_entries where idempotency_key = "
+       "p_idempotency_key) then", "  if false then",
+       "credit", "operator_seams", "a retried suspend/unsuspend flips the organization"),
+    _m("d1r_unverified_reads_verified", OPS,
+       "         case when to_jsonb(u)->>'email_confirmed_at' is not null\n"
+       "              then 'email_confirmed_at/' || (to_jsonb(u)->>'email_confirmed_at') end",
+       "         'email_confirmed_at/' || coalesce(to_jsonb(u)->>'email_confirmed_at', 'none')",
+       "credit", "operator_seams",
+       "an unverified user is handed verification evidence (A1 mints)"),
+    _m("d1r_usage_unit_mislabelled", OPS,
+       "         case e.accounting_regime when 'credit' then 'CREDIT' else 'USD' end,",
+       "         'CREDIT',", "credit", "operator_seams", "a USD row is labelled CREDIT"),
     # --- plans at 10^5 rows per tenant (slow; full run only) -----------------------------------
     _m("d1r_no_ledger_keyset_index", CREDIT,
        "create index if not exists credit_ledger_wallet_created_idx\n"
@@ -1141,6 +1188,7 @@ _CHECKS = {
     "credit_read_surface": checks_credit.check_credit_read_surface,
     "credit_leaky_probe": checks_credit.check_credit_leaky_probe,
     "seams": checks_credit.check_seams,
+    "operator_seams": checks_credit.check_operator_seams,
     "seed_is_the_fixtures": checks_credit.check_seed_is_the_fixtures,
     "credit_plans": checks_credit.check_credit_plans,       # scenario "credit_volume"
     # D1R, scenario "upgrade05": need the captured state (see `_upgrade05_check`).

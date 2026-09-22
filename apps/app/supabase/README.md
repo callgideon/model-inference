@@ -109,7 +109,7 @@ The historical role table above describes 0001–0002. For 0003–0005 the autho
 `0004_pilot_roles_and_rpcs.sql` and `0005_console_read_surface.sql` (exact names in migrations/),
 including restricted financial RPCs. App and Lab share this one migration history.
 
-## CREDIT and the provider registry (D1R: 0006–0008)
+## CREDIT, the provider registry and operator seams (D1R: 0006–0009)
 
 `0006_credit_accounting.sql` (CREDIT wallets, ledger, holds, the individual signup
 entitlement, the accounting regime on jobs and usage, feature flags, the grant
@@ -138,5 +138,19 @@ by `console_legacy_usd_statement`; an existing organization with several members
 individual wallet binding until its billing owner is resolved (the grant refuses it as a
 rollout hold); no exchange rate exists anywhere in the schema.
 
-Hosted state: only 0001–0002 are applied to the hosted project. 0003–0008 are not;
+`0009_operator_seams.sql` (coordinator ruling on the G6B handback) extends the closed
+audit action list, makes audit idempotency keys unique, adds the key audience
+(`consumer | provider_dev | operator`) with its scope and a one-way revocation, and
+service-only operations: `infrx.key_by_hash`, `infrx.revoke_key`,
+`infrx.bootstrap_operator_key`, `infrx.verified_user`, `infrx.set_suspension`,
+`infrx.usage_records`, `infrx.active_holds`, `infrx.audit_by_idempotency_key`.
+The single operator key is bootstrapped from its sha256 only (the plaintext never
+reaches the database), once, audited:
+
+```sql
+select infrx.bootstrap_operator_key('<operator org uuid>', 'operator', '<prefix>',
+                                    '<sha256 hex of the key>', '<operator>', '<reason>');
+```
+
+Hosted state: only 0001–0002 are applied to the hosted project. 0003–0009 are not;
 the coordinator applies them only after the backup/restore rehearsal (I3B).

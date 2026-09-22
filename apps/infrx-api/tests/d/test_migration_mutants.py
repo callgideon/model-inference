@@ -73,7 +73,8 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           "d1r_signup_enabled_on_apply", "d1r_upgrade_imports_usd_as_credit",
           "d1r_gateway_row_needs_a_regime", "d1r_regrants_a_legacy_view",
           "d1r_credit_ledger_without_rls", "d1r_new_views_keep_default_acl",
-          "d1r_summary_callable_by_anon")
+          "d1r_summary_callable_by_anon", "d1r_audit_replays_twice", "d1r_key_unrevoked",
+          "d1r_unverified_reads_verified")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 
