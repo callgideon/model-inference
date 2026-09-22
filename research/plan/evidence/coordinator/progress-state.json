@@ -1,13 +1,13 @@
 {
-  "updated": "2026-09-22T19:36:54Z",
+  "updated": "2026-09-22T20:16:57Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
     "F2R": {
       "lane": "codex-f2r",
-      "phase": "implementing",
+      "phase": "lane A merged (e1a33d1) pending review; post-merge follow-ups IR-A1..A10 in flight on codex-f2r-int",
       "since": "2026-09-22T15:51:21Z",
-      "note": "lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions"
+      "note": "integration head red at collection until IR-A8 lands; main held at f9ba5d2"
     },
     "F2P": {
       "lane": "codex-f2p",

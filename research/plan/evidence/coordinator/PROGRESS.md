@@ -1,13 +1,13 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T19:36:54Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T20:16:57Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 9 done · 5 in progress · 16 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
 | B0 Baseline & contracts | S1 | Reconcile pulled wave-2 baseline and publish product revision audit | **done** | implemented |  |
-| B0 Baseline & contracts | F2R | Close remaining wave-2 contract and verification carryovers | **in-progress** | planned | lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions |
+| B0 Baseline & contracts | F2R | Close remaining wave-2 contract and verification carryovers | **in-progress** | planned | integration head red at collection until IR-A8 lands; main held at f9ba5d2 |
 | B0 Baseline & contracts | I0 | Repair installer atomicity and fail-closed startup prerequisite | **done** | implemented |  |
 | B0 Baseline & contracts | E2R | Repair service harness ownership, role matrix and shared test clock | **done** | implemented |  |
 | B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **done** | implemented |  |
@@ -62,7 +62,7 @@ Generated 2026-09-22T19:36:54Z from `tasks.json` (manifest v4) and `progress-sta
 
 ## In flight
 
-- F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions
+- F2R: codex-f2r — lane A merged (e1a33d1) pending review; post-merge follow-ups IR-A1..A10 in flight on codex-f2r-int since 2026-09-22T15:51:21Z — integration head red at collection until IR-A8 lands; main held at f9ba5d2
 - F2P: codex-f2p — additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - D1R: codex-d1r / codex/d1r-v2-schema — dispatched from 9faaa57 (reads 06a + v2 fixture base) since 2026-09-22T18:05:08Z — D owns migrations; additive over 0001–0005
