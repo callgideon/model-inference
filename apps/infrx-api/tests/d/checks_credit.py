@@ -619,10 +619,48 @@ def check_grant(conn) -> str:
     return "grant: one row, idempotent across op/campaign/org, 4 refusals"
 
 
+class _Rollback(Exception):
+    pass
+
+
 def check_grant_race(connect, database: str, attempts: int = 8, rounds: int = 10) -> str:
     """CREDIT-GRANT under a race: in each round, N concurrent callers for one fresh
     individual produce exactly one ledger row, and every caller is handed that same row.
-    Several rounds, because a race that loses one time in five is still a race."""
+    Several rounds, because a race that loses one time in five is still a race.
+
+    The rounds are probabilistic: the interleaving that matters - a caller passing the
+    per-user check and then colliding on the per-personal-org index - happens only
+    sometimes (the mutant `d1r_grant_race_arbitrates_one_index` died 4 runs in 5). So it is
+    first produced DETERMINISTICALLY (D3, for D2's request 8): an individual whose personal
+    organization already funds another individual's wallet collides on the personal-org
+    index ALONE. `on conflict do nothing` absorbs that collision and the grant answers the
+    typed rollout hold; a conflict target naming only the per-user index surfaces a raw
+    unique violation instead, every time."""
+    squatter = "c2000000-0000-4000-8000-00000000dead"
+    victim = "c2000000-0000-4000-8000-00000000beef"
+    with connect(database) as c:
+        try:
+            with c.transaction():
+                for user in (squatter, victim):
+                    c.execute("insert into auth.users (id, email) values (%s, %s)",
+                              (user, f"{user[-4:]}@example.com"))
+                c.execute("insert into infrx.credit_wallets (kind, owner_user_id, "
+                          "personal_org_id) values ('consumer', %s, %s)",
+                          (squatter, personal_org(c, victim)))
+                try:
+                    with c.transaction():
+                        grant(c, victim, op=None)
+                except psycopg.Error as refused:
+                    state = refused.sqlstate
+                else:
+                    state = None
+                assert state == "55000", (
+                    f"a personal-org-only collision answered {state!r}, not the typed "
+                    f"rollout hold (55000): the insert does not absorb a conflict on the "
+                    f"per-personal-org index")
+                raise _Rollback()
+        except _Rollback:
+            pass
     for n in range(rounds):
         user = RACER if n == 0 else f"c2000000-0000-4000-8000-{n:012d}"
         if n:
