@@ -1146,8 +1146,11 @@ def _admission_cases(conn) -> tuple[tuple, tuple]:
          .replace(", 'legacy_usd'", "") + ")"),
         ("spending another individual's wallet through one's own organization",
          credit_job(j + "04", "job_c_04", o1, w2)),
+        # Through the provider's own provider_dev key, so only the dev-deployment rule
+        # can refuse it (the key rule is its own case below).
         ("a provider dev wallet paying for public production",
-         credit_job(j + "05", "job_c_05", o1, PROVIDER_WALLET)),
+         _provider_dev_key(op) + "; "
+         + credit_job(j + "05", "job_c_05", op, PROVIDER_WALLET, key=PDEV_KEY)),
         # D2 (D1R review (a)): R70 as a database invariant, and the provider's own key.
         ("a consumer wallet spending on the private dev deployment",
          credit_job(j + "0c", "job_c_0c", o1, w1, card=DEV_CARD, deployment=DEV_DEPLOYMENT)),
