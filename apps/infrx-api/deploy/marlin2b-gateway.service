@@ -5,8 +5,11 @@ After=network-online.target marlin2b-vllm.service
 [Service]
 User=ubuntu
 WorkingDirectory=/home/ubuntu/model-inference/apps/infrx-api
+# The env file is the only configuration authority: preflight.py validates every key
+# in it, including USAGE_LOG, which used to be a second `Environment=` line here that
+# silently overrode the file. I2B moves the path to persistent storage (infra/README.md
+# §2, matrix row M-SCRATCH); until then preflight.py writes today's value.
 EnvironmentFile=/etc/marlin2b-gateway.env
-Environment=USAGE_LOG=/opt/dlami/nvme/logs/usage.jsonl
 ExecStart=/opt/pytorch/bin/uvicorn gateway:app --host 127.0.0.1 --port 8001 --workers 1
 Restart=always
 RestartSec=3
