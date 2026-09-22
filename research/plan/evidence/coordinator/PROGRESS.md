@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T22:35:57Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T22:37:58Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 11 done · 5 in progress · 14 remaining (of 30).**
+**Backend packages: 11 done · 8 in progress · 11 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -21,16 +21,16 @@ Generated 2026-09-22T22:35:57Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | M2 | Versioned preprocessing and tenant cache | **done** | implemented |  |
 | B1 Durable endpoint | M3 | Owned uploads, expiry and orphan collection | **done** | implemented |  |
 | B1 Durable endpoint | Q2 | Valkey adapter with atomic tested scripts | **done** | implemented |  |
-| B1 Durable endpoint | Q3 | Outbox/reconciler integration and index loss recovery | **remaining** | planned |  |
+| B1 Durable endpoint | Q3 | Outbox/reconciler integration and index loss recovery | **in-progress** | planned | outbox drain/ack, PG reconciler, index-loss recovery |
 | B1 Durable endpoint | W2 | Lease-aware execution, cancellation and completion | **done** | implemented |  |
-| B1 Durable endpoint | W3 | Drain, engine pin and measured concurrency | **remaining** | planned |  |
+| B1 Durable endpoint | W3 | Drain, engine pin and measured concurrency | **in-progress** | planned | engine pin by digest, drain, readiness; measurements coordinator-run |
 | B1 Durable endpoint | G1R | Revise ingress for consumer and provider endpoint audiences | **remaining** | planned |  |
 | B1 Durable endpoint | G2 | Synchronous chat and persistent SSE relay | **remaining** | planned |  |
 | B1 Durable endpoint | G3 | Explicit jobs, status, cancellation and replay | **remaining** | planned |  |
 | B1 Durable endpoint | G4U | Owned upload HTTP adapter | **remaining** | planned |  |
 | B1 Durable endpoint | G6B | Headless endpoint provisioning and operations | **done** | implemented |  |
 | B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **in-progress** | planned | gate not passable until G/D/W/Q lanes merge |
-| B2 Integrate & deploy | I2B | Reproducible Marlin endpoint deployment independent of frontends | **remaining** | planned | needs allocated GPU/staging (P-04) |
+| B2 Integrate & deploy | I2B | Reproducible Marlin endpoint deployment independent of frontends | **in-progress** | planned | packaging, scripts, local rehearsal; box rollout coordinator-run |
 | B2 Integrate & deploy | I3B | Backend recovery, observability, restore and rollback proof | **remaining** | planned | needs allocated GPU/staging (P-04) |
 | B2 Integrate & deploy | E1B | Measure the end-to-end Marlin baseline and operating envelope | **in-progress** | planned | sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart |
 | B3 Measured tuning | M4 | Optimize bounded video retrieval, decoding and preparation | **remaining** | planned | needs allocated GPU/staging (P-04) |
@@ -67,6 +67,9 @@ Generated 2026-09-22T22:35:57Z from `tasks.json` (manifest v4) and `progress-sta
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
 - D2: codex-d2 / codex/d2-admission-outbox — dispatched (admission transaction, outbox, M3 tables, D1R follow-ups) since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL
 - A1: codex-a1 / codex/a1-signup-grant — implementing (signup grant, backfill, retention) since 2026-09-22T22:35:57Z — new files only; migrations 0015+; D2 in flight
+- W3: codex-w3 / codex/w3-drain-pin — implementing (software half) since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
+- I2B: codex-i2b / codex/i2b-deployment — implementing (software half) since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
+- Q3: codex-q3 / codex/q3-outbox-reconciler — implementing (software half) since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
 
 ## Checkpoints
 
