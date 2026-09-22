@@ -32,7 +32,9 @@ READY_PATH = ingress.READY_PATH
 
 ORG = "1a1a1a1a-0000-4000-8000-000000000001"
 KEY = "3c3c3c3c-0000-4000-8000-000000000003"
-ROW = {"id": KEY, "org_id": ORG, "revoked_at": None}
+USER = "2b2b2b2b-0000-4000-8000-000000000002"
+# A consumer key as 0009 stores it: the audience and the individual it belongs to.
+ROW = {"id": KEY, "org_id": ORG, "revoked_at": None, "audience": "consumer", "user_id": USER}
 REQUEST_ID = "4d4d4d4d-0000-4000-8000-000000000004"
 TOKEN = "sk-infrx-g1-test"
 AUTH = {"authorization": f"Bearer {TOKEN}"}
