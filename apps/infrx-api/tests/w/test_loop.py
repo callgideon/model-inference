@@ -32,10 +32,15 @@ from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import (ChunkEventType, EngineEvent, ExecutionMode, HoldState,
                                      IndexEvent, JobState, LeaseKind, OutboxKind,
                                      SettlementState, TerminalCause, Usage)
-from infrx.worker import AttemptRunner, WorkerLoop
+from infrx.worker import AttemptRunner, WorkerLoop, prepared_request
 from infrx.worker.attempt import BATCH_MAX_EVENTS
+from infrx.worker.engine import (LOCAL_MEDIA_ROOT, MODEL_EOS_TOKEN_IDS, _inside_tenant_root,
+                                 local_media_url)
 from infrx.worker.fakes import FakeUpstream
 from infrx.worker.reasoning import ReasoningFilter, filter_text
+from tests.w.test_engine import Box as _Box
+from tests.w.test_engine import text_prepared as _text_prepared
+from tests.w.test_engine import video_work as _video_work
 
 
 def run(coro):
@@ -1138,3 +1143,60 @@ def test_dur_output__a_relay_that_fails_never_fails_a_committed_attempt():
         assert "relay failed" in result.detail
         assert world.visible(request.request_id) != ""
     run(case())
+
+
+# --------------------------------------------------------------------------
+# the two adapter changes S2M's pinned profile settles (engine.py, minimal)
+# --------------------------------------------------------------------------
+def test_api_stream__a_prepared_video_reaches_the_engine_as_a_local_file_of_its_own_tenant():
+    """S2M §2 / discrepancy D3: the pilot engine opens the prepared object from the
+    processing-cache root it was started with (`--allowed-local-media-path`), so the part
+    carries `file://<root>/<the store's own key>` - never the bare key, which vLLM cannot
+    open, and never the customer's url."""
+    box = _Box()
+    work = _video_work(box)
+    prepared = prepared_request(work, 1200)
+    ref = prepared.media[0]
+
+    default = FakeUpstream(clock=box.clock).engine()
+    assert default.upstream_body(prepared)["messages"][0]["content"][1]["video_url"] == {
+        "url": f"file://{LOCAL_MEDIA_ROOT}/{ref.storage_ref}"}
+    # the root is a deployment fact, and it is the engine's, not the request's
+    pinned = FakeUpstream(clock=box.clock).engine(local_media_root="/srv/cache")
+    assert pinned.upstream_body(prepared)["messages"][0]["content"][1]["video_url"] == {
+        "url": f"file:///srv/cache/{ref.storage_ref}"}
+
+    # inside the root **and** under this tenant's prefix: both, or it is refused
+    assert _inside_tenant_root(f"/srv/cache/{ref.storage_ref}", "/srv/cache", ref.org_id)
+    assert not _inside_tenant_root(f"/srv/cache/media/{b.ORG_B}/v1/source", "/srv/cache",
+                                   ref.org_id)
+    assert not _inside_tenant_root("/etc/passwd", "/srv/cache", ref.org_id)
+    assert not _inside_tenant_root(f"/other/media/{ref.org_id}/v1/source", "/srv/cache",
+                                   ref.org_id)
+    # a relative root cannot be compared with anything, so it is not a root
+    assert not _inside_tenant_root(f"cache/media/{ref.org_id}/v1/s", "cache", ref.org_id)
+    with pytest.raises(errors.NotFound):
+        local_media_url(ref, "cache")
+    # and the grammar still guards the key the path is built from
+    with pytest.raises(errors.NotFound):
+        local_media_url(ref.model_copy(update={"storage_ref": "../../etc/passwd"}),
+                        LOCAL_MEDIA_ROOT)
+    with pytest.raises(errors.NotFound):
+        local_media_url(ref.model_copy(update={"storage_ref": f"media/{b.ORG_B}/v1/source"}),
+                        LOCAL_MEDIA_ROOT)
+
+
+def test_api_stream__both_eos_ids_are_supplied_on_every_request():
+    """S2M §1.2 consequence 1: the `--hf-overrides` remap loses Marlin's second EOS id, so
+    the request re-supplies both. An engine that stops on only one runs every answer to
+    the output ceiling, which the customer pays for."""
+    box = _Box()
+    engine = FakeUpstream(clock=box.clock).engine()
+    body = engine.upstream_body(_text_prepared(box))
+    assert body["stop_token_ids"] == [248044, 248046] == list(MODEL_EOS_TOKEN_IDS)
+    # not a caller parameter: a client cannot widen or narrow the stop set
+    with pytest.raises(errors.UnsupportedParameter):
+        engine.upstream_body(_text_prepared(box, parameters={"stop_token_ids": [1]}))
+    # consequence 2 of the same remap is the filter's, and `visible` never carries it
+    assert filter_text("<think>the van is stationary</think>Two people unload boxes.") == \
+        "Two people unload boxes."

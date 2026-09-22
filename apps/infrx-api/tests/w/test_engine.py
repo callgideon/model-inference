@@ -34,8 +34,10 @@ from infrx.media.video import Media
 from infrx.worker import (EngineError, EngineFailure, EngineIncomplete, EngineProtocolViolation,
                           EngineTransportError, EngineUnsupported, VllmEngine, cache_salt,
                           prepared_request)
-from infrx.worker.engine import (MAX_CANCEL_INTENTS, MIN_JOURNAL_EVENT_BYTES,
-                                 PAYLOAD_OVERHEAD_BYTES, _delta_payload, media_uuid)
+from infrx.worker.engine import (LOCAL_MEDIA_ROOT, LOCAL_MEDIA_SCHEME, MAX_CANCEL_INTENTS,
+                                 MIN_JOURNAL_EVENT_BYTES, MODEL_EOS_TOKEN_IDS,
+                                 PAYLOAD_OVERHEAD_BYTES, _delta_payload, _inside_tenant_root,
+                                 local_media_url, media_uuid)
 from infrx.worker.fakes import (ERROR_BODY_CHUNK, SERVED_MODEL, FakeUpstream,
                                engine_factory)
 from infrx.worker.reasoning import filter_text
@@ -324,15 +326,19 @@ def test_api_stream__messages_are_rebuilt_from_an_allow_list():
     assert [sorted(message) for message in body["messages"]] == [["content", "role"]]
     assert body["messages"][0]["content"] == [
         {"type": "text", "text": "Describe this clip."},
-        {"type": "video_url", "video_url": {"url": prepared.media[0].storage_ref}}]
+        # S2M §2/D3: the local file the prepared reference materialized to, under the
+        # root the engine was started with - never the customer's own url
+        {"type": "video_url",
+         "video_url": {"url": local_media_url(prepared.media[0], LOCAL_MEDIA_ROOT)}}]
     for role in ("system", "user", "assistant"):
         engine.upstream_body(text_prepared(Box(), messages=({"role": role, "content": "hi"},)))
 
 
 def test_api_stream__no_outbound_body_ever_carries_a_foreign_url():
     """MEDIA-SEC: the positive half of the allow-list. Whatever the customer put in the
-    message, the only reference in the outbound JSON is the prepared one, which carries no
-    URL scheme at all (W3/M2 add `file://` plus an allowed media path for real vLLM)."""
+    message, the only reference in the outbound JSON is the prepared one, as a `file://`
+    path under the root the engine was started with (S2M §2/D3) - so the one scheme that
+    can appear names a local file of this tenant's, and no network scheme ever does."""
     box = Box()
     for url in (EVIL, "https://videos.example.com/clip.mp4", "data:video/mp4;base64,AAAA",
                 "file:///etc/passwd", "gopher://internal/"):
@@ -343,7 +349,10 @@ def test_api_stream__no_outbound_body_ever_carries_a_foreign_url():
         events = asyncio.run(collect(engine.generate(lease(box), prepared)))
         assert events, url
         sent = json.dumps(upstream.requests[0])
-        assert "://" not in sent and "data:" not in sent, url
+        assert sent.count("://") == 1, (url, sent)          # exactly the one file:// we built
+        assert local_media_url(prepared.media[0], LOCAL_MEDIA_ROOT) in sent
+        for scheme in ("http", "data:", "gopher", "ftp", "s3", "//169.254"):
+            assert scheme not in sent.replace(LOCAL_MEDIA_SCHEME, ""), (url, scheme)
         assert prepared.media[0].storage_ref in sent
 
 
@@ -356,7 +365,7 @@ def test_api_stream__prepared_media_replaces_the_customers_url():
     prepared = prepared_request(work, prompt_tokens=1200)
     body = engine.upstream_body(prepared)
     assert body["messages"][0]["content"][1]["video_url"] == {
-        "url": work.prepared_refs[0].storage_ref}
+        "url": local_media_url(work.prepared_refs[0], LOCAL_MEDIA_ROOT)}
     assert EVIL not in json.dumps(body)
 
     # a prepared ref with no media part at all: only the count check can refuse this
