@@ -121,15 +121,20 @@ class V2Harness:
 
 def fake_v2_harness() -> V2Harness:
     """A fresh harness seeded from the committed fixtures. Never shared between cases."""
-    built = {name: builder() for name, builder in v2fix.BUILDERS.items()}
-    prod = built["deployment_revision_public.json"]
-    dev = built["deployment_revision_private_dev.json"]
-    serving = built["serving_revision.json"]
-    card = built["rate_card_marlin.json"]
-    policy = built["data_access_policy.json"]
+    # Only the rows the directories answer with: building the whole fixture base here
+    # would make one broken record fail every case for the same reason, which is
+    # exactly the non-specific kill R40 warns about.
+    def built(name):
+        return v2fix.BUILDERS[name]()
+
+    prod = built("deployment_revision_public.json")
+    dev = built("deployment_revision_private_dev.json")
+    serving = built("serving_revision.json")
+    card = built("rate_card_marlin.json")
+    policy = built("data_access_policy.json")
     wallets = FakeWalletDirectory(
-        by_user={IDS.consumer_user: built["wallet_consumer.json"]},
-        by_provider={IDS.provider_org: built["wallet_provider_dev.json"]})
+        by_user={IDS.consumer_user: built("wallet_consumer.json")},
+        by_provider={IDS.provider_org: built("wallet_provider_dev.json")})
     catalog = FakeCatalogDirectory(
         aliases={v2fix.REQUESTED_MODEL: prod.deployment_revision_id,
                  v2fix.DEV_REQUESTED_MODEL: dev.deployment_revision_id},
@@ -139,8 +144,8 @@ def fake_v2_harness() -> V2Harness:
         # still needs an approved internal card, and the fixture proves the refusal.
         rate_cards={prod.deployment_revision_id: card},
         policies={prod.deployment_revision_id: policy, dev.deployment_revision_id: policy})
-    membership = built["provider_membership.json"]
-    grant = built["access_grant.json"]
+    membership = built("provider_membership.json")
+    grant = built("access_grant.json")
     providers = FakeProviderDirectory(
         memberships={(membership.provider_org_id, membership.user_id): membership},
         grants={(grant.grantor_org_id, grant.recipient_provider_org_id): grant})

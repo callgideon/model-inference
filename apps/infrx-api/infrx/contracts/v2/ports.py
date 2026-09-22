@@ -25,7 +25,7 @@ from .. import errors
 from .records import (AccessGrant, AdmissionPins, AuthContextV2, CredentialAudience,
                       DataAccessPolicyRef, DataCategory, DataPurpose, DeploymentRevision,
                       DeploymentState, ProviderMembership, RateCardSnapshot, ServingRevision,
-                      Visibility, WalletKind, WalletRef, may_read_customer_content)
+                      Visibility, WalletRef, may_read_customer_content)
 
 
 @runtime_checkable
@@ -95,20 +95,26 @@ def resolve_wallet(auth: AuthContextV2, wallet: WalletRef | None) -> WalletRef:
         raise errors.Forbidden("an operator credential does not spend a wallet")
     if wallet is None:
         raise errors.NotFound("no wallet is provisioned for this credential")
+    # The wallet *kind* is not checked separately, and that is deliberate.
+    # `WalletRef` validates ownership as an exclusive-or by kind, so a consumer
+    # wallet always has `owner_provider_org_id is None` and a provider_dev wallet
+    # always has `owner_user_id is None`; `AuthContextV2` in turn guarantees the
+    # identity a given audience carries is not None. The ownership equalities below
+    # therefore already refuse the wrong kind, and a separate kind check would be a
+    # guard no single-edit mutant could kill (R32) — defence that looks real and
+    # proves nothing. Each check below IS individually lethal, and
+    # `credit_identity__*` names the case that kills it.
     if auth.audience is CredentialAudience.consumer:
-        if wallet.kind is not WalletKind.consumer:
-            raise errors.Forbidden("a consumer credential spends a consumer wallet")
         if wallet.owner_user_id != auth.user_id:
-            raise errors.Forbidden("a credential spends only its own user's wallet")
+            raise errors.Forbidden("a credential spends only its own user's wallet; a "
+                                   "provider_dev wallet has no individual owner at all")
         if wallet.personal_org_id != auth.org_id:
             raise errors.Forbidden("the wallet's personal-org binding does not match the "
                                    "organization this key authenticates")
         return wallet
-    if wallet.kind is not WalletKind.provider_dev:
-        raise errors.Forbidden("a provider_dev credential spends the provider dev wallet, "
-                               "never a consumer wallet")
     if wallet.owner_provider_org_id != auth.provider_org_id:
-        raise errors.Forbidden("a provider credential spends only its own provider's wallet")
+        raise errors.Forbidden("a provider credential spends only its own provider's wallet, "
+                               "never a consumer wallet (which has no provider owner)")
     return wallet
 
 
@@ -135,10 +141,13 @@ def pin_admission(*, auth: AuthContextV2, requested_model: str,
     if deployment.state is DeploymentState.retired:
         raise errors.NotFound(f"model {requested_model!r} is retired")
     if deployment.visibility is Visibility.private:
-        # A private dev endpoint is reachable only by a provider_dev credential
-        # scoped to that very endpoint. A consumer key never is.
-        if auth.audience is not CredentialAudience.provider_dev:
-            raise errors.NotFound(f"no published deployment for model {requested_model!r}")
+        # A private dev endpoint is reachable only by the credential issued for that
+        # very endpoint, in that very provider. There is deliberately no separate
+        # `audience is provider_dev` check: `AuthContextV2` already refuses an
+        # endpoint scope on a consumer or operator context, so their `endpoint_id` is
+        # None and the equality below is the audience check. A third, redundant guard
+        # would be a guard no single-edit mutant could kill (R32), which is worse
+        # than no guard at all: it would look like defence and prove nothing.
         if auth.endpoint_id != deployment.endpoint_id:
             raise errors.NotFound(f"no published deployment for model {requested_model!r}")
         if auth.provider_org_id != deployment.provider_org_id:

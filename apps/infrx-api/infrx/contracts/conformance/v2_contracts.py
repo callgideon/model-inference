@@ -73,17 +73,40 @@ async def split_contract__a_consumer_credential_cannot_reach_a_private_dev_endpo
     not a 403 that confirms the artifact exists, and never a successful pin."""
     harness = factory()
     dev_model = v2fix.DEV_REQUESTED_MODEL
+    consumer = _consumer_auth()
+    # Layer 1: the catalog does not list a private dev deployment for a consumer.
+    assert await harness.catalog.resolve(dev_model, audience=consumer.audience,
+                                        endpoint_id=consumer.endpoint_id) is None
     try:
-        await _pin(harness, _consumer_auth(), dev_model)
+        await _pin(harness, consumer, dev_model)
     except errors.NotFound as refused:
         assert "no published deployment" in str(refused), refused
     else:
         raise AssertionError("a consumer credential reached a private dev deployment")
-    # and the provider credential scoped to that endpoint sees it, but it is unpriced
+    # Layer 2: and even handed the row directly, the pin refuses it. Each layer is
+    # checked on its own, so removing either one fails this case.
     deployment = await harness.catalog.resolve(dev_model,
                                               audience=v2.CredentialAudience.provider_dev,
                                               endpoint_id=IDS.dev_endpoint)
     assert deployment is not None and deployment.endpoint_id == IDS.dev_endpoint
+    serving = await harness.catalog.serving_revision(deployment.serving_version_id)
+    policy = await harness.catalog.data_access_policy(deployment.deployment_revision_id)
+    card = v2fix.BUILDERS["rate_card_marlin.json"]().model_copy(update={
+        "deployment_revision_id": deployment.deployment_revision_id,
+        "rate_card_version": "rc_internal_preview"})
+    direct = dict(requested_model=dev_model, deployment=deployment, serving=serving,
+                  rate_card=card, policy=policy)
+    provider = _provider_auth()
+    for wrong in (consumer,
+                  provider.model_copy(update={"endpoint_id": IDS.prod_endpoint}),
+                  provider.model_copy(update={"provider_org_id": IDS.rival_provider_org})):
+        try:
+            v2ports.pin_admission(auth=wrong, **direct)
+        except errors.NotFound:
+            continue
+        raise AssertionError(f"{wrong.audience} reached the private dev deployment directly")
+    pins, _card = v2ports.pin_admission(auth=provider, **direct)
+    assert pins.deployment_revision_id == deployment.deployment_revision_id
 
 
 async def split_contract__a_provider_credential_cannot_borrow_another_endpoint(factory):
@@ -197,6 +220,15 @@ async def credit_units__a_mixed_history_totals_per_unit_and_never_once(factory):
     legacy = [e for e in history.entries if e.accounting_regime is v2.AccountingRegime.legacy_usd]
     assert len(legacy) == 1 and str(legacy[0].amount()) == "0.01414000"
     assert isinstance(legacy[0].amount(), mu.Usd)
+    # and the regime, not the `unit` column, is what fixes the denomination: a legacy
+    # row relabelled CREDIT is refused rather than read as credits.
+    try:
+        v2.UsageRecordV2.model_validate(dict(v2fix.load("usage_legacy_usd.json"),
+                                             unit=mu.CREDIT))
+    except pydantic.ValidationError as refused:
+        assert "denominated in" in str(refused), refused
+    else:
+        raise AssertionError("a legacy_usd row was accepted as CREDIT")
 
 
 async def credit_units__a_legacy_row_invents_none_of_the_new_fields(factory):
@@ -207,6 +239,11 @@ async def credit_units__a_legacy_row_invents_none_of_the_new_fields(factory):
     assert row.accounting_regime is v2.AccountingRegime.legacy_usd and row.unit == mu.USD
     assert row.rate_card_version is None and row.serving_version_id is None
     assert row.deployment_revision_id is None and row.price_version == "pv_2026_09_01"
+    # a row that never recorded a price version keeps None, not a plausible default
+    bare = v2.project_v1_usage(
+        {"request_id": IDS.legacy_request, "cost_usd": "0.00000000", "prompt_tokens": 0,
+         "completion_tokens": 0, "settled_at": v2fix.T0}, org_id=IDS.consumer_org)
+    assert bare.price_version is None, bare.price_version
     # and a CREDIT row may not borrow the legacy field, or vice versa
     try:
         v2.UsageRecordV2.model_validate(dict(v2fix.load("usage_credit.json"),
@@ -276,7 +313,7 @@ async def credit_identity__a_provider_dev_credential_resolves_a_zero_provider_wa
     assert wallet.ledger_total.is_zero and wallet.reserved_total.is_zero
     assert wallet.has_signup_entitlement is False
     assert wallet.owner_user_id is None and wallet.personal_org_id is None
-    # handed a consumer wallet, the same credential is refused
+    # handed a consumer wallet, the same credential is refused...
     try:
         v2ports.resolve_wallet(auth,
                                await harness.wallets.consumer_wallet_for_user(IDS.consumer_user))
@@ -284,6 +321,15 @@ async def credit_identity__a_provider_dev_credential_resolves_a_zero_provider_wa
         pass
     else:
         raise AssertionError("a provider credential spent a consumer wallet")
+    # ... and so is a *rival provider's* dev wallet, which passes the kind check and
+    # fails only on ownership. Each guard is therefore checked on its own.
+    try:
+        v2ports.resolve_wallet(auth, wallet.model_copy(update={
+            "wallet_id": IDS.rival_provider_org,
+            "owner_provider_org_id": IDS.rival_provider_org}))
+    except errors.Forbidden:
+        return
+    raise AssertionError("a provider credential spent another provider's wallet")
 
 
 async def credit_identity__no_request_field_can_select_a_wallet(factory):
@@ -505,7 +551,7 @@ async def credit_rate__an_unknown_private_or_unpriced_model_is_refused(factory):
     try:
         await _pin(harness, provider, v2fix.DEV_REQUESTED_MODEL)
     except errors.InvalidRequest as refused:
-        assert "rate card" in str(refused), refused
+        assert "no approved CREDIT rate card" in str(refused), refused
     else:
         raise AssertionError("an unpriced dev deployment was admitted")
 
