@@ -172,6 +172,10 @@ async def split_contract__the_v1_model_revision_string_is_unchanged_r62(factory)
     # the artifact identity lives here, and nowhere in the consumer string
     assert serving.model_commit == "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965"
     assert len(serving.weight_shard_digests) == 2
+    # ... and the provenance must be stated by whoever writes the row: a default here
+    # would let a record claim `registry_oid_confirmed` without anyone confirming it.
+    assert v2.ServingRevision.model_fields["digest_source"].is_required(), \
+        "digest_source has a default; provenance must be stated, never assumed"
     assert serving.digest_source is v2.DigestSource.served_bytes, (
         "the registry-oid equality is still pending (W3); the record must say which "
         "kind of digest it holds rather than implying an upstream confirmation")
@@ -644,6 +648,36 @@ async def credit_rate__the_hold_rounds_up_and_the_charge_rounds_half_up_once(fac
         raise AssertionError("a settlement exceeded the admitted hold")
 
 
+async def credit_rate__admitted_pins_are_immutable_and_every_pin_is_required(factory):
+    """An admitted job's pins cannot be edited in place and none of them may be left
+    to a default. Frozen records refuse attribute assignment; every identity field of
+    `AdmissionPins` and `AdmissionV2` is required. (`model_copy(update=)` still
+    produces a *new* object; proposed ruling V15 forbids it on admitted pins, and
+    wire-in/D2–D5 enforce that at the persistence boundary.)"""
+    harness = factory()
+    admission = await _admit(harness)
+    for target, field, value in ((admission.pins, "serving_version_id", IDS.model_version),
+                                 (admission.pins, "rate_card_version", "rc_other"),
+                                 (admission, "rate_card", admission.rate_card),
+                                 (admission, "maximum_hold", mu.Credit("0"))):
+        try:
+            setattr(target, field, value)
+        except pydantic.ValidationError:
+            continue
+        raise AssertionError(f"{type(target).__name__}.{field} was assigned in place")
+    # Only single-valued constants and the replay flag may default.
+    required_pins = {name for name, f in v2.AdmissionPins.model_fields.items()
+                     if f.is_required()}
+    assert required_pins == {"model_id", "requested_model", "deployment_revision_id",
+                             "serving_version_id", "rate_card_version",
+                             "policy_version"}, sorted(required_pins)
+    required_admission = {name for name, f in v2.AdmissionV2.model_fields.items()
+                          if f.is_required()}
+    assert required_admission == {"request_id", "job_handle", "org_id", "wallet_id", "pins",
+                                  "rate_card", "maximum_hold", "admitted_at"}, \
+        sorted(required_admission)
+
+
 async def credit_rate__unknown_usage_is_never_settled(factory):
     """Only authoritative engine usage settles a debit; unknown usage is quarantined
     and reconciled, never debited later."""
@@ -799,6 +833,7 @@ def cases() -> list[Callable]:
         credit_rate__a_caller_supplied_price_or_identity_is_refused,
         credit_rate__the_hold_rounds_up_and_the_charge_rounds_half_up_once,
         credit_rate__unknown_usage_is_never_settled,
+        credit_rate__admitted_pins_are_immutable_and_every_pin_is_required,
         lab_access__provider_ownership_alone_yields_no_customer_payload,
         lab_access__a_revoked_grant_blocks_access_immediately,
         lab_access__an_expired_grant_and_a_rival_provider_are_refused,
