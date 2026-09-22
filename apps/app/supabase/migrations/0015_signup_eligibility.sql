@@ -113,6 +113,13 @@ language sql security definer set search_path = infrx, public, pg_temp as $$
   do update set attempts = signup_denials.attempts + 1, last_at = infrx.now();
 $$;
 
+-- R72 on the USD side alone: is this organization's legacy USD balance nonzero? A boolean,
+-- never an amount, so no function reads both units (R64/R73; checks_credit's unit scan).
+create or replace function infrx.legacy_usd_rollout_hold(p_org uuid) returns boolean
+language sql stable security definer set search_path = infrx, public, pg_temp as $$
+  select coalesce(sum(l.delta_usd), 0) <> 0 from public.credit_ledger l where l.org_id = p_org;
+$$;
+
 -- status: granted | replayed | unverified | identity_reused | rollout_hold | retired.
 -- The grant columns are set for granted/replayed only. An unknown user answers
 -- `unverified`, exactly like a known unverified one (no enumeration).
@@ -163,8 +170,7 @@ begin
   end if;
 
   -- R72: a nonzero legacy USD balance is a rollout hold - never converted, never dropped.
-  if v_org is not null and (select coalesce(sum(l.delta_usd), 0) from public.credit_ledger l
-                            where l.org_id = v_org) <> 0 then
+  if v_org is not null and infrx.legacy_usd_rollout_hold(v_org) then
     v_status := 'rollout_hold';
   else
     v_digest := encode(sha256(convert_to(lower(btrim(v_email)), 'UTF8')), 'hex');
@@ -266,6 +272,8 @@ end $$;
 
 revoke all on function infrx.personal_org_binding_guard() from public, anon, authenticated;
 revoke all on function infrx.retired_wallet_guard() from public, anon, authenticated;
+revoke all on function infrx.legacy_usd_rollout_hold(uuid)
+  from public, anon, authenticated, service_role;
 revoke all on function infrx.record_signup_denial(uuid, text)
   from public, anon, authenticated, service_role;
 revoke all on function public.claim_signup_grant(uuid, text, uuid)
