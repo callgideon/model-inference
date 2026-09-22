@@ -1441,6 +1441,13 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("metadata_charged_as_serialized", "an over-declared record is charged what it declared",
        TA, "        return max(envelope.metadata_bytes, serialized)", "        return serialized",
        "trace_bounds__metadata_exhaustion_drops_with_counters"),
+    # F2R-A review: a zero declaration is the canonical under-declaration, and the case
+    # declares exactly that, so a charge that waives it cannot pass.
+    _m("metadata_charge_skips_zero", "a record declaring 0 metadata bytes is still charged",
+       TA, "        metadata = self.metadata_charge(envelope, serialized)",
+       "        metadata = 0 if envelope.metadata_bytes == 0 else "
+       "self.metadata_charge(envelope, serialized)",
+       "trace_bounds__metadata_exhaustion_drops_with_counters"),
 )
 
 

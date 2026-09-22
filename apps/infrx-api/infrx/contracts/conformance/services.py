@@ -798,16 +798,17 @@ async def trace_bounds__metadata_exhaustion_drops_with_counters(factory):
     and an over-declared one is charged what it declared."""
     from ..codec import compact_bytes
     probe = factory()
-    actual = len(compact_bytes(b.trace(probe.ids.uuid(), content_bytes=0, metadata_bytes=1,
+    actual = len(compact_bytes(b.trace(probe.ids.uuid(), content_bytes=0, metadata_bytes=0,
                                        harness=probe)))
-    # room for one serialized row, not for two
+    # room for one serialized row, not for two; every record declares 0 metadata bytes,
+    # the canonical under-declaration, so only the serialized charge can stop the second
     limits = DEFAULTS.replace(trace_capture_bytes=1 << 20,
                               trace_metadata_reserve_bytes=actual + actual // 2)
     harness = factory(limits=limits)
     accepted = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0,
-                                                metadata_bytes=1, harness=harness))
+                                                metadata_bytes=0, harness=harness))
     dropped = await harness.port.offer(b.trace(harness.ids.uuid(), content_bytes=0,
-                                               metadata_bytes=1, harness=harness))
+                                               metadata_bytes=0, harness=harness))
     assert accepted is TraceOfferResult.accepted_in_memory
     assert dropped is TraceOfferResult.dropped
     stats = await harness.port.stats()
