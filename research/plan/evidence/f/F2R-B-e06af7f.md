@@ -421,6 +421,90 @@ id.
 | 7 config names / defaults / `validate_runtime` | `213204a` | the 83 cases of the item-7 table, notably `test_a_bad_deployment_value_refuses_before_anything_mounts` and `test_the_g1_and_q1_constants_match_the_deployment_defaults`; Python mutants are IR-6 (lane A's file) |
 | R62 model revision prefix | `904a5f0` | `V1-Q10 every query this page builds is one the service accepts, and its walk is stable` |
 
+## Round 2 — IR-1 … IR-4 applied (coordinator extended the owned paths)
+
+A red `console-test`/`console-typecheck` cannot merge and no other active lane owns the consumers,
+so the coordinator extended this lane's owned paths to `lib/services/console.ts`,
+`lib/services/query.ts`, `app/(console)/usage/{view-model.ts,page.tsx}`,
+`app/(console)/traces/view-model.ts`, `tests/c/**` and `tests/u/**`, and asked for the four
+integration requests to be applied exactly as filed, one commit each. S1-fix's files
+(`lib/credits.ts`, `lib/services/credits.ts`, `layout.tsx`, `sidebar.tsx`,
+`fake-console-context.ts`, `console-data-state.tsx`, `traces/query.ts`,
+`tests/c/credits.test.ts`) were **not touched** — `git diff ec6c548 --name-only` over that set is
+empty — and neither were the `CREDITS-*` mutants.
+
+| Commit | IR | What it does |
+|---|---|---|
+| `19b2bf6` | IR-1 | `lib/services/console.ts` + `lib/services/query.ts` |
+| `959d4f8` | IR-2 | `app/(console)/usage/view-model.ts` + `tests/u` |
+| `8087a58` | IR-3 | `app/(console)/traces/view-model.ts` + `tests/v` |
+| `81fd783` | IR-4 | `tests/c` (harness, expectations, mutant list) |
+
+**Implementation SHA after round 2: `81fd783`.**
+
+### The four canonical console targets
+
+| Command | Result | Exit |
+|---|---|---|
+| `make console-test` | `# tests 263 / # pass 263 / # fail 0 / # skipped 0` (round 1: 247 passed, 14 failed) | 0 |
+| `make console-lint` | `✖ 2 problems (0 errors, 2 warnings)` — the two pre-existing warnings, unchanged | 0 |
+| `make console-typecheck` | `next typegen` then `tsc --noEmit`, no diagnostics (round 1: 34 errors) | 0 |
+| `make console-mutants` | all four lists, below | 0 |
+
+| Mutant list | Result |
+|---|---|
+| `tests/contracts` | `baseline: 48 exported cases pass unmutated`; `160 mutants: 160 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 99.5s` |
+| `tests/v` | `40/40 mutants killed by a declared case` (39 + the new `CAPTURE-01`) |
+| `tests/u` | `2 self-checks, 2 as expected; 64 mutants, 64 killed, 0 not killed` (61 + three new) |
+| `tests/c` | `4 self-tests, 0 failed`; `baseline: 80 cases pass unmutated, 31 fail (C2/C3 operations this task does not implement)`; `96 mutants: 96 killed by a named declared case, 0 survived, 0 stale, 0 runner errors, 77.0s` (round 1: 56 killed, **32 runner errors**) |
+
+`cd apps/infrx-api && uv run --frozen pytest -q tests/contracts`: 737 passed (the console-side
+changes touch no Python; the count is higher than round 1's 654 because lane-independent Python
+work is not in this branch — this branch's own Python total is unchanged from `e06af7f`).
+
+### The gated conformance cases now RUN against C1
+
+`tests/c/harness.ts` translates the fake's `accounting_regime` into D1's `settlement_regime`
+(`legacy`/`pilot`) — the harness stands in for `console_usage`, so it speaks the view's column
+names — seeds the orphaned audit entry, and declares `hasLegacyRows`. The conformance child reports
+`# skipped 0`, with `ok 35 - legacy and key-less usage rows keep their nulls and are still counted`
+and `ok 36 - an unrecorded capture mode, an orphaned audit target and an unreached provider are
+nulls, not defaults`, and its passing count rose from 10 to 19. All three new cases are pinned in
+`OWNED_CASES`, and that test now also **refuses a skip**: `ok … # SKIP` matches the "passed"
+pattern, so a harness that stopped carrying the rows would otherwise read as green.
+
+### New coverage in round 2
+
+| Test ID | Invariant | Killing mutant |
+|---|---|---|
+| `the accounting regime is read from the row, and an unrecognised one is refused` (tests/c) | `legacy` projects `legacy_usd` with its four NULLs intact and the row is kept; a pilot row projects `pilot`; five unrecognised regimes (`Legacy`, `pilot_v2`, `""`, `1`, `null`) are `internal_error` **fail-closed**; the aggregates refuse three window-less calls and accept a bounded one; a key with no recorded capture mode is listed with `trace_mode: null` rather than denying the list | `REGIME-C1` (unknown regime read as `pilot`), `REGIME-C2` (everything `pilot`), `REGIME-C3` (`text()` back on a nullable column), `KEYMODE-C1` (`kills_by: guarded`), `WINDOW-C1` |
+| `a usage row survives a deleted key, and says so` (tests/c) | Both key fields null, the row kept, no filter matching it, exactly-one-null still a typed refusal | `KEYNAME-01`/`-02`/`-03`, all three re-anchored (they named the retired sentinels) |
+| `a judge sample is projected field by field…` (tests/c) | The frozen four-member shape; a null `request_id` kept; a numeric one refused; a textual `rubric_version` refused | `SAMPLE-C1` (reads `id`, which the view never emits), `SAMPLE-C2` (both `kills_by: guarded`) |
+| `the rendered statements are the shipped SQL…` (tests/c) | The usage statement selects `u.settlement_regime`, `u.key_name`, `u.usage_certainty`, `u.trace_mode`. A column list is the only place a missing column is visible: the in-memory port hands back whole rows, which is exactly how `settlement_regime` came to be absent from the statement while the view emitted it | `REGIME-C4` |
+| `U1-T29 a legacy row and a deleted key render as absences, never as invented values` | No mode and no outcome render as an em dash, a deleted key as `(deleted key)`, and a full pilot row renders none of the fallbacks (so the case cannot hold over a view that shows an em dash for everything) | `U1-M62`, `U1-M63`, `U1-M64`; `U1-M37` re-expressed |
+| `V1-V06 an empty page distinguishes filtered, capture-off, keys-unknown and simply idle` | A key with **no recorded** capture mode reads as `tracing_off`, and a key that records one still reads as `no_traces` | `CAPTURE-01` (restores the old `key.trace_mode !== "off"`); `EMPTY-02` re-anchored |
+
+### Two round-1 findings corrected
+
+- **`admin_audit_page` is untenanted** (`tenantColumn: null`, operator-only) and does not select the
+  view's `org_id` alias, so an audit entry whose `target_org_id` is null **is** readable through C1.
+  Round 1 filed "C's port refuses an audit row whose tenant column is null" as an open finding; it
+  does not, and nothing had to change for the orphaned entry to be read. Withdrawn.
+- **`REGIME-C4` is only killable through the rendered SQL**, not through behaviour: the in-memory
+  port ignores a plan's column list. That is now stated by the case it kills rather than left to a
+  reader, and it is why the missing column survived review in the first place.
+
+### Limits after round 2
+
+1. Still **fake-and-double only**: the C1 suite runs against an in-memory `QueryPort`, so item 6
+   remains *implemented*. The real-service proof (PostgreSQL + ClickHouse) is E3/C2's.
+2. `REGIME-C4`'s invariant (the statement selects the column) is proven against rendered SQL text,
+   not against a database. A real execution is the only thing that proves the *view* emits it.
+3. IR-5, IR-6 and IR-7 remain requests, unchanged: the G1/Q1/T2 wiring, the five Python mutants for
+   item 7 (lane A's `tests/contracts/mutants.py`), and the F2P/lane-A Python counterparts.
+4. `tests/d`, `make api-mutants` as written and `make integration` were not run in round 2 either,
+   for the reasons under *Commands*. This round touched no Python and no integration file.
+
 ## Verification log
 
 - 2026-09-22: Written with the three commits it identifies. Every count is quoted from the
@@ -428,3 +512,12 @@ id.
   are reported as red with their exact error lists. `tests/d`, `make api-mutants` as written
   and `make integration` were not run, with reasons. Nothing was pushed or deployed; no
   cloud, Supabase project or paid provider was contacted.
+- 2026-09-22 (round 2): IR-1 … IR-4 applied under the coordinator's extension of this lane's owned
+  paths, one commit each (`19b2bf6`, `959d4f8`, `8087a58`, `81fd783`). The four canonical console
+  targets are green, quoted above: `console-test` 263 passed / 0 failed / 0 skipped, `console-lint`
+  0 errors, `console-typecheck` 0 diagnostics, `console-mutants` 160/160 + 40/40 + 64/64 + 96/96
+  with 0 survivors, 0 stale and **0 runner errors** in every list. The two gated conformance cases
+  run against C1's real services rather than skipping. Round 1's red numbers are left above as they
+  were reported. IR-3 was a real defect, not a compile fix, and has its own killable mutant.
+  Two round-1 findings are corrected rather than deleted. Still nothing deployed, pushed, or run
+  against a real database, cloud or paid provider.
