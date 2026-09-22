@@ -18,6 +18,7 @@ Two rules run through all of it, and they are the same two the fake encodes:
 """
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -227,7 +228,9 @@ class MediaStaging:
             raise errors.RequestTooLarge(f"{len(fetched.data)} bytes exceeds MAX_MEDIA_BYTES")
         # Measured here rather than taken from the fetcher: the digest is the object's
         # identity, its key and its handle, so it is computed from the bytes being stored.
-        digest = digest_of(fetched.data)
+        # M4: in a worker thread - hashlib releases the GIL, so a 64 MiB digest no longer
+        # stalls every other request on this event loop (M4 evidence).
+        digest = await asyncio.to_thread(digest_of, fetched.data)
         # Before the write, so a clip the profile refuses costs no object (M2).
         mime, duration_s = await self.facts(fetched.data, fetched.mime)
         ref = MediaRef(org_id=org_id, handle=media_handle(digest), kind=kind,

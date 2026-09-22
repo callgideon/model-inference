@@ -367,7 +367,8 @@ class MediaPreparation(MediaStaging):
             # is told it is prepared" holds on the second attempt as well as the first.
             if entry is None or await self.objects.head(prepared_key) is None:
                 data = await self.objects.get(key)
-                if data is None or digest_of(data) != ref.digest:
+                # M4: the full-body digest runs in a worker thread, off the event loop.
+                if data is None or await asyncio.to_thread(digest_of, data) != ref.digest:
                     # Between the HEAD and the read: an object store that answered "yes"
                     # and then handed over other bytes must not become a prepared artifact.
                     raise errors.NotFound(f"the staged object for media {ref.handle} is gone")

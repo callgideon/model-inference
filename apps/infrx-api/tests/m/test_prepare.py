@@ -855,3 +855,33 @@ def test_the_invariants_of_the_blocked_case_hold_on_materialized_media(tmp_path)
         run(adapter.attach("00000099-0000-4000-8000-000000000099", theirs))
     with pytest.raises(errors.NotFound):
         run(adapter.prepare("00000099-0000-4000-8000-000000000099", "profile-2"))
+
+
+# --- M4: full-body work off the event loop --------------------------------------------
+def test_no_full_body_digest_runs_on_the_event_loop(tmp_path, monkeypatch):
+    """M4: measured before this change, the digests in `materialize` and `prepare` held the
+    event loop for ~0.8 ms per MiB each (~53 ms at the 64 MiB cap on the measurement host),
+    delaying every other request the process was serving. They run in a worker thread now:
+    a digest that finds a running loop in its own thread is one on the loop."""
+    on_loop = []
+
+    def watched(real):
+        def digest(data):
+            try:
+                asyncio.get_running_loop()
+                on_loop.append(len(data))
+            except RuntimeError:
+                pass
+            return real(data)
+        return digest
+
+    monkeypatch.setattr(store, "digest_of", watched(store.digest_of))
+    monkeypatch.setattr(prepare, "digest_of", watched(prepare.digest_of))
+    # A store double whose own digest is not `store.digest_of`, so only the adapter's count.
+    adapter = preparation(tmp_path / "cache", bodies=[CLIP],
+                          objects=support.FileObjectStore(tmp_path / "objects"),
+                          jobs={"job-1": b.ORG_A})
+    ref = asyncio.run(adapter.materialize(b.ORG_A, URL))
+    asyncio.run(adapter.attach("job-1", (ref,)))
+    asyncio.run(adapter.prepare("job-1", "v1"))
+    assert on_loop == []

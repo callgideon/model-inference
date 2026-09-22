@@ -331,7 +331,8 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "            raise errors.Conflict(f\"handle {ref.handle} already names different content\")",
        "            pass", "test_a_handle_that_already_names_other_content_is_a_conflict"),
     _m("digest_taken_from_the_fetcher", "the stored object's digest is measured here",
-       S, "        digest = digest_of(fetched.data)", "        digest = fetched.digest",
+       S, "        digest = await asyncio.to_thread(digest_of, fetched.data)",
+       "        digest = fetched.digest",
        "test_the_digest_is_measured_not_taken_from_the_fetcher"),
     # F2R item 4: `stage` no longer indexes a caller's ref, so the three mutants of the
     # code that did (replace-on-conflict, last-of-two-handles, index-as-it-goes) went with
@@ -668,7 +669,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("digest_not_rechecked_after_the_read",
        "HEAD and digest, not HEAD alone: a store that answers with other bytes must not have "
        "them prepared and answered about",
-       R, "                if data is None or digest_of(data) != ref.digest:",
+       R, "                if data is None or await asyncio.to_thread(digest_of, data) != ref.digest:",
        "                if data is None:",
        "test_an_object_whose_content_changed_is_not_prepared"),
     _m("cache_hit_stands_in_for_the_durable_artifact",
@@ -1082,6 +1083,17 @@ MUTANTS: tuple[Mutant, ...] = (
        F, 'digest="sha256:" + hasher.hexdigest(), host=host)',
        "digest=digest_of(bytes(body)), host=host)",
        "test_a_fetched_body_is_held_at_most_about_twice"),
+    # === M4: full-body digests off the event loop (media/store.py, media/prepare.py) =======
+    _m("materialize_digest_on_the_loop",
+       "materialize's full-body digest runs in a worker thread, not on the event loop",
+       S, "        digest = await asyncio.to_thread(digest_of, fetched.data)",
+       "        digest = digest_of(fetched.data)",
+       "test_no_full_body_digest_runs_on_the_event_loop"),
+    _m("prepare_digest_on_the_loop",
+       "prepare's full-body digest runs in a worker thread, not on the event loop",
+       R, "await asyncio.to_thread(digest_of, data) != ref.digest:",
+       "digest_of(data) != ref.digest:",
+       "test_no_full_body_digest_runs_on_the_event_loop"),
     # === M4: MEDIA-PARITY (tests/m/test_parity.py) ============================================
     _m("prepared_bytes_are_not_the_source",
        "profile v1 prepares the source bytes: the durable and local artifacts hash to the ref",
