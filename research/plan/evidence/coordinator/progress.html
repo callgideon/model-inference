@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T16:36:52Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T16:42:53Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>1</b><span>done</span></div>
 <div class="tile prog"><b>9</b><span>in progress</span></div>
@@ -45,7 +45,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <section class="panel"><h2>Packages</h2><div class="scroll"><table><thead><tr><th>Band</th><th>Task</th><th>Title</th><th>Status</th><th>Note</th></tr></thead><tbody>
 <tr><td>B0</td><td><code>S1</code></td><td>Reconcile pulled wave-2 baseline and publish product revision audit</td><td><span class="pill prog">in-progress</span></td><td class="note">S1 API side passed independent review; console fixes in flight</td></tr>
 <tr><td>B0</td><td><code>F2R</code></td><td>Close remaining wave-2 contract and verification carryovers</td><td><span class="pill prog">in-progress</span></td><td class="note">lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7)</td></tr>
-<tr><td>B0</td><td><code>I0</code></td><td>Repair installer atomicity and fail-closed startup prerequisite</td><td><span class="pill prog">in-progress</span></td><td class="note">fail-closed installer; stubs only</td></tr>
+<tr><td>B0</td><td><code>I0</code></td><td>Repair installer atomicity and fail-closed startup prerequisite</td><td><span class="pill prog">in-progress</span></td><td class="note">handed back: preflight.py fail-closed installer; 77 tests, 45 mutants</td></tr>
 <tr><td>B0</td><td><code>E2R</code></td><td>Repair service harness ownership, role matrix and shared test clock</td><td><span class="pill prog">in-progress</span></td><td class="note">harness ownership + five RLS inversions on real services</td></tr>
 <tr><td>B0</td><td><code>S2M</code></td><td>Freeze Marlin SOP inference launch profile</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B0</td><td><code>F2P</code></td><td>Encode product-v2 CREDIT, identity, serving and permission contracts</td><td><span class="pill prog">in-progress</span></td><td class="note">v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</td></tr>
@@ -92,7 +92,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 </tbody></table></div></section>
 <section class="panel"><h2>In flight now</h2><ul>
 <li><code>F2R</code> — codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7)</li>
-<li><code>I0</code> — codex-i0 — implementing since 2026-09-22T15:51:21Z — fail-closed installer; stubs only</li>
+<li><code>I0</code> — codex-i0 — independent review at 06aa170 since 2026-09-22T15:51:21Z — handed back: preflight.py fail-closed installer; 77 tests, 45 mutants</li>
 <li><code>E2R</code> — codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services</li>
 <li><code>F2P</code> — codex-f2p — additive design phase (new files only); wire-in after F2R since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>
 <li><code>Q2</code> — codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory</li>

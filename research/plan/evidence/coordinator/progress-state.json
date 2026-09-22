@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T16:36:52Z",
+  "updated": "2026-09-22T16:42:53Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,9 +11,9 @@
     },
     "I0": {
       "lane": "codex-i0",
-      "phase": "implementing",
+      "phase": "independent review at 06aa170",
       "since": "2026-09-22T15:51:21Z",
-      "note": "fail-closed installer; stubs only"
+      "note": "handed back: preflight.py fail-closed installer; 77 tests, 45 mutants"
     },
     "E2R": {
       "lane": "codex-e2r",
