@@ -177,6 +177,16 @@ edit exactly these existing files:
 | `Makefile` | `api-mutants` and `console-mutants` gain the v2 mutant lists |
 | `research/plan/01-contracts.md`, `06-database-map.md`, `08-contracts-v1-encoding.md` | link this appendix and `06a-database-map-v2.md`; fold §8's proposed rulings into 08 §10 with coordinator-assigned numbers |
 
+Two constraints the wire-in must respect (no change was made for them now):
+
+- `NormalizedRequestV2.wallet_id` must be written only from `ports.resolve_wallet`;
+  no adapter may populate it from any other source.
+- The console's grant and membership checks compare ISO timestamps as strings
+  (`types.ts` `membershipPermits`/`grantPermits`), which is correct only for the
+  canonical `Z` form the contracts serialize. A DTO reaching the console with
+  `+00:00` or fractional-second variants must be normalized first (C accepts both
+  forms per R59 (9), so the normalization belongs there).
+
 A v1 read projection/upgrade test is part of that phase and is **not** satisfied by
 `project_v1_usage` alone: that function proves the shape, while the projection test
 must run against real pre-cutover rows produced by 0001–0005 (D1R's fixtures).
@@ -191,7 +201,7 @@ folding these into `08-contracts-v1-encoding.md` §10 at wire-in.
 |---|---|
 | V1 | **A unit is a type, not a field.** `Credit`, `Usd` and `ProviderUsd` are sibling runtime classes on the Python side and disjoint brands on the TS side. A unit is never inferred from a field name, a magnitude or a regime label alone; a row states its regime and its unit, and the pair must agree. |
 | V2 | **No conversion exists.** No function in either language maps one denomination to another, and none may be added without a product decision recording an exchange rate. The only unwrap is `raw(unit)`, which refuses a foreign unit. A v1 `PriceSnapshot` does not upgrade to a `RateCardSnapshot`; `upgrade_v1_price_snapshot_is_refused` is the named refusal. |
-| V3 | **The wallet is resolved, never named.** `AuthContextV2` has no wallet field, `resolve_wallet` takes no request, and a wallet not owned by the credential's identity is `Forbidden` rather than a fallback. An operator credential resolves no wallet at all. |
+| V3 | **The wallet is resolved, never named.** `AuthContextV2` has no wallet field, `resolve_wallet` takes no request, and a wallet not owned by the credential's identity, and of the credential's audience's wallet kind, is `Forbidden` rather than a fallback. The kind is checked explicitly and before ownership: record validators do not protect a `model_copy(update=)`/`model_construct` object. An operator credential resolves no wallet at all. |
 | V4 | **The ledger vocabulary is closed and has no transfer.** Provider-dev credit reaching a consumer wallet is prevented by the absence of an operation, not by a check. |
 | V5 | **`settle` cannot see the present.** It takes the admission, the usage and a time — no directory, no clock, no rate. This is how "every request settles at its admitted rate and serving revision" is structural. |
 | V6 | **Unpriced is unserveable.** A deployment with no approved active CREDIT card is `invalid_request`, never free inference. A card that prices another deployment or serving revision is refused rather than pinned. |
@@ -203,6 +213,7 @@ folding these into `08-contracts-v1-encoding.md` §10 at wire-in.
 | V12 | **An empty scope fails closed** — the same reading v1's `OrgEntitlements.model_ids == ()` already has. |
 | V13 | **Digest provenance is recorded, not assumed.** `ServingRevision.digest_source` distinguishes served bytes from a registry oid, and `runtime_image_digest` may be absent while the runtime is a moving tag. Without this, "measured on the pilot box" would later read as "confirmed upstream". |
 | V14 | **The fixture base is generated.** `fixtures/v2/*.json` comes from `fixtures.py --write`; a hand-edited fixture fails `test_fixtures_v2.py`. The console reads those same files rather than keeping byte-identical copies, so there is nothing to diff at integration. |
+| V15 | **Pins are immutable after acceptance.** `AdmissionPins` and `AdmissionV2` are frozen and every identity field is required. `model_copy(update=)` and `model_construct` are not permitted on admitted `AdmissionPins`/`AdmissionV2`: both bypass the validators that tie a card to its pins, so the wire-in phase and D2–D5 enforce the prohibition at the persistence boundary (the pin columns on `jobs` are never updated). |
 
 ## 9. Pending inputs this encoding depends on
 
@@ -216,3 +227,8 @@ folding these into `08-contracts-v1-encoding.md` §10 at wire-in.
 - 2026-09-22: Written by F2P's additive phase. Items 1–6 of the F2P brief are
   encoded and tested; item 7 (wire-in) is listed in §7 and is not done. Commands,
   counts and mutant results are in `research/plan/evidence/f/`.
+- 2026-09-22: F2P independent review (fix_required at `c42b213`). B1: the three
+  guards the additive phase deleted as redundant are restored — record validators
+  do not run under `model_copy(update=)`/`model_construct`, so the wallet-kind and
+  audience checks are load-bearing. V3 amended accordingly; V15 added. Wire-in
+  notes on `wallet_id` provenance and canonical-`Z` string comparison added to §7.
