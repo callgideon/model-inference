@@ -27,9 +27,10 @@
     "resolved_at": "2026-09-22T22:42:53Z",
     "resolved_by": "docker buildx imagetools inspect (read-only registry call); sha256 of the raw manifest list equals the digest",
     "linux_amd64_manifest": "sha256:a1da81e8784aacd6e9efa0e8667575f4551c8492e103fc10e3ecc034d212072b",
+    "linux_amd64_config": "sha256:38e8c0e60293aefc23edee5c074107e44b89d64f26d5399cd2f5956801b6ef24",
     "vllm_build_commit": "a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b",
     "created": "2026-09-19T05:47:54Z",
-    "pilot_box": "⚠️ TO BE VERIFIED: the box's image id begins sha256:4cbfd34aac14 (I1B, 12 hex digits); measure/inventory.sh prints the full id, and equality makes digest_source registry_oid_confirmed"
+    "pilot_box": "⚠️ TO BE VERIFIED: the box's image id begins sha256:4cbfd34aac14 (I1B, 12 hex digits) - the manifest list digest, as a containerd image store reports it; measure/inventory.sh prints the full id (either the list or the amd64 config digest), and equality makes digest_source registry_oid_confirmed"
   },
   "flags": [
     "--served-model-name",
