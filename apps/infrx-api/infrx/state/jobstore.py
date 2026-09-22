@@ -8,9 +8,9 @@ onward; `credit_schema.py` records their names and the lock order.
 Refusals raised in SQL arrive as SQLSTATE P0001 with the message `<error_code>: detail`
 and become the `DomainError` of that code. D1R's seams keep their own SQLSTATEs.
 
-Operations D3-D5 own (`claim`, `heartbeat`, `cancel`, `complete`, `recover`, inference
-`load_work`) raise `NotImplementedError` naming the task: a fail-closed boundary, never
-a silent success.
+D3 (0016) adds the fenced leases: `claim`, `heartbeat`, `load_work`, `cancel`, `recover`
+and the fence of `complete`, whose settlement (D5) still raises `NotImplementedError`: a
+fail-closed boundary, never a silent success.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from ..contracts import errors, ids
 from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import (Admission, Budgets, IdempotencyRef, IndexEvent, Lease,
                                  MediaRef, NormalizedRequest, ReservationKind,
-                                 TerminalOutcome)
+                                 TerminalOutcome, Work)
 from ..contracts.v2.records import AdmissionV2
 
 #: `async () -> psycopg.AsyncConnection` in autocommit, acting as `service_role`.
@@ -117,6 +117,14 @@ def admission_v2_of(doc: dict) -> AdmissionV2:
         "admitted_at": doc["admitted_at"], "replayed": doc["replayed"]})
 
 
+class PreparedWork(Work):
+    """`Work` plus preparation's exact prompt count (`prepared(..., prompt_tokens=)`, W2
+    request 3), None before preparation stored one. A local attribute until the F2P wire-in
+    adds `Work.prompt_tokens` to the contract; then this class goes."""
+
+    prompt_tokens: int | None = None
+
+
 class PgJobStore:
     """`ports.JobStore` over PostgreSQL. `limits` is the store's own configuration: caps,
     budgets and ceilings come from here, never from a caller (R4, R53)."""
@@ -124,6 +132,8 @@ class PgJobStore:
     def __init__(self, connect: Connect, *, limits: PilotSettings = DEFAULTS) -> None:
         self._connect = connect
         self.limits = limits
+        #: The last `recover` sweep's jobs it could not reap: job id -> "sqlstate: detail".
+        self.unsettleable: dict[str, str] = {}
 
     async def _call(self, function: str, args: dict[str, Any]) -> Any:
         from psycopg import Error
@@ -278,21 +288,73 @@ class PgJobStore:
             raise domain_error(failed) from None
         return rows[0][0]
 
-    # --- D3 / D5 (fail closed) ---------------------------------------------------
-    async def claim(self, job_id: str, worker_id: str):
-        raise NotImplementedError("JobStore.claim is D3's")
+    # --- D3: fenced leases, recovery and cancellation (0016) ------------------------
+    def _lease_limits(self) -> dict[str, Any]:
+        """The store's own lease configuration, sent with every D3 call (never a caller's)."""
+        return {name: getattr(self.limits, name) for name in (
+            "lease_ttl_s", "preparation_lease_ttl_s", "max_prepublication_retries",
+            "unknown_usage_reconcile_s")}
 
-    async def heartbeat(self, lease):
-        raise NotImplementedError("JobStore.heartbeat is D3's")
+    async def _fenced(self, function: str, lease: Lease, **extra: Any) -> dict:
+        """One fenced boundary call: the lease is a fencing token, the refusal after an R29
+        terminalization comes back as data (R39) and is raised here."""
+        return self._answer(await self._call(function, {
+            "lease": lease.model_dump(mode="json"), "limits": self._lease_limits(), **extra}))
 
-    async def cancel(self, org_id: str, job_handle: str):
-        raise NotImplementedError("JobStore.cancel is D3's")
+    async def claim(self, job_id: str, worker_id: str) -> Lease:
+        """`queued -> running`, the next inference generation, on the database clock."""
+        doc = await self._call("claim", {"job_id": job_id, "worker_id": worker_id,
+                                         "limits": self._lease_limits()})
+        return Lease.model_validate(doc["lease"])
 
-    async def complete(self, lease, outcome):
-        raise NotImplementedError("JobStore.complete is D5's")
+    async def heartbeat(self, lease: Lease) -> Lease:
+        """Renews the STORED lease (R29); a preparation lease never past its phase (R52)."""
+        return Lease.model_validate((await self._fenced("heartbeat", lease))["lease"])
 
-    async def recover(self):
-        raise NotImplementedError("JobStore.recover is D3's")
+    async def load_work(self, lease: Lease) -> PreparedWork:
+        """R46: fenced like a mutation. A CREDIT job's work is a `WorkV2` this v1 port cannot
+        carry (no price snapshot), so it is refused rather than invented."""
+        doc = await self._fenced("load_work", lease)
+        admission = doc["admission"]
+        if admission["accounting_regime"] != "legacy_usd":
+            raise errors.InvalidRequest(f"job {lease.job_id} is a CREDIT job: its work is "
+                                        f"WorkV2, which the v1 load_work cannot carry")
+        request = NormalizedRequest.model_validate(doc["request"])
+        return PreparedWork(request=request, media_refs=request.media,
+                            prepared_refs=tuple(MediaRef.model_validate(r)
+                                                for r in doc["prepared_refs"]),
+                            price_snapshot=admission["price_snapshot"],
+                            budgets=admission["budgets"],
+                            prompt_tokens=admission["prepared_prompt_tokens"])
 
-    async def load_work(self, lease):
-        raise NotImplementedError("JobStore.load_work is D3's (fenced like claim)")
+    async def cancel(self, org_id: str, job_handle: str) -> TerminalOutcome:
+        """Terminalizes and releases the hold and capacity in one transaction; a job that is
+        already terminal answers its committed outcome (completion won)."""
+        return _outcome(await self._call("cancel", {"org_id": org_id, "job_handle": job_handle,
+                                                    "limits": self._lease_limits()}))
+
+    async def complete(self, lease: Lease, outcome: TerminalOutcome) -> TerminalOutcome:
+        """D3 runs the fence (stale/foreign/expired/wrong-kind refused, R29 terminalizes);
+        the settlement after it is D5's, so a lease that holds still fails closed."""
+        from psycopg.errors import FeatureNotSupported
+        try:
+            await self._fenced("terminalize", lease, outcome=outcome.model_dump(mode="json"))
+        except FeatureNotSupported:
+            pass
+        raise NotImplementedError("JobStore.complete: the fence held; the settlement is D5's")
+
+    async def recover(self) -> tuple[TerminalOutcome | IndexEvent, ...]:
+        """The reaper, on the database clock (R7). Requeues become outbox dispatch rows (the
+        relay delivers them) and are also returned as `IndexEvent`s with the same ids. A job
+        the sweep could not reap is reported in `self.unsettleable`, never returned."""
+        produced: list[TerminalOutcome | IndexEvent] = []
+        self.unsettleable = {}
+        for item in await self._call("recover", {"limits": self._lease_limits()}):
+            if "outcome" in item:
+                produced.append(_outcome(item["outcome"]))
+            elif "index_event" in item:
+                produced.append(IndexEvent.model_validate(item["index_event"]))
+            else:
+                failed = item["unsettleable"]
+                self.unsettleable[failed["job_id"]] = f"{failed['code']}: {failed['detail']}"
+        return tuple(produced)

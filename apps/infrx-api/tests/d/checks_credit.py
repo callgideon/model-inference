@@ -128,7 +128,12 @@ ALLOWED_LEGACY_CHANGES = {
 #: DEFINER, the fixed search_path and the ACL (service_role only) may not - the inventory
 #: value is `md5(definition) secdef acl`, and only the md5 is allowed to move.
 FILLED_BOUNDARIES = frozenset({("function", "infrx", "infrx.admit(jsonb)"),
-                               ("function", "infrx", "infrx.prepare(jsonb)")})
+                               ("function", "infrx", "infrx.prepare(jsonb)"),
+                               # D3 (0016): claim, heartbeat, cancel; terminalize's fence.
+                               ("function", "infrx", "infrx.claim(jsonb)"),
+                               ("function", "infrx", "infrx.heartbeat(jsonb)"),
+                               ("function", "infrx", "infrx.cancel(jsonb)"),
+                               ("function", "infrx", "infrx.terminalize(jsonb)")})
 
 
 def _same_boundary(old: str, new: str | None) -> bool:
