@@ -217,3 +217,57 @@ def test_the_in_process_kill_rule_is_the_same_rule():
     assert mutation_list.assertion_kill(lambda: None).outcome is Outcome.survived
     assert mutation_list.assertion_kill(crashes).outcome is Outcome.broken_runner
     assert mutation_list.assertion_kill(crashes, dies_by=(KeyError,)).outcome is Outcome.killed
+
+
+# --- R83 amendment (coordinator ruling after the F2R-A review) --------------------------
+def test_an_assertion_inside_the_package_is_not_the_cases_observation():
+    """(a) An `assert` that fires inside `infrx/` is the package's own guard; only the
+    exported conformance cases (which live in the package) and the tests assert on the
+    case's behalf. The guard is evidence only when the mutant declares it."""
+    report = ("=================================== FAILURES ===================================\n"
+              "/x/infrx/contracts/fakes/feedback.py:119: AssertionError: guard\n"
+              "/x/infrx/contracts/conformance/services.py:9: AssertionError: the case\n"
+              "/x/tests/contracts/test_a.py:3: assert 1 == 2\n"
+              "=========================== short test summary info ============================\n")
+    deaths = mutation_list._death_kinds(report)
+    honest = set(mutation_list.HONEST_DEATHS)
+    assert mutation_list._undeclared(deaths, honest) == ["AssertionError@feedback.py"]
+    assert mutation_list._undeclared(deaths, honest, ("AssertionError",)) == []
+
+
+def _with_test_file(body: str):
+    """A runner whose copy carries one extra test file (the copy only - never the tree)."""
+    def layout(root):
+        api = mutation_list._copy(root, mutation_list.CONTRACTS)
+        (api / "tests" / "contracts" / "test_zz_runner_self_check.py").write_text(body)
+        return api
+    return mutation_list.Runner(name="contracts-self-check", layout=layout,
+                                targets=("tests/contracts/test_zz_runner_self_check.py",))
+
+
+def test_a_list_whose_cases_fail_unmutated_is_refused():
+    """(b) The pristine baseline: a named case that fails on the unmutated tree would
+    'kill' every mutant naming it, so the list is refused before any mutant runs - and
+    `run_mutant` consults it for every mutant that belongs to a loaded list."""
+    runner = _with_test_file("def test_fails_on_the_pristine_tree():\n    assert False\n")
+    refused = mutation_list.pristine(("test_fails_on_the_pristine_tree",), runner)
+    assert refused is not None and refused.outcome is mutation_list.Outcome.broken_runner
+    assert "pristine baseline" in refused.detail
+    assert "test_fails_on_the_pristine_tree" in refused.detail
+    assert mutation_list._siblings(ALL[0]) is mutation_list.MUTANTS
+    assert mutation_list.pristine(tuple(sorted({c for m in ALL for c in m.cases})),
+                                  mutation_list.CONTRACTS) is None
+
+
+def test_a_fixture_error_with_no_test_run_is_a_broken_runner():
+    """(c) A setup error is `1 error`, not `N passed/failed`: the copy is broken, the
+    mutant did not merely name no case."""
+    runner = _with_test_file("import pytest\n\n\n@pytest.fixture\ndef boom():\n"
+                             "    raise RuntimeError('setup')\n\n\n"
+                             "def test_needs_a_fixture_that_errors(boom):\n    pass\n")
+    noop = mutation_list.Mutant(
+        name="self_fixture_error", invariant="a setup error is not evidence",
+        file="contracts/fakes/state.py", old="MAX_READ_LIMIT = 1000",
+        new="MAX_READ_LIMIT = 1000  # no-op", cases=("test_needs_a_fixture_that_errors",))
+    result = mutation_list.run_mutant(noop, runner)
+    assert result.outcome is mutation_list.Outcome.broken_runner, result

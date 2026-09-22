@@ -1816,15 +1816,9 @@ async def feedback_ack__calibration_labels_are_operator_data(factory):
         raise AssertionError("a FeedbackList was built without the viewer projection")
 
     # r1 R54: a replay is projected like a read, and never returns a row of another kind.
-    label_key = b.idem(request, "cal-shared", operation="calibration.label")
-    labelled = await harness.port.label_calibration(
-        operator, request.request_id, CalibrationLabel.correct.value, 4, label_key)
-    try:
-        await harness.port.accept(b.auth(), request.request_id, b.feedback(), label_key)
-    except errors.IdempotencyConflict:
-        pass
-    else:
-        raise AssertionError("a customer replayed an operator's calibration key through accept")
+    # The label-side replay is checked first: it is the direction where a missing
+    # operation check returns the wrong row to this case (the accept-side replay of a label
+    # would trip the fake's own projection guard before the case could see it).
     accept_key = b.idem(request, "fb-shared", operation="feedback")
     plain = await harness.port.accept(operator, request.request_id,
                                       b.feedback(FeedbackName.thumb, True), accept_key)
@@ -1835,6 +1829,15 @@ async def feedback_ack__calibration_labels_are_operator_data(factory):
         pass
     else:
         raise AssertionError("a customer feedback key was replayed as a calibration label")
+    label_key = b.idem(request, "cal-shared", operation="calibration.label")
+    labelled = await harness.port.label_calibration(
+        operator, request.request_id, CalibrationLabel.correct.value, 4, label_key)
+    try:
+        await harness.port.accept(b.auth(), request.request_id, b.feedback(), label_key)
+    except errors.IdempotencyConflict:
+        pass
+    else:
+        raise AssertionError("a customer replayed an operator's calibration key through accept")
     # and the replay a customer *is* entitled to is masked exactly as the read was
     replayed = await harness.port.accept(b.auth(), request.request_id,
                                          b.feedback(FeedbackName.comment, "from support"),
