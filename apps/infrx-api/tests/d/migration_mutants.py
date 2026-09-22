@@ -1321,3 +1321,4 @@ def _run(check, *args) -> tuple[str, str]:
 
 def _first_line(error: BaseException) -> str:
     return f"{type(error).__name__}: {str(error).strip().splitlines()[0][:160]}"
+from . import signup_mutants  # noqa: E402,F401  A1 (0015): appends its mutants and checks
