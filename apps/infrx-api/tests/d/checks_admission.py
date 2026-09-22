@@ -161,10 +161,10 @@ def check_admission_accepts(conn) -> str:
         horizon = b.default_deadline_s()
         assert job[:4] == ("preparing", "legacy_usd", b.DEFAULT_PRICE.price_version, hold), job
         assert job[4] == min(request.deadline_at, now + timedelta(seconds=horizon)), job[4]
-        assert job[5] == min(now + timedelta(seconds=DEFAULTS.preparation_timeout_s), job[4])
-        assert job[6] == now and job[7].startswith("job_") and job[7] == doc["job_handle"]
+        assert job[5] == min(now + timedelta(seconds=DEFAULTS.preparation_timeout_s), job[4]), 'failed: job[5] == min(now + timedelta(seconds=DEFAULTS.preparation_timeout_s), job[4])'
+        assert job[6] == now and job[7].startswith("job_") and job[7] == doc["job_handle"], 'failed: job[6] == now and job[7].startswith("job_") and job[7] == doc["job_handle"]'
         assert job[8] == request.model_dump(mode="json"), "the admitted request was altered"
-        assert job[9] == b.idem(request, "accept").payload_hash
+        assert job[9] == b.idem(request, "accept").payload_hash, 'failed: job[9] == b.idem(request, "accept").payload_hash'
         held = conn.execute("select amount, state from infrx.credit_holds where request_id = %s",
                             (request.request_id,)).fetchone()
         assert held == (hold, "held"), held
@@ -178,9 +178,9 @@ def check_admission_accepts(conn) -> str:
                               "infrx.outbox where aggregate_id = %s", (request.request_id,)
                               ).fetchall()
         assert events == [("prepare_dispatch", job[7], None)], events
-        assert doc["maximum_hold"] == f"{hold:f}" and doc["replayed"] is False
+        assert doc["maximum_hold"] == f"{hold:f}" and doc["replayed"] is False, 'failed: doc["maximum_hold"] == f"{hold:f}" and doc["replayed"] is False'
         assert Decimal(doc["price_snapshot"]["input_rate_per_million"]) == \
-            b.DEFAULT_PRICE.input_rate_per_million
+            b.DEFAULT_PRICE.input_rate_per_million, 'failed: Decimal(doc["price_snapshot"]["input_rate_per_million"]) == \\ b.DEFAULT_PRICE.input_rate_per_million'
         # R53 is immutable on the row (the admitted request too)
         why = cc.attempt(conn, "update infrx.jobs set request_record = '{}'::jsonb "
                                "where request_id = %s", (request.request_id,))
@@ -194,12 +194,13 @@ def check_admission_accepts(conn) -> str:
         # the hold rounds UP (ceiling_8) on a rate whose exact cost has more digits
         conn.execute("insert into infrx.price_versions (price_version, model_revision, "
                      "input_rate_per_million, output_rate_per_million, token_rules_version, "
-                     "effective_from) values ('pv_odd', 'odd/model@1', 0.33333333, "
-                     "0.33333333, 'tr_v1', '2026-01-01T00:00:00Z')")
+                     "effective_from) values ('pv_odd', 'odd/model@1', 0.11111111, "
+                     "0.11111111, 'tr_v1', '2026-01-01T00:00:00Z')")
         odd = b.request(world, model_revision="odd/model@1", max_input_tokens=1,
                         max_output_tokens=1)
         odd_doc = admit(conn, odd, b.idem(odd, "accept-odd"))
-        assert odd_doc["maximum_hold"] == "0.00000067", odd_doc["maximum_hold"]
+        # (2 x 0.11111111) / 10^6 = 0.00000022222222: up, never to the nearest
+        assert odd_doc["maximum_hold"] == "0.00000023", odd_doc["maximum_hold"]
 
         # CREDIT
         org = cc.personal_org(conn, cc.CONSUMER_1)
@@ -222,8 +223,8 @@ def check_admission_accepts(conn) -> str:
         assert chold == (want_hold, "held", row[1]), chold
         after = footprint(conn)
         assert after[7] - before[7] == want_hold and after[6] == before[6], (before, after)
-        assert cdoc["pins"]["rate_card_version"] == pins["rate_card_version"]
-        assert cdoc["rate_card"]["input_rate_per_million"] == "400.00000000"
+        assert cdoc["pins"]["rate_card_version"] == pins["rate_card_version"], 'failed: cdoc["pins"]["rate_card_version"] == pins["rate_card_version"]'
+        assert cdoc["rate_card"]["input_rate_per_million"] == "400.00000000", 'failed: cdoc["rate_card"]["input_rate_per_million"] == "400.00000000"'
         return f"one USD admission owns job/hold/3 reservations/dispatch/mapping; one CREDIT " \
                f"admission owns the pins and a {want_hold} CREDIT hold"
     return _in_rollback(conn, body)
@@ -345,7 +346,7 @@ def check_admission_refusals(conn) -> str:
                 assert footprint(conn) == mark, f"{label}: the refusal left rows behind"
                 raise_rollback()
             seen.append(label)
-        assert footprint(conn) == before
+        assert footprint(conn) == before, 'failed: footprint(conn) == before'
         return f"{len(seen)} refusals typed, each leaving no job/hold/reservation/dispatch"
     return _in_rollback(conn, body)
 
@@ -427,27 +428,29 @@ def check_admission_idempotency(conn) -> str:
         assert {k: v for k, v in again.items() if k != "replayed"} == \
             {k: v for k, v in first.items() if k != "replayed"}, "the replay changed identity"
         assert refusal(conn, request, b.idem(request, "idem-1", payload="other")) == \
-            "idempotency_conflict"
-        assert refusal(conn, request, b.idem(request, None)) == "state_conflict"
-        assert refusal(conn, request, b.idem(request, "a-late-key")) == "state_conflict"
-        assert footprint(conn) == mark
-        # the tombstone: terminal now, 24 h from here (D5's settlement stands in as a row)
+            "idempotency_conflict", 'failed: refusal(conn, request, b.idem(request, "idem-1", payload="other")) == \\ "idempotency_conflict"'
+        assert refusal(conn, request, b.idem(request, None)) == "state_conflict", 'failed: refusal(conn, request, b.idem(request, None)) == "state_conflict"'
+        assert refusal(conn, request, b.idem(request, "a-late-key")) == "state_conflict", 'failed: refusal(conn, request, b.idem(request, "a-late-key")) == "state_conflict"'
+        assert footprint(conn) == mark, 'failed: footprint(conn) == mark'
+        # the tombstone runs from the TERMINAL state (D5's settlement stands in as a row),
+        # which here is an hour after admission
         ttl = DEFAULTS.idempotency_ttl_s
+        conn.execute("select infrx_test.advance(3600)")
         conn.execute("""update infrx.jobs set state = 'failed', outcome_cause = 'platform_error',
             settlement_state = 'released_free', settled_at = infrx.now()
             where request_id = %s""", (request.request_id,))
         conn.execute("select infrx_test.advance(%s)", (ttl - 1e-6,))
-        late = admit(conn, request, idem)
-        assert late["replayed"] is True and late["job_handle"] == first["job_handle"]
+        assert refusal(conn, request, idem) is None, \
+            "the tombstone expired before terminal + 24 h"
         conn.execute("select infrx_test.advance(%s)", (1e-6,))
-        assert refusal(conn, request, idem) == "idempotency_expired"
-        conn.execute("select infrx_test.advance(%s)", (-ttl,))
+        assert refusal(conn, request, idem) == "idempotency_expired", \
+            "the tombstone outlived terminal + 24 h"
         # an active job's mapping never expires, however long it runs
         live = b.request(world)
         admit(conn, live, b.idem(live, "live"))
         conn.execute("select infrx_test.advance(%s)", (10 * ttl,))
-        assert admit(conn, live, b.idem(live, "live"))["replayed"] is True
-        conn.execute("select infrx_test.advance(%s)", (-10 * ttl,))
+        assert refusal(conn, live, b.idem(live, "live")) is None, \
+            "an active job's mapping expired"
         return "replay same identity, 409 changed payload / R6, 410 exactly at terminal+24h"
     return _in_rollback(conn, body)
 

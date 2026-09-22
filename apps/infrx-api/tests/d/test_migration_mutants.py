@@ -74,7 +74,16 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           "d1r_gateway_row_needs_a_regime", "d1r_regrants_a_legacy_view",
           "d1r_credit_ledger_without_rls", "d1r_new_views_keep_default_acl",
           "d1r_summary_callable_by_anon", "d1r_audit_replays_twice", "d1r_key_unrevoked",
-          "d1r_unverified_reads_verified")
+          "d1r_unverified_reads_verified",
+          # D2: the money path, fencing, tenant isolation and the relay.
+          "d2_usd_balance_unchecked", "d2_hold_rounds_to_nearest",
+          "d2_replay_ignores_the_payload", "d2_admission_lock_dropped",
+          "d2_terminalize_keeps_the_usd_reservation", "d2_zero_credit_hold_written",
+          "d2_credit_wallet_reached_through_any_org",
+          "d2_consumer_spends_on_a_private_deployment", "d2_prepare_any_generation",
+          "d2_superseded_rows_dispatched", "d2_result_read_across_tenants",
+          "d2_media_delete_ignores_last_use", "d2_usd_statement_reads_credit",
+          "d2_credit_ledger_rounds_to_cents")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 

@@ -83,8 +83,8 @@ def check_prepare_transition(conn) -> str:
         code, answer = claim(conn, request.request_id)
         assert code is None, code
         lease = answer["lease"]
-        assert Lease.model_validate(lease).kind.value == "preparation"
-        assert lease["generation"] == 1 and lease["worker_id"] == "prep-a"
+        assert Lease.model_validate(lease).kind.value == "preparation", 'failed: Lease.model_validate(lease).kind.value == "preparation"'
+        assert lease["generation"] == 1 and lease["worker_id"] == "prep-a", 'failed: lease["generation"] == 1 and lease["worker_id"] == "prep-a"'
         now = world.clock.now()
         assert lease["expires_at"] == (now + timedelta(
             seconds=DEFAULTS.preparation_lease_ttl_s)).isoformat(), lease
@@ -98,7 +98,7 @@ def check_prepare_transition(conn) -> str:
             assert prepare(conn, fake)[0] == "stale_lease", label
         assert prepare(conn, lease, (b.media(b.ORG_B),))[0] == "forbidden", \
             "another tenant's prepared media was stored"
-        assert job(conn, request.request_id)[0] == "preparing"
+        assert job(conn, request.request_id)[0] == "preparing", 'failed: job(conn, request.request_id)[0] == "preparing"'
         refs = (b.media(b.ORG_A),)
         code, admission = prepare(conn, lease, refs)
         assert code is None, code
@@ -106,8 +106,8 @@ def check_prepare_transition(conn) -> str:
         assert (state, attempts) == ("queued", 1), (state, attempts)
         assert stored == [r.model_dump(mode="json") for r in refs], stored
         assert queued_at == now and queue_deadline == min(
-            now + timedelta(seconds=DEFAULTS.queue_wait_interactive_s), request.deadline_at)
-        assert admission["state"] == "queued"
+            now + timedelta(seconds=DEFAULTS.queue_wait_interactive_s), request.deadline_at), 'failed: queued_at == now and queue_deadline == min( now + timedelta(seconds=DEFAULTS.queue_wait_interactive_s), reques'
+        assert admission["state"] == "queued", 'failed: admission["state"] == "queued"'
         active = conn.execute("select kind from infrx.capacity_reservations where "
                               "request_id = %s and active order by kind",
                               (request.request_id,)).fetchall()
@@ -116,15 +116,15 @@ def check_prepare_transition(conn) -> str:
                             "released_at is null", (request.request_id,)).fetchone()[0]
         assert live == 0, "the finished preparation attempt is still live"
         assert sorted(kinds(conn, request.request_id)) == ["inference_dispatch",
-                                                           "prepare_dispatch"]
+                                                           "prepare_dispatch"], 'failed: sorted(kinds(conn, request.request_id)) == ["inference_dispatch", "prepare_dispatch"]'
         assert prepare(conn, lease)[0] == "stale_lease", "a spent lease queued the job twice"
-        assert kinds(conn, request.request_id).count("inference_dispatch") == 1
+        assert kinds(conn, request.request_id).count("inference_dispatch") == 1, 'failed: kinds(conn, request.request_id).count("inference_dispatch") == 1'
         # an expired lease is stale (before the phase deadline)
         other = _admitted(conn, world)
         _, answer = claim(conn, other.request_id)
         advance(conn, DEFAULTS.preparation_lease_ttl_s + 1)
         assert prepare(conn, answer["lease"])[0] == "stale_lease", "an expired lease queued"
-        assert job(conn, other.request_id)[0] == "preparing"
+        assert job(conn, other.request_id)[0] == "preparing", 'failed: job(conn, other.request_id)[0] == "preparing"'
         # and the expired lease is superseded by the next claim, at generation 2
         code, again = claim(conn, other.request_id, "prep-b")
         assert code is None and again["lease"]["generation"] == 2, (code, again)
@@ -197,9 +197,9 @@ def check_credit_job_terminalization_releases_credit(conn) -> str:
         wallet = cc.wallet_of(conn, cc.CONSUMER_1)
         reserved = conn.execute("select reserved_total from infrx.credit_wallets where "
                                 "wallet_id = %s", (wallet,)).fetchone()[0]
-        assert reserved > 0
+        assert reserved > 0, 'failed: reserved > 0'
         advance(conn, DEFAULTS.preparation_timeout_s)
-        assert claim(conn, request.request_id)[0] == "already_terminal"
+        assert claim(conn, request.request_id)[0] == "already_terminal", 'failed: claim(conn, request.request_id)[0] == "already_terminal"'
         after = conn.execute("select (select reserved_total from infrx.credit_wallets where "
                              "wallet_id = %s), (select state from infrx.credit_wallet_holds "
                              "where request_id = %s)", (wallet, request.request_id)).fetchone()
@@ -224,16 +224,16 @@ def check_dispatch_relay(conn) -> str:
         a = _admitted(conn, world)
         c = _admitted(conn, world)
         first = call(conn, "dispatch_pending", pending)
-        assert {a.request_id, c.request_id} <= ids(first)
+        assert {a.request_id, c.request_id} <= ids(first), 'failed: {a.request_id, c.request_id} <= ids(first)'
         assert not {a.request_id, c.request_id} & ids(call(conn, "dispatch_pending", pending)), \
             "a claimed, unacknowledged row was handed out again inside its window"
         advance(conn, 30)
         again = call(conn, "dispatch_pending", pending)
         assert {a.request_id, c.request_id} <= ids(again), "a lost acknowledgment lost the job"
         event_a = next(e for e in again if e["job_id"] == a.request_id)
-        assert event_a["kind"] == "prepare_dispatch" and event_a["attempt"] == 0
-        assert call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 1
-        assert call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 0
+        assert event_a["kind"] == "prepare_dispatch" and event_a["attempt"] == 0, 'failed: event_a["kind"] == "prepare_dispatch" and event_a["attempt"] == 0'
+        assert call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 1, 'failed: call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 1'
+        assert call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 0, 'failed: call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 0'
         advance(conn, 30)
         assert a.request_id not in ids(call(conn, "dispatch_pending", pending)), \
             "an acknowledged row was delivered again"
@@ -341,9 +341,9 @@ def check_results_and_prompt_tokens(conn) -> str:
         assert outcome(conn, "put_result", dict(args, text="another answer"))[0] == \
             "state_conflict", "a second writer replaced the stored result"
         assert outcome(conn, "put_result", {"job_id": str(__import__("uuid").uuid4()),
-                                            "text": "x"})[0] == "not_found"
+                                            "text": "x"})[0] == "not_found", 'failed: outcome(conn, "put_result", {"job_id": str(__import__("uuid").uuid4()), "text": "x"})[0] == "not_found"'
         body_, = conn.execute("select infrx.read_result(%s, %s)", (b.ORG_A, ref)).fetchone()
-        assert body_ == "a clip of a cat"
+        assert body_ == "a clip of a cat", 'failed: body_ == "a clip of a cat"'
         for org, bad in ((b.ORG_B, ref), (b.ORG_A, "infrx-result:../../etc"),
                          (b.ORG_A, f"infrx-result:{b.ORG_A}")):
             try:
@@ -355,12 +355,12 @@ def check_results_and_prompt_tokens(conn) -> str:
                 raise AssertionError(f"read_result answered {org} for {bad}")
         stored = conn.execute("select digest, bytes from infrx.job_results where "
                               "request_id = %s", (request.request_id,)).fetchone()
-        assert stored[1] == len("a clip of a cat".encode()) and stored[0].startswith("sha256:")
+        assert stored[1] == len("a clip of a cat".encode()) and stored[0].startswith("sha256:"), 'failed: stored[1] == len("a clip of a cat".encode()) and stored[0].startswith("sha256:")'
         # prompt tokens
         _, lease = claim(conn, request.request_id)
         too_many = {"lease": lease["lease"], "media": [],
                     "prompt_tokens": request.max_input_tokens + 1}
-        assert outcome(conn, "prepare", too_many)[0] == "context_length_exceeded"
+        assert outcome(conn, "prepare", too_many)[0] == "context_length_exceeded", 'failed: outcome(conn, "prepare", too_many)[0] == "context_length_exceeded"'
         code, _ = outcome(conn, "prepare", dict(too_many, prompt_tokens=1234))
         assert code is None, code
         got, = conn.execute("select prepared_prompt_tokens from infrx.jobs where "

@@ -52,8 +52,8 @@ def check_media_uploads(conn) -> str:
             assert why is not None and why.startswith("23"), f"{label}: {why!r}"
         conn.execute(_upload())
         # M3's finalize-once: the first UPDATE wins, the second finds nothing to update
-        assert conn.execute(FINALIZE, (b.ORG_A, HANDLE)).fetchall() == [(HANDLE,)]
-        assert conn.execute(FINALIZE, (b.ORG_A, HANDLE)).fetchall() == []
+        assert conn.execute(FINALIZE, (b.ORG_A, HANDLE)).fetchall() == [(HANDLE,)], 'failed: conn.execute(FINALIZE, (b.ORG_A, HANDLE)).fetchall() == [(HANDLE,)]'
+        assert conn.execute(FINALIZE, (b.ORG_A, HANDLE)).fetchall() == [], 'failed: conn.execute(FINALIZE, (b.ORG_A, HANDLE)).fetchall() == []'
         assert conn.execute(FINALIZE, (b.ORG_B, HANDLE)).fetchall() == [], \
             "another organization finalized the upload"
         after = (
@@ -97,15 +97,15 @@ def check_media_objects(conn) -> str:
         conn.execute("select infrx_test.advance(60)")
         second, = conn.execute("select infrx.touch_media_object(%s, %s)",
                                (ref, b.ORG_A)).fetchone()
-        assert second > first
+        assert second > first, 'failed: second > first'
         stale, = conn.execute("select infrx.delete_media_object_if_idle(%s, %s)",
                               (ref, first)).fetchone()
         assert stale is False, "an object used after the collector looked was deleted"
         idle, = conn.execute("select infrx.delete_media_object_if_idle(%s, %s)",
                              (ref, second)).fetchone()
-        assert idle is True
+        assert idle is True, 'failed: idle is True'
         assert conn.execute("select count(*) from infrx.media_objects where storage_ref = %s",
-                            (ref,)).fetchone()[0] == 0
+                            (ref,)).fetchone()[0] == 0, 'failed: conn.execute("select count(*) from infrx.media_objects where storage_ref = %s", (ref,)).fetchone()[0] == 0'
         return "tenant-checked touch; conditional delete loses to a re-use"
     return ca._in_rollback(conn, body)
 
