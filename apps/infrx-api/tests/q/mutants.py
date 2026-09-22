@@ -355,9 +355,12 @@ MUTANTS: tuple[Mutant, ...] = (
 RUNNER = Runner(name="q", targets=("tests/q",), require_every_case=True)
 
 
-def run_mutant(mutant: Mutant) -> Result:
-    """Apply one mutant to a throwaway copy and run the cases it names under `tests/q`."""
-    return shared.run_mutant(mutant, RUNNER)
+def run_mutant(mutant: Mutant, *, paths: str = "tests/q") -> Result:
+    """Apply one mutant to a throwaway copy and run the cases it names under `paths`
+    (`tests/q` by default; Q2's Valkey list aims the same runner at its own file)."""
+    runner = RUNNER if paths == "tests/q" else Runner(name="q", targets=(paths,),
+                                                      require_every_case=True)
+    return shared.run_mutant(mutant, runner)
 
 
 if __name__ == "__main__":
