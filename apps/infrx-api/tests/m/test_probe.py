@@ -281,6 +281,26 @@ def test_a_container_with_no_servable_video_track_is_refused(name, data):
         probe.probe(data)
 
 
+@pytest.mark.parametrize("name, data", [
+    ("two movie headers", support.box(b"ftyp", b"isom" + b"\x00" * 8)
+     + support.box(b"moov", support.mvhd(10_000, 1_000), support.mvhd(600_000, 1_000),
+                   support.trak())),
+    ("two durations in one Info", support.element(0x1A45DFA3, b"\x00")
+     + support.element(0x18538067,
+                       support.element(0x1549A966,
+                                       support.webm_info(10.0) + support.webm_info(600.0))
+                       + support.webm_tracks())),
+])
+def test_a_duplicate_duration_header_is_refused(name, data):
+    """Two headers stating the one number the engine's frame budget is computed from is not
+    a file with a spare field: first-wins lets the second copy say anything, so a 10 s clip
+    passes the 120 s cap and a decoder that reads the last one samples ten minutes at four
+    frames (review R20)."""
+    with pytest.raises(errors.UnsupportedMedia) as raised:
+        probe.probe(data)
+    assert raised.value.reason == "duplicate-header"
+
+
 def test_the_video_track_is_chosen_by_its_codec_not_its_position():
     """A file whose first track is audio or subtitles still has its geometry read from the
     video track - reading track 1 blindly reports a 0x0 "video"."""

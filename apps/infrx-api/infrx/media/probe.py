@@ -176,6 +176,11 @@ def probe_iso(data: bytes) -> Probed:
             if walked > MAX_ELEMENTS:
                 raise _refuse("too-many-boxes")
             if kind == "mvhd":
+                if timescale or duration:
+                    # Two movie headers disagree about the one number the frame budget is
+                    # computed from, and first-wins means the second one is a free rewrite
+                    # of whatever a checker looked at (review R20).
+                    raise _refuse("duplicate-header")
                 timescale, duration = _mvhd(data, body)
             elif kind == "tkhd" and track is not None:
                 track["width"], track["height"] = _tkhd(data, body)
@@ -283,6 +288,8 @@ def probe_matroska(data: bytes) -> Probed:
             elif element == TIMECODE_SCALE:
                 scale = _ebml_uint(data, body, size) or DEFAULT_TIMECODE_SCALE
             elif element == DURATION:
+                if duration:
+                    raise _refuse("duplicate-header")
                 duration = _ebml_float(data, body, body_end)
             elif current is not None and element == TRACK_TYPE:
                 current["type"] = _ebml_uint(data, body, size)
