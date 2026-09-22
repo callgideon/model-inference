@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T17:15:14Z",
+  "updated": "2026-09-22T17:18:38Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -47,7 +47,7 @@
     },
     "E1B": {
       "lane": "codex-e1b",
-      "phase": "software slices a/b/c: independent review at 2cf7a81; GPU slices pending W3\u2192I2B",
+      "phase": "fix round 1 (120 s clip, price \u26a0\ufe0f, KV wording, four test bindings)",
       "since": "2026-09-22T16:03:43Z",
       "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol"
     },
@@ -103,6 +103,12 @@
       "what": "Approved CREDIT rate card (P-02 legacy transition RESOLVED: $0 legacy USD, nothing to migrate)",
       "blocks": "public metered publication only; a provisional fixture rate is used meanwhile",
       "owner": "user/operator"
+    },
+    {
+      "id": "P-19 (new)",
+      "what": "Sourced AWS g6e.2xlarge / single-L40S price row in research/cross-cutting/cloud-pricing.md",
+      "blocks": "publishing any cost-per-video-hour figure (S2M \u00a75.2, E1B protocol)",
+      "owner": "pricing owner / user"
     }
   ],
   "checkpoints": [

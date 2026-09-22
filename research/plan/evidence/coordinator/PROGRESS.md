@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T17:15:14Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T17:18:38Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 1 done · 9 in progress · 20 remaining (of 30).**
 
@@ -51,6 +51,7 @@ Generated 2026-09-22T17:15:14Z from `tasks.json` (manifest v4) and `progress-sta
 | P-07 | SOP rubric, ground truth, dataset rights — RECORDED (10 missing inputs; no accuracy baseline exists) | SOP accuracy claims only | user/product |
 | P-18 | Workload + criteria — PROVISIONAL criteria predeclared by S2M (labelled); latency/availability targets deliberately absent | E4B certification; provisional criteria allowed | workload owner |
 | P-01 | Approved CREDIT rate card (P-02 legacy transition RESOLVED: $0 legacy USD, nothing to migrate) | public metered publication only; a provisional fixture rate is used meanwhile | user/operator |
+| P-19 (new) | Sourced AWS g6e.2xlarge / single-L40S price row in research/cross-cutting/cloud-pricing.md | publishing any cost-per-video-hour figure (S2M §5.2, E1B protocol) | pricing owner / user |
 
 ## ETA (provisional, cadence-based — not a commitment)
 
@@ -68,7 +69,7 @@ Generated 2026-09-22T17:15:14Z from `tasks.json` (manifest v4) and `progress-sta
 - Q2: codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory
 - M2: codex-m2 — fix round 1 (review fix_required: EBML uint width, profile segment in cache path) since 2026-09-22T16:00:21Z — handed back: probe + preparation + cache; 132 mutants
 - W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R
-- E1B: codex-e1b — software slices a/b/c: independent review at 2cf7a81; GPU slices pending W3→I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol
+- E1B: codex-e1b — fix round 1 (120 s clip, price ⚠️, KV wording, four test bindings) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol
 - S1: codex-s1fix / codex/s1fix-console-balance — S1-fix round 2 (test-only: source-level assertions for lib/credits.ts, layout, sidebar) since 2026-09-22T16:36:52Z — S1 API side passed independent review; console fixes in flight
 
 ## Checkpoints

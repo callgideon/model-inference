@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T17:15:14Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T17:18:38Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>1</b><span>done</span></div>
 <div class="tile prog"><b>9</b><span>in progress</span></div>
@@ -89,6 +89,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td><code>P-07</code></td><td>SOP rubric, ground truth, dataset rights — RECORDED (10 missing inputs; no accuracy baseline exists)</td><td>SOP accuracy claims only</td><td>user/product</td></tr>
 <tr><td><code>P-18</code></td><td>Workload + criteria — PROVISIONAL criteria predeclared by S2M (labelled); latency/availability targets deliberately absent</td><td>E4B certification; provisional criteria allowed</td><td>workload owner</td></tr>
 <tr><td><code>P-01</code></td><td>Approved CREDIT rate card (P-02 legacy transition RESOLVED: $0 legacy USD, nothing to migrate)</td><td>public metered publication only; a provisional fixture rate is used meanwhile</td><td>user/operator</td></tr>
+<tr><td><code>P-19 (new)</code></td><td>Sourced AWS g6e.2xlarge / single-L40S price row in research/cross-cutting/cloud-pricing.md</td><td>publishing any cost-per-video-hour figure (S2M §5.2, E1B protocol)</td><td>pricing owner / user</td></tr>
 </tbody></table></div></section>
 <section class="panel"><h2>In flight now</h2><ul>
 <li><code>F2R</code> — codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: items 2–5,9 + relayed additions; lane B: items 6/7 done at 1cd5754, now applying consumer updates IR-1..4 to make the tree green</li>
@@ -98,7 +99,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>Q2</code> — codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory</li>
 <li><code>M2</code> — codex-m2 — fix round 1 (review fix_required: EBML uint width, profile segment in cache path) since 2026-09-22T16:00:21Z — handed back: probe + preparation + cache; 132 mutants</li>
 <li><code>W2</code> — codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R</li>
-<li><code>E1B</code> — codex-e1b — software slices a/b/c: independent review at 2cf7a81; GPU slices pending W3→I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol</li>
+<li><code>E1B</code> — codex-e1b — fix round 1 (120 s clip, price ⚠️, KV wording, four test bindings) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol</li>
 <li><code>S1</code> — codex-s1fix / codex/s1fix-console-balance — S1-fix round 2 (test-only: source-level assertions for lib/credits.ts, layout, sidebar) since 2026-09-22T16:36:52Z — S1 API side passed independent review; console fixes in flight</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
