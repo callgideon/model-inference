@@ -560,6 +560,92 @@ host changes, because removing SSH before the profile swap and the hop-limit fli
 removes the fallback if SSM access breaks; I2 confirms `ssm
 describe-instance-information` still reports `Online` immediately beforehand.
 
+## 5.1 The preflight, and the supported mode transition (I0)
+
+**Implemented in the repository, not on the host.** `apps/infrx-api/deploy/preflight.py`
+is the fail-closed half of matrix row `M-FAILCLOSED`: the installer refusal. It is
+local code with local tests (`apps/infrx-api/tests/i/`); **the deployed pilot host is
+not fixed by it** and keeps behaving as row `O-FAILOPEN` describes until a separately
+scoped deployment, under the lock of §1, runs the new `install.sh` there. The runtime
+half (`config.validate_runtime`, the `unset -> refuse` inversion) is G2's.
+
+```
+sudo INFRX_MODE=dev ./apps/infrx-api/deploy/install.sh     # the whole stack
+preflight.py manifest --mode pilot                         # required keys, names only
+preflight.py apply --mode <mode> --env-file <path> …       # exit 0 / 2 refused / 3 restart failed
+preflight.py probe --mode <mode> --env-file <staged>       # run by apply, in the runtime interpreter
+```
+
+`apply` performs, in this order and stopping at the first failure: read every required
+parameter -> validate every value -> stage a private `0600` file with its final owner
+beside the target -> run `probe` in the interpreter the unit will use -> `os.replace`
+-> `systemctl daemon-reload` + `restart`. **Nothing before the rename touches the
+installed file**, so exit 2 means the previous file is byte-identical and no unit was
+restarted. `AccessDenied`, throttling and any failure the script cannot classify are
+**never** read as an absent parameter; `ParameterNotFound` is tolerated only for a key
+the mode does not require.
+
+### The required-key manifest
+
+`preflight.py manifest --mode <mode>` prints it; it is the only source of keys the env
+file may contain, one declared shape each, and it is the file's whole content:
+
+| Key | Source | Required in | Role |
+|---|---|---|---|
+| `INFRX_MODE` | installer flag | every mode | runtime mode; **no default** |
+| `MODEL_ID`, `MAX_INFLIGHT` | installer flags | every mode | served model pin, capacity bound |
+| `USAGE_LOG` | installer flag | every mode | usage sink. The gateway unit's duplicate `Environment=USAGE_LOG` is removed, so the validated file is the only authority; I2B moves the path to persistent storage (§2, row `M-SCRATCH`) |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | `/model-inference/supabase_url`, `…/supabase_service_role_key` | `pilot` | identity source |
+| `DATABASE_URL` | `/model-inference/pg_journal_url` (PROPOSED, §5) | `pilot` | metering sink **and** price authority — D1's `price_versions`, which is why the withdrawn `price_table_version` is also a **refused** key |
+| `GATEWAY_API_KEY` | `/model-inference/marlin2b_api_key` | never | **forbidden in `pilot`** (r1 R51): the parameter is not even read there. This is I2's half of row `M-KEYCUT` |
+
+A value is refused when it is empty, whitespace-only, padded, of the wrong shape, or
+contains a newline or NUL — the last because a value with a newline writes a second
+`KEY=VALUE` line, which would let whoever can write a parameter choose the gateway's
+authentication. No value is ever printed, logged or passed as an argument.
+
+### The supported transition
+
+There are three modes and one direction of travel. Each step is a separate install run
+under the lock, and each is reversible only as §8 allows.
+
+1. **absent -> `dev`.** `INFRX_MODE` has no default, so an install run without it fails
+   in `install.sh` before anything is read. `dev` keeps today's permissive runtime and
+   **does not install the public Caddy site** — no `:80`/`:443` listener, no ACME
+   account, no certificate for the pilot name — because a dev host answering on the
+   pilot's DNS name is the same failure as an unmetered pilot.
+2. **`dev` -> `pilot`.** Refused unless **all** of the following hold. They are checks,
+   not documentation, and each has a named case in `tests/i`:
+   - every pilot key above reads successfully and validates;
+   - `config.validate_runtime` accepts the exact staged bytes (auth **and** metering
+     configured, no shared `GATEWAY_API_KEY`);
+   - the pilot routers are composed: `infrx/gateway/app.py`'s `ROUTERS` contains the
+     ingress. **This is false today** — the composition root still mounts
+     `(health, models, chat)` — so a pilot install is refused now, by design. G2 owns
+     that change and its eight cutover inversions; `validate_runtime`'s `unset -> legacy`
+     branch and G's `unset_mode_refuses` mutant stay exactly as they are until then,
+     and no install run can produce an unset mode in the meantime;
+   - the runtime interpreter is ≥ 3.12.4, and `httpx`/`httpcore` carry an explicit level
+     of WARNING or above, children included;
+   - `models/marlin2b/serve.sh` passes no `--reasoning-parser` and no
+     `continuous_usage_stats`, and pins the engine image **by digest**. It does not
+     today (it defaults to a floating `:nightly` tag), so this is a second live refusal;
+     **pending on W3**.
+3. **`pilot` -> back.** Once enforced credits are on, §8 applies without exception: the
+   previous **compatible** runtime, or maintenance 503 until one exists. Reverting to
+   the original unmetered gateway is not a rollback option, and neither is installing
+   `INFRX_MODE=dev` on the pilot host — that is the unmetered gateway with a different
+   name. A failed restart after a valid install is an alert, not an automatic rollback:
+   the installed file is validated, and putting an unvalidated one back is strictly
+   worse.
+
+**What G2 and I2B call.** `preflight.py probe --mode <mode> --env-file <path>` answers a
+JSON verdict `{ok, python, mode, validated_mode, problems, warnings}` whose `problems`
+name settings, modules and loggers and never a value. G2 uses it as the composition
+gate's counterpart: when `ROUTERS` gains the ingress, this check starts passing and the
+same run's `validate_runtime` refusal is what keeps an incomplete pilot from serving.
+I2B reuses `apply` as its atomic configuration step rather than writing a second one.
+
 ## 6. Backup and restore per durable layer
 
 No EC2 snapshot, AMI or AWS Backup plan exists in us-east-1 (row `O-BACKUPS`);
@@ -646,6 +732,14 @@ target group.
 
 ## Verification log
 
+- 2026-09-22 (I0, local code only; no AWS call, no `systemctl`, nothing run against
+  the pilot host): added §5.1 — the installer refusal half of `M-FAILCLOSED` is
+  implemented in `apps/infrx-api/deploy/preflight.py` with the failure injection suite
+  in `apps/infrx-api/tests/i/`. Row `O-FAILOPEN` still describes the **deployed** host:
+  this task changes the script, not the box, and the ordering hazard of §5 is unchanged
+  until a scoped deployment applies it. Two pilot prerequisites are refusals today and
+  stay refusals until their owners act: the composed pilot routers (G2) and the
+  digest-pinned engine image (W3).
 - 2026-09-20: Authored by I1 from read-only AWS observation, the live public
   endpoints and the repository's deploy files. No resource was created and no
   configuration changed. Every threshold here is `est.` until I2/I3/E4 measure
