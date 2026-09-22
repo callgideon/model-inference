@@ -21,9 +21,13 @@ import pytest
 from infrx.contracts.conformance import SUITES
 
 from . import mutants as mutation_list
+from . import test_config_and_imports, test_fixtures, test_money
 
 ALL = mutation_list.MUTANTS
 CASE_NAMES = {case.__name__ for _name, (cases, _runner) in SUITES.items() for case in cases()}
+# F2R: record and config invariants die in these modules, which the runner also targets.
+RECORD_TESTS = {name for module in (test_fixtures, test_money, test_config_and_imports)
+                for name in vars(module) if name.startswith("test_")}
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # The default suite runs one mutant per fake plus every mutant of the money path, so a
 # broken runner or a vacuous case in the core settlement logic is caught in CI time;
@@ -44,7 +48,7 @@ def test_the_list_is_well_formed():
         assert mutant.cases, f"{mutant.name} names no case"
         assert mutant.invariant, f"{mutant.name} states no invariant"
         for case in mutant.cases:
-            assert case in CASE_NAMES, f"{mutant.name} names unknown case {case}"
+            assert case in CASE_NAMES | RECORD_TESTS, f"{mutant.name} names unknown case {case}"
     assert set(SUBSET) <= {m.name for m in ALL}
 
 
