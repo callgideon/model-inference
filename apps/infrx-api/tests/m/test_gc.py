@@ -10,6 +10,7 @@ cache); both are moved by hand. `sweep()` is called directly: no background task
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import os
 
@@ -19,6 +20,7 @@ from infrx.contracts.conformance import builders as b
 from infrx.contracts.records import UploadState
 from infrx.media import gc
 
+from . import support
 from .test_uploads import CLIP, TTL, adapter_for, arrive, created, finalized, run
 
 GRACE = TTL
@@ -63,11 +65,11 @@ def test_a_live_jobs_input_is_never_collected(tmp_path):
     _, ref = finalized(adapter)
     job_id = staged_job(adapter, jobs, ref)
     prepared = run(adapter.prepare(job_id, "v1"))
-    sweeper = collector(adapter, jobs)
-    for _ in range(3):
-        adapter.clock.advance(GRACE * 2)
-        swept = run(sweeper.sweep())
-        assert [k for k in swept.deleted if k.startswith("media/")] == []
+    for sweeper in (collector(adapter, jobs), collector(adapter, jobs, grace_s=0)):
+        for _ in range(3):
+            adapter.clock.advance(GRACE * 2)
+            swept = run(sweeper.sweep())
+            assert [k for k in swept.deleted if k.startswith("media/")] == []
     assert ref.storage_ref in adapter.objects.objects
     assert prepared[0].storage_ref in adapter.objects.objects
     assert run(adapter.resolve_owned(b.ORG_A, ref.handle)) == ref
@@ -79,7 +81,11 @@ def test_input_is_collected_after_the_job_ends_and_the_grace_passes():
     job_id = staged_job(adapter, jobs, ref)
     sweeper = collector(adapter, jobs)
     run(sweeper.sweep())
+    adapter.clock.advance(GRACE * 2)            # a job live for longer than the grace
+    run(sweeper.sweep())
     jobs.live.discard(job_id)
+    run(sweeper.sweep())
+    assert ref.storage_ref in adapter.objects.objects
     adapter.clock.advance(GRACE - 1)
     run(sweeper.sweep())
     assert ref.storage_ref in adapter.objects.objects
@@ -128,12 +134,33 @@ def test_a_failed_stage_blob_is_eventually_removed():
 
 
 def test_media_staged_for_a_request_never_admitted_is_removed():
+    """And once removed, nothing resolves to it: not the upload, not a materialized ref."""
     adapter = adapter_for()
     _, ref = finalized(adapter)
     run(adapter.stage(b.ORG_A, b.request(adapter.harness, refs=(ref,))))
+    inline = run(adapter.materialize(b.ORG_A, "data:video/mp4;base64,"
+                                     + base64.b64encode(support.mp4(seconds=5.0)).decode()))
     sweeper = collector(adapter)
+    run(sweeper.sweep())
     adapter.clock.advance(GRACE)
-    assert ref.storage_ref in run(sweeper.sweep()).deleted
+    deleted = run(sweeper.sweep()).deleted
+    assert ref.storage_ref in deleted and inline.storage_ref in deleted
+    with pytest.raises(errors.NotFound):
+        run(adapter.resolve_owned(b.ORG_A, inline.handle))
+
+
+def test_a_finalize_is_a_use():
+    """A second upload of content already stored (same content-addressed key) renews it:
+    the new upload's object is not collected for the old one's age."""
+    adapter = adapter_for()
+    _, ref = finalized(adapter)
+    sweeper = collector(adapter)
+    run(sweeper.sweep())
+    adapter.clock.advance(GRACE - 1)
+    _, again = finalized(adapter)
+    assert again.storage_ref == ref.storage_ref
+    adapter.clock.advance(2)
+    assert ref.storage_ref not in run(sweeper.sweep()).deleted
 
 
 def test_recent_use_renews_the_grace():
@@ -235,7 +262,6 @@ def test_the_sweep_runs_the_processing_cache_expiry(tmp_path):
 def test_the_cache_cap_evicts_idle_entries_and_never_a_live_jobs(tmp_path):
     """M2 limit 8: the cache is bounded. Oldest idle entries go first; a live job's entry
     stays even when the cap cannot be met without it."""
-    from . import support
     adapter, jobs = adapter_for(tmp_path), Jobs()
     _, old = prepared_job(adapter, jobs, CLIP, live=True)
     adapter.cache.clock.now += 1
