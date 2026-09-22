@@ -76,11 +76,9 @@ MIGRATION_MUTANTS = (
        "grant execute on function public.claim_signup_grant(uuid, text, uuid) "
        "to service_role, authenticated;",
        "signup_privileges", "a browser session claims for any user id it names"),
-    _m("a1_claim_keeps_default_acl",
-       "revoke all on function public.claim_signup_grant(uuid, text, uuid)\n"
-       "  from public, anon, authenticated;",
-       "-- mutant: default ACL kept",
-       "signup_privileges", "Supabase's default EXECUTE lets anon call the grant"),
+    # No mutant drops 0015's `revoke all on function public.claim_signup_grant`: D1's
+    # default privileges already keep a later public function from browser roles, so that
+    # revoke is a restatement no single edit of 0015 can break (it survived; measured).
     _m("a1_service_writes_claims",
        "revoke all on infrx.signup_identity_claims, infrx.signup_denials, "
        "infrx.retired_individuals\n  from public, anon, authenticated, service_role;",
