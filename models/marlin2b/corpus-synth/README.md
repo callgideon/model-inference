@@ -40,7 +40,7 @@ The licensed 64-clip corpus in [`../corpus/`](../corpus/README.md) stays the
 | `sop01-8s-854x480-steps_within_one_second` | two steps 0.4 s apart | timestamp resolution: the gap is **inside one profile-v1 frame period** (0.5 s at 2 fps), so the two steps can fall between sampled frames |
 | `sop04-30s-854x480-steps_out_of_order` | 2 steps, canonical order reversed in time | a model (or a parser) that only ever emits canonical order is wrong here |
 | `sop07-60s-854x480-step_absent` | canonical step 2 declared absent, never rendered | a rubric can be shown to punish a hallucinated span — `.find` "always emits some span" |
-| `sop10-115s-854x480-step_spans_segment_boundary` | one step straddles 60 s | the §3.2 overlap problem: a step crossing the client's own segmentation edge is seen twice or truncated |
+| `sop10-120s-854x480-step_spans_segment_boundary` | one step straddles 60 s | the §3.2 overlap problem: a step crossing the client's own segmentation edge is seen twice or truncated |
 
 Every clip that crosses the declared 60 s segmentation edge lists it in
 `boundary_spanning_step_ids`, declared case or not: a crossing nobody wrote down is
