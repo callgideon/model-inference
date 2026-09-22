@@ -425,6 +425,11 @@ class MediaRef(Record):
     storage_ref: str                    # server-built key; never returned to callers
     profile_version: str = "v1"
     duration_s: float | None = None
+    # R61 (2), amended: the pilot's local serving form of a *prepared* ref, written by
+    # preparation (M2) - `<PROCESSING_CACHE_DIR>/<org uuid>/<profile_version>/<digest16>/
+    # source.<ext>`, mirroring the object key - never caller-derived, and never the
+    # identity (`storage_ref` is). None for a source ref or with no local cache.
+    local_path: str | None = None
 
 
 # --- request and admission ---------------------------------------------------
