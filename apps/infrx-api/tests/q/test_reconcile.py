@@ -11,10 +11,13 @@ never a pass.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 
 import pytest
 
 from infrx.contracts import errors
+from infrx.contracts.limits import PilotSettings
+from infrx.scheduling import MAX_INDEX_BYTES, MAX_INDEX_ITEMS
 
 from . import q3rig as rig
 from . import vkharness
@@ -555,6 +558,34 @@ def test_q3_drill__valkey_sigkilled_under_queued_and_running_traffic_loses_no_jo
         assert sorted(w.leases) == sorted(w.admitted)
         assert all(w.jobs.jobs[job].state is rig.JobState.succeeded for job in w.admitted)
         assert w.outbox.unacknowledged() == []
+    run(body)
+
+
+# --- (5) the index caps come from the settings ---------------------------------------
+
+@dataclasses.dataclass(frozen=True)
+class _PilotWithCaps(PilotSettings):
+    """`PilotSettings` as F2P's wire-in extends it (the two names 08 §5 gives the caps)."""
+    max_index_items: int = 2
+    max_index_bytes: int = 268_435_456
+
+
+def test_q3_caps__both_adapters_take_the_caps_from_the_settings(adapter):
+    """With the fields present the settings bind; without them Q1's constants do; an
+    explicit argument wins over both."""
+    async def body():
+        now = rig.jobstore_factory().clock.now
+        configured = rig.make_index(adapter, now, limits=_PilotWithCaps())
+        assert (configured._max_items, configured._max_bytes) == (2, 268_435_456)
+        plain = rig.make_index(adapter, now)
+        assert (plain._max_items, plain._max_bytes) == (MAX_INDEX_ITEMS, MAX_INDEX_BYTES)
+        explicit = rig.make_index(adapter, now, limits=_PilotWithCaps(), max_items=7)
+        assert explicit._max_items == 7
+        w = rig.world(adapter, limits=_PilotWithCaps(max_index_bytes=10**6))
+        for _ in range(3):
+            await rig.admit(w)
+        assert await w.rec.drain() == {"read": 3, "indexed": 2, "deferred": 1,
+                                       "acknowledged": 2}
     run(body)
 
 
