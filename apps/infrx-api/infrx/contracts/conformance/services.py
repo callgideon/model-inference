@@ -29,6 +29,8 @@ async def media_sec__an_upload_is_owned_verified_and_immutable(factory):
     handle = ticket["upload_handle"]
     assert handle.startswith("upl_") and str(ticket["destination_ref"]).startswith("infrx-upload:")
     assert "?" not in str(ticket["destination_ref"])          # not a signed URL
+    # R61 (1): exactly `infrx-upload:upl_<id>`, no organization qualifier
+    assert ticket["destination_ref"] == f"infrx-upload:{handle}"
     hook(harness, "put_object")(handle, b"0123456789", "video/mp4")
     ref = await harness.port.finalize_upload(b.ORG_A, handle)
     assert ref.bytes == 10 and ref.digest.startswith("sha256:") and ref.org_id == b.ORG_A

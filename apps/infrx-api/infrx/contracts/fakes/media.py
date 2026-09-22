@@ -210,7 +210,9 @@ class FakeMediaStore:
         self.uploads[handle] = upload
         return {"upload_handle": handle,
                 # A constrained server-issued destination, never a caller-shaped key.
-                "destination_ref": f"infrx-upload:{org_id}:{handle}",
+                # R61 (1): no organization in the reference - the tenant comes from the
+                # authenticated key, and a qualified form invites cross-tenant probing.
+                "destination_ref": f"infrx-upload:{handle}",
                 "max_bytes": max_bytes, "accepted_mime": mimes,
                 "state": upload.state, "expires_at": upload.expires_at}
 

@@ -39,7 +39,7 @@ STORAGE_KEY_FIELDS = frozenset({
     "bucket", "key_prefix", "signed_url", "presigned_url", "download_url", "object_path",
 })
 # `destination_ref` on `UploadCreated` is deliberately not a key: it is a constrained
-# server-issued reference (`infrx-upload:<org>:<handle>`), and the test below asserts
+# server-issued reference (`infrx-upload:upl_<id>`, R61 (1)), and the test below asserts
 # that shape rather than trusting the name.
 WIRE_FIXTURES = tuple(sorted(name for name, model in fixtures.MODELS.items()
                              if model.__module__.endswith("contracts.wire")))
@@ -118,6 +118,11 @@ def test_an_upload_destination_is_a_constrained_reference_not_a_url():
     created = fixtures.model("upload_created.json")
     assert created.destination_ref.startswith("infrx-upload:")
     assert "://" not in created.destination_ref and "?" not in created.destination_ref
+    # R61 (1): no organization qualifier. The fixture carried `infrx-upload:pilot:upl_…`
+    # until the F2R lane-A revision; that is the one sanctioned v1 fixture byte change
+    # (coordinator ruling: R61 supersedes the wave-2 byte).
+    assert created.destination_ref == f"infrx-upload:{created.upload_handle}"
+    assert ids.UPLOAD_HANDLE_RE.fullmatch(created.upload_handle)
 
 
 @pytest.mark.parametrize("name", sorted(fixtures.LIST_MODELS))
