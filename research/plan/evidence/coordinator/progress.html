@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T16:12:51Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T16:15:14Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>1</b><span>done</span></div>
 <div class="tile prog"><b>9</b><span>in progress</span></div>
@@ -47,7 +47,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B0</td><td><code>F2R</code></td><td>Close remaining wave-2 contract and verification carryovers</td><td><span class="pill prog">in-progress</span></td><td class="note">lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7)</td></tr>
 <tr><td>B0</td><td><code>I0</code></td><td>Repair installer atomicity and fail-closed startup prerequisite</td><td><span class="pill prog">in-progress</span></td><td class="note">fail-closed installer; stubs only</td></tr>
 <tr><td>B0</td><td><code>E2R</code></td><td>Repair service harness ownership, role matrix and shared test clock</td><td><span class="pill prog">in-progress</span></td><td class="note">harness ownership + five RLS inversions on real services</td></tr>
-<tr><td>B0</td><td><code>S2M</code></td><td>Freeze Marlin SOP inference launch profile</td><td><span class="pill prog">in-progress</span></td><td class="note">profile pinned to fd111fca; P-06 resolved as profile; P-07/P-18 recorded; 14 discrepancies (3 fail-stops → M2/W/G2)</td></tr>
+<tr><td>B0</td><td><code>S2M</code></td><td>Freeze Marlin SOP inference launch profile</td><td><span class="pill prog">in-progress</span></td><td class="note">docs-only; coordinator re-check on handback</td></tr>
 <tr><td>B0</td><td><code>F2P</code></td><td>Encode product-v2 CREDIT, identity, serving and permission contracts</td><td><span class="pill prog">in-progress</span></td><td class="note">v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</td></tr>
 <tr><td>B1</td><td><code>D1R</code></td><td>Add product-v2 schema without rewriting USD pilot migrations</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>D2</code></td><td>Atomic admission, durable preparation and dispatch outbox</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
@@ -94,14 +94,13 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>F2R</code> — codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7)</li>
 <li><code>I0</code> — codex-i0 — implementing since 2026-09-22T15:51:21Z — fail-closed installer; stubs only</li>
 <li><code>E2R</code> — codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services</li>
-<li><code>S2M</code> — codex-s2m — handed back at 343e685 — independent fact review running since 2026-09-22T16:03:43Z — profile pinned to fd111fca; P-06 resolved as profile; P-07/P-18 recorded; 14 discrepancies (3 fail-stops → M2/W/G2)</li>
+<li><code>S2M</code> — codex-s2m / codex/s2m-marlin-profile — fix round 1 (review: fix_required — 3 claims, 7 citations) since 2026-09-22T16:15:14Z — docs-only; coordinator re-check on handback</li>
 <li><code>F2P</code> — codex-f2p — additive design phase (new files only); wire-in after F2R since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>
 <li><code>Q2</code> — codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory</li>
 <li><code>M2</code> — codex-m2 — implementing since 2026-09-22T16:00:21Z — prepare(): probe real duration, url→ref rewrite, processing cache; rebases on F2R</li>
 <li><code>W2</code> — codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R</li>
 <li><code>E1B</code> — codex-e1b — implementing (software slices; GPU slices wait for W3/I2B) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol</li>
 <li>review <code>S1</code> — independent review of the audit&#x27;s code at ec6c548 since 2026-09-22T15:51:21Z</li>
-<li>review <code>S2M</code> — fact audit of the pinned profile at 343e685 since 2026-09-22T16:03:43Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>

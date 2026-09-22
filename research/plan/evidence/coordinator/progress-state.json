@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T16:12:51Z",
+  "updated": "2026-09-22T16:15:14Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -22,10 +22,10 @@
       "note": "harness ownership + five RLS inversions on real services"
     },
     "S2M": {
-      "lane": "codex-s2m",
-      "phase": "handed back at 343e685 \u2014 independent fact review running",
-      "since": "2026-09-22T16:03:43Z",
-      "note": "profile pinned to fd111fca; P-06 resolved as profile; P-07/P-18 recorded; 14 discrepancies (3 fail-stops \u2192 M2/W/G2)"
+      "lane": "codex-s2m / codex/s2m-marlin-profile",
+      "phase": "fix round 1 (review: fix_required \u2014 3 claims, 7 citations)",
+      "since": "2026-09-22T16:15:14Z",
+      "note": "docs-only; coordinator re-check on handback"
     },
     "F2P": {
       "lane": "codex-f2p",
@@ -62,10 +62,6 @@
     "S1": {
       "phase": "independent review of the audit's code at ec6c548",
       "since": "2026-09-22T15:51:21Z"
-    },
-    "S2M": {
-      "phase": "fact audit of the pinned profile at 343e685",
-      "since": "2026-09-22T16:03:43Z"
     }
   },
   "gates": {

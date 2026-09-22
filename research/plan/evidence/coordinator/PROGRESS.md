@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T16:12:51Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T16:15:14Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 1 done · 9 in progress · 20 remaining (of 30).**
 
@@ -10,7 +10,7 @@ Generated 2026-09-22T16:12:51Z from `tasks.json` (manifest v4) and `progress-sta
 | B0 Baseline & contracts | F2R | Close remaining wave-2 contract and verification carryovers | **in-progress** | planned | lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7) |
 | B0 Baseline & contracts | I0 | Repair installer atomicity and fail-closed startup prerequisite | **in-progress** | planned | fail-closed installer; stubs only |
 | B0 Baseline & contracts | E2R | Repair service harness ownership, role matrix and shared test clock | **in-progress** | planned | harness ownership + five RLS inversions on real services |
-| B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **in-progress** | planned | profile pinned to fd111fca; P-06 resolved as profile; P-07/P-18 recorded; 14 discrepancies (3 fail-stops → M2/W/G2) |
+| B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **in-progress** | planned | docs-only; coordinator re-check on handback |
 | B0 Baseline & contracts | F2P | Encode product-v2 CREDIT, identity, serving and permission contracts | **in-progress** | planned | v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map |
 | B1 Durable endpoint | D1R | Add product-v2 schema without rewriting USD pilot migrations | **remaining** | planned |  |
 | B1 Durable endpoint | D2 | Atomic admission, durable preparation and dispatch outbox | **remaining** | planned |  |
@@ -64,14 +64,13 @@ Generated 2026-09-22T16:12:51Z from `tasks.json` (manifest v4) and `progress-sta
 - F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7)
 - I0: codex-i0 — implementing since 2026-09-22T15:51:21Z — fail-closed installer; stubs only
 - E2R: codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services
-- S2M: codex-s2m — handed back at 343e685 — independent fact review running since 2026-09-22T16:03:43Z — profile pinned to fd111fca; P-06 resolved as profile; P-07/P-18 recorded; 14 discrepancies (3 fail-stops → M2/W/G2)
+- S2M: codex-s2m / codex/s2m-marlin-profile — fix round 1 (review: fix_required — 3 claims, 7 citations) since 2026-09-22T16:15:14Z — docs-only; coordinator re-check on handback
 - F2P: codex-f2p — additive design phase (new files only); wire-in after F2R since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - Q2: codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory
 - M2: codex-m2 — implementing since 2026-09-22T16:00:21Z — prepare(): probe real duration, url→ref rewrite, processing cache; rebases on F2R
 - W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R
 - E1B: codex-e1b — implementing (software slices; GPU slices wait for W3/I2B) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol
 - review S1: independent review of the audit's code at ec6c548 since 2026-09-22T15:51:21Z
-- review S2M: fact audit of the pinned profile at 343e685 since 2026-09-22T16:03:43Z
 
 ## Checkpoints
 
