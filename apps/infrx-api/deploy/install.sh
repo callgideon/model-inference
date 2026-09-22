@@ -40,7 +40,9 @@ sha=$(git -C "$repo" rev-parse HEAD)
 [ -z "${RELEASE:-}" ] || [ "$sha" = "$RELEASE" ] || die "HEAD is $sha, not RELEASE=$RELEASE" 2
 
 # 2. the runtime image
-docker build -q -f "$here/Dockerfile" -t "infrx-runtime:$sha" "$repo/apps/infrx-api" >/dev/null
+# No provenance attestation: with the containerd image store it carries a build timestamp
+# into the index, so the same commit would get a new id on every build.
+docker build -q --provenance=false -f "$here/Dockerfile" -t "infrx-runtime:$sha" "$repo/apps/infrx-api" >/dev/null
 image=$(docker image inspect --format '{{.Id}}' "infrx-runtime:$sha")
 echo "release $sha image $image"
 

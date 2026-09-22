@@ -265,7 +265,7 @@ step "0. the box: pinned images, one network namespace"
 cd "$repo"
 RELEASE=$(git rev-parse HEAD)
 [ -z "$(git status --porcelain)" ] || { echo "the checkout is dirty; commit first"; exit 2; }
-docker build -q -f "$here/Dockerfile" -t "infrx-runtime:$RELEASE" "$repo/apps/infrx-api" >/dev/null
+docker build -q --provenance=false -f "$here/Dockerfile" -t "infrx-runtime:$RELEASE" "$repo/apps/infrx-api" >/dev/null
 export REHEARSAL_IMAGE
 REHEARSAL_IMAGE=$(docker image inspect --format '{{.Id}}' "infrx-runtime:$RELEASE")
 /usr/bin/docker run -d --name infrx-i2b-box --label "$LABEL" --network none \
