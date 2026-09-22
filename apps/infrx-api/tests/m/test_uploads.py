@@ -476,3 +476,55 @@ def test_an_uploaded_clip_is_prepared_like_any_source(tmp_path):
     local = adapter.local_uri(prepared[0]).removeprefix("file://")
     assert open(local, "rb").read() == CLIP
     assert os.path.commonpath([str(tmp_path), local]) == str(tmp_path)
+
+
+# --- the exported conformance suite ---------------------------------------------------
+class DeclaredFacts(uploads.MediaUploads):
+    """The conformance cases upload `b"0123456789"` and `b"tiny"` as `video/mp4` and
+    `application/zip`: labels, not containers, so M2's probe would refuse every one of
+    them for a reason the case is not about. This adapter takes M1's `facts` (the declared
+    type, no duration) and is otherwise the shipped class; that finalize consults the
+    probe is proven above (`test_the_container_wins_over_the_declared_content_type`)."""
+
+    facts = store.MediaStaging.facts
+
+
+def conformance_factory(limits=None, **_kw):
+    ids = SequentialIds()
+    adapter = adapter_for(limits=limits or DEFAULTS, cls=DeclaredFacts)
+    adapter.new_handle = ids.upload_handle
+
+    def put_object(handle, data, mime="video/mp4"):
+        arrive(adapter, handle, data, mime)
+
+    return Harness(port=adapter, clock=adapter.clock, ids=ids,
+                   extra={"put_object": put_object, "admitted": adapter.jobs.__setitem__})
+
+
+# F2R item 4 (lane A): `builders.media()` names objects nobody materialized, so `prepare`
+# has no bytes to read. Pinned, exactly as M2 pinned it, until F2R-A merges.
+PENDING_F2R = "media_parity__staging_is_content_addressed_and_tenant_namespaced"
+
+
+def test_the_exported_conformance_suite_runs_every_upload_case():
+    """F-CONTRACT / r1 R32: the six upload cases M2 skipped naming `create_upload` now
+    run and pass; the two M1 cases still pass; the F2R-blocked case stays pinned."""
+    from infrx.contracts.conformance import SUITES, MissingHook
+
+    cases, _runner = SUITES["mediastore"]
+    outcomes: dict[str, str] = {}
+    for case in cases():
+        try:
+            asyncio.run(case(conformance_factory))
+            outcomes[case.__name__] = "pass"
+        except MissingHook as missing:                   # never a pass (R32)
+            outcomes[case.__name__] = f"skip: needs {missing.hook}"
+        except errors.DomainError as refusal:
+            outcomes[case.__name__] = f"blocked: {refusal.code}: {refusal}"
+    print("\nmediastore conformance against infrx.media.uploads.MediaUploads:")
+    for name, outcome in sorted(outcomes.items()):
+        print(f"  {outcome:<34} {name}")
+    assert len(outcomes) == len(cases()) == 9
+    assert [name for name, out in outcomes.items() if out != "pass"] == [PENDING_F2R]
+    assert outcomes[PENDING_F2R].startswith("blocked: not_found")
+    assert "the staged object for media upl_conformancefixture" in outcomes[PENDING_F2R]
