@@ -584,7 +584,9 @@ MUTANTS: tuple[Mutant, ...] = (
            "fresh", "row_constraints",
            "a metered row is attributed to another tenant's key, which is what per-key "
            "metering and rate limits are counted on"),
-    Mutant("console_usage_joins_any_key", CONSOLE,
+    # D1R: 0008 re-creates `console_usage` (columns appended), so the live definition -
+    # and the edit that can break it - is 0008's; 0005's text is superseded history.
+    Mutant("console_usage_joins_any_key", SURFACE,
            "left join public.api_keys k on k.id = e.api_key_id and k.org_id = e.org_id",
            "left join public.api_keys k on k.id = e.api_key_id",
            "fresh", "console_read_surface",
@@ -767,6 +769,10 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
     _m("d1r_credit_ledger_without_rls", CREDIT,
        "alter table infrx.credit_ledger enable row level security;\n", "",
        "fresh", "relations_exist", "a future exposure of infrx leaks every CREDIT ledger"),
+    _m("d1r_operator_cannot_switch_the_rollout", CREDIT,
+       "grant update (enabled, updated_by, reason, updated_at) on infrx.feature_flags\n"
+       "  to service_role;", "", "credit", "credit_role_matrix",
+       "the cutover can only be done by a superuser session, outside the audited path"),
     _m("d1r_missing_flag_row_is_open", CREDIT,
        "  if not coalesce((select f.enabled from infrx.feature_flags f where f.name = p_name), false)",
        "  if not coalesce((select f.enabled from infrx.feature_flags f where f.name = p_name), true)",
