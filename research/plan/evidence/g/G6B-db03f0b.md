@@ -157,6 +157,9 @@ Mutant `operation_id_not_deterministic` shows both double-write without the fix.
 - `marlin_release` uses the fixture's placeholder `engine_options_digest` and no
   runtime image digest (moving tag) — W3 fills both; the rate is provisional (P-01).
 - Data-access policy per deployment is assumed seeded by D; publish does not create it.
+- Until D row 1 lands, `Operations._context` on a consumer key row with `user_id=None`
+  raises an untyped pydantic `ValidationError` (from `AuthContextV2`) rather than a
+  typed refusal; D's `user_id`-required CHECK removes the case.
 - Upload form and async polling are specified, not served (G3/G4U/M3), and
   `bench.upload`'s shape does not match `wire.UploadCreated` (see E1B request).
 - `item_key` does not include the segment's content sha256 (§3.1 "recommended").
@@ -180,7 +183,7 @@ the same way as `Operations._context`; E3B.a provisions its two tenants through 
 4. `verified_user(user_id)` → `(user_id, personal_org_id, verification_evidence_ref)` only when verified (A1's binding).
 5. A1 `grant_initial(user_id, operation_id, at)` per 06a (`signup_grants` unique `(user_id, entitlement)`, creates/locks wallet bound to the personal org, returns existing on replay).
 6. D5 `operator_adjustment(user_id → wallet, amount numeric(20,8) ≠ 0, operation_id unique, actor, reason)` into `wallet_ledger` kind `operator_adjustment`, refused if total would fall below reserved; `reconcile(org_id, request_id, operation_id, actor, at)` applying the 24 h rule.
-7. Registry: inserts into `serving_versions`, `deployment_revisions`, `rate_cards` (immutable, identical re-insert is a no-op), alias row in `catalog_listings(requested_model → deployment_revision_id)`, and the per-deployment data-access policy row.
+7. Registry (**one transaction** for serving + deployment + card + alias: `publish` issues four port calls, so without a transaction a `Conflict` on a later row leaves a partial publication): inserts into `serving_versions`, `deployment_revisions`, `rate_cards` (immutable, identical re-insert is a no-op), alias row in `catalog_listings(requested_model → deployment_revision_id)`, and the per-deployment data-access policy row.
 8. `organizations` suspension RPC over the 0003 columns (`suspended`, `suspended_at`, `suspension_reason` code).
 9. Account view: `usage(org_id)` as `UsageRecordV2` rows, `holds(org_id)` as `(request_id, state, amount CREDIT)`.
 
@@ -198,3 +201,25 @@ the same way as `Operations._context`; E3B.a provisions its two tenants through 
 ## Verification log
 
 - 2026-09-22: Written from the command output quoted above, including the tests/d retry after the shared harness lock freed.
+
+## Review round 1 (coordinator review at `aa692fc`: PASS, 4 test gaps + 2 items)
+
+| Item | Commit | Case | Mutant |
+|---|---|---|---|
+| 1 401/403 stop like 402 | `1f30972` | `test_api_ops__an_exhausted_wallet_pauses_the_sweep[401/402/403]` | `credential_failure_continues` |
+| 2 public draining deployment refused | `ef1a698` | `…a_private_deployment_is_never_published_and_is_not_found` | `draining_deployment_published` |
+| 3 mispriced on each arm | `5b668bb` | `…an_unpriced_or_mispriced_deployment_is_unserveable` | `card_serving_unchecked`, `card_model_unchecked` |
+| 4 O_EXCL asserted directly | `b7d5c83` | `test_api_ops__the_secret_file_is_created_exclusively` | `cli_secret_file_not_exclusive` |
+| 5 no overdraw via adjustment | `2ad5af0` | `test_credit_identity__an_adjustment_never_overdraws_the_wallet` | `fake_ledger_overdraws` (mutates the fake; declared) |
+| 6 non-JSON 200/202 is a failed item | `506a374` | `…failures_are_explicit_and_never_retried_blindly` | `non_json_200_raises` (declared) |
+| docstrings | `8f9aee1` | — | — |
+
+Commands (UTC 19:33:32 → 19:35:04, at `8f9aee1`):
+
+| Command | Exit | Tail |
+|---|---|---|
+| `uv run --frozen pytest -q -p no:cacheprovider tests/g` | 0 | `320 passed, 2 warnings in 27.94s` |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/g/ops/test_mutants.py` | 0 | `68 passed in 62.85s (0:01:02)` |
+| `uv run --frozen python tests/g/ops/mutants.py --list` | 0 | `62 mutants over 38 named cases` |
+
+- 2026-09-22: Review round 1 appended; D row 7 transaction and the `_context` untyped-error limit recorded.
