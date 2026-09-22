@@ -27,7 +27,8 @@ API_DIR = pathlib.Path(__file__).resolve().parents[2]
 PACKAGE = "infrx"
 SUITE = ("tests/m/test_fetch.py", "tests/m/test_store.py",
          "tests/m/test_probe.py", "tests/m/test_prepare.py",
-         "tests/m/test_uploads.py", "tests/m/test_gc.py", "tests/m/test_consent.py")
+         "tests/m/test_uploads.py", "tests/m/test_gc.py", "tests/m/test_consent.py",
+         "tests/m/test_parity.py")
 
 F = "media/fetch.py"
 S = "media/store.py"
@@ -1070,6 +1071,19 @@ MUTANTS: tuple[Mutant, ...] = (
        C, "    else:\n        raise errors.InvalidRequest(f\"unknown reuse purpose",
        "    elif False:\n        raise errors.InvalidRequest(f\"unknown reuse purpose",
        "test_an_unknown_purpose_is_refused"),
+    # === M4: MEDIA-PARITY (tests/m/test_parity.py) ============================================
+    _m("prepared_bytes_are_not_the_source",
+       "profile v1 prepares the source bytes: the durable and local artifacts hash to the ref",
+       R, "        return data\n", "        return data[:-1]\n",
+       "test_a_prepared_clip_is_the_same_across_runs_stores_forms_and_expiry"),
+    _m("cache_file_name_varies",
+       "a prepared clip lands at the same path under the cache root on every run and store",
+       R, 'f"{SOURCE_FILENAME}.{extension}")', 'f"{SOURCE_FILENAME}.{time.monotonic_ns()}.{extension}")',
+       "test_a_prepared_clip_is_the_same_across_runs_stores_forms_and_expiry"),
+    _m("budget_frames_not_rounded_to_even",
+       "the engine's frame budget for the measured duration is whole temporal patches (10.5 s -> 22)",
+       V, "        frames += frames % 2\n", "        pass\n",
+       "test_a_prepared_clip_is_the_same_across_runs_stores_forms_and_expiry"),
     # === M3: the object-store port additions (media/store.py) =============================
     _m("keys_ignore_the_prefix", "a listing returns only the prefix it was asked for",
        S, "return sorted(key for key in self.objects if key.startswith(prefix))",

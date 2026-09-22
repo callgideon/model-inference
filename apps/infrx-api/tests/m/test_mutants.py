@@ -35,11 +35,11 @@ SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 def test_the_list_is_well_formed():
     """A typo in a test name would make a mutant unkillable by construction and pass."""
-    from . import (test_consent, test_fetch, test_gc, test_prepare, test_probe, test_store,
-                   test_uploads)
+    from . import (test_consent, test_fetch, test_gc, test_parity, test_prepare, test_probe,
+                   test_store, test_uploads)
 
     names = {name for module in (test_fetch, test_prepare, test_probe, test_store,
-                                 test_uploads, test_gc, test_consent)
+                                 test_uploads, test_gc, test_consent, test_parity)
              for name in vars(module)
              if name.startswith("test_")}
     assert len({m.name for m in ALL}) == len(ALL), "duplicate mutant names"
