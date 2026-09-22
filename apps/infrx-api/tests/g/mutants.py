@@ -467,7 +467,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("deps_not_read_from_rt", "register reads its deps from the runtime",
        N, 'ingress = Ingress(rt, deps if deps is not None else getattr(rt, "ingress", None))',
        "ingress = Ingress(rt, deps)",
-       "test_f_base__register_reads_its_deps_from_the_runtime"),
+       # G1R: default deps carry no catalog, so the ingress now refuses to register -
+       # the missing runtime deps, observed as a typed startup refusal.
+       "test_f_base__register_reads_its_deps_from_the_runtime", dies_by=("RuntimeMisconfigured",)),
     _m("catalog_optional", "the ingress refuses to start without a catalog",
        N, "        if self.deps.catalog is None:", "        if False:",
        "test_f_base__the_ingress_refuses_to_start_without_a_catalog"),
