@@ -534,7 +534,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_a_hostile_length_is_refused_not_followed"),
     _m("timecode_scale_assumed_default",
        "a Matroska duration is in timecode-scale units, and the scale is in the file",
-       P, "                scale = _u(data, body, size) or DEFAULT_TIMECODE_SCALE",
+       P, "                scale = _ebml_uint(data, body, size) or DEFAULT_TIMECODE_SCALE",
        "                scale = DEFAULT_TIMECODE_SCALE",
        "test_the_probe_reads_the_container_the_bytes_describe"),
     _m("matroska_codec_allowlist_widened",
