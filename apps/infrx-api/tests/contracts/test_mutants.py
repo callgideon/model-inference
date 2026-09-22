@@ -195,3 +195,21 @@ def test_the_fakes_skip_no_conformance_case():
         provided = set(harness.extra) | ({"failures"} if harness.failures is not None else set())
         missing = OPTIONAL_HOOKS.get(port, frozenset()) - provided
         assert missing == set(), f"the {port} fake is missing hooks {sorted(missing)}"
+
+
+def test_the_in_process_kill_rule_is_the_same_rule():
+    """F2R item 9: track D's in-process checks use `assertion_kill`, so its classification is
+    proved here without a database: an assertion is a kill, silence is a survivor, any other
+    exception is a broken check unless declared."""
+    Outcome = mutation_list.Outcome
+
+    def asserts():
+        raise AssertionError("noticed")
+
+    def crashes():
+        raise KeyError("boom")
+
+    assert mutation_list.assertion_kill(asserts).outcome is Outcome.killed
+    assert mutation_list.assertion_kill(lambda: None).outcome is Outcome.survived
+    assert mutation_list.assertion_kill(crashes).outcome is Outcome.broken_runner
+    assert mutation_list.assertion_kill(crashes, dies_by=(KeyError,)).outcome is Outcome.killed
