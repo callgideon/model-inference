@@ -313,3 +313,40 @@ pair docs above remain estimates for the eight target GPUs.
   ≈ **$0.06–0.14 per video-hour** of dense captioning at on-demand g6e
   pricing (≈ $2.24/h) — corrected 2026-09-20 from *"$0.02–0.04"*, which
   divided video-seconds by 1,000 instead of 3,600.
+
+## Launch profile (S2M, 2026-09-22)
+
+The served configuration is pinned in
+[`research/workloads/marlin-sop.md`](../../workloads/marlin-sop.md): artifact commit
+`fd111fca4fc7897876fb0d7e9df22ca5ac8ab965` (HF API `.sha`, re-confirmed unauthenticated on
+2026-09-22; the gated files themselves still 401 without `HF_TOKEN`, so the copies in this
+directory remain the source of truth for their contents), the `--hf-overrides` load, the
+`Qwen3VLProcessor` / `Qwen3VLVideoProcessor` identity with a real sha256 for
+`chat_template.jinja` (`273d8e0e…`, taken from the public API's `config.chat_template_jinja`
+field, 7,755 B), and **preprocessing profile `v1` = Path A**: 2 fps, 4–240 frames,
+200,704 px/frame, `size.longest_edge = frames × 200,704` as a whole-clip pixel budget.
+
+What that document adds to the open questions above, rather than closing:
+
+- **Open question 2 (Path A vs Path B) is resolved for the endpoint and only there.** The
+  runtime sends Path A's budget itself (`apps/infrx-api/infrx/media/video.py:111-116`), and
+  the measured 2,061-versus-12,221 prompt tokens on `sample-10s.mp4` confirm the whole-clip
+  reading. Which path the model was *trained* on is still unverified; `shortest_edge` 4096
+  (the value that reproduced the training grid) versus 65,536 is a new ⚠️ item.
+- **The 240-frame quality cliff is currently unreachable through the endpoint**, because
+  `MAX_VIDEO_SECONDS` is 120 s — so raising that cap is a new serving version with its own
+  quality evidence, not a configuration tweak.
+- **Open questions 1, 3, 5 and 33 are untouched**: the remap has still never been run on
+  any of the eight pinned GPUs, there is still no engine-versus-`transformers` quality
+  comparison beyond one clip's caption events, the only measurements anywhere remain the
+  four L40S rows below, and there is still no accuracy baseline of any kind. The launch
+  profile therefore carries **provisional** performance criteria (P-18) with latency and
+  availability targets deliberately absent, and makes no SOP accuracy claim (P-07).
+- The two weight-shard digests, the `tokenizer.json` digest and a runtime **image** digest
+  (`serve.sh` pins the moving tag `vllm/vllm-openai:nightly`) are named blockers for an
+  honest serving-version record.
+
+## Verification log
+
+- 2026-09-22 (S2M): Added this launch-profile note. No new measurement, no GPU run, no
+  cloud operation; every estimate and open question above is unchanged.
