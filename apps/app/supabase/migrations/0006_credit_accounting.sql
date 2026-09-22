@@ -250,6 +250,10 @@ begin
         unique (request_id, org_id, wallet_id, rate_card_version),
       add constraint jobs_settlement_target_key
         unique (request_id, rate_card_version, serving_version_id, deployment_revision_id);
+    -- A settlement debit is the debit of THAT job, from THAT job's wallet.
+    alter table infrx.credit_ledger add constraint credit_ledger_debit_is_the_jobs
+      foreign key (request_id, wallet_id) references infrx.jobs (request_id, wallet_id)
+      on delete restrict;
   end if;
 end $$;
 

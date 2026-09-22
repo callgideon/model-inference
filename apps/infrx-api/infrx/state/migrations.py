@@ -24,6 +24,10 @@ DIR = _REPO / "apps" / "app" / "supabase" / "migrations"
 SHIM = _HERE / "supabase_shim.sql"
 TEST_CLOCK = _HERE / "test_clock.sql"
 
+#: Operator seed (D1R): the Marlin registry rows and a PROVISIONAL rate card (P-01).
+#: Never a migration - an operator applies it deliberately; the tests apply it too.
+SEED_MARLIN = _HERE / "seed_marlin_provisional.sql"
+
 
 def migrations() -> tuple[Path, ...]:
     """`0001_init.sql`, `0002_…`, … in lexicographic order, which is their order."""

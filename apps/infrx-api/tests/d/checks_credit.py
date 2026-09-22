@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 
 import psycopg
+from infrx.state import migrations
 
 from . import checks
 from .checks import KEY_A
@@ -289,6 +290,54 @@ def seed_credit(conn) -> None:
     set_flag(conn, "credit_admission", True)
     grant(conn, CONSUMER_1)
     grant(conn, CONSUMER_2)
+    seed_registry(conn)
+
+
+# --- the operator seed and the provider fixture (item 3) -------------------------
+NEMO = "b0000001-0000-4000-8000-000000000001"
+OTHER_PROVIDER = "b0000009-0000-4000-8000-000000000009"
+OTHER_ENDPOINT = "c0000009-0000-4000-8000-000000000009"
+MODEL = "d0000001-0000-4000-8000-000000000001"
+SERVING = "d0000003-0000-4000-8000-000000000003"
+DEV_DEPLOYMENT = "c0000003-0000-4000-8000-000000000003"
+PUBLIC_DEPLOYMENT = "c0000004-0000-4000-8000-000000000004"
+PROD_ENDPOINT = "c0000002-0000-4000-8000-000000000002"
+DEV_ENDPOINT = "c0000001-0000-4000-8000-000000000001"
+CARD = "rc_marlin2b_2026_09_provisional"
+POLICY = "dap_2026_09_01"
+DEV_CARD = "rc_marlin2b_dev_internal"
+PROVIDER_WALLET = "b0000003-0000-4000-8000-000000000003"
+
+
+def apply_seed(conn) -> None:
+    conn.execute(migrations.SEED_MARLIN.read_text())
+
+
+def seed_registry(conn) -> None:
+    """The operator seed exactly as an operator runs it, plus what the checks need
+    beside it: a second provider, provider members, the provider's dev wallet funded
+    by an audited allocation, and an internal card for the private dev deployment."""
+    apply_seed(conn)
+    conn.execute(f"""
+    insert into infrx.provider_orgs (provider_org_id, slug, display_name, created_by)
+      values ('{OTHER_PROVIDER}', 'other', 'NemoStation', 'ops');   -- same display text
+    insert into infrx.endpoints (endpoint_id, provider_org_id, name, environment, created_by)
+      values ('{OTHER_ENDPOINT}', '{OTHER_PROVIDER}', 'other', 'prod', 'ops');
+    insert into infrx.provider_memberships (provider_org_id, user_id, role, granted_by) values
+      ('{NEMO}', '{PROVIDER_DEV_USER}', 'developer', 'ops@infrx'),
+      ('{NEMO}', '{PROVIDER_ADMIN_USER}', 'administrator', 'ops@infrx');
+    insert into infrx.credit_wallets (wallet_id, kind, owner_provider_org_id)
+      values ('{PROVIDER_WALLET}', 'provider_dev', '{NEMO}');
+    insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id,
+      actor, reason)
+      values ('{PROVIDER_WALLET}', 'provider_dev', 'operator_allocation', 500,
+              gen_random_uuid(), 'ops@infrx', 'preview budget');
+    insert into infrx.rate_card_versions (rate_card_version, model_id, deployment_revision_id,
+      serving_version_id, input_rate_per_million, output_rate_per_million, effective_at,
+      approved_by, provisional)
+      values ('{DEV_CARD}', '{MODEL}', '{DEV_DEPLOYMENT}', '{SERVING}', 400, 1200,
+              '2026-09-01T00:00:00Z', 'ops@infrx', true);
+    """)
 
 
 class _Allowed(Exception):
@@ -612,3 +661,260 @@ def check_regime_on_usage(conn) -> str:
     regime, = conn.execute("select count(*) from public.usage_events "
                            "where accounting_regime <> 'legacy_usd'").fetchone()
     return f"{n} regime violations refused, {m} legacy writer accepted ({regime} CREDIT rows)"
+
+
+# =============================================================================
+# item 3: the registry
+# =============================================================================
+def registry_counts(conn) -> tuple:
+    return tuple(conn.execute(f"select count(*) from infrx.{t}").fetchone()[0] for t in (
+        "provider_orgs", "model_versions", "serving_versions", "endpoints",
+        "deployment_revisions", "rate_card_versions", "data_access_policies",
+        "catalog_listings"))
+
+
+def _as_fixture(value):
+    """A database value spelled the way the fixture JSON spells it."""
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if hasattr(value, "isoformat"):
+        return value.isoformat().replace("+00:00", "Z")
+    return value
+
+
+def check_seed_is_the_fixtures(conn) -> str:
+    """The operator seed IS the F2P fixture records (02: operators seed the identical
+    records): serving revision, both deployment revisions and the rate card match their
+    fixture JSON field for field; the card is labelled provisional (P-01); a second run
+    of the seed changes nothing."""
+    before = registry_counts(conn)
+    apply_seed(conn)
+    assert registry_counts(conn) == before, "re-running the seed changed the registry"
+    compared = 0
+    card = _load("rate_card_marlin")
+    row = conn.execute("select rate_card_version, unit, meter, model_id, deployment_revision_id, "
+                       "serving_version_id, input_rate_per_million::text, "
+                       "output_rate_per_million::text, effective_at, approved_by, status, "
+                       "hold_rounding, debit_rounding, provisional from infrx.rate_card_versions "
+                       "where rate_card_version = %s", (card["rate_card_version"],)).fetchone()
+    keys = ("rate_card_version", "unit", "meter", "model_id", "deployment_revision_id",
+            "serving_version_id", "input_rate_per_million", "output_rate_per_million",
+            "effective_at", "approved_by", "status", "hold_rounding", "debit_rounding")
+    got = dict(zip(keys, map(_as_fixture, row)))
+    for k in keys:
+        assert got[k] == card[k], f"rate card {k}: database {got[k]!r}, fixture {card[k]!r}"
+    assert row[-1] is True and "P-01" in got["approved_by"], "the card is not labelled provisional"
+    compared += len(keys)
+    for name in ("deployment_revision_public", "deployment_revision_private_dev"):
+        fx = _load(name)
+        keys = ("deployment_revision_id", "endpoint_id", "environment", "max_input_tokens",
+                "max_output_tokens", "provider_org_id", "serving_version_id", "state",
+                "visibility", "created_at")
+        row = conn.execute(f"select {', '.join(keys)} from infrx.deployment_revisions "
+                           "where deployment_revision_id = %s",
+                           (fx["deployment_revision_id"],)).fetchone()
+        got = dict(zip(keys, map(_as_fixture, row)))
+        for k in keys:
+            assert got[k] == fx[k], f"{name}.{k}: database {got[k]!r}, fixture {fx[k]!r}"
+        compared += len(keys)
+    fx = _load("serving_revision")
+    keys = ("serving_version_id", "model_id", "model_version_id", "provider_org_id",
+            "public_model_id", "revision_label", "model_repo", "model_commit",
+            "weight_shard_digests", "tokenizer_digest", "chat_template_digest",
+            "digest_source", "prompt_harness_ref", "preprocessor_profile_version",
+            "runtime_image_ref", "engine_options_digest", "precision", "capability",
+            "created_at")
+    row = conn.execute("""
+        select s.serving_version_id, s.model_id, s.model_version_id, s.provider_org_id, m.id,
+               s.revision_label, v.model_repo, v.model_commit, v.weight_shard_digests,
+               v.tokenizer_digest, v.chat_template_digest, v.digest_source,
+               s.prompt_harness_ref, s.preprocessor_profile_version, s.runtime_image_ref,
+               s.engine_options_digest, s.precision, s.capability, s.created_at
+        from infrx.serving_versions s
+        join infrx.model_versions v on v.model_version_id = s.model_version_id
+        join public.models m on m.model_uuid = s.model_id
+        where s.serving_version_id = %s""", (fx["serving_version_id"],)).fetchone()
+    got = dict(zip(keys, map(_as_fixture, row)))
+    for k in keys:
+        assert got[k] == fx[k], f"serving_revision.{k}: database {got[k]!r}, fixture {fx[k]!r}"
+    assert "runtime_image_digest" not in fx and conn.execute(
+        "select runtime_image_digest is null from infrx.serving_versions "
+        "where serving_version_id = %s", (fx["serving_version_id"],)).fetchone()[0], \
+        "a moving-tag runtime gained a digest (R76)"
+    compared += len(keys)
+    return f"seed == F2P fixtures on {compared} fields; provisional; re-run is a no-op"
+
+
+def _registry_cases() -> tuple[tuple, tuple]:
+    dep = ("insert into infrx.deployment_revisions (endpoint_id, provider_org_id, environment, "
+           "serving_version_id, visibility, state, max_input_tokens, max_output_tokens, "
+           "created_by) values ")
+    card = ("insert into infrx.rate_card_versions (rate_card_version, model_id, "
+            "deployment_revision_id, serving_version_id, input_rate_per_million, "
+            "output_rate_per_million, effective_at, approved_by, provisional")
+    mv = ("insert into infrx.model_versions (model_id, provider_org_id, model_repo, "
+          "model_commit, weight_shard_digests, tokenizer_digest, chat_template_digest, "
+          "digest_source, created_by) values ")
+    sha = "'sha256:" + "a" * 64 + "'"
+    good_mv = (f"'{MODEL}', '{NEMO}', 'r', '{'f' * 40}', array[{sha}], {sha}, {sha}, "
+               f"'served_bytes', 'ops')")
+    listing = ("insert into infrx.catalog_listings (public_model_id, version, model_id, "
+               "deployment_revision_id, serving_version_id, rate_card_version, effective_at, "
+               "approved_by) values ")
+    refused = (
+        ("a public deployment on a dev endpoint",
+         dep + f"('{DEV_ENDPOINT}', '{NEMO}', 'dev', '{SERVING}', 'public', 'active', 1, 1, 'o')"),
+        ("a public deployment that never passed validation",
+         dep + f"('{PROD_ENDPOINT}', '{NEMO}', 'prod', '{SERVING}', 'public', 'draft', 1, 1, 'o')"),
+        ("a private deployment in a public state",
+         dep + f"('{PROD_ENDPOINT}', '{NEMO}', 'prod', '{SERVING}', 'private', 'active', 1, 1, 'o')"),
+        ("a deployment whose environment disagrees with its endpoint",
+         dep + f"('{DEV_ENDPOINT}', '{NEMO}', 'prod', '{SERVING}', 'private', 'draft', 1, 1, 'o')"),
+        ("deploying another provider's serving version",
+         dep + f"('{OTHER_ENDPOINT}', '{OTHER_PROVIDER}', 'prod', '{SERVING}', 'private', "
+               f"'draft', 1, 1, 'o')"),
+        ("deploying onto another provider's endpoint",
+         dep + f"('{OTHER_ENDPOINT}', '{NEMO}', 'prod', '{SERVING}', 'private', 'draft', 1, 1, 'o')"),
+        ("re-pointing a deployment at another serving version",
+         f"update infrx.deployment_revisions set serving_version_id = gen_random_uuid() "
+         f"where deployment_revision_id = '{PUBLIC_DEPLOYMENT}'"),
+        ("making a private deployment public by update",
+         f"update infrx.deployment_revisions set visibility = 'public' "
+         f"where deployment_revision_id = '{DEV_DEPLOYMENT}'"),
+        ("widening a deployment's validated limits",
+         f"update infrx.deployment_revisions set max_output_tokens = 100000 "
+         f"where deployment_revision_id = '{PUBLIC_DEPLOYMENT}'"),
+        ("an active deployment going back to draft",
+         f"update infrx.deployment_revisions set state = 'validating' "
+         f"where deployment_revision_id = '{PUBLIC_DEPLOYMENT}'"),
+        ("resurrecting a retired deployment",
+         f"with r as (update infrx.deployment_revisions set state = 'retired' "
+         f"where deployment_revision_id = '{DEV_DEPLOYMENT}' returning 1) "
+         f"select 1; update infrx.deployment_revisions set state = 'ready_private' "
+         f"where deployment_revision_id = '{DEV_DEPLOYMENT}'"),
+        ("deleting a deployment", f"delete from infrx.deployment_revisions "
+                                  f"where deployment_revision_id = '{DEV_DEPLOYMENT}'"),
+        ("re-pricing an admitted card", f"update infrx.rate_card_versions set "
+         f"output_rate_per_million = 1 where rate_card_version = '{CARD}'"),
+        ("deleting a card", f"delete from infrx.rate_card_versions where rate_card_version = '{CARD}'"),
+        ("a USD card", card + f", unit) values ('rc_x', '{MODEL}', '{PUBLIC_DEPLOYMENT}', "
+                              f"'{SERVING}', 1, 1, now(), 'o', false, 'USD')"),
+        ("an unknown meter", card + f", meter) values ('rc_x', '{MODEL}', '{PUBLIC_DEPLOYMENT}', "
+                                    f"'{SERVING}', 1, 1, now(), 'o', false, 'seconds-v1')"),
+        ("a negative rate", card + f") values ('rc_x', '{MODEL}', '{PUBLIC_DEPLOYMENT}', "
+                                   f"'{SERVING}', -1, 1, now(), 'o', false)"),
+        ("an unapproved card", card + f", status) values ('rc_x', '{MODEL}', "
+                                      f"'{PUBLIC_DEPLOYMENT}', '{SERVING}', 1, 1, now(), 'o', "
+                                      f"false, 'proposed')"),
+        ("a card with no approver", card + f") values ('rc_x', '{MODEL}', '{PUBLIC_DEPLOYMENT}', "
+                                           f"'{SERVING}', 1, 1, now(), ' ', false)"),
+        ("a card pricing a serving version its deployment does not run",
+         card + f") values ('rc_x', '{MODEL}', '{PUBLIC_DEPLOYMENT}', gen_random_uuid(), 1, 1, "
+                f"now(), 'o', false)"),
+        ("a listing of a private dev deployment",
+         listing + f"('nemostation/marlin-2b', 9, '{MODEL}', '{DEV_DEPLOYMENT}', '{SERVING}', "
+                   f"'{DEV_CARD}', now(), 'o')"),
+        ("a listing priced by another deployment's card",
+         listing + f"('nemostation/marlin-2b', 9, '{MODEL}', '{PUBLIC_DEPLOYMENT}', '{SERVING}', "
+                   f"'{DEV_CARD}', now(), 'o')"),
+        ("moving an alias by editing its listing",
+         "update infrx.catalog_listings set deployment_revision_id = deployment_revision_id, "
+         "version = 2"),
+        ("a listing under another model's alias",
+         f"insert into public.models (id, name, provider, description, status, base_url, "
+         f"served_model, input_usd_per_m, output_usd_per_m, context_tokens, input_modalities, "
+         f"output_modalities) values ('x/y', 'x', 'x', 'x', 'live', 'u', 'x', 0, 0, 1, "
+         f"'{{text}}', '{{text}}'); " + listing + f"('x/y', 1, '{MODEL}', '{PUBLIC_DEPLOYMENT}', "
+         f"'{SERVING}', '{CARD}', now(), 'o')"),
+        ("re-owning a model that has versions",
+         f"update public.models set provider_org_id = '{OTHER_PROVIDER}' "
+         f"where model_uuid = '{MODEL}'"),
+        ("a model version owned by a provider that does not own the model",
+         mv + good_mv.replace(f"'{NEMO}'", f"'{OTHER_PROVIDER}'")),
+        ("a commit that is not a sha", mv + good_mv.replace("f" * 40, "main")),
+        ("no weight shard", mv + good_mv.replace(f"array[{sha}]", "'{}'::text[]")),
+        ("a null weight shard", mv + good_mv.replace(f"array[{sha}]", f"array[{sha}, null]")),
+        ("a malformed shard digest",
+         mv + good_mv.replace(f"array[{sha}]", f"array[{sha}, 'md5:abc']")),
+        ("an unrecorded digest provenance", mv + good_mv.replace("'served_bytes'", "'guess'")),
+        ("editing a model version's weights",
+         "update infrx.model_versions set weight_shard_digests = array[]::text[]"),
+        ("a second serving version with the same revision label",
+         f"insert into infrx.serving_versions (model_version_id, model_id, provider_org_id, "
+         f"revision_label, prompt_harness_ref, preprocessor_profile_version, runtime_image_ref, "
+         f"engine_options_digest, precision, capability, created_by) select model_version_id, "
+         f"model_id, provider_org_id, revision_label, prompt_harness_ref, "
+         f"preprocessor_profile_version, runtime_image_ref, engine_options_digest, precision, "
+         f"capability, 'o' from infrx.serving_versions where serving_version_id = '{SERVING}'"),
+        ("a serving version with another billing meter",
+         f"insert into infrx.serving_versions (model_version_id, model_id, provider_org_id, "
+         f"revision_label, prompt_harness_ref, preprocessor_profile_version, runtime_image_ref, "
+         f"engine_options_digest, precision, capability, created_by) select model_version_id, "
+         f"model_id, provider_org_id, 'v2', prompt_harness_ref, preprocessor_profile_version, "
+         f"runtime_image_ref, engine_options_digest, precision, capability || "
+         f"'{{\"billing_meter\": \"seconds-v1\"}}', 'o' from infrx.serving_versions "
+         f"where serving_version_id = '{SERVING}'"),
+        ("pinning a runtime digest onto an existing serving version",
+         f"update infrx.serving_versions set runtime_image_digest = {sha}"),
+        ("a provider role that is a consumer role",
+         f"insert into infrx.provider_memberships (provider_org_id, user_id, role, granted_by) "
+         f"values ('{NEMO}', '{CONSUMER_1}', 'owner', 'ops')"),
+        ("two current memberships of one provider",
+         f"insert into infrx.provider_memberships (provider_org_id, user_id, role, granted_by) "
+         f"values ('{NEMO}', '{PROVIDER_DEV_USER}', 'viewer', 'ops')"),
+        ("promoting a membership in place",
+         f"update infrx.provider_memberships set role = 'administrator' "
+         f"where user_id = '{PROVIDER_DEV_USER}'"),
+        ("an ungranted membership",
+         f"insert into infrx.provider_memberships (provider_org_id, user_id, role, granted_by) "
+         f"values ('{NEMO}', '{CONSUMER_1}', 'viewer', '')"),
+        ("un-revoking a membership",
+         f"update infrx.provider_memberships set revoked_at = now() "
+         f"where user_id = '{PROVIDER_DEV_USER}'; update infrx.provider_memberships "
+         f"set revoked_at = null where user_id = '{PROVIDER_DEV_USER}'"),
+        ("deleting a membership",
+         f"delete from infrx.provider_memberships where user_id = '{PROVIDER_DEV_USER}'"),
+        ("a second dev wallet for one provider",
+         f"insert into infrx.credit_wallets (kind, owner_provider_org_id) "
+         f"values ('provider_dev', '{NEMO}')"),
+        ("a dev wallet for a provider that does not exist",
+         "insert into infrx.credit_wallets (kind, owner_provider_org_id) "
+         "values ('provider_dev', gen_random_uuid())"),
+        ("a signup grant into a provider's dev wallet",
+         f"insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id, "
+         f"actor) values ('{PROVIDER_WALLET}', 'provider_dev', 'signup_grant', 10000, "
+         f"gen_random_uuid(), 'platform')"),
+        ("renaming a provider (ownership rows are immutable)",
+         f"update infrx.provider_orgs set slug = 'x' where provider_org_id = '{NEMO}'"),
+    )
+    accepted = (
+        ("two providers may share display text (it is not a key)",
+         "select 1 from infrx.provider_orgs where display_name = 'NemoStation' having count(*) = 2"),
+        ("a dev deployment moves forward to retired",
+         f"update infrx.deployment_revisions set state = 'retired' "
+         f"where deployment_revision_id = '{DEV_DEPLOYMENT}'"),
+        ("a membership is revoked once",
+         f"update infrx.provider_memberships set revoked_at = now() "
+         f"where user_id = '{PROVIDER_DEV_USER}'"),
+        ("a new rate is a new card; the alias moves by a new listing version",
+         card + f") values ('rc_marlin2b_v2', '{MODEL}', '{PUBLIC_DEPLOYMENT}', '{SERVING}', "
+                f"500, 1500, now(), 'ops@infrx', false); " + listing +
+         f"('nemostation/marlin-2b', 2, '{MODEL}', '{PUBLIC_DEPLOYMENT}', '{SERVING}', "
+         f"'rc_marlin2b_v2', now(), 'ops@infrx')"),
+        ("an operator allocation funds the provider's dev wallet",
+         f"insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id, "
+         f"actor) values ('{PROVIDER_WALLET}', 'provider_dev', 'operator_allocation', 1, "
+         f"gen_random_uuid(), 'ops@infrx')"),
+    )
+    return refused, accepted
+
+
+def check_registry(conn) -> str:
+    """Item 3: provider-owned, immutable registry. Visibility/state/environment rules
+    (R70), provider-coherent deployments, immutable cards/listings (CREDIT-RATE), digest
+    provenance (R76), provider roles distinct from consumer roles, one dev wallet per
+    provider and no signup money for it."""
+    refused, accepted = _registry_cases()
+    n = _all_refused(conn, refused, "registry")
+    m = _all_accepted(conn, accepted, "registry controls")
+    return f"{n} registry violations refused, {m} controls accepted"

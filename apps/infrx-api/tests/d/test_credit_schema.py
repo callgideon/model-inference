@@ -93,3 +93,16 @@ def test_credit_units__no_conversion_and_explicit_regimes() -> None:
     print(checks_credit.check_no_unit_conversion(conn))
     print(checks_credit.check_money_unit_cases(conn))
     print(checks_credit.check_regime_on_usage(conn))
+
+
+# --- item 3: the provider / model / serving / deployment / listing / rate registry --
+def test_registry__the_operator_seed_is_the_f2p_fixtures() -> None:
+    """The documented operator seed works without Lab, is idempotent, and its rows are
+    the F2P fixture records field for field, with the card labelled provisional (P-01)."""
+    print(checks_credit.check_seed_is_the_fixtures(_credit()))
+
+
+def test_registry__ownership_immutability_and_visibility() -> None:
+    """Provider-owned, immutable revisions and rate snapshots; dev never public; roles
+    distinct from consumer roles; display text is not a key."""
+    print(checks_credit.check_registry(_credit()))
