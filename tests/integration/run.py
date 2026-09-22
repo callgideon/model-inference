@@ -283,23 +283,26 @@ def migrate(report: Report, seed: int):
     state = harness.save_state({"seed": seed, "fixtures": fixtures.to_dict(),
                                 "applied": applied, "clock": clock})
     report.add("migrate", PASS, {"applied": applied, "clock": clock,
-                                 "clock_offset_probe_s": offset_probe,
+                                 "clock_probe": offset_probe,
                                  "seed": seed, "balances": before,
                                  "usage_rows": fixtures.usage_rows,
                                  "state_file": str(state)})
     return fixtures
 
 
-def _clock_probe(conn) -> float:
-    """Prove the test clock really moves, and only where it is set."""
-    with conn.transaction():
-        pgstate.set_clock_offset(conn, 3600.0)
-        moved, real = conn.execute(
-            f"select {pgstate.CLOCK_SCHEMA}.now(), now()").fetchone()
-    unset = conn.execute(f"select {pgstate.CLOCK_SCHEMA}.now() - now()").fetchone()[0]
-    if abs(unset.total_seconds()) > 1.0:
-        raise harness.HarnessError("the clock offset leaked out of its transaction")
-    return round((moved - real).total_seconds(), 1)
+def _clock_probe(conn) -> dict:
+    """Prove the SHARED clock (`infrx.now()`, D1's) really moves, and comes back to rest.
+
+    E2R item 2: this used to probe E2's private `infrx_e2_test.now()`, a function no
+    migration and no product code ever calls. A clock probe that passes on a function
+    nothing reads proves nothing about R7.
+    """
+    probe = pgstate.probe_clock(conn)
+    if probe["moved_s"] != 3600.0 or abs(probe["at_rest_s"]) > 1.0 \
+            or abs(probe["after_rollback_s"]) > 1.0:
+        raise harness.HarnessError(
+            f"the shared test clock does not behave as R7 requires: {probe}")
+    return probe
 
 
 def rls(report: Report, fixtures) -> None:
@@ -343,10 +346,19 @@ def suites(report: Report, *, own_only: bool) -> None:
     if not own_only:
         for target in ("api-test", "console-test", "bench-test"):
             runs.append(shell(["make", target], cwd=harness.REPO_ROOT))
-    failed = [run for run in runs if run["exit"] != 0]
-    report.add("suites", FAIL if failed else PASS,
-               {"runs": [{k: run[k] for k in ("argv", "exit", "counts")} for run in runs]},
-               runs=runs)
+    failed = [run["argv"] for run in runs if run["exit"] != 0]
+    # E2R item 4: exit 0 is not evidence that anything ran. `make bench-test` prints
+    # "not run - models/marlin2b/tests does not exist yet" and exits 0; a target whose
+    # command is missing, whose suite collected nothing, or whose `if` branch echoed a
+    # sentence does the same. A run that reports no passing cases at all is therefore a
+    # FAILURE of this stage, not a pass with an empty count - the whole point of the stage
+    # is that cross-module discovery is measured rather than assumed.
+    silent = [run["argv"] for run in runs
+              if not run["counts"].get("passed") and not run["counts"].get("node_pass")]
+    report.add("suites", FAIL if (failed or silent) else PASS,
+               {"runs": [{k: run[k] for k in ("argv", "exit", "counts")} for run in runs],
+                "nonzero_exit": failed or None,
+                "reported_no_tests": silent or None}, runs=runs)
 
 
 def mutation(report: Report, *, layer: str) -> None:

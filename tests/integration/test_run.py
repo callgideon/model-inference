@@ -281,6 +281,41 @@ def test_a_failing_suite_fails_the_run():
     assert green.stages[-1]["status"] == runner.PASS
 
 
+def test_a_suite_that_reports_no_tests_at_all_fails_the_run():
+    """E2R item 4: exit 0 is not evidence that anything ran.
+
+    `make bench-test` echoes "not run - models/marlin2b/tests does not exist yet (E1 owns
+    it)" and exits 0; a deleted testpath, an empty collection or a mistyped target does the
+    same. This stage exists to MEASURE cross-module discovery, so a runner that reports no
+    passing cases is a failure of the stage rather than a pass with an empty count.
+    """
+    report = fresh_report()
+
+    def silent(argv, **_):
+        quiet = argv[:2] == ["make", "bench-test"]
+        return {"argv": " ".join(argv), "cwd": ".", "exit": 0, "seconds": 0.1,
+                "counts": {} if quiet else {"passed": 41}, "named": None,
+                "tail": "bench-test: not run - models/marlin2b/tests does not exist yet"}
+
+    with patched(runner, shell=silent):
+        runner.suites(report, own_only=False)
+    entry = report.stages[-1]
+    assert entry["status"] == runner.FAIL, entry
+    assert entry["detail"]["reported_no_tests"] == ["make bench-test"], entry["detail"]
+    assert entry["detail"]["nonzero_exit"] is None, "it exited 0: that is the point"
+    assert report.exit_code == 1
+
+    # A node runner counts differently and must still count: `# pass 131`, not `131 passed`.
+    console = fresh_report()
+    with patched(runner, shell=lambda argv, **_: {
+            "argv": " ".join(argv), "cwd": ".", "exit": 0, "seconds": 0.1,
+            "counts": {"node_pass": 131} if argv[:2] == ["make", "console-test"]
+                      else {"passed": 7},
+            "named": None, "tail": ""}):
+        runner.suites(console, own_only=False)
+    assert console.stages[-1]["status"] == runner.PASS, console.stages[-1]
+
+
 def test_teardown_is_reported_and_its_failure_is_a_failure():
     report = fresh_report()
     with patched(harness, down=lambda: ["infrx-e2-postgres"],

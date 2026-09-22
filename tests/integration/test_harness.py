@@ -123,13 +123,40 @@ def test_nothing_in_this_directory_points_at_production():
 
 def test_the_movable_clock_cannot_exist_in_a_deployed_database():
     """08 §10 "D1: four things", item 3: a clock a deployed process can move is a way to
-    release an unknown-usage hold early. The offset therefore lives in a schema and a GUC
-    namespace that no migration creates - checked against the migrations, not asserted."""
+    release an unknown-usage hold early.
+
+    E2R item 2 swapped E2's private clock for D1's shared `infrx_test` one, so the old check
+    ("the migrations never mention it") is no longer available: `infrx.now()` READS
+    `infrx_test.clock` and says so in 0003. The two barriers that actually hold are checked
+    instead - nothing in the migrations INSTALLS the offset, and the only installer is a
+    fixture outside the migrations directory - plus the second, independent gate: the offset
+    is consulted only in a task-local `infrx_<task>` database, which production's is not.
+    """
+    installs = (f"create schema if not exists {pgstate.CLOCK_SCHEMA}",
+                f"create schema {pgstate.CLOCK_SCHEMA}",
+                f"create table if not exists {pgstate.CLOCK_SCHEMA}.clock",
+                f"function {pgstate.CLOCK_SCHEMA}.advance",
+                f"function {pgstate.CLOCK_SCHEMA}.set_offset")
     for path in pgstate.migration_files():
-        text = path.read_text()
-        assert pgstate.CLOCK_SCHEMA not in text, f"{path.name} creates the test clock schema"
-        assert pgstate.CLOCK_GUC not in text, f"{path.name} references the test clock GUC"
-    assert pgstate.CLOCK_SCHEMA.startswith("infrx_e2"), "the schema stays in this namespace"
+        lowered = path.read_text().lower()
+        for needle in installs:
+            assert needle not in lowered, f"{path.name} installs the test clock: {needle!r}"
+
+    fixture = pgstate.CLOCK_FIXTURE
+    assert fixture.is_file(), f"the clock fixture is missing: {fixture}"
+    assert fixture.parent != harness.MIGRATIONS_DIR, \
+        "the only installer of a movable clock must not be a migration"
+    body = fixture.read_text().lower()
+    assert f"create schema if not exists {pgstate.CLOCK_SCHEMA}" in body
+    assert f"create table if not exists {pgstate.CLOCK_SCHEMA}.clock" in body
+
+    # The second barrier, in the migration that defines the clock: a database name gate.
+    gate = "current_database() like 'infrx@_%' escape '@'"
+    assert any(gate in path.read_text() for path in pgstate.migration_files()), \
+        f"{pgstate.CLOCK_FUNCTION} must gate the offset on a task-local database name"
+    assert harness.PG_DATABASE.startswith("infrx_"), "our database must pass that gate"
+    assert not harness.PG_TEMPLATE_SOURCE.startswith("infrx_"), \
+        "and production's database name must not: that is what makes the gate work"
 
 
 def test_the_migration_set_is_the_console_one_and_is_read_in_filename_order():
@@ -168,9 +195,17 @@ def test_the_role_matrix_covers_every_role_and_every_expectation_kind():
     denials = [check for check in checks if check.expect == ("error", pgstate.PERMISSION_DENIED)]
     unqualified = [check.case for check in denials if not check.message_contains]
     assert unqualified == [], f"these 42501 cases do not distinguish the cause: {unqualified}"
-    assert {check.message_contains for check in denials} == {
-        "permission denied for table", "violates row-level security policy",
-        "not a member of organization"}, "all three causes must be represented"
+    # E2R item 2: with the merged 0004 there is a FOURTH cause - a revoked function EXECUTE -
+    # and the four `anon` cases name the relation they were refused, so a grant reappearing on
+    # one table cannot hide behind a generic fragment.
+    causes = {check.message_contains for check in denials}
+    assert {"permission denied for table", "violates row-level security policy",
+            "not a member of organization",
+            "permission denied for function org_balance"} <= causes, causes
+    assert {cause for cause in causes if cause.startswith("permission denied for table ")} == {
+        "permission denied for table organizations", "permission denied for table api_keys",
+        "permission denied for table credit_ledger",
+        "permission denied for table models"}, causes
     # Every statement must be renderable: an unbound placeholder is a case that never runs.
     for check in checks:
         statement, _ = pgstate._sql(fixtures, check.sql)

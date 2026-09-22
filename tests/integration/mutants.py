@@ -32,7 +32,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import harness                                          # noqa: E402
 
 # The trees a mutant may edit, copied wholesale so an edit cannot escape the copy.
-OWNED_TREES = ("tests/integration", "models/marlin2b")
+# E2R item 1: `apps/infrx-api/tests/d` joins them for the D harness's ownership invariants.
+# Its test loads `pgharness.py` by path relative to its own `__file__`, so in the copy it
+# loads the MUTATED one; `infrx` itself comes from the real checkout through PYTHONPATH.
+OWNED_TREES = ("tests/integration", "models/marlin2b", "apps/infrx-api/tests/d")
 
 
 @dataclass(frozen=True)
@@ -165,6 +168,12 @@ MUTANTS: tuple[Mutant, ...] = (
            "            pass",
            "tests/integration/test_run.py", "undetected_canary",
            cases=("test_an_undetected_canary_fails_the_run",)),
+    Mutant("e2m69", "E2R item 4: a suite that reported no tests at all fails the run",
+           "tests/integration/run.py",
+           '    report.add("suites", FAIL if (failed or silent) else PASS,',
+           '    report.add("suites", FAIL if failed else PASS,',
+           "tests/integration/test_run.py", "reports_no_tests",
+           cases=("test_a_suite_that_reports_no_tests_at_all_fails_the_run",)),
     Mutant("e2m35", "r1 B2: a failing suite fails the run",
            "tests/integration/run.py",
            '    failed = [run for run in runs if run["exit"] != 0]',
@@ -316,8 +325,10 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_the_fake_server_binds_loopback_unless_explicitly_allowed",)),
     Mutant("e2m56", "r2 B1 (P4): every matrix check is rolled back, leaving no residue",
            "tests/integration/pgstate.py",
-           "            raise _Rollback\n",
-           "            pass\n",
+           # Multi-line since E2R: `probe_clock` ends a transaction the same way, so the bare
+           # line is no longer unique and `occurrences` would report this mutant as stale.
+           '                outcome = "unexpected-success"\n            raise _Rollback\n',
+           '                outcome = "unexpected-success"\n            pass\n',
            "tests/integration/test_services.py", "role_matrix_holds",
            layer=2, dirties_database=True,
            cases=("test_the_role_matrix_holds_for_every_role",)),
@@ -358,10 +369,22 @@ MUTANTS: tuple[Mutant, ...] = (
                   "test_the_compose_file_publishes_exactly_those_ports_on_loopback")),
     Mutant("e2m11", "the movable database clock cannot exist in a deployed database",
            "tests/integration/pgstate.py",
-           'CLOCK_SCHEMA = "infrx_e2_test"',
-           'CLOCK_SCHEMA = "public"',
+           'CLOCK_SCHEMA = "infrx_test"',
+           'CLOCK_SCHEMA = "infrx"',
            "tests/integration/test_harness.py", "movable_clock",
            cases=("test_the_movable_clock_cannot_exist_in_a_deployed_database",)),
+    Mutant("e2m59", "E2R: the only installer of the movable clock is not a migration",
+           "tests/integration/pgstate.py",
+           'CLOCK_FIXTURE = harness.API_ROOT / "infrx" / "state" / "test_clock.sql"',
+           'CLOCK_FIXTURE = harness.MIGRATIONS_DIR / "0003_pilot_durable_schema.sql"',
+           "tests/integration/test_harness.py", "movable_clock",
+           cases=("test_the_movable_clock_cannot_exist_in_a_deployed_database",)),
+    Mutant("e2m61", "E2R: an anon denial names the relation whose grant is missing",
+           "tests/integration/pgstate.py",
+           'message_contains="permission denied for table organizations"),',
+           'message_contains="permission denied for table"),',
+           "tests/integration/test_harness.py", "role_matrix_covers",
+           cases=("test_the_role_matrix_covers_every_role_and_every_expectation_kind",)),
 
     # ---------------- the test-id table
     Mutant("e2m12", "namespacing really separates the colliding legacy ids",
@@ -404,13 +427,38 @@ MUTANTS: tuple[Mutant, ...] = (
            '        passed = (outcome == "error" and True',
            "tests/integration/test_services.py", "should_fail",
            layer=2, cases=("test_a_check_that_should_fail_does_fail",)),
-    Mutant("e2m18", "database time moves only inside a transaction that asks for it",
+    Mutant("e2m18", "E2R: a rolled-back move of the shared clock leaves it where it was",
            "tests/integration/pgstate.py",
-           '    conn.execute("select set_config(%s, %s, %s)", (CLOCK_GUC, str(float(seconds)), local))',
-           '    conn.execute("select set_config(%s, %s, false)", (CLOCK_GUC, str(float(seconds))))',
-           "tests/integration/test_services.py", "database_time",
+           # Multi-line: `raise _Rollback` also ends every role-matrix check.
+           "            advance_clock(conn, 1800.0)\n"
+           "            inside = clock_delta_s(conn)\n"
+           "            raise _Rollback",
+           "            advance_clock(conn, 1800.0)\n"
+           "            inside = clock_delta_s(conn)\n"
+           "            pass",
+           "tests/integration/test_services.py", "shared_clock",
            layer=2,
-           cases=("test_database_time_moves_only_inside_a_transaction_that_asks_for_it",)),
+           cases=("test_the_shared_clock_moves_the_function_every_durable_decision_reads",)),
+    Mutant("e2m60", "E2R item 2: anon is REFUSED by the missing grant, not filtered to 0 rows",
+           "tests/integration/pgstate.py",
+           'Check("E2-RLS-04", "anon", None, "select count(*) from public.models",\n'
+           '              ("error", PERMISSION_DENIED),',
+           'Check("E2-RLS-04", "anon", None, "select count(*) from public.models",\n'
+           '              ("value", 0),',
+           "tests/integration/test_services.py", "role_matrix_holds",
+           layer=2, cases=("test_the_role_matrix_holds_for_every_role",)),
+    Mutant("e2m62", "E2R item 2: E2-RLS-44's refusal is the function grant, not the body's check",
+           "tests/integration/pgstate.py",
+           '              message_contains="permission denied for function org_balance"),',
+           '              message_contains="not a member of organization"),',
+           "tests/integration/test_services.py", "role_matrix_holds",
+           layer=2, cases=("test_the_role_matrix_holds_for_every_role",)),
+    Mutant("e2m63", "E2R item 2: the legacy claim GUC is set, which is the one this image reads",
+           "tests/integration/pgstate.py",
+           "    conn.execute(\"select set_config('request.jwt.claim.sub', %s, true)\", (str(user_id),))",
+           "    pass",
+           "tests/integration/test_services.py", "both_jwt_claim_forms",
+           layer=2, cases=("test_both_jwt_claim_forms_are_set_for_an_impersonated_principal",)),
     Mutant("e2m19", "the namespace guard holds against the live daemon, not just the prefix",
            "tests/integration/harness.py",
            '    if labels.get("com.docker.compose.project") != PROJECT:',
@@ -468,6 +516,42 @@ MUTANTS: tuple[Mutant, ...] = (
            "                if False:",
            "tests/integration/test_services.py", "authenticates_nobody or role_matrix_holds",
            layer=2, cases=("test_a_matrix_that_authenticates_nobody_fails",)),
+    # ---------------- E2R item 1: the D harness owns its container before it uses it
+    # Layer 1 by the harness's own definition (they need docker but not the E2 stack), and
+    # they skip visibly without it, exactly as D's suite does.
+    Mutant("e2m64", "E2R: a container this run did not create is never used or replaced",
+           "apps/infrx-api/tests/d/pgharness.py",
+           "    stranger = foreign()\n    if stranger is not None:",
+           "    stranger = None\n    if stranger is not None:",
+           "apps/infrx-api/tests/d/test_pgharness.py", "did_not_create",
+           cases=("test_a_container_this_run_did_not_create_is_refused_and_survives",)),
+    Mutant("e2m65", "E2R: the port lock refuses a concurrent run before anything is inspected",
+           "apps/infrx-api/tests/d/pgharness.py",
+           "    _acquire_lock()\n    stranger = foreign()",
+           "    stranger = foreign()",
+           "apps/infrx-api/tests/d/test_pgharness.py", "second_concurrent_run",
+           cases=("test_a_second_concurrent_run_is_refused_and_alters_nothing",)),
+    Mutant("e2m66", "E2R: a crashed run's leftover container is replaced, never adopted",
+           "apps/infrx-api/tests/d/pgharness.py",
+           '        _docker("rm", "-f", "-v", CONTAINER, check=False)\n'
+           "    # The Supabase image initialises its own roles",
+           "        pass\n"
+           "    # The Supabase image initialises its own roles",
+           "apps/infrx-api/tests/d/test_pgharness.py", "killed_mid_provision",
+           cases=("test_a_run_killed_mid_provision_is_cleaned_up_by_the_next_one",)),
+    Mutant("e2m67", "E2R: only what this run created is removed",
+           "apps/infrx-api/tests/d/pgharness.py",
+           "    if not _created:\n        return\n    assert_ours(\"remove\")",
+           "    assert_ours(\"remove\")",
+           "apps/infrx-api/tests/d/test_pgharness.py", "only_ever_removes",
+           cases=("test_remove_only_ever_removes_what_this_run_created",)),
+    Mutant("e2m68", "E2R: one lock covers both image variants, because they share the port",
+           "apps/infrx-api/tests/d/pgharness.py",
+           'return Path(tempfile.gettempdir()) / f"{SERVICE.container}-{PORT}.lock"',
+           'return Path(tempfile.gettempdir()) / f"{CONTAINER}.lock"',
+           "apps/infrx-api/tests/d/test_pgharness.py", "both_image_variants",
+           cases=("test_the_port_lock_is_shared_by_both_image_variants",)),
+
     Mutant("e2m27", "r1 R-a: the template copy is owned by postgres, or migrations cannot run",
            "tests/integration/harness.py",
            "                             f\"template {PG_TEMPLATE_SOURCE} owner {PG_USER}\")],",
@@ -514,6 +598,9 @@ def run_one(mutant: Mutant, *, stack_available: bool) -> dict:
              "-k", mutant.select, "-p", "no:cacheprovider", "--no-header", "-x"],
             cwd=str(root), capture_output=True, text=True, timeout=240,
             env={**os.environ, "INFRX_E2_REPO_ROOT": str(harness.REPO_ROOT),
+                 # `infrx` (the pinned contracts package) always comes from the real
+                 # checkout; only the owned trees above are the copy's.
+                 "PYTHONPATH": str(harness.API_ROOT),
                  # The copy must claim the provisioning checkout's identity or B1's ownership
                  # label correctly makes the live stack foreign, and every layer-2 mutant is
                  # skipped instead of killed.

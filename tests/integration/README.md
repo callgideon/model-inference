@@ -100,7 +100,7 @@ exists, and `down()` records every id before removing and re-checks by id afterw
 | ClickHouse database | `infrx_e2` |
 | Valkey key prefix | `infrx_e2:` |
 | object prefix | `test/e2/` in bucket `infrx-e2` |
-| test-only SQL schema | `infrx_e2_test` (the movable clock) |
+| test-only SQL schema | `infrx_test` — D1's shared clock fixture (`apps/infrx-api/infrx/state/test_clock.sql`), installed by the harness, by no migration |
 | run state | `$TMPDIR/infrx-e2-state.json`, removed at teardown |
 
 Credentials are fixed local literals in `compose.yaml` (`infrx-e2-local` and friends). A
@@ -150,8 +150,9 @@ PostgreSQL has.
   - `OWNER postgres` is not cosmetic: `public` is owned by `pg_database_owner`, so without it
     the copy's owner is `supabase_admin` and the migration fails with `permission denied for
     schema public`.
-  - E2's own `infrx_e2_test.now()` clock stays until D1 merges, then gives way to D1's
-    `infrx_test` clock; both are gated the same way.
+  - E2R: E2's own `infrx_e2_test.now()` clock is **gone**. The harness installs D1's
+    `infrx_test` fixture and probes `infrx.now()`, the function every durable decision
+    reads (R7); a clock probe that passes on a function nothing calls proves nothing.
 - `auth.uid()` reads `current_setting('request.jwt.claim.sub')`, while hosted Supabase and
   PostgREST ≥ 10 set the JSON `request.jwt.claims`. The matrix sets **both** (r1 review R-b)
   and asserts `auth.uid()` is the impersonated principal on every principal-bearing case — a
@@ -202,7 +203,7 @@ the client side (`truncated_stream`).
 | `Faults.kill_container(svc, "SIGKILL")` | process loss inside a container | `compose up -d` |
 | `Faults.pause(svc)` | a network drop that **hangs**: the connection is accepted and nothing answers, which is what finds a missing client timeout | `docker unpause` |
 | `Faults.disconnect(svc)` | a hard partition: the endpoint leaves the project network, so the peer refuses rather than hangs | `docker network connect` |
-| `pgstate.set_clock_offset(conn, s)` | database time moves, transaction-locally | end of transaction |
+| `pgstate.set_clock_offset(conn, s)` / `advance_clock(conn, s)` | `infrx.now()` moves for every session (the offset is a committed row in `infrx_test.clock`) | `set_clock_offset(conn, 0)`, or rolling the transaction back |
 | `FakeVllmServer.kill(SIGKILL)` | the engine process dies mid-request | `start()` |
 
 `run.py` handles SIGTERM as well as SIGINT: both raise into `main`'s `finally`, so the stack is
@@ -213,15 +214,29 @@ preflight rather than surfacing as a failure to bind.
 `Faults` is a context manager that reverts in reverse order even when the body raises, and
 every container helper is namespace-checked first.
 
-When D1's migrations are in the harness, two things change and are already agreed with the
-coordinator: `E2-RLS-01`..`04` and `E2-RLS-44` flip from "zero rows" to error expectations
-(D1 revokes `anon` outright rather than relying on a policy that matches nothing), and E2 drops
-its private clock in favour of D1's `infrx_test`.
+## The database clock, and the five inversions (E2R item 2)
 
-The database clock lives in schema `infrx_e2_test` behind the GUC `infrx_e2.clock_offset_s`.
-**No migration creates either**, which is checked against the migration files rather than
-asserted — a clock a deployed process can move is a way to release an unknown-usage hold
-early (08 §10, item 3).
+Both carryovers of audit item 16 are closed, against the merged migrations `0001`–`0005`:
+
+- `E2-RLS-01`..`04` and `E2-RLS-44` are **error** expectations now, with the message measured
+  on the pinned image. `0004` (ruling R59-4) revokes ALL from `anon`/`authenticated` on every
+  existing `public` relation and grants back only what the console needs, so `anon` no longer
+  reads zero rows through a policy — it is refused by the absent grant:
+  `42501 permission denied for table {organizations,api_keys,credit_ledger,models}`, and
+  `42501 permission denied for function org_balance` where it used to reach the function body
+  and be refused by the membership check. Both are 42501, so the message is part of the
+  expectation and the relation is named in it; a grant reappearing on one table cannot hide
+  behind a generic fragment.
+- The private clock is gone. `pgstate.install_test_clock` applies
+  `apps/infrx-api/infrx/state/test_clock.sql` and everything probes **`infrx.now()`**. Two
+  barriers keep a movable clock out of a deployed database, and `test_harness.py` checks both:
+  no migration installs the schema, the table or the two movers (the fixture is not in
+  `apps/app/supabase/migrations/`), and `infrx.now()` consults the offset only when
+  `current_database() like 'infrx\_%'` — production is `postgres`. D's suite proves the second
+  barrier against a non-`infrx_` database on both images; this harness does not duplicate it.
+- The offset is a committed row, not a session GUC: a move outlives its statement, and a
+  rolled-back transaction is what undoes it. `pgstate.probe_clock` is the one definition of
+  what the clock does and `run.py` records its measurements in the `migrate` stage.
 
 ## Known limits of the isolation (r2 review, recorded deliberately)
 
@@ -229,7 +244,9 @@ early (08 §10, item 3).
 |---|---|
 | **The ownership label is the checkout path**, which is guessable. A deliberate copier that sets `INFRX_E2_CHECKOUT` to another checkout's path is mis-classified as the owner. | It stops the accident this exists for - a second checkout of the same repository running the same project name - and no path *in practice* forges it. A per-run random id, written into the state file, would close it; that is the upgrade if two E sessions ever share a host. |
 | **A fake vLLM started by the test suite is orphaned if `run.py` is interrupted during the `suites` stage.** The signal handler only knows about servers `run.py` itself started. | The next run's preflight reports it by name and refuses, so it costs a message rather than a mystery. `pytest` started it, so `pytest`'s own teardown is the right owner. |
-| **`infrx.now()` (D1's clock) is declared STABLE**, so within one statement it returns the value it had before `advance()` in that same statement. | Postgres is entitled to fold a stable function once per statement. Move the clock in its own statement, then read it. |
+| **`infrx.now()` (D1's clock) is declared STABLE**, so within one statement it returns the value it had before `advance()` in that same statement. | Postgres is entitled to fold a stable function once per statement. Move the clock in its own statement, then read it — `probe_clock` measures exactly this rather than leaving it in prose. |
+| **The cancellation race is a race.** `CANCEL_GAP_S` (0.2 s, the only wait in `fake_vllm.py`) gives the client's cancel POST 800 ms to complete a round trip before the last delta goes out. At 0.02 s it had 80 ms and failed on this host at load average 14.5 (`assert 5 < 5`). | Synchronising the server on the cancel would remove the interleaving the fault exists to model. If it ever fails again the answer is a longer gap, not a weaker assertion: `completion_tokens == deltas actually sent` is the invariant. |
+| **PostgREST is not in the stack.** The pinned image's `auth.uid()` reads only the legacy `request.jwt.claim.sub` GUC, and PostgREST 13.0.4 sets only the JSON `request.jwt.claims` (both measured, E2R evidence). | The matrix sets both forms and asserts the identity on every principal-bearing case, and one case pins the measured asymmetry so an image whose `auth.uid()` starts reading the JSON form fails rather than silently changing what the matrix means. A PostgREST service in the stack is P-03 / E3B. |
 
 ## Honesty rules this harness follows
 

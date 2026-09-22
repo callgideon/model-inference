@@ -24,11 +24,16 @@ import harness
 # closed here rather than interpolated from a caller.
 SQL_ROLES = ("anon", "authenticated", "service_role", "postgres")
 
-# Test-only clock. No migration creates this schema, so a deployed database cannot have
-# the function and no deployed process can move time (08 §10 "D1: four things", item 3).
-# `test_harness.py` greps the migrations to keep that true.
-CLOCK_SCHEMA = "infrx_e2_test"
-CLOCK_GUC = "infrx_e2.clock_offset_s"
+# E2R item 2: E2's private `infrx_e2_test.now()` is GONE. D1's migrations shipped the real
+# thing - `infrx.now()`, the function every durable decision reads (R7) - whose test-only
+# offset lives in `infrx_test.clock`, installed by the fixture below and by no migration.
+# Using E2's own clock after D1 merged would have measured a function nothing in the product
+# calls. Two barriers keep it out of a deployed database and `test_harness.py` checks both:
+# the fixture is not in `apps/app/supabase/migrations/`, and `infrx.now()` only consults the
+# offset when `current_database() like 'infrx\_%'` (production is `postgres`).
+CLOCK_SCHEMA = "infrx_test"
+CLOCK_FUNCTION = "infrx.now()"
+CLOCK_FIXTURE = harness.API_ROOT / "infrx" / "state" / "test_clock.sql"
 
 
 class MigrationError(RuntimeError):
@@ -72,32 +77,69 @@ def apply_migrations(conn, *, require_fresh: bool = True) -> list[tuple[str, str
 
 
 def install_test_clock(conn) -> str:
-    """A movable database clock, test-only by construction.
+    """Install D1's shared test clock fixture, which is the only thing that can move
+    `infrx.now()` - and only in a task-local `infrx_<task>` database.
 
-    R7/§conformance: an adapter must read the *database* clock inside its transaction, and
-    every conformance case drives `harness.clock`. Both hold only if the database's notion
-    of now is a settable offset that production cannot have - so it lives in a schema no
-    migration creates, keyed off a custom GUC nothing in production sets.
-
-    r1 review R-a: D1's own `infrx.now()` gates the offset on
-    `current_database() like 'infrx\\_%'`, which is why E2 now targets a database called
-    `infrx_e2` (production is `postgres`). This private clock is the interim one and is
-    dropped in favour of D1's `infrx_test` clock once D1 merges; both are then gated the
-    same way and neither can exist in a deployed database.
+    R7: one function is "now" for every durable decision. The offset is a TABLE
+    (`infrx_test.clock`), not a session GUC, because the conformance harness's hooks run on
+    a different connection from the port operations. That has one consequence every caller
+    must know and `probe_clock` measures: a move is COMMITTED, so it outlives the statement
+    that made it and is undone only by rolling the transaction back or setting it to zero.
     """
-    conn.execute(f"create schema if not exists {CLOCK_SCHEMA}")
-    conn.execute(f"""
-        create or replace function {CLOCK_SCHEMA}.now() returns timestamptz
-        language sql stable as $$
-          select now() + (coalesce(nullif(current_setting('{CLOCK_GUC}', true), ''), '0')
-                          ::double precision * interval '1 second')
-        $$""")
-    return f"{CLOCK_SCHEMA}.now()"
+    conn.execute(CLOCK_FIXTURE.read_text())
+    return f"{CLOCK_FUNCTION} + {CLOCK_SCHEMA}.clock ({CLOCK_FIXTURE.name})"
 
 
-def set_clock_offset(conn, seconds: float, *, local: bool = True) -> None:
-    """Move database time for this transaction (or this session with local=False)."""
-    conn.execute("select set_config(%s, %s, %s)", (CLOCK_GUC, str(float(seconds)), local))
+def set_clock_offset(conn, seconds: float) -> None:
+    """The absolute form: database time is wall time + `seconds` from here on."""
+    conn.execute(f"select {CLOCK_SCHEMA}.set_offset(%s)", (float(seconds),))
+
+
+def advance_clock(conn, seconds: float) -> object:
+    """The relative form, matching `FakeClock.advance`. Returns what the function returns,
+    which is NOT the moved time - see `probe_clock`."""
+    return conn.execute(f"select {CLOCK_SCHEMA}.advance(%s)", (float(seconds),)).fetchone()[0]
+
+
+def clock_delta_s(conn) -> float:
+    """`infrx.now() - now()` in seconds: how far the test clock is from wall time."""
+    return float(conn.execute(
+        f"select extract(epoch from ({CLOCK_FUNCTION} - now()))").fetchone()[0])
+
+
+def probe_clock(conn) -> dict:
+    """Every measured fact about the shared clock, in one place so `run.py` and the suite
+    cannot disagree about what it does.
+
+    Three facts, each of which a caller gets wrong if it is not stated:
+
+    * the offset really moves `infrx.now()`, the function the migrations default to;
+    * `advance()` RETURNS `infrx.now()`, and `infrx.now()` is STABLE, so within that one
+      statement it is still the PRE-move value. Move the clock in its own statement, then
+      read (E2 round-3 limit 3, now measured rather than asserted in prose);
+    * the offset is a committed row, not a transaction-local GUC: it survives its statement
+      and a rolled-back transaction is what undoes it.
+    """
+    set_clock_offset(conn, 0.0)
+    returned = advance_clock(conn, 3600.0)
+    read_back, wall = conn.execute(f"select {CLOCK_FUNCTION}, now()").fetchone()
+    moved = (read_back - wall).total_seconds()
+    stale = (read_back - returned).total_seconds()
+    set_clock_offset(conn, 0.0)
+    at_rest = clock_delta_s(conn)
+    try:
+        with conn.transaction():
+            advance_clock(conn, 1800.0)
+            inside = clock_delta_s(conn)
+            raise _Rollback
+    except _Rollback:
+        pass
+    return {"function": CLOCK_FUNCTION, "offset_table": f"{CLOCK_SCHEMA}.clock",
+            "fixture": str(CLOCK_FIXTURE.relative_to(harness.REPO_ROOT)),
+            "moved_s": round(moved, 1), "advance_returned_pre_move_s": round(stale, 1),
+            "at_rest_s": round(at_rest, 1),
+            "inside_rolled_back_tx_s": round(inside, 1),
+            "after_rollback_s": round(clock_delta_s(conn), 1)}
 
 
 # --------------------------------------------------------------------- fixtures
@@ -365,14 +407,32 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
               ("value", True), "and with no claim set there is no identity at all"),
 
         # -------- anon: a browser with no session reaches nothing
+        # E2R item 2 (audit carryover 16): these four read 0 rows through RLS while only
+        # 0001+0002 were applied. With the merged 0001-0005 they are REFUSED before any
+        # policy runs: 0004 ruling R59-4 does `revoke all ... from anon, authenticated` on
+        # every existing `public` relation and grants back only what the console needs, and
+        # `anon` gets nothing at all. The distinction matters - "0 rows" is also what a
+        # broken identity produces, while `42501 permission denied for table X` can only
+        # come from the absent grant - so the message is part of the expectation and the
+        # relation is named in it. Measured on the pinned image; not inferred from the SQL.
         Check("E2-RLS-01", "anon", None, "select count(*) from public.organizations",
-              ("value", 0), "an unauthenticated browser sees no organization"),
+              ("error", PERMISSION_DENIED),
+              "an unauthenticated browser cannot even read the organizations table: after "
+              "0004 anon holds no privilege on it, so the refusal is the missing grant",
+              message_contains="permission denied for table organizations"),
         Check("E2-RLS-02", "anon", None, "select count(*) from public.api_keys",
-              ("value", 0), "no key metadata leaks to anon"),
+              ("error", PERMISSION_DENIED), "no key metadata is reachable by anon at all",
+              message_contains="permission denied for table api_keys"),
         Check("E2-RLS-03", "anon", None, "select count(*) from public.credit_ledger",
-              ("value", 0), "no ledger row leaks to anon"),
+              ("error", PERMISSION_DENIED),
+              "no ledger row is reachable by anon - and TRUNCATE went with the grant "
+              "(0004: `truncate public.credit_ledger cascade` used to erase it)",
+              message_contains="permission denied for table credit_ledger"),
         Check("E2-RLS-04", "anon", None, "select count(*) from public.models",
-              ("value", 0), "even the catalog is authenticated-only"),
+              ("error", PERMISSION_DENIED),
+              "even the catalog is refused: a pre-login page that needs it must add "
+              "`grant select on public.models to anon` and say so",
+              message_contains="permission denied for table models"),
 
         # -------- member of alpha: own tenants only
         Check("E2-RLS-10", "authenticated", "member_alpha",
@@ -470,10 +530,12 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
               ("value", 12), "and counts exactly the seeded rows for its own"),
         Check("E2-RLS-44", "anon", None, "select public.org_balance({alpha})",
               ("error", PERMISSION_DENIED),
-              "anon is refused by the function BODY, not by a grant: PUBLIC keeps EXECUTE on "
-              "a function by default, so the explicit membership check is the only thing "
-              "standing there - measured message, not assumed",
-              message_contains="not a member of organization"),
+              "E2R item 2: anon used to reach the function body and be refused by its "
+              "membership check (PUBLIC keeps EXECUTE by default). 0004 revokes EXECUTE "
+              "from `public, anon`, so the refusal now happens one layer earlier - at the "
+              "function grant. Both are 42501; only the message says which, and a harness "
+              "that accepted either would not notice the grant disappearing again",
+              message_contains="permission denied for function org_balance"),
 
         # -------- operator: platform-wide reads, still not a free write
         Check("E2-RLS-50", "authenticated", "operator",
