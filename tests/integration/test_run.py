@@ -638,6 +638,13 @@ def test_a_real_orphaned_fake_server_is_found_by_its_command_line():
         assert os.getpid() not in found, "the scanning process is never its own orphan"
         # Another checkout's server is not ours to report.
         assert all(str(pid).isdigit() for pid in found)
+        # E2R: and the OTHER branch, which procfs otherwise hides on this host. Pointing the
+        # scan at a directory that does not exist takes the `ps` path, against the same real
+        # process - so the branch that only macOS would run is executed here too.
+        via_ps = runner.fake_server_orphans(proc=Path("/nonexistent-procfs"))
+        assert child.pid in via_ps, \
+            f"the ps branch missed pid {child.pid}; found {via_ps} (is `ps` truncating again?)"
+        assert os.getpid() not in via_ps
     finally:
         try:
             os.killpg(os.getpgid(child.pid), signal.SIGKILL)
@@ -649,6 +656,27 @@ def test_a_real_orphaned_fake_server_is_found_by_its_command_line():
             break
         time.sleep(0.05)
     assert child.pid not in runner.fake_server_orphans(), "a dead server is not an orphan"
+
+
+def test_the_ps_orphan_parser_reads_a_pid_and_a_whole_command_line():
+    """E2R: the `ps` branch is unreachable on a host with procfs, so the parser is driven
+    directly - a line with our marker is ours, a line naming another checkout's copy is not,
+    a header or a blank line is not a process, and a TRUNCATED line is (correctly) missed,
+    which is exactly the bug `-ww` exists to prevent and the reason this is testable at all.
+    """
+    marker = str((harness.HERE / "fake_vllm.py").resolve())
+    listing = "\n".join([
+        "  PID COMMAND",
+        "",
+        f" 4242 /usr/bin/python3 {marker} --port 55589 --fault none",
+        f" 4243 /usr/bin/python3 /another/checkout/tests/integration/fake_vllm.py --port 1",
+        f"{os.getpid()} /usr/bin/python3 {marker}",
+        f" 4244 /usr/bin/python3 {marker[:len(marker) - 5]}",     # truncated by a narrow ps
+        "notapid something",
+    ])
+    assert runner._orphans_from_ps(listing, marker) == [4242], \
+        "only this checkout's untruncated command lines are ours, and never our own pid"
+    assert runner._orphans_from_ps("", marker) == []
 
 
 def test_provision_database_refuses_a_container_outside_the_namespace():

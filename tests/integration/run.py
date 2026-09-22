@@ -214,29 +214,44 @@ def preflight(report: Report, *, want_services: bool) -> bool:
     return True
 
 
-def fake_server_orphans() -> list[int]:
+def _orphans_from_ps(listing: str, marker: str) -> list[int]:
+    """Parse `ps -axww -o pid=,command=`.
+
+    Its own function because on Linux the procfs branch below always wins, so this one was
+    dead code no test could reach and no mutant could kill - which is how the original
+    truncation bug (`ps` cutting each line to the terminal width, hiding a marker that is an
+    absolute path) survived review in the first place. `-ww` is what stops that, and
+    `test_run.py` drives this parser directly as well as through the real `ps`.
+    """
+    pids = []
+    for line in listing.splitlines():
+        columns = line.strip().split(None, 1)
+        if len(columns) == 2 and columns[0].isdigit():
+            pid = int(columns[0])
+            if pid != os.getpid() and marker in columns[1]:
+                pids.append(pid)
+    return sorted(pids)
+
+
+def fake_server_orphans(proc: Path = Path("/proc")) -> list[int]:
     """PIDs of a fake vLLM this harness started and never stopped.
 
     Only processes whose command line names *this* checkout's `fake_vllm.py` count: another
     checkout's server is not ours to report as our leak, and nothing here kills anything.
+
+    `proc` is injectable for one reason: pointing it at a directory that does not exist takes
+    the `ps` branch on a host that has procfs, so both paths are exercised where the tests run.
     """
     marker = str((harness.HERE / "fake_vllm.py").resolve())
     # Linux exposes untruncated argv through procfs. macOS has no procfs;
     # double-wide ps explicitly disables the terminal-width truncation that the
     # original reviewer caught. This function reports PIDs; it never kills them.
-    if not Path("/proc").is_dir():
+    if not proc.is_dir():
         result = subprocess.run(["ps", "-axww", "-o", "pid=,command="],
                                 capture_output=True, text=True, check=True)
-        pids = []
-        for line in result.stdout.splitlines():
-            columns = line.strip().split(None, 1)
-            if len(columns) == 2 and columns[0].isdigit():
-                pid = int(columns[0])
-                if pid != os.getpid() and marker in columns[1]:
-                    pids.append(pid)
-        return sorted(pids)
+        return _orphans_from_ps(result.stdout, marker)
     pids = []
-    for entry in Path("/proc").iterdir():
+    for entry in proc.iterdir():
         if not entry.name.isdigit() or int(entry.name) == os.getpid():
             continue
         try:
