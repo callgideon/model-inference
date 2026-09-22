@@ -75,6 +75,7 @@ Q = "contracts/fakes/scheduling.py"
 R = "contracts/records.py"
 W = "contracts/wire.py"                 # public bodies: projections and input bounds
 MONEY = "contracts/money.py"
+E = "contracts/fakes/engine.py"
 
 # --- how a mutant is allowed to die (r1 round-3 review; enforced since F2R item 9) ----
 # A port is a trust boundary, so a kill that depends on an *untyped* exception is a case a
@@ -1356,6 +1357,15 @@ MUTANTS: tuple[Mutant, ...] = (
        "            resolved = run.model_copy(update={\"state\": JudgeRunState.quarantined})\n"
        "            self.runs[run_id] = resolved",
        "judge_budget__an_ambiguous_run_is_resolved_only_by_an_operator"),
+    # --- F2R lane A item 2: the delta payload is exactly `{visible, raw}` (R64) ------
+    _m("engine_fake_visible_is_raw", "the customer never reads the reasoning block (R58)",
+       E, 'SPLIT_REASONING_VISIBLE = ("", "", "", "Two people unload boxes.")',
+       "SPLIT_REASONING_VISIBLE = SPLIT_REASONING",
+       "api_stream__reasoning_delimiters_split_across_chunks"),
+    _m("engine_fake_keeps_the_content_alias", "a delta payload is exactly {visible, raw}",
+       E, 'payload={"visible": visible, "raw": raw}))',
+       'payload={"visible": visible, "raw": raw, "content": raw}))',
+       "api_stream__canonical_events_end_with_authoritative_usage"),
 )
 
 

@@ -130,23 +130,20 @@ ERROR_BODY_MAX_BYTES = 64 * 1024        # an engine's error body is read bounded
 # r1 R58: one event must fit the journal, measured by the **store's own rule**
 # (`StreamStore.event_bytes` = `len(compact_bytes(event.payload))`, `JOURNAL_EVENT_MAX_BYTES`
 # = 1 MiB). Sizing by code points was wrong for anything but ASCII: a delta carries its
-# text three times today (`visible`, `raw`, and the transitional `content` alias), a code
-# point costs up to 4 bytes in UTF-8 and up to 6 as a JSON escape (`\u0001`), so 131072
-# code points of `日` measured 1,179,684 B and of `😀` 1,572,900 B against a 1,048,576 B
-# ceiling - and W2's `append` would answer `journal_write_failed` for an ordinary CJK
-# answer. Pieces are therefore measured in **encoded JSON bytes** and each copy gets a
-# quarter of the ceiling, which leaves the keys, the braces and the other fields room to
-# spare. When the coordinator removes the `content` alias a delta will carry two copies
-# instead of three and this divisor can become 3; the test measures the real payload either
-# way, so nothing else has to change. A long delta is **split** across events rather than
-# refused: the reasoning filter is boundary-independent, so splitting loses nothing, while
-# refusing would throw away an answer the engine did produce.
-PAYLOAD_COPIES = 3               # `visible`, `raw`, and the transitional `content` alias
-# An empty payload - `{"content":"","raw":"","visible":""}` - measures **36 bytes** under the
-# store's own `compact_bytes` (measured here, not quoted: the round-4 review said 35, and a
-# case now asserts whatever it really is stays under this constant); 64 leaves that plus slack
-# for the keys a `usage` payload adds. The budget
-# is `(ceiling - overhead) // copies`, so a small ceiling shrinks the text rather than the
+# text twice (`visible` and `raw`; the transitional `content` alias was removed by F2R
+# item 2, R64), a code point costs up to 4 bytes in UTF-8 and up to 6 as a JSON escape
+# (`\u0001`), so a code-point budget lets an ordinary CJK answer outgrow the ceiling and
+# W2's `append` would answer `journal_write_failed`. Pieces are therefore measured in
+# **encoded JSON bytes** and each copy gets `(ceiling - overhead) // PAYLOAD_COPIES`; the
+# test measures the real payload, so nothing else depends on the divisor. A long delta is
+# **split** across events rather than refused: the reasoning filter is boundary-independent,
+# so splitting loses nothing, while refusing would throw away an answer the engine did
+# produce.
+PAYLOAD_COPIES = 2               # `visible` and `raw`
+# An empty payload - `{"raw":"","visible":""}` - measures **23 bytes** under the store's own
+# `compact_bytes` (a case asserts whatever it really is stays under this constant); 64 leaves
+# that plus slack for the keys a `usage` payload adds. The budget is
+# `(ceiling - overhead) // copies`, so a small ceiling shrinks the text rather than the
 # margin. Flooring the budget at a constant is what let a 128-byte ceiling emit 132-byte
 # events with multi-byte text.
 PAYLOAD_OVERHEAD_BYTES = 64
@@ -355,15 +352,12 @@ def _split_encoded(text: str, budget: int) -> list[str]:
 
 
 def _delta_payload(raw: str, visible: str) -> dict[str, str]:
-    """r1 R58: `visible` is the customer's text, `raw` is for trace capture only.
+    """r1 R58 / R64: `visible` is the customer's text, `raw` is for trace capture only.
 
-    `content` is a **transitional alias of `raw`**: the exported engine conformance cases
-    and the shared `FakeEngine` still read `payload["content"]` and assert the unfiltered
-    text there, and both live in the coordinator-owned contracts package. It goes in the
-    same change that updates them (integration request in the W1 evidence). No relay may
-    use it - a relay that does leaks the reasoning block.
+    Exactly these two keys: the transitional `content` alias of `raw` is gone (F2R item
+    2). No relay may read `raw` - a relay that does leaks the reasoning block.
     """
-    return {"visible": visible, "raw": raw, "content": raw}
+    return {"visible": visible, "raw": raw}
 
 
 def _parse_usage(raw: object) -> Usage | None:

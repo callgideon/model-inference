@@ -583,9 +583,11 @@ async def api_stream__canonical_events_end_with_authoritative_usage(factory):
     usage_events = [event for event in events if event.type is ChunkEventType.usage]
     assert len(usage_events) == 1 and usage_events[0].usage is not None
     assert usage_events[0].usage.certainty.value == "authoritative"
-    text = "".join(event.payload["content"] for event in events
-                   if event.type is ChunkEventType.delta)
-    assert text == hook(harness, "text")
+    deltas = [event.payload for event in events if event.type is ChunkEventType.delta]
+    # r1 R58: exactly `{visible, raw}`; a plain answer reads the same in both.
+    assert all(set(payload) == {"visible", "raw"} for payload in deltas)
+    assert "".join(payload["raw"] for payload in deltas) == hook(harness, "text")
+    assert "".join(payload["visible"] for payload in deltas) == hook(harness, "text")
 
 
 async def api_stream__reasoning_delimiters_split_across_chunks(factory):
@@ -593,12 +595,15 @@ async def api_stream__reasoning_delimiters_split_across_chunks(factory):
     only exist in the concatenation, never inside one delta."""
     harness = factory(fault="split_reasoning_delimiters")
     events = await _drain(harness.port, _lease(harness), _prepared(harness))
-    deltas = [event.payload["content"] for event in events
-              if event.type is ChunkEventType.delta]
+    payloads = [event.payload for event in events if event.type is ChunkEventType.delta]
+    deltas = [payload["raw"] for payload in payloads]
     joined = "".join(deltas)
     assert joined.count("<think>") == 1 and joined.count("</think>") == 1
     assert not any("<think>" in delta or "</think>" in delta for delta in deltas)
     assert joined.split("</think>")[-1] == "Two people unload boxes."
+    # r1 R58: what the customer reads is the answer alone, with no piece of the block.
+    visible = "".join(payload["visible"] for payload in payloads)
+    assert visible == "Two people unload boxes.", visible
 
 
 async def api_stream__a_prefill_stall_produces_no_delta_within_the_budget(factory):
