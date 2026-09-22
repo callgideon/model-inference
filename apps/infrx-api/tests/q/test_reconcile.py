@@ -231,13 +231,16 @@ def test_q3_reconcile__a_queued_job_missing_from_the_index_is_indexed_again(adap
     w = rig.world(adapter)
 
     async def body():
-        jobs = [await rig.admit(w) for _ in range(2)]
+        jobs = [await rig.admit(w)]
+        w.h.clock.advance(1.5)
+        jobs += [await rig.admit(w) for _ in range(2)]
         await w.rec.drain()
-        await w.index.remove(jobs[0])
+        for job in jobs[:2]:
+            await w.index.remove(job)
         w.h.clock.advance(4.0)
-        assert await w.rec.reconcile() == {"missing": 1, "repaired": 1}
-        assert w.rec.metrics["missing_index"] == 1
-        assert w.rec.metrics["missing_lag_s"] == 4.0
+        assert await w.rec.reconcile() == {"missing": 2, "repaired": 2}
+        assert w.rec.metrics["missing_index"] == 2
+        assert w.rec.metrics["missing_lag_s"] == 5.5            # the oldest missing one
         assert sorted((await rig.members(w)).values()) == sorted(jobs)
         assert await w.rec.reconcile() == {}
         assert w.rec.metrics["missing_index"] == 0
@@ -287,6 +290,74 @@ def test_q3_reconcile__an_acknowledged_candidate_postgresql_still_wants_forces_a
         assert list((await rig.members(w)).values()) == [job]
         await rig.finish(w)
         rig.settled(w)
+    run(body)
+
+
+class RacedIndex:
+    """An index another relay process writes to first: every `enqueue` from here finds
+    the candidate already delivered (it indexes it, then answers "already indexed")."""
+
+    def __init__(self, inner) -> None:
+        self.inner = inner
+
+    async def enqueue(self, event):
+        await self.inner.enqueue(event)
+        return False
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+
+def test_q3_reconcile__a_candidate_delivered_concurrently_is_not_taken_for_an_acknowledged_one(
+        adapter):
+    """`enqueue` answering "already there" is ambiguous: acknowledged, or delivered by
+    another relay since the pass read the index. Only a second read tells them apart,
+    and only the acknowledged kind is worth a rebuild."""
+    w = rig.world(adapter)
+
+    async def body():
+        job = await rig.admit(w)
+        w.rec.index = RacedIndex(w.index)
+        assert await w.rec.reconcile() == {"missing": 1}
+        assert w.rec.metrics["rebuilds"] == 0
+        assert list((await rig.members(w)).values()) == [job]
+    run(body)
+
+
+def test_q3_reconcile__a_job_redispatched_during_the_pass_keeps_its_new_candidate(adapter):
+    """A running job's candidate is dead at the snapshot; before the pass removes it the
+    lease expires, the reaper requeues the job and the drain delivers the new dispatch.
+    `remove` takes both candidates of the job; the snapshot read after the removal puts
+    the new one back."""
+    w = rig.world(adapter)
+
+    async def body():
+        job = await rig.admit(w)
+        await w.rec.drain()
+        await rig.prepare_one(w)
+        await w.rec.drain()
+        taken = await w.index.claim_candidate("gpu", kind=rig.INFER)   # held in flight
+        await w.jobs.claim(job, "gpu")
+
+        async def requeued_and_delivered():
+            w.h.clock.advance(w.jobs.limits.lease_ttl_s)
+            await w.jobs.recover()
+            assert await w.rec.drain() == {"read": 1, "indexed": 1, "acknowledged": 1}
+
+        w.rec.store = Interleave(w.outbox, 1, requeued_and_delivered)
+        assert await w.rec.reconcile() == {"dead": 1, "missing": 1, "repaired": 1}
+        (fresh,) = (await rig.members(w)).items()
+        assert fresh[1] == job and fresh[0] != taken.event_id
+    run(body)
+
+
+def test_q3_reconcile__a_rebuild_is_recovery_and_ignores_the_caps(adapter):
+    w = rig.world(adapter, max_items=2)
+
+    async def body():
+        jobs = [await rig.admit(w) for _ in range(4)]
+        assert await w.rec.rebuild() == 4
+        assert sorted((await rig.members(w)).values()) == sorted(jobs)
     run(body)
 
 
@@ -382,7 +453,7 @@ def test_q3_run__the_relay_reconciles_first_and_retries_a_failed_pass(adapter):
                 break
             await asyncio.sleep(0.002)
         stop.set()
-        await task
+        assert await asyncio.gather(task, return_exceptions=True) == [None]
         assert w.rec.metrics["errors"] == 1
         assert sorted((await rig.members(w)).values()) == sorted(jobs)
     run(body)
