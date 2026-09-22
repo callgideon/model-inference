@@ -199,9 +199,12 @@ const USAGE_FILTERS: Record<string, FilterSpec> = {
   model: { column: "u.model", op: "eq", field: "model" },
 };
 
+// r2: `settlement_regime` is selected because `UsageRow.accounting_regime` is projected from it.
+// D1's `console_usage` has always emitted it; this column list did not ask for it, so the row
+// arrived without the one field that says which accounting rules wrote it.
 const USAGE_COLUMNS = `u.org_id, u.request_id, u.created_at, u.model, u.key_id, u.key_name, u.execution_mode,
          u.job_state, u.terminal_cause, u.http_status, u.prompt_tokens, u.completion_tokens,
-         u.usage_certainty, u.settlement_state, u.cost, u.max_hold, u.trace_mode`;
+         u.usage_certainty, u.settlement_state, u.settlement_regime, u.cost, u.max_hold, u.trace_mode`;
 
 const TRACE_COLUMNS = `org_id, request_id, created_at, model, key_id, job_state, http_status, trace_mode,
          content, loss_reason, prompt_tokens, completion_tokens, ttft_ms, wall_ms, cost,
