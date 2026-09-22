@@ -21,6 +21,8 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "c1": {"postgres": 55441},
     # R63: per-task Valkey ports for Q lanes (the track port 56379 stays the shared default)
     "q2": {"valkey": 55461}, "q3": {"valkey": 55462},
+    # D2's relay drills need both a PostgreSQL and a Valkey of their own
+    "d2": {"postgres": 55433, "valkey": 55463},
 }
 
 # track -> {service: (host port, extra ports)}

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T22:40:37Z",
+  "updated": "2026-09-22T22:56:06Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "D2": {
       "lane": "codex-d2 / codex/d2-admission-outbox",
-      "phase": "dispatched (admission transaction, outbox, M3 tables, D1R follow-ups)",
+      "phase": "independent review (4-perspective workflow) at ebd621d",
       "since": "2026-09-22T20:55:35Z",
       "note": "real JobStore over PostgreSQL"
     },
