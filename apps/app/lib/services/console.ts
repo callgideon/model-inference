@@ -319,8 +319,8 @@ function masked(row: Row, session: SessionContext): boolean {
  * A JSON number is accepted only below `SAFE_MONEY_NUMBER`, because `toFixed(8)` on a double does not
  * convert — it *fabricates*: a double holds at most 2^53 units of 1e-8, so from about 2^26 dollars the
  * eighth digit is whatever the binary representation happened to round to, and
- * `123456789012.12345678` comes back as `…12345886`. The only path that still hands over a number is
- * the legacy `org_balance` fallback, whose values are far below the bound.
+ * `123456789012.12345678` comes back as `…12345886`. A stored value that arrives as a number at all
+ * is a legacy row; the `org_balance` fallback that used to hand them over is gone (S1-fix B1).
  */
 const SAFE_MONEY_NUMBER = Math.pow(2, 26);
 

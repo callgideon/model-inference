@@ -18,7 +18,21 @@ audit](../../research/plan/10-wave2-platform-audit.md) reconciles wave 2 at `271
 Usage/Balance/Traces currently have development-only fixture previews, enabled by
 `INFRX_CONSOLE_PREVIEW=1` under `next dev`; production always shows an unavailable
 state until C0 supplies real account reporting. Sidebar amounts remain exact legacy
-USD, including holds. No public signup or CREDIT grant implementation is claimed.
+USD, including holds — or fixed "Balance unavailable" copy when the wallet summary
+cannot be read, never a substituted number. No public signup or CREDIT grant
+implementation is claimed.
+
+The preview gate is decided when the bundle is built, not from the environment the
+server is started with, because Next inlines only the textual `process.env.NODE_ENV`.
+After `pnpm build`, the production chunk must contain no fixture path at all:
+
+```bash
+pnpm build
+grep -rl "INFRX_CONSOLE_PREVIEW" .next --include="*.js"; echo "exit=$?"   # exit=1, no file
+grep -rl "createFakeConsoleServices" .next --include="*.js"; echo "exit=$?" # exit=1, no file
+grep -rho 'consoleContext",0,function.\{0,40\}' .next/server --include="*.js" | sort -u
+# consoleContext",0,function(a=process.env){return null}
+```
 
 ## Run locally
 

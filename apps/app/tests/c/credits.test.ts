@@ -19,6 +19,16 @@ const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const source = (relative: string) => readFileSync(join(appRoot, relative), "utf8");
 
 /**
+ * The same file with its comments removed, so a rule about the *code* is not satisfied or broken by
+ * prose: "never throws" in a doc comment is not a `throw`, and a `throw` is not excused by a comment
+ * around it. Coarse on purpose — none of the three files checked here puts `//` inside a string.
+ */
+const code = (relative: string) =>
+  source(relative)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+
+/**
  * The outcome, with "it threw" as a fourth kind rather than as a test crash.
  *
  * `assert.throws`-style checking is the wrong shape here: the invariant is that nothing is thrown, and
@@ -117,24 +127,85 @@ test("a wallet amount that arrives as a number is bounded by what a double can h
  * The rendering half of B1. A DOM render is not available: `node --test` cannot load a `.tsx` module
  * at all (ERR_UNKNOWN_FILE_EXTENSION — it strips types but does not transform JSX), and the console's
  * dependency set is frozen, so this checks the three files as source, the way `client-boundary.test.ts`
- * checks the import graph. It catches the regression shapes: a number formatted in the composition
- * root, and copy that states an amount or the reason a read failed.
+ * checks the import graph. It catches the regression shapes: a number formatted or invented in the
+ * composition root, an unavailable balance turned back into a 500, a gate short-circuited in the
+ * sidebar, and copy that states an amount or the reason a read failed.
  */
 test("the layout hands the sidebar a result it cannot turn into a number, and the copy states none", () => {
-  const layout = source("app/(console)/layout.tsx");
-  assert.match(layout, /sidebarBalance\(/, "the layout maps the result through sidebarBalance");
+  const layout = code("app/(console)/layout.tsx");
+  assert.match(
+    layout,
+    /const balance = sidebarBalance\(await getBalance\(session\.orgId\)\);/,
+    "the layout maps the wallet's own result through sidebarBalance, and nothing else",
+  );
+  assert.match(layout, /balance=\{balance\}/, "and hands exactly that to the sidebar");
   assert.doesNotMatch(
     layout,
     /displayMoney|ZERO_MONEY|toFixed/,
     "the layout must format no money of its own: an amount here is one the wallet never produced",
   );
+  assert.doesNotMatch(
+    layout,
+    /\?\?|"\$|'\$/,
+    "and must not substitute a default amount for a missing one: `?? \"$0.00\"` is a balance nobody read",
+  );
+  assert.doesNotMatch(
+    layout,
+    /\bthrow\b/,
+    "an unavailable balance must not become a thrown error: there is no error.tsx above this layout, " +
+      "so every console page would 500",
+  );
 
-  const sidebar = source("components/sidebar.tsx");
+  const sidebar = code("components/sidebar.tsx");
   assert.match(sidebar, /BALANCE_UNAVAILABLE/, "the sidebar renders the shared unavailable copy");
+  assert.match(
+    sidebar,
+    /balance === null \?/,
+    "on the balance being absent — a constant condition here would render the amount branch with no amount",
+  );
   assert.doesNotMatch(sidebar, /ZERO_MONEY|displayMoney/, "and never substitutes an amount for it");
 
   const copy = source("components/console-data-state.tsx");
   const literal = /BALANCE_UNAVAILABLE = "([^"]*)"/.exec(copy);
   assert.ok(literal, "the fixed copy is a literal in console-data-state.tsx");
   assert.doesNotMatch(literal[1], /\d/, "the unavailable copy states no amount, not even a zero");
+});
+
+/**
+ * `lib/credits.ts` is the one place the decisions above can be undone, and it is the one place no case
+ * can execute: it imports `@/lib/supabase/server`, so loading it here means `next/headers` (R48). It
+ * is deliberately a shell — one wallet call, one pure decision, one guard — and this reads that shape
+ * out of the source, so a second read, a fallback under another function's name, or a `throw` cannot
+ * come back unnoticed between here and C0's real context.
+ */
+test("the balance read is one wallet call that cannot throw", () => {
+  const credits = code("lib/credits.ts");
+
+  const calls = [...credits.matchAll(/\.rpc\(\s*"([^"]*)"/g)].map((match) => match[1]);
+  assert.deepEqual(
+    calls,
+    ["org_wallet_summary"],
+    "exactly one RPC, and it is the wallet summary: a second call is the hold-blind `org_balance` " +
+      "fallback returning under whatever name, and it reports credit that is already committed",
+  );
+  assert.doesNotMatch(
+    credits,
+    /\.from\(|\.rpc\(\s*[^"]/,
+    "and no table read and no computed function name: the balance has one source",
+  );
+
+  assert.match(credits, /\btry\s*\{/, "the read is guarded");
+  assert.match(credits, /\}\s*catch\b/, "and the guard catches: a client or transport that throws is " +
+    "unavailable, not a 500 on every console page");
+  assert.doesNotMatch(
+    credits,
+    /\bthrow\b/,
+    "and nothing in this module throws: the console layout calls it on every page with no error.tsx " +
+      "above it",
+  );
+  assert.match(
+    credits,
+    /return balanceOutcome\(summary\.data, summary\.error\)/,
+    "the decision itself stays in lib/services/credits.ts, where the cases above can reach it",
+  );
 });

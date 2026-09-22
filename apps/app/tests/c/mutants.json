@@ -587,6 +587,66 @@
       ]
     },
     {
+      "id": "CREDITS-08",
+      "note": "reviewer X1: the hold-blind fallback comes back as a second RPC under another name",
+      "file": "lib/credits.ts",
+      "find": "    return balanceOutcome(summary.data, summary.error);",
+      "replace": "    if (summary.error !== null) {\n      const legacy = await supabase.rpc(\"org_balance\", { p_org: orgId });\n      return balanceOutcome({ ledger_total: legacy.data as string, reserved_total: \"0\" }, null);\n    }\n    return balanceOutcome(summary.data, summary.error);",
+      "cases": [
+        "the balance read is one wallet call that cannot throw"
+      ]
+    },
+    {
+      "id": "CREDITS-09",
+      "note": "reviewer X2: an unavailable wallet is thrown from getBalance, so every console page 500s",
+      "file": "lib/credits.ts",
+      "find": "    return { kind: \"unavailable\", reason: \"the wallet summary could not be read\" };",
+      "replace": "    throw new Error(\"the wallet summary could not be read\");",
+      "cases": [
+        "the balance read is one wallet call that cannot throw"
+      ]
+    },
+    {
+      "id": "CREDITS-10",
+      "note": "reviewer X3: the try/catch around the client and transport is removed",
+      "file": "lib/credits.ts",
+      "find": "export async function getBalance(orgId: string): Promise<BalanceResult> {\n  try {\n    const supabase = await createClient();\n    const summary = await supabase\n      .rpc(\"org_wallet_summary\", { p_org: orgId })\n      .maybeSingle<WalletSummaryRow>();\n    return balanceOutcome(summary.data, summary.error);\n  } catch {\n    // The client or the transport itself failed rather than answering with an error row.\n    return { kind: \"unavailable\", reason: \"the wallet summary could not be read\" };\n  }\n}",
+      "replace": "export async function getBalance(orgId: string): Promise<BalanceResult> {\n  const supabase = await createClient();\n  const summary = await supabase\n    .rpc(\"org_wallet_summary\", { p_org: orgId })\n    .maybeSingle<WalletSummaryRow>();\n  return balanceOutcome(summary.data, summary.error);\n}",
+      "cases": [
+        "the balance read is one wallet call that cannot throw"
+      ]
+    },
+    {
+      "id": "CREDITS-11",
+      "note": "reviewer X4: the layout throws when the balance is unavailable",
+      "file": "app/(console)/layout.tsx",
+      "find": "  const balance = sidebarBalance(await getBalance(session.orgId));",
+      "replace": "  const read = await getBalance(session.orgId);\n  if (read.kind !== \"ok\") throw new Error(\"balance unavailable\");\n  const balance = sidebarBalance(read);",
+      "cases": [
+        "the layout hands the sidebar a result it cannot turn into a number, and the copy states none"
+      ]
+    },
+    {
+      "id": "CREDITS-12",
+      "note": "reviewer X5: the layout substitutes a default amount nobody read",
+      "file": "app/(console)/layout.tsx",
+      "find": "  const balance = sidebarBalance(await getBalance(session.orgId));",
+      "replace": "  const balance = sidebarBalance(await getBalance(session.orgId)) ?? \"$0.00\";",
+      "cases": [
+        "the layout hands the sidebar a result it cannot turn into a number, and the copy states none"
+      ]
+    },
+    {
+      "id": "CREDITS-13",
+      "note": "reviewer X10: the sidebar's unavailable branch is short-circuited, so the amount branch renders with no amount",
+      "file": "components/sidebar.tsx",
+      "find": "            {balance === null ? (",
+      "replace": "            {false ? (",
+      "cases": [
+        "the layout hands the sidebar a result it cannot turn into a number, and the copy states none"
+      ]
+    },
+    {
       "id": "CLIENT-01",
       "note": "a server-only module loses its run-time guard",
       "file": "lib/services/cursor.ts",
