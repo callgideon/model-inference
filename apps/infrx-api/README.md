@@ -127,6 +127,53 @@ set -a; . /etc/marlin2b-gateway.env; set +a
 /opt/pytorch/bin/python ~/model-inference/apps/infrx-api/deploy/replay_usage.py
 ```
 
+## Headless provisioning and the dataset client (G6B)
+
+Everything a provisioned client needs, with both Next.js apps stopped. **Status:
+implemented against in-memory fakes only** — `infrx.operations.cli` refuses to run
+until the D1R/D5/A1 PostgreSQL adapters exist (it never runs on an in-memory store).
+
+Operator prerequisites: the gateway environment installed by `deploy/preflight.py
+apply --mode pilot` (no shared `GATEWAY_API_KEY`, R51), and an operator-audience key
+row (bootstrap is a D-owned step). The operator secret comes from
+`$INFRX_OPERATOR_KEY` or a no-echo prompt, never argv.
+
+```bash
+python -m infrx.operations.cli grant --user <user-uuid> --idempotency-key g-<user-uuid> --reason "..."
+python -m infrx.operations.cli issue-key --user <user-uuid> --name sweep --secret-file ./sweep.key \
+    --idempotency-key k-1 --reason "..."          # the secret is written once, 0600, never printed
+python -m infrx.operations.cli publish-marlin --provider-org <uuid> \
+    --created-at 2026-09-01T00:00:00+00:00 --effective-at <now, RFC 3339> --idempotency-key p-1 --reason "..."
+# also: adjust, revoke-key, rotate-key, suspend [--code abuse|nonpayment|security|operator_request|other],
+#       cancel --org --job, reconcile --org --request
+```
+
+- Keys are consumer keys for a **verified** individual's personal org, stored as
+  `sha256` like every other key; a replayed issue returns the id and prefix only.
+- Credit moves only through the A1 signup grant (once per user, 10,000 CREDIT) and D5
+  adjustments; the tool never writes a balance. Every write needs an idempotency key
+  and a reason and leaves one `infrx.audit_entries` row.
+- The Marlin rate card is **provisional (P-01)** and labelled so in its version and
+  approver until an operator-approved rate exists.
+
+Client (`client_example.py`, reusing `models/marlin2b/bench.py`'s item identity and
+key handling):
+
+```bash
+export INFRX_API_KEY="$(cat sweep.key)"
+python client_example.py quickstart --base https://<host>/v1 --video https://<public>/clip.mp4
+python client_example.py sweep --base https://<host>/v1 --manifest items.jsonl --state state.jsonl
+```
+
+One manifest line per ≤120 s segment; `Idempotency-Key: sop1.<item_key>` is derived
+from the item, so re-running the same command resumes: finished items are skipped and
+the rest are re-sent with the same key and payload (the server replays, never double
+charges). At most 8 requests in flight per key; 429/5xx honour `Retry-After`; 400/409
+are quarantined, 410 asks for a re-run, 401/402/403 stop the sweep. Served today: sync
+JSON with `http(s)` or `data:` media. `--form upload` and `--respond-async` are
+**specified, not served** until G3/G4U mount `/v1/uploads` and `/v1/jobs`.
+Research: `research/workloads/marlin-sop.md` §3.
+
 ## Deploy
 
 ```bash
