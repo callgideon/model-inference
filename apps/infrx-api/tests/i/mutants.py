@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 """r1 R32/R40 for track I: one single-edit defect per invariant this suite claims.
 
-Same vocabulary as `tests/contracts/mutants.py` (`Mutant`, `Outcome`, `Result`), a
-runner of I's own because the mutated file is not in the `infrx` package: it is
-`deploy/preflight.py`, plus - for the two cases that are claims about the *runtime* -
-`infrx/media/fetch.py` and `infrx/gateway/app.py`. The copied tree therefore carries
-`infrx/`, `tests/` and `deploy/`, and `models/marlin2b/serve.sh`, which one case reads
-as it stands.
-
-A kill needs pytest to exit 1 with only the mutant's own named cases failing, so a
-syntax error, an import error or a defect with wider reach than declared is
-`broken_runner` and fails the run exactly as a survivor does.
+The shared runner of `tests/contracts/mutants.py` (F2R item 9, IR-A10) with a layout of
+I's own, because the mutated file is not in the `infrx` package: it is
+`deploy/preflight.py`, plus - for the cases that are claims about the *runtime* - files
+under `infrx/`. The copied tree therefore carries `infrx/`, `tests/` and `deploy/` at
+`apps/infrx-api`, and `models/marlin2b/serve.sh`, which one case reads as it stands.
+What a kill is - and that a crash is not one unless declared - is the shared rule.
 
     uv run --frozen pytest -q tests/i/test_mutants.py     # the whole list
     uv run --frozen python tests/i/mutants.py --list
@@ -18,25 +14,21 @@ syntax error, an import error or a defect with wider reach than declared is
 """
 from __future__ import annotations
 
-import argparse
 import importlib.util
 import pathlib
 import re
 import shutil
-import subprocess
 import sys
-import tempfile
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
 REPO = API_DIR.parents[1]
 SUITE = "tests/i"
-NESTED_TIMEOUT_S = 300
 
 
 def _shared():
-    """`Mutant`/`Outcome`/`Result`/`_failing_ids` from the contracts list, loaded by
-    path: under `--import-mode=importlib` the `tests` package is synthesised by pytest
-    and a cross-directory import is not reliably available."""
+    """The shared runner, loaded by path: under `--import-mode=importlib` the `tests`
+    package is synthesised by pytest and a cross-directory import is not reliably
+    available."""
     path = API_DIR / "tests" / "contracts" / "mutants.py"
     spec = importlib.util.spec_from_file_location("i_shared_mutants", path)
     module = importlib.util.module_from_spec(spec)
@@ -47,13 +39,13 @@ def _shared():
 
 _SHARED = _shared()
 Mutant, Outcome, Result = _SHARED.Mutant, _SHARED.Outcome, _SHARED.Result
-PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED = 0, 1
 
 P = "deploy/preflight.py"               # relative to apps/infrx-api, not to `infrx`
 
 
-def _m(name, invariant, file, old, new, *cases) -> Mutant:
-    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases)
+def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases,
+                  dies_by=tuple(dies_by))
 
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -257,7 +249,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("unset_mode_refuses", "an unset INFRX_MODE is still legacy behaviour (F2.2 item 14)",
        "infrx/config.py", '        return "legacy"',
        '        raise RuntimeMisconfigured(mode, detail="INFRX_MODE must be set")',
-       "test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer"),
+       "test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer",
+       # the defect IS the raise: `validate_runtime(Settings())` refusing instead of
+       # answering "legacy" (the shared rule makes that kill mode explicit)
+       dies_by=("RuntimeMisconfigured",)),
 )
 
 
@@ -265,74 +260,22 @@ MUTANTS: tuple[Mutant, ...] = (
 # `API_DIR.parents[1]`, so a flat copy made it `/` and
 # `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` failed in
 # every copied tree whatever the edit - which reports `killed` for a mutant that changed
-# nothing (review r1 B1). `SELF_TESTS` now pins that a no-op mutant naming that case is
+# nothing (review r1 B1). `SELF_TESTS` pins that a no-op mutant naming that case is
 # `survived`.
 COPY_ROOT = pathlib.Path("apps/infrx-api")
 
 
-def _pytest(root: pathlib.Path, files: list[str], selection: str):
+def _layout(root: pathlib.Path) -> pathlib.Path:
     api = root / COPY_ROOT
-    return subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-         "-rf", "--tb=no", *files, "-k", selection],
-        cwd=api, capture_output=True, text=True, timeout=NESTED_TIMEOUT_S,
-        env={"PYTHONPATH": str(api), "PATH": "/usr/bin:/bin",
-             "HOME": str(api), "TMPDIR": str(api / "tmp")})
-
-
-def run_mutant(mutant) -> Result:
-    """Apply one mutant to a throwaway copy of the tree and run the cases it names.
-
-    A kill needs all three: pytest exited 1, at least one test failed, and every
-    failing id names one of the mutant's own cases. The worktree is never written to.
-    """
-    if not mutant.cases:
-        return Result(Outcome.misdeclared, "declares no case")
-    with tempfile.TemporaryDirectory(prefix=f"i0-mutant-{mutant.name}-") as tmp:
-        root = pathlib.Path(tmp)
-        api = root / COPY_ROOT
-        api.mkdir(parents=True)
-        ignore = shutil.ignore_patterns("__pycache__", ".venv")
-        for name in ("infrx", "tests", "deploy"):
-            shutil.copytree(API_DIR / name, api / name, ignore=ignore)
-        # One case reads `models/marlin2b/serve.sh` as it stands, and finds it through
-        # `support.REPO`, which is two levels above the package - hence the layout.
-        engine = root / "models" / "marlin2b"
-        engine.mkdir(parents=True)
-        shutil.copy2(REPO / "models" / "marlin2b" / "serve.sh", engine / "serve.sh")
-        (api / "tmp").mkdir()
-        shutil.copy2(API_DIR / "pyproject.toml", api / "pyproject.toml")
-        target = api / mutant.file
-        source = target.read_text()
-        if mutant.old not in source:
-            return Result(Outcome.misdeclared,
-                          f"anchor not found in {mutant.file}: {mutant.old[:60]!r}")
-        target.write_text(source.replace(mutant.old, mutant.new, 1))
-        files = sorted(files_for(mutant.cases))
-        if not files:
-            return Result(Outcome.misdeclared, f"no file defines any of {list(mutant.cases)}")
-        try:
-            done = _pytest(root, files, " or ".join(mutant.cases))
-        except subprocess.TimeoutExpired:
-            return Result(Outcome.broken_runner,
-                          f"the named cases did not finish within {NESTED_TIMEOUT_S}s")
-        stdout = done.stdout or ""
-        lines = (stdout or done.stderr).strip().splitlines()
-        summary = lines[-1] if lines else "no output"
-        if done.returncode not in (PYTEST_ALL_PASSED, PYTEST_TESTS_FAILED):
-            return Result(Outcome.broken_runner, f"pytest exit {done.returncode}: {summary}")
-        if not re.search(r"(\d+) (?:passed|failed|skipped)", summary) or "no tests ran" in summary:
-            return Result(Outcome.misdeclared, f"no case matched: {summary}")
-        failed, errored = _SHARED._failing_ids(stdout)
-        if errored:
-            return Result(Outcome.broken_runner, f"errors outside the named cases: {errored[:3]}")
-        if done.returncode == PYTEST_ALL_PASSED or not failed:
-            return Result(Outcome.survived, summary)
-        stray = [test_id for test_id in failed
-                 if not any(case in test_id for case in mutant.cases)]
-        if stray:
-            return Result(Outcome.broken_runner, f"failures outside the named cases: {stray[:3]}")
-        return Result(Outcome.killed, summary)
+    api.mkdir(parents=True)
+    ignore = shutil.ignore_patterns("__pycache__", ".venv")
+    for name in ("infrx", "tests", "deploy"):
+        shutil.copytree(API_DIR / name, api / name, ignore=ignore)
+    engine = root / "models" / "marlin2b"
+    engine.mkdir(parents=True)
+    shutil.copy2(REPO / "models" / "marlin2b" / "serve.sh", engine / "serve.sh")
+    shutil.copy2(API_DIR / "pyproject.toml", api / "pyproject.toml")
+    return api
 
 
 def _definitions() -> dict[str, str]:
@@ -357,25 +300,17 @@ def case_names() -> set[str]:
     return set(_definitions())
 
 
+# `package=""`: a mutant's `file` is relative to `apps/infrx-api`, not to `infrx`.
+RUNNER = _SHARED.Runner(name="i0", package="", layout=_layout,
+                        targets_for=lambda cases: sorted(files_for(cases)))
+
+
+def run_mutant(mutant) -> Result:
+    return _SHARED.run_mutant(mutant, RUNNER)
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="run track I's mutation list")
-    parser.add_argument("names", nargs="*")
-    parser.add_argument("--list", action="store_true")
-    args = parser.parse_args()
-    if args.list:
-        for mutant in MUTANTS:
-            print(f"{mutant.name:38s} {mutant.invariant}")
-        print(f"\n{len(MUTANTS)} mutants over "
-              f"{len({case for m in MUTANTS for case in m.cases})} named cases")
-        return 0
-    bad = {}
-    for mutant in (m for m in MUTANTS if not args.names or m.name in args.names):
-        result = run_mutant(mutant)
-        print(f"[{result.outcome:13s}] {mutant.name}: {result.detail}")
-        if not result.killed:
-            bad[mutant.name] = result.detail
-    print(f"\n{len(bad)} not killed" if bad else "\nall killed")
-    return 1 if bad else 0
+    return _SHARED.main(MUTANTS, RUNNER, "run track I's mutation list")
 
 
 if __name__ == "__main__":

@@ -1488,6 +1488,8 @@ def _domain_deaths() -> frozenset[str]:
     death. `TypeError`, `NameError`, `KeyError`, `AttributeError`, `ValidationError`,
     `RecursionError` and the rest are not, and must be declared per mutant in `dies_by`.
     """
+    if str(API_DIR) not in sys.path:          # a list run as a script by its path
+        sys.path.insert(0, str(API_DIR))
     from infrx.contracts import errors
 
     found, pending = set(), [errors.DomainError]
@@ -1523,7 +1525,10 @@ class Runner:
     `targets` are pytest paths; `targets_for` narrows them per mutant (track G collects
     only the files defining the named cases, because collecting its whole suite imports
     FastAPI once per mutant). `require_every_case` is track Q's stricter rule: a mutant
-    may not claim coverage from a case that cannot see it.
+    may not claim coverage from a case that cannot see it. `layout` builds a copy of a
+    different shape (track I mutates `deploy/`, outside the package, and one case reads
+    a repository file): it fills the temporary root and returns the directory pytest runs
+    in; a mutant's `file` is then relative to that directory joined with `package`.
     """
 
     name: str
@@ -1533,6 +1538,7 @@ class Runner:
     timeout_s: float = NESTED_TIMEOUT_S
     require_every_case: bool = False
     targets_for: "Callable[[tuple[str, ...]], Sequence[str]] | None" = None
+    layout: "Callable[[pathlib.Path], pathlib.Path] | None" = None
 
     def select(self, cases: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(self.targets_for(cases)) if self.targets_for else self.targets
@@ -1624,8 +1630,10 @@ def case_of(test_id: str, cases: tuple[str, ...]) -> str | None:
     return None
 
 
-def _prepare(root: pathlib.Path, mutant: "Mutant", runner: Runner) -> Result | None:
-    """Copy the tree, apply the one edit, and refuse an edit that cannot be evidence."""
+def _copy(root: pathlib.Path, runner: Runner) -> pathlib.Path:
+    """The default copy: the package and the tests; returns where pytest runs."""
+    if runner.layout is not None:
+        return runner.layout(root)
     junk = shutil.ignore_patterns("__pycache__")
     shutil.copytree(API_DIR / runner.package, root / runner.package, ignore=junk)
     shutil.copytree(API_DIR / "tests", root / "tests", ignore=junk)
@@ -1633,7 +1641,12 @@ def _prepare(root: pathlib.Path, mutant: "Mutant", runner: Runner) -> Result | N
     # mode, `pythonpath=["."]`), or the copy collects under different import rules than
     # the suite was written for.
     shutil.copy2(API_DIR / "pyproject.toml", root / "pyproject.toml")
-    target = root / runner.package / mutant.file
+    return root
+
+
+def _prepare(api: pathlib.Path, mutant: "Mutant", runner: Runner) -> Result | None:
+    """Apply the one edit to the copy, and refuse an edit that cannot be evidence."""
+    target = api / runner.package / mutant.file
     source = target.read_text()
     found = source.count(mutant.old)
     if found != mutant.occurrences:
@@ -1672,7 +1685,8 @@ def run_mutant(mutant: "Mutant", runner: Runner | None = None) -> Result:
                       f"no target defines any of {list(mutant.cases)}")
     with tempfile.TemporaryDirectory(prefix=f"{runner.name}-mutant-{mutant.name}-") as tmp:
         root = pathlib.Path(tmp)
-        refused = _prepare(root, mutant, runner)
+        api = _copy(root, runner)
+        refused = _prepare(api, mutant, runner)
         if refused is not None:
             return refused
         cache, temp = root / ".pycache", root / ".tmp"
@@ -1684,8 +1698,8 @@ def run_mutant(mutant: "Mutant", runner: Runner | None = None) -> Result:
                 [sys.executable, "-m", "pytest", "-q", "--no-header",
                  "-p", "no:cacheprovider", "-rf", "--tb=line",
                  *runner.extra_args, *targets, "-k", selection],
-                cwd=root, capture_output=True, text=True, timeout=runner.timeout_s,
-                env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin",
+                cwd=api, capture_output=True, text=True, timeout=runner.timeout_s,
+                env={"PYTHONPATH": str(api), "PATH": "/usr/bin:/bin", "HOME": str(temp),
                      "PYTHONPYCACHEPREFIX": str(cache), "TMPDIR": str(temp)})
         except subprocess.TimeoutExpired:
             # A defect that makes a case hang is real, but a hang is not the proof the

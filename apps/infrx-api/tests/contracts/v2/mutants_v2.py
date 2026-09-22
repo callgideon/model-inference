@@ -12,28 +12,17 @@ mutant survives. Nothing is ever written inside the worktree.
     uv run --frozen python tests/contracts/v2/mutants_v2.py --list     # names only
     uv run --frozen python tests/contracts/v2/mutants_v2.py settle_ignores_certainty
 
-What counts as a kill is `mutants.run_mutant`'s definition, reused here: pytest
-exited 1, at least one test failed, and every failing id names one of the mutant's
-own cases. A syntax error, an import-time failure or a collection error fails tests
-the mutant never named and is reported as `broken_runner`, which fails the run just
-as a survivor does.
-
-`mutants.run_mutant` hard-codes `tests/contracts/test_conformance.py` as the file
-to select from, so the subprocess call is repeated here with the v2 path while the
-*classification* (exit codes, failing ids, stray failures) is imported rather than
-copied. F2R item 8 consolidates the eight v1 runners; the wire-in phase should
-parameterise `run_mutant(test_path=...)` and delete the twenty lines below.
-`ponytail: duplicated subprocess call, deleted when run_mutant takes a test path.`
+What counts as a kill is the shared runner's rule (`tests/contracts/mutants.py`, F2R
+item 9; this list delegates to it with its own `Runner` since IR-A10): pytest exited 1,
+only the mutant's own cases failed, and each died by an assertion, a typed
+`DomainError`, or an exception the mutant declares. A syntax error, an import-time
+failure or a collection error is `broken_runner`, which fails the run just as a
+survivor does.
 """
 from __future__ import annotations
 
-import argparse
 import pathlib
-import re
-import shutil
-import subprocess
 import sys
-import tempfile
 
 if __package__:
     from .. import mutants as v1runner
@@ -42,9 +31,8 @@ else:                                   # run as a script: `python tests/contrac
     import mutants as v1runner
 Mutant, Outcome, Result = v1runner.Mutant, v1runner.Outcome, v1runner.Result
 
-API_DIR = pathlib.Path(__file__).resolve().parents[3]
-PACKAGE = "infrx"
 TEST_FILE = "tests/contracts/v2/test_conformance_v2.py"
+RUNNER = v1runner.Runner(name="v2", targets=(TEST_FILE,))
 
 
 def _m(name, invariant, file, old, new, *cases) -> Mutant:
@@ -386,77 +374,11 @@ MUTANTS: tuple[Mutant, ...] = (
 
 
 def run_mutant(mutant: Mutant) -> Result:
-    """Apply one v2 mutant to a throwaway copy and run its cases.
-
-    Identical to `mutants.run_mutant` except for the test file it selects from;
-    the classification of the outcome is imported, not reimplemented.
-    """
-    if not mutant.cases:
-        return Result(Outcome.misdeclared, "declares no case")
-    with tempfile.TemporaryDirectory(prefix=f"mutant-v2-{mutant.name}-") as tmp:
-        root = pathlib.Path(tmp)
-        shutil.copytree(API_DIR / PACKAGE, root / PACKAGE,
-                        ignore=shutil.ignore_patterns("__pycache__"))
-        shutil.copytree(API_DIR / "tests", root / "tests",
-                        ignore=shutil.ignore_patterns("__pycache__"))
-        target = root / mutant.path
-        source = target.read_text()
-        if mutant.old not in source:
-            return Result(Outcome.misdeclared,
-                          f"anchor not found in {mutant.file}: {mutant.old[:60]!r}")
-        target.write_text(source.replace(mutant.old, mutant.new, 1))
-        selection = " or ".join(mutant.cases)
-        done = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
-             "-rf", "--tb=no", TEST_FILE, "-k", selection],
-            cwd=root, capture_output=True, text=True,
-            env={"PYTHONPATH": str(root), "PATH": "/usr/bin:/bin"})
-        stdout = done.stdout or ""
-        lines = (stdout or done.stderr).strip().splitlines()
-        summary = lines[-1] if lines else "no output"
-        if done.returncode not in (v1runner.PYTEST_ALL_PASSED, v1runner.PYTEST_TESTS_FAILED):
-            return Result(Outcome.broken_runner, f"pytest exit {done.returncode}: {summary}")
-        ran = re.search(r"(\d+) (?:passed|failed|skipped)", summary)
-        if not ran or "no tests ran" in summary:
-            return Result(Outcome.misdeclared, f"no case matched {selection!r}: {summary}")
-        failed, errored = v1runner._failing_ids(stdout)
-        if errored:
-            return Result(Outcome.broken_runner, f"errors outside the named cases: {errored[:3]}")
-        if done.returncode == v1runner.PYTEST_ALL_PASSED or not failed:
-            return Result(Outcome.survived, summary)
-        stray = [test_id for test_id in failed
-                 if not any(f"[{case}]" in test_id or test_id.endswith(case)
-                            for case in mutant.cases)]
-        if stray:
-            return Result(Outcome.broken_runner,
-                          f"failures outside the named cases: {stray[:3]}")
-        if "skipped" in summary and not failed:
-            return Result(Outcome.misdeclared, f"its cases were skipped: {summary}")
-        return Result(Outcome.killed, summary)
+    return v1runner.run_mutant(mutant, RUNNER)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="run the contracts-v2 mutation list")
-    parser.add_argument("names", nargs="*", help="mutants to run (default: all)")
-    parser.add_argument("--list", action="store_true", help="print the list and exit")
-    args = parser.parse_args()
-    if args.list:
-        for mutant in MUTANTS:
-            print(f"{mutant.name:46s} {mutant.invariant}")
-        print(f"\n{len(MUTANTS)} mutants over "
-              f"{len({case for m in MUTANTS for case in m.cases})} named cases")
-        return 0
-    chosen = [m for m in MUTANTS if not args.names or m.name in args.names]
-    bad: dict[str, list[str]] = {}
-    for mutant in chosen:
-        result = run_mutant(mutant)
-        print(f"[{result.outcome:13s}] {mutant.name}: {result.detail}")
-        if not result.killed:
-            bad.setdefault(result.outcome.value, []).append(mutant.name)
-    failures = sum(len(names) for names in bad.values())
-    print(f"\n{len(chosen) - failures}/{len(chosen)} killed"
-          + "".join(f"; {outcome}: {names}" for outcome, names in sorted(bad.items())))
-    return 1 if bad else 0
+    return v1runner.main(MUTANTS, RUNNER, "run the contracts-v2 mutation list")
 
 
 if __name__ == "__main__":
