@@ -18,8 +18,9 @@ from typing import Any, Awaitable, Callable
 
 from ..contracts import errors
 from ..contracts.limits import DEFAULTS, PilotSettings
-from ..contracts.records import (Admission, Budgets, IdempotencyRef, NormalizedRequest,
-                                 ReservationKind, TerminalOutcome)
+from ..contracts.records import (Admission, Budgets, IdempotencyRef, IndexEvent, Lease,
+                                 MediaRef, NormalizedRequest, ReservationKind,
+                                 TerminalOutcome)
 from ..contracts.v2.records import AdmissionV2
 
 #: `async () -> psycopg.AsyncConnection` in autocommit, acting as `service_role`.
@@ -184,6 +185,52 @@ class PgJobStore:
         if doc["accounting_regime"] != "credit":
             raise errors.NotFound(f"job {job_handle} is not a CREDIT job")
         return admission_v2_of(doc), _outcome(doc["outcome"])
+
+    # --- preparation (D2 item 2) ----------------------------------------------------
+    @staticmethod
+    def _answer(doc: dict) -> dict:
+        """R39: a refusal that followed a committed terminalization comes back as data,
+        because raising inside the function would have rolled the terminalization back."""
+        refusal = doc.get("refusal") if isinstance(doc, dict) else None
+        if refusal:
+            raise _BY_CODE[refusal["code"]](refusal["detail"])
+        return doc
+
+    async def claim_preparation(self, job_id: str, worker_id: str) -> Lease:
+        """r1 R46/R52: a fenced preparation lease; one live lease per job, the first claim
+        plus MAX_PREPUBLICATION_RETRIES further ones, never past the phase deadline."""
+        doc = self._answer(await self._call("claim_preparation", {
+            "job_id": job_id, "worker_id": worker_id,
+            "limits": {"preparation_lease_ttl_s": self.limits.preparation_lease_ttl_s,
+                       "max_prepublication_retries": self.limits.max_prepublication_retries}}))
+        return Lease.model_validate(doc["lease"])
+
+    async def prepared(self, lease: Lease, media: tuple[MediaRef, ...] = ()):
+        """`preparing -> queued` fenced on the preparation lease, with its
+        `inference_dispatch` event, in one transaction (the 06 `prepare` boundary)."""
+        doc = self._answer(await self._call("prepare", {
+            "lease": lease.model_dump(mode="json"),
+            "media": [ref.model_dump(mode="json") for ref in media]}))
+        return admission_of(doc) if doc["accounting_regime"] == "legacy_usd" \
+            else admission_v2_of(doc)
+
+    # --- the dispatch outbox (D2 item 2) -------------------------------------------
+    async def dispatch_pending(self, *, limit: int = 100, worker_id: str = "relay",
+                               redelivery_s: float = 30.0) -> tuple[IndexEvent, ...]:
+        """Unacknowledged dispatch rows whose job still wants them, as index events."""
+        docs = await self._call("dispatch_pending", {"limit": limit, "worker_id": worker_id,
+                                                     "redelivery_s": redelivery_s})
+        return tuple(IndexEvent.model_validate(doc) for doc in docs)
+
+    async def acknowledge_dispatch(self, event_ids) -> int:
+        """Delivery acknowledgment: the index now holds these candidates."""
+        return await self._call("acknowledge_dispatch",
+                                {"event_ids": [str(event_id) for event_id in event_ids]})
+
+    async def dispatch_snapshot(self) -> tuple[IndexEvent, ...]:
+        """PostgreSQL truth for `Scheduler.rebuild`."""
+        rows = await self._query("select infrx.dispatch_snapshot()", ())
+        return tuple(IndexEvent.model_validate(doc) for doc in rows[0][0])
 
     # --- D3 / D5 (fail closed) ---------------------------------------------------
     async def claim(self, job_id: str, worker_id: str):

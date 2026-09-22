@@ -56,3 +56,23 @@ def test_admission__concurrent_admissions_and_grants_keep_the_lock_order() -> No
     """DUR-CAP: 8 concurrent admissions + 2 grants across two orgs/keys, 5 rounds."""
     _db()
     print(checks_admission.check_admission_concurrency(pgharness.connect, DB))
+
+
+# --- item 2: preparation and the dispatch outbox, in SQL ---------------------------
+def test_prepare__fenced_preparing_to_queued_with_one_inference_dispatch() -> None:
+    """02 §3 / R46 / R38: the prepare boundary, fence by fence."""
+    from . import checks_dispatch
+    print(checks_dispatch.check_prepare_transition(_db()))
+
+
+def test_prepare__the_preparation_deadline_terminalizes_in_the_same_call() -> None:
+    """R29 / R39 / R55: claim, late prepared and the retry bound terminalize and refuse."""
+    from . import checks_dispatch
+    print(checks_dispatch.check_preparation_deadline_terminalizes(_db()))
+    print(checks_dispatch.check_credit_job_terminalization_releases_credit(_db()))
+
+
+def test_outbox__pending_redelivery_superseded_and_snapshot() -> None:
+    """DUR-OUTBOX: at-least-once rows, superseded acks, the rebuild snapshot."""
+    from . import checks_dispatch
+    print(checks_dispatch.check_dispatch_relay(_db()))

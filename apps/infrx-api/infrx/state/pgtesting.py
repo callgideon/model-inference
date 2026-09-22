@@ -149,7 +149,10 @@ def hooks(conn, store: PgJobStore) -> dict[str, Callable]:
         rows = conn.execute(
             "select event_id, aggregate_id, kind, version, payload, available_at "
             "from infrx.outbox where %s::uuid is null or aggregate_id = %s::uuid "
-            "order by created_at, event_id", (aggregate_id, aggregate_id)).fetchall()
+            "order by created_at, array_position(array['prepare_dispatch',"
+            "'inference_dispatch','usage_projection','trace_projection','feedback_projection',"
+            "'judge_projection','callback_delivery'], kind), event_id",
+            (aggregate_id, aggregate_id)).fetchall()
         return [OutboxEvent(event_id=str(e), aggregate_id=str(a), kind=k, version=v,
                             payload=p, available_at=t) for e, a, k, v, p, t in rows]
 

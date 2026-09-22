@@ -73,7 +73,7 @@ EXPECTED_VIEWS = (
 RPC_NAMES = ("admit", "prepare", "claim", "heartbeat", "append", "cancel", "terminalize",
              "grant_credit", "accept_feedback", "reserve_judge", "record_submission")
 #: The boundaries D2 has filled (0011 `admit`, 0012 `prepare`); the rest are still stubs.
-FILLED_RPCS = ("admit",)
+FILLED_RPCS = ("admit", "prepare")
 
 _JOB_COLUMNS = """
   request_id, job_handle, org_id, key_id, model_revision, execution_mode, state,
