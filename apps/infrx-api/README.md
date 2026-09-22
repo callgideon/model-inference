@@ -44,7 +44,7 @@ and serves unauthenticated, which is how the tests run it.
 | `GATEWAY_API_KEY` | `/model-inference/marlin2b_api_key` | legacy single key, still accepted while it exists |
 | `MODEL_ID` | — | id on the wire and in `usage_events.model_id` (`nemostation/marlin-2b`) |
 | `UPSTREAM`, `MAX_INFLIGHT`, `MAX_VIDEO_SECONDS`, `MAX_VIDEO_MB` | — | vLLM address, 429 threshold, video limits |
-| `FETCH_TIMEOUT_S`, `MAX_REDIRECTS`, `ALLOWED_VIDEO_MIME` | — | media fetch: total budget (30 s), redirect hops (3), content-type allowlist (`video/mp4,video/webm,video/quicktime,video/mpeg`) |
+| `FETCH_TIMEOUT_S`, `MAX_REDIRECTS`, `ALLOWED_VIDEO_MIME` | — | media fetch: total budget (30 s), redirect hops (3), content-type allowlist (`video/mp4,video/webm,video/quicktime`) |
 | `USAGE_LOG`, `USAGE_FAILED_LOG` | — | `/opt/dlami/nvme/logs/usage.jsonl`, and `usage_failed.jsonl` beside it |
 | `MODELS_DOC` | — | path to the provider document served by `/v1/models` |
 
@@ -89,7 +89,7 @@ Policy (`prepare_video` / `fetch_video` in `infrx/media/video.py`; `gateway.py` 
   whole in RAM;
 - **time**: the whole fetch, redirects included, lives inside `FETCH_TIMEOUT_S`
   (30 s), 5 s of it for connect;
-- **type**: `ALLOWED_VIDEO_MIME` (mp4, webm, mov/quicktime, mpeg); a server
+- **type**: `ALLOWED_VIDEO_MIME` (mp4, webm, mov/quicktime); a server
   that says nothing or `application/octet-stream` falls back to the URL's
   extension, anything else is refused;
 - **errors**: upstream exception text is never returned — it goes to the
