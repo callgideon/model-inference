@@ -1,13 +1,13 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T16:58:00Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T17:01:43Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 1 done · 9 in progress · 20 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
 | B0 Baseline & contracts | S1 | Reconcile pulled wave-2 baseline and publish product revision audit | **in-progress** | implemented | S1 API side passed independent review; console fixes in flight |
-| B0 Baseline & contracts | F2R | Close remaining wave-2 contract and verification carryovers | **in-progress** | planned | lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7) |
+| B0 Baseline & contracts | F2R | Close remaining wave-2 contract and verification carryovers | **in-progress** | planned | lane A: items 2–5,9 + relayed additions; lane B: items 6/7 done at 1cd5754, now applying consumer updates IR-1..4 to make the tree green |
 | B0 Baseline & contracts | I0 | Repair installer atomicity and fail-closed startup prerequisite | **in-progress** | planned | handed back: preflight.py fail-closed installer; 77 tests, 45 mutants |
 | B0 Baseline & contracts | E2R | Repair service harness ownership, role matrix and shared test clock | **in-progress** | planned | harness ownership + five RLS inversions on real services |
 | B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **done** | implemented |  |
@@ -61,7 +61,7 @@ Generated 2026-09-22T16:58:00Z from `tasks.json` (manifest v4) and `progress-sta
 
 ## In flight
 
-- F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7)
+- F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: items 2–5,9 + relayed additions; lane B: items 6/7 done at 1cd5754, now applying consumer updates IR-1..4 to make the tree green
 - I0: codex-i0 — independent review at 06aa170 since 2026-09-22T15:51:21Z — handed back: preflight.py fail-closed installer; 77 tests, 45 mutants
 - E2R: codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services
 - F2P: codex-f2p — additive design phase (new files only); wire-in after F2R since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
