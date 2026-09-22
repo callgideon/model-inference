@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T18:13:15Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T18:17:57Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>5</b><span>done</span></div>
 <div class="tile prog"><b>8</b><span>in progress</span></div>
@@ -59,7 +59,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B1</td><td><code>M3</code></td><td>Owned uploads, expiry and orphan collection</td><td><span class="pill prog">in-progress</span></td><td class="note">uploads, GC, consent resolver; six conformance cases to unskip</td></tr>
 <tr><td>B1</td><td><code>Q2</code></td><td>Valkey adapter with atomic tested scripts</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>Q3</code></td><td>Outbox/reconciler integration and index loss recovery</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
-<tr><td>B1</td><td><code>W2</code></td><td>Lease-aware execution, cancellation and completion</td><td><span class="pill prog">in-progress</span></td><td class="note">attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart</td></tr>
+<tr><td>B1</td><td><code>W2</code></td><td>Lease-aware execution, cancellation and completion</td><td><span class="pill prog">in-progress</span></td><td class="note">attempt loop + vLLM adapter with R61 media form; 59 + 149 mutants</td></tr>
 <tr><td>B1</td><td><code>W3</code></td><td>Drain, engine pin and measured concurrency</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G1R</code></td><td>Revise ingress for consumer and provider endpoint audiences</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G2</code></td><td>Synchronous chat and persistent SSE relay</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
@@ -95,7 +95,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>F2R</code> — codex-f2r — implementing since 2026-09-22T15:51:21Z — lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions</li>
 <li><code>E2R</code> — codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services | resumed from WIP after restart</li>
 <li><code>F2P</code> — codex-f2p — additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>
-<li><code>W2</code> — codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart</li>
+<li><code>W2</code> — codex-w2 — independent review at 1ea3817 since 2026-09-22T16:00:21Z — attempt loop + vLLM adapter with R61 media form; 59 + 149 mutants</li>
 <li><code>E1B</code> — codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
 <li><code>D1R</code> — codex-d1r / codex/d1r-v2-schema — dispatched from 9faaa57 (reads 06a + v2 fixture base) since 2026-09-22T18:05:08Z — D owns migrations; additive over 0001–0005</li>
 <li><code>M3</code> — codex-m3 / codex/m3-owned-uploads — implementing (early start on accepted v2 contracts) since 2026-09-22T18:12:19Z — uploads, GC, consent resolver; six conformance cases to unskip</li>

@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T18:13:15Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T18:17:57Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 5 done · 8 in progress · 17 remaining (of 30).**
 
@@ -22,7 +22,7 @@ Generated 2026-09-22T18:13:15Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | M3 | Owned uploads, expiry and orphan collection | **in-progress** | planned | uploads, GC, consent resolver; six conformance cases to unskip |
 | B1 Durable endpoint | Q2 | Valkey adapter with atomic tested scripts | **done** | implemented |  |
 | B1 Durable endpoint | Q3 | Outbox/reconciler integration and index loss recovery | **remaining** | planned |  |
-| B1 Durable endpoint | W2 | Lease-aware execution, cancellation and completion | **in-progress** | planned | attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart |
+| B1 Durable endpoint | W2 | Lease-aware execution, cancellation and completion | **in-progress** | planned | attempt loop + vLLM adapter with R61 media form; 59 + 149 mutants |
 | B1 Durable endpoint | W3 | Drain, engine pin and measured concurrency | **remaining** | planned |  |
 | B1 Durable endpoint | G1R | Revise ingress for consumer and provider endpoint audiences | **remaining** | planned |  |
 | B1 Durable endpoint | G2 | Synchronous chat and persistent SSE relay | **remaining** | planned |  |
@@ -65,7 +65,7 @@ Generated 2026-09-22T18:13:15Z from `tasks.json` (manifest v4) and `progress-sta
 - F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions
 - E2R: codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services | resumed from WIP after restart
 - F2P: codex-f2p — additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
-- W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart
+- W2: codex-w2 — independent review at 1ea3817 since 2026-09-22T16:00:21Z — attempt loop + vLLM adapter with R61 media form; 59 + 149 mutants
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - D1R: codex-d1r / codex/d1r-v2-schema — dispatched from 9faaa57 (reads 06a + v2 fixture base) since 2026-09-22T18:05:08Z — D owns migrations; additive over 0001–0005
 - M3: codex-m3 / codex/m3-owned-uploads — implementing (early start on accepted v2 contracts) since 2026-09-22T18:12:19Z — uploads, GC, consent resolver; six conformance cases to unskip
