@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T18:22:01Z",
+  "updated": "2026-09-22T18:33:10Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "W2": {
       "lane": "codex-w2",
-      "phase": "independent review at 1ea3817",
+      "phase": "fix round 1 (five test gaps from the review)",
       "since": "2026-09-22T16:00:21Z",
       "note": "attempt loop + vLLM adapter with R61 media form; 59 + 149 mutants"
     },
