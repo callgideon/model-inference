@@ -164,9 +164,8 @@ begin
   end if;
   select * into a from infrx.attempts
    where job_id = j.request_id and kind = v_kind and released_at is null;
-  -- (the phase a kind fences: preparing for preparation, running for inference)
-  if not found or (j.state = 'preparing') <> (v_kind = 'preparation')
-     or j.state not in ('preparing', 'running') then
+  -- A live attempt of this kind exists exactly while the job is in the phase it fences.
+  if not found then
     perform infrx.refuse('stale_lease', 'job ' || j.request_id || ' is ' || j.state
                          || ' with no live ' || v_kind || ' lease');
   end if;

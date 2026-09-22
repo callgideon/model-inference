@@ -83,7 +83,15 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           "d2_consumer_spends_on_a_private_deployment", "d2_prepare_any_generation",
           "d2_superseded_rows_dispatched", "d2_result_read_across_tenants",
           "d2_media_delete_ignores_last_use", "d2_usd_statement_reads_credit",
-          "d2_credit_ledger_rounds_to_cents")
+          "d2_credit_ledger_rounds_to_cents",
+          # D3: fencing, publication/regeneration, money release and tenant isolation.
+          "d3_fence_ignores_the_generation", "d3_fence_ignores_the_worker",
+          "d3_fence_expiry_before_the_deadline", "d3_fence_without_the_row_lock",
+          "d3_claim_without_the_row_lock", "d3_cancel_any_tenant",
+          "d3_published_output_released", "d3_terminalization_keeps_the_hold",
+          "d3_requeue_after_publication", "d3_retries_unbounded",
+          "d3_held_unknown_may_be_rewritten", "d3_one_stuck_job_stops_the_sweep",
+          "d3_service_operations_callable_by_browsers", "d3_prep_retries_unbounded")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 

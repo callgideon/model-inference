@@ -25,8 +25,8 @@ from infrx.state import migrations
 
 from ..contracts import mutants as shared
 from ..contracts.mutants import Outcome
-from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_media,
-               pgharness)
+from . import (checks, checks_admission, checks_credit, checks_dispatch, checks_leases,
+               checks_media, pgharness)
 
 SCHEMA = "0003_pilot_durable_schema.sql"
 ROLES = "0004_pilot_roles_and_rpcs.sql"
@@ -1451,6 +1451,288 @@ D2_MUTANTS: tuple[Mutant, ...] = (
 MUTANTS = MUTANTS + D2_MUTANTS
 
 
+#: D3 (0016 and the 0003 `jobs_guard` amendment, scenario "admission"). One per claimed
+#: invariant, each killed by its named `checks_leases` check.
+LEASES = "0016_fenced_leases.sql"
+_REFUSAL_RETURN = ("  if v_refusal is not null then\n"
+                   "    return jsonb_build_object('refusal', v_refusal);\n  end if;\n")
+D3_MUTANTS: tuple[Mutant, ...] = (
+    # --- the fence ---------------------------------------------------------------------
+    _m("d3_fence_accepts_any_kind", LEASES,
+       "  if v_kind is null or not (v_kind = any(p_kinds)) then", "  if v_kind is null then",
+       "admission", "preparation_fence", "a preparation lease reaches the settlement (R46)"),
+    _m("d3_fence_without_a_live_attempt", LEASES,
+       "  -- A live attempt of this kind exists exactly while the job is in the phase it fences.\n"
+       "  if not found then",
+       "  -- A live attempt of this kind exists exactly while the job is in the phase it fences.\n"
+       "  if false then",
+       "admission", "lease_fence", "a token with no attempt behind it loads the work"),
+    _m("d3_fence_ignores_the_generation", LEASES,
+       "  if a.generation is distinct from (p_lease->>'generation')::int then", "  if false then",
+       "admission", "lease_fence", "a superseded generation mutates the new holder's job"),
+    _m("d3_fence_ignores_the_worker", LEASES,
+       "  if a.worker_id is distinct from p_lease->>'worker_id' then", "  if false then",
+       "admission", "lease_fence", "two processes holding generation N both mutate"),
+    _m("d3_fence_expiry_before_the_deadline", LEASES,
+       "  if v_now >= j.deadline_at or v_now >= a.generation_deadline_at then",
+       "  if v_now < a.expires_at and (v_now >= j.deadline_at "
+       "or v_now >= a.generation_deadline_at) then",
+       "admission", "lease_fence", "an overdue job waits for the reaper with its hold (R55)"),
+    _m("d3_fence_ignores_the_generation_deadline", LEASES,
+       "  if v_now >= j.deadline_at or v_now >= a.generation_deadline_at then",
+       "  if v_now >= j.deadline_at then",
+       "admission", "lease_fence", "a live lease keeps generating past its phase (R29)"),
+    _m("d3_fence_ignores_the_preparation_deadline", LEASES,
+       "  if v_kind = 'preparation' and v_now >= j.preparation_deadline_at then",
+       "  if false then", "admission", "preparation_fence",
+       "a late preparation settles with the wrong cause (R29)"),
+    _m("d3_fence_ignores_expiry", LEASES,
+       "  if v_now >= a.expires_at then\n    perform infrx.refuse('stale_lease', v_kind || "
+       "' lease expired at '",
+       "  if false then\n    perform infrx.refuse('stale_lease', v_kind || "
+       "' lease expired at '", "admission", "lease_fence", "a lost worker keeps mutating"),
+    _m("d3_fence_serves_a_terminal_job", LEASES,
+       "  if j.settled_at is not null then\n    perform infrx.refuse('already_terminal', 'job ' "
+       "|| j.request_id || ' is already '",
+       "  if false then\n    perform infrx.refuse('already_terminal', 'job ' "
+       "|| j.request_id || ' is already '",
+       "admission", "lease_fence", "a worker cannot tell its job was cancelled"),
+    _m("d3_fence_without_the_row_lock", LEASES,
+       "  select * into j from infrx.jobs where request_id = (p_lease->>'job_id')::uuid "
+       "for update;",
+       "  select * into j from infrx.jobs where request_id = (p_lease->>'job_id')::uuid;",
+       "admission", "lease_races", "a fenced mutation does not serialize with the reaper"),
+    # --- claim -------------------------------------------------------------------------
+    _m("d3_claim_without_the_row_lock", LEASES,
+       "  select * into j from infrx.jobs where request_id = (p_args->>'job_id')::uuid "
+       "for update;",
+       "  select * into j from infrx.jobs where request_id = (p_args->>'job_id')::uuid;",
+       "admission", "lease_races", "two claimers race to a unique violation"),
+    _m("d3_claim_serves_a_terminal_job", LEASES,
+       "  if j.settled_at is not null then\n    perform infrx.refuse('already_terminal', 'job ' "
+       "|| j.request_id || ' is ' || j.state);",
+       "  if false then\n    perform infrx.refuse('already_terminal', 'job ' "
+       "|| j.request_id || ' is ' || j.state);",
+       "admission", "claim_generation", "a dispatcher cannot tell a finished job"),
+    _m("d3_claim_any_state", LEASES, "  if j.state <> 'queued' then", "  if false then",
+       "admission", "claim_generation", "a running job is claimed twice"),
+    _m("d3_claim_past_the_absolute_deadline", LEASES,
+       "  if v_now >= j.deadline_at then\n    perform infrx.refuse('not_claimable'",
+       "  if false then\n    perform infrx.refuse('not_claimable'",
+       "admission", "claim_generation", "a job nobody waits for starts running"),
+    _m("d3_claim_past_the_queue_deadline", LEASES,
+       "  if v_now >= j.queue_deadline_at then\n    perform infrx.refuse('not_claimable'",
+       "  if false then\n    perform infrx.refuse('not_claimable'",
+       "admission", "claim_generation", "a job told to give up starts running (R20)"),
+    _m("d3_claim_queue_time_not_charged", LEASES,
+       "                          + coalesce(extract(epoch from v_now - j.queued_at)::float8, 0)",
+       "                          + 0",
+       "admission", "claim_generation", "a requeue buys back queue time (R38)"),
+    _m("d3_claim_generation_not_incremented", LEASES,
+       "          (select coalesce(max(generation), 0) + 1 from infrx.attempts",
+       "          (select coalesce(max(generation), 0) + 2 from infrx.attempts",
+       "admission", "claim_generation", "the generation is not the next one"),
+    _m("d3_claim_generation_past_the_deadline", LEASES,
+       "  v_generation_deadline := least(v_now + make_interval(secs => j.budget_generation_s),\n"
+       "                                 j.deadline_at);",
+       "  v_generation_deadline := v_now + make_interval(secs => j.budget_generation_s);",
+       "admission", "claim_generation", "a phase outlives the accepted deadline (R20)"),
+    _m("d3_claim_first_token_past_the_generation", LEASES,
+       "          least(v_now + make_interval(secs => j.budget_first_token_s), "
+       "v_generation_deadline))",
+       "          v_now + make_interval(secs => j.budget_first_token_s))",
+       "admission", "claim_generation", "a first-token wait outlives the generation (R20)"),
+    _m("d3_claim_lease_ttl_ignored", LEASES,
+       "v_now + make_interval(secs => v_ttl),", "v_now + interval '1 day',",
+       "admission", "claim_generation", "a lost worker is not reaped for a day"),
+    # --- heartbeat / load_work ------------------------------------------------------------
+    _m("d3_heartbeat_renews_the_callers_record", LEASES,
+       "           else v_now + make_interval(secs => infrx.lease_limit(p_args, 'lease_ttl_s')) "
+       "end",
+       "           else (p_args->'lease'->>'expires_at')::timestamptz end",
+       "admission", "lease_fence", "a worker grants itself any lease (R29)"),
+    _m("d3_preparation_renewal_past_the_phase", LEASES,
+       "                  t.generation_deadline_at)          -- = preparation_deadline_at (R52)",
+       "                  v_now + interval '1 day')",
+       "admission", "preparation_fence", "a renewal buys preparation time (R52)"),
+    _m("d3_heartbeat_ignores_a_terminalization", LEASES,
+       _REFUSAL_RETURN + "  update infrx.attempts t", "  update infrx.attempts t",
+       "admission", "lease_fence", "the worker of a terminalized job gets a lease (R39)"),
+    _m("d3_load_work_after_a_terminalization", LEASES,
+       _REFUSAL_RETURN + "  select * into j from infrx.jobs where request_id = "
+       "(p_args->'lease'->>'job_id')::uuid;",
+       "  select * into j from infrx.jobs where request_id = "
+       "(p_args->'lease'->>'job_id')::uuid;",
+       "admission", "lease_fence", "a terminalized job's work is still handed out (R39)"),
+    _m("d3_load_work_the_callers_deadline", LEASES,
+       "    'request', j.request_record || jsonb_build_object('deadline_at', j.deadline_at),",
+       "    'request', j.request_record,",
+       "admission", "preparation_fence", "a worker is told a deadline the store never kept"),
+    _m("d3_load_work_without_prepared_refs", LEASES,
+       "    'prepared_refs', coalesce(j.prepared_refs, '[]'),",
+       "    'prepared_refs', '[]'::jsonb,",
+       "admission", "lease_fence", "the engine never sees preparation's media"),
+    # --- cancel and the terminalization -------------------------------------------------
+    _m("d3_cancel_any_tenant", LEASES,
+       "   where job_handle = p_args->>'job_handle' and org_id = (p_args->>'org_id')::uuid",
+       "   where job_handle = p_args->>'job_handle'",
+       "admission", "cancel", "a tenant cancels another tenant's job"),
+    _m("d3_cancel_rewrites_the_committed_outcome", LEASES,
+       "  if j.settled_at is not null then\n    return infrx.job_admission(j.request_id)"
+       "->'outcome';",
+       "  if false then\n    return infrx.job_admission(j.request_id)->'outcome';",
+       "admission", "cancel", "a late cancel fails instead of answering the outcome"),
+    _m("d3_cancel_without_the_row_lock", LEASES,
+       "   where job_handle = p_args->>'job_handle' and org_id = (p_args->>'org_id')::uuid\n"
+       "   for update;",
+       "   where job_handle = p_args->>'job_handle' and org_id = (p_args->>'org_id')::uuid;",
+       "admission", "lease_races", "cancel and complete race to a second terminal write"),
+    _m("d3_published_output_released", LEASES,
+       "  if j.published then\n    -- Output was committed",
+       "  if false then\n    -- Output was committed",
+       "admission", "cancel", "uncounted output drops out of reconciliation (02)"),
+    _m("d3_a_cancellation_is_platform_absorbed", LEASES,
+       "                    'client_cancelled', 'client_disconnected') then",
+       "                    'client_disconnected') then",
+       "admission", "cancel", "a free cancellation is booked as platform cost (R21)"),
+    _m("d3_no_reconciliation_window", LEASES,
+       "    v_reconcile := v_now + make_interval(secs => p_reconcile_s);",
+       "    v_reconcile := v_now;",
+       "admission", "cancel", "unknown usage is released at once, before reconciliation"),
+    _m("d3_terminalization_keeps_the_hold", LEASES,
+       "  else\n    perform infrx.release_hold_legacy_usd(p_request_id);\n  end if;",
+       "  else\n    null;\n  end if;",
+       "admission", "cancel", "a cancelled job keeps the customer's money reserved"),
+    _m("d3_terminalization_keeps_the_credit_hold", LEASES,
+       "  elsif j.accounting_regime = 'credit' then\n"
+       "    perform infrx.release_hold_credit(p_request_id);",
+       "  elsif j.accounting_regime = 'credit' then\n    null;",
+       "admission", "cancel", "a cancelled CREDIT job keeps the wallet reserved"),
+    _m("d3_terminalization_keeps_the_reservations", LEASES,
+       "  update infrx.capacity_reservations set active = false, released_at = v_now\n"
+       "   where request_id = p_request_id and active;",
+       "  update infrx.capacity_reservations set active = false, released_at = v_now\n"
+       "   where false;",
+       "admission", "cancel", "a cancelled job holds capacity for ever"),
+    _m("d3_terminalization_keeps_the_attempts", LEASES,
+       "  update infrx.attempts set released_at = v_now, finished_at = coalesce(finished_at, "
+       "v_now)\n   where job_id = p_request_id and released_at is null;",
+       "  update infrx.attempts set released_at = v_now, finished_at = coalesce(finished_at, "
+       "v_now)\n   where false;",
+       "admission", "cancel", "a cancelled job's worker still holds a live attempt"),
+    _m("d3_terminalization_without_its_usage_projection", LEASES,
+       "  values (gen_random_uuid(), p_request_id, j.org_id, 'usage_projection',",
+       "  values (gen_random_uuid(), p_request_id, j.org_id, 'trace_projection',",
+       "admission", "cancel", "usage never learns the job ended"),
+    _m("d3_quarantine_releases_the_hold", LEASES,
+       "  update infrx.credit_holds set state = 'unknown', reconcile_after = p_reconcile_after,",
+       "  update infrx.credit_holds set state = 'released', reconcile_after = null,",
+       "admission", "cancel", "the hold says released while the wallet stays reserved"),
+    # --- the reaper ---------------------------------------------------------------------
+    _m("d3_requeue_after_publication", LEASES,
+       "  if j.published then\n    return jsonb_build_array(",
+       "  if false then\n    return jsonb_build_array(",
+       "admission", "recover_requeue", "published output is regenerated (02 §6)"),
+    _m("d3_retries_unbounded", LEASES, "  if j.attempts >= p_retries then", "  if false then",
+       "admission", "recover_requeue", "a failing job is retried for ever"),
+    _m("d3_one_retry_too_many", LEASES, "  if j.attempts >= p_retries then",
+       "  if j.attempts > p_retries then",
+       "admission", "recover_requeue", "MAX_PREPUBLICATION_RETRIES + 1 requeues"),
+    _m("d3_a_live_lease_reaped", LEASES,
+       "  if p_now < a.expires_at then\n    return '[]';\n  end if;\n  -- 02 §6",
+       "  if false then\n    return '[]';\n  end if;\n  -- 02 §6",
+       "admission", "recover_requeue", "a renewal committed after the scan is requeued anyway"),
+    _m("d3_generation_deadline_not_reaped", LEASES,
+       "  if p_now >= a.generation_deadline_at then", "  if false then",
+       "admission", "recover_requeue", "a run past its phase keeps its hold (R20)"),
+    _m("d3_scan_misses_the_generation_deadline", LEASES,
+       "                       and (a.expires_at <= v_now or a.generation_deadline_at <= v_now)))",
+       "                       and (a.expires_at <= v_now)))",
+       "admission", "recover_requeue", "the sweep never looks at an overdue live run"),
+    _m("d3_requeue_restores_the_whole_queue_budget", LEASES,
+       "                          secs => greatest(0, budget_queue_wait_s - queue_wait_used_s)),",
+       "                          secs => budget_queue_wait_s),",
+       "admission", "recover_requeue", "a requeue buys a fresh queue budget (R38)"),
+    _m("d3_requeue_without_an_inference_dispatch", LEASES,
+       "  values (gen_random_uuid(), p_id, j.org_id, 'inference_dispatch',",
+       "  values (gen_random_uuid(), p_id, j.org_id, 'prepare_dispatch',",
+       "admission", "recover_requeue", "a requeued job is handed to the preparation pool"),
+    _m("d3_requeue_keeps_the_lost_attempt", LEASES,
+       "   where job_id = p_id and kind = 'inference' and generation = a.generation;",
+       "   where false;",
+       "admission", "recover_requeue", "the lost attempt still fences the next claim"),
+    _m("d3_requeue_uncounted", LEASES,
+       "  update infrx.jobs set state = 'queued', attempts = attempts + 1, queued_at = p_now,",
+       "  update infrx.jobs set state = 'queued', attempts = attempts, queued_at = p_now,",
+       "admission", "recover_requeue", "the retry counter never moves"),
+    _m("d3_queued_job_reaped_early", LEASES, "    if p_now >= j.queue_deadline_at then",
+       "    if true then", "admission", "recover_requeue",
+       "a queued job is expired before its queue instant"),
+    _m("d3_queue_expiry_ignored", LEASES, "    if p_now >= j.queue_deadline_at then",
+       "    if false then", "admission", "recover_requeue",
+       "an abandoned queued job keeps its hold"),
+    _m("d3_prep_reaper_ignores_the_deadline", LEASES,
+       "    if p_now >= j.preparation_deadline_at then", "    if false then",
+       "admission", "recover_preparation", "a dead preparation holds until deadline_at"),
+    _m("d3_prep_live_lease_reaped", LEASES,
+       "    if not found or p_now < a.expires_at then", "    if not found then",
+       "admission", "recover_preparation", "a live preparation is redispatched"),
+    _m("d3_prep_retries_unbounded", LEASES,
+       "    if j.preparation_attempts > p_retries then", "    if false then",
+       "admission", "recover_preparation", "a preparation is retried for ever (R46)"),
+    _m("d3_prep_reap_without_redispatch", LEASES,
+       "    values (gen_random_uuid(), p_id, j.org_id, 'prepare_dispatch',",
+       "    values (gen_random_uuid(), p_id, j.org_id, 'inference_dispatch',",
+       "admission", "recover_preparation", "a reaped preparation is never tried again"),
+    _m("d3_prep_reap_keeps_the_lease", LEASES,
+       "     where job_id = p_id and kind = 'preparation' and generation = a.generation;",
+       "     where false;",
+       "admission", "recover_preparation", "the dead worker's lease blocks the next claim"),
+    _m("d3_unknown_released_early", LEASES,
+       "     where settlement_state = 'held_unknown' and reconcile_after <= v_now",
+       "     where settlement_state = 'held_unknown'",
+       "admission", "recover_unknown_release", "reconciliation is skipped (02)"),
+    _m("d3_unknown_released_twice", LEASES,
+       "   where request_id = p_id and settlement_state = 'held_unknown'\n   for update skip locked;",
+       "   where request_id = p_id\n   for update skip locked;",
+       "admission", "recover_unknown_release", "a second sweep releases the hold again"),
+    _m("d3_unknown_release_keeps_the_hold", LEASES,
+       "  if j.accounting_regime = 'credit' then\n    perform infrx.release_hold_credit(p_id);\n"
+       "  else\n    perform infrx.release_hold_legacy_usd(p_id);\n  end if;",
+       "  null;",
+       "admission", "recover_unknown_release", "platform-absorbed, and still reserved"),
+    _m("d3_one_stuck_job_stops_the_sweep", LEASES,
+       "      v_out := v_out || infrx.recover_job(v_id, v_now, v_retries, v_reconcile);\n"
+       "    exception when others then",
+       "      v_out := v_out || infrx.recover_job(v_id, v_now, v_retries, v_reconcile);\n"
+       "    exception when no_data_found then",
+       "admission", "recover_isolation", "one poisoned job stops every release"),
+    # --- privileges ---------------------------------------------------------------------
+    _m("d3_service_operations_callable_by_browsers", LEASES,
+       "    execute format('grant execute on function %s to service_role', f);",
+       "    execute format('grant execute on function %s to service_role, authenticated', f);",
+       "admission", "lease_privileges", "a browser session runs the reaper"),
+    _m("d3_the_fence_callable_by_the_service", LEASES,
+       "      'infrx.fence_lease(jsonb, text[], double precision)',\n", "",
+       "admission", "lease_privileges", "a client can fence-and-terminalize any job"),
+    # --- the 0003 amendment -----------------------------------------------------------
+    _m("d3_any_terminal_settlement_may_change", SCHEMA,
+       "           and not (old.settlement_state = 'held_unknown'\n"
+       "                    and new.settlement_state = 'released_platform_absorbed'))",
+       "           and false)",
+       "admission", "recover_unknown_release", "a settled job's settlement is rewritable"),
+    _m("d3_held_unknown_may_be_rewritten", SCHEMA,
+       "                    and new.settlement_state = 'released_platform_absorbed'))",
+       "                    and true))",
+       "admission", "recover_unknown_release", "an unknown-usage outcome is rewritten as never charged"),
+    _m("d3_unknown_release_refused", SCHEMA,
+       "           and not (old.settlement_state = 'held_unknown'",
+       "           and not (false",
+       "admission", "recover_unknown_release", "unknown-usage holds are reserved for ever"),
+)
+MUTANTS = MUTANTS + D3_MUTANTS
+
+
 def _mutate(directory: Path, mutant: Mutant) -> None:
     for path in (*migrations.migrations(), migrations.SEED_MARLIN):
         shutil.copy(path, directory / path.name)
@@ -1532,6 +1814,17 @@ _CHECKS = {
     "media_uploads": checks_media.check_media_uploads,
     "media_objects": checks_media.check_media_objects,
     "media_privileges": checks_media.check_media_privileges,
+    # D3, scenario "admission".
+    "claim_generation": checks_leases.check_claim_generation,
+    "lease_fence": checks_leases.check_fence,
+    "preparation_fence": checks_leases.check_preparation_fence,
+    "cancel": checks_leases.check_cancel,
+    "recover_requeue": checks_leases.check_recover_requeue,
+    "recover_preparation": checks_leases.check_recover_preparation,
+    "recover_unknown_release": checks_leases.check_recover_unknown_release,
+    "recover_isolation": checks_leases.check_recover_isolation,
+    "lease_privileges": checks_leases.check_lease_privileges,
+    "lease_races": lambda conn: checks_leases.check_lease_races(pgharness.connect, MUT_DB),
 }
 
 

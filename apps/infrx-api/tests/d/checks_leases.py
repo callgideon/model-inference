@@ -197,7 +197,13 @@ def check_fence(conn) -> str:
             for label, token in forged.items():
                 code, _ = d3(conn, fn, lease=token, **extra)
                 assert code == "stale_lease", f"{fn} with {label}: {code}"
-        assert row(conn, request.request_id)["state"] == "running", 'failed: row(conn, request.request_id)["state"] == "running"'
+        assert row(conn, request.request_id)["state"] == "running", \
+            "a forged lease moved the job"
+        # a token naming no live attempt (a queued job, no generation or owner) fences out
+        idle = queued(conn, world)
+        assert d3(conn, "load_work", lease={"job_id": idle.request_id,
+                                            "kind": "inference"})[0] == "stale_lease", \
+            "a lease with no live attempt behind it loaded the work"
         # the stored lease renews; a forged record's deadlines are ignored
         advance(conn, 40)
         now = world.clock.now()
@@ -524,7 +530,10 @@ def check_recover_unknown_release(conn) -> str:
         advance(conn, TTL)
         assert reaped(_recover(conn))["settlement_state"] == "held_unknown", 'failed: held_unknown'
         held = reserved(conn)
-        assert refused(request.request_id, "settled"), "a held_unknown settlement became settled"
+        # (released_free, not settled: a CHECK already refuses a settled row without
+        # authoritative usage, so only the guard stands between held_unknown and it)
+        assert refused(request.request_id, "released_free"), \
+            "a held_unknown settlement was rewritten as never charged"
         advance(conn, DEFAULTS.unknown_usage_reconcile_s - 1)
         assert _recover(conn) == [] and reserved(conn) == held, "released before the window"
         advance(conn, 1)
