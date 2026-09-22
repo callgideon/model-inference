@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T16:00:21Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T16:03:43Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 1 done · 8 in progress · 21 remaining (of 30).**
+**Backend packages: 1 done · 9 in progress · 20 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -10,7 +10,7 @@ Generated 2026-09-22T16:00:21Z from `tasks.json` (manifest v4) and `progress-sta
 | B0 Baseline & contracts | F2R | Close remaining wave-2 contract and verification carryovers | **in-progress** | planned | lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7) |
 | B0 Baseline & contracts | I0 | Repair installer atomicity and fail-closed startup prerequisite | **in-progress** | planned | fail-closed installer; stubs only |
 | B0 Baseline & contracts | E2R | Repair service harness ownership, role matrix and shared test clock | **in-progress** | planned | harness ownership + five RLS inversions on real services |
-| B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **in-progress** | planned | pinned Marlin profile (docs); records P-06/P-07/P-18 |
+| B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **in-progress** | planned | profile pinned to fd111fca; P-06 resolved as profile; P-07/P-18 recorded; 14 discrepancies (3 fail-stops → M2/W/G2) |
 | B0 Baseline & contracts | F2P | Encode product-v2 CREDIT, identity, serving and permission contracts | **in-progress** | planned | v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map |
 | B1 Durable endpoint | D1R | Add product-v2 schema without rewriting USD pilot migrations | **remaining** | planned |  |
 | B1 Durable endpoint | D2 | Atomic admission, durable preparation and dispatch outbox | **remaining** | planned |  |
@@ -32,7 +32,7 @@ Generated 2026-09-22T16:00:21Z from `tasks.json` (manifest v4) and `progress-sta
 | B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **remaining** | planned |  |
 | B2 Integrate & deploy | I2B | Reproducible Marlin endpoint deployment independent of frontends | **remaining** | planned | needs allocated GPU/staging (P-04) |
 | B2 Integrate & deploy | I3B | Backend recovery, observability, restore and rollback proof | **remaining** | planned | needs allocated GPU/staging (P-04) |
-| B2 Integrate & deploy | E1B | Measure the end-to-end Marlin baseline and operating envelope | **remaining** | planned | needs allocated GPU/staging (P-04) |
+| B2 Integrate & deploy | E1B | Measure the end-to-end Marlin baseline and operating envelope | **in-progress** | planned | sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol |
 | B3 Measured tuning | M4 | Optimize bounded video retrieval, decoding and preparation | **remaining** | planned | needs allocated GPU/staging (P-04) |
 | B3 Measured tuning | W4 | Tune Marlin GPU serving and scheduler admission from measured evidence | **remaining** | planned | needs allocated GPU/staging (P-04) |
 | B4 Endpoint gate | E4B | Certify the robust and measured Marlin endpoint release candidate | **remaining** | planned | needs allocated GPU/staging (P-04) |
@@ -47,9 +47,9 @@ Generated 2026-09-22T16:00:21Z from `tasks.json` (manifest v4) and `progress-sta
 | Input | What | Blocks | Owner |
 |---|---|---|---|
 | P-04 | Allocated staging/GPU target — coordinator allocates (existing g6e.2xlarge dev box or a new instance) | nothing now; measurements start when the target is up | coordinator (authorized) |
-| P-06 | Exact Marlin artifact/capabilities and finite-video limits | honest published capability; W3 pins | S2M records; user confirms HF/model access |
-| P-07 | SOP rubric, ground truth, dataset rights | SOP accuracy claims only | user/product |
-| P-18 | Representative workload + latency/throughput/error/cost constraints, soak duration | E4B certification; provisional criteria allowed | workload owner |
+| P-06 | Marlin artifact/capabilities — RESOLVED AS A PROFILE (S2M): fd111fca, Qwen3-VL processor, profile v1; 4 digests ⚠️ need HF_TOKEN + pinned image | publishing externally until the three fail-stops (D2/D3/D12) close | M2/W/G2 (fixes); W3 (digests) |
+| P-07 | SOP rubric, ground truth, dataset rights — RECORDED (10 missing inputs; no accuracy baseline exists) | SOP accuracy claims only | user/product |
+| P-18 | Workload + criteria — PROVISIONAL criteria predeclared by S2M (labelled); latency/availability targets deliberately absent | E4B certification; provisional criteria allowed | workload owner |
 | P-01 / P-02 | Approved CREDIT rate card; legacy USD account transition | public metered publication and cutover only | user/operator |
 | P-03 | Local Docker/services | nothing — Docker is available on this host | resolved here |
 
@@ -65,13 +65,15 @@ Generated 2026-09-22T16:00:21Z from `tasks.json` (manifest v4) and `progress-sta
 - F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7)
 - I0: codex-i0 — implementing since 2026-09-22T15:51:21Z — fail-closed installer; stubs only
 - E2R: codex-e2r — implementing since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services
-- S2M: codex-s2m — implementing since 2026-09-22T15:51:21Z — pinned Marlin profile (docs); records P-06/P-07/P-18
+- S2M: codex-s2m — handed back at 343e685 — independent fact review running since 2026-09-22T16:03:43Z — profile pinned to fd111fca; P-06 resolved as profile; P-07/P-18 recorded; 14 discrepancies (3 fail-stops → M2/W/G2)
 - F2P: codex-f2p — additive design phase (new files only); wire-in after F2R since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - Q2: codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory
 - M2: codex-m2 — implementing since 2026-09-22T16:00:21Z — prepare(): probe real duration, url→ref rewrite, processing cache; rebases on F2R
 - W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R
+- E1B: codex-e1b — implementing (software slices; GPU slices wait for W3/I2B) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol
 - review S1: independent review of the audit's code at ec6c548 since 2026-09-22T15:51:21Z
 - review inventory: read-only live-state inventory: GPU box + hosted Supabase (P-02/P-04/P-06 facts) since 2026-09-22T16:00:21Z
+- review S2M: fact audit of the pinned profile at 343e685 since 2026-09-22T16:03:43Z
 
 ## Checkpoints
 

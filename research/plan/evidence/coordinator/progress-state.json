@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T16:00:21Z",
+  "updated": "2026-09-22T16:03:43Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,9 +23,9 @@
     },
     "S2M": {
       "lane": "codex-s2m",
-      "phase": "implementing",
-      "since": "2026-09-22T15:51:21Z",
-      "note": "pinned Marlin profile (docs); records P-06/P-07/P-18"
+      "phase": "handed back at 343e685 \u2014 independent fact review running",
+      "since": "2026-09-22T16:03:43Z",
+      "note": "profile pinned to fd111fca; P-06 resolved as profile; P-07/P-18 recorded; 14 discrepancies (3 fail-stops \u2192 M2/W/G2)"
     },
     "F2P": {
       "lane": "codex-f2p",
@@ -50,6 +50,12 @@
       "phase": "implementing",
       "since": "2026-09-22T16:00:21Z",
       "note": "attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R"
+    },
+    "E1B": {
+      "lane": "codex-e1b",
+      "phase": "implementing (software slices; GPU slices wait for W3/I2B)",
+      "since": "2026-09-22T16:03:43Z",
+      "note": "sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol"
     }
   },
   "reviews": {
@@ -60,6 +66,10 @@
     "inventory": {
       "phase": "read-only live-state inventory: GPU box + hosted Supabase (P-02/P-04/P-06 facts)",
       "since": "2026-09-22T16:00:21Z"
+    },
+    "S2M": {
+      "phase": "fact audit of the pinned profile at 343e685",
+      "since": "2026-09-22T16:03:43Z"
     }
   },
   "gates": {
@@ -85,19 +95,19 @@
     },
     {
       "id": "P-06",
-      "what": "Exact Marlin artifact/capabilities and finite-video limits",
-      "blocks": "honest published capability; W3 pins",
-      "owner": "S2M records; user confirms HF/model access"
+      "what": "Marlin artifact/capabilities \u2014 RESOLVED AS A PROFILE (S2M): fd111fca, Qwen3-VL processor, profile v1; 4 digests \u26a0\ufe0f need HF_TOKEN + pinned image",
+      "blocks": "publishing externally until the three fail-stops (D2/D3/D12) close",
+      "owner": "M2/W/G2 (fixes); W3 (digests)"
     },
     {
       "id": "P-07",
-      "what": "SOP rubric, ground truth, dataset rights",
+      "what": "SOP rubric, ground truth, dataset rights \u2014 RECORDED (10 missing inputs; no accuracy baseline exists)",
       "blocks": "SOP accuracy claims only",
       "owner": "user/product"
     },
     {
       "id": "P-18",
-      "what": "Representative workload + latency/throughput/error/cost constraints, soak duration",
+      "what": "Workload + criteria \u2014 PROVISIONAL criteria predeclared by S2M (labelled); latency/availability targets deliberately absent",
       "blocks": "E4B certification; provisional criteria allowed",
       "owner": "workload owner"
     },
