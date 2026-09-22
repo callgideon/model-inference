@@ -264,6 +264,9 @@ def test_dur_output__the_answer_is_journalled_visible_only_then_relayed_and_sett
         result = await world.runner(engine).run(request.request_id)
 
         assert result.settled and result.cause is TerminalCause.completed
+        # the World's relay raises on a pre-commit object and the runner swallows relay
+        # errors by design, so a clean detail is part of the persist-before-relay proof
+        assert "relay failed" not in result.detail, result.detail
         outcome = result.outcome
         assert outcome.state is JobState.succeeded
         assert outcome.result_ref == f"infrx-result:{request.request_id}"
@@ -1429,4 +1432,31 @@ def test_dur_settle__a_usage_record_that_is_not_authoritative_is_unknown():
         assert result.outcome.usage is None and result.outcome.debit == 0
         assert result.outcome.cause is TerminalCause.engine_incomplete
         assert result.outcome.settlement_state is SettlementState.held_unknown
+    run(case())
+
+
+# --------------------------------------------------------------------------
+# independent review of 1ea3817: the reviewer's killing cases, lifted verbatim
+# --------------------------------------------------------------------------
+def test_gap__the_relay_never_receives_anything_the_journal_has_not_taken():
+    """The World's relay raises on a pre-commit object, and the runner swallows relay
+    errors - so a recording relay is what proves the order."""
+    async def case():
+        world = World()
+        request, _ = await queued(world)
+        _, engine = adapter(world)
+        received = []
+
+        async def recording(chunks):
+            for chunk in chunks:
+                stored = world.stream.chunks.get(request.request_id, [])
+                received.append((chunk, any(getattr(chunk, "sequence", None) == held.sequence
+                                            and getattr(chunk, "generation", None) == held.generation
+                                            for held in stored)))
+
+        result = await world.runner(engine, relay=recording).run(request.request_id)
+        assert result.cause is TerminalCause.completed
+        assert "relay failed" not in result.detail, result.detail
+        assert received and all(committed for _, committed in received), received
+        assert len(received) == result.committed == result.relayed
     run(case())

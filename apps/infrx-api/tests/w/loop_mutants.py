@@ -78,6 +78,7 @@ MEDIA_FILE = ("test_api_stream__a_prepared_video_reaches_the_engine_as_a_local_f
 EOS = "test_api_stream__both_eos_ids_are_supplied_on_every_request"
 TRUST = "test_dur_settle__an_adapters_completed_is_not_taken_on_trust"
 CERTAINTY = "test_dur_settle__a_usage_record_that_is_not_authoritative_is_unknown"
+RECORDING_RELAY = "test_gap__the_relay_never_receives_anything_the_journal_has_not_taken"
 
 MUTANTS: tuple[Mutant, ...] = (
     # --- r1 R58: the journal carries `visible`, and only what committed is relayed ----
@@ -95,6 +96,12 @@ MUTANTS: tuple[Mutant, ...] = (
        A, "            chunks = await self._fenced(self.stream.append(state.lease, events), "
           "state, result)",
        "            chunks = events", HAPPY, WRITE_FAILED),
+    _m("relay_before_persist", "persist before relay: nothing reaches the relay uncommitted",
+       A, "            chunks = await self._fenced(self.stream.append(state.lease, events), "
+          "state, result)\n",
+       "            await self._relay(result, events)\n"
+       "            chunks = await self._fenced(self.stream.append(state.lease, events), "
+       "state, result)\n", HAPPY, RECORDING_RELAY),
     _m("write_failure_is_a_success", "a journal write that failed is not a completed answer",
        A, "            cause = TerminalCause.journal_write_failed",
        "            cause = None", WRITE_FAILED, UNCONFIRMED),
