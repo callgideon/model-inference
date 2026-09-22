@@ -107,10 +107,13 @@ def test_credit_rate__an_unpriced_or_mispriced_deployment_is_unserveable():
     async def go():
         op, (key,) = await setup(w, USER_A)
         serving, deployment, card, model = release()
-        other = v2.RateCardSnapshot(**{**card.model_dump(),
-                                       "deployment_revision_id": v2fix.IDS.prod_deployment})
-        with pytest.raises(errors.InvalidRequest):
-            await op.publish(serving, deployment, other, model, idempotency_key="p", reason=R)
+        for field, value in (("deployment_revision_id", v2fix.IDS.prod_deployment),
+                             ("serving_version_id", v2fix.IDS.serving_version),
+                             ("model_id", v2fix.IDS.model)):
+            other = v2.RateCardSnapshot(**{**card.model_dump(), field: value})
+            with pytest.raises(errors.InvalidRequest):
+                await op.publish(serving, deployment, other, model, idempotency_key=f"p-{field}",
+                                 reason=R)
         assert w.audit.entries[-1].after["operation"] == "key_issue"
         w.catalog.rate_cards.clear()                                      # nothing priced
         with pytest.raises(errors.InvalidRequest):                        # R69, not free
