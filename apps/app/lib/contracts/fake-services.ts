@@ -201,6 +201,8 @@ const judgeFixture = judgeFixtureJson as unknown as {
     consent_snapshot_at: string | null;
     external_batch_id: string | null;
     quarantine_reason: string | null;
+    /** The run's own count when D1's view capped the embedded array; absent means "all of them". */
+    sample_count?: number;
     samples: {
       id: string;
       /** Null: the trace this sample scored has since been deleted. */
@@ -1059,7 +1061,7 @@ function buildOrg(spec: OrgFixture): OrgState {
         judge_model: run.judge_model,
         judge_model_version: run.judge_model_version,
         // The run's own count, which is not `samples.length` once D1's cap bites.
-        sample_count: samples.length,
+        sample_count: run.sample_count ?? samples.length,
         limited_evaluation_count: run.samples.filter((sample) => sample.limited_evaluation).length,
         budget_reserved: parseMoney(run.budget_reserved),
         budget_settled: run.budget_settled === null ? null : parseMoney(run.budget_settled),

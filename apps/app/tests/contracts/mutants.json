@@ -1636,8 +1636,8 @@
       "id": "JUDGESAMPLE-03",
       "note": "sample_count is one less than the samples the row carries, which is how a capped array becomes a wrong count",
       "file": "lib/contracts/fake-services.ts",
-      "find": "        sample_count: samples.length,",
-      "replace": "        sample_count: Math.max(0, samples.length - 1),",
+      "find": "        sample_count: run.sample_count ?? samples.length,",
+      "replace": "        sample_count: run.sample_count ?? Math.max(0, samples.length - 1),",
       "cases": [
         "judge runs separate estimates, limited evaluations and held budgets"
       ]
@@ -1938,6 +1938,16 @@
       "replace": "",
       "cases": [
         "the v1 contract module carries the v2 revision as a namespace, not a shadow"
+      ]
+    },
+    {
+      "id": "JUDGESAMPLE-04",
+      "note": "a capped run's sample_count is derived from the capped array (F2R-B NB-1)",
+      "file": "lib/contracts/fake-services.ts",
+      "find": "        sample_count: run.sample_count ?? samples.length,",
+      "replace": "        sample_count: samples.length,",
+      "cases": [
+        "judge runs separate estimates, limited evaluations and held budgets"
       ]
     }
   ]

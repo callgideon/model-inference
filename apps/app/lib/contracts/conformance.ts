@@ -110,8 +110,10 @@ export type ConsoleHarness = {
    * True when the harness holds the pre-pilot and nullable history the projection has to survive:
    * at least one `legacy_usd` usage row carrying a charge, at least one usage row whose key has
    * since been deleted, at least one api key with no recorded capture mode, at least one audit
-   * entry whose target organization is gone, and at least one judge run that never reached a
-   * provider (no model version, no consent snapshot, a sample whose trace is gone).
+   * entry whose target organization is gone, at least one judge run that never reached a
+   * provider (no model version, no consent snapshot, a sample whose trace is gone), and at least
+   * one judge run whose embedded sample array is full at `JUDGE_RUN_SAMPLE_CAP` with a larger
+   * `sample_count` of its own.
    *
    * The cases that prove it are **skipped, naming this flag**, on a harness that declares nothing —
    * a skip is visible in the report and is never a pass. A harness that declares it and does not
@@ -3073,12 +3075,26 @@ export function runConsoleServicesConformance(
     });
 
     it("judge runs separate estimates, limited evaluations and held budgets", async () => {
-      const { services, sessions } = await makeHarness();
+      const harness = await makeHarness();
+      const { services, sessions } = harness;
       const runs = await walkAll<JudgeRun>(
         (cursor) => services.judgeRuns(sessions.owner, { limit: 20, cursor }),
         "judge runs",
       );
       for (const run of runs) assertJudgeRun(run);
+      if (harness.hasLegacyRows === true) {
+        // F2R-B NB-1: a run whose embedded array is full (D1's cap) reports its own count beyond
+        // the array. `assertJudgeRun` only bounds the count from below, so without a capped run in
+        // the data a projection deriving the count from the array would pass.
+        const capped = runs.filter((run) => run.samples.length === JUDGE_RUN_SAMPLE_CAP);
+        assert.ok(capped.length > 0, "the harness declares its history but carries no capped judge run");
+        for (const run of capped) {
+          assert.ok(
+            run.sample_count > JUDGE_RUN_SAMPLE_CAP,
+            `judge run ${run.id}: a capped array reports sample_count ${run.sample_count}, not the run's own count`,
+          );
+        }
+      }
     });
 
     it("an aggregate without a window is invalid_request, not an all-time total", async () => {
