@@ -1,0 +1,20 @@
+{
+  "accounting_regime": "credit",
+  "charged_amount": "9.97600000",
+  "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+  "org_id": "a0000002-0000-4000-8000-000000000002",
+  "outcome": "settled",
+  "rate_card_version": "rc_marlin2b_2026_09_provisional",
+  "request_id": "f0000001-0000-4000-8000-000000000001",
+  "schema_version": 2,
+  "serving_version_id": "d0000003-0000-4000-8000-000000000003",
+  "settled_at": "2026-09-22T12:00:30Z",
+  "unit": "CREDIT",
+  "usage": {
+    "certainty": "authoritative",
+    "completion_tokens": 480,
+    "prompt_tokens": 23500,
+    "schema_version": 1,
+    "total_tokens": 23980
+  }
+}

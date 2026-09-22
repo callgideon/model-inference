@@ -1,0 +1,16 @@
+{
+  "approved_by": "provisional - P-01 pending",
+  "debit_rounding": "half_up_8",
+  "deployment_revision_id": "c0000004-0000-4000-8000-000000000004",
+  "effective_at": "2026-09-01T00:00:00Z",
+  "hold_rounding": "ceiling_8",
+  "input_rate_per_million": "400.00000000",
+  "meter": "tokens-v1",
+  "model_id": "d0000001-0000-4000-8000-000000000001",
+  "output_rate_per_million": "1200.00000000",
+  "rate_card_version": "rc_marlin2b_2026_09_provisional",
+  "schema_version": 2,
+  "serving_version_id": "d0000003-0000-4000-8000-000000000003",
+  "status": "approved",
+  "unit": "CREDIT"
+}

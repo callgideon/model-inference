@@ -1,0 +1,11 @@
+{
+  "kind": "consumer",
+  "ledger_total": "10000.00000000",
+  "owner_user_id": "a0000001-0000-4000-8000-000000000001",
+  "personal_org_id": "a0000002-0000-4000-8000-000000000002",
+  "reserved_total": "10.01440000",
+  "revision": 1,
+  "schema_version": 2,
+  "unit": "CREDIT",
+  "wallet_id": "a0000004-0000-4000-8000-000000000004"
+}

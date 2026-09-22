@@ -1,0 +1,20 @@
+{
+  "categories": [
+    "request_content",
+    "response_content"
+  ],
+  "effective_at": "2026-09-01T00:00:00Z",
+  "expires_at": "2026-12-01T00:00:00Z",
+  "grant_id": "e0000001-0000-4000-8000-000000000001",
+  "grantor_org_id": "a0000002-0000-4000-8000-000000000002",
+  "model_ids": [
+    "d0000001-0000-4000-8000-000000000001"
+  ],
+  "purposes": [
+    "provider_sharing"
+  ],
+  "recipient_provider_org_id": "b0000001-0000-4000-8000-000000000001",
+  "retention_days": 30,
+  "schema_version": 2,
+  "version": 1
+}

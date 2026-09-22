@@ -1,0 +1,19 @@
+{
+  "api_family": "chat_completions",
+  "billing_meter": "tokens-v1",
+  "input_modalities": [
+    "text",
+    "video"
+  ],
+  "input_schema_ref": "chat_completions_v2",
+  "output_modalities": [
+    "text"
+  ],
+  "output_schema_ref": "chat_completion_v2",
+  "preprocessing_profile_ref": "marlin2b_video_v1",
+  "schema_version": 2,
+  "stream_input": false,
+  "stream_output": true,
+  "structured_output": false,
+  "tools": false
+}

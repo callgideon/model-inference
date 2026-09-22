@@ -1,0 +1,444 @@
+{
+  "appendix": "research/plan/01a-contracts-v2-map.md",
+  "database_map": "research/plan/06a-database-map-v2.md",
+  "records": [
+    {
+      "added": [
+        "audience",
+        "endpoint_id",
+        "provider_org_id",
+        "user_id"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "adds the credential audience and the trusted identities behind it (user, provider org, private endpoint). No wallet field: the wallet is resolved by ports.resolve_wallet from these.",
+      "record": "AuthContextV2",
+      "same_name": [
+        "entitlement_version",
+        "key_id",
+        "legacy_key",
+        "org_id",
+        "principal",
+        "role"
+      ],
+      "v1": "AuthContext"
+    },
+    {
+      "added": [
+        "pins",
+        "policy",
+        "request",
+        "wallet_id"
+      ],
+      "dropped": [
+        "created_at",
+        "deadline_at",
+        "execution_mode",
+        "key_id",
+        "max_input_tokens",
+        "max_output_tokens",
+        "media",
+        "messages",
+        "model_revision",
+        "org_id",
+        "parameters",
+        "payload_digest",
+        "payload_ref",
+        "request_id",
+        "trace_policy"
+      ],
+      "nests_v1_as": "request",
+      "note": "the v1 request is nested verbatim, so every public OpenAI-style field is unchanged; v2 adds only the internal resolution (pins, wallet, policy).",
+      "record": "NormalizedRequestV2",
+      "same_name": [],
+      "v1": "NormalizedRequest"
+    },
+    {
+      "added": [
+        "accounting_regime",
+        "pins",
+        "rate_card",
+        "wallet_id"
+      ],
+      "dropped": [
+        "budgets",
+        "deadline_at",
+        "idempotency_key",
+        "key_id",
+        "operation",
+        "outbox",
+        "payload_hash",
+        "preparation_deadline_at",
+        "price_snapshot",
+        "queue_deadline_at",
+        "queue_wait_used_s",
+        "reservations",
+        "state"
+      ],
+      "nests_v1_as": null,
+      "note": "the price snapshot becomes a CREDIT rate card and the resolved identities are pinned. Capacity reservations, budgets, outbox and deadlines stay in the v1 Admission that D persists.",
+      "record": "AdmissionV2",
+      "same_name": [
+        "admitted_at",
+        "job_handle",
+        "maximum_hold",
+        "org_id",
+        "replayed",
+        "request_id"
+      ],
+      "v1": "Admission"
+    },
+    {
+      "added": [
+        "rate_card"
+      ],
+      "dropped": [
+        "price_snapshot"
+      ],
+      "nests_v1_as": "request",
+      "note": "the lease holder receives the admitted rate card and pins, never a re-resolvable alias.",
+      "record": "WorkV2",
+      "same_name": [
+        "budgets",
+        "media_refs",
+        "prepared_refs",
+        "request"
+      ],
+      "v1": "Work"
+    },
+    {
+      "added": [
+        "approved_by",
+        "debit_rounding",
+        "deployment_revision_id",
+        "effective_at",
+        "hold_rounding",
+        "meter",
+        "model_id",
+        "rate_card_version",
+        "serving_version_id",
+        "status",
+        "unit"
+      ],
+      "dropped": [
+        "captured_at",
+        "currency",
+        "model_revision",
+        "price_version",
+        "token_rules_version"
+      ],
+      "nests_v1_as": null,
+      "note": "PriceSnapshot renamed and re-denominated: unit CREDIT, meter tokens-v1, rates per million as CREDIT, effective_at, approver and both rounding rules named. currency/USD is gone; there is no conversion from a v1 snapshot.",
+      "record": "RateCardSnapshot",
+      "same_name": [
+        "input_rate_per_million",
+        "output_rate_per_million"
+      ],
+      "v1": "PriceSnapshot"
+    },
+    {
+      "added": [
+        "accounting_regime",
+        "charged",
+        "deployment_revision_id",
+        "rate_card_version",
+        "request_id",
+        "serving_version_id",
+        "wallet_id"
+      ],
+      "dropped": [
+        "cause",
+        "debit",
+        "job_id",
+        "reconcile_after",
+        "result_ref",
+        "settlement_state",
+        "state"
+      ],
+      "nests_v1_as": null,
+      "note": "the money half of the terminal outcome, in CREDIT, at the admitted card. State, cause and result ref stay on v1's TerminalOutcome.",
+      "record": "SettlementV2",
+      "same_name": [
+        "settled_at",
+        "usage"
+      ],
+      "v1": "TerminalOutcome"
+    },
+    {
+      "added": [
+        "kind",
+        "ledger_total",
+        "owner_provider_org_id",
+        "owner_user_id",
+        "personal_org_id",
+        "reserved_total",
+        "revision",
+        "unit",
+        "wallet_id"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new: the server-derived wallet. kind fixes ownership (user XOR provider org) and the personal-org billing binding.",
+      "record": "WalletRef",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "amount",
+        "campaign_version",
+        "entitlement",
+        "granted_at",
+        "ledger_operation_id",
+        "user_id",
+        "verification_evidence_ref",
+        "wallet_id"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new: the one-time individual grant, keyed by (user_id, initial_signup_grant) alone.",
+      "record": "SignupGrant",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "actor",
+        "amount",
+        "created_at",
+        "entry_id",
+        "kind",
+        "operation_id",
+        "reason",
+        "request_id",
+        "unit",
+        "wallet_id",
+        "wallet_kind"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new: append-only CREDIT movements. The closed kind set contains no transfer, so provider dev credit cannot reach a consumer.",
+      "record": "CreditLedgerEntry",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "as_of",
+        "balance",
+        "entry_count",
+        "org_id",
+        "rollout_hold"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new: existing delta_usd history, preserved and labelled. A nonzero balance is a rollout hold, never a converted total.",
+      "record": "LegacyUsdStatement",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "budget_id",
+        "limit",
+        "period",
+        "provider_org_id",
+        "reserved",
+        "unit"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new: external judge/teacher budgets in PROVIDER_USD, never summed with a consumer balance.",
+      "record": "ProviderBudget",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "accounting_regime",
+        "charged_amount",
+        "deployment_revision_id",
+        "org_id",
+        "outcome",
+        "price_version",
+        "rate_card_version",
+        "request_id",
+        "serving_version_id",
+        "settled_at",
+        "unit",
+        "usage"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new DTO: one settled request with its explicit accounting regime and unit beside the amount.",
+      "record": "UsageRecordV2",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "entries",
+        "org_id"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new DTO: a mixed legacy/CREDIT history whose totals() answers per unit and never once.",
+      "record": "UsageHistory",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "available",
+        "kind",
+        "ledger_total",
+        "legacy_usd",
+        "reserved_total",
+        "unit",
+        "wallet_id"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new DTO: CREDIT total, reserved and derived available, with the legacy USD statement alongside rather than added in.",
+      "record": "BalanceV2",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "adapter_digest",
+        "capability",
+        "created_at",
+        "engine_options_digest",
+        "model_id",
+        "model_version_id",
+        "precision",
+        "preprocessor_profile_version",
+        "prompt_harness_ref",
+        "provider_org_id",
+        "runtime_image_digest",
+        "serving_version_id",
+        "tokenizer_digest",
+        "weights_digest"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new: immutable weights/adapter/tokenizer/prompt/preprocessor/runtime identity. Optimization makes a new one.",
+      "record": "ServingRevision",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "created_at",
+        "deployment_revision_id",
+        "endpoint_id",
+        "environment",
+        "max_input_tokens",
+        "max_output_tokens",
+        "provider_org_id",
+        "serving_version_id",
+        "state",
+        "visibility"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new: endpoint -> serving revision, with environment, visibility and lifecycle state. Dev is never public.",
+      "record": "DeploymentRevision",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "api_family",
+        "billing_meter",
+        "input_modalities",
+        "input_schema_ref",
+        "output_modalities",
+        "output_schema_ref",
+        "preprocessing_profile_ref",
+        "stream_input",
+        "stream_output",
+        "structured_output",
+        "tools"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new: the minimum capability record of research/platforms/07-api-contracts.md.",
+      "record": "CapabilityRecord",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "accounting_regime",
+        "deployment_revision_id",
+        "model_id",
+        "policy_version",
+        "rate_card_version",
+        "requested_model",
+        "serving_version_id"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new: model -> deployment revision -> serving version + rate card version + policy version, frozen at acceptance.",
+      "record": "AdmissionPins",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "consent_version",
+        "effective_at",
+        "policy_version",
+        "trace_mode"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new: the data-access policy identity pinned with the job.",
+      "record": "DataAccessPolicyRef",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "granted_at",
+        "granted_by",
+        "provider_org_id",
+        "revoked_at",
+        "role",
+        "user_id"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new: explicit provider membership and role. Consumer org ownership grants none of it.",
+      "record": "ProviderMembership",
+      "same_name": [],
+      "v1": null
+    },
+    {
+      "added": [
+        "categories",
+        "effective_at",
+        "expires_at",
+        "grant_id",
+        "grantor_org_id",
+        "model_ids",
+        "purposes",
+        "recipient_provider_org_id",
+        "retention_days",
+        "revoked_at",
+        "version"
+      ],
+      "dropped": [],
+      "nests_v1_as": null,
+      "note": "new: a source owner's grant to one provider for named categories and purposes, checked current at every use.",
+      "record": "AccessGrant",
+      "same_name": [],
+      "v1": null
+    }
+  ],
+  "schema_version": 2,
+  "schema_version_note": "every internal v2 record carries schema_version: 2; it is excluded from the per-record field lists below",
+  "surface_version": "contracts-v2.0"
+}
