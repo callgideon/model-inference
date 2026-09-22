@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T22:37:58Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T22:40:37Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 11 done · 8 in progress · 11 remaining (of 30).**
+**Backend packages: 11 done · 12 in progress · 7 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -14,7 +14,7 @@ Generated 2026-09-22T22:37:58Z from `tasks.json` (manifest v4) and `progress-sta
 | B0 Baseline & contracts | F2P | Encode product-v2 CREDIT, identity, serving and permission contracts | **in-progress** | planned | v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map |
 | B1 Durable endpoint | D1R | Add product-v2 schema without rewriting USD pilot migrations | **done** | implemented |  |
 | B1 Durable endpoint | D2 | Atomic admission, durable preparation and dispatch outbox | **in-progress** | planned | real JobStore over PostgreSQL |
-| B1 Durable endpoint | D3 | Fenced leases, recovery and cancellation | **remaining** | planned |  |
+| B1 Durable endpoint | D3 | Fenced leases, recovery and cancellation | **in-progress** | planned | stacked on D2's head; leases, reaper, cancellation |
 | B1 Durable endpoint | D4 | Persistent stream journal and replay | **remaining** | planned |  |
 | B1 Durable endpoint | D5 | Terminal transaction, grants and reconciliation | **remaining** | planned |  |
 | B1 Durable endpoint | A1 | Verified individual signup entitlement and idempotent backfill | **in-progress** | planned | new files only; migrations 0015+; D2 in flight |
@@ -24,16 +24,16 @@ Generated 2026-09-22T22:37:58Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | Q3 | Outbox/reconciler integration and index loss recovery | **in-progress** | planned | outbox drain/ack, PG reconciler, index-loss recovery |
 | B1 Durable endpoint | W2 | Lease-aware execution, cancellation and completion | **done** | implemented |  |
 | B1 Durable endpoint | W3 | Drain, engine pin and measured concurrency | **in-progress** | planned | engine pin by digest, drain, readiness; measurements coordinator-run |
-| B1 Durable endpoint | G1R | Revise ingress for consumer and provider endpoint audiences | **remaining** | planned |  |
+| B1 Durable endpoint | G1R | Revise ingress for consumer and provider endpoint audiences | **in-progress** | planned | audience ingress on accepted v2 contracts; rebase at wire-in merge |
 | B1 Durable endpoint | G2 | Synchronous chat and persistent SSE relay | **remaining** | planned |  |
 | B1 Durable endpoint | G3 | Explicit jobs, status, cancellation and replay | **remaining** | planned |  |
 | B1 Durable endpoint | G4U | Owned upload HTTP adapter | **remaining** | planned |  |
 | B1 Durable endpoint | G6B | Headless endpoint provisioning and operations | **done** | implemented |  |
 | B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **in-progress** | planned | gate not passable until G/D/W/Q lanes merge |
 | B2 Integrate & deploy | I2B | Reproducible Marlin endpoint deployment independent of frontends | **in-progress** | planned | packaging, scripts, local rehearsal; box rollout coordinator-run |
-| B2 Integrate & deploy | I3B | Backend recovery, observability, restore and rollback proof | **remaining** | planned | needs allocated GPU/staging (P-04) |
+| B2 Integrate & deploy | I3B | Backend recovery, observability, restore and rollback proof | **in-progress** | planned | metrics/alerts, local recovery drills, runbooks; early start |
 | B2 Integrate & deploy | E1B | Measure the end-to-end Marlin baseline and operating envelope | **in-progress** | planned | sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart |
-| B3 Measured tuning | M4 | Optimize bounded video retrieval, decoding and preparation | **remaining** | planned | needs allocated GPU/staging (P-04) |
+| B3 Measured tuning | M4 | Optimize bounded video retrieval, decoding and preparation | **in-progress** | planned | measurement harness + parity oracle first |
 | B3 Measured tuning | W4 | Tune Marlin GPU serving and scheduler admission from measured evidence | **remaining** | planned | needs allocated GPU/staging (P-04) |
 | B4 Endpoint gate | E4B | Certify the robust and measured Marlin endpoint release candidate | **remaining** | planned | needs allocated GPU/staging (P-04) |
 
@@ -70,6 +70,10 @@ Generated 2026-09-22T22:37:58Z from `tasks.json` (manifest v4) and `progress-sta
 - W3: codex-w3 / codex/w3-drain-pin — implementing (software half) since 2026-09-22T22:37:58Z — engine pin by digest, drain, readiness; measurements coordinator-run
 - I2B: codex-i2b / codex/i2b-deployment — implementing (software half) since 2026-09-22T22:37:58Z — packaging, scripts, local rehearsal; box rollout coordinator-run
 - Q3: codex-q3 / codex/q3-outbox-reconciler — implementing (software half) since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery
+- G1R: codex-g1r / codex/g1r-audience-ingress — implementing since 2026-09-22T22:40:37Z — audience ingress on accepted v2 contracts; rebase at wire-in merge
+- D3: codex-d3 / codex/d3-fenced-leases — implementing since 2026-09-22T22:40:37Z — stacked on D2's head; leases, reaper, cancellation
+- I3B: codex-i3b / codex/i3b-recovery-observe — implementing since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start
+- M4: codex-m4 / codex/m4-media-optimize — implementing since 2026-09-22T22:40:37Z — measurement harness + parity oracle first
 
 ## Checkpoints
 

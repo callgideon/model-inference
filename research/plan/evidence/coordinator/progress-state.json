@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T22:37:58Z",
+  "updated": "2026-09-22T22:40:37Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -50,6 +50,30 @@
       "phase": "implementing (software half)",
       "since": "2026-09-22T22:37:58Z",
       "note": "outbox drain/ack, PG reconciler, index-loss recovery"
+    },
+    "G1R": {
+      "lane": "codex-g1r / codex/g1r-audience-ingress",
+      "phase": "implementing",
+      "since": "2026-09-22T22:40:37Z",
+      "note": "audience ingress on accepted v2 contracts; rebase at wire-in merge"
+    },
+    "D3": {
+      "lane": "codex-d3 / codex/d3-fenced-leases",
+      "phase": "implementing",
+      "since": "2026-09-22T22:40:37Z",
+      "note": "stacked on D2's head; leases, reaper, cancellation"
+    },
+    "I3B": {
+      "lane": "codex-i3b / codex/i3b-recovery-observe",
+      "phase": "implementing",
+      "since": "2026-09-22T22:40:37Z",
+      "note": "metrics/alerts, local recovery drills, runbooks; early start"
+    },
+    "M4": {
+      "lane": "codex-m4 / codex/m4-media-optimize",
+      "phase": "implementing",
+      "since": "2026-09-22T22:40:37Z",
+      "note": "measurement harness + parity oracle first"
     }
   },
   "reviews": {},
