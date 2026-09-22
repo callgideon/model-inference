@@ -81,6 +81,25 @@ def ingress_is_mounted() -> bool:
     return any(module.__name__.endswith(".ingress") for module in composition.ROUTERS)
 
 
+UNIMPLEMENTED_SQL = ("select count(*) from pg_proc p join pg_namespace n on n.oid = "
+                     "p.pronamespace where n.nspname = 'infrx' "
+                     "and p.prosrc like '%infrx.unimplemented%'")
+
+
+def unimplemented_rpcs() -> int:
+    """How many `infrx` functions are still `infrx.unimplemented` stubs (D2-D5's RPCs).
+
+    Measured on E2's migrated database when the stack is up; without it, read from the
+    migrations themselves (a stub is a function body naming `infrx.unimplemented(`), so the
+    probe never answers "implemented" just because nothing was there to ask."""
+    if harness.load_state() and harness.owned_containers():
+        import psycopg
+        with psycopg.connect(harness.pg_dsn(), autocommit=True) as conn:
+            return conn.execute(UNIMPLEMENTED_SQL).fetchone()[0]
+    return sum(path.read_text().count("perform infrx.unimplemented(")
+               for path in harness.MIGRATIONS_DIR.glob("*.sql"))
+
+
 # ------------------------------------------------------------------ two tenants
 
 @dataclass(frozen=True)

@@ -49,10 +49,16 @@ BACKENDS = ("fake", "postgres")
 
 
 def rig(backend: str, *unblock: str, **limits):
-    """The store a drill runs on. `postgres` is pending on the D tasks named."""
+    """The store a drill runs on. `postgres` is pending on the D tasks named - but only
+    while the D RPCs are still stubs: the day they are implemented this FAILS, so a drill
+    cannot stay silently pending behind a store that already exists."""
     if backend == "postgres":
-        stack.pending(*unblock, why="no PostgreSQL JobStore/StreamStore adapter on this "
-                                    "base: the RPCs this drill crashes are stubs")
+        stubs = stack.unimplemented_rpcs()
+        if stubs == 0:
+            pytest.fail("the D RPCs are implemented: wire rig('postgres') to the real "
+                        "adapter (E3B phase 2)")
+        stack.pending(*unblock, why=f"no PostgreSQL JobStore/StreamStore adapter on this "
+                                    f"base: {stubs} infrx RPCs are infrx.unimplemented stubs")
     h = jobstore_factory(limits=DEFAULTS.replace(**limits) if limits else None)
     h.extra["grant"](b.ORG_A, GRANT)
     h.extra["grant"](b.ORG_B, GRANT)
@@ -344,8 +350,12 @@ def test_e3b_dr10_journal_backpressure_refuses_an_oversized_event_whole(backend)
 
 def test_e3b_dr11_client_disconnect_mid_stream_is_pending():
     """API-MODES / API-STREAM: a sync or SSE client that disconnects mid-generation must
-    cancel or detach per mode, with no orphan execution. It is a route behaviour."""
-    stack.pending("G1R", "G2", why="the sync/SSE relay that sees the disconnect is G2's")
+    cancel or detach per mode, with no orphan execution. It is a route behaviour, so it is
+    pending exactly as long as no metered route is mounted, and fails once one is."""
+    if stack.ingress_is_mounted():
+        pytest.fail("the pilot ingress is mounted: write the disconnect drill body now")
+    stack.pending("G1R", "G2", why="the sync/SSE relay that sees the disconnect is G2's, "
+                                   "and no metered route is mounted")
 
 
 # ------------------------------------------------------------------ saturation and queue
