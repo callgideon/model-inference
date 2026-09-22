@@ -324,6 +324,27 @@ def test_deploy_failclosed__the_probe_that_says_nothing_is_a_refusal(tmp_path,
     unchanged(cfg, before, made.systemctl_calls)
 
 
+def test_deploy_failclosed__a_pilot_install_stops_on_the_unpinned_engine_image(
+        tmp_path, monkeypatch, capsys):
+    """Review r1 B2: the digest requirement was asserted only at `engine_problems`
+    level, so skipping the engine checks **in pilot** survived every case — the one
+    apply-level pilot case used a pinned script, the flag case ran in dev, and the
+    real-script case called `engine_problems` directly. This is the apply-level
+    assertion: a pilot install with the default floating-tag script, every parameter
+    present and valid, refuses before the env file is touched.
+
+    It is also the repository's state today — `models/marlin2b/serve.sh` defaults to
+    `:nightly` and W3 owns the pin — so this refusal is the recorded pending gap."""
+    made = support.stubs(tmp_path, monkeypatch)
+    cfg = support.config(tmp_path, mode="pilot")          # default script: floating tag
+    before = cfg.env_file.read_bytes()
+    assert preflight.apply(cfg) == preflight.REFUSED
+    unchanged(cfg, before, made.systemctl_calls)
+    message = capsys.readouterr().err
+    assert "digest" in message, message
+    assert MARKER not in message
+
+
 # --- the install that works, and the restart that does not -------------------------
 def test_deploy_failclosed__an_engine_the_adapter_cannot_read_installs_nothing(
         tmp_path, monkeypatch, capsys):

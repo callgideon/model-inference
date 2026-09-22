@@ -231,6 +231,14 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("engine_problems_not_collected", "the engine checks reach the install decision",
        P, "    problems += engine_problems(cfg.serve_script, cfg.mode)", "    pass",
        "test_deploy_failclosed__an_engine_the_adapter_cannot_read_installs_nothing"),
+    # review r1 B2: the mode-selective form of the same edit. It survived every case
+    # until an apply-level pilot case existed, because the only pilot case that reached
+    # `apply` used a pinned script.
+    _m("engine_checks_skipped_in_pilot", "the engine checks reach the install decision "
+       "in pilot too, where the digest is required",
+       P, "    problems += engine_problems(cfg.serve_script, cfg.mode)",
+       '    problems += engine_problems(cfg.serve_script, cfg.mode) if cfg.mode != "pilot" else []',
+       "test_deploy_failclosed__a_pilot_install_stops_on_the_unpinned_engine_image"),
     # --- claims about the runtime, edited in the copied tree only --------------------
     _m("transport_logs_not_silenced", "the runtime itself silences the transport loggers",
        "infrx/media/fetch.py", "silence_transport_logs()\n", "\n",
