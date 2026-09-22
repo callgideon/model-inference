@@ -64,14 +64,16 @@ BATCH_MAX_EVENTS = 32
 
 class _JournalFailed(RuntimeError):
     """An append that failed, or that we cannot prove either way. Private: it never
-    leaves this module - the caller settles `journal_write_failed`."""
+    leaves this module - the caller settles `journal_write_failed`.
 
-    def __init__(self, detail: str, *, committed: bool) -> None:
+    The two cases settle the same way on purpose. A write that was refused published
+    nothing; a write that was acknowledged and then lost its answer may have published
+    everything, and `02` §6 forbids regenerating after that marker. Neither may be
+    relayed, and neither is a completed answer, so the honest outcome is one cause.
+    """
+
+    def __init__(self, detail: str) -> None:
         self.detail = detail
-        # True when the batch may already be in the journal (the write was acknowledged
-        # and then the answer was lost): the job may be published, so it can no longer be
-        # regenerated and `02` §6 makes the honest outcome a terminal failure.
-        self.committed = committed
         super().__init__(detail)
 
 
@@ -201,7 +203,7 @@ class AttemptRunner:
                 async with asyncio.timeout(self._remaining(state.lease)):
                     async for event in stream:
                         await self._absorb(state, result, event)
-                    await self._flush(state, result, final=True)
+                    await self._flush(state, result)
             finally:
                 # Deterministic: stop reading the engine now, whatever ended the loop.
                 await self._aclose(stream)
@@ -311,7 +313,7 @@ class AttemptRunner:
         elapsed_ms = (self.clock.now() - opened).total_seconds() * 1000 if opened else 0.0
         return elapsed_ms >= self.limits.stream_batch_ms
 
-    async def _flush(self, state: _State, result: AttemptResult, *, final: bool = False) -> None:
+    async def _flush(self, state: _State, result: AttemptResult) -> None:
         """Commit the batch, **then** relay it. The order is the whole point: a chunk the
         customer has seen and the journal has not taken can never be replayed."""
         if not state.batch:
@@ -324,17 +326,15 @@ class AttemptRunner:
         except (errors.StaleLease, _Terminalized):
             raise                                   # a fence loss is not a write failure
         except errors.DomainError as failed:
-            raise _JournalFailed(f"{failed.code}: {failed}", committed=False) from None
+            raise _JournalFailed(f"{failed.code}: {failed}") from None
         except Exception as failed:
             # The write was acknowledged and the answer lost, or something unknown broke:
             # either way we cannot prove what is in the journal, so we do not relay it.
-            raise _JournalFailed(f"{type(failed).__name__}: {failed}", committed=True) from None
+            raise _JournalFailed(f"{type(failed).__name__}: {failed}") from None
         state.batch.clear()
         state.batch_opened_at = None
         result.committed += len(chunks)
         await self._relay(result, chunks)
-        if final:
-            state.batch_opened_at = None
 
     async def _relay(self, result: AttemptResult, chunks: tuple) -> None:
         if self.relay is None or not chunks:

@@ -99,8 +99,7 @@ MUTANTS: tuple[Mutant, ...] = (
        A, "            cause = TerminalCause.journal_write_failed",
        "            cause = None", WRITE_FAILED, UNCONFIRMED),
     _m("unconfirmed_write_relayed", "a write we cannot prove is never relayed",
-       A, '            raise _JournalFailed(f"{type(failed).__name__}: {failed}", '
-          "committed=True) from None",
+       A, '            raise _JournalFailed(f"{type(failed).__name__}: {failed}") from None',
        "            chunks = events\n            state.batch.clear()\n"
        "            await self._relay(result, chunks)\n            return", UNCONFIRMED),
     _m("terminal_event_journalled", "a worker never appends a terminal event (r1 R30)",
