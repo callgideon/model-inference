@@ -78,11 +78,28 @@ remapped loader does not carry Marlin's custom code
 
 **Not available on any hardware, so not in the profile:** speculative decoding
 (`mtp_num_hidden_layers: 1` is declared but the weight map ships **zero** `mtp` tensors —
-[`architecture.md` §7.1](../models/marlin2b/architecture.md)); any FP8/NVFP4/MXFP4/INT4
-weight path (no such checkpoint exists, public or private —
-[`architecture.md` §9](../models/marlin2b/architecture.md)); prefix caching as a
+[`architecture.md` §7.1](../models/marlin2b/architecture.md)); any FP8, NVFP4, MXFP4 or
+AWQ weight path — **no such checkpoint exists**
+([`architecture.md` §9](../models/marlin2b/architecture.md) "Notably absent"); prefix caching as a
 throughput lever (the cacheable scaffold is <0.2 % of a video request and
 `--mamba-cache-mode=all` raises — [§5.5](../models/marlin2b/architecture.md)).
+
+**Quantised builds do exist, and are out of profile.** Correcting an earlier draft of this
+document, which said no quantised checkpoint existed at all:
+[`architecture.md` §9](../models/marlin2b/architecture.md) lists an **author-published
+MLX 8-bit** build (`NemoStation/Marlin-2B-MLX-8bit`, Apple Silicon only, so irrelevant to
+CUDA serving) plus community **GPTQ INT4 W4A16** (`prasannaJagadesh/marlin-2B-GPTQ-4BITS`),
+**SDNQ INT8** (`tintwotin/Marlin-2B-SDNQ-int8`) and **GGUF** (`jadeonrails/marlin-2b-gguf`)
+builds. None enters the launch profile, for reasons that are facts rather than preferences:
+**not one publishes any accuracy measurement** — no CaReBench, DREAM-1K or TimeLens score and
+no perplexity delta ([§9](../models/marlin2b/architecture.md); open question 33 in
+[`models/marlin2b/README.md`](../models/marlin2b/README.md)) — which for a model whose product
+is second-precise timestamps is an unmeasured risk landing on exactly the digits that matter;
+the INT4 path is separately blocked on the target hardware by vLLM #35924 (GDN's `in_proj_ba`
+output dim = `num_v_heads` = 16, below `GPTQ_MARLIN_MIN_THREAD_N` = 64, so the Marlin kernel
+raises during weight loading **even at TP1**); and INT8 is a non-starter on B300/GB300
+(`sm_103a` lacks `tcgen05.mma .kind::i8`). Adopting any of them is a new serving version with
+its own parity and quality evidence (OPT-PARITY), never a configuration change.
 
 ### 1.3 Tokenizer and processor pin
 
@@ -91,7 +108,7 @@ throughput lever (the cacheable scaffold is <0.2 % of a video request and
 | Vocab | 248,320, `tie_word_embeddings: true` | [`config.json`](../models/marlin2b/config.json) |
 | `eos_token` / `pad_token` | `<\|im_end\|>` / `<\|endoftext\|>`; `bos_token` and `unk_token` `null` | HF API `.config.tokenizer_config`, `meas.` 2026-09-22 |
 | Vision token ids | image 248056, video 248057, vision start/end 248053/248054 | [`config.json`](../models/marlin2b/config.json) |
-| `tokenizer.json` | 19,989,325 B; **content digest ⚠️ TO BE VERIFIED** | `FILES.md`. Method: `sha256sum $WEIGHTS/tokenizer.json` on a host with `HF_TOKEN` after `models/marlin2b/download.sh`; the file is 401 without it |
+| `tokenizer.json` | 19,989,325 B; **sha256 published, see below — ⚠️ not transcribed in this session** | `meas.` 2026-09-22: `GET /api/models/NemoStation/Marlin-2B/tree/main` returns `.lfs.oid` for this file, 64 hex characters, `pointerSize` 133. The oid **is** the sha256 of the contents, so no token is needed to obtain it |
 | `chat_template.jinja` | 7,755 B, **sha256 `273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80`** | `meas.` 2026-09-22: HF API `.config.chat_template_jinja` is the whole template (7,755 UTF-8 bytes, exactly the `FILES.md` size) and needs no gate. Emits `<\|vision_start\|><\|video_pad\|><\|vision_end\|>`, carries a `<tool_call>` block the platform refuses (§2.3) |
 | Processor class | `Qwen3VLProcessor` | [`processor_config.json`](../models/marlin2b/processor_config.json) |
 | Video processor | `Qwen3VLVideoProcessor` | idem |
@@ -100,11 +117,32 @@ throughput lever (the cacheable scaffold is <0.2 % of a video request and
 | Patch geometry | `patch_size` 16, `temporal_patch_size` 2, `merge_size` 2 | `processor_config.json`, `config.json` `vision_config` |
 | Runtime requirement | `transformers >= 5.7.0`, `torch >= 2.11.0`, `torchcodec`, `qwen-vl-utils >= 0.0.14`, `av`, `pillow` | [`MODEL_CARD.md`](../models/marlin2b/MODEL_CARD.md) "System requirements"; `model.env:10` records `transformers>=5.7.0, torchcodec` |
 
-The **weight-shard digests are ⚠️ TO BE VERIFIED**: no sha256 of
-`model-0000{1,2}-of-00002.safetensors` exists anywhere in this repository. Method:
-`sha256sum` both shards on the box after download and record them here and in the
-serving-version record; until then a deployment cannot prove it served the bytes this
-document pins.
+**Artifact content digests — obtainable now, without `HF_TOKEN`.** Correcting an earlier draft
+of this document, which said no sha256 existed anywhere and implied the gate was the obstacle:
+the public tree API publishes the git-LFS object id of each large file, and for LFS that oid
+**is** the sha256 of the file contents. Confirmed present on 2026-09-22 (`meas.`), one
+unauthenticated request:
+
+```bash
+curl -sS https://huggingface.co/api/models/NemoStation/Marlin-2B/tree/main \
+  | python3 -c 'import json,sys; [print(e["path"], e["lfs"]["oid"], e["lfs"]["size"]) for e in json.load(sys.stdin) if e.get("lfs")]'
+```
+
+| File | Bytes (`.lfs.size`, confirmed) | `.lfs.oid` |
+|---|---:|---|
+| `model-00001-of-00002.safetensors` | 4,999,157,736 | present, 64 hex, `pointerSize` 135 |
+| `model-00002-of-00002.safetensors` | 444,519,488 | present, 64 hex, `pointerSize` 134 |
+| `tokenizer.json` | 19,989,325 | present, 64 hex, `pointerSize` 133 |
+
+⚠️ **The three values are deliberately not transcribed here.** This session's environment
+applies a secret-redaction filter to 64-hex-character strings, so every oid reached this
+session masked; writing them from memory would be fabrication, and working around the filter
+to move them is not something a documentation task should do. **Action for the owner of the
+serving-version record (W3/I2B):** run the command above on a host without that filter, paste
+the three oids into the record, then `sha256sum` the downloaded files and confirm they match.
+That closes the pin end to end — the registry's claim *and* the bytes served. The remaining
+⚠️ after that is the runtime **image** digest (`serve.sh` pins the moving tag
+`vllm/vllm-openai:nightly`), which no registry read can supply.
 
 ### 1.4 Prompt/harness pin (mode surface)
 
@@ -144,7 +182,7 @@ conflict rather than resolving it ([`architecture.md` §6.3](../models/marlin2b/
 resolution it was trained on — a silent quality regression, not an error.
 
 **Profile `v1`, frozen** (`profile_version: "v1"`, the value `MediaRef.profile_version`
-already defaults to — `apps/infrx-api/infrx/contracts/records.py:429`):
+already defaults to — `apps/infrx-api/infrx/contracts/records.py:426`):
 
 | Parameter | Value | Source line |
 |---|---:|---|
@@ -172,7 +210,7 @@ processor-parity observation, not a quality result.
 Two open items inside the pin:
 
 - **`shortest_edge` is 4096 in code** (`media/video.py:116`) while
-  `models/marlin2b/tokens.py:47` also probes `65536` (the *image* floor from
+  `models/marlin2b/tokens.py:53-56` also probes `65536` (the *image* floor from
   `preprocessor_config.json`). ⚠️ **TO BE VERIFIED** which value the training path used;
   4096 is the one that produced the measured 2,061-token training grid, so it is the pin.
   Method: run `models/marlin2b/tokens.py` with both variants on one clip and compare
@@ -191,12 +229,30 @@ Two open items inside the pin:
 
 `est.` from the pinned geometry, not measured on target hardware:
 
-| Duration | frames | video tokens | prefill (incl. ~40 scaffold) | KV BF16 |
+| Duration | frames | video tokens | prefill (incl. scaffold) | KV BF16 (6 of 24 layers) |
 |---|---:|---:|---:|---:|
 | 2 s (min) | 4 | 392 | ~430 | 4.6 MiB |
 | 30 s | 60 | 5,880 | ~5,920 | 68.9 MiB |
 | 60 s | 120 | 11,760 | ~11,800 | 137.8 MiB |
 | 120 s (API cap) | 240 | 23,520 | ~23,560 | 275.6 MiB |
+
+Three qualifications on that table, none of which changes its conclusion:
+
+- **The scaffold estimate is low.** `architecture.md` §6.3 adds "~30-40 tokens of chat scaffold
+  + instruction prompt", but the committed measurements imply more: Path A gave 2,061 prompt
+  tokens for 1,960 video tokens (grid `[10,28,28]`), i.e. **101 tokens** of overhead, and
+  Path B gave 12,221 for 11,960 (grid `[10,52,92]`), i.e. **261** (`results/notes.md`
+  findings 2-3). Budget ~100; it is ~0.4 % of a 120 s request either way.
+- **Only 6 of the 24 layers hold a KV cache**, because the schedule is hybrid: 18 Gated-DeltaNet
+  layers cache **0 bytes per token** and 6 full-attention layers cost 2,048 B/token each
+  (`config.json` `text_config.layer_types`;
+  [`architecture.md` §5.1](../models/marlin2b/architecture.md)). That is why the KV column is
+  small for a 32 K context.
+- **The KV column omits the GDN state.** Every concurrent sequence also holds a **fixed
+  18.63 MiB** recurrent + convolution state, independent of context length
+  ([`architecture.md` §5.3](../models/marlin2b/architecture.md)): at 120 s that is 275.6 MiB of
+  KV **plus** 18.63 MiB of state, and at high concurrency the state is the term that stops
+  being negligible.
 
 Source: [`architecture.md` §6.3](../models/marlin2b/architecture.md). `--max-model-len
 32768` (`serve.sh:27`) and `MAX_CONTEXT_TOKENS` 32,768
@@ -323,14 +379,14 @@ The engine's own tolerance is not the platform's contract.
 | Capability | Value | Source |
 |---|---|---|
 | Sync JSON | supported | `chat.py`; fixture `contracts/fixtures/v1/chat_success_nonstream.json` |
-| Output SSE stream | supported; `stream_options.include_usage` forced on; cursor/`id` = `<generation>-<sequence>`; `Last-Event-ID` resume | 08 §3; `engine.py:566-567`; `chat.py:53` |
+| Output SSE stream | supported; `stream_options.include_usage` forced on; cursor/`id` = `<generation>-<sequence>`; `Last-Event-ID` resume | 08 §3; `engine.py:564-565`; `chat.py:53` |
 | Explicit async | `Prefer: respond-async` → job handle; `Preference-Applied: respond-async` | classified today, 202 pending G3 (§2.1) |
 | Output modalities | **text only** | `PreparedRequest` has no other output; caption/find return text (§1.4) |
 | Tools / function calling | **no** | refused by name in both halves |
 | Structured output / JSON schema | **no** | idem |
 | Stream *input* (live video) | **no** | [07-api-contracts.md](../platforms/07-api-contracts.md) "Streaming distinctions" §2–3; a separate transport and contract |
 | Actions / actuation | **no** | §5.3 |
-| Reasoning exposure | `visible` only; one leading `<think>…</think>` stripped; `raw` never leaves the platform | R58; `worker/reasoning.py`; `engine.py:357-368` |
+| Reasoning exposure | `visible` only; one leading `<think>…</think>` stripped; `raw` is internal (trace capture and usage evidence), not relayed and not journalled | **R58** — the guarantee lives in the ruling and in the journal/relay writing `visible` only, **not** in the adapter's payload builder: `_delta_payload` still emits `raw` *and* a transitional `content` alias of it (`engine.py:366`), which F2R item 2 removes. `worker/reasoning.py` is the boundary-independent filter |
 | Usage | OpenAI token fields; authoritative only when the last usage object arrives after the final content delta and is consistent | R58; `engine.py:1008-1062` |
 
 ### 2.5 Limits
@@ -351,7 +407,8 @@ The engine's own tolerance is not the platform's contract.
 | `Idempotency-Key` | ≤255 chars | `MAX_IDEMPOTENCY_KEY_CHARS`, `limits.py:30` |
 | Allowed video MIME | `video/mp4`, `video/webm`, `video/quicktime`, `video/mpeg` | `config.py:30`; extension fallback only when the server declines to declare a type |
 | Concurrency caps | 64 active jobs / 16 per org / 8 per key; 8 preparing | `limits.py:107-109`, `max_preparing_jobs` `limits.py:74`; legacy `MAX_INFLIGHT=16` → 429 |
-| Engine concurrency | `ENGINE_MAX_NUM_SEQS` 8 | `limits.py:110` |
+| Engine concurrency | `ENGINE_MAX_NUM_SEQS` 8 — **the pilot setting, not the running engine.** The deployed unit starts `serve.sh --max-num-seqs 32` while `serve.sh` itself passes no such flag, so the engine admits 32 sequences while the platform plans for 8. W3 reconciles (D13) | `limits.py:110` vs `apps/infrx-api/deploy/marlin2b-vllm.service:12` |
+| Native position limit | `text_config.max_position_embeddings` = **262,144**, `rope_type: default` with no scaling config | [`config.json`](../models/marlin2b/config.json); [`architecture.md` §5.3](../models/marlin2b/architecture.md). The 32,768 above is a **deployment choice** (`serve.sh:27` and `MAX_CONTEXT_TOKENS`) sized to the 120 s profile, not a model limit |
 | Deadlines/budgets (snapshot at admission, R4) | preparation 120 s; queue 10 s sync/stream, 600 s async; generation 300 s; TTFT 60 s; stall 20 s | `limits.py:70-81` |
 | Retention | result 24 h; processing cache 7 d; journal chunk 1 h; idempotency 24 h after terminal | `limits.py:97-102` |
 
@@ -398,8 +455,8 @@ Filled from the lines above. This replaces the illustrative fixture in
   "serving_version": {
     "model_repo": "NemoStation/Marlin-2B",
     "model_commit": "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965",
-    "weight_shard_digests": "TO_BE_VERIFIED",
-    "tokenizer_digest": "TO_BE_VERIFIED",
+    "weight_shard_digests": "PUBLISHED — the two .lfs.oid values from /api/models/NemoStation/Marlin-2B/tree/main; transcribe them here (§1.3) and confirm with sha256sum after download",
+    "tokenizer_digest": "PUBLISHED — the tokenizer.json .lfs.oid from the same tree call; same confirmation step",
     "chat_template_sha256": "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
     "architecture_override": {"architectures": ["Qwen3_5ForConditionalGeneration"]},
     "eos_token_ids": [248044, 248046],
@@ -421,10 +478,15 @@ Filled from the lines above. This replaces the illustrative fixture in
 }
 ```
 
-Four `TO_BE_VERIFIED` fields are **launch blockers for an honest capability record**, not
-cosmetic: without the shard/tokenizer digests and a runtime image digest, "pinned serving
-version" is a label. `serve.sh`'s `vllm/vllm-openai:nightly` is a moving tag — W3 owns
-replacing it with a digest.
+The remaining `TO_BE_VERIFIED` fields are **launch blockers for an honest capability record**,
+not cosmetic. Three of the four the first draft listed turned out to be **published and
+obtainable without a token** — the two weight-shard digests and the tokenizer digest are
+`.lfs.oid` values on the public tree endpoint (§1.3), so the record's owner transcribes them
+rather than waiting for gated access; what is left is the **runtime image digest** (`serve.sh`
+pins the moving tag `vllm/vllm-openai:nightly`, which no registry read can resolve for us),
+the **decoder** actually used by the pinned engine, and the **hardware** the envelope was
+measured on. Without the image digest in particular, "pinned serving version" is a label:
+two deployments can serve different engine builds under the same record.
 
 ---
 
@@ -432,6 +494,14 @@ replacing it with a digest.
 
 Scope: **thousands of recorded clips, processed once each, resumable.** It uses only the
 primitives above. There is no batch API, no server-side dataset object and no new route.
+
+**Specified versus served, stated up front.** Two things this recipe uses are contracts that
+do not answer yet in this tree: the `infrx-upload:` media form (§3.3) and
+`Prefer: respond-async` with the job status/result routes it implies (§3.5). `ROUTERS =
+(health, models, chat)` today (§2.1, discrepancy D12), so a sweep run against this tree must
+use the `data:` or `http(s)` media form on sync or SSE, and those two rows become executable
+when G3 and G4U/M3 land. Everything else below — item keys, idempotency scope, segmentation,
+concurrency caps, failure classes, usage reconciliation — is served today.
 
 ### 3.1 Identity and idempotency
 
@@ -482,8 +552,8 @@ Pick one media form per item and keep it stable within a run:
 
 | Form | When | Cost |
 |---|---|---|
-| `infrx-upload:upl_…` | the preferred form for a dataset: the object is staged once, is tenant-scoped, and a retry re-uses it | needs the upload routes (§2.1, **not implemented**) |
-| `data:<mime>;base64,…` | works today; the only form that needs no public hosting | +33 % bytes against the 64 MiB media cap and the 96 MiB body cap; base64 is CPU work the client must do off its event loop (`bench.py:501-506`) |
+| `infrx-upload:upl_…` | the preferred form for a dataset: the object is staged once, is tenant-scoped, and a retry re-uses it | **specified, not served** — the upload routes are unmounted and `MediaStore.create_upload`/`finalize_upload` raise `NotImplementedError` (§2.1, D12) |
+| `data:<mime>;base64,…` | works today; the only form that needs no public hosting | +33 % bytes against the 64 MiB media cap and the 96 MiB body cap; base64 is CPU work the client must do off its event loop (`bench.py:501-503`) |
 | `http(s)://…` | the client already hosts the clips publicly | every fetch is re-validated against the SSRF policy; a private/loopback/link-local/CGNAT/NAT64/Teredo address is refused (`media/video.py:18-60`, `media/fetch.py`) |
 
 ### 3.4 Bounded concurrency and pacing
@@ -577,8 +647,13 @@ customer or robotics-vendor data**, and with ground truth that exists by constru
 - **Scripted procedure.** Each clip is a list of steps with exact start/end seconds. The
   script **is** the ground truth: `{step_id, label, start_s, end_s}`. Because the renderer
   is given those numbers, the labels are not annotations to be trusted — they are inputs.
-- **Size and spread.** 12 clips: durations 8 s, 30 s, 60 s, 115 s (inside the 120 s cap, and
-  the 115 s one is the 240-frame worst case); 3–7 steps each; one clip with two steps
+- **Size and spread.** 12 clips: durations 8 s, 30 s, 60 s and **120.0 s**, the last being the
+  240-frame worst case. (An earlier draft used 115 s and called it the worst case, which is
+  wrong: `frames = clamp(round(2.0 × duration_s), 4, 240)` then rounded **up to even**
+  (`media/video.py:113-114`) makes 115 s **230** frames and 22,540 video tokens. The 240 cap is
+  first reached just above **119.25 s** — `round(2 × 119.26) = 239`, bumped to 240 — and Python's
+  round-half-to-even makes exactly 119.25 s give 238, so 120.0 s is the clip to build: it is the
+  worst case with margin and it is the API cap.) 3–7 steps each; one clip with two steps
   ≤1 s apart (timestamp resolution), one with a step spanning a segment boundary
   (§3.2 overlap), one 2-step clip where the steps run **out of order** and one where a
   step is **absent** (so a rubric can be shown to punish a hallucinated step — `.find`
@@ -602,18 +677,18 @@ Inputs for the M2 / G2 / W3 / M3 / E briefs. Each is a fact about this tree at b
 | # | Discrepancy | Evidence | Owner |
 |---|---|---|---|
 | D1 | **`NormalizedRequest.messages` keeps the caller's raw `video_url.url`.** `Validator.normalize` stores `messages=messages`, the validated body's own tuple (`validate.py:509`), and `media=()` (`validate.py:519`). So the accepted record — which is what `MediaStore.stage` makes durable (`store.py:246`) — contains the customer's URL or the whole inline base64 payload. 02 step 1 wants the canonical payload staged with refs, and `payload_digest` already tokenises inline media *for the digest only* (`validate.py:385-404`). | `validate.py:506-524` | G2 (rewrite `{url}` → `{ref}` at acceptance), M2 |
-| D2 | **M1 never sets `duration_s`, and the engine refuses without it.** `MediaStaging.materialize` builds a `MediaRef` with no `duration_s` (`store.py:178-181`) and nothing else probes; `MediaRef.duration_s` defaults to `None` (`records.py:429`). `VllmEngine.upstream_body` raises `UnsupportedMedia` unless the video ref carries a positive finite duration (`engine.py:570-578`), because the frame budget is computed from it. **With the real M1 store, every video request fails at the engine.** | `store.py:178`, `engine.py:570-578` | M2 (duration probe during preparation; `PROBE_TIMEOUT_S` 10 s already exists, `limits.py:67`) |
+| D2 | **M1 never sets `duration_s`, and the engine refuses without it.** `MediaStaging.materialize` builds a `MediaRef` with no `duration_s` (`store.py:178-181`) and nothing else probes; `MediaRef.duration_s` defaults to `None` (`records.py:427`). `VllmEngine.upstream_body` raises `UnsupportedMedia` unless the video ref carries a positive finite duration (`engine.py:570-578`), because the frame budget is computed from it. **With the real M1 store, every video request fails at the engine.** | `store.py:178`, `engine.py:570-578` | M2 (duration probe during preparation; `PROBE_TIMEOUT_S` 10 s already exists, `limits.py:67`) |
 | D3 | **The engine is handed a bare object key as `video_url.url`.** `_part` returns `{"type":"video_url","video_url":{"url": ref.storage_ref}}` (`engine.py:530`), i.e. `media/<org>/<profile>/<digest16>/source` — not something vLLM can open. The legacy path works because it inlines a `data:` URL instead (`media/video.py:201`, `chat.py:45-48`). Nothing in the tree bridges key → bytes for the pilot path. | `engine.py:509-530`, `store.py:141-147` | M2 + W3 (decide: presigned URL, local path mount, or inline; it is a serving-profile decision because it changes decode locality) |
 | D4 | **`upload_created.json` fixture's `destination_ref` is org/environment-qualified.** The fixture says `infrx-upload:pilot:upl_…` while `validate.check_video_ref` accepts only `infrx-upload:` + `UPLOAD_HANDLE_RE` (`validate.py:233-241`, `ids.py:27`) and deliberately refuses a qualified form ("an org-qualified reference invites cross-tenant probing", `validate.py:234-236`). The wave-2 handoff §3 records `infrx-upload:upl_<id>` **only** as settled but not yet written into 08 §10. | `contracts/fixtures/v1/upload_created.json`, `validate.py:233-241` | M3 (reconcile), coordinator (record the ruling in 08 §10) |
 | D5 | **The frozen `storage_ref` in three v1 fixtures cannot pass the engine's own guard.** `normalized_request.json`, `media_ref.json` and `prepared_request.json` all carry `media/1a1a1a1a/22/source.mp4`. `check_storage_ref` requires a **full lowercase UUID** org segment and refuses anything else as `not_found` (`engine.py:281-295`, `STORAGE_REF_PATTERN` `engine.py:124-127`), and M1 builds `media/<full uuid>/<profile>/<16 hex>/source` (`store.py:141-147`). A fixture that the pinned adapter refuses is not a contract. | fixtures vs `engine.py:124-127` | F (fixture revision) |
 | D6 | **`prepared_request.json` has one media ref and zero media parts.** Its single message is `{"role":"user","content":"Describe what happens in this clip."}` with `media` of length 1, so `messages_for` raises "0 media parts but 1 prepared references" (`engine.py:504-506`). R58 requires one media part per staged ref, in order. | fixture vs `engine.py:504-506` | F (fixture revision) |
 | D7 | **`payload_ref` shapes disagree.** Fixtures use `payloads/1a1a1a1a/11/request.json`; `Validator` sets `payloads/{org_id}/{request_id}.json` (`validate.py:515`) and `stage` ignores the caller's value and builds `payloads/<org uuid>/<request_id>.json` itself (`store.py:249`). Harmless at runtime (the store wins) but the fixture documents a path nothing produces. | fixtures vs `validate.py:515`, `store.py:249` | F |
-| D8 | **`model_revision` in fixtures is `nemostation/marlin-2b@2026-09-01`** — a date that is neither the artifact's `lastModified` (2026-05-30) nor its commit. The public id `nemostation/marlin-2b` is `Settings.model_id` (`config.py:45`) and the engine's served name is `marlin2b` (`serve.sh:36`, and `chat.py:32` overwrites the body's model with it). Recommend the revision carry the artifact commit, e.g. `nemostation/marlin-2b@fd111fca`. | fixtures, `config.py:45`, `serve.sh:36` | F + G1R (served-model table), D1R (registry rows) |
+| D8 | **`model_revision` is `nemostation/marlin-2b@2026-09-01`** — a date that is neither the artifact's `lastModified` (2026-05-30) nor its commit — and it is **not confined to one or two fixtures**: it appears in **15** of the frozen v1 fixtures, in two Python modules, and in a third, *unprefixed* form (`marlin-2b@2026-09-01`) in three console files. Full set below, because a partial rename would leave two revisions in one tree. The public id `nemostation/marlin-2b` is `Settings.model_id` (`config.py:45`) and the engine's served name is `marlin2b` (`serve.sh:36`, and `chat.py:32` overwrites the body's model with it). Recommend the revision carry the artifact commit, e.g. `nemostation/marlin-2b@fd111fca`. | the 20 files listed in integration request 5, `config.py:45`, `serve.sh:36` | F + G1R (served-model table), D1R (registry rows) |
 | D9 | **`MAX_VIDEO_SECONDS` is unenforced on the new media path.** The legacy `Media.prepare_video` refuses over 120 s (`media/video.py:204-205`); `MediaFetcher`/`MediaStaging` enforce bytes (`store.py:173-174`) but never duration, because nothing probes it (D2). So the pilot path has a byte cap and no duration cap. | `store.py:158-190` vs `media/video.py:204` | M2 |
 | D10 | **The deployed legacy path accepts a part type the contract does not.** `chat.py:38` treats `input_video` like `video_url` and forwards the whole caller body (including any `mm_processor_kwargs`) to vLLM, with no parameter allow-list. Anything published as "the API" today is looser than the profile in §2. | `chat.py:33-50` | G2 at cutover (the legacy shim and its tests retire together, R48) |
 | D11 | **`bench.py` uses `upload://<handle>`**, not `infrx-upload:upl_…` (`bench.py:63`, `bench.py:508`), and sends **no `Idempotency-Key`** at all. The load client therefore cannot exercise the resume/no-duplicate property MARLIN-SOP requires. | `bench.py:63,508`; no `Idempotency-Key` in the file | E1B |
 | D12 | **`ROUTERS = (health, models, chat)`** — the pilot ingress, jobs and upload routes are not mounted, so §2.1's async and upload rows are *specified, not served*. Any capability document published before G2/G3/G4U must say so. | `gateway/app.py:22` | G2/G3/G4U |
-| D13 | **`serve.sh` pins a moving tag.** `IMAGE=vllm/vllm-openai:nightly` (`serve.sh:23`) cannot be a serving-version pin; the measured rows were taken on "nightly pulled 2026-09-19". Also `serve.sh` does **not** pass the B300 non-negotiables from the research recommendation (`--mamba-cache-mode=align`, `--block-size 128`, `--media-io-kwargs`, `--mm-processor-cache-type shm`) and does not re-supply both EOS ids. | `serve.sh:23-45` vs [`models/marlin2b/README.md`](../models/marlin2b/README.md) "How to run it" | W3 |
+| D13 | **`serve.sh` pins a moving tag.** `IMAGE=vllm/vllm-openai:nightly` (`serve.sh:23`) cannot be a serving-version pin; the measured rows were taken on "nightly pulled 2026-09-19". Also `serve.sh` does **not** pass the B300 non-negotiables from the research recommendation (`--mamba-cache-mode=align`, `--block-size 128`, `--media-io-kwargs`, `--mm-processor-cache-type shm`) and does not re-supply both EOS ids. **The deployed unit and the platform also disagree on engine concurrency:** `apps/infrx-api/deploy/marlin2b-vllm.service:12` starts `serve.sh --max-num-seqs 32`, while `limits.py:110` plans for 8 and `serve.sh` passes no flag of its own (§2.5). | `serve.sh:23-42` (the file is 42 lines) vs [`research/models/marlin2b/README.md`](../models/marlin2b/README.md) "How to run it" and its non-negotiables list; `deploy/marlin2b-vllm.service:12` | W3 |
 | D14 | **`top_k`/`min_p`/`repetition_penalty` asymmetry** between ingress (refused as unknown) and the engine allow-list (forwarded) — §2.2. Harmless today, but a caller reading the engine's list would believe they are available. | `validate.py:44-49` vs `engine.py:83-86` | G1R (decide: add with ranges, or state the refusal) |
 
 ---
@@ -652,7 +727,7 @@ and E1B may replace any row with a measured envelope.
 | Error-rate criterion | **provisional:** <1 % platform-caused failures (5xx, `platform_error`, `engine_error`, `lost_after_publication`) over a sweep, with rejections reported separately and not counted as failures | derived from R21's "platform-caused failures are free" — a platform that absorbs >1 % is paying for its own defects | **provisional (P-18)** |
 | Latency criterion | **provisional:** no criterion. The only measured tail is p50-grade on one GPU with two clips. E1B must **measure** p95/p99 on the target before any latency number is written down | §1.6 | **explicitly absent** |
 | Throughput criterion | **provisional:** report successful **video-seconds processed per second** together with the clip/frame/output profile; do not quote clips/s without the duration mix. One GPU-hour processed 15.9–36.2 video-hours on L40S (`meas.`, corrected 2026-09-20) | `results/notes.md` cost sketch | **provisional (P-18)** |
-| Cost criterion | **provisional:** report cost per successful video-hour at the measured envelope. L40S on-demand ≈ $2.24/h gave $0.06 (360p) – $0.14 (1080p) per video-hour. Prices come only from [`cloud-pricing.md`](../cross-cutting/cloud-pricing.md) | `results/notes.md`; `HANDOFF.md` §1 | **provisional (P-18)** |
+| Cost criterion | **provisional:** report cost per successful video-hour at the measured envelope. The committed sketch is $0.06 (360p) – $0.14 (1080p) per video-hour at an **operational** rate of ≈ $2.24/h for the `g6e.2xlarge` dev box. ⚠️ **That rate is an operational figure from `HANDOFF.md:24`, not a priced row: it is not in [`cloud-pricing.md`](../cross-cutting/cloud-pricing.md)**, which carries L40S rows for other vendors (OCI `BM.GPU.L40S.4` $3.50, and $1.09-$1.57 single-card rows) but **no AWS `g6e` row at all**. Repository convention is that prices come only from `cloud-pricing.md`, so publishing a cost figure requires a sourced row being added there first — owner: whoever publishes it; S2M does not edit that file | `results/notes.md` cost sketch; `HANDOFF.md:24` | **provisional (P-18)** |
 | Resource criterion | **provisional:** flat host RSS and flat GPU memory over a soak; no growth in queue depth at steady arrival rate; preparation disk bounded | `18-marlin-backend-first.md` "Bounded under load" | **provisional (P-18)** |
 | Soak duration | **⚠️ TO BE VERIFIED — no owner input.** A provisional engineering floor of 4 h continuous at the sustainable rate plus one induced restart is proposed so E1B/I3B have something to execute; the real duration is an availability decision | none | **provisional (P-18)** |
 | Availability / recovery | **⚠️ TO BE VERIFIED — no owner input.** A single GPU is a single point of failure (`HANDOFF.md` §1). Measure and publish the recovery window; **do not state an availability target** and do not call single-GPU process recovery high availability | `18-marlin-backend-first.md`; P-16 | **absent by decision** |
@@ -733,3 +808,30 @@ plainly, because a reader who knows the word "VLA" will otherwise assume otherwi
   promotes them to an envelope or a target. Fourteen runtime-versus-contract discrepancies
   are recorded in §4 as inputs for M2/M3/G2/G1R/W3/F/E1B and are **not** fixed by this
   document.
+
+- 2026-09-22 (S2M, independent review pass): Corrected four wrong claims and seven wrong
+  citations found by review, and added six verified facts. **Claims corrected:** quantised
+  checkpoints *do* exist (an author MLX-8bit plus community GPTQ-INT4, SDNQ-INT8 and GGUF —
+  `architecture.md` §9); what is absent is any FP8/NVFP4/MXFP4/AWQ build and any accuracy
+  evaluation of any variant, so they are out of profile for stated reasons (§1.2). The three
+  artifact content digests are **published and need no token** — `.lfs.oid` on the public tree
+  endpoint — not unobtainable as the first draft implied (§1.3, §2.6); this session could not
+  transcribe the values because its environment redacts 64-hex strings, so the command and the
+  owner are recorded instead. `sop-synth-v1`'s long clip is **120.0 s**, not 115 s: 115 s is
+  230 frames and 22,540 tokens, and the 240-frame cap is first reached just above **119.25 s**,
+  computed from `media/video.py:113-114` (the review's own "≥119.75 s" is off by half a second —
+  the even-bump promotes an odd 239 to 240) (§3.8). The ≈$2.24/h L40S rate is an **operational figure from
+  `HANDOFF.md:24`**, not a `cloud-pricing.md` row — that file has no AWS `g6e` row (§5.2).
+  **Citations corrected:** `records.py:429`→`:426` (`profile_version`) and `:427`
+  (`duration_s`); `tokens.py:47`→`:53-56`; `engine.py:566-567`→`:564-565`;
+  `serve.sh:23-45`→`:23-42` (42 lines); `bench.py:501-506`→`:501-503`; D13's link text now
+  says `research/models/marlin2b/README.md`, which is where it resolved. The `raw` guarantee is
+  attributed to **R58** and the journal/relay, not to `_delta_payload`, which still emits a
+  transitional `content` alias of `raw` (`engine.py:366`). **Added:** 6 of 24 layers hold KV and
+  the omitted 18.63 MiB/sequence GDN state (§1.6); measured scaffold overhead is 101 tokens on
+  Path A and 261 on Path B, not ~40 (§1.6); `max_position_embeddings` is 262,144 and 32,768 is
+  a deployment choice (§2.5); the deployed unit runs `--max-num-seqs 32` against a pilot setting
+  of 8 (§2.5, D13); §3 now marks which rows are specified-not-served. Review also found D8
+  understated: the `@2026-09-01` revision is in 15 fixtures, 2 Python modules and 3 console
+  files (20 in total), not the two originally named. No conclusion of §1-§6 is reversed by any
+  of this, and still no measurement, GPU run, cloud operation or code change.
