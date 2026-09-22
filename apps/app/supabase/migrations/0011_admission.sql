@@ -61,6 +61,19 @@ begin
   end if;
 end $$;
 
+-- W2's request: preparation's exact prompt count, stored with the prepared refs so the
+-- worker's `Work` can carry it (the `Work.prompt_tokens` field is the coordinator's).
+alter table infrx.jobs add column if not exists prepared_prompt_tokens int;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conrelid = 'infrx.jobs'::regclass
+                 and conname = 'jobs_prepared_prompt_tokens_within_ceiling') then
+    alter table infrx.jobs add constraint jobs_prepared_prompt_tokens_within_ceiling
+      check (prepared_prompt_tokens is null
+             or prepared_prompt_tokens between 0 and max_input_tokens);
+  end if;
+end $$;
+
 -- The admitted request is as immutable as its price (R53/R78); prepared refs are written
 -- once, by the preparing -> queued transition.
 create or replace function infrx.jobs_admission_record_guard() returns trigger
@@ -69,7 +82,9 @@ begin
   if new.request_record is distinct from old.request_record
      or new.idem_payload_hash is distinct from old.idem_payload_hash
      or (old.prepared_refs is not null
-         and new.prepared_refs is distinct from old.prepared_refs) then
+         and new.prepared_refs is distinct from old.prepared_refs)
+     or (old.prepared_prompt_tokens is not null
+         and new.prepared_prompt_tokens is distinct from old.prepared_prompt_tokens) then
     raise exception 'job %: the admitted request and its prepared refs are immutable',
       old.request_id using errcode = '23514';
   end if;
@@ -152,6 +167,7 @@ language sql stable security definer set search_path = infrx, public, pg_temp as
       'queue_wait_s', j.budget_queue_wait_s, 'generation_s', j.budget_generation_s,
       'first_token_s', j.budget_first_token_s, 'stall_s', j.budget_stall_s),
     'preparation_deadline_at', j.preparation_deadline_at,
+    'prepared_prompt_tokens', j.prepared_prompt_tokens,
     'queue_deadline_at', j.queue_deadline_at, 'queue_wait_used_s', j.queue_wait_used_s,
     'accounting_regime', j.accounting_regime,
     'wallet_id', j.wallet_id,

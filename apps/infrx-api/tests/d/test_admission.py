@@ -84,3 +84,10 @@ def test_outbox__expiry_and_gc_never_delete_what_a_consumer_needs() -> None:
     bounded, never a live job's, an unacknowledged or a callback delivery's."""
     from . import checks_dispatch
     print(checks_dispatch.check_outbox_gc(_db()))
+
+
+# --- item 4: W2's result object and prompt count, M3's liveness -----------------------
+def test_results__write_once_owner_read_and_the_prepared_prompt_count() -> None:
+    """W2 requests: put_result / read_result, prepared prompt_tokens within the ceiling."""
+    from . import checks_dispatch
+    print(checks_dispatch.check_results_and_prompt_tokens(_db()))

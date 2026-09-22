@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
 
-from ..contracts import errors
+from ..contracts import errors, ids
 from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import (Admission, Budgets, IdempotencyRef, IndexEvent, Lease,
                                  MediaRef, NormalizedRequest, ReservationKind,
@@ -50,13 +50,17 @@ def connector(dsn: str) -> Connect:
 
 
 def _codes() -> dict[str, type[errors.DomainError]]:
+    """code -> the MOST specific class that declares it (`StateConflict`, not its base
+    `Conflict`, which shares the code), so `except errors.StateConflict` works."""
     found: dict[str, type[errors.DomainError]] = {}
-    stack = [errors.DomainError]
-    while stack:
-        cls = stack.pop()
-        found.setdefault(cls.code, cls)
-        stack.extend(cls.__subclasses__())
-    return found
+
+    def walk(cls, depth: int) -> None:
+        if "code" in cls.__dict__ and depth >= found.get(cls.code, (None, -1))[1]:
+            found[cls.code] = (cls, depth)
+        for sub in cls.__subclasses__():
+            walk(sub, depth + 1)
+    walk(errors.DomainError, 0)
+    return {code: cls for code, (cls, _) in found.items()}
 
 
 _BY_CODE = _codes()
@@ -209,12 +213,21 @@ class PgJobStore:
                        "max_prepublication_retries": self.limits.max_prepublication_retries}}))
         return Lease.model_validate(doc["lease"])
 
-    async def prepared(self, lease: Lease, media: tuple[MediaRef, ...] = ()):
+    async def prepared(self, lease: Lease, media: tuple[MediaRef, ...] = (), *,
+                       prompt_tokens: int | None = None):
         """`preparing -> queued` fenced on the preparation lease, with its
-        `inference_dispatch` event, in one transaction (the 06 `prepare` boundary)."""
+        `inference_dispatch` event, in one transaction (the 06 `prepare` boundary).
+
+        `prompt_tokens` (W2's request) is preparation's exact count, stored once with the
+        refs and refused past the job's `max_input_tokens`; it reaches `Work` when the
+        coordinator adds `Work.prompt_tokens` (integration request)."""
+        if prompt_tokens is not None and (isinstance(prompt_tokens, bool)
+                                          or not isinstance(prompt_tokens, int)):
+            raise errors.InvalidRequest("prompt_tokens must be an integer")
         doc = self._answer(await self._call("prepare", {
             "lease": lease.model_dump(mode="json"),
-            "media": [ref.model_dump(mode="json") for ref in media]}))
+            "media": [ref.model_dump(mode="json") for ref in media],
+            "prompt_tokens": prompt_tokens}))
         return admission_of(doc) if doc["accounting_regime"] == "legacy_usd" \
             else admission_v2_of(doc)
 
@@ -241,6 +254,29 @@ class PgJobStore:
         """Expire dispatch rows of terminal jobs; delete acknowledged rows past
         `retention_s` that no live job or consumer can still need (0013). Bounded."""
         return await self._call("gc_outbox", {"retention_s": retention_s, "limit": limit})
+
+    # --- W2 / M3 requests (D2 item 4) --------------------------------------------
+    async def is_live(self, job_id: str) -> bool:
+        """M3's collector: True while the job is not terminal; an unknown (or malformed)
+        id is not live."""
+        if not ids.is_request_id(job_id):
+            return False
+        rows = await self._query("select settled_at is null from infrx.jobs "
+                                 "where request_id = %s", (job_id,))
+        return bool(rows and rows[0][0])
+
+    async def put_result(self, job_id: str, text: str) -> str:
+        """W2's result object writer (02 §7): immutable, first write wins; returns the
+        `infrx-result:<job_id>` reference `complete` carries (R30)."""
+        return await self._call("put_result", {"job_id": job_id, "text": text})
+
+    async def read_result(self, org_id: str, result_ref: str) -> str:
+        rows = None
+        try:
+            rows = await self._query("select infrx.read_result(%s, %s)", (org_id, result_ref))
+        except Exception as failed:                  # psycopg.Error, mapped
+            raise domain_error(failed) from None
+        return rows[0][0]
 
     # --- D3 / D5 (fail closed) ---------------------------------------------------
     async def claim(self, job_id: str, worker_id: str):

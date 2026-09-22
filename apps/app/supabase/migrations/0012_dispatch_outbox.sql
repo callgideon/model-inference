@@ -212,6 +212,12 @@ begin
              where (m->>'org_id')::uuid is distinct from j.org_id) then
     perform infrx.refuse('forbidden', 'prepared media must belong to the job''s org');
   end if;
+  -- The prompt preparation counted must fit the input ceiling the hold was sized on.
+  if (p_args->>'prompt_tokens')::int < 0
+     or (p_args->>'prompt_tokens')::int > j.max_input_tokens then
+    perform infrx.refuse('context_length_exceeded', 'the prepared prompt ('
+                         || (p_args->>'prompt_tokens') || ' tokens) exceeds max_input_tokens');
+  end if;
   update infrx.attempts set released_at = v_now, finished_at = v_now
    where job_id = a.job_id and kind = a.kind and generation = a.generation;
   update infrx.capacity_reservations set active = false, released_at = v_now
@@ -220,6 +226,7 @@ begin
   v_remaining := greatest(0, j.budget_queue_wait_s - j.queue_wait_used_s);
   update infrx.jobs set state = 'queued', queued_at = v_now,
                         prepared_refs = coalesce(p_args->'media', '[]'),
+                        prepared_prompt_tokens = (p_args->>'prompt_tokens')::int,
                         queue_deadline_at = least(v_now + make_interval(secs => v_remaining),
                                                   j.deadline_at)
    where request_id = j.request_id;

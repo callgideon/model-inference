@@ -323,3 +323,48 @@ def check_outbox_gc(conn) -> str:
         assert counts == [1, 1, 1, 0], counts
         return "terminal dispatch rows expired; acknowledged rows past retention deleted, bounded"
     return ca._in_rollback(conn, body)
+
+
+def check_results_and_prompt_tokens(conn) -> str:
+    """W2's two requests, in SQL: `put_result` stores one immutable, tenant-bound result
+    per job (same text replays the reference, different text is state_conflict, unknown
+    job not_found); `read_result` answers the owner only; `prepare` stores preparation's
+    prompt count once and refuses one past the job's `max_input_tokens`."""
+    world = ca.World(conn)
+
+    def body():
+        request = _admitted(conn, world)
+        args = {"job_id": request.request_id, "text": "a clip of a cat"}
+        ref = call(conn, "put_result", args)
+        assert ref == f"infrx-result:{request.request_id}", ref
+        assert call(conn, "put_result", args) == ref, "the same result did not replay"
+        assert outcome(conn, "put_result", dict(args, text="another answer"))[0] == \
+            "state_conflict", "a second writer replaced the stored result"
+        assert outcome(conn, "put_result", {"job_id": str(__import__("uuid").uuid4()),
+                                            "text": "x"})[0] == "not_found"
+        body_, = conn.execute("select infrx.read_result(%s, %s)", (b.ORG_A, ref)).fetchone()
+        assert body_ == "a clip of a cat"
+        for org, bad in ((b.ORG_B, ref), (b.ORG_A, "infrx-result:../../etc"),
+                         (b.ORG_A, f"infrx-result:{b.ORG_A}")):
+            try:
+                with conn.transaction():
+                    conn.execute("select infrx.read_result(%s, %s)", (org, bad))
+            except psycopg.Error as failed:
+                assert getattr(domain_error(failed), "code", None) == "not_found", (org, bad)
+            else:
+                raise AssertionError(f"read_result answered {org} for {bad}")
+        stored = conn.execute("select digest, bytes from infrx.job_results where "
+                              "request_id = %s", (request.request_id,)).fetchone()
+        assert stored[1] == len("a clip of a cat".encode()) and stored[0].startswith("sha256:")
+        # prompt tokens
+        _, lease = claim(conn, request.request_id)
+        too_many = {"lease": lease["lease"], "media": [],
+                    "prompt_tokens": request.max_input_tokens + 1}
+        assert outcome(conn, "prepare", too_many)[0] == "context_length_exceeded"
+        code, _ = outcome(conn, "prepare", dict(too_many, prompt_tokens=1234))
+        assert code is None, code
+        got, = conn.execute("select prepared_prompt_tokens from infrx.jobs where "
+                            "request_id = %s", (request.request_id,)).fetchone()
+        assert got == 1234, got
+        return "result write-once, owner-only read; prompt count stored within the ceiling"
+    return ca._in_rollback(conn, body)
