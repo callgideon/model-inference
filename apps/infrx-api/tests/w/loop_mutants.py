@@ -84,6 +84,7 @@ STALE_COMPLETE = "test_gap__a_stale_complete_settles_nothing"
 CLAMP = "test_gap__the_task_deadline_is_the_clamped_instant_not_the_generation_budget"
 EXACT_USAGE = "test_gap__the_usage_settled_is_the_engines_authoritative_record_unchanged"
 STOPS_READING = "test_gap__a_discovered_cancellation_stops_the_worker_reading_the_stream"
+SIBLING_ROOT = "test_gap__a_sibling_prefixed_root_is_outside_the_root"
 RECORDING_RELAY = "test_gap__the_relay_never_receives_anything_the_journal_has_not_taken"
 
 MUTANTS: tuple[Mutant, ...] = (
@@ -367,6 +368,12 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("media_path_guessed_without_resolver", "no resolver is a typed refusal, not a guess",
        E, '        raise errors.DependencyUnavailable("no local media resolver is configured")',
        '        return f"{LOCAL_MEDIA_SCHEME}{root}/{ref.storage_ref}"', MEDIA_FILE),
+    _m("inside_root_by_string_prefix", "a sibling directory sharing the root's prefix is outside",
+       E, '    prefix = posixpath.normpath(root) + "/"\n    if not path.startswith(prefix):\n'
+          '        return False\n    segments = path[len(prefix):].split("/")',
+       "    prefix = posixpath.normpath(root)\n    if not path.startswith(prefix):\n"
+       '        return False\n    segments = path[len(prefix):].split("/")[1:]',
+       SIBLING_ROOT),
     _m("only_one_eos_id", "S2M §1.2: both EOS ids, or answers run to the ceiling",
        E, "MODEL_EOS_TOKEN_IDS = (248044, 248046)", "MODEL_EOS_TOKEN_IDS = (248046,)", EOS),
     _m("eos_ids_not_sent", "the ids are re-supplied on every request, not left to the flag",

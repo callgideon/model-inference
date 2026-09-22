@@ -1551,3 +1551,13 @@ def test_gap__a_discovered_cancellation_stops_the_worker_reading_the_stream():
         assert engine.yielded <= 5, engine.yielded
         assert engine.closed == 1
     run(case())
+
+
+def test_gap__a_sibling_prefixed_root_is_outside_the_root():
+    box = _Box()
+    prepared = prepared_request(_video_work(box), 1200)
+    ref = prepared.media[0]
+    d16 = ref.digest.removeprefix("sha256:")[:16]
+    assert _inside_tenant_root(f"/srv/cache/{ref.org_id}/v1/{d16}/source.mp4", "/srv/cache", ref.org_id, ref)
+    assert not _inside_tenant_root(f"/srv/cache2/{ref.org_id}/v1/{d16}/source.mp4", "/srv/cache", ref.org_id, ref)
+    assert not _inside_tenant_root(f"/srv/cache-old/{ref.org_id}/v1/{d16}/source.mp4", "/srv/cache", ref.org_id, ref)
