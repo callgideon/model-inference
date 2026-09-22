@@ -58,8 +58,6 @@ PENDING = {
     "M3": "owned uploads, expiry and orphan collection",
     "Q3": "outbox dispatcher/reconciler feeding the index from PostgreSQL",
     "W3": "worker wiring: drain, engine pin, media root, measured concurrency",
-    "I2B": "the deployed PostgREST/auth pairing (claim form auth.uid() reads)",
-    "P-04": "allocated GPU target with the pinned Marlin engine",
 }
 
 

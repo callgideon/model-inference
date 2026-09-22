@@ -117,11 +117,14 @@ def test_postgrest_service_role_reads_every_tenant():
     assert len(answer.json()) >= 2
 
 
-def test_postgrest_member_session_sees_its_own_organization():
-    """A member's JWT through PostgREST reads its own organization. E2R measured that the
-    pinned image's `auth.uid()` reads only the legacy claim GUC while PostgREST 13 sets only
-    the JSON claims; which pairing the deployment runs is I2B's (and the console's) call, so
-    the observation is recorded and the case stays pending on it."""
+def test_postgrest_member_session_is_nobody_on_the_pinned_pairing():
+    """A MEASUREMENT of the pinned pairing, over real HTTP: a member's JWT through PostgREST
+    13.0.4 to the pinned `supabase/postgres` 17.6.1.173 is answered 200 with NO rows - the
+    image's `auth.uid()` reads only the legacy `request.jwt.claim.sub` GUC and PostgREST 13
+    sets only the JSON `request.jwt.claims` (E2R's SQL-level measurement, reproduced end to
+    end). Hosted `auth.uid()` reads both forms (I1B), so the pinned image is the odd one out;
+    bumping it is E's integration request. The case fails the day the pairing changes, so the
+    assertion is updated deliberately rather than drifting."""
     import harness
     state = harness.load_state() or {}
     owner = (state.get("fixtures") or {}).get("principals", {}).get("owner_alpha")
@@ -131,10 +134,4 @@ def test_postgrest_member_session_sees_its_own_organization():
         answer = client.get("/organizations", params={"select": "id"},
                             headers={"Authorization":
                                      f"Bearer {stack.jwt('authenticated', owner['user_id'])}"})
-    rows = answer.json() if answer.status_code == 200 else None
-    if rows:
-        assert all(row["id"] for row in rows)
-        return
-    stack.pending("I2B", why=f"member JWT via PostgREST 13.0.4 observed status "
-                             f"{answer.status_code}, rows {rows!r}: auth.uid() does not read "
-                             f"the claim form this PostgREST sets")
+    assert (answer.status_code, answer.json()) == (200, []), answer.text[:200]
