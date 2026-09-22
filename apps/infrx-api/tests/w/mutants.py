@@ -327,6 +327,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("visible_and_raw_collapsed", "visible is filtered, raw is not (R58)",
        E, '    return {"visible": visible, "raw": raw}',
        '    return {"visible": raw, "raw": raw}', TEXTS, ADAPTER_SPLITS),
+    _m("content_alias_reintroduced", "a delta payload is exactly {visible, raw} (R80)",
+       E, '    return {"visible": visible, "raw": raw}',
+       '    return {"visible": visible, "raw": raw, "content": raw}',
+       "test_f_contract__the_real_adapter_passes_the_exported_engine_suite"),
     _m("held_tail_never_emitted", "the filter's final tail reaches the events (R58)",
        E, "        if stream.held_tail:", "        if False:", TAIL, ADAPTER_SPLITS),
     # --- usage (r1 R58) -------------------------------------------------------
