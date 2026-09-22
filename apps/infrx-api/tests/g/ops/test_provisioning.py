@@ -298,3 +298,16 @@ def test_api_ops__operations_never_touch_a_balance():
     source = "".join(p.read_text() for p in sorted(package.glob("*.py")))
     for forbidden in ("ledger_total", "reserved_total", "delta_usd", "cost_usd"):
         assert forbidden not in source, forbidden
+
+
+def test_credit_identity__an_adjustment_never_overdraws_the_wallet():
+    """The D5 port contract the fake implements: below zero is refused, nothing audited."""
+    w = fakes.world()
+
+    async def go():
+        op, _ = await provision(w)
+        audited = len(w.audit.entries)
+        with pytest.raises(errors.InvalidRequest):
+            await op.adjust(USER_A, "-10001", idempotency_key="over", reason=R)
+        assert len(w.audit.entries) == audited and w.ledger.total(USER_A) == INITIAL_SIGNUP_GRANT
+    run(go())

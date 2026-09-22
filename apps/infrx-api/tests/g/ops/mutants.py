@@ -35,6 +35,7 @@ from tests.contracts.mutants import Mutant, Outcome, Result, _failing_ids  # noq
 S = "infrx/operations/service.py"
 C = "infrx/operations/cli.py"
 X = "client_example.py"
+F = "tests/g/ops/fakes.py"           # the port contract D5 must match
 
 
 def _m(name, invariant, file, old, new, *cases) -> Mutant:
@@ -123,6 +124,12 @@ MUTANTS: tuple[Mutant, ...] = (
        S, "        if await self.ops.wallets.consumer_wallet_for_user(user_id) is not None:",
        "        if False:",
        "test_credit_identity__a_wallet_bound_to_another_org_is_refused"),
+    _m("fake_ledger_overdraws",
+       "an adjustment below zero is refused by the ledger port (mutates the fake: this pins "
+       "the contract D5's adapter must implement, not operations code)",
+       F, "        except ValueError:\n            raise errors.InvalidRequest",
+       "        except ArithmeticError:\n            raise errors.InvalidRequest",
+       "test_credit_identity__an_adjustment_never_overdraws_the_wallet"),
     _m("zero_adjustment_accepted", "an adjustment moves a nonzero amount",
        S, "        if value.is_zero:", "        if False:",
        "test_api_ops__an_adjustment_moves_only_the_individuals_wallet"),
