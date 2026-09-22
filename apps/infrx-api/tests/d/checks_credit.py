@@ -598,31 +598,44 @@ def check_grant(conn) -> str:
     return "grant: one row, idempotent across op/campaign/org, 4 refusals"
 
 
-def check_grant_race(connect, database: str, attempts: int = 8) -> str:
-    """CREDIT-GRANT under a race: N concurrent callers for one individual produce
-    exactly one ledger row, and every caller is handed that same row."""
-    barrier = threading.Barrier(attempts)
-    out: list = []
+def check_grant_race(connect, database: str, attempts: int = 8, rounds: int = 10) -> str:
+    """CREDIT-GRANT under a race: in each round, N concurrent callers for one fresh
+    individual produce exactly one ledger row, and every caller is handed that same row.
+    Several rounds, because a race that loses one time in five is still a race."""
+    for n in range(rounds):
+        user = RACER if n == 0 else f"c2000000-0000-4000-8000-{n:012d}"
+        if n:
+            with connect(database) as c:
+                c.execute("insert into auth.users (id, email) values (%s, %s) "
+                          "on conflict do nothing", (user, f"race{n}@example.com"))
+        barrier = threading.Barrier(attempts)
+        out: list = []
+        errors: list = []
 
-    def call() -> None:
+        def call() -> None:
+            try:
+                with connect(database) as c:
+                    barrier.wait()
+                    out.append(grant(c, user, op=None))
+            except Exception as failed:               # reported below, never swallowed
+                errors.append(f"{type(failed).__name__}: {str(failed)[:200]}")
+
+        threads = [threading.Thread(target=call) for _ in range(attempts)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
         with connect(database) as c:
-            barrier.wait()
-            out.append(grant(c, RACER, op=None))
-
-    threads = [threading.Thread(target=call) for _ in range(attempts)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    with connect(database) as c:
-        rows = c.execute("select l.operation_id from infrx.credit_ledger l "
-                         "join infrx.credit_wallets w using (wallet_id) "
-                         "where w.owner_user_id = %s", (RACER,)).fetchall()
-    assert len(out) == attempts, f"only {len(out)} of {attempts} callers returned"
-    assert len(rows) == 1, f"{len(rows)} ledger rows after a race of {attempts}"
-    assert {r[2] for r in out} == {rows[0][0]}, "callers were handed different grants"
-    assert sum(1 for r in out if not r[5]) == 1, "not exactly one caller issued the grant"
-    return f"{attempts} concurrent grants -> 1 ledger row, 1 issuer, {attempts - 1} replays"
+            rows = c.execute("select l.operation_id from infrx.credit_ledger l "
+                             "join infrx.credit_wallets w using (wallet_id) "
+                             "where w.owner_user_id = %s", (user,)).fetchall()
+        assert len(out) == attempts, \
+            f"round {n}: only {len(out)} of {attempts} callers returned: {errors}"
+        assert len(rows) == 1, f"round {n}: {len(rows)} ledger rows after a race"
+        assert {r[2] for r in out} == {rows[0][0]}, f"round {n}: callers got different grants"
+        assert sum(1 for r in out if not r[5]) == 1, f"round {n}: not exactly one issuer"
+    return (f"{rounds} rounds x {attempts} concurrent grants -> 1 ledger row and 1 issuer "
+            f"per individual")
 
 
 def check_no_unit_conversion(conn) -> str:
@@ -1881,16 +1894,23 @@ def check_operator_seams(conn) -> str:
                               ).fetchall()
         assert replay == [("admin_set_suspension",)], replay
         raise psycopg.Rollback()
-    with conn.transaction():
-        unverified = conn.execute("select * from infrx.verified_user(%s)", (UNGRANTED,)
-                                  ).fetchone()
-        conn.execute("update auth.users set email_confirmed_at = '2026-09-22T12:00:00Z' "
-                     "where id = %s", (UNGRANTED,))
-        verified = conn.execute("select * from infrx.verified_user(%s)", (UNGRANTED,)).fetchone()
-        raise psycopg.Rollback()
+    unverified = conn.execute("select * from infrx.verified_user(%s)", (UNGRANTED,)).fetchone()
     assert unverified[2] is None and str(unverified[1]) == personal_org(conn, UNGRANTED), \
         f"an unconfirmed user reads as verified: {unverified}"
-    assert verified[2] and verified[2].startswith("email_confirmed_at/"), verified
+    # GoTrue's column: the shim has it; the bare supabase/postgres image's auth.users does
+    # not (GoTrue adds it on a hosted project), so the verified path runs where it exists.
+    verified_path = "not run (auth.users has no email_confirmed_at on this image)"
+    if conn.execute("select count(*) from information_schema.columns where table_schema = "
+                    "'auth' and table_name = 'users' and column_name = 'email_confirmed_at'"
+                    ).fetchone()[0]:
+        with conn.transaction():
+            conn.execute("update auth.users set email_confirmed_at = '2026-09-22T12:00:00Z' "
+                         "where id = %s", (UNGRANTED,))
+            verified = conn.execute("select * from infrx.verified_user(%s)", (UNGRANTED,)
+                                    ).fetchone()
+            raise psycopg.Rollback()
+        assert verified[2] and verified[2].startswith("email_confirmed_at/"), verified
+        verified_path = "verified path checked"
     with conn.transaction():
         conn.execute(_admission_cases(conn)[1][0][1])       # a settled CREDIT request
         conn.execute(credit_job("5c000000-0000-4000-8000-0000000000c2", "job_h", o1, w1) + "; "
@@ -1906,4 +1926,4 @@ def check_operator_seams(conn) -> str:
                           "infrx.usage_records(%s, null, null, 1)", (checks.ORG_A,)).fetchall()
     assert len(legacy) == 1 and legacy[0][:2] == ("legacy_usd", "USD"), legacy
     return (f"{n} refusals, {m} controls; bootstrap/revoke/suspension idempotent and audited; "
-            f"verified_user; usage and holds per regime")
+            f"verified_user unverified path, {verified_path}; usage and holds per regime")

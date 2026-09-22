@@ -635,11 +635,7 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
     _m("d1r_two_wallets_per_individual", CREDIT,
        "create unique index if not exists credit_wallets_one_per_user\n"
        "  on infrx.credit_wallets (owner_user_id) where kind = 'consumer';", "",
-       "credit", "credit_identity", "one individual holds two promotional wallets",
-       # Declared (R40): without the index the grant's ON CONFLICT has no arbiter, so the
-       # fixture's own grant fails - the grant cannot run at all, which is the observable
-       # consequence. The runner still never scores this as a kill.
-       expects=SETUP_ERROR, expects_detail="ON CONFLICT"),
+       "credit", "credit_identity", "one individual holds two promotional wallets"),
     _m("d1r_two_wallets_per_personal_org", CREDIT,
        "create unique index if not exists credit_wallets_one_per_personal_org\n"
        "  on infrx.credit_wallets (personal_org_id) where kind = 'consumer';", "",
@@ -744,6 +740,13 @@ D1R_MUTANTS: tuple[Mutant, ...] = (
        "'initial_signup_grant') then",
        "  if true then", "credit", "grant",
        "an auth-callback retry is a second entitlement (CREDIT-GRANT)"),
+    _m("d1r_grant_race_arbitrates_one_index", CREDIT,
+       "    values ('consumer', p_user_id, v_org)\n    on conflict do nothing;",
+       "    values ('consumer', p_user_id, v_org)\n"
+       "    on conflict (owner_user_id) where kind = 'consumer' do nothing;",
+       "credit", "grant_race",
+       "concurrent first logins fail on the personal-org index instead of replaying "
+       "(measured: 1 of 8 callers in a legacy-first run)"),
     _m("d1r_grant_binds_a_shared_org", CREDIT,
        "    if (select count(*) from public.org_members m where m.org_id = v_org) > 1 then",
        "    if false then", "credit", "grant",
@@ -1188,6 +1191,7 @@ _CHECKS = {
     "credit_read_surface": checks_credit.check_credit_read_surface,
     "credit_leaky_probe": checks_credit.check_credit_leaky_probe,
     "seams": checks_credit.check_seams,
+    "grant_race": lambda conn: checks_credit.check_grant_race(pgharness.connect, MUT_DB),
     "operator_seams": checks_credit.check_operator_seams,
     "seed_is_the_fixtures": checks_credit.check_seed_is_the_fixtures,
     "credit_plans": checks_credit.check_credit_plans,       # scenario "credit_volume"

@@ -515,12 +515,18 @@ begin
         'must be resolved before an individual wallet is bound to it', v_org
         using errcode = '55000';
     end if;
+    -- No conflict target: a racing caller can collide on the per-user OR the
+    -- per-personal-org index first, and either means "already created".
     insert into infrx.credit_wallets (kind, owner_user_id, personal_org_id)
     values ('consumer', p_user_id, v_org)
-    on conflict (owner_user_id) where kind = 'consumer' do nothing;
+    on conflict do nothing;
   end if;
   select w.wallet_id into v_wallet from infrx.credit_wallets w
    where w.owner_user_id = p_user_id and w.kind = 'consumer' for update;
+  if v_wallet is null then
+    raise exception 'rollout_hold: organization % already funds another individual''s wallet',
+      v_org using errcode = '55000';
+  end if;
 
   if not exists (select 1 from infrx.signup_entitlements e
                  where e.user_id = p_user_id and e.entitlement = 'initial_signup_grant') then
