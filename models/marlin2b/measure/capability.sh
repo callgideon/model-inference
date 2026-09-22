@@ -180,12 +180,12 @@ conn.request("POST", "/v1/chat/completions", json.dumps(text(
 response = conn.getresponse()
 chunks = 0
 while chunks < 5:
-    line = response.fp.readline()
+    line = response.readline()        # the de-chunked body, one SSE line at a time
     if not line:
         break
     chunks += line.startswith(b"data:")
 during = running()
-conn.sock.close()                     # the client goes away mid-stream
+response.close()                      # the client goes away mid-stream
 conn.close()
 t0, after = time.monotonic(), None
 while time.monotonic() - t0 < 10:
