@@ -103,6 +103,14 @@ def test_create_issues_an_opaque_handle_and_a_constrained_destination():
                                                  "accepted_mime": ["video/mp4"]}))
     handle = ticket["upload_handle"]
     assert UPLOAD_HANDLE_RE.fullmatch(handle)
+    # the grammar bench.py allowlists: upl_ + 22..64, and nothing either side of it
+    assert UPLOAD_HANDLE_RE.fullmatch("upl_" + "a" * 22)
+    assert UPLOAD_HANDLE_RE.fullmatch("upl_" + "a" * 64)
+    assert not UPLOAD_HANDLE_RE.fullmatch("upl_" + "a" * 21)
+    assert not UPLOAD_HANDLE_RE.fullmatch("upl_" + "a" * 65)
+    # R47: the ticket carries exactly the contract's fields - no storage key, no org
+    assert set(ticket) == {"upload_handle", "destination_ref", "max_bytes", "accepted_mime",
+                           "state", "expires_at"}
     assert ticket["destination_ref"] == "infrx-upload:" + handle
     assert ticket["max_bytes"] == 1024 and ticket["accepted_mime"] == ("video/mp4",)
     assert ticket["state"] is UploadState.created
@@ -283,9 +291,21 @@ def test_a_declared_size_is_verified():
     assert ref.bytes == len(CLIP)
 
 
-def test_a_declared_digest_is_verified():
+def flip_last(digest: str) -> str:
+    return digest[:-1] + ("0" if digest[-1] != "0" else "1")
+
+
+@pytest.mark.parametrize("declared", [
+    fetch.digest_of(b"something else"),
+    flip_last(fetch.digest_of(CLIP)),              # only the last hex digit differs
+], ids=["other", "last-digit"])
+def test_a_declared_digest_is_verified(declared):
+    """The whole digest is compared, exactly: not a prefix, not case-folded (an
+    uppercased declaration is refused at create by the digest grammar)."""
     adapter = adapter_for()
-    handle = created(adapter, digest=fetch.digest_of(b"something else"))
+    with pytest.raises(errors.InvalidRequest):
+        created(adapter, digest=fetch.digest_of(CLIP).upper().replace("SHA256:", "sha256:"))
+    handle = created(adapter, digest=declared)
     arrive(adapter, handle, CLIP)
     with pytest.raises(errors.UnsupportedMedia):
         run(adapter.finalize_upload(b.ORG_A, handle))
@@ -457,6 +477,26 @@ def test_an_upload_whose_object_changed_is_not_staged(change):
         run(adapter.objects.delete(ref.storage_ref))
     with pytest.raises(errors.NotFound):
         run(adapter.stage(b.ORG_A, upload_request(adapter, ref)))
+    with pytest.raises(errors.NotFound):
+        run(adapter.resolve_owned(b.ORG_A, handle))
+
+
+@pytest.mark.parametrize("tamper", [flip_last, lambda digest: "sha256:" + digest[7:].upper()],
+                         ids=["last-digit", "uppercase"])
+def test_the_use_time_recheck_compares_the_whole_digest(tamper):
+    """`resolve_owned`'s re-check is exact: a HEAD digest one hex digit off, or
+    differing only in case, is not the finalized object."""
+    class Tampered(store.InMemoryObjectStore):
+        target = None
+
+        async def head(self, key):
+            digest = await super().head(key)
+            return tamper(digest) if key == self.target and digest else digest
+
+    objects = Tampered()
+    adapter = adapter_for(objects=objects)
+    handle, ref = finalized(adapter)
+    objects.target = ref.storage_ref
     with pytest.raises(errors.NotFound):
         run(adapter.resolve_owned(b.ORG_A, handle))
 

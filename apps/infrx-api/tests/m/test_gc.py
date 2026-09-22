@@ -255,6 +255,19 @@ def test_a_lapsed_upload_window_is_closed_and_its_bytes_removed():
     assert swept.deleted == [adapter.upload_key(b.ORG_A, handle)]
 
 
+def test_a_finalized_record_outlives_its_window_while_its_object_lives():
+    """A finalized upload's record is kept past `expires_at + grace` for as long as its
+    object is in use, and a retried completion is still idempotent."""
+    adapter, jobs = adapter_for(), Jobs()
+    handle, ref = finalized(adapter)
+    staged_job(adapter, jobs, ref)
+    sweeper = collector(adapter, jobs)
+    adapter.clock.advance(TTL + GRACE + 1)
+    run(sweeper.sweep())
+    assert handle in adapter.uploads
+    assert run(adapter.finalize_upload(b.ORG_A, handle)) == ref
+
+
 def test_a_refused_upload_record_is_dropped_after_the_grace():
     adapter = adapter_for()
     handle = created(adapter, max_bytes=8)
