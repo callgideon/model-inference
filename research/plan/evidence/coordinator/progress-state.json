@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T18:49:10Z",
+  "updated": "2026-09-22T19:03:55Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,7 +29,7 @@
     },
     "M3": {
       "lane": "codex-m3 / codex/m3-owned-uploads",
-      "phase": "independent review at 9cdb618",
+      "phase": "fix round 1 (GC listing race; test-strength; two hardenings)",
       "since": "2026-09-22T18:12:19Z",
       "note": "uploads, GC, consent resolver; six conformance cases to unskip"
     },
