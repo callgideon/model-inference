@@ -23,6 +23,19 @@ def test_every_fixture_is_claimed_by_exactly_one_group():
     assert not set(fixtures.MODELS) & set(fixtures.LIST_MODELS)
 
 
+def test_the_fixture_root_holds_exactly_the_two_revisions():
+    """F2P wire-in item 7: `fixtures/` holds `v1/` (claimed above) and `v2/` (claimed by
+    `contracts.v2.fixtures`, whose bytes and field map `tests/contracts/v2/test_fixtures_v2.py`
+    checks) and nothing else. A third directory or a stray file at the root would be a
+    fixture neither guard claims."""
+    from infrx.contracts.v2 import fixtures as v2fix
+    root = fixtures.DIR.parent
+    assert {p.name for p in root.iterdir()} - {"__init__.py", "__pycache__"} == {"v1", "v2"}
+    on_disk = {p.name for p in (root / "v2").iterdir()}
+    assert on_disk == set(v2fix.MODELS) | set(v2fix.TABLES), on_disk ^ (
+        set(v2fix.MODELS) | set(v2fix.TABLES))
+
+
 @pytest.mark.parametrize("name", sorted(fixtures.MODELS))
 def test_fixture_round_trips_byte_stably(name):
     """F-CONTRACT: file -> model -> file is the identity."""
