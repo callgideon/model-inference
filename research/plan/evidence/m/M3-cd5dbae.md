@@ -258,3 +258,9 @@ Owned paths only: `infrx/media/uploads.py` (new), `infrx/media/gc.py` (new), `in
 ## Verification log
 
 - 2026-09-22: Authored from the runs above at implementation SHA `cd5dbae`. Every count and quoted line is command output. No live, paid, cloud, container or GPU operation was performed, and no network request was made from any test.
+- 2026-09-22: tests/d result appended (history above left as written). The retry loop got
+  the harness on attempt 5: `uv run --frozen pytest -q tests/d` at 2026-09-22T18:47:03Z,
+  exit 0, `76 passed in 60.19s (0:01:00)`, at `cd5dbae`'s tree. Limit 13 and row 10's
+  HarnessBusy are therefore superseded: every API suite (`--ignore=tests/d` 2205, `tests/d`
+  76, full M mutant list 212) passed at the implementation SHA, in separate invocations
+  rather than as one `make check`.
