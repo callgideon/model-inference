@@ -1,0 +1,331 @@
+# I0 — installer atomicity and fail-closed startup prerequisite
+
+| Field | Value |
+|---|---|
+| Task | **I0** (track I), brief `research/plan/11-wave3-revision-handoffs.md` §I0 and `.claude/handoff/wave3/I0.md` |
+| Status | **implemented** (fakes and local stubs only; nothing integrated, nothing deployed) |
+| Owner/session | Opus 5 implementation session, 2026-09-22 |
+| Base SHA | `ec6c5483f472ee84e10d48ca3c51ba474b4efed2` |
+| Implementation SHA | `1cbaf6f` (`b13ce06` item 1, `8931285` item 2, `1cbaf6f` item 3; this report is item 4's commit) |
+| Branch / worktree | `codex/i0-installer-failclosed` in `.claude/worktrees/codex-i0` |
+| Integrated SHA | none — coordinator owns integration into `claude/backend-impl` |
+| Oracle | `DEPLOY-FAILCLOSED` (`research/plan/04-verification.md`), row `M-FAILCLOSED`, hazard row `O-FAILOPEN` |
+
+## The deployed host is not fixed by this task
+
+Stated plainly because it is the single most misreadable thing in this report. Row
+`O-FAILOPEN` of `research/plan/evidence/i/I1-4e052f4.md` describes a **live** exposure on
+`i-0e8449a4ffca29bab`: an install run there that loses a parameter read still truncates
+`/etc/marlin2b-gateway.env` and restarts the gateway, and the gateway still allows every
+request when neither authentication mechanism is configured. This task changed the
+**script in the repository** and added tests for it. It ran no AWS call, no `systemctl`,
+no `docker` command of its own and nothing at all against the pilot host. The exposure
+closes when a separately scoped deployment, under the lock of `infra/README.md` §1, runs
+the new `install.sh` on that host — which is I2B's work, not this one's.
+
+## Requirement coverage
+
+Brief item -> test ID -> the exact invariant. Every failure case asserts the installed
+file's bytes **and** the recorded `systemctl` calls, never an exit code alone.
+
+### Item 1 — read and validate every required value before touching the env file
+
+| Test ID | Invariant |
+|---|---|
+| `tests/i/test_prereqs.py::test_deploy_failclosed__the_manifest_is_the_only_source_of_env_keys` | Every key has one declared shape and a role; `MODES` equals `infrx.contracts.limits.MODES`; `render` emits only declared keys, in manifest order |
+| `…::test_deploy_failclosed__a_failed_read_is_classified_before_it_is_tolerated` | `ParameterNotFound` is matched on the exact code; five denial/throttle/KMS codes classify as `denied`; anything unrecognised is `unknown`, never `not_found` |
+| `…::test_deploy_failclosed__a_refusal_says_which_rule_the_value_broke` | An opaque secret has no pattern, so empty, whitespace-only, newline-bearing and padded values are each refused with the rule they broke named |
+| `test_install.py::test_deploy_failclosed__a_denied_or_unexplained_read_installs_nothing` (5 cases) | `AccessDeniedException`, `ThrottlingException`, `ExpiredTokenException`, `KMSAccessDeniedException` and an **unclassified** code each leave the env file byte-identical with no `systemctl` call |
+| `…::test_deploy_failclosed__a_required_parameter_that_is_missing_is_a_failure` | `ParameterNotFound` on a key the mode requires is a refusal naming the parameter and the env key, not a warning |
+| `…::test_deploy_failclosed__an_optional_parameter_is_omitted_only_when_absent` | The `infra/README.md` §5 distinction: absent optional key -> omitted, install proceeds; **denied** on the same key -> refusal |
+| `…::test_deploy_failclosed__a_value_of_the_wrong_shape_installs_nothing` (10 cases) | Empty, whitespace, padded, plaintext-http, non-URL, wrong DSN scheme, truncated secret, whitespace-only secret, newline-bearing secret, padded secret |
+| `…::test_deploy_failclosed__a_value_cannot_write_a_second_variable` | A value containing a newline would append its own `KEY=VALUE` line, i.e. whoever can write an SSM parameter would choose `GATEWAY_API_KEY`; refused, and the value is not echoed |
+| `…::test_deploy_failclosed__a_withdrawn_price_key_is_refused` | No env file carries `PRICE_TABLE_VERSION`/`PRICE_SOURCE`: D1's `price_versions` is the only price authority (`infra/README.md` §5, withdrawn parameter) |
+| `…::test_deploy_failclosed__a_valid_install_replaces_the_file_and_restarts` (2 cases) | The installed file is 0600, owned by the configured user, contains only manifest keys, and the calls are exactly `daemon-reload` then one `restart` of both units — for a replacement and for a first install |
+| `…::test_deploy_failclosed__the_final_owner_is_set_before_the_rename` | `shutil.chown` is called once, on the **staged** path, so the installed file is never briefly owned by root or readable by anyone else |
+| `…::test_deploy_failclosed__no_secret_value_reaches_stdout_stderr_or_an_argument` | Marker audit: a marker secret appears in the 0600 env file and in **no** stdout, stderr or `argv` of `aws`, `systemctl` or the probe interpreter. The last assertion fails if the marker is absent from the file, so the audit cannot pass vacuously |
+
+### Item 2 — failure injection with local stubs
+
+| Test ID | Invariant |
+|---|---|
+| `test_install.py::test_deploy_failclosed__a_directory_it_cannot_write_installs_nothing` | The staged file shares the target's directory (so the rename is atomic); a directory the installer cannot write aborts at staging, nothing installed, nothing restarted |
+| `…::test_deploy_failclosed__a_write_that_fails_leaves_no_staged_file` | `ENOSPC` at `os.write`: the staged 0600 file holding half a secret is removed, the installed file is byte-identical, no restart |
+| `…::test_deploy_failclosed__a_crash_before_the_rename_changes_nothing` | The process is killed between staging and rename (`SIGKILL` from the stub probe interpreter, exit `-9`): installed file byte-identical, no restart, the staged leftover is 0600 and is removed by the next run |
+| `…::test_deploy_failclosed__a_stale_staged_file_is_never_left_in_place` | A staged file from a crashed run is removed rather than accumulating 0600 secrets in `/etc` |
+| `…::test_deploy_failclosed__the_probe_that_says_nothing_is_a_refusal` | A runtime interpreter answering something other than a verdict is not a passing check |
+| `…::test_deploy_failclosed__a_failed_daemon_reload_never_reaches_the_restart` | Units are not restarted against a unit file systemd has not reloaded |
+| `…::test_deploy_failclosed__a_failed_restart_is_reported_and_not_rolled_back` | A validated file stays installed; a unit that will not start is exit 3 and an alert, not an automatic rollback to an unvalidated file |
+| `…::test_deploy_failclosed__the_old_installer_published_an_open_gateway` | **The fix is provably a change.** The old five lines of `install.sh` at `ec6c548` (lines 12–26 and 35), run under the same denied stubs, truncate the env file to one with neither `GATEWAY_API_KEY` nor `SUPABASE_URL` — the configuration for which `authenticate()` returns no error at all — and restart the gateway. The new path leaves the file byte-identical and restarts nothing |
+
+Injection seams, all local: a fake `aws` answering from a JSON spec and recording its
+`argv`; a fake `systemctl` recording its verb and returning a configured exit code; stub
+runtime interpreters (one that kills its parent, one that prints non-JSON, one that
+records `argv` and then execs the real interpreter); a temporary directory for `/etc`;
+`os.write` patched to raise `ENOSPC`; a directory chmod to 0500. **No test hook exists in
+`preflight.py`** — the crash point is the probe subprocess, which is a production seam.
+
+### Item 3 — the legacy -> pilot transition and the preflight G2/I2B call
+
+`infra/README.md` §5.1 (new) specifies the manifest, the three mode steps, and the five
+conditions a pilot install must satisfy. The preflight is
+`preflight.py probe --mode <mode> --env-file <staged>`, which answers
+`{ok, python, mode, validated_mode, problems, warnings}` with settings/module/logger
+names and never a value.
+
+| Test ID | Invariant |
+|---|---|
+| `test_install.py::test_deploy_failclosed__an_unset_or_unknown_mode_installs_nothing` (4 cases) | `""`, `prod`, `Pilot`, `legacy`: no default mode, and **no parameter is read** for an unusable mode |
+| `…::test_deploy_failclosed__pilot_is_refused_while_the_runtime_is_not_composed` | With every pilot parameter present and valid, a pilot install is still refused because `infrx/gateway/app.py`'s `ROUTERS` does not contain the ingress (the G2 gate). Message names `ROUTERS` and `G2`, and no secret |
+| `…::test_deploy_failclosed__the_staged_bytes_are_what_the_runtime_validates` | `config.validate_runtime` is the probe, run against the exact staged bytes: a pilot file without `DATABASE_URL` is refused by the runtime's own rule |
+| `…::test_deploy_failclosed__pilot_never_writes_the_shared_legacy_key` | r1 R51: the legacy-key parameter is not read in pilot mode and is named as forbidden; a file that carries it anyway is refused by `validate_runtime` |
+| `test_prereqs.py::test_deploy_failclosed__the_mode_checked_is_the_mode_written` | The requested mode and the staged file's `INFRX_MODE` are compared, so a file cannot claim `pilot` while the pilot checks ran for another mode |
+| `test_prereqs.py::test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer` | **F2.2 item 14 stays open.** `validate_runtime(Settings())` still returns `"legacy"` — G2 inverts that and G's `unset_mode_refuses` mutant keeps guarding it — and no install run can produce an unset mode, because `INFRX_MODE` is required and `""` is not a valid mode |
+
+Rollback, per `infra/README.md` §8 restated in §5.1: after credit enforcement, a
+compatible runtime or maintenance 503. Neither the original unmetered gateway nor
+`INFRX_MODE=dev` **on the pilot host** is a rollback option — the second is the unmetered
+gateway under a different name, which is why `dev` also refuses to install the public
+Caddy site.
+
+### Item 4 — pinned prerequisites the installer checks
+
+| Test ID | Invariant |
+|---|---|
+| `test_prereqs.py::test_deploy_failclosed__the_runtime_interpreter_must_be_new_enough` | Python >= 3.12.4 in the **runtime** interpreter (M1: CPython 3.12.0–3.12.3 answer `is_private` from older special-purpose tables). A hard refusal in `pilot`, a warning in the explicitly permissive dev/test modes |
+| `…::test_deploy_failclosed__a_transport_logger_below_warning_refuses_the_install` | `httpx`/`httpcore` at or above WARNING, asserted in the probe's verdict as well as in the check: at INFO httpx writes the validated IP and the caller's signed query for every hop |
+| `…::test_deploy_failclosed__an_unset_transport_level_is_not_good_enough` | Stricter than M1 integration request 5's snippet on purpose: the two root transport names must carry an **explicit** level, because `NOTSET` inherits a root that a process may set to DEBUG |
+| `…::test_deploy_failclosed__a_child_transport_logger_cannot_reopen_the_leak` | A `dictConfig` naming `httpcore.http11` overrides what the module set at import |
+| `…::test_deploy_failclosed__an_unsupported_engine_flag_refuses_the_install` (2 cases) | No `--reasoning-parser`, no `continuous_usage_stats` in the script the vLLM unit starts |
+| `test_install.py::test_deploy_failclosed__an_engine_the_adapter_cannot_read_installs_nothing` | The same check reaching the install decision: the env file is not touched |
+| `test_prereqs.py::test_deploy_failclosed__the_engine_image_must_be_pinned_by_digest_in_pilot` | A floating tag is refused in pilot, accepted in dev |
+| `…::test_deploy_failclosed__a_missing_engine_script_is_not_a_pass` | An absent or unnamed script is an unchecked flag set, not an empty one |
+| `…::test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` | The **real** `models/marlin2b/serve.sh`: exactly one pilot problem, and it is the missing digest pin. This pins the pending gap as a test |
+
+## Environment
+
+| Item | Value |
+|---|---|
+| Classification | **local** developer host, no cloud, no GPU, no service containers |
+| OS | `Linux 7.0.0-1010-aws x86_64`, `Ubuntu 24.04.4 LTS` |
+| Python | `apps/infrx-api/.venv/bin/python` -> `Python 3.12.3`; system `python3` -> `Python 3.12.3`. **Below the 3.12.4 pin this task introduces**: see Limits |
+| Environment build | `make api-env` = `uv sync --frozen --all-extras`, `uv 0.11.8 (x86_64-unknown-linux-gnu)` |
+| Node / pnpm | `v22.23.1` / `9.15.9` (not exercised: no `apps/app` change) |
+| Docker | `Docker version 29.6.2, build dfc4efb` (not used by this task) |
+| bash | `GNU bash, version 5.2.21(1)-release` (the old-installer reproduction runs under it) |
+| Seed | none; no randomised input |
+
+## Commands
+
+Run from the worktree root unless noted. Environment variable **names** only.
+
+| # | Command | Exit | Result (tail of output) |
+|---|---|---|---|
+| 1 | `make api-env` | 0 | `uv sync --frozen --all-extras` completed; `+ uvicorn==0.53.0`, `+ valkey==6.1.1`, `+ zstandard==0.25.0` |
+| 2 | `uv run --frozen pytest -q tests/i` (in `apps/infrx-api`) | 0 | `77 passed in 39.98s` |
+| 3 | `uv run --frozen pytest -q --ignore=tests/d` (in `apps/infrx-api`) | 0 | `1595 passed, 2 warnings in 184.63s (0:03:04)` |
+| 4 | `uv run --frozen python tests/i/mutants.py` | 0 | `all killed` (45 mutants over 35 named cases) |
+| 5 | `INFRX_MUTANTS=all uv run --frozen pytest -q tests/i/test_mutants.py` | 0 | `51 passed in 71.82s (0:01:11)` |
+| 6 | `uv run --frozen pytest -q tests/test_gateway_auth.py tests/test_app_factory.py tests/test_inflight.py tests/test_media.py tests/i` (legacy-first) | 0 | `106 passed, 2 warnings in 33.63s` |
+| 7 | `uv run --frozen pytest -q tests/i tests/test_gateway_auth.py tests/test_app_factory.py tests/test_inflight.py tests/test_media.py` (track-first) | 0 | `106 passed, 2 warnings in 34.06s` |
+| 8 | `uv run --frozen pytest -q tests/i tests/m` | 0 | `201 passed in 43.10s` |
+| 9 | `uv run --frozen pytest -q tests/m tests/i` (reverse, for the process-global logger levels) | 0 | `201 passed in 45.01s` |
+| 10 | `make bench-test` | 0 | `40 passed in 3.91s` |
+| 11 | `INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/q/test_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/t/test_trace_mutants.py tests/g/test_mutants.py tests/i/test_mutants.py` | 0 | `1006 passed in 1002.85s (0:16:42)` — the `make api-mutants` list with `tests/d/test_migration_mutants.py` removed and `tests/i/test_mutants.py` added |
+
+**Skips:** none. No command in this report reported a skipped test.
+
+**`make check` was not run as written, and `make api-mutants` was substituted.** The
+coordinator's interim rule for this lane is `--ignore=tests/d` until the worktree is
+rebased onto `c23d804` (E2R's harness fix), and this worktree is on the recorded base
+`ec6c548`; the common brief forbids a rebase by an implementation session. `make check`
+and `make api-mutants` both name `tests/d` explicitly, so command 3 replaces
+`make api-test` and command 11 replaces `make api-mutants`. The console targets
+(`console-test`, `console-lint`, `console-typecheck`, `console-mutants`) were **not run**:
+this task changes no file under `apps/app`. `make integration` was **not run**: this task
+changes no file under `tests/integration`. Not run is recorded as not run.
+
+**One deviation, recorded in full.** `make api-mutants` was started once before the
+substitution was applied, and it reached `tests/d/test_migration_mutants.py` before it
+was stopped with `SIGTERM`. No container of this task's exists: `docker ps -a` after the
+stop listed only `infrx-review-s1-d1-postgres`, `infrx-q2-valkey` and
+`gideon-migration-order-test-caae059890`, none of which this task created — at base
+`ec6c548` the D harness names its container `infrx-d1-postgres`
+(`infrx/contracts/tasklocal.py`), so the `infrx-review-s1-d1-*` names belong to another
+checkout and were left untouched. No container was removed, stopped or inspected beyond
+`docker ps`/`docker inspect`. A later listing, after command 11 finished, showed `infrx-d1-postgres` — the name the D harness uses at this base. It appeared **after** this task's `tests/d` process had already been stopped and command 11 excludes `tests/d`, so it belongs to another checkout; it was also left untouched. No `infrx-i0-*` container was ever created.
+
+## Results
+
+* `tests/i`: **77 passed**, 0 failed, 0 skipped (35 cases; the count is higher because
+  four cases are parametrised — 5 denial codes, 10 bad values, 4 bad modes, 2 install
+  shapes).
+* Mutation: **45 mutants, all killed**, each by a named case. Four runner self-tests pin
+  the outcomes that must **not** count as a kill: a mutant naming no case and a missing
+  anchor are `misdeclared`, a syntax error is `broken_runner`, and a defect no named case
+  notices is `survived`. A kill requires pytest exit 1 with every failing id belonging to
+  the mutant's own cases, so an import error or a syntax error fails the run exactly as a
+  survivor does.
+* Three survivors and one unkillable claim were found and fixed rather than explained
+  away: the shape cases ran in `pilot` mode where the pending engine-digest refusal
+  masked them (moved to `dev`); the empty/padding/newline guards were shadowed by the
+  pattern shapes (a case on an **opaque** secret, which has no pattern, now isolates
+  each); and `collect`'s second required-key loop was unreachable, so it was **deleted**
+  instead of left as code no mutant could kill. One claim was dropped rather than faked:
+  `os.fsync` before the rename is implemented but no test asserts it, so no mutant claims
+  it (see Limits).
+* Affected conformance suites: the whole API suite minus `tests/d` passes (command 3),
+  including `tests/contracts`, `tests/g` (which owns `validate_runtime`'s cases) and
+  `tests/m` (which asserts the transport logger levels this task also reads). Both
+  pytest orderings pass, and `tests/i` before and after `tests/m` both pass — the
+  relevant risk, because logger levels are process-global and `tests/i` changes them
+  inside a restoring fixture.
+
+## Failure drill
+
+| Injection point | Durable state before | After | Retry behaviour | Cleanup |
+|---|---|---|---|---|
+| `aws ssm get-parameter` returns `AccessDeniedException` | previous env file, units running | **byte-identical**, no `systemctl` call, exit 2 | a rerun with the parameter readable installs normally | no staged file remains |
+| Required parameter `ParameterNotFound` | as above | as above, message names the parameter and env key | as above | none needed |
+| Value of the wrong shape / newline-bearing | as above | as above, no value in the message | as above | none needed |
+| Read-only target directory | as above | as above, `OSError` propagates | as above | nothing was created |
+| `os.write` -> `ENOSPC` | as above | as above | as above | staged file unlinked |
+| `SIGKILL` between staging and rename | as above | **byte-identical**, no restart | the next run removes the leftover and installs | one 0600 staged file, removed by the next run |
+| `systemctl daemon-reload` exits 1 | as above | **new validated file installed**, no `restart` attempted, exit 3 | operator fixes systemd and reruns | none |
+| `systemctl restart` exits 1 | as above | new validated file installed, exit 3, the failing unit named | operator inspects the unit; §8 governs rollback | none |
+| Unknown/unset mode | as above | byte-identical, **and no parameter read at all** | operator sets a real mode | none |
+
+No duplicate side effect is possible: the only mutation is one `os.replace`, and every
+path that reaches it has passed every check.
+
+## Artifacts
+
+No raw log is committed. Every command and its output tail is transcribed above. No
+credential, parameter value, customer content or signed URL appears in this report, in
+the tests or in the source; the tests' marker secret is a literal
+(`MARKER-SECRET-do-not-log`) chosen so the audit assertion can be checked, and it is not
+a real value.
+
+## Changes
+
+Owned paths only.
+
+| Path | Change |
+|---|---|
+| `apps/infrx-api/deploy/preflight.py` | **new** (603 lines). The manifest, shape validation, error classification, staging/commit, the runtime probe, engine checks and the CLI |
+| `apps/infrx-api/deploy/install.sh` | rewritten env/restart half: `INFRX_MODE` required with no default, units enabled but not started, `preflight.py apply` owns the env file and the restart, the public Caddy site installs only in pilot mode |
+| `apps/infrx-api/deploy/marlin2b-gateway.service` | removed the duplicate `Environment=USAGE_LOG`, which silently overrode the env file; the validated file is now the only configuration authority |
+| `apps/infrx-api/tests/i/` | **new**: `support.py`, `test_install.py`, `test_prereqs.py`, `mutants.py`, `test_mutants.py` |
+| `infra/README.md` | **new** §5.1 and an appended verification-log entry (history not rewritten) |
+| `research/plan/evidence/i/I0-1cbaf6f.md` | this report |
+
+No contract change. No SQL, no migration. No composition root, Makefile, lockfile,
+package manifest, `apps/app` or `tests/integration` edit.
+
+### Migration / deploy / rollback implications
+
+* No database migration. The only durable artefact is `/etc/marlin2b-gateway.env` on a
+  host, and it is replaced atomically or not at all.
+* Deploying this changes the **operator interface**: `install.sh` now requires
+  `INFRX_MODE` and will refuse to run without it. A pilot install is currently refused by
+  three independent checks (see Limits), which is the intended fail-closed state.
+* Rolling back this change means reverting the commits; the previously installed env file
+  is untouched by a revert. Reverting reinstates `O-FAILOPEN`, so it is not a safe
+  rollback once credits are enforced — `infra/README.md` §8 applies.
+
+## Limits
+
+1. **The deployed pilot host is unchanged.** Row `O-FAILOPEN` still describes it. Owner:
+   I2B, under the deployment lock.
+2. **A pilot install cannot currently succeed anywhere**, by design, for three reasons:
+   the pilot routers are not composed (owner **G2**); the engine image is not
+   digest-pinned (owner **W3**; no P-input covers the digest itself — `P-04` carries the
+   allocated target that would receive it); and this host's interpreter is 3.12.3, below
+   the 3.12.4 pin (owner **I2B**, by pinning the runtime image digest). The first two are
+   asserted as refusals by named tests; the third is asserted by a case that moves the
+   pin rather than by faking an interpreter.
+3. **`DATABASE_URL`'s parameter `/model-inference/pg_journal_url` does not exist.** It is
+   PROPOSED in `infra/README.md` §5 and created by I2B. Until it exists, a pilot install
+   refuses with `not_found` — correct behaviour, untested against real SSM. Related:
+   `P-04`.
+4. **No real AWS, systemd or SSM behaviour is verified.** The classification table is
+   built from the error codes named in `infra/README.md` §5 and the AWS CLI's message
+   form, not from an observed denial. An unrecognised real-world code classifies as
+   `unknown`, which refuses — so an unseen code fails closed rather than silently. First
+   real evidence: I2B's install run in `staging` (`P-04`).
+5. **Durability across power loss is not asserted.** `os.fsync` runs before the rename,
+   but no test proves it, so no mutant claims it; a mutant that removed it would survive
+   and was therefore not committed. Owner: I3B's restore drill.
+6. **`chown` is exercised only as the current user.** A test that is not root can only
+   chown to itself, so the invariant is asserted through the recorded call (path is the
+   staged file, user is the configured owner) rather than through a changed uid. Real
+   `ubuntu` ownership is first observed in I2B's install run.
+7. **The `ENOSPC` case is injected at `os.write`,** not by filling a filesystem. The
+   handling path is identical (`OSError` from the write), but a genuinely full `/etc` is
+   unverified.
+8. **`tests/d` was not run** (coordinator interim rule; this worktree is not rebased onto
+   `c23d804`, and an implementation session may not rebase). `make check` and
+   `make api-mutants` were therefore substituted as described under Commands.
+9. **The unit files are installed before the env file is validated.** They are idempotent
+   and inert until a restart, and the restart is inside `preflight.py`, so the two
+   operations a failed run must not perform are both guarded; this is stated in
+   `install.sh` and in §5.1 rather than hidden.
+10. **`deploy/preflight.py` is loaded by path in the tests** (`importlib`), because
+    `deploy/` is a directory of scripts with no `__init__.py`. That is deliberate: it
+    behaves identically under pytest, under the mutation runner's copied tree and when
+    the file is run directly.
+
+## Handback
+
+**Next unblocked task:** the B0 lane is unchanged — F2R remains the gate for F2P. I0 is
+complete as a prerequisite: `research/plan/03-execution-protocol.md` lists it as
+mandatory for the G2 composition, and G2 can now call
+`preflight.py probe` instead of inventing a second startup check.
+
+**Pending coordinator wiring / integration requests** (no shared file was edited):
+
+1. **`Makefile`** — add `tests/i/test_mutants.py` to the `api-mutants` target's list, so
+   track I's 45 mutants run with the others:
+   `… tests/g/test_mutants.py tests/i/test_mutants.py`. (`api-test` already discovers
+   `tests/i` through `testpaths = ["tests"]`; no change needed there.)
+2. **`apps/infrx-api/pyproject.toml`** — `requires-python = "==3.12.*"` permits 3.12.0–3.
+   The runtime pin this task enforces at install time is **>= 3.12.4**; the manifest
+   should say `>=3.12.4,<3.13` so a fresh environment cannot be built below the pin.
+   Coordinator-owned (package manifest); not edited here. This worktree's interpreter is
+   3.12.3, so that change would require a newer interpreter to be available first.
+3. **G2 / `infrx/gateway/app.py`** — when `ROUTERS` gains the pilot ingress, the
+   installer's composition gate starts passing on its own; nothing in `preflight.py`
+   needs editing. G2 should also call `infrx.media.fetch.silence_transport_logs()` **after**
+   its logging configuration (M1 integration request 5 item 1): the installer asserts the
+   levels but cannot configure a process it does not run. G's `unset_mode_refuses` mutant
+   and `validate_runtime`'s `unset -> legacy` branch stay as they are until that change;
+   `tests/i` pins that expectation, so G2 must update
+   `test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer` and
+   `test_deploy_failclosed__pilot_is_refused_while_the_runtime_is_not_composed` in the
+   same commit as the inversion.
+4. **W3** — pin the engine image by digest in `models/marlin2b/serve.sh`;
+   `test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands` asserts
+   the current floating tag as exactly one pilot problem and must be updated in the same
+   commit.
+5. **I2B** — create `/model-inference/pg_journal_url`, pin the runtime image (>= 3.12.4)
+   by digest, and move `USAGE_LOG` to persistent storage (row `M-SCRATCH`); reuse
+   `preflight.py apply` as the atomic configuration step rather than writing a second one.
+
+**Unresolved findings:** none of this task's own. The five items above are other owners'.
+
+## F2.2 carryover items touched
+
+| Item | Commit | Killing test |
+|---|---|---|
+| 7 (config limits, "invalid config fails before mounting pilot ingress" — the I0 half: fail-closed deployment settings) | `b13ce06`, `8931285` | `test_deploy_failclosed__the_staged_bytes_are_what_the_runtime_validates` (mutant `runtime_not_validated`) and `test_deploy_failclosed__a_value_of_the_wrong_shape_installs_nothing` (mutant `shape_unchecked`) |
+| 14 (unset-mode refusal inversion — **kept open**, as the audit requires) | `8931285` | `test_deploy_failclosed__an_unset_mode_is_unreachable_from_the_installer` (mutant `unset_mode_refuses`, the same defect G's list carries) |
+
+## Verification log
+
+- 2026-09-22: Authored from the commands transcribed above, all of them local. No AWS
+  call, no `systemctl`, no `docker` create/stop/remove, nothing run against the pilot
+  host, no paid provider. The deployed host's `O-FAILOPEN` exposure is **not** fixed by
+  this task. Mutation survivors found during the session were fixed by strengthening the
+  cases (opaque-secret guards, dev-mode shape cases) and by deleting one unreachable
+  branch; one unasserted claim (`fsync` before rename) is recorded as a limit instead of
+  being given a mutant it could not honestly kill.
