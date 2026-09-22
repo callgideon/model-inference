@@ -176,6 +176,8 @@ def test_deploy_failclosed__only_a_committed_checkout_is_deployed(tmp_path, monk
     done = host.run("install.sh", INFRX_MODE="dev", RELEASE="d" * 40)
     assert done.returncode == 2 and "RELEASE" in done.stderr
     assert host.of("docker") == [] and host.of("systemctl") == [] and backups(host) == []
+    # root deploys ubuntu's checkout: every git call names it a safe directory
+    assert host.of("git") and all(e.startswith("git -c safe.directory=") for e in host.of("git"))
 
 
 # --- install.sh: success -------------------------------------------------------------

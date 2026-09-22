@@ -35,8 +35,11 @@ PYTHON=${PYTHON:-python3}           # the installer's interpreter; preflight's a
 ENV_OWNER=${ENV_OWNER:-ubuntu}
 
 # 1. exactly a commit
-sha=$(git -C "$repo" rev-parse HEAD)
-[ -z "$(git -C "$repo" status --porcelain)" ] || die "the checkout has uncommitted changes; deploy a commit" 2
+# root runs this against ubuntu's checkout: name it safe for this one command, or git
+# refuses ("dubious ownership") and the deploy stops here.
+g() { git -c safe.directory="$repo" -C "$repo" "$@"; }
+sha=$(g rev-parse HEAD)
+[ -z "$(g status --porcelain)" ] || die "the checkout has uncommitted changes; deploy a commit" 2
 [ -z "${RELEASE:-}" ] || [ "$sha" = "$RELEASE" ] || die "HEAD is $sha, not RELEASE=$RELEASE" 2
 
 # 2. the runtime image

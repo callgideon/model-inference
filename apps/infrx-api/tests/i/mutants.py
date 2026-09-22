@@ -470,7 +470,11 @@ INSTALL, DRAIN, ROLLBACK, LIB = (U + "install.sh", U + "drain.sh", U + "rollback
                                  U + "lib.sh")
 MUTANTS += (
     _m("dirty_checkout_deployed", "the image is built from exactly a commit",
-       INSTALL, '[ -z "$(git -C "$repo" status --porcelain)" ] || die', ": || die",
+       INSTALL, '[ -z "$(g status --porcelain)" ] || die', ": || die",
+       "test_deploy_failclosed__only_a_committed_checkout_is_deployed"),
+    _m("git_refuses_root", "root can read ubuntu's checkout (safe.directory)",
+       INSTALL, 'g() { git -c safe.directory="$repo" -C "$repo" "$@"; }',
+       'g() { git -C "$repo" "$@"; }',
        "test_deploy_failclosed__only_a_committed_checkout_is_deployed"),
     _m("release_unchecked", "HEAD must be the RELEASE the runbook names",
        INSTALL, '[ -z "${RELEASE:-}" ] || [ "$sha" = "$RELEASE" ] || die', ": || die",
