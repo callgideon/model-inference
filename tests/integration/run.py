@@ -579,9 +579,9 @@ def _run(report: Report, args, want_services: bool) -> int:
         interrupted = stop
         report.add("interrupted", FAIL, f"signal {stop.signum}: tearing the stack down")
     finally:
+        if have_services and not args.keep and args.layer == "3":
+            backend_teardown(report)          # E3B: before E2's network can go
         if have_services and not args.keep:
-            if args.layer == "3":
-                backend_teardown(report)
             teardown(report)
         elif args.keep:
             report.add("teardown", SKIP, "--keep: the stack is still up")
