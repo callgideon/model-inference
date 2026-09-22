@@ -1424,6 +1424,10 @@ MUTANTS: tuple[Mutant, ...] = (
            old="    if _configured(secret) and len(secret) < MIN_CONSOLE_CURSOR_SECRET_CHARS:",
            new="    if _configured(secret) and len(secret) < 1:",
            cases=("test_a_short_cursor_secret_is_refused_without_echoing_it",)),
+    # --- F2P wire-in (item 7): the v2 composition ----------------------------------
+    _m("contracts_v2_not_a_submodule", "contracts.v2 resolves by attribute access (item 1)",
+       "contracts/__init__.py", '"tasklocal", "v2", "wire")', '"tasklocal", "wire")',
+       "test_contracts_v2_resolves_by_attribute_access_like_every_submodule"),
     # --- F2R: the two money-context mutants the audit found surviving ----------------
     _m("money_context_default_precision", "money arithmetic runs at 40 digits",
        MONEY, "        prec=40, rounding=decimal.ROUND_HALF_EVEN,",

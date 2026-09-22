@@ -336,6 +336,16 @@ def test_contracts_import_pulls_in_no_track_dependency():
     assert walked >= 20, f"only {walked} modules were walked"
 
 
+def test_contracts_v2_resolves_by_attribute_access_like_every_submodule():
+    """F2P wire-in item 1: `infrx.contracts.v2` is a listed submodule, reached lazily by
+    attribute access and named by `dir()`, so a consumer never needs an import path that
+    differs from v1's."""
+    import infrx.contracts as contracts
+    assert "v2" in dir(contracts)
+    assert contracts.v2.SURFACE_VERSION == "contracts-v2.0"
+    assert contracts.v2.records.SCHEMA_VERSION == 2
+
+
 def test_the_extras_are_installed_so_the_check_is_meaningful():
     """Otherwise the test above would pass by accident in a core-only environment.
 
