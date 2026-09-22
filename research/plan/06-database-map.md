@@ -28,7 +28,7 @@ This is the product-v2 target. Existing D1 migrations 0003–0005 implement USD/
 | endpoints / deployment_revisions / catalog_listings | Provider-owned dev/prod endpoint, immutable serving/config revision, visibility and publication state, active listing/rate link | Private dev excluded from public catalog; atomic alias change affects future admission only |
 | data_access_grants | Grantor/source consumer, recipient provider, resource/model scope, categories, purposes, expiry/revocation, version and audit | Current authorization checked before read/export/egress; copying data does not strip source restrictions |
 
-Dataset/evaluation/training lineage relations are later Lab milestones. Their resource contracts are in the Lab spec; do not create speculative training tables as an App release requirement. D authors initial provider/registry additions needed by A3/L2/L3 in coordinated migrations.
+Dataset/evaluation/training lineage relations are planned in F3/D7/D8 below and rollout in D9. They are follow-on Lab milestones; do not create those tables as an App release requirement. D authors initial provider/registry additions needed by A3/L2/L3 in coordinated migrations.
 
 ## Mutation boundaries
 
@@ -47,3 +47,16 @@ Store bounded canonical refs rather than large trace/video payloads in PG. Keep 
 - 2026-09-20: Proposed relations, keys and role boundaries mapped to D1–D6. No migrations generated or applied by the documentation task.
 
 - 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.
+
+## D7–D9 follow-on Lab persistence map
+
+These are planned follow-on migrations under the same D ownership, not changes required for the App pilot. [F3 and detailed briefs](13-lab-improvement-handoffs.md) provide the contract and task acceptance. Keep original migration history unchanged; reserve future sequence numbers at integration. D8 and D9 can design concurrently but cannot publish competing migration numbers or skip merged-tree upgrade checks.
+
+| Owner | Relations / keys | Required database proof |
+|---|---|---|
+| D7 | sources/source-purpose links; dataset_versions/manifests/samples/membership/split assignments; harness revisions | Provider-scoped keys, immutable published manifests, unique version/content references, grouped split constraints and current source authorization |
+| D7 | evaluation_runs/cases/attempts/results; checkpoint_receipts/subscriptions; durable outbox | Unique run/case/evaluator result, lease-generation checks, exactly-once logical acceptance under replay, explicit partial/cancel/restricted state, receipt/subscription dedup |
+| D8 | annotations/reviews; annotation_batches/items; external_pipeline_runs/intents/receipts/checkpoints; shared budget links | Append-only provenance; protected reviewer fields; one budget reservation per logical operation including unknown submissions; current purpose enforcement |
+| D9 | release_policy_versions/decisions; experiment assignments/cohort references | Protected public policy activation, compare-and-swap transitions, stable declared assignment, job serving/rate pins never rewritten by rollback |
+
+Never store large video/trace/training bundles inline or copy source rights into an unrevocable boolean. Dataset content may become inaccessible while bounded audit identity remains; retention for evidence and actual payload deletion are separate. Cross-provider joins and signed exports must be tested through both actual RLS roles and service authorization. Use a representative large dataset/query fixture to inspect plans and prove scoped pagination rather than only singleton-row tests.

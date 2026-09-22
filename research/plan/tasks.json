@@ -1,7 +1,7 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "baseline_commit": "1db98e9",
-  "status": "wave-2 baseline imported and audited; local corrections and two-platform plan prepared; wave-3 feature implementation not started",
+  "status": "complete two-platform implementation package; wave-2 baseline preserved; product-v2 revisions and Lab improvement/rollout additions planned, not implemented",
   "dependency_semantics": {
     "start_dependencies": "Code-ready dependencies: committed and reviewed interfaces/fixtures must exist before coding; implemented baseline modules may supply code without live integration. New shared revision gates F2R/F2P/D1R require their acceptance evidence before consumers start. A dirty coordinator tree is never a worktree base.",
     "integration_dependencies": "Must have real adapter evidence before dependent task is integrated. Code-ready fake implementations satisfy only start dependencies. Baseline integrated status never certifies a later product revision.",
@@ -28,7 +28,8 @@
         "apps/app/supabase/migrations/ (all future migrations)",
         "apps/infrx-api/infrx/state/",
         "apps/infrx-api/tests/d/",
-        "All new A/L-related migrations remain D-owned; user CREDIT wallets separate from legacy USD"
+        "All new A/L-related migrations remain D-owned; user CREDIT wallets separate from legacy USD",
+        "D7/D8/D9 schema/repositories; one serial migration lane, all numbers reserved at integration"
       ]
     },
     {
@@ -100,7 +101,8 @@
         "apps/app/app/(console)/api-keys/actions.ts",
         "apps/app/app/(console)/admin/actions.ts",
         "apps/app/tests/c/",
-        "Consumer actions stay in apps/app; provider actions in apps/lab; shared server package extraction coordinated; see amendment"
+        "Consumer actions stay in apps/app; provider actions in apps/lab; shared server package extraction coordinated; see amendment",
+        "Shared authorization/query clients and original actions; N/B/P/R own their explicit feature services under published contracts, not duplicate wallet/registry/auth logic"
       ]
     },
     {
@@ -173,9 +175,80 @@
       "title": "Provider Lab foundation and control workflows",
       "handoff": "09-amendment-workstreams.md",
       "ownership": [
-        "apps/lab/ excluding C actions and V trace views",
+        "apps/lab/ shell/access/models/deployments only; excludes C/V and explicit N/B/P/R feature roots",
         "provider authorization/registry services assigned after F2",
         "schema changes D-owned; runtime changes G/W-owned"
+      ]
+    },
+    {
+      "id": "N",
+      "title": "Dataset lifecycle",
+      "handoff": "13-lab-improvement-handoffs.md",
+      "ownership": [
+        "apps/infrx-api/infrx/datasets/",
+        "apps/infrx-api/tests/n/",
+        "apps/lab/app/(provider)/datasets/",
+        "apps/lab/lib/services/datasets/",
+        "apps/lab/tests/n/"
+      ]
+    },
+    {
+      "id": "H",
+      "title": "Prompt and safe replay harnesses",
+      "handoff": "13-lab-improvement-handoffs.md",
+      "ownership": [
+        "apps/infrx-api/infrx/harnesses/",
+        "apps/infrx-api/tests/h/"
+      ]
+    },
+    {
+      "id": "B",
+      "title": "Offline evaluation and checkpoint benchmarks",
+      "handoff": "13-lab-improvement-handoffs.md",
+      "ownership": [
+        "apps/infrx-api/infrx/evaluation/",
+        "apps/infrx-api/tests/b/",
+        "apps/lab/app/(provider)/evaluations/",
+        "apps/lab/app/(provider)/experiments/",
+        "apps/lab/lib/services/evaluation/",
+        "apps/lab/tests/b/"
+      ]
+    },
+    {
+      "id": "P",
+      "title": "Annotation and external training pipelines",
+      "handoff": "13-lab-improvement-handoffs.md",
+      "ownership": [
+        "apps/infrx-api/infrx/pipelines/",
+        "apps/infrx-api/tests/p/",
+        "apps/lab/app/(provider)/annotations/",
+        "apps/lab/app/(provider)/training/",
+        "apps/lab/lib/services/pipelines/",
+        "apps/lab/tests/p/"
+      ]
+    },
+    {
+      "id": "R",
+      "title": "Release experiments and optimization evidence",
+      "handoff": "13-lab-improvement-handoffs.md",
+      "ownership": [
+        "apps/infrx-api/infrx/rollouts/",
+        "apps/infrx-api/tests/r/",
+        "apps/lab/app/(provider)/releases/",
+        "apps/lab/app/(provider)/optimizations/",
+        "apps/lab/lib/services/rollouts/",
+        "apps/lab/tests/r/"
+      ]
+    },
+    {
+      "id": "X",
+      "title": "Gated modality and backend adapters",
+      "handoff": "14-expansion-gates.md",
+      "ownership": [
+        "research/workloads/",
+        "apps/infrx-api/infrx/sessions/",
+        "apps/infrx-api/tests/x/",
+        "Backend implementation requires explicit W-owner path transfer"
       ]
     }
   ],
@@ -197,7 +270,8 @@
       "amendment": "Preserve completed extraction and existing security fixes.",
       "baseline_status": "integrated",
       "amendment_status": "compatible-baseline",
-      "revision_tasks": []
+      "revision_tasks": [],
+      "execution_class": "core"
     },
     {
       "id": "F2",
@@ -223,7 +297,8 @@
       "revision_tasks": [
         "F2R",
         "F2P"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "D1",
@@ -251,7 +326,8 @@
       "amendment_status": "revision-required",
       "revision_tasks": [
         "D1R"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "D2",
@@ -273,7 +349,8 @@
       "milestone": "APP-M1",
       "amendment": "Resolve wallet from trusted consumer context; pin deployment and CREDIT rates in the admission transaction.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "D3",
@@ -295,7 +372,8 @@
       "milestone": "APP-M1",
       "amendment": "Preserve fenced execution, recovery and cancellation.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "D4",
@@ -317,7 +395,8 @@
       "milestone": "APP-M1",
       "amendment": "Preserve committed journal and replay guarantees.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "D5",
@@ -342,7 +421,8 @@
       "milestone": "APP-M1",
       "amendment": "Settle CREDIT once; preserve legacy USD regime; grant operations support A1.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "D6",
@@ -398,7 +478,8 @@
       "revision_tasks": [
         "F2R",
         "M2"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "M2",
@@ -423,7 +504,8 @@
       "milestone": "APP-M1",
       "amendment": "Keep versioned preprocessing and tenant-separated caches.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "M3",
@@ -447,7 +529,8 @@
       "milestone": "APP-M1",
       "amendment": "Keep owned upload lifecycle.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "Q1",
@@ -474,7 +557,8 @@
       "revision_tasks": [
         "F2R",
         "Q2"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "Q2",
@@ -496,7 +580,8 @@
       "milestone": "APP-M1",
       "amendment": "Keep rebuildable Valkey index.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "Q3",
@@ -521,7 +606,8 @@
       "milestone": "APP-M1",
       "amendment": "Keep outbox and index recovery.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "W1",
@@ -548,7 +634,8 @@
       "revision_tasks": [
         "F2R",
         "W2"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "W2",
@@ -575,7 +662,8 @@
       "milestone": "APP-M1",
       "amendment": "Keep lease-aware execution and completion.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "W3",
@@ -585,7 +673,8 @@
         "F2P"
       ],
       "integration_dependencies": [
-        "E1"
+        "E1",
+        "S2M"
       ],
       "test_ids": [
         "OPS-RECOVER",
@@ -599,7 +688,8 @@
       "milestone": "APP-M1",
       "amendment": "Keep measured capacity, pin and drain work.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "G1",
@@ -629,7 +719,8 @@
       "revision_tasks": [
         "F2R",
         "G1R"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "G2",
@@ -657,7 +748,8 @@
       "milestone": "APP-M1",
       "amendment": "Keep sync/SSE behavior; consume revised snapshots.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "G3",
@@ -683,7 +775,8 @@
       "milestone": "APP-M1",
       "amendment": "Keep explicit async, cancellation and owned replay.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "G4",
@@ -741,7 +834,9 @@
       "milestone": "APP-M3",
       "amendment": "Useful optional callbacks; no consumer M2 dependency.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "conditional",
+      "activation": "Enable optional callback delivery only when explicitly selected; pass API-CALLBACK with registered signed destinations."
     },
     {
       "id": "T1",
@@ -768,7 +863,8 @@
       "revision_tasks": [
         "F2R",
         "T2I"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "T2",
@@ -824,7 +920,8 @@
       "milestone": "LAB-M1",
       "amendment": "Keep retention/deletion; apply provider access grants at read/export boundary.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "J1",
@@ -851,7 +948,8 @@
       "revision_tasks": [
         "F2R",
         "J2"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "J2",
@@ -877,7 +975,8 @@
       "milestone": "LAB-M1",
       "amendment": "Use provider-purpose grants and explicit Lab USD budgets; never consume consumer credits implicitly.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "J3",
@@ -902,7 +1001,8 @@
       "milestone": "LAB-M1",
       "amendment": "Calibration uses Lab actions/review permissions.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "C1",
@@ -934,7 +1034,8 @@
         "F2R",
         "F2P",
         "C0"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "C2",
@@ -960,7 +1061,8 @@
       "milestone": "LAB-M1",
       "amendment": "Real consumer PostgREST QueryPort is C0, not C2. C2 adds only authorized Lab/content adapters.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "C3",
@@ -1022,7 +1124,8 @@
       "amendment_status": "revision-required",
       "revision_tasks": [
         "U1R"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "U2",
@@ -1046,7 +1149,8 @@
       "milestone": "APP-M1",
       "amendment": "Consumer keys/privacy remain in App; no Lab settings.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "U3",
@@ -1071,7 +1175,8 @@
       "milestone": "APP-M1",
       "amendment": "Protected platform operator controls remain temporarily in App; provider role never mints credits.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "V1",
@@ -1099,7 +1204,8 @@
       "amendment_status": "revision-required",
       "revision_tasks": [
         "V1M"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "V2",
@@ -1124,7 +1230,8 @@
       "milestone": "LAB-M1",
       "amendment": "Provider content/review UI goes to Lab; reusable own-request components can later serve App.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "V3",
@@ -1148,7 +1255,8 @@
       "milestone": "LAB-M1",
       "amendment": "Judge/calibration presentation goes to Lab.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "I1",
@@ -1169,7 +1277,8 @@
       "amendment_status": "revision-required",
       "revision_tasks": [
         "I0"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "I2",
@@ -1233,7 +1342,8 @@
       "milestone": "APP-M2",
       "amendment": "Consumer recovery gate depends on E3A; Lab recovery is separate and conditional services tested if enabled.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "I4",
@@ -1256,7 +1366,9 @@
       "milestone": "APP-M3",
       "amendment": "Fleet remains separately gated after pilot.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "conditional",
+      "activation": "Measured E4 pilot envelope demonstrates fleet need, with capacity/topology design and allocated staging resources; no automatic purchases."
     },
     {
       "id": "E1",
@@ -1276,7 +1388,8 @@
       "amendment": "Reuse representative corpus/benchmark evidence; no repeated-clip shortcut.",
       "baseline_status": "integrated",
       "amendment_status": "compatible-baseline",
-      "revision_tasks": []
+      "revision_tasks": [],
+      "execution_class": "core"
     },
     {
       "id": "E2",
@@ -1303,7 +1416,8 @@
       "amendment_status": "revision-required",
       "revision_tasks": [
         "E2R"
-      ]
+      ],
+      "execution_class": "core"
     },
     {
       "id": "E3",
@@ -1371,7 +1485,8 @@
         "F2P"
       ],
       "integration_dependencies": [
-        "I3"
+        "I3",
+        "S2M"
       ],
       "test_ids": [
         "PERF-PILOT",
@@ -1388,7 +1503,8 @@
       "milestone": "APP-M2",
       "amendment": "Consumer pilot includes verified signup/grant/rates and usage; judge and provider UI are not prerequisites.",
       "baseline_status": "planned",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "S1",
@@ -1405,7 +1521,8 @@
       "status": "implemented",
       "disposition": "new",
       "amendment_status": "local-audit-complete-awaiting-independent-review",
-      "evidence": "10-wave2-platform-audit.md"
+      "evidence": "10-wave2-platform-audit.md",
+      "execution_class": "core"
     },
     {
       "id": "A1",
@@ -1427,7 +1544,8 @@
       "handoff": "09-amendment-workstreams.md",
       "status": "planned",
       "disposition": "new",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "A2",
@@ -1449,7 +1567,8 @@
       "handoff": "09-amendment-workstreams.md",
       "status": "planned",
       "disposition": "new",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "A3",
@@ -1463,7 +1582,8 @@
       "integration_dependencies": [
         "D1R",
         "G1R",
-        "C0"
+        "C0",
+        "S2M"
       ],
       "test_ids": [
         "CREDIT-RATE",
@@ -1473,7 +1593,8 @@
       "handoff": "09-amendment-workstreams.md",
       "status": "planned",
       "disposition": "new",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "D6F",
@@ -1494,7 +1615,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "D6",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "D6J",
@@ -1517,7 +1639,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "D6",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "G4U",
@@ -1539,7 +1662,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "G4",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "G4F",
@@ -1560,7 +1684,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "G4",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "G4T",
@@ -1584,7 +1709,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "G4",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "T2I",
@@ -1607,7 +1733,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "T2",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "T2F",
@@ -1630,7 +1757,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "T2",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "C3A",
@@ -1654,7 +1782,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "C3",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "C3F",
@@ -1678,7 +1807,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "C3",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "C3L",
@@ -1703,7 +1833,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "C3",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "L1",
@@ -1724,7 +1855,8 @@
       "handoff": "09-amendment-workstreams.md",
       "status": "planned",
       "disposition": "new",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "L2",
@@ -1744,7 +1876,8 @@
       "handoff": "09-amendment-workstreams.md",
       "status": "planned",
       "disposition": "new",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "L3",
@@ -1768,7 +1901,8 @@
       "handoff": "09-amendment-workstreams.md",
       "status": "planned",
       "disposition": "new",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "L4",
@@ -1791,7 +1925,8 @@
       "handoff": "09-amendment-workstreams.md",
       "status": "planned",
       "disposition": "new",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "I2A",
@@ -1827,7 +1962,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "I2",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "I2L",
@@ -1854,7 +1990,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "I2",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "E3A",
@@ -1908,7 +2045,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "E3",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "E3L",
@@ -1937,7 +2075,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "E3",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "E5L",
@@ -1975,7 +2114,8 @@
       "status": "planned",
       "disposition": "split-successor",
       "supersedes_part_of": "E3",
-      "amendment_status": "awaits-product-v2-contract"
+      "amendment_status": "awaits-product-v2-contract",
+      "execution_class": "core"
     },
     {
       "id": "F2R",
@@ -1995,7 +2135,8 @@
       "product": "shared",
       "milestone": "APP-M0",
       "disposition": "new-revision",
-      "amendment": "Account for all 16 old F2.2 items; audit fixes are partial, not whole-task completion."
+      "amendment": "Account for all 16 old F2.2 items; audit fixes are partial, not whole-task completion.",
+      "execution_class": "core"
     },
     {
       "id": "F2P",
@@ -2015,7 +2156,8 @@
       "product": "shared",
       "milestone": "APP-M0",
       "disposition": "new-revision",
-      "amendment": "Update both languages/fakes/fixtures atomically; retain explicit v1 USD projections."
+      "amendment": "Update both languages/fakes/fixtures atomically; retain explicit v1 USD projections.",
+      "execution_class": "core"
     },
     {
       "id": "D1R",
@@ -2037,7 +2179,8 @@
       "product": "shared",
       "milestone": "APP-M0",
       "disposition": "new-revision",
-      "amendment": "New additive migrations, exact text RPCs, legacy/new regimes, provider/registry minimum."
+      "amendment": "New additive migrations, exact text RPCs, legacy/new regimes, provider/registry minimum.",
+      "execution_class": "core"
     },
     {
       "id": "C0",
@@ -2059,7 +2202,8 @@
       "product": "app",
       "milestone": "APP-M1",
       "disposition": "new-revision",
-      "amendment": "Supabase/PostgREST adapter, legacy projection, real user context; independent of Lab traces and judge."
+      "amendment": "Supabase/PostgREST adapter, legacy projection, real user context; independent of Lab traces and judge.",
+      "execution_class": "core"
     },
     {
       "id": "I0",
@@ -2078,7 +2222,8 @@
       "product": "shared",
       "milestone": "APP-M0",
       "disposition": "new-revision",
-      "amendment": "Local script/runtime tests only; no production install and no early ingress cutover."
+      "amendment": "Local script/runtime tests only; no production install and no early ingress cutover.",
+      "execution_class": "core"
     },
     {
       "id": "E2R",
@@ -2097,7 +2242,8 @@
       "product": "shared",
       "milestone": "APP-M0",
       "disposition": "new-revision",
-      "amendment": "Reproduce real PG evidence with safe test resource ownership; no borrowed containers."
+      "amendment": "Reproduce real PG evidence with safe test resource ownership; no borrowed containers.",
+      "execution_class": "core"
     },
     {
       "id": "G1R",
@@ -2120,7 +2266,8 @@
       "product": "shared",
       "milestone": "APP-M0",
       "disposition": "new-revision",
-      "amendment": "Keep legacy router unmounted until G2 composition gate; audience and wallet are server-derived."
+      "amendment": "Keep legacy router unmounted until G2 composition gate; audience and wallet are server-derived.",
+      "execution_class": "core"
     },
     {
       "id": "V1M",
@@ -2144,7 +2291,8 @@
       "product": "lab",
       "milestone": "LAB-M1",
       "disposition": "new-revision",
-      "amendment": "Move existing V1 tests/components; remove App provider route; no cross-app server-action imports."
+      "amendment": "Move existing V1 tests/components; remove App provider route; no cross-app server-action imports.",
+      "execution_class": "core"
     },
     {
       "id": "U1R",
@@ -2168,17 +2316,1218 @@
       "product": "app",
       "milestone": "APP-M1",
       "disposition": "new-revision",
-      "amendment": "Preserve U1 view logic; revise units/labels/formatters and real context without erasing USD history."
+      "amendment": "Preserve U1 view logic; revise units/labels/formatters and real context without erasing USD history.",
+      "execution_class": "core"
+    },
+    {
+      "id": "F3",
+      "title": "Freeze dataset, evaluation, training and rollout contracts",
+      "track": "F",
+      "product": "shared",
+      "milestone": "LAB-M2",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F2P"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "DATA-RIGHTS",
+        "EVAL-REPRO",
+        "PIPELINE-LINEAGE",
+        "ROLLOUT-PIN"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "shared contract packages/fixtures (coordinator publishes)"
+      ],
+      "implementation_slices": [
+        "F3.a: Define immutable dataset/sample/source/grant IDs, schema versions, lineage and split manifests; fixtures include text, finite video and structured tool I/O.",
+        "F3.b: Define evaluation/case/attempt/result, harness, checkpoint, annotation and external-run state transitions; stable idempotency keys, unit-tagged budgets and ambiguous-submit state.",
+        "F3.c: Define rollout policy/assignment/decision and optimization variant references; publish Python/TypeScript validators and fake adapters with rejected examples."
+      ],
+      "acceptance": "All feature teams consume one reviewed schema/fixture commit. Existing serving contracts remain compatible; optional features default off. Specify server-derived identity and permission checks at scheduling, access, export and external submission.",
+      "failure_oracle": "Cross-provider refs, mutable version refs, mixed USD/CREDIT and unknown schemas fail; role alone cannot authorize data reuse. Run fake/real conformance with the same fixtures.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "D7",
+      "title": "Persist datasets, harnesses and evaluation coordination",
+      "track": "D",
+      "product": "shared",
+      "milestone": "LAB-M2",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3",
+        "D1R"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "DATA-IMMUTABLE",
+        "DATA-RIGHTS",
+        "EVAL-DURABLE"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/app/supabase/migrations/",
+        "apps/infrx-api/infrx/state/lab_data.py (proposed)",
+        "apps/infrx-api/tests/d/"
+      ],
+      "implementation_slices": [
+        "D7.a: Add source/grant references, immutable manifests, sample membership and split assignments, harness revisions and provenance using additive migrations.",
+        "D7.b: Add evaluation runs/cases/attempt leases/outbox/results/checkpoint receipts and unique keys; repository mutations enforce fencing and transitions.",
+        "D7.c: Add scoped RPCs/RLS/indexes and large-fixture query plans; run upgrade and two-provider role matrices against actual PostgreSQL/PostgREST."
+      ],
+      "acceptance": "Immutable version publication is atomic; partial uploads remain invisible. One logical result per run/case/evaluator; receipts and reservations survive restart. Tenant filters do not rely on the UI.",
+      "failure_oracle": "Race two publishers, duplicate checkpoint delivery and stale worker writes; kill around commit/ack and recover once. Foreign IDs and stale content grants fail actual DB/route tests.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "N1",
+      "title": "Import benchmark data and existing annotation outputs",
+      "track": "N",
+      "product": "lab",
+      "milestone": "LAB-M2",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3"
+      ],
+      "integration_dependencies": [
+        "D7",
+        "M3",
+        "L2"
+      ],
+      "test_ids": [
+        "DATA-IMPORT",
+        "DATA-RIGHTS"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/datasets/imports/ (proposed)",
+        "apps/infrx-api/tests/n/"
+      ],
+      "implementation_slices": [
+        "N1.a: Implement versioned JSONL plus manifest importer, field mappings and schema preview for text, finite video/time spans and structured outputs; preserve original artifacts and annotation method/version.",
+        "N1.b: Stream bounded validation, resumable staging, content digests and dedup candidates through the existing media/object ports; quarantine malformed rows with row-level diagnostics.",
+        "N1.c: Publish validated immutable manifests through D7; record source/license/use restrictions and source clock units; provide provider pipeline export examples."
+      ],
+      "acceptance": "Provider can import an owned benchmark and a SAM/Gemini-style exported annotation fixture without replacing their pipeline or installing their tools. Publication reports accepted/rejected counts and cannot silently omit errors.",
+      "failure_oracle": "Oversized/archive traversal/SSRF sources, invalid timestamp units, duplicate upload replay and cross-provider objects are rejected. Process crash cannot publish half a dataset.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "N2",
+      "title": "Version, split and export reproducible datasets",
+      "track": "N",
+      "product": "lab",
+      "milestone": "LAB-M2",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "N1"
+      ],
+      "integration_dependencies": [
+        "D7"
+      ],
+      "test_ids": [
+        "DATA-IMMUTABLE",
+        "DATA-SPLIT",
+        "DATA-RIGHTS"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/datasets/versions/ (proposed)",
+        "apps/infrx-api/tests/n/"
+      ],
+      "implementation_slices": [
+        "N2.a: Implement content-addressed manifests and deterministic dedup/split policy; group by source episode/session/customer as applicable, including near-duplicate review flags.",
+        "N2.b: Freeze train/dev/test assignments and permitted purposes; implement new-version derivation and holdout access rules without mutating source evidence.",
+        "N2.c: Implement authorized resumable exports with manifest hash, redaction, TTL and per-source lineage; expose export cancellation and expiry."
+      ],
+      "acceptance": "Same inputs/policy/seed produce the same version and split digest. Baselines and candidates use a frozen holdout; adding samples creates a new version. Export includes exact schema/rights and omitted-item reasons.",
+      "failure_oracle": "Related clips or sessions cannot cross splits; revoked source blocks new reads/exports even if its immutable manifest survives as inaccessible metadata. Duplicate imports cannot silently change the holdout.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "N3",
+      "title": "Derive datasets from permitted traces and propagate revocation",
+      "track": "N",
+      "product": "lab",
+      "milestone": "LAB-M3",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "N2"
+      ],
+      "integration_dependencies": [
+        "T3",
+        "C2",
+        "D6F"
+      ],
+      "test_ids": [
+        "DATA-RIGHTS",
+        "DATA-LINEAGE"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/datasets/lineage/ (proposed)",
+        "apps/infrx-api/tests/n/"
+      ],
+      "implementation_slices": [
+        "N3.a: Select traces/reviews using server-bound source and purpose grants; preserve original request/output/time spans and append corrections as separate records.",
+        "N3.b: Record transitive source-to-dataset-to-run-to-artifact lineage; implement current authorization checks and revocation/expiry events for queued and running jobs.",
+        "N3.c: Block affected future access/export/training and mark dependent artifacts restricted; provide deletion/reconciliation evidence and operator disposition for already delivered data/models."
+      ],
+      "acceptance": "Capture, provider analysis, annotation, external egress and training are independent purposes. Logical denial is immediate; physical purge follows recorded retention jobs. Never claim a trained model has been unlearned or an external export recalled.",
+      "failure_oracle": "Revoke a source after selection, during queue wait and before external submission; no new unauthorized egress. Missing projection cannot substitute for permission; retained aggregate evidence contains no revoked content.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "N4",
+      "title": "Build dataset import, version and split workflows in Lab",
+      "track": "N",
+      "product": "lab",
+      "milestone": "LAB-M2",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3",
+        "L1"
+      ],
+      "integration_dependencies": [
+        "N2"
+      ],
+      "test_ids": [
+        "DATA-IMPORT",
+        "DATA-SPLIT",
+        "CONSOLE-FLOWS"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/lab/app/(provider)/datasets/ (proposed)",
+        "apps/lab/lib/services/datasets/ (proposed)",
+        "apps/lab/tests/n/"
+      ],
+      "implementation_slices": [
+        "N4.a: Build import mapping/validation progress with rejected-row downloads and resumable state.",
+        "N4.b: Build version/sample/timeline inspection, split summary, permissions and provenance views.",
+        "N4.c: Connect real repositories and authorized exports; support accessible loading/empty/error/denied states and restricted-version explanations."
+      ],
+      "acceptance": "A provider completes import \u2192 frozen version \u2192 inspect split \u2192 export through the UI. No placeholder navigation is published; data loading and failed authorization never render success.",
+      "failure_oracle": "Cross-provider deep links, revoked media URLs, interrupted imports and malformed mappings are exercised through real server actions; browser never receives privileged storage credentials.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "H1",
+      "title": "Version prompts and bounded replay harnesses",
+      "track": "H",
+      "product": "lab",
+      "milestone": "LAB-M2",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3"
+      ],
+      "integration_dependencies": [
+        "L2"
+      ],
+      "test_ids": [
+        "HARNESS-SAFE",
+        "EVAL-REPRO"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/harnesses/ (proposed)",
+        "apps/infrx-api/tests/h/"
+      ],
+      "implementation_slices": [
+        "H1.a: Implement versioned prompt, processor, input mapping, tool schema and reference-output configuration with immutable hashes.",
+        "H1.b: Provide built-in text/finite-video/structured-output adapters and recorded or mocked tool-response replay; forbid arbitrary uploaded code and production side effects.",
+        "H1.c: Bind harness revision into serving/evaluation manifests and report unsupported tool/environment coverage; add single-factor and explicitly tagged multifactor comparisons."
+      ],
+      "acceptance": "Changing a prompt/processor changes the manifest identity. An unchanged candidate can be compared to a prompt-only variant. Unsupported replay behavior is visible and cannot silently invoke production tools.",
+      "failure_oracle": "Attempt tool network mutation, actuator execution, missing recorded response and prompt/config mutation mid-run; block or mark unsupported rather than produce falsely comparable scores.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "B1",
+      "title": "Execute durable offline evaluation runs",
+      "track": "B",
+      "product": "lab",
+      "milestone": "LAB-M2",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3"
+      ],
+      "integration_dependencies": [
+        "D7",
+        "N2",
+        "H1",
+        "L3",
+        "W2",
+        "D5"
+      ],
+      "test_ids": [
+        "EVAL-DURABLE",
+        "EVAL-REPRO"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/evaluation/runner/ (proposed)",
+        "apps/infrx-api/tests/b/"
+      ],
+      "implementation_slices": [
+        "B1.a: Freeze dataset, serving/harness/evaluator revisions, seed, limits, rights snapshot and execution environment; create durable case jobs via D7.",
+        "B1.b: Dispatch to approved internal dev endpoints with separately funded provider_dev CREDIT, not consumer grants; record external USD separately when applicable. Integrate leases/cancel/retry/results and bounded concurrency.",
+        "B1.c: Implement deterministic task metrics, per-case outputs/errors/usage/timing and resume/reconciliation; store attempts without counting a case twice."
+      ],
+      "acceptance": "Both baseline and candidate run on identical frozen cases. Every scheduled case ends with a result, explicit failure, cancellation or unresolved state; costs cover attempts and missing outputs remain in the denominator. A retry is permitted only under the declared idempotency/side-effect contract.",
+      "failure_oracle": "Crash after submission/before acknowledgement, expire worker lease, revoke data, exhaust budget and cancel mid-batch; no ambiguous resubmission, unbounded spending, silent dropped case or stale result overwrite.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "B2",
+      "title": "Compare quality, costs and latency with honest uncertainty",
+      "track": "B",
+      "product": "lab",
+      "milestone": "LAB-M2",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3"
+      ],
+      "integration_dependencies": [
+        "B1"
+      ],
+      "test_ids": [
+        "EVAL-COMPARE"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/evaluation/reports/ (proposed)",
+        "apps/infrx-api/tests/b/"
+      ],
+      "implementation_slices": [
+        "B2.a: Pair exact case IDs and dataset/harness/evaluator pins; reject incompatible runs or explicitly label unpaired/multifactor comparisons.",
+        "B2.b: Compute task and required-slice scores including errors/missing results, clustered-by-source uncertainty where appropriate, latency distributions and unit-separated cost totals.",
+        "B2.c: Store predeclared acceptance/non-inferiority thresholds and evaluation protocol with decision evidence; return inconclusive for insufficient data, mismatched coverage or uncertainty crossing the threshold."
+      ],
+      "acceptance": "A failing safety/SOP slice cannot be hidden by aggregate improvement; small samples do not become a confident win. Show observed facts separately from estimates and teacher judgments. Thresholds are workload inputs, not invented platform defaults.",
+      "failure_oracle": "Inject missing failures, duplicate cases, unequal case sets, skewed source clusters and a severe slice regression; report denominator/coverage and refuse unsupported improvement claims.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "B3",
+      "title": "Benchmark externally produced checkpoints continuously",
+      "track": "B",
+      "product": "lab",
+      "milestone": "LAB-M2",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3"
+      ],
+      "integration_dependencies": [
+        "B1",
+        "L2"
+      ],
+      "test_ids": [
+        "CHECKPOINT-IDEM"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/evaluation/checkpoints/ (proposed)",
+        "apps/infrx-api/tests/b/"
+      ],
+      "implementation_slices": [
+        "B3.a: Implement authenticated signed checkpoint event/manual import with replay window, provider binding, artifact digest and external run reference.",
+        "B3.b: Validate artifact registration through supported registry adapters; define pinned suite subscription, debounce/latest-only policy, concurrent-run and spending limits.",
+        "B3.c: Persist receipt \u2192 registration \u2192 evaluation lineage; expose failed/skipped/superseded events and reconcile partial failures without re-submitting paid work."
+      ],
+      "acceptance": "An external training loop can submit a checkpoint and obtain one evaluation per subscription/version. Arrival order does not silently redefine latest; no checkpoint is automatically public or promoted.",
+      "failure_oracle": "Replay/forge/reorder events, mutate artifact bytes under a URL, burst many checkpoints and crash between receipt/dispatch; stable dedup, bounded budget and visible skipped states.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "B4",
+      "title": "Build evaluations and experiment comparisons in Lab",
+      "track": "B",
+      "product": "lab",
+      "milestone": "LAB-M2",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3",
+        "L1"
+      ],
+      "integration_dependencies": [
+        "B2",
+        "B3",
+        "H1"
+      ],
+      "test_ids": [
+        "EVAL-COMPARE",
+        "CONSOLE-FLOWS"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/lab/app/(provider)/evaluations/ (proposed)",
+        "apps/lab/app/(provider)/experiments/ (proposed)",
+        "apps/lab/lib/services/evaluation/ (proposed)",
+        "apps/lab/tests/b/"
+      ],
+      "implementation_slices": [
+        "B4.a: Build baseline/candidate launch with frozen inputs, budget, test suite and predeclared criteria; expose harness version editor through validated fields.",
+        "B4.b: Build durable progress/cancel/resume, checkpoint event status and result drilldown with failure denominators and timeline evidence.",
+        "B4.c: Build comparison/slice/uncertainty/cost panels and reproducibility export; connect real authorized services."
+      ],
+      "acceptance": "A provider imports a benchmark, runs a baseline and candidate, inspects failures and exports a reproducible comparison. Live jobs do not execute in Next.js handlers; inaccessible evidence is not embedded in responses.",
+      "failure_oracle": "Reload during run, forbidden deep links, failed/cancelled cases and inconclusive results remain accurate in browser tests; CREDIT and USD are never summed.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "D8",
+      "title": "Persist annotations and external training lifecycle",
+      "track": "D",
+      "product": "shared",
+      "milestone": "LAB-M3",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3",
+        "D7"
+      ],
+      "integration_dependencies": [
+        "D6J"
+      ],
+      "test_ids": [
+        "PIPELINE-LINEAGE",
+        "PIPELINE-BUDGET",
+        "DATA-RIGHTS"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/app/supabase/migrations/",
+        "apps/infrx-api/infrx/state/lab_pipeline.py (proposed)",
+        "apps/infrx-api/tests/d/"
+      ],
+      "implementation_slices": [
+        "D8.a: Add append-only labels/review decisions, annotation batches and external training run/config/artifact lineage.",
+        "D8.b: Reuse the shared exact external USD reservation/accounting discipline with purpose-specific authorization; add idempotent callbacks, unknown-submit reconciliation and fenced worker mutations.",
+        "D8.c: Test role matrices, upgrade compatibility and cancellation/receipt/settlement races with actual services."
+      ],
+      "acceptance": "Review provenance cannot be forged by consumers; human ground truth and synthetic labels remain distinct. One budget reservation per logical operation includes outstanding/unknown submissions.",
+      "failure_oracle": "Duplicate callback, revoke consent before submit, simultaneous spends and stale workers cannot double settle, reclassify synthetic labels or expose another provider\u2019s datasets.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "P1",
+      "title": "Import, review and export annotation records",
+      "track": "P",
+      "product": "lab",
+      "milestone": "LAB-M3",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3"
+      ],
+      "integration_dependencies": [
+        "D8",
+        "N2"
+      ],
+      "test_ids": [
+        "PIPELINE-LINEAGE",
+        "DATA-SPLIT"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/pipelines/annotations/ (proposed)",
+        "apps/infrx-api/tests/p/"
+      ],
+      "implementation_slices": [
+        "P1.a: Import human/pipeline labels preserving annotator/method/model/prompt/version/confidence and time spans; link original evidence, never overwrite it.",
+        "P1.b: Add review assignment/disagreement/adjudication transitions with role checks and rubric versions; select authorized examples into new datasets.",
+        "P1.c: Export task examples or preference pairs with exact train-only membership and target adapter schema; holdout labels cannot leak into training exports."
+      ],
+      "acceptance": "Existing annotation pipeline output and later human correction round-trip with provenance. App feedback is evidence, not privileged calibration truth. Record rejected label mappings and missing evidence.",
+      "failure_oracle": "Forge reviewer role, relabel synthetic output as human truth, replay a correction or include holdout descendants in training export; deny or quarantine and retain original history.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "P2",
+      "title": "Run bounded teacher annotation batches",
+      "track": "P",
+      "product": "lab",
+      "milestone": "LAB-M3",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3"
+      ],
+      "integration_dependencies": [
+        "P1",
+        "D8",
+        "N2",
+        "J2",
+        "J3"
+      ],
+      "test_ids": [
+        "PIPELINE-BUDGET",
+        "PIPELINE-LINEAGE"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/pipelines/teachers/ (proposed)",
+        "apps/infrx-api/tests/p/"
+      ],
+      "implementation_slices": [
+        "P2.a: Build teacher batch manifests with authorized source purposes, redaction, rubric/prompt/model pins and dry-run cost estimates.",
+        "P2.b: Adapt the existing calibrated judge/external-budget ports to labels/preferences while keeping evaluation and training purposes separate; validate schemas and per-item failures.",
+        "P2.c: Reconcile callbacks/polls/unknown submissions; review sampled labels before a new dataset version becomes eligible for training."
+      ],
+      "acceptance": "Dry-run works without approved rates or external calls. Live execution requires a selected adapter/model, approved rate, source permission and budget. Teacher accuracy is evaluated on independent reviewed cases; no automatic ground-truth designation.",
+      "failure_oracle": "Timeout after provider accepts, change consent/rate while queued, malformed labels, partial output and budget exhaustion cannot cause duplicate charges or unauthorized egress.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "P3",
+      "title": "Integrate external training and import candidates",
+      "track": "P",
+      "product": "lab",
+      "milestone": "LAB-M3",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3"
+      ],
+      "integration_dependencies": [
+        "D8",
+        "N2",
+        "B3",
+        "L2"
+      ],
+      "test_ids": [
+        "TRAIN-RECOVER",
+        "PIPELINE-LINEAGE"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/pipelines/training/ (proposed)",
+        "apps/infrx-api/tests/p/"
+      ],
+      "implementation_slices": [
+        "P3.a: Implement an export/manual-run connector as the initial real workflow: immutable authorized train/dev manifests, configuration/objective/adapter metadata, environment and run reference; external training remains provider-owned.",
+        "P3.b: Implement connector interface plus protocol test server for submit/status/cancel/checkpoints, idempotency and ambiguous-submit reconciliation. Advertise automatic submission only for adapters with real integration evidence.",
+        "P3.c: Import returned checkpoint via B3 and enforce held-out evaluation before candidate approval; preserve actual provider-reported cost and unknown states without invented estimates."
+      ],
+      "acceptance": "A provider exports a training bundle, runs their existing SFT/LoRA or compatible preference workflow, imports a checkpoint and compares it on the frozen holdout. Managed RLHF, remote uploaded code and an unselected paid vendor are not required. LoRA is an adaptation method, not a competing objective to SFT.",
+      "failure_oracle": "Missing/incompatible artifacts, duplicate checkpoint/callback, cancelled run returning a late checkpoint and unknown provider submission cannot auto-promote, duplicate paid work or lose lineage.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "P4",
+      "title": "Build annotation and training workflows in Lab",
+      "track": "P",
+      "product": "lab",
+      "milestone": "LAB-M3",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3",
+        "L1"
+      ],
+      "integration_dependencies": [
+        "P1",
+        "P2",
+        "P3",
+        "B2"
+      ],
+      "test_ids": [
+        "PIPELINE-LINEAGE",
+        "CONSOLE-FLOWS"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/lab/app/(provider)/annotations/ (proposed)",
+        "apps/lab/app/(provider)/training/ (proposed)",
+        "apps/lab/lib/services/pipelines/ (proposed)",
+        "apps/lab/tests/p/"
+      ],
+      "implementation_slices": [
+        "P4.a: Build review/import/export with disagreement, lineage and source-purpose restrictions.",
+        "P4.b: Build teacher dry-run/budget approval and batch status using supported adapters; make unavailable live capabilities explicit.",
+        "P4.c: Build external training bundle, run/checkpoint tracking and held-out comparison links; separate observed training loss from deployment-quality evidence."
+      ],
+      "acceptance": "Provider can complete a data correction \u2192 training export \u2192 external checkpoint \u2192 held-out comparison journey. No nonfunctional managed-training buttons or success state for unknown paid jobs.",
+      "failure_oracle": "Unauthorized reviewer, revoked source, unknown job, partial artifact and comparison regression surface actionable states and cannot be bypassed by direct server action calls.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "D9",
+      "title": "Persist release policies and stable experiment assignment",
+      "track": "D",
+      "product": "shared",
+      "milestone": "LAB-M4",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3",
+        "D7"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "ROLLOUT-PIN",
+        "ROLLOUT-RECOVER"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/app/supabase/migrations/",
+        "apps/infrx-api/infrx/state/lab_rollout.py (proposed)",
+        "apps/infrx-api/tests/d/"
+      ],
+      "implementation_slices": [
+        "D9.a: Add immutable release experiment/policy revisions, allowed variants, allocation unit and limits; avoid storing raw customer identities in provider-visible records.",
+        "D9.b: Persist assignment/decision references and policy events with compare-and-swap transitions; admissions retain chosen serving/rate revisions.",
+        "D9.c: Verify role isolation, upgrade compatibility and conflicting publish/rollback transactions under real PostgreSQL."
+      ],
+      "acceptance": "D8/D9 migration ordering is reserved by the sole D owner; independent feature scheduling does not permit migration filename collisions. Rollback creates a new policy decision, not edits to history.",
+      "failure_oracle": "Concurrent promotions, stale policy publisher and repeated assignment cannot mutate admitted jobs or allocate beyond defined policy. Pinned clients remain pinned.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "R1",
+      "title": "Route bounded shadow, canary and A/B experiments",
+      "track": "R",
+      "product": "lab",
+      "milestone": "LAB-M4",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3"
+      ],
+      "integration_dependencies": [
+        "D9",
+        "L3",
+        "G2",
+        "G3"
+      ],
+      "test_ids": [
+        "ROLLOUT-PIN"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/rollouts/routing/ (proposed)",
+        "apps/infrx-api/tests/r/"
+      ],
+      "implementation_slices": [
+        "R1.a: Implement stable assignment by declared user/session/episode/request unit; honor explicit serving pins and eligibility/consent restrictions.",
+        "R1.b: Add G-owned admission integration through a coordinator request; freeze policy/variant/rate in job context, cap candidate traffic and separately fund shadow inference.",
+        "R1.c: Implement shadow response suppression and no-side-effect execution; emit cohort/coverage/loss telemetry without granting providers customer identity access."
+      ],
+      "acceptance": "Shadow does not change user output or debit their wallet twice; provider-funded duplicate work has its own limits. Canary and A/B use declared stable cohorts; video/robot episode assignment requires the relevant extension contract.",
+      "failure_oracle": "Retry admissions, change weights mid-session, revoke eligibility and overload candidate; no duplicate consumer billing, assignment drift for promised cohort, accidental shadow output or production tool execution.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "R2",
+      "title": "Evaluate guardrails and roll back controlled releases",
+      "track": "R",
+      "product": "lab",
+      "milestone": "LAB-M4",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "R1"
+      ],
+      "integration_dependencies": [
+        "B2",
+        "L4"
+      ],
+      "test_ids": [
+        "ROLLOUT-RECOVER",
+        "EVAL-COMPARE"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/rollouts/control/ (proposed)",
+        "apps/infrx-api/tests/r/"
+      ],
+      "implementation_slices": [
+        "R2.a: Freeze operational/quality thresholds, observation window, minimum evidence and decision protocol before launch; predeclare sequential checks or a fixed horizon.",
+        "R2.b: Compute cohort balance/coverage/drift/latency/error/budget guardrails; insufficient or delayed evidence cannot approve promotion.",
+        "R2.c: Implement operator approval and automated stop/rollback for declared triggers; prove queued/running requests stay pinned while future admissions revert."
+      ],
+      "acceptance": "Repeated peeking does not become an unqualified statistical win. Failure to collect quality telemetry halts expansion; operational emergency rollback remains available independent of model judges.",
+      "failure_oracle": "Kill controller, delay metrics, skew cohorts, breach a slice or fail candidate health; one audited decision, bounded exposure and correct future routing after recovery.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "R3",
+      "title": "Register and compare optimized serving variants",
+      "track": "R",
+      "product": "lab",
+      "milestone": "LAB-M4",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3"
+      ],
+      "integration_dependencies": [
+        "H1",
+        "B2",
+        "L2",
+        "W3"
+      ],
+      "test_ids": [
+        "OPT-PARITY"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/rollouts/optimization/ (proposed)",
+        "apps/infrx-api/tests/r/",
+        "models/ optimization evidence via experiment owners"
+      ],
+      "implementation_slices": [
+        "R3.a: Register externally produced quantized/pruned/adapter/speculative/runtime/hardware variants as immutable serving revisions with compatibility and provenance metadata.",
+        "R3.b: Run unchanged held-out corpus and measured load profile against reference/variant, pinning engine build, dtype, hardware and preprocessing; report output quality and supported capability differences.",
+        "R3.c: Attach measured cost/throughput/latency/memory and rollback evidence to candidate comparison; import benchmark results from internal optimization work without building a general kernel platform."
+      ],
+      "acceptance": "Offline fixture/reporting integration works locally; actual optimization or non-NVIDIA support is claimed only for a measured supported adapter. Re-registering a checkpoint with a different engine/hardware/preprocessor creates a distinct serving identity.",
+      "failure_oracle": "Variant lies about capability, changes tokenizer or uses different corpus/load regime; reject equivalence claims. Better throughput cannot override a failed required quality slice.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "R4",
+      "title": "Build release experiments and optimization comparison UI",
+      "track": "R",
+      "product": "lab",
+      "milestone": "LAB-M4",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3",
+        "L1"
+      ],
+      "integration_dependencies": [
+        "R2",
+        "R3",
+        "B2"
+      ],
+      "test_ids": [
+        "ROLLOUT-PIN",
+        "CONSOLE-FLOWS"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "apps/lab/app/(provider)/releases/ (proposed)",
+        "apps/lab/app/(provider)/optimizations/ (proposed)",
+        "apps/lab/lib/services/rollouts/ (proposed)",
+        "apps/lab/tests/r/"
+      ],
+      "implementation_slices": [
+        "R4.a: Build variant eligibility, cohort/budget/threshold setup and approval preview.",
+        "R4.b: Build traffic/quality/uncertainty progress, stopped/inconclusive states and audited rollback controls.",
+        "R4.c: Build optimization evidence comparison with explicit hardware/runtime scope; integrate real services and enforce operator-only public changes."
+      ],
+      "acceptance": "Provider proposes and operator controls a bounded release, sees reasons for stop/inconclusive decisions, and can inspect rollback lineage. UI does not label synthetic performance fixtures as measurements.",
+      "failure_oracle": "Role escalation through direct actions, stale revision approval, empty metrics and double-click rollback cannot corrupt policy or bypass publication controls.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "I5",
+      "title": "Package dataset and evaluation workers for independent deployment",
+      "track": "I",
+      "product": "shared",
+      "milestone": "LAB-M2",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3",
+        "I1"
+      ],
+      "integration_dependencies": [
+        "N2",
+        "B1",
+        "B3"
+      ],
+      "test_ids": [
+        "LAB-WORKERS"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "infra/lab/ (proposed)",
+        "apps/infrx-api/deploy/lab/ (proposed)"
+      ],
+      "implementation_slices": [
+        "I5.a: Package dataset/evaluation/checkpoint processes with explicit capability flags, queues, secrets, bounded concurrency and health/readiness.",
+        "I5.b: Add local real-service composition, object/DB backup-restore and queue/case recovery drills with owned test resources.",
+        "I5.c: Produce disabled-by-default staging deployment/rollback runbook, metrics and separate budget alerts; execute staging only when allocated."
+      ],
+      "acceptance": "No long task runs in a frontend process. Lab worker outage does not block consumer inference. Local composition is reproducible; hosted evidence is separately recorded per enabled feature.",
+      "failure_oracle": "Restart workers while jobs are active, lose object store, revoke credentials or fill spool/temp disk; no stale lease commits, unbounded retry or public inference outage.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "I6",
+      "title": "Package annotation and training integration workers",
+      "track": "I",
+      "product": "shared",
+      "milestone": "LAB-M3",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "I5"
+      ],
+      "integration_dependencies": [
+        "P2",
+        "P3"
+      ],
+      "test_ids": [
+        "LAB-WORKERS",
+        "PIPELINE-BUDGET"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "infra/lab/ (proposed)",
+        "apps/infrx-api/deploy/lab/ (proposed)"
+      ],
+      "implementation_slices": [
+        "I6.a: Add teacher/training process roles, allowlisted egress and purpose-specific secrets without enabling paid execution by default.",
+        "I6.b: Add reconciliation, budget alerts, dead-letter/operator actions and revocation cancellation runbooks.",
+        "I6.c: Exercise local protocol-server failure/restart drills and document exact remaining adapter/staging inputs."
+      ],
+      "acceptance": "Dry-run and manual export/import work without external provider secrets. Unknown submission is visible and requires reconciliation; budget and data-use restrictions survive process restart.",
+      "failure_oracle": "Restart after ambiguous submission, revoke a source while queued and fail secret lookup; worker does not double-submit or silently enable another provider.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "I7",
+      "title": "Package release controls and optimization evidence operations",
+      "track": "I",
+      "product": "shared",
+      "milestone": "LAB-M4",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "I5"
+      ],
+      "integration_dependencies": [
+        "R2",
+        "R3"
+      ],
+      "test_ids": [
+        "LAB-WORKERS",
+        "ROLLOUT-RECOVER"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "infra/lab/ (proposed)",
+        "apps/infrx-api/deploy/lab/ (proposed)"
+      ],
+      "implementation_slices": [
+        "I7.a: Package rollout controller with independent readiness, current-policy recovery and emergency disable controls.",
+        "I7.b: Add cohort/guardrail observability, required-evidence freshness and rollback exercises.",
+        "I7.c: Document allocated staging/load environment and measured hardware matrix; keep unsupported variants disabled."
+      ],
+      "acceptance": "Losing Lab UI/controller never loses durable inference/accounting; current safe policy or explicit fail-closed admission behavior is documented and tested. No automatic capacity purchases.",
+      "failure_oracle": "Controller outage/partition and stale telemetry cannot expand traffic; rollback preserves admitted request pins and consumer balances.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "E6L",
+      "title": "Prove imported benchmark to candidate decision end to end",
+      "track": "E",
+      "product": "lab",
+      "milestone": "LAB-M2",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "F3",
+        "E2R"
+      ],
+      "integration_dependencies": [
+        "E3L",
+        "N2",
+        "N4",
+        "H1",
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "I5"
+      ],
+      "test_ids": [
+        "DATA-IMPORT",
+        "DATA-SPLIT",
+        "DATA-RIGHTS",
+        "EVAL-DURABLE",
+        "EVAL-REPRO",
+        "EVAL-COMPARE",
+        "CHECKPOINT-IDEM"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "tests/integration/lab_evaluate/ (proposed)",
+        "apps/lab/tests/e2e/ (coordinator-assigned suites)",
+        "research/plan/evidence/e/"
+      ],
+      "implementation_slices": [
+        "E6L.a: Publish owned text/tool and finite-video benchmark fixtures, related-source split traps, deterministic evaluator and synthetic model endpoints with known wins/regressions.",
+        "E6L.b: Run real DB/object/services/browser journey import \u2192 frozen split \u2192 baseline/candidate \u2192 report \u2192 checkpoint event \u2192 comparison; inject restart, duplicate and denied-access cases.",
+        "E6L.c: Demonstrate intentional defects are detected; attach environment/SHAs/artifact hashes and separately list staging/GPU/model-quality evidence still pending."
+      ],
+      "acceptance": "LAB-EVALUATE-LOCAL passes without production traces, teacher API or managed training. Actual model superiority is a separate measured claim. All LAB-08/09/10/11 requirements have exercised positive and negative paths.",
+      "failure_oracle": "The suite must fail if a missing candidate output is dropped, a split leaks, a checkpoint duplicates a run or a foreign dataset is accepted; do not use implementation-generated expectations.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "E7L",
+      "title": "Prove the second authorized improvement iteration",
+      "track": "E",
+      "product": "lab",
+      "milestone": "LAB-M3",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "E6L"
+      ],
+      "integration_dependencies": [
+        "E5L",
+        "N3",
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "I6"
+      ],
+      "test_ids": [
+        "DATA-LINEAGE",
+        "PIPELINE-LINEAGE",
+        "PIPELINE-BUDGET",
+        "TRAIN-RECOVER"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "tests/integration/lab_improve/ (proposed)",
+        "apps/lab/tests/e2e/ (coordinator-assigned suites)",
+        "research/plan/evidence/e/"
+      ],
+      "implementation_slices": [
+        "E7L.a: Drive permitted deployment evidence \u2192 human/teacher annotation \u2192 new dataset/train export \u2192 external checkpoint \u2192 frozen held-out evaluation.",
+        "E7L.b: Propose/approve the candidate through L3/L4 in private or allocated staging deployment, collect permitted evidence pinned to that new serving version, then repeat correction/export/checkpoint/evaluation for a second iteration; revoke source rights at queue/submit/export boundaries.",
+        "E7L.c: Run manual connector against real export/import artifacts and protocol server against automatic connector interface; separately record selected live adapter evidence when authorized."
+      ],
+      "acceptance": "Two iterations preserve source rights, original evidence, independent holdout and budget reconciliation. A seeded bad checkpoint is rejected for promotion even with improved training loss. No synthetic training fixture is presented as real model improvement.",
+      "failure_oracle": "Suite catches holdout leakage, relabeled synthetic truth, duplicate paid submission, missing transitive revocation and promotion from training loss alone.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "E8L",
+      "title": "Prove controlled rollout and optimization evidence",
+      "track": "E",
+      "product": "lab",
+      "milestone": "LAB-M4",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "E6L"
+      ],
+      "integration_dependencies": [
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "I7"
+      ],
+      "test_ids": [
+        "ROLLOUT-PIN",
+        "ROLLOUT-RECOVER",
+        "OPT-PARITY"
+      ],
+      "handoff": "13-lab-improvement-handoffs.md",
+      "owned_paths": [
+        "tests/integration/lab_rollout/ (proposed)",
+        "apps/lab/tests/e2e/ (coordinator-assigned suites)",
+        "research/plan/evidence/e/"
+      ],
+      "implementation_slices": [
+        "E8L.a: Exercise two serving variants and explicit-pinned/unpinned clients through stable assignment, bounded shadow/canary and operator approval.",
+        "E8L.b: Inject health/quality/coverage/budget regression and controller restart; verify bounded exposure, no double consumer debit and rollback of future admissions only.",
+        "E8L.c: Verify optimization evidence scope and incompatible variant rejection; attach real GPU/hardware parity only for allocated supported targets."
+      ],
+      "acceptance": "LAB-ROLLOUT-LOCAL can pass without training integrations. A live rollout still requires staged inference/quality/latency evidence and approval for affected traffic; unsupported chip/model combinations remain unavailable.",
+      "failure_oracle": "Suite detects shadow output leakage, unstable session assignment, changed queued-job revision, unmeasured hardware claims and a regression hidden by aggregate scores.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "X1",
+      "title": "Specify a bounded live-video workload and trial contract",
+      "track": "X",
+      "product": "shared",
+      "milestone": "LAB-M5",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "conditional",
+      "start_dependencies": [
+        "F2P"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "VIDEO-CONTRACT"
+      ],
+      "handoff": "14-expansion-gates.md",
+      "owned_paths": [
+        "research/workloads/video/ (proposed)"
+      ],
+      "implementation_slices": [
+        "X1.a: Record provider-selected task, input cadence/cameras, window/hop, timestamps, retention, response shape and deployment location.",
+        "X1.b: Define causal benchmark, ground truth, freshness/quality/throughput thresholds, duplicate-event policy and buffer/backpressure failure behavior.",
+        "X1.c: Resolve serving/preprocessor capabilities, transport and allocated capacity; publish approved trial contract and split implementation slices before X2."
+      ],
+      "acceptance": "No native streaming claim follows from output SSE or clip inference. Discovery can draft synthetic fixtures immediately after F2P; approval needs a real workload owner and measured requirements.",
+      "failure_oracle": "Contract has missing deadline, clock alignment, overload policy or causal labeling rule: mark trial blocked with exact missing input, keep App/Lab work running.",
+      "activation": "Workload owner supplies the live-input task and constraints; absent inputs permit documented discovery only, not fabricated acceptance targets.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "X2",
+      "title": "Implement and verify the approved video session adapter",
+      "track": "X",
+      "product": "shared",
+      "milestone": "LAB-M5",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "conditional",
+      "start_dependencies": [
+        "X1"
+      ],
+      "integration_dependencies": [
+        "W3",
+        "M3",
+        "E6L"
+      ],
+      "test_ids": [
+        "VIDEO-CONTRACT",
+        "VIDEO-CAUSAL"
+      ],
+      "handoff": "14-expansion-gates.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/sessions/video/ (proposed)",
+        "apps/infrx-api/tests/x/video/ (proposed)"
+      ],
+      "implementation_slices": [
+        "X2.a: Implement the approved session/transport adapter with timestamped bounded buffers, window/hop sampling, overlap dedup and preparation identity.",
+        "X2.b: Integrate scheduling/backpressure/expiry through existing durable runtime using coordinator-owned hooks; record fresh/stale/dropped windows and loss.",
+        "X2.c: Replay causal streams with arrival jitter/disconnect/reconnect, memory pressure and overload, then run the allocated model trial before enabling support."
+      ],
+      "acceptance": "Only the approved task and measured envelope are supported. No future frames enter a causal window; reused preprocessing preserves finite-clip parity. Billable units/rates are explicit before public availability.",
+      "failure_oracle": "Inject clock jumps, out-of-order frames, stuck producer/consumer and session restart; bounded memory, honest loss/freshness and no duplicate accepted events.",
+      "activation": "Approved X1 contract, recorded implementation slices, verified model capability and an allocated trial environment.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "X3",
+      "title": "Specify a robot/task and inference freshness contract",
+      "track": "X",
+      "product": "shared",
+      "milestone": "LAB-M5",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "conditional",
+      "start_dependencies": [
+        "F2P"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "ROBOT-CONTRACT"
+      ],
+      "handoff": "14-expansion-gates.md",
+      "owned_paths": [
+        "research/workloads/robotics/ (proposed)"
+      ],
+      "implementation_slices": [
+        "X3.a: Record actual policy artifact, robot/task, cameras/proprioception/state/action schemas, normalization, horizon, clocks and ROS2/recording versions.",
+        "X3.b: Measure end-to-end transport/queue/compute/freshness at intended edge/cloud placement; define local fallback/stop owner and proposed-versus-executed action evidence.",
+        "X3.c: Define offline/simulator-first acceptance and authorized hardware trial, select adapter/MCAP mapping, then split X4 against that approved contract."
+      ],
+      "acceptance": "\u03c00.5 is treated as a VLA policy; future world-model annotations are a different integration. No general WAN suitability or support for arbitrary modalities is asserted.",
+      "failure_oracle": "Missing robot schema, latency/freshness target, stale-action rejection or local control owner prevents hardware enablement; architecture discovery remains useful.",
+      "activation": "An identified design partner, robot/task and available recordings; missing inputs are explicit pending decisions.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "X4",
+      "title": "Implement the bounded policy/ROS2 observation adapter",
+      "track": "X",
+      "product": "shared",
+      "milestone": "LAB-M5",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "conditional",
+      "start_dependencies": [
+        "X3"
+      ],
+      "integration_dependencies": [
+        "W3",
+        "E6L"
+      ],
+      "test_ids": [
+        "ROBOT-CONTRACT",
+        "ROBOT-REPLAY"
+      ],
+      "handoff": "14-expansion-gates.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/sessions/robotics/ (proposed)",
+        "apps/infrx-api/tests/x/robotics/ (proposed)"
+      ],
+      "implementation_slices": [
+        "X4.a: Implement the pinned observation/action codec, authentication/session sequencing and policy runtime adapter for the approved robot.",
+        "X4.b: Integrate freshness rejection, deadline/backpressure behavior and synchronized proposed/executed action recording through approved ROS2/MCAP adapters.",
+        "X4.c: Exercise offline/simulator failure cases before an explicitly allocated robot trial; preserve local actuator authority and emergency controls."
+      ],
+      "acceptance": "Serving emits schema-valid proposals and explicit stale/failed results; offline evaluation cannot actuate hardware. Compatibility is limited to the verified policy/robot/task contract.",
+      "failure_oracle": "Delayed/reordered observations, unit mismatch, disconnect and late action chunks cause declared rejection/fallback, not stale actuation. Compare recorded execution/outcomes separately from proposals.",
+      "activation": "Approved X3 contract, recorded implementation slices, simulator fixtures and explicit hardware-trial owner/allocation.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "X5",
+      "title": "Qualify a non-NVIDIA backend investment",
+      "track": "X",
+      "product": "shared",
+      "milestone": "INFRA-EXPAND",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "conditional",
+      "start_dependencies": [
+        "F2P"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "BACKEND-CONTRACT"
+      ],
+      "handoff": "14-expansion-gates.md",
+      "owned_paths": [
+        "research/workloads/hardware/ (proposed)"
+      ],
+      "implementation_slices": [
+        "X5.a: Select a real chip/runtime/model/workload and collect supported operators/dtypes/licensing/driver/toolchain constraints from primary sources.",
+        "X5.b: Define artifact conversion/engine port, measured load profile, quality parity, capacity, cost and failure recovery gates.",
+        "X5.c: Publish prototype scope, resource allocation and go/no-go criteria; reuse R3 experiment records and avoid promising generic heterogeneous placement."
+      ],
+      "acceptance": "Discovery produces a measured investment decision and explicit adapter contract; no new kernel or cloud capacity is assumed available.",
+      "failure_oracle": "Model conversion loses required operators, claimed throughput uses incomparable inputs or economics omit idle capacity: trial cannot be certified.",
+      "activation": "Chosen hardware/model workload and access to a trial target; research may proceed without purchases.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "X6",
+      "title": "Implement and validate one qualified inference backend",
+      "track": "X",
+      "product": "shared",
+      "milestone": "INFRA-EXPAND",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "conditional",
+      "start_dependencies": [
+        "X5"
+      ],
+      "integration_dependencies": [
+        "R3",
+        "W3"
+      ],
+      "test_ids": [
+        "OPT-PARITY",
+        "BACKEND-CONTRACT"
+      ],
+      "handoff": "14-expansion-gates.md",
+      "owned_paths": [
+        "apps/infrx-api/infrx/worker/backends/ (coordinator-assigned adapter)",
+        "apps/infrx-api/tests/x/hardware/ (proposed)"
+      ],
+      "implementation_slices": [
+        "X6.a: Implement the approved engine adapter with capability handshake, artifact identity, raw/visible output and exact usage contract.",
+        "X6.b: Integrate cancellation, fencing/drain/health and placement constraints; supported capability registry rejects incompatible requests.",
+        "X6.c: Run held-out quality and sustained/burst/fault benchmarks on actual hardware and register a separately gated serving variant with rollback evidence."
+      ],
+      "acceptance": "One validated combination may be advertised; other chips/models remain unsupported. Scheduler/runtime never sacrifices durable acceptance or accounting for throughput.",
+      "failure_oracle": "Backend crash, unsupported dtype/tokenizer, usage loss and late output cannot corrupt settlement or claim successful completion. Quality regressions block variant promotion.",
+      "activation": "Approved X5 contract, allocated hardware, artifact access and adapter-specific implementation slices reviewed before coding.",
+      "slice_sizing": "Each listed slice is a review checkpoint targeting 2\u20138 hours, not a duration promise. Split any larger slice before assignment; keep its parent ID and acceptance oracle. Parent completion requires every slice and integration evidence."
+    },
+    {
+      "id": "S2M",
+      "title": "Freeze Marlin SOP inference launch profile",
+      "track": "S",
+      "product": "app",
+      "milestone": "APP-M0",
+      "status": "planned",
+      "disposition": "complete-plan-addition",
+      "execution_class": "core",
+      "start_dependencies": [
+        "S1"
+      ],
+      "integration_dependencies": [],
+      "test_ids": [
+        "MARLIN-SOP"
+      ],
+      "handoff": "12-complete-build-plan.md",
+      "owned_paths": [
+        "research/workloads/marlin-sop.md (new launch profile)",
+        "Marlin launch contract fixtures through F/E owners"
+      ],
+      "implementation_slices": [
+        "S2M.a: Inspect actual Marlin artifact/config and existing media/benchmark code; record exact model/processor revisions, accepted modalities/shapes, limits, response modes and preprocessing identity.",
+        "S2M.b: Define finite-clip SOP request examples and large-dataset client recipe with stable source/episode IDs, bounded concurrency, idempotency, polling/resume and explicit retry behavior; use owned synthetic or authorized examples.",
+        "S2M.c: Separate endpoint conformance from SOP-quality validation. Record missing task rubric/ground truth/dataset access as Lab evaluation inputs; do not invent accuracy claims, actuation support or live-video capability."
+      ],
+      "acceptance": "A3 docs and W3/E4 can test the actual supported Marlin endpoint contract. Large dataset means many bounded inputs using explicit async as needed, not unlimited videos or a new batch/training product. Unknown task-specific SOP schema/quality thresholds do not prevent launching an honestly documented inference API, but prevent SOP accuracy claims.",
+      "failure_oracle": "Reject unsupported state/action inputs, over-limit media and advertised unsupported structured output/streaming. Resume sample dataset inference after interruption without duplicate accepted jobs or hidden failures."
     }
   ],
   "product_revision": "2026-09-21-two-platforms-individual-grant",
   "implementation_baseline_commit": "271add946771ddc4efc3cbc2044758443080759b",
   "authority": [
     "../platforms/README.md",
+    "12-complete-build-plan.md",
+    "15-pending-inputs.md",
+    "16-fresh-session-handoff.md",
     "10-wave2-platform-audit.md",
     "11-wave3-revision-handoffs.md",
     "08-platform-split.md",
-    "09-amendment-workstreams.md"
+    "09-amendment-workstreams.md",
+    "13-lab-improvement-handoffs.md",
+    "14-expansion-gates.md"
   ],
   "status_semantics": "Baseline integrated/implemented records describe the original v1 evidence, not product-v2 compatibility. amendment_status and revision_tasks record outstanding work. S1 audit is implemented and prepared for independent review; no deployment is implied.",
   "release_gates": {
@@ -2207,6 +3556,49 @@
         "I2L"
       ],
       "conditional": "Trace/data/judge workers need deployment evidence before enablement; live judge needs explicit consent/budget beyond dry-run. V1M must remove the App provider route and prove both app boundaries."
+    },
+    "LAB-EVALUATE-LOCAL": {
+      "requires": [
+        "E6L"
+      ],
+      "conditional": "Real local DB/object/services and UI; imported owned data works with E5L unavailable. No real model-quality or staging claim from fake endpoints."
+    },
+    "LAB-IMPROVE-LOCAL": {
+      "requires": [
+        "E7L"
+      ],
+      "conditional": "Second permitted data iteration, manual external training export/import and protocol-server integration; live teacher/automatic training adapters require separately approved rates/budgets and evidence."
+    },
+    "LAB-ROLLOUT-LOCAL": {
+      "requires": [
+        "E8L"
+      ],
+      "conditional": "Routing/control/rollback integrated locally; measured model/hardware and staging-traffic evidence are separately required for public enablement."
+    },
+    "COMPLETE-LOCAL": {
+      "requires": [
+        "E3A",
+        "E3L",
+        "E5L",
+        "E6L",
+        "E7L",
+        "E8L"
+      ],
+      "conditional": "All current core features built and integrated; allocated staging/live release evidence remains separate. Conditional/deferred expansions cannot be represented as complete."
+    },
+    "COMPLETE-RELEASE": {
+      "requires": [
+        "E4",
+        "I2L",
+        "E5L",
+        "E6L",
+        "E7L",
+        "E8L",
+        "I5",
+        "I6",
+        "I7"
+      ],
+      "conditional": "Also requires staging deployment, restore/revocation/fault evidence for every enabled feature, published rates and account transition, actual Marlin GPU parity, allocated origins and approved external adapters/data/budgets. Manual training connector may be the enabled adapter; unsupported automatic adapters stay unavailable."
     }
   },
   "revision_tasks": [
@@ -2219,5 +3611,18 @@
     "G1R",
     "V1M",
     "U1R"
-  ]
+  ],
+  "audit_commit": "07dfb64",
+  "delivery_scopes": {
+    "core": "Existing active implementation tasks plus new F3/D7-D9/N/H/B/P/R/I5-I7/E6L-E8L. G5 callbacks and I4 fleet are conditional. Complete local product journeys and enabled integrations; actual deployment/paid/model-quality claims require their separate evidence.",
+    "conditional": "G5 optional callbacks, I4 fleet, X1-X6 specialized workloads/hardware. Activation conditions must be satisfied before implementation/enablement; missing inputs cannot be silently defaulted.",
+    "deferred": "Consumer payments/pooling, payouts, arbitrary provider code execution, fully managed training/RL infrastructure, response caching, OpenRouter, speech. No task is implicitly authorized by the words complete platform."
+  },
+  "current_execution_scope": {
+    "id": "APP-FIRST-MARLIN-SOP",
+    "objective": "Launch apps/app for Marlin2B inference, serving the SOP-verification use case over large robotics datasets. Lab plans are subsequent implementation milestones.",
+    "dispatch_now": "S1 current-HEAD review, F2R, I0, E2R and S2M; then F2P and App closure only.",
+    "dispatch_later": "Lab M0-M4 after the App launch candidate is accepted by the coordinator/user; no diversion into dataset/training/UI or modality extensions during App-first work. External launch blockers permit App hardening and release preparation, not automatic scope expansion.",
+    "terminology": "The user describes the Marlin workload in a VLA context. Verify actual input/output capabilities; do not infer robot action generation, closed-loop actuation or native live input from that context."
+  }
 }

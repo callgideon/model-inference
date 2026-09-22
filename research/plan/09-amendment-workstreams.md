@@ -1,5 +1,7 @@
 # Implementation briefs for the platform split
 
+**Current scheduling overlay:** [complete plan](12-complete-build-plan.md), manifest v4 and [fresh-session handoff](16-fresh-session-handoff.md). Marlin App launch is the immediate scope; compatible brief details below remain binding. S2M adds the Marlin profile; Lab M2–M4 are now decomposed separately.
+
 Use with [task manifest v3](tasks.json), [impact mapping](08-platform-split.md), [execution protocol](03-execution-protocol.md) and [test oracles](04-verification.md). The original module briefs supply unchanged detailed algorithms. Each task below inherits its track's ownership restrictions. Start dependencies require reviewed code/fixtures; new F2R/F2P/D1R gates require acceptance evidence; additional integration dependencies may be mocked during development but require real evidence before handback.
 
 The [wave-2 revision handoffs](11-wave3-revision-handoffs.md) add F2R/F2P/D1R/C0/I0/E2R/G1R/V1M/U1R and override older dependencies here. These are bounded deliverables. If the remote implementation makes one larger than a normal 2–8 hour work unit, the coordinator subdivides it in the session record before assignment, preserving its acceptance oracle. No estimate is a completion promise. Several slices share an owner and should not run concurrently on the same files.

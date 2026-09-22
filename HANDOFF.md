@@ -1,6 +1,8 @@
 # Handoff — product amendment 2026-09-21; historical operations below
 
-**Start with [the wave-2 audit](research/plan/10-wave2-platform-audit.md), [two-platform architecture](research/platforms/README.md) and [the continuation handoff](research/plan/PLATFORM-SPLIT-HANDOFF.md).** Main was pulled at `271add9`; all eleven wave-2 modules are preserved. F2R/F2P and additive D1R revisions precede product-v2 integration. Manifest v3 preserves original completion statuses separately from amendment requirements. Wave 3 feature implementation has not started.
+**Latest handoff:** [ready-to-copy implementation prompt](research/plan/16-fresh-session-handoff.md), [complete plan](research/plan/12-complete-build-plan.md) and [pending work](research/plan/15-pending-inputs.md). The immediate objective is launching `apps/app` for Marlin2B inference supporting SOP verification over large robotics datasets. Lab and later extensions have detailed follow-on plans; do not dispatch them ahead of the accepted App candidate.
+
+**Start with [the wave-2 audit](research/plan/10-wave2-platform-audit.md), [two-platform architecture](research/platforms/README.md) and [the continuation handoff](research/plan/PLATFORM-SPLIT-HANDOFF.md).** Main was pulled at `271add9`; all eleven wave-2 modules are preserved. F2R/F2P and additive D1R revisions precede product-v2 integration. Manifest v4 preserves original completion statuses separately from amendment requirements. Wave 3 feature implementation has not started.
 
 Read `CLAUDE.md` first, then the new package and your assigned module. The package supersedes conflicting scope, architecture, sequencing and acceptance instructions in this original handoff and the older research specs. Historical measurements/access inventory below are retained for context; they are not newly verified live state. Old branch/worktree claims must be checked, not assumed.
 

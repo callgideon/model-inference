@@ -2,7 +2,7 @@
 
 Read the source sections for background/detail; contracts and durable protocols override conflicts. This map ensures the combined serving/trace program is assigned rather than silently dropped. Named tasks are in [the manifest](tasks.json); required test oracles are in [verification](04-verification.md).
 
-**2026-09-21 amendment:** the table below preserves the original requirement mapping. Mixed IDs resolve through [the complete 45-task mapping](08-platform-split.md). Product scope and current release gates are in [App requirements](../platforms/03-app-spec.md), [Lab requirements](../platforms/05-lab-spec.md) and manifest v3. App uses E3A/I2A/E4; Lab operations use E3L/I2L and observation uses E5L.
+**2026-09-21 amendment:** the table below preserves the original requirement mapping. Mixed IDs resolve through [the complete 45-task mapping](08-platform-split.md). Product scope and current release gates are in [App requirements](../platforms/03-app-spec.md), [Lab requirements](../platforms/05-lab-spec.md) and manifest v4. App uses E3A/I2A/E4; Lab operations use E3L/I2L and observation uses E5L.
 
 | Source requirement family | Implementation owners | Verification / disposition |
 |---|---|---|
@@ -28,7 +28,7 @@ Read the source sections for background/detail; contracts and durable protocols 
 | Platform S1/S2 loop | Serving + traces + feedback + evaluation above | Pilot evidence; broader platform thesis remains context |
 | Payments, commercial second-owner, OpenRouter | Deferred by accepted scope | No implementation task or paid-launch claim in this package |
 | Consumer teams/pooling and org-switcher | Deferred from App | Personal-org consumer ownership retained; provider memberships separate |
-| Provider dataset/experimentation/training loop | Lab milestones M2–M4 | Explicit roadmap; not a consumer launch dependency or an already decomposed coding task |
+| Provider dataset/experimentation/training loop | Lab milestones M2–M4 | F3/D7–D9/N/H/B/P/R/I5–I7/E6L–E8L detailed follow-on tasks; no consumer launch dependency |
 | Provider roles, model versions, endpoint publication | L1–L4/A3/D1R | LAB-ACCESS/PUBLISH; customer access grants independent from model ownership |
 | Consumer public verified signup and individual grant | A1/A2/D1R/D5 | CREDIT-GRANT/IDENTITY/UNITS and APP-JOURNEY |
 | Response caching, speculative/quantized/kernel optimization | Deferred pending evidence and separate consent semantics | M2/W3 parity/capability probes only; do not activate from research estimates |
@@ -43,4 +43,42 @@ The old serving implementation spec's §§3–5, 13–14 describe queue state, H
 
 - 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.
 
-- 2026-09-21 wave-2 audit: manifest v3 adds F2R/F2P/D1R/C0/I0/E2R/G1R/V1M/U1R. Imported baseline completions are retained; the audit and revision briefs map current repair/integration gates. Earlier unverified-remote statements apply only to the pre-pull review.
+- 2026-09-21 wave-2 audit: manifest v4 adds F2R/F2P/D1R/C0/I0/E2R/G1R/V1M/U1R. Imported baseline completions are retained; the audit and revision briefs map current repair/integration gates. Earlier unverified-remote statements apply only to the pre-pull review.
+
+## Complete product coverage (manifest v4)
+
+The original source map above is historical where it says later Lab work is undecomposed. This mapping gives every current product requirement an implementation owner and an actual gate. Current dispatch remains App first.
+
+| Requirement | Task coverage | Gate / oracle |
+|---|---|---|
+| APP-01 signup/recovery | A2/C0/C3A/D1R | E3A; APP-JOURNEY/CONSOLE-TENANT |
+| APP-02 individual grant | A1/D1R/D5/F2P | E3A; CREDIT-GRANT/IDENTITY |
+| APP-03 catalog/rates/capabilities | A3/G1R/S2M | E3A/E4; CREDIT-RATE/MARLIN-SOP |
+| APP-04 keys | U2/C3A/G1R | E3A; API-AUTH |
+| APP-05 inference/media | G2/G4U/M2/M3/W2/W3 | E3A/E4; MEDIA-SEC/PARITY/API-STREAM |
+| APP-06 explicit async/replay | G3/D2–D5/Q2/Q3 | E3A; API-MODES/DUR-OUTPUT |
+| APP-07 credits/history | U1R/C0/C3A/D5 | E3A; CREDIT-UNITS/SPEND |
+| APP-08 own usage | U1R/C0/C3A/D5 | E3A; CONSOLE-TENANT |
+| APP-09 working docs | A3/S2M | E3A/E4; APP-JOURNEY/MARLIN-SOP |
+| APP-10 settings/data consent | U2/C3A, T3 only when capture enabled | E3A and enabled-feature TRACE-TENANT |
+| APP-11 operator controls | U3/C3A/A3 | E3A; CREDIT-RATE/CONSOLE-TENANT |
+| APP-12 bounds/exhaustion | G1R/D2/A2 | E3A/E4; DUR-CAP/CREDIT-SPEND |
+| APP-13 Marlin SOP launch profile | S2M/A3/W3/E4 | MARLIN-SOP; real-model smoke separate from SOP-quality certification |
+| LAB-01 access | L1/L2/D1R | E3L; LAB-ACCESS |
+| LAB-02 registry | L2/F2P/D1R | E3L; LAB-PUBLISH |
+| LAB-03 dev/prod/rollback | L3/L4/G1R/W2 | E3L; LAB-PUBLISH |
+| LAB-04 publication/rates | L4/A3/D1R | E3L; CREDIT-RATE/LAB-PUBLISH |
+| LAB-05 aggregates | L4/C0/T2I/T3 | E3L/E5L; LAB-ACCESS/TRACE-BOUNDS |
+| LAB-06 traces | V1M/C2/T2I/T3/G4T | E5L; TRACE-TENANT/RECOVER |
+| LAB-07 review/feedback | V2/C3F/D6F/G4F | E5L; FEEDBACK-ACK |
+| LAB-08 dataset lifecycle | F3/D7/N1–N4 | E6L/E7L; DATA-IMPORT/SPLIT/RIGHTS/LINEAGE |
+| LAB-09 evaluation/compare | B1/B2/B4/D7/H1 | E6L; EVAL-DURABLE/REPRO/COMPARE |
+| LAB-10 checkpoints | B3/L2/D7 | E6L; CHECKPOINT-IDEM |
+| LAB-11 prompt/harness | H1/F3/B4 | E6L; HARNESS-SAFE/EVAL-REPRO |
+| LAB-12 teacher/judge | J2/J3/V3/C3L/D6J and P2/D8 | E5L/E7L; JUDGE-BUDGET/SCORES/PIPELINE-BUDGET |
+| LAB-13 training integration | P1/P3/P4/D8/N3 | E7L; TRAIN-RECOVER/PIPELINE-LINEAGE |
+| LAB-14 controlled release | D9/R1/R2/R4 | E8L; ROLLOUT-PIN/RECOVER |
+| LAB-15 optimization evidence | R3/R4/W3; conditional X5/X6 backend | E8L; OPT-PARITY; actual hardware gate separate |
+| LAB-16 specialized modalities | X1/X2 video, X3/X4 robotics | Approved contract then VIDEO-CAUSAL/ROBOT-REPLAY; conditional, not App launch |
+
+I5/I6/I7 package later workers and per-enabled-feature staging evidence. E6L does not depend on E5L/customer capture; E8L does not depend on training. Core local completeness covers App plus Lab M0–M4. Speech/commercial/fleet/new chip or transport claims require their own scope/activation; nothing is silently counted complete.

@@ -9,7 +9,7 @@ Updated 2026-09-21. Recommendations below are explicit so later sessions do not 
 - **One-time 10,000 promotional credits per individual user.**
 - Provider models/endpoints, input/output configuration, inference analysis, datasets, benchmarking and improvement workflows; OpenAI-style standards where practical.
 - Inference optimization, scaling, throughput, cost and heterogeneous compute are the company's internal business focus. Model optimization may remain an internal service whose outputs are benchmarked as new variants.
-- Marlin is the immediate hosting relationship; video, robotics and LLM workloads are relevant; speech is deferred.
+- Latest priority: Marlin2B SOP verification over large robotics datasets; **launch the inference App first**. The user describes a VLA application context; validate actual endpoint modalities/output before advertising action or streaming capability. Lab follows the accepted App candidate. Video/robotics/LLM remain broader directions; speech is deferred.
 - Wave-2 implementation from the other system is now pulled at `271add9`; the repository is audited. Unpushed work, remote worktrees and current hosted state remain unverified. See the wave-2 audit for present versus target behavior.
 
 ## Architecture defaults adopted by this amendment
@@ -42,6 +42,8 @@ Updated 2026-09-21. Recommendations below are explicit so later sessions do not 
 | Remote implementation state | Coordinator inventories actual commits/worktrees before applying task mapping | Integration assignments, not documentation |
 
 The initial failed/cancelled execution charging policy is proposed in [credits](02-credits.md) and must be disclosed before launch. No new user clarification is required to continue documentation or local contract work.
+
+See [the complete pending-input register](../plan/15-pending-inputs.md) for owners, blockers and work that can continue, including SOP rubric/dataset access and external training/teacher choices.
 
 ## Evidence and sources
 

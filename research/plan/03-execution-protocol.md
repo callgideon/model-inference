@@ -2,9 +2,9 @@
 
 ## Session start
 
-First read [the platform-split handoff](PLATFORM-SPLIT-HANDOFF.md) and read the wave-2 audit and reconcile any commits after `271add9`. Manifest v3 is authoritative for active task IDs, current paths and separate App/Lab release gates. Existing worktree owners retain their files until a coordinated handback; do not reset their status because this documentation uses `planned`.
+First read [the fresh-session handoff](16-fresh-session-handoff.md), [current complete plan](12-complete-build-plan.md) and the wave-2 audit and reconcile any commits after `271add9`. Manifest v4 is authoritative for active task IDs, current paths and separate App/Lab release gates. Existing worktree owners retain their files until a coordinated handback; do not reset their status because this documentation uses `planned`.
 
-Read root CLAUDE and HANDOFF, this package, and the selected module brief. Inspect actual branch/worktree status and newer evidence before coding. The manifest is the planned dependency graph, not a live scheduler. Coordinator records assigned task, owner, base SHA and integration target in an append-only session record under `research/plan/evidence/`; do not have every worker rewrite the shared manifest.
+Read root CLAUDE and HANDOFF, this package, and the selected module brief. Inspect actual branch/worktree status and newer evidence before coding. The manifest is the planned dependency graph, not a live scheduler. Its current_execution_scope restricts dispatch to App-first work; graph readiness alone does not authorize Lab or conditional extensions. Coordinator records assigned task, owner, base SHA and integration target in an append-only session record under `research/plan/evidence/`; do not have every worker rewrite the shared manifest.
 
 Use an isolated checkout of the coordinator's **committed integration SHA**. Do not branch from uncommitted foundation changes. Example after selecting task D1 and a verified SHA:
 
@@ -46,3 +46,7 @@ Live tests/deployment use a coordinator-allocated environment and a single deplo
 ## Verification log
 
 - 2026-09-20: Defined isolated worktree ownership, mock/integration distinction and rollback rules for external implementation sessions.
+
+## Extended Lab lanes after activation
+
+F3 publishes later schemas without gating App. D7–D9 remain the single D migration lane. N/H/B/P/R own the explicit feature roots in manifest v4; L no longer owns those paths broadly. E6L/E7L/E8L prove separate workflows, and I5–I7 package separate workers. See [ownership and phase order](12-complete-build-plan.md). Concurrent D8/D9 design is allowed; migration IDs and merged-tree upgrade tests remain serial. Each package is broken into its listed review slices before dispatch; additional splits preserve the parent task and acceptance criteria.

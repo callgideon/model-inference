@@ -57,3 +57,17 @@ Historical ⚠️ research items remain experiments, not launch facts. E1/E4 own
 ## Wave-2 audit additions (2026-09-21)
 
 See [the audit](10-wave2-platform-audit.md) for findings A01–A14 and disposition. Original USD contracts/schema, absent consumer database adapter, uncomposed runtime and absent provider authorization are release blockers until F2P/D1R/C0/G2/L2 evidence exists. Production fixture account reporting is disabled by the local audit correction. Existing hosted installer fail-open exposure remains a deployment risk; I0 is code/test preparation, not proof of a live repair. E2R must repair D harness ownership before parallel database suites. Real-service tests are pending on this host because Docker is unavailable; no unit count substitutes for them.
+
+## Complete-plan additions and latest priority
+
+| Risk | Effect | Mitigation / owner |
+|---|---|---|
+| App launch drowned in broader Lab roadmap | Immediate Marlin customers still lack a stable self-service endpoint | APP-FIRST execution scope, S2M profile and independent E3A/E4 gate; coordinator activates Lab only after accepted App candidate |
+| VLA application context interpreted as action/streaming model support | Wrong API promises, untestable latency or unsafe integration expectations | S2M verifies actual artifact/protocol; recorded SOP analysis first; X1/X3 contracts gate transport/action trials |
+| Large robotics corpus split by clip instead of episode/source | Leakage and overstated SOP accuracy | N2 grouped splits, N3 lineage, B2 clustered/paired reports; predeclared temporal rubric and missing-case denominator |
+| Later Lab becomes a second wallet/job/permission system | Divergent accounting and data rights | F3 common fixtures, D7–D9 same D owner, reuse exact budgets and source-purpose grants |
+| External train/teacher submission times out | Duplicate spending and inconsistent model lineage | Durable intent/unknown state, provider idempotency or reconciliation; manual training baseline; P2/P3 tests |
+| Immutable datasets evade revocation | Unauthorized reuse after consent/retention change | Current authorization at read/export/submit, transitive lineage, logical restriction and physical purge evidence; no unlearning promise |
+| Fixed metric hides failures or sequential testing overclaims | Bad model promoted | B2 full denominators/required slices; R2 predeclared analysis, coverage and inconclusive states |
+| Synthetic quality/performance fixture presented as real measurement | False readiness and unsupported hardware claims | Separate software/local/staging/model/hardware evidence in every E gate; R3/X5/X6 pins |
+| Main push implicitly deploys unintegrated work | Consumer regression | Dedicated integration/review branch; release-specific evidence and authorized deployment context |

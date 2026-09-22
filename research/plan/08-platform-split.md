@@ -1,5 +1,7 @@
 # Implementation amendment — App and Provider Lab
 
+**Current scheduling overlay:** [complete plan](12-complete-build-plan.md), manifest v4 and [fresh-session handoff](16-fresh-session-handoff.md). Marlin App launch is the immediate scope; compatible brief details below remain binding. S2M adds the Marlin profile; Lab M2–M4 are now decomposed separately.
+
 Revision 2026-09-21. Read [product architecture](../platforms/README.md) first. This amendment supersedes conflicting routing, credit-unit, signup and release-dependency instructions in the original module briefs. Unchanged durable protocols remain binding.
 
 ## Current State Summary

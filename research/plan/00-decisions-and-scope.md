@@ -1,5 +1,7 @@
 # Accepted scope and decisions
 
+**Current scope/sequence:** [complete implementation plan](12-complete-build-plan.md). Marlin2B SOP verification over large robotics datasets is the lead workload; launch the consumer App first. This file’s initial scope is the App/early-Lab release. Later Lab M2–M4 now have executable packages; conditional/deferred work remains explicit.
+
 ## Product outcome
 
 A developer can sign up, verify their identity, receive 10,000 promotional credits once per individual, create a key, submit text/video inference, retrieve explicitly asynchronous jobs and inspect their own usage in `apps/app`. Provider operations and improvement workflows belong in the separate `apps/lab`. Both reuse the durable inference backend. The [two-platform architecture](../platforms/README.md) and [implementation amendment](08-platform-split.md) govern the revised product boundary and release gates. First consumer release runs on one GPU; its failure semantics are honest and recovery is tested.
@@ -30,7 +32,7 @@ The user's latest product clarification overrides earlier zero-grant and single-
 
 ## Deferred
 
-Payments/invoices/refunds of real money; OpenRouter listing and its ZDR claims; commercial second-owner onboarding gate; consumer teams/pooling; response caching; managed training/distillation; quantization/kernel experiments without parity evidence; capacity purchases or Savings Plans. Provider isolation tests with two synthetic providers are mandatory for Lab regardless of the deferred commercial second-owner gate. Training and specialized modalities now have an explicit [Lab roadmap](../platforms/06-lab-roadmap.md), not an App launch dependency.
+Payments/invoices/refunds of real money; OpenRouter listing and its ZDR claims; commercial second-owner onboarding gate; consumer teams/pooling; response caching; fully managed training/RL infrastructure (external training/distillation integration is planned Lab scope); quantization/kernel experiments without parity evidence; capacity purchases or Savings Plans. Provider isolation tests with two synthetic providers are mandatory for Lab regardless of the deferred commercial second-owner gate. Training and specialized modalities now have an explicit [Lab roadmap](../platforms/06-lab-roadmap.md), not an App launch dependency. Detailed tasks now exist in [Lab improvement handoffs](13-lab-improvement-handoffs.md).
 
 ## Current implementation baseline
 

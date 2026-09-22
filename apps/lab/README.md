@@ -1,5 +1,7 @@
 # Provider Lab (`apps/lab`)
 
+**Sequencing:** consumer Marlin App launch comes first. [Complete plan](../../research/plan/12-complete-build-plan.md), [detailed later Lab packages](../../research/plan/13-lab-improvement-handoffs.md) and [fresh-session handoff](../../research/plan/16-fresh-session-handoff.md) are ready for the next accepted Lab scope.
+
 **Documentation scaffold only. No runnable application, dependencies or deployment has been created yet.**
 
 This is the planned provider product: register model versions, configure private dev and production endpoints, inspect authorized inference evidence, benchmark candidates, curate data and connect improvement workflows.

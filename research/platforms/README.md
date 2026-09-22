@@ -1,5 +1,7 @@
 # Two-platform product architecture
 
+**Latest priority:** Marlin2B SOP verification over large robotics datasets is the lead application; launch the consumer inference App first. [Complete implementation plan](../plan/12-complete-build-plan.md) and [fresh-session prompt](../plan/16-fresh-session-handoff.md) govern execution. Lab M2–M4 now have [detailed handoffs](../plan/13-lab-improvement-handoffs.md); this does not make them App launch dependencies.
+
 Updated 2026-09-21. **Target product architecture, reconciled with wave 2 at `271add9`; deployment is not claimed.**
 
 The business operates inference infrastructure. Two products make that infrastructure useful to different users:

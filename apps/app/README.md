@@ -1,5 +1,7 @@
 # Consumer inference App (`apps/app`)
 
+**Current execution:** [Marlin App-first complete plan](../../research/plan/12-complete-build-plan.md) and [fresh-session prompt](../../research/plan/16-fresh-session-handoff.md). Preserve the audited wave-2 work; actual product-v2 and runtime integration remain pending.
+
 The customer console: sign in, browse models, copy a working request, manage API
 keys, see usage and balance, read the docs. Next.js (App Router) on Vercel,
 Supabase for auth and Postgres. Current [requirements](../../research/platforms/03-app-spec.md)

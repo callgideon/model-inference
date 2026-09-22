@@ -87,3 +87,24 @@ Result access expires at 24h, processing cache at 7d, full trace content at owne
 - 2026-09-20: Frozen proposed v1 semantics for F2 implementation. All configuration values here require tests and, where performance-dependent, pilot measurement.
 
 - 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.
+
+## F3 follow-on Lab contracts (not App launch prerequisites)
+
+F3 publishes the concrete Python/TypeScript encoding and shared fixtures for these records after F2P. The following fields/invariants define its required scope; do not add all later schemas to the App runtime just to satisfy a roadmap.
+
+| Record | Required identity/configuration | Invariants |
+|---|---|---|
+| SourceRef / DataUseGrantRef | owner, source digest/episode/time basis, license/provenance, purpose/destination, expiry/revocation version | Resolve current authorization at access/submit; snapshots audit permission at a time, never override later revocation |
+| DatasetVersion / Sample | immutable manifest/schema hash, source and parent refs, sample ID/content digest, media timestamps/units, labels/method, grouping/split policy/seed | Publish atomically; corrections create new records/version; preserve train/dev/holdout partition and all source restrictions |
+| HarnessRevision | prompt/processor/input/tool schema/recorded response refs, adapter version and capability coverage | Immutable; safe built-in replay adapters; unsupported side effects explicit; no uploaded arbitrary code |
+| EvaluationRun / Case / Attempt | dataset/split, serving/harness/evaluator/environment pins, seed, case universe, purpose, budget, lease generation, idempotency key | Immutable run specification; one logical case result; attempts and missing/errors retained; cancellation and stale writes fenced |
+| EvaluationReport / Decision | paired case IDs, denominator/coverage, source-cluster slices, latency and unit-tagged costs, uncertainty method, predeclared thresholds | Record method/version and inconclusive outcomes; no incomparable run promoted by aggregate-only score |
+| CheckpointReceipt | external run/provider, authenticated event ID/sequence, artifact digest, subscription/suite revision | Unique receipt and benchmark per subscription/version; late/duplicate/out-of-order events visible; no automatic deployment |
+| Annotation / ReviewDecision | original evidence, method/model/prompt/rubric, reviewer provenance, correction parent, confidence/disagreement | Human, synthetic and customer feedback origins stay distinct; no forgery of calibration authority |
+| ExternalPipelineRun | connector/capability version, dataset/config hash, submit intent, external ID, callback receipts, checkpoints, unit-tagged reservations/costs | Manual export/import is supported explicitly; automatic submit is available only for tested adapters; ambiguous submit is never blindly retried |
+| ReleasePolicy / Assignment | provider/endpoint, permitted serving variants, allocation unit/seed, traffic/budget bounds, predeclared guardrails, policy revision | Explicit pins honored; assignment is server-derived; future admissions use current policy, old jobs stay pinned |
+| OptimizationEvidence | serving/hardware/runtime/build/dtype/processor pins, baseline/corpus/load profile and raw report digests | New execution identity for material change; measured support limited to the tested combination |
+
+Evaluation states must distinguish queued/running/succeeded/partial/failed/cancelled/restricted; per-case outcomes include explicit missing/unsupported states. External pipeline states must additionally distinguish submission intent, submitted, unknown submission and reconciling. F3/D7/D8 define exact legal transitions and cancellation/late-artifact semantics in executable fixtures. Monetary states use the existing exact budgets/settlement protocol; a new UI must not invent a parallel spend counter.
+
+Requests used for Lab benchmark execution use a funded provider_dev wallet and bounded concurrency; consumer signup grants are not training/evaluation credits. External teacher/training USD costs are never summed with CREDIT. Full object payloads live in authorized object storage; relational rows store bounded references and lineage. Current inference contracts remain backward compatible while the later workers/apps adopt F3.

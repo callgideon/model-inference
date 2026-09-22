@@ -1,6 +1,8 @@
 # Coordinator handoff — implementation continuation
 
-> **Current authority:** [wave-2 audit](10-wave2-platform-audit.md), [revision handoffs](11-wave3-revision-handoffs.md), [continuation prompt](PLATFORM-SPLIT-HANDOFF.md) and manifest v3. Wave 2 is imported at `271add9`; preserve its completion evidence. The older coordinator instructions below are historical where they conflict.
+**Dispatch authority:** [complete build plan](12-complete-build-plan.md), [fresh-session handoff](16-fresh-session-handoff.md), [pending inputs](15-pending-inputs.md) and manifest v4. Current scope is APP-FIRST-MARLIN-SOP. Follow S2M with App work; activate Lab only after App candidate acceptance. Older next-session text below is historical where it differs.
+
+> **Current authority:** [wave-2 audit](10-wave2-platform-audit.md), [revision handoffs](11-wave3-revision-handoffs.md), [continuation prompt](PLATFORM-SPLIT-HANDOFF.md) and manifest v4. Wave 2 is imported at `271add9`; preserve its completion evidence. The older coordinator instructions below are historical where they conflict.
 
 ## Current State Summary
 
@@ -10,11 +12,11 @@ Wave 2 is merged at the imported main SHA `271add9`. The local audit reconciles 
 
 The consumer release is a free single-GPU pilot with public verified signup, 10,000 CREDIT once per individual, exact holds/settlement, explicit async, secure media and own usage. Provider operations, trace analysis and evaluation have separate Lab gates. Payments, commercial second-owner onboarding, OpenRouter and managed training remain later. Continue inference on optional capture loss; retain the 24h results/7d cache/up-to-90d content/13mo metadata policies. Historical production state requires read-only revalidation before deployment.
 
-The complete authority begins with [product architecture](../platforms/README.md) and [the amendment](08-platform-split.md), then [scope](00-decisions-and-scope.md), [contracts](01-contracts.md), [durable protocols](02-durable-protocols.md), manifest v3 and the assigned brief. Historical research remains supporting context. Preserve research verification history; append new evidence. No secret values belong in handoffs, logs or commits.
+The complete authority begins with [product architecture](../platforms/README.md) and [the amendment](08-platform-split.md), then [scope](00-decisions-and-scope.md), [contracts](01-contracts.md), [durable protocols](02-durable-protocols.md), manifest v4 and the assigned brief. Historical research remains supporting context. Preserve research verification history; append new evidence. No secret values belong in handoffs, logs or commits.
 
 ## Immediate Next Steps
 
-Follow the continuation handoff: S1 review/commit → F2R (parallel I0/E2R) → F2P → parallel D1R/C0/G1R/runtime/App/Lab slices. Integrate the full durable runtime before G2 cutover. Manifest v3 gives exact dependencies; the old G2-before-W2 sequence is withdrawn. Preserve code and evidence from the original package.
+Follow the continuation handoff: S1 review/commit → F2R (parallel I0/E2R) → F2P → parallel D1R/C0/G1R/runtime/App/Lab slices. Integrate the full durable runtime before G2 cutover. Manifest v4 gives exact dependencies; the old G2-before-W2 sequence is withdrawn. Preserve code and evidence from the original package.
 
 ## Architecture Overview
 
@@ -49,7 +51,7 @@ Do not treat historical A0 fixes as new work: several already exist. Do not chan
 Planning observed 23 Python tests, 4 console tests and console lint passing before this documentation work; these are baseline observations only. Documentation validation is recorded separately in [the preparation report](evidence/documentation-review.md). Future tests, live fault drills and rollout gates remain unexecuted.
 
 ```text
-Act as implementation coordinator. Start with research/plan/PLATFORM-SPLIT-HANDOFF.md and reconcile the work already running on this system. Read product architecture, amendment mapping/briefs and manifest v3 before assigning active tasks. Preserve compatible completed work and amend F2 contracts before merging conflicting credit/ownership changes. Follow independent App/Lab gates, shared-file ownership, durable protocols and evidence rules. Do not claim mock-only work integrated or exceed this session's environment authorization.
+Act as implementation coordinator. Start with research/plan/PLATFORM-SPLIT-HANDOFF.md and reconcile the work already running on this system. Read product architecture, amendment mapping/briefs and manifest v4 before assigning active tasks. Preserve compatible completed work and amend F2 contracts before merging conflicting credit/ownership changes. Follow independent App/Lab gates, shared-file ownership, durable protocols and evidence rules. Do not claim mock-only work integrated or exceed this session's environment authorization.
 ```
 
 ## Verification log

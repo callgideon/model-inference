@@ -2,7 +2,7 @@
 
 Every test ID below names a required **future** test; none is claimed implemented by this package. Module briefs map tasks to these IDs. Retain existing research test cases, but namespace them as `SERV-*`, `TRACE-*`, `JUDGE-*` or `CONSOLE-*` so repeated A1/Q1/I1 labels cannot collide. E2 publishes the explicit legacy-to-new mapping in its evidence.
 
-**2026-09-21 amendment:** use [platform split](08-platform-split.md) and [manifest v3](tasks.json). Consumer, Lab operations and Lab observation are independently released. Implement new tests against actual services; this documentation has not executed them.
+**2026-09-21 amendment:** use [platform split](08-platform-split.md) and [manifest v4](tasks.json). Consumer, Lab operations and Lab observation are independently released. Implement new tests against actual services; this documentation has not executed them.
 
 ## Required suites
 
@@ -83,3 +83,42 @@ Payments/OpenRouter/second-owner commercial gates remain deferred. No throughput
 - 2026-09-20: Defined planned pass/fail oracles and release gate separation. Existing local baseline results are recorded in the scope document; new implementation tests remain pending.
 
 - 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.
+
+## Complete-plan oracles (App profile and later Lab)
+
+These are required future checks, not tests claimed to exist. S2M/MARLIN-SOP is part of the current App scope; the rest activate with their Lab/extension milestones. Each gate combines its feature suites with real adapter and browser evidence; use deterministic external protocol servers locally and separately record authorized live adapter/model/hardware evidence.
+
+| ID | Injection / action | Required passing observation | Owners |
+|---|---|---|---|
+| MARLIN-SOP | Actual artifact/processor profile, supported SOP-oriented finite clip, bounded dataset resume and unsupported modes | Snippets match real capabilities; no duplicate accepted items/charges after resume; no action/native-stream/accuracy claim inferred from VLA context | S2M/A3/M/W/E4 |
+| DATA-IMPORT | Malformed/oversized inputs, time-unit mismatch, cross-provider refs and crash during publication | Bounded validator, explicit row errors, provenance preserved; no partially published dataset | N/D/E |
+| DATA-IMMUTABLE | Concurrent publication, changed artifact under URL, export/retry | Stable manifest/content hashes, atomic version, append-only derivation; changed bytes never silently redefine a version | N/D/E |
+| DATA-SPLIT | Related clips/episodes/session duplicates, holdout descendants in train export | Group isolation, deterministic seed/policy and holdout protection; all rejected leakage visible | N/P/E |
+| DATA-RIGHTS | Revoke/expire grant after selection and before read/export/submit | Current source-purpose authorization enforced throughout; immutable manifests confer no continued content access | N/C/D/P/E |
+| DATA-LINEAGE | Trace → corrected label → dataset → training → checkpoint, then revoke source | Transitive links intact; new access/egress blocked; artifact restrictions and deletion/reconciliation recorded; no false unlearning claim | N/P/E |
+| HARNESS-SAFE | Unrecorded tool call, network mutation or actuator request during replay | Built-in adapters only, bounded recorded/mocked side effects, unsupported coverage explicit; no production execution | H/E |
+| EVAL-REPRO | Two serving versions over frozen cases/harness/evaluator/environment | Matching case universe/config hashes and complete outcomes; rerun variance is recorded, not promised deterministic model output | B/H/N/E |
+| EVAL-DURABLE | Crash/ack loss/lease expiry/cancel/exhaustion/duplicate callback | One logical outcome per case, all attempts/costs visible, no stale writes or ambiguous resubmit | B/D/E |
+| EVAL-COMPARE | Missing failed cases, skewed source groups, tiny samples or required-slice regression | Full denominators, paired or explicitly unpaired reports, honest uncertainty and inconclusive states; no hidden severe regression | B/R/E |
+| CHECKPOINT-IDEM | Forged/replayed/reordered checkpoint events, changed artifact and event burst | Authenticated receipt, digest validation, once-per-subscription run, bounded spend and visible skipped states; no automatic promotion | B/D/E |
+| PIPELINE-LINEAGE | Human/synthetic/imported label changes and export round trip | Original evidence and method/reviewer/rubric retained; no forged ground truth; holdout never training input | P/N/D/E |
+| PIPELINE-BUDGET | Concurrent paid intents, timeout after accept, consent revoke, rate change | Exact separate USD reservation cap includes ambiguous intents; no automatic duplicate submit or revoked egress | P/J/D/E |
+| TRAIN-RECOVER | Manual bundle/checkpoint cycle, late checkpoint after cancel, missing artifacts and unknown submit | Reproducible authorized lineage, explicit connector capability and uncertainty; held-out evaluation before eligibility, never training-loss promotion | P/B/E |
+| ROLLOUT-PIN | Retries, session requests, explicit pins and policy changes | Declared stable cohort; original request revision/rate immutable; shadow output suppressed and no double consumer debit | R/G/D/E |
+| ROLLOUT-RECOVER | Quality/health/budget breach, delayed metrics, controller restart and rollback race | Bounded candidate exposure, no expansion on missing evidence, one audited decision, future requests revert and admitted jobs stay pinned | R/I/D/E |
+| OPT-PARITY | Incompatible tokenizer/dtype/capability, different load/corpus or unsupported hardware claim | Separate immutable variants, comparable pinned evidence, failed quality slices block promotion; hardware scope explicit | R/W/X/E |
+| LAB-WORKERS | Worker crash, unavailable storage/secret, filled disk, denied egress and restore | Durable reconciliation, bounded queues/resources, separate feature flags and no App inference dependency on Lab worker uptime | I/B/P/R/E |
+| VIDEO-CONTRACT | Incomplete workload/freshness/transport/window/deadline specification | Trial stays conditional until owner approves measurable inputs/outputs and overload policy | X1/E |
+| VIDEO-CAUSAL | Future/out-of-order/jittered frames, overlap, reconnect and pressure | Causal bounded windows, explicit loss/staleness, correct dedup and finite-clip parity within approved envelope | X2/M/W/E |
+| ROBOT-CONTRACT | Missing robot/policy/action units/clocks/local control owner | No hardware enablement without complete approved workload/placement/fallback contract | X3/E |
+| ROBOT-REPLAY | Late observations/actions, disconnect, unit mismatch and simulator/offline replay | Freshness rejection, local actuator authority, proposed/executed distinction; offline replay never actuates hardware | X4/E |
+| BACKEND-CONTRACT | Unsupported operator/model, runtime crash or incompatible usage/output | Only measured supported combinations advertised; fencing, exact accounting and quality survive backend change | X5/X6/W/E |
+
+## Additional milestone gates
+
+- **LAB-EVALUATE-LOCAL / E6L:** owned import → frozen grouped split → baseline/candidate → comparison → idempotent checkpoint benchmark. Real DB/object/services and browser; E5L and paid judge unavailable must not break this journey.
+- **LAB-IMPROVE-LOCAL / E7L:** permitted deployment evidence → annotation → new dataset → external training bundle/checkpoint → held-out decision, repeated a second time. Manual connector uses real files/receipts; a protocol server does not certify a particular paid service.
+- **LAB-ROLLOUT-LOCAL / E8L:** stable bounded shadow/canary, threshold/coverage failure, rollback and separately scoped optimization evidence. No training dependency required.
+- **Complete release:** local gates plus allocated staging/process/restore/data-revocation checks for every enabled feature, actual Marlin GPU/profile evidence, published credit rates, legacy-account disposition and authorization for any external paid adapter/affected traffic. Record each missing input; do not aggregate incomplete features into a single green label.
+
+For Marlin SOP evaluation, freeze episode/source grouping, temporal event-matching tolerances and task rubric before comparing candidates. Segment long recordings with documented overlap/boundaries; correlated clips are not independent samples. Report dataset coverage and unavailable ground truth. A generic text judge alone cannot certify procedure compliance or physical task safety.

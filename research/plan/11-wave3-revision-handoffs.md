@@ -1,6 +1,8 @@
 # Executable revision handoffs after wave 2
 
-Use the [audit](10-wave2-platform-audit.md), [manifest v3](tasks.json), [product architecture](../platforms/README.md) and original module briefs together. These revision tasks preserve completed v1 behavior and establish the common base for the remaining implementation. They supersede conflicting start/order/ownership instructions in the old F2.2 list. No implementation-model-specific orchestration is required.
+**Current scheduling overlay:** [complete plan](12-complete-build-plan.md), manifest v4 and [fresh-session handoff](16-fresh-session-handoff.md). Marlin App launch is the immediate scope; compatible brief details below remain binding. S2M adds the Marlin profile; Lab M2–M4 are now decomposed separately.
+
+Use the [audit](10-wave2-platform-audit.md), [manifest v4](tasks.json), [product architecture](../platforms/README.md) and original module briefs together. These revision tasks preserve completed v1 behavior and establish the common base for the remaining implementation. They supersede conflicting start/order/ownership instructions in the old F2.2 list. No implementation-model-specific orchestration is required.
 
 ## Assignment protocol
 

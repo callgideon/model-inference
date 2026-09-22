@@ -1,10 +1,12 @@
 # Implementation handoffs — consumer App and provider Lab
 
+**Current start:** [complete build plan](12-complete-build-plan.md), [fresh-session prompt/context](16-fresh-session-handoff.md), [all task statuses](17-task-ledger.md) and [pending inputs](15-pending-inputs.md). Immediate scope is the Marlin SOP-use-case consumer App launch; Lab follows an accepted App candidate. Manifest v4 adds detailed Lab M2–M4 packages and conditional extensions without resetting original work.
+
 Status: **wave 2 imported from main `271add9` and audited; wave-3 feature work has not started**. See [audit findings](10-wave2-platform-audit.md), [new revision handoffs](11-wave3-revision-handoffs.md) and [actual local verification](evidence/wave2-platform-audit.md). Original v1 completion evidence remains historical evidence, not product-v2 compatibility or live status.
 
 ## Start here
 
-Read [the wave-2 audit](10-wave2-platform-audit.md) and [revision briefs](11-wave3-revision-handoffs.md), then [product architecture](../platforms/README.md), [the cross-system handoff](PLATFORM-SPLIT-HANDOFF.md), [implementation impact](08-platform-split.md) and [amendment briefs](09-amendment-workstreams.md), then [accepted decisions](00-decisions-and-scope.md), [contracts](01-contracts.md) and [durable protocols](02-durable-protocols.md). Reconcile current work before selecting one active task from [manifest v3](tasks.json). Follow [worktree rules](03-execution-protocol.md); attach [verification evidence](04-verification.md). Six old mixed tasks are superseded; their IDs remain for mapping prior work.
+Read [the fresh-session handoff](16-fresh-session-handoff.md) and [complete build plan](12-complete-build-plan.md), then [the wave-2 audit](10-wave2-platform-audit.md), [revision briefs](11-wave3-revision-handoffs.md), [product architecture](../platforms/README.md), [implementation impact](08-platform-split.md) and [amendment briefs](09-amendment-workstreams.md), then [accepted decisions](00-decisions-and-scope.md), [contracts](01-contracts.md) and [durable protocols](02-durable-protocols.md). Reconcile current work before selecting one active task from [manifest v4](tasks.json). Follow [worktree rules](03-execution-protocol.md); attach [verification evidence](04-verification.md). Six old mixed tasks are superseded; their IDs remain for mapping prior work.
 
 | Track | Handoff | Owns | Earliest useful work |
 |---|---|---|---|
@@ -29,11 +31,11 @@ F/S establish the revised common contracts. Independent tracks then develop agai
 
 ## Delivery sequence
 
-1. Review/commit S1 audit; retain F1/F2/D1 and all wave-2 history. F2R closes carryovers while I0 and E2R can work independently.
+1. Review/commit S1 audit; retain F1/F2/D1 and all wave-2 history. F2R closes carryovers while I0, E2R and S2M can work independently.
 2. F2P encodes the revised contract; D1R adds migrations after 0005. C0 wires consumer database reporting independently of Lab content.
 3. Parallel runtime/App tasks use the revised fixtures, then integrate real D2–D5/M/Q/W before G2 mounts anything. I0's installer prerequisite is mandatory.
 4. E3A → I2A/I3/E4 proves the consumer release. L1–L4/E3L/I2L prove provider operations independently; V1M/C2/T/J feed E5L observation.
-5. Fleet, datasets/training, streaming/robotics and speech follow their separate roadmap gates. No old wave-3 linear sequence overrides the manifest.
+5. After the App candidate is accepted, activate Lab milestones: F3/D7/N/H/B/I5/E6L for evaluation, D8/N3/P/I6/E7L for improvement, D9/R/I7/E8L for rollout. [Detailed briefs](13-lab-improvement-handoffs.md) and [conditional expansion gates](14-expansion-gates.md) replace the earlier undecomposed roadmap. Speech remains deferred. No old wave-3 linear sequence overrides the manifest.
 
 See [risks and review dispositions](05-risk-register.md) for the changes made after review. No elapsed-time promise substitutes for a passed gate.
 
@@ -48,4 +50,4 @@ The [contracts v1 encoding](08-contracts-v1-encoding.md) fixes the layout, vocab
 
 - 2026-09-21: Amended for separate consumer App/provider Lab, individual signup credits and independent release gates; see the platform-split review. Implementation evidence on the other system remains unverified here.
 
-- 2026-09-21: Imported `271add9`, audited wave 2 and reconciled product-v2 revisions in manifest v3; see `10-wave2-platform-audit.md`. Earlier remote-unverified statements are superseded for committed repository work only.
+- 2026-09-21: Imported `271add9`, audited wave 2 and reconciled product-v2 revisions in manifest v4; see `10-wave2-platform-audit.md`. Earlier remote-unverified statements are superseded for committed repository work only.

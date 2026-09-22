@@ -1,5 +1,7 @@
 # model-inference
 
+**Current priority:** launch the Marlin2B inference App for the SOP-verification use case over large robotics datasets. [Complete implementation plan](research/plan/12-complete-build-plan.md) · [Fresh-session prompt/context](research/plan/16-fresh-session-handoff.md) · [Task ledger](research/plan/17-task-ledger.md).
+
 Start with the [two-platform architecture and roadmaps](research/platforms/README.md).
 `apps/app` serves model consumers; `apps/lab` serves model providers. Wave 2 was pulled at `271add9`: read the [audit and revised sequence](research/plan/10-wave2-platform-audit.md)
 and [continuation handoff](research/plan/PLATFORM-SPLIT-HANDOFF.md) before wave 3.

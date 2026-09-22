@@ -1,5 +1,7 @@
 # infrx-api — the inference gateway
 
+**Current execution:** [Marlin App-first complete plan](../../research/plan/12-complete-build-plan.md) and [fresh-session prompt](../../research/plan/16-fresh-session-handoff.md). Preserve the audited wave-2 work; actual product-v2 and runtime integration remain pending.
+
 OpenAI-compatible gateway in front of vLLM, plus its deployment files and the
 OpenRouter provider document. Runs on the GPU box as `marlin2b-gateway.service`
 (uvicorn on localhost:8001) behind Caddy; vLLM stays on localhost:8000. Box

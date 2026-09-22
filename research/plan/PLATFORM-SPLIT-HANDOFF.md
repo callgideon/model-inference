@@ -1,5 +1,7 @@
 # Handoff — continue after the wave-2 product audit
 
+> **Superseded entry point:** use [the complete fresh-session handoff](16-fresh-session-handoff.md) and [build plan](12-complete-build-plan.md). This audit handoff remains historical context. The latest priority is Marlin SOP inference App first; the prompt below predates that priority and the fully decomposed Lab backlog. Its 77-record counts refer to manifest v3 at audit time.
+
 ## Session Metadata
 
 Prepared 2026-09-21. Repository: `model-inference`. Imported implementation base: `271add946771ddc4efc3cbc2044758443080759b` from `origin/main`. Audit branch: `codex/wave2-platform-audit`. Before creating worktrees, use the actual committed audit handback SHA and inspect any newer main commits. Never use an uncommitted coordinator tree as a base.

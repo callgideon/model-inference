@@ -5,8 +5,10 @@ Repository conventions for all implementation sessions; the filename is historic
 ## What this repo is
 
 Read `research/platforms/README.md` for the current two-product architecture and
-`research/plan/PLATFORM-SPLIT-HANDOFF.md` before continuing implementation.
-`HANDOFF.md` contains historical operational context. Read manifest v3, the
+`research/plan/16-fresh-session-handoff.md` and `12-complete-build-plan.md` before continuing implementation.
+Current execution scope is Marlin SOP inference App first; Lab feature work follows
+an accepted App launch candidate. `15-pending-inputs.md` records all remaining inputs.
+`HANDOFF.md` contains historical operational context. Read manifest v4, the
 platform-split amendment, shared contracts and your assigned brief before coding.
 Wave 2 is imported at `271add9`; read `research/plan/10-wave2-platform-audit.md`
 and `11-wave3-revision-handoffs.md`. Preserve completed v1 evidence; new revision

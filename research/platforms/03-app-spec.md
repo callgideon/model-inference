@@ -2,6 +2,12 @@
 
 Location: `apps/app`. The product lets an individual developer obtain a usable model API, manage keys and understand the credits consumed. It is the consumer surface for the shared inference business.
 
+## Lead workload and launch boundary
+
+Marlin2B SOP verification over large robotics datasets is the current end application. Launch the inference App first. S2M freezes the actual model/processor/input/output contract and a tested finite-video SOP example. Many examples are processed through bounded inputs, stable source/episode identifiers, idempotency and explicit async polling/resume; a general dataset-management or batch-training product is not a launch requirement.
+
+The user describes the application in a VLA context. Do not advertise robot actions, closed-loop control, arbitrary sensor modalities, strict structured output or native live video unless the actual artifact/adapter demonstrates them. Distinguish endpoint correctness from task accuracy on a labeled SOP benchmark; missing benchmark/rubric inputs block accuracy claims, not a disclosed working inference API.
+
 ## Primary journey and navigation
 
 Signup → verify account → receive 10,000 credits once → select a live model → create/reveal an API key → copy a valid request → inspect outcome and remaining credits.
@@ -26,6 +32,7 @@ Use an onboarding checklist only until the developer makes their first successfu
 | APP-10 | Privacy/settings: trace mode, retention and distinct data-use permissions when available | Trace off works; provider sharing/evaluation/training are never implied or prechecked by signup. U2/C3A |
 | APP-11 | Operator controls for grant adjustments, suspension, published rates and incident diagnosis | Protected actions audited and idempotent; consumer/provider roles cannot invoke them. U3/C3A/A3 |
 | APP-12 | Free-plan admission/abuse bounds and exhaustion UX | Stable 402/429 behavior, hard holds, no payment bait or automatic upgrade path. G1/D2/A2 |
+| APP-13 | Verified Marlin SOP-use-case capability profile and large-dataset API recipe | Pin actual artifact/preprocessing; working bounded finite-video example, resumable per-item jobs, explicit unsupported modes and no unmeasured accuracy claim. S2M/A3/W3/E4; MARLIN-SOP |
 
 The first published model is Marlin. Additional models can share catalog and wallet machinery but require their own serving/capability/rate validation. A model name appearing in historical research is not publication authorization or readiness evidence.
 
