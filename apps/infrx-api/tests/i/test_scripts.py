@@ -201,7 +201,10 @@ def test_backend_deploy__a_dev_install_pins_the_image_it_probed(tmp_path, monkey
     assert order[1] == "systemctl restart marlin2b-gateway"
     assert order[-1].endswith("http://127.0.0.1:8001/health"), order
     assert [e for e in host.of("docker") if "caddy" in e] == []
-    [backup] = backups(host)
+    host.clear()
+    assert host.run("install.sh", INFRX_MODE="dev", ENGINE="restart").returncode == 0
+    assert "systemctl restart marlin2b-vllm" in host.of("systemctl")
+    backup = backups(host)[0]
     with tarfile.open(backup / "files.tar") as tar:
         assert ENV in tar.getnames()
         assert tar.extractfile(ENV).read().decode() == MONOLITH_ENV

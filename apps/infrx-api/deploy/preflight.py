@@ -70,13 +70,15 @@ IMAGE_PREFLIGHT = "/app/deploy/preflight.py"
 FORBIDDEN_ENGINE_FLAGS = ("--reasoning-parser", "continuous_usage_stats")
 # W3's record of the served engine, next to serve.sh (models/marlin2b/).
 SERVING_VERSION = "serving-version.json"
+LOOPBACK_PUBLISH = ("127.0.0.1:", "${BIND:-127.0.0.1}:")
 # W3's entry points the worker and reaper units start (`python -m <module>`). A pilot
 # image without them would install units that crash-loop.
 WORKER_ENTRIES = ("infrx.worker.__main__", "infrx.worker.reaper")
 
-# est. budgets (infra/README.md §2): media/staging 60 GiB + usage spill and logs 5 GiB on
-# the root EBS volume, plus headroom. Checked where the directory lives or will live.
-DISK_BUDGET = (("/var/lib/infrx", 80 * 2**30),)
+# est. budgets (infra/README.md §2), checked where each directory lives or will live: the
+# usage spill and logs on the root EBS volume (5 GiB + headroom), and the media root on
+# the instance-store NVMe (media/staging 60 GiB; a rebuildable cache, W3's proposed R).
+DISK_BUDGET = (("/var/lib/infrx", 10 * 2**30), ("/opt/dlami/nvme/processing", 60 * 2**30))
 
 # infra/README.md §5: `/model-inference/price_table_version` was **withdrawn**, not
 # reassigned - contracts v1 resolves the price from D1's `price_versions` by model and
@@ -315,7 +317,7 @@ class Config:
     image: str = ""                   # INFRX_IMAGE; set, the probe runs inside it
     upstream: str = "http://127.0.0.1:8000"
     valkey_url: str = "valkey://127.0.0.1:6379/0"
-    media_root: str = "/var/lib/infrx/media"
+    media_root: str = "/opt/dlami/nvme/processing"
     settings: tuple[str, ...] = ()    # `--set NAME=VALUE`, schema names only
     disk: tuple[tuple[str, int], ...] = ()
     aws: tuple[str, ...] = ("aws",)
@@ -444,12 +446,13 @@ def engine_problems(script: pathlib.Path | None, mode: str) -> list[str]:
             problems.append(f"{script} does not pin the engine image by digest "
                             f"(IMAGE default is not a @sha256: reference); pilot needs "
                             f"a pinned image - pending on W3")
-        # I2B: the engine is private. serve.sh publishes its port on `${BIND:-...}`; a
-        # default other than loopback is an OpenAI endpoint with no key on the host's
-        # public address.
-        if "${BIND:-127.0.0.1}" not in text:
-            problems.append(f"{script} does not bind the engine to 127.0.0.1 by default; "
-                            f"the engine is never public")
+        # I2B: the engine is private. Every port serve.sh publishes must be on loopback
+        # (`-p "127.0.0.1:…"`, or the older `${BIND:-127.0.0.1}` default): anything else
+        # is an OpenAI endpoint with no key on the host's public address.
+        publishes = re.findall(r'-p\s+"?([^"\s]+)', text)
+        if not publishes or not all(spec.startswith(LOOPBACK_PUBLISH) for spec in publishes):
+            problems.append(f"{script} publishes the engine beyond 127.0.0.1; the engine "
+                            f"is never public")
         # The named placeholder for W3's pin record. Present, it must record the digest
         # serve.sh actually runs, so the two cannot disagree about what "pinned" means.
         pin = script.parent / SERVING_VERSION
@@ -764,7 +767,7 @@ def main(argv=None) -> int:
                               help="runtime image id (sha256:...); the probe runs in it")
     apply_parser.add_argument("--upstream", default="http://127.0.0.1:8000")
     apply_parser.add_argument("--valkey-url", default="valkey://127.0.0.1:6379/0")
-    apply_parser.add_argument("--media-root", default="/var/lib/infrx/media")
+    apply_parser.add_argument("--media-root", default="/opt/dlami/nvme/processing")
     apply_parser.add_argument("--set", action="append", default=[], metavar="NAME=VALUE",
                               help="a tunable from the schema (`manifest` lists them)")
 

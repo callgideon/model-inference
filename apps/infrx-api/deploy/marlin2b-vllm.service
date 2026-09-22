@@ -7,11 +7,14 @@ Requires=docker.service
 User=ubuntu
 Environment=WEIGHTS_ROOT=/opt/dlami/nvme
 Environment=HOME=/home/ubuntu
-# serve.sh runs `docker run --rm` in the foreground, so systemd owns the lifecycle. Its
-# image pin, flags and the media-root mount are W3's; its default bind is loopback, which
-# preflight.py checks before a pilot install.
+# One source per setting (W3): serve.sh reads ENGINE_MAX_NUM_SEQS and PROCESSING_CACHE_DIR
+# under the names the runtime reads, from the same validated file, and refuses a second
+# value on its command line - so this unit passes none. Its image pin, flags, loopback
+# publish and read-only media mount are W3's; preflight.py checks them before a pilot.
+EnvironmentFile=/etc/marlin2b-gateway.env
 ExecStartPre=-/usr/bin/docker rm -f marlin2b-8000
-ExecStart=/home/ubuntu/model-inference/models/marlin2b/serve.sh --max-num-seqs 32
+ExecStartPre=+/usr/bin/install -d -o 10001 -g 10000 -m 2750 ${PROCESSING_CACHE_DIR}
+ExecStart=/home/ubuntu/model-inference/models/marlin2b/serve.sh
 # The box stopped this with docker's 10 s default (I1B inventory). The worker is drained
 # first (it is ordered After= this unit, so it stops before it); systemd waits longer than
 # docker, or it would kill only the client.

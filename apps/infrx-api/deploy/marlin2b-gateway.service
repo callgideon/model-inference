@@ -12,6 +12,11 @@ User=ubuntu
 # root EBS volume, which survives a stop).
 EnvironmentFile=/etc/marlin2b-gateway.env
 ExecStartPre=-/usr/bin/docker rm -f infrx-gateway
+# The media root R (PROCESSING_CACHE_DIR, one value for the gateway, the worker and the
+# engine) is on the instance-store NVMe, which a stop/start wipes: recreate it with its
+# owner every start rather than let docker create it root-owned. `+`: this one line runs
+# privileged, the container does not.
+ExecStartPre=+/usr/bin/install -d -o 10001 -g 10000 -m 2750 ${PROCESSING_CACHE_DIR}
 # Least privilege: uid 10001 in group infrx, read-only root, no capabilities, bounded
 # memory/CPU/pids (est. budgets, infra/README.md §2), loopback only - Caddy is the only
 # public listener. The media root is the gateway's to write (M2/M3 preparation).
@@ -21,7 +26,7 @@ ExecStart=/usr/bin/docker run --rm --name infrx-gateway --network host \
   --memory 8g --cpus 4 --pids-limit 512 \
   --env-file /etc/marlin2b-gateway.env \
   -v /var/lib/infrx/usage:/var/lib/infrx/usage \
-  -v /var/lib/infrx/media:/var/lib/infrx/media \
+  -v ${PROCESSING_CACHE_DIR}:${PROCESSING_CACHE_DIR} \
   ${INFRX_IMAGE} uvicorn gateway:app --host 127.0.0.1 --port 8001 --workers 1 \
   --timeout-graceful-shutdown 110
 # Drain: uvicorn stops accepting and finishes in-flight requests for up to 110 s, docker

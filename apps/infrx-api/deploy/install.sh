@@ -64,9 +64,11 @@ for pair in ${INFRX_SET:-}; do sets+=(--set "$pair"); done
   --region "$REGION" --image "$image" --serve-script "$SERVE_SCRIPT" "${sets[@]}"
 
 # 5. state directories, units, the index and the engine
-mkdir -p "$STATE/usage" "$STATE/media"
-chown 10001:10000 "$STATE/usage" "$STATE/media"
-chmod 0750 "$STATE/usage" && chmod 2750 "$STATE/media"
+# The usage spill is on the root EBS volume (row M-SCRATCH); the media root is recreated by
+# the units themselves at every start, because the NVMe it lives on is wiped by a stop.
+mkdir -p "$STATE/usage"
+chown 10001:10000 "$STATE/usage"
+chmod 0750 "$STATE/usage"
 mkdir -p "$UNIT_DIR"
 for f in $UNIT_FILES; do put "$here/$f" "$UNIT_DIR/$f"; done
 systemctl daemon-reload
@@ -76,9 +78,11 @@ if [ "$mode" = pilot ]; then
 else
   systemctl enable marlin2b-vllm $runtime_units
 fi
-# The engine reads no env file and takes minutes to load, so it is started (a no-op when
-# it is up), never restarted by an install; a new engine is W3's separate step.
-systemctl start marlin2b-vllm
+# The engine takes minutes to load, so it is started (a no-op when it is up) and not
+# restarted - unless ENGINE=restart, which the runbook's cutover sets: a running engine
+# keeps its old image, flags and mounts until it restarts.
+if [ "${ENGINE:-start}" = restart ]; then systemctl restart marlin2b-vllm
+else systemctl start marlin2b-vllm; fi
 wait_http http://127.0.0.1:8000/health "${ENGINE_READY_S:-900}" \
   || die "the engine is not healthy; nothing else was restarted (backup $backup)" 4
 

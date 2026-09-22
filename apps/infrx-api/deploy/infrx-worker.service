@@ -15,7 +15,7 @@ ExecStart=/usr/bin/docker run --rm --name infrx-worker --network host \
   --cap-drop ALL --security-opt no-new-privileges \
   --memory 4g --cpus 2 --pids-limit 256 \
   --env-file /etc/marlin2b-gateway.env \
-  -v /var/lib/infrx/media:/var/lib/infrx/media:ro \
+  -v ${PROCESSING_CACHE_DIR}:${PROCESSING_CACHE_DIR}:ro \
   ${INFRX_IMAGE} python -m infrx.worker
 # W3's drain: SIGTERM stops claiming, lets in-flight attempts finish within the deadline,
 # then fences and releases the rest - a released job is requeued by the reaper, never lost

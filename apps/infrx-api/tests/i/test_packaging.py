@@ -155,7 +155,7 @@ def test_backend_deploy__runtime_containers_run_unprivileged_and_bounded():
         assert "no-new-privileges" in flag(argv, "--security-opt"), name
         assert flag(argv, "--memory") and flag(argv, "--pids-limit"), name
     assert uids["marlin2b-gateway.service"] != uids["infrx-worker.service"]
-    media = "/var/lib/infrx/media"
+    media = "${PROCESSING_CACHE_DIR}"
     assert f"{media}:{media}" in flag(docker_run("marlin2b-gateway.service"), "-v")
     assert f"{media}:{media}:ro" in flag(docker_run("infrx-worker.service"), "-v")
     assert not [v for v in flag(docker_run("infrx-reaper.service"), "-v")]
@@ -184,9 +184,29 @@ def test_deploy_failclosed__a_public_engine_bind_is_refused(tmp_path):
     """serve.sh publishes the engine port on `${BIND:-...}`; a pilot install refuses a
     default other than loopback, because that is an OpenAI endpoint with no key."""
     script = support.serve_script(tmp_path, image=support.PINNED)
-    script.write_text(script.read_text().replace("${BIND:-127.0.0.1}", "${BIND:-0.0.0.0}"))
-    problems = preflight.engine_problems(script, "pilot")
-    assert len(problems) == 1 and "127.0.0.1" in problems[0], problems
+    default = script.read_text()
+    for public in ("${BIND:-0.0.0.0}", "0.0.0.0", "${BIND}"):
+        script.write_text(default.replace("${BIND:-127.0.0.1}", public))
+        problems = preflight.engine_problems(script, "pilot")
+        assert len(problems) == 1 and "127.0.0.1" in problems[0], (public, problems)
+    script.write_text(default.replace("${BIND:-127.0.0.1}", "127.0.0.1"))   # W3's form
+    assert preflight.engine_problems(script, "pilot") == []
+
+
+def test_backend_deploy__the_engine_takes_its_settings_from_the_validated_file():
+    """W3's one source per setting: serve.sh reads `ENGINE_MAX_NUM_SEQS` and
+    `PROCESSING_CACHE_DIR` from the environment and refuses a second value on its command
+    line, so the engine unit passes no argument and reads the file preflight validated.
+    The media root lives on the instance-store NVMe a stop wipes: the engine and the
+    gateway (its writer) recreate it, owned by the gateway's uid, on every start."""
+    engine = unit("marlin2b-vllm.service")
+    assert engine.get("EnvironmentFile") == [ENV_FILE]
+    assert engine["ExecStart"] == ["/home/ubuntu/model-inference/models/marlin2b/serve.sh"]
+    create = "+/usr/bin/install -d -o 10001 -g 10000 -m 2750 ${PROCESSING_CACHE_DIR}"
+    for name in ("marlin2b-vllm.service", "marlin2b-gateway.service"):
+        assert create in unit(name)["ExecStartPre"], name
+    assert "ENGINE_MAX_NUM_SEQS" in preflight.TUNABLE
+    assert any(key.env == "PROCESSING_CACHE_DIR" for key in preflight.MANIFEST)
 
 
 def test_backend_deploy__one_env_file_configures_every_runtime_unit():
@@ -340,7 +360,10 @@ def test_deploy_failclosed__a_host_below_its_disk_budget_installs_no_pilot(
     assert cfg.env_file.read_bytes() == before and made.systemctl_calls == []
     assert "GiB free, the pilot budget is" in capsys.readouterr().err
     assert preflight.disk_problems(((str(tmp_path), 1),)) == []
-    assert preflight.DISK_BUDGET == (("/var/lib/infrx", 80 * 2**30),)
+    assert preflight.DISK_BUDGET == (("/var/lib/infrx", 10 * 2**30),
+                                     ("/opt/dlami/nvme/processing", 60 * 2**30))
+    # the budgeted media directory is the root the installer writes as PROCESSING_CACHE_DIR
+    assert preflight.Config(mode="pilot", env_file=tmp_path).media_root == preflight.DISK_BUDGET[1][0]
 
 
 # --- the edge --------------------------------------------------------------------------
