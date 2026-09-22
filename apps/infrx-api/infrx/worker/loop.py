@@ -55,6 +55,9 @@ class WorkerLoop:
     # ever sleeps unless a caller asks it to.
     idle_sleep_s: float = 0.0
     results: list[AttemptResult] = field(default_factory=list)
+    # A runner that died - the store unreachable, say - stops claiming and must not do it
+    # silently. `gather` would otherwise swallow it into a list nobody reads.
+    failures: list = field(default_factory=list)
     claimed: int = 0
     draining: bool = False
     _tasks: list = field(default_factory=list)
@@ -95,7 +98,10 @@ class WorkerLoop:
         self._tasks = [asyncio.create_task(self._runner(stop_when_idle, max_claims),
                                            name=f"{self.worker_id}-{n}")
                        for n in range(concurrency)]
-        await asyncio.gather(*self._tasks, return_exceptions=True)
+        finished = await asyncio.gather(*self._tasks, return_exceptions=True)
+        self.failures.extend(outcome for outcome in finished
+                             if isinstance(outcome, BaseException)
+                             and not isinstance(outcome, asyncio.CancelledError))
         return list(self.results)
 
     async def _runner(self, stop_when_idle: bool, max_claims: int | None) -> None:

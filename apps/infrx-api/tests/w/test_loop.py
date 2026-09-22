@@ -1046,7 +1046,7 @@ def test_ops_recover__the_loop_claims_acknowledges_and_settles_every_candidate()
         assert {result.cause for result in results} == {TerminalCause.completed}
         assert world.scheduler.depth() == 1               # the preparation candidate
         assert len(world.scheduler.acknowledged) == 3
-        assert loop.claimed == 3
+        assert loop.claimed == 3 and loop.failures == []
     run(case())
 
 
