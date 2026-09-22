@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T17:57:28Z",
+  "updated": "2026-09-22T17:58:32Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "Q2": {
       "lane": "codex-q2",
-      "phase": "independent review at 10cd1c1",
+      "phase": "fix round 1 (race test for the claim fence; evidence regeneration)",
       "since": "2026-09-22T16:00:21Z",
       "note": "handed back: Valkey adapter, 76 mutants, differential vs memory adapter"
     },

@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T17:57:28Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T17:58:32Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 4 done · 6 in progress · 20 remaining (of 30).**
 
@@ -65,7 +65,7 @@ Generated 2026-09-22T17:57:28Z from `tasks.json` (manifest v4) and `progress-sta
 - F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions
 - E2R: codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services | resumed from WIP after restart
 - F2P: codex-f2p — fix round 1 (restore three guards + killable; three record-level mutants); wire-in waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
-- Q2: codex-q2 — independent review at 10cd1c1 since 2026-09-22T16:00:21Z — handed back: Valkey adapter, 76 mutants, differential vs memory adapter
+- Q2: codex-q2 — fix round 1 (race test for the claim fence; evidence regeneration) since 2026-09-22T16:00:21Z — handed back: Valkey adapter, 76 mutants, differential vs memory adapter
 - W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 
