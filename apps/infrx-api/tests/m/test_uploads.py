@@ -501,6 +501,17 @@ def test_the_use_time_recheck_compares_the_whole_digest(tamper):
         run(adapter.resolve_owned(b.ORG_A, handle))
 
 
+def test_another_orgs_open_upload_state_does_not_leak():
+    """An upload's state is answered only to its owner: a foreign org whose own ref
+    happens to carry the same handle resolves to its own ref, not "not finalized"."""
+    adapter = adapter_for()
+    handle = created(adapter)                                   # org A's, still open
+    foreign = b.media(b.ORG_B, handle=handle, kind=MediaKind.inline)
+    staged = run(adapter.stage(b.ORG_B, b.request(adapter.harness, org_id=b.ORG_B,
+                                                  refs=(foreign,))))
+    assert run(adapter.resolve_owned(b.ORG_B, handle)) == staged[0]
+
+
 def test_an_uploaded_clip_is_prepared_like_any_source(tmp_path):
     """M2 limit 10: `prepare` finds a finalized upload at the source key it rebuilds, and
     the prepared artifact and the local file follow."""

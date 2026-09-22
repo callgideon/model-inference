@@ -230,8 +230,10 @@ class MediaUploads(MediaPreparation):
     # --- use ------------------------------------------------------------------
     async def resolve_owned(self, org_id: str, ref: str) -> MediaRef:
         media = await super().resolve_owned(org_id, ref)     # another org's: not_found
+        # Scoped by (org, handle): another org's upload state is never answered (review).
         upload = self.uploads.get(ref)
-        if upload is not None and upload.state is not UploadState.finalized:
+        if upload is not None and upload.org_id == org_id \
+                and upload.state is not UploadState.finalized:
             raise errors.InvalidRequest(f"upload {ref} is {upload.state}, not finalized")
         if media.kind is MediaKind.upload \
                 and await self.objects.head(media.storage_ref) != media.digest:
