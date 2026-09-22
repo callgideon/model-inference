@@ -1,0 +1,335 @@
+# Q2 — Valkey scheduling adapter with atomic tested scripts
+
+## Task and status
+
+| Field | Value |
+|---|---|
+| Task | **Q2** (track Q, scheduling indices and fair dispatch) |
+| Owner / session | implementation agent (Claude Opus 5, 1M context), wave 3 lane B0 |
+| Status | **implemented** — layer-2 verified against real Valkey 8.1.10 in this task's own container. Not `integrated`: the coordinator owns the merge, `make api-mutants` still has to gain this list (integration request 1) and Q3 owns the PostgreSQL source of the rebuild snapshot |
+| Oracles claimed | F-CONTRACT (7/7 exported scheduler cases, 0 skips), DUR-OUTBOX (replay, visibility, rebuild), DUR-CAP as the Q2 brief scopes it (index item/byte bounds) |
+
+## Source
+
+| Field | Value |
+|---|---|
+| Base SHA | `ec6c5483f472ee84e10d48ca3c51ba474b4efed2` (tip of `origin/codex/wave2-platform-audit`) |
+| Implementation SHA | `8bfc3fb78200b75a93db2f9bf76458310192e890` |
+| Branch | `codex/q2-valkey-scheduler` |
+| Worktree | `.claude/worktrees/codex-q2` |
+| Integrated SHA | none — coordinator integrates into `claude/backend-impl` |
+| Commits | `1ad2f8a` adapter · `513861b` differential harness · `f81af1c` suite · `611bef0` deterministic fault injection · `8bfc3fb` mutation list |
+
+Reference documents read before coding: the wave-3 common brief, `wave3/Q2.md`,
+`research/plan/handoffs/Q-scheduling.md` §Q2, `research/plan/evidence/q/Q1-4e48eee.md`
+§"What Q2 must reproduce" (the round-3 fourteen-point list), `08-contracts-v1-encoding.md`
+§10 R60 **as corrected on 2026-09-21** and §8 (task-local services),
+`04-verification.md`, `evidence/README.md`, `infrx/scheduling/memory.py` and `tests/q/`.
+
+## What was built
+
+`apps/infrx-api/infrx/scheduling/valkey.py` — `ports.Scheduler` over Valkey, one Lua
+script per operation (`enqueue`, `claim`, `acknowledge`, `remove`, `rebuild`, plus a
+read-only `state` snapshot), nine declared keys per index, fairness doubles as ZSET
+scores. Three decisions carry the correctness:
+
+1. **Scores are written with `string.format('%.17g', …)`.** Lua 5.1 stringifies numbers
+   with `%.14g`, so the default conversion silently rounds every tag on its way into the
+   ZSET. 17 significant digits round-trip a double exactly, and the arithmetic is spelled
+   in the memory adapter's order, so the two adapters are *bit* identical — including the
+   documented drift (six advances of 1/3 land on 1.9999999999999998, not 2.0).
+2. **Instants cross into Lua as exact integer microseconds.** `datetime`'s own
+   resolution; `timestamp()` is a double near 1.7e9 whose ulp is ~0.24 µs, and both the
+   `available_at <= now` and the `now >= claimed_at + TTL` boundaries are pinned *at
+   equality* by the conformance suite.
+3. **A claim is select-then-commit.** The service estimator is an injected Python
+   collaborator, so the first (atomic) call expires visibilities, selects under R60 and
+   returns the candidate *without moving fairness state*; the caller prices it; the
+   second (atomic) call commits only if that candidate is still the fair choice and
+   otherwise hands back the new winner to be priced. That is what makes point 8 ("the
+   cost is validated before any write") true in a store where the cost cannot be
+   computed.
+
+The adapter holds no per-candidate state in the process; the index is entirely in Valkey.
+
+## Requirement coverage
+
+The fourteen points are covered twice: by the differential run (agreement with the
+reference model after *every* operation) and by one named case each, because only a named
+case can kill a mutant. Test ids are in `apps/infrx-api/tests/q/test_valkey_scheduler.py`
+unless stated.
+
+| Point / oracle | Test id | Exact invariant demonstrated |
+|---|---|---|
+| F-CONTRACT | `test_q2_contract__the_real_adapter_passes_the_exported_case[…]` (7 ids) | the Valkey adapter passes every exported scheduler case the fake and the memory adapter pass, under the coordinator's factory |
+| F-CONTRACT | `test_q2_contract__the_whole_suite_runs_and_skips_nothing` | `run_cases` ran 7 and skipped 0; a missing hook would be a skip, never a pass |
+| F-CONTRACT | `test_q2_contract__the_adapter_satisfies_the_scheduler_protocol` | `isinstance(port, ports.Scheduler)` and every declared port method is a coroutine function |
+| all 14 (as agreement) | `test_q2_differential__the_two_adapters_agree_on_every_operation` | after every operation of every stream, the returned value (or typed refusal code) and `tags()`, `virtual_times()`, `kind_tags()`, `top_virtual_time()`, `stats()` are equal to the memory adapter's |
+| — (honesty) | `test_q2_differential__the_harness_notices_a_divergence` | the same stream against a `%.14g` score format fails, on `tags`, at step 25: the differential can fail |
+| 1, 2, 4 | `test_q2_fair__tenants_alternate_and_ties_break_on_arrival` | one flow per (kind, org); FIFO inside a flow by the integer arrival sequence; equal tags separated by that sequence |
+| 4 | `test_q2_fair__the_virtual_finish_time_advances_at_dispatch_only` | nothing moves at enqueue; `start = max(tag, V)`, `V = start`, `tag = start + cost/weight`, in that order |
+| 4 | `test_q2_fair__weight_buys_a_proportional_share` | a tenant weighted 3 takes three slots per peer slot; the tags land on the drifted doubles the reference produces |
+| 4 | `test_q2_fair__one_dispatch_moves_the_tag_by_exactly_cost_over_weight` | with cost 2.5 and weight 4 the tag advance is 0.625, and level 1 is charged the raw 2.5 |
+| 4 | `test_q2_fair__a_candidate_that_waited_catches_up_once_and_cannot_hoard` | the clamp: one slot of catch-up, and `V[kind]` is the *clamped start* (3.0), never the arriving flow's tag (0.0) |
+| 3 | `test_q2_fair__a_newcomer_arrives_at_its_own_kinds_virtual_time` | an arriving flow's tag is its own kind's `V` (2.0 here), not 0 and not the busy kind's 49.0 |
+| 3 | `test_q2_fair__the_virtual_time_of_a_kind_survives_an_empty_index` | `V[kind]` is not reset when the last flow of a kind disappears; the next arrival inherits it |
+| 8 | `test_q2_fair__a_bad_service_cost_is_a_typed_error_that_moves_nothing` | `0`, negative, NaN, inf and a raising estimator are `internal_error` with `snapshot()` byte-identical before and after, for `kind=None` and both filters; the estimator's own `DomainError` passes through with code `invalid_request` |
+| 8 | `test_q2_config__a_weight_that_would_break_dispatch_is_refused_where_it_is_set` | a non-positive or non-finite weight is a `ValueError` in the constructor, not a division by zero inside a script |
+| 9 | `test_q2_kind__visibility_expires_at_the_ttl_and_on_its_pools_lease` | 30 s preparation / 120 s inference from the claim, back at exactly the TTL (1 µs before: still held), expiry evaluated lazily so `stats()["inflight"] == 2` after it is due |
+| 2 | `test_q2_kind__returned_candidates_keep_their_arrival_order` | a timed-out candidate re-enters at its **original** sequence, so FIFO survives a lost worker |
+| 2 | `test_q2_stats__a_candidate_is_not_offered_before_it_is_available` | an older not-yet-available candidate does not block a newer available one, and a 30.5 s availability is honoured to the microsecond |
+| 5 | `test_q2_none__a_peer_in_another_kind_is_not_starved_by_a_noisy_backlog` | the other kind is served at slots [1, 3, 5] for backlogs 5, 30, 400 and for a noisy tenant weighted 2 |
+| 5 | `test_q2_none__the_kind_tag_advances_by_the_service_the_kind_received` | level 1 charges `start + cost` with no weight: pattern `IPIIIIIIIIIIIPIIIIIIIIIIIP`, kind tags 33.0 / 23.0 |
+| 5 | `test_q2_none__the_kind_tie_breaks_on_arrival_order` | equal kind tags break on the pick's arrival sequence, in both orders of arrival |
+| 5 (corrected) | `test_q2_none__the_kind_is_ranked_by_the_candidate_it_would_actually_hand_out` | the level-1 tie-break is the sequence of the candidate level 2 would hand out (4), not the oldest the kind holds (2) |
+| 5 | `test_q2_none__a_kind_that_waited_catches_up_once_and_cannot_hoard` | `top_start = max(kind tag, V_top)`, `V_top = top_start`: 3.0 stays 3.0 when the quiet kind returns; then `P I P I` |
+| 6 | `test_q2_none__a_filtered_worker_never_moves_the_kind_state` | a kind-filtered claim leaves `kind_tags()` and `top_virtual_time()` untouched, and the unfiltered worker still alternates |
+| 3 (R52) | `test_q2_kind__preparation_and_inference_are_separately_fair` | separate flow, separate tag and separate `V` per kind for one org |
+| 13 | `test_q2_kind__an_unknown_kind_is_a_typed_refusal` | `usage_projection`/`callback_delivery` are `invalid_request`, checked before anything else; the index is untouched; `kind=None` means anything |
+| 10 | `test_q2_caps__a_full_index_refuses_with_a_typed_retryable_error` | `capacity_exhausted`, HTTP 429, `retry_after_s == 1`, `snapshot()` unchanged, no flow created for the refused tenant |
+| 10 | `test_q2_caps__queued_bytes_are_counted_per_candidate_and_returned` | the charge is `len(compact_bytes(event))`, symmetric on ack and cancel, and the byte cap binds independently of the item cap |
+| brief (4) | `test_q2_caps__the_cap_is_enforced_inside_the_script_over_the_shared_index` | two adapters on one namespace share one bound: the second process's enqueue is refused by the first's candidates |
+| brief (4) | `test_q2_bounds__the_adapter_keeps_no_per_candidate_state_in_the_process` | after 200 enqueues, 100 claims and a cancellation, every container attribute of the adapter has the size it had when empty |
+| acceptance | `test_q2_isolation__two_namespaces_do_not_see_each_other` | one server, two indices: depth, dispatch and fairness state are private |
+| 7, 11 | `test_q2_cancel__removal_drops_pending_and_in_flight_candidates_and_their_flow` | `remove` drops pending *and* in-flight candidates of the job; the flow disappears at zero pending+inflight; the bytes come back |
+| 11 | `test_q2_cancel__a_cancelled_candidate_may_be_re_indexed` | cancellation is not remembered (`acknowledged == 0`) and a replayed dispatch event returns `True` |
+| 10 | `test_q2_replay__enqueue_is_replay_safe_across_pending_inflight_and_acknowledged` | the same event id indexes one candidate whether the first copy is pending, in flight or acknowledged |
+| 12 | `test_q2_rebuild__from_a_postgresql_snapshot_with_duplicates` | a snapshot of accepted jobs with duplicates indexes 4 of 7, over a `max_items=3` index (caps not applied), bytes = the snapshot's compact bytes, depth per kind 2/2 |
+| 12 | `test_q2_rebuild__clears_in_flight_acknowledged_and_both_fairness_levels` | in flight dropped, acknowledged cleared, `tags`/`V`/`kind tags`/`V_top` all reset, a fresh byte total, and no stale pending key left for a re-created flow (checked by reading the raw keys) |
+| 9, stats | `test_q2_stats__depth_and_waiting_age_are_reported_without_claiming_capacity` | `oldest_wait_s` is over *available pending* candidates only (9.5 s), depth is per kind, and an in-flight candidate is not waiting |
+| brief (3) | `test_q2_crash__an_interrupted_script_leaves_no_half_indexed_candidate` | see Failure drill |
+| R32 | `tests/q/test_valkey_mutants.py::test_the_list_is_well_formed` | 75 mutants, unique names, each anchor exactly once in `valkey.py`, each naming an invariant and a case |
+| R32 / R60 | `tests/q/test_valkey_mutants.py::test_every_r60_clause_carries_a_mutant` | all fifteen named R60 mutants are still in the list |
+| R32 | `tests/q/test_valkey_mutants.py::test_the_runner_cannot_report_a_false_kill[…]` | a no-op edit survives; a real defect named against a case that cannot see it survives |
+
+## Environment
+
+| Component | Version |
+|---|---|
+| Host | Linux 7.0.0-1010-aws x86_64 (AWS dev box), **local** classification — no cloud, no production, no paid provider touched |
+| Python | 3.12.3 (main, Aug 31 2026) via `uv 0.11.8`, `apps/infrx-api/.venv` from `uv sync --frozen --all-extras` |
+| Valkey client | `valkey-py 6.1.1` (the `scheduling` extra, as locked in `uv.lock`) |
+| Valkey server | `valkey_version:8.1.10` (`redis_version:7.2.4` compatibility string), `os:Linux 7.0.0-1010-aws x86_64`, `arch_bits:64` |
+| Image | `valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1` (tag `8.1-alpine`) — **the digest E2's `tests/integration/compose.yaml` pins** |
+| Container | `infrx-q2-valkey`, `127.0.0.1:55461:6379`, `valkey-server --save '' --appendonly no` (no RDB, no AOF: the index is a cache) |
+| Docker | 29.6.2, build dfc4efb |
+| Node / pnpm | v22.23.1 / 9.15.9 — **not exercised**: no `apps/app` file is touched, so the console targets were not run |
+
+Nothing else was started, stopped or inspected. E2's `infrx-e2-*` stack was running
+throughout on its own ports and was not touched; the container created here was removed at
+the end of the session (see Cleanup).
+
+## Commands
+
+Exit status and UTC times are quoted from the run log; every command was run from the
+repository root or `apps/infrx-api` as shown. Environment variable names only:
+`INFRX_MUTANTS`, `INFRX_Q2_DIFFERENTIAL`, `INFRX_Q2_VALKEY_PORT` (unset — the default 55461
+was used).
+
+| # | Command | Exit | UTC |
+|---|---|---|---|
+| 1 | `make api-env` (repo root; `uv sync --frozen --all-extras`) | 0 | 2026-09-22 ~15:5x |
+| 2 | `uv run --frozen pytest -q --ignore=tests/d -p no:cacheprovider` | 0 | start 16:34:44 → end 16:37:14 |
+| 3 | `uv run --frozen pytest -q -p no:cacheprovider tests/test_app_factory.py tests/test_gateway_auth.py tests/test_inflight.py tests/test_media.py tests/contracts tests/g tests/j tests/m tests/q tests/t tests/w` (legacy-first) | 0 | 16:37:54 → 16:40:53 |
+| 4 | `uv run --frozen pytest -q -p no:cacheprovider tests/q tests/contracts tests/g tests/j tests/m tests/t tests/w tests/test_app_factory.py …` (track-first) | 0 | 16:40:53 → 16:43:41 |
+| 5 | `uv run --frozen pytest -q -p no:cacheprovider tests/q` (focused suite) | 0 | 16:43:41 → 16:43:55 |
+| 6 | `uv run --frozen python -m tests.q.differential` (40 seeds × 2,500 operations; seeds 1–40, `random.Random(seed)`) | 0 | 16:43:55 → 16:46:31 |
+| 7 | `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py tests/m/test_mutants.py tests/q/test_mutants.py tests/q/test_valkey_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/t/test_trace_mutants.py tests/g/test_mutants.py` | RUN7EXIT | RUN7TIME |
+| 8 | `INFRX_Q2_DIFFERENTIAL=all uv run --frozen pytest -q -p no:cacheprovider tests/q/test_valkey_scheduler.py` | RUN8EXIT | RUN8TIME |
+| 9 | `uv run --frozen python tests/q/valkey_mutants.py` (the whole Q2 list, standalone) | 0 | 16:2x → 16:3x |
+
+**`make check` was not run as one command, and `make api-test` / `make api-mutants` were
+not run verbatim.** The coordinator's interim rule for this lane was to exclude `tests/d`
+(the D harness hard-coded one container and port, so concurrent lanes destroyed each
+other's database); command 2 is `api-test` minus `tests/d` and command 7 is `api-mutants`
+minus `tests/d/test_migration_mutants.py`. `tests/d`: **not run (harness collision, E2R)**.
+The later notice that E2R's fix is merged as `c23d804` on `claude/backend-impl` does not
+apply to this worktree, which is still based on `ec6c548`; after the coordinator rebases,
+`tests/d` should be run on the integration SHA. The console targets
+(`console-test/lint/typecheck/mutants`) and `bench-test` were **not run**: no file under
+`apps/app` or `models/` is touched by this task. `make integration` was **not run**: no
+file under `tests/integration` is touched.
+
+## Results
+
+| Run | Observed | Expected |
+|---|---|---|
+| 2 — whole Python suite minus `tests/d` | `1568 passed, 2 warnings in 149.57s` — **0 skipped** | all pass; the two warnings are pre-existing Starlette/anyio deprecations |
+| 3 — legacy-first ordering | `1568 passed, 2 warnings in 178.81s` | identical count in either order (R48: no import-order coupling) |
+| 4 — track-first ordering | `1568 passed, 2 warnings in 165.00s` | identical count |
+| 5 — `tests/q` | `111 passed in 13.57s` (Q1's 68 + Q2's 43) | all pass |
+| 6 — differential | `40 seeds x 2500 operations = 100000 compared states; no divergence`, outcome histogram: `9985 ack, 4020 advance, 23703 claim, 1877 claim_unknown:invalid_request, 43477 enqueue, 4859 enqueue:capacity_exhausted, 2065 poison, 1524 poison:internal_error, 463 poison:invalid_request, 3048 rebuild, 4979 remove` | no divergence, and the histogram shows the paths the brief names were exercised: unfiltered claims with both kinds holding work, non-unit costs, cap refusals and all four estimator faults |
+| 7 — every mutant list (minus D) | RUN7RESULT | every declared mutant killed |
+| 8 — suite with the full differential | RUN8RESULT | all pass |
+| 9 — Q2 mutation list standalone | `75/75 killed` | no survivor |
+| conformance | printed by test: `scheduler conformance (Valkey): 7 ran, 0 skipped []` | 7 cases, 0 skips |
+| fault injection | printed by test: `fault injection: {'applied': 8, 'discarded': 4}` | both halves exercised |
+
+No failures and no skips are being reported as passes. The only "not run" items are listed
+under Commands and Limits.
+
+## Failure drill
+
+**1. Interrupted script (deliverable 3).** `tests/q/test_valkey_scheduler.py::test_q2_crash__an_interrupted_script_leaves_no_half_indexed_candidate`
+sends the `enqueue` script on a raw socket it owns and loses the connection before the
+reply is ever read — twelve injections, two kinds of death:
+
+* the **whole** command followed by a close (FIN after the bytes): the server has them, so
+  the operation must have been applied *completely* — 8 injections, each confirmed by the
+  item count rising by exactly one and the replayed `enqueue` answering `False` (indexed
+  exactly once);
+* a command **truncated mid-write** followed by an abort (RST): the server holds an
+  incomplete command it can never run, so the operation must not have happened at all — 4
+  injections, each confirmed by an unchanged item count *and* byte total and by the
+  replayed `enqueue` answering `True` (not indexed: the outbox drain retries).
+
+Durable state before and after each injection is read back **raw** by `_consistent()`:
+every entry has a payload, the byte counter equals the sum of the entries' sizes, every
+event id is pending **xor** in flight (a "half-indexed candidate" is exactly the
+violation of this: wedged, never re-offered, never released, still charged), and every
+flow's reference count equals what it holds. A `claim` killed mid-call is injected after
+each enqueue and checked the same way. Cleanup: the run ends by advancing past the lease
+and draining — 12 candidates, each dispatched exactly once, no duplicate.
+An earlier version of this drill asserted "applied" after an RST and was flaky under load
+(a RST can discard bytes the server has not read); commit `611bef0` replaced the race with
+the two deterministic deaths above, and the suite then ran clean 3/3 times.
+
+**2. Differential canary.** `test_q2_differential__the_harness_notices_a_divergence` runs
+seed 1 against an adapter whose claim script formats scores with Lua's own `%.14g`; the
+harness fails on `tags` at step 25. Manually, three more canaries were run before the
+suite existed: dropping the weight division diverged at seed 1 step 25, and dropping the
+level-1 clamp diverged at seed 1 step 555 (it needed 2,500-step depth — the 400-step
+run did *not* catch it, which is why the default suite slice is 250 steps *and* the full
+40 × 2,500 run is reported here rather than treated as optional).
+
+**3. Six mutants survived the first full run** (`the_tag_advance_ignores_the_estimator`,
+`the_virtual_time_is_the_unclamped_tag`, `the_kind_is_ranked_by_its_oldest_candidate`,
+`rebuild_keeps_the_stale_pending_candidates`, `rebuild_does_not_restart_the_counters`,
+`instants_cross_into_lua_as_epoch_floats`) and one was reported `broken_runner`
+(`acknowledge_is_synchronous`: making that method synchronous is a `SyntaxError`, because
+its body awaits, and the runner correctly refuses to count a syntax error as a kill). Each
+was fixed by sharpening the *case*, not by weakening the claim: a non-unit-cost
+assertion, a virtual-time assertion taken straight after the newcomer's dispatch, a
+`_consistent()` read after a rebuild, a byte-total assertion after a rebuild, a
+*fractional* availability (30.5 s) that a second-truncated instant gets wrong, and a
+renamed port method for the protocol-shape invariant. The mutant whose defect turned out
+to be unobservable at microsecond precision (`int(ts * 1e6)`) was replaced by the
+observable one (`int(ts) * 1e6`) rather than kept as an unkillable claim. Second full run:
+75/75 killed.
+
+## Artifacts
+
+Committed files (git blob hashes at `8bfc3fb`):
+
+| Path | Blob |
+|---|---|
+| `apps/infrx-api/infrx/scheduling/valkey.py` | `a01634d78d8959f806e0f9eda27c4d5662a3e51d` |
+| `apps/infrx-api/infrx/scheduling/__init__.py` | `455a856869da9eaeec523c100cb865e61f9ffc52` |
+| `apps/infrx-api/tests/q/vkharness.py` | `2d993a4139862c9086681c770faa41d827d057d9` |
+| `apps/infrx-api/tests/q/differential.py` | `b2256102c1d8f24fcd0c7321db2e7af713c1d600` |
+| `apps/infrx-api/tests/q/test_valkey_scheduler.py` | `f9b17a4a65532a009165c4f208b8dab705c4e112` |
+| `apps/infrx-api/tests/q/valkey_mutants.py` | `aafd0a54c0f5d4915359161fb7e620300d7e0d52` |
+| `apps/infrx-api/tests/q/test_valkey_mutants.py` | `5399dd2cc082e4dedd0746ee44f785a2de32d411` |
+
+Run logs were written to this session's scratch area only (no durable store is approved
+for this lane) and contain no credentials, prompts or customer content; every number
+quoted above is reproducible with the commands in the Commands table. `git diff --stat
+ec6c548 HEAD` = `7 files changed, 2641 insertions(+), 1 deletion(-)`.
+
+## Changes
+
+**Owned paths touched** (nothing else):
+
+* `apps/infrx-api/infrx/scheduling/valkey.py` (new)
+* `apps/infrx-api/infrx/scheduling/__init__.py` (one export line: `ValkeyScheduler`,
+  `connect`; `valkey.py` imports the client package inside `connect`, so importing the
+  package still pulls no heavy dependency — `08` §4)
+* `apps/infrx-api/tests/q/{vkharness,differential,test_valkey_scheduler,valkey_mutants,test_valkey_mutants}.py` (new)
+* `research/plan/evidence/q/Q2-8bfc3fb.md` (this report)
+
+`infrx/scheduling/memory.py` is **unchanged**: it is Q1's frozen reference and its mutation
+list anchors on its exact lines. `_service_cost` and the weight validation are therefore
+duplicated in `valkey.py` rather than hoisted — deliberate, and noted in the docstring.
+
+**Migration / deploy / rollback.** No SQL, no migration, no deployment file. Rollback is
+deleting the adapter: `MemoryScheduler` is untouched and the composition root does not
+reference either one yet (Q3 wires the choice). Switching adapters at runtime is a drain
+and rebuild, which is Q3's protocol; the index is a cache, so the switch costs throughput,
+never jobs.
+
+**Integration requests** (coordinator-owned files, exact change):
+
+1. `Makefile`, target `api-mutants`: add `tests/q/test_valkey_mutants.py` to the pytest
+   argument list (after `tests/q/test_mutants.py`). It needs Docker and skips visibly with
+   a reason when the task-local Valkey is unavailable, exactly like `tests/d`'s list.
+2. `apps/infrx-api/infrx/contracts/tasklocal.py`: add `"q2": {"valkey": 55461}` to
+   `TASK_PORTS`. The wave-3 Q2 brief assigns this task port 55461 while `TRACK_SERVICES`
+   gives track Q 56379; `tests/q/vkharness.py` currently carries 55461 as a module
+   constant with that discrepancy in a comment. Q3 will want the same entry.
+3. `apps/infrx-api/infrx/contracts/limits.py`: the two index caps are still module
+   constants in `infrx/scheduling/memory.py` (Q1's request, restated). If `PilotSettings`
+   grows `max_index_items` / `max_index_bytes`, this adapter already reads them —
+   `getattr(limits, "max_index_items", MAX_INDEX_ITEMS)` — and no code change is needed.
+4. Optional, F2R's consolidated mutation runner: `tests/q/valkey_mutants.py` declares
+   `MUTANTS` and calls `tests.q.mutants.run_mutant(mutant, paths=PATHS)`; switching it to
+   the consolidated runner is a one-line change of that call.
+
+## Limits
+
+* **Not integrated.** No composition root wires this adapter; nothing in a request path
+  uses it yet. `VALKEY_URL` is read only through the `connect()` helper, which no caller
+  invokes.
+* **`tests/d` not run** (harness collision, E2R) — see Commands. Not a skip counted as a
+  pass.
+* **The rebuild source is a fixture, not PostgreSQL.** Deliverable 3 asks for "a
+  PostgreSQL snapshot *shape*"; `test_q2_rebuild__from_a_postgresql_snapshot_with_duplicates`
+  builds the accepted-job snapshot from the contract's `IndexEvent` records. The real
+  non-terminal query and the reconciler are **Q3**; that end-to-end path is **pending**
+  and depends on D2/D3 integration, not on an input id in `15-pending-inputs.md`.
+* **Single-server semantics only.** Valkey replication is asynchronous, so a replicated or
+  clustered deployment is not proven here (`03` gotcha, and the Q handoff says so). The
+  keys carry a `{…}` hash tag so a cluster would keep one index in one slot, but no cluster
+  was tested. Risk owner: I (fleet) with Q3.
+* **Concurrent claimers are not proven fair.** Each script call is atomic, but a claim is
+  two calls, so two dispatchers claiming simultaneously can commit a choice that was fair
+  one round trip ago (the commit re-selects and re-prices if the winner changed, so no
+  candidate is handed out twice and no state is corrupted — only the *order* can differ
+  from the single-dispatcher order). The pilot runs one dispatcher; the upgrade path
+  (store the cost at enqueue, one round trip) is in the `claim_candidate` docstring.
+  Risk owner: Q3.
+* **No performance claim.** The claim script does one `HGETALL` of the entry table plus a
+  walk of each flow, bounded by `MAX_INDEX_ITEMS`; 100,000 differential operations ran in
+  ~100 s including two adapters and a full state comparison per operation, which is not a
+  throughput measurement. PERF-PILOT owns that.
+* **Not measured against a GPU or the pilot host**; nothing here needs one.
+
+## Cleanup
+
+`docker rm -f -v infrx-q2-valkey` at the end of the session (the harness registers the
+same removal at interpreter exit, but only when *it* created the container, so a mutation
+subprocess never removes a container it found running). E2's `infrx-e2-*` containers were
+left exactly as they were. Verified after removal: `docker ps --format '{{.Names}}'` no
+longer lists `infrx-q2-valkey`, and it is absent from `docker ps -a`.
+
+## Handback
+
+* **Next unblocked task in track Q: Q3** — outbox drain/ack with bounded scan
+  checkpoints, rebuild from PostgreSQL non-terminal snapshots, lag/missing-index metrics,
+  and the drain/rebuild adapter switch. It starts after Q2 and F2P and integrates after
+  D2 and D3. Q3 inherits three things from this task, stated so they are not rediscovered:
+  the select-then-commit shape of `claim_candidate` (the estimator lives in Python), the
+  fact that `rebuild` clears the acknowledged set (so **ack before rebuild**, or a
+  candidate is dropped until the next rebuild — benign, but a throughput hole), and the
+  level-1 charge being the raw cost (an 11 s preparation against 1 s inference waits 12
+  unfiltered slots; R60's bound is in service time, not slots).
+* **Pending coordinator wiring:** integration requests 1–4 above.
+* **Unresolved findings:** none in this task's scope. The two contract-level oddities
+  worth the coordinator's eye are the port-number discrepancy (request 2) and the index
+  caps still living in `memory.py` rather than `PilotSettings` (request 3).
+
+## Verification log
+
+- 2026-09-22: Written from this session's own runs on `8bfc3fb`. Every count and every
+  outcome above is quoted from command output; nothing is inferred, and the items not run
+  (`tests/d`, console targets, `make integration`, anything cloud or GPU) are named as not
+  run rather than assumed to pass.

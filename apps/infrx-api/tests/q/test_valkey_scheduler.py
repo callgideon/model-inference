@@ -17,6 +17,7 @@ A missing Docker, client or server is reported as a skip naming the reason, neve
 from __future__ import annotations
 
 import asyncio
+import collections
 import inspect
 import os
 
@@ -119,8 +120,6 @@ def test_q2_differential__the_two_adapters_agree_on_every_operation():
     exist so a single-edit defect has a *named* case to be killed by."""
     seeds = differential.SEEDS if FULL_DIFFERENTIAL else (1, 2, 3, 4)
     steps = differential.STEPS if FULL_DIFFERENTIAL else 250
-    counters: dict = {}
-    import collections
     counters = collections.Counter()
     compared = asyncio.run(differential.run_seeds(seeds, steps, counters))
     print(f"\ndifferential: {len(seeds)} seeds x {steps} operations = {compared} "

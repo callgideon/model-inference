@@ -506,6 +506,12 @@ class ValkeyScheduler:
         snapshot in snapshot order, the caps are not applied, in-flight entries are
         dropped, acknowledged ids are cleared, and both fairness levels restart - so no
         tenant and no *kind* inherits a penalty from an index that no longer exists.
+
+        ponytail: the whole snapshot crosses in one command's arguments, so a very large
+        recovery is bounded by the server's query buffer rather than by anything here.
+        Chunking it would cost the single-call atomicity that makes a rebuild
+        all-or-nothing, so the chunk-and-fence version belongs to Q3's reconciler - which
+        knows how many non-terminal jobs there are - if it ever needs one.
         """
         args: list[Any] = []
         for event in snapshot:

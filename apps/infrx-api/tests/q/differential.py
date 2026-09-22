@@ -34,7 +34,6 @@ from datetime import timedelta
 from infrx.contracts import errors
 from infrx.contracts.conformance import builders as b
 from infrx.contracts.fakes.support import DEFAULT_START
-from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import ExecutionMode, IndexEvent, OutboxKind
 
 from . import support, vkharness
@@ -133,12 +132,6 @@ def workload(seed: int, steps: int = STEPS) -> list[tuple]:
         else:
             script.append(("rebuild", tuple(rng.sample(indexed, min(len(indexed), 9)))))
     return script
-
-
-async def _call(value):
-    """The memory adapter publishes its state synchronously, the Valkey one over the
-    wire; the comparison does not care which."""
-    return await value if asyncio.iscoroutine(value) else value
 
 
 async def state(port) -> dict:
