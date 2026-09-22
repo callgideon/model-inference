@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T20:30:38Z",
+  "updated": "2026-09-22T20:40:26Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,7 +29,7 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "phase 1: merged-tree layer 2, backend suite skeleton with pending journeys, drills, canaries",
+      "phase": "phase 1 handed back (gate exit 3: 23 pending); independent review running",
       "since": "2026-09-22T18:46:49Z",
       "note": "gate not passable until G/D/W/Q lanes merge"
     }

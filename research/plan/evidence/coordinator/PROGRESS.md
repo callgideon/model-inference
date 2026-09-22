@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T20:30:38Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T20:40:26Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 9 done · 5 in progress · 16 remaining (of 30).**
 
@@ -66,7 +66,7 @@ Generated 2026-09-22T20:30:38Z from `tasks.json` (manifest v4) and `progress-sta
 - F2P: codex-f2p — additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - D1R: codex-d1r / codex/d1r-v2-schema — independent review at ce36cd3 (both images) since 2026-09-22T18:05:08Z — migrations 0006–0009; 111 migration mutants; hosted apply is a separate coordinator operation
-- E3B: codex-e3b / codex/e3b-backend-gate — phase 1: merged-tree layer 2, backend suite skeleton with pending journeys, drills, canaries since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
+- E3B: codex-e3b / codex/e3b-backend-gate — phase 1 handed back (gate exit 3: 23 pending); independent review running since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
 
 ## Checkpoints
 
