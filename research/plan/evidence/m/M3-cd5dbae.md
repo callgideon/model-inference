@@ -264,3 +264,57 @@ Owned paths only: `infrx/media/uploads.py` (new), `infrx/media/gc.py` (new), `in
   HarnessBusy are therefore superseded: every API suite (`--ignore=tests/d` 2205, `tests/d`
   76, full M mutant list 212) passed at the implementation SHA, in separate invocations
   rather than as one `make check`.
+
+---
+
+# Round 2: independent review at `9cdb618`, fix_required
+
+Appended; history above left as written. Round 2 was measured at `559f7e4`. The
+reviewer reproduced every round-1 count. Its race probes found 0/60 duplicate copies and
+0/60 ref mismatches, plus one real defect (B1) and the gaps below.
+
+## Disposition
+
+| Item | Disposition | Commit | Killing case / mutant |
+|---|---|---|---|
+| **B1** `gc.py` took `open_destinations` from `store.uploads` **before** `await objects.keys("uploads/")`. An upload created and PUT during that round trip was listed, missing from the stale set, and deleted as record-less. The reviewer's yielding-store probe lost the open destination in **28/60** iterations. | **fixed**: list first, then compute the open set | `775796b` | `test_an_upload_created_during_the_listing_keeps_its_destination` (fails on the pre-fix `gc.py`, checked); block-edit mutant `open_set_taken_before_the_listing` |
+| (a) the handle grammar's lower bound was not asserted | 22 and 64 accepted, 21 and 65 refused | `56e0a6f` | `test_create_issues_an_opaque_handle_and_a_constrained_destination` |
+| (b) declared-digest comparison only checked a prefix, and case-folding was untested (both at finalize and at resolve_owned's re-check) | a digest one hex digit off is refused at finalize; an uppercased one is refused at create; the re-check refuses a HEAD digest one digit off or case-changed | `56e0a6f` | `test_a_declared_digest_is_verified` (2), `test_the_use_time_recheck_compares_the_whole_digest` (2); mutants `declared_digest_prefix_compared`, `use_time_recheck_case_folded` |
+| (c) R47: the ticket's field set was not pinned | `set(ticket) == {upload_handle, destination_ref, max_bytes, accepted_mime, state, expires_at}` | `56e0a6f` | `test_create_issues_an_opaque_handle_and_a_constrained_destination` |
+| (d) nothing stopped "GC drops finalized records" | a finalized record outlives `expires_at + grace` while its object is in use, and a retry is still idempotent | `56e0a6f` | `test_a_finalized_record_outlives_its_window_while_its_object_lives`; mutant `finalized_record_dropped_by_age` |
+| hardening: `resolve_owned` looked an upload up by handle only, so org B resolving its own ref carrying org A's open handle got "created, not finalized" (cross-tenant state leak, reachable via caller-made refs until F2R-4) | the state check now applies only when `upload.org_id == org_id` | `624eaf2` | `test_another_orgs_open_upload_state_does_not_leak`; mutant `upload_state_answered_across_orgs` |
+| hardening: GC deleted, then forgot | `_forget(key)` now runs **before** `await objects.delete(key)`, so a stage during the delete round trip is `not_found` | `666cdb3` | `test_a_stage_during_the_delete_is_refused_not_admitted`; mutant `index_forgotten_after_the_delete` |
+| hardening: `gc.py` called `ProcessingCache._remove` | public `ProcessingCache.evict(key)` (a 3-line addition to `prepare.py`, authorized by the review) | `559f7e4` | `test_the_cache_cap_evicts_idle_entries_and_never_a_live_jobs` (existing) |
+
+`624eaf2` moved the anchor of `unfinalized_upload_resolves`. The whole-list anchor check
+caught it (`anchors missing ['unfinalized_upload_resolves']`), and it was repaired in
+`559f7e4` and killed again.
+
+**Limit 2 remains, now narrower.** The reviewer's probe B lost a live source in
+**25–45/60** iterations at grace = TTL: a job admitted on media whose delete was already
+decided. Forgetting before the delete closes the window after the index entry is gone.
+The window between the pass's decision and a concurrent stage that already resolved the
+ref is still open. D2's conditional delete on `last_used_at` (integration request 1) is
+the durable fix. The contracts fake's `infrx-upload:{org}:{handle}` was deliberately left
+untouched; the coordinator is ruling on it separately.
+
+## Results at `559f7e4` (from `apps/infrx-api`, 2026-09-22 UTC)
+
+| # | Command | Exit | Output tail |
+|---|---|---|---|
+| 1 | `uv run --frozen pytest -q tests/m --deselect tests/m/test_mutants.py::test_mutant_is_killed` (19:06:40Z) | 0 | `321 passed, 17 deselected in 7.27s` |
+| 2 | `uv run --frozen pytest -q tests/contracts` | 0 | `1006 passed in 36.66s` |
+| 3 | `uv run --frozen pytest -q tests/w tests/g` | 0 | `336 passed, 2 warnings in 34.70s` |
+| 4 | legacy-first ordering (as round 1) | 0 | `350 passed, 17 deselected, 2 warnings in 8.10s` |
+| 5 | track-first ordering | 0 | `350 passed, 17 deselected, 2 warnings in 8.21s` |
+| 6 | `INFRX_MUTANTS=all uv run --frozen pytest -q tests/m/test_mutants.py` (19:08:18Z) | 0 | `218 passed in 252.62s (0:04:12)`: 215 mutants + 3 meta-tests, no survivor |
+
+Mutation list composition: `total 215`, consent 9, fetch 42, gc 25, prepare 38, probe 23,
+store 36, uploads 35, video 7. M3 now has 71 mutants (up from 65). `tests/d` and
+`--ignore=tests/d` were not re-run this round. This round did not touch any file those
+suites import beyond `infrx/media/*`, and rows 1–5 cover those files.
+
+## Verification log (round 2)
+
+- 2026-09-22: Round 2 authored from the runs above at `559f7e4`. The probe figures
+  (28/60, 25–45/60, 0/60) are the reviewer's measurements, quoted rather than re-measured.
