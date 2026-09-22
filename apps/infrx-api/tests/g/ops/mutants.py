@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+"""R32/R40 for G6B: one single-edit defect per invariant `tests/g/ops` claims.
+
+Vocabulary (`Mutant`, `Outcome`, `Result`, `_failing_ids`) is the contracts list's.
+The runner is this file's because two of the mutated files sit outside `infrx/`
+(`client_example.py`, which imports `models/marlin2b/bench.py`), so the throwaway copy
+keeps the repository layout: `<tmp>/apps/infrx-api/{infrx,tests,client_example.py}` and
+`<tmp>/models` linked read-only to the real tree. A kill needs pytest exit 1, failures
+only among the named cases, and **every** named case failing (Q1's r2 rule).
+
+    uv run --frozen pytest -q tests/g/ops/test_mutants.py                  # subset
+    INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/ops/test_mutants.py
+    uv run --frozen python tests/g/ops/mutants.py --list
+"""
+from __future__ import annotations
+
+import argparse
+import ast
+import os
+import pathlib
+import shutil
+import subprocess
+import sys
+import tempfile
+
+API_DIR = pathlib.Path(__file__).resolve().parents[3]
+REPO = API_DIR.parents[1]
+SUITE = "tests/g/ops"
+
+if str(API_DIR) not in sys.path:        # `python tests/g/ops/mutants.py`
+    sys.path.insert(0, str(API_DIR))
+
+from tests.contracts.mutants import Mutant, Outcome, Result, _failing_ids  # noqa: E402
+
+S = "infrx/operations/service.py"
+C = "infrx/operations/cli.py"
+X = "client_example.py"
+
+
+def _m(name, invariant, file, old, new, *cases) -> Mutant:
+    return Mutant(name=name, invariant=invariant, file=file, old=old, new=new, cases=cases)
+
+
+MUTANTS: tuple[Mutant, ...] = (
+    # --- G6B.a: who may operate, and on whose behalf ---------------------------
+    _m("operator_audience_unchecked", "only an operator-audience key row opens an operator session",
+       S, "        if auth.audience is not CredentialAudience.operator:", "        if False:",
+       "test_api_auth__a_forged_operator_is_refused"),
+    _m("tenant_audience_unchecked", "only a consumer key reads a tenant's own state",
+       S, "        if auth.audience is not CredentialAudience.consumer:", "        if False:",
+       "test_api_auth__a_forged_operator_is_refused"),
+    _m("issued_key_is_operator", "this tool mints consumer keys only (no privilege escalation)",
+       S, "                         audience=CredentialAudience.consumer, key_hash=hash_key(secret),",
+       "                         audience=CredentialAudience.operator, key_hash=hash_key(secret),",
+       "test_api_auth__a_forged_operator_is_refused"),
+    _m("revoked_key_accepted", "a revoked key authenticates nothing",
+       S, "        if row is None or row.revoked_at is not None:", "        if row is None:",
+       "test_api_auth__a_revoked_key_reads_nothing",
+       "test_api_auth__a_revoked_operator_key_is_refused",
+       "test_api_auth__rotation_issues_before_it_revokes"),
+    _m("rotation_skips_the_revoke", "rotation revokes the old key after issuing the new one",
+       S, "        await self.revoke_key(org_id, key_id, idempotency_key=idempotency_key + \":revoke\",",
+       "        0 and await self.revoke_key(org_id, key_id, idempotency_key=idempotency_key + \":revoke\",",
+       "test_api_auth__rotation_issues_before_it_revokes"),
+    _m("rotation_ignores_the_personal_org", "a rotated key stays in the individual's personal org",
+       S, "        if identity.personal_org_id != org_id:", "        if False:",
+       "test_api_auth__a_foreign_tenant_key_is_not_found_through_another_org"),
+    # --- the secret ------------------------------------------------------------
+    _m("secret_stored_in_clear", "the key row holds sha256(secret), never the secret",
+       S, "                         audience=CredentialAudience.consumer, key_hash=hash_key(secret),",
+       "                         audience=CredentialAudience.consumer, key_hash=secret,",
+       "test_api_ops__the_secret_is_stored_only_as_its_hash_and_never_audited"),
+    _m("lookup_by_clear_secret", "authentication looks the row up by the hash",
+       S, "        row = await self.tenants.key_by_hash(hash_key(secret))",
+       "        row = await self.tenants.key_by_hash(secret)",
+       "test_api_ops__a_verified_individual_is_granted_keyed_and_reads_its_balance"),
+    _m("secret_in_repr", "an IssuedKey's repr carries no secret",
+       S, "    secret: str | None = dataclasses.field(default=None, repr=False)",
+       "    secret: str | None = dataclasses.field(default=None, repr=True)",
+       "test_api_ops__the_secret_is_stored_only_as_its_hash_and_never_audited"),
+    _m("secret_revealed_on_replay", "a secret is revealed once, never on a replay",
+       S, "        reveal = secret if result[\"inserted\"] and not replayed else None",
+       "        reveal = secret",
+       "test_api_ops__the_secret_is_revealed_once"),
+    # --- idempotency and audit -------------------------------------------------
+    _m("replay_ignores_the_request", "one idempotency key names one request",
+       S, "            if prior.after.get(\"operation\") != operation or prior.after.get(\"request\") != request:",
+       "            if prior.after.get(\"operation\") != operation:",
+       "test_api_ops__a_replayed_adjustment_is_deduplicated"),
+    _m("replay_is_not_looked_up", "a replay returns the recorded result",
+       S, "        if prior is not None:", "        if False:",
+       "test_api_ops__a_replayed_adjustment_is_deduplicated",
+       "test_api_ops__the_secret_is_revealed_once"),
+    _m("operation_id_not_deterministic", "the port dedupes a crash replay by operation id",
+       S, "        operation_id = stable_id(operation, idempotency_key)",
+       "        operation_id = stable_id(operation, idempotency_key, str(uuid.uuid4()))",
+       "test_api_ops__a_replayed_adjustment_is_deduplicated",
+       "test_api_ops__the_secret_is_revealed_once"),
+    _m("reason_optional", "every operator write states a reason",
+       S, "        if not reason.strip() or len(reason) > MAX_REASON:",
+       "        if len(reason) > MAX_REASON:",
+       "test_api_ops__every_write_needs_a_reason_and_an_idempotency_key"),
+    _m("idempotency_key_unbounded", "the idempotency key is 1..255 characters",
+       S, "        if not idempotency_key or len(idempotency_key) > MAX_IDEMPOTENCY_KEY:",
+       "        if not idempotency_key:",
+       "test_api_ops__every_write_needs_a_reason_and_an_idempotency_key"),
+    # --- identity, wallet and suspension ---------------------------------------
+    _m("unverified_identity_accepted",
+       "only a verified individual is provisioned (declared: the defect surfaces as an "
+       "AttributeError on the missing identity)",
+       S, "        if identity is None:", "        if False:",
+       "test_credit_identity__an_unverified_user_gets_no_grant_and_no_key"),
+    _m("key_without_wallet", "no key is issued without a bound, metered wallet",
+       S, "        await self.ops.bound_wallet(identity)          # no key without a metered wallet",
+       "        pass",
+       "test_credit_identity__no_key_without_a_metered_wallet",
+       "test_credit_identity__a_wallet_bound_to_another_org_is_refused"),
+    _m("wallet_binding_unchecked", "a wallet bound to another org is refused, not used",
+       S, "        return v2ports.resolve_wallet(probe, wallet)", "        return wallet",
+       "test_credit_identity__a_wallet_bound_to_another_org_is_refused"),
+    _m("grant_skips_an_existing_binding", "a grant never lands in a wallet bound elsewhere",
+       S, "        if await self.ops.wallets.consumer_wallet_for_user(user_id) is not None:",
+       "        if False:",
+       "test_credit_identity__a_wallet_bound_to_another_org_is_refused"),
+    _m("zero_adjustment_accepted", "an adjustment moves a nonzero amount",
+       S, "        if value.is_zero:", "        if False:",
+       "test_api_ops__an_adjustment_moves_only_the_individuals_wallet"),
+    _m("direct_balance_edit", "operations never edit a balance directly",
+       S, "        wallet = await self.ops.bound_wallet(identity)\n\n        async def write(operation_id):\n            entry,",
+       "        wallet = (await self.ops.bound_wallet(identity)).model_copy(update={\"ledger_total\": value})\n\n        async def write(operation_id):\n            entry,",
+       "test_api_ops__operations_never_touch_a_balance"),
+    _m("suspension_ignored", "a suspended org receives no new key",
+       S, "        if await self.ops.tenants.suspension(org_id) is not None:", "        if False:",
+       "test_api_ops__suspension_refuses_new_keys_and_keeps_prose_in_the_audit"),
+    _m("suspension_code_free_text", "the org carries a closed reason code, not prose",
+       S, "        if reason_code is not None and reason_code not in SUSPENSION_REASONS:",
+       "        if False:",
+       "test_api_ops__suspension_refuses_new_keys_and_keeps_prose_in_the_audit"),
+    # --- the CLI ---------------------------------------------------------------
+    _m("cli_accepts_a_key_on_argv", "a key on argv is refused",
+       C, "        if token.startswith(\"sk-\") or service.KEY_PREFIX in token:", "        if False:",
+       "test_api_ops__the_cli_refuses_a_key_on_argv_and_an_existing_secret_file"),
+    _m("cli_overwrites_a_secret_file", "an existing secret file is never replaced",
+       C, "        if os.path.exists(a.secret_file):     # refuse before a key exists, not after",
+       "        if False:",
+       "test_api_ops__the_cli_refuses_a_key_on_argv_and_an_existing_secret_file"),
+    _m("cli_secret_file_world_readable", "the secret file is created 0600",
+       C, "os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)", "os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)",
+       "test_api_ops__the_cli_writes_the_secret_once_and_never_prints_it"),
+    _m("cli_prints_the_secret", "stdout carries the result without the secret",
+       C, "            \"replayed\": issued.replayed,", "            \"replayed\": issued.secret,",
+       "test_api_ops__the_cli_writes_the_secret_once_and_never_prints_it"),
+    _m("cli_error_echoes_the_credential", "a refusal names the error, never the credential",
+       C, "        print(json.dumps({\"error\": e.code, \"message\": str(e)}), file=sys.stderr)",
+       "        print(json.dumps({\"error\": e.code, \"message\": str(e) + secret}), file=sys.stderr)",
+       "test_api_auth__the_cli_reports_a_refusal_without_the_secret"),
+)
+
+
+def run_mutant(mutant: Mutant) -> Result:
+    if not mutant.cases:
+        return Result(Outcome.misdeclared, "declares no case")
+    with tempfile.TemporaryDirectory(prefix=f"g6b-mutant-{mutant.name}-") as tmp:
+        api = pathlib.Path(tmp) / "apps" / "infrx-api"
+        junk = shutil.ignore_patterns("__pycache__", ".venv")
+        for name in ("infrx", "tests"):
+            shutil.copytree(API_DIR / name, api / name, ignore=junk)
+        if (API_DIR / X).exists():
+            shutil.copy2(API_DIR / X, api / X)
+        os.symlink(REPO / "models", pathlib.Path(tmp) / "models")
+        target = api / mutant.file
+        source = target.read_text()
+        found = source.count(mutant.old)
+        if found != 1:
+            return Result(Outcome.misdeclared,
+                          f"anchor appears {found} times in {mutant.file}: {mutant.old[:60]!r}")
+        target.write_text(source.replace(mutant.old, mutant.new, 1))
+        done = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider",
+             "-rf", "--tb=no", "-o", "addopts=--import-mode=importlib",
+             "-o", "testpaths=tests", SUITE, "-k", " or ".join(mutant.cases)],
+            cwd=api, capture_output=True, text=True, timeout=300,
+            env={"PYTHONPATH": str(api), "PATH": "/usr/bin:/bin"})
+        stdout = done.stdout or ""
+        lines = (stdout or done.stderr).strip().splitlines()
+        summary = lines[-1] if lines else "no output"
+        if done.returncode not in (0, 1):
+            return Result(Outcome.broken_runner, f"pytest exit {done.returncode}: {summary}")
+        if "no tests ran" in summary or not any(w in summary for w in ("passed", "failed")):
+            return Result(Outcome.misdeclared, f"no case matched: {summary}")
+        failed, errored = _failing_ids(stdout)
+        if errored:
+            return Result(Outcome.broken_runner, f"errors: {errored[:3]}")
+        if done.returncode == 0 or not failed:
+            return Result(Outcome.survived, summary)
+        stray = [t for t in failed if not any(case in t for case in mutant.cases)]
+        if stray:
+            return Result(Outcome.broken_runner, f"failures outside the named cases: {stray[:3]}")
+        unproven = [c for c in mutant.cases if not any(c in t for t in failed)]
+        if unproven:
+            return Result(Outcome.misdeclared, f"named cases that did not notice: {unproven}")
+        return Result(Outcome.killed, summary)
+
+
+def case_names() -> set[str]:
+    """Every `test_*` function in this suite except the list's own claims."""
+    names = set()
+    for path in sorted((API_DIR / SUITE).glob("test_*.py")):
+        if path.name == "test_mutants.py":
+            continue
+        tree = ast.parse(path.read_text())
+        names |= {n.name for n in tree.body
+                  if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")}
+    return names
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="run G6B's mutation list")
+    parser.add_argument("names", nargs="*")
+    parser.add_argument("--list", action="store_true")
+    args = parser.parse_args()
+    if args.list:
+        for mutant in MUTANTS:
+            print(f"{mutant.name:36s} {mutant.invariant}")
+        print(f"\n{len(MUTANTS)} mutants over "
+              f"{len({c for m in MUTANTS for c in m.cases})} named cases")
+        return 0
+    chosen = [m for m in MUTANTS if not args.names or m.name in args.names]
+    bad = []
+    for mutant in chosen:
+        result = run_mutant(mutant)
+        print(f"[{result.outcome:13s}] {mutant.name}: {result.detail}")
+        if not result.killed:
+            bad.append(mutant.name)
+    print(f"\n{len(chosen) - len(bad)}/{len(chosen)} killed" + (f"; not killed: {bad}" if bad else ""))
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
