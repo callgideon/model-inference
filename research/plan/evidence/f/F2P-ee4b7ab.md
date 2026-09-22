@@ -54,7 +54,7 @@ All run from the worktree. UTC 2026-09-22. No seed applies (no randomised suite)
 | `cd apps/app && node tests/contracts/v2/run-mutants-v2.mjs` | 0 | `23/23 mutants killed` |
 | `make bench-test` | 0 | `40 passed in 4.46s` |
 | `make api-mutants` | **not run as the canonical target** | it includes `tests/d/test_migration_mutants.py`. Per the coordinator's interim rule the equivalent run excluding tests/d was used instead (see below). |
-| all mutation lists except tests/d: `INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/… tests/q/… tests/j/… tests/w/… tests/t/… tests/g/… tests/contracts/v2/test_mutants_v2.py` | see Results | reported in the final handback message; started before this report was written |
+| all mutation lists except tests/d: `INFRX_MUTANTS=all uv run --frozen pytest -q tests/contracts/test_mutants.py tests/m/test_mutants.py tests/q/test_mutants.py tests/j/test_mutants.py tests/w/test_mutants.py tests/t/test_trace_mutants.py tests/g/test_mutants.py tests/contracts/v2/test_mutants_v2.py` | 0 | `1019 passed in 1396.28s (0:23:16)` — every pre-existing track list plus the new v2 list, with no survivor and no runner error |
 | `make check` | **not run as one target** | `api-test` and `api-mutants` both include `tests/d`. Every other component of `check` was run individually and is listed above. |
 | `make integration INTEGRATION_ARGS="--layer 1 --canary"` | **not run** | Not a skip being counted as a pass: this task touched no file under `tests/integration/`, and `tests/integration/compose.yaml` pins project `infrx-e2` with fixed `container_name: infrx-e2-*` and fixed host ports. The common brief reserves that stack for the E2R lane's own checkout and forbids touching containers this task did not create. E2R's per-process labelling (`c23d804`) is not in this base. |
 | `tests/d` (and its migration mutants) | **not run (harness collision, E2R)** | the coordinator's interim rule; the lift to that rule requires a rebase onto `c23d804` or later, which this branch has not done (base is `ec6c548`). |
@@ -222,3 +222,7 @@ rule, which the rebase onto `c23d804` resolves.
 - 2026-09-22: Written from the commands above at head `ee4b7ab`. Counts are quoted
   from command output, not typed from memory. tests/d and `make integration` are
   recorded as not run with their reasons; neither is counted as a pass.
+- 2026-09-22: The cross-track mutation run completed after the report was first
+  written and its quoted result was substituted for the placeholder:
+  `1019 passed in 1396.28s`, exit 0, over the seven pre-existing lists plus the v2
+  list. No other field changed.
