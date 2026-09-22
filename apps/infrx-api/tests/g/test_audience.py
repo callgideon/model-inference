@@ -22,11 +22,8 @@ CREATOR = "5e5e5e5e-0000-4000-8000-000000000005"
 # individual is the member who created it, as D2's `coalesce(user_id, created_by)` reads.
 CONSUMER = {**support.ROW, "created_by": CREATOR}
 LEGACY_CONSUMER = {**support.ROW, "user_id": None, "created_by": CREATOR}
-PROVIDER = {"id": IDS.provider_dev_key, "org_id": IDS.provider_org, "revoked_at": None,
-            "audience": "provider_dev", "user_id": None, "created_by": IDS.provider_member,
-            "provider_org_id": IDS.provider_org, "endpoint_id": IDS.dev_endpoint}
-OPERATOR = {"id": support.KEY, "org_id": support.ORG, "revoked_at": None,
-            "audience": "operator", "user_id": None, "created_by": CREATOR}
+PROVIDER = support.PROVIDER_ROW
+OPERATOR = {**support.OPERATOR_ROW, "created_by": CREATOR}
 
 
 class Req:

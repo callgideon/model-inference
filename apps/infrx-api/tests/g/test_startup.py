@@ -39,7 +39,7 @@ def test_f_base__pilot_refuses_to_start_when_a_component_is_unreachable(name, ch
     """A missing probe is not a passing probe, and a probe that raises is a failure
     whose exception text stays in the log."""
     with pytest.raises(RuntimeMisconfigured) as raised:
-        support.cutover_app(ingress_deps=ingress.IngressDeps(checks=checks))
+        support.cutover_app(ingress_deps=support.deps(checks=checks))
     message = str(raised.value)
     for component in named:
         assert component in message
@@ -50,7 +50,7 @@ def test_f_base__dev_starts_with_unreachable_components_and_says_so():
     """`dev` is explicitly permissive (infra/README.md): it starts, and readiness is
     where the truth is - not a silent 200."""
     app, mounted = support.cutover_app(support.settings("dev"),
-                                       ingress_deps=ingress.IngressDeps(checks={}))
+                                       ingress_deps=support.deps(checks={}))
     assert mounted.startup_state == {"price_source": "unavailable", "journal": "unavailable"}
     response = TestClient(app).get(support.READY_PATH, headers=support.AUTH)
     assert response.status_code == 503, response.text
@@ -83,7 +83,7 @@ def test_f_base__public_health_is_generic():
     """No component state, no counters, no mode: a public liveness probe is not a
     reconnaissance endpoint."""
     app, _ = support.cutover_app(support.settings("dev"),
-                                 ingress_deps=ingress.IngressDeps(checks={}))
+                                 ingress_deps=support.deps(checks={}))
     response = TestClient(app).get(support.HEALTH_PATH)
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -91,7 +91,7 @@ def test_f_base__public_health_is_generic():
 
 def test_f_base__a_readiness_probe_that_raises_is_unavailable_not_a_500():
     app, _ = support.cutover_app(support.settings("dev"),
-                                 ingress_deps=ingress.IngressDeps(checks={**BOTH_OK,
+                                 ingress_deps=support.deps(checks={**BOTH_OK,
                                                                          "journal": boom}))
     response = TestClient(app).get(support.READY_PATH, headers=support.AUTH)
     assert response.status_code == 503
@@ -126,7 +126,7 @@ def test_f_base__registering_the_ingress_never_replaces_the_legacy_chat_route():
     app = support.legacy_app()
     rt = app.state.runtime
     rt.mode = "dev"
-    ingress.register(app, rt, ingress.IngressDeps(checks=BOTH_OK))
+    ingress.register(app, rt, support.deps(checks=BOTH_OK))
     tc = TestClient(app)
     assert tc.post("/v1/chat/completions", json=support.BODY).status_code == 200   # legacy
     assert tc.get(support.HEALTH_PATH).json() == {"status": "ok"}                  # new routes live
@@ -192,12 +192,14 @@ def test_f_base__register_reads_its_deps_from_the_runtime():
     assert len(calls) == 1
 
 
-def test_f_base__the_default_model_must_be_in_the_served_map():
-    """An empty map used to copy the public id through as the revision - the defect the
-    map exists to prevent, reintroduced by omission."""
-    with pytest.raises(RuntimeMisconfigured) as raised:
-        support.cutover_app(ingress_deps=support.deps(served_models={"other/model": "other@1"}))
-    assert "MODEL_ID" in str(raised.value)
+def test_f_base__the_ingress_refuses_to_start_without_a_catalog():
+    """G1R: a model name means only what the trusted catalog says. With no catalog the
+    ingress could only guess (the old served-map fallback copied the name through), so
+    it refuses to register, in every mode."""
+    for mode in ("pilot", "dev"):
+        with pytest.raises(RuntimeMisconfigured) as raised:
+            support.cutover_app(support.settings(mode), ingress_deps=support.deps(catalog=None))
+        assert "catalog" in str(raised.value)
 
 
 def test_dur_rls__a_client_that_disconnects_mid_body_is_not_a_server_error(caplog):

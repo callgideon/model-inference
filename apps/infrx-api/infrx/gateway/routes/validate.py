@@ -10,10 +10,16 @@ stating, because each one is a rule rather than a taste:
   `price_snapshot` (r1 R45) is how it believes it named its own rates.
 * **The ceilings are derived, not echoed.** `max_output_tokens` is the validated
   request ceiling and `max_input_tokens` is `MAX_CONTEXT_TOKENS` minus it (01: "the
-  conservative input ceiling (context limit minus requested maximum output)"), so
-  the pair always satisfies the range check `admit` repeats inside its transaction
-  (r1 R55: `1 ≤ out ≤ MAX_OUTPUT_TOKENS`, `in ≥ 1`, `in + out ≤ MAX_CONTEXT_TOKENS`)
-  and the hold the store derives from it (R53) covers the whole envelope.
+  conservative input ceiling (context limit minus requested maximum output)"), each
+  bounded by the resolved deployment's own validated limits (G1R: D2 refuses a
+  request past them), so the pair always satisfies the range check `admit` repeats
+  inside its transaction (r1 R55: `1 ≤ out ≤ MAX_OUTPUT_TOKENS`, `in ≥ 1`,
+  `in + out ≤ MAX_CONTEXT_TOKENS`) and the hold the store derives from it (R53)
+  covers the whole envelope.
+* **The model is resolved, not mapped (G1R).** The name the caller asked for goes
+  through the trusted catalog (`catalog.resolve`) for this credential's audience, and
+  only what the serving revision declares is accepted; the name itself is what
+  admission re-resolves and pins.
 * **No money and no price.** Nothing here reads or writes a rate. The price is the
   store's fact, taken in the admitting transaction from its own source (R45).
 
@@ -38,6 +44,7 @@ from ...contracts.codec import canonical_bytes
 from ...contracts.limits import MAX_IDEMPOTENCY_KEY_CHARS
 from ...contracts.records import (Budgets, ConsentSnapshot, ExecutionMode, IdempotencyRef,
                                   NormalizedRequest, TraceMode)
+from .catalog import check_capability, resolve
 
 # Everything a pilot request may name. `messages` and `model` become record fields;
 # the rest travel in `NormalizedRequest.parameters`.
@@ -417,36 +424,25 @@ def _tokenised(message: dict, media: dict[str, str]) -> dict:
 
 
 class Validator:
-    """One per app. Holds the pilot limits; reads nothing else."""
+    """One per app. Holds the pilot limits and the catalog it resolves models through."""
 
-    def __init__(self, rt, *, consent_for=None, served_models=None) -> None:
+    def __init__(self, rt, *, catalog, consent_for=None) -> None:
         self.rt = rt
+        self.catalog = catalog
         self.consent_for = consent_for or off_mode_policy
-        # Public model id -> model revision. The public id is what a caller names and
-        # the revision is what the store prices, entitles and pins; copying one into
-        # the other made every unknown model the platform's problem at admission and
-        # let a 1 MiB string through as a revision. `None` means "the served model
-        # answers to its own name", which is the F1 behaviour.
-        self.served_models = (dict(served_models) if served_models is not None
-                              else {rt.settings.model_id: rt.settings.model_id})
 
-    def model_revision(self, body: dict) -> str:
-        """The revision for the requested public id, or a refusal (never an echo)."""
+    def requested_model(self, body: dict) -> str:
+        """The model name the caller asked for (an alias or an R62 pin), bounded. An
+        omitted model is the served default, resolved like any other name."""
         model = body.get("model")
         if model is None:
-            default = self.rt.settings.model_id
-            return self.served_models.get(default, default)
+            return self.rt.settings.model_id
         if not isinstance(model, str) or not model:
             raise errors.InvalidRequest("model must be a non-empty string", param="model")
         if len(model) > MAX_MODEL_CHARS:
             raise errors.InvalidRequest(f"model is at most {MAX_MODEL_CHARS} characters",
                                         param="model")
-        revision = self.served_models.get(model)
-        if revision is None:
-            # The table's model code: this organization cannot run that model here.
-            # Never "not found", which would confirm which model ids exist.
-            raise errors.ModelNotEntitled("the requested model is not served", param="model")
-        return revision
+        return model
 
     @property
     def limits(self):
@@ -456,23 +452,24 @@ class Validator:
         """UTC from the app's injected clock - never a second clock of its own."""
         return datetime.fromtimestamp(self.rt.clock(), timezone.utc)
 
-    def ceilings(self, body: dict) -> tuple[int, int]:
-        """(max_input_tokens, max_output_tokens), already range-checked."""
+    def ceilings(self, body: dict, deployment) -> tuple[int, int]:
+        """(max_input_tokens, max_output_tokens), already range-checked, within both the
+        pilot limits and the resolved deployment's validated limits."""
         requested = _int(body, "max_tokens")
         alternative = _int(body, "max_completion_tokens")
         if requested is not None and alternative is not None and requested != alternative:
             raise errors.InvalidRequest("max_tokens and max_completion_tokens disagree",
                                         param="max_tokens")
-        ceiling = self.limits.max_output_tokens
+        ceiling = min(self.limits.max_output_tokens, deployment.max_output_tokens)
         output = requested if requested is not None else alternative
         output = ceiling if output is None else output
         if not 1 <= output <= ceiling:
             raise errors.InvalidRequest(f"max_tokens must be in 1..{ceiling}", param="max_tokens")
         # 01: reserve the context limit minus the requested output as the input
-        # ceiling. The sum is then exactly MAX_CONTEXT_TOKENS, which R55 allows.
-        return self.limits.max_context_tokens - output, output
+        # ceiling, never more than the deployment accepts (D2 refuses past it).
+        return min(deployment.max_input_tokens, self.limits.max_context_tokens - output), output
 
-    def normalize(self, body: dict, auth, request_id: str, headers) -> NormalizedRequest:
+    async def normalize(self, body: dict, auth, request_id: str, headers) -> NormalizedRequest:
         for name in body:
             # The name is the caller's, so it is never formatted into a message; the
             # envelope echoes it only if it looks like a parameter name (intake).
@@ -498,14 +495,19 @@ class Validator:
         if seed is not None and not 0 <= seed <= MAX_SEED:
             raise errors.InvalidRequest(f"seed must be in 0..{MAX_SEED}", param="seed")
         check_stop(body.get("stop"))
-        revision = self.model_revision(body)
+        model = self.requested_model(body)
         mode = execution_mode(body, headers)
-        max_input, max_output = self.ceilings(body)
+        # Only now, with every cheap check passed, the catalog: trusted rows, this
+        # credential's audience, and the capabilities its serving revision declares.
+        resolved = await resolve(self.catalog, auth, model)
+        check_capability(resolved.serving, messages, mode)
+        max_input, max_output = self.ceilings(body, resolved.deployment)
         now = self.now()
         budgets = Budgets.of(self.limits, mode)
         return NormalizedRequest(
             request_id=request_id, org_id=auth.org_id, key_id=auth.key_id,
-            model_revision=revision,
+            # What the caller asked for: admission resolves and pins it (D2, R78).
+            model_revision=model,
             messages=messages,
             parameters={name: body[name] for name in sorted(body)
                         if name in SUPPORTED - {"model", "messages"}},
