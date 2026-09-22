@@ -108,7 +108,7 @@ its own parity and quality evidence (OPT-PARITY), never a configuration change.
 | Vocab | 248,320, `tie_word_embeddings: true` | [`config.json`](../models/marlin2b/config.json) |
 | `eos_token` / `pad_token` | `<\|im_end\|>` / `<\|endoftext\|>`; `bos_token` and `unk_token` `null` | HF API `.config.tokenizer_config`, `meas.` 2026-09-22 |
 | Vision token ids | image 248056, video 248057, vision start/end 248053/248054 | [`config.json`](../models/marlin2b/config.json) |
-| `tokenizer.json` | 19,989,325 B; **sha256 published, see below — ⚠️ not transcribed in this session** | `meas.` 2026-09-22: `GET /api/models/NemoStation/Marlin-2B/tree/main` returns `.lfs.oid` for this file, 64 hex characters, `pointerSize` 133. The oid **is** the sha256 of the contents, so no token is needed to obtain it |
+| `tokenizer.json` | 19,989,325 B; served-bytes sha256 `06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523` (`meas.` pilot box, 2026-09-22); registry oid ⚠️ see below | `meas.` 2026-09-22: `GET /api/models/NemoStation/Marlin-2B/tree/main` returns `.lfs.oid` for this file, 64 hex characters, `pointerSize` 133. The oid **is** the sha256 of the contents, so no token is needed to obtain it |
 | `chat_template.jinja` | 7,755 B, **sha256 `273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80`** | `meas.` 2026-09-22: HF API `.config.chat_template_jinja` is the whole template (7,755 UTF-8 bytes, exactly the `FILES.md` size) and needs no gate. Emits `<\|vision_start\|><\|video_pad\|><\|vision_end\|>`, carries a `<tool_call>` block the platform refuses (§2.3) |
 | Processor class | `Qwen3VLProcessor` | [`processor_config.json`](../models/marlin2b/processor_config.json) |
 | Video processor | `Qwen3VLVideoProcessor` | idem |
@@ -117,31 +117,36 @@ its own parity and quality evidence (OPT-PARITY), never a configuration change.
 | Patch geometry | `patch_size` 16, `temporal_patch_size` 2, `merge_size` 2 | `processor_config.json`, `config.json` `vision_config` |
 | Runtime requirement | `transformers >= 5.7.0`, `torch >= 2.11.0`, `torchcodec`, `qwen-vl-utils >= 0.0.14`, `av`, `pillow` | [`MODEL_CARD.md`](../models/marlin2b/MODEL_CARD.md) "System requirements"; `model.env:10` records `transformers>=5.7.0, torchcodec` |
 
-**Artifact content digests — obtainable now, without `HF_TOKEN`.** Correcting an earlier draft
-of this document, which said no sha256 existed anywhere and implied the gate was the obstacle:
-the public tree API publishes the git-LFS object id of each large file, and for LFS that oid
-**is** the sha256 of the file contents. Confirmed present on 2026-09-22 (`meas.`), one
-unauthenticated request:
+**Artifact content digests — registry claim needs `HF_TOKEN`; served bytes measured.** Two
+corrections to earlier drafts, established by the coordinator on 2026-09-22: (1) the public
+tree API does publish `.lfs.oid` for this repository, but because the repository is **gated**
+an unauthenticated call returns each oid **masked as 64 `*` characters** (confirmed from two
+different hosts, including the pilot box itself: the response body, not any local filter, is
+what carried the asterisks — the "secret-redaction filter" reading in the previous draft was
+wrong). With `HF_TOKEN` exported (an approved account, as `CLAUDE.md` requires for the
+download) the same call returns the real oids, and for LFS the oid **is** the sha256 of the
+contents. (2) The bytes actually served were hashed read-only on the pilot box
+(`sha256sum` under `/opt/dlami/nvme/marlin2b`, files dated 2026-09-19 22:52–22:53 UTC):
 
 ```bash
-curl -sS https://huggingface.co/api/models/NemoStation/Marlin-2B/tree/main \
+# registry claim (needs HF_TOKEN; unauthenticated → oids are '*'*64)
+curl -sS -H "Authorization: Bearer $HF_TOKEN" https://huggingface.co/api/models/NemoStation/Marlin-2B/tree/main \
   | python3 -c 'import json,sys; [print(e["path"], e["lfs"]["oid"], e["lfs"]["size"]) for e in json.load(sys.stdin) if e.get("lfs")]'
+# served bytes (on the serving host)
+sha256sum model-00001-of-00002.safetensors model-00002-of-00002.safetensors tokenizer.json
 ```
 
-| File | Bytes (`.lfs.size`, confirmed) | `.lfs.oid` |
-|---|---:|---|
-| `model-00001-of-00002.safetensors` | 4,999,157,736 | present, 64 hex, `pointerSize` 135 |
-| `model-00002-of-00002.safetensors` | 444,519,488 | present, 64 hex, `pointerSize` 134 |
-| `tokenizer.json` | 19,989,325 | present, 64 hex, `pointerSize` 133 |
+| File | Bytes (`.lfs.size` = on-disk size, confirmed) | Served-bytes sha256 (`meas.` pilot box, 2026-09-22) | Registry `.lfs.oid` |
+|---|---:|---|---|
+| `model-00001-of-00002.safetensors` | 4,999,157,736 | `5d78fa4dbd856dc89c01b99ffa92072fe31b8a1e6b31e87893734c80304983b7` | ⚠️ needs `HF_TOKEN` |
+| `model-00002-of-00002.safetensors` | 444,519,488 | `01d40ec9ccf4c2ad8e755604468dd6ee4a5c6551553e5739a03beb4c0673d0db` | ⚠️ needs `HF_TOKEN` |
+| `tokenizer.json` | 19,989,325 | `06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523` | ⚠️ needs `HF_TOKEN` |
 
-⚠️ **The three values are deliberately not transcribed here.** This session's environment
-applies a secret-redaction filter to 64-hex-character strings, so every oid reached this
-session masked; writing them from memory would be fabrication, and working around the filter
-to move them is not something a documentation task should do. **Action for the owner of the
-serving-version record (W3/I2B):** run the command above on a host without that filter, paste
-the three oids into the record, then `sha256sum` the downloaded files and confirm they match.
-That closes the pin end to end — the registry's claim *and* the bytes served. The remaining
-⚠️ after that is the runtime **image** digest (`serve.sh` pins the moving tag
+`chat_template.jinja` on the box hashes to the same `273d8e0e…` as the template returned by the
+model API, so the box holds the registry's template byte for byte. **Action for W3/I2B:** run
+the authenticated command above on the serving host, confirm each oid equals the served-bytes
+column, and record the equality in the serving-version record; a mismatch is a fail-stop. The
+remaining ⚠️ after that is the runtime **image** digest (`serve.sh` pins the moving tag
 `vllm/vllm-openai:nightly`), which no registry read can supply.
 
 ### 1.4 Prompt/harness pin (mode surface)
@@ -455,8 +460,8 @@ Filled from the lines above. This replaces the illustrative fixture in
   "serving_version": {
     "model_repo": "NemoStation/Marlin-2B",
     "model_commit": "fd111fca4fc7897876fb0d7e9df22ca5ac8ab965",
-    "weight_shard_digests": "PUBLISHED — the two .lfs.oid values from /api/models/NemoStation/Marlin-2B/tree/main; transcribe them here (§1.3) and confirm with sha256sum after download",
-    "tokenizer_digest": "PUBLISHED — the tokenizer.json .lfs.oid from the same tree call; same confirmation step",
+    "weight_shard_digests": ["5d78fa4dbd856dc89c01b99ffa92072fe31b8a1e6b31e87893734c80304983b7", "01d40ec9ccf4c2ad8e755604468dd6ee4a5c6551553e5739a03beb4c0673d0db"],  // served bytes, meas. pilot box 2026-09-22; registry oid equality ⚠️ needs HF_TOKEN (W3)
+    "tokenizer_digest": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",  // idem
     "chat_template_sha256": "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
     "architecture_override": {"architectures": ["Qwen3_5ForConditionalGeneration"]},
     "eos_token_ids": [248044, 248046],
@@ -835,3 +840,4 @@ plainly, because a reader who knows the word "VLA" will otherwise assume otherwi
   understated: the `@2026-09-01` revision is in 15 fixtures, 2 Python modules and 3 console
   files (20 in total), not the two originally named. No conclusion of §1-§6 is reversed by any
   of this, and still no measurement, GPU run, cloud operation or code change.
+- 2026-09-22 (coordinator): corrected the digest method — the gated repository returns `*`×64 oids to unauthenticated tree calls (verified from the pilot box too; no local filter was involved); recorded the served-bytes sha256 of the three files from a read-only `sha256sum` on the pilot box and the chat-template match; registry equality stays ⚠️ until W3 runs the authenticated call. ⚠️ set now: registry oid equality, runtime image digest, engine decoder, measured hardware, `shortest_edge` 4096-vs-65,536.
