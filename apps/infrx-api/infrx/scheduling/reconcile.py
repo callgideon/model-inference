@@ -140,6 +140,24 @@ class Reconciler:
         self.metrics["rebuilds"] += 1
         return count + report["repaired"]
 
+    # --- (3) switching adapters ---------------------------------------------
+    async def switch(self, index: Any) -> int:
+        """Move dispatch to another adapter (memory <-> Valkey) without losing a job.
+
+        The new index is rebuilt from PostgreSQL before anything points at it; then the
+        drain points at it; then it is topped up from a snapshot read after the swap,
+        which carries over a dispatch the drain delivered into the old index meanwhile
+        (its outbox row is acknowledged, so nothing else would). The old index is never
+        copied: every job it holds that still wants dispatch is in the snapshot. A worker
+        still claiming from it can at worst be offered a job the new index also offers,
+        which the store's claim fences; the composition root re-points the workers and
+        drops the old index.
+        """
+        count = await self.rebuild(index)
+        self.index = index
+        report, _ = await self._top_up(await self.store.dispatch_snapshot(), index)
+        return count + report["repaired"]
+
     async def _top_up(self, snapshot, index) -> tuple[Counter[str], float]:
         """Enqueue every snapshot event the index does not hold. `blocked` counts the
         ones it refused as already acknowledged and still does not hold."""

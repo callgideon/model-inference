@@ -184,18 +184,20 @@ def test_q3_metrics__the_outbox_lag_is_the_oldest_waiting_dispatch(adapter):
 
 # --- (2) the reconciler -------------------------------------------------------------
 
-class StaleFirst:
-    """The store, except that its next `dispatch_snapshot` answers with one read earlier:
-    the interleaving "snapshot, then a delivery, then the rebuild" made deterministic."""
+class Interleave:
+    """The store, except that its `n`-th `dispatch_snapshot` is read, THEN `action` runs,
+    THEN the (now stale) snapshot is returned: "something happened between the snapshot
+    and what the reconciler did with it", made deterministic."""
 
-    def __init__(self, store, stale) -> None:
-        self.store, self.stale = store, stale
+    def __init__(self, store, n: int, action) -> None:
+        self.store, self.n, self.action, self.calls = store, n, action, 0
 
     async def dispatch_snapshot(self):
-        if self.stale is not None:
-            stale, self.stale = self.stale, None
-            return stale
-        return await self.store.dispatch_snapshot()
+        snapshot = await self.store.dispatch_snapshot()
+        self.calls += 1
+        if self.calls == self.n:
+            await self.action()
+        return snapshot
 
     def __getattr__(self, name):
         return getattr(self.store, name)
@@ -309,11 +311,15 @@ def test_q3_reconcile__a_delivery_behind_a_stale_snapshot_survives_the_rebuild(a
 
     async def body():
         first = await rig.admit(w)
-        stale = await w.outbox.dispatch_snapshot()
-        second = await rig.admit(w)
-        assert await w.rec.drain() == {"read": 2, "indexed": 2, "acknowledged": 2}
-        w.rec.store = StaleFirst(w.outbox, stale)
+        second = []
+
+        async def deliver():
+            second.append(await rig.admit(w))
+            assert await w.rec.drain() == {"read": 2, "indexed": 2, "acknowledged": 2}
+
+        w.rec.store = Interleave(w.outbox, 1, deliver)
         assert await w.rec.rebuild() == 2
+        (second,) = second
         assert sorted((await rig.members(w)).values()) == sorted([first, second])
         assert w.outbox.unacknowledged() == []
         await rig.finish(w)
@@ -331,15 +337,83 @@ def test_q3_fence__a_stale_candidate_never_acquires_a_second_lease(adapter):
         await w.rec.drain()
         await rig.prepare_one(w)                             # prepared, queued
         await w.rec.drain()
-        stale = await w.outbox.dispatch_snapshot()
-        candidate, lease = await rig.infer_one(w, "gpu-1", finish=False)
-        assert lease is not None and rig.state(w, job) is rig.JobState.running
-        w.rec.store = StaleFirst(w.outbox, stale)
+        first = []
+
+        async def claim():
+            first.append(await rig.infer_one(w, "gpu-1", finish=False))
+
+        w.rec.store = Interleave(w.outbox, 1, claim)
         await w.rec.rebuild()
+        ((_candidate, lease),) = first
+        assert lease is not None and rig.state(w, job) is rig.JobState.running
         again, refused = await rig.infer_one(w, "gpu-2")
         assert again.job_id == job and refused is None
         assert w.leases[job] == 1
         await w.jobs.complete(lease, rig.b.outcome(job, w.h))
+        rig.settled(w)
+    run(body)
+
+
+# --- (3) switching adapters ---------------------------------------------------------
+
+@pytest.mark.parametrize("old,new", [("memory", "valkey"), ("valkey", "memory")])
+def test_q3_switch__a_live_pipeline_moves_to_the_other_adapter_and_loses_no_job(old, new):
+    """Mid-run: candidates pending, one in flight with a preparation worker, one job
+    running, one row not yet delivered. After the switch the workers claim from the new
+    index; the one still holding an old candidate finishes and acknowledges it there."""
+    if _valkey_down:
+        pytest.skip(f"task-local Valkey unavailable: {_valkey_down}")
+    w = rig.world(old)
+
+    async def body():
+        for org in (rig.ORG_A, rig.ORG_B) * 3:
+            await rig.admit(w, org)
+        await w.rec.drain()
+        for _ in range(3):
+            await rig.prepare_one(w)
+        await w.rec.drain()
+        _candidate, running = await rig.infer_one(w, finish=False)
+        held = await w.index.claim_candidate("prep", kind=rig.PREP)
+        await rig.admit(w)                                   # not delivered yet
+        old_index = w.index
+        fresh = rig.make_index(new, w.h.clock.now)
+        # PostgreSQL's six: three preparing (the held one too), two queued, and the one
+        # whose row the drain has not delivered - the running one is not a candidate
+        assert await w.rec.switch(fresh) == 6
+        w.index = fresh                                      # the workers, re-pointed
+        await w.jobs.prepared(await w.jobs.claim_preparation(held.job_id, "prep"), ())
+        await old_index.acknowledge(held)
+        await w.jobs.complete(running, rig.b.outcome(running.job_id, w.h))
+        await rig.finish(w)
+        assert sorted(w.leases) == sorted(w.admitted)
+        assert w.outbox.unacknowledged() == []
+        rig.settled(w)
+    run(body)
+
+
+def test_q3_switch__a_delivery_into_the_old_index_during_the_switch_reaches_the_new_one(
+        adapter):
+    """The drain still points at the old index while the new one is being rebuilt. A
+    dispatch it delivers there - after the rebuild's snapshots, before the swap - is
+    acknowledged in the outbox, so only the snapshot read after the swap can carry it
+    over."""
+    w = rig.world(adapter)
+
+    async def body():
+        await rig.admit(w)
+        await w.rec.drain()
+        late = []
+
+        async def deliver_to_the_old_index():
+            late.append(await rig.admit(w))
+            assert await w.rec.drain() == {"read": 1, "indexed": 1, "acknowledged": 1}
+
+        w.rec.store = Interleave(w.outbox, 2, deliver_to_the_old_index)
+        fresh = rig.make_index("memory", w.h.clock.now)
+        await w.rec.switch(fresh)
+        assert late[0] in (await fresh.members()).values()
+        w.index = fresh
+        await rig.finish(w)
         rig.settled(w)
     run(body)
 
