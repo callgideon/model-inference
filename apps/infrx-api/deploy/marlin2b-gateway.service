@@ -1,16 +1,34 @@
 [Unit]
-Description=Marlin-2B OpenAI-compatible gateway (localhost:8001)
-After=network-online.target marlin2b-vllm.service
+Description=infrx gateway (pinned runtime image, 127.0.0.1:8001)
+Requires=docker.service
+After=docker.service network-online.target marlin2b-vllm.service infrx-valkey.service
+Wants=network-online.target
 
 [Service]
 User=ubuntu
-WorkingDirectory=/home/ubuntu/model-inference/apps/infrx-api
-# The env file is the only configuration authority: preflight.py validates every key
-# in it, including USAGE_LOG, which used to be a second `Environment=` line here that
-# silently overrode the file. I2B moves the path to persistent storage (infra/README.md
-# §2, matrix row M-SCRATCH); until then preflight.py writes today's value.
+# The one configuration authority (preflight.py apply): systemd reads INFRX_IMAGE from it
+# and the container reads the rest, so the image and the configuration it was probed
+# with are replaced by the same rename. USAGE_LOG is in it too (row M-SCRATCH: on the
+# root EBS volume, which survives a stop).
 EnvironmentFile=/etc/marlin2b-gateway.env
-ExecStart=/opt/pytorch/bin/uvicorn gateway:app --host 127.0.0.1 --port 8001 --workers 1
+ExecStartPre=-/usr/bin/docker rm -f infrx-gateway
+# Least privilege: uid 10001 in group infrx, read-only root, no capabilities, bounded
+# memory/CPU/pids (est. budgets, infra/README.md §2), loopback only - Caddy is the only
+# public listener. The media root is the gateway's to write (M2/M3 preparation).
+ExecStart=/usr/bin/docker run --rm --name infrx-gateway --network host \
+  --user 10001:10000 --read-only --tmpfs /tmp:rw,size=1g,mode=1777 \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --memory 8g --cpus 4 --pids-limit 512 \
+  --env-file /etc/marlin2b-gateway.env \
+  -v /var/lib/infrx/usage:/var/lib/infrx/usage \
+  -v /var/lib/infrx/media:/var/lib/infrx/media \
+  ${INFRX_IMAGE} uvicorn gateway:app --host 127.0.0.1 --port 8001 --workers 1 \
+  --timeout-graceful-shutdown 110
+# Drain: uvicorn stops accepting and finishes in-flight requests for up to 110 s, docker
+# waits 120 s before SIGKILL, and systemd waits longer than docker, because a systemd
+# kill of the `docker run` client does not stop the container.
+ExecStop=/usr/bin/docker stop -t 120 infrx-gateway
+TimeoutStopSec=150
 Restart=always
 RestartSec=3
 

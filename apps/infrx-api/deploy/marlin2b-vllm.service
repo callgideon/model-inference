@@ -1,5 +1,5 @@
 [Unit]
-Description=vLLM serving Marlin-2B (docker, localhost:8000)
+Description=vLLM serving Marlin-2B (docker, 127.0.0.1:8000; never public)
 After=docker.service network-online.target
 Requires=docker.service
 
@@ -7,10 +7,16 @@ Requires=docker.service
 User=ubuntu
 Environment=WEIGHTS_ROOT=/opt/dlami/nvme
 Environment=HOME=/home/ubuntu
-# serve.sh runs `docker run --rm` in the foreground, so systemd owns the lifecycle.
+# serve.sh runs `docker run --rm` in the foreground, so systemd owns the lifecycle. Its
+# image pin, flags and the media-root mount are W3's; its default bind is loopback, which
+# preflight.py checks before a pilot install.
 ExecStartPre=-/usr/bin/docker rm -f marlin2b-8000
 ExecStart=/home/ubuntu/model-inference/models/marlin2b/serve.sh --max-num-seqs 32
-ExecStop=/usr/bin/docker stop marlin2b-8000
+# The box stopped this with docker's 10 s default (I1B inventory). The worker is drained
+# first (it is ordered After= this unit, so it stops before it); systemd waits longer than
+# docker, or it would kill only the client.
+ExecStop=/usr/bin/docker stop -t 120 marlin2b-8000
+TimeoutStopSec=150
 Restart=always
 RestartSec=5
 TimeoutStartSec=900

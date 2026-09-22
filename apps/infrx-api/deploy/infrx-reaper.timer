@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the infrx reaper every 30 s
+
+[Timer]
+OnBootSec=60
+# At most the preparation lease TTL (08 §5 PREPARATION_LEASE_TTL_S = 30): a lost
+# preparation is only retried once something reaps it (r1 R52).
+OnUnitActiveSec=30
+AccuracySec=5
+
+[Install]
+WantedBy=timers.target

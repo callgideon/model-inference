@@ -1,10 +1,52 @@
-# TLS termination for the marlin2b gateway. Caddy fetches and renews the
-# certificate itself; ports 80 and 443 must be reachable and DNS must point here.
-marlin2b.callbill.ai {
-    reverse_proxy 127.0.0.1:8001 {
-        flush_interval -1
-        transport http {
-            read_timeout 600s
-        }
-    }
+# The only public listener (I2B.b). Caddy fetches and renews the certificate itself;
+# ports 80 and 443 must be reachable and DNS must point here. `INFRX_SITE` exists for the
+# local rehearsal (a plain-HTTP address, no ACME); the box leaves it unset.
+{
+	# The admin API is Caddy's default, loopback only; stated so nobody widens it.
+	admin localhost:2019
+}
+
+{$INFRX_SITE:marlin2b.callbill.ai} {
+	# Bounded bodies at the edge: 08 §5 MAX_REQUEST_BYTES = 100663296 (96 MiB).
+	request_body {
+		max_size 96MiB
+	}
+	handle_errors 413 {
+		header Content-Type application/json
+		respond `{"error":{"message":"The request body is too large.","type":"invalid_request_error","code":"request_too_large","param":null,"request_id":"{http.request.uuid}","infrx":null}}` 413
+	}
+
+	# Operator surfaces never leave the host: /metrics (I3B), /readyz (W3), /internal.
+	# They answer on 127.0.0.1:8001 for the operator only. The engine (127.0.0.1:8000) has
+	# no route here at all.
+	@private path /metrics /metrics/* /readyz /readyz/* /internal /internal/*
+	handle @private {
+		header Content-Type application/json
+		respond `{"error":{"message":"The requested resource was not found.","type":"not_found_error","code":"not_found","param":null,"request_id":"{http.request.uuid}","infrx":null}}` 404
+	}
+
+	# Public health says up or down and nothing else - no in-flight count, no upstream
+	# error text - whatever the gateway's own body contains.
+	handle /health {
+		reverse_proxy 127.0.0.1:8001 {
+			@up status 2xx
+			handle_response @up {
+				header Content-Type application/json
+				respond `{"ok":true}` 200
+			}
+			handle_response {
+				header Content-Type application/json
+				respond `{"ok":false}` 503
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8001 {
+			flush_interval -1
+			transport http {
+				read_timeout 600s
+			}
+		}
+	}
 }

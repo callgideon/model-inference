@@ -61,7 +61,7 @@ if [ "$INFRX_MODE" = pilot ]; then
   docker rm -f caddy >/dev/null 2>&1 || true
   docker run -d --name caddy --restart unless-stopped --network host \
     -v /etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro -v caddy_data:/data -v caddy_config:/config \
-    caddy:2 >/dev/null
+    caddy@sha256:14a9c00d4e833ebc2b65d36515b37bde3b73f0b323a2663aaafc88953d8c4e3f >/dev/null  # 2.11.4
   echo "installed; check: systemctl status marlin2b-vllm marlin2b-gateway; docker logs caddy"
 else
   # infra/README.md §5: a dev host answering on the pilot's DNS name is the same
