@@ -148,6 +148,12 @@ MUST_BE_POSITIVE = (
 )
 
 
+# Filesystem roots: unset (empty) disables the feature; set, the value must be an absolute
+# path with no surrounding whitespace - a relative root would follow the process's working
+# directory, and `" /var/x"` is a directory nobody meant.
+PATH_SETTINGS = ("trace_spool_dir", "processing_cache_dir")
+
+
 class RuntimeMisconfigured(ValueError):
     """r1 R44: a typed startup error. It names the missing *setting names* and never a
     value, because `DATABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` carry credentials and a
@@ -252,6 +258,10 @@ def validate_pilot(pilot, gateway=None):
     for name in MUST_BE_POSITIVE:
         if getattr(pilot, name) <= 0:
             raise ValueError(f"{env_name(name)} must be positive")
+    for name in PATH_SETTINGS:
+        path = getattr(pilot, name)
+        if path and (path != path.strip() or not os.path.isabs(path)):
+            raise ValueError(f"{env_name(name)} must be unset or an absolute path")
     if pilot.infrx_mode == "pilot":
         if not _configured(pilot.database_url):
             raise ValueError("INFRX_MODE=pilot requires DATABASE_URL: admission must be metered")

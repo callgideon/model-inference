@@ -41,7 +41,7 @@ EXPECTED = {
     "SSE_KEEPALIVE_S": 10.0, "STREAM_BATCH_MS": 50,
     "JOURNAL_EVENT_MAX_BYTES": 1048576, "JOURNAL_JOB_RESERVE_BYTES": 16777216,
     "JOURNAL_TOTAL_BYTES": 1073741824, "JOURNAL_CHUNK_TTL_S": 3600.0,
-    "RESULT_TTL_S": 86400.0, "PROCESSING_CACHE_TTL_S": 604800.0,
+    "RESULT_TTL_S": 86400.0, "PROCESSING_CACHE_TTL_S": 604800.0, "PROCESSING_CACHE_DIR": "",
     "IDEMPOTENCY_TTL_S": 86400.0, "TRACE_CONTENT_MAX_DAYS": 90,
     "TRACE_METADATA_MONTHS": 13, "MAX_ACTIVE_JOBS": 64,
     "MAX_ACTIVE_JOBS_PER_ORG": 16, "MAX_ACTIVE_JOBS_PER_KEY": 8,
@@ -84,11 +84,24 @@ def test_settings_are_frozen_and_replaceable():
 @pytest.mark.parametrize("name", sorted(EXPECTED))
 def test_each_name_is_read_from_the_environment(name):
     raw = {"INFRX_MODE": "test", "JUDGE_MODE": "live", "DATABASE_URL": "postgresql:///x",
-           "TRACE_SPOOL_DIR": "/tmp/spool"}.get(name, "7")
+           "TRACE_SPOOL_DIR": "/tmp/spool",
+           "PROCESSING_CACHE_DIR": "/tmp/processing"}.get(name, "7")
     pilot = config.pilot_from_env({name: raw})
     field_name = limits.fields_by_env()[name].name
     kind = type(getattr(limits.DEFAULTS, field_name))
     assert getattr(pilot, field_name) == kind(raw)
+
+
+@pytest.mark.parametrize("name", ["TRACE_SPOOL_DIR", "PROCESSING_CACHE_DIR"])
+def test_a_filesystem_root_is_unset_or_absolute(name):
+    """F2R: an empty root disables the feature; a set one is an absolute path."""
+    field = limits.fields_by_env()[name].name
+    assert getattr(limits.DEFAULTS, field) == ""
+    config.validate_pilot(config.pilot_from_env({name: "/var/lib/infrx/x"}))
+    config.validate_pilot(config.pilot_from_env({name: ""}))
+    for bad in ("relative/dir", " /var/lib/infrx/x", "/var/lib/infrx/x\n"):
+        with pytest.raises(ValueError, match=name):
+            config.validate_pilot(limits.DEFAULTS.replace(**{field: bad}))
 
 
 def test_pilot_mode_fails_closed():

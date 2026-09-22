@@ -99,6 +99,8 @@ class PilotSettings:
     # retention
     result_ttl_s: float = 86_400.0
     processing_cache_ttl_s: float = 604_800.0
+    # M2's local processing cache root (R61 (2)): unset means no local cache
+    processing_cache_dir: str = ""
     idempotency_ttl_s: float = 86_400.0          # after terminal
     trace_content_max_days: int = 90
     trace_metadata_months: int = 13
