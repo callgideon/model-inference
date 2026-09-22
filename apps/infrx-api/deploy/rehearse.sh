@@ -62,7 +62,7 @@ HOST = ("/etc/", "/var/lib/infrx", "/var/backups/infrx", "/opt/dlami/nvme")
 VALUED = {"--user", "--tmpfs", "--cap-drop", "--cap-add", "--security-opt", "--memory",
           "--cpus", "--pids-limit", "-e", "--env", "--label", "-p", "--gpus", "--entrypoint",
           "-w", "--workdir", "--format", "-t", "--network", "--name", "-v", "--volume",
-          "--env-file", "--restart", "-f", "--filter"}
+          "--env-file", "--restart"}
 path = lambda p: ROOT + p if p.startswith(HOST) else p
 def vol(spec):
     src, sep, rest = spec.partition(":")
