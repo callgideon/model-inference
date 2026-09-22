@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T21:01:35Z",
+  "updated": "2026-09-22T21:18:49Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "phase 1 fix round (pending-but-green probes; I2B reverse edge; stage wiring tests)",
+      "phase": "phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes",
       "since": "2026-09-22T18:46:49Z",
       "note": "gate not passable until G/D/W/Q lanes merge"
     },
@@ -171,6 +171,10 @@
     {
       "at": "2026-09-22T20:55:35Z",
       "what": "D1R merged: migrations 0006\u20130009 (CREDIT, registry, read surface, operator seams); D2 dispatched"
+    },
+    {
+      "at": "2026-09-22T21:18:49Z",
+      "what": "E3B phase 1 merged (c7d715f); integration engine client on {visible, raw}; migration set 0001\u20130009"
     }
   ],
   "cadence_windows": [

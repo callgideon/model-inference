@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T21:01:35Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T21:18:49Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 10 done · 5 in progress · 15 remaining (of 30).**
 
@@ -65,7 +65,7 @@ Generated 2026-09-22T21:01:35Z from `tasks.json` (manifest v4) and `progress-sta
 - F2R: codex-f2r — lane A merged (e1a33d1) pending review; post-merge follow-ups IR-A1..A10 in flight on codex-f2r-int since 2026-09-22T15:51:21Z — integration head red at collection until IR-A8 lands; main held at f9ba5d2
 - F2P: codex-f2p — additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
-- E3B: codex-e3b / codex/e3b-backend-gate — phase 1 fix round (pending-but-green probes; I2B reverse edge; stage wiring tests) since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
+- E3B: codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
 - D2: codex-d2 / codex/d2-admission-outbox — dispatched (admission transaction, outbox, M3 tables, D1R follow-ups) since 2026-09-22T20:55:35Z — real JobStore over PostgreSQL
 
 ## Checkpoints
@@ -91,6 +91,7 @@ Generated 2026-09-22T21:01:35Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-22T19:16:15Z: M3 merged (e2188f3): owned uploads, collector, consented reuse; M→W seam tests wired to the resolver
 - 2026-09-22T19:36:54Z: G6B merged (ed6da07): operator adapter/CLI, protected publication, headless client
 - 2026-09-22T20:55:35Z: D1R merged: migrations 0006–0009 (CREDIT, registry, read surface, operator seams); D2 dispatched
+- 2026-09-22T21:18:49Z: E3B phase 1 merged (c7d715f); integration engine client on {visible, raw}; migration set 0001–0009
 
 ## Authorizations
 
