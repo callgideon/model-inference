@@ -20,15 +20,21 @@ FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 # One per mutated file, plus the two pins the whole path rests on.
 SUBSET = ("one_answer_is_enough", "connects_to_the_name_not_the_address",
           "denied_networks_not_checked", "stage_indexes_as_it_goes", "key_without_the_tenant",
-          "transport_logs_not_silenced", "attach_accepts_an_unstaged_ref")
+          "transport_logs_not_silenced", "attach_accepts_an_unstaged_ref",
+          # M2: one per new file, plus the two pins the whole preparation path rests on -
+          # the measured duration the engine budgets frames from and the tenant in the
+          # processing-cache path.
+          "box_length_not_compared_with_the_file", "no_probe_at_materialization",
+          "duration_cap_removed", "cache_path_without_the_tenant", "facts_hook_not_consulted")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
 def test_the_list_is_well_formed():
     """A typo in a test name would make a mutant unkillable by construction and pass."""
-    from . import test_fetch, test_store
+    from . import test_fetch, test_prepare, test_probe, test_store
 
-    names = {name for module in (test_fetch, test_store) for name in vars(module)
+    names = {name for module in (test_fetch, test_prepare, test_probe, test_store)
+             for name in vars(module)
              if name.startswith("test_")}
     assert len({m.name for m in ALL}) == len(ALL), "duplicate mutant names"
     assert set(SUBSET) <= {m.name for m in ALL}
@@ -43,8 +49,12 @@ def test_the_mutation_list_covers_the_owned_modules():
     """R32 from the other side: a guard nothing can break is a guard nothing proves. The
     count is a floor on the two modules M1 wrote plus the address policy it reuses."""
     files = {mutant.file for mutant in ALL}
-    assert files == {"media/fetch.py", "media/store.py", "media/video.py"}
-    assert len(ALL) >= 78, f"only {len(ALL)} mutants declared"
+    assert files == {"media/fetch.py", "media/store.py", "media/video.py",
+                     "media/probe.py", "media/prepare.py"}
+    assert len(ALL) >= 78 + 30, f"only {len(ALL)} mutants declared"
+    # M2's own floor, stated separately so widening M1's list cannot cover for a thin one
+    m2 = [mutant for mutant in ALL if mutant.file in ("media/probe.py", "media/prepare.py")]
+    assert len(m2) >= 30, f"only {len(m2)} mutants for M2's modules"
 
 
 @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])

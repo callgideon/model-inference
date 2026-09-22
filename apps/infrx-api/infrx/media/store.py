@@ -71,6 +71,15 @@ class ObjectStore(Protocol):
     async def head(self, key: str) -> str | None:
         """The digest of the stored object, or None if there is none."""
 
+    async def get(self, key: str) -> bytes | None:
+        """The stored bytes, or None (S3 `GetObject`).
+
+        M2's preparation phase re-reads what staging wrote: it runs later and possibly in
+        another process, so re-measuring the object is the only way a prepared artifact is
+        a fact about the stored bytes rather than about whatever the intake process
+        happened to be holding.
+        """
+
     async def put_if_absent(self, key: str, data: bytes, content_type: str) -> bool:
         """Store bytes at a server-built key only if nothing is there; True if written.
 
@@ -88,6 +97,10 @@ class InMemoryObjectStore:
     async def head(self, key: str) -> str | None:
         stored = self.objects.get(key)
         return stored[0] if stored else None
+
+    async def get(self, key: str) -> bytes | None:
+        stored = self.objects.get(key)
+        return stored[1] if stored else None
 
     async def put_if_absent(self, key: str, data: bytes, content_type: str) -> bool:
         if key in self.objects:
@@ -132,6 +145,12 @@ class MediaStaging:
         # name, replace or shadow another org's object.
         self.refs: dict[tuple[str, str], MediaRef] = {}
         self.by_job: dict[str, tuple[MediaRef, ...]] = {}
+        # M2: what `prepare` produced, kept beside the attached sources rather than
+        # replacing them. R46 allows bounded preparation retries, and a store that
+        # overwrote the sources with the prepared refs would have the second attempt
+        # prepare the first attempt's output - under a key derived from the profile it was
+        # already prepared for.
+        self.prepared_by_job: dict[str, tuple[MediaRef, ...]] = {}
         self.payloads: dict[str, StagedPayload] = {}
 
     @staticmethod
@@ -155,6 +174,17 @@ class MediaStaging:
             raise errors.Conflict(f"an object already exists at {key} with different content")
 
     # --- materialization (M1's own operation, not a port one) ----------------
+    async def facts(self, data: bytes, mime: str) -> tuple[str, float | None]:
+        """What this store records about the bytes it is about to write: `(mime, duration)`.
+
+        M1 records the declared type and no duration, which is exactly what a store with no
+        decoder can honestly say. M2's `MediaPreparation` overrides this with a probe of the
+        bytes, so the type and the duration on a `MediaRef` become measurements rather than
+        the caller's word - and, because it is called **before** the object is written, media
+        the profile refuses is never stored at all.
+        """
+        return mime, None
+
     async def materialize(self, org_id: str, source: str) -> MediaRef:
         """Fetch or decode one caller-supplied source **once** and store it durably.
 
@@ -175,17 +205,19 @@ class MediaStaging:
         # Measured here rather than taken from the fetcher: the digest is the object's
         # identity, its key and its handle, so it is computed from the bytes being stored.
         digest = digest_of(fetched.data)
+        # Before the write, so a clip the profile refuses costs no object (M2).
+        mime, duration_s = await self.facts(fetched.data, fetched.mime)
         ref = MediaRef(org_id=org_id, handle=media_handle(digest), kind=kind,
-                       digest=digest, bytes=len(fetched.data), mime=fetched.mime,
+                       digest=digest, bytes=len(fetched.data), mime=mime,
                        storage_ref=self._key(org_id, digest, self.profile_version, "source"),
-                       profile_version=self.profile_version)
+                       profile_version=self.profile_version, duration_s=duration_s)
         clash = self.refs.get((org_id, ref.handle))
         if clash is not None and clash.digest != digest:
             # The handle is a prefix of the digest, so this cannot happen by chance; if it
             # ever does (a shorter handle, a different scheme) it must not silently
             # replace the tenant's ref with one pointing at other content.
             raise errors.Conflict(f"handle {ref.handle} already names different content")
-        await self._write_once(ref.storage_ref, fetched.data, fetched.mime)
+        await self._write_once(ref.storage_ref, fetched.data, ref.mime)
         self.refs[(org_id, ref.handle)] = ref
         return ref
 
