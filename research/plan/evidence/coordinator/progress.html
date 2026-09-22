@@ -27,39 +27,39 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T15:55:30Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T16:00:21Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>1</b><span>done</span></div>
-<div class="tile prog"><b>4</b><span>in progress</span></div>
-<div class="tile rem"><b>25</b><span>remaining</span></div>
+<div class="tile prog"><b>8</b><span>in progress</span></div>
+<div class="tile rem"><b>21</b><span>remaining</span></div>
 <div class="tile blk"><b>6</b><span>GPU-gated</span></div>
 <div class="tile"><b>3%</b><span>of 30 backend packages</span></div>
 </section>
 <section class="panel"><h2>Bands (E4B dependency closure)</h2>
-<div class="band"><div class="n">B0 · Baseline &amp; contracts</div><div class="bar"><i class="d" style="width:16.7%"></i><i class="p" style="width:66.7%"></i><i class="r" style="width:16.7%"></i></div><div class="c">1 done · 4 in progress · 1 left</div></div>
-<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 17 left</div></div>
+<div class="band"><div class="n">B0 · Baseline &amp; contracts</div><div class="bar"><i class="d" style="width:16.7%"></i><i class="p" style="width:83.3%"></i><i class="r" style="width:0.0%"></i></div><div class="c">1 done · 5 in progress · 0 left</div></div>
+<div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:17.6%"></i><i class="r" style="width:82.4%"></i></div><div class="c">0 done · 3 in progress · 14 left</div></div>
 <div class="band"><div class="n">B2 · Integrate &amp; deploy</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 4 left</div></div>
 <div class="band"><div class="n">B3 · Measured tuning</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 2 left</div></div>
 <div class="band"><div class="n">B4 · Endpoint gate</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 1 left</div></div>
 <p class="note">Foundations and wave-2 modules already merged and reused by the closure: E1, F1, F2, I1, M1, Q1, W1.</p></section>
 <section class="panel"><h2>Packages</h2><div class="scroll"><table><thead><tr><th>Band</th><th>Task</th><th>Title</th><th>Status</th><th>Note</th></tr></thead><tbody>
 <tr><td>B0</td><td><code>S1</code></td><td>Reconcile pulled wave-2 baseline and publish product revision audit</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
-<tr><td>B0</td><td><code>F2R</code></td><td>Close remaining wave-2 contract and verification carryovers</td><td><span class="pill prog">in-progress</span></td><td class="note">shared-contract carryovers 2–7, 9; shared mutation runner first</td></tr>
+<tr><td>B0</td><td><code>F2R</code></td><td>Close remaining wave-2 contract and verification carryovers</td><td><span class="pill prog">in-progress</span></td><td class="note">lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7)</td></tr>
 <tr><td>B0</td><td><code>I0</code></td><td>Repair installer atomicity and fail-closed startup prerequisite</td><td><span class="pill prog">in-progress</span></td><td class="note">fail-closed installer; stubs only</td></tr>
 <tr><td>B0</td><td><code>E2R</code></td><td>Repair service harness ownership, role matrix and shared test clock</td><td><span class="pill prog">in-progress</span></td><td class="note">harness ownership + five RLS inversions on real services</td></tr>
 <tr><td>B0</td><td><code>S2M</code></td><td>Freeze Marlin SOP inference launch profile</td><td><span class="pill prog">in-progress</span></td><td class="note">pinned Marlin profile (docs); records P-06/P-07/P-18</td></tr>
-<tr><td>B0</td><td><code>F2P</code></td><td>Encode product-v2 CREDIT, identity, serving and permission contracts</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
+<tr><td>B0</td><td><code>F2P</code></td><td>Encode product-v2 CREDIT, identity, serving and permission contracts</td><td><span class="pill prog">in-progress</span></td><td class="note">v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</td></tr>
 <tr><td>B1</td><td><code>D1R</code></td><td>Add product-v2 schema without rewriting USD pilot migrations</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>D2</code></td><td>Atomic admission, durable preparation and dispatch outbox</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>D3</code></td><td>Fenced leases, recovery and cancellation</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>D4</code></td><td>Persistent stream journal and replay</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>D5</code></td><td>Terminal transaction, grants and reconciliation</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>A1</code></td><td>Verified individual signup entitlement and idempotent backfill</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
-<tr><td>B1</td><td><code>M2</code></td><td>Versioned preprocessing and tenant cache</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>M2</code></td><td>Versioned preprocessing and tenant cache</td><td><span class="pill prog">in-progress</span></td><td class="note">prepare(): probe real duration, url→ref rewrite, processing cache; rebases on F2R</td></tr>
 <tr><td>B1</td><td><code>M3</code></td><td>Owned uploads, expiry and orphan collection</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
-<tr><td>B1</td><td><code>Q2</code></td><td>Valkey adapter with atomic tested scripts</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>Q2</code></td><td>Valkey adapter with atomic tested scripts</td><td><span class="pill prog">in-progress</span></td><td class="note">Valkey adapter reproducing the 14-point list; differential vs memory</td></tr>
 <tr><td>B1</td><td><code>Q3</code></td><td>Outbox/reconciler integration and index loss recovery</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
-<tr><td>B1</td><td><code>W2</code></td><td>Lease-aware execution, cancellation and completion</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
+<tr><td>B1</td><td><code>W2</code></td><td>Lease-aware execution, cancellation and completion</td><td><span class="pill prog">in-progress</span></td><td class="note">attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R</td></tr>
 <tr><td>B1</td><td><code>W3</code></td><td>Drain, engine pin and measured concurrency</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G1R</code></td><td>Revise ingress for consumer and provider endpoint audiences</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>G2</code></td><td>Synchronous chat and persistent SSE relay</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
@@ -92,15 +92,21 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td><code>P-03</code></td><td>Local Docker/services</td><td>nothing — Docker is available on this host</td><td>resolved here</td></tr>
 </tbody></table></div></section>
 <section class="panel"><h2>In flight now</h2><ul>
-<li><code>F2R</code> — codex-f2r — implementing since 2026-09-22T15:51:21Z — shared-contract carryovers 2–7, 9; shared mutation runner first</li>
+<li><code>F2R</code> — codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7)</li>
 <li><code>I0</code> — codex-i0 — implementing since 2026-09-22T15:51:21Z — fail-closed installer; stubs only</li>
 <li><code>E2R</code> — codex-e2r — implementing since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services</li>
 <li><code>S2M</code> — codex-s2m — implementing since 2026-09-22T15:51:21Z — pinned Marlin profile (docs); records P-06/P-07/P-18</li>
+<li><code>F2P</code> — codex-f2p — additive design phase (new files only); wire-in after F2R since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>
+<li><code>Q2</code> — codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory</li>
+<li><code>M2</code> — codex-m2 — implementing since 2026-09-22T16:00:21Z — prepare(): probe real duration, url→ref rewrite, processing cache; rebases on F2R</li>
+<li><code>W2</code> — codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R</li>
 <li>review <code>S1</code> — independent review of the audit&#x27;s code at ec6c548 since 2026-09-22T15:51:21Z</li>
+<li>review <code>inventory</code> — read-only live-state inventory: GPU box + hosted Supabase (P-02/P-04/P-06 facts) since 2026-09-22T16:00:21Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>
 <li><span class="meta">2026-09-22T15:55:30Z</span> — Baseline make check exit 0 on ec6c548 (api-test + all mutant lists, console 255, bench 40); main fast-forwarded to claude/backend-impl and pushed (first checkpoint under full authorization)</li>
+<li><span class="meta">2026-09-22T16:00:21Z</span> — Max-parallel decision: F2R split into two lanes; F2P additive phase started; Q2/M2/W2 started early against v1 fakes (rebase after F2R). Interim rule: only E2R runs tests/d until the harness namespace fix lands.</li>
 </ul></section><section class="panel"><h2>Authorizations</h2><ul>
 <li>authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)</li>
 <li>authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step</li>

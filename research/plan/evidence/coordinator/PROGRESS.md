@@ -1,28 +1,28 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T15:55:30Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T16:00:21Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 1 done · 4 in progress · 25 remaining (of 30).**
+**Backend packages: 1 done · 8 in progress · 21 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
 | B0 Baseline & contracts | S1 | Reconcile pulled wave-2 baseline and publish product revision audit | **done** | implemented |  |
-| B0 Baseline & contracts | F2R | Close remaining wave-2 contract and verification carryovers | **in-progress** | planned | shared-contract carryovers 2–7, 9; shared mutation runner first |
+| B0 Baseline & contracts | F2R | Close remaining wave-2 contract and verification carryovers | **in-progress** | planned | lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7) |
 | B0 Baseline & contracts | I0 | Repair installer atomicity and fail-closed startup prerequisite | **in-progress** | planned | fail-closed installer; stubs only |
 | B0 Baseline & contracts | E2R | Repair service harness ownership, role matrix and shared test clock | **in-progress** | planned | harness ownership + five RLS inversions on real services |
 | B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **in-progress** | planned | pinned Marlin profile (docs); records P-06/P-07/P-18 |
-| B0 Baseline & contracts | F2P | Encode product-v2 CREDIT, identity, serving and permission contracts | **remaining** | planned |  |
+| B0 Baseline & contracts | F2P | Encode product-v2 CREDIT, identity, serving and permission contracts | **in-progress** | planned | v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map |
 | B1 Durable endpoint | D1R | Add product-v2 schema without rewriting USD pilot migrations | **remaining** | planned |  |
 | B1 Durable endpoint | D2 | Atomic admission, durable preparation and dispatch outbox | **remaining** | planned |  |
 | B1 Durable endpoint | D3 | Fenced leases, recovery and cancellation | **remaining** | planned |  |
 | B1 Durable endpoint | D4 | Persistent stream journal and replay | **remaining** | planned |  |
 | B1 Durable endpoint | D5 | Terminal transaction, grants and reconciliation | **remaining** | planned |  |
 | B1 Durable endpoint | A1 | Verified individual signup entitlement and idempotent backfill | **remaining** | planned |  |
-| B1 Durable endpoint | M2 | Versioned preprocessing and tenant cache | **remaining** | planned |  |
+| B1 Durable endpoint | M2 | Versioned preprocessing and tenant cache | **in-progress** | planned | prepare(): probe real duration, url→ref rewrite, processing cache; rebases on F2R |
 | B1 Durable endpoint | M3 | Owned uploads, expiry and orphan collection | **remaining** | planned |  |
-| B1 Durable endpoint | Q2 | Valkey adapter with atomic tested scripts | **remaining** | planned |  |
+| B1 Durable endpoint | Q2 | Valkey adapter with atomic tested scripts | **in-progress** | planned | Valkey adapter reproducing the 14-point list; differential vs memory |
 | B1 Durable endpoint | Q3 | Outbox/reconciler integration and index loss recovery | **remaining** | planned |  |
-| B1 Durable endpoint | W2 | Lease-aware execution, cancellation and completion | **remaining** | planned |  |
+| B1 Durable endpoint | W2 | Lease-aware execution, cancellation and completion | **in-progress** | planned | attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R |
 | B1 Durable endpoint | W3 | Drain, engine pin and measured concurrency | **remaining** | planned |  |
 | B1 Durable endpoint | G1R | Revise ingress for consumer and provider endpoint audiences | **remaining** | planned |  |
 | B1 Durable endpoint | G2 | Synchronous chat and persistent SSE relay | **remaining** | planned |  |
@@ -62,17 +62,23 @@ Generated 2026-09-22T15:55:30Z from `tasks.json` (manifest v4) and `progress-sta
 
 ## In flight
 
-- F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — shared-contract carryovers 2–7, 9; shared mutation runner first
+- F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane A: shared runner (item 9) then items 2–5; lane B (codex-f2r-b): TS console contracts (6) + config names (7)
 - I0: codex-i0 — implementing since 2026-09-22T15:51:21Z — fail-closed installer; stubs only
 - E2R: codex-e2r — implementing since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services
 - S2M: codex-s2m — implementing since 2026-09-22T15:51:21Z — pinned Marlin profile (docs); records P-06/P-07/P-18
+- F2P: codex-f2p — additive design phase (new files only); wire-in after F2R since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
+- Q2: codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory
+- M2: codex-m2 — implementing since 2026-09-22T16:00:21Z — prepare(): probe real duration, url→ref rewrite, processing cache; rebases on F2R
+- W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R
 - review S1: independent review of the audit's code at ec6c548 since 2026-09-22T15:51:21Z
+- review inventory: read-only live-state inventory: GPU box + hosted Supabase (P-02/P-04/P-06 facts) since 2026-09-22T16:00:21Z
 
 ## Checkpoints
 
 - 2026-09-21T22:44Z: Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9
 - 2026-09-22T15:51:21Z: Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched
 - 2026-09-22T15:55:30Z: Baseline make check exit 0 on ec6c548 (api-test + all mutant lists, console 255, bench 40); main fast-forwarded to claude/backend-impl and pushed (first checkpoint under full authorization)
+- 2026-09-22T16:00:21Z: Max-parallel decision: F2R split into two lanes; F2P additive phase started; Q2/M2/W2 started early against v1 fakes (rebase after F2R). Interim rule: only E2R runs tests/d until the harness namespace fix lands.
 
 ## Authorizations
 
