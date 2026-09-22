@@ -1519,3 +1519,35 @@ def test_gap__the_usage_settled_is_the_engines_authoritative_record_unchanged():
         assert result.outcome.usage == Usage.of(1200, 7)
         assert result.outcome.debit == b.DEFAULT_PRICE.debit(1200, 7)
     run(case())
+
+
+class _CancelThenKeepTalking(ScriptEngine):
+    def __init__(self, world, admission):
+        super().__init__(clock=world.clock)
+        self.world, self.admission, self.yielded = world, admission, 0
+
+    async def _events(self):
+        self.started += 1
+        batch_s = self.world.limits.stream_batch_ms / 1000
+        try:
+            for event in (PROGRESS, delta("one "), delta("two ")):
+                self.clock.advance(batch_s); self.yielded += 1; yield event
+            await self.world.jobs.cancel(b.ORG_A, self.admission.job_handle)
+            for n in range(20):
+                self.clock.advance(batch_s); self.yielded += 1; yield delta(f"late{n} ")
+            self.yielded += 1; yield usage_event(Usage.of(1200, 22))
+        finally:
+            self.closed += 1
+
+
+def test_gap__a_discovered_cancellation_stops_the_worker_reading_the_stream():
+    async def case():
+        world = World()
+        request, admission = await queued(world)
+        engine = _CancelThenKeepTalking(world, admission)
+        result = await world.runner(engine).run(request.request_id)
+        assert result.refusal == "already_terminal" and result.cancelled
+        # discovered by the first append after the cancellation; the rest is never pulled
+        assert engine.yielded <= 5, engine.yielded
+        assert engine.closed == 1
+    run(case())
