@@ -124,6 +124,16 @@ ALLOWED_LEGACY_CHANGES = {
         "six headless operator actions appended",
 }
 
+#: D2 fills the bodies of the 0004 boundaries it owns. The BODY may change; SECURITY
+#: DEFINER, the fixed search_path and the ACL (service_role only) may not - the inventory
+#: value is `md5(definition) secdef acl`, and only the md5 is allowed to move.
+FILLED_BOUNDARIES = frozenset({("function", "infrx", "infrx.admit(jsonb)"),
+                               ("function", "infrx", "infrx.prepare(jsonb)")})
+
+
+def _same_boundary(old: str, new: str | None) -> bool:
+    return new is not None and old.split(" ", 1)[1] == new.split(" ", 1)[1]
+
 
 def inventory(conn) -> dict:
     """Constraints, triggers, function bodies and ACLs, relation/column ACLs, RLS,
@@ -190,15 +200,19 @@ def check_legacy_schema_unchanged(conn, before: dict) -> str:
         new = after.get(key)
         if new == old or (new is not None and key in ALLOWED_LEGACY_CHANGES):
             continue
+        if key in FILLED_BOUNDARIES and _same_boundary(old, new):
+            continue
         changed.append(f"{key}: {old!r} -> {new!r}")
     assert not changed, "D1R rewrote 0001-0005 schema:\n  " + "\n  ".join(changed[:30])
     # Named, because these are what the brief lists: the USD wallet trigger and the
     # narrow financial RPC grants still exist exactly as they were.
     for key in (("trigger", "public.credit_ledger", "credit_ledger_moves_wallet"),
                 ("function", "infrx", "infrx.grant_credit(jsonb)"),
-                ("function", "infrx", "infrx.admit(jsonb)"),
                 ("function", "public", "public.org_wallet_summary(uuid)")):
         assert key in before and after.get(key) == before[key], f"{key} changed or vanished"
+    for key in FILLED_BOUNDARIES:
+        assert key in before and _same_boundary(before[key], after.get(key)), \
+            f"{key}: its grants or SECURITY DEFINER changed ({before[key]!r} -> {after.get(key)!r})"
     return (f"{len(before)} objects of 0001-0005 unchanged "
             f"({len(ALLOWED_LEGACY_CHANGES)} named allowances)")
 
