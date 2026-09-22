@@ -805,6 +805,11 @@ def test_the_predeclared_protocol_matches_the_client_that_implements_it():
     # figure may not be published as though it came from the priced table.
     assert "not a priced row" in text and "no AWS `g6e` row at all" in text
     assert "HANDOFF.md:24" in text
+    # B3: KV capacity comes from the engine's own num_gpu_blocks, never from idle headroom
+    # (vLLM pre-allocates the pool at --gpu-memory-utilization), and the dense-layer
+    # comparison is an estimate.
+    assert "num_gpu_blocks" in text and "Idle residency says nothing about KV capacity" in text
+    assert "45.0 GiB" in text and "(`est.`" in text
     for pending in ("P-04", "P-18", "P-07"):
         assert pending in text
     assert "Server-Timing" in text and "declared_missing" in text, \
