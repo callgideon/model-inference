@@ -27,6 +27,7 @@ import {
   totalUsd,
   unitOfRegime,
 } from "./money-units.ts";
+import type { UsageRow } from "../types.ts";
 
 // The v2 namespace is the whole revision: `lib/contracts/types.ts` re-exports this module
 // as `v2` (F2P wire-in, item 9), so the unit vocabulary travels with the DTOs.
@@ -361,6 +362,34 @@ export function mayReadCustomerContent(
     membershipPermits(membership, "manage_dev_deployment", options.now, options.providerOrgId) &&
     grantPermits(grant, options)
   );
+}
+
+/**
+ * A v1 console usage row read as the v2 DTO: the console half of the v1 read projection (F2P
+ * wire-in, item 10; the Python half, `project_v1_usage`, runs against D1R's real 0001-0005 rows).
+ * Both v1 regimes (`legacy_usd` and `pilot`) are pre-cutover USD history, so the v2 regime is
+ * `legacy_usd` and the unit USD. A NULL stays absent - no usage without recorded tokens, no
+ * outcome without a settlement state - and nothing CREDIT-shaped is filled in.
+ */
+export function projectV1UsageRow(row: UsageRow, orgId: string): UsageRecordV2 {
+  const record: UsageRecordV2 = {
+    schema_version: 2,
+    request_id: row.request_id,
+    org_id: orgId,
+    accounting_regime: "legacy_usd",
+    unit: "USD",
+    charged_amount: parseAmount(row.cost, "USD"),
+    settled_at: row.created_at,
+  };
+  if (row.prompt_tokens !== null && row.completion_tokens !== null) {
+    record.usage = {
+      prompt_tokens: row.prompt_tokens,
+      completion_tokens: row.completion_tokens,
+      total_tokens: row.prompt_tokens + row.completion_tokens,
+    };
+  }
+  if (row.settlement_state !== null) record.outcome = row.settlement_state;
+  return record;
 }
 
 /** A consumer wallet is the only one with a signup entitlement. */

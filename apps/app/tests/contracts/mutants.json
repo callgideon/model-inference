@@ -2014,6 +2014,36 @@
       "cases": [
         "an operator write is audited, and a restore adds an entry instead of erasing one (R34)"
       ]
+    },
+    {
+      "id": "PROJ-01",
+      "note": "the v1 read projection invents `settled` for a legacy row (item 10)",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (row.settlement_state !== null) record.outcome = row.settlement_state;",
+      "replace": "  record.outcome = row.settlement_state ?? \"settled\";",
+      "cases": [
+        "a pre-cutover usage row reads as a legacy USD v2 record and invents nothing"
+      ]
+    },
+    {
+      "id": "PROJ-02",
+      "note": "the projection reads a v1 pilot row as a CREDIT row",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "    accounting_regime: \"legacy_usd\",\n    unit: \"USD\",",
+      "replace": "    accounting_regime: row.accounting_regime === \"pilot\" ? \"credit\" : \"legacy_usd\",\n    unit: \"USD\",",
+      "cases": [
+        "a pre-cutover usage row reads as a legacy USD v2 record and invents nothing"
+      ]
+    },
+    {
+      "id": "PROJ-03",
+      "note": "the projection invents zero usage for a row that recorded no tokens",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "  if (row.prompt_tokens !== null && row.completion_tokens !== null) {",
+      "replace": "  if (true) {",
+      "cases": [
+        "a pre-cutover usage row reads as a legacy USD v2 record and invents nothing"
+      ]
     }
   ]
 }

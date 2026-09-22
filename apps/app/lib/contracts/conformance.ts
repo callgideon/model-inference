@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import moneyCases from "../../tests/contracts/money_cases.json" with { type: "json" };
 import { addMoney, compareMoney, isMoney, parseMoney, subMoney, ZERO_MONEY, type Money } from "./money.ts";
+import * as v2 from "./v2/types.ts";
 import {
   ACCOUNTING_REGIMES,
   AUDIT_ACTIONS,
@@ -3129,6 +3130,48 @@ export function runConsoleServicesConformance(
       // about the operation being broken.
       expectOk(await services.usageSummary(sessions.owner, { ...ALL_TIME }), "bounded summary");
       expectOk(await services.usageDaily(sessions.owner, { ...ALL_TIME }), "bounded daily");
+    });
+
+    it("a pre-cutover usage row reads as a legacy USD v2 record and invents nothing", async (t) => {
+      // F2P wire-in item 10: the v1 read projection, over the same rows the harness serves (C1's
+      // harness speaks D1's `console_usage`). Both v1 regimes are USD history before the CREDIT
+      // cutover; the projection keeps every absence and the totals stay one figure per unit.
+      const harness = await makeHarness();
+      if (harness.hasLegacyRows !== true) {
+        return t.skip("the harness declares no legacy history (ConsoleHarness.hasLegacyRows)");
+      }
+      const { services, sessions } = harness;
+      const rows = await walkAll<UsageRow>(
+        (cursor) => services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT, cursor }),
+        "usage",
+      );
+      assert.ok(rows.some((row) => row.accounting_regime === "legacy_usd"), "no legacy row to project");
+      let cost = ZERO_MONEY;
+      const projected = rows.map((row) => {
+        cost = addMoney(cost, row.cost);
+        const record = v2.projectV1UsageRow(row, harness.ids.orgId);
+        assert.equal(record.accounting_regime, "legacy_usd", `${row.request_id}: a v1 row is pre-cutover USD`);
+        assert.equal(record.unit, "USD", `${row.request_id}: in USD`);
+        assert.equal(record.charged_amount, row.cost, `${row.request_id}: its charge, to the digit`);
+        assert.equal(record.rate_card_version, undefined, `${row.request_id}: no rate card invented`);
+        assert.equal(record.serving_version_id, undefined, `${row.request_id}: no serving revision invented`);
+        assert.equal(
+          record.outcome,
+          row.settlement_state ?? undefined,
+          `${row.request_id}: the outcome is the row's own, or absent`,
+        );
+        assert.equal(
+          record.usage === undefined,
+          row.prompt_tokens === null || row.completion_tokens === null,
+          `${row.request_id}: usage exists exactly when tokens were recorded`,
+        );
+        return record;
+      });
+      assert.ok(
+        projected.some((record) => record.outcome === undefined),
+        "a legacy row has no settlement state, and its projection must not invent one",
+      );
+      assert.deepEqual(v2.usageTotalsByUnit(projected), { USD: cost }, "one USD total, no CREDIT figure");
     });
 
     it("legacy and key-less usage rows keep their nulls and are still counted", async (t) => {
