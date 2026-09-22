@@ -1949,6 +1949,17 @@
       "cases": [
         "judge runs separate estimates, limited evaluations and held budgets"
       ]
+    },
+    {
+      "id": "R62-TRACES-01",
+      "entry": "fixtures",
+      "note": "a trace content template drops the public model id (F2R-B NB-2)",
+      "file": "lib/contracts/fixtures/traces.json",
+      "find": "\"content_templates\": [\n    {\n      \"v\": 1,\n      \"request\": {\n        \"model\": \"nemostation/marlin-2b@2026-09-01\"",
+      "replace": "\"content_templates\": [\n    {\n      \"v\": 1,\n      \"request\": {\n        \"model\": \"marlin-2b@2026-09-01\"",
+      "cases": [
+        "every model a trace template names carries its public model id (R62)"
+      ]
     }
   ]
 }

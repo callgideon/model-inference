@@ -369,3 +369,16 @@ test("the judge fixtures keep dry-run, live and ambiguous runs honest", () => {
     "a limited evaluation is required",
   );
 });
+
+test("every model a trace template names carries its public model id (R62)", () => {
+  // F2R-B NB-2: `<public_model_id>@<revision>`, the form every other surface uses. The unprefixed
+  // `marlin-2b@2026-09-01` this file used to carry is the defect R62 names; a template that
+  // regressed would render a model identity no request could have used.
+  const PUBLIC_REVISION = /^[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9.-]*@\d{4}-\d{2}-\d{2}$/;
+  const models = traceFixture.content_templates.map((template) => template.request.model);
+  assert.ok(models.length > 0, "no trace content template names a model");
+  for (const model of models) {
+    assert.match(model, PUBLIC_REVISION, `trace template model ${model} lacks its public model id`);
+    assert.ok(orgsFixture.models.includes(model), `trace template model ${model} is not a served model`);
+  }
+});

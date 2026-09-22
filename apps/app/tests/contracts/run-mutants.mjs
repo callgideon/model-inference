@@ -23,7 +23,8 @@
 // must kill it: `conformance` (the default) is the exported console-services conformance, as
 // above; `v2` is the contracts-v2 console suites (`tests/contracts/v2/*.test.ts`), which read the
 // Python fixture base by relative path, so every copy also carries
-// `apps/infrx-api/infrx/contracts/fixtures/v2` beside the app. The kill rule is the same for
+// `apps/infrx-api/infrx/contracts/fixtures/v2` beside the app; `fixtures` is the console fixture
+// guards (`tests/contracts/fixtures.test.ts`). The kill rule is the same for
 // every entry. `--entry NAME` runs one entry's mutants; the default runs all of them.
 //
 // Usage: node tests/contracts/run-mutants.mjs [--entry NAME] [--only ID,ID] [--jobs N] [--timeout MS] [--keep]
@@ -72,6 +73,8 @@ const ENTRIES = {
         .map((name) => `tests/contracts/v2/${name}`),
     indent: 0,
   },
+  // The console fixture guards (F2R-B NB-2): fixture *data* invariants, killed by editing the data.
+  fixtures: { files: () => ["tests/contracts/fixtures.test.ts"], indent: 0 },
 };
 
 function entryOf(mutant) {
