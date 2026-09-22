@@ -1099,6 +1099,14 @@ def test_api_stream__a_prepared_reference_must_be_one_the_store_could_have_made(
     foreign = prepared.model_copy(update={"media": (b.media(b.ORG_B).model_copy(update={
         "storage_ref": f"media/{b.ORG_B}/v1/source"}),)})
     assert refusal(engine, foreign) == "refused: not_found"
+    # R61's path check does not stand in for this link: a resolver that answers with the
+    # request organization's path whatever the ref says passes the path check, and only
+    # the salt/ref link refuses org B's object under org A's namespace
+    lenient = m2_local_uri(LOCAL_MEDIA_ROOT)
+    blind = FakeUpstream(clock=Box().clock).engine(
+        local_uri=lambda ref: lenient(ref.model_copy(update={"org_id": b.ORG_A})))
+    assert refusal(blind, foreign) == "refused: not_found"
+    assert refusal(blind, prepared) == "accepted"
 
     # the guard is also asserted on its own, because the local-path check (S2M D3) refuses
     # a foreign prefix too: with only the end-to-end assertions above, a `check_storage_ref`
