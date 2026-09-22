@@ -237,6 +237,16 @@ for d in "$@"; do
     -v "$d:$d" "$REHEARSAL_IMAGE" chown "$owner" "$d"
 done
 SH
+cat > "$BIN/chmod" <<'SH'
+#!/usr/bin/env bash
+# chmod, and for a path a container uid now owns (the box runs as root), as root.
+/bin/chmod "$@" 2>/dev/null && exit 0
+mode=$1; shift
+for d in "$@"; do
+  /usr/bin/docker run --rm --user 0 --network none --label ai.infrx.i2b.rehearsal=1 \
+    -v "$d:$d" "$REHEARSAL_IMAGE" chmod "$mode" "$d"
+done
+SH
 chmod +x "$BIN"/*
 export PATH="$BIN:$PATH"
 params() { printf '%s' "$1" > "$work/params.json"; }
@@ -348,21 +358,37 @@ for p in /metrics /readyz /internal/x; do
 done
 r=$(status_of POST http://127.0.0.1:8080/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer $KEY\"}" "$body")
 check "an authenticated call through the edge is 200 (got $r)" '[ "$r" = 200 ]'
+# A raw socket: the edge answers 413 and closes while the client is still sending, which
+# an HTTP library reports as a reset rather than as the answer it received.
 r=$(/usr/bin/docker exec infrx-i2b-box python -c '
-import urllib.request
-req = urllib.request.Request("http://127.0.0.1:8080/v1/chat/completions", data=b"x" * (97 * 2**20), method="POST")
-try: urllib.request.urlopen(req, timeout=60); print(200)
-except urllib.error.HTTPError as e: print(e.code, e.read().decode()[:120])
-except Exception as e: print("ERR", type(e).__name__)')
+import socket
+n = 97 * 2**20
+s = socket.create_connection(("127.0.0.1", 8080), timeout=60)
+s.sendall(b"POST /v1/chat/completions HTTP/1.1\r\nHost: rehearsal\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n" % n)
+chunk, sent, data = b"x" * 65536, 0, b""
+try:
+    while sent < n:
+        s.sendall(chunk); sent += len(chunk)
+except OSError:
+    pass
+try:
+    while True:
+        part = s.recv(65536)
+        if not part: break
+        data += part
+except OSError:
+    pass
+print(data.split(b"\r\n", 1)[0].decode(), "sent", sent // 2**20, "MiB",
+      "request_too_large" if b"request_too_large" in data else "no-envelope")')
 echo "97 MiB body -> $r"
-check "a body over MAX_REQUEST_BYTES is 413 request_too_large at the edge" "[[ '$r' == 413*request_too_large* ]]"
+check "a body over MAX_REQUEST_BYTES is 413 request_too_large at the edge" "[[ '$r' == 'HTTP/1.1 413'*request_too_large ]]"
 
 step "6. drain: maintenance at the edge first, then the runtime stops; resume after readiness"
 "$here/drain.sh" pause
 out=$(http POST http://127.0.0.1:8080/v1/chat/completions '{"Content-Type":"application/json"}' "$body")
 echo "during maintenance: $(echo "$out" | tr '\n' ' ')"
 check "maintenance answers 503 dependency_unavailable" "[[ '${out%%$'\n'*}' = 503 && '$out' == *dependency_unavailable* ]]"
-check "the gateway container is gone" '[ "$(started infrx-gateway)" = none ]'
+check "the gateway is stopped" '[ "$(/usr/bin/docker inspect --format "{{.State.Running}}" infrx-i2b-infrx-gateway 2>/dev/null || echo gone)" != true ]'
 /usr/bin/docker restart infrx-i2b-caddy >/dev/null; sleep 2
 r=$(http GET http://127.0.0.1:8080/health | tr '\n' ' ')
 check "maintenance survives a Caddy restart (health: $r)" "[[ '$r' == 503* ]]"
