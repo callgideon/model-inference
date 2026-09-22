@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T22:56:06Z",
+  "updated": "2026-09-22T23:43:21Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,7 +29,7 @@
     },
     "A1": {
       "lane": "codex-a1 / codex/a1-signup-grant",
-      "phase": "implementing (signup grant, backfill, retention)",
+      "phase": "independent review (3-perspective workflow) at abbf066",
       "since": "2026-09-22T22:35:57Z",
       "note": "new files only; migrations 0015+; D2 in flight"
     },
