@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T18:45:43Z",
+  "updated": "2026-09-22T18:46:49Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -44,6 +44,12 @@
       "phase": "implementing (early start on accepted v2 contracts)",
       "since": "2026-09-22T18:12:19Z",
       "note": "operator CLI, protected publish/inspect, headless quickstart"
+    },
+    "E3B": {
+      "lane": "codex-e3b / codex/e3b-backend-gate",
+      "phase": "phase 1: merged-tree layer 2, backend suite skeleton with pending journeys, drills, canaries",
+      "since": "2026-09-22T18:46:49Z",
+      "note": "gate not passable until G/D/W/Q lanes merge"
     }
   },
   "reviews": {},

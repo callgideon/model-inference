@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T18:45:43Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T18:46:49Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 6 done · 7 in progress · 17 remaining (of 30).**
+**Backend packages: 6 done · 8 in progress · 16 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -29,7 +29,7 @@ Generated 2026-09-22T18:45:43Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | G3 | Explicit jobs, status, cancellation and replay | **remaining** | planned |  |
 | B1 Durable endpoint | G4U | Owned upload HTTP adapter | **remaining** | planned |  |
 | B1 Durable endpoint | G6B | Headless endpoint provisioning and operations | **in-progress** | planned | operator CLI, protected publish/inspect, headless quickstart |
-| B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **remaining** | planned |  |
+| B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **in-progress** | planned | gate not passable until G/D/W/Q lanes merge |
 | B2 Integrate & deploy | I2B | Reproducible Marlin endpoint deployment independent of frontends | **remaining** | planned | needs allocated GPU/staging (P-04) |
 | B2 Integrate & deploy | I3B | Backend recovery, observability, restore and rollback proof | **remaining** | planned | needs allocated GPU/staging (P-04) |
 | B2 Integrate & deploy | E1B | Measure the end-to-end Marlin baseline and operating envelope | **in-progress** | planned | sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart |
@@ -69,6 +69,7 @@ Generated 2026-09-22T18:45:43Z from `tasks.json` (manifest v4) and `progress-sta
 - D1R: codex-d1r / codex/d1r-v2-schema — dispatched from 9faaa57 (reads 06a + v2 fixture base) since 2026-09-22T18:05:08Z — D owns migrations; additive over 0001–0005
 - M3: codex-m3 / codex/m3-owned-uploads — implementing (early start on accepted v2 contracts) since 2026-09-22T18:12:19Z — uploads, GC, consent resolver; six conformance cases to unskip
 - G6B: codex-g6b / codex/g6b-headless-ops — implementing (early start on accepted v2 contracts) since 2026-09-22T18:12:19Z — operator CLI, protected publish/inspect, headless quickstart
+- E3B: codex-e3b / codex/e3b-backend-gate — phase 1: merged-tree layer 2, backend suite skeleton with pending journeys, drills, canaries since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
 
 ## Checkpoints
 
