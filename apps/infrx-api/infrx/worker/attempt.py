@@ -210,6 +210,9 @@ class AttemptRunner:
         except TimeoutError:
             cause = TerminalCause.deadline_exceeded
             result.detail = "the attempt passed its generation deadline"
+            # The lease is still ours (a deadline is not a fence loss), so the engine is told
+            # with it, as on a cancellation: closing the stream alone may leave it decoding.
+            await self._cancel_engine(state, result)
         except _Terminalized as settled_elsewhere:
             result.refusal = settled_elsewhere.code
             result.cancelled = True

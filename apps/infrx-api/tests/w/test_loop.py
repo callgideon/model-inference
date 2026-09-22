@@ -1505,6 +1505,8 @@ def test_gap__the_task_deadline_is_the_clamped_instant_not_the_generation_budget
         result = await asyncio.wait_for(world.runner(engine).run(request.request_id), timeout=2)
         assert result.proposed_cause is TerminalCause.deadline_exceeded
         assert engine.closed == 1
+        # N4: the engine is told to stop with the current lease, not only disconnected
+        assert [job for job, _ in engine.cancelled] == [result.outcome.job_id]
     run(case())
 
 

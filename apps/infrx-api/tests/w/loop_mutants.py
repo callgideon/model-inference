@@ -133,6 +133,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "        except errors.StaleLease:\n            raise\n        except _Terminalized:\n"
        "            state.batch.clear(); state.batch_opened_at = None\n            return",
        STOPS_READING),
+    _m("deadline_does_not_cancel_engine", "a task-level deadline tells the engine to stop",
+       A, '            result.detail = "the attempt passed its generation deadline"\n'
+          "            # The lease",
+       '            result.detail = "the attempt passed its generation deadline"\n'
+       "            return await self._settle(state, result, cause)\n            # The lease",
+       CLAMP),
     _m("write_failure_is_a_success", "a journal write that failed is not a completed answer",
        A, "            cause = TerminalCause.journal_write_failed",
        "            cause = None", WRITE_FAILED, UNCONFIRMED),
