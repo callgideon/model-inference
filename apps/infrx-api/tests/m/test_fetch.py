@@ -582,3 +582,35 @@ def test_a_data_url_must_be_base64_and_an_allowed_video_type():
             fetch.decode_data_url(url, SMALL)
         expected = "empty-body" if reason == "unsupported-source" else reason
         assert caught.value.reason == expected, url
+
+
+# --- M4: the streaming digest and one copy ------------------------------------------
+def test_the_digest_covers_every_chunk_in_the_order_it_arrived():
+    """M4: the digest is taken as the body streams, so it must be the digest of every byte
+    in order - not of the first chunk, the last one, or a reordering."""
+    chunks = [b"\x00\x00\x00 ftypmp42", b"first" * 1000, b"second" * 1000, b"end"]
+    transport = support.Transport(support.response(stream=support.Chunks(chunks)))
+    got = asyncio.run(fetcher(transport=transport).fetch(URL))
+    assert got.data == b"".join(chunks)
+    assert got.digest == fetch.digest_of(b"".join(chunks))
+
+
+def test_a_fetched_body_is_held_at_most_about_twice():
+    """M4, bounded memory: the body grows once and is copied once. Measured on this path
+    before M4 the high-water was ~3x the body (one growing buffer plus two full copies);
+    the bound here sits between 2x and 3x so the extra copy cannot come back unnoticed."""
+    import tracemalloc
+
+    size, chunk = 8 << 20, 64 << 10
+    body = b"\x00\x00\x00 ftypmp42" + bytes(size - 16)
+    chunks = [body[at:at + chunk] for at in range(0, size, chunk)]
+    transport = support.Transport(support.response(stream=support.Chunks(chunks)))
+    tracemalloc.start()
+    try:
+        base = tracemalloc.get_traced_memory()[0]
+        got = asyncio.run(fetcher(transport=transport).fetch(URL))
+        peak = tracemalloc.get_traced_memory()[1] - base
+    finally:
+        tracemalloc.stop()
+    assert got.data == body
+    assert peak < 2.5 * size, f"peak {peak / size:.2f}x the body"

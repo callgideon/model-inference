@@ -1071,6 +1071,17 @@ MUTANTS: tuple[Mutant, ...] = (
        C, "    else:\n        raise errors.InvalidRequest(f\"unknown reuse purpose",
        "    elif False:\n        raise errors.InvalidRequest(f\"unknown reuse purpose",
        "test_an_unknown_purpose_is_refused"),
+    # === M4: the streaming digest and one copy (media/fetch.py) ============================
+    _m("streaming_digest_keeps_only_the_last_chunk",
+       "the fetched digest covers every chunk, in order",
+       F, "                        hasher.update(chunk)\n",
+       "                        hasher = hashlib.sha256(chunk)\n",
+       "test_the_digest_covers_every_chunk_in_the_order_it_arrived"),
+    _m("fetched_body_copied_twice",
+       "a fetched body is copied once: the high-water stays under 2.5x the body (was ~3x)",
+       F, 'digest="sha256:" + hasher.hexdigest(), host=host)',
+       "digest=digest_of(bytes(body)), host=host)",
+       "test_a_fetched_body_is_held_at_most_about_twice"),
     # === M4: MEDIA-PARITY (tests/m/test_parity.py) ============================================
     _m("prepared_bytes_are_not_the_source",
        "profile v1 prepares the source bytes: the durable and local artifacts hash to the ref",

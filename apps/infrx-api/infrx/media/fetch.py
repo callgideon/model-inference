@@ -302,18 +302,24 @@ class MediaFetcher:
                     declared = response.headers.get("content-length", "")
                     if declared.isdigit() and int(declared) > cap:
                         raise refused("too-large", host=host, exc=errors.RequestTooLarge)
+                    # M4: the digest is taken as the bytes arrive, so it is finished when the
+                    # last one lands, and the body is copied once at the end. Measured on the
+                    # 64 MiB cap: one full copy and one full hash less on the event loop, and
+                    # a high-water of about 2x the body instead of 3x (M4 evidence).
+                    hasher = hashlib.sha256()
                     async for chunk in response.aiter_raw():
                         body += chunk
                         if len(body) > cap:
                             # Aborted mid-body: the rest is never read, so a lying
                             # Content-Length buys an attacker nothing.
                             raise refused("too-large", host=host, exc=errors.RequestTooLarge)
+                        hasher.update(chunk)
                         if self.monotonic() >= expires_at:
                             raise refused("timeout", host=host)
                     if not body:
                         raise refused("empty-body", host=host)
-                    return Fetched(mime=mime, data=bytes(body), digest=digest_of(bytes(body)),
-                                   host=host)
+                    return Fetched(mime=mime, data=bytes(body),
+                                   digest="sha256:" + hasher.hexdigest(), host=host)
                 finally:
                     await response.aclose()
             raise refused("too-many-redirects")
