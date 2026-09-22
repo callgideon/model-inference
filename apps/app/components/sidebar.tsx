@@ -19,6 +19,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { signOut } from "@/app/actions";
+import { BALANCE_UNAVAILABLE } from "@/components/console-data-state";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -42,7 +43,8 @@ export function Sidebar({
   isOperator,
 }: {
   email: string;
-  balance: string;
+  /** The exact available balance as display text, or `null` when the wallet could not be read. */
+  balance: string | null;
   isOperator: boolean;
 }) {
   const pathname = usePathname();
@@ -116,8 +118,16 @@ export function Sidebar({
             className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent"
           >
             <Wallet className="size-4 text-muted-foreground" />
-            <span className="flex-1 text-muted-foreground">Balance</span>
-            <span className="font-medium tabular-nums">{balance}</span>
+            {balance === null ? (
+              <span role="status" className="flex-1 text-muted-foreground">
+                {BALANCE_UNAVAILABLE}
+              </span>
+            ) : (
+              <>
+                <span className="flex-1 text-muted-foreground">Balance</span>
+                <span className="font-medium tabular-nums">{balance}</span>
+              </>
+            )}
           </Link>
 
           <DropdownMenu>

@@ -520,20 +520,70 @@
       "id": "CREDITS-01",
       "note": "available is a float subtraction",
       "file": "lib/services/credits.ts",
-      "find": "    available: subMoney(ledgerTotal, reserved),",
-      "replace": "    available: parseMoney((Number(ledgerTotal) - Number(reserved)).toFixed(8)),",
+      "find": "    return { kind: \"ok\", money: subMoney(amount(data.ledger_total), amount(data.reserved_total)) };",
+      "replace": "    return { kind: \"ok\", money: parseMoney((Number(amount(data.ledger_total)) - Number(amount(data.reserved_total))).toFixed(8)) };",
       "cases": [
         "available is the reconciled total minus reservations, on scaled integers"
       ]
     },
     {
       "id": "CREDITS-02",
-      "note": "any failing wallet read falls back to the balance that ignores reservations",
+      "note": "a failing wallet read is answered from the ledger total, as the legacy org_balance did: every outstanding hold ignored",
       "file": "lib/services/credits.ts",
-      "find": "    if (missing) return { kind: \"fallback\", reason: \"org_wallet_summary does not exist yet (pre-D1)\" };",
-      "replace": "    return { kind: \"fallback\", reason: \"org_wallet_summary could not be read\" };",
+      "find": "    return { kind: \"unavailable\", reason: `the wallet summary could not be read: ${error.code ?? \"unknown error\"}` };",
+      "replace": "    return { kind: \"ok\", money: amount(data?.ledger_total ?? null) };",
       "cases": [
-        "a missing function falls back; a broken one does not"
+        "a missing wallet function is unavailable, never the hold-blind legacy balance"
+      ]
+    },
+    {
+      "id": "CREDITS-03",
+      "note": "a failed read is thrown instead of returned, so every console page 500s",
+      "file": "lib/services/credits.ts",
+      "find": "    return { kind: \"unavailable\", reason: `the wallet summary could not be read: ${error.code ?? \"unknown error\"}` };",
+      "replace": "    throw new Error(`the wallet summary could not be read: ${error.code ?? \"unknown error\"}`);",
+      "cases": [
+        "a missing wallet function is unavailable, never the hold-blind legacy balance"
+      ]
+    },
+    {
+      "id": "CREDITS-04",
+      "note": "a missing wallet row is read as a wallet with nothing in it and nothing held",
+      "file": "lib/services/credits.ts",
+      "find": "    return { kind: \"unavailable\", reason: \"the wallet summary returned no wallet row\" };",
+      "replace": "    return { kind: \"ok\", money: ZERO_MONEY };",
+      "cases": [
+        "a wallet row that is absent or inexact is unavailable, not a zero balance"
+      ]
+    },
+    {
+      "id": "CREDITS-05",
+      "note": "an amount too large to convert exactly is shown as zero instead of unavailable",
+      "file": "lib/services/credits.ts",
+      "find": "    return { kind: \"unavailable\", reason: \"the wallet summary is not an exact amount\" };",
+      "replace": "    return { kind: \"ok\", money: ZERO_MONEY };",
+      "cases": [
+        "a wallet row that is absent or inexact is unavailable, not a zero balance"
+      ]
+    },
+    {
+      "id": "CREDITS-06",
+      "note": "unavailable is rendered as a zero amount",
+      "file": "lib/services/credits.ts",
+      "find": "  return result.kind === \"ok\" ? displayMoney(result.money) : null;",
+      "replace": "  return displayMoney(result.kind === \"ok\" ? result.money : ZERO_MONEY);",
+      "cases": [
+        "the sidebar is handed an amount only when the wallet answered"
+      ]
+    },
+    {
+      "id": "CREDITS-07",
+      "note": "the console layout formats a balance of its own instead of the wallet's result",
+      "file": "app/(console)/layout.tsx",
+      "find": "  const balance = sidebarBalance(await getBalance(session.orgId));",
+      "replace": "  const balance = displayMoney(ZERO_MONEY);",
+      "cases": [
+        "the layout hands the sidebar a result it cannot turn into a number, and the copy states none"
       ]
     },
     {
@@ -645,26 +695,6 @@
       "replace": "const SAFE_MONEY_NUMBER = Math.pow(2, 53);",
       "cases": [
         "money arrives as text: a number is accepted only where a double still holds eight digits"
-      ]
-    },
-    {
-      "id": "CREDITS-03",
-      "note": "the function's name is not required, so an error text forces the fallback",
-      "file": "lib/services/credits.ts",
-      "find": "    const missing = (code === \"PGRST202\" || code === \"42883\") && /org_wallet_summary\\s*\\(/.test(message);",
-      "replace": "    const missing = code === \"PGRST202\" || code === \"42883\";",
-      "cases": [
-        "a missing function falls back; a broken one does not"
-      ]
-    },
-    {
-      "id": "CREDITS-04",
-      "note": "the error code is not required, so any message mentioning the function falls back",
-      "file": "lib/services/credits.ts",
-      "find": "    if (missing) return { kind: \"fallback\", reason: \"org_wallet_summary does not exist yet (pre-D1)\" };",
-      "replace": "    if (missing || /org_wallet_summary/.test(message)) return { kind: \"fallback\", reason: \"org_wallet_summary does not exist yet (pre-D1)\" };",
-      "cases": [
-        "a missing function falls back; a broken one does not"
       ]
     },
     {
@@ -836,26 +866,6 @@
       "replace": "    if (!Number.isFinite(value) || value >= SAFE_MONEY_NUMBER) {\n      throw new TypeError(\"a wallet amount this large must arrive as a decimal string, not a number\");\n    }",
       "cases": [
         "a wallet amount that arrives as a number is bounded by what a double can hold"
-      ]
-    },
-    {
-      "id": "MONEY-05",
-      "note": "the display path counts a value it cannot read exactly",
-      "file": "lib/services/credits.ts",
-      "find": "    const units =\n      typeof row.delta_usd === \"number\"\n        ? Math.abs(row.delta_usd) < SAFE_MONEY_NUMBER\n          ? tryParseMoneyUnits(row.delta_usd.toFixed(8))\n          : null\n        : tryParseMoneyUnits(row.delta_usd);",
-      "replace": "    const units =\n      typeof row.delta_usd === \"number\"\n        ? tryParseMoneyUnits(row.delta_usd.toFixed(8))\n        : tryParseMoneyUnits(row.delta_usd);",
-      "cases": [
-        "a wallet amount that arrives as a number is bounded by what a double can hold"
-      ]
-    },
-    {
-      "id": "CREDITS-05",
-      "note": "the fallback regex is not anchored on the call, so an inner name matches",
-      "file": "lib/services/credits.ts",
-      "find": "    const missing = (code === \"PGRST202\" || code === \"42883\") && /org_wallet_summary\\s*\\(/.test(message);",
-      "replace": "    const missing = (code === \"PGRST202\" || code === \"42883\") && /org_wallet_summary/.test(message);",
-      "cases": [
-        "a missing function falls back; a broken one does not"
       ]
     },
     {
