@@ -1,15 +1,15 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T18:38:09Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T18:45:43Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 5 done · 8 in progress · 17 remaining (of 30).**
+**Backend packages: 6 done · 7 in progress · 17 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
 | B0 Baseline & contracts | S1 | Reconcile pulled wave-2 baseline and publish product revision audit | **done** | implemented |  |
 | B0 Baseline & contracts | F2R | Close remaining wave-2 contract and verification carryovers | **in-progress** | planned | lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions |
 | B0 Baseline & contracts | I0 | Repair installer atomicity and fail-closed startup prerequisite | **done** | implemented |  |
-| B0 Baseline & contracts | E2R | Repair service harness ownership, role matrix and shared test clock | **in-progress** | planned | harness ownership + five RLS inversions on real services | resumed from WIP after restart |
+| B0 Baseline & contracts | E2R | Repair service harness ownership, role matrix and shared test clock | **done** | implemented |  |
 | B0 Baseline & contracts | S2M | Freeze Marlin SOP inference launch profile | **done** | implemented |  |
 | B0 Baseline & contracts | F2P | Encode product-v2 CREDIT, identity, serving and permission contracts | **in-progress** | planned | v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map |
 | B1 Durable endpoint | D1R | Add product-v2 schema without rewriting USD pilot migrations | **in-progress** | planned | D owns migrations; additive over 0001–0005 |
@@ -56,14 +56,13 @@ Generated 2026-09-22T18:38:09Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (19 packages): ~1.1 days at observed cadence, ~2.3 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (18 packages): ~1.1 days at observed cadence, ~2.1 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (I2B, I3B, E1B, M4, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
 ## In flight
 
 - F2R: codex-f2r — implementing since 2026-09-22T15:51:21Z — lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions
-- E2R: codex-e2r — fix round 1 (rls stage guard, anon SQLSTATE case, org_members matrix row) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services | resumed from WIP after restart
 - F2P: codex-f2p — additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - W2: codex-w2 — fix round 1 (five test gaps from the review) since 2026-09-22T16:00:21Z — attempt loop + vLLM adapter with R61 media form; 59 + 149 mutants
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
@@ -88,6 +87,7 @@ Generated 2026-09-22T18:38:09Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-22T18:05:08Z: F2P additive phase merged (9faaa57); rulings R64–R78; D1R dispatched
 - 2026-09-22T18:06:47Z: Q2 merged (e86b1c0): Valkey scheduler adapter with race-fence test
 - 2026-09-22T18:13:15Z: Checkpoint 2: main ff to 2bfb0c4 after a full green check (api-mutants 1103, api 1729+76, console 266)
+- 2026-09-22T18:45:43Z: E2R merged (9cc3be1): role matrix on real services, shared clock, layer-2 green with canary
 
 ## Authorizations
 

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T18:38:09Z",
+  "updated": "2026-09-22T18:45:43Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -8,12 +8,6 @@
       "phase": "implementing",
       "since": "2026-09-22T15:51:21Z",
       "note": "lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions"
-    },
-    "E2R": {
-      "lane": "codex-e2r",
-      "phase": "fix round 1 (rls stage guard, anon SQLSTATE case, org_members matrix row)",
-      "since": "2026-09-22T15:51:21Z",
-      "note": "harness ownership + five RLS inversions on real services | resumed from WIP after restart"
     },
     "F2P": {
       "lane": "codex-f2p",
@@ -165,6 +159,10 @@
     {
       "at": "2026-09-22T18:13:15Z",
       "what": "Checkpoint 2: main ff to 2bfb0c4 after a full green check (api-mutants 1103, api 1729+76, console 266)"
+    },
+    {
+      "at": "2026-09-22T18:45:43Z",
+      "what": "E2R merged (9cc3be1): role matrix on real services, shared clock, layer-2 green with canary"
     }
   ],
   "cadence_windows": [

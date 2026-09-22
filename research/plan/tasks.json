@@ -2247,7 +2247,7 @@
       "title": "Repair service harness ownership, role matrix and shared test clock",
       "track": "E",
       "handoff": "11-wave3-revision-handoffs.md",
-      "status": "planned",
+      "status": "implemented",
       "start_dependencies": [
         "S1"
       ],
@@ -2258,9 +2258,12 @@
       ],
       "product": "shared",
       "milestone": "APP-M0",
-      "disposition": "new-revision",
+      "disposition": "new-revision Merged --no-ff on claude/backend-impl at 9cc3be1 (2026-09-22; item 1 earlier as c23d804) after independent review in a private Docker namespace (fix_required → fixed). P-03 (pinned PostgREST) still pending.",
       "amendment": "Reproduce real PG evidence with safe test resource ownership; no borrowed containers.",
-      "execution_class": "core"
+      "execution_class": "core",
+      "evidence": [
+        "research/plan/evidence/e/E2R-5b8e118.md"
+      ]
     },
     {
       "id": "G1R",
