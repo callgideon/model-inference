@@ -1291,7 +1291,7 @@ def test_a_cancelling_flusher_cannot_take_a_second_batch():
 
 
 def test_the_queue_is_bounded_in_bytes_as_well_as_in_rows():
-    """Ruling 5, settled by F2R item 3 (R65). A caller can declare zero metadata bytes for a
+    """Ruling 5, settled by F2R item 3 (R81). A caller can declare zero metadata bytes for a
     20 KB envelope; charged the declared number, the row ceiling let 10,000 of them into
     memory (the reviewer measured 435 MiB resident for records that claimed to cost nothing).
 

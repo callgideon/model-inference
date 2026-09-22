@@ -181,7 +181,7 @@ class MediaStore(Protocol):
 
     async def stage(self, org_id: str, request: NormalizedRequest) -> tuple[MediaRef, ...]:
         """Durably stage the canonical payload before acceptance, with refs **this store
-        produced** (F2R item 4, R66).
+        produced** (F2R item 4, R82).
 
         Every url/inline ref must be one the store materialized for `org_id` (M's
         `materialize`; the conformance harness's `materialized(org_id, ref)` hook), and
@@ -382,7 +382,7 @@ class TraceSink(Protocol):
         | `dropped` | records refused, each with a counted `loss_reasons` entry |
         | `in_memory` | records held in memory, not yet appended |
         | `in_memory_content_bytes` | content bytes currently charged to the process budget |
-        | `in_memory_metadata_bytes` | metadata bytes currently charged: per record `max(declared metadata_bytes, len(serialized envelope))` (R65) |
+        | `in_memory_metadata_bytes` | metadata bytes currently charged: per record `max(declared metadata_bytes, len(serialized envelope))` (R81) |
         | `open_captures` | captures opened and not yet finished or abandoned |
         | `appended` | records written to the spool but not necessarily fsynced |
         | `fsynced` | records fsynced, i.e. the only ones durability is claimed for |

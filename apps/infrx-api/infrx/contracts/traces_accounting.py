@@ -10,7 +10,7 @@ the breach belongs to whichever capture crosses it, and the whole of that captur
 content is discarded, because a partial capture must never look complete. `abandon`
 gives its bytes back. The metadata reserve is what keeps metadata flowing after
 content has been cut off, and it is charged `max(declared, serialized)` bytes per
-record (R65).
+record (R81).
 
 Neutral on purpose: `contracts.fakes.traces.FakeTraceSink` (the in-memory fake, which
 adds a default `FakeClock`, failure injection and a crash drill) and the production
@@ -368,7 +368,7 @@ class TraceSinkBase:
                 # record may be kept is the writing sink's call (the spool refuses it as
                 # `malformed` before it gets here), so this charges what was declared.
                 serialized = 0
-        # R65: the reserve is charged what the record really costs in memory as well as
+        # R81: the reserve is charged what the record really costs in memory as well as
         # what the caller declared, whichever is larger - a caller can under-declare, and
         # the serialized row is what the queue holds.
         metadata = self.metadata_charge(envelope, serialized)

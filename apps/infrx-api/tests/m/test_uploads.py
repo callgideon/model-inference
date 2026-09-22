@@ -392,7 +392,7 @@ def test_nothing_uploaded_yet_is_not_a_refusal():
 
 
 def test_finalizing_never_replaces_what_the_handle_already_names():
-    """A handle that already names other content keeps that content. R66: `stage` takes
+    """A handle that already names other content keeps that content. R82: `stage` takes
     only store-produced refs and this store's handles are content-addressed, so the squat
     is seeded directly - only something outside the store can reach this state."""
     adapter = adapter_for()
@@ -449,7 +449,7 @@ def test_stage_refuses_an_unfinalized_upload():
 
 
 def test_resolve_refuses_an_upload_that_is_not_finalized_even_if_its_handle_is_indexed():
-    """A handle squatted by an indexed ref (seeded directly, R66) is not a finalized
+    """A handle squatted by an indexed ref (seeded directly, R82) is not a finalized
     upload."""
     adapter = adapter_for()
     handle = created(adapter)
@@ -510,7 +510,7 @@ def test_another_orgs_open_upload_state_does_not_leak():
     adapter = adapter_for()
     handle = created(adapter)                                   # org A's, still open
     foreign = b.media(b.ORG_B, handle=handle, kind=MediaKind.inline)
-    adapter.refs[(b.ORG_B, handle)] = foreign                   # seeded directly (R66)
+    adapter.refs[(b.ORG_B, handle)] = foreign                   # seeded directly (R82)
     assert run(adapter.resolve_owned(b.ORG_B, handle)) == foreign
 
 

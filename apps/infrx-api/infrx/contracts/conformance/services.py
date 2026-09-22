@@ -218,7 +218,7 @@ async def media_sec__staging_never_replaces_an_existing_object(factory):
     second = reused["upload_handle"]
     squatted = await b.materialized(harness, b.ORG_A, handle=second, kind=MediaKind.inline)
     if squatted.handle != second:
-        # R66: this store derives a materialized handle from the content, so no object of
+        # R82: this store derives a materialized handle from the content, so no object of
         # the tenant's can sit under an upload handle and there is nothing to replace.
         return
     staged_first = await harness.port.stage(b.ORG_A, b.request(harness, refs=(squatted,)))
@@ -793,7 +793,7 @@ async def trace_bounds__metadata_exhaustion_drops_with_counters(factory):
     """TRACE-BOUNDS: when the metadata reserve is gone the record is dropped and
     counted; inference is untouched either way.
 
-    Revised by F2R item 3 (R65): a record costs the reserve `max(declared metadata_bytes,
+    Revised by F2R item 3 (R81): a record costs the reserve `max(declared metadata_bytes,
     len(serialized envelope))`, so an under-declared envelope cannot buy a second place,
     and an over-declared one is charged what it declared."""
     from ..codec import compact_bytes

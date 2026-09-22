@@ -1372,7 +1372,7 @@ MUTANTS: tuple[Mutant, ...] = (
        "            resolved = run.model_copy(update={\"state\": JudgeRunState.quarantined})\n"
        "            self.runs[run_id] = resolved",
        "judge_budget__an_ambiguous_run_is_resolved_only_by_an_operator"),
-    # --- F2R lane A item 2: the delta payload is exactly `{visible, raw}` (R64) ------
+    # --- F2R lane A item 2: the delta payload is exactly `{visible, raw}` (R80) ------
     _m("engine_fake_visible_is_raw", "the customer never reads the reasoning block (R58)",
        E, 'SPLIT_REASONING_VISIBLE = ("", "", "", "Two people unload boxes.")',
        "SPLIT_REASONING_VISIBLE = SPLIT_REASONING",
@@ -1433,7 +1433,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("accounting_regime_respelled", "the regime is spelled as the console spells it (IR-7)",
        R, '    legacy_usd = "legacy_usd"', '    legacy_usd = "legacy"',
        "test_enum_values_are_frozen"),
-    # --- F2R lane A item 3: the metadata reserve is charged the serialized row (R65) ----
+    # --- F2R lane A item 3: the metadata reserve is charged the serialized row (R81) ----
     _m("metadata_charged_as_declared", "an under-declared record is charged what it costs",
        TA, "        return max(envelope.metadata_bytes, serialized)",
        "        return envelope.metadata_bytes",
