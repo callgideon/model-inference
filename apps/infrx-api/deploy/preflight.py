@@ -73,9 +73,13 @@ FORBIDDEN_ENGINE_FLAGS = ("--reasoning-parser", "continuous_usage_stats")
 WITHDRAWN_KEYS = ("PRICE_TABLE_VERSION", "PRICE_SOURCE")
 
 # A value with a newline in it writes a second `KEY=VALUE` line into the env file, i.e.
-# an SSM parameter (or anything that can write one) chooses `GATEWAY_API_KEY`. Refused
-# for every key, secret or not: this is the trust boundary of the whole module.
-FORBIDDEN_CHARS = ("\n", "\r", "\0")
+# an SSM parameter (or anything that can write one) chooses `GATEWAY_API_KEY`. Quotes and
+# backslashes are refused for the same reason one step further in: systemd's
+# `EnvironmentFile` parser gives them meaning (quoted values, escape sequences, line
+# continuation) that neither `render` nor `read_env` models, so a value carrying one
+# would not arrive at the process as it was read. Operators URL-encode such a value.
+# Refused for every key, secret or not: this is the trust boundary of the whole module.
+FORBIDDEN_CHARS = ("\n", "\r", "\0", "'", '"', "\\")
 
 
 # --- the manifest of required keys -------------------------------------------------
@@ -159,8 +163,9 @@ def shape_problem(key: Key, value: str) -> str | None:
     if value == "" or value.strip() == "":
         return f"{key.env}: the value is empty"
     if any(bad in value for bad in FORBIDDEN_CHARS):
-        return (f"{key.env}: the value contains a newline or NUL and would write a "
-                f"second variable into the env file")
+        return (f"{key.env}: the value contains a newline, NUL, quote or backslash; "
+                f"a newline would write a second variable into the env file and the "
+                f"others are special to systemd's EnvironmentFile parser")
     if value != value.strip():
         return f"{key.env}: the value has leading or trailing whitespace"
     if not SHAPES[key.shape](value):
@@ -298,7 +303,8 @@ def render(values: dict[str, str]) -> str:
 
 def read_env(path: pathlib.Path) -> dict[str, str]:
     """Parse a file this module wrote. Not a general dotenv reader: no quoting, no
-    `export`, no continuations, because nothing else writes this file."""
+    `export`, no continuations, because nothing else writes this file - and because
+    `FORBIDDEN_CHARS` refuses every character that would need one of them."""
     env = {}
     for line in path.read_text().splitlines():
         if line and not line.startswith("#") and "=" in line:
@@ -486,7 +492,15 @@ def stage(values: dict[str, str], target: pathlib.Path, owner: str) -> pathlib.P
 
 
 def commit(staged: pathlib.Path, target: pathlib.Path) -> None:
+    """Rename, then fsync the **directory**: the file's own bytes are already durable
+    (`stage` fsyncs them), but the rename itself lives in the directory, and a power
+    loss between the two leaves the target pointing at nothing."""
     os.replace(staged, target)
+    directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
 
 
 def systemctl(cfg: Config, *args: str) -> int:

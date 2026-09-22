@@ -18,7 +18,14 @@
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REGION=${AWS_REGION:-us-east-1}
-: "${INFRX_MODE:?INFRX_MODE must be set explicitly: dev, test or pilot (no default)}"
+# Before pip, apt or any unit file: an unusable mode must not leave half a deploy
+# behind. `${VAR:?}` only catches unset and empty, so a typo would have run everything
+# below and been refused at the very end.
+case "${INFRX_MODE:-}" in
+  dev|test|pilot) ;;
+  *) echo "INFRX_MODE must be dev, test or pilot (no default); got '${INFRX_MODE:-}'" >&2
+     exit 2 ;;
+esac
 ENV_FILE=${ENV_FILE:-/etc/marlin2b-gateway.env}
 RUNTIME_PYTHON=${RUNTIME_PYTHON:-/opt/pytorch/bin/python}
 SERVE_SCRIPT=${SERVE_SCRIPT:-$here/../../../models/marlin2b/serve.sh}
@@ -27,19 +34,27 @@ SERVE_SCRIPT=${SERVE_SCRIPT:-$here/../../../models/marlin2b/serve.sh}
 command -v ffprobe >/dev/null || apt-get install -y -qq ffmpeg
 
 install -m 644 "$here/marlin2b-vllm.service" "$here/marlin2b-gateway.service" /etc/systemd/system/
-# `enable`, not `enable --now`: a unit started before the env file exists is the
-# fail-open case this script is being fixed for. preflight.py restarts both units
-# after it has installed a validated file.
 systemctl daemon-reload
+# `enable`, not `enable --now`: the gateway must not start before its env file exists,
+# which is the fail-open case this script is being fixed for.
 systemctl enable marlin2b-vllm marlin2b-gateway
+# The engine reads no env file and takes ~minutes to load weights, so it is *started*
+# (idempotent: a no-op if it is already up) rather than restarted. Restarting it on
+# every install would kill in-flight generation for a change it cannot even see.
+systemctl start marlin2b-vllm
 
+# Only the gateway reads the env file, so only the gateway is restarted - and only
+# after a validated file is in place.
 "$RUNTIME_PYTHON" "$here/preflight.py" apply \
   --mode "$INFRX_MODE" --env-file "$ENV_FILE" --owner ubuntu --region "$REGION" \
   --runtime-python "$RUNTIME_PYTHON" --serve-script "$SERVE_SCRIPT" \
-  --restart marlin2b-vllm --restart marlin2b-gateway
+  --restart marlin2b-gateway
 
 if [ "$INFRX_MODE" = pilot ]; then
-  mkdir -p /etc/caddy && install -m 644 "$here/Caddyfile" /etc/caddy/Caddyfile
+  # Two statements, not `mkdir … && install …`: a command that fails on the left of
+  # `&&` is a tested condition, so `set -e` does not stop the script there.
+  mkdir -p /etc/caddy
+  install -m 644 "$here/Caddyfile" /etc/caddy/Caddyfile
   docker rm -f caddy >/dev/null 2>&1 || true
   docker run -d --name caddy --restart unless-stopped --network host \
     -v /etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro -v caddy_data:/data -v caddy_config:/config \

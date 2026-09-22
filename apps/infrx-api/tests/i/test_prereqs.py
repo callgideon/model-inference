@@ -72,6 +72,9 @@ def test_deploy_failclosed__a_refusal_says_which_rule_the_value_broke():
     assert "is empty" in preflight.shape_problem(key, "")
     assert "is empty" in preflight.shape_problem(key, " " * 24)
     assert "newline" in preflight.shape_problem(key, good + "\nGATEWAY_API_KEY=x")
+    # systemd's EnvironmentFile gives these three a meaning `read_env` does not model.
+    for special in ("'", '"', "\\"):
+        assert "quote or backslash" in preflight.shape_problem(key, good + special), special
     assert "whitespace" in preflight.shape_problem(key, " " + good)
     assert "not a valid opaque" in preflight.shape_problem(key, "short")
     assert preflight.shape_problem(key, good) is None
@@ -95,6 +98,7 @@ def test_deploy_failclosed__the_runtime_interpreter_must_be_new_enough(tmp_path,
     """Python >= 3.12.4, because CPython 3.12.0-3.12.3 answer `is_private` from older
     special-purpose tables and the media path's address policy depends on them (M1).
     A hard refusal in pilot; a warning in the explicitly permissive dev/test modes."""
+    assert preflight.REQUIRED_PYTHON == (3, 12, 4)
     staged = tmp_path / "staged.env"
     staged.write_text("INFRX_MODE=pilot\n")
     monkeypatch.setattr(preflight, "REQUIRED_PYTHON", (99, 0, 0))
@@ -119,6 +123,19 @@ def test_deploy_failclosed__the_mode_checked_is_the_mode_written(tmp_path):
     verdict = preflight.probe(staged, "test")
     assert any("INFRX_MODE is not the requested 'test'" in problem
                for problem in verdict["problems"])
+
+
+def test_deploy_failclosed__a_runtime_that_does_not_import_is_not_a_pass(tmp_path,
+                                                                        monkeypatch):
+    """Every later check needs the runtime package, so an import failure is fatal rather
+    than a verdict with nothing in it. The problem names the exception **type**: a
+    traceback in an installer's output is where paths and configuration leak."""
+    staged = tmp_path / "staged.env"
+    staged.write_text("INFRX_MODE=dev\n")
+    monkeypatch.setitem(sys.modules, "infrx.config", None)
+    verdict = preflight.probe(staged, "dev")
+    assert verdict["ok"] is False
+    assert verdict["problems"] == ["the runtime package does not import: ModuleNotFoundError"]
 
 
 # --- the transport loggers ----------------------------------------------------------

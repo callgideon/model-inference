@@ -87,19 +87,21 @@ def test_deploy_failclosed__a_required_parameter_that_is_missing_is_a_failure(
     assert "DATABASE_URL" in message
 
 
+@pytest.mark.parametrize("code", ["AccessDeniedException", "ThrottlingException",
+                                  "SomethingNobodyHasSeenBefore"])
 def test_deploy_failclosed__an_optional_parameter_is_omitted_only_when_absent(
-        tmp_path, monkeypatch):
-    """The distinction `infra/README.md` §5 demands. `GATEWAY_API_KEY` is optional in
-    dev, so `ParameterNotFound` leaves it out and the install proceeds; `AccessDenied`
-    on the *same* parameter aborts, because a denial is not evidence of absence."""
+        tmp_path, monkeypatch, code):
+    """The distinction `infra/README.md` §5 demands, asserted on the **same** key.
+    `GATEWAY_API_KEY` is optional in dev, so `ParameterNotFound` leaves it out and the
+    install proceeds; a denial, a throttle or an error nobody has classified on that
+    same parameter aborts, because none of them is evidence of absence."""
     made = support.stubs(tmp_path, monkeypatch, valid(legacy=None))
     cfg = support.config(tmp_path)
     assert preflight.apply(cfg) == 0
     assert "GATEWAY_API_KEY" not in preflight.read_env(cfg.env_file)
     assert made.systemctl_calls == ["daemon-reload", "restart marlin2b-vllm marlin2b-gateway"]
 
-    denied = support.stubs(tmp_path, monkeypatch,
-                           valid(legacy={"error": "AccessDeniedException"}))
+    denied = support.stubs(tmp_path, monkeypatch, valid(legacy={"error": code}))
     after_first = cfg.env_file.read_bytes()
     denied.fail_systemctl()
     (denied.dir / "systemctl.log").unlink(missing_ok=True)
