@@ -10,6 +10,17 @@
 
 import type { Money } from "./money.ts";
 
+/**
+ * Contracts v2 (F2P wire-in, item 9): the whole revision, reached as `v2.X` from this module.
+ *
+ * A namespace rather than a flat re-export, because one name is declared by both revisions with
+ * different values: v1's `ACCOUNTING_REGIMES` below is a usage row's settlement regime
+ * (`legacy_usd` | `pilot`, D1's `settlement_regime`), and `v2.ACCOUNTING_REGIMES` is the CREDIT-era
+ * accounting regime (`legacy_usd` | `credit`, D1R's `accounting_regime`). A console module names
+ * the one it means; it cannot pick up the other by importing the bare name.
+ */
+export * as v2 from "./v2/types.ts";
+
 // ---------------------------------------------------------------------------
 // Vocabulary — string values are frozen by 08 §3.
 // ---------------------------------------------------------------------------

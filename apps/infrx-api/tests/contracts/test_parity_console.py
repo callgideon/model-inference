@@ -602,3 +602,26 @@ def test_the_trace_content_body_matches_member_for_member():
         names = set(re.findall(r"^\s+([a-z_]+)[?]?:", inner.group(1), re.M))
         assert names == set(model.model_fields), \
             f"TraceContentBody.{member}: {sorted(names)} vs {sorted(model.model_fields)}"
+
+
+def test_the_v2_vocabulary_has_its_own_parity_module_and_one_seam_here():
+    """F2P wire-in item 8. Every v2 vocabulary is compared value by value, in order, by
+    `tests/contracts/v2/test_parity_v2.py` (which reuses `ts_string_array` from here); this
+    test owns the seam between the two files. `types.ts` carries v2 only as the `v2`
+    namespace, and the one constant both revisions declare - `ACCOUNTING_REGIMES` - is
+    compared on both sides with its different values, so neither can shadow the other."""
+    from infrx.contracts.v2 import money_units
+    from .v2 import test_parity_v2
+    source = TYPES.read_text()
+    assert re.search(r'^export \* as v2 from "\./v2/types\.ts";$', source, re.M)
+    v2_source = test_parity_v2.TYPES_SOURCE + test_parity_v2.UNITS_SOURCE
+    assert re.search(r'^export \* from "\./money-units\.ts";$', test_parity_v2.TYPES_SOURCE,
+                     re.M), "the v2 namespace must carry the unit vocabulary too"
+    arrays = r"export const ([A-Z][A-Z0-9_]*)\b[^=]*=\s*\["
+    shared = set(re.findall(arrays, source)) & set(re.findall(arrays, v2_source))
+    assert shared == {"ACCOUNTING_REGIMES"}, sorted(shared)
+    assert ts_string_array(source, "ACCOUNTING_REGIMES") == [r.value for r in records.AccountingRegime]
+    assert ts_string_array(test_parity_v2.UNITS_SOURCE, "ACCOUNTING_REGIMES") == \
+        list(money_units.ACCOUNTING_REGIMES)
+    assert set(test_parity_v2.SHARED_ENUMS) | set(test_parity_v2.UNIT_ENUMS) >= {
+        "CREDENTIAL_AUDIENCES", "WALLET_KINDS", "MONEY_UNITS", "ACCOUNTING_REGIMES"}

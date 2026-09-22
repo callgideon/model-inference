@@ -28,6 +28,10 @@ import {
   unitOfRegime,
 } from "./money-units.ts";
 
+// The v2 namespace is the whole revision: `lib/contracts/types.ts` re-exports this module
+// as `v2` (F2P wire-in, item 9), so the unit vocabulary travels with the DTOs.
+export * from "./money-units.ts";
+
 // ---------------------------------------------------------------------------
 // Vocabulary — mirrors of the v2 StrEnums, string values frozen.
 // ---------------------------------------------------------------------------

@@ -141,8 +141,8 @@ def test_the_console_reads_the_python_fixture_base_rather_than_a_copy():
 
 
 def test_the_v1_parity_surface_is_untouched():
-    """F-BASE: v2 is additive, so the v1 console DTO file still declares v1's own
-    vocabulary and this test's own imports prove the v1 parity module still loads."""
+    """F-BASE: the v1 console DTO file still declares v1's own vocabulary, and v2 reaches
+    it only as the `v2` namespace (wire-in item 9) - never as flat declarations there."""
     v1_types = (CONSOLE / "lib" / "contracts" / "types.ts").read_text()
     assert ts_string_array(v1_types, "JOB_STATES")[0] == "preparing"
     assert "CREDENTIAL_AUDIENCES" not in v1_types, \
