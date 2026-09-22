@@ -28,6 +28,7 @@ from infrx.contracts.conformance import (MissingHook, run_cases, run_scheduler_c
                                          scheduler_cases)
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import DISPATCH_KINDS, OutboxKind
+from infrx.scheduling import valkey as valkey_module
 from infrx.scheduling.valkey import _CLAIM, ValkeyScheduler
 
 from . import differential, vkharness
@@ -369,6 +370,18 @@ def test_q2_config__a_weight_that_would_break_dispatch_is_refused_where_it_is_se
 # ==========================================================================
 # points 9, 2: visibility
 # ==========================================================================
+def test_q2_config__the_url_comes_from_the_settings_and_an_unset_one_is_refused():
+    """`VALKEY_URL` (`08` §6) has one reader. An unset URL is a typed refusal rather than
+    a client pointed at localhost by a default nobody chose - the failure mode that puts a
+    pilot's index somewhere nobody is looking."""
+    with pytest.raises(errors.InvalidRequest) as caught:
+        valkey_module.connect(DEFAULTS)                       # valkey_url is "" by default
+    assert caught.value.code == "invalid_request"
+    configured = valkey_module.connect(DEFAULTS.replace(valkey_url=vkharness.URL))
+    assert configured is not None
+    asyncio.run(configured.aclose())
+
+
 def test_q2_kind__visibility_expires_at_the_ttl_and_on_its_pools_lease():
     """Point 9: 30 s preparation, 120 s inference, measured from the claim, back at
     exactly `claimed_at + TTL` (`>=`), and evaluated lazily at the start of the next

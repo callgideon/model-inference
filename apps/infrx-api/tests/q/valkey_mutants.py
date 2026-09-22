@@ -155,6 +155,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "        except errors.DomainError as domain:\n"
        '            raise errors.InternalError("wrapped") from domain',
        "test_q2_fair__a_bad_service_cost_is_a_typed_error_that_moves_nothing"),
+    _m("an_unset_valkey_url_is_not_refused",
+       "VALKEY_URL has one reader and an unset one is a typed refusal, not a client "
+       "pointed at a default nobody chose",
+       "    if not limits.valkey_url:",
+       "    if False:",
+       "test_q2_config__the_url_comes_from_the_settings_and_an_unset_one_is_refused"),
     _m("a_non_positive_weight_is_accepted",
        "a weight that would divide by zero inside the script is refused where it is set",
        '            if not (weight > 0) or weight == float("inf"):',
