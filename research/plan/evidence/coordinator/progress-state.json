@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T19:16:15Z",
+  "updated": "2026-09-22T19:23:11Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,7 +29,7 @@
     },
     "G6B": {
       "lane": "codex-g6b / codex/g6b-headless-ops",
-      "phase": "implementing (early start on accepted v2 contracts)",
+      "phase": "independent review at aa692fc (secret-handling audit)",
       "since": "2026-09-22T18:12:19Z",
       "note": "operator CLI, protected publish/inspect, headless quickstart"
     },
