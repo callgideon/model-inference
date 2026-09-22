@@ -223,6 +223,23 @@ class MediaStore(Protocol):
 
 
 @runtime_checkable
+class MediaPreparation(Protocol):
+    """M2's admission-time preparation, a separate protocol from `MediaStore` (whose
+    `prepare(job_id, profile)` keeps its signature): G calls this **before** `stage`.
+
+    Implemented by `infrx.media.prepare.MediaPreparation` (M2)."""
+
+    async def prepare_request(self, org_id: str, request: NormalizedRequest) -> NormalizedRequest:
+        """The validated request with its media materialized, measured and referenced:
+        `media` holds one store-produced ref per video part, in order, each carrying the
+        measured `duration_s`, and `messages` name those refs instead of the customer's
+        URLs, so `stage` accepts exactly this record (F2R item 4). All or nothing: a
+        source that cannot be fetched, read or served refuses the whole request.
+        `payload_digest` is not recomputed - it names the customer's body for
+        idempotency. `request.org_id` must be `org_id`, or `forbidden`."""
+
+
+@runtime_checkable
 class Scheduler(Protocol):
     """Q. A rebuildable index. Membership alone never authorizes execution."""
 
