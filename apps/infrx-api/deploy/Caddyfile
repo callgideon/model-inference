@@ -16,6 +16,15 @@
 		respond `{"error":{"message":"The request body is too large.","type":"invalid_request_error","code":"request_too_large","param":null,"request_id":"{http.request.uuid}","infrx":null}}` 413
 	}
 
+	# The gateway down is "down" too, not an empty 502.
+	handle_errors 502 503 504 {
+		@health path /health
+		handle @health {
+			header Content-Type application/json
+			respond `{"ok":false}` 503
+		}
+	}
+
 	# A declared length over the bound is refused before a byte reaches the gateway (the
 	# rehearsal found the gateway answering first otherwise); a chunked body is still cut
 	# at max_size above.

@@ -385,6 +385,12 @@ check "a body over MAX_REQUEST_BYTES is 413 request_too_large at the edge" "[[ '
 r=$(status_of POST http://127.0.0.1:8080/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer $KEY\"}" "$body")
 check "a normal body still passes the edge after it ($r)" '[ "$r" = 200 ]'
 
+systemctl stop marlin2b-gateway
+r=$(http GET http://127.0.0.1:8080/health | tr '\n' ' ')
+check "the gateway down is public health {\"ok\":false} 503, nothing else ($r)" "[ '$r' = '503 {\"ok\":false} ' ]"
+systemctl start marlin2b-gateway
+READY_S=60 bash -c ". '$here/lib.sh'; wait_ready dev"
+
 step "6. drain: maintenance at the edge first, then the runtime stops; resume after readiness"
 "$here/drain.sh" pause
 out=$(http POST http://127.0.0.1:8080/v1/chat/completions '{"Content-Type":"application/json"}' "$body")

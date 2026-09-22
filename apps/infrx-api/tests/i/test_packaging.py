@@ -400,6 +400,9 @@ def test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health():
     assert ('{"ok":true}', 200) in bodies and ('{"ok":false}', 503) in bodies
     health = text[text.index("handle /health"):text.index("\thandle {")]
     assert {body for body, _ in _responses(health)} == {'{"ok":true}', '{"ok":false}'}
+    assert "handle_errors 502 503 504 {" in text
+    down = text[text.index("handle_errors 502 503 504"):text.index("# A declared length")]
+    assert "@health path /health" in down and _responses(down) == [('{"ok":false}', 503)]
     envelopes = {status: json.loads(body) for body, status in bodies if body.startswith('{"error"')}
     assert envelopes == {404: _envelope("not_found"), 413: _envelope("request_too_large")}
 
