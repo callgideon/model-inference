@@ -46,3 +46,26 @@ wait_ready() {
   if [ "$1" = pilot ]; then wait_http http://127.0.0.1:8001/readyz "${READY_S:-120}"
   else wait_http http://127.0.0.1:8001/health "${READY_S:-120}"; fi
 }
+
+# Validate the site with the pinned Caddy, install both sites, and serve the normal one:
+# reload a running edge of the pinned image, or (re)create it. Host network (the box's
+# layout); the directory, not the file, is mounted, so a rename of the active site is
+# visible to a reload. INFRX_SITE is the rehearsal's address; unset on the box.
+edge_install() {
+  local src=$1 site=(${INFRX_SITE:+-e "INFRX_SITE=$INFRX_SITE"})
+  docker run --rm --network none "${site[@]}" -v "$src/Caddyfile:/etc/caddy/Caddyfile:ro" \
+    "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+  mkdir -p "$CADDY_DIR/infrx"
+  put "$src/Caddyfile" "$CADDY_DIR/infrx/Caddyfile"
+  put "$src/Caddyfile.maintenance" "$CADDY_DIR/infrx/Caddyfile.maintenance"
+  if [ "$(docker inspect --format '{{.Config.Image}}' caddy 2>/dev/null || true)" = "$CADDY_IMAGE" ]; then
+    caddy_site Caddyfile
+  else
+    put "$CADDY_DIR/infrx/Caddyfile" "$CADDY_DIR/Caddyfile"
+    docker rm -f caddy >/dev/null 2>&1 || true
+    docker run -d --name caddy --restart unless-stopped --network host "${site[@]}" \
+      --cap-drop ALL --cap-add NET_BIND_SERVICE --read-only --tmpfs /tmp \
+      -v "$CADDY_DIR:/etc/caddy:ro" -v caddy_data:/data -v caddy_config:/config \
+      "$CADDY_IMAGE" >/dev/null
+  fi
+}

@@ -92,24 +92,5 @@ wait_ready "$mode" || die "the runtime did not become ready; the edge was not ch
 if [ "$mode" = pilot ]; then systemctl start infrx-reaper.timer; fi
 
 # 7. the edge - pilot only (a dev host answering on the pilot's name is an unmetered pilot)
-if [ "$mode" = pilot ]; then
-  site=(${INFRX_SITE:+-e "INFRX_SITE=$INFRX_SITE"})   # the rehearsal's address; unset on the box
-  docker run --rm --network none "${site[@]}" -v "$here/Caddyfile:/etc/caddy/Caddyfile:ro" "$CADDY_IMAGE" \
-    caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
-  mkdir -p "$CADDY_DIR/infrx"
-  put "$here/Caddyfile" "$CADDY_DIR/infrx/Caddyfile"
-  put "$here/Caddyfile.maintenance" "$CADDY_DIR/infrx/Caddyfile.maintenance"
-  if [ "$(docker inspect --format '{{.Config.Image}}' caddy 2>/dev/null || true)" = "$CADDY_IMAGE" ]; then
-    caddy_site Caddyfile
-  else
-    put "$CADDY_DIR/infrx/Caddyfile" "$CADDY_DIR/Caddyfile"
-    docker rm -f caddy >/dev/null 2>&1 || true
-    # Host network (the box's layout); the directory, not the file, is mounted, so a
-    # rename of the active site is visible to a reload.
-    docker run -d --name caddy --restart unless-stopped --network host "${site[@]}" \
-      --cap-drop ALL --cap-add NET_BIND_SERVICE --read-only --tmpfs /tmp \
-      -v "$CADDY_DIR:/etc/caddy:ro" -v caddy_data:/data -v caddy_config:/config \
-      "$CADDY_IMAGE" >/dev/null
-  fi
-fi
+if [ "$mode" = pilot ]; then edge_install "$here"; fi
 echo "deployed $sha ($mode); image $image; rollback: $here/rollback.sh $backup"
