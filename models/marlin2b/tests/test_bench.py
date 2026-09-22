@@ -5,10 +5,12 @@ fake gateway. Run with pytest or as a plain script:
     python -m pytest models/marlin2b/tests -q
     python models/marlin2b/tests/test_bench.py
 """
-import asyncio, contextlib, io, json, os, sys, tempfile
+import asyncio, contextlib, io, json, os, re, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.dirname(HERE)]
+
+import httpx
 
 import bench
 from fake_gateway import FakeGateway
@@ -569,13 +571,19 @@ def test_an_upload_handle_that_is_not_a_contract_handle_is_never_sent_back():
         assert not gw.seen, "no chat request may carry a reference we cannot vouch for"
 
 
+# A second tenant's key that would PASS the error-code allowlist on its own: all
+# [a-z0-9_], so only the key check can refuse it. With an uppercase key the leak
+# assertion below would hold for free and prove nothing about tenant 2 (reviewer r08).
+KEY_TWO = "sk_test_second_tenant_8a7b6c5d"
+
+
 def test_two_tenants_may_hold_identical_item_keys():
     """The idempotency scope is org + operation + key, so two tenants never collide."""
     with tempfile.TemporaryDirectory() as tmp:
         clips = make_clips(2, tmp)
         with_clips(clips)
         gw = FakeGateway(idempotent=True)
-        env = {"MARLIN_API_KEY": KEY, "T_ONE": KEY, "T_TWO": "sk-test-SECOND-TENANT-8a7b6c5d"}
+        env = {"MARLIN_API_KEY": KEY, "T_ONE": KEY, "T_TWO": KEY_TWO}
         summary, raw, stdout, _ = run_bench(
             base_argv(tmp, requests=4, concurrency=1, tenant_keys="T_ONE,T_TWO",
                       dataset_version="ds"), gw, env=env)
@@ -585,8 +593,103 @@ def test_two_tenants_may_hold_identical_item_keys():
         assert len(bearers) == 2, "each tenant sent its own key"
         assert {r["tenant"] for r in raw} == {0, 1}
         for blob in all_output(tmp, summary, raw, stdout):
-            for secret in (KEY, env["T_TWO"]):
+            for secret in (KEY, KEY_TWO):
                 assert secret not in blob, "a tenant key leaked into client output"
+
+        # Non-vacuous: a gateway that echoes TENANT 2's key back in an allowlisted field.
+        # `error.code` fullmatches [a-z0-9_]{1,64} here, so the pattern alone lets it
+        # through and only the key check can refuse it - and the key it carries is the
+        # SECOND tenant's, which a single-key redaction would never look for.
+        def echo_tenant_two(request):
+            if request.headers.get("authorization") == f"Bearer {KEY_TWO}":
+                return httpx.Response(401, json={"error": {"code": KEY_TWO, "type": KEY_TWO,
+                                                           "message": f"bad key {KEY_TWO}"}})
+            return None
+
+        gw2 = FakeGateway(idempotent=True, chat_override=echo_tenant_two)
+        argv = base_argv(tmp, requests=4, concurrency=1, tenant_keys="T_ONE,T_TWO",
+                         dataset_version="ds2")
+        echo_raw = os.path.join(tmp, "raw-echo.jsonl")
+        argv[argv.index("--raw") + 1] = echo_raw
+        summary, raw, stdout, _ = run_bench(argv, gw2, env=env)
+        tenant_two = [r for r in raw if r["tenant"] == 1]
+        assert len(tenant_two) == 2 and all(r["outcome"] == "rejected" for r in tenant_two)
+        assert all(r["error_code"] == "unrecognized" and r["error_type"] == "unrecognized"
+                   for r in tenant_two), "tenant 2's key was recorded as an error code"
+        assert summary["error_codes"] == {"unrecognized": 2}
+        blobs = all_output(tmp, summary, raw, stdout) + \
+            [open(echo_raw, encoding="utf-8").read()]
+        for blob in blobs:
+            for cut in range(8, len(KEY_TWO) + 1):
+                assert KEY_TWO[:cut] not in blob, f"leaked {cut} characters of tenant 2's key"
+            assert KEY not in blob
+
+
+def test_a_target_that_publishes_no_phase_timings_says_so():
+    """The deployed monolith publishes no Server-Timing at all. Nothing may be invented
+    from that: every row's phases are None and every declared phase is named missing."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(2, tmp)
+        with_clips(clips)
+        summary, raw, _, _ = run_bench(base_argv(tmp, requests=4, concurrency=1),
+                                       FakeGateway(server_timing=False),
+                                       env={"MARLIN_API_KEY": KEY})
+        assert summary["accepted"] == 4
+        assert all(r["server_timing"] is None for r in raw), "a phase timing was invented"
+        phases = summary["phases"]
+        assert phases["observed"] == {} and phases["undeclared_observed"] == []
+        assert phases["declared_missing"] == list(bench.PHASES), \
+            "every declared phase must be named as missing, not silently dropped"
+        assert bench.parse_server_timing("") is None and bench.parse_server_timing(None) is None
+
+
+def test_the_handle_grammar_is_enforced_at_both_edges():
+    """22..64 of [A-Za-z0-9_-] after `upl_`, fullmatched: one character short fails, and a
+    long-enough handle carrying a dot or a slash fails too (reviewer r06/r19)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(2, tmp)
+        with_clips(clips)
+        short = "upl_" + "z" * 21                       # one character below the minimum
+        dotted = "upl_" + "z" * 18 + "a.bc"            # 22 characters, one of them a dot
+        slashed = "upl_" + "z" * 18 + "a/bc"           # 22 characters, one of them a slash
+        assert bench.HANDLE_OK.fullmatch(short) is None
+        assert bench.HANDLE_OK.fullmatch("upl_" + "z" * 22) is not None
+        for n, handle in enumerate((short, dotted, slashed)):
+            gw = FakeGateway(bad_handle=handle)
+            argv = base_argv(tmp, requests=2, concurrency=1, forms="upload")
+            argv[argv.index("--raw") + 1] = os.path.join(tmp, f"raw-h{n}.jsonl")
+            summary, raw, _, _ = run_bench(argv, gw, env={"MARLIN_API_KEY": KEY})
+            assert summary["accepted"] == 0 and summary["failed"] == 2, handle
+            assert all(r["error_class"] == "UploadFailed" for r in raw), handle
+            assert not gw.seen, f"a chat request carried the malformed handle {handle!r}"
+
+
+def test_a_rejected_429_item_is_resumed_with_the_same_key():
+    """§3.6: a 429 is normal, not terminal. The resume re-sends exactly that item with the
+    same Idempotency-Key, and it becomes the item the first run never created."""
+    with tempfile.TemporaryDirectory() as tmp:
+        clips = make_clips(3, tmp)
+        with_clips(clips)
+        gw = FakeGateway(idempotent=True, statuses={1: 429}, retry_after="0")
+        first = os.path.join(tmp, "raw1.jsonl")
+        argv = base_argv(tmp, requests=3, concurrency=1, dataset_version="ds")
+        argv[argv.index("--raw") + 1] = first
+        summary, raw, _, _ = run_bench(argv, gw, env={"MARLIN_API_KEY": KEY})
+        assert (summary["accepted"], summary["rejected"]) == (2, 1)
+        rejected = [r for r in raw if r["outcome"] == "rejected"][0]
+        assert rejected["http_status"] == 429 and bench.is_terminal(rejected) is False
+        assert len(gw.accepted_keys) == 2, "a 429 creates no item"
+
+        argv2 = base_argv(tmp, requests=3, concurrency=1, dataset_version="ds")
+        argv2[argv2.index("--raw") + 1] = os.path.join(tmp, "raw2.jsonl")
+        argv2 += ["--resume", first]
+        resumed, raw2, _, rc = run_bench(argv2, gw, env={"MARLIN_API_KEY": KEY})
+        assert rc == 0 and resumed["denominators"]["skipped_terminal_on_resume"] == 2
+        assert len(raw2) == 1 and resumed["accepted"] == 1
+        assert raw2[0]["idempotency_key"] == rejected["idempotency_key"], \
+            "the re-sent item must keep the key its rejected attempt used"
+        assert resumed["idempotency"]["replayed"] == 0, "the 429 attempt left nothing to replay"
+        assert len(gw.accepted_keys) == 3 and len(set(gw.accepted_keys)) == 3
 
 
 def test_real_load_corpus_reads_the_committed_manifest():
@@ -814,6 +917,14 @@ def test_the_predeclared_protocol_matches_the_client_that_implements_it():
         assert pending in text
     assert "Server-Timing" in text and "declared_missing" in text, \
         "the protocol must name where phase timings come from and what an absent one does"
+    # r11: the concurrency sweep is bound by the engine's own --max-num-seqs, so the ladder
+    # in the L1 row is parsed, not trusted to prose.
+    assert "--max-num-seqs 32" in text
+    l1 = [line for line in text.splitlines() if line.startswith("| L1 ")]
+    assert len(l1) == 1, "the protocol must carry exactly one L1 concurrency-sweep row"
+    ladder = [int(c) for c in re.search(r"-c ([\d,]+)", l1[0]).group(1).split(",")]
+    assert ladder == sorted(ladder) and max(ladder) <= 32, \
+        f"the sweep ladder {ladder} exceeds the engine's own --max-num-seqs 32"
 
 
 def test_historical_cli_still_parses_and_refuses_command_line_keys():

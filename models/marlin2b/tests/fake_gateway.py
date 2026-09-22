@@ -61,6 +61,8 @@ class FakeGateway:
         # first outcome and creates NO second accepted item; same key + a different payload
         # is 409 idempotency_conflict. `lose_ack` accepts an item and then tears the
         # response, which is the interruption a resume has to survive without duplicating.
+        # bad_handle: True for a too-short handle, or a literal handle string to plant one
+        # of the grammar's edge cases (21 characters, or 22 containing '.' or '/').
         self.idempotent, self.lose_ack, self.bad_handle = idempotent, set(lose_ack), bad_handle
         self.idempotency = {}     # (bearer, key) -> payload digest
         self.accepted_keys = []   # one entry per item the server really created, in order
@@ -81,7 +83,9 @@ class FakeGateway:
         if path.endswith("/uploads"):
             # contracts/ids.py: `upl_` + 22..64 of [A-Za-z0-9_-]. A shorter handle is what
             # the client must refuse rather than send back as a reference.
-            handle = "up_short" if self.bad_handle else f"upl_{len(self.uploads):04d}" + "z" * 18
+            handle = (self.bad_handle if isinstance(self.bad_handle, str)
+                      else "up_short" if self.bad_handle
+                      else f"upl_{len(self.uploads):04d}" + "z" * 18)
             self.uploads[handle] = json.loads(request.content or b"{}")
             url = self.upload_url or ("https://fake-upload.invalid/" + handle)
             return httpx.Response(200, json={"handle": handle, "upload": {
