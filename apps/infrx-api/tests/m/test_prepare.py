@@ -524,6 +524,27 @@ def test_a_cache_file_deleted_behind_the_index_is_a_miss(tmp_path):
     assert adapter.local_uri(run(adapter.prepare(job_id, "v1"))[0])
 
 
+def test_the_prepared_ref_carries_the_measurement_not_the_attached_record(tmp_path):
+    """The attached record is data, not testimony. `attach` stores this store's own refs, so
+    the way caller-shaped facts reach `prepare` is a job row that returns them - which is
+    exactly what D2 will do once the attachment lives in PostgreSQL. Every field the engine
+    acts on is therefore re-measured from the bytes that are really there, never copied from
+    the ref (review R1/R23)."""
+    adapter = preparation(tmp_path)
+    job_id, refs = staged_job(adapter)
+    # What a job row holding the customer's numbers would hand back: the same object, with
+    # a convenient duration, the wrong container and a nonsense size.
+    adapter.by_job[job_id] = (refs[0].model_copy(update={"duration_s": 1.0,
+                                                         "mime": "video/quicktime",
+                                                         "bytes": 7}),)
+    prepared = run(adapter.prepare(job_id, "v1"))[0]
+    assert prepared.duration_s == pytest.approx(10.0)
+    assert prepared.mime == "video/mp4"
+    assert prepared.bytes == len(CLIP)
+    # and the local copy is named for the container it really is, not the claimed one
+    assert adapter.local_uri(prepared).endswith("source.mp4")
+
+
 def test_an_object_that_vanished_between_attach_and_prepare_is_not_found(tmp_path):
     """The expiry drill on the durable side: preparation reads the object it was told
     about, so an object that is gone is a typed `not_found` rather than a worker failing on

@@ -684,6 +684,23 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "                await self._write_once(prepared_key, body, probed.mime)",
        "                pass",
        "test_prepare_persists_the_artifact_and_a_file_the_engine_can_open"),
+    _m("prepared_ref_trusts_the_attached_duration",
+       "the prepared duration is the measurement, not the number on the attached record "
+       "(a job row can hand back whatever it stored) (review R1/R23)",
+       R, '                "duration_s": entry.probed.duration_s}))',
+       '                "duration_s": ref.duration_s}))',
+       "test_the_prepared_ref_carries_the_measurement_not_the_attached_record"),
+    _m("prepared_ref_trusts_the_attached_mime",
+       "likewise the container: it decides the cache file's extension and what the engine "
+       "is told it is opening",
+       R, '                "mime": entry.probed.mime, "bytes": entry.bytes,',
+       '                "mime": ref.mime, "bytes": entry.bytes,',
+       "test_the_prepared_ref_carries_the_measurement_not_the_attached_record"),
+    _m("prepared_ref_trusts_the_attached_size",
+       "likewise the size of the artifact that was actually prepared",
+       R, '                "mime": entry.probed.mime, "bytes": entry.bytes,',
+       '                "mime": entry.probed.mime, "bytes": ref.bytes,',
+       "test_the_prepared_ref_carries_the_measurement_not_the_attached_record"),
     _m("prepared_ref_carries_no_duration",
        "the prepared ref carries the measured duration, which is what the engine budgets "
        "frames from",
