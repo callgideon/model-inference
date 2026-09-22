@@ -69,14 +69,14 @@ def test_deploy_failclosed__a_refusal_says_which_rule_the_value_broke():
     to know which rule it broke, not just that "the value is not valid"."""
     key = next(k for k in preflight.MANIFEST if k.env == "SUPABASE_SERVICE_ROLE_KEY")
     good = "a" * 24
-    assert "is empty" in preflight.shape_problem(key, "")
-    assert "is empty" in preflight.shape_problem(key, " " * 24)
-    assert "newline" in preflight.shape_problem(key, good + "\nGATEWAY_API_KEY=x")
+    assert "is empty" in (preflight.shape_problem(key, "") or "")
+    assert "is empty" in (preflight.shape_problem(key, " " * 24) or "")
+    assert "newline" in (preflight.shape_problem(key, good + "\nGATEWAY_API_KEY=x") or "")
     # systemd's EnvironmentFile gives these three a meaning `read_env` does not model.
     for special in ("'", '"', "\\"):
-        assert "quote or backslash" in preflight.shape_problem(key, good + special), special
-    assert "whitespace" in preflight.shape_problem(key, " " + good)
-    assert "not a valid opaque" in preflight.shape_problem(key, "short")
+        assert "quote or backslash" in (preflight.shape_problem(key, good + special) or ""), special
+    assert "whitespace" in (preflight.shape_problem(key, " " + good) or "")
+    assert "not a valid opaque" in (preflight.shape_problem(key, "short") or "")
     assert preflight.shape_problem(key, good) is None
 
 
