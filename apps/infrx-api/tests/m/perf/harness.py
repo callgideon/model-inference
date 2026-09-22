@@ -468,10 +468,13 @@ def load(path: str) -> tuple[dict, list[dict]]:
     return rows[0], rows[1:]
 
 
-def report(paths: list[str]) -> None:
+def report(paths: list[str], clips: list[str] = ()) -> None:
     """Per size bucket, the median over accepted clips of each clip's p50 (and the worst
-    clip's max for stalls), one column per run; then every refused clip."""
+    clip's max for stalls), one column per run; then every refused clip, then `clips` one by
+    one. Runs are compared on the clips they all measured, and the table says how many."""
     runs = [load(path) for path in paths]
+    common = set.intersection(*({row["id"] for row in rows} for _, rows in runs))
+    runs = [(env, [row for row in rows if row["id"] in common]) for env, rows in runs]
     for env, _ in runs:
         print(f"# {env['label']}: code {env['code_sha']}, {env['utc']}, {env['cpu']}, "
               f"{env['cpus']} CPUs, Python {env['python']}, {env['host_class']}")
@@ -508,6 +511,19 @@ def report(paths: list[str]) -> None:
             cells.append(f"{row['outcome']} / {row['bytes_read_materialize']} / "
                          f"{row['materialize_url_ms']['p50']}")
         print(f"| {clip_id} | {size} | " + " | ".join(cells) + " |")
+    for clip_id in clips:
+        print(f"\n| {clip_id} | " + " | ".join(env["label"] for env, _ in runs) + " |")
+        print("|---|" + "---:|" * len(runs))
+        rows = [next(r for r in rows if r["id"] == clip_id) for _, rows in runs]
+        for metric in [m for m in METRICS + ("ttfb_ms", "fetch_stall_ms") if m in rows[0]]:
+            print(f"| {metric} p50 (max) | " + " | ".join(
+                f"{r[metric]['p50']} ({r[metric]['max']})" for r in rows) + " |")
+        print("| peak MiB url / inline / prepare | " + " | ".join(
+            " / ".join(str(r["peak_mib"].get(k, "-")) for k in
+                       ("materialize_url", "materialize_inline", "prepare_cold"))
+            for r in rows) + " |")
+        print("| bytes read before the outcome | " + " | ".join(
+            f"{r['bytes_read_materialize']} ({r['outcome']})" for r in rows) + " |")
 
 
 def main(argv=None) -> int:
@@ -524,9 +540,10 @@ def main(argv=None) -> int:
     measure.add_argument("--only", nargs="*", help="clip id substrings")
     rep = sub.add_parser("report")
     rep.add_argument("paths", nargs="+")
+    rep.add_argument("--clips", nargs="*", default=(), help="clip ids to print one by one")
     args = parser.parse_args(argv)
     if args.command == "report":
-        report(args.paths)
+        report(args.paths, args.clips)
     else:
         asyncio.run(run(args))
     return 0
