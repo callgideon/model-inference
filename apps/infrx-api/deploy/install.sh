@@ -69,8 +69,8 @@ for pair in ${INFRX_SET:-}; do sets+=(--set "$pair"); done
 # The usage spill is on the root EBS volume (row M-SCRATCH); the media root is recreated by
 # the units themselves at every start, because the NVMe it lives on is wiped by a stop.
 mkdir -p "$STATE/usage"
-chown 10001:10000 "$STATE/usage"
 chmod 0750 "$STATE/usage"
+chown 10001:10000 "$STATE/usage"
 mkdir -p "$UNIT_DIR"
 for f in $UNIT_FILES; do put "$here/$f" "$UNIT_DIR/$f"; done
 systemctl daemon-reload
