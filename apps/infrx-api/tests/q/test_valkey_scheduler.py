@@ -839,22 +839,44 @@ def _resp(*parts: bytes) -> bytes:
 
 
 async def _kill_mid_call(port, script_source: str, args, *, truncate: int | None = None):
-    """Send one script on a raw socket and destroy the connection before the reply.
+    """Send one script on a raw socket and lose the connection before the reply.
 
-    `truncate` cuts the command off mid-write, which is the other half of the injection:
-    the server discards an incomplete command when the peer disappears, so that operation
-    never happens at all. Either way the index must be wholly before or wholly after.
+    Two deaths, because they prove the two halves of atomicity and each one is
+    deterministic rather than a race:
+
+    * the **whole** command, then a close with the reply never read (FIN after the bytes,
+      so the server has them): the client learns nothing, and the operation must have been
+      applied *completely*;
+    * a command **truncated mid-write**, then an abort (RST): the server is left holding an
+      incomplete command it can never run, and the operation must not have happened at all.
     """
     command = _resp(b"EVAL", script_source.encode(), str(len(port._keys)).encode(),
                     *[key.encode() for key in port._keys],
                     *[str(arg).encode() for arg in args])
-    if truncate is not None:
-        command = command[:truncate]
     reader, writer = await asyncio.open_connection("127.0.0.1", vkharness.PORT)
-    writer.write(command)
+    writer.write(command if truncate is None else command[:truncate])
     await writer.drain()
-    writer.transport.abort()                      # RST: the reply is never read
+    if truncate is None:
+        writer.close()                            # FIN: the bytes are delivered, the
+        await writer.wait_closed()                # reply is never read
+    else:
+        writer.transport.abort()                  # RST: the half-command is discarded
     del reader
+
+
+async def _settled(port, expected: int, *, timeout_s: float = 5.0) -> int:
+    """The item count once the server has caught up, or after the deadline.
+
+    Valkey gives no ordering between two connections, so "did the killed command run"
+    is polled rather than assumed - and a poll that times out returns the count it saw,
+    which is what makes the assertion above it a real one.
+    """
+    deadline = asyncio.get_running_loop().time() + timeout_s
+    while True:
+        items = (await port.stats())["items"]
+        if items == expected or asyncio.get_running_loop().time() > deadline:
+            return items
+        await asyncio.sleep(0.01)
 
 
 async def _consistent(port) -> dict:
@@ -909,16 +931,20 @@ def test_q2_crash__an_interrupted_script_leaves_no_half_indexed_candidate():
             before = await _consistent(port)
             enqueue_args = list(port._event_args(candidate)) + [port._max_items,
                                                                port._max_bytes]
-            await _kill_mid_call(port, _ENQUEUE, enqueue_args,
-                                 truncate=40 if number % 3 == 0 else None)
+            truncated = 40 if number % 3 == 0 else None
+            await _kill_mid_call(port, _ENQUEUE, enqueue_args, truncate=truncated)
+            expected = before["items"] + (0 if truncated else 1)
+            assert await _settled(port, expected) == expected, \
+                ("a whole command was not applied" if truncated is None
+                 else "a truncated command was applied")
             after = await _consistent(port)
-            assert after["items"] in (before["items"], before["items"] + 1), after
-            if after["items"] == before["items"]:
+            if truncated:
                 outcomes["discarded"] += 1
                 assert after["bytes"] == before["bytes"]
                 assert await port.enqueue(candidate) is True     # not indexed: retryable
             else:
                 outcomes["applied"] += 1
+                assert after["bytes"] > before["bytes"]
                 assert await port.enqueue(candidate) is False    # indexed exactly once
             # and a claim killed mid-call leaves no candidate owned by nobody
             claim_args = [_us(h.clock.now()), "", "", "1.0",
