@@ -39,6 +39,41 @@ SEAMS: dict[str, tuple[frozenset[str], tuple[tuple[str, str], ...]]] = {
         ("as_of", "timestamp with time zone"), ("rollout_hold", "boolean"))),
 }
 
+# --- D2 (0010-0014): the platform's admission / preparation / outbox operations. Each
+# takes and returns one jsonb (or a scalar); `infrx/state/jobstore.py` is the adapter and
+# its docstrings are the argument shapes. Refusals are SQLSTATE P0001 `<error_code>: …`
+# (hint `retry_after=<s>` on 429s); a refusal that follows a committed terminalization
+# (R39) is returned as `{"refusal": {code, detail}}` instead of raised.
+_SERVICE = frozenset({"service_role"})
+SEAMS.update({
+    "infrx.admit(jsonb)": (_SERVICE, ()),                 # 06 boundary, body D2 (0011)
+    "infrx.prepare(jsonb)": (_SERVICE, ()),               # 06 boundary, body D2 (0012)
+    "infrx.claim_preparation(jsonb)": (_SERVICE, ()),
+    "infrx.dispatch_pending(jsonb)": (_SERVICE, ()),
+    "infrx.acknowledge_dispatch(jsonb)": (_SERVICE, ()),
+    "infrx.dispatch_snapshot()": (_SERVICE, ()),
+    "infrx.gc_outbox(jsonb)": (_SERVICE, ()),
+    "infrx.job_admission(uuid)": (_SERVICE, ()),
+    "infrx.put_result(jsonb)": (_SERVICE, ()),            # W2: the result object writer
+    "infrx.read_result(uuid,text)": (_SERVICE, ()),
+    "infrx.touch_media_object(text,uuid)": (_SERVICE, ()),  # M3 (0010)
+    # also M3: infrx.delete_media_object_if_idle(text, timestamptz) -> boolean, service_role
+})
+
+#: The admission lock order (0011). Every D writer takes these in this order; a grant
+#: takes only the last; settlement (D5) takes the wallet without the scope lock.
+LOCK_ORDER = ("pg_advisory_xact_lock(infrx.admission_lock_key())  -- capacity scope",
+              "infrx.idempotency (org_id, operation, key)  FOR UPDATE",
+              "public.organizations (id)  FOR SHARE",
+              "public.api_keys (id)  FOR SHARE",
+              "infrx.wallets (org_id) | infrx.credit_wallets (wallet_id)  FOR UPDATE")
+
+#: D5 hard rule (D1R review (d)): settle the CREDIT hold (held -> settled, which releases
+#: the reservation) BEFORE inserting the `inference_debit` ledger row. A debit first trips
+#: `credit_wallets_reserved_within_total` whenever the hold equals the available balance.
+#: D2 never writes a zero-amount CREDIT hold (0011 refuses it as invalid_request).
+D5_SETTLE_HOLD_BEFORE_DEBIT = True
+
 #: C0/U1R pages: view -> ordered columns. Keyset order for the ledger page is
 #: (created_at desc, entry_id desc) within one wallet_id.
 VIEWS: dict[str, tuple[str, ...]] = {

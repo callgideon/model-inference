@@ -207,7 +207,9 @@ end $$;
 
 -- ====================================================== usage and holds (G6B) ===
 -- UsageRecordV2-shaped rows, newest first, bounded; the unit follows the regime and the
--- amount is text. Keyset: pass the last row's (settled_at, request_id).
+-- amount is text. Keyset: pass the last row's (settled_at, request_id) - BOTH or NEITHER
+-- (D1R review (e)): with only one of the two the row comparison is NULL and the page is
+-- silently empty.
 create or replace function infrx.usage_records(p_org uuid, p_before timestamptz default null,
   p_before_id uuid default null, p_limit int default 100)
 returns table (request_id uuid, org_id uuid, accounting_regime text, unit text,
