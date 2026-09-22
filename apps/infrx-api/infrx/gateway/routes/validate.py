@@ -24,10 +24,9 @@ stating, because each one is a rule rather than a taste:
   store's fact, taken in the admitting transaction from its own source (R45).
 
 `deadline_at` is `created_at` plus the mode's preparation + queue + generation
-budgets **minus a skew margin**, because `admit` measures that ceiling from the
-database clock (R7) and a store clock a millisecond behind the gateway would
-otherwise refuse every request. The margin is the whole tolerance for that skew:
-past it, the store is right to refuse.
+budgets, with no skew margin: R79 - `admit` clamps a later deadline to what it can
+keep on its own clock and refuses only an elapsed one, so the gateway has no second
+clock to correct for.
 
 Size lives here too, not only in the byte cap. 96 MiB of JSON is 3.4 million empty
 messages, and building records from them blocked the event loop for 21.8 s and grew
