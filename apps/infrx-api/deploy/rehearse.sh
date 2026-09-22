@@ -257,6 +257,7 @@ except urllib.error.HTTPError as e:
 except Exception as e:
     print("ERR", type(e).__name__)' "$@"
 }
+status_of() { local out; out=$(http "$@"); echo "${out%%$'\n'*}"; }   # status line only
 started() { /usr/bin/docker inspect --format '{{.State.StartedAt}}' "infrx-i2b-$1" 2>/dev/null || echo none; }
 sha() { sha256sum "$1" | cut -c1-16; }
 
@@ -294,13 +295,13 @@ check "the gateway runs the pinned image as 10001, read-only, no capabilities" \
   "[[ '$g' == *'user=10001:10000 ro=true capdrop=[ALL] secopt=[no-new-privileges]'*'image=$REHEARSAL_IMAGE'* ]]"
 
 step "2. calls on the deployed path (loopback, legacy key: dev mode)"
-r=$(http GET http://127.0.0.1:8001/v1/models | head -1); check "GET /v1/models 200 (got $r)" '[ "$r" = 200 ]'
+r=$(status_of GET http://127.0.0.1:8001/v1/models); check "GET /v1/models 200 (got $r)" '[ "$r" = 200 ]'
 body='{"model":"nemostation/marlin-2b","messages":[{"role":"user","content":"hi"}],"max_tokens":8}'
-r=$(http POST http://127.0.0.1:8001/v1/chat/completions '{"Content-Type":"application/json"}' "$body" | head -1)
+r=$(status_of POST http://127.0.0.1:8001/v1/chat/completions '{"Content-Type":"application/json"}' "$body")
 check "chat without a key is 401 (got $r)" '[ "$r" = 401 ]'
-r=$(http POST http://127.0.0.1:8001/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer wrong-key-0123456789abcdef\"}" "$body" | head -1)
+r=$(status_of POST http://127.0.0.1:8001/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer wrong-key-0123456789abcdef\"}" "$body")
 check "chat with a wrong key is 401 (got $r)" '[ "$r" = 401 ]'
-r=$(http POST http://127.0.0.1:8001/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer $KEY\"}" "$body" | head -1)
+r=$(status_of POST http://127.0.0.1:8001/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer $KEY\"}" "$body")
 check "chat with the key reaches the engine: 200 (got $r)" '[ "$r" = 200 ]'
 
 step "3. fail-closed drills against the running deploy"
@@ -310,7 +311,7 @@ drill() {  # drill NAME EXPECTED-EXIT ENV...
   local name=$1 want=$2; shift 2
   set +e; env "$@" RELEASE="$RELEASE" ENV_OWNER="$(id -un)" "$here/install.sh" > "$work/drill.log" 2>&1
   local got=$?; set -e
-  grep -E '^  - |refused|refusing' "$work/drill.log" | head -n 6
+  grep -E '^  - |refused|refusing' "$work/drill.log" | head -n 6 || true
   check "$name: exit $want (got $got), env/units byte-identical, gateway not restarted" \
     "[ $got = $want ] && [ \"\$(sha '$env_file')\" = '$before_env' ] && [ \"\$(started infrx-gateway)\" = '$before_start' ] && [ \"\$(cat '$INFRX_ROOT'/etc/systemd/system/* | sha256sum | cut -c1-16)\" = '$units_before' ]"
 }
@@ -340,12 +341,12 @@ step "5. the edge: real Caddyfile, pinned Caddy, in the box (plain HTTP address,
 (export INFRX_SITE=http://:8080; . "$here/lib.sh"; edge_install "$here")
 sleep 2
 out=$(http GET http://127.0.0.1:8080/health); echo "$out"
-check "public /health is exactly {\"ok\":true}" "[ \"\$(echo '$out' | tail -1)\" = '{\"ok\":true}' ]"
+check "public /health is exactly {\"ok\":true}" "[ '${out##*$'\n'}' = '{\"ok\":true}' ]"
 for p in /metrics /readyz /internal/x; do
   r=$(http GET "http://127.0.0.1:8080$p"); echo "$p -> $(echo "$r" | tr '\n' ' ')"
-  check "$p is 404 not_found at the edge" "[[ '$(echo "$r" | head -1)' = 404 && '$r' == *'\"code\":\"not_found\"'* ]]"
+  check "$p is 404 not_found at the edge" "[[ '${r%%$'\n'*}' = 404 && '$r' == *'\"code\":\"not_found\"'* ]]"
 done
-r=$(http POST http://127.0.0.1:8080/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer $KEY\"}" "$body" | head -1)
+r=$(status_of POST http://127.0.0.1:8080/v1/chat/completions "{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer $KEY\"}" "$body")
 check "an authenticated call through the edge is 200 (got $r)" '[ "$r" = 200 ]'
 r=$(/usr/bin/docker exec infrx-i2b-box python -c '
 import urllib.request
@@ -360,7 +361,7 @@ step "6. drain: maintenance at the edge first, then the runtime stops; resume af
 "$here/drain.sh" pause
 out=$(http POST http://127.0.0.1:8080/v1/chat/completions '{"Content-Type":"application/json"}' "$body")
 echo "during maintenance: $(echo "$out" | tr '\n' ' ')"
-check "maintenance answers 503 dependency_unavailable" "[[ '$(echo "$out" | head -1)' = 503 && '$out' == *dependency_unavailable* ]]"
+check "maintenance answers 503 dependency_unavailable" "[[ '${out%%$'\n'*}' = 503 && '$out' == *dependency_unavailable* ]]"
 check "the gateway container is gone" '[ "$(started infrx-gateway)" = none ]'
 /usr/bin/docker restart infrx-i2b-caddy >/dev/null; sleep 2
 r=$(http GET http://127.0.0.1:8080/health | tr '\n' ' ')
@@ -377,7 +378,7 @@ check "second deploy exits 0 (got $code)" '[ "$code" = 0 ]'
 check "the second env carries MAX_ACTIVE_JOBS=4" "grep -qx MAX_ACTIVE_JOBS=4 '$env_file'"
 second_backup=$(ls -d "$INFRX_ROOT"/var/backups/infrx/* | tail -n1)
 before_start=$(started infrx-gateway)
-"$here/rollback.sh" "$second_backup" | tail -n 2
+"$here/rollback.sh" "$second_backup" 2>&1 | tail -n 2 || true
 check "the env file is the first deploy's again" "[ \"\$(sha '$env_file')\" = '$first_env' ]"
 check "the gateway restarted onto it and is ready" "[ \"\$(started infrx-gateway)\" != '$before_start' ] && curl -fsS -o /dev/null http://127.0.0.1:8001/health"
 
