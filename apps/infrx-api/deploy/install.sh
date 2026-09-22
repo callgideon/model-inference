@@ -1,71 +1,111 @@
 #!/usr/bin/env bash
-# Install/refresh the marlin2b stack on the box: vLLM (systemd, docker),
-# gateway (systemd, /opt/pytorch), Caddy (docker, TLS). Idempotent; run as root.
-#   sudo INFRX_MODE=dev ./apps/infrx-api/deploy/install.sh
+# Deploy the Marlin backend on the box - install or upgrade, idempotent, run as root:
 #
-# INFRX_MODE has no default (infra/README.md §5): a default is how an unmetered pilot
-# happens by accident. `preflight.py apply` reads and validates every required SSM
-# parameter before it replaces /etc/marlin2b-gateway.env, and a failed read, a bad
-# value or an unmet runtime prerequisite leaves the previous file byte-identical and
-# restarts nothing (evidence row `O-FAILOPEN`, matrix row `M-FAILCLOSED`).
+#   sudo INFRX_MODE=pilot [RELEASE=<git sha>] ./apps/infrx-api/deploy/install.sh
 #
-# Order note: pip, the unit files and the Caddyfile are installed before the env file.
-# They are idempotent and inert - systemd keeps serving the old configuration until a
-# restart, and the restart only happens after a successful install - so the two
-# operations a failed run must never perform, replacing the env file and restarting,
-# are both inside preflight.py. Running this against the pilot host needs the
-# deployment lock of infra/README.md §1.
+# Order, stopping at the first failure (infra/README.md §7; the runbook runs drain.sh and
+# migrate.py before this, and this contains no SQL):
+#   1. the checkout is exactly a commit (RELEASE, if given, is that commit);
+#   2. build the pinned runtime image from it; its content id is the pin;
+#   3. back up every file this run may replace (rollback.sh restores it);
+#   4. preflight.py apply: read every secret, validate, probe INSIDE the image, replace
+#      the env file by one rename - or refuse with everything untouched (exit 2);
+#   5. install the unit files (inert until restarted), start the index and the engine;
+#   6. restart the runtime units, wait for readiness (pilot: /readyz);
+#   7. only then the edge: validate the Caddyfile with the pinned Caddy and serve it.
+# A refusal at 1-4 leaves the host exactly as it was. A failure at 5-7 leaves a validated
+# configuration installed and says which backup to roll back to; it does not roll back
+# on its own (a validated file is not replaced by an unvalidated guess).
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+repo=$(cd "$here/../../.." && pwd)
+# shellcheck source=lib.sh
+. "$here/lib.sh"
 REGION=${AWS_REGION:-us-east-1}
-# Before pip, apt or any unit file: an unusable mode must not leave half a deploy
-# behind. `${VAR:?}` only catches unset and empty, so a typo would have run everything
-# below and been refused at the very end.
+# Before anything else: an unusable mode must not leave half a deploy behind.
 case "${INFRX_MODE:-}" in
   dev|test|pilot) ;;
-  *) echo "INFRX_MODE must be dev, test or pilot (no default); got '${INFRX_MODE:-}'" >&2
-     exit 2 ;;
+  *) die "INFRX_MODE must be dev, test or pilot (no default); got '${INFRX_MODE:-}'" 2 ;;
 esac
-ENV_FILE=${ENV_FILE:-/etc/marlin2b-gateway.env}
-RUNTIME_PYTHON=${RUNTIME_PYTHON:-/opt/pytorch/bin/python}
-SERVE_SCRIPT=${SERVE_SCRIPT:-$here/../../../models/marlin2b/serve.sh}
+mode=$INFRX_MODE
+case $mode in pilot) runtime_units=$RUNTIME_UNITS_pilot ;; *) runtime_units=$RUNTIME_UNITS_dev ;; esac
+SERVE_SCRIPT=${SERVE_SCRIPT:-$repo/models/marlin2b/serve.sh}
+PREFLIGHT=${PREFLIGHT:-$here/preflight.py}
+PYTHON=${PYTHON:-python3}           # the installer's interpreter; preflight's apply is stdlib
+ENV_OWNER=${ENV_OWNER:-ubuntu}
 
-"$RUNTIME_PYTHON" -m pip install -q fastapi uvicorn httpx
-command -v ffprobe >/dev/null || apt-get install -y -qq ffmpeg
+# 1. exactly a commit
+sha=$(git -C "$repo" rev-parse HEAD)
+[ -z "$(git -C "$repo" status --porcelain)" ] || die "the checkout has uncommitted changes; deploy a commit" 2
+[ -z "${RELEASE:-}" ] || [ "$sha" = "$RELEASE" ] || die "HEAD is $sha, not RELEASE=$RELEASE" 2
 
-install -m 644 "$here/marlin2b-vllm.service" "$here/marlin2b-gateway.service" /etc/systemd/system/
+# 2. the runtime image
+docker build -q -f "$here/Dockerfile" -t "infrx-runtime:$sha" "$repo/apps/infrx-api" >/dev/null
+image=$(docker image inspect --format '{{.Id}}' "infrx-runtime:$sha")
+echo "release $sha image $image"
+
+# 3. the backup: every path this run may replace, and which of them did not exist
+backup=$BACKUPS/$(date -u +%Y%m%dT%H%M%SZ)-$sha
+mkdir -p "$backup" && chmod 0700 "$BACKUPS" "$backup"
+paths=("${ENV_FILE#/}" etc/caddy/Caddyfile etc/caddy/infrx/Caddyfile etc/caddy/infrx/Caddyfile.maintenance)
+for f in $UNIT_FILES; do paths+=("etc/systemd/system/$f"); done
+present=()
+: > "$backup/absent"
+for p in "${paths[@]}"; do
+  if [ -e "$ROOT/$p" ]; then present+=("$p"); else echo "$p" >> "$backup/absent"; fi
+done
+tar -C "${ROOT:-/}" -cpf "$backup/files.tar" --files-from /dev/null "${present[@]}"
+echo "backup $backup"
+
+# 4. the env file (the only step that reads secrets); refused -> nothing above mattered
+sets=()
+for pair in ${INFRX_SET:-}; do sets+=(--set "$pair"); done
+"$PYTHON" "$PREFLIGHT" apply --mode "$mode" --env-file "$ROOT$ENV_FILE" --owner "$ENV_OWNER" \
+  --region "$REGION" --image "$image" --serve-script "$SERVE_SCRIPT" "${sets[@]}"
+
+# 5. state directories, units, the index and the engine
+mkdir -p "$STATE/usage" "$STATE/media"
+chown 10001:10000 "$STATE/usage" "$STATE/media"
+chmod 0750 "$STATE/usage" && chmod 2750 "$STATE/media"
+mkdir -p "$UNIT_DIR"
+for f in $UNIT_FILES; do put "$here/$f" "$UNIT_DIR/$f"; done
 systemctl daemon-reload
-# `enable`, not `enable --now`: the gateway must not start before its env file exists,
-# which is the fail-open case this script is being fixed for.
-systemctl enable marlin2b-vllm marlin2b-gateway
-# The engine reads no env file and takes ~minutes to load weights, so it is *started*
-# (idempotent: a no-op if it is already up) rather than restarted. Restarting it on
-# every install would kill in-flight generation for a change it cannot even see.
-# This blocks until the unit is active - up to the unit's TimeoutStartSec=900 on a cold
-# start - and `set -e` stops the install if the engine cannot come up, which is the
-# order infra/README.md §7 asks for: each step waits for the previous readiness signal.
-systemctl start marlin2b-vllm
-
-# Only the gateway reads the env file, so only the gateway is restarted - and only
-# after a validated file is in place.
-"$RUNTIME_PYTHON" "$here/preflight.py" apply \
-  --mode "$INFRX_MODE" --env-file "$ENV_FILE" --owner ubuntu --region "$REGION" \
-  --runtime-python "$RUNTIME_PYTHON" --serve-script "$SERVE_SCRIPT" \
-  --restart marlin2b-gateway
-
-if [ "$INFRX_MODE" = pilot ]; then
-  # Two statements, not `mkdir … && install …`: a command that fails on the left of
-  # `&&` is a tested condition, so `set -e` does not stop the script there.
-  mkdir -p /etc/caddy
-  install -m 644 "$here/Caddyfile" /etc/caddy/Caddyfile
-  docker rm -f caddy >/dev/null 2>&1 || true
-  docker run -d --name caddy --restart unless-stopped --network host \
-    -v /etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro -v caddy_data:/data -v caddy_config:/config \
-    caddy@sha256:14a9c00d4e833ebc2b65d36515b37bde3b73f0b323a2663aaafc88953d8c4e3f >/dev/null  # 2.11.4
-  echo "installed; check: systemctl status marlin2b-vllm marlin2b-gateway; docker logs caddy"
+if [ "$mode" = pilot ]; then
+  systemctl enable marlin2b-vllm infrx-valkey $runtime_units infrx-reaper.timer
+  systemctl start infrx-valkey
 else
-  # infra/README.md §5: a dev host answering on the pilot's DNS name is the same
-  # failure as an unmetered pilot, so no public listener and no ACME account.
-  echo "INFRX_MODE=$INFRX_MODE: the public Caddy site is not installed" >&2
-  echo "installed; check: systemctl status marlin2b-vllm marlin2b-gateway"
+  systemctl enable marlin2b-vllm $runtime_units
 fi
+# The engine reads no env file and takes minutes to load, so it is started (a no-op when
+# it is up), never restarted by an install; a new engine is W3's separate step.
+systemctl start marlin2b-vllm
+wait_http http://127.0.0.1:8000/health "${ENGINE_READY_S:-900}" \
+  || die "the engine is not healthy; nothing else was restarted (backup $backup)" 4
+
+# 6. the runtime, then readiness
+systemctl restart $runtime_units
+wait_ready "$mode" || die "the runtime did not become ready; the edge was not changed. Roll back with: $here/rollback.sh $backup" 4
+if [ "$mode" = pilot ]; then systemctl start infrx-reaper.timer; fi
+
+# 7. the edge - pilot only (a dev host answering on the pilot's name is an unmetered pilot)
+if [ "$mode" = pilot ]; then
+  site=(${INFRX_SITE:+-e "INFRX_SITE=$INFRX_SITE"})   # the rehearsal's address; unset on the box
+  docker run --rm --network none "${site[@]}" -v "$here/Caddyfile:/etc/caddy/Caddyfile:ro" "$CADDY_IMAGE" \
+    caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+  mkdir -p "$CADDY_DIR/infrx"
+  put "$here/Caddyfile" "$CADDY_DIR/infrx/Caddyfile"
+  put "$here/Caddyfile.maintenance" "$CADDY_DIR/infrx/Caddyfile.maintenance"
+  if [ "$(docker inspect --format '{{.Config.Image}}' caddy 2>/dev/null || true)" = "$CADDY_IMAGE" ]; then
+    caddy_site Caddyfile
+  else
+    put "$CADDY_DIR/infrx/Caddyfile" "$CADDY_DIR/Caddyfile"
+    docker rm -f caddy >/dev/null 2>&1 || true
+    # Host network (the box's layout); the directory, not the file, is mounted, so a
+    # rename of the active site is visible to a reload.
+    docker run -d --name caddy --restart unless-stopped --network host "${site[@]}" \
+      --cap-drop ALL --cap-add NET_BIND_SERVICE --read-only --tmpfs /tmp \
+      -v "$CADDY_DIR:/etc/caddy:ro" -v caddy_data:/data -v caddy_config:/config \
+      "$CADDY_IMAGE" >/dev/null
+  fi
+fi
+echo "deployed $sha ($mode); image $image; rollback: $here/rollback.sh $backup"

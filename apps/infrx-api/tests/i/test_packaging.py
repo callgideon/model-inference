@@ -68,7 +68,7 @@ def test_backend_deploy__every_image_is_pinned_by_digest():
         assert re.search(r"@sha256:[0-9a-f]{64}$", image), image
     index = [t for t in docker_run("infrx-valkey.service") if t.startswith("valkey/valkey")]
     assert len(index) == 1 and re.search(r"@sha256:[0-9a-f]{64}$", index[0]), index
-    assert re.search(r"caddy@sha256:[0-9a-f]{64}", (DEPLOY / "install.sh").read_text())
+    assert re.search(r"CADDY_IMAGE=caddy@sha256:[0-9a-f]{64}", (DEPLOY / "lib.sh").read_text())
     for name in RUNTIME_UNITS:
         assert "${INFRX_IMAGE}" in docker_run(name), name
     image_key = next(key for key in preflight.MANIFEST if key.env == "INFRX_IMAGE")
@@ -193,7 +193,7 @@ def test_backend_deploy__one_env_file_configures_every_runtime_unit():
     """One configuration authority: every unit that runs the runtime image reads the file
     `preflight.py apply` validated - systemd for `${INFRX_IMAGE}`, docker for the rest -
     so no process can start on configuration the probe never saw."""
-    assert (DEPLOY / "install.sh").read_text().count(f"ENV_FILE=${{ENV_FILE:-{ENV_FILE}}}") == 1
+    assert (DEPLOY / "lib.sh").read_text().count(f"ENV_FILE=${{ENV_FILE:-{ENV_FILE}}}") == 1
     for name in RUNTIME_UNITS:
         assert unit(name)["EnvironmentFile"] == [ENV_FILE], name
         assert flag(docker_run(name), "--env-file") == [ENV_FILE], name

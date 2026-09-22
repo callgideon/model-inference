@@ -1,0 +1,333 @@
+#!/usr/bin/env python3
+"""I2B.b: `install.sh` (deploy), `drain.sh`, `rollback.sh` - `DEPLOY-FAILCLOSED`,
+`BACKEND-DEPLOY` and `OPS-RECOVER` (research/plan/04-verification.md).
+
+The scripts run for real, in bash, against a sandbox root (`INFRX_ROOT`) with stub
+`systemctl`, `docker`, `curl`, `git`, `chown` and `aws` first on PATH. Every stub appends
+to one `events.log`, so a case asserts the *order* of what a script did across all of
+them - "the edge changed only after readiness" is a statement about two binaries. The
+preflight is the real one (the docker stub runs its probe in this interpreter, as the
+image would), except in the pilot cases, which need a pilot the repository cannot pass
+today (G2/W3 pending) and therefore swap in a preflight that installs a pilot file.
+"""
+from __future__ import annotations
+
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import tarfile
+
+from . import support
+from .support import preflight
+
+DEPLOY = support.API_DIR / "deploy"
+SHA = "c" * 40
+IMAGE = "sha256:" + "b" * 64
+ENV = "etc/marlin2b-gateway.env"
+MONOLITH_ENV = "MODEL_ID=nemostation/marlin-2b\nSUPABASE_URL=https://x.supabase.co\n"
+MONOLITH_UNIT = "[Service]\nExecStart=/opt/pytorch/bin/uvicorn gateway:app\n"
+
+STUB = '''#!{python}
+"""Stub `{name}`: logs its argv to events.log and answers from behaviour.json."""
+import json, os, pathlib, sys
+here = pathlib.Path(__file__).resolve().parent
+args = sys.argv[1:]
+with (here / "events.log").open("a") as log:
+    log.write("{name} " + " ".join(args) + "\\n")
+spec = json.loads((here / "behaviour.json").read_text())
+name = "{name}"
+if name == "git":
+    if args[-2:] == ["rev-parse", "HEAD"]:
+        print(spec["head"])
+    elif args[-2:] == ["status", "--porcelain"]:
+        print(spec["dirty"], end="")
+elif name == "curl":
+    raise SystemExit(0 if args[-1] not in spec["curl_fails"] else 22)
+elif name == "systemctl":
+    raise SystemExit(spec["systemctl"].get(args[0], 0))
+elif name == "docker":
+    if args[0] == "image":
+        print(spec["image"])
+    elif args[0] == "inspect":
+        if spec["caddy_image"] is None:
+            raise SystemExit(1)
+        print(spec["caddy_image"])
+    elif args[0] == "run" and {image_preflight!r} in args:
+        rest = args[args.index({image_preflight!r}) + 1:]
+        os.execv({python!r}, [{python!r}, {preflight!r}, *rest])
+'''
+
+# A preflight that installs a pilot file without reading anything: the repository's own
+# pilot is refused today by design (G2 composition, W3 entry points and engine pin).
+PILOT_PREFLIGHT = '''#!/usr/bin/env python3
+import pathlib, sys
+args = sys.argv[1:]
+env = pathlib.Path(args[args.index("--env-file") + 1])
+image = args[args.index("--image") + 1]
+with open(pathlib.Path(__file__).parent / "events.log", "a") as log:
+    log.write("preflight " + " ".join(args) + "\\n")
+env.parent.mkdir(parents=True, exist_ok=True)
+env.write_text(f"INFRX_MODE=pilot\\nINFRX_IMAGE={image}\\n")
+'''
+
+
+class Host:
+    """A sandbox root, the stubs, and helpers to run a script against them."""
+
+    def __init__(self, tmp_path, monkeypatch, parameters=None):
+        self.root = tmp_path / "root"
+        (self.root / "etc").mkdir(parents=True)
+        self.bin = tmp_path / "stub-bin"
+        self.bin.mkdir()
+        support.stubs(tmp_path, monkeypatch, parameters)          # `aws` (+ PATH entry)
+        (tmp_path / "stub-bin" / "systemctl").unlink()
+        (tmp_path / "stub-bin" / "docker").unlink()
+        for name in ("systemctl", "docker", "curl", "git", "chown"):
+            path = self.bin / name
+            path.write_text(STUB.format(python=sys.executable, name=name,
+                                        image_preflight=preflight.IMAGE_PREFLIGHT,
+                                        preflight=str(DEPLOY / "preflight.py")))
+            path.chmod(0o755)
+        self.behave()
+
+    def behave(self, **changes):
+        spec = {"head": SHA, "dirty": "", "curl_fails": [], "systemctl": {},
+                "image": IMAGE, "caddy_image": None}
+        spec.update(changes)
+        (self.bin / "behaviour.json").write_text(json.dumps(spec))
+
+    def run(self, script, *args, **env) -> subprocess.CompletedProcess:
+        base = {"INFRX_ROOT": str(self.root), "ENV_OWNER": support.owner_name(),
+                "PYTHON": sys.executable, "SERVE_SCRIPT": str(self.serve), "POLL_S": "0.05",
+                "READY_S": "1", "ENGINE_READY_S": "1", "PATH": os.environ["PATH"]}
+        return subprocess.run(["bash", str(DEPLOY / script), *args], capture_output=True,
+                              text=True, env={**base, **env}, cwd=str(self.root))
+
+    @property
+    def serve(self) -> pathlib.Path:
+        return support.serve_script(self.bin.parent, image=support.PINNED)
+
+    @property
+    def events(self) -> list[str]:
+        log = self.bin / "events.log"
+        return log.read_text().splitlines() if log.exists() else []
+
+    def clear(self):
+        (self.bin / "events.log").unlink(missing_ok=True)
+
+    def of(self, name) -> list[str]:
+        return [e for e in self.events if e.startswith(name + " ")]
+
+    def file(self, relative) -> pathlib.Path:
+        return self.root / relative
+
+    def pilot_preflight(self) -> str:
+        path = self.bin / "pilot-preflight.py"
+        path.write_text(PILOT_PREFLIGHT)
+        return str(path)
+
+    def monolith(self):
+        """The box before I2B: the monolith's env file and gateway unit, no mode."""
+        self.file(ENV).write_text(MONOLITH_ENV)
+        unit = self.file("etc/systemd/system/marlin2b-gateway.service")
+        unit.parent.mkdir(parents=True, exist_ok=True)
+        unit.write_text(MONOLITH_UNIT)
+
+
+def backups(host) -> list[pathlib.Path]:
+    return sorted((host.root / "var/backups/infrx").glob("*"))
+
+
+# --- install.sh: refusals ------------------------------------------------------------
+def test_deploy_failclosed__a_refused_install_changes_nothing_on_the_host(tmp_path,
+                                                                          monkeypatch):
+    """DEPLOY-FAILCLOSED end to end through the deploy script: a denied secret read, and
+    the repository's own pilot today (refused by the composition gate and W3's pending
+    pins), both exit 2 with the env file and every unit byte-identical, no unit touched
+    by systemctl, no state directory made and the edge untouched."""
+    for params in ({**{n: {"value": v} for n, v in support.VALID.items()},
+                    "/model-inference/pg_journal_url": {"error": "AccessDeniedException"}},
+                   None):
+        host = Host(tmp_path / str(params is None), monkeypatch, params)
+        host.monolith()
+        before = {p: host.file(p).read_bytes()
+                  for p in (ENV, "etc/systemd/system/marlin2b-gateway.service")}
+        done = host.run("install.sh", INFRX_MODE="pilot")
+        assert done.returncode == 2, done.stderr
+        assert {p: host.file(p).read_bytes() for p in before} == before
+        assert sorted(p.name for p in host.file("etc/systemd/system").iterdir()) == [
+            "marlin2b-gateway.service"]
+        assert host.of("systemctl") == [] and host.of("chown") == []
+        assert not host.file("var/lib/infrx").exists()
+        assert [e for e in host.of("docker") if "caddy" in e] == []
+        assert "refusing to install" in done.stderr
+
+
+def test_deploy_failclosed__only_a_committed_checkout_is_deployed(tmp_path, monkeypatch):
+    """The image is built from exactly a commit: a dirty tree, or HEAD other than the
+    RELEASE the runbook names, stops before the build and before any host change."""
+    host = Host(tmp_path, monkeypatch)
+    host.behave(dirty=" M apps/infrx-api/infrx/config.py\n")
+    done = host.run("install.sh", INFRX_MODE="dev")
+    assert done.returncode == 2 and "uncommitted" in done.stderr
+    host.behave()
+    done = host.run("install.sh", INFRX_MODE="dev", RELEASE="d" * 40)
+    assert done.returncode == 2 and "RELEASE" in done.stderr
+    assert host.of("docker") == [] and host.of("systemctl") == [] and backups(host) == []
+
+
+# --- install.sh: success -------------------------------------------------------------
+def test_backend_deploy__a_dev_install_pins_the_image_it_probed(tmp_path, monkeypatch):
+    """BACKEND-DEPLOY, fresh target: the image built from the commit is the one the probe
+    ran in and the one written for the units; the units are the repository's bytes; the
+    engine is started (never restarted) and healthy before the gateway restarts; dev
+    installs no edge; the backup holds the previous files and lists the new ones."""
+    host = Host(tmp_path, monkeypatch)
+    host.monolith()
+    done = host.run("install.sh", INFRX_MODE="dev")
+    assert done.returncode == 0, done.stderr
+    assert preflight.read_env(host.file(ENV)).get("INFRX_IMAGE") == IMAGE
+    probes = [e for e in host.of("docker") if preflight.IMAGE_PREFLIGHT in e]
+    assert len(probes) == 1 and f" {IMAGE} " in probes[0]
+    for name in ("marlin2b-gateway.service", "infrx-worker.service", "marlin2b-vllm.service"):
+        assert host.file(f"etc/systemd/system/{name}").read_bytes() == (DEPLOY / name).read_bytes()
+    assert host.of("systemctl") == [
+        "systemctl daemon-reload", "systemctl enable marlin2b-vllm marlin2b-gateway",
+        "systemctl start marlin2b-vllm", "systemctl restart marlin2b-gateway"]
+    order = [e for e in host.events if e.startswith(("systemctl restart", "curl"))]
+    assert order[0].endswith("http://127.0.0.1:8000/health"), order
+    assert order[1] == "systemctl restart marlin2b-gateway"
+    assert order[-1].endswith("http://127.0.0.1:8001/health"), order
+    assert [e for e in host.of("docker") if "caddy" in e] == []
+    [backup] = backups(host)
+    with tarfile.open(backup / "files.tar") as tar:
+        assert ENV in tar.getnames()
+        assert tar.extractfile(ENV).read().decode() == MONOLITH_ENV
+    assert "etc/systemd/system/infrx-worker.service" in (backup / "absent").read_text()
+
+
+def test_backend_deploy__a_pilot_install_opens_the_edge_only_after_readiness(
+        tmp_path, monkeypatch):
+    """Pilot order (infra/README.md §7): the index and the engine, then the runtime, then
+    /readyz, then the reaper timer, and only then the edge - validated with the pinned
+    Caddy before it is served, with the maintenance site installed beside it."""
+    host = Host(tmp_path, monkeypatch)
+    done = host.run("install.sh", INFRX_MODE="pilot", PREFLIGHT=host.pilot_preflight())
+    assert done.returncode == 0, done.stderr
+    assert host.of("systemctl") == [
+        "systemctl daemon-reload",
+        "systemctl enable marlin2b-vllm infrx-valkey infrx-worker marlin2b-gateway "
+        "infrx-reaper.timer",
+        "systemctl start infrx-valkey", "systemctl start marlin2b-vllm",
+        "systemctl restart infrx-worker marlin2b-gateway", "systemctl start infrx-reaper.timer"]
+    events = host.events
+    ready = events.index(next(e for e in events if e.endswith("http://127.0.0.1:8001/readyz")))
+    edge = [i for i, e in enumerate(events) if e.startswith("docker") and "caddy" in e]
+    assert edge and min(edge) > ready
+    validates = [e for e in host.of("docker") if "caddy validate" in e]
+    assert len(validates) == 1, validates
+    assert "--network none" in validates[0] and "caddy@sha256:" in validates[0]
+    served = [e for e in host.of("docker") if e.startswith("docker run -d --name caddy")]
+    assert len(served) == 1 and "caddy@sha256:" in served[0] and "--network host" in served[0]
+    assert host.file("etc/caddy/Caddyfile").read_bytes() == (DEPLOY / "Caddyfile").read_bytes()
+    assert host.file("etc/caddy/infrx/Caddyfile.maintenance").read_bytes() == (
+        DEPLOY / "Caddyfile.maintenance").read_bytes()
+
+
+def test_ops_recover__a_runtime_that_is_not_ready_leaves_the_edge_alone(tmp_path,
+                                                                        monkeypatch):
+    """A runtime that never answers /readyz is exit 4 naming the backup to roll back
+    to; the edge is not touched (it keeps serving maintenance or the previous site) and
+    the reaper timer is not started. No automatic rollback: the file is validated."""
+    host = Host(tmp_path, monkeypatch)
+    host.behave(curl_fails=["http://127.0.0.1:8001/readyz"])
+    done = host.run("install.sh", INFRX_MODE="pilot", PREFLIGHT=host.pilot_preflight())
+    assert done.returncode == 4
+    [backup] = backups(host)
+    assert f"rollback.sh {backup}" in done.stderr
+    assert [e for e in host.of("docker") if "caddy" in e] == []
+    assert "systemctl start infrx-reaper.timer" not in host.events
+
+
+# --- drain.sh -------------------------------------------------------------------------
+def _pilot_host(tmp_path, monkeypatch) -> Host:
+    host = Host(tmp_path, monkeypatch)
+    assert host.run("install.sh", INFRX_MODE="pilot",
+                    PREFLIGHT=host.pilot_preflight()).returncode == 0
+    host.behave(caddy_image="running")
+    host.clear()
+    return host
+
+
+def test_ops_recover__drain_closes_the_edge_before_stopping_the_worker(tmp_path,
+                                                                       monkeypatch):
+    """pause: the active site becomes maintenance (so a Caddy restart keeps it) and is
+    reloaded **before** the reaper and the runtime stop; resume opens the edge only
+    after /readyz, and a runtime that is not ready keeps maintenance (exit 4)."""
+    host = _pilot_host(tmp_path, monkeypatch)
+    active = host.file("etc/caddy/Caddyfile")
+    assert host.run("drain.sh", "pause").returncode == 0
+    assert active.read_bytes() == (DEPLOY / "Caddyfile.maintenance").read_bytes()
+    assert host.events == [
+        "docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile",
+        "systemctl stop infrx-reaper.timer", "systemctl stop infrx-worker marlin2b-gateway"]
+
+    host.clear()
+    host.behave(caddy_image="running", curl_fails=["http://127.0.0.1:8001/readyz"])
+    assert host.run("drain.sh", "resume").returncode == 4
+    assert active.read_bytes() == (DEPLOY / "Caddyfile.maintenance").read_bytes()
+    assert host.of("docker") == []
+
+    host.clear()
+    host.behave(caddy_image="running")
+    assert host.run("drain.sh", "resume").returncode == 0
+    assert active.read_bytes() == (DEPLOY / "Caddyfile").read_bytes()
+    events = host.events
+    assert events[0] == "systemctl start infrx-worker marlin2b-gateway"
+    assert events[-1].startswith("docker exec caddy caddy reload")
+    assert events.index("systemctl start infrx-reaper.timer") < len(events) - 1
+
+
+# --- rollback.sh -------------------------------------------------------------------------
+def test_ops_recover__rollback_restores_every_replaced_file(tmp_path, monkeypatch):
+    """After a dev install over the monolith, rollback.sh puts the previous env file and
+    gateway unit back byte for byte, removes (and disables) the units that did not exist,
+    and restarts the gateway onto them. A dev -> legacy revert is allowed: dev was never
+    metered."""
+    host = Host(tmp_path, monkeypatch)
+    host.monolith()
+    assert host.run("install.sh", INFRX_MODE="dev").returncode == 0
+    [backup] = backups(host)
+    host.clear()
+    done = host.run("rollback.sh", str(backup))
+    assert done.returncode == 0, done.stderr
+    assert host.file(ENV).read_text() == MONOLITH_ENV
+    assert host.file("etc/systemd/system/marlin2b-gateway.service").read_text() == MONOLITH_UNIT
+    assert not host.file("etc/systemd/system/infrx-worker.service").exists()
+    assert "systemctl disable --now infrx-worker.service" in host.events
+    assert "systemctl restart marlin2b-gateway" in host.events
+    assert host.events[-1].endswith("http://127.0.0.1:8001/health")
+
+
+def test_deploy_failclosed__rollback_never_returns_a_pilot_to_an_unmetered_runtime(
+        tmp_path, monkeypatch):
+    """infra/README.md §8: a host that served pilot is not rolled back to a runtime that
+    cannot settle metered work - refused (exit 2) before anything is stopped or written -
+    unless the operator states no pilot request was ever accepted (a failed first
+    cutover), in which case the monolith's files come back."""
+    host = Host(tmp_path, monkeypatch)
+    host.monolith()
+    assert host.run("install.sh", INFRX_MODE="pilot",
+                    PREFLIGHT=host.pilot_preflight()).returncode == 0
+    [backup] = backups(host)
+    host.clear()
+    current = host.file(ENV).read_bytes()
+    done = host.run("rollback.sh", str(backup))
+    assert done.returncode == 2 and "drain.sh pause" in done.stderr
+    assert host.file(ENV).read_bytes() == current and host.events == []
+    done = host.run("rollback.sh", str(backup),
+                    ROLLBACK_TO_UNMETERED="no-pilot-request-was-accepted")
+    assert done.returncode == 0, done.stderr
+    assert host.file(ENV).read_text() == MONOLITH_ENV
