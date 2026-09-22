@@ -109,6 +109,30 @@ def test_f_base__the_composition_root_still_mounts_only_the_legacy_routers():
     assert ingress.HEALTH_PATH not in paths and ingress.READY_PATH not in paths
 
 
+def test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route():
+    """E3B dr17: in `pilot`, `create_app` refuses while `app.ROUTERS` composes the legacy
+    chat route (no durable admission, no hold) - naming the router list, never a value.
+    The cutover composition validates; one that mounts both still refuses (the legacy
+    route would keep the path), and so does one with no metered ingress at all, which is
+    I0's installer predicate. `dev` and the unset legacy mode are unaffected."""
+    from unittest import mock
+
+    config = support.settings()                     # a complete pilot configuration
+    with pytest.raises(RuntimeMisconfigured) as raised:
+        composition.create_app(config, client=support.upstream(), sb=support.supabase())
+    message = str(raised.value)
+    assert "legacy route" in message
+    assert "service-role" not in message and "infrx_g1" not in message
+    with support.as_cutover():
+        assert validate_runtime(config) == "pilot"
+    for routers in ((health, models, chat, ingress), (health, models)):
+        with mock.patch.object(composition, "ROUTERS", routers):
+            with pytest.raises(RuntimeMisconfigured):
+                validate_runtime(config)
+    assert validate_runtime(support.settings("dev")) == "dev"
+    assert validate_runtime(Settings()) == "legacy"
+
+
 def test_f_base__an_unset_mode_is_still_legacy_behaviour():
     """R44's unset branch: `create_app()` with no `INFRX_MODE` logs `legacy` and
     changes nothing, and the legacy chat route still answers without a key. G1 flips

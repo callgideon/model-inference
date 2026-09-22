@@ -223,7 +223,9 @@ def validate_runtime(settings):
     * `dev` / `test` - explicit, and no further requirement.
     * `pilot` - requires authentication **and** metering configuration, and refuses the
       shared `GATEWAY_API_KEY` (R51), or a typed `RuntimeMisconfigured` naming the setting
-      names and nothing else. A whitespace-only value is not configuration.
+      names and nothing else. A whitespace-only value is not configuration. It also
+      refuses while the composition root would serve chat through the legacy F1 route
+      (G1R, E3B dr17): only the metered ingress may answer `/v1/chat/completions`.
     * anything else - refuses to start. A typo in a unit file is not a mode.
 
     In every mode it first refuses a 08 §5 deployment value that cannot serve
@@ -252,6 +254,19 @@ def validate_runtime(settings):
                      if name in PILOT_FORBIDDEN_SETTINGS and _configured(value)]
         if missing or forbidden:
             raise RuntimeMisconfigured(mode, missing, forbidden=forbidden)
+        # G1R / E3B dr17: the legacy chat route has no durable admission and no hold, so a
+        # pilot must not start while it is mounted - or while the metered ingress is not.
+        # What serves the path is the composition root's router list; G2's cutover swaps
+        # `chat` for `ingress` there. deploy/preflight.py's installer gate (I0) refuses
+        # the same composition. Imported here, not at module load: `gateway.app` imports
+        # this module.
+        from .gateway import app as composition
+        from .gateway.routes import chat, ingress
+        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:
+            # Worded apart from preflight's own gate message, so each refusal stays
+            # observable (and killable) on its own.
+            raise RuntimeMisconfigured(mode, detail="chat would be served by the legacy "
+                                                    "route, not the metered ingress (dr17)")
     return mode
 
 

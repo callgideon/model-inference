@@ -806,6 +806,21 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_credit_rate__an_alias_moved_after_acceptance_moves_no_admitted_job_or_replay",
        "test_dur_cap__denied_capacity_is_retryable_and_the_retry_is_admitted_once",
        dies_by=("KeyError",)),
+    # --- G1R item 4: pilot never serves chat through the legacy route (E3B dr17) -----
+    # `config.validate_runtime` is the coordinator's hook; G1R's brief places this refusal
+    # there, so these three edit it in the temporary copy.
+    _m("pilot_serves_the_legacy_route", "pilot refuses while the legacy chat route is composed",
+       "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
+       "        if False:",
+       "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
+    _m("legacy_route_beside_the_ingress", "the legacy route beside the ingress still refuses",
+       "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
+       "        if ingress not in composition.ROUTERS:",
+       "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
+    _m("no_metered_ingress_accepted", "a pilot with no metered ingress refuses (I0's predicate)",
+       "config.py", "        if ingress not in composition.ROUTERS or chat in composition.ROUTERS:",
+       "        if chat in composition.ROUTERS:",
+       "test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"),
     # These two edit files G does not own, in the temporary copy only: they are the
     # cutover itself, and they say exactly which cases pin today's behaviour.
     _m("composition_root_mounts_the_ingress", "G1 mounts nothing until the cutover",

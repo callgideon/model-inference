@@ -17,6 +17,7 @@ import dataclasses
 import pathlib
 import shutil
 import tempfile
+from unittest import mock
 
 import httpx
 from fastapi import FastAPI
@@ -25,8 +26,9 @@ from infrx.config import Settings, validate_runtime
 from infrx.contracts.conformance.v2_fakes import fake_v2_harness
 from infrx.contracts.v2 import fixtures as v2fix
 from infrx.contracts.limits import DEFAULTS
+from infrx.gateway import app as composition
 from infrx.gateway.app import Runtime, create_app
-from infrx.gateway.routes import ingress
+from infrx.gateway.routes import health, ingress, models
 
 CHAT_PATH = ingress.CHAT_PATH
 HEALTH_PATH = ingress.HEALTH_PATH
@@ -89,11 +91,23 @@ def settings(mode="pilot", *, legacy_key="", supabase_url="https://fake.supabase
                     **{k: v for k, v in overrides.items() if k not in PILOT_FIELDS})
 
 
+# The router list G2's cutover produces: the metered ingress in place of legacy `chat`.
+CUTOVER = (health, models, ingress)
+
+
+def as_cutover():
+    """`app.ROUTERS` as the cutover leaves it, for the length of a `with`. `pilot` refuses
+    to validate while the legacy chat route is composed (G1R / E3B dr17), and these apps
+    are the cutover's, so they are validated as the cutover will be."""
+    return mock.patch.object(composition, "ROUTERS", CUTOVER)
+
+
 def runtime(config=None, *, sb=None, clock=None, seen=None):
     rt = Runtime(config if config is not None else settings(), client=upstream(),
                  sb=sb if sb is not None else supabase(seen=seen),
                  clock=clock if clock is not None else (lambda: 1_790_000_000.0))
-    rt.mode = validate_runtime(rt.settings)
+    with as_cutover():
+        rt.mode = validate_runtime(rt.settings)
     return rt
 
 
