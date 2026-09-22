@@ -487,6 +487,19 @@ MUTANTS: tuple[Mutant, ...] = (
        "    async def acknowledge(self, event: IndexEvent) -> None:",
        "    async def acknowledge_candidate(self, event: IndexEvent) -> None:",
        "test_q2_contract__the_adapter_satisfies_the_scheduler_protocol"),
+    # --- the select-then-commit fence under concurrent dispatchers -----------
+    _m("the_commit_skips_the_fence",
+       "a commit hands out only the candidate that was priced; a changed fair choice is "
+       "handed back to be priced, never substituted",
+       "if expected == '' or expected ~= pick.id then return {1, pick.id, payload} end",
+       "if expected == '' then return {1, pick.id, payload} end",
+       "test_q2_race__two_dispatchers_never_receive_one_candidate"),
+    _m("the_commit_trusts_expected_even_if_no_longer_pending",
+       "a candidate another dispatcher already took is never handed out a second time",
+       "if expected == '' or expected ~= pick.id then return {1, pick.id, payload} end",
+       "if expected == '' then return {1, pick.id, payload} end "
+       "if expected ~= pick.id then pick.id = expected end",
+       "test_q2_race__two_dispatchers_never_receive_one_candidate"),
 )
 
 

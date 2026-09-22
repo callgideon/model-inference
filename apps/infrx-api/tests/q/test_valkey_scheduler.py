@@ -1009,3 +1009,66 @@ def test_q2_crash__an_interrupted_script_leaves_no_half_indexed_candidate():
         drained = [c.event_id for c in await drain(port, "worker-a")]
         assert len(drained) == len(set(drained)) == 12, drained
     run(body)
+
+
+# ==========================================================================
+# concurrent dispatchers: the select-then-commit fence
+# ==========================================================================
+def test_q2_race__two_dispatchers_never_receive_one_candidate():
+    """A claim is two atomic calls (select, then commit the priced candidate), so the
+    commit's fence is the only thing between concurrent dispatchers and a double
+    hand-out. Two adapters - two gateway processes, separate clients, one namespace, one
+    clock - run eight claim loops at once, mixing `kind=None` and a kind filter: every
+    id is handed out once, the in-flight count is exactly what was handed out, and every
+    committed reply is the candidate that was priced (`expected`), never a substitute."""
+    async def body(harness_):
+        namespace = vkharness.namespace()
+        one = harness_(namespace_=namespace)
+        other = ValkeyScheduler(vkharness.client(), one.clock.now, limits=DEFAULTS,
+                                namespace=namespace)
+        substituted = []
+
+        def fenced(port):
+            original = port._call
+
+            async def call(script, *args):
+                reply = await original(script, *args)
+                if script is port._claim and int(reply[0]) == 2:
+                    if valkey_module._text(reply[1]) != args[2]:
+                        substituted.append((args[2], valkey_module._text(reply[1])))
+                return reply
+            port._call = call
+
+        fenced(one.port)
+        fenced(other)
+        try:
+            for i in range(60):
+                org = (ORG_A, ORG_B, ORG_C)[i % 3]
+                kind = (PREPARE, INFER)[(i // 3) % 2]
+                assert await one.port.enqueue(event(one, org_id=org, kind=kind))
+            handed = []
+
+            async def loop(port, kind):
+                while True:
+                    try:
+                        candidate = await port.claim_candidate("worker", kind=kind)
+                    except errors.InternalError as exc:
+                        # `_CLAIM_ATTEMPTS` exhausted under contention: retryable, the
+                        # candidate stays pending (a limit Q3 inherits)
+                        if "fair choice changed" in str(exc):
+                            continue
+                        raise
+                    if candidate is None:
+                        return
+                    handed.append(candidate.event_id)
+
+            await asyncio.gather(*(loop(port, kind)
+                                   for port in (one.port, other)
+                                   for kind in (None, INFER, None, INFER)))
+            assert len(handed) == len(set(handed)) == 60, collections.Counter(
+                handed).most_common(3)
+            assert (await one.port.stats())["inflight"] == len(handed)
+            assert substituted == []
+        finally:
+            await other.client.aclose()
+    run(body)
