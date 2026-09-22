@@ -25,14 +25,16 @@ import time
 import uuid
 
 from infrx.contracts.fakes.factories import scheduler_factory
+from infrx.contracts import tasklocal
 from infrx.contracts.limits import DEFAULTS
 from infrx.scheduling.valkey import ValkeyScheduler
 
-# `08` §8 reserves 56379 for track Q; the wave-3 Q2 brief assigns this task the
-# task-local port 55461 (Q's task range), which `infrx/contracts/tasklocal.py` does not
-# know yet - the coordinator request is in this task's evidence.
-CONTAINER = "infrx-q2-valkey"
-PORT = int(os.environ.get("INFRX_Q2_VALKEY_PORT", "55461"))
+# The name and port come from `08` §8's table. Until R63 adds `"q2"` to `TASK_PORTS`,
+# `local_services` would fall back to track Q's 56379, so the brief's 55461 stands in.
+_SERVICE = tasklocal.local_services("q2")["valkey"]
+CONTAINER = _SERVICE.container
+PORT = int(os.environ.get("INFRX_Q2_VALKEY_PORT",
+                          _SERVICE.host_port if "q2" in tasklocal.TASK_PORTS else 55461))
 # valkey/valkey:8.1-alpine, the digest in tests/integration/compose.yaml (E2). Pinned so
 # a rerun cannot silently move to another server version.
 IMAGE = ("valkey/valkey@sha256:"
@@ -95,8 +97,14 @@ def ensure() -> None:
 def _wait_ready(timeout_s: float = 30.0) -> None:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
-        if _listening():
-            return
+        # docker's proxy accepts TCP before the server does, so wait for a PONG
+        try:
+            with socket.create_connection(("127.0.0.1", PORT), timeout=0.5) as probe:
+                probe.sendall(b"PING\r\n")
+                if probe.recv(16).startswith(b"+PONG"):
+                    return
+        except OSError:
+            pass
         time.sleep(0.1)
     raise RuntimeError(f"{CONTAINER} did not accept connections within {timeout_s}s")
 
