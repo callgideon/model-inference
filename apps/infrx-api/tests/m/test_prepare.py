@@ -419,6 +419,27 @@ def test_the_profile_version_namespaces_the_prepared_artifact(tmp_path):
     assert len(adapter.cache.entries) == 2
 
 
+def test_two_profiles_of_one_object_are_two_local_files(tmp_path):
+    """R61 as amended (review B2): the profile version is a path segment, not only an index
+    key. Sharing one file made the second `put` overwrite the first, and made expiring v1
+    delete the bytes v2's live entry pointed at."""
+    clock = Clock()
+    adapter = preparation(tmp_path, clock=clock)
+    job_id, _ = staged_job(adapter)
+    first = run(adapter.prepare(job_id, "v1"))[0]
+    clock.advance(DEFAULTS.processing_cache_ttl_s - 1)
+    second = run(adapter.prepare(job_id, "profile-2"))[0]
+    one, two = adapter.local_uri(first)[len("file://"):], adapter.local_uri(second)[len("file://"):]
+    assert one != two
+    assert f"{os.sep}v1{os.sep}" in one and f"{os.sep}profile-2{os.sep}" in two
+    assert os.path.exists(one) and os.path.exists(two)
+    # v1 is now past its life and v2 is not: expiring one must not take the other's bytes
+    clock.advance(2)
+    assert adapter.cache.sweep() == 1
+    assert not os.path.exists(one)
+    assert os.path.exists(two) and adapter.local_uri(second).endswith(two)
+
+
 def test_preparing_twice_is_the_same_answer(tmp_path):
     """R46 allows bounded preparation retries, so a second attempt must re-derive the same
     refs - not prepare the first attempt's output under a second profile hop."""
@@ -575,16 +596,26 @@ def test_the_cache_path_is_built_from_validated_parts_only(tmp_path):
     """Nothing caller-shaped reaches a path: a malformed tenant or digest is a typed
     refusal where the path is built, not a directory somewhere else."""
     cache = prepare.ProcessingCache(str(tmp_path))
-    good = cache.path_for(b.ORG_A, "sha256:" + "ab" * 32, "video/mp4")
-    assert good.startswith(str(tmp_path)) and good.endswith("source.mp4")
+    digest = "sha256:" + "ab" * 32
+    good = cache.path_for(b.ORG_A, "v1", digest, "video/mp4")
+    # The exact shape, not "starts with the root and ends with .mp4": R61 as amended is
+    # root/org/profile/16-hex/source.ext, and a path that merely looks plausible is how two
+    # profiles came to share one file (review B2). Asserting the segments also pins the
+    # digest width and keeps the root check honest.
+    assert os.path.relpath(good, str(tmp_path)).split(os.sep) == [
+        b.ORG_A, "v1", "ab" * 8, "source.mp4"]
+    assert os.path.isabs(good)
     for org in ("../../etc", "", "ORG", b.ORG_A + "/..", "not-a-uuid"):
         with pytest.raises(errors.InvalidRequest):
-            cache.path_for(org, "sha256:" + "ab" * 32, "video/mp4")
-    for digest in ("../../etc/passwd", "sha256:zz", "", "sha256:" + "ab" * 31):
+            cache.path_for(org, "v1", digest, "video/mp4")
+    for version in ("../../etc", "v1/../..", "/absolute", "V1", "", "v1\nx"):
         with pytest.raises(errors.InvalidRequest):
-            cache.path_for(b.ORG_A, digest, "video/mp4")
+            cache.path_for(b.ORG_A, version, digest, "video/mp4")
+    for bad in ("../../etc/passwd", "sha256:zz", "", "sha256:" + "ab" * 31):
+        with pytest.raises(errors.InvalidRequest):
+            cache.path_for(b.ORG_A, "v1", bad, "video/mp4")
     with pytest.raises(errors.UnsupportedMedia):
-        cache.path_for(b.ORG_A, "sha256:" + "ab" * 32, "application/zip")
+        cache.path_for(b.ORG_A, "v1", digest, "application/zip")
 
 
 # --- the seam into W1 -----------------------------------------------------------

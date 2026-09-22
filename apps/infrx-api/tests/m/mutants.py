@@ -430,6 +430,8 @@ MUTANTS: tuple[Mutant, ...] = (
     # check (`size < body - at`, a termination guard, proved by the bounded-time assertion in
     # `test_a_hostile_length_is_refused_not_followed`) and the EBML `first == 0` width check
     # (a width of nine is refused by the truncation guard on any file short enough to matter).
+    # `ProcessingCache.path_for`'s cache-root check is the third of the same kind: see
+    # `cache_root_check_rejects_valid_paths` for what is and is not claimed about it.
     # ----------------------------------------------------------------------
     _m("box_length_not_compared_with_the_file",
        "a box may not claim more bytes than the file has (the content being there is not the "
@@ -707,9 +709,33 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("cache_path_without_the_tenant",
        "MEDIA-SEC: the organization is in the path, so identical bytes in two tenants are two "
        "files and neither tenant can reach the other's",
-       R, "        path = os.path.join(self.root, valid_org(org_id), valid_digest(digest),",
-       "        path = os.path.join(self.root, valid_digest(digest),",
+       R, "        path = os.path.join(self.root, valid_org(org_id), valid_profile(profile),",
+       "        path = os.path.join(self.root, valid_profile(profile),",
        "test_one_tenants_cache_entry_is_not_another_tenants",
+       "test_the_cache_path_is_built_from_validated_parts_only"),
+    _m("cache_digest_segment_width",
+       "a key and a cache path carry the first 16 hex characters of the digest; a shorter "
+       "segment is a different address space for the same content (review survivor R9)",
+       S, '    return digest[len("sha256:"):][:16]', '    return digest[len("sha256:"):][:12]',
+       "test_the_cache_path_is_built_from_validated_parts_only",
+       "test_a_fetched_source_becomes_a_tenant_scoped_content_addressed_object"),
+    _m("cache_root_check_rejects_valid_paths",
+       "the cache-root check must accept the paths the cache builds. **Removing** it is not "
+       "killable and is not claimed: `valid_org`, `valid_profile` and `valid_digest` already "
+       "exclude every segment that could escape, so it is belt to their braces (review "
+       "survivor R10) - what is proved here is that the belt does not refuse a valid path",
+       R, "        if os.path.commonpath([self.root, os.path.abspath(path)]) != self.root:",
+       "        if os.path.commonpath([self.root, os.path.abspath(path)]) == self.root:",
+       "test_the_cache_path_is_built_from_validated_parts_only"),
+    _m("cache_path_without_the_profile",
+       "R61 as amended: the profile version is a path segment as well as an index key, or "
+       "two profiles of one source share one file and expiring one deletes the other's "
+       "bytes (review B2)",
+       R, "        path = os.path.join(self.root, valid_org(org_id), valid_profile(profile),\n"
+          '                            valid_digest(digest), f"{SOURCE_FILENAME}.{extension}")',
+       "        path = os.path.join(self.root, valid_org(org_id),\n"
+          '                            valid_digest(digest), f"{SOURCE_FILENAME}.{extension}")',
+       "test_two_profiles_of_one_object_are_two_local_files",
        "test_the_cache_path_is_built_from_validated_parts_only"),
     _m("cache_extension_unchecked",
        "a cache file is named for a container the profile serves; `source.None` is not a "

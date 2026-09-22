@@ -127,8 +127,12 @@ class ProcessingCache:
       both come from `valid_org`, so one tenant's entry is not reachable from another's -
       not by reusing a handle, not by guessing a digest, not by a `..` in anything, because
       nothing caller-shaped reaches the path at all.
-    * **versioned.** The profile version is part of the key, so re-preparing under a new
-      profile is a different entry rather than a silent reuse of the old artifact.
+    * **versioned.** The profile version is a segment of the **path** as well as part of
+      the index key (R61, amended). With it in the key alone, two profiles of one source
+      shared one file: the second `put` overwrote the first, and expiring v1 deleted the
+      bytes v2's live entry pointed at (review B2). The path now mirrors `_key`'s layout
+      exactly - tenant, profile, digest - so the same three things namespace the durable
+      object and the local copy.
     * **expiring.** 7 days is a retention obligation, not a cache-eviction preference
       (01 "Privacy and retention"): an expired entry is unreadable *and* the file is
       removed, so `sweep()` on a cold cache still deletes.
@@ -145,12 +149,13 @@ class ProcessingCache:
     def enabled(self) -> bool:
         return bool(self.root)
 
-    def path_for(self, org_id: str, digest: str, mime: str) -> str:
-        """`<root>/<org uuid>/<16 hex of digest>/source.<ext>`, built from validated parts.
+    def path_for(self, org_id: str, profile: str, digest: str, mime: str) -> str:
+        """`<root>/<org uuid>/<profile>/<16 hex of digest>/source.<ext>`, from validated parts.
 
-        The coordinator's single-host form. Both variable parts are validated here rather
-        than by whoever calls: a path is the one place where "the caller cannot name it" has
-        to be true of every caller, including a later one nobody has written yet.
+        R61 as amended: the same three segments `_key` builds a durable key from, in the
+        same order. All three are validated here rather than by whoever calls: a path is the
+        one place where "the caller cannot name it" has to be true of every caller,
+        including a later one nobody has written yet.
         """
         if not self.enabled:
             raise errors.DependencyUnavailable("no processing cache is configured")
@@ -158,8 +163,8 @@ class ProcessingCache:
         if extension is None:
             raise errors.UnsupportedMedia("the media type is not a supported video",
                                           param="messages")
-        path = os.path.join(self.root, valid_org(org_id), valid_digest(digest),
-                            f"{SOURCE_FILENAME}.{extension}")
+        path = os.path.join(self.root, valid_org(org_id), valid_profile(profile),
+                            valid_digest(digest), f"{SOURCE_FILENAME}.{extension}")
         # Defence in depth: the parts above cannot contain a separator, and if a later
         # change lets one through, the path does not leave the cache root.
         if os.path.commonpath([self.root, os.path.abspath(path)]) != self.root:
@@ -185,7 +190,7 @@ class ProcessingCache:
     def put(self, org_id: str, digest: str, profile: str, data: bytes,
             probed: probing.Probed) -> CacheEntry:
         """Write the prepared bytes and index them. Same content twice is one file."""
-        path = self.path_for(org_id, digest, probed.mime)
+        path = self.path_for(org_id, profile, digest, probed.mime)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         # Written beside the target and renamed: a worker never opens a half-written clip,
         # and a crash leaves a temporary file rather than a plausible-looking short one.
