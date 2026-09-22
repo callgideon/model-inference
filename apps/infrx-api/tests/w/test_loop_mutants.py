@@ -41,10 +41,10 @@ def test_the_list_is_well_formed():
         assert mutant.invariant, f"{mutant.name} states no invariant"
         assert mutant.file in ("worker/attempt.py", "worker/loop.py", "worker/engine.py"), \
             mutant.file
-        for name in mutant.allowed_errors:
+        for name in mutant.dies_by:
             assert name.isidentifier() and name not in w1_list.KILL_ERRORS, name
     assert set(SUBSET) <= {m.name for m in ALL}
-    declared = [m.name for m in ALL if m.allowed_errors]
+    declared = [m.name for m in ALL if m.dies_by]
     assert len(declared) <= len(ALL) // 5, declared
 
 
