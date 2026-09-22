@@ -67,7 +67,11 @@ def test_every_owned_case_is_covered_by_a_mutant():
               "test_ops_recover__a_lease_held_by_a_dead_worker_is_never_resumed",
               "test_dur_settle__a_finish_reason_outside_the_set_is_not_completed",
               "test_dur_settle__a_usage_event_can_arrive_with_a_stall_or_a_cancellation",
-              "test_dur_settle__a_finished_stream_with_a_dropped_line_is_not_a_billable_success"}
+              "test_dur_settle__a_finished_stream_with_a_dropped_line_is_not_a_billable_success",
+              # asserts about the **exported suites and their factories**, not about this
+              # module: breaking it means editing the contracts package, whose mutation
+              # list is the coordinator's
+              "test_f_contract__the_loops_collaborators_pass_their_exported_suites"}
     uncovered = cases - covered - exempt
     assert uncovered == set(), f"cases no mutant can break: {sorted(uncovered)}"
     assert exempt <= cases, sorted(exempt - cases)

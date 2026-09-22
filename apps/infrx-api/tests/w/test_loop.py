@@ -23,7 +23,8 @@ from decimal import Decimal
 import pytest
 
 from infrx.contracts import errors
-from infrx.contracts.conformance import builders as b
+from infrx.contracts.conformance import OPTIONAL_HOOKS, SUITES, builders as b, run_cases
+from infrx.contracts.fakes.factories import FACTORIES
 from infrx.contracts.fakes.engine import EngineFault, FakeEngine
 from infrx.contracts.fakes.scheduling import FakeScheduler
 from infrx.contracts.fakes.state import FakeJobStore, FakeStreamStore
@@ -36,7 +37,7 @@ from infrx.worker import AttemptRunner, WorkerLoop, prepared_request
 from infrx.worker.attempt import BATCH_MAX_EVENTS
 from infrx.worker.engine import (LOCAL_MEDIA_ROOT, MODEL_EOS_TOKEN_IDS, _inside_tenant_root,
                                  local_media_url)
-from infrx.worker.fakes import FakeUpstream
+from infrx.worker.fakes import FakeUpstream, engine_factory as engine_harness
 from infrx.worker.reasoning import ReasoningFilter, filter_text
 from tests.w.test_engine import Box as _Box
 from tests.w.test_engine import text_prepared as _text_prepared
@@ -219,6 +220,34 @@ def usage_event(usage: Usage | None = None, reason: str | None = None) -> Engine
 
 
 PROGRESS = EngineEvent(type=ChunkEventType.progress, payload={"phase": "running"})
+
+
+# --------------------------------------------------------------------------
+# F-CONTRACT: the suites the loop is written against
+# --------------------------------------------------------------------------
+def test_f_contract__the_loops_collaborators_pass_their_exported_suites():
+    """The loop is coded to three ports, so W2's own evidence runs their exported suites
+    rather than citing another track's report: `engine` against W1's real adapter, and
+    `jobstore`/`streamstore` against the shared fakes that stand in for D2-D5 until the
+    real store exists. A skipped case is reported, never counted (r1 R32)."""
+    skipped: list = []
+    ran = {}
+    for port, factory in (("engine", engine_harness),
+                          ("jobstore", FACTORIES["jobstore"]),
+                          ("streamstore", FACTORIES["streamstore"])):
+        cases, runner = SUITES[port]
+        ran[port] = run_cases(cases(), factory, skipped=skipped)
+    print("worker-level conformance: "
+          + ", ".join(f"{port} {count} ran" for port, count in ran.items())
+          + f", {len(skipped)} skipped")
+    assert skipped == [], [(miss.case, miss.hook) for miss in skipped]
+    assert all(count > 0 for count in ran.values()), ran
+    # the fakes publish every optional hook their suites may need, so no case silently
+    # asserts less than the full run
+    for port in ("jobstore", "streamstore"):
+        harness = FACTORIES[port]()
+        missing = OPTIONAL_HOOKS[port] - set(harness.extra) - {"failures"}
+        assert not missing, (port, sorted(missing))
 
 
 # --------------------------------------------------------------------------
