@@ -173,18 +173,18 @@ class AttemptRunner:
             work = await self.jobs.load_work(lease)
         except errors.DomainError as refused:
             # `stale_lease`: stop and let the winner run. `already_terminal`: the store
-            # settled it in this call. Neither settles anything here (W1 handback).
+            # settled it in this call. Neither settles anything here (W1 handback), and
+            # neither cancels the engine - nothing has been generated yet.
             result.refusal = refused.code
             result.detail = str(refused)
+            result.cancelled = isinstance(refused, errors.AlreadyTerminal)
             return result
         try:
             prepared = prepared_request(work, await self._prompt_tokens(work),
                                         limits=self.limits)
         except errors.DomainError as refused:
             result.detail = str(refused)
-            cause = (TerminalCause.invalid_media if isinstance(refused, errors.UnsupportedMedia)
-                     else TerminalCause.platform_error)
-            return await self._settle(state, result, cause)
+            return await self._settle(state, result, _cause_for(refused))
         except Exception as failure:                 # a tokenizer that blew up is ours
             result.detail = f"{type(failure).__name__}: {failure}"
             return await self._settle(state, result, TerminalCause.platform_error)
@@ -232,8 +232,9 @@ class AttemptRunner:
             cause = failure.terminal_cause          # transport / error / incomplete / protocol
             result.detail = f"{type(failure).__name__}: {failure.detail}"
         except errors.DomainError as refused:
-            # A refusal from the engine boundary itself (a reused lease is `state_conflict`).
-            cause = TerminalCause.platform_error
+            # The adapter refuses at the first `__anext__`, not when `generate` is called,
+            # so a media or parameter refusal arrives here: same classification as above.
+            cause = _cause_for(refused)
             result.detail = str(refused)
         except Exception as failure:                # nothing untyped becomes a settlement
             cause = TerminalCause.platform_error
@@ -318,8 +319,10 @@ class AttemptRunner:
             return
         events = tuple(state.batch)
         try:
-            chunks = await self.stream.append(state.lease, events)
-        except (errors.StaleLease, errors.AlreadyTerminal):
+            # Fenced like every other mutation, and it is also the cancellation poll while
+            # output is flowing: a customer cancellation is discovered within one batch.
+            chunks = await self._fenced(self.stream.append(state.lease, events), state, result)
+        except (errors.StaleLease, _Terminalized):
             raise                                   # a fence loss is not a write failure
         except errors.DomainError as failed:
             raise _JournalFailed(f"{failed.code}: {failed}", committed=False) from None
@@ -495,6 +498,21 @@ class AttemptRunner:
         result.outcome = settled
         result.cause = settled.cause
         return result
+
+
+def _cause_for(refused: errors.DomainError) -> TerminalCause:
+    """The cause a refusal at the engine boundary deserves.
+
+    `unsupported_media` is `02`'s `invalid_media`, which is free: the media was never
+    usable, so nothing ran and nobody is charged. Anything else - an unsupported
+    parameter, a context length, a reused lease - is a request admission should have
+    refused, which makes it ours to absorb rather than the customer's to be charged for.
+    Either way the customer pays nothing; the two differ in which of us it is recorded
+    against (`released_free` versus `released_platform_absorbed`).
+    """
+    if isinstance(refused, errors.UnsupportedMedia):
+        return TerminalCause.invalid_media
+    return TerminalCause.platform_error
 
 
 def _state_for(cause: TerminalCause) -> JobState:
