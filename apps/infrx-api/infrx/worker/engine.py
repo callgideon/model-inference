@@ -337,12 +337,11 @@ def _inside_tenant_root(path: str, root: str, org_id: str) -> bool:
 def local_media_url(ref: MediaRef, root: str) -> str:
     """The `file://` URL the pinned engine opens the prepared object with (S2M §2/D3).
 
-    The path is derived from the store's own key, so the customer never names a file, and
-    it is re-checked against the configured root and the ref's tenant: the grammar alone
-    would be enough today, and it is exactly the kind of "enough" that stops being true
-    when the layout changes.
+    The path is derived from the store's own key (`upstream_body` has already checked that
+    key's grammar and its tenant), then re-checked against the configured root and the
+    ref's organization: the grammar alone would be enough today, and that is exactly the
+    kind of "enough" that stops being true when the layout changes.
     """
-    check_storage_ref(ref)
     path = posixpath.normpath(posixpath.join(root, ref.storage_ref))
     if not _inside_tenant_root(path, root, ref.org_id):
         raise errors.NotFound(f"media {ref.handle} is not inside this tenant's media root")

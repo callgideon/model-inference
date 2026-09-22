@@ -250,6 +250,9 @@ def test_dur_output__the_answer_is_journalled_visible_only_then_relayed_and_sett
         for chunk in world.journal(request.request_id):
             if chunk.event_type is ChunkEventType.delta:
                 assert set(chunk.payload) == {"visible"}, chunk.payload
+                # a delta with nothing for the customer (all of it was reasoning) is not
+                # journalled at all: it would spend journal bytes on nothing
+                assert chunk.payload["visible"], chunk
             assert "the van is" not in str(chunk.payload)
         # every relayed chunk was committed first, and only committed ones were relayed
         assert result.relayed == result.committed > 0
@@ -463,6 +466,9 @@ def test_dur_fence__a_stale_worker_cannot_append_after_its_lease_expired():
         assert not result.settled and result.refusal == "stale_lease"
         assert world.outcome(request.request_id) is None      # still running, for `recover`
         assert world.relayed == []
+        # r1 R58: a lost fence never cancels - the generation this token names is not the
+        # one that is running, and stopping our own task is all we may do
+        assert engine.cancelled == [] and result.engine_cancel is None
     run(case())
 
 
@@ -522,6 +528,9 @@ def test_dur_fence__a_lost_fence_never_cancels_another_generation():
         # the job is queued again, so the old token fences nothing
         late = await world.runner(engine).execute(stale)
         assert late.refusal == "stale_lease" and late.engine_cancel is None
+        # a lost fence is not a cancellation: this job belongs to another generation, and
+        # nobody asked for it to stop
+        assert late.cancelled is False and not late.settled
         assert engine.cancelled == []        # nothing was cancelled on anyone's behalf
         assert engine.started == 0
 
@@ -538,12 +547,14 @@ def test_dur_fence__the_heartbeat_renews_inside_the_lease_and_is_what_a_silent_s
         world = World()
         request, _ = await queued(world)
         # 7 s per delta (under the 20 s stall budget) against a 40 s renewal interval and
-        # a 120 s TTL: nine deltas is 63 s, so the lease is renewed on the way.
+        # a 120 s TTL: twenty deltas is 140 s, so the attempt **outlives its own lease**
+        # and only the renewal keeps its appends fenced.
         upstream, engine = adapter(world, "slow_deltas",
-                                   upstream_kw={"text": b.MODEL[:12] * 9, "chunk_size": 12})
+                                   upstream_kw={"text": b.MODEL[:12] * 20, "chunk_size": 12})
         result = await world.runner(engine).run(request.request_id)
         assert result.cause is TerminalCause.completed, result.detail
-        assert result.heartbeats >= 1
+        assert result.deltas == 20, "the case no longer outlives the lease TTL"
+        assert result.heartbeats >= 2
         assert world.jobs.jobs[request.request_id].outcome is not None
 
         # the same renewal, now discovering a cancellation with no output in flight
@@ -612,6 +623,17 @@ def test_dur_settle__two_usage_events_make_the_count_unknown():
         assert result.usage_unknown_reason == "multiple_usage_events"
         assert result.outcome.usage is None and result.outcome.debit == 0
         assert result.outcome.settlement_state is SettlementState.held_unknown
+
+        # and a delta *after* the usage event: the count cannot have covered the whole
+        # answer, so the stream did not finish as far as we know (R58)
+        after = World()
+        request2, _ = await queued(after)
+        late = ScriptEngine(events=(PROGRESS, delta("a "), usage_event(Usage.of(1200, 1)),
+                                    delta("b ")))
+        result2 = await after.runner(late).run(request2.request_id)
+        assert result2.proposed_cause is TerminalCause.engine_incomplete
+        assert result2.outcome.state is JobState.failed and result2.outcome.debit == 0
+        assert request2.request_id not in after.results
     run(case())
 
 
@@ -874,7 +896,11 @@ def test_dur_fence__a_silent_engine_is_bounded_by_the_attempts_own_deadline():
         world = World(limits=limits)
         request, _ = await queued(world)
         engine = ScriptEngine(hang=True)
-        result = await world.runner(engine).run(request.request_id)
+        # `wait_for` is the case's own backstop, not the loop's: if the attempt is not
+        # bounded by the lease's instant this raises instead of settling, which is the
+        # declared kill mode of the mutant that removes the bound.
+        result = await asyncio.wait_for(world.runner(engine).run(request.request_id),
+                                        timeout=2)
         assert result.proposed_cause is TerminalCause.deadline_exceeded
         assert engine.started == 1 and engine.closed == 1     # the stream was closed
         outcome = result.outcome
@@ -883,6 +909,16 @@ def test_dur_fence__a_silent_engine_is_bounded_by_the_attempts_own_deadline():
         # r1 R21: the platform's own deadline is platform-caused, so it is free
         assert outcome.settlement_state is SettlementState.released_platform_absorbed
         assert world.balance()["reserved"] == 0
+
+        # the other direction: the bound is the lease's instant, so an attempt with 300 s
+        # of generation budget left is *not* cut short - a constant here would fail every
+        # legitimate stream
+        patient = World()
+        request2, _ = await queued(patient)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(
+                patient.runner(ScriptEngine(hang=True)).run(request2.request_id), timeout=0.1)
+        assert patient.outcome(request2.request_id) is None
     run(case())
 
 
@@ -964,13 +1000,22 @@ def test_ops_recover__the_loop_claims_acknowledges_and_settles_every_candidate()
             request, _ = await queued(world)
             requests.append(request)
             await world.scheduler.enqueue(candidate(world, request))
+        # a preparation candidate in the same index: r1 R46/R52 make it M's, and a
+        # kind-filtered claim also keeps this pool out of R60's level-1 fairness state
+        preparation, _ = await queued(world)
+        prepare_candidate = candidate(world, preparation).model_copy(
+            update={"kind": OutboxKind.prepare_dispatch})
+        await world.scheduler.enqueue(prepare_candidate)
+
         _, engine = adapter(world)
         loop = WorkerLoop(scheduler=world.scheduler, runner=world.runner(engine),
                           worker_id="worker-a", limits=world.limits)
         results = await loop.run(concurrency=2)
         assert len(results) == 3 and all(result.settled for result in results)
+        assert prepare_candidate.event_id in world.scheduler.pending
+        assert world.outcome(preparation.request_id) is None
         assert {result.cause for result in results} == {TerminalCause.completed}
-        assert world.scheduler.depth() == 0
+        assert world.scheduler.depth() == 1               # the preparation candidate
         assert len(world.scheduler.acknowledged) == 3
         assert loop.claimed == 3
     run(case())
@@ -1055,7 +1100,7 @@ def test_ops_recover__a_drain_stops_claiming_and_releases_what_it_cannot_finish(
                           worker_id="worker-a", limits=world.limits)
         running = asyncio.create_task(loop.run(concurrency=1, stop_when_idle=False))
         await asyncio.wait_for(started.wait(), timeout=2)
-        report = await loop.drain(within_s=0.05)
+        report = await asyncio.wait_for(loop.drain(within_s=0.05), timeout=2)
         await asyncio.wait_for(running, timeout=2)
 
         assert report.released == 1 and report.claimed == 1
@@ -1072,24 +1117,42 @@ def test_ops_recover__a_drain_stops_claiming_and_releases_what_it_cannot_finish(
 
 
 def test_ops_recover__a_drain_that_can_wait_lets_the_attempt_finish():
-    """The other half of the bound: an attempt that completes inside it settles
-    normally, and the loop stops claiming anything new."""
+    """The other half of the bound: an attempt that needs a moment more finishes inside a
+    generous bound and settles normally, and the loop claims nothing new while draining."""
     async def case():
         world = World()
         request, _ = await queued(world)
         second, _ = await queued(world)
         await world.scheduler.enqueue(candidate(world, request))
         await world.scheduler.enqueue(candidate(world, second))
-        _, engine = adapter(world)
+        in_flight = asyncio.Event()
+
+        class _Slow(ScriptEngine):
+            async def _events(self):
+                self.started += 1
+                try:
+                    yield PROGRESS
+                    in_flight.set()
+                    await asyncio.sleep(0.05)      # still working when the drain arrives
+                    yield delta("an answer ")
+                    yield usage_event(Usage.of(1200, 1))
+                finally:
+                    self.closed += 1
+
+        engine = _Slow()
         loop = WorkerLoop(scheduler=world.scheduler, runner=world.runner(engine),
                           worker_id="worker-a", limits=world.limits)
         running = asyncio.create_task(loop.run(concurrency=1, stop_when_idle=False))
-        while loop.claimed < 1:                      # let the first attempt start
-            await asyncio.sleep(0)
-        report = await loop.drain(within_s=2.0)
+        await asyncio.wait_for(in_flight.wait(), timeout=2)
+        report = await asyncio.wait_for(loop.drain(within_s=2.0), timeout=3)
         await asyncio.wait_for(running, timeout=2)
+
         assert report.released == 0 and report.finished == 1
         assert loop.results and loop.results[0].settled
+        assert loop.results[0].cause is TerminalCause.completed
+        # draining stops claiming: the second candidate is still in the index
+        assert loop.claimed == 1 and world.scheduler.depth() == 1
+        assert world.outcome(second.request_id) is None
     run(case())
 
 
@@ -1175,9 +1238,12 @@ def test_api_stream__a_prepared_video_reaches_the_engine_as_a_local_file_of_its_
                                    ref.org_id)
     # a relative root cannot be compared with anything, so it is not a root
     assert not _inside_tenant_root(f"cache/media/{ref.org_id}/v1/s", "cache", ref.org_id)
+    # and a path that only *starts* with the prefix is normalized before it is compared
+    assert not _inside_tenant_root(f"/srv/cache/media/{ref.org_id}/../../../etc/passwd",
+                                   "/srv/cache", ref.org_id)
     with pytest.raises(errors.NotFound):
         local_media_url(ref, "cache")
-    # and the grammar still guards the key the path is built from
+    # a key outside this tenant's own prefix never becomes a path, whatever its shape
     with pytest.raises(errors.NotFound):
         local_media_url(ref.model_copy(update={"storage_ref": "../../etc/passwd"}),
                         LOCAL_MEDIA_ROOT)
@@ -1193,10 +1259,113 @@ def test_api_stream__both_eos_ids_are_supplied_on_every_request():
     box = _Box()
     engine = FakeUpstream(clock=box.clock).engine()
     body = engine.upstream_body(_text_prepared(box))
-    assert body["stop_token_ids"] == [248044, 248046] == list(MODEL_EOS_TOKEN_IDS)
+    assert body.get("stop_token_ids") == [248044, 248046] == list(MODEL_EOS_TOKEN_IDS)
     # not a caller parameter: a client cannot widen or narrow the stop set
     with pytest.raises(errors.UnsupportedParameter):
         engine.upstream_body(_text_prepared(box, parameters={"stop_token_ids": [1]}))
     # consequence 2 of the same remap is the filter's, and `visible` never carries it
     assert filter_text("<think>the van is stationary</think>Two people unload boxes.") == \
         "Two people unload boxes."
+
+
+class _LyingStream:
+    """An iterator that reports facts that do not add up: `terminal_cause` says the answer
+    is whole, the rest of the report says it is not. W1's adapter never does this; the
+    point is that the **worker** does not take the billing decision on trust."""
+
+    def __init__(self, events, **facts) -> None:
+        self._events = list(events)
+        self.closed = 0
+        self.__dict__.update(facts)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._events:
+            raise StopAsyncIteration
+        return self._events.pop(0)
+
+    async def aclose(self) -> None:
+        self.closed += 1
+
+
+@dataclass
+class LyingEngine:
+    events: tuple = ()
+    facts: dict = field(default_factory=dict)
+    stream: object = None
+    cancelled: list = field(default_factory=list)
+
+    def generate(self, lease, prepared):
+        self.stream = _LyingStream(self.events, **self.facts)
+        return self.stream
+
+    async def cancel(self, lease) -> bool:
+        self.cancelled.append((lease.job_id, lease.generation))
+        return True
+
+    async def health(self) -> dict:
+        return {"ready": True}
+
+    async def drain(self) -> None:
+        return None
+
+
+def test_dur_settle__an_adapters_completed_is_not_taken_on_trust():
+    """W1 handback: `terminal_cause` is advisory and the store recomputes settlement, so
+    the worker re-checks the three facts `completed` needs - the engine finished, it said
+    what it used, and no line was dropped. Each missing fact on its own is enough."""
+    async def case():
+        lies = (
+            # a completed cause with no usage at all
+            ({"terminal_cause": TerminalCause.completed, "finish_reason": "stop",
+              "malformed_lines": 0}, (PROGRESS, delta("an answer "))),
+            # a finish reason outside the set
+            ({"terminal_cause": TerminalCause.completed, "finish_reason": "abort",
+              "malformed_lines": 0}, (PROGRESS, delta("an answer "),
+                                      usage_event(Usage.of(1200, 1)))),
+            # a line the adapter could not place: content we may have dropped
+            ({"terminal_cause": TerminalCause.completed, "finish_reason": "stop",
+              "malformed_lines": 1}, (PROGRESS, delta("an answer "),
+                                      usage_event(Usage.of(1200, 1)))),
+        )
+        for facts, events in lies:
+            world = World()
+            request, _ = await queued(world)
+            engine = LyingEngine(events=events, facts=facts)
+            result = await world.runner(engine).run(request.request_id)
+            assert result.proposed_cause is TerminalCause.engine_incomplete, facts
+            assert result.outcome.state is JobState.failed, facts
+            assert result.outcome.debit == 0, facts
+            assert request.request_id not in world.results, facts
+            assert engine.stream.closed == 1, facts
+
+        # the same adapter telling the truth does settle a success
+        honest = World()
+        request, _ = await queued(honest)
+        truthful = LyingEngine(events=(PROGRESS, delta("an answer "),
+                                       usage_event(Usage.of(1200, 1))),
+                               facts={"terminal_cause": TerminalCause.completed,
+                                      "finish_reason": "stop", "malformed_lines": 0})
+        result = await honest.runner(truthful).run(request.request_id)
+        assert result.cause is TerminalCause.completed and result.outcome.debit > 0
+    run(case())
+
+
+def test_dur_settle__a_usage_record_that_is_not_authoritative_is_unknown():
+    """r1 R58: the event's own certainty decides. A record marked `unknown` must not reach
+    `complete` - the store refuses a non-authoritative usage outright, so passing one
+    would lose the settlement, and believing it would bill a guess."""
+    async def case():
+        world = World()
+        request, _ = await queued(world)
+        guessed = Usage.of(1200, 40).model_copy(update={"certainty": "unknown"})
+        engine = ScriptEngine(events=(PROGRESS, delta("an answer "), usage_event(guessed)))
+        result = await world.runner(engine).run(request.request_id)
+        assert result.settled, result.refusal
+        assert result.usage_unknown_reason == "unknown"
+        assert result.outcome.usage is None and result.outcome.debit == 0
+        assert result.outcome.cause is TerminalCause.engine_incomplete
+        assert result.outcome.settlement_state is SettlementState.held_unknown
+    run(case())

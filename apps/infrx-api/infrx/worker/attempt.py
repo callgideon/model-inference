@@ -123,7 +123,6 @@ class _State:
     usage: Usage | None = None                   # authoritative only, from the usage event
     usage_events: int = 0
     last_event: ChunkEventType | None = None
-    cancelled: bool = False
     stream: Any = None
 
 
@@ -392,7 +391,6 @@ class AttemptRunner:
         except Exception as failure:                 # best effort; closing the stream stops it
             result.engine_cancel = False
             result.detail = f"engine cancel failed: {type(failure).__name__}: {failure}"
-        state.cancelled = True
 
     def _remaining(self, lease: Lease) -> float:
         return max(0.0, (lease.generation_deadline_at - self.clock.now()).total_seconds())
@@ -425,8 +423,10 @@ class AttemptRunner:
         return cause
 
     def _derived_cause(self, state: _State) -> TerminalCause:
-        if state.cancelled:
-            return TerminalCause.client_cancelled
+        """There is no `client_cancelled` here: a cancellation this worker discovered is
+        the store's own terminal state, so that path never reaches a settlement. A stream
+        the *engine* was told to cancel says so through its own report (W1's
+        `terminal_cause`), which is why the hint is read before this is."""
         if self.clock.now() >= state.lease.generation_deadline_at:
             return TerminalCause.deadline_exceeded
         if state.usage is not None and state.last_event is ChunkEventType.usage:

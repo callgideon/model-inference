@@ -36,7 +36,7 @@ from infrx.worker import (EngineError, EngineFailure, EngineIncomplete, EnginePr
                           prepared_request)
 from infrx.worker.engine import (LOCAL_MEDIA_ROOT, LOCAL_MEDIA_SCHEME, MAX_CANCEL_INTENTS,
                                  MIN_JOURNAL_EVENT_BYTES, MODEL_EOS_TOKEN_IDS,
-                                 PAYLOAD_OVERHEAD_BYTES, _delta_payload, _inside_tenant_root,
+                                 PAYLOAD_OVERHEAD_BYTES, _delta_payload, check_storage_ref,
                                  local_media_url, media_uuid)
 from infrx.worker.fakes import (ERROR_BODY_CHUNK, SERVED_MODEL, FakeUpstream,
                                engine_factory)
@@ -1100,6 +1100,15 @@ def test_api_stream__a_prepared_reference_must_be_one_the_store_could_have_made(
     foreign = prepared.model_copy(update={"media": (b.media(b.ORG_B).model_copy(update={
         "storage_ref": f"media/{b.ORG_B}/v1/source"}),)})
     assert refusal(engine, foreign) == "refused: not_found"
+
+    # the guard is also asserted on its own, because the local-path check (S2M D3) refuses
+    # a foreign prefix too: with only the end-to-end assertions above, a `check_storage_ref`
+    # that stopped comparing tenants would be masked by the second check.
+    check_storage_ref(good)
+    for storage_ref in (f"media/{b.ORG_B}/v1/source", "http://169.254.169.254/",
+                        f"media/{b.ORG_A}/v1/source\n"):
+        with pytest.raises(errors.NotFound):
+            check_storage_ref(good.model_copy(update={"storage_ref": storage_ref}))
 
     # the store's own five-segment key is accepted too, not only the fixture's shorter one
     real = good.model_copy(update={
