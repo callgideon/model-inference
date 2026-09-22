@@ -1423,13 +1423,29 @@ def cell_warnings(s):
     return out
 
 
+def is_legacy(cell):
+    """A summary written before this schema existed (the four 2026-09-19 L40S rows have no
+    denominators, no profile block and no per-outcome counts).
+
+    They are real measurements and must not be printed as "no accepted request", but they
+    are also not cells of this protocol, so they are listed apart with what they do carry.
+    """
+    return "denominators" not in cell or "profile" not in cell
+
+
 def report(path, stream=sys.stdout):
     """Read a summary JSONL (--out) and print the sweep table. Reads only; runs nothing."""
     with open(path, encoding="utf-8") as f:
-        cells = [json.loads(line) for line in f if line.strip()]
-    if not cells:
+        rows = [json.loads(line) for line in f if line.strip()]
+    legacy = [c for c in rows if is_legacy(c)]
+    cells = [c for c in rows if not is_legacy(c)]
+    if not rows:
         print(f"no summaries in {path}", file=stream)
         return 1
+    if not cells:
+        print(f"# Marlin-2B sweep report — {os.path.basename(path)}\n", file=stream)
+        print_legacy(legacy, stream)
+        return 0
     fingerprints = {json.dumps({k: (c.get("profile") or {}).get(k) for k in
                                 ("dataset_version", "profile_version", "seed", "forms",
                                  "max_tokens_mix", "tenants")}, sort_keys=True) for c in cells}
@@ -1459,10 +1475,25 @@ def report(path, stream=sys.stdout):
         warnings = cell_warnings(c)
         print(f"- **{c.get('label') or '(none)'}** ({c.get('ts')}): "
               + ("; ".join(warnings) if warnings else "no reported limit"), file=stream)
+    print_legacy(legacy, stream)
     print("\nProvisional criteria (marlin-sop.md §5.2, P-18) are **provisional**: quoting a "
           "row of this report without its label promotes it to a target, which it is not.",
           file=stream)
     return 0
+
+
+def print_legacy(legacy, stream):
+    if not legacy:
+        return
+    print(f"\n## {len(legacy)} pre-E1B row(s), listed apart\n", file=stream)
+    print("Written before this schema: no denominators, no profile block, no rejected/failed "
+          "split, so they are NOT comparable with the cells above and cannot be read as an "
+          "envelope. What they carry:\n", file=stream)
+    for c in legacy:
+        print(f"- **{c.get('label') or '(none)'}** ({c.get('ts')}): conc "
+              f"{c.get('concurrency')}, {c.get('requests')} requests, TTFT p50 "
+              f"{c.get('ttft_p50')} s, latency p50 {c.get('latency_p50')} s, "
+              f"{c.get('req_per_s')} req/s — p50-grade, no tail", file=stream)
 
 
 def main(argv=None):

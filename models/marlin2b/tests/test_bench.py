@@ -740,6 +740,23 @@ def test_the_report_refuses_unsupported_tails_and_names_every_cell_limit():
         buf = io.StringIO()
         assert bench.report(empty, stream=buf) == 1 and "no summaries" in buf.getvalue()
 
+        # A pre-E1B row (the four committed 2026-09-19 L40S rows have this shape) is a real
+        # measurement with none of this schema's fields. It is listed apart, never printed as
+        # "no accepted request" and never mixed into the comparable table.
+        legacy = {"label": "L40S 2026-09-19", "concurrency": 8, "requests": 32,
+                  "ttft_p50": 3.352, "latency_p50": 4.99, "req_per_s": 1.569,
+                  "ts": "2026-09-19T23:13:33Z"}
+        mixed = os.path.join(tmp, "mixed.jsonl")
+        with open(mixed, "w", encoding="utf-8") as f:
+            f.write(json.dumps(legacy) + "\n")
+        buf = io.StringIO()
+        assert bench.report(mixed, stream=buf) == 0
+        text = buf.getvalue()
+        assert "1 pre-E1B row(s), listed apart" in text and "L40S 2026-09-19" in text
+        assert "TTFT p50 3.352 s" in text and "p50-grade, no tail" in text
+        assert "no accepted request" not in text, "a legacy row is not an empty cell"
+        assert "| L40S 2026-09-19 |" not in text, "a legacy row may not join the table"
+
 
 def test_the_declared_profile_carries_every_axis_a_throughput_number_needs():
     with tempfile.TemporaryDirectory() as tmp:

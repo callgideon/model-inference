@@ -150,6 +150,12 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_percentiles_are_suppressed_when_samples_cannot_support_them",
                   "test_the_predeclared_protocol_matches_the_client_that_implements_it")),
 
+    Mutant("e1bm24", "a pre-E1B summary row is listed apart, not read as an empty cell",
+           "bench.py", '    return "denominators" not in cell or "profile" not in cell',
+           "    return False",
+           "report_refuses",
+           cases=("test_the_report_refuses_unsupported_tails_and_names_every_cell_limit",)),
+
     # ---------------- E1B.c: the pre-registration cannot drift
     Mutant("e1bm17", "the protocol's frozen seed is the seed the runs use",
            "results/E1B-protocol.md", "`--seed 20260922`", "`--seed 7`",
