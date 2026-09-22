@@ -62,7 +62,7 @@ AuditAction vocabulary drift (console `grant|suspension_set|entitlements_set|cal
 | `python -m tests.m.mutants` (after item 4) | 1 → fixed | `76/77 killed; survived: ['stage_accepts_a_foreign_reference']` → retargeted, then `3/3 killed` on the changed ones |
 | full shared list, detached: `INFRX_MUTANTS=all pytest -q tests/contracts/test_mutants.py tests/{m,q,j,w}/test_mutants.py tests/t/test_trace_mutants.py tests/g/test_mutants.py > f2r-a-mutants-final.log` at `d7790c6` | see below | see below |
 
-List sizes at head (`--list`): contracts 277, m 77, j 113, w 149, t 82, q 54, g 157.
+List sizes at head (`--list`): contracts 278 (277 was a miscount; review 16), m 77, j 113, w 149, t 82, q 54, g 157.
 
 **The earlier detached run against the WIP (`48d61b9`)**: `7 failed, 953 passed in 2211.08s` — the seven (`w: event_bytes_sized_for_ascii, visible_and_raw_collapsed`; `t: unsynced_bytes_survive_a_crash, a_crash_keeps_its_promise_count, crash_keeps_the_record_count, the_queue_counts_only_rows, a_clockless_sink_is_built`) were not WIP defects: that run collected its lists at start and copied the live tree per mutant while items 2 and 3 moved those anchors. Each was re-anchored, retargeted or retired (above) and killed in focused runs.
 
