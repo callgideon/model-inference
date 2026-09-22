@@ -108,6 +108,14 @@ def _error_code(resp, key):
     return bench.allow(err.get("code") if isinstance(err, dict) else None, bench.CODE_OK, key)
 
 
+def _json(resp):
+    """A body that is not JSON is data, never an exception out of the sweep."""
+    try:
+        return resp.json()
+    except ValueError:
+        return None
+
+
 def _completion(row, body):
     usage = body.get("usage") if isinstance(body, dict) else None
     choices = body.get("choices") if isinstance(body, dict) else None
@@ -170,11 +178,13 @@ async def process(client, cfg, item, prior, record):
                                           cfg["key"])
         row["replayed"] = resp.headers.get("idempotency-replayed") == "true"
         if resp.status_code == 200:
-            _completion(row, resp.json())
+            _completion(row, _json(resp))
             break
         if resp.status_code == 202:
-            row["job_handle"] = bench.allow(resp.json().get("job_handle"), JOB_OK, cfg["key"],
-                                            fallback=None)
+            accepted = _json(resp)
+            row["job_handle"] = bench.allow(
+                accepted.get("job_handle") if isinstance(accepted, dict) else None, JOB_OK,
+                cfg["key"], fallback=None)
             row["status"] = "accepted" if row["job_handle"] else "failed"
             record(dict(row))             # persist the handle before polling (§3.5 step 2)
             if row["job_handle"]:

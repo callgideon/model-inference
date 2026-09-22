@@ -126,7 +126,8 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_credit_identity__a_wallet_bound_to_another_org_is_refused"),
     _m("fake_ledger_overdraws",
        "an adjustment below zero is refused by the ledger port (mutates the fake: this pins "
-       "the contract D5's adapter must implement, not operations code)",
+       "the contract D5's adapter must implement, not operations code; declared: surfaces as "
+       "the wallet validator's ValueError instead of invalid_request)",
        F, "        except ValueError:\n            raise errors.InvalidRequest",
        "        except ArithmeticError:\n            raise errors.InvalidRequest",
        "test_credit_identity__an_adjustment_never_overdraws_the_wallet"),
@@ -232,6 +233,11 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("usage_less_200_accepted", "a 200 without usage is a failure, not a result",
        X, "        row[\"status\"] = \"failed\"          # a 200 without usage or content is not a result",
        "        row[\"status\"] = \"done\"",
+       "test_api_ops__failures_are_explicit_and_never_retried_blindly"),
+    _m("non_json_200_raises",
+       "a 200 with a non-JSON body is a failed item, not an exception out of the sweep "
+       "(declared: the defect surfaces as the JSON decoder's exception)",
+       X, "    except ValueError:\n        return None", "    except TypeError:\n        return None",
        "test_api_ops__failures_are_explicit_and_never_retried_blindly"),
     _m("wallet_exhaustion_ignored", "a 402 pauses the sweep instead of burning the dataset",
        X, "            cfg[\"stop\"].set()             # do not burn the dataset against 401/402/403",

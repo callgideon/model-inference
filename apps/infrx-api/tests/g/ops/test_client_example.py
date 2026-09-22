@@ -112,13 +112,15 @@ def test_api_ops__failures_are_explicit_and_never_retried_blindly(key, tmp_path)
         httpx.Response(409, json={"error": {"code": "idempotency_conflict"}}),
         httpx.Response(410, json={"error": {"code": "idempotency_expired"}}),
         httpx.Response(200, json={"choices": [{"message": {"content": "cut"}}]}),  # no usage
+        httpx.Response(200, content=b"<html>proxy error</html>"),            # not JSON
         httpx.Response(429, headers={"retry-after": "7"}),
         completion(),
     ])
-    code, rows, state = sweep(tmp_path, lambda r: next(replies), "--concurrency", "1", n=5)
+    code, rows, state = sweep(tmp_path, lambda r: next(replies), "--concurrency", "1", n=6)
     assert [(r["status"], r["error_code"]) for r in rows] == [
         ("quarantined", "unsupported_media"), ("quarantined", "idempotency_conflict"),
-        ("rerun_required", "idempotency_expired"), ("failed", None), ("done", None)]
+        ("rerun_required", "idempotency_expired"), ("failed", None), ("failed", None),
+        ("done", None)]
     assert slept == [7.0] and rows[-1]["attempts"] == 2      # Retry-After honoured
     assert secret[9:] not in open(state).read()
 
