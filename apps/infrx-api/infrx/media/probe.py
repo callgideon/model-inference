@@ -220,6 +220,21 @@ def _vint(data: bytes, at: int, *, keep_marker: bool) -> tuple[int, int, bool]:
     return (raw if keep_marker else raw & mask), width, (raw & mask) == mask
 
 
+def _ebml_uint(data: bytes, at: int, size: int) -> int:
+    """An EBML unsigned integer, whose width the specification bounds at eight bytes.
+
+    `_u` will read any width the file declares, and every value read here ends up in
+    arithmetic or in a message: a 100-byte `TimecodeScale` was **accepted** and produced a
+    duration of 6.67e+235, a 200-byte one raised `OverflowError` on the multiplication, and
+    a 3000-byte `PixelWidth` raised `ValueError` (CPython's 4300-digit `int.__str__` limit)
+    while formatting the refusal. All three were a 500 where the contract says
+    `unsupported_media` (review B1).
+    """
+    if not 0 < size <= 8:
+        raise _refuse("bad-uint")
+    return _u(data, at, size)
+
+
 def _ebml_float(data: bytes, start: int, end: int) -> float:
     size = end - start
     if size == 4:
@@ -266,17 +281,17 @@ def probe_matroska(data: bytes) -> Probed:
                     tracks.append(current)
                 stack.append((body, body_end, depth + 1))
             elif element == TIMECODE_SCALE:
-                scale = _u(data, body, size) or DEFAULT_TIMECODE_SCALE
+                scale = _ebml_uint(data, body, size) or DEFAULT_TIMECODE_SCALE
             elif element == DURATION:
                 duration = _ebml_float(data, body, body_end)
             elif current is not None and element == TRACK_TYPE:
-                current["type"] = _u(data, body, size)
+                current["type"] = _ebml_uint(data, body, size)
             elif current is not None and element == CODEC_ID:
                 current["codec"] = data[body:body_end].decode("latin-1").rstrip("\0")
             elif current is not None and element == PIXEL_WIDTH:
-                current["width"] = _u(data, body, size)
+                current["width"] = _ebml_uint(data, body, size)
             elif current is not None and element == PIXEL_HEIGHT:
-                current["height"] = _u(data, body, size)
+                current["height"] = _ebml_uint(data, body, size)
             at = body_end
     if duration <= 0:
         raise _refuse("no-duration")

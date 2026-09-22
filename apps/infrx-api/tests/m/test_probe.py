@@ -120,6 +120,33 @@ def test_a_box_longer_than_the_file_is_refused_although_its_content_is_there():
      + support.element(0x18538067, support.element(
          0x1549A966, support.webm_info() + support.webm_tracks(), size=b"\xff"))),
     ("a truncated EBML element", support.webm()[:12]),
+    # An EBML unsigned integer is at most eight bytes wide. Wider ones are not "big
+    # numbers": 100 bytes of TimecodeScale was accepted as a 6.67e+235-second clip, 200
+    # bytes overflowed the multiplication, and a 3,000-byte PixelWidth broke the refusal's
+    # own f-string on CPython's 4300-digit limit - a 500 where the contract says
+    # `unsupported_media` (review B1).
+    ("a 100-byte timecode scale", support.element(0x1A45DFA3, b"\x00")
+     + support.element(0x18538067, support.element(
+         0x1549A966, support.element(0x2AD7B1, b"\x01" + b"\x00" * 99)
+         + support.element(0x4489, struct.pack(">d", 1e4))) + support.webm_tracks())),
+    ("a 200-byte timecode scale", support.element(0x1A45DFA3, b"\x00")
+     + support.element(0x18538067, support.element(
+         0x1549A966, support.element(0x2AD7B1, b"\x01" + b"\x00" * 199)
+         + support.element(0x4489, struct.pack(">d", 1e4))) + support.webm_tracks())),
+    ("a 3000-byte pixel width", support.element(0x1A45DFA3, b"\x00")
+     + support.element(0x18538067, support.webm_info() + support.element(
+         0x1654AE6B, support.element(0xAE, support.element(0x83, b"\x01")
+                                     + support.element(0x86, b"V_VP9")
+                                     + support.element(0xE0, support.element(
+                                         0xB0, b"\x01" + b"\x00" * 2_999)
+                                         + support.element(0xBA, (480).to_bytes(2, "big"))))))),
+    ("a 9-byte track type", support.element(0x1A45DFA3, b"\x00")
+     + support.element(0x18538067, support.webm_info() + support.element(
+         0x1654AE6B, support.element(0xAE, support.element(0x83, b"\x00" * 9)
+                                     + support.element(0x86, b"V_VP9")
+                                     + support.element(0xE0, support.element(
+                                         0xB0, (640).to_bytes(2, "big"))
+                                         + support.element(0xBA, (480).to_bytes(2, "big"))))))),
     # Overlapping siblings: Info claims one byte more than the elements after it, so with the
     # parent bound gone it swallows Tracks and the file parses perfectly. This is the case
     # that separates "an element may not claim past its parent" from "may not claim past the

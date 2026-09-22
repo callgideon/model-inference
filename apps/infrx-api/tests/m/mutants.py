@@ -513,6 +513,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "an EBML element may not claim more bytes than its parent has",
        P, "            if size < 0 or body + size > end:", "            if size < 0:",
        "test_a_hostile_length_is_refused_not_followed"),
+    _m("ebml_uint_width_unchecked",
+       "an EBML unsigned integer is at most eight bytes wide: wider ones were accepted as "
+       "absurd values, overflowed the arithmetic, or broke the refusal's own formatting - a "
+       "500 where the contract says unsupported_media (review B1)",
+       P, "    if not 0 < size <= 8:\n        raise _refuse(\"bad-uint\")", "    pass",
+       "test_a_hostile_length_is_refused_not_followed"),
     _m("timecode_scale_assumed_default",
        "a Matroska duration is in timecode-scale units, and the scale is in the file",
        P, "                scale = _u(data, body, size) or DEFAULT_TIMECODE_SCALE",
