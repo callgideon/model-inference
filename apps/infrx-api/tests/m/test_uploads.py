@@ -9,6 +9,7 @@ harness's `FakeClock`, and the clips are `support.mp4`/`support.webm`.
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 
 import pytest
@@ -391,15 +392,17 @@ def test_nothing_uploaded_yet_is_not_a_refusal():
 
 
 def test_finalizing_never_replaces_what_the_handle_already_names():
-    """A handle the tenant already staged other content under keeps that content."""
+    """A handle that already names other content keeps that content. R66: `stage` takes
+    only store-produced refs and this store's handles are content-addressed, so the squat
+    is seeded directly - only something outside the store can reach this state."""
     adapter = adapter_for()
     handle = created(adapter)
     squat = b.media(b.ORG_A, handle=handle, kind=MediaKind.inline)
-    staged = run(adapter.stage(b.ORG_A, b.request(adapter.harness, refs=(squat,))))
+    adapter.refs[(b.ORG_A, handle)] = squat
     arrive(adapter, handle, CLIP)
     with pytest.raises(errors.Conflict):
         run(adapter.finalize_upload(b.ORG_A, handle))
-    assert adapter.refs[(b.ORG_A, handle)] == staged[0]
+    assert adapter.refs[(b.ORG_A, handle)] == squat
     assert adapter.uploads[handle].state is UploadState.aborted
 
 
@@ -446,11 +449,11 @@ def test_stage_refuses_an_unfinalized_upload():
 
 
 def test_resolve_refuses_an_upload_that_is_not_finalized_even_if_its_handle_is_indexed():
-    """A handle squatted by a staged ref is not a finalized upload."""
+    """A handle squatted by an indexed ref (seeded directly, R66) is not a finalized
+    upload."""
     adapter = adapter_for()
     handle = created(adapter)
-    squat = b.media(b.ORG_A, handle=handle, kind=MediaKind.inline)
-    run(adapter.stage(b.ORG_A, b.request(adapter.harness, refs=(squat,))))
+    adapter.refs[(b.ORG_A, handle)] = b.media(b.ORG_A, handle=handle, kind=MediaKind.inline)
     with pytest.raises(errors.InvalidRequest):
         run(adapter.resolve_owned(b.ORG_A, handle))
 
@@ -507,9 +510,8 @@ def test_another_orgs_open_upload_state_does_not_leak():
     adapter = adapter_for()
     handle = created(adapter)                                   # org A's, still open
     foreign = b.media(b.ORG_B, handle=handle, kind=MediaKind.inline)
-    staged = run(adapter.stage(b.ORG_B, b.request(adapter.harness, org_id=b.ORG_B,
-                                                  refs=(foreign,))))
-    assert run(adapter.resolve_owned(b.ORG_B, handle)) == staged[0]
+    adapter.refs[(b.ORG_B, handle)] = foreign                   # seeded directly (R66)
+    assert run(adapter.resolve_owned(b.ORG_B, handle)) == foreign
 
 
 def test_an_uploaded_clip_is_prepared_like_any_source(tmp_path):
@@ -548,18 +550,20 @@ def conformance_factory(limits=None, **_kw):
     def put_object(handle, data, mime="video/mp4"):
         arrive(adapter, handle, data, mime)
 
+    async def materialized(org_id, ref):
+        # distinct clip per handle: equal content would give equal content-derived handles
+        seconds = 5.0 + int(fetch.digest_of(ref.handle.encode())[7:15], 16) % 97 / 10
+        body = base64.b64encode(support.mp4(seconds=seconds)).decode()
+        return await adapter.materialize(org_id, f"data:video/mp4;base64,{body}")
+
     return Harness(port=adapter, clock=adapter.clock, ids=ids,
-                   extra={"put_object": put_object, "admitted": adapter.jobs.__setitem__})
-
-
-# F2R item 4 (lane A): `builders.media()` names objects nobody materialized, so `prepare`
-# has no bytes to read. Pinned, exactly as M2 pinned it, until F2R-A merges.
-PENDING_F2R = "media_parity__staging_is_content_addressed_and_tenant_namespaced"
+                   extra={"put_object": put_object, "admitted": adapter.jobs.__setitem__,
+                          "materialized": materialized})
 
 
 def test_the_exported_conformance_suite_runs_every_upload_case():
     """F-CONTRACT / r1 R32: the six upload cases M2 skipped naming `create_upload` now
-    run and pass; the two M1 cases still pass; the F2R-blocked case stays pinned."""
+    run and pass; the two M1 cases and the parity case pass - every case passes."""
     from infrx.contracts.conformance import SUITES, MissingHook
 
     cases, _runner = SUITES["mediastore"]
@@ -576,6 +580,4 @@ def test_the_exported_conformance_suite_runs_every_upload_case():
     for name, outcome in sorted(outcomes.items()):
         print(f"  {outcome:<34} {name}")
     assert len(outcomes) == len(cases()) == 9
-    assert [name for name, out in outcomes.items() if out != "pass"] == [PENDING_F2R]
-    assert outcomes[PENDING_F2R].startswith("blocked: not_found")
-    assert "the staged object for media upl_conformancefixture" in outcomes[PENDING_F2R]
+    assert [name for name, out in outcomes.items() if out != "pass"] == []
