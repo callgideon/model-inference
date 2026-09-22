@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T17:45:34Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T17:46:43Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>3</b><span>done</span></div>
 <div class="tile prog"><b>7</b><span>in progress</span></div>
@@ -57,7 +57,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B1</td><td><code>A1</code></td><td>Verified individual signup entitlement and idempotent backfill</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>M2</code></td><td>Versioned preprocessing and tenant cache</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>M3</code></td><td>Owned uploads, expiry and orphan collection</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
-<tr><td>B1</td><td><code>Q2</code></td><td>Valkey adapter with atomic tested scripts</td><td><span class="pill prog">in-progress</span></td><td class="note">Valkey adapter reproducing the 14-point list; differential vs memory | resumed from WIP after restart</td></tr>
+<tr><td>B1</td><td><code>Q2</code></td><td>Valkey adapter with atomic tested scripts</td><td><span class="pill prog">in-progress</span></td><td class="note">handed back: Valkey adapter, 76 mutants, differential vs memory adapter</td></tr>
 <tr><td>B1</td><td><code>Q3</code></td><td>Outbox/reconciler integration and index loss recovery</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>W2</code></td><td>Lease-aware execution, cancellation and completion</td><td><span class="pill prog">in-progress</span></td><td class="note">attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart</td></tr>
 <tr><td>B1</td><td><code>W3</code></td><td>Drain, engine pin and measured concurrency</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
@@ -96,7 +96,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>I0</code> — codex-i0 — fix round 1 (review: runner layout false-kill path; apply-level pilot digest case) since 2026-09-22T15:51:21Z — handed back: preflight.py fail-closed installer; 77 tests, 45 mutants | resumed from WIP after restart</li>
 <li><code>E2R</code> — codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services | resumed from WIP after restart</li>
 <li><code>F2P</code> — codex-f2p — review resumed after restart; wire-in waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>
-<li><code>Q2</code> — codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory | resumed from WIP after restart</li>
+<li><code>Q2</code> — codex-q2 — independent review at 10cd1c1 since 2026-09-22T16:00:21Z — handed back: Valkey adapter, 76 mutants, differential vs memory adapter</li>
 <li><code>W2</code> — codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart</li>
 <li><code>E1B</code> — codex-e1b — fix round 1 (120 s clip, price ⚠️, KV wording, four test bindings) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
