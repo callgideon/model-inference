@@ -104,14 +104,22 @@ def duplicate_settlements_accepted(conn) -> list[str]:
             f"insert into infrx.stream_chunks (job_id, generation, sequence, event_type, "
             f"payload, bytes, expires_at) values ('{job}', 1, 9, 'terminal', "
             f"'{{\"state\":\"succeeded\"}}'::jsonb, 30, '2026-09-21T01:00:00Z')",
-        "a second usage debit": usage,
         "a second hold for one request":
             f"insert into infrx.credit_holds (request_id, org_id, key_id, amount, state) "
             f"values ('{D.JOB_QUEUED}', '{org}', '{D.KEY_A}', 1.25000000, 'held')",
     }
     accepted += [name for name, sql in shapes.items() if _attempt(conn, sql)]
+    # The second debit is NOT rolled back when accepted (the others are): conservation must
+    # then see the wallet move twice, so a missing one-debit rule shows up in the money too.
+    import psycopg
+    try:
+        with conn.transaction():
+            conn.execute(usage)
+        accepted.append("a second usage debit")
+    except psycopg.Error:
+        pass
     if _wallet(conn, org) - before != Decimal("-0.00050000"):
-        accepted.append("a refused write still moved the wallet total")
+        accepted.append("the wallet total moved by more than the one accepted debit")
     return accepted
 
 
@@ -165,6 +173,7 @@ def test_e3b_db04_detects_a_missing_one_usage_debit_rule(seeded):
     seeded.execute("drop index public.credit_ledger_one_usage_per_request")
     accepted = duplicate_settlements_accepted(seeded)
     assert "a second usage debit" in accepted, accepted
+    assert "the wallet total moved by more than the one accepted debit" in accepted, accepted
 
 
 def test_e3b_db05_detects_a_browser_grant_on_a_pilot_relation(seeded):

@@ -413,9 +413,14 @@ def test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job(valkey_index):
                 snapshot.append(_event(h, admission.request_id))
         assert await port.rebuild(tuple(snapshot)) == 3
         dispatched = []
-        while (candidate := await port.claim_candidate("w2")) is not None:
+        for _ in range(len(admissions) + 1):         # bounded: a duplicate cannot loop
+            candidate = await port.claim_candidate("w2")
+            if candidate is None:
+                break
             dispatched.append(candidate.job_id)
             await port.acknowledge(candidate)
+        else:
+            raise AssertionError(f"the index kept dispatching: {dispatched}")
         expected = {a.request_id for a in admissions} - {first.job_id}
         assert sorted(dispatched) == sorted(expected), dispatched
         await assert_conserved(h, b.ORG_A, [a.job_handle for a in admissions])
