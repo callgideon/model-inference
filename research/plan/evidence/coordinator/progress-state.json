@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T18:33:10Z",
+  "updated": "2026-09-22T18:38:09Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E2R": {
       "lane": "codex-e2r",
-      "phase": "independent review at 1491951 (layer 2 green with canary)",
+      "phase": "fix round 1 (rls stage guard, anon SQLSTATE case, org_members matrix row)",
       "since": "2026-09-22T15:51:21Z",
       "note": "harness ownership + five RLS inversions on real services | resumed from WIP after restart"
     },
