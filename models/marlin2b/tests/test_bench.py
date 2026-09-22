@@ -766,6 +766,29 @@ def test_the_declared_profile_carries_every_axis_a_throughput_number_needs():
         assert summary["video_s_per_s"] > 0
 
 
+def test_the_predeclared_protocol_matches_the_client_that_implements_it():
+    """Slice E1B.c: the protocol is pre-registration, so it may not drift from the code.
+
+    Only the machine-checkable parts are asserted — the rules the client enforces and the
+    labels the criteria must keep. The rest is a commitment in prose, by design.
+    """
+    path = os.path.join(os.path.dirname(HERE), "results", "E1B-protocol.md")
+    text = open(path, encoding="utf-8").read()
+    for q in (50, 95, 99):
+        assert f"p{q} ≥{bench.min_samples(q)}" in text, f"the p{q} rule drifted from bench.py"
+    assert "--profile-version v1" in text and "sop1.<item_key>" in text
+    assert "--seed 20260922" in text, "the frozen seed must be stated, not implied"
+    assert "--max-tokens 128,512,1024" in text
+    assert text.count("provisional (P-18)") >= 6, "every provisional row keeps its label"
+    assert "no criterion" in text and "explicitly absent" in text, \
+        "the absent latency criterion must stay absent"
+    assert "CREDIT is not USD" in text
+    for pending in ("P-04", "P-18", "P-07"):
+        assert pending in text
+    assert "Server-Timing" in text and "declared_missing" in text, \
+        "the protocol must name where phase timings come from and what an absent one does"
+
+
 def test_historical_cli_still_parses_and_refuses_command_line_keys():
     a = bench.parse_args(["video.mp4", "-c", "8", "-n", "32", "--max-tokens", "256", "--label", "L40S run"])
     assert (a.video, a.concurrency, a.requests, a.max_tokens, a.label) == ("video.mp4", 8, 32, 256, "L40S run")
