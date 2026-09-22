@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T17:51:45Z",
+  "updated": "2026-09-22T17:57:28Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -9,12 +9,6 @@
       "since": "2026-09-22T15:51:21Z",
       "note": "lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions"
     },
-    "I0": {
-      "lane": "codex-i0",
-      "phase": "fix round 1 (review: runner layout false-kill path; apply-level pilot digest case)",
-      "since": "2026-09-22T15:51:21Z",
-      "note": "handed back: preflight.py fail-closed installer; 77 tests, 45 mutants | resumed from WIP after restart"
-    },
     "E2R": {
       "lane": "codex-e2r",
       "phase": "implementing (item 1 merged c23d804; items 2\u20134 in flight)",
@@ -23,7 +17,7 @@
     },
     "F2P": {
       "lane": "codex-f2p",
-      "phase": "review resumed after restart; wire-in waits on F2R-A",
+      "phase": "fix round 1 (restore three guards + killable; three record-level mutants); wire-in waits on F2R-A",
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
     },
@@ -143,6 +137,10 @@
     {
       "at": "2026-09-22T17:51:45Z",
       "what": "E1B software slices merged (164e43e): bench client, sop-synth-v1 (120 s worst case), predeclared protocol"
+    },
+    {
+      "at": "2026-09-22T17:57:28Z",
+      "what": "I0 merged (0ac073e): fail-closed installer; Makefile mutant list extended"
     }
   ],
   "cadence_windows": [

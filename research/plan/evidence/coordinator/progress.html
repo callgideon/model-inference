@@ -27,16 +27,16 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T17:51:45Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T17:57:28Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
-<div class="tile done"><b>3</b><span>done</span></div>
-<div class="tile prog"><b>7</b><span>in progress</span></div>
+<div class="tile done"><b>4</b><span>done</span></div>
+<div class="tile prog"><b>6</b><span>in progress</span></div>
 <div class="tile rem"><b>20</b><span>remaining</span></div>
 <div class="tile blk"><b>6</b><span>GPU-gated</span></div>
-<div class="tile"><b>10%</b><span>of 30 backend packages</span></div>
+<div class="tile"><b>13%</b><span>of 30 backend packages</span></div>
 </section>
 <section class="panel"><h2>Bands (E4B dependency closure)</h2>
-<div class="band"><div class="n">B0 · Baseline &amp; contracts</div><div class="bar"><i class="d" style="width:33.3%"></i><i class="p" style="width:66.7%"></i><i class="r" style="width:0.0%"></i></div><div class="c">2 done · 4 in progress · 0 left</div></div>
+<div class="band"><div class="n">B0 · Baseline &amp; contracts</div><div class="bar"><i class="d" style="width:50.0%"></i><i class="p" style="width:50.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">3 done · 3 in progress · 0 left</div></div>
 <div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:5.9%"></i><i class="p" style="width:11.8%"></i><i class="r" style="width:82.4%"></i></div><div class="c">1 done · 2 in progress · 14 left</div></div>
 <div class="band"><div class="n">B2 · Integrate &amp; deploy</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:25.0%"></i><i class="r" style="width:75.0%"></i></div><div class="c">0 done · 1 in progress · 3 left</div></div>
 <div class="band"><div class="n">B3 · Measured tuning</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 2 left</div></div>
@@ -45,7 +45,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <section class="panel"><h2>Packages</h2><div class="scroll"><table><thead><tr><th>Band</th><th>Task</th><th>Title</th><th>Status</th><th>Note</th></tr></thead><tbody>
 <tr><td>B0</td><td><code>S1</code></td><td>Reconcile pulled wave-2 baseline and publish product revision audit</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B0</td><td><code>F2R</code></td><td>Close remaining wave-2 contract and verification carryovers</td><td><span class="pill prog">in-progress</span></td><td class="note">lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions</td></tr>
-<tr><td>B0</td><td><code>I0</code></td><td>Repair installer atomicity and fail-closed startup prerequisite</td><td><span class="pill prog">in-progress</span></td><td class="note">handed back: preflight.py fail-closed installer; 77 tests, 45 mutants | resumed from WIP after restart</td></tr>
+<tr><td>B0</td><td><code>I0</code></td><td>Repair installer atomicity and fail-closed startup prerequisite</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B0</td><td><code>E2R</code></td><td>Repair service harness ownership, role matrix and shared test clock</td><td><span class="pill prog">in-progress</span></td><td class="note">harness ownership + five RLS inversions on real services | resumed from WIP after restart</td></tr>
 <tr><td>B0</td><td><code>S2M</code></td><td>Freeze Marlin SOP inference launch profile</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B0</td><td><code>F2P</code></td><td>Encode product-v2 CREDIT, identity, serving and permission contracts</td><td><span class="pill prog">in-progress</span></td><td class="note">v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</td></tr>
@@ -75,7 +75,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B4</td><td><code>E4B</code></td><td>Certify the robust and measured Marlin endpoint release candidate</td><td><span class="pill rem">remaining</span> <span class="pill gpu">needs GPU target</span></td><td class="note"></td></tr>
 </tbody></table></div></section>
 <section class="panel eta"><h2>ETA — provisional, cadence-based</h2>
-<p class="big">Local software (through E3B and the software half of the rest, 21 packages): ~1.2 days at the observed cadence, ~2.5 days at half of it.</p>
+<p class="big">Local software (through E3B and the software half of the rest, 20 packages): ~1.2 days at the observed cadence, ~2.4 days at half of it.</p>
 <p>Observed cadence: 11 tasks integrated in 15.7 h (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds, two rate-limit interruptions included). Wave-3 packages are larger and the D lane is serial, hence the range; the serial critical path D1R→D2→D3→D4→D5→E3B alone is at least ~22 h.</p>
 <p><b>GPU-gated packages (I2B, I3B, E1B, M4, W4, E4B): no ETA until P-04 is allocated.</b> Their harnesses, scripts and runbooks are built inside the local estimate; measurements wait for the target.</p>
 <p class="note">Assumes continuous coordination. Interruptions extend wall clock, not work. This is a projection, not a commitment; it is regenerated at every checkpoint.</p>
@@ -93,9 +93,8 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 </tbody></table></div></section>
 <section class="panel"><h2>In flight now</h2><ul>
 <li><code>F2R</code> — codex-f2r — implementing since 2026-09-22T15:51:21Z — lane B MERGED (2bfb0c4); lane A resumed from WIP 48d61b9 with 9 relayed additions</li>
-<li><code>I0</code> — codex-i0 — fix round 1 (review: runner layout false-kill path; apply-level pilot digest case) since 2026-09-22T15:51:21Z — handed back: preflight.py fail-closed installer; 77 tests, 45 mutants | resumed from WIP after restart</li>
 <li><code>E2R</code> — codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services | resumed from WIP after restart</li>
-<li><code>F2P</code> — codex-f2p — review resumed after restart; wire-in waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>
+<li><code>F2P</code> — codex-f2p — fix round 1 (restore three guards + killable; three record-level mutants); wire-in waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>
 <li><code>Q2</code> — codex-q2 — independent review at 10cd1c1 since 2026-09-22T16:00:21Z — handed back: Valkey adapter, 76 mutants, differential vs memory adapter</li>
 <li><code>W2</code> — codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R | resumed from WIP after restart</li>
 <li><code>E1B</code> — codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
@@ -111,6 +110,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><span class="meta">2026-09-22T17:29:34Z</span> — S1-fix merged (6669e1f): console balance unavailable state, build-time preview gate; console targets green on merged tree</li>
 <li><span class="meta">2026-09-22T17:45:34Z</span> — Restart on rey account; M2 (8156f78) and F2R-B (2bfb0c4) merged; six implementer lanes resumed from WIP; F2P review resumed</li>
 <li><span class="meta">2026-09-22T17:51:45Z</span> — E1B software slices merged (164e43e): bench client, sop-synth-v1 (120 s worst case), predeclared protocol</li>
+<li><span class="meta">2026-09-22T17:57:28Z</span> — I0 merged (0ac073e): fail-closed installer; Makefile mutant list extended</li>
 </ul></section><section class="panel"><h2>Authorizations</h2><ul>
 <li>authorized: merge to main at reviewed green checkpoints (user, 2026-09-22)</li>
 <li>authorized: FULL operational authorization (user, 2026-09-22): hosted Supabase migration apply, public cutover, paid provider calls, compute purchases, any operations — logged with cost and rollback before each irreversible step</li>
