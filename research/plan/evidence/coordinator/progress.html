@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T16:42:53Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-22T16:51:55Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>1</b><span>done</span></div>
 <div class="tile prog"><b>9</b><span>in progress</span></div>
@@ -55,7 +55,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B1</td><td><code>D4</code></td><td>Persistent stream journal and replay</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>D5</code></td><td>Terminal transaction, grants and reconciliation</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>A1</code></td><td>Verified individual signup entitlement and idempotent backfill</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
-<tr><td>B1</td><td><code>M2</code></td><td>Versioned preprocessing and tenant cache</td><td><span class="pill prog">in-progress</span></td><td class="note">prepare(): probe real duration, url→ref rewrite, processing cache; rebases on F2R</td></tr>
+<tr><td>B1</td><td><code>M2</code></td><td>Versioned preprocessing and tenant cache</td><td><span class="pill prog">in-progress</span></td><td class="note">handed back: probe + preparation + cache; 132 mutants</td></tr>
 <tr><td>B1</td><td><code>M3</code></td><td>Owned uploads, expiry and orphan collection</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
 <tr><td>B1</td><td><code>Q2</code></td><td>Valkey adapter with atomic tested scripts</td><td><span class="pill prog">in-progress</span></td><td class="note">Valkey adapter reproducing the 14-point list; differential vs memory</td></tr>
 <tr><td>B1</td><td><code>Q3</code></td><td>Outbox/reconciler integration and index loss recovery</td><td><span class="pill rem">remaining</span></td><td class="note"></td></tr>
@@ -96,7 +96,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>E2R</code> — codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services</li>
 <li><code>F2P</code> — codex-f2p — additive design phase (new files only); wire-in after F2R since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map</li>
 <li><code>Q2</code> — codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory</li>
-<li><code>M2</code> — codex-m2 — implementing since 2026-09-22T16:00:21Z — prepare(): probe real duration, url→ref rewrite, processing cache; rebases on F2R</li>
+<li><code>M2</code> — codex-m2 — independent review at 969bb39 since 2026-09-22T16:00:21Z — handed back: probe + preparation + cache; 132 mutants</li>
 <li><code>W2</code> — codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R</li>
 <li><code>E1B</code> — codex-e1b — implementing (software slices; GPU slices wait for W3/I2B) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol</li>
 <li><code>S1</code> — codex-s1fix / codex/s1fix-console-balance — review fix round (B1 balance unavailable state, B2 preview gate inlining) since 2026-09-22T16:36:52Z — S1 API side passed independent review; console fixes in flight</li>

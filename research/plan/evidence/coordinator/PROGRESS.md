@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T16:42:53Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T16:51:55Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 1 done · 9 in progress · 20 remaining (of 30).**
 
@@ -18,7 +18,7 @@ Generated 2026-09-22T16:42:53Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | D4 | Persistent stream journal and replay | **remaining** | planned |  |
 | B1 Durable endpoint | D5 | Terminal transaction, grants and reconciliation | **remaining** | planned |  |
 | B1 Durable endpoint | A1 | Verified individual signup entitlement and idempotent backfill | **remaining** | planned |  |
-| B1 Durable endpoint | M2 | Versioned preprocessing and tenant cache | **in-progress** | planned | prepare(): probe real duration, url→ref rewrite, processing cache; rebases on F2R |
+| B1 Durable endpoint | M2 | Versioned preprocessing and tenant cache | **in-progress** | planned | handed back: probe + preparation + cache; 132 mutants |
 | B1 Durable endpoint | M3 | Owned uploads, expiry and orphan collection | **remaining** | planned |  |
 | B1 Durable endpoint | Q2 | Valkey adapter with atomic tested scripts | **in-progress** | planned | Valkey adapter reproducing the 14-point list; differential vs memory |
 | B1 Durable endpoint | Q3 | Outbox/reconciler integration and index loss recovery | **remaining** | planned |  |
@@ -66,7 +66,7 @@ Generated 2026-09-22T16:42:53Z from `tasks.json` (manifest v4) and `progress-sta
 - E2R: codex-e2r — implementing (item 1 merged c23d804; items 2–4 in flight) since 2026-09-22T15:51:21Z — harness ownership + five RLS inversions on real services
 - F2P: codex-f2p — additive design phase (new files only); wire-in after F2R since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - Q2: codex-q2 — implementing since 2026-09-22T16:00:21Z — Valkey adapter reproducing the 14-point list; differential vs memory
-- M2: codex-m2 — implementing since 2026-09-22T16:00:21Z — prepare(): probe real duration, url→ref rewrite, processing cache; rebases on F2R
+- M2: codex-m2 — independent review at 969bb39 since 2026-09-22T16:00:21Z — handed back: probe + preparation + cache; 132 mutants
 - W2: codex-w2 — implementing since 2026-09-22T16:00:21Z — attempt loop: fenced claim/heartbeat/journal-before-relay/settle; rebases on F2R
 - E1B: codex-e1b — implementing (software slices; GPU slices wait for W3/I2B) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol
 - S1: codex-s1fix / codex/s1fix-console-balance — review fix round (B1 balance unavailable state, B2 preview gate inlining) since 2026-09-22T16:36:52Z — S1 API side passed independent review; console fixes in flight

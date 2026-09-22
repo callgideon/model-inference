@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T16:42:53Z",
+  "updated": "2026-09-22T16:51:55Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -35,9 +35,9 @@
     },
     "M2": {
       "lane": "codex-m2",
-      "phase": "implementing",
+      "phase": "independent review at 969bb39",
       "since": "2026-09-22T16:00:21Z",
-      "note": "prepare(): probe real duration, url\u2192ref rewrite, processing cache; rebases on F2R"
+      "note": "handed back: probe + preparation + cache; 132 mutants"
     },
     "W2": {
       "lane": "codex-w2",
