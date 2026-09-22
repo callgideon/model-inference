@@ -1,8 +1,8 @@
 # Backend-first progress tracker
 
-Generated 2026-09-22T19:04:25Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-22T19:16:15Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 7 done · 7 in progress · 16 remaining (of 30).**
+**Backend packages: 8 done · 6 in progress · 16 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -19,7 +19,7 @@ Generated 2026-09-22T19:04:25Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | D5 | Terminal transaction, grants and reconciliation | **remaining** | planned |  |
 | B1 Durable endpoint | A1 | Verified individual signup entitlement and idempotent backfill | **remaining** | planned |  |
 | B1 Durable endpoint | M2 | Versioned preprocessing and tenant cache | **done** | implemented |  |
-| B1 Durable endpoint | M3 | Owned uploads, expiry and orphan collection | **in-progress** | planned | uploads, GC, consent resolver; six conformance cases to unskip |
+| B1 Durable endpoint | M3 | Owned uploads, expiry and orphan collection | **done** | implemented |  |
 | B1 Durable endpoint | Q2 | Valkey adapter with atomic tested scripts | **done** | implemented |  |
 | B1 Durable endpoint | Q3 | Outbox/reconciler integration and index loss recovery | **remaining** | planned |  |
 | B1 Durable endpoint | W2 | Lease-aware execution, cancellation and completion | **done** | implemented |  |
@@ -56,7 +56,7 @@ Generated 2026-09-22T19:04:25Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (17 packages): ~1.0 days at observed cadence, ~2.0 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (16 packages): ~23 h at observed cadence, ~1.9 days if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (I2B, I3B, E1B, M4, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
@@ -66,7 +66,6 @@ Generated 2026-09-22T19:04:25Z from `tasks.json` (manifest v4) and `progress-sta
 - F2P: codex-f2p — additive phase MERGED (9faaa57); wire-in (13 files) waits on F2R-A since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - D1R: codex-d1r / codex/d1r-v2-schema — dispatched from 9faaa57 (reads 06a + v2 fixture base) since 2026-09-22T18:05:08Z — D owns migrations; additive over 0001–0005
-- M3: codex-m3 / codex/m3-owned-uploads — fix round 1 (GC listing race; test-strength; two hardenings) since 2026-09-22T18:12:19Z — uploads, GC, consent resolver; six conformance cases to unskip
 - G6B: codex-g6b / codex/g6b-headless-ops — implementing (early start on accepted v2 contracts) since 2026-09-22T18:12:19Z — operator CLI, protected publish/inspect, headless quickstart
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1: merged-tree layer 2, backend suite skeleton with pending journeys, drills, canaries since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
 
@@ -90,6 +89,7 @@ Generated 2026-09-22T19:04:25Z from `tasks.json` (manifest v4) and `progress-sta
 - 2026-09-22T18:45:43Z: E2R merged (9cc3be1): role matrix on real services, shared clock, layer-2 green with canary
 - 2026-09-22T18:49:10Z: W2 merged (32cc0cb): worker attempt loop + vLLM adapter with pilot media form
 - 2026-09-22T19:04:25Z: Checkpoint 3: main ff to the integration head (E2R, W2 merged); composed evidence recorded
+- 2026-09-22T19:16:15Z: M3 merged (e2188f3): owned uploads, collector, consented reuse; M→W seam tests wired to the resolver
 
 ## Authorizations
 

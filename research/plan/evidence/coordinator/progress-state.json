@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22T19:04:25Z",
+  "updated": "2026-09-22T19:16:15Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -26,12 +26,6 @@
       "phase": "dispatched from 9faaa57 (reads 06a + v2 fixture base)",
       "since": "2026-09-22T18:05:08Z",
       "note": "D owns migrations; additive over 0001\u20130005"
-    },
-    "M3": {
-      "lane": "codex-m3 / codex/m3-owned-uploads",
-      "phase": "fix round 1 (GC listing race; test-strength; two hardenings)",
-      "since": "2026-09-22T18:12:19Z",
-      "note": "uploads, GC, consent resolver; six conformance cases to unskip"
     },
     "G6B": {
       "lane": "codex-g6b / codex/g6b-headless-ops",
@@ -171,6 +165,10 @@
     {
       "at": "2026-09-22T19:04:25Z",
       "what": "Checkpoint 3: main ff to the integration head (E2R, W2 merged); composed evidence recorded"
+    },
+    {
+      "at": "2026-09-22T19:16:15Z",
+      "what": "M3 merged (e2188f3): owned uploads, collector, consented reuse; M\u2192W seam tests wired to the resolver"
     }
   ],
   "cadence_windows": [

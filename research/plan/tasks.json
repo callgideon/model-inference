@@ -527,14 +527,17 @@
       ],
       "track": "M",
       "handoff": "handoffs/M-media.md",
-      "status": "planned",
-      "disposition": "keep",
+      "status": "implemented",
+      "disposition": "keep Merged --no-ff on claude/backend-impl at e2188f3 (2026-09-22) after independent review with race probes (fix_required → fixed). Early start on accepted v2 contracts; durable upload rows are D2's.",
       "product": "shared",
       "milestone": "APP-M1",
       "amendment": "Keep owned upload lifecycle.",
       "baseline_status": "planned",
       "amendment_status": "awaits-product-v2-contract",
-      "execution_class": "core"
+      "execution_class": "core",
+      "evidence": [
+        "research/plan/evidence/m/M3-cd5dbae.md"
+      ]
     },
     {
       "id": "Q1",
