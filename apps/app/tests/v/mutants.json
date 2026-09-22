@@ -160,9 +160,9 @@
     },
     {
       "id": "EMPTY-02",
-      "note": "an organization capturing nothing is told there is simply no traffic",
+      "note": "an organization capturing nothing is told there is simply no traffic (r2: re-anchored on `traceModeOf`)",
       "file": "app/(console)/traces/view-model.ts",
-      "find": "    const capturing = context.keys.some((key) => key.trace_mode !== \"off\" && key.revoked_at === null);",
+      "find": "    const capturing = context.keys.some((key) => traceModeOf(key) !== \"off\" && key.revoked_at === null);",
       "replace": "    const capturing = true;",
       "cases": [
         "V1-V06 an empty page distinguishes filtered, capture-off, keys-unknown and simply idle"
@@ -400,6 +400,16 @@
       "replace": "export default function TracesError({ retry: reset }: { error: Error & { digest?: string }; retry: () => void }) {",
       "cases": [
         "V1-V11 the error boundary re-fetches, and shows nothing from the thrown error"
+      ]
+    },
+    {
+      "id": "CAPTURE-01",
+      "note": "a key with no recorded capture mode counts as capturing, so an organization that captures nothing is told its empty list means nothing has run (r2: null is off)",
+      "file": "app/(console)/traces/view-model.ts",
+      "find": "    const capturing = context.keys.some((key) => traceModeOf(key) !== \"off\" && key.revoked_at === null);",
+      "replace": "    const capturing = context.keys.some((key) => key.trace_mode !== \"off\" && key.revoked_at === null);",
+      "cases": [
+        "V1-V06 an empty page distinguishes filtered, capture-off, keys-unknown and simply idle"
       ]
     }
   ]

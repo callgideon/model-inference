@@ -21,6 +21,7 @@ import {
   type Result,
   type UsageDay,
   type UsageQuery,
+  type UsageWindowQuery,
   type UsageRow,
   type UsageSummary,
 } from "../../../lib/contracts/types.ts";
@@ -228,8 +229,10 @@ function rangeMs(range: RangeKey): number {
 }
 
 /** The filters as the service sees them: no cursor, no limit — the whole selected scope. */
-export function usageScopeQuery(filters: UsageFilters, now: Date): UsageQuery {
-  const query: UsageQuery = {
+export function usageScopeQuery(filters: UsageFilters, now: Date): UsageWindowQuery {
+  // r2: the two aggregates require the window. This builder always produced one — the range
+  // selector is the page's whole point — so the type now says so and the compiler keeps it true.
+  const query: UsageWindowQuery = {
     from: new Date(now.getTime() - rangeMs(filters.range)).toISOString(),
     to: now.toISOString(),
   };
@@ -417,6 +420,15 @@ export function instantLabel(iso: string): string {
   return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 }
 
+/**
+ * What a cell shows when the row has no value for it — a legacy row that predates the pilot
+ * columns, or a key that has been deleted. r2 made those fields nullable on the contract; turning a
+ * null into text is this layer's job, and only this layer's: the service reports the absence, the
+ * page decides how to say it, and nothing in between invents a value.
+ */
+const NO_VALUE = "—";
+const DELETED_KEY_LABEL = "(deleted key)";
+
 export type UsageRowView = {
   requestId: string;
   when: string;
@@ -435,9 +447,9 @@ export function usageRowView(row: UsageRow): UsageRowView {
     requestId: row.request_id,
     when: instantLabel(row.created_at),
     model: row.model,
-    keyName: row.key_name,
-    mode: row.execution_mode,
-    outcome: row.terminal_cause ?? row.job_state,
+    keyName: row.key_name ?? DELETED_KEY_LABEL,
+    mode: row.execution_mode ?? NO_VALUE,
+    outcome: row.terminal_cause ?? row.job_state ?? NO_VALUE,
     httpStatus: row.http_status,
     settlement: settlementView(row),
     amount: amountView(row),

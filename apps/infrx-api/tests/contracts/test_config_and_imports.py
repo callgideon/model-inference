@@ -383,3 +383,155 @@ def test_c1_is_the_only_console_task_with_a_database():
 def _api_dir():
     import pathlib
     return pathlib.Path(__file__).resolve().parents[2]
+
+
+# --- F2R item 7: the 08 §5 deployment table ------------------------------------------
+# Name by name, like `EXPECTED` above. These live in `config.DeploymentSettings` rather
+# than in `contracts.limits.PilotSettings` because they are deployment knobs, not numbers
+# both language halves enforce; the split is recorded in 08 §5 and in config.py.
+DEPLOYMENT_EXPECTED = {
+    "TRACE_SPOOL_SEGMENT_BYTES": 16777216,
+    "MAX_INDEX_ITEMS": 500, "MAX_INDEX_BYTES": 268435456,
+    "CONSOLE_CURSOR_SECRET": "",
+    "DATABASE_POOL_MIN_SIZE": 1, "DATABASE_POOL_MAX_SIZE": 10,
+    "DATABASE_POOL_CONNECT_TIMEOUT_S": 5.0,
+    "DATABASE_POOL_STATEMENT_TIMEOUT_MS": 15000,
+    "MAX_MESSAGES": 64, "MAX_PARTS": 16, "MAX_TEXT_CODEPOINTS": 131072,
+    "MAX_URL_CHARS": 8192, "MAX_NUMBER_DIGITS": 20,
+    "LARGE_BODY_LIMIT": 2, "LARGE_BODY_THRESHOLD_BYTES": 1048576,
+}
+
+# Everything except the secret, which is text.
+DEPLOYMENT_NUMBERS = tuple(name for name, value in sorted(DEPLOYMENT_EXPECTED.items())
+                           if not isinstance(value, str))
+
+
+def test_every_deployment_name_and_default_is_frozen():
+    actual = {limits.env_name(f.name): getattr(config.DEPLOYMENT_DEFAULTS, f.name)
+              for f in dataclasses.fields(config.DeploymentSettings)}
+    assert actual == DEPLOYMENT_EXPECTED
+
+
+def test_the_deployment_names_are_nobodys_existing_names():
+    """A deployment name that collided with an F1 or pilot variable would let one
+    setting silently retune the other."""
+    f1 = {"FETCH_TIMEOUT_S", "MAX_VIDEO_MB", "MAX_REDIRECTS", "MAX_INFLIGHT", "UPSTREAM",
+          "GATEWAY_API_KEY", "USAGE_LOG", "ALLOWED_VIDEO_MIME", "MODEL_ID", "MODELS_DOC"}
+    assert set(DEPLOYMENT_EXPECTED).isdisjoint(set(EXPECTED))
+    assert set(DEPLOYMENT_EXPECTED).isdisjoint(f1)
+
+
+@pytest.mark.parametrize("name", sorted(DEPLOYMENT_EXPECTED))
+def test_each_deployment_name_is_read_from_the_environment(name):
+    raw = "s" * 32 if name == "CONSOLE_CURSOR_SECRET" else "7"
+    deployment = config.deployment_from_env({name: raw})
+    field_name = name.lower()
+    kind = type(getattr(config.DEPLOYMENT_DEFAULTS, field_name))
+    assert getattr(deployment, field_name) == kind(raw)
+
+
+@pytest.mark.parametrize("name", sorted(DEPLOYMENT_EXPECTED))
+def test_a_missing_deployment_name_takes_its_default(name):
+    """Absent is unset, and unset is the frozen default -- for this name only: the read
+    must not disturb any other field."""
+    others = {n: v for n, v in DEPLOYMENT_EXPECTED.items() if n != name}
+    deployment = config.deployment_from_env({n: str(v) for n, v in others.items() if v != ""})
+    assert getattr(deployment, name.lower()) == DEPLOYMENT_EXPECTED[name]
+
+
+@pytest.mark.parametrize("name", sorted(DEPLOYMENT_EXPECTED))
+def test_an_empty_deployment_value_is_refused(name):
+    """`MAX_MESSAGES=` in a unit file is a mistake. Serving the default for it is how an
+    operator comes to believe they configured something they did not."""
+    for blank in ("", " ", "\t"):
+        with pytest.raises(ValueError, match=name):
+            config.deployment_from_env({name: blank})
+
+
+@pytest.mark.parametrize("name", DEPLOYMENT_NUMBERS)
+def test_a_deployment_value_of_the_wrong_type_is_refused(name):
+    with pytest.raises(ValueError, match=name):
+        config.deployment_from_env({name: "abc"})
+    with pytest.raises(ValueError, match=name):
+        config.deployment_from_env({name: "-1"})
+
+
+@pytest.mark.parametrize("name", DEPLOYMENT_NUMBERS)
+def test_a_deployment_bound_a_zero_would_disable_is_refused(name):
+    """Every number here is a size or a cap: zero disables it rather than tightening it.
+    A zero pool admits no connection, a zero statement timeout means *no* limit in
+    PostgreSQL, a zero message cap refuses every request, a zero segment never rotates."""
+    assert name.lower() in config.DEPLOYMENT_MUST_BE_POSITIVE
+    with pytest.raises(config.RuntimeMisconfigured, match=name):
+        config.validate_deployment(config.deployment_from_env({name: "0"}))
+
+
+def test_the_pool_bounds_must_be_ordered():
+    with pytest.raises(config.RuntimeMisconfigured, match="DATABASE_POOL_MIN_SIZE"):
+        config.validate_deployment(config.deployment_from_env(
+            {"DATABASE_POOL_MIN_SIZE": "11", "DATABASE_POOL_MAX_SIZE": "10"}))
+    assert config.validate_deployment(config.deployment_from_env(
+        {"DATABASE_POOL_MIN_SIZE": "10", "DATABASE_POOL_MAX_SIZE": "10"}))
+
+
+def test_a_short_cursor_secret_is_refused_without_echoing_it():
+    """It is a signing key, and a startup error is the most widely copied line of text a
+    process ever emits."""
+    secret = "tooshort"
+    with pytest.raises(config.RuntimeMisconfigured) as caught:
+        config.validate_deployment(config.deployment_from_env({"CONSOLE_CURSOR_SECRET": secret}))
+    assert "CONSOLE_CURSOR_SECRET" in str(caught.value) and secret not in str(caught.value)
+    long_enough = "s" * config.MIN_CONSOLE_CURSOR_SECRET_CHARS
+    assert config.validate_deployment(config.deployment_from_env(
+        {"CONSOLE_CURSOR_SECRET": long_enough})).console_cursor_secret == long_enough
+
+
+def test_the_cursor_secret_is_the_consoles_requirement_and_not_this_gateways():
+    """Unset, it is not a gateway startup failure in any mode, including `pilot`: this
+    process serves no console page, so it has nothing to sign, and refusing to serve
+    inference over a console setting would be the wrong coupling. The requirement is
+    recorded for C2 and the deployment checklist instead."""
+    assert config.CONSOLE_ONLY_SETTINGS == ("CONSOLE_CURSOR_SECRET",)
+    assert config.DEPLOYMENT_DEFAULTS.console_cursor_secret == ""
+    app = _app({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED})
+    assert app.state.runtime.mode == "pilot"
+
+
+@pytest.mark.parametrize("mode", ["", "dev", "test", "pilot"])
+def test_a_bad_deployment_value_refuses_before_anything_mounts(mode):
+    """`create_app` validates before it builds the app, so a bad value is a startup
+    failure in every mode rather than a surprise on the first request that reaches the
+    setting. No app object exists to serve, which is the observable form of "nothing
+    mounted"."""
+    env = {"MAX_MESSAGES": "0"}
+    if mode:
+        env["INFRX_MODE"] = mode
+    if mode == "pilot":
+        env.update(METERED, **AUTHENTICATED)
+    with pytest.raises(config.RuntimeMisconfigured, match="MAX_MESSAGES"):
+        _app(env)
+    # And the same configuration with the value corrected does start, so the refusal is
+    # about the value and not about the mode.
+    assert _app({**env, "MAX_MESSAGES": "64"}) is not None
+
+
+def test_the_g1_and_q1_constants_match_the_deployment_defaults():
+    """The caps still live as module constants in G1's validator and Q1's scheduler; the
+    wiring is an integration request for those owners. Until it lands, this is what keeps
+    the two from drifting: a default changed here without the constant (or the reverse) is
+    two different limits with one name in 08 §5.
+    """
+    from infrx.gateway.routes import intake, validate
+    from infrx.scheduling import memory
+    d = config.DEPLOYMENT_DEFAULTS
+    assert validate.MAX_MESSAGES == d.max_messages
+    assert validate.MAX_PARTS_PER_MESSAGE == d.max_parts
+    assert validate.MAX_TEXT_CODEPOINTS == d.max_text_codepoints
+    assert validate.MAX_URL_CHARS == d.max_url_chars
+    assert intake.MAX_NUMBER_DIGITS == d.max_number_digits
+    assert memory.MAX_INDEX_ITEMS == d.max_index_items
+    assert memory.MAX_INDEX_BYTES == d.max_index_bytes
+    # `LargeBodies` states its two numbers as parameter defaults rather than constants.
+    slots = intake.LargeBodies()
+    assert slots.limit == d.large_body_limit
+    assert slots.threshold == d.large_body_threshold_bytes

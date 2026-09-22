@@ -516,6 +516,48 @@ test("U1-T08 unreported usage shows no token count and says so instead of estima
   assert.ok(/[0-9]/.test(known.completion));
 });
 
+test("U1-T29 a legacy row and a deleted key render as absences, never as invented values", async () => {
+  const rows = await oneOfEach();
+  const pilot = rows.get("settled")!;
+
+  // r2: a row from before the pilot accounting regime carries no execution mode and no job state,
+  // and a row whose key was deleted carries neither key field. The service reports those absences;
+  // this layer is the only one allowed to turn them into text, and what it must never do is show a
+  // value that no row contained — a mode of "sync" or a key name belonging to some other key.
+  const legacy = usageRowView({
+    ...pilot,
+    accounting_regime: "legacy_usd",
+    execution_mode: null,
+    job_state: null,
+    terminal_cause: null,
+    usage_certainty: null,
+    settlement_state: null,
+    trace_mode: null,
+    max_hold: null,
+  });
+  assert.equal(legacy.mode, "—", "no execution mode is an em dash, not a default mode");
+  assert.equal(legacy.outcome, "—", "and no outcome is an em dash, not a job state it never had");
+  // The columns that do have values still render, so the row is shown rather than dropped: a
+  // legacy charge is real money and hiding it understates what the organization spent.
+  assert.equal(legacy.requestId, pilot.request_id);
+  assert.equal(legacy.when, instantLabel(pilot.created_at));
+  assert.equal(legacy.model, pilot.model);
+
+  const keyless = usageRowView({ ...pilot, key_id: null, key_name: null });
+  assert.equal(keyless.keyName, "(deleted key)", "a deleted key is named as deleted");
+  assert.equal(keyless.requestId, pilot.request_id, "and the row is still the organization's");
+  // The label is a label: it is not the identifier of anything, so it can never be fed back as a
+  // filter value that would match this row.
+  assert.notEqual(keyless.keyName, pilot.key_id);
+
+  // A pilot row with all its values renders none of the fallbacks, or the assertions above would
+  // hold over a view that showed an em dash for everything.
+  const full = usageRowView(pilot);
+  assert.equal(full.mode, pilot.execution_mode);
+  assert.equal(full.keyName, pilot.key_name);
+  assert.notEqual(full.outcome, "—");
+});
+
 test("U1-T09 each settlement state gets its own label and its own explanation", async () => {
   const rows = await oneOfEach();
   const labels = new Map<string, string>();

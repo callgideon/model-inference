@@ -17,7 +17,7 @@ import { MAX_PAGE_LIMIT, TRACE_CONTENT_AVAILABILITY } from "../../lib/contracts/
 
 runConsoleServicesConformance(() => {
   const services = createFakeConsoleServices();
-  return { services, sessions: services.sessions, ids: services.ids };
+  return { services, sessions: services.sessions, ids: services.ids, hasLegacyRows: services.hasLegacyRows };
 }, "fixture-backed ConsoleServices");
 
 test("the fixtures are deterministic and each instance has its own state", async () => {

@@ -49,13 +49,19 @@ import type {
   UsageQuery,
   UsageRow,
   UsageSummary,
+  UsageWindowQuery,
   WalletBalance,
 } from "./types.ts";
 
 export interface ConsoleServices {
   usage(session: SessionContext, query: UsageQuery): Promise<Result<Page<UsageRow>>>;
-  usageSummary(session: SessionContext, query: UsageQuery): Promise<Result<UsageSummary>>;
-  usageDaily(session: SessionContext, query: UsageQuery): Promise<Result<UsageDay[]>>;
+  /**
+   * The two aggregates take a **required** window: an unbounded aggregate is a full-table scan
+   * whose answer nobody can check, and it silently mixes accounting regimes. A missing or
+   * malformed `from`/`to` is `invalid_request`, never an implicit "all time".
+   */
+  usageSummary(session: SessionContext, query: UsageWindowQuery): Promise<Result<UsageSummary>>;
+  usageDaily(session: SessionContext, query: UsageWindowQuery): Promise<Result<UsageDay[]>>;
 
   balances(session: SessionContext): Promise<Result<WalletBalance>>;
   ledger(session: SessionContext, query: PageQuery): Promise<Result<Page<LedgerEntry>>>;

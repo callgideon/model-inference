@@ -99,5 +99,5 @@ test("the wrapper really does make cursors unreadable to the implementation", as
 
 runConsoleServicesConformance((): ConsoleHarness => {
   const fake = createFakeConsoleServices();
-  return { services: withOpaqueCursors(fake), sessions: fake.sessions, ids: fake.ids };
+  return { services: withOpaqueCursors(fake), sessions: fake.sessions, ids: fake.ids, hasLegacyRows: fake.hasLegacyRows };
 }, "ConsoleServices with opaque cursors");

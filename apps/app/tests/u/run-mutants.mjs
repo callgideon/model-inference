@@ -64,6 +64,7 @@ const T = {
   history: "U1-T27 a failed ledger read never makes an established organization look new",
   billingModel: "U1-T28 the billing page model states every branch, and page sizes are named here",
   boundary: "U1-T19 the error boundaries wire up the recovery that can actually recover",
+  absences: "U1-T29 a legacy row and a deleted key render as absences, never as invented values",
 };
 
 /** One single edit each, and one named invariant each. */
@@ -182,6 +183,31 @@ const MUTANTS = [
   },
 
   // --- filters and honesty about what was charged ---------------------------
+  // --- r2: an absent value is rendered as absent, never invented -------------
+  {
+    id: "U1-M62",
+    what: "a legacy row with no execution mode is shown as `sync`, a mode it never had",
+    file: USAGE,
+    find: "    mode: row.execution_mode ?? NO_VALUE,",
+    replace: '    mode: row.execution_mode ?? "sync",',
+    cases: [T.absences],
+  },
+  {
+    id: "U1-M63",
+    what: "a row with no outcome falls through to a job state it never had",
+    file: USAGE,
+    find: "    outcome: row.terminal_cause ?? row.job_state ?? NO_VALUE,",
+    replace: '    outcome: row.terminal_cause ?? row.job_state ?? "succeeded",',
+    cases: [T.absences],
+  },
+  {
+    id: "U1-M64",
+    what: "a deleted key is rendered as the empty string, so the column reads as a blank cell",
+    file: USAGE,
+    find: "    keyName: row.key_name ?? DELETED_KEY_LABEL,",
+    replace: '    keyName: row.key_name ?? "",',
+    cases: [T.absences],
+  },
   {
     id: "U1-M14",
     what: "a hold is rendered in the charged column",
@@ -375,8 +401,9 @@ const MUTANTS = [
     id: "U1-M37",
     what: "the outcome column ignores the terminal cause",
     file: USAGE,
-    find: "    outcome: row.terminal_cause ?? row.job_state,",
-    replace: "    outcome: row.job_state,",
+    // r2 re-expressed: the job state is nullable now, so the fallback chain ends in NO_VALUE.
+    find: "    outcome: row.terminal_cause ?? row.job_state ?? NO_VALUE,",
+    replace: "    outcome: row.job_state ?? NO_VALUE,",
     cases: [T.settlement],
   },
   {

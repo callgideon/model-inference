@@ -700,8 +700,8 @@
       "id": "KEYNAME-01",
       "note": "a deleted key denies the whole usage page",
       "file": "lib/services/console.ts",
-      "find": "  if (id === null && name === null) return { key_id: DELETED_KEY_ID, key_name: DELETED_KEY_NAME };",
-      "replace": "  if (false) return { key_id: DELETED_KEY_ID, key_name: DELETED_KEY_NAME };",
+      "find": "  if (id === null && name === null) return { key_id: null, key_name: null };",
+      "replace": "  if (false) return { key_id: null, key_name: null };",
       "cases": [
         "a usage row survives a deleted key, and says so"
       ],
@@ -712,17 +712,17 @@
       "note": "a half-null key pair is papered over instead of refused",
       "file": "lib/services/console.ts",
       "find": "  if (id === null || name === null) {\n    throw new TypeError(\"a usage row has one of key_id/key_name null: the key join yields both or neither\");\n  }",
-      "replace": "  if (id === null || name === null) return { key_id: id ?? DELETED_KEY_ID, key_name: name ?? DELETED_KEY_NAME };",
+      "replace": "  if (id === null || name === null) return { key_id: id, key_name: name };",
       "cases": [
         "a usage row survives a deleted key, and says so"
       ]
     },
     {
       "id": "KEYNAME-03",
-      "note": "the sentinel is a value a caller could filter for",
+      "note": "the deleted-key pair is given invented values instead of the nulls the view produced",
       "file": "lib/services/console.ts",
-      "find": "export const DELETED_KEY_ID = \"\";",
-      "replace": "export const DELETED_KEY_ID = \"deleted\";",
+      "find": "  if (id === null && name === null) return { key_id: null, key_name: null };",
+      "replace": "  if (id === null && name === null) return { key_id: \"\", key_name: \"(deleted key)\" };",
       "cases": [
         "a usage row survives a deleted key, and says so"
       ]
@@ -977,6 +977,89 @@
       "replace": "",
       "cases": [
         "a production build serves no fixtures whatever environment it is handed"
+      ]
+    },
+    {
+      "id": "REGIME-C1",
+      "note": "an unrecognised settlement regime is read as `pilot`, so R13's settlement rules reach a row they never settled",
+      "file": "lib/services/console.ts",
+      "find": "  throw new TypeError(\"settlement_regime must be legacy or pilot\");",
+      "replace": "  return \"pilot\";",
+      "cases": [
+        "the accounting regime is read from the row, and an unrecognised one is refused"
+      ]
+    },
+    {
+      "id": "REGIME-C2",
+      "note": "every row is projected as pilot, so pre-pilot history is presented as metered traffic",
+      "file": "lib/services/console.ts",
+      "find": "    accounting_regime: accountingRegimeOf(row),",
+      "replace": "    accounting_regime: \"pilot\",",
+      "cases": [
+        "the accounting regime is read from the row, and an unrecognised one is refused"
+      ]
+    },
+    {
+      "id": "REGIME-C3",
+      "note": "a nullable pilot column goes back through the strict reader, which denies the whole page for any legacy row",
+      "file": "lib/services/console.ts",
+      "find": "    execution_mode: optionalText(row, \"execution_mode\") as UsageRow[\"execution_mode\"],",
+      "replace": "    execution_mode: text(row, \"execution_mode\") as UsageRow[\"execution_mode\"],",
+      "cases": [
+        "the accounting regime is read from the row, and an unrecognised one is refused"
+      ]
+    },
+    {
+      "id": "KEYMODE-C1",
+      "note": "a key with no recorded capture mode denies the whole key list",
+      "file": "lib/services/console.ts",
+      "find": "    trace_mode: optionalText(row, \"trace_mode\") as ApiKeySummary[\"trace_mode\"],",
+      "replace": "    trace_mode: text(row, \"trace_mode\") as ApiKeySummary[\"trace_mode\"],",
+      "cases": [
+        "the accounting regime is read from the row, and an unrecognised one is refused"
+      ],
+      "kills_by": "guarded"
+    },
+    {
+      "id": "WINDOW-C1",
+      "note": "the aggregates answer over all history, mixing the accounting regimes in one total",
+      "file": "lib/services/console.ts",
+      "find": "      const invalid = badFilter(query) ?? missingWindow(query);\n      if (invalid !== null) return fail<UsageSummary>(\"invalid_request\", invalid);",
+      "replace": "      const invalid = badFilter(query);\n      if (invalid !== null) return fail<UsageSummary>(\"invalid_request\", invalid);",
+      "cases": [
+        "the accounting regime is read from the row, and an unrecognised one is refused"
+      ]
+    },
+    {
+      "id": "SAMPLE-C1",
+      "note": "the sample is read by a member name the view does not emit, so every real run throws",
+      "file": "lib/services/console.ts",
+      "find": "    sample_id: text(row, \"sample_id\"),",
+      "replace": "    sample_id: text(row, \"id\"),",
+      "cases": [
+        "a judge sample is projected field by field, so a stored blob cannot widen it"
+      ],
+      "kills_by": "guarded"
+    },
+    {
+      "id": "SAMPLE-C2",
+      "note": "a sample whose trace was deleted is refused instead of carrying the null the view produced",
+      "file": "lib/services/console.ts",
+      "find": "    request_id: optionalText(row, \"request_id\"),",
+      "replace": "    request_id: text(row, \"request_id\"),",
+      "cases": [
+        "a judge sample is projected field by field, so a stored blob cannot widen it"
+      ],
+      "kills_by": "guarded"
+    },
+    {
+      "id": "REGIME-C4",
+      "note": "the usage statement stops selecting the regime column, so no row can say which rules wrote it",
+      "file": "lib/services/query.ts",
+      "find": "u.usage_certainty, u.settlement_state, u.settlement_regime, u.cost, u.max_hold, u.trace_mode`;",
+      "replace": "u.usage_certainty, u.settlement_state, u.cost, u.max_hold, u.trace_mode`;",
+      "cases": [
+        "the rendered statements are the shipped SQL: one relation, named columns, bounded"
       ]
     }
   ]

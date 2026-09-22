@@ -370,15 +370,19 @@ test("a usage row survives a deleted key, and says so", async () => {
   const page = expectOk(await services.usage(sessions.owner, { limit: MAX_PAGE_LIMIT }));
   const row = page.items.find((candidate) => candidate.request_id === usage.request_id);
   assert.ok(row !== undefined, "the row is kept, or the cost total it carries would be understated");
-  assert.equal(row.key_name, "(deleted key)");
-  assert.equal(row.key_id, "", "the documented sentinel, until key_id becomes nullable in the contract");
+  // r2: the pair is `string | null`, so the two sentinels are gone. `""` was an identifier no
+  // caller could filter for and `(deleted key)` was a name nobody chose; how the absence is shown
+  // is the page's decision (`usageRowView`), and this layer reports it as an absence.
+  assert.equal(row.key_name, null);
+  assert.equal(row.key_id, null);
 
-  // And the sentinel is unreachable from a filter: a key id filter must be identifier-shaped.
+  // And it is unreachable from a filter either way: a key id filter must be identifier-shaped, and
+  // no identifier matches "this row names no key".
   expectError(await services.usage(sessions.owner, { key_id: "" }), "invalid_request", "the empty key filter");
   const byKey = expectOk(await services.usage(sessions.owner, { key_id: ids.keyId, limit: MAX_PAGE_LIMIT }));
   assert.ok(
-    !byKey.items.some((candidate) => candidate.key_id === ""),
-    "a real key filter never matches the sentinel",
+    !byKey.items.some((candidate) => candidate.key_id === null),
+    "a real key filter never returns a row that names no key",
   );
 
   // Exactly one of the two null is a shape the view cannot produce: it is a malformed row.
@@ -436,6 +440,74 @@ test("entitlements fail closed: R24's three states are never reached by coercion
   }
 });
 
+test("the accounting regime is read from the row, and an unrecognised one is refused", async () => {
+  const { services, sessions, ids, data } = makeConsoleHarness();
+  // r2. The regime is the field that says which rules wrote a row, so it is *read* and never
+  // inferred from which columns happen to be null — "every pilot column is null" is also what a
+  // broken projection looks like.
+  const legacy = data.usage.filter((row) => row.org_id === ids.orgId && row.settlement_regime === "legacy");
+  assert.ok(legacy.length > 0, "the dataset must carry pre-pilot history, or this proves nothing");
+  const pilot = data.usage.find((row) => row.org_id === ids.orgId && row.settlement_regime === "pilot");
+  assert.ok(pilot !== undefined, "and rows of the pilot regime to tell it apart from");
+
+  const walked = await walkUsage(services as never, sessions.owner);
+  assert.ok(walked.ok, "a legacy row must not deny the page it is on");
+  const byId = new Map(walked.value.items.map((row) => [row.request_id, row as unknown as Record<string, unknown>]));
+  for (const row of legacy) {
+    const projected = byId.get(String(row.request_id));
+    assert.ok(projected !== undefined, "a legacy row is still the organization's traffic and is kept");
+    assert.equal(projected.accounting_regime, "legacy_usd", "the console name for `legacy`");
+    // Its NULLs are its own. A projection that filled any of them in would be inventing history.
+    assert.deepEqual(
+      {
+        execution_mode: projected.execution_mode,
+        job_state: projected.job_state,
+        usage_certainty: projected.usage_certainty,
+        trace_mode: projected.trace_mode,
+      },
+      { execution_mode: null, job_state: null, usage_certainty: null, trace_mode: null },
+      "a legacy row has no pilot columns to fill in",
+    );
+  }
+  assert.equal(byId.get(String(pilot.request_id))?.accounting_regime, "pilot");
+
+  // Fail closed: a regime nobody recognises is a malformed row, never read as `pilot`. Reading it
+  // as `pilot` would apply R13's settlement rules to a row they never settled.
+  const victim = data.usage.find((row) => row.org_id === ids.orgId);
+  assert.ok(victim !== undefined);
+  const kept = victim.settlement_regime;
+  for (const bad of ["Legacy", "pilot_v2", "", 1, null]) {
+    victim.settlement_regime = bad;
+    const broken = await walkUsage(services as never, sessions.owner);
+    assert.ok(!broken.ok, `a settlement_regime of ${JSON.stringify(bad)} must be refused`);
+    assert.equal(broken.error.code, "internal_error");
+  }
+  victim.settlement_regime = kept;
+
+  // The aggregates require their window (r2): an unbounded total silently mixes the two regimes.
+  for (const query of [{}, { from: "2000-01-01T00:00:00Z" }, { to: "2100-01-01T00:00:00Z" }]) {
+    expectError(
+      await services.usageSummary(sessions.owner, query as never),
+      "invalid_request",
+      `usageSummary with ${JSON.stringify(query)}`,
+    );
+    expectError(
+      await services.usageDaily(sessions.owner, query as never),
+      "invalid_request",
+      `usageDaily with ${JSON.stringify(query)}`,
+    );
+  }
+  expectOk(await services.usageSummary(sessions.owner, { from: "2000-01-01T00:00:00Z", to: "2100-01-01T00:00:00Z" }));
+
+  // A key with no recorded capture mode is a null, not a denied key list and not an invented mode.
+  const key = data.keys.find((row) => row.org_id === ids.orgId && row.trace_mode === null);
+  assert.ok(key !== undefined, "the dataset must carry a key from before `api_keys.trace_mode`");
+  const keys = expectOk(await services.keys.list(sessions.owner));
+  const projectedKey = keys.find((candidate) => candidate.id === key.id);
+  assert.ok(projectedKey !== undefined, "the key is listed rather than denying the list");
+  assert.equal(projectedKey.trace_mode, null, "and its unrecorded mode stays unrecorded here");
+});
+
 test("a judge sample is projected field by field, so a stored blob cannot widen it", async () => {
   const { services, sessions, data, ids } = makeConsoleHarness();
   const run = data.judge.find(
@@ -454,9 +526,12 @@ test("a judge sample is projected field by field, so a stored blob cannot widen 
   assert.ok(!serialised.includes("batch_live_should_never_be_here"), "and so is its value");
   assert.ok(!serialised.includes("labelled_by"), "including an operator principal on a sample");
   const projected = page.items.flatMap((item) => item.samples)[0];
+  // r2: the frozen shape is what `console_judge_runs` builds and nothing else. The four members
+  // this used to expect included `id`/`run_id`, which that view never emits, and two `limited_*`
+  // members only a fake could fill.
   assert.deepEqual(
     Object.keys(projected).sort(),
-    ["id", "limited_evaluation", "limited_reason", "request_id", "run_id", "scores"],
+    ["request_id", "rubric_version", "sample_id", "scores"],
     "a sample is exactly the DTO's fields",
   );
   for (const score of projected.scores) {
@@ -479,10 +554,24 @@ test("a judge sample is projected field by field, so a stored blob cannot widen 
     );
   }
 
+  // r2: a sample whose trace has been deleted carries a null `request_id`, and that is a value
+  // rather than a defect — but anything that is not a string and not null still is one.
+  const keptRequestId = samples[0].request_id;
+  samples[0].request_id = null;
+  const orphan = expectOk(await services.judgeRuns(sessions.owner, { limit: 20 }));
+  assert.equal(
+    orphan.items.flatMap((item) => item.samples)[0].request_id,
+    null,
+    "a sample whose trace is gone keeps a null rather than being given an invented id",
+  );
+  samples[0].request_id = 17;
+  expectError(await services.judgeRuns(sessions.owner, { limit: 20 }), "internal_error", "a numeric request id");
+  samples[0].request_id = keptRequestId;
+
   // Garbage inside the blob is a typed refusal rather than a half-rendered run.
-  samples[0].limited_reason = "because";
-  expectError(await services.judgeRuns(sessions.owner, { limit: 20 }), "internal_error", "an unknown limited reason");
-  samples[0].limited_reason = null;
+  samples[0].rubric_version = "three";
+  expectError(await services.judgeRuns(sessions.owner, { limit: 20 }), "internal_error", "a textual rubric version");
+  samples[0].rubric_version = 3;
   (samples[0].scores as Record<string, unknown>[])[0].kind = "vibes";
   expectError(await services.judgeRuns(sessions.owner, { limit: 20 }), "internal_error", "an unknown score kind");
   (samples[0].scores as Record<string, unknown>[])[0].kind = "numeric";

@@ -46,7 +46,7 @@ import { createFakeConsoleServices } from "../../lib/contracts/fake-services.ts"
 
 runConsoleServicesConformance(() => {
   const services = createFakeConsoleServices();
-  return { services, sessions: services.sessions, ids: services.ids };
+  return { services, sessions: services.sessions, ids: services.ids, hasLegacyRows: services.hasLegacyRows };
 }, "mutation target");
 `;
 
@@ -307,13 +307,16 @@ const SELF_TESTS = [
     expect: "runner-error",
   },
   {
-    // The round-4 reviewer's V03 edit, which round 5 reported as a kill while it was failing eight
-    // cases by TypeError. It is a *legitimate* kill now — the per-field idempotency case catches it on
-    // an assertion — and this self-test exists to keep it that way: if the case that catches it ever
-    // weakens, the classifier sees an exception again and refuses the kill.
-    name: "the old V03 edit is killed on an assertion, not on an exception",
+    // The edit the round-4 reviewer filed as V03 and which round 5 reported as a kill while it was
+    // failing eight cases by TypeError. It is the **IDEM-05** variant, not V03 (V03 was the
+    // fake-only "record committed with its effect" finding), and the label now says so: a
+    // self-test named after the wrong mutant is a self-test nobody can check. It is a
+    // *legitimate* kill now — the per-field idempotency case catches it on an assertion — and
+    // this self-test exists to keep it that way: if the case that catches it ever weakens, the
+    // classifier sees an exception again and refuses the kill.
+    name: "the old IDEM-05 edit is killed on an assertion, not on an exception",
     mutant: {
-      id: "SELF-V03-REPLICA",
+      id: "SELF-IDEM-05-REPLICA",
       file: "lib/contracts/fake-services.ts",
       find: "    const value = apply();\n    remember(session, operation, key, payload, record(value));",
       replace: "    remember(session, operation, key, payload, record(undefined as never));\n    const value = apply();",

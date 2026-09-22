@@ -10,14 +10,15 @@
  * absence of a request must never be drawn as a loss.
  */
 
-import type {
-  ApiKeySummary,
-  ErrorCode,
-  Page,
-  Result,
-  TraceContentAvailability,
-  TraceListItem,
-  TraceLossReason,
+import {
+  traceModeOf,
+  type ApiKeySummary,
+  type ErrorCode,
+  type Page,
+  type Result,
+  type TraceContentAvailability,
+  type TraceListItem,
+  type TraceLossReason,
 } from "../../../lib/contracts/types.ts";
 import { traceHref, type FilterState } from "./query.ts";
 
@@ -339,7 +340,12 @@ export function buildTraceListView(
     }
     // No filters and no rows: either nothing has run, or nothing is being captured. The two read
     // very differently to someone who has just made requests, so they are separate states.
-    const capturing = context.keys.some((key) => key.trace_mode !== "off" && key.revoked_at === null);
+    // r2: `ApiKeySummary.trace_mode` is nullable and **null is off** — a key that predates the
+    // column recorded no choice, and capture is consent, so no choice can only mean no capture.
+    // `key.trace_mode !== "off"` was true for such a key, so this page told an organization whose
+    // keys capture nothing that it was capturing and that its empty list meant "nothing has run".
+    // `traceModeOf` is the one reading of the column; the comparison never repeats it.
+    const capturing = context.keys.some((key) => traceModeOf(key) !== "off" && key.revoked_at === null);
     return capturing
       ? {
           kind: "empty",

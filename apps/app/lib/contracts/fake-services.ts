@@ -52,6 +52,7 @@ import {
   MAX_PAGE_LIMIT,
   MAX_RUBRIC_VERSION,
   ORG_ROLES,
+  traceModeOf,
   PLATFORM_ACTOR,
   PAGE_QUERY_FIELDS,
   SETTINGS_UPDATE_FIELDS,
@@ -117,7 +118,8 @@ type KeyFixture = {
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
-  trace_mode: string;
+  /** Null: a key created before `api_keys.trace_mode` existed. Null is off, never a default. */
+  trace_mode: string | null;
 };
 
 type OrgFixture = {
@@ -129,6 +131,8 @@ type OrgFixture = {
   suspended: boolean;
   suspension_reason: string | null;
   usage_rows: number;
+  /** Rows from before the pilot accounting regime, appended older than every generated row. */
+  legacy_usage_rows: number;
   all_free: boolean;
   grants: GrantFixture[];
   adjustment: GrantFixture | null;
@@ -191,15 +195,16 @@ const judgeFixture = judgeFixtureJson as unknown as {
     mode: string;
     rubric_version: number;
     judge_model: string;
-    judge_model_version: string;
+    judge_model_version: string | null;
     budget_reserved: string;
     budget_settled: string | null;
-    consent_snapshot_at: string;
+    consent_snapshot_at: string | null;
     external_batch_id: string | null;
     quarantine_reason: string | null;
     samples: {
       id: string;
-      trace_index: number;
+      /** Null: the trace this sample scored has since been deleted. */
+      trace_index: number | null;
       limited_evaluation: boolean;
       limited_reason: string | null;
       scores: Omit<JudgeScore, "rubric_version" | "judge_model" | "judge_model_version">[];
@@ -404,6 +409,9 @@ function canonicalPayload(value: Record<string, unknown>): string {
 function codePoints(text: string): number {
   return [...text].length;
 }
+
+/** A filter value is an identifier, not a document: bounded like every other text input (R17). */
+const MAX_FILTER_IDENTIFIER_CHARS = 200;
 
 /** R3: one named signal per submission, with the value type the name implies. */
 function badFeedbackBody(input: { name: FeedbackName; value: FeedbackValue; comment?: string | null }): string | null {
@@ -743,7 +751,7 @@ function buildOrg(spec: OrgFixture): OrgState {
     created_at: key.created_at,
     last_used_at: key.last_used_at,
     revoked_at: key.revoked_at,
-    trace_mode: pick(TRACE_MODES, key.trace_mode, `${spec.name} key trace_mode`),
+    trace_mode: key.trace_mode === null ? null : pick(TRACE_MODES, key.trace_mode, `${spec.name} key trace_mode`),
   }));
   const activeKeys = keys.filter((key) => key.revoked_at === null);
 
@@ -755,6 +763,15 @@ function buildOrg(spec: OrgFixture): OrgState {
 
   for (let i = 0; i < spec.usage_rows; i += 1) {
     const key = activeKeys[i % activeKeys.length];
+    // Every 53rd row was made with a key that has since been deleted. D1 nulls
+    // `usage_events.api_key_id` on delete, so the usage view yields `key_id` and `key_name` null
+    // *together*; the trace row keeps the id it was written with, because it stores it rather
+    // than joining for it. The row is still this organization's traffic and is still counted.
+    const keyDeleted = i % 53 === 8;
+    // Active keys always carry a capture mode; `traceModeOf` is the one reading of the nullable
+    // column, so this generator cannot disagree with the rest of the console about it.
+    const keyTraceMode = traceModeOf(key);
+    const executionMode = EXECUTION_MODE_CYCLE[i % EXECUTION_MODE_CYCLE.length];
     const model = orgsFixture.models[i % orgsFixture.models.length];
     // 137 s apart, then 3 days apart past row 119, so the oldest rows are genuinely older than
     // the 30-day retention window and one of them can be `expired` for real. Still monotonic —
@@ -782,9 +799,10 @@ function buildOrg(spec: OrgFixture): OrgState {
       request_id,
       created_at,
       model,
-      key_id: key.id,
-      key_name: key.name,
-      execution_mode: EXECUTION_MODE_CYCLE[i % EXECUTION_MODE_CYCLE.length],
+      key_id: keyDeleted ? null : key.id,
+      key_name: keyDeleted ? null : key.name,
+      accounting_regime: "pilot",
+      execution_mode: executionMode,
       job_state: outcome.job_state,
       terminal_cause: outcome.terminal_cause,
       http_status: outcome.http_status,
@@ -794,11 +812,11 @@ function buildOrg(spec: OrgFixture): OrgState {
       settlement_state: settlement,
       cost: outcome.billable ? costOf(promptTokens, completionTokens) : ZERO_MONEY,
       max_hold: outcome.holds ? costOf(promptTokens, MAX_OUTPUT_TOKENS) : null,
-      trace_mode: key.trace_mode,
+      trace_mode: keyTraceMode,
     });
 
-    const availability = availabilityFor(key.trace_mode, fullModeRows, createdMs + retentionMs < CLOCK_MS);
-    if (key.trace_mode === "full") fullModeRows += 1;
+    const availability = availabilityFor(keyTraceMode, fullModeRows, createdMs + retentionMs < CLOCK_MS);
+    if (keyTraceMode === "full") fullModeRows += 1;
     const list: TraceListItem = {
       request_id,
       created_at,
@@ -806,7 +824,7 @@ function buildOrg(spec: OrgFixture): OrgState {
       key_id: key.id,
       job_state: outcome.job_state,
       http_status: outcome.http_status,
-      trace_mode: key.trace_mode,
+      trace_mode: keyTraceMode,
       content: availability,
       loss_reason: availability === "lost" ? "memory_budget" : "none",
       prompt_tokens: known ? promptTokens : null,
@@ -824,7 +842,7 @@ function buildOrg(spec: OrgFixture): OrgState {
 
     traces.push({
       ...list,
-      execution_mode: usage[i].execution_mode,
+      execution_mode: executionMode,
       terminal_cause: outcome.terminal_cause,
       error_code: outcome.error_code,
       usage_certainty: outcome.usage_certainty,
@@ -857,6 +875,38 @@ function buildOrg(spec: OrgFixture): OrgState {
         availability === "available"
           ? { ...structuredClone(template), request: { ...structuredClone(template.request), model } }
           : null,
+    });
+  }
+
+  // Rows from before the pilot accounting regime, older than every row above (R13 does not reach
+  // them). They are real charges in US dollars and must be displayed and totalled, but they were
+  // never jobs: no execution mode, no job state, no usage certainty, no capture mode, no
+  // settlement. Nothing invents those values, and nothing replays such a row into a debit -- which
+  // is why the regime is a field of its own rather than something inferred from the null columns.
+  for (let k = 0; k < spec.legacy_usage_rows; k += 1) {
+    const i = spec.usage_rows + k;
+    const createdMs = CLOCK_MS - (i + 1) * 137000 - Math.max(0, i - 119) * 3 * 86400000;
+    const promptTokens = 512 + Math.floor(random() * 20000);
+    const completionTokens = 32 + Math.floor(random() * 480);
+    const key = keys[k % keys.length];
+    usage.push({
+      request_id: deterministicUuid(spec.namespace, i + 1),
+      created_at: new Date(createdMs).toISOString(),
+      model: orgsFixture.models[i % orgsFixture.models.length],
+      key_id: key.id,
+      key_name: key.name,
+      accounting_regime: "legacy_usd",
+      execution_mode: null,
+      job_state: null,
+      terminal_cause: null,
+      http_status: 200,
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      usage_certainty: null,
+      settlement_state: null,
+      cost: costOf(promptTokens, completionTokens),
+      max_hold: null,
+      trace_mode: null,
     });
   }
 
@@ -980,18 +1030,14 @@ function buildOrg(spec: OrgFixture): OrgState {
 
     org.judge = judgeFixture.runs.map((run) => {
       const samples: JudgeSample[] = run.samples.map((sample) => {
-        const trace = org.traces[sample.trace_index];
+        const trace = sample.trace_index === null ? undefined : org.traces[sample.trace_index];
         return {
-          id: sample.id,
-          run_id: run.id,
-          request_id: trace === undefined ? deterministicUuid(spec.namespace, 1) : trace.request_id,
-          limited_evaluation: sample.limited_evaluation,
-          limited_reason:
-            sample.limited_reason === "no_media"
-              ? "no_media"
-              : sample.limited_reason === "content_expired"
-                ? "content_expired"
-                : null,
+          sample_id: sample.id,
+          // The sample's own rubric version: late results deduplicate by (run, sample, version),
+          // so a run may hold samples from more than one, and the scores follow the sample.
+          rubric_version: run.rubric_version,
+          // Null rather than an invented id: a sample whose trace is gone is still a sample.
+          request_id: trace === undefined ? null : trace.request_id,
           scores: sample.scores.map((score) => ({
             ...score,
             rubric_version: run.rubric_version,
@@ -1012,8 +1058,9 @@ function buildOrg(spec: OrgFixture): OrgState {
         rubric_version: run.rubric_version,
         judge_model: run.judge_model,
         judge_model_version: run.judge_model_version,
+        // The run's own count, which is not `samples.length` once D1's cap bites.
         sample_count: samples.length,
-        limited_evaluation_count: samples.filter((sample) => sample.limited_evaluation).length,
+        limited_evaluation_count: run.samples.filter((sample) => sample.limited_evaluation).length,
         budget_reserved: parseMoney(run.budget_reserved),
         budget_settled: run.budget_settled === null ? null : parseMoney(run.budget_settled),
         consent_snapshot_at: run.consent_snapshot_at,
@@ -1078,6 +1125,13 @@ export type FailurePhase = "before" | "after_write";
 export type FakeConsoleServices = ConsoleServices & {
   sessions: FakeSessions;
   ids: FakeIds;
+  /**
+   * `ConsoleHarness.hasLegacyRows`: the fixtures carry the pre-pilot and nullable history — legacy
+   * usd rows with a charge, rows whose key has been deleted, a key with no recorded capture mode
+   * and an audit entry whose target organization is gone. The conformance cases that prove the
+   * projection survives it are skipped on a harness that has none.
+   */
+  hasLegacyRows: true;
   /** Deterministic failure injection: the next call of `operation` returns this error. */
   failNext(operation: ConsoleOperation, code: ErrorCode, message?: string, phase?: FailurePhase): void;
   /**
@@ -1119,7 +1173,23 @@ export function createFakeConsoleServices(): FakeConsoleServices {
    * R34: append-only. Nothing in this file updates or removes an entry, which is why a restore
    * cannot erase the suspension before it — the history is the list, not the current state.
    */
-  const audit: AuditEntry[] = [];
+  const audit: AuditEntry[] = [
+    // R34 outlives its targets: this organization has since been deleted, and D1's
+    // `target_org_id` is `on delete set null`, so the entry survives with no target. The write
+    // happened; attributing it to some other organization to avoid a null would be a lie, and
+    // back-filling it is impossible. A `target_org_id` filter must not match it.
+    {
+      id: deterministicUuid(6060, 0),
+      at: new Date(CLOCK_MS - 60000).toISOString(),
+      actor_principal: orgsFixture.sessions.operator.email,
+      action: "entitlements_set",
+      target_org_id: null,
+      reason: "closed the account's entitlements before deletion",
+      before: { model_ids: null },
+      after: { model_ids: [] },
+      idempotency_key: "seed-entitlements-closed",
+    },
+  ];
   let auditCounter = 0;
   let clockMs = CLOCK_MS;
   let operatorClockMs = CLOCK_MS;
@@ -1300,7 +1370,8 @@ export function createFakeConsoleServices(): FakeConsoleServices {
     }
     for (const name of ["key_id", "model"] as const) {
       const value = query[name];
-      if (value !== undefined && !(typeof value === "string" && value.length > 0 && value.length <= 200)) {
+      // R54: code points, like every other length bound in this file.
+      if (value !== undefined && !(typeof value === "string" && value.length > 0 && codePoints(value) <= MAX_FILTER_IDENTIFIER_CHARS)) {
         return `${name} must be a non-empty identifier`;
       }
     }
@@ -1329,6 +1400,19 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       (query.from === undefined || at >= instant(query.from)) &&
       (query.to === undefined || at <= instant(query.to))
     );
+  }
+
+  /**
+   * An aggregate needs a window. `usageSummary` and `usageDaily` collapse history into one figure,
+   * so an unbounded call is a full-table scan whose answer nobody can check and which silently
+   * mixes the legacy regime into a pilot total. The list keeps its optional window: a page is
+   * bounded by its limit.
+   */
+  function missingWindow(query: UsageQuery): string | null {
+    for (const name of ["from", "to"] as const) {
+      if (query[name] === undefined) return `${name} is required: an aggregate needs a window`;
+    }
+    return null;
   }
 
   function usageRowsFor(org: OrgState, query: UsageQuery): UsageRow[] {
@@ -1564,6 +1648,8 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       };
     })(),
 
+    hasLegacyRows: true,
+
     failNext(operation, code, message = "injected failure", phase = "before") {
       const queue = injected.get(operation) ?? [];
       queue.push({ code, message, phase });
@@ -1592,7 +1678,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (injectedResult !== null) return injectedResult;
       const rejected = badInput<UsageSummary>(query, USAGE_QUERY_FIELDS);
       if (rejected !== null) return rejected;
-      const invalid = badFilter(query);
+      const invalid = badFilter(query) ?? missingWindow(query);
       if (invalid !== null) return fail<UsageSummary>("invalid_request", invalid);
       const resolved = tenant<UsageSummary>(session, "usageSummary");
       if (isError(resolved)) return resolved;
@@ -1636,7 +1722,7 @@ export function createFakeConsoleServices(): FakeConsoleServices {
       if (injectedResult !== null) return injectedResult;
       const rejected = badInput<UsageDay[]>(query, USAGE_QUERY_FIELDS);
       if (rejected !== null) return rejected;
-      const invalid = badFilter(query);
+      const invalid = badFilter(query) ?? missingWindow(query);
       if (invalid !== null) return fail<UsageDay[]>("invalid_request", invalid);
       const resolved = tenant<UsageDay[]>(session, "usageDaily");
       if (isError(resolved)) return resolved;

@@ -279,6 +279,29 @@ test("V1-V06 an empty page distinguishes filtered, capture-off, keys-unknown and
     assert.equal(off.action?.href, "/api-keys");
   }
 
+  // r2: a key that predates `api_keys.trace_mode` records **no** choice, and null reads as off
+  // (capture is consent, so the absence of a choice cannot mean capture). `trace_mode !== "off"`
+  // was true for such a key, which told an organization capturing nothing that its empty list
+  // meant "nothing has run yet" — and pointed it away from the one page that would fix it.
+  const unrecorded = buildTraceListView(page([]), {
+    filters: FILTERS,
+    keys: [key({ trace_mode: null })],
+    narrowed: PARSED_IDLE.narrowed,
+  });
+  assert.equal(unrecorded.kind, "empty");
+  if (unrecorded.kind === "empty") {
+    assert.equal(unrecorded.reason, "tracing_off", "a key with no recorded capture mode captures nothing");
+    assert.equal(unrecorded.action?.href, "/api-keys");
+  }
+  // And a key that *does* record a mode still counts as capturing, so the assertion above is not
+  // holding over a page that says "tracing_off" for every key it is given.
+  const recorded = buildTraceListView(page([]), {
+    filters: FILTERS,
+    keys: [key({ trace_mode: "minimal" })],
+    narrowed: PARSED_IDLE.narrowed,
+  });
+  assert.equal(recorded.kind === "empty" ? recorded.reason : "rows", "no_traces");
+
   // `keys.list` failed: the names are missing and so is the fact about capture, so the page must not
   // claim tracing is off for keys it could not read.
   const unknown = buildTraceListView(page([]), {

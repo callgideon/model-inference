@@ -270,6 +270,15 @@ export type UsageQuery = PageQuery & {
   model?: string;
 };
 
+/**
+ * The window an *aggregate* requires. `usageSummary` and `usageDaily` collapse rows into one
+ * figure, and an aggregate with no bounds is a full-table scan whose answer nobody can check: it
+ * silently mixes the legacy regime with the pilot one and grows without limit as history does. The
+ * list keeps its optional window — a page is bounded by its limit — but the two aggregates require
+ * `from` and `to`, and a caller that omits either is `invalid_request`, never an implicit "all time".
+ */
+export type UsageWindowQuery = UsageQuery & { from: string; to: string };
+
 export type TraceQuery = PageQuery & {
   from?: string;
   to?: string;
@@ -301,26 +310,51 @@ export const TRACE_QUERY_FIELDS = [
 // Usage and money
 // ---------------------------------------------------------------------------
 
+/**
+ * Which accounting rules a usage row was written under.
+ *
+ * - `pilot` — settled by the metering path: every column below is populated and the settlement
+ *   rules of R13 apply to it.
+ * - `legacy_usd` — history from before the pilot regime. The row is a real charge in US dollars
+ *   and must be *displayed and totalled*, but it was never a job: it has no execution mode, no job
+ *   state, no usage certainty and no capture mode, and nothing may replay it into a debit.
+ *
+ * The regime is an explicit field rather than something inferred from which columns are null,
+ * because "every pilot column happens to be null" is also what a broken projection looks like. It
+ * is the console name for D1's `usage_events.settlement_regime` (`legacy` / `pilot`).
+ */
+export const ACCOUNTING_REGIMES = ["legacy_usd", "pilot"] as const;
+export type AccountingRegime = (typeof ACCOUNTING_REGIMES)[number];
+
 export type UsageRow = {
   request_id: string;
   created_at: string;
   model: string;
-  key_id: string;
-  key_name: string;
-  execution_mode: ExecutionMode;
-  job_state: JobState;
+  /**
+   * The key that made the request, or null for both fields together when that key has since been
+   * deleted (D1 sets `usage_events.api_key_id` to null on delete, so the join yields both or
+   * neither). The row is still the organization's traffic and is still counted: dropping it would
+   * understate a cost total, and inventing a placeholder identifier would make it filterable.
+   */
+  key_id: string | null;
+  key_name: string | null;
+  /** Which rules wrote this row. Legacy rows keep their NULLs; nothing is invented for them. */
+  accounting_regime: AccountingRegime;
+  /** Null on a `legacy_usd` row only; a pilot row always carries all four. */
+  execution_mode: ExecutionMode | null;
+  job_state: JobState | null;
   terminal_cause: TerminalCause | null;
   http_status: number;
   prompt_tokens: number | null;
   completion_tokens: number | null;
-  usage_certainty: UsageCertainty;
+  usage_certainty: UsageCertainty | null;
   /** Null until the request reaches a terminal state: nothing has been settled yet (R13). */
   settlement_state: SettlementState | null;
   /** Charged amount; zero while unsettled, free or platform-absorbed. */
   cost: Money;
   /** Outstanding reservation, null once released. Never an authoritative charge. */
   max_hold: Money | null;
-  trace_mode: TraceMode;
+  trace_mode: TraceMode | null;
 };
 
 export type UsageSummary = {
@@ -393,8 +427,19 @@ export type ApiKeySummary = {
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
-  trace_mode: TraceMode;
+  /**
+   * Null is **off**, not "unknown" and not a default to be filled in (`api_keys.trace_mode` is a
+   * nullable column added by D1, so every key that predates it reads null). Capture is consent,
+   * so the absence of a recorded choice can only mean no capture; a reader that treats null as
+   * anything else would start capturing content nobody opted into. Use `traceModeOf`.
+   */
+  trace_mode: TraceMode | null;
 };
+
+/** The one reading of a null capture mode: off. A reader that spells this differently is a defect. */
+export function traceModeOf(key: Pick<ApiKeySummary, "trace_mode">): TraceMode {
+  return key.trace_mode ?? "off";
+}
 
 /** A key label is a label: bounded so a form cannot post a document into the keys page (R17). */
 export const MAX_KEY_NAME_CHARS = 200;
@@ -731,7 +776,12 @@ export type AuditEntry = {
   at: string;
   actor_principal: string;
   action: AuditAction;
-  target_org_id: string;
+  /**
+   * The organization the write landed on, or null once that organization has been deleted: the
+   * trail is append-only and outlives its targets (`on delete set null` in D1), so an entry whose
+   * target is gone is still the record that the write happened. It is never back-filled.
+   */
+  target_org_id: string | null;
   reason: string;
   /** The fields this write changed, before and after. `null` before a creation. */
   before: Record<string, unknown> | null;
@@ -820,20 +870,39 @@ export type JudgeScore = {
   rationale: string | null;
   rubric_version: number;
   judge_model: string;
-  judge_model_version: string;
+  /** Null until the provider names the revision it served; a dry run has no provider. */
+  judge_model_version: string | null;
   /** Dry-run output: an estimate, never a provider result. */
   estimated: boolean;
 };
 
+/**
+ * One evaluated sample, frozen to the shape D1's `console_judge_runs` view emits and nothing else
+ * (previously the console carried a second, richer shape that no query could produce).
+ *
+ * - `sample_id` is the sample's own identifier, a lower-case UUIDv4, unique within its run;
+ * - `rubric_version` is the sample's, not the run's: late results deduplicate by
+ *   (run, sample, rubric version), so one run may carry samples from more than one version;
+ * - `request_id` is null when the trace the sample scored has since been deleted;
+ * - `scores` is empty when nothing has been collected yet.
+ *
+ * `limited_evaluation`/`limited_reason` are deliberately absent: the run carries
+ * `limited_evaluation_count`, which is what the console renders, and a per-sample flag no view
+ * selects would have been a field only the fake could fill.
+ */
 export type JudgeSample = {
-  id: string;
-  run_id: string;
-  request_id: string;
-  /** No media means no groundedness pass; the scores are explicitly partial. */
-  limited_evaluation: boolean;
-  limited_reason: JudgeLimitedReason | null;
+  sample_id: string;
+  rubric_version: number;
+  request_id: string | null;
   scores: JudgeScore[];
 };
+
+/**
+ * The most samples one run row carries. D1 caps the embedded array so a run with ten thousand
+ * samples cannot turn one page of a list into a multi-megabyte document, which is why
+ * `sample_count` is the run's own count and is **not** `samples.length`.
+ */
+export const JUDGE_RUN_SAMPLE_CAP = 50;
 
 export type JudgeRun = {
   id: string;
@@ -842,13 +911,20 @@ export type JudgeRun = {
   mode: JudgeMode;
   rubric_version: number;
   judge_model: string;
-  judge_model_version: string;
+  /** Null on a run that never reached a provider: a dry run does not learn a served revision. */
+  judge_model_version: string | null;
+  /** Every sample of the run, which is not `samples.length` once the cap bites. */
   sample_count: number;
   limited_evaluation_count: number;
   /** Worst-case reservation; stays held while a submission outcome is ambiguous. */
   budget_reserved: Money;
   budget_settled: Money | null;
-  consent_snapshot_at: string;
+  /**
+   * When the consent this run was authorized by took effect, or null if that consent-history row
+   * has since been revoked and removed: the run is still a fact, and a missing snapshot instant is
+   * not an excuse to invent one (D1 reaches it through an outer join).
+   */
+  consent_snapshot_at: string | null;
   external_batch_id: string | null;
   quarantine_reason: string | null;
   samples: JudgeSample[];

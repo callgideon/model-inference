@@ -284,7 +284,38 @@ RECORD_PAIRS = {
 # persisted record and on the console's stored shape, and on neither DTO.
 INTERNAL_MARKERS = ("by_operator",)
 
-UNPAIRED_CONSOLE_TYPES = ("WalletBalance", "TraceListItem")
+UNPAIRED_CONSOLE_TYPES = ("WalletBalance", "TraceListItem",
+                          # r2 (F2R item 6): the console rows whose nullability the wave-2 audit
+                          # found wrong (A07). They are read models over D1 views rather than
+                          # records, so there is nothing in `records.py` to compare them with -
+                          # `test_the_legacy_nullable_console_fields_are_frozen` pins the fields
+                          # that decision turns on instead.
+                          "UsageRow", "ApiKeySummary", "AuditEntry", "JudgeSample")
+
+# r2 (F2R item 6): the console vocabulary that has no Python counterpart **yet**. Recorded so
+# "not compared" is a decision: F2P/lane A adds `records.AccountingRegime` and this moves into
+# `SHARED_ENUMS`. The values are the console's own names for D1's `usage_events.settlement_regime`
+# (`legacy`/`pilot`), which is why they are not spelled the same.
+UNPAIRED_CONSOLE_ENUMS = {"ACCOUNTING_REGIMES": ["legacy_usd", "pilot"]}
+
+# The nullability the legacy projection turns on, field by field. A field that stops being nullable
+# here starts rejecting real D1 history again (the A07 defect), and a field that *becomes* nullable
+# without a decision would let a projection hand the console a null it does not handle. `False`
+# means "must NOT be nullable": `accounting_regime` is the field that says which rules apply, so a
+# null there would make the whole regime distinction unreadable.
+LEGACY_NULLABLE_CONSOLE_FIELDS = {
+    "UsageRow": {"key_id": True, "key_name": True, "accounting_regime": False,
+                 "execution_mode": True, "job_state": True, "usage_certainty": True,
+                 "trace_mode": True, "settlement_state": True, "max_hold": True,
+                 "request_id": False, "created_at": False, "http_status": False, "cost": False},
+    "ApiKeySummary": {"trace_mode": True, "id": False, "name": False},
+    "AuditEntry": {"target_org_id": True, "actor_principal": False, "action": False},
+    "JudgeRun": {"judge_model_version": True, "consent_snapshot_at": True,
+                 "judge_model": False, "sample_count": False, "rubric_version": False},
+    # Frozen to D1's `console_judge_runs` shape and nothing else: the field *set* is the ruling.
+    "JudgeSample": {"sample_id": False, "rubric_version": False, "request_id": True,
+                    "scores": False},
+}
 
 
 class _TsField(typing.NamedTuple):
@@ -470,6 +501,30 @@ def test_record_fields_and_nullability_match(name):
         assert not unexplained, \
             (f"{name}.{ts_field} is `{console[ts_field].kind}` in TypeScript, which "
              f"{pair['model'].__name__}.{py_field} ({sorted(python_names)}) does not explain")
+
+
+@pytest.mark.parametrize("name", sorted(UNPAIRED_CONSOLE_ENUMS))
+def test_the_console_only_vocabularies_are_recorded(name):
+    """A vocabulary only the console has is still pinned here, so adding the Python half is a
+    decision and renaming or widening it breaks this test rather than drifting quietly."""
+    assert ts_string_array(TYPES.read_text(encoding="utf-8"), name) == UNPAIRED_CONSOLE_ENUMS[name]
+
+
+@pytest.mark.parametrize("name", sorted(LEGACY_NULLABLE_CONSOLE_FIELDS))
+def test_the_legacy_nullable_console_fields_are_frozen(name):
+    """r2 (F2R item 6): the nullability D1's real history needs, pinned field by field."""
+    fields = ts_type_fields(TYPES.read_text(encoding="utf-8"), name)
+    for field, nullable in LEGACY_NULLABLE_CONSOLE_FIELDS[name].items():
+        assert field in fields, f"{name}.{field} is gone"
+        assert fields[field].nullable is nullable, \
+            f"{name}.{field} nullability changed: {fields[field].kind}"
+
+
+def test_the_judge_sample_carries_exactly_d1s_field_set():
+    """The frozen shape of `console_judge_runs`. A richer sample is one no query can produce, so
+    the console would depend on something only a fake could fill."""
+    fields = ts_type_fields(TYPES.read_text(encoding="utf-8"), "JudgeSample")
+    assert set(fields) == set(LEGACY_NULLABLE_CONSOLE_FIELDS["JudgeSample"])
 
 
 @pytest.mark.parametrize("name", UNPAIRED_CONSOLE_TYPES)

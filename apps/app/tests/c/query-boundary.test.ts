@@ -300,6 +300,13 @@ test("the rendered statements are the shipped SQL: one relation, named columns, 
   assert.match(usage.text, /order by u\.created_at desc, u\.request_id desc/);
   assert.match(usage.text, /limit 26$/);
   assert.ok(!usage.text.includes("select *"), "a read selects named columns, never everything");
+  // r2: every column the projection reads has to be asked for. `settlement_regime` is the one that
+  // says which accounting rules wrote the row, and the statement omitted it while the view emitted
+  // it — a column list is the only place that gap is visible, because a double that hands back
+  // whole rows cannot show it.
+  for (const column of ["u.settlement_regime", "u.key_name", "u.usage_certainty", "u.trace_mode"]) {
+    assert.ok(usage.text.includes(column), `the usage statement must select ${column}`);
+  }
 
   const wallet = renderSql(buildPlan("wallet_summary", { orgId: ORG, limit: 1 }));
   // The balance reads the wallet's stored totals; it is never recomputed from the ledger.

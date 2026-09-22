@@ -12,7 +12,7 @@
     {
       "v": 1,
       "request": {
-        "model": "marlin-2b@2026-09-01",
+        "model": "nemostation/marlin-2b@2026-09-01",
         "messages": [
           {
             "role": "system",
@@ -57,7 +57,7 @@
     {
       "v": 1,
       "request": {
-        "model": "marlin-2b@2026-09-01",
+        "model": "nemostation/marlin-2b@2026-09-01",
         "messages": [
           {
             "role": "user",

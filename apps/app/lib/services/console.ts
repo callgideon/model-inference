@@ -23,7 +23,6 @@ import {
   DEFAULT_PAGE_LIMIT,
   ENTITLEMENT_LIMIT_NAMES,
   FEEDBACK_INPUT_FIELDS,
-  JUDGE_LIMITED_REASONS,
   JUDGE_SCORE_KINDS,
   MAX_ENTITLEMENT_LIMIT,
   JOB_STATES,
@@ -108,19 +107,6 @@ const ROW_TIMESTAMP = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(?:
 /** A caller's filter value: the same two forms, so a console page can pass either one through. */
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|\+00:00)$/;
 
-/**
- * What a usage row shows for a key that has since been deleted.
- *
- * `usage_events.api_key_id` is `on delete set null`, so D1's `console_usage` LEFT JOIN yields **both**
- * `key_id` and `key_name` as NULL for such a row — that is the truth, and the row must still be
- * counted (dropping it understates a cost total). `UsageRow.key_id` is a non-nullable string in the
- * frozen contract, so until the contract revision that makes it `string | null` (F2.2) the pair is
- * projected as this documented sentinel. It is deliberately the empty string: a `key_id` filter value
- * must be identifier-shaped (non-empty, ≤ 200 characters), so no caller can filter *for* it and no
- * filter can accidentally match it.
- */
-export const DELETED_KEY_ID = "";
-export const DELETED_KEY_NAME = "(deleted key)";
 
 /** No traffic in the window: every figure zero, which is what an empty aggregate means. */
 const ZERO_USAGE_SUMMARY: UsageSummary = {
@@ -198,6 +184,19 @@ function badFilter(query: UsageQuery & Partial<TraceQuery>): string | null {
   }
   if (query.has_feedback !== undefined && typeof query.has_feedback !== "boolean") {
     return "has_feedback must be a boolean";
+  }
+  return null;
+}
+
+/**
+ * r2: an aggregate needs a window. `usageSummary` and `usageDaily` collapse history into one
+ * figure, so an unbounded call is a scan whose answer nobody can check and which silently mixes the
+ * legacy accounting regime into a pilot total. The list keeps its optional window: a page is
+ * bounded by its limit. Checked before the tenant lookup, like every other input refusal.
+ */
+function missingWindow(query: UsageQuery): string | null {
+  for (const name of ["from", "to"] as const) {
+    if (query[name] === undefined) return `${name} is required: an aggregate needs a window`;
   }
   return null;
 }
@@ -360,17 +359,41 @@ function json(row: Row, column: string): unknown {
 }
 
 /**
- * The key pair, or the sentinel. Both columns null is a deleted key; exactly one null is a shape the
- * view cannot produce, so it is a malformed row rather than something to paper over.
+ * The key pair, nulled together for a key that has since been deleted.
+ *
+ * `usage_events.api_key_id` is `on delete set null`, so D1's `console_usage` LEFT JOIN yields **both**
+ * `key_id` and `key_name` as NULL for such a row — that is the truth, and the row must still be
+ * counted (dropping it understates a cost total). Contract revision r2 made the pair
+ * `string | null`, so the two sentinels this used to project (`""` and `"(deleted key)"`) are gone:
+ * one was an identifier no caller could filter for and the other was a name nobody chose. A
+ * `key_id` filter value must be identifier-shaped (non-empty), so no filter matches such a row
+ * either way, and how the absence is *rendered* is the page's decision rather than this one's.
+ *
+ * Exactly one of the two null is a shape the view cannot produce, so it stays a malformed row
+ * rather than something to paper over.
  */
-function deletedKeyOr(row: Row): { key_id: string; key_name: string } {
+function deletedKeyOr(row: Row): { key_id: string | null; key_name: string | null } {
   const id = optionalText(row, "key_id");
   const name = optionalText(row, "key_name");
-  if (id === null && name === null) return { key_id: DELETED_KEY_ID, key_name: DELETED_KEY_NAME };
+  if (id === null && name === null) return { key_id: null, key_name: null };
   if (id === null || name === null) {
     throw new TypeError("a usage row has one of key_id/key_name null: the key join yields both or neither");
   }
   return { key_id: id, key_name: name };
+}
+
+/**
+ * Which accounting rules wrote the row (contract r2). D1 spells the column
+ * `usage_events.settlement_regime` with the values `legacy`/`pilot`; the console vocabulary is
+ * `legacy_usd`/`pilot`, so the mapping is explicit and **fails closed**: a regime nobody recognises
+ * is a malformed row, never read as `pilot`, because reading it as `pilot` would apply R13's
+ * settlement rules to a row that was never settled by them.
+ */
+function accountingRegimeOf(row: Row): UsageRow["accounting_regime"] {
+  const regime = text(row, "settlement_regime");
+  if (regime === "legacy") return "legacy_usd";
+  if (regime === "pilot") return "pilot";
+  throw new TypeError("settlement_regime must be legacy or pilot");
 }
 
 function usageRowOf(row: Row): UsageRow {
@@ -379,17 +402,20 @@ function usageRowOf(row: Row): UsageRow {
     created_at: timestamp(row, "created_at"),
     model: text(row, "model"),
     ...deletedKeyOr(row),
-    execution_mode: text(row, "execution_mode") as UsageRow["execution_mode"],
-    job_state: text(row, "job_state") as UsageRow["job_state"],
+    accounting_regime: accountingRegimeOf(row),
+    // r2: nullable, and null on a legacy row. `text()` refused the whole page for history that
+    // predates the pilot columns (wave-2 audit A07); nothing is filled in for them either.
+    execution_mode: optionalText(row, "execution_mode") as UsageRow["execution_mode"],
+    job_state: optionalText(row, "job_state") as UsageRow["job_state"],
     terminal_cause: optionalText(row, "terminal_cause") as UsageRow["terminal_cause"],
     http_status: integer(row, "http_status"),
     prompt_tokens: optionalInteger(row, "prompt_tokens"),
     completion_tokens: optionalInteger(row, "completion_tokens"),
-    usage_certainty: text(row, "usage_certainty") as UsageRow["usage_certainty"],
+    usage_certainty: optionalText(row, "usage_certainty") as UsageRow["usage_certainty"],
     settlement_state: optionalText(row, "settlement_state") as UsageRow["settlement_state"],
     cost: money(row, "cost"),
     max_hold: optionalMoney(row, "max_hold"),
-    trace_mode: text(row, "trace_mode") as UsageRow["trace_mode"],
+    trace_mode: optionalText(row, "trace_mode") as UsageRow["trace_mode"],
   };
 }
 
@@ -418,7 +444,9 @@ function keyOf(row: Row): ApiKeySummary {
     created_at: timestamp(row, "created_at"),
     last_used_at: optionalTimestamp(row, "last_used_at"),
     revoked_at: optionalTimestamp(row, "revoked_at"),
-    trace_mode: text(row, "trace_mode") as ApiKeySummary["trace_mode"],
+    // r2: `api_keys.trace_mode` is a nullable column D1 added, and null is **off**. `text()` threw
+    // on it, which denied the whole key list for a key that predates the column (A07).
+    trace_mode: optionalText(row, "trace_mode") as ApiKeySummary["trace_mode"],
   };
 }
 
@@ -570,7 +598,7 @@ function judgeScoreOf(value: unknown): JudgeScore {
     rationale: optionalText(row, "rationale"),
     rubric_version: integer(row, "rubric_version"),
     judge_model: text(row, "judge_model"),
-    judge_model_version: text(row, "judge_model_version"),
+    judge_model_version: optionalText(row, "judge_model_version"),
     estimated: flag(row, "estimated"),
   };
 }
@@ -584,24 +612,32 @@ function numericOrNull(row: Row, column: string): number | null {
   throw new TypeError(`${column} must be a number`);
 }
 
+/**
+ * r2: exactly the four members `console_judge_runs` builds — `jsonb_build_object('sample_id',
+ * 'rubric_version', 'request_id', 'scores')`. The previous shape read `id`, `run_id`,
+ * `limited_evaluation` and `limited_reason`, none of which that view emits: `id`/`run_id` were
+ * `text()` reads of absent members (so every real run would have thrown) and the two limited-*
+ * members were fields only a fake could fill. The run carries `limited_evaluation_count`, which is
+ * what the console renders.
+ *
+ * `scores` may be SQL NULL (`judge_samples.scores` is nullable: nothing collected yet), which is
+ * an empty list of scores and not a missing field.
+ */
 function judgeSampleOf(value: unknown): JudgeSample {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new TypeError("a judge sample is an object");
   }
   const row = value as Row;
-  const limitedReason = optionalText(row, "limited_reason");
-  if (limitedReason !== null && !(JUDGE_LIMITED_REASONS as readonly string[]).includes(limitedReason)) {
-    throw new TypeError("unknown limited-evaluation reason");
-  }
   const scores = cell(row, "scores");
-  if (!Array.isArray(scores)) throw new TypeError("a judge sample's scores are a list");
+  if (scores !== null && !Array.isArray(scores)) throw new TypeError("a judge sample's scores are a list");
   return {
-    id: text(row, "id"),
-    run_id: text(row, "run_id"),
-    request_id: text(row, "request_id"),
-    limited_evaluation: flag(row, "limited_evaluation"),
-    limited_reason: limitedReason as JudgeSample["limited_reason"],
-    scores: scores.map(judgeScoreOf),
+    sample_id: text(row, "sample_id"),
+    // The *sample's* rubric version: late results deduplicate by (run, sample, rubric version),
+    // so one run may carry samples from more than one.
+    rubric_version: integer(row, "rubric_version"),
+    // Null: the trace this sample scored has been deleted. An invented id would name another one.
+    request_id: optionalText(row, "request_id"),
+    scores: (scores ?? []).map(judgeScoreOf),
   };
 }
 
@@ -615,12 +651,15 @@ function judgeRunOf(row: Row): JudgeRun {
     mode: text(row, "mode") as JudgeRun["mode"],
     rubric_version: integer(row, "rubric_version"),
     judge_model: text(row, "judge_model"),
-    judge_model_version: text(row, "judge_model_version"),
+    // r2: `judge_runs.judge_model_version` is nullable, and a dry run reaches no provider.
+    judge_model_version: optionalText(row, "judge_model_version"),
     sample_count: integer(row, "sample_count"),
     limited_evaluation_count: integer(row, "limited_evaluation_count"),
     budget_reserved: money(row, "budget_reserved"),
     budget_settled: optionalMoney(row, "budget_settled"),
-    consent_snapshot_at: timestamp(row, "consent_snapshot_at"),
+    // r2: the view reaches the consent row through an outer join, so a revoked one is null. The
+    // run is still a fact; a snapshot instant is not invented for it.
+    consent_snapshot_at: optionalTimestamp(row, "consent_snapshot_at"),
     external_batch_id: optionalText(row, "external_batch_id"),
     quarantine_reason: optionalText(row, "quarantine_reason"),
     samples: (samples ?? []).map(judgeSampleOf),
@@ -635,7 +674,9 @@ function auditEntryOf(row: Row): AuditEntry {
     at: timestamp(row, "at"),
     actor_principal: text(row, "actor_principal"),
     action: text(row, "action") as AuditEntry["action"],
-    target_org_id: text(row, "target_org_id"),
+    // r2: `audit_entries.target_org_id` is `on delete set null`, so an entry whose target
+    // organization is gone keeps the record of the write with no target.
+    target_org_id: optionalText(row, "target_org_id"),
     reason: text(row, "reason"),
     before: before === null ? null : (before as Record<string, unknown>),
     after: (after ?? {}) as Record<string, unknown>,
@@ -820,7 +861,7 @@ export function createConsoleServices(config: ConsoleServicesConfig): ConsoleSer
     async usageSummary(session, query) {
       const rejected = badInput<UsageSummary>(query, USAGE_QUERY_FIELDS);
       if (rejected !== null) return rejected;
-      const invalid = badFilter(query);
+      const invalid = badFilter(query) ?? missingWindow(query);
       if (invalid !== null) return fail<UsageSummary>("invalid_request", invalid);
       const resolved = await tenant<UsageSummary>(session, "usageSummary");
       if (isFailure(resolved)) return resolved;
@@ -862,7 +903,7 @@ export function createConsoleServices(config: ConsoleServicesConfig): ConsoleSer
     async usageDaily(session, query) {
       const rejected = badInput<UsageDay[]>(query, USAGE_QUERY_FIELDS);
       if (rejected !== null) return rejected;
-      const invalid = badFilter(query);
+      const invalid = badFilter(query) ?? missingWindow(query);
       if (invalid !== null) return fail<UsageDay[]>("invalid_request", invalid);
       const resolved = await tenant<UsageDay[]>(session, "usageDaily");
       if (isFailure(resolved)) return resolved;
