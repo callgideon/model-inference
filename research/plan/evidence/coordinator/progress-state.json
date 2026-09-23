@@ -1,14 +1,8 @@
 {
-  "updated": "2026-09-23T04:47:12Z",
+  "updated": "2026-09-23T11:20:35Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
-    "F2P": {
-      "lane": "codex-f2p",
-      "phase": "wire-in confirmation (Opus) of fix round at ced6751; then merge",
-      "since": "2026-09-22T16:00:21Z",
-      "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
-    },
     "E1B": {
       "lane": "codex-e1b",
       "phase": "software slices MERGED (164e43e); GPU measurement slices pending W3 \u2192 I2B",
@@ -17,12 +11,53 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes",
+      "phase": "phase 2 review fix_required at 80cef22 (4 blocking: dr13 premise unpinned, baseline-red mutants counted killed, I2B pending vs RESIDUAL, e3bm22 dies by import; 1 refuted; 17 nonblocking; rulings R92/R93, P-21) \u2192 fix round running",
       "since": "2026-09-22T18:46:49Z",
-      "note": "gate not passable until G/D/W/Q lanes merge"
+      "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
+    },
+    "D4": {
+      "lane": "codex-d4 / codex/d4-stream-journal",
+      "phase": "HANDED BACK a4598b0 (impl ce7659b); Opus review running (3 lenses + refuters); D5 dispatch at the CONFIRMED head",
+      "since": "2026-09-23T05:12:27Z",
+      "note": "0017 stream journal: fenced append, global budget without a global lock, terminal event via AFTER UPDATE OF settled_at trigger, read_owned replay (typed gaps/expiry/cursor), pruning + usage, races, E3B drills dr05/06/08/10, CREDIT journal + privileges; sweeps 788 both images; 44 migration + 9 code mutants; requests: harness 0017 line, Makefile += tests/d/test_code_mutants_d4.py, G2 compose PgStreamStore, W3 expire() in reap_once, I3B gauge, pgstate additions, E3B2 rig hook"
+    },
+    "G2": {
+      "lane": "codex-g2 / codex/g2-chat-relay",
+      "phase": "review fix_required at 2d742aa (11 blocking: replay before preparation (R91 lookup port), post-admission 503 retry, cancel drain at shutdown, unnamed-stream cancel, raw/content relay guard, stream bound, pool configure hook, [DONE] after unconfirmed cancel, CREDIT price_source probe; 22 nonblocking) \u2192 fix round running",
+      "since": "2026-09-23T05:12:27Z",
+      "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) \u2192 fix lane codex/w-consumed-parameters"
+    },
+    "W4": {
+      "lane": "codex-w4 / codex/w4-measured-tuning",
+      "phase": "phase A confirmation at b0a44a0: box-safety PASS, decision fix_required on 2 test-coverage gaps (D2 reconciliation clauses; bench retries clauses) + 8 nonblocking \u2192 round 3 running; re-confirmation next",
+      "since": "2026-09-23T05:40:38Z",
+      "note": "protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge"
+    },
+    "G3": {
+      "lane": "codex-g3 / codex/g3-jobs",
+      "phase": "implementing per .claude/handoff/wave3/G3.md (stacked on G2 2d742aa; fakes only)",
+      "since": "2026-09-23T10:09:50Z",
+      "note": "POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/"
     }
   },
-  "reviews": {},
+  "reviews": {
+    "W4": {
+      "phase": "confirmation fix_required at b0a44a0 (wf_6fb50020-bf6; JSON evidence/w/W4-confirm-b0a44a0.json) \u2192 round 3",
+      "since": "2026-09-23T11:09:23Z"
+    },
+    "G4U": {
+      "phase": "MERGED 7d21fa7 after confirmation pass at 962b2b1",
+      "since": "2026-09-23T10:33:10Z"
+    },
+    "G2": {
+      "phase": "fix_required at 2d742aa (wf_cc07f35b-21f; 26 agents; JSON evidence/g/G2-review-2d742aa.json) \u2192 fix round; confirmation next",
+      "since": "2026-09-23T11:05:53Z"
+    },
+    "E3B2": {
+      "phase": "fix_required at 80cef22 (wf_345bc3f0-8ec; 13 agents; JSON evidence/e/E3B2-review-80cef22.json) \u2192 fix round; confirmation next",
+      "since": "2026-09-23T11:20:35Z"
+    }
+  },
   "gates": {
     "BACKEND-LOCAL": {
       "requires": "E3B",
@@ -76,9 +111,21 @@
     },
     {
       "id": "P-04-sweep",
-      "what": "W3 concurrency sweep on the box (E1B cell L1): needs a checkout with bench.py + a ~12 min corpus build on the box; held per user instruction (no new work). ENGINE_MAX_NUM_SEQS stays 32 (the box's measured value) until then.",
-      "blocks": "W3 measured ENGINE_MAX_NUM_SEQS; serving-version.json settings_status",
-      "owner": "coordinator (box op)"
+      "what": "W3 concurrency sweep DONE (2026-09-23T05:04Z, sweep-20260923T050411Z): F(c) never 0 because the engine's 16384-token encoder cache rejects the four 112 s clips at every level; no level qualifies under the predeclared rule; c=16 would qualify with those set aside",
+      "blocks": "ENGINE_MAX_NUM_SEQS / WORKER_CONCURRENCY (stay 8 \u26a0\ufe0f / cutover keeps 32 explicitly); W4's first input",
+      "owner": "W4 (tuning) / W3 (record)"
+    },
+    {
+      "id": "P-20",
+      "what": "The engine rejects videos above ~72 s (encoder cache budget 16384 tokens) while profile v1 admits up to 120 s: decide raise the budget (W4, re-measure) or cap admission (G2 validation) \u2014 until then the pilot admits what the engine cannot serve",
+      "blocks": "E4B certification; G2's validation ceiling",
+      "owner": "W4 decides; G2 applies"
+    },
+    {
+      "id": "P-21",
+      "what": "Host sysctl net.ipv4.ip_local_reserved_ports for the task-port blocks (55432-55499, 56700-56799) \u2014 a root change on this host (persist in /etc/sysctl.d); prevents ephemeral-port bind collisions between lanes",
+      "blocks": "nothing (lanes retry); reduces HarnessBusy/bind noise",
+      "owner": "user (root approval); coordinator applies"
     }
   ],
   "checkpoints": [
@@ -177,6 +224,10 @@
     {
       "at": "2026-09-23T00:46:03Z",
       "what": "Resumed on sofia; ten lanes resumed from pushed heads (transcripts intact)"
+    },
+    {
+      "at": "2026-09-23T10:43:20Z",
+      "what": "Checkpoint at 90aadcf (code) / 01a7dfc (docs-only tail): api-test 2993 green on private ports; api-mutants 2349/2350 (the one red is the load-sensitive W3 sigint_not_handled runner timeout, killed in isolation); console 289 + typecheck + lint + 104 console mutants; bench 67 \u2192 main fast-forwarded f9ba5d2 \u2192 01a7dfc"
     }
   ],
   "cadence_windows": [
@@ -246,6 +297,31 @@
       "merged": "I2B @ e82d77f merged --no-ff (08d3240) in the same step as W3 (FC-1)",
       "at": "2026-09-23T04:45:36Z",
       "note": "three review rounds (M1, S1 Caddy admin socket, RB-1 revert order, RB-2 grammar, RC2-X backup naming); I list 189; rehearsal 44/0; box rollout per the runbook is a separate coordinator operation (not done); I3B's --max-age 180 alert timer has no unit yet (composition item)"
+    },
+    "F2P": {
+      "merged": "F2P additive 9faaa57 + wire-in 6a49af5 merged --no-ff (1baf0b8); IR-C1 applied by the coordinator",
+      "at": "2026-09-23T05:19:56Z",
+      "note": "wire-in reviewed (e307084), confirmed (ced6751), round 2 folded; 395 Python mutants / 415 items; console lists 199/40/64/104; IR-DTO (console DTO swap) stays open for C0/C1/U1R; Q Valkey runners to pass env=('INFRX_Q2_VALKEY_PORT',) \u2014 follow-up"
+    },
+    "F-cancel-cause": {
+      "merged": "F cancel-cause @ 0fe8fdd merged --no-ff (6803d2f) + PENDING line 0024da2",
+      "at": "2026-09-23T06:50:14Z",
+      "note": "review pass at b691add (wf_fc480c08-828); M1 folded (second cancel keeps the first cause; 2 mutants killed); Pg refuses non-default causes until D5's 0018; G2 falls back to the default cancel on UnsupportedParameter"
+    },
+    "I-schema": {
+      "merged": "I schema fix @ 4c7de56 merged --no-ff",
+      "at": "2026-09-23T08:22:54Z",
+      "note": "wire-in names ACCOUNTING_REGIME/ACTIVE_RATE_CARD_VERSION/PROVIDER_DEV_ALLOCATION_CEILING_CREDIT in TUNABLE; MAX_INDEX_* moved to \u00a75; tests/i 143, config 233 on the lane; gate rerun at the new head pending"
+    },
+    "W-new": {
+      "merged": "W-new @ 483d763 merged --no-ff (a15fa4b)",
+      "at": "2026-09-23T10:40:50Z",
+      "note": "CONSUMED_PARAMETERS; cap reaches vLLM via the typed max_output_tokens ceiling; W lists 320, tests/w 157 on the merged tree, 3 mutants killed"
+    },
+    "G4U": {
+      "merged": "G4U @ d1827d5 merged --no-ff (7d21fa7) + Makefile list",
+      "at": "2026-09-23T10:59:19Z",
+      "note": "review fix_required f3c8055 \u2192 round 2 962b2b1 \u2192 confirmation PASS \u2192 fold-ins 73dfaaf; 39 mutants; merged tree tests/g+m 703, uploads+G lists 241; mount + rt.media_store/rt.large_bodies at the cutover; M request check_open; E bench.py upload names; Q harness container override"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"

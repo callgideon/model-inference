@@ -14,6 +14,7 @@ from decimal import Decimal
 import pytest
 from infrx import config
 from infrx.contracts import limits, tasklocal
+from infrx.contracts.v2.money_units import Credit
 
 # 08 §5, name by name. A rename or a changed default is a contract revision, so it
 # must fail here first.
@@ -55,6 +56,11 @@ EXPECTED = {
     "S3_MEDIA_BUCKET": "", "S3_TRACE_BUCKET": "",
     # r1 R14: the 24h window 02 requires before an unknown-usage hold is freed
     "UNKNOWN_USAGE_RECONCILE_S": 86400.0,
+    # Q2 request 3: the scheduler index caps, moved here from the deployment table
+    "MAX_INDEX_ITEMS": 500, "MAX_INDEX_BYTES": 268435456,
+    # contracts v2 (F2P wire-in item 5): contract data, empty allowed
+    "ACTIVE_RATE_CARD_VERSION": "",
+    "PROVIDER_DEV_ALLOCATION_CEILING_CREDIT": Credit("0.00000000"),
 }
 
 
@@ -146,6 +152,10 @@ def test_invalid_values_are_rejected_without_echoing_them():
     ("JUDGE_LIVE_BUDGET_USD", "1e9"), ("JUDGE_LIVE_BUDGET_USD", "-5"),
     ("LEASE_TTL_S", "nan"), ("LEASE_TTL_S", "inf"), ("LEASE_TTL_S", "-5"),
     ("MAX_ACTIVE_JOBS", "-1"), ("JOURNAL_TOTAL_BYTES", "-1"),
+    ("PROVIDER_DEV_ALLOCATION_CEILING_CREDIT", "-5"),
+    ("PROVIDER_DEV_ALLOCATION_CEILING_CREDIT", "NaN"),
+    ("PROVIDER_DEV_ALLOCATION_CEILING_CREDIT", "1e3"),
+    ("PROVIDER_DEV_ALLOCATION_CEILING_CREDIT", "0.000000001"),
 ])
 def test_nonsense_numbers_are_refused_at_the_boundary(name, raw):
     """A limit that parses as `nan`, `inf` or a negative silently disables itself."""
@@ -350,6 +360,16 @@ def test_contracts_import_pulls_in_no_track_dependency():
     assert walked >= 20, f"only {walked} modules were walked"
 
 
+def test_contracts_v2_resolves_by_attribute_access_like_every_submodule():
+    """F2P wire-in item 1: `infrx.contracts.v2` is a listed submodule, reached lazily by
+    attribute access and named by `dir()`, so a consumer never needs an import path that
+    differs from v1's."""
+    import infrx.contracts as contracts
+    assert "v2" in dir(contracts)
+    assert contracts.v2.SURFACE_VERSION == "contracts-v2.0"
+    assert contracts.v2.records.SCHEMA_VERSION == 2
+
+
 def test_the_extras_are_installed_so_the_check_is_meaningful():
     """Otherwise the test above would pass by accident in a core-only environment.
 
@@ -428,7 +448,7 @@ def _api_dir():
 # both language halves enforce; the split is recorded in 08 §5 and in config.py.
 DEPLOYMENT_EXPECTED = {
     "TRACE_SPOOL_SEGMENT_BYTES": 16777216,
-    "MAX_INDEX_ITEMS": 500, "MAX_INDEX_BYTES": 268435456,
+    "ACCOUNTING_REGIME": "legacy_usd",
     "CONSOLE_CURSOR_SECRET": "",
     "DATABASE_POOL_MIN_SIZE": 1, "DATABASE_POOL_MAX_SIZE": 10,
     "DATABASE_POOL_CONNECT_TIMEOUT_S": 5.0,
@@ -438,7 +458,7 @@ DEPLOYMENT_EXPECTED = {
     "LARGE_BODY_LIMIT": 2, "LARGE_BODY_THRESHOLD_BYTES": 1048576,
 }
 
-# Everything except the secret, which is text.
+# Everything except the text values (the secret, the accounting regime).
 DEPLOYMENT_NUMBERS = tuple(name for name, value in sorted(DEPLOYMENT_EXPECTED.items())
                            if not isinstance(value, str))
 
@@ -523,6 +543,102 @@ def test_a_short_cursor_secret_is_refused_without_echoing_it():
         {"CONSOLE_CURSOR_SECRET": long_enough})).console_cursor_secret == long_enough
 
 
+def test_the_cursor_secret_bound_is_exactly_sixteen_characters():
+    """F2R-B NB-3: the boundary itself. Fifteen characters is refused and sixteen is
+    accepted, so a bound that drifts by one in either direction fails here (the case above
+    only proves that an 8-character secret is refused)."""
+    assert config.MIN_CONSOLE_CURSOR_SECRET_CHARS == 16
+    refused = False
+    try:
+        config.validate_deployment(config.deployment_from_env({"CONSOLE_CURSOR_SECRET": "s" * 15}))
+    except config.RuntimeMisconfigured:
+        refused = True
+    assert refused, "a 15-character cursor secret was accepted"
+    # F2P review CFG-6: the bound is measured after stripping, so padding cannot make a
+    # 14-character key look like 16.
+    # CONF-N3: and padding on one side only cannot either.
+    for padded in (" " + "s" * 14 + " ", "  " + "s" * 14, "s" * 14 + "  "):
+        with pytest.raises(config.RuntimeMisconfigured, match="CONSOLE_CURSOR_SECRET"):
+            config.validate_deployment(config.deployment_from_env(
+                {"CONSOLE_CURSOR_SECRET": padded}))
+    try:
+        config.validate_deployment(config.deployment_from_env({"CONSOLE_CURSOR_SECRET": "s" * 16}))
+    except config.RuntimeMisconfigured:
+        raise AssertionError("a 16-character cursor secret was refused") from None
+
+
+@pytest.mark.parametrize("regime", ["legacy_usd", "credit"])
+def test_the_accounting_regime_is_a_v2_regime(regime):
+    """F2P wire-in item 5: ACCOUNTING_REGIME is one of the two v2 regimes; v1's
+    `pilot`, a case variant and a typo are refused before anything mounts."""
+    assert config.validate_deployment(config.deployment_from_env(
+        {"ACCOUNTING_REGIME": regime})).accounting_regime == regime
+    for bad in ("pilot", "CREDIT", "credits"):
+        refused = False
+        try:
+            config.validate_deployment(config.deployment_from_env({"ACCOUNTING_REGIME": bad}))
+        except config.RuntimeMisconfigured as caught:
+            refused = "ACCOUNTING_REGIME" in str(caught)
+        assert refused, f"ACCOUNTING_REGIME={bad!r} was accepted"
+
+
+def test_a_credit_deployment_needs_an_approved_rate_card():
+    """R69 at startup: the CREDIT regime without ACTIVE_RATE_CARD_VERSION refuses to start
+    in every mode, naming the setting; with one it starts; the legacy regime needs none."""
+    for mode in ("", "dev", "pilot"):
+        env = {"ACCOUNTING_REGIME": "credit", **({"INFRX_MODE": mode} if mode else {})}
+        if mode == "pilot":
+            env.update(METERED, **AUTHENTICATED)
+        refused = False
+        try:
+            _app(env)
+        except config.RuntimeMisconfigured as caught:
+            refused = "ACTIVE_RATE_CARD_VERSION" in str(caught)
+        assert refused, f"mode {mode!r} started a CREDIT deployment with no approved card"
+        # G1R review C1: in pilot the app refuses to start on the legacy composition (dr17),
+        # so the corrected card is validated as the cutover composes it.
+        corrected = {**env, "ACTIVE_RATE_CARD_VERSION": "rc_marlin2b_2026_09_provisional"}
+        if mode == "pilot":
+            assert _validated_as_cutover(corrected) == "pilot"
+        else:
+            assert _app(corrected)
+        # F2P review M-6/CFG-2: whitespace is not a card (refused as missing), and a padded
+        # name is refused at startup rather than served (`validate_pilot` is off this path).
+        with pytest.raises(config.RuntimeMisconfigured, match="requires ACTIVE_RATE_CARD_VERSION"):
+            _app({**env, "ACTIVE_RATE_CARD_VERSION": "  "})
+        # CONF-N1: padding on one side only is padding too (a one-sided strip must not pass).
+        for padded in (" rc_marlin2b_2026_09_provisional ", "rc_marlin2b_2026_09_provisional ",
+                       " rc_marlin2b_2026_09_provisional"):
+            with pytest.raises(config.RuntimeMisconfigured, match="ACTIVE_RATE_CARD_VERSION must not"):
+                _app({**env, "ACTIVE_RATE_CARD_VERSION": padded})
+    assert _app({"ACCOUNTING_REGIME": "legacy_usd"}) is not None
+    # F2P confirmation CONF-N2: whitespace-only is unset in every regime, so a legacy
+    # deployment starts; a padded card is refused in every regime (the rule is the text's).
+    try:
+        started = _app({"ACCOUNTING_REGIME": "legacy_usd", "ACTIVE_RATE_CARD_VERSION": "  "})
+    except config.RuntimeMisconfigured as refused:
+        raise AssertionError(f"a whitespace-only card was read as a card: {refused}") from None
+    assert started is not None
+    with pytest.raises(config.RuntimeMisconfigured, match="ACTIVE_RATE_CARD_VERSION must not"):
+        _app({"ACCOUNTING_REGIME": "legacy_usd", "ACTIVE_RATE_CARD_VERSION": " rc_x "})
+
+
+def test_the_allocation_ceiling_is_a_credit_amount_defaulting_to_nothing():
+    """The provider-dev allocation ceiling is a `Credit` (a unit is a type, R64): zero by
+    default - no allocation until an operator sets one - and parsed by the money rules."""
+    default = limits.DEFAULTS.provider_dev_allocation_ceiling_credit
+    assert type(default) is Credit and str(default) == "0.00000000"
+    parsed = config.pilot_from_env({"PROVIDER_DEV_ALLOCATION_CEILING_CREDIT": "250.5"})
+    assert parsed.provider_dev_allocation_ceiling_credit == Credit("250.5")
+
+
+def test_the_active_rate_card_version_is_exact_text():
+    for bad in (" rc_x", "rc_x ", "rc_x\n"):
+        with pytest.raises(ValueError, match="ACTIVE_RATE_CARD_VERSION"):
+            config.validate_pilot(limits.DEFAULTS.replace(active_rate_card_version=bad))
+    assert config.validate_pilot(limits.DEFAULTS.replace(active_rate_card_version="rc_x"))
+
+
 def test_the_cursor_secret_is_the_consoles_requirement_and_not_this_gateways():
     """Unset, it is not a gateway startup failure in any mode, including `pilot`: this
     process serves no console page, so it has nothing to sign, and refusing to serve
@@ -533,25 +649,36 @@ def test_the_cursor_secret_is_the_consoles_requirement_and_not_this_gateways():
     assert _validated_as_cutover({"INFRX_MODE": "pilot", **METERED, **AUTHENTICATED}) == "pilot"
 
 
+@pytest.mark.parametrize("setting", ["MAX_MESSAGES", "MAX_INDEX_ITEMS"])
 @pytest.mark.parametrize("mode", ["", "dev", "test", "pilot"])
-def test_a_bad_deployment_value_refuses_before_anything_mounts(mode):
+def test_a_bad_deployment_value_refuses_before_anything_mounts(mode, setting):
     """`create_app` validates before it builds the app, so a bad value is a startup
     failure in every mode rather than a surprise on the first request that reaches the
     setting. No app object exists to serve, which is the observable form of "nothing
     mounted"."""
-    env = {"MAX_MESSAGES": "0"}
+    env = {setting: "0"}
     if mode:
         env["INFRX_MODE"] = mode
     if mode == "pilot":
         env.update(METERED, **AUTHENTICATED)
-    with pytest.raises(config.RuntimeMisconfigured, match="MAX_MESSAGES"):
+    with pytest.raises(config.RuntimeMisconfigured, match=setting):
         _app(env)
     # And the same configuration with the value corrected does start, so the refusal is
     # about the value and not about the mode (pilot: as the cutover composes it).
     if mode == "pilot":
-        assert _validated_as_cutover({**env, "MAX_MESSAGES": "64"}) == "pilot"
+        assert _validated_as_cutover({**env, setting: "64"}) == "pilot"
     else:
-        assert _app({**env, "MAX_MESSAGES": "64"}) is not None
+        assert _app({**env, setting: "64"}) is not None
+
+
+def test_a_zero_index_cap_refuses_to_start():
+    """F2P review M-3: the two scheduler index caps moved from the deployment table to
+    `PilotSettings` (item 5) and kept their startup refusal: a zero cap would reach Q2's
+    adapter and disable the bound. Named here, not derived from `MUST_BE_POSITIVE`, so
+    dropping a name from that list fails this case."""
+    for name in ("MAX_INDEX_ITEMS", "MAX_INDEX_BYTES"):
+        with pytest.raises(config.RuntimeMisconfigured, match=name):
+            _app({name: "0"})
 
 
 def test_the_g1_and_q1_constants_match_the_deployment_defaults():
@@ -568,8 +695,9 @@ def test_the_g1_and_q1_constants_match_the_deployment_defaults():
     assert validate.MAX_TEXT_CODEPOINTS == d.max_text_codepoints
     assert validate.MAX_URL_CHARS == d.max_url_chars
     assert intake.MAX_NUMBER_DIGITS == d.max_number_digits
-    assert memory.MAX_INDEX_ITEMS == d.max_index_items
-    assert memory.MAX_INDEX_BYTES == d.max_index_bytes
+    # Q2 request 3: the index caps are pilot settings now (the Valkey adapter reads them).
+    assert memory.MAX_INDEX_ITEMS == limits.DEFAULTS.max_index_items
+    assert memory.MAX_INDEX_BYTES == limits.DEFAULTS.max_index_bytes
     # `LargeBodies` states its two numbers as parameter defaults rather than constants.
     slots = intake.LargeBodies()
     assert slots.limit == d.large_body_limit

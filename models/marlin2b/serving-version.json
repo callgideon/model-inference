@@ -60,14 +60,14 @@
     "PROCESSING_CACHE_DIR": "/opt/dlami/nvme/processing"
   },
   "settings_status": {
-    "ENGINE_MAX_NUM_SEQS": "⚠️ TO BE VERIFIED: the pilot value (contracts limits engine_max_num_seqs); the pilot box ran 32 (I1B), and still serves 32 (meas. 2026-09-23, container args). The sweep is held by the coordinator (P-04: it needs a checkout and a corpus build on the box), so until it runs the cutover sets 32 explicitly (I2B FC-1). measure/concurrency.sh measures it and refuses unless the engine serves --max-num-seqs 32, so the sweep runs either before the pinned unit is deployed (the box's current unit passes 32) or after `INFRX_SET=ENGINE_MAX_NUM_SEQS=32` through I2B's install.sh (the validated /etc/marlin2b-gateway.env, which the vLLM unit and the runtime both read) and a restart of marlin2b-vllm; the W3 evidence's predeclared rule then sets the value that replaces 8",
+    "ENGINE_MAX_NUM_SEQS": "⚠️ TO BE VERIFIED: stays 8 (the pilot value, contracts limits engine_max_num_seqs). Measured 2026-09-23 (concurrency_sweep below): F(c) is never 0 - the same four 112 s clips fail at every level on the engine's encoder-cache limit (engine_limits) - so under W3's predeclared rule no level qualifies and the setting stays 8. With those deterministic failures set aside the rule would give 16 (W(c) = 0 for c <= 16; T >= 0.9 x 2.376 = 2.138 req/s first at c = 16 with 2.206; floor(X) = 80): recorded for the decision, NOT adopted. The box serves 32 and the cutover keeps 32 explicitly (I2B FC-1) until W4 resolves the encoder limit and the sweep is re-run",
     "PROCESSING_CACHE_DIR": "proposed for I2B: on the box's NVMe (I1B: /opt/dlami/nvme, 386 G free); the same value for the gateway, the worker and serve.sh"
   },
   "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",
   "not_passed": "the B300 recommendations (--mamba-cache-mode=align, --block-size 128, --media-io-kwargs, --mm-processor-cache-type shm): never measured on the L40S pilot; adopting one is a new serving version (marlin-sop.md D13). Measured 2026-09-23: without the flag the engine already runs mamba_cache_mode align (its default with prefix caching) and picks block size 544 itself",
   "kv_capacity": {
     "kv_cache_size_tokens": 2644426,
-    "max_concurrency_at_32768_tokens": 80.70,
+    "max_concurrency_at_32768_tokens": 80.7,
     "num_gpu_blocks": 5407,
     "block_size": 544,
     "available_kv_cache_memory": "33.67 GiB",
@@ -86,5 +86,119 @@
     "file_url_under_allowed_path": "⚠️ not_run: today's engine has no --allowed-local-media-path; needs I2B's pinned deploy (PROCESSING_CACHE_DIR set), step 2b",
     "file_url_outside_refused": "⚠️ not_run: as above",
     "cancellation": "pass: 5 chunks read, client disconnect, vllm:num_requests_running 1 -> 0 in 0.11 s; no abort line found in the engine log"
+  },
+  "concurrency_sweep": {
+    "measured": "meas. 2026-09-23, E1B cell L1 by measure/concurrency.sh against the engine directly (--max-num-seqs 32, image = the pin, engine not restarted): research/plan/evidence/w/box/sweep-20260923T050411Z/ (w3-L1-20260923T050411Z.concurrency.log, w3-L1-20260923T050411Z/{bench.jsonl,c*.log,raw/,samples.tsv}); SSM launch 61273f16-5135-4fe0-90e5-97a20a4e9637; run 2026-09-23T05:04:11Z from 517e09d on the verified corpus",
+    "protocol": "closed loop, n = max(64, 4c), seed 20260922, --max-tokens 128,512,1024, --subset full, --engine-state warm, video_b64",
+    "labels": "rows from bench.py --report; its per-cell limits apply (p99 suppressed below 300 samples; P-18 criteria are provisional, not targets); peak_* from the 2 s samples; peak_waiting printed empty for c = 1..16 is 0, and the 2 at c = 32 was scraped with a prefix match that also counted num_requests_waiting_by_reason (fixed after the run), so the true peak may be 1",
+    "failures": "every failure is one of the four 112 s clips (c012, c025, c038, c051): 4 per level, 8 at c = 32 (each clip twice), 28 in total; bench: stream_error_event, platform-attributed",
+    "rule": "W3's predeclared rule (evidence): c* = smallest c with F(c) = 0, W(c) = 0, T(c) >= 0.9 max T; ENGINE_MAX_NUM_SEQS = min(c*, floor(X)), X = 80.70 (kv_capacity). Literal result: no level qualifies (F > 0 everywhere). Conditional result with the 112 s clips set aside: 16 (not adopted)",
+    "levels": [
+      {
+        "c": 1,
+        "requests": 64,
+        "accepted": 60,
+        "failed": 4,
+        "req_per_s": 0.353,
+        "video_s_per_s": 7.439,
+        "ttft_p50_s": 0.6804,
+        "ttft_p95_s": 3.046,
+        "latency_p50_s": 2.185,
+        "latency_p95_s": 6.2907,
+        "peak_running": 1,
+        "peak_waiting": 0,
+        "peak_kv_usage": 0.00573436921938586,
+        "peak_gpu_mem_mib": 44251
+      },
+      {
+        "c": 2,
+        "requests": 64,
+        "accepted": 60,
+        "failed": 4,
+        "req_per_s": 0.812,
+        "video_s_per_s": 17.112,
+        "ttft_p50_s": 0.3911,
+        "ttft_p95_s": 1.7052,
+        "latency_p50_s": 2.0444,
+        "latency_p95_s": 5.5045,
+        "peak_running": 2,
+        "peak_waiting": 0,
+        "peak_kv_usage": 0.007029226785053688,
+        "peak_gpu_mem_mib": 44251
+      },
+      {
+        "c": 4,
+        "requests": 64,
+        "accepted": 60,
+        "failed": 4,
+        "req_per_s": 1.301,
+        "video_s_per_s": 27.425,
+        "ttft_p50_s": 0.5151,
+        "ttft_p95_s": 2.4332,
+        "latency_p50_s": 2.4581,
+        "latency_p95_s": 6.3195,
+        "peak_running": 4,
+        "peak_waiting": 0,
+        "peak_kv_usage": 0.012393636699962962,
+        "peak_gpu_mem_mib": 45139
+      },
+      {
+        "c": 8,
+        "requests": 64,
+        "accepted": 60,
+        "failed": 4,
+        "req_per_s": 1.888,
+        "video_s_per_s": 39.798,
+        "ttft_p50_s": 0.8353,
+        "ttft_p95_s": 3.773,
+        "latency_p50_s": 3.2358,
+        "latency_p95_s": 8.5095,
+        "peak_running": 8,
+        "peak_waiting": 0,
+        "peak_kv_usage": 0.02219755826859049,
+        "peak_gpu_mem_mib": 45139
+      },
+      {
+        "c": 16,
+        "requests": 64,
+        "accepted": 60,
+        "failed": 4,
+        "req_per_s": 2.206,
+        "video_s_per_s": 46.503,
+        "ttft_p50_s": 1.6717,
+        "ttft_p95_s": 7.0806,
+        "latency_p50_s": 5.1164,
+        "latency_p95_s": 13.4532,
+        "peak_running": 13,
+        "peak_waiting": 0,
+        "peak_kv_usage": 0.03311135775064744,
+        "peak_gpu_mem_mib": 45139
+      },
+      {
+        "c": 32,
+        "requests": 128,
+        "accepted": 120,
+        "failed": 8,
+        "req_per_s": 2.376,
+        "video_s_per_s": 50.09,
+        "ttft_p50_s": 5.9727,
+        "ttft_p95_s": 11.7668,
+        "latency_p50_s": 10.089,
+        "latency_p95_s": 22.453,
+        "peak_running": 24,
+        "peak_waiting": 2,
+        "peak_kv_usage": 0.05937846836847949,
+        "peak_gpu_mem_mib": 45139
+      }
+    ]
+  },
+  "engine_limits": {
+    "encoder_cache_tokens": 16384,
+    "max_accepted_clip_s": 72,
+    "max_accepted_prompt_tokens": 14773,
+    "profile_v1_max_video_seconds": 120,
+    "measured": "meas. 2026-09-23 in the sweep (concurrency_sweep): the four 112 s clips are rejected at every level with `VLLMValidationError: video item with 20160|21168|21504 embedding tokens exceeds the pre-allocated encoder cache size 16384` (the engine's start-up: encoder cache budget of 16384 tokens, profiled with 1 image item) - the error text and the start-up line are quoted from the coordinator record (the engine log), the clip ids, durations and counts from the committed raw/; the longest accepted clip is 72 s (c024, 14,773 prompt tokens)",
+    "client_view": "HTTP 200, then an SSE error event about 9 s later",
+    "consequence": "⚠️ this engine configuration rejects clips the API admits (contracts limits max_video_seconds 120): a deterministic configuration limit, not a load effect. W4 decides (raise the encoder budget, lower the admitted length, or pre-reject at admission) with a re-measurement; until then G2's validation has pending input P-20 (a temporary cap at the longest accepted length, 72 s, or an explicit W4 setting)"
   }
 }

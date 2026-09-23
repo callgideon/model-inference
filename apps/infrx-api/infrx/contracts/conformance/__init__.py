@@ -22,6 +22,8 @@ from .sequences import run_tracesink_sequence_properties, tracesink_sequence_pro
 from .jobs import jobstore_cases, streamstore_cases
 from .services import (engine_cases, feedback_cases, judge_cases, mediastore_cases,
                        scheduler_cases, tracesink_cases)
+from .v2_contracts import (V2Harness, cases as v2_cases, credit_jobstore_cases,
+                           run_credit_jobstore_conformance, run_v2_conformance)
 
 
 def run_cases(cases, factory: Callable[..., Harness], *,
@@ -90,6 +92,16 @@ SUITES: dict[str, tuple[Callable[[], list], Callable[..., int]]] = {
     "judge": (judge_cases, run_judge_conformance),
 }
 
-__all__ = ["Harness", "MissingHook", "OPTIONAL_HOOKS", "SUITES", "hook", "run_cases",
+# Contracts v2 (F2P wire-in, item 2): a sibling of `SUITES`, not an entry in it, because
+# its factory returns a `V2Harness` of trusted directories rather than a port `Harness`,
+# and v1's suites stay exactly as they are until D2-D5 cut over.
+V2_SUITES: dict[str, tuple[Callable[[], list], Callable[..., int]]] = {
+    "v2": (v2_cases, run_v2_conformance),
+    # `ports.CreditJobStore`: a port `Harness` factory, like v1's JobStore suite.
+    "credit_jobstore": (credit_jobstore_cases, run_credit_jobstore_conformance),
+}
+
+__all__ = ["Harness", "MissingHook", "OPTIONAL_HOOKS", "SUITES", "V2Harness", "V2_SUITES",
+           "hook", "run_cases", "run_credit_jobstore_conformance", "run_v2_conformance",
            "run_tracesink_sequence_properties", "tracesink_sequence_properties",
            *(f"run_{name}_conformance" for name in SUITES)]

@@ -31,6 +31,10 @@ ORG_A = "1a1a1a1a-0000-4000-8000-000000000001"
 ORG_B = "2b2b2b2b-0000-4000-8000-000000000002"
 KEY_A = "3c3c3c3c-0000-4000-8000-000000000003"
 KEY_B = "4d4d4d4d-0000-4000-8000-000000000004"
+# A key belongs to exactly one organization (a real store's `api_keys.org_id`), so a case
+# that needs a second key in an organization uses that organization's own second key.
+KEY_A2 = "3c3c3c3c-0000-4000-8000-000000000013"      # ORG_A's second key
+KEY_B2 = "4d4d4d4d-0000-4000-8000-000000000014"      # ORG_B's second key
 MODEL = "nemostation/marlin-2b@2026-09-01"
 
 

@@ -30,8 +30,9 @@ TASK_PORTS: dict[str, dict[str, int]] = {
     "g2": {"valkey": 55466},
     # E3B phase 2 runs the E2 stack as compose namespace `e3b2` in the reserved block
     # 56700-56799 (the harness derives service ports from INFRX_E2_NAMESPACE; a block is
-    # not a single port, so it is recorded here as the namespace's first port)
-    "e3b2": {"postgres": 56701},
+    # not a single port, so the PostgreSQL port the harness actually derives for it is mirrored here)
+    "d5": {"postgres": 55436, "valkey": 55467},
+    "e3b2": {"postgres": 56732},
 }
 
 # track -> {service: (host port, extra ports)}

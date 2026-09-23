@@ -75,6 +75,13 @@ BILLABLE_CAUSES = frozenset({
 })
 PLATFORM_FAILURE_CAUSES = frozenset(set(TerminalCause) - BILLABLE_CAUSES)
 
+# R21 / G2: the causes a caller may give `JobStore.cancel`. The two client causes and
+# the platform's synchronous deadline, and nothing else: every other cause is the
+# store's or the worker's to record, never a canceller's.
+CANCEL_CAUSES = frozenset({
+    TerminalCause.client_cancelled, TerminalCause.client_disconnected, TerminalCause.sync_deadline,
+})
+
 # The (cause, state) pair is part of the contract, not two independent fields: a
 # `succeeded` job whose cause is `engine_error` would be a free success, and a
 # `failed` job whose cause is `completed` would lose a settled debit. Any cause
@@ -651,6 +658,17 @@ class Work(Record):
     prepared_refs: tuple[MediaRef, ...] = ()
     price_snapshot: PriceSnapshot
     budgets: Budgets
+    # Preparation's exact prompt token count, stored once with the prepared refs (D2's
+    # `jobs.prepared_prompt_tokens`, filled by D3's `load_work`; W2's request). None until
+    # preparation has counted, and never beyond the ceiling the hold was sized for.
+    prompt_tokens: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _prompt_fits_the_admitted_ceiling(self) -> Work:
+        if self.prompt_tokens is not None and self.prompt_tokens > self.request.max_input_tokens:
+            raise ValueError("prompt_tokens exceeds the request's max_input_tokens, which the "
+                             "hold was sized for")
+        return self
 
 
 class PreparedRequest(Record):

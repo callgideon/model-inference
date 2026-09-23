@@ -102,6 +102,7 @@
         "budgets",
         "media_refs",
         "prepared_refs",
+        "prompt_tokens",
         "request"
       ],
       "v1": "Work"

@@ -133,16 +133,15 @@ def test_the_console_reads_the_python_fixture_base_rather_than_a_copy():
         if "fixtures/v2" not in source:
             continue
         assert "infrx-api/infrx/contracts/fixtures/v2" in source, test_file
-    # `mutants-v2.json` is the console's own mutation list, not a fixture copy; every
-    # other JSON file here would be one, and a copy is a thing that can drift.
-    copies = [path.name for path in (CONSOLE / "tests" / "contracts" / "v2").glob("*.json")
-              if path.name != "mutants-v2.json"]
+    # Any JSON file here would be a fixture copy, and a copy is a thing that can drift. (The
+    # v2 mutation list lives in `tests/contracts/mutants.json` since the wire-in, item 11.)
+    copies = [path.name for path in (CONSOLE / "tests" / "contracts" / "v2").glob("*.json")]
     assert copies == [], f"v2 fixtures must not be copied into the console: {copies}"
 
 
 def test_the_v1_parity_surface_is_untouched():
-    """F-BASE: v2 is additive, so the v1 console DTO file still declares v1's own
-    vocabulary and this test's own imports prove the v1 parity module still loads."""
+    """F-BASE: the v1 console DTO file still declares v1's own vocabulary, and v2 reaches
+    it only as the `v2` namespace (wire-in item 9) - never as flat declarations there."""
     v1_types = (CONSOLE / "lib" / "contracts" / "types.ts").read_text()
     assert ts_string_array(v1_types, "JOB_STATES")[0] == "preparing"
     assert "CREDENTIAL_AUDIENCES" not in v1_types, \

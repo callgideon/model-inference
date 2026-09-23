@@ -19,10 +19,18 @@
 //
 // Run with `pnpm test:mutants`. Deliberately not part of `pnpm test`: one Node process per mutant.
 //
-// Usage: node tests/contracts/run-mutants.mjs [--only ID,ID] [--jobs N] [--timeout MS] [--keep]
+// One runner, several entry points (F2P wire-in item 11). A mutant's `entry` names the suite that
+// must kill it: `conformance` (the default) is the exported console-services conformance, as
+// above; `v2` is the contracts-v2 console suites (`tests/contracts/v2/*.test.ts`), which read the
+// Python fixture base by relative path, so every copy also carries
+// `apps/infrx-api/infrx/contracts/fixtures/v2` beside the app; `fixtures` is the console fixture
+// guards (`tests/contracts/fixtures.test.ts`). The kill rule is the same for
+// every entry. `--entry NAME` runs one entry's mutants; the default runs all of them.
+//
+// Usage: node tests/contracts/run-mutants.mjs [--entry NAME] [--only ID,ID] [--jobs N] [--timeout MS] [--keep]
 //        node tests/contracts/run-mutants.mjs --self-test
 import { spawn } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +44,7 @@ const jobs = Math.max(1, Number(flag("--jobs", "4")) || 4);
 const timeoutMs = Math.max(1000, Number(flag("--timeout", "120000")) || 120000);
 const keep = args.includes("--keep");
 const selfTest = args.includes("--self-test");
+const onlyEntry = flag("--entry", null);
 
 /**
  * The entry point each run executes: only the exported conformance functions, against the fake.
@@ -50,6 +59,30 @@ runConsoleServicesConformance(() => {
 }, "mutation target");
 `;
 
+/**
+ * Where each entry's suite lives in a copy, and at what TAP depth its cases report: the
+ * conformance cases are subtests of one suite (4 spaces), the v2 suites' tests are top level.
+ */
+const ENTRIES = {
+  conformance: { files: () => ["tests/contracts/__conformance-only.test.ts"], indent: 4 },
+  v2: {
+    files: (app) =>
+      readdirSync(join(app, "tests/contracts/v2"))
+        .filter((name) => name.endsWith(".test.ts"))
+        .sort()
+        .map((name) => `tests/contracts/v2/${name}`),
+    indent: 0,
+  },
+  // The console fixture guards (F2R-B NB-2): fixture *data* invariants, killed by editing the data.
+  fixtures: { files: () => ["tests/contracts/fixtures.test.ts"], indent: 0 },
+};
+
+function entryOf(mutant) {
+  const name = mutant.entry ?? "conformance";
+  if (!(name in ENTRIES)) throw new Error(`mutant ${mutant.id}: unknown entry ${name}`);
+  return name;
+}
+
 function prepareCopy() {
   const root = mkdtempSync(join(tmpdir(), "f2ts-mutants-"));
   const app = join(root, "app");
@@ -60,6 +93,12 @@ function prepareCopy() {
   });
   symlinkSync(join(appRoot, "node_modules"), join(app, "node_modules"), "dir");
   writeFileSync(join(app, "tests/contracts/__conformance-only.test.ts"), ENTRY);
+  // The v2 suites read the Python fixture base at ../../../../infrx-api/... from their own file.
+  cpSync(
+    resolve(appRoot, "../infrx-api/infrx/contracts/fixtures/v2"),
+    join(root, "infrx-api/infrx/contracts/fixtures/v2"),
+    { recursive: true },
+  );
   return { root, app };
 }
 
@@ -69,16 +108,18 @@ function prepareCopy() {
  * `settle()` wrapper reports a thrown error through `assert.fail`, so its message is recognised too —
  * it is a thrown error wearing an assertion's clothes.
  */
-function failingCases(out) {
+function failingCases(out, indent = 4) {
   const cases = [];
-  const pattern = /^ {4}not ok \d+ - (.*)$/gm;
+  const pad = " ".repeat(indent);
+  const yaml = " ".repeat(indent + 2);
+  const pattern = new RegExp(`^${pad}not ok \\d+ - (.*)$`, "gm");
   for (let match = pattern.exec(out); match !== null; match = pattern.exec(out)) {
     const rest = out.slice(match.index + match[0].length);
-    const end = rest.search(/^ {6}\.\.\.$/m);
+    const end = rest.search(new RegExp(`^${yaml}\\.\\.\\.$`, "m"));
     const diagnostic = end === -1 ? rest : rest.slice(0, end);
     const assertion = /code: 'ERR_ASSERTION'/.test(diagnostic);
     const wrapped = /threw instead of returning a Result/.test(diagnostic);
-    const error = /^ {6}name: '(\w+)'/m.exec(diagnostic);
+    const error = new RegExp(`^${yaml}name: '(\\w+)'`, "m").exec(diagnostic);
     cases.push({
       name: match[1].trim(),
       how: assertion && !wrapped ? "assertion" : "error",
@@ -88,12 +129,13 @@ function failingCases(out) {
   return cases;
 }
 
-function failingNames(out) {
-  return failingCases(out).map((entry) => entry.name);
+function failingNames(out, indent = 4) {
+  return failingCases(out, indent).map((entry) => entry.name);
 }
 
-function passingCases(out) {
-  return [...out.matchAll(/^ {4}ok \d+ - (.*)$/gm)].map((match) => match[1].trim());
+function passingCases(out, indent = 4) {
+  const pattern = new RegExp(`^${" ".repeat(indent)}ok \\d+ - (.*)$`, "gm");
+  return [...out.matchAll(pattern)].map((match) => match[1].trim());
 }
 
 /**
@@ -111,11 +153,12 @@ function loadFailureReason(out) {
   return "the suite failed without naming a case";
 }
 
-function runSuite(app, limitMs = timeoutMs) {
+function runSuite(app, limitMs = timeoutMs, entry = "conformance") {
+  const { files, indent } = ENTRIES[entry];
   return new Promise((done) => {
     const child = spawn(
       process.execPath,
-      ["--test", "--test-reporter=tap", "tests/contracts/__conformance-only.test.ts"],
+      ["--test", "--test-reporter=tap", ...files(app)],
       { cwd: app, stdio: ["ignore", "pipe", "pipe"] },
     );
     let out = "";
@@ -131,7 +174,14 @@ function runSuite(app, limitMs = timeoutMs) {
     child.stderr.on("data", collect);
     child.on("close", (code) => {
       clearTimeout(timer);
-      done({ code, failed: failingCases(out), passed: passingCases(out), out, timedOut });
+      done({
+        code,
+        failed: failingCases(out, indent),
+        passed: passingCases(out, indent),
+        indent,
+        out,
+        timedOut,
+      });
     });
   });
 }
@@ -181,7 +231,7 @@ function classify(mutant, run) {
   if (matched.length === 0) {
     return {
       outcome: "survived",
-      why: `the suite failed, but not in a declared case (failed: ${failingNames(run.out).join("; ") || "none named"})`,
+      why: `the suite failed, but not in a declared case (failed: ${failingNames(run.out, run.indent).join("; ") || "none named"})`,
     };
   }
   const collateral = run.failed.length - matched.length;
@@ -335,6 +385,31 @@ const SELF_TESTS = [
     },
     expect: "killed",
   },
+  // The v2 entry (item 11): the same classification over the v2 suites' top-level tests.
+  {
+    name: "a no-op edit survives on the v2 entry",
+    mutant: {
+      id: "SELF-V2-NOOP",
+      entry: "v2",
+      file: "lib/contracts/v2/types.ts",
+      find: "export const WALLET_KINDS",
+      replace: "// a comment changes no behaviour\nexport const WALLET_KINDS",
+      cases: ["available credit is recomputed, not trusted"],
+    },
+    expect: "survived",
+  },
+  {
+    name: "a genuine v2 defect is killed by its declared v2 test",
+    mutant: {
+      id: "SELF-V2-REAL-KILL",
+      entry: "v2",
+      file: "lib/contracts/v2/types.ts",
+      find: "  return subCredit(parseCredit(balance.ledger_total), parseCredit(balance.reserved_total));",
+      replace: "  return parseCredit(balance.ledger_total);",
+      cases: ["available credit is recomputed, not trusted"],
+    },
+    expect: "killed",
+  },
   {
     name: "a mutant with no declared cases is a runner error",
     mutant: { id: "SELF-NO-CASES", file: "lib/contracts/fake-services.ts", find: TENANT, replace: "    const org = [...orgs.values()][0];", cases: [] },
@@ -355,7 +430,7 @@ async function runSelfTests() {
         outcome = "stale";
         why = applied.why;
       } else {
-        const run = await runSuite(worker.app, check.timeoutMs ?? timeoutMs);
+        const run = await runSuite(worker.app, check.timeoutMs ?? timeoutMs, entryOf(check.mutant));
         applied.restore();
         const verdict = classify(check.mutant, run);
         outcome = verdict.outcome;
@@ -380,7 +455,10 @@ async function runSelfTests() {
 async function runCatalogue() {
   const catalogue = JSON.parse(readFileSync(join(here, "mutants.json"), "utf8"));
   const only = new Set((flag("--only", "") ?? "").split(",").filter((id) => id !== ""));
-  const mutants = catalogue.mutants.filter((mutant) => only.size === 0 || only.has(mutant.id));
+  const mutants = catalogue.mutants.filter(
+    (mutant) =>
+      (only.size === 0 || only.has(mutant.id)) && (onlyEntry === null || entryOf(mutant) === onlyEntry),
+  );
   if (mutants.length === 0) {
     console.error("no mutants selected");
     return 2;
@@ -389,21 +467,25 @@ async function runCatalogue() {
   const started = Date.now();
   const workers = [prepareCopy()];
   try {
-    const baseline = await runSuite(workers[0].app);
-    if (baseline.code !== 0) {
-      console.error("the conformance suite does not pass unmutated — fix that first:\n");
-      console.error(baseline.out.split("\n").filter((line) => /not ok|Error/.test(line)).join("\n"));
-      return 2;
+    // One pristine baseline per entry the selection touches: every case a mutant may name must
+    // pass unmutated, or its "kill" would be the suite's own failure.
+    const knownByEntry = {};
+    for (const entry of [...new Set(mutants.map(entryOf))].sort()) {
+      const baseline = await runSuite(workers[0].app, timeoutMs, entry);
+      if (baseline.code !== 0) {
+        console.error(`the ${entry} suite does not pass unmutated — fix that first:\n`);
+        console.error(baseline.out.split("\n").filter((line) => /not ok|Error/.test(line)).join("\n"));
+        return 2;
+      }
+      knownByEntry[entry] = new Set([...baseline.passed, ...failingNames(baseline.out, baseline.indent)]);
+      console.log(`baseline (${entry}): ${knownByEntry[entry].size} cases pass unmutated`);
     }
-    const knownCases = new Set([...passingCases(baseline.out), ...failingNames(baseline.out)]);
-    console.log(
-      `baseline: ${knownCases.size} exported cases pass unmutated; ${mutants.length} mutants, ${jobs} at a time, ` +
-        `${timeoutMs} ms each\n`,
-    );
+    console.log(`${mutants.length} mutants, ${jobs} at a time, ${timeoutMs} ms each\n`);
     for (let i = 1; i < jobs; i += 1) workers.push(prepareCopy());
 
+    const knownFor = (mutant) => knownByEntry[entryOf(mutant)];
     const misattributed = mutants.filter((mutant) =>
-      (mutant.cases ?? []).some((name) => !knownCases.has(name)),
+      (mutant.cases ?? []).some((name) => !knownFor(mutant).has(name)),
     );
 
     const results = [];
@@ -420,7 +502,7 @@ async function runCatalogue() {
             results.push({ mutant, outcome: "stale", why: applied.why });
             continue;
           }
-          const run = await runSuite(worker.app);
+          const run = await runSuite(worker.app, timeoutMs, entryOf(mutant));
           applied.restore();
           results.push({ mutant, ...classify(mutant, run) });
         }
@@ -468,7 +550,7 @@ async function runCatalogue() {
     if (misattributed.length > 0) {
       console.error("\nThese mutants name a case the suite does not have, so a kill could not be attributed:");
       for (const mutant of misattributed) {
-        console.error(`  ${mutant.id}: ${mutant.cases.filter((name) => !knownCases.has(name)).join("; ")}`);
+        console.error(`  ${mutant.id}: ${mutant.cases.filter((name) => !knownFor(mutant).has(name)).join("; ")}`);
       }
       exitCode = 1;
     }

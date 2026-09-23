@@ -1,0 +1,2761 @@
+{
+ "schema_version": 1,
+ "corpus_version": "e1-2026-09-20",
+ "generated_at_utc": "2026-09-20T19:17:48Z",
+ "built_at_utc": "2026-09-23T04:54:22Z",
+ "cache_root_env": "CORPUS_CACHE",
+ "cache_root_default": ".claude/corpus-cache",
+ "api_limits": {
+  "max_clip_duration_s": 120,
+  "max_pixels_per_frame": 200704
+ },
+ "ffmpeg": {
+  "version": "7.0.2-static",
+  "build": "ffmpeg-7.0.2-amd64-static (johnvansickle.com static build, gcc 8/Debian)",
+  "tarball_url": "https://johnvansickle.com/ffmpeg/releases/ffmpeg-7.0.2-amd64-static.tar.xz",
+  "tarball_url_fallbacks": [
+   "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz",
+   "https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-7.0.2-amd64-static.tar.xz"
+  ],
+  "tarball_sha256": "abda8d77ce8309141f83ab8edf0596834087c52467f6badf376a6a2a4c87cf67",
+  "tarball_md5": "7fa72b652e19bf84c9461e332ea1cdf3",
+  "tarball_bytes": 41888096,
+  "ffmpeg_sha256": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
+  "ffprobe_sha256": "4f231a1960d83e403d08f7971e271707bec278a9ae18e21b8b5b03186668450d",
+  "dir": "ffmpeg-7.0.2-amd64-static"
+ },
+ "encode_defaults": {
+  "codec": "libx264",
+  "preset": "veryfast",
+  "crf": 26,
+  "pix_fmt": "yuv420p",
+  "gop": 48,
+  "threads": 1,
+  "bitexact": true,
+  "audio": "dropped"
+ },
+ "ordering": "manifest order is stable; benchmark clients reorder with their own --seed",
+ "sources": [
+  {
+   "id": "bbb1080p30",
+   "title": "Big Buck Bunny (Sunflower, 1080p 30fps)",
+   "file": "bbb1080p30.mp4",
+   "url": "https://download.blender.org/demo/movies/BBB/bbb_sunflower_1080p_30fps_normal.mp4.zip",
+   "archive_member": "bbb_sunflower_1080p_30fps_normal.mp4",
+   "license": "CC-BY-3.0",
+   "license_url": "https://creativecommons.org/licenses/by/3.0/",
+   "license_evidence_url": "https://peach.blender.org/about/",
+   "license_evidence_quote": "Creative Commons Attribution 3.0",
+   "attribution": "(CC) Blender Foundation | peach.blender.org",
+   "expected": {
+    "duration_s": 634.6,
+    "width": 1920,
+    "height": 1080,
+    "fps": 30.0,
+    "codec": "h264"
+   },
+   "usable_start_s": 10.0,
+   "usable_end_s": 610.0,
+   "sha256": "ae51005850b0ff757fe60c3dd7a12d754d3cd2397d87d939b55235e457f97658",
+   "bytes": 276134947,
+   "probed": {
+    "duration_s": 634.6,
+    "bytes": 276134947,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30.0,
+    "pix_fmt": "yuv420p",
+    "frames": 19036,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null
+   },
+   "status": "unfetched",
+   "error": "HTTPError: HTTP Error 403: Forbidden"
+  },
+  {
+   "id": "tos720p",
+   "title": "Tears of Steel (720p)",
+   "file": "tos720p.mov",
+   "url": "https://download.blender.org/demo/movies/ToS/tears_of_steel_720p.mov",
+   "license": "CC-BY-3.0",
+   "license_url": "https://creativecommons.org/licenses/by/3.0/",
+   "license_evidence_url": "https://mango.blender.org/about/",
+   "license_evidence_quote": "Creative Commons Attribution 3.0, which allows you to share and show the film freely",
+   "attribution": "(CC) Blender Foundation | mango.blender.org",
+   "note": "download.blender.org/demo/movies/ToS/copyright.txt puts the soundtrack under CC-BY-ND-3.0; derived clips are video-only (-an), so no soundtrack is redistributed.",
+   "expected": {
+    "duration_s": 734.166667,
+    "width": 1280,
+    "height": 534,
+    "fps": 24.0,
+    "codec": "h264"
+   },
+   "usable_start_s": 20.0,
+   "usable_end_s": 720.0,
+   "sha256": "efa9062d9cdb7a338e40ad530dfdf234806743f29ae6a1a136b97ece4e588e8f",
+   "bytes": 372178639,
+   "probed": {
+    "duration_s": 734.167,
+    "bytes": 372178639,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 1280,
+    "height": 534,
+    "fps": 24.0,
+    "pix_fmt": "yuv420p",
+    "frames": 17620,
+    "aspect": "640:267",
+    "display_aspect_ratio": "640:267",
+    "rotation_metadata": null
+   },
+   "status": "unfetched",
+   "error": "HTTPError: HTTP Error 403: Forbidden"
+  },
+  {
+   "id": "sintel1080p",
+   "title": "Sintel (2010, 1080p)",
+   "file": "sintel1080p.mkv",
+   "url": "https://download.blender.org/demo/movies/Sintel.2010.1080p.mkv",
+   "license": "CC-BY-3.0",
+   "license_url": "https://creativecommons.org/licenses/by/3.0/",
+   "license_evidence_url": "https://durian.blender.org/sharing/",
+   "license_evidence_quote": "Creative Commons Attribution 3.0",
+   "attribution": "(CC) Blender Foundation | durian.blender.org",
+   "expected": {
+    "duration_s": 888.032,
+    "width": 1920,
+    "height": 818,
+    "fps": 24.0,
+    "codec": "h264"
+   },
+   "usable_start_s": 20.0,
+   "usable_end_s": 860.0,
+   "sha256": "fae11ed41b2c99dfbeabce7ea5458446e21e7b840a982f510f2341919c3d9920",
+   "bytes": 1172428172,
+   "probed": {
+    "duration_s": 888.032,
+    "bytes": 1172428172,
+    "container": "matroska,webm",
+    "codec": "h264",
+    "width": 1920,
+    "height": 818,
+    "fps": 24.0,
+    "pix_fmt": "yuv420p",
+    "frames": null,
+    "aspect": "960:409",
+    "display_aspect_ratio": "960:409",
+    "rotation_metadata": null
+   },
+   "status": "unfetched",
+   "error": "HTTPError: HTTP Error 403: Forbidden"
+  },
+  {
+   "id": "nasasteve",
+   "title": "The Aurora Named STEVE (NASA Goddard)",
+   "file": "nasasteve.mp4",
+   "url": "https://images-assets.nasa.gov/video/GSFC_20180314_Aurora_m12865_Steve/GSFC_20180314_Aurora_m12865_Steve~orig.mp4",
+   "license": "public-domain-usgov",
+   "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+   "license_evidence_url": "https://images.nasa.gov/docs/images.nasa.gov_Guide_v1.0.pdf",
+   "license_evidence_quote": "NASA content is generally not copyrighted and may be used for educational or informational purposes without needing explicit permissions",
+   "attribution": "NASA's Goddard Space Flight Center (nasa_id GSFC_20180314_Aurora_m12865_Steve)",
+   "note": "The item's own NASA description credits 'amateur photographers from the Alberta Aurora Chasers', so parts of this video are very likely third-party stills that the generic NASA-content sentence does not cover. Nothing is redistributed (no media in git, derived clips stay in the local cache), but treat this source as attribution-only: swap in NASA-produced footage before any public redistribution. Item page: https://svs.gsfc.nasa.gov/12865 ('Please give credit for this item to: NASA's Goddard Space Flight Center').",
+   "expected": {
+    "duration_s": 132.885333,
+    "width": 1920,
+    "height": 1080,
+    "fps": 59.94,
+    "codec": "h264"
+   },
+   "usable_start_s": 2.0,
+   "usable_end_s": 130.0,
+   "sha256": "f0156c314c7296c8c425c0cfed830e8a86f178aa91140e58b87188018d0ebce9",
+   "bytes": 288226736,
+   "probed": {
+    "duration_s": 132.885,
+    "bytes": 288226736,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 1920,
+    "height": 1080,
+    "fps": 59.94,
+    "pix_fmt": "yuv420p",
+    "frames": 7965,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null
+   },
+   "status": "fetched"
+  }
+ ],
+ "prompts": [
+  {
+   "id": "p00",
+   "kind": "caption",
+   "text": "Describe every event in this clip, in order, with start and end times in seconds."
+  },
+  {
+   "id": "p01",
+   "kind": "find",
+   "text": "From when to when is the main subject moving across the frame?"
+  },
+  {
+   "id": "p02",
+   "kind": "count",
+   "text": "How many distinct people, animals or vehicles appear? List them."
+  },
+  {
+   "id": "p03",
+   "kind": "motion",
+   "text": "Describe the camera motion: static, pan, tilt, zoom or handheld?"
+  },
+  {
+   "id": "p04",
+   "kind": "scene",
+   "text": "How many scene changes are there, and at which timestamps?"
+  },
+  {
+   "id": "p05",
+   "kind": "objects",
+   "text": "List the objects in the foreground and the objects in the background."
+  },
+  {
+   "id": "p06",
+   "kind": "text",
+   "text": "Is any on-screen text, logo or caption visible? Quote it exactly if so."
+  },
+  {
+   "id": "p07",
+   "kind": "summary",
+   "text": "Summarise this clip in one sentence for a video search index."
+  },
+  {
+   "id": "p08",
+   "kind": "temporal",
+   "text": "What happens first and what happens last? Answer in two short sentences."
+  },
+  {
+   "id": "p09",
+   "kind": "colour",
+   "text": "Describe the dominant colours and the lighting conditions."
+  },
+  {
+   "id": "p10",
+   "kind": "setting",
+   "text": "Where does this take place: indoors or outdoors, natural or built, day or night?"
+  },
+  {
+   "id": "p11",
+   "kind": "grounding",
+   "text": "Give the time range of the single most visually salient action."
+  },
+  {
+   "id": "p12",
+   "kind": "anomaly",
+   "text": "Is anything unusual, damaged, unsafe or out of place? Describe it or say none."
+  },
+  {
+   "id": "p13",
+   "kind": "frames",
+   "text": "Describe the first visible frame, then the last visible frame."
+  },
+  {
+   "id": "p14",
+   "kind": "orientation",
+   "text": "Is this footage portrait, landscape or square, and is it rotated?"
+  },
+  {
+   "id": "p15",
+   "kind": "detail",
+   "text": "Describe the smallest detail you can reliably identify and when it is visible."
+  }
+ ],
+ "clips": [
+  {
+   "id": "c000-bbb1080p30-1080p-16x9",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1080p-16x9",
+   "display_width": 1920,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 10.0,
+    "duration_s": 2,
+    "scale": [
+     1920,
+     1080
+    ],
+    "fps": 30,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p00",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c000-bbb1080p30-1080p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c001-tos720p-720p-16x9",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "720p-16x9",
+   "display_width": 1280,
+   "display_height": 720,
+   "recipe": {
+    "start_s": 20.0,
+    "duration_s": 3,
+    "scale": [
+     1280,
+     720
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p01",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c001-tos720p-720p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c002-sintel1080p-480p-16x9",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "480p-16x9",
+   "display_width": 854,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 20.0,
+    "duration_s": 5,
+    "scale": [
+     854,
+     480
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p02",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c002-sintel1080p-480p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c003-nasasteve-360p-16x9",
+   "kind": "clip",
+   "source": "nasasteve",
+   "geometry_label": "360p-16x9",
+   "display_width": 640,
+   "display_height": 360,
+   "recipe": {
+    "start_s": 2.0,
+    "duration_s": 7,
+    "scale": [
+     640,
+     360
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p03",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c003-nasasteve-360p-16x9.mp4",
+   "derived": {
+    "duration_s": 7.0,
+    "bytes": 128388,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 640,
+    "height": 360,
+    "fps": 10.0,
+    "pix_fmt": "yuv420p",
+    "frames": 70,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null,
+    "sha256": "229c79ed29567158af515942fcc6a55e5ed5a0c568fc1b7a6f7ae262ea3a5cc0",
+    "source_upscaled": false
+   },
+   "status": "built"
+  },
+  {
+   "id": "c004-bbb1080p30-1080x1920-portrait",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1080x1920-portrait",
+   "display_width": 1080,
+   "display_height": 1920,
+   "recipe": {
+    "start_s": 13.0,
+    "duration_s": 9,
+    "scale": [
+     1080,
+     1920
+    ],
+    "fps": 60,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p04",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c004-bbb1080p30-1080x1920-portrait.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c005-tos720p-720x1280-portrait",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "720x1280-portrait",
+   "display_width": 720,
+   "display_height": 1280,
+   "recipe": {
+    "start_s": 24.0,
+    "duration_s": 12,
+    "scale": [
+     720,
+     1280
+    ],
+    "fps": 30,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p05",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c005-tos720p-720x1280-portrait.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c006-sintel1080p-480x854-portrait",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "480x854-portrait",
+   "display_width": 480,
+   "display_height": 854,
+   "recipe": {
+    "start_s": 26.0,
+    "duration_s": 15,
+    "scale": [
+     480,
+     854
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p06",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c006-sintel1080p-480x854-portrait.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c007-nasasteve-1080-square",
+   "kind": "clip",
+   "source": "nasasteve",
+   "geometry_label": "1080-square",
+   "display_width": 1080,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 10.0,
+    "duration_s": 20,
+    "scale": [
+     1080,
+     1080
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p07",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c007-nasasteve-1080-square.mp4",
+   "derived": {
+    "duration_s": 20.0,
+    "bytes": 3977337,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 1080,
+    "height": 1080,
+    "fps": 15.0,
+    "pix_fmt": "yuv420p",
+    "frames": 300,
+    "aspect": "1:1",
+    "display_aspect_ratio": "1:1",
+    "rotation_metadata": null,
+    "sha256": "6897d2ecea8d98c96c009eddad1f0a7475d7c093059dd0e3c4992584107a7286",
+    "source_upscaled": false
+   },
+   "status": "sha256_mismatch",
+   "error": "cached bytes sha256 8c1e0706c8ba42d2a9729288c54617742e610e8d6baf21ea8706e7e9be4f9d70 != pinned 6897d2ecea8d98c96c009eddad1f0a7475d7c093059dd0e3c4992584107a7286"
+  },
+  {
+   "id": "c008-bbb1080p30-512-square",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "512-square",
+   "display_width": 512,
+   "display_height": 512,
+   "recipe": {
+    "start_s": 23.0,
+    "duration_s": 26,
+    "scale": [
+     512,
+     512
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p08",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c008-bbb1080p30-512-square.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c009-tos720p-2560x1080-ultrawide",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "2560x1080-ultrawide",
+   "display_width": 2560,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 37.0,
+    "duration_s": 34,
+    "scale": [
+     2560,
+     1080
+    ],
+    "fps": 60,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p09",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c009-tos720p-2560x1080-ultrawide.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c010-sintel1080p-1920x800-scope",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "1920x800-scope",
+   "display_width": 1920,
+   "display_height": 800,
+   "recipe": {
+    "start_s": 42.0,
+    "duration_s": 48,
+    "scale": [
+     1920,
+     800
+    ],
+    "fps": 30,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p10",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c010-sintel1080p-1920x800-scope.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c011-nasasteve-640x480-4x3",
+   "kind": "clip",
+   "source": "nasasteve",
+   "geometry_label": "640x480-4x3",
+   "display_width": 640,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 31.0,
+    "duration_s": 72,
+    "scale": [
+     640,
+     480
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p11",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c011-nasasteve-640x480-4x3.mp4",
+   "derived": {
+    "duration_s": 72.0,
+    "bytes": 2168958,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 640,
+    "height": 480,
+    "fps": 24.0,
+    "pix_fmt": "yuv420p",
+    "frames": 1728,
+    "aspect": "4:3",
+    "display_aspect_ratio": "4:3",
+    "rotation_metadata": null,
+    "sha256": "557e2b1848628b79e4e363936add7c1c6f317444ba3fe0cb748a52361e412510",
+    "source_upscaled": false
+   },
+   "status": "built"
+  },
+  {
+   "id": "c012-bbb1080p30-1024x768-4x3",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1024x768-4x3",
+   "display_width": 1024,
+   "display_height": 768,
+   "recipe": {
+    "start_s": 50.0,
+    "duration_s": 112,
+    "scale": [
+     1024,
+     768
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p12",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c012-bbb1080p30-1024x768-4x3.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c013-tos720p-1920x480-extreme-wide",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "1920x480-extreme-wide",
+   "display_width": 1920,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 72.0,
+    "duration_s": 2,
+    "scale": [
+     1920,
+     480
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p13",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c013-tos720p-1920x480-extreme-wide.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c014-sintel1080p-480x1920-extreme-tall",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "480x1920-extreme-tall",
+   "display_width": 480,
+   "display_height": 1920,
+   "recipe": {
+    "start_s": 91.0,
+    "duration_s": 3,
+    "scale": [
+     480,
+     1920
+    ],
+    "fps": 60,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p14",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c014-sintel1080p-480x1920-extreme-tall.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c015-nasasteve-240p-tiny",
+   "kind": "clip",
+   "source": "nasasteve",
+   "geometry_label": "240p-tiny",
+   "display_width": 426,
+   "display_height": 240,
+   "recipe": {
+    "start_s": 104.0,
+    "duration_s": 5,
+    "scale": [
+     426,
+     240
+    ],
+    "fps": 30,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p15",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c015-nasasteve-240p-tiny.mp4",
+   "derived": {
+    "duration_s": 5.0,
+    "bytes": 37094,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 426,
+    "height": 240,
+    "fps": 30.0,
+    "pix_fmt": "yuv420p",
+    "frames": 150,
+    "aspect": "71:40",
+    "display_aspect_ratio": "71:40",
+    "rotation_metadata": null,
+    "sha256": "1a313f0a058ce65a82732594333cc39e6cd716b5d49b3743c473829309195cb3",
+    "source_upscaled": false
+   },
+   "status": "built"
+  },
+  {
+   "id": "c016-bbb1080p30-1080p-16x9",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1080p-16x9",
+   "display_width": 1920,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 163.0,
+    "duration_s": 7,
+    "scale": [
+     1920,
+     1080
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p01",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c016-bbb1080p30-1080p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c017-tos720p-720p-16x9",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "720p-16x9",
+   "display_width": 1280,
+   "display_height": 720,
+   "recipe": {
+    "start_s": 75.0,
+    "duration_s": 9,
+    "scale": [
+     1280,
+     720
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p02",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c017-tos720p-720p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c018-sintel1080p-480p-16x9",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "480p-16x9",
+   "display_width": 854,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 95.0,
+    "duration_s": 12,
+    "scale": [
+     854,
+     480
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p03",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c018-sintel1080p-480p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c019-nasasteve-360p-16x9",
+   "kind": "clip",
+   "source": "nasasteve",
+   "geometry_label": "360p-16x9",
+   "display_width": 640,
+   "display_height": 360,
+   "recipe": {
+    "start_s": 110.0,
+    "duration_s": 15,
+    "scale": [
+     640,
+     360
+    ],
+    "fps": 60,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p04",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c019-nasasteve-360p-16x9.mp4",
+   "derived": {
+    "duration_s": 15.0,
+    "bytes": 144071,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 640,
+    "height": 360,
+    "fps": 60.0,
+    "pix_fmt": "yuv420p",
+    "frames": 900,
+    "aspect": "16:9",
+    "display_aspect_ratio": "16:9",
+    "rotation_metadata": null,
+    "sha256": "d2c5ab815774c0f38db6810daac90796b5c656d3ffe6a69446578781dee8bc72",
+    "source_upscaled": false
+   },
+   "status": "sha256_mismatch",
+   "error": "cached bytes sha256 5212217122b077064e31384c4aa48c2344c72436057a06cc3cde60449e7291cf != pinned d2c5ab815774c0f38db6810daac90796b5c656d3ffe6a69446578781dee8bc72"
+  },
+  {
+   "id": "c020-bbb1080p30-1080x1920-portrait-rot90cw",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1080x1920-portrait",
+   "display_width": 1920,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 171.0,
+    "duration_s": 20,
+    "scale": [
+     1080,
+     1920
+    ],
+    "fps": 30,
+    "transpose": "90cw",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p05",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c020-bbb1080p30-1080x1920-portrait-rot90cw.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c021-tos720p-720x1280-portrait",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "720x1280-portrait",
+   "display_width": 720,
+   "display_height": 1280,
+   "recipe": {
+    "start_s": 85.0,
+    "duration_s": 26,
+    "scale": [
+     720,
+     1280
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p06",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c021-tos720p-720x1280-portrait.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c022-sintel1080p-480x854-portrait",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "480x854-portrait",
+   "display_width": 480,
+   "display_height": 854,
+   "recipe": {
+    "start_s": 108.0,
+    "duration_s": 34,
+    "scale": [
+     480,
+     854
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p07",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c022-sintel1080p-480x854-portrait.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c023-bbb1080p30-1080-square",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1080-square",
+   "display_width": 1080,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 192.0,
+    "duration_s": 48,
+    "scale": [
+     1080,
+     1080
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p08",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c023-bbb1080p30-1080-square.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c024-bbb1080p30-512-square",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "512-square",
+   "display_width": 512,
+   "display_height": 512,
+   "recipe": {
+    "start_s": 241.0,
+    "duration_s": 72,
+    "scale": [
+     512,
+     512
+    ],
+    "fps": 60,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p09",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c024-bbb1080p30-512-square.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c025-tos720p-2560x1080-ultrawide-rot180",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "2560x1080-ultrawide",
+   "display_width": 2560,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 112.0,
+    "duration_s": 112,
+    "scale": [
+     2560,
+     1080
+    ],
+    "fps": 30,
+    "transpose": "180",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p10",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c025-tos720p-2560x1080-ultrawide-rot180.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c026-sintel1080p-1920x800-scope",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "1920x800-scope",
+   "display_width": 1920,
+   "display_height": 800,
+   "recipe": {
+    "start_s": 143.0,
+    "duration_s": 2,
+    "scale": [
+     1920,
+     800
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p11",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c026-sintel1080p-1920x800-scope.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c027-nasasteve-640x480-4x3",
+   "kind": "clip",
+   "source": "nasasteve",
+   "geometry_label": "640x480-4x3",
+   "display_width": 640,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 126.0,
+    "duration_s": 3,
+    "scale": [
+     640,
+     480
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p12",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c027-nasasteve-640x480-4x3.mp4",
+   "derived": {
+    "duration_s": 3.0,
+    "bytes": 80899,
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "codec": "h264",
+    "width": 640,
+    "height": 480,
+    "fps": 15.0,
+    "pix_fmt": "yuv420p",
+    "frames": 45,
+    "aspect": "4:3",
+    "display_aspect_ratio": "4:3",
+    "rotation_metadata": null,
+    "sha256": "b0fc4176cb771b76026fac3a3fc75afa14f019c915f4d541effe9e32b057f501",
+    "source_upscaled": false
+   },
+   "status": "sha256_mismatch",
+   "error": "cached bytes sha256 a0c364db45e53ba6ae0ddf31336025dcf7040fa731c6411463a939bbe6dc2232 != pinned b0fc4176cb771b76026fac3a3fc75afa14f019c915f4d541effe9e32b057f501"
+  },
+  {
+   "id": "c028-bbb1080p30-1024x768-4x3",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1024x768-4x3",
+   "display_width": 1024,
+   "display_height": 768,
+   "recipe": {
+    "start_s": 314.0,
+    "duration_s": 5,
+    "scale": [
+     1024,
+     768
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p13",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c028-bbb1080p30-1024x768-4x3.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c029-tos720p-1920x480-extreme-wide",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "1920x480-extreme-wide",
+   "display_width": 1920,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 225.0,
+    "duration_s": 7,
+    "scale": [
+     1920,
+     480
+    ],
+    "fps": 60,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p14",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c029-tos720p-1920x480-extreme-wide.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c030-sintel1080p-480x1920-extreme-tall-rot90ccw",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "480x1920-extreme-tall",
+   "display_width": 1920,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 146.0,
+    "duration_s": 9,
+    "scale": [
+     480,
+     1920
+    ],
+    "fps": 30,
+    "transpose": "90ccw",
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p15",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c030-sintel1080p-480x1920-extreme-tall-rot90ccw.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c031-bbb1080p30-240p-tiny",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "240p-tiny",
+   "display_width": 426,
+   "display_height": 240,
+   "recipe": {
+    "start_s": 320.0,
+    "duration_s": 12,
+    "scale": [
+     426,
+     240
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p00",
+   "subset": [
+    "full",
+    "fast"
+   ],
+   "file": "clips/c031-bbb1080p30-240p-tiny.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c032-bbb1080p30-1080p-16x9",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1080p-16x9",
+   "display_width": 1920,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 333.0,
+    "duration_s": 15,
+    "scale": [
+     1920,
+     1080
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p02",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c032-bbb1080p30-1080p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c033-tos720p-720p-16x9",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "720p-16x9",
+   "display_width": 1280,
+   "display_height": 720,
+   "recipe": {
+    "start_s": 233.0,
+    "duration_s": 20,
+    "scale": [
+     1280,
+     720
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p03",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c033-tos720p-720p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c034-sintel1080p-480p-16x9",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "480p-16x9",
+   "display_width": 854,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 156.0,
+    "duration_s": 26,
+    "scale": [
+     854,
+     480
+    ],
+    "fps": 60,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p04",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c034-sintel1080p-480p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c035-bbb1080p30-360p-16x9",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "360p-16x9",
+   "display_width": 640,
+   "display_height": 360,
+   "recipe": {
+    "start_s": 349.0,
+    "duration_s": 34,
+    "scale": [
+     640,
+     360
+    ],
+    "fps": 30,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p05",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c035-bbb1080p30-360p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c036-bbb1080p30-1080x1920-portrait",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1080x1920-portrait",
+   "display_width": 1080,
+   "display_height": 1920,
+   "recipe": {
+    "start_s": 384.0,
+    "duration_s": 48,
+    "scale": [
+     1080,
+     1920
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p06",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c036-bbb1080p30-1080x1920-portrait.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c037-tos720p-720x1280-portrait",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "720x1280-portrait",
+   "display_width": 720,
+   "display_height": 1280,
+   "recipe": {
+    "start_s": 254.0,
+    "duration_s": 72,
+    "scale": [
+     720,
+     1280
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p07",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c037-tos720p-720x1280-portrait.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c038-sintel1080p-480x854-portrait",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "480x854-portrait",
+   "display_width": 480,
+   "display_height": 854,
+   "recipe": {
+    "start_s": 183.0,
+    "duration_s": 112,
+    "scale": [
+     480,
+     854
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p08",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c038-sintel1080p-480x854-portrait.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c039-bbb1080p30-1080-square",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1080-square",
+   "display_width": 1080,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 433.0,
+    "duration_s": 2,
+    "scale": [
+     1080,
+     1080
+    ],
+    "fps": 60,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p09",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c039-bbb1080p30-1080-square.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c040-bbb1080p30-512-square",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "512-square",
+   "display_width": 512,
+   "display_height": 512,
+   "recipe": {
+    "start_s": 436.0,
+    "duration_s": 3,
+    "scale": [
+     512,
+     512
+    ],
+    "fps": 30,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p10",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c040-bbb1080p30-512-square.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c041-tos720p-2560x1080-ultrawide",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "2560x1080-ultrawide",
+   "display_width": 2560,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 327.0,
+    "duration_s": 5,
+    "scale": [
+     2560,
+     1080
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p11",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c041-tos720p-2560x1080-ultrawide.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c042-sintel1080p-1920x800-scope",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "1920x800-scope",
+   "display_width": 1920,
+   "display_height": 800,
+   "recipe": {
+    "start_s": 296.0,
+    "duration_s": 7,
+    "scale": [
+     1920,
+     800
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p12",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c042-sintel1080p-1920x800-scope.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c043-bbb1080p30-640x480-4x3",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "640x480-4x3",
+   "display_width": 640,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 440.0,
+    "duration_s": 9,
+    "scale": [
+     640,
+     480
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p13",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c043-bbb1080p30-640x480-4x3.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c044-bbb1080p30-1024x768-4x3",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1024x768-4x3",
+   "display_width": 1024,
+   "display_height": 768,
+   "recipe": {
+    "start_s": 450.0,
+    "duration_s": 12,
+    "scale": [
+     1024,
+     768
+    ],
+    "fps": 60,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p14",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c044-bbb1080p30-1024x768-4x3.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c045-tos720p-1920x480-extreme-wide",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "1920x480-extreme-wide",
+   "display_width": 1920,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 333.0,
+    "duration_s": 15,
+    "scale": [
+     1920,
+     480
+    ],
+    "fps": 30,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p15",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c045-tos720p-1920x480-extreme-wide.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c046-sintel1080p-480x1920-extreme-tall",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "480x1920-extreme-tall",
+   "display_width": 480,
+   "display_height": 1920,
+   "recipe": {
+    "start_s": 304.0,
+    "duration_s": 20,
+    "scale": [
+     480,
+     1920
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p00",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c046-sintel1080p-480x1920-extreme-tall.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c047-bbb1080p30-240p-tiny",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "240p-tiny",
+   "display_width": 426,
+   "display_height": 240,
+   "recipe": {
+    "start_s": 463.0,
+    "duration_s": 26,
+    "scale": [
+     426,
+     240
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p01",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c047-bbb1080p30-240p-tiny.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c048-bbb1080p30-1080p-16x9",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1080p-16x9",
+   "display_width": 1920,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 490.0,
+    "duration_s": 34,
+    "scale": [
+     1920,
+     1080
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p03",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c048-bbb1080p30-1080p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c049-tos720p-720p-16x9",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "720p-16x9",
+   "display_width": 1280,
+   "display_height": 720,
+   "recipe": {
+    "start_s": 349.0,
+    "duration_s": 48,
+    "scale": [
+     1280,
+     720
+    ],
+    "fps": 60,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p04",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c049-tos720p-720p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c050-sintel1080p-480p-16x9",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "480p-16x9",
+   "display_width": 854,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 325.0,
+    "duration_s": 72,
+    "scale": [
+     854,
+     480
+    ],
+    "fps": 30,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p05",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c050-sintel1080p-480p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c051-tos720p-360p-16x9",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "360p-16x9",
+   "display_width": 640,
+   "display_height": 360,
+   "recipe": {
+    "start_s": 398.0,
+    "duration_s": 112,
+    "scale": [
+     640,
+     360
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p06",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c051-tos720p-360p-16x9.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c052-bbb1080p30-1080x1920-portrait",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1080x1920-portrait",
+   "display_width": 1080,
+   "display_height": 1920,
+   "recipe": {
+    "start_s": 525.0,
+    "duration_s": 2,
+    "scale": [
+     1080,
+     1920
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p07",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c052-bbb1080p30-1080x1920-portrait.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c053-tos720p-720x1280-portrait",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "720x1280-portrait",
+   "display_width": 720,
+   "display_height": 1280,
+   "recipe": {
+    "start_s": 511.0,
+    "duration_s": 3,
+    "scale": [
+     720,
+     1280
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p08",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c053-tos720p-720x1280-portrait.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c054-sintel1080p-480x854-portrait",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "480x854-portrait",
+   "display_width": 480,
+   "display_height": 854,
+   "recipe": {
+    "start_s": 398.0,
+    "duration_s": 5,
+    "scale": [
+     480,
+     854
+    ],
+    "fps": 60,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p09",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c054-sintel1080p-480x854-portrait.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c055-bbb1080p30-1080-square",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1080-square",
+   "display_width": 1080,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 528.0,
+    "duration_s": 7,
+    "scale": [
+     1080,
+     1080
+    ],
+    "fps": 30,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p10",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c055-bbb1080p30-1080-square.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c056-bbb1080p30-512-square",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "512-square",
+   "display_width": 512,
+   "display_height": 512,
+   "recipe": {
+    "start_s": 536.0,
+    "duration_s": 9,
+    "scale": [
+     512,
+     512
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p11",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c056-bbb1080p30-512-square.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c057-tos720p-2560x1080-ultrawide",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "2560x1080-ultrawide",
+   "display_width": 2560,
+   "display_height": 1080,
+   "recipe": {
+    "start_s": 515.0,
+    "duration_s": 12,
+    "scale": [
+     2560,
+     1080
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p12",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c057-tos720p-2560x1080-ultrawide.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c058-sintel1080p-1920x800-scope",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "1920x800-scope",
+   "display_width": 1920,
+   "display_height": 800,
+   "recipe": {
+    "start_s": 404.0,
+    "duration_s": 15,
+    "scale": [
+     1920,
+     800
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p13",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c058-sintel1080p-1920x800-scope.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c059-bbb1080p30-640x480-4x3",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "640x480-4x3",
+   "display_width": 640,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 546.0,
+    "duration_s": 20,
+    "scale": [
+     640,
+     480
+    ],
+    "fps": 60,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p14",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c059-bbb1080p30-640x480-4x3.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c060-bbb1080p30-1024x768-4x3",
+   "kind": "clip",
+   "source": "bbb1080p30",
+   "geometry_label": "1024x768-4x3",
+   "display_width": 1024,
+   "display_height": 768,
+   "recipe": {
+    "start_s": 567.0,
+    "duration_s": 26,
+    "scale": [
+     1024,
+     768
+    ],
+    "fps": 30,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p15",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c060-bbb1080p30-1024x768-4x3.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c061-tos720p-1920x480-extreme-wide",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "1920x480-extreme-wide",
+   "display_width": 1920,
+   "display_height": 480,
+   "recipe": {
+    "start_s": 528.0,
+    "duration_s": 34,
+    "scale": [
+     1920,
+     480
+    ],
+    "fps": 24,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p00",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c061-tos720p-1920x480-extreme-wide.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c062-sintel1080p-480x1920-extreme-tall",
+   "kind": "clip",
+   "source": "sintel1080p",
+   "geometry_label": "480x1920-extreme-tall",
+   "display_width": 480,
+   "display_height": 1920,
+   "recipe": {
+    "start_s": 420.0,
+    "duration_s": 48,
+    "scale": [
+     480,
+     1920
+    ],
+    "fps": 15,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p01",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c062-sintel1080p-480x1920-extreme-tall.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  },
+  {
+   "id": "c063-tos720p-240p-tiny",
+   "kind": "clip",
+   "source": "tos720p",
+   "geometry_label": "240p-tiny",
+   "display_width": 426,
+   "display_height": 240,
+   "recipe": {
+    "start_s": 563.0,
+    "duration_s": 72,
+    "scale": [
+     426,
+     240
+    ],
+    "fps": 10,
+    "transpose": null,
+    "encode": {
+     "codec": "libx264",
+     "preset": "veryfast",
+     "crf": 26,
+     "pix_fmt": "yuv420p",
+     "gop": 48,
+     "threads": 1,
+     "bitexact": true,
+     "audio": "dropped"
+    }
+   },
+   "prompt": "p02",
+   "subset": [
+    "full"
+   ],
+   "file": "clips/c063-tos720p-240p-tiny.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "source unavailable"
+  }
+ ],
+ "negatives": [
+  {
+   "id": "neg-truncated-mp4",
+   "kind": "negative",
+   "recipe": {
+    "op": "truncate",
+    "from": "c000-bbb1080p30-1080p-16x9",
+    "keep_bytes": 65536
+   },
+   "expected_failure": "truncated_container_probe_failure",
+   "file": "negatives/neg-truncated-mp4.mp4",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "parent clip c000-bbb1080p30-1080p-16x9 not built"
+  },
+  {
+   "id": "neg-wrong-container",
+   "kind": "negative",
+   "recipe": {
+    "op": "rename_extension",
+    "from": "c001-tos720p-720p-16x9"
+   },
+   "expected_failure": "container_extension_mismatch",
+   "file": "negatives/neg-wrong-container.mkv",
+   "derived": null,
+   "status": "unbuilt",
+   "error": "parent clip c001-tos720p-720p-16x9 not built"
+  },
+  {
+   "id": "neg-zero-length",
+   "kind": "negative",
+   "recipe": {
+    "op": "zero_length"
+   },
+   "expected_failure": "empty_payload",
+   "file": "negatives/neg-zero-length.mp4",
+   "derived": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "probe": "expected to fail"
+   },
+   "status": "built"
+  },
+  {
+   "id": "neg-not-video",
+   "kind": "negative",
+   "recipe": {
+    "op": "text_payload",
+    "text": "this is not a video\n"
+   },
+   "expected_failure": "unsupported_media_type",
+   "file": "negatives/neg-not-video.mp4",
+   "derived": {
+    "sha256": "0a835f30fa1f3ecbe987a8000abf03a846766c3e33de0ebf40f19f43cc2b47fc",
+    "bytes": 20,
+    "probe": "expected to fail"
+   },
+   "status": "built"
+  }
+ ]
+}

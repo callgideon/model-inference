@@ -23,6 +23,34 @@ def test_every_fixture_is_claimed_by_exactly_one_group():
     assert not set(fixtures.MODELS) & set(fixtures.LIST_MODELS)
 
 
+def test_the_fixture_root_holds_exactly_the_two_revisions():
+    """F2P wire-in item 7: `fixtures/` holds `v1/` (claimed above) and `v2/` (claimed by
+    `contracts.v2.fixtures`, whose bytes and field map `tests/contracts/v2/test_fixtures_v2.py`
+    checks) and nothing else. A third directory or a stray file at the root would be a
+    fixture neither guard claims."""
+    from infrx.contracts.v2 import fixtures as v2fix
+    root = fixtures.DIR.parent
+    assert {p.name for p in root.iterdir()} - {"__init__.py", "__pycache__"} == {"v1", "v2"}
+    on_disk = {p.name for p in (root / "v2").iterdir()}
+    assert on_disk == set(v2fix.MODELS) | set(v2fix.TABLES), on_disk ^ (
+        set(v2fix.MODELS) | set(v2fix.TABLES))
+
+
+def test_a_stray_entry_at_the_fixture_root_fails_the_guard(monkeypatch):
+    """F2P review CFG-4: the "nothing else" half of the guard above. A third revision
+    directory planted beside v1/ and v2/ must fail it."""
+    import pathlib
+    root, real = fixtures.DIR.parent, pathlib.Path.iterdir
+
+    def planted(self):
+        yield from real(self)
+        if self == root:
+            yield root / "v3"
+    monkeypatch.setattr(pathlib.Path, "iterdir", planted)
+    with pytest.raises(AssertionError):
+        test_the_fixture_root_holds_exactly_the_two_revisions()
+
+
 @pytest.mark.parametrize("name", sorted(fixtures.MODELS))
 def test_fixture_round_trips_byte_stably(name):
     """F-CONTRACT: file -> model -> file is the identity."""
@@ -674,3 +702,24 @@ def test_the_judge_sample_dto_is_the_consoles_four_fields():
                                                 "request_id": one, **bad})
     with pytest.raises(ValueError):                 # present, even when null
         records.JudgeSample.model_validate({"sample_id": one, "rubric_version": 1})
+
+
+def test_work_carries_preparations_prompt_count_within_the_admitted_ceiling():
+    """`Work.prompt_tokens` (W2's request, D3 fills it): absent until preparation counted,
+    a nonnegative integer, and never past `max_input_tokens` - the hold was sized for that
+    ceiling, so a larger count is a platform incident, not a work item."""
+    import pydantic
+    from infrx.contracts.conformance import builders as b
+    from infrx.contracts.fakes.support import FakeClock, SequentialIds
+
+    class _H:
+        clock, ids = FakeClock(), SequentialIds()
+
+    request = b.request(_H, max_input_tokens=1_000)
+    base = dict(request=request, price_snapshot=b.DEFAULT_PRICE,
+                budgets=records.Budgets.of(limits.DEFAULTS, request.execution_mode))
+    assert records.Work(**base).prompt_tokens is None
+    assert records.Work(**base, prompt_tokens=1_000).prompt_tokens == 1_000
+    for bad in (-1, 1_001):
+        with pytest.raises(pydantic.ValidationError):
+            records.Work(**base, prompt_tokens=bad)

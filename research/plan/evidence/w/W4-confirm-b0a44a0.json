@@ -1,0 +1,593 @@
+{
+  "verdict": "fix_required",
+  "head": "b0a44a0",
+  "reviews": [
+    {
+      "lens": "boxsafety",
+      "verdict_hint": "pass",
+      "fabrication_check": "Claims I confirmed at b0a44a0 in candidate.sh. Every refusal comes before `systemctl stop` (line 188) and before `mkdir -p \"$OUT\"` (line 98):\n- argument count, line 51\n- closed candidate table, lines 52-57\n- restart consent, line 58\n- OUT under $NVME/w4-*, line 59; OUT canonical, line 60\n- READY_S, line 61\n- lock open and flock, lines 64-65\n- unit is-active, lines 66-67\n- container present, lines 68-69\n- ExecStart readable, lines 71 and 73\n- unit-tree guard, lines 75-76\n- checkout files including corpus-synth, lines 77-80\n- corpus verify, lines 82-84\n- parity --check, lines 88-90\n- in-flight check, last, lines 93-96 (BS-8)\n\nMoving the lock, parity, in-flight or checkout check after the stop is killed by the named refusal cases (R3, R10, R14, R18).\n\nThe fixes are in place:\n- The stub docker refuses a duplicate `run` with exit 125, and the restores case asserts 7 runs equal to 7 attempts (BS-3).\n- All 17 refusal cases assert no `systemctl stop/start` and no `docker run/stop/rm`, and nothing under w4-* except the lock (HON-3).\n- M1, M2, M3, M4, M6 and M7 are each killed by a named case (BS-2/HON-2).\n- BS-5 pinning holds against a broad hostile environment.\n- concurrency.sh is still a one-line diff from a237d6f.\n- The evidence's claims about registered mutants match: 37/37 box-script mutants were killed, and the 2 structural checks pass. test_w4 has 15 cases.\n\nNot verified, outside this lens: tests/w 179, W3 list 87, bench 67, the both-orderings base-vs-head comparison, and the decide/parity/protocol claims (D1-D10, HON-1/4-9).\n\nNo box, AWS, SSM, SSH, Docker or network was used. candidate.sh and concurrency.sh ran only in stub boxes.",
+      "cleanup": "I removed /tmp/claude-1000/confirm-w4-boxsafety-<pid> (including the zz_ harness files I had copied into its tests/w), the bc-probe copy and the path marker. The codex-w4 worktree is untouched (clean, HEAD b0a44a0). The hand-mutant harness and its per-mutant outputs are still in the session scratchpad (scratchpad/hand_mutants.py, scratchpad/hm/).",
+      "mutants": [
+        {
+          "name": "M1 out_canonical_dropped (round 1)",
+          "edit": "line 60 realpath -m -s check -> true",
+          "result": "killed",
+          "killed_by": "REFUSES case not-canonical (exit 0)"
+        },
+        {
+          "name": "M2 image_compare_dropped (round 1)",
+          "edit": "line 174 drop && [ post_image = pre_image ]",
+          "result": "killed",
+          "killed_by": "RESTORES case image"
+        },
+        {
+          "name": "M3 health_ignored (round 1)",
+          "edit": "line 174 drop [ healthy = yes ] &&",
+          "result": "killed",
+          "killed_by": "RESTORES case unhealthy"
+        },
+        {
+          "name": "M4 restore_keeps_set_e (round 1)",
+          "edit": "line 166 set +e -> :",
+          "result": "killed",
+          "killed_by": "RESTORES case start-fails"
+        },
+        {
+          "name": "M6 waiting_not_counted (round 1)",
+          "edit": "line 94 regex running only",
+          "result": "killed",
+          "killed_by": "REFUSES case waiting"
+        },
+        {
+          "name": "M7 empty_execstart_accepted (round 1)",
+          "edit": "line 73 [ -n unit_script ] -> true",
+          "result": "killed",
+          "killed_by": "REFUSES case no-execstart"
+        },
+        {
+          "name": "R1 is_active_dropped",
+          "edit": "lines 66-67 is-active test -> true",
+          "result": "killed",
+          "killed_by": "REFUSES unit-inactive"
+        },
+        {
+          "name": "R2 flock_dropped",
+          "edit": "line 65 flock -n 9 -> true",
+          "result": "killed",
+          "killed_by": "REFUSES second-run"
+        },
+        {
+          "name": "R3 flock_after_stop",
+          "edit": "lines 64-65 moved after systemctl stop (line 188)",
+          "result": "killed",
+          "killed_by": "REFUSES second-run (stop/start recorded)"
+        },
+        {
+          "name": "R4 lock_outside_w4",
+          "edit": "$NVME/w4-candidate.lock -> $NVME/candidate.lock",
+          "result": "killed",
+          "killed_by": "REFUSES second-run"
+        },
+        {
+          "name": "R5 lock_by_existence_never_released",
+          "edit": "flock replaced by an existence check plus touch",
+          "result": "survived named cases",
+          "killed_by": "reviewer probe P_second_run only (BX-N1)"
+        },
+        {
+          "name": "R6 is_active_wrong_unit",
+          "edit": "is-active infrx-worker.service instead of $UNIT",
+          "result": "killed",
+          "killed_by": "REFUSES unit-inactive"
+        },
+        {
+          "name": "R7 ready_s_accepts_15m",
+          "edit": "regex drops trailing $",
+          "result": "killed",
+          "killed_by": "REFUSES ready-s"
+        },
+        {
+          "name": "R8 ready_s_accepts_0",
+          "edit": "regex ^[0-9]+$",
+          "result": "survived named cases",
+          "killed_by": "reviewer probe P_ready0 only (BX-N2)"
+        },
+        {
+          "name": "R9 parity_check_bypassed",
+          "edit": "parity_ready=$(true)",
+          "result": "killed",
+          "killed_by": "REFUSES parity-missing; RECORDS"
+        },
+        {
+          "name": "R10 parity_check_after_stop",
+          "edit": "lines 88-90 moved after systemctl stop",
+          "result": "killed",
+          "killed_by": "REFUSES parity-missing; RECORDS"
+        },
+        {
+          "name": "R11 image_by_name_not_digest",
+          "edit": "{{.Image}} -> {{.Config.Image}} (pre and post)",
+          "result": "survived all",
+          "killed_by": "none; stub cannot distinguish (BX-N4), near-equivalent on box"
+        },
+        {
+          "name": "R12 health_wrong_port",
+          "edit": "wait_ready polls 127.0.0.1:8001/health",
+          "result": "survived all",
+          "killed_by": "none; stub curl ignores port (BX-N4)"
+        },
+        {
+          "name": "R13 failed_start_exit0",
+          "edit": "drop [ status -ne 0 ] || status=4",
+          "result": "killed",
+          "killed_by": "RESTORES (exit 4 asserted)"
+        },
+        {
+          "name": "R14 inflight_after_stop (BS-8)",
+          "edit": "lines 93-96 moved after systemctl stop",
+          "result": "killed",
+          "killed_by": "REFUSES in-flight; RESTORES; RECORDS"
+        },
+        {
+          "name": "R15 bytecode_env_dropped (BS-7)",
+          "edit": "export CORPUS_CACHE only",
+          "result": "killed",
+          "killed_by": "RECORDS (stub parity sees no PYTHONDONTWRITEBYTECODE)"
+        },
+        {
+          "name": "R16 seqs_from_env",
+          "edit": "ENGINE_MAX_NUM_SEQS=${ENGINE_MAX_NUM_SEQS:-32}",
+          "result": "survived all",
+          "killed_by": "none (BX-N5); fails safe on box via concurrency.sh's 32 guard"
+        },
+        {
+          "name": "R17 lock_fd_leaked_to_engine",
+          "edit": "drop 9>&- on the serve.sh launch",
+          "result": "survived named cases",
+          "killed_by": "reviewer probe P_fd9 only (BX-N3)"
+        },
+        {
+          "name": "R18 checkout_check_after_stop",
+          "edit": "lines 77-80 moved after systemctl stop",
+          "result": "killed",
+          "killed_by": "REFUSES no-checkout"
+        },
+        {
+          "name": "registered box-script subset of the W4 list (37 SCRIPT_MUTANTS incl. unit_not_active_accepted, second_run_not_locked, candidate_started_over_the_last_one = BS-3/M9, port/weights/media_root_from_the_environment, parity_set_unchecked, ready_s_unvalidated)",
+          "edit": "python -m tests.w.w4_mutants <37 names>",
+          "result": "37/37 killed",
+          "killed_by": "their named cases"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-w4 diff --stat a237d6f..b0a44a0 -- models/marlin2b/measure/concurrency.sh",
+          "exit": 0,
+          "tail": "1 file changed, 1 insertion(+), 1 deletion(-)  (--engine-state warm -> \"${ENGINE_STATE:-warm}\")"
+        },
+        {
+          "cmd": "git archive b0a44a0 | tar -x -C /tmp/claude-1000/confirm-w4-boxsafety-<pid>; make api-env",
+          "exit": 0,
+          "tail": "uv sync --frozen installed (uvicorn 0.53.0, valkey 6.1.1, zstandard 0.25.0 ...)"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q tests/w/test_w4.py",
+          "exit": 0,
+          "tail": "15 passed in 106.59s"
+        },
+        {
+          "cmd": ".venv/bin/python -m tests.w.w4_mutants <37 SCRIPT_MUTANTS>",
+          "exit": 0,
+          "tail": "37/37 killed"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q tests/w/test_w4_mutants.py -k 'not test_mutant'",
+          "exit": 0,
+          "tail": "2 passed, 6 deselected in 0.29s"
+        },
+        {
+          "cmd": "hand-mutant harness (24 mutants x REFUSES/RESTORES/RECORDS + probes P_second_run, P_ready0, P_fd9; pristine first in each process)",
+          "exit": 0,
+          "tail": "PRISTINE all 6 pass (x24); M1 M2 M3 M4 M6 M7 R1 R2 R3 R4 R6 R7 R9 R10 R13 R14 R15 R18 killed by named cases; R5 R8 R17 killed only by reviewer probes; R11 R12 R16 survive all"
+        },
+        {
+          "cmd": "hostile-env probe: candidate_box with PORT=8001 GPU=1 WEIGHTS=/x WEIGHTS_ROOT=/y VLLM_LOGGING_LEVEL=DEBUG IMAGE=evil ENGINE_MAX_NUM_SEQS=8 MAX_MODEL_LEN=262144 PROCESSING_CACHE_DIR=<dir> EXP CONTAINER UNIT ENGINE LEVELS NVME",
+          "exit": 0,
+          "tail": "exit 0 restored=yes; runs 7; distinct argv 1: -p 127.0.0.1:8000:8000, device=0, <nvme>/marlin2b:/model:ro, VLLM_LOGGING_LEVEL=INFO, vllm/vllm-openai@sha256:4cbfd34a..., --max-model-len 32768 --max-num-seqs 32 ... --max-num-batched-tokens 32768; sweeps all state=restarted"
+        },
+        {
+          "cmd": "BS-7 probe: parity.py --check, synth.py verify, build.py verify on a copied checkout with and without PYTHONDONTWRITEBYTECODE=1",
+          "exit": 0,
+          "tail": "with: no .pyc; without: corpus/__pycache__/build.cpython-312.pyc measure/__pycache__/decide.cpython-312.pyc"
+        },
+        {
+          "cmd": "grep env/printenv/set -x/declare -p/HF_TOKEN in candidate.sh concurrency.sh serve.sh capability.sh",
+          "exit": 0,
+          "tail": "only shebangs and serve.sh sourcing env.sh/model.env; nothing prints the environment"
+        },
+        {
+          "cmd": "rm -rf scratch; git -C codex-w4 status --short; rev-parse HEAD",
+          "exit": 0,
+          "tail": "clean, b0a44a0"
+        }
+      ]
+    },
+    {
+      "lens": "decision",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every result above comes from a command run in this session on a git-archive copy of b0a44a0. The counts reproduce the lane's claims: test_w4 15, tests/w 179, W4 list 94 (92 mutants plus 2 checks; --list says 92), W3 list 87 (85 plus 2). Golden sweep: on the warm W3 sweep both runs, with and without the set-aside, now give w3_rule unknown and adopt nothing. That is the output protocol \u00a77 requires ('a level whose engine was not freshly started is not compared'). The earlier outputs, fail without the set-aside and pass c*=16 with it, compared warm cells. passing_pair relabelled restarted adopts 16; with one level warm (candidate only, or both sides) it does not adopt. D1, D3, D4, D5, D6, D7, D10 and HON-1 close as claimed. HON-6: I recomputed the 82 s ceiling and the F-2 condition, and the amendment wording is accurate. D2 is only partly closed: the attempts clause is tested, but the accepted, failed and requests clauses and both bench retried_requests checks survive clause-level mutants, and each surviving mutant (M1, M3, M4, M5) turns a no-adopt fixture into 'adopt 16'. I did not run make api-mutants, the both-orderings base-vs-head comparison, or the bench suite (67). No box, AWS, SSM, SSH, Docker or network was used; candidate.sh ran only inside the test stubs.",
+      "cleanup": "I removed /tmp/claude-1000/confirm-w4-decision-1175275. The helper scripts (hm.py, m1.py, data.py, m1demo.py, proto.py) are in this session's scratchpad. The codex-w4 worktree was only read (git archive / diff / log), and HEAD is still b0a44a0 with a clean status.",
+      "mutants": [
+        {
+          "name": "R1 c_star sorted(reverse=True)",
+          "edit": "decide.c_star: for c in sorted(levels, reverse=True)",
+          "result": "killed",
+          "killed_by": "test_engine_opt__the_rule_holds_at_its_boundaries (also listed as largest_qualifying_level)"
+        },
+        {
+          "name": "R2 oom reduced to 'if exited'",
+          "edit": "oom_verdict: if exited or oom -> if exited",
+          "result": "killed",
+          "killed_by": "PASSING case, oom_line ('oom' state pass)"
+        },
+        {
+          "name": "R3 MAX_GPU_GROWTH dropped",
+          "edit": "ok = gpu <= MAX_GPU_GROWTH_MIB and host -> ok = True and host",
+          "result": "killed",
+          "killed_by": "PASSING case, gpu_growth (+300 MiB read as pass)"
+        },
+        {
+          "name": "R4 engine_state ignored (decide)",
+          "edit": "stale list -> if False (no level is ever stale)",
+          "result": "killed",
+          "killed_by": "test_engine_opt__the_050411Z_sweep_has_no_qualifying_level and test_perf_envelope__cells_at_different_cache_states_are_not_compared (the PASSING case alone lets it survive)"
+        },
+        {
+          "name": "R5 overload masking without bench.jsonl",
+          "edit": "masking_verdict drops 'or not level.reconciled'",
+          "result": "killed",
+          "killed_by": "PASSING case, rows_lost (overload_masking pass)"
+        },
+        {
+          "name": "R6 six failed rows deleted from raw (data)",
+          "edit": "bench c32 failed+6/accepted-6; the six failed raw rows deleted",
+          "result": "blocked: overload_masking fail, error_rate unknown, no adoption",
+          "killed_by": "reconciled (attempts clause)"
+        },
+        {
+          "name": "M1 reconciliation ignores failed",
+          "edit": "drop and counted['failed'] == row['failed']",
+          "result": "SURVIVED all decide cases; relabelling six failures as cancelled then adopts 16",
+          "killed_by": ""
+        },
+        {
+          "name": "M2 reconciliation ignores requests",
+          "edit": "tally == row['requests'] -> True",
+          "result": "SURVIVED all decide cases",
+          "killed_by": ""
+        },
+        {
+          "name": "M3 reconciliation ignores accepted",
+          "edit": "drop counted['accepted'] == row['accepted']",
+          "result": "SURVIVED all decide cases; bench accepted-1/cancelled+1 then adopts 16",
+          "killed_by": ""
+        },
+        {
+          "name": "M4 bench retried_requests not added",
+          "edit": "retried = raw retries only",
+          "result": "SURVIVED all decide cases; bench retried_requests=2 then adopts 16",
+          "killed_by": ""
+        },
+        {
+          "name": "M5 bench retried_requests absence ignored",
+          "edit": "retries_known drops the denominators clause",
+          "result": "SURVIVED all decide cases; bench key absent then adopts 16",
+          "killed_by": ""
+        },
+        {
+          "name": "M6 tail ignores stale",
+          "edit": "severe_tail: (UNKNOWN..) if False else tail_verdict",
+          "result": "killed",
+          "killed_by": "STATES case (mixed c=4 warm)"
+        },
+        {
+          "name": "M7 paired ignores stale",
+          "edit": "elif stale -> elif False",
+          "result": "killed",
+          "killed_by": "STATES case ('pass', '60 clips')"
+        },
+        {
+          "name": "M8 retries summed over set-aside-filtered rows",
+          "edit": "retried over self.rows instead of rows",
+          "result": "survived (no claim that retries on set-aside clips count; not a finding)",
+          "killed_by": ""
+        },
+        {
+          "name": "M9 LEVELS drops 32",
+          "edit": "LEVELS = (1, 2, 4, 8, 16)",
+          "result": "killed",
+          "killed_by": "PROTOCOL case"
+        },
+        {
+          "name": "M10 missing levels ignored",
+          "edit": "if missing or stale -> if stale",
+          "result": "killed",
+          "killed_by": "PASSING case, level_missing (listed as missing_levels_ignored)"
+        },
+        {
+          "name": "data: off-by-one attempts=rows+1, accepted+1, requests+1 at c=4",
+          "edit": "bench only",
+          "result": "blocked: masking fail, error unknown",
+          "killed_by": "reconciled"
+        },
+        {
+          "name": "data: retries non-zero on the bench only (retried_requests=1)",
+          "edit": "bench c=2",
+          "result": "blocked: masking fail (only by the M4 term, untested)",
+          "killed_by": "retried (untested)"
+        },
+        {
+          "name": "data: level c=1 attempts=0 both sides",
+          "edit": "raw empty, bench zeroed",
+          "result": "no adoption: severe_tail unknown (p95 needs 60); w3_rule pass c*=16",
+          "killed_by": "tail sufficiency"
+        },
+        {
+          "name": "D5 floor(X)=0 and X=1.00",
+          "edit": "80.70x -> 0.99x / 1.00x",
+          "result": "0.99: setting 0, 'floor(X) < 1', no adoption; 1.00: adopt 1",
+          "killed_by": "setting_below_one_adopted (in list)"
+        },
+        {
+          "name": "D6 baseline = candidate root / symlink / byte copy / reversed pair",
+          "edit": "--baseline variations",
+          "result": "all paired criteria unknown (own run, own run, ('e1','e1'), ('e0','e1')); no adoption",
+          "killed_by": "baseline_may_be_the_candidate, any_pair_accepted"
+        },
+        {
+          "name": "D7 missing level c=1 (candidate / both)",
+          "edit": "bench row removed",
+          "result": "w3_rule unknown, no adoption; tail and paired criteria still pass (DEC-R2-3)",
+          "killed_by": "missing_levels_ignored"
+        },
+        {
+          "name": "D4 parity prompt_tokens None both sides / one side",
+          "edit": "parity_verdict rows",
+          "result": "unknown 'accepted without usage' in both",
+          "killed_by": "parity_blank_usage_compared"
+        },
+        {
+          "name": "HON-6 ceiling",
+          "edit": "recompute --ceiling 16384 and sampled n in [4,F]",
+          "result": "ceiling_s=82 (82 s: 16154, 83 s: 16434). 704x288 fits at every n at 82 s (source-limited, max 16038). 1920x1080 at 82 s exceeds only at n in {15,17,21,23} (about 0.2 fps), max 14760 for n>=F-2. 3800x2137 at n=5 gives 23919. The F-2 condition in the amendment is sufficient and correctly stated",
+          "killed_by": "ceiling_ignores_the_sampling_edge (in list)"
+        },
+        {
+          "name": "D10 boundaries",
+          "edit": "threshold_exclusive, error_rate_boundary, tail_skips_c_star (and x_is_the_largest, set_aside_prefix_without_dash, starvation_slack_dropped, parity_pairs_by_clip_only)",
+          "result": "killed in the full list run (94 passed)",
+          "killed_by": "test_engine_opt__the_rule_holds_at_its_boundaries"
+        },
+        {
+          "name": "protocol-side \u00a75 mutations",
+          "edit": "protocol MAX_TTFT 45.0; T_FRACTION 0.85; MAX_FAILURE_RATE 0.02; SHORT_CLASS_LEVELS 8,16; MIN_GROWTH_SAMPLES row deleted; E3 baseline E0; decide MAX_GPU_GROWTH 512; undeclared NEW_LIMIT; PAIRS += (e3,e0)",
+          "result": "all killed; pristine passes",
+          "killed_by": "check_protocol_matches"
+        },
+        {
+          "name": "HON-1 flag equality",
+          "edit": "candidate.sh e3 drops --api-server-count 2; e3 extra flag; e1 3276",
+          "result": "all killed",
+          "killed_by": "check_protocol_matches (e3_flag_dropped in list)"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-w4 archive b0a44a0 | tar -x -C /tmp/claude-1000/confirm-w4-decision-1175275; UV_OFFLINE=1 make api-env",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen --offline pytest -q tests/w/test_w4.py",
+          "exit": 0,
+          "tail": "15 passed in 99.97s"
+        },
+        {
+          "cmd": "uv run --frozen --offline pytest -q tests/w",
+          "exit": 0,
+          "tail": "179 passed in 544.61s"
+        },
+        {
+          "cmd": "uv run --frozen --offline python -m tests.w.w4_mutants --list",
+          "exit": 0,
+          "tail": "92 mutants over 15 named cases"
+        },
+        {
+          "cmd": "uv run --frozen --offline python -m tests.w.w3_mutants --list",
+          "exit": 0,
+          "tail": "85 mutants over 22 named cases"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/w/test_w4_mutants.py",
+          "exit": 0,
+          "tail": "94 passed in 1093.92s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/w/test_w3_mutants.py",
+          "exit": 0,
+          "tail": "87 passed in 360.74s"
+        },
+        {
+          "cmd": "python3 decide.py sweep-20260923T050411Z",
+          "exit": 0,
+          "tail": "w3_rule=unknown (c*=None is not taken: not restarted [1..32]); error_rate=fail 28/448; verdict: no setting adopted"
+        },
+        {
+          "cmd": "python3 decide.py sweep-20260923T050411Z --set-aside c012,c025,c038,c051",
+          "exit": 0,
+          "tail": "w3_rule c*=16 setting=16; criterion w3_rule=unknown (not restarted [1..32]); error_rate pass 0/420; verdict: no setting adopted"
+        },
+        {
+          "cmd": "python3 decide.py --ceiling 16384",
+          "exit": 0,
+          "tail": "duration_s=82 worst 16154; 83 -> 16434; ceiling_s=82"
+        },
+        {
+          "cmd": "hm.py (hand mutants R1-R5, M1-M10 against the decide cases)",
+          "exit": 0,
+          "tail": "R1-R5, M6, M7, M9, M10 killed; M1, M2, M3, M4, M5, M8 survived every decide case"
+        },
+        {
+          "cmd": "data.py (fixture scenarios)",
+          "exit": 0,
+          "tail": "passing_pair restarted: adopt 16; one warm level (cand only / both): no adoption, w3_rule+tail+paired unknown; D5/D6/D7/D4 as tabled"
+        },
+        {
+          "cmd": "m1demo.py (consequence of the surviving mutants)",
+          "exit": 0,
+          "tail": "real: no adoption in all 4 scenarios; M1/M3/M4/M5: adopt ENGINE_MAX_NUM_SEQS=16 each"
+        },
+        {
+          "cmd": "proto.py (protocol/decide/candidate side mutations vs check_protocol_matches)",
+          "exit": 0,
+          "tail": "pristine passes; 11/11 edits killed"
+        },
+        {
+          "cmd": "rm -rf /tmp/claude-1000/confirm-w4-decision-1175275",
+          "exit": 0,
+          "tail": "scratch removed; codex-w4 worktree clean at b0a44a0"
+        }
+      ]
+    }
+  ],
+  "confirmed_blocking": [
+    {
+      "id": "DEC-R2-1",
+      "severity": "blocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "164-167 (Level.reconciled)",
+      "claim_broken": "D2 as claimed in round 2 (evidence W4-ecacd50.md, D2 row): raw rows must match the bench row's attempts, accepted count and failed count, and accepted+rejected+failed+cancelled must equal requests. Only the attempts clause is killable. The named mutant raw_rows_not_reconciled replaces the whole expression with True, so the only case that kills it is rows_lost, which changes len(rows). No case can tell the accepted, failed or requests clause is missing.",
+      "evidence": "Hand mutants run against every decide case (PASSING, BOUNDARY, NO_LEVEL, STATES, PROTOCOL, PARITY, SET_ASIDE, UNKNOWN); all of them pass. M1 drops `and counted[\"failed\"] == row.get(\"failed\")`: SURVIVED. M3 drops the accepted clause: SURVIVED. M2 replaces `tally == row.get(\"requests\")` with True: SURVIVED. Consequence on passing_pair: at c=32 the bench row gets failed+6/accepted-6, and six raw accepted rows are relabelled 'cancelled' instead of 'failed' (the round-1 B3b hidden-failure attack, done by relabelling where round 1 deleted). The real code gives 'no setting adopted - failed: [overload_masking]; unknown: [error_rate]'. Under M1 it gives 'adopt ENGINE_MAX_NUM_SEQS=16', error_rate pass 0/420. The same holds with the bench row at accepted-1/cancelled+1 and raw unchanged: the real code does not adopt, M3 adopts 16.",
+      "minimal_fix": "In the passing case, add two data cases that change one clause each: (a) six raw failed rows relabelled cancelled while the bench row keeps failed+6; (b) the bench row's accepted-1/cancelled+1 with raw unchanged; optionally (c) a bench row whose accepted+rejected+failed+cancelled != requests. Each must give overload_masking fail and no adoption. Add clause-level mutants (reconcile_ignores_failed, reconcile_ignores_accepted, reconcile_ignores_requests) to w4_mutants.py.",
+      "lens": "decision",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I could not refute it. The defect is real at b0a44a0. I ran everything on a git-archive scratch copy of b0a44a0 using the codex-w4 venv. decide.py:165-167 checks four things: len(rows)==attempts, tally==requests, counted accepted==bench accepted, and counted failed==bench failed. The only D2 case in test_w4.py is rows_lost (test_w4.py:350-358), which deletes six raw rows and so changes len(rows). The one listed mutant, raw_rows_not_reconciled (w4_mutants.py:143-144), turns the whole expression into `True or (...)`, so no case covers any single clause. I made three hand mutants against the unmutated original. M1 drops the failed clause. M3 drops the accepted clause. M2 replaces `tally == row.get(\"requests\")` with True. Under each one, all 16 tests in tests/w/test_w4.py still pass: M1 and M3 each show 1 failed / 16 passed, and the one failure is my extra attack test; M2 shows 17 passed. So no existing case kills any of them. I then added two attack cases. (a) Relabel: at c=32, six raw accepted rows become 'cancelled' while the bench row gets accepted-6/failed+6. The real code says 'no setting adopted - failed: [overload_masking]; unknown: [error_rate]' (raw rows do not reconcile at c=[32]). M1 adopts, and the not-adopt assertion fails. This is the round-1 hidden-failure attack done by relabelling. (b) Bench row accepted-1/cancelled+1 with the raw rows unchanged: the real code does not adopt. M3 gives 'adopt ENGINE_MAX_NUM_SEQS=16', with error_rate pass 0/420. M2 is also caught by (a) and (b), but only because the accepted/failed clauses fire as well. The requests clause would need its own case where accepted+rejected+failed+cancelled != requests, which confirms that clause has no killable test either. The round-2 evidence (W4-ecacd50.md D2 row) claims all four clauses. Two of them (failed, accepted) guard against hidden failures and a wrong adoption, and no test can kill them, so this is a decision-rule invariant with no killable test: blocking. The reviewer's minimal fix is right: add passing-pair cases (a) and (b), plus (c) for the tally clause, and clause-level mutants in w4_mutants.py.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed this at b0a44a0 on a scratch copy of /home/rey/workspace/rey/code/model-inference/.claude/worktrees/codex-w4. Baseline: the decide tests in apps/infrx-api/tests/w/test_w4.py (-k engine_opt, perf_envelope or media_parity) pass 12 of 12. The three hand mutants of models/marlin2b/measure/decide.py:165-167 each still pass 12 of 12, so all three survive: M1 drops `and counted[\"failed\"] == row.get(\"failed\")`, M3 drops the accepted clause, and M2 replaces `tally == row.get(\"requests\")` with True. The named mutant `raw_rows_not_reconciled` (`True or (`) is killed with 1 failure, and only by rows_lost, which changes len(rows). No other test file loads decide.py. I also reproduced the consequence on passing_pair: at c=32 six raw accepted rows are relabelled 'cancelled' and the bench row gets accepted-6/failed+6. The real code gives \"no setting adopted - failed: ['overload_masking']; unknown: ['error_rate']\". With M1 it gives \"adopt ENGINE_MAX_NUM_SEQS=16\", error_rate pass 0/420. The decision code at b0a44a0 is correct. The defect is that three of the four clauses D2 claims (evidence W4-ecacd50.md line 426) have no killable test. Under the review's rubric that is blocking: a round-2 closure claims an invariant with no killable test, and the unguarded clause is the one that stops failures hidden as cancellations from being adopted. The fix the reviewer proposes is enough: add the relabel case and the accepted-1/cancelled+1 case, optionally a tally != requests case, plus three clause-level mutants.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "DEC-R2-2",
+      "severity": "blocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "168-169, 177-178 (retries_known, retried)",
+      "claim_broken": "The round-2 D2 row claims that a bench row without denominators.retried_requests makes overload masking unknown, and that the bench row's retried_requests is added to the raw retries. Protocol \u00a75 says 'every bench row has retried_requests = 0'. Neither clause has a killing case: retries_unrecorded and overload_masking damage only the raw rows' `retries` key.",
+      "evidence": "M4 removes the `+ denominators.retried_requests` term and M5 removes the `retried_requests is not None` clause. Both SURVIVED every decide case. On passing_pair with bench c=2 denominators.retried_requests=2 (raw retries 0), the real code gives overload_masking fail and no adoption; M4 adopts 16. With retried_requests removed from the bench row, the real code gives overload_masking unknown and no adoption; M5 adopts 16.",
+      "minimal_fix": "Add blocks('bench_retried', set denominators.retried_requests=1 at c=2 -> overload_masking fail) and blocks('bench_retries_unrecorded', pop denominators.retried_requests -> unknown). Add mutants bench_retries_ignored and bench_retries_absent_read_as_zero.",
+      "lens": "decision",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I reproduced the finding at b0a44a0 on scratch copies made with git archive, and it holds. The worktree was not touched.\n\n1. **No test covers the bench side.** Nothing under tests/w mentions `retried_requests` or `denominators`. The overload_masking cases only damage the raw rows' `retries` key: `overload_masking` sets `retries=1` and `retries_unrecorded` pops `retries`. The one retries mutant in w4_mutants.py, `missing_retries_read_as_zero`, mutates only the raw-row half of line 168.\n\n2. **Both mutants survive the whole suite.** M4 drops the `+ denominators.retried_requests` term at decide.py:177-178. M5 drops the `retried_requests is not None` clause at decide.py:168-169. Each mutant still passes all 15 cases in tests/w/test_w4.py (15 passed on each).\n\n3. **Each mutant changes the verdict on the smallest damage.** I started from `passing_pair` and damaged only the c=2 bench row:\n\n| Damage at c=2 | Real code | Mutant |\n|---|---|---|\n| `denominators.retried_requests=2` | overload_masking fail, no setting adopted | M4: overload_masking pass, adopts ENGINE_MAX_NUM_SEQS=16 |\n| `denominators.retried_requests` removed | overload_masking unknown, no setting adopted | M5: overload_masking pass, adopts ENGINE_MAX_NUM_SEQS=16 |\n\nThis is blocking. Protocol \u00a75 states the overload-masking test as \"every bench row has `retried_requests = 0`\" and names the bench rows as its input. The amended \u00a76 decision rule makes unrecorded retries `unknown`. Both clauses reach the adopt/no-adopt decision, yet neither has a test that kills its mutant. If either clause is later dropped, the tool adopts a setting over a masked or unrecorded bench row. It is an invariant with no killable test, on the decision rule.\n\nThe proposed fix is sufficient:\n- Add two `blocks(...)` cases: `bench_retried` (set `retried_requests` to 1 at c=2, expect fail) and `bench_retries_unrecorded` (pop it, expect unknown, criterion overload_masking).\n- Add the matching mutants `bench_retries_ignored` and `bench_retries_absent_read_as_zero`.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed the finding at b0a44a0 on a git-archive scratch copy, using the codex-w4 venv. Nothing was written to the worktree.\n\n1. How the real code behaves. I used the tests' own helpers `passing_pair` and `edit_bench`. With bench c=2 `denominators.retried_requests=2`, overload_masking fails (\"retries ... at c=[2]\") and the verdict is \"no setting adopted\". With `retried_requests` popped at c=2, overload_masking is unknown (\"retries not recorded at c=[2]\") and again nothing is adopted. So the bench-row clauses at `decide.py` 168-169 and 177-178 do control the decision.\n\n2. The mutants survive.\n   - M4 drops the `+ denominators.retried_requests` term from `self.retried`. All 15 cases in `tests/w/test_w4.py` pass (15 passed, 108s).\n   - M5 cuts `retries_known` down to `all(\"retries\" in r for r in rows)`. All 15 cases pass again (15 passed, 105s).\n\n3. Why nothing kills them. The only overload-masking cases are `blocks(\"overload_masking\")`, `blocks(\"retries_unrecorded\")` and `rows_lost`, at `test_w4.py` 346-357. All three change raw rows only. The one related mutant, `missing_retries_read_as_zero` at `w4_mutants.py` 147, replaces the whole `retries_known` expression with True, so it does not isolate the bench-row clause.\n\n4. One point in the code's favour. In `bench.py` line 1311, `retried_requests` is counted from the same final rows written to the raw file, so for well-formed data the raw `retries` usually already show a retry.\n\nThis is still blocking. Protocol \u00a75 names the bench rows as the source for overload masking (\"every bench row has retried_requests = 0\"), and D2 claims both behaviours. Both are decision-rule invariants that no current case can kill.\n\nThe proposed fix is enough: the two `blocks()` cases that edit `denominators.retried_requests` at c=2 (set it to 1 for fail, remove it for unknown), plus the two named mutants.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "unverified_blocking": [],
+  "nonblocking": [
+    {
+      "id": "BX-N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "line": "829",
+      "claim_broken": "BS-1 says the lock 'is released at exit'. flock on fd 9 does release it, but no case runs twice on one box. A mutant that locks by the file existing and never removes it still passes every named case.",
+      "evidence": "Hand mutant R5 replaced lines 64-65 with `[ ! -e lock ] || refuse; : > lock`. It passes REFUSES, RESTORES and RECORDS. My probe P_second_run kills it: a clean run followed by a second run on the same box gets 'refused: another candidate.sh holds .../w4-candidate.lock'. The pristine copy passes the probe.",
+      "minimal_fix": "Add a case that runs candidate_box twice on the same tmp and expects exit 0 and restored=yes both times, then register the stale-lock mutant.",
+      "lens": "boxsafety"
+    },
+    {
+      "id": "BX-N2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "line": "828",
+      "claim_broken": "The rule is READY_S ^[1-9][0-9]*$, and only '15m' is tested. The lower bound (0) has no case.",
+      "evidence": "Hand mutant R8 changed the regex to ^[0-9]+$. It passes all named cases. My probe with READY_S=0 kills it: the pristine copy refuses with exit 2, the mutant gets exit 1. On the box, READY_S=0 would make the gate and restore waits fail at once and give a false restored=no, the same harm as BS-6.",
+      "minimal_fix": "Add a 'ready-s-zero' entry (READY_S=\"0\") to the check_candidate_refuses cases.",
+      "lens": "boxsafety"
+    },
+    {
+      "id": "BX-N3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "line": "685",
+      "claim_broken": "The evidence claims the candidate engine and the host sampler get `9>&-`. No test checks this: removing it from the serve.sh launch survives every named case.",
+      "evidence": "Hand mutant R17 removed `9>&-` from line 131. Named cases: all pass. My probe P_fd9 wraps the stub docker `run` to list /proc/self/fd and kills the mutant (fds '0 1 2 3 4 9'). Impact is low, because restore's stop_candidate ends the docker CLI that holds the fd.",
+      "minimal_fix": "In the stub DOCKER `run` branch, record os.listdir('/proc/self/fd'), and assert in check_candidate_restores that fd 9 is never inherited.",
+      "lens": "boxsafety"
+    },
+    {
+      "id": "BX-N4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "line": "685",
+      "claim_broken": "The stub curl ignores host and port, and the stub docker's `.Image` match also answers `.Config.Image`. A health probe on the wrong port, or an image comparison by name rather than digest, cannot be killed.",
+      "evidence": "Hand mutant R12 made wait_ready poll http://127.0.0.1:8001/health, the gateway's port (BS-5). R11 changed `{{.Image}}` to `{{.Config.Image}}` for pre_image and post_image. Both pass all six checks. The code is correct today: ENGINE is a constant, and .Image is the image ID. R11 is near-equivalent on the box because serve.sh's reference is itself @sha256.",
+      "minimal_fix": "Make the stub curl exit 7 unless the URL starts with http://127.0.0.1:8000/. Make the stub docker answer only an exact '{{.Image}}' format, and give .Config.Image a different value.",
+      "lens": "boxsafety"
+    },
+    {
+      "id": "BX-N5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_w4.py",
+      "line": "766",
+      "claim_broken": "The launch pins ENGINE_MAX_NUM_SEQS=32, but the environment case never sets ENGINE_MAX_NUM_SEQS, the name the gateway reads.",
+      "evidence": "Hand mutant R16 changed it to `ENGINE_MAX_NUM_SEQS=${ENGINE_MAX_NUM_SEQS:-32}`, and it survived all checks. On the box it would fail safe: concurrency.sh refuses unless the engine has --max-num-seqs 32, so the run exits 3 and restores. My hostile-env probe on pristine (PORT, GPU, WEIGHTS, WEIGHTS_ROOT, VLLM_LOGGING_LEVEL, IMAGE, MAX_MODEL_LEN, ENGINE_MAX_NUM_SEQS=8, PROCESSING_CACHE_DIR, EXP, CONTAINER, UNIT, ENGINE, LEVELS, NVME) gave 7 identical docker argvs, all pinned: 127.0.0.1:8000, device=0, $NVME/marlin2b, INFO, digest image, 32768, seqs 32, no media path.",
+      "minimal_fix": "Add ENGINE_MAX_NUM_SEQS=\"8\" to the environment in check_candidate_restores's first candidate_box call.",
+      "lens": "boxsafety"
+    },
+    {
+      "id": "DEC-R2-3",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/W4-protocol.md",
+      "line": "amendment 1, 'Decision rule, made explicit' sentence",
+      "claim_broken": "The amendment says 'a level not labelled restarted, or any of the six levels missing, makes W3's rule, the tail and the paired criteria unknown'. In decide.py a missing level makes only w3_rule unknown. The tail and the paired criteria react to stale levels, not to missing ones. The evidence's D7 row states the narrower, correct behaviour.",
+      "evidence": "passing_pair with bench c=1 removed from the candidate (or from both sides): w3_rule unknown ('levels missing [1]'), but severe_tail pass ('levels <= 16'), usage_drift pass (60 clips), short_job_starvation pass. The verdict is still 'no setting adopted', so the decision is correct and only the protocol wording overclaims.",
+      "minimal_fix": "Reword the amendment to 'a level not labelled restarted makes W3's rule, the tail and the paired criteria unknown; any of the six levels missing makes W3's rule unknown (and so adopts nothing)'. The alternative is to also route `missing` into the tail and paired branches.",
+      "lens": "decision"
+    },
+    {
+      "id": "DEC-R2-4",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "criteria(): common/comparable",
+      "claim_broken": "D7 checks only the candidate's levels. A baseline that lacks a level shrinks the paired comparison silently instead of making it unknown.",
+      "evidence": "passing_pair with the baseline's c=32 bench row removed gives usage_drift pass (60 clips) over the remaining levels. Starvation happened to become unknown here only because the short-class samples fell below 60. The verdict still does not adopt in this fixture, but that rests on sample counts, not on a rule.",
+      "minimal_fix": "Make the paired criteria unknown when set(base.levels) != set(LEVELS). The alternative is to state in \u00a77 that paired criteria are taken over the common levels only.",
+      "lens": "decision"
+    },
+    {
+      "id": "DEC-R2-5",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/decide.py",
+      "line": "print_report 'w3_rule c*=.. setting=..'",
+      "claim_broken": "On the warm W3 sweep with the set-aside, the report prints 'w3_rule c*=16 threshold=2.1384 setting=16' while the w3_rule criterion is unknown ('not taken'). The evidence discloses that c* is still printed as a computed figure, but setting=16 beside a rule that was not taken can be misread.",
+      "evidence": "decide.py sweep-20260923T050411Z --set-aside c012,c025,c038,c051 prints 'setting=16', then 'criterion w3_rule=unknown (c*=16 is not taken ...)', then 'verdict: no setting adopted'.",
+      "minimal_fix": "Print the setting as 'setting=16 (not taken)' when w3_rule is not pass, or drop it.",
+      "lens": "decision"
+    }
+  ]
+}

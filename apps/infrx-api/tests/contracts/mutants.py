@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import enum
+import os
 import pathlib
 import re
 import shutil
@@ -78,15 +79,22 @@ W = "contracts/wire.py"                 # public bodies: projections and input b
 MONEY = "contracts/money.py"
 E = "contracts/fakes/engine.py"
 TA = "contracts/traces_accounting.py"      # the accounting the fake and the spool share
+# contracts v2 (F2P; folded into this list by the wire-in, item 6)
+V2_R = "contracts/v2/records.py"
+V2_P = "contracts/v2/ports.py"
+V2_MU = "contracts/v2/money_units.py"
+V2_FX = "contracts/v2/fixtures.py"
+V2_INIT = "contracts/v2/__init__.py"
+V2_FAKE = "contracts/conformance/v2_fakes.py"
 
 # --- how a mutant is allowed to die (r1 round-3 review; enforced since F2R item 9) ----
 # A port is a trust boundary, so a kill that depends on an *untyped* exception is a case a
 # real adapter could fail for the wrong reason: a store answering the typed `DomainError`
 # the contract promises must not crash the case. Every committed mutant dies on an
 # assertion, and the shared runner now **enforces** that: a death by any other exception
-# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **four**
-# mutants declare one; the first two are guards whose entire purpose is to stop an untyped
-# error escaping:
+# is `broken_runner` unless the mutant declares the class in `dies_by`. Exactly **five**
+# mutants declare one; the first two and the last are guards whose entire purpose is to
+# stop an untyped error escaping:
 #
 # * `mime_string_accepted` - `create_upload`'s allow-list check. Removing it lets
 #   `tuple(5)` raise `TypeError` out of the port, which *is* the defect; adding a second
@@ -101,6 +109,12 @@ TA = "contracts/traces_accounting.py"      # the accounting the fake and the spo
 # * `drop_reason_falls_back_on_truthiness` - an `AssertionError` raised inside the package
 #   is not the case's observation (R83 amendment (a)); here it is the accounting base's
 #   own `_drop` guard, which is the invariant's enforcement in every sink.
+# * `load_work_serves_a_credit_job` - a v1 `Work` cannot be built for a CREDIT job (it has
+#   no USD price), so without the guard `load_work` raises pydantic's `ValidationError` out
+#   of the port instead of the typed `not_found`: that escape is the defect.
+# * `load_work_credit_serves_a_legacy_job` - the mirror: a legacy job has no CREDIT terms,
+#   so without the guard `load_work_credit` raises `AttributeError` (on `job.credit.pins`)
+#   out of the port instead of the typed `not_found` (F2P confirmation MONEY-C1).
 #
 # The six `ValidationError` kills the review found are gone: `FakeFeedbackService._row`
 # maps a record-validation failure to `internal_error`, because the row's fields are
@@ -165,19 +179,19 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if False:",
        "dur_admit__a_refused_admission_reserves_nothing"),
     _m("admit_reserves_before_validating", "a refused admission reserves nothing",
-       S, "            price = self._price(request, now)\n"
-          "            hold = self._derive_hold(request, price)\n"
-          "            self._check_balance(request.org_id, hold)\n"
+       S, "            price = None if terms else self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price, terms)\n"
+          "            self._check_balance(request.org_id, hold, terms)\n"
           "            self.journal.reserve(request.request_id)",
        "            self.journal.reserve(request.request_id)\n"
-          "            price = self._price(request, now)\n"
-          "            hold = self._derive_hold(request, price)\n"
-          "            self._check_balance(request.org_id, hold)",
+          "            price = None if terms else self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price, terms)\n"
+          "            self._check_balance(request.org_id, hold, terms)",
        "dur_admit__a_refused_admission_reserves_nothing"),
     # r1 R53: the hold is the store's, from the snapshot it took in the same
     # transaction. These are the two ways to get that wrong.
     _m("admit_uses_a_caller_supplied_hold", "no caller-supplied hold (R53)",
-       S, "            hold = self._derive_hold(request, price)",
+       S, "            hold = self._derive_hold(request, price, terms)",
        '            hold = money.parse(request.parameters.get("hold", "0.00070000"))',
        "dur_settle__a_price_change_never_undersizes_the_hold",
        "dur_cap__a_negative_maximum_hold_is_refused"),
@@ -187,18 +201,18 @@ MUTANTS: tuple[Mutant, ...] = (
        "dur_settle__a_price_change_never_undersizes_the_hold",
        "dur_cap__a_hold_is_checked_against_available_not_the_ledger"),
     _m("admit_checks_the_balance_before_pricing", "the balance gate sees the derived hold (R53)",
-       S, "            price = self._price(request, now)\n"
-          "            hold = self._derive_hold(request, price)\n"
-          "            self._check_balance(request.org_id, hold)",
-       "            self._check_balance(request.org_id, money.ZERO)\n"
-          "            price = self._price(request, now)\n"
-          "            hold = self._derive_hold(request, price)",
+       S, "            price = None if terms else self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price, terms)\n"
+          "            self._check_balance(request.org_id, hold, terms)",
+       "            self._check_balance(request.org_id, money.ZERO, terms)\n"
+          "            price = None if terms else self._price(request, now)\n"
+          "            hold = self._derive_hold(request, price, terms)",
        "dur_cap__hold_cannot_exceed_the_available_balance",
        "dur_cap__a_hold_is_checked_against_available_not_the_ledger"),
     _m("settlement_prices_at_the_current_rate", "settlement uses the admitted snapshot (R53)",
-       S, "            candidate = job.admission.price_snapshot.debit(usage.prompt_tokens,",
-       "            candidate = (self.price_for(job.request.model_revision, now)\n"
-          "                         or job.admission.price_snapshot).debit(usage.prompt_tokens,",
+       S, "                         else job.admission.price_snapshot.debit(usage.prompt_tokens,",
+       "                         else (self.price_for(job.request.model_revision, now)\n"
+          "                               or job.admission.price_snapshot).debit(usage.prompt_tokens,",
        "dur_settle__a_price_change_never_undersizes_the_hold"),
     _m("load_work_reports_the_current_price", "load_work carries the admitted snapshot (R53)",
        S, "                        price_snapshot=job.admission.price_snapshot, budgets=job.budgets)",
@@ -575,12 +589,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if False:",
        "dur_output__a_lost_preparation_worker_is_reaped_within_bounds"),
     _m("load_work_is_unfenced", "load_work hands out nothing to a fenced lease (R46)",
-       S, "            job = (self._fence_preparation(lease) if lease.kind is LeaseKind.preparation\n"
-          "                   else self._fence(lease))",
-       "            job = self.jobs[lease.job_id]",
+       S, "        return (self._fence_preparation(lease) if lease.kind is LeaseKind.preparation\n"
+          "                else self._fence(lease))",
+       "        return self.jobs[lease.job_id]",
        "dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise"),
     _m("load_work_hides_the_prepared_refs", "load_work carries what preparation produced (R46)",
-       S, "                        prepared_refs=job.prepared,", "                        prepared_refs=(),",
+       S, "                        prepared_refs=job.prepared,\n", "                        prepared_refs=(),\n",
        "dur_fence__load_work_is_fenced_and_hands_out_nothing_otherwise"),
     # --- feedback -------------------------------------------------------------
     _m("feedback_operator_role_from_session", "accept always records customer (R31)",
@@ -649,20 +663,16 @@ MUTANTS: tuple[Mutant, ...] = (
        "    return half_up(cost(max_input_tokens, max_output_tokens, input_rate, output_rate))",
        "dur_cap__the_hold_rounds_up_never_half_up"),
     _m("replay_rederives_the_hold", "a replay reports the original hold and price (s05)",
-       S, "        job = self.jobs[record.request_id]\n"
-          '        return self._snapshot(job).model_copy(update={"replayed": True})',
-       "        job = self.jobs[record.request_id]\n"
-          "        current = self.price_for(job.request.model_revision, now)\n"
+       S, '        return self._snapshot(job).model_copy(update={"replayed": True})',
+       "        current = self.price_for(job.request.model_revision, now)\n"
           '        return self._snapshot(job).model_copy(update={"replayed": True,\n'
           '            "price_snapshot": current or job.admission.price_snapshot,\n'
           "            \"maximum_hold\": self._derive_hold(job.request,\n"
           "                                              current or job.admission.price_snapshot)})",
        "dur_admit__a_replay_reports_the_original_hold_and_price"),
     _m("replay_refreshes_the_admitted_at", "a replay reports the original admission (t15)",
-       S, "        job = self.jobs[record.request_id]\n"
-          '        return self._snapshot(job).model_copy(update={"replayed": True})',
-       "        job = self.jobs[record.request_id]\n"
-          '        return self._snapshot(job).model_copy(update={"replayed": True,\n'
+       S, '        return self._snapshot(job).model_copy(update={"replayed": True})',
+       '        return self._snapshot(job).model_copy(update={"replayed": True,\n'
           '                                                     "admitted_at": now})',
        "dur_admit__a_replay_reports_the_original_hold_and_price"),
     _m("preparation_retries_unbounded", "preparation retries are bounded (q08)",
@@ -1412,8 +1422,9 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_a_deployment_bound_a_zero_would_disable_is_refused",)),
     Mutant(name="DEPLOY-03", invariant="a bad deployment value refuses before anything mounts",
            file="config.py",
-           old='    validate_deployment(getattr(settings, "deployment", DEPLOYMENT_DEFAULTS), mode)\n',
-           new="", cases=("test_a_bad_deployment_value_refuses_before_anything_mounts",)),
+           old='    deployment = validate_deployment(getattr(settings, "deployment", DEPLOYMENT_DEFAULTS), mode)\n',
+           new='    deployment = getattr(settings, "deployment", DEPLOYMENT_DEFAULTS)\n',
+           cases=("test_a_bad_deployment_value_refuses_before_anything_mounts",)),
     Mutant(name="DEPLOY-04", invariant="the pool bounds are ordered (min == max is valid)",
            file="config.py",
            old="    if deployment.database_pool_min_size > deployment.database_pool_max_size:",
@@ -1424,6 +1435,553 @@ MUTANTS: tuple[Mutant, ...] = (
            old="    if _configured(secret) and len(secret) < MIN_CONSOLE_CURSOR_SECRET_CHARS:",
            new="    if _configured(secret) and len(secret) < 1:",
            cases=("test_a_short_cursor_secret_is_refused_without_echoing_it",)),
+    # --- contracts v2 (F2P additive phase; `tests/contracts/v2/mutants_v2.py` until the
+    # wire-in folded it here, item 6). Killed in tests/contracts/v2/test_conformance_v2.py.
+    # --- SPLIT-CONTRACT ------------------------------------------------------
+    _m("catalog_lists_private_dev_publicly",
+       "a private dev deployment is not in the public catalog at all",
+       V2_FAKE, "        if deployment.visibility is v2.Visibility.private:",
+       "        if False:",
+       "split_contract__a_consumer_credential_cannot_reach_a_private_dev_endpoint"),
+    _m("pin_lets_a_copied_consumer_context_into_a_private_endpoint",
+       "only a provider_dev audience reaches a private deployment, even when a "
+       "model_copy'd consumer context carries the endpoint's ids (review B1, G1)",
+       V2_P, "        if auth.audience is not CredentialAudience.provider_dev:",
+       "        if False:",
+       "split_contract__a_consumer_credential_cannot_reach_a_private_dev_endpoint"),
+    _m("pin_ignores_the_credentials_endpoint_scope",
+       "a provider credential reaches only the endpoint it was issued for",
+       V2_P, "        if auth.endpoint_id != deployment.endpoint_id:",
+       "        if False and auth.endpoint_id != deployment.endpoint_id:",
+       "split_contract__a_consumer_credential_cannot_reach_a_private_dev_endpoint"),
+    _m("pin_ignores_the_credentials_provider",
+       "a member of another provider cannot reach this provider's dev endpoint",
+       V2_P, "        if auth.provider_org_id != deployment.provider_org_id:",
+       "        if False and auth.provider_org_id != deployment.provider_org_id:",
+       "split_contract__a_consumer_credential_cannot_reach_a_private_dev_endpoint"),
+    _m("catalog_ignores_the_endpoint_scope",
+       "the catalog itself does not answer for a foreign endpoint",
+       V2_FAKE, "            if endpoint_id != deployment.endpoint_id:\n"
+             "                return None",
+       "            if endpoint_id != deployment.endpoint_id:\n"
+       "                pass",
+       "split_contract__a_provider_credential_cannot_borrow_another_endpoint"),
+    _m("a_v1_payload_is_silently_accepted",
+       "schema_version is explicit; a v1 body is refused, never reinterpreted",
+       V2_R, "        if self.schema_version != SCHEMA_VERSION:",
+       "        if False:",
+       "split_contract__an_internal_v1_payload_is_refused_not_upgraded"),
+    _m("a_v1_price_snapshot_converts_to_credit",
+       "there is no conversion from a v1 USD snapshot to a CREDIT rate card",
+       V2_R, '    raise ValueError(f"v1 PriceSnapshot {snapshot.price_version} is denominated in "',
+       '    return None or ValueError(f"v1 PriceSnapshot {snapshot.price_version} is '
+       'denominated in "',
+       "split_contract__an_internal_v1_payload_is_refused_not_upgraded"),
+    _m("model_revision_loses_its_revision",
+       "r1 R62: the consumer-facing identifier keeps its <model>@<revision> form",
+       V2_R, '        return f"{self.public_model_id}@{self.revision_label}"',
+       '        return f"{self.public_model_id}"',
+       "split_contract__the_v1_model_revision_string_is_unchanged_r62"),
+    _m("digest_provenance_claims_upstream_confirmation",
+       "a served-bytes digest is never recorded as a confirmed registry oid",
+       V2_FX, "        digest_source=v2.DigestSource.served_bytes,",
+       "        digest_source=v2.DigestSource.registry_oid_confirmed,",
+       "split_contract__the_v1_model_revision_string_is_unchanged_r62"),
+    _m("an_unpinned_runtime_image_reads_as_pinned",
+       "image_is_pinned is False while serve.sh pins a moving tag",
+       V2_R, "        return self.runtime_image_digest is not None",
+       "        return self.runtime_image_digest is None",
+       "split_contract__the_v1_model_revision_string_is_unchanged_r62"),
+    _m("digest_source_defaults_to_confirmed",
+       "digest provenance is stated by the writer, never defaulted (review B2a)",
+       V2_R, "    digest_source: DigestSource\n",
+       "    digest_source: DigestSource = DigestSource.registry_oid_confirmed\n",
+       "split_contract__the_v1_model_revision_string_is_unchanged_r62"),
+    _m("two_surface_versions",
+       "the whole changed surface carries ONE reviewed version identifier",
+       V2_INIT, 'SURFACE_VERSION = "contracts-v2.0"', 'SURFACE_VERSION = "contracts-v2.1"',
+       "split_contract__the_surface_carries_one_reviewed_version"),
+
+    # --- CREDIT-UNITS --------------------------------------------------------
+    _m("units_are_interchangeable",
+       "arithmetic across two denominations is refused by construction",
+       V2_MU, "        return other._value if type(other) is type(self) else None",
+       "        return other._value if isinstance(other, Amount) else None",
+       "credit_units__mixed_unit_arithmetic_is_refused_by_construction"),
+    _m("raw_answers_any_unit",
+       "raw(unit) refuses unless the caller names the unit it already expects",
+       V2_MU, "        if unit != type(self).UNIT:", "        if False:",
+       "credit_units__mixed_unit_arithmetic_is_refused_by_construction"),
+    _m("history_totals_collapse_into_one_unit",
+       "a mixed history reports one figure per unit and never a combined one",
+       V2_R, "        return {unit: str(total(amounts, UNIT_TYPES[unit]))\n"
+          "                for unit, amounts in sorted(by_unit.items())}",
+       '        return {"CREDIT": str(total(amounts, UNIT_TYPES[unit]))\n'
+       "                for unit, amounts in sorted(by_unit.items())}",
+       "credit_units__a_mixed_history_totals_per_unit_and_never_once"),
+    _m("a_legacy_row_is_read_as_credit",
+       "a row's regime fixes its unit; the pair is never inferred",
+       V2_R, "        expected = unit_of(self.accounting_regime.value)",
+       '        expected = self.unit',
+       "credit_units__a_mixed_history_totals_per_unit_and_never_once"),
+    _m("a_credit_row_may_carry_a_legacy_price_version",
+       "price_version is the legacy regime's field and only that",
+       V2_R, '                raise ValueError("price_version is the legacy regime\'s field")',
+       "                pass",
+       "credit_units__a_legacy_row_invents_none_of_the_new_fields"),
+    _m("the_projection_invents_a_price_version",
+       "an old row's fields are read, never defaulted into something plausible",
+       V2_R, '        price_version=row.get("price_version"), settled_at=row["settled_at"])',
+       '        price_version=row.get("price_version", "pv_unknown"), '
+       'settled_at=row["settled_at"])',
+       "credit_units__a_legacy_row_invents_none_of_the_new_fields"),
+    _m("a_negative_credit_rate_is_accepted",
+       "a negative rate would turn a debit into a credit at settlement",
+       V2_R, "        if self.input_rate_per_million.is_negative or "
+          "self.output_rate_per_million.is_negative:",
+       "        if False:",
+       "credit_units__a_wrong_unit_or_unpriced_rate_card_cannot_exist"),
+    _m("an_unapproved_rate_card_is_accepted",
+       "an approved rate card names its approver",
+       V2_R, '        if not self.approved_by.strip():', "        if False:",
+       "credit_units__a_wrong_unit_or_unpriced_rate_card_cannot_exist"),
+    _m("a_nonzero_legacy_balance_needs_no_hold",
+       "a nonzero legacy USD balance is a rollout hold, not a silent write-off",
+       V2_R, "        if not self.balance.is_zero and not self.rollout_hold:",
+       "        if False:",
+       "credit_units__a_nonzero_legacy_balance_is_a_hold_not_a_conversion"),
+
+    # --- CREDIT-IDENTITY -----------------------------------------------------
+    _m("available_ignores_reservations",
+       "available is the ledger total minus active reservations",
+       V2_R, "        return self.ledger_total - self.reserved_total",
+       "        return self.ledger_total",
+       "credit_identity__a_consumer_credential_resolves_its_own_user_wallet"),
+    _m("a_provider_wallet_claims_a_signup_entitlement",
+       "only an individual's consumer wallet has a signup entitlement",
+       V2_R, "        return self.kind is WalletKind.consumer", "        return True",
+       "credit_identity__a_provider_dev_credential_resolves_a_zero_provider_wallet"),
+    _m("a_provider_credential_spends_any_wallet",
+       "a provider credential spends only its own provider's wallet",
+       V2_P, "    if wallet.owner_provider_org_id != auth.provider_org_id:",
+       "    if False:",
+       "credit_identity__a_provider_dev_credential_resolves_a_zero_provider_wallet"),
+    _m("a_request_may_name_a_wallet",
+       "extra=forbid is what stops a payload naming a wallet, price or identity",
+       V2_R, '    model_config = ConfigDict(frozen=True, extra="forbid")',
+       '    model_config = ConfigDict(frozen=True, extra="ignore")',
+       "credit_identity__no_request_field_can_select_a_wallet"),
+    _m("a_consumer_credential_spends_a_copied_provider_wallet",
+       "a consumer credential spends a consumer wallet only, even one model_copy'd "
+       "with its owner fields (review B1, G2)",
+       V2_P, "        if wallet.kind is not WalletKind.consumer:", "        if False:",
+       "credit_identity__a_foreign_wallet_is_forbidden_not_a_fallback"),
+    _m("a_provider_credential_spends_a_copied_consumer_wallet",
+       "a provider_dev credential never spends a consumer wallet, even one model_copy'd "
+       "with the provider as owner (review B1, G3)",
+       V2_P, "    if wallet.kind is not WalletKind.provider_dev:", "    if False:",
+       "credit_identity__a_provider_dev_credential_resolves_a_zero_provider_wallet"),
+    _m("a_credential_spends_another_users_wallet",
+       "a credential spends only its own user's wallet",
+       V2_P, "        if wallet.owner_user_id != auth.user_id:", "        if False:",
+       "credit_identity__a_foreign_wallet_is_forbidden_not_a_fallback"),
+    _m("the_personal_org_binding_is_not_checked",
+       "the wallet's personal-org binding must match the authenticated org",
+       V2_P, "        if wallet.personal_org_id != auth.org_id:", "        if False:",
+       "credit_identity__a_foreign_wallet_is_forbidden_not_a_fallback"),
+    _m("a_missing_wallet_resolves_to_something",
+       "no wallet provisioned is not_found, never a fallback",
+       V2_P, '        raise errors.NotFound("no wallet is provisioned for this credential")',
+       "        return wallet or wallet",
+       "credit_identity__a_foreign_wallet_is_forbidden_not_a_fallback"),
+    _m("an_operator_credential_spends_a_wallet",
+       "an operator credential resolves no spendable wallet",
+       V2_P, '        raise errors.Forbidden("an operator credential does not spend a wallet")',
+       "        return wallet",
+       "credit_identity__an_operator_credential_spends_no_wallet"),
+    _m("a_provider_wallet_receives_the_signup_grant",
+       "a provider_dev wallet has no signup entitlement",
+       V2_R, "    if not wallet.has_signup_entitlement:", "    if False:",
+       "credit_identity__a_provider_wallet_has_no_grant_and_no_transfer"),
+    _m("a_transfer_kind_exists",
+       "the ledger vocabulary is closed and has no transfer",
+       V2_R, '    inference_debit = "inference_debit"',
+       '    inference_debit = "inference_debit"\n    transfer = "transfer"',
+       "credit_identity__a_provider_wallet_has_no_grant_and_no_transfer"),
+    _m("a_provider_wallet_may_carry_a_signup_entry",
+       "a signup grant entry is only ever on a consumer wallet",
+       V2_R, "            if self.wallet_kind is not WalletKind.consumer:", "            if False:",
+       "credit_identity__a_provider_wallet_has_no_grant_and_no_transfer"),
+    _m("the_grant_key_includes_the_campaign",
+       "the grant key is the individual and the entitlement, nothing else",
+       V2_R, "        return (self.user_id, self.entitlement)",
+       "        return (self.user_id, self.entitlement, self.campaign_version)",
+       "credit_identity__campaign_and_membership_never_reset_the_grant_key"),
+
+    # --- CREDIT-GRANT --------------------------------------------------------
+    _m("the_grant_amount_changes",
+       "the initial grant is exactly +10000.00000000 CREDIT",
+       V2_R, 'INITIAL_SIGNUP_GRANT = Credit("10000.00000000")',
+       'INITIAL_SIGNUP_GRANT = Credit("1000.00000000")',
+       "credit_grant__the_grant_is_exactly_ten_thousand_credit_once"),
+    _m("an_unverified_grant_is_accepted",
+       "the grant records the verification evidence it was issued against",
+       V2_R, "        if not self.verification_evidence_ref.strip():", "        if False:",
+       "credit_grant__the_grant_is_exactly_ten_thousand_credit_once"),
+    _m("the_grant_lands_in_another_users_wallet",
+       "the initial grant lands in the individual's own wallet only",
+       V2_R, "    if wallet.owner_user_id != user_id:", "    if False:",
+       "credit_grant__the_grant_lands_only_in_the_individuals_own_wallet"),
+
+    # --- CREDIT-RATE ---------------------------------------------------------
+    _m("an_admission_may_carry_a_foreign_card",
+       "the attached rate card must be the pinned rate_card_version",
+       V2_R, "        if self.rate_card.rate_card_version != self.pins.rate_card_version:",
+       "        if False:",
+       "credit_rate__admission_pins_model_serving_deployment_and_rate_card"),
+    _m("an_admission_may_price_another_deployment",
+       "the attached card must price the pinned deployment revision",
+       V2_R, "        if self.rate_card.deployment_revision_id != "
+          "self.pins.deployment_revision_id:",
+       "        if False:",
+       "credit_rate__admission_pins_model_serving_deployment_and_rate_card"),
+    _m("the_pin_hardcodes_a_rate_card_version",
+       "the pin records the card the catalog resolved, not a constant",
+       V2_P, "                         rate_card_version=rate_card.rate_card_version,",
+       '                         rate_card_version="rc_marlin2b_2026_09_provisional",',
+       "credit_rate__a_rate_published_after_acceptance_does_not_move_the_job"),
+    _m("publishing_a_rate_does_nothing",
+       "the case really does change the published rate before settling",
+       V2_FAKE, "        self.rate_cards[card.deployment_revision_id] = card", "        pass",
+       "credit_rate__a_rate_published_after_acceptance_does_not_move_the_job"),
+    _m("the_settlement_records_the_wrong_serving_revision",
+       "a settlement records the serving revision the job was admitted with",
+       V2_R, "        serving_version_id=admission.pins.serving_version_id,",
+       "        serving_version_id=admission.pins.model_id,",
+       "credit_rate__an_alias_moved_after_acceptance_does_not_move_the_job"),
+    _m("an_unpriced_deployment_is_admitted",
+       "a deployment with no approved active CREDIT card is unserveable, not free",
+       V2_FAKE, "        rate_cards={prod.deployment_revision_id: card},",
+       "        rate_cards={prod.deployment_revision_id: card,\n"
+       "                    dev.deployment_revision_id: card},",
+       "credit_rate__an_unknown_private_or_unpriced_model_is_refused"),
+    _m("pin_admission_takes_a_caller_rate_card",
+       "R45 extended: no parameter exists through which a caller supplies a price",
+       V2_P, "def pin_admission(*, auth: AuthContextV2, requested_model: str,",
+       "def pin_admission(*, auth: AuthContextV2, requested_model: str,\n"
+       "                  caller_rate_card_version: str | None = None,",
+       "credit_rate__a_caller_supplied_price_or_identity_is_refused"),
+    _m("the_hold_rounds_like_a_charge",
+       "the maximum hold rounds up; equal roundings under-reserve",
+       V2_R, "        return Credit(money.maximum_hold(max_input_tokens, max_output_tokens, "
+          "*self._rates()))",
+       "        return Credit(money.debit(max_input_tokens, max_output_tokens, "
+       "*self._rates()))",
+       "credit_rate__the_hold_rounds_up_and_the_charge_rounds_half_up_once"),
+    _m("the_charge_rounds_up",
+       "the final charge rounds half up once, never away from the customer",
+       V2_R, "        return Credit(money.debit(prompt_tokens, completion_tokens, *self._rates()))",
+       "        return Credit(money.maximum_hold(prompt_tokens, completion_tokens, "
+       "*self._rates()))",
+       "credit_rate__the_hold_rounds_up_and_the_charge_rounds_half_up_once"),
+    _m("a_settlement_may_exceed_the_hold",
+       "usage beyond the reserved envelope is a platform incident, not a debit",
+       V2_R, "    if charged > admission.maximum_hold:", "    if False:",
+       "credit_rate__the_hold_rounds_up_and_the_charge_rounds_half_up_once"),
+    _m("records_are_mutable",
+       "admitted pins cannot be assigned in place (review B2b)",
+       V2_R, '    model_config = ConfigDict(frozen=True, extra="forbid")',
+       '    model_config = ConfigDict(frozen=False, extra="forbid")',
+       "credit_rate__admitted_pins_are_immutable_and_every_pin_is_required"),
+    _m("a_pin_is_optional",
+       "every identity pin is required; none is left to a default (review B2c)",
+       V2_R, "    deployment_revision_id: UuidStr\n    serving_version_id: UuidStr\n"
+          "    rate_card_version: str\n    policy_version: str\n",
+       "    deployment_revision_id: UuidStr\n    serving_version_id: UuidStr | None = None\n"
+       "    rate_card_version: str\n    policy_version: str\n",
+       "credit_rate__admitted_pins_are_immutable_and_every_pin_is_required"),
+    _m("admission_pins_are_optional",
+       "an admission always carries its pins (review B2c)",
+       V2_R, "    pins: AdmissionPins\n    rate_card: RateCardSnapshot\n",
+       "    pins: AdmissionPins | None = None\n    rate_card: RateCardSnapshot\n",
+       "credit_rate__admitted_pins_are_immutable_and_every_pin_is_required"),
+    _m("settle_ignores_certainty",
+       "only authoritative engine usage settles a debit",
+       V2_R, "    if usage.certainty is not records.UsageCertainty.authoritative:",
+       "    if False:",
+       "credit_rate__unknown_usage_is_never_settled"),
+
+    # --- LAB-ACCESS ----------------------------------------------------------
+    _m("a_role_grants_customer_content",
+       "provider ownership alone yields no customer payload",
+       V2_R, "        ProviderCapability.manage_dev_deployment,\n"
+          "        ProviderCapability.run_evaluation,\n    }),",
+       "        ProviderCapability.manage_dev_deployment,\n"
+       "        ProviderCapability.run_evaluation,\n"
+       "        ProviderCapability.read_customer_content,\n    }),",
+       "lab_access__provider_ownership_alone_yields_no_customer_payload"),
+    _m("content_access_needs_only_a_membership",
+       "a current membership AND a current grant, every time",
+       V2_R, "    if membership is None or grant is None:\n        return False",
+       "    if membership is None:\n        return False\n    if grant is None:\n"
+       "        return True",
+       "lab_access__provider_ownership_alone_yields_no_customer_payload"),
+    _m("revocation_is_ignored",
+       "revocation blocks new access immediately, not at the next snapshot",
+       V2_R, "        if self.revoked_at is not None and now >= self.revoked_at:\n"
+          "            return False",
+       "        if False:\n            return False",
+       "lab_access__a_revoked_grant_blocks_access_immediately"),
+    _m("expiry_is_ignored",
+       "an expired grant authorizes nothing",
+       V2_R, "        return self.expires_at is None or now < self.expires_at",
+       "        return True",
+       "lab_access__an_expired_grant_and_a_rival_provider_are_refused"),
+    _m("the_recipient_provider_is_not_checked",
+       "a grant names one recipient provider",
+       V2_R, "                and provider_org_id == self.recipient_provider_org_id",
+       "                and True",
+       "lab_access__an_expired_grant_and_a_rival_provider_are_refused"),
+    _m("the_purpose_is_not_checked",
+       "capture, sharing, external judging and training are four permissions",
+       V2_R, "                and purpose in self.purposes)", "                and True)",
+       "lab_access__each_purpose_is_a_separate_permission"),
+    _m("the_category_is_not_checked",
+       "a grant names the data categories it covers",
+       V2_R, "                and category in self.categories", "                and True",
+       "lab_access__each_purpose_is_a_separate_permission"),
+    _m("a_revoked_membership_still_permits",
+       "a revoked membership and a foreign provider permit nothing",
+       V2_R, "        if provider_org_id != self.provider_org_id or not self.is_current(now):\n"
+          "            return False",
+       "        if False:\n            return False",
+       "lab_access__roles_default_deny_and_a_viewer_reaches_nothing"),
+    _m("every_role_permits_everything",
+       "a role permits exactly its own listed capabilities; unknown is denied",
+       V2_R, "        return capability in ROLE_CAPABILITIES[self.role]", "        return True",
+       "lab_access__roles_default_deny_and_a_viewer_reaches_nothing"),
+    # --- F2P wire-in (item 7): the v2 composition ----------------------------------
+    _m("contracts_v2_not_a_submodule", "contracts.v2 resolves by attribute access (item 1)",
+       "contracts/__init__.py", '"tasklocal", "v2", "wire")', '"tasklocal", "wire")',
+       "test_contracts_v2_resolves_by_attribute_access_like_every_submodule"),
+    # items 3-4: the CREDIT regime of the fake JobStore (`ports.CreditJobStore`). Layered
+    # refusals with no single store edit that breaks them - private/unknown/unpriced models
+    # (the catalog's visibility *and* `pin_admission`), an operator or foreign wallet
+    # (`resolve_wallet`), a mismatched card on the worker's view (`WorkV2`'s validator) -
+    # are killed at the layer that owns them by the v2 mutants above.
+    _m("credit_hold_lands_on_the_usd_wallet", "a CREDIT hold is reserved on the CREDIT wallet",
+       S, "        wallet = self.credit_wallet(wallet_id) if terms is not None else self.wallet(request.org_id)",
+       "        wallet = self.wallet(request.org_id)",
+       "credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit"),
+    _m("credit_hold_ignores_the_ceilings", "the CREDIT hold covers both validated ceilings",
+       S, "                                         request.max_output_tokens).raw(CREDIT)",
+       "                                         0).raw(CREDIT)",
+       "credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit"),
+    _m("credit_balance_checked_on_the_usd_wallet", "a CREDIT hold is checked on the CREDIT wallet",
+       S, "        wallet = (self.credit_wallets.get(terms[3]) if terms is not None\n"
+          "                  else self.wallets.get(org_id)) or _Wallet()",
+       "        wallet = self.wallets.get(org_id) or _Wallet()",
+       "credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit",
+       "credit_admit__refusals_leave_no_job_and_no_hold"),
+    _m("get_owned_serves_a_credit_job", "a v1 read of a CREDIT job is not_found",
+       S, "        if job.credit is not None:\n"
+          '            raise errors.NotFound(f"job {job_handle} is a CREDIT job: use get_owned_credit")',
+       "        if False:\n            pass",
+       "credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit"),
+    _m("get_owned_credit_serves_a_legacy_job", "a CREDIT read of a legacy job is not_found (review M-2)",
+       S, "        if job.credit is None:\n"
+          '            raise errors.NotFound(f"job {job_handle} is not a CREDIT job")',
+       "        if False:\n            pass",
+       "credit_admit__the_store_resolves_wallet_pins_and_card_and_holds_credit"),
+    _m("complete_credit_serves_a_legacy_job", "a legacy lease never settles as CREDIT (review M-2)",
+       S, "        if job is not None and job.credit is None:\n"
+          '            raise errors.NotFound(f"job {lease.job_id} is not a CREDIT job")',
+       "        if False:\n            pass",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only"),
+    _m("complete_serves_a_credit_job", "v1 complete of a CREDIT job is not_found (review M-4)",
+       S, "            if job.credit is not None and not credit:", "            if False:",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only"),
+    _m("complete_replays_a_terminal_credit_job", "v1 complete of a settled CREDIT job is not_found (MONEY-N1)",
+       S, "            if job.credit is not None and not credit:",
+       "            if job.credit is not None and not credit and not job.terminal:",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only"),
+    _m("credential_org_mismatch_ignored", "a key row admits only for its own organization (review M-2)",
+       S, "        if auth.org_id != request.org_id:", "        if False:",
+       "credit_admit__refusals_leave_no_job_and_no_hold"),
+    _m("credit_wallet_by_organization", "the wallet comes from resolve_wallet, never the org (R66)",
+       S, "        wallet = v2ports.resolve_wallet(auth, candidate)",
+       "        wallet = next((w for w in self.wallet_directory.by_user.values()\n"
+       "                       if w.personal_org_id == request.org_id), None) \\\n"
+       "            or v2ports.resolve_wallet(auth, candidate)",
+       "credit_admit__refusals_leave_no_job_and_no_hold"),
+    _m("credit_replay_crosses_regimes", "one idempotency key never replays across regimes",
+       S, "        if (job.credit is not None) is not credit:", "        if False:",
+       "credit_admit__a_replay_is_pinned_and_never_crosses_regimes"),
+    _m("credit_replay_not_marked", "a CREDIT replay is marked replayed",
+       S, '                                               "replayed": True})',
+       '                                               "replayed": False})',
+       "credit_admit__a_replay_is_pinned_and_never_crosses_regimes"),
+    _m("credit_settles_at_the_published_card", "a CREDIT job settles at its admitted card (R68)",
+       S, "            candidate = (job.credit.rate_card.debit(usage.prompt_tokens,",
+       "            candidate = (self.catalog.rate_cards[job.credit.pins.deployment_revision_id]"
+       ".debit(usage.prompt_tokens,",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only"),
+    _m("credit_charge_in_the_usd_field", "a CREDIT charge never enters the USD debit field",
+       S, "                    debit = money.ZERO\n", "",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only"),
+    _m("credit_settles_on_the_usd_wallet", "settlement moves the CREDIT wallet, not the USD one",
+       S, "        wallet = self._wallet_of(job)", "        wallet = self.wallet(job.request.org_id)",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only",
+       "credit_settle__a_free_outcome_moves_no_credit"),
+    _m("load_work_serves_a_credit_job", "the v1 work of a CREDIT job is not_found",
+       S, "            if job.credit is not None:\n"
+          '                raise errors.NotFound(f"job {job.id} is a CREDIT job: use load_work_credit")',
+       "            if False:\n                pass",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only",
+       dies_by=("ValidationError",)),
+    _m("load_work_credit_serves_a_legacy_job", "a CREDIT read of a legacy lease is not_found (MONEY-C1)",
+       S, "            if job.credit is None:\n"
+          '                raise errors.NotFound(f"job {job.id} is not a CREDIT job")',
+       "            if False:\n                pass",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only",
+       dies_by=("AttributeError",)),
+    _m("credit_free_outcome_settles", "a free CREDIT outcome has no settlement record",
+       S, "        return settled, self.jobs[lease.job_id].settlement",
+       "        return settled, (self.jobs[lease.job_id].settlement\n"
+       "                         or settle(self.jobs[lease.job_id].credit, Usage.of(0, 0),\n"
+       "                                   settled.settled_at))",
+       "credit_settle__a_free_outcome_moves_no_credit"),
+    _m("credit_reconcile_releases_on_the_usd_wallet",
+       "the 24 h reconcile releases a CREDIT hold on its CREDIT wallet (F2P review M-1)",
+       S, "            self._release_hold(self.credit_wallet(hold.wallet_id) if hold.wallet_id\n"
+          "                               else self.wallet(hold.org_id), hold)",
+       "            self._release_hold(self.wallet(hold.org_id), hold)",
+       "credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet"),
+    _m("credit_reconcile_releases_early", "a CREDIT held_unknown hold waits the fenced 24 h (MONEY-N2)",
+       S, "            if not (job.terminal and fenced and now >= hold.reconcile_after):",
+       "            if not (job.terminal and fenced and (hold.wallet_id is not None\n"
+       "                                                 or now >= hold.reconcile_after)):",
+       "credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet"),
+    _m("credit_reconcile_on_the_first_credit_wallet", "each CREDIT hold is reconciled on its own wallet (MONEY-N2)",
+       S, "            self._release_hold(self.credit_wallet(hold.wallet_id) if hold.wallet_id\n",
+       "            self._release_hold(self.credit_wallet(next(iter(self.credit_wallets))) if hold.wallet_id\n",
+       "credit_settle__an_unknown_usage_hold_is_reconciled_on_the_credit_wallet"),
+    _m("legacy_projection_drops_a_half_usage", "a half-recorded usage row is refused (review M-7)",
+       V2_R, "    if (prompt is None) != (completion is None):", "    if False:",
+       "test_a_pre_cutover_row_keeps_its_absences_and_a_credit_row_cannot_have_them"),
+    # coordinator addition (D2 handback): `Work.prompt_tokens`
+    _m("work_prompt_tokens_unbounded", "Work.prompt_tokens never exceeds max_input_tokens",
+       R, "        if self.prompt_tokens is not None and self.prompt_tokens > self.request.max_input_tokens:",
+       "        if False:",
+       "test_work_carries_preparations_prompt_count_within_the_admitted_ceiling"),
+    _m("work_prompt_tokens_negative", "Work.prompt_tokens is nonnegative",
+       R, "    prompt_tokens: int | None = Field(default=None, ge=0)",
+       "    prompt_tokens: int | None = None",
+       "test_work_carries_preparations_prompt_count_within_the_admitted_ceiling"),
+    _m("work_v2_prompt_tokens_unbounded", "WorkV2.prompt_tokens never exceeds max_input_tokens",
+       V2_R, "                and self.prompt_tokens > self.request.request.max_input_tokens):",
+       "                and False):",
+       "test_work_v2_carries_the_prompt_count_within_the_admitted_ceiling"),
+    _m("v2_fixture_table_unclaimed", "every file under fixtures/v2 is claimed (item 7)",
+       V2_FX, 'TABLES = ("map.json", "money_unit_cases.json")', 'TABLES = ("map.json",)',
+       "test_the_fixture_root_holds_exactly_the_two_revisions"),
+    # item 10: the projection over D1R's real pre-cutover rows
+    _m("legacy_projection_invents_settled", "a pre-cutover row with no outcome keeps none",
+       V2_R, "        outcome=records.SettlementState(outcome) if outcome is not None else None,",
+       "        outcome=records.SettlementState(outcome or \"settled\"),",
+       "test_a_pre_cutover_row_keeps_its_absences_and_a_credit_row_cannot_have_them"),
+    _m("legacy_projection_invents_zero_usage", "a pre-cutover row with no tokens has no usage",
+       V2_R, "    if prompt is not None and completion is not None:",
+       "    if True:\n        prompt, completion = prompt or 0, completion or 0",
+       "test_a_pre_cutover_row_keeps_its_absences_and_a_credit_row_cannot_have_them"),
+    _m("credit_row_without_usage", "a CREDIT row carries its usage and outcome",
+       V2_R, "            if self.usage is None or self.outcome is None:", "            if False:",
+       "test_a_pre_cutover_row_keeps_its_absences_and_a_credit_row_cannot_have_them"),
+    _m("v2_suite_runs_nothing", "V2_SUITES runs the whole exported v2 list (item 2)",
+       "contracts/conformance/__init__.py", '"v2": (v2_cases, run_v2_conformance),',
+       '"v2": (v2_cases, lambda factory=None: 0),',
+       "test_the_conformance_package_exports_the_v2_suite"),
+    # --- F2R-B NB-3: the cursor secret's exact boundary ------------------------------
+    Mutant(name="DEPLOY-06", invariant="a 15-character cursor secret is refused",
+           file="config.py",
+           old="    if _configured(secret) and len(secret) < MIN_CONSOLE_CURSOR_SECRET_CHARS:",
+           new="    if _configured(secret) and len(secret) < MIN_CONSOLE_CURSOR_SECRET_CHARS - 1:",
+           cases=("test_the_cursor_secret_bound_is_exactly_sixteen_characters",)),
+    Mutant(name="DEPLOY-07", invariant="a 16-character cursor secret is accepted",
+           file="config.py",
+           old="    if _configured(secret) and len(secret) < MIN_CONSOLE_CURSOR_SECRET_CHARS:",
+           new="    if _configured(secret) and len(secret) <= MIN_CONSOLE_CURSOR_SECRET_CHARS:",
+           cases=("test_the_cursor_secret_bound_is_exactly_sixteen_characters",)),
+    # --- F2P wire-in item 5: the v2 configuration names ------------------------------
+    Mutant(name="CFG-V2-01", invariant="ACCOUNTING_REGIME is one of the two v2 regimes",
+           file="config.py", old="    if deployment.accounting_regime not in ACCOUNTING_REGIMES:",
+           new="    if False:", cases=("test_the_accounting_regime_is_a_v2_regime",)),
+    Mutant(name="CFG-V2-02", invariant="a CREDIT deployment needs an approved card (R69)",
+           file="config.py", old="    if deployment.accounting_regime == CREDIT_REGIME \\\n",
+           new="    if False \\\n",
+           cases=("test_a_credit_deployment_needs_an_approved_rate_card",)),
+    Mutant(name="CFG-V2-03", invariant="a unit-typed ceiling is never negative",
+           file="config.py", old="        if value.is_negative:", new="        if False:",
+           cases=("test_nonsense_numbers_are_refused_at_the_boundary",)),
+    Mutant(name="CFG-V2-04", invariant="ACTIVE_RATE_CARD_VERSION is exact text",
+           file="config.py", old="    if card != card.strip():", new="    if False:",
+           cases=("test_the_active_rate_card_version_is_exact_text",)),
+    Mutant(name="CFG-V2-05", invariant="no provider-dev allocation until an operator sets one",
+           file="contracts/limits.py",
+           old='    provider_dev_allocation_ceiling_credit: Credit = Credit("0.00000000")',
+           new='    provider_dev_allocation_ceiling_credit: Credit = Credit("1000.00000000")',
+           cases=("test_the_allocation_ceiling_is_a_credit_amount_defaulting_to_nothing",
+                  "test_every_configuration_name_and_default_is_frozen")),
+    Mutant(name="CFG-V2-06", invariant="a zero pilot bound refuses startup in every mode (review M-3)",
+           file="config.py",
+           old="        if getattr(pilot, name) <= 0:\n"
+               '            raise RuntimeMisconfigured(mode, detail=f"{env_name(name)} must be positive")',
+           new="        if False:\n            pass",
+           cases=("test_a_bad_deployment_value_refuses_before_anything_mounts",
+                  "test_a_zero_index_cap_refuses_to_start")),
+    Mutant(name="CFG-V2-07", invariant="the index caps are pilot bounds a zero disables (review M-3)",
+           file="config.py", old='    "max_index_items", "max_index_bytes",\n', new="",
+           cases=("test_a_zero_index_cap_refuses_to_start",)),
+    Mutant(name="CFG-V2-08", invariant="ACTIVE_RATE_CARD_VERSION is exact text at startup (review M-6)",
+           file="config.py",
+           old="            and pilot.active_rate_card_version != pilot.active_rate_card_version.strip():",
+           new="            and False:", cases=("test_a_credit_deployment_needs_an_approved_rate_card",)),
+    Mutant(name="CFG-V2-09", invariant="a whitespace-only card is not configured (review CFG-2)",
+           file="config.py", old="            and not _configured(pilot.active_rate_card_version):",
+           new="            and not bool(pilot.active_rate_card_version):",
+           cases=("test_a_credit_deployment_needs_an_approved_rate_card",)),
+    Mutant(name="CFG-V2-11", invariant="a whitespace-only card is unset in every regime (CONF-N2)",
+           file="config.py", old="    if _configured(pilot.active_rate_card_version) \\\n",
+           new="    if pilot.active_rate_card_version \\\n",
+           cases=("test_a_credit_deployment_needs_an_approved_rate_card",)),
+    Mutant(name="CFG-V2-12", invariant="a padded card is refused in every regime (CONF-N2)",
+           file="config.py", old="    if _configured(pilot.active_rate_card_version) \\\n",
+           new="    if deployment.accounting_regime == CREDIT_REGIME \\\n"
+               "            and _configured(pilot.active_rate_card_version) \\\n",
+           cases=("test_a_credit_deployment_needs_an_approved_rate_card",)),
+    Mutant(name="CFG-V2-13", invariant="a card padded on the right only is refused (CONF-N1)",
+           file="config.py",
+           old="            and pilot.active_rate_card_version != pilot.active_rate_card_version.strip():",
+           new="            and pilot.active_rate_card_version != pilot.active_rate_card_version.lstrip():",
+           cases=("test_a_credit_deployment_needs_an_approved_rate_card",)),
+    Mutant(name="CFG-V2-14", invariant="a card padded on the left only is refused (CONF-N1)",
+           file="config.py",
+           old="            and pilot.active_rate_card_version != pilot.active_rate_card_version.strip():",
+           new="            and pilot.active_rate_card_version != pilot.active_rate_card_version.rstrip():",
+           cases=("test_a_credit_deployment_needs_an_approved_rate_card",)),
+    Mutant(name="CFG-V2-10", invariant="a deployment text value is measured stripped (review CFG-6)",
+           file="config.py",
+           old="        values[f.name] = (raw.strip() if isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), str)",
+           new="        values[f.name] = (raw if isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), str)",
+           cases=("test_the_cursor_secret_bound_is_exactly_sixteen_characters",)),
+    Mutant(name="CFG-V2-15", invariant="a deployment text value is stripped on the left too (CONF-N3)",
+           file="config.py", old="        values[f.name] = (raw.strip() if isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), str)",
+           new="        values[f.name] = (raw.rstrip() if isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), str)",
+           cases=("test_the_cursor_secret_bound_is_exactly_sixteen_characters",)),
+    Mutant(name="CFG-V2-16", invariant="a deployment text value is stripped on the right too (CONF-N3)",
+           file="config.py", old="        values[f.name] = (raw.strip() if isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), str)",
+           new="        values[f.name] = (raw.lstrip() if isinstance(getattr(DEPLOYMENT_DEFAULTS, f.name), str)",
+           cases=("test_the_cursor_secret_bound_is_exactly_sixteen_characters",)),
     # --- F2R: the two money-context mutants the audit found surviving ----------------
     _m("money_context_default_precision", "money arithmetic runs at 40 digits",
        MONEY, "        prec=40, rounding=decimal.ROUND_HALF_EVEN,",
@@ -1459,6 +2017,60 @@ MUTANTS: tuple[Mutant, ...] = (
        "        metadata = 0 if envelope.metadata_bytes == 0 else "
        "self.metadata_charge(envelope, serialized)",
        "trace_bounds__metadata_exhaustion_drops_with_counters"),
+    # --- F cancel-cause: `JobStore.cancel(..., *, cause)` (R21; G2 D-new, D5 item 3) ----
+    _m("cancel_port_default_is_not_the_client", "an existing cancel(org, handle) still means client_cancelled",
+       "contracts/ports.py",
+       "                     cause: TerminalCause = TerminalCause.client_cancelled) -> TerminalOutcome:",
+       "                     cause: TerminalCause = TerminalCause.client_disconnected) -> TerminalOutcome:",
+       "test_dur_settle__cancel_takes_a_keyword_cause_that_defaults_to_client_cancelled"),
+    _m("cancel_causes_widened", "only the client's causes and sync_deadline may be named",
+       R, "    TerminalCause.client_cancelled, TerminalCause.client_disconnected, TerminalCause.sync_deadline,\n})",
+       "    TerminalCause.client_cancelled, TerminalCause.client_disconnected, TerminalCause.sync_deadline,\n"
+       "    TerminalCause.completed,\n})",
+       "test_dur_settle__cancel_takes_a_keyword_cause_that_defaults_to_client_cancelled",
+       "dur_settle__cancel_refuses_any_other_cause_and_changes_nothing"),
+    _m("cancel_cause_dropped", "a cancel records the cause it is given (R21)",
+       S, "            outcome = self._terminalize(job, cause, None, None, JobState.cancelled)",
+       "            outcome = self._terminalize(job, TerminalCause.client_cancelled, None, None,"
+       " JobState.cancelled)",
+       "dur_settle__cancel_records_its_cause_and_settles_by_r21"),
+    _m("credit_cancel_cause_dropped", "a CREDIT cancel records the cause it is given (R21)",
+       S, "            outcome = self._terminalize(job, cause, None, None, JobState.cancelled)",
+       "            outcome = self._terminalize(job, TerminalCause.client_cancelled, None, None,"
+       " JobState.cancelled)",
+       "credit_settle__cancel_records_its_cause_and_settles_by_r21"),
+    _m("cancel_unknown_cause_mapped_to_client_cancelled", "a refused cause is refused, not recorded as client_cancelled",
+       S, '            raise errors.InvalidRequest(f"{cause!r} is not a cancellation cause")',
+       "            cause = TerminalCause.client_cancelled",
+       "dur_settle__cancel_refuses_any_other_cause_and_changes_nothing"),
+    _m("cancel_accepts_any_cause", "any other cause is invalid_request and changes nothing",
+       S, "        if cause not in CANCEL_CAUSES:", "        if False:",
+       "dur_settle__cancel_refuses_any_other_cause_and_changes_nothing"),
+    _m("cancel_sync_deadline_charged_to_the_client", "sync_deadline is platform-absorbed (R21)",
+       R, "BILLABLE_CAUSES = frozenset({\n    TerminalCause.completed, TerminalCause.client_cancelled, TerminalCause.client_disconnected,\n})",
+       "BILLABLE_CAUSES = frozenset({\n    TerminalCause.completed, TerminalCause.client_cancelled, TerminalCause.client_disconnected,\n"
+       "    TerminalCause.sync_deadline,\n})",
+       "dur_settle__cancel_records_its_cause_and_settles_by_r21",
+       "credit_settle__cancel_records_its_cause_and_settles_by_r21",
+       "dur_settle__only_three_causes_can_charge"),
+    _m("cancel_client_disconnected_absorbed_by_the_platform", "client_disconnected is the client's cause (R21)",
+       R, "BILLABLE_CAUSES = frozenset({\n    TerminalCause.completed, TerminalCause.client_cancelled, TerminalCause.client_disconnected,\n})",
+       "BILLABLE_CAUSES = frozenset({\n    TerminalCause.completed, TerminalCause.client_cancelled,\n})",
+       "dur_settle__cancel_records_its_cause_and_settles_by_r21",
+       "credit_settle__cancel_records_its_cause_and_settles_by_r21"),
+    # Review M1: a repeat cancel answers the COMMITTED outcome; the first cause stands.
+    _m("second_cancel_rewrites_the_cause", "a second cancel never rewrites the committed cause",
+       S, "            if job.terminal:\n                # Completion won the race; a completed job stays completed.\n                return job.outcome",
+       "            if job.terminal:\n                # Completion won the race; a completed job stays completed.\n                if job.state is JobState.cancelled:\n                    job.outcome = job.outcome.model_copy(update={\"cause\": cause})\n                return job.outcome",
+       "dur_settle__cancel_records_its_cause_and_settles_by_r21"),
+    _m("credit_second_cancel_rewrites_the_cause", "a second CREDIT cancel never rewrites the committed cause",
+       S, "            if job.terminal:\n                # Completion won the race; a completed job stays completed.\n                return job.outcome",
+       "            if job.terminal:\n                # Completion won the race; a completed job stays completed.\n                if job.state is JobState.cancelled:\n                    job.outcome = job.outcome.model_copy(update={\"cause\": cause})\n                return job.outcome",
+       "credit_settle__cancel_records_its_cause_and_settles_by_r21"),
+    # Item 3: the PostgreSQL adapter until D5's 0018 (D5 retires this with the refusal).
+    _m("pg_cancel_records_an_unsupported_cause", "before 0018 no cause but client_cancelled reaches 0016",
+       "state/jobstore.py", "        if cause != TerminalCause.client_cancelled:", "        if False:",
+       "test_dur_settle__before_0018_the_pg_store_refuses_a_cause_it_cannot_record"),
 )
 
 
@@ -1578,6 +2190,8 @@ class Runner:
     different shape (track I mutates `deploy/`, outside the package, and one case reads
     a repository file): it fills the temporary root and returns the directory pytest runs
     in; a mutant's `file` is then relative to that directory joined with `package`.
+    `env` names caller variables the copy inherits (a lane's own Valkey port, Q3 HON-3);
+    every other variable of the caller stays out.
     """
 
     name: str
@@ -1588,6 +2202,7 @@ class Runner:
     require_every_case: bool = False
     targets_for: "Callable[[tuple[str, ...]], Sequence[str]] | None" = None
     layout: "Callable[[pathlib.Path], pathlib.Path] | None" = None
+    env: tuple[str, ...] = ()
 
     def select(self, cases: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(self.targets_for(cases)) if self.targets_for else self.targets
@@ -1736,7 +2351,8 @@ def _pytest(root: pathlib.Path, api: pathlib.Path, runner: Runner, targets, sele
          "-p", "no:cacheprovider", "-rfE", "--tb=line",
          *runner.extra_args, *targets, "-k", selection],
         cwd=api, capture_output=True, text=True, timeout=timeout_s,
-        env={"PYTHONPATH": str(api), "PATH": "/usr/bin:/bin", "HOME": str(temp),
+        env={**{name: os.environ[name] for name in runner.env if name in os.environ},
+             "PYTHONPATH": str(api), "PATH": "/usr/bin:/bin", "HOME": str(temp),
              "PYTHONPYCACHEPREFIX": str(cache), "TMPDIR": str(temp)})
 
 
@@ -1860,10 +2476,14 @@ def run_mutant(mutant: "Mutant", runner: Runner | None = None) -> Result:
 
 # The exported cases, plus the record/config tests a record-level invariant is proved by
 # (F2R items 5 and 7: a validator on `records` or `config` has no port case to die in).
+# F2P wire-in item 6: the v2 conformance file is one more target of the same runner, so
+# the v2 list is part of this one and there is no second classifier anywhere.
 CONTRACTS = Runner(name="contracts", targets=("tests/contracts/test_conformance.py",
                                               "tests/contracts/test_fixtures.py",
                                               "tests/contracts/test_money.py",
-                                              "tests/contracts/test_config_and_imports.py"))
+                                              "tests/contracts/test_config_and_imports.py",
+                                              "tests/contracts/v2/test_conformance_v2.py",
+                                              "tests/contracts/test_cancel_cause.py"))
 
 
 def main(mutants: "tuple[Mutant, ...]" = (), runner: Runner | None = None,

@@ -53,6 +53,7 @@ BUDGET = "test_api_stream__the_video_token_budget_is_f1s_own_function"
 SALT = "test_api_stream__the_cache_salt_is_per_tenant_and_per_profile"
 OPTIONS = "test_api_stream__unsupported_options_are_refused_explicitly"
 CEILING = "test_api_stream__the_output_ceiling_is_validated_and_enforced"
+FROZEN = "test_api_stream__the_frozen_normalized_request_reaches_the_engine_capped"
 TEXTS = "test_api_stream__deltas_carry_the_visible_and_raw_text"
 TAIL = "test_api_stream__the_filters_final_tail_reaches_the_event_stream"
 ADAPTER_SPLITS = "test_api_stream__every_chunk_split_reaches_the_customer_through_the_adapter"
@@ -176,6 +177,14 @@ MUTANTS: tuple[Mutant, ...] = (
        OPTIONS),
     _m("n_above_one_accepted", "n>1 is refused",
        E, "                if value != 1:", "                if False:", OPTIONS),
+    _m("consumed_parameters_refused", "what the record consumed is not refused (G2 W-new)",
+       E, "            if name in INTERNAL_PARAMETERS or name in CONSUMED_PARAMETERS:",
+       "            if name in INTERNAL_PARAMETERS:", OPTIONS, FROZEN),
+    _m("consumed_parameters_forwarded", "the record's ceiling and our transport win",
+       E, "            if name in INTERNAL_PARAMETERS or name in CONSUMED_PARAMETERS:\n",
+       "            if name in CONSUMED_PARAMETERS:\n                forwarded[name] = value\n"
+       "            if name in INTERNAL_PARAMETERS or name in CONSUMED_PARAMETERS:\n",
+       OPTIONS),
     # --- ceilings and the context --------------------------------------------
     _m("ceiling_lower_bound_dropped", "a zero ceiling is not a valid request",
        E, "        if not 1 <= ceiling <= self.limits.max_output_tokens:",
