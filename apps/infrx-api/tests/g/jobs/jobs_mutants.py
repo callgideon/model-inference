@@ -69,6 +69,7 @@ EXPIRED_Q = "test_api_modes__a_job_that_expires_in_the_queue_is_an_expired_resul
 CLIENT = "test_api_modes__the_client_examples_async_flow_is_served"
 COMPOSE = "test_f_base__the_jobs_router_mounts_only_over_a_relay"
 TABLE = "test_f_base__each_jobs_route_has_one_handler_and_it_is_the_jobs_routers"
+PILOT = "test_f_base__the_pilot_composition_carries_the_relay_the_jobs_router_needs"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -86,7 +87,7 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("retry_after_dropped", "the 202 says when to poll (Retry-After)",
        J, "            wire.HEADER_RETRY_AFTER: str(POLL_AFTER_S)})", "            })", ACCEPT),
     _m("hook_not_installed", "mounting the jobs router installs the 202 hook",
-       J, "    relay.on_async = jobs.accepted\n", "", ACCEPT, MATRIX),
+       J, "    relay.on_async = jobs.accepted\n", "", ACCEPT, MATRIX, PILOT),
     _m("staged_refs_never_attached", "the 202 follows the attach of the staged refs",
        R, "                await _dependency(self.media.attach(job.request_id, refs))",
        "                pass", ACCEPT),
