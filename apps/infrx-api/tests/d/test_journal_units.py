@@ -126,9 +126,12 @@ def test_append__refuses_what_jsonb_cannot_store_before_sending_it() -> None:
     assert conn.sent == [], "an unjournalable batch reached the database"
     # confirmation A4: every other JSON value is journalable - str, float, int, bool, null,
     # list, object, and the literal text of an escape
-    asyncio.run(store.append(LEASE, (EngineEvent(type="delta", payload={
-        "content": "\\u0000 caf\u00e9", "logprob": -3.2e-07, "n": 1, "b": True, "z": None,
-        "l": [0, "x", [1.5]], "o": {"k": False}}),)))
+    try:
+        asyncio.run(store.append(LEASE, (EngineEvent(type="delta", payload={
+            "content": "\\u0000 caf\u00e9", "logprob": -3.2e-07, "n": 1, "b": True, "z": None,
+            "l": [0, "x", [1.5]], "o": {"k": False}}),)))
+    except errors.JournalWriteFailed as refused:     # D4 verifier N2: the test's own reason
+        raise AssertionError(f"a journalable payload was refused: {refused}") from None
     assert len(conn.sent) == 1, "a journalable payload was refused"
 
     async def fake_stores_them():
