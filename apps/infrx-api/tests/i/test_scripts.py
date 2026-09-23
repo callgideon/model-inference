@@ -432,6 +432,15 @@ def _runbook() -> tuple[str, str]:
 R2 = {"ROLLBACK_TO_UNMETERED": "no-pilot-request-was-accepted"}
 
 
+def _in_order(events, *expected):
+    """Each expected event happened, in this order - a missing one fails the assertion
+    rather than raising from `list.index`."""
+    missing = [e for e in expected if e not in events]
+    assert not missing, (missing, events)
+    positions = [events.index(e) for e in expected]
+    assert positions == sorted(positions), (expected, events)
+
+
 def test_ops_recover__the_r2_revert_reopens_the_edge_on_the_restored_runtime(tmp_path,
                                                                               monkeypatch):
     """Runbook R2, in runbook order, with the steps' own lines: 30-pause makes maintenance
@@ -456,9 +465,9 @@ def test_ops_recover__the_r2_revert_reopens_the_edge_on_the_restored_runtime(tmp
     assert host.file(ENV).read_text() == MONOLITH_ENV
     assert active.read_bytes() == (DEPLOY / "Caddyfile").read_bytes()
     events = host.events
-    engine = events.index("systemctl restart marlin2b-vllm")
     assert events[-1].startswith("docker exec caddy caddy reload"), events
-    assert events[-2].endswith("http://127.0.0.1:8001/health") and len(events) - 2 > engine
+    assert events[-2].endswith("http://127.0.0.1:8001/health"), events
+    assert "systemctl restart marlin2b-vllm" in events[:-2], events
 
 
 def test_ops_recover__r2_restores_the_engine_before_the_gateway_that_asks_it(tmp_path,
@@ -506,7 +515,6 @@ def test_ops_recover__r2_restores_the_engine_before_the_gateway_that_asks_it(tmp
     done = host.shell(revert, BACKUP=str(backup), **R2)
     assert done.returncode == 0, done.stderr
     assert active.read_bytes() == (DEPLOY / "Caddyfile").read_bytes()
-    events = host.events
-    assert (events.index("systemctl restart marlin2b-vllm")
-            < events.index("curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8000/health")
-            < events.index("systemctl restart marlin2b-gateway")), events
+    _in_order(host.events, "systemctl restart marlin2b-vllm",
+              "curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8000/health",
+              "systemctl restart marlin2b-gateway")
