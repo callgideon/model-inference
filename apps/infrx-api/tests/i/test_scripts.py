@@ -334,8 +334,8 @@ def test_deploy_failclosed__rollback_never_returns_a_pilot_to_an_unmetered_runti
         tmp_path, monkeypatch):
     """infra/README.md §8: a host that served pilot is not rolled back to a runtime that
     cannot settle metered work - refused (exit 2) before anything is stopped or written -
-    unless the operator states no pilot request was ever accepted (a failed first
-    cutover), in which case the monolith's files come back."""
+    unless the operator states, in exactly those words, that no pilot request was ever
+    accepted (a failed first cutover), in which case the monolith's files come back."""
     host = Host(tmp_path, monkeypatch)
     host.monolith()
     assert host.run("install.sh", INFRX_MODE="pilot",
@@ -346,6 +346,11 @@ def test_deploy_failclosed__rollback_never_returns_a_pilot_to_an_unmetered_runti
     done = host.run("rollback.sh", str(backup))
     assert done.returncode == 2 and "drain.sh pause" in done.stderr
     assert host.file(ENV).read_bytes() == current and host.events == []
+    # the statement is exact: a typo, a yes, a padded copy are not it
+    for typo in ("no-pilot-request-accepted", "yes", " no-pilot-request-was-accepted"):
+        done = host.run("rollback.sh", str(backup), ROLLBACK_TO_UNMETERED=typo)
+        assert done.returncode == 2, typo
+        assert host.file(ENV).read_bytes() == current and host.events == [], typo
     done = host.run("rollback.sh", str(backup),
                     ROLLBACK_TO_UNMETERED="no-pilot-request-was-accepted")
     assert done.returncode == 0, done.stderr
