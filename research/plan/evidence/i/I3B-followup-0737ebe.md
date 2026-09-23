@@ -228,7 +228,135 @@ Rolling back means reverting the commits. New mutants: i3bm86–i3bm93 (86 in th
 - **Box/hosted:** unchanged coordinator operations (the hosted backup rehearsal; rollback on the
   box is still ⚠️ P-18).
 
+## Round 2 — review fix round (review of `d99da09`)
+
+The review (`research/plan/evidence/i/I3B-followup-review-d99da09.json` on `claude/backend-impl`,
+drill and restore lenses, two refuters per blocking finding) returned **fix_required**: three
+blocking findings (DR-1, RST-1, RST-4) and eight nonblocking ones. This round fixes all three
+blocking findings and folds in DR-2 (as an integration request, because the file belongs to E),
+DR-3, DR-4, RST-2 and RST-3. DR-5 and RST-5 are left, with the reasons given below. DR-6 needed
+no change.
+
+| Field | Value |
+|---|---|
+| Base | `d99da09` (round 1, pushed) |
+| Round-2 head | `946e916` code (`7c2cb26` + a reflow of rollback.md); this section is committed on top of it |
+| Verified against | a scratch clone (`git clone --shared`, removed afterwards) of `d99da09` merged with **`origin/codex/e3b-phase2-gate` @ `c587ddc`** (E3B2's WIP save). The merge was clean, so the `5e9bbf1` fallback was not needed. On top of it: request 1 (updated, see IR R2-1), IR R2-A, IR R2-B, and then the round-2 commits cherry-picked one at a time |
+| Cross-check | this branch's head merged with E3B2's **local, unpushed** head `f97bfb7` (IRs R2-A/R2-B plus the `stack.py` half of request 1), at layer 0 only |
+
+### Findings → fixes
+
+| Finding | Commit | Change | Case (dies at) | Declared mutant → kill (quoted from E's runner on the merge) |
+|---|---|---|---|---|
+| **DR-1** (blocking) rc10's edge "byte for byte" was vacuous | `5e6f26d`, docs `7c2cb26` | `release()` marks both infrx sites with `# <image>`. The active Caddyfile copies the site, so it is marked too. rc10 now pins the premise that no backed-up file is equal across the two releases. `DEPLOY` is the copy's (`kit.ROOT`), so the runner's edit is the script that rc10 runs | `rc10`, `on_host(root) == release(IMAGE["previous"])` (test_recovery.py:815) | **i3bm94** rollback.sh `tar … -xpf files.tar` → `… --exclude=etc/caddy` (the reviewer's rv1): `killed`, `test_recovery.py:815: AssertionError`, `1 failed, 12 deselected in 7.70s` (layer 2, d3, R7) |
+| **RST-1** (blocking) the schemas ACL family could not be killed | `6b43e13` | bk01f `DAMAGE["schemas"] = "grant usage on schema infrx to anon"` (0004 revokes that grant) | `bk01f[schemas]`, the family assertion (test_restore.py:464) | **i3bm95** `coalesce(nspacl, …)` → `coalesce(null, …)` (M5): `killed`, `test_restore.py:464: AssertionError` |
+| **RST-4** (blocking) the sequence family was empty | `47d1489` | **Chosen: keep the branch and test it.** A sequence is one `serial` or identity column away, and removing the branch would reopen the gap silently. bk01g grants `usage on sequence infrx.s to anon`, asserts exactly `relations` naming `'infrx.s'`, and puts the grant back before the existing revoke-to-empty check. restore.md now says the migrated schema has no sequence today: grep of 0001-0017 finds no `serial`/`bigserial`/identity/`create sequence`/`nextval` | `bk01g` (test_restore.py:502) | **i3bm96** `relkind in ('r','p','v','m','S')` → without `'S'` (M6): `killed`, `test_restore.py:502: AssertionError` |
+| DR-2 D-mode lock defeated by the runner's private TMPDIR | none on this branch (E's `run_one`) | **IR R2-B** (diff below). Measured on the scratch merge with `$TMPDIR/infrx-d3-postgres-55434.lock` held by `flock`: **without** the IR, `--only i3bm87` → `killed`, because the child took its own lock in a private TMPDIR and ran over the held port. **With** the IR → `baseline-red` (refused, 1 failed in 0.73 s). A plain `pytest -k bk01g` under the same TMPDIR shows the refusal: `HarnessBusy: another run holds …/infrx-d3-postgres-55434.lock` | - | - |
+| DR-3 rc10 checked readiness only by probe order | `8a8223e` | The stub fails a call that names `$INFRX_I3B_FAIL`. New **rc10b[8001, 8002]** (layer 1, no database) checks five things: exit 4, `the restored runtime is not ready`, the argv sequence stop/daemon-reload/restart(/8001 ok), only retries of the failing probe, and **no `docker` call** (the edge is never reloaded). It also checks that the files on disk are already the previous release's, because the restore runs before the readiness wait. rollback.md step 4 says so | `rc10b` exit-code assertion (test_recovery.py:849) | **i3bm97** `wait_ready … \|\| true` (rv3): `killed`, `test_recovery.py:849: AssertionError`. **i3bm98** lib.sh `&& wait_http "$WORKER_READY"` → `;` (rv2): `killed`, `:849: AssertionError` ([8001]) |
+| DR-4 pending ids were not pinned | `e3577b3` | New **rc00** (layer 0) checks that `kit.pending("NOPE")` and `kit.pending()` are refused, that rc03/rc05b/rc08b skip as exactly `PENDING[G2]`/`[M1-L2]`/`[I2B-R4]`, and that rc03 fails once `stack.ingress_is_mounted` is True. rc04 is not pinned, because its ids come from `stack.stubbed` on E2's stack | rc00 (:600/:607/:609) | **i3bm99** `unknown = []` (pk1): `:600: AssertionError`. **i3bm100** rc05b `"M1-L2"` → `"G2"` (pk4): `:607: AssertionError`. **i3bm101** rc03 `if False:` (pk2): `:609: AssertionError` |
+| RST-2 the plain image was not refused | `2d5df9f` | `needs_pg` skips first with a typed reason, `UNSUPPORTED[plain D image] INFRX_I3B_PG=d needs INFRX_D1_IMAGE=supabase: the restore client (pgrestore.IMAGE) is PostgreSQL 17.6 and sends SET transaction_timeout, which D's plain 16.14 server rejects, and D's shim has no auth.users.confirmed_at`, before any container starts. The plain branches of `_admin`/`_create` are deleted. On the plain image, `test_restore.py` now gives `6 passed, 20 skipped in 0.75s`, exit 0, and no container (it was `5 failed, 10 passed, 1 skipped, 8 errors`). This is a skip, as the brief asks, not the reviewer's `fail`. A mutant run on the plain image reports `no-cases`, never a kill | **bk00** (layer 0, a stand-in harness reporting the plain image) | **i3bm102** refusal deleted: `killed`, `test_restore.py:122: Failed` (`DID NOT RAISE <class 'Skipped'>`) |
+| RST-3 column ACLs were not compared | `05112f5` | New CATALOG family `column_acls` (schema.table, column, sorted `attacl`). A column has no owner default, so NULL means no grant. `DAMAGE["column_acls"]` revokes `update (full_name)` on `public.profiles` from authenticated (0001's grant). bk01_a, bk01b/c/h and the other families stayed green on d3/Supabase before the commit. restore.md A6 lists the family | `bk01f[column_acls]` (test_restore.py:464) | **i3bm103** family dropped: `killed`, `test_restore.py:464: AssertionError` |
+| DR-5 rc04 pends the whole drill on D5 | **left** | Its admit/claim half needs a PostgreSQL restart under `PgJobStore`, which is E3B2's `stack.pg_jobstore()` on E2's compose stack. This lane may not start that stack, and a layer-3 drill that was never run is the "implemented, not exercised" shape the reviews reject. Deliberately deferred: rc04 pends on `stack.stubbed(("admit","claim","terminalize"))` (D5 expected), as before | - | - |
+| DR-6 | none | Documented merge order (E3B2 first) | - | - |
+| RST-5 owner not compared | **left** (follow-up) | The blind spot is an object whose ACL is `'{}'` whose owner changes. No project object has `'{}'`. Adding `*owner::regrole` columns to three families changes every row shape and gives no measured gain today | - | - |
+
+Death shapes of the 10 new mutants: 9 `AssertionError` and 1 pytest `Failed` (`DID NOT RAISE`,
+i3bm102). None is a crash.
+
+### Round-2 runs
+
+UTC 2026-09-23. `PY=apps/infrx-api/.venv/bin/python`. `D=INFRX_I3B_PG=d INFRX_D_TASK=d3
+INFRX_D1_IMAGE=supabase INFRX_D2_VALKEY_PORT=55464 INFRX_D2_VALKEY_CONTAINER=infrx-d3-valkey`.
+Mutant runs used a private `TMPDIR` under the session scratch.
+
+| # | Command | Where | Exit | Result (quoted) |
+|---|---|---|---|---|
+| R1 | `$PY -m pytest -q -rs tests/integration/test_harness.py tests/integration/backend/test_stage.py tests/integration/test_run.py tests/integration/backend/recovery` (15:02:45Z) | this branch at `7c2cb26` (`946e916` only reflows prose) | **0** | `94 passed, 30 skipped, 2 warnings in 13.55s`; PENDING `[G2]`, `[M1-L2]`, `[I2B-R4]` once each (round 1: 90/28; +rc00, rc10b×2, bk00; +2 skips bk01f[schemas]/[column_acls] need PostgreSQL) |
+| R2 | same (15:04:05Z) | scratch merge | **0** | `110 passed, 30 skipped, 1 xfailed, 2 warnings in 14.04s`. The first attempt with request 1 as written gave `3 failed, 107 passed`: test_stage's stand-in `PENDING[D4]` is stale because D4 has merged since (see IR R2-1). The stand-in became `D5` |
+| R3 | same | branch head + E3B2 local `f97bfb7` + IRs | 1 → **0** | `1 failed, 109 passed`: `test_no_pending_id_names_a_merged_task…` → `({'D2','D3','G1R','M3','W3'}, {… 'I2B' …})`. E3B2's RESIDUAL still lists I2B, which I3B no longer names. With request 1's `stack.py` half applied: `110 passed, 30 skipped, 1 xfailed` |
+| R4 | `$D $PY -m pytest -rs -v tests/integration/backend/recovery` (15:04:28Z) | scratch merge | **0** | `58 passed, 9 skipped, 2 warnings in 52.25s` (round 1: 52/9). test_restore.py: 26 passed, 1 skipped (bk03). rc00, rc10, rc10b×2, bk00, bk01_a, bk01f × 10 (incl. schemas, column_acls), bk01g, bk01h, rb08 PASSED. Skips: 3 PENDING + 6 need E2's stack. `docker ps -a` afterwards: no d3/i3b container |
+| R5 | `INFRX_I3B_PG=d INFRX_D_TASK=d3 $PY -m pytest -q -rs …/test_restore.py` on the **plain** image | this branch | **0** | `6 passed, 20 skipped in 0.75s`; skip reason `UNSUPPORTED[plain D image] …` (RST-2); no container started |
+| R6 | `$D TMPDIR=<private> $PY tests/integration/backend/recovery/mutants_i3b.py --layer all --report m-all.json` (15:05:44Z-15:10:5xZ) | scratch merge | 1 | `{"mutants": 96, "killed": 75, "controls_survived": 1, "not_killed": 20, "pending": 0}`. Problems: i3bm33 `no-cases` (rc06 needs E2's Valkey, as in round 1) and **19 `baseline-red`**: every baseline of rc10, bk01_a, bk01c, bk01d, bk01e_a/b and bk01f[policies…functions_config] failed in 1.0-1.24 s. The cause was found (R8) and it is not the code. Every other D-mode mutant was killed: bk01g's i3bm87-90/96, bk01f[schemas]/[column_acls] i3bm95/103, bk01h i3bm91, bk04 i3bm43 |
+| R7 | the 19 again, `--only` ×19 | scratch merge | 1, then **0** | the first retry (15:12:30Z) was poisoned by my own R8 reproduction: all 19 failed again in 20 s while that experiment's `TIME-WAIT` held the port. The retry after the port was free (15:13:34Z): **exit 0, `{"mutants": 19, "killed": 19, "not_killed": 0, "problems": null}`** (15:13:34Z-15:20:24Z). Death sites: 17 `AssertionError`, 1 `Failed`, and 1 `RuntimeError` (i3bm48 at pgrestore.py:299, the tool's own read-only guard, as in round 1). i3bm94 `test_recovery.py:815: AssertionError`, i3bm92 `:819`, i3bm44 `test_restore.py:319`, i3bm86 `:268`. Together with R6, all **94 non-control mutants except i3bm33** are killed, the control survives and i3bm33 is `no-cases`: 96 = the declared list |
+| R8 | diagnosis: a client socket bound to `127.0.0.1:55434` (connected to a local listener) held while `pytest -k bk01d` ran on d3 | scratch merge | 1 | `RuntimeError: could not start infrx-d3-postgres-supabase: … failed to bind host port 127.0.0.1:55434/tcp: address already in use`, `1 failed, 26 deselected in 0.99s`, and the container is left `Created`. This is the same signature as R6's reds: ~1 s, and a `Created` d3 container carrying this checkout's label was seen mid-window. A **TIME-WAIT** socket on 55434 blocks the bind too: after the socket closed, the runner's own baseline for i3bm44 still failed the same way until the 60 s TIME-WAIT expired. During R6's window `ss` showed `TIME-WAIT 127.0.0.1:55434 → 127.0.0.1:55531`: some local client had taken 55434 as its **ephemeral** port. The range is `32768-60999` and there are no reserved ports, so this is **P-21**. It explains round 1's #12 as well |
+| R9 | `cd apps/infrx-api && $PY -m pytest -q -rs tests/i` (15:06:10Z) | scratch merge | **0** | `143 passed in 199.77s (0:03:19)` |
+| R10 | `--only i3bm94` / `i3bm97 i3bm98` / `i3bm95 i3bm96` / `i3bm99-101` / `i3bm102` / `i3bm103`, each as it landed | scratch merge | **0** | each `killed`, `problems: null` (the kill lines are quoted in the table above) |
+| R11 | **the full list again, one run**, `$D TMPDIR=<private> $PY …/mutants_i3b.py --layer all --report m-all2.json` (15:21:24Z-15:31:38Z, nothing else of mine running, 55434 free at start) | scratch merge | 1 | **`{"mutants": 96, "killed": 94, "controls_survived": 1, "not_killed": 1, "pending": 0, "problems": ["i3bm33"]}`**. The count equals the declared list (96). The only problem is i3bm33 `no-cases` (rc06 needs E2's Valkey), as in round 1. Death sites: 83 `AssertionError`, 8 `Failed`, 1 `RuntimeError` (i3bm48, pgrestore.py:299), and 2 not visible in the tail (i3bm11/12, as the review found). New ones: i3bm94 `test_recovery.py:815`, i3bm97/98 `:849`, i3bm99/100/101 `:600/:607/:609`, i3bm95/103 `test_restore.py:464`, i3bm96 `:502` (all `AssertionError`), and i3bm102 `test_restore.py:122: Failed` |
+
+### Limits (round 2)
+
+1. **E2's stack, the box and hosted: not run.** rc04/rc06-rc09 and bk03 are as in round 1.
+   i3bm33 is still `no-cases` here.
+2. **P-21 applies to d3's port too (R8):** any local client can take 55434 as an ephemeral
+   port, and while its socket is ESTABLISHED or in TIME-WAIT (60 s) the d3 container cannot
+   start. Every D-mode case then fails in about 1 s, and the runner calls it `baseline-red`.
+   That is fail-closed: the failure is never counted as a kill. I did not change the host's
+   `ip_local_reserved_ports`: it is a host-wide setting and not this lane's to change.
+3. Round 1's Limits 5 is now explained by R8 (P-21) together with DR-2 (concurrent D runs
+   under private TMPDIRs).
+4. Request 1 as written in round 1 is stale on `c587ddc` (D4 merged). E3B2's local work
+   (`324224a`, unpushed) already rewrote the stage XML with synthetic ids; what remains is the
+   `stack.py` half (R3).
+
+### Integration requests (round 2; they replace nothing above unless they say so)
+
+- **R2-1 (E3B2 / coordinator; updates request 1).** Merge order and substance are unchanged,
+  with two exceptions. First, the stand-in `PENDING[D4]` in `test_stage.py` must be an id that
+  is not merged (`D5` was verified here; E3B2's `324224a` uses synthetic `X1`-`X3`, which is
+  better). Second, on E3B2's current local head only the `stack.py` half is still needed:
+  RESIDUAL must drop `I2B`, and with request 1 it empties (R3).
+- **R2-A (E3B2, runner) - NEW, required before this branch merges.** `OWNED_TREES +=
+  ("apps/infrx-api/deploy",)` on its own line, so that e3bm23's anchor `"apps/infrx-api/tests/d",
+  "infra")` still occurs once. i3bm94, i3bm97 and i3bm98 mutate `rollback.sh`/`lib.sh` in the
+  copy. Without this line the copy has no `deploy/`, and two things break. I measured both on
+  the cross-check clone at `f97bfb7`. First, `mutants_i3b.py --only i3bm97` crashes the run:
+  `FileNotFoundError: … /infrx-e2-i3bm97-…/apps/infrx-api/deploy/rollback.sh`, exit 1. Second,
+  E3B2's own `-k every_list_through_one_runner` fails with `AssertionError: assert ['i3bm94',
+  'i3bm97', 'i3bm98'] == []`. With the line applied the same case gives `1 passed`.
+  ```diff
+   OWNED_TREES = ("tests/integration", "models/marlin2b", "apps/infrx-api/tests/d", "infra")
+  +# I3B follow-up round 2 (DR-1/DR-3): rc10 runs I2B's rollback.sh and lib.sh from the
+  +# copy, and i3bm94/i3bm97/i3bm98 mutate them.
+  +OWNED_TREES += ("apps/infrx-api/deploy",)
+  ```
+- **R2-B (E3B2, runner) - NEW (DR-2).** It is additive, so e3bm31's anchor and its litter
+  case are untouched, and it is scoped to I3B's suites in D mode:
+  ```diff
+           private = None if mutant.suite.startswith("apps/infrx-api/") else root / "tmp"
+  +        # I3B's D mode (INFRX_I3B_PG=d): its restore and rc10 cases run D's pgharness, whose
+  +        # port lock lives in the shared TMPDIR too - a private one gives each run its own lock
+  +        # on the one shared port, and a second run removes the first's container (DR-2).
+  +        if (os.environ.get("INFRX_I3B_PG") == "d"
+  +                and mutant.suite.startswith("tests/integration/backend/recovery/")):
+  +            private = None
+  ```
+- **R2-C (coordinator / D, host) - NEW (P-21, R8).** Take the D/E task ports out of the
+  ephemeral range on the dev host (`net.ipv4.ip_local_reserved_ports`, for example
+  `55432-55439,55464-55469` plus E2's), or give pgharness one bounded retry of `docker run` on
+  `address already in use`. Until one of these lands, a D-mode run that coincides with local
+  connection churn goes `baseline-red`. The runner stays fail-closed.
+- Unchanged from round 1: the merge order (E3B2 first, then this branch with R2-1/R2-A/R2-B);
+  the coordinator's `I2B-R4`/`M1-L2` owners; request 4 (runner litter), which E3B2 has
+  addressed (`2cc281c`, `01ecdce`).
+
+### Changes (round 2)
+
+`git diff --stat d99da09..946e916`: 6 files, +176/−30. The files are
+`infra/runbooks/{pgrestore.py, restore.md, rollback.md}` and
+`tests/integration/backend/recovery/{mutants_i3b.py, test_recovery.py, test_restore.py}`, all
+owned by I3B. No module code, contract, migration, deploy script, Makefile, E3B file or D file
+changed. **Migrations: none.** New mutants: i3bm94-i3bm103 (96 in the list). New cases: rc00,
+rc10b[8001/8002], bk00, bk01f[schemas], bk01f[column_acls]; rc10 and bk01g gained assertions.
+Artifacts (session scratch, sha256 prefix): `m-all.json d38573c0586c13e6` (R6), `l0-head.log
+94261dfe0a488b6f` (R1), `l0-merge.log 6d0cf41b2556100b` (R2), `recovery-d3.log c9feecf9608d9df1`
+(R4), `m-reds2.json fb7447b1346d3c4d` (R7), **`m-all2.json 0e12d59209e7c0af` (R11)**.
+
 ## Verification log
 
 - 2026-09-23: Authored from the runs above; every count is quoted from command output or the
   JSON reports. Status **implemented, not integrated**. Nothing deployed; E2's stack not started.
+- 2026-09-23 (round 2): review of `d99da09` answered - DR-1, RST-1, RST-4 fixed with cases and
+  mutants i3bm94-96; DR-3, DR-4, RST-2, RST-3 folded in (i3bm97-103); DR-2 as IR R2-B; DR-5 and
+  RST-5 left with reasons. Every count is quoted from command output or the JSON reports; the
+  19 baseline-reds of R6 were diagnosed (P-21, R8) and re-run (R7). Status **implemented, not
+  integrated**. Nothing deployed; E2's stack not started.
