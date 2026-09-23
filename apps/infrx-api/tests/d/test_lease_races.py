@@ -156,10 +156,19 @@ def test_race__a_rebuild_during_a_claim_never_sees_half_a_claim() -> None:
     rebuild snapshot taken while the claim is uncommitted sees the whole pre-claim job
     (queued, no live attempt) and offers it; the claimer it feeds waits on the job row and
     is `not_claimable` once the claim commits; a snapshot after the commit never offers it
-    again. No reader ever sees a lease on a queued job or a running job without one."""
+    again. No reader ever sees a lease on a queued job or a running job without one.
+
+    D2's `reopen_dispatch` (the rebuild fence) takes no job-row lock: it only un-acknowledges
+    outbox rows and never mutates a job. Run during the uncommitted claim it does not wait
+    and reopens the job's delivered dispatch row; once the claim commits the relay finds the
+    job running and supersedes the row, so the claim stands alone - whoever re-reads the
+    job under its lock (claim, claim_preparation, dispatch_pending) decides."""
     rig = Rig()
     job = rig.queued()
     observer = rig.service()
+    since = observer.execute("select infrx.now()").fetchone()[0]
+    with rig.service() as relay:                     # the dispatch was delivered: acknowledged
+        cl.pump(relay)
 
     def seen():
         state = rig.job(job)["state"], [(k, g) for k, g, _ in live(rig, job)]
@@ -172,6 +181,8 @@ def test_race__a_rebuild_during_a_claim_never_sees_half_a_claim() -> None:
     code, _ = rpc(claimer, "claim", {"job_id": job, "worker_id": "w1", "limits": cl.LIMITS})
     assert code is None, code
     assert seen() == (("queued", []), True), "a reader saw half a claim"
+    assert observer.execute("select infrx.reopen_dispatch(%s)", (Jsonb({
+        "since": since.isoformat()}),)).fetchone()[0] == 1, "the fence did not reopen the row"
     out: dict = {}
     thread = threading.Thread(target=lambda: out.setdefault("rival", rpc(rival, "claim", {
         "job_id": job, "worker_id": "w2", "limits": cl.LIMITS})))
@@ -184,6 +195,10 @@ def test_race__a_rebuild_during_a_claim_never_sees_half_a_claim() -> None:
     assert out["rival"][0] == "not_claimable", out
     assert seen() == (("running", [("inference", 1)]), False), \
         "a committed claim is still offered, or not whole"
+    with rig.service() as relay:
+        assert job not in {e["job_id"] for e in cl.pump(relay)}, \
+            "the row reopened during the claim dispatched a running job"
+    assert live(rig, job) == [("inference", 1, "w1")], live(rig, job)
 
 
 # --------------------------------------------------------------------- recover vs heartbeat
