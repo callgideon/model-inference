@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T23:21:08Z",
+  "updated": "2026-09-23T23:26:57Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "D5": {
       "lane": "codex-d5 / codex/d5-terminal-transaction",
-      "phase": "fix round: commits in at 8554b47; agent killed at 22:45Z (session limit) \u2192 resumed 23:1xZ: battery + handback \u2192 single verifier \u2192 merge unit",
+      "phase": "fix round HANDED BACK 4bfdbf0 (code final 8554b47; 70 migration + 37 code mutants); battery running; single verifier running \u2192 merge unit step 1 (with phase 3)",
       "since": "2026-09-23T12:56:22Z",
       "note": "ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1\u20135; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items"
     },
@@ -84,8 +84,8 @@
       "since": "2026-09-23T18:41:52Z"
     },
     "D5": {
-      "phase": "fix_required at c67e4f5 (wf_1c8eb6c1-062; 23 agents; JSON evidence/d/D5-review-c67e4f5.json) \u2192 fix round",
-      "since": "2026-09-23T20:43:27Z"
+      "phase": "verifier at 4bfdbf0 running (money on both images + refuters)",
+      "since": "2026-09-23T23:26:57Z"
     },
     "M1-L2": {
       "phase": "verifier pass at 0b9fc50 (wf_78054834-1a2; JSON evidence/m/M1L2-verify-0b9fc50.json)",
