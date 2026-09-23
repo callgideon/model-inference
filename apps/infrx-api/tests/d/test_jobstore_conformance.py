@@ -96,7 +96,10 @@ CASES = jobstore_cases()
 
 #: D4 review H2: the exception each pending case must die of - D5's `complete` for `_D5`,
 #: the refused key for the F2 case - so a regression before that step fails, never xfails.
-RAISES = {"dur_cap__total_org_and_key_limits_reject_with_retry_guidance": errors.InvalidApiKey}
+RAISES = {"dur_cap__total_org_and_key_limits_reject_with_retry_guidance": errors.InvalidApiKey,
+          # F cancel-cause: PgJobStore.cancel refuses the non-default cause before any SQL
+          # (UnsupportedParameter, param="cause") until D5's 0018 records it.
+          "dur_settle__cancel_records_its_cause_and_settles_by_r21": errors.UnsupportedParameter}
 
 
 def _param(case):
