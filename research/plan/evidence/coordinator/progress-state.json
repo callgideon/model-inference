@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T03:21:53Z",
+  "updated": "2026-09-23T03:25:01Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,7 +29,7 @@
     },
     "A1": {
       "lane": "codex-a1 / codex/a1-signup-grant",
-      "phase": "re-confirmation of round 2 at d8a3e84; merge after D2",
+      "phase": "round 3 (RV2-1 membership/claim race) after re-confirmation of d8a3e84",
       "since": "2026-09-22T22:35:57Z",
       "note": "new files only; migrations 0015+; D2 in flight"
     },
