@@ -950,6 +950,12 @@ MUTANTS: tuple[Mutant, ...] = (
            '("skipped", r"(\\d+) skipped")', '("skipped", r"(\\d+) skipped in")',
            "tests/integration/test_run.py", "unexpected_skip",
            cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
+    Mutant("e3bm57", "E3B2 round 4 (GATE-N1): the backend suite runs with -rfEs (its failures)",
+           "tests/integration/run.py",
+           '"no:cacheprovider", SUITE_ADDOPTS, f"--junitxml={junit}"],',
+           '"no:cacheprovider", "-rs", f"--junitxml={junit}"],',
+           "tests/integration/backend/test_stage.py", "reports_the_summary",
+           cases=("test_the_backend_stage_reports_the_summary_of_what_its_suite_produced",)),
 )
 
 

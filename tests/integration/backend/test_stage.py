@@ -89,6 +89,8 @@ def test_the_backend_stage_reports_the_summary_of_what_its_suite_produced(monkey
     assert report.exit_code == 3
     # Confirmation G-N2: the stage is recorded before its teardown (its seconds are its own).
     assert [entry["stage"] for entry in report.stages] == ["backend", "backend-teardown"]
+    # Verification GATE-N1: the backend suite reports its failures and skips (-rfEs), too.
+    assert run.SUITE_ADDOPTS in stage["runs"][0]["argv"].split(), stage["runs"][0]["argv"]
 
 
 # ------------------------------------------------------------------ E3B phase 2, item 1
