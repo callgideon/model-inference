@@ -82,6 +82,12 @@ def live_attempts(conn, request_id: str) -> list[tuple]:
                         (request_id,)).fetchall()
 
 
+def credit_hold(conn, request_id: str) -> tuple:
+    """(state, reconcile_after) of a CREDIT job's hold."""
+    return conn.execute("select state, reconcile_after from infrx.credit_wallet_holds "
+                        "where request_id = %s", (request_id,)).fetchone()
+
+
 def reserved(conn, org: str = b.ORG_A) -> Decimal:
     return conn.execute("select reserved_total from infrx.wallets where org_id = %s",
                         (org,)).fetchone()[0]
@@ -125,7 +131,9 @@ def check_claim_generation(conn) -> str:
     clock with the R20 instants (generation = min(now + budget, deadline_at), first token
     = min(now + budget, generation)); the queued interval is charged to the queue budget
     (R38); a second claimer, a job past its queue or absolute deadline, a terminal job and
-    an unknown job are refused, typed; a requeue's claim is the NEXT generation."""
+    an unknown job are refused, typed; a requeue's claim is the NEXT generation. Interim
+    until WorkV2 (MY-3): a CREDIT job is `not_claimable`, leaves no attempt and expires at
+    its queue instant, released free."""
     world = ca.World(conn)
 
     def body():
@@ -186,6 +194,22 @@ def check_claim_generation(conn) -> str:
         d3(conn, "cancel", org_id=late.org_id, job_handle=row(conn, late.request_id)["job_handle"])
         assert d3(conn, "claim", job_id=late.request_id, worker_id="w1")[0] == \
             "already_terminal", "a terminal job was not already_terminal"
+        # MY-3: a queued CREDIT job is never leased (its work has no v1 loader)
+        org = cc.personal_org(conn, cc.CONSUMER_1)
+        credit = ca.credit_request(world, ca.C1_KEY, org)
+        ca.admit(conn, credit, b.idem(credit, credit.request_id), regime="credit")
+        _, prep = claim(conn, credit.request_id)
+        assert prepare(conn, prep["lease"])[0] is None, "the CREDIT fixture did not queue"
+        assert d3(conn, "claim", job_id=credit.request_id, worker_id="w1")[0] == \
+            "not_claimable", "a CREDIT job was leased with no v2 work loader"
+        assert live_attempts(conn, credit.request_id) == [], "a refused CREDIT claim left a lease"
+        advance(conn, DEFAULTS.queue_wait_interactive_s)
+        expired = [(i["outcome"]["cause"], i["outcome"]["settlement_state"])
+                   for i in _recover(conn)
+                   if i.get("outcome", {}).get("job_id") == credit.request_id]
+        assert expired == [("queue_wait_expired", "released_free")] and credit_hold(
+            conn, credit.request_id)[0] == "released", \
+            f"the unclaimable CREDIT job did not expire free: {expired}"
         return "generation minted under the job lock, R20 instants, R38 charge, typed refusals"
     return ca._in_rollback(conn, body)
 

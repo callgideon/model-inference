@@ -8,6 +8,7 @@
 --                        D5's settlement call it as their first statement.
 --   claim                `queued -> running`: the next inference generation, minted under
 --                        the job row lock, with its R20 instants and R38 queue accounting.
+--                        A CREDIT job is not claimable until WorkV2 exists (interim).
 --   heartbeat            renews the STORED lease on the database clock (R29: the caller's
 --                        copy is only a fencing token); a preparation lease never past
 --                        `preparation_deadline_at` (R52).
@@ -223,6 +224,13 @@ begin
   if j.state <> 'queued' then
     perform infrx.refuse('not_claimable', 'job ' || j.request_id || ' is ' || j.state
                          || ', not queued');
+  end if;
+  -- Interim fail-fast until WorkV2 (review MY-3): the v1 `load_work` cannot carry a CREDIT
+  -- job's work, so it is never leased; it expires at its queue instant `queue_wait_expired`
+  -- (released_free) instead of cycling leases through the reaper with its hold reserved.
+  if j.accounting_regime = 'credit' then
+    perform infrx.refuse('not_claimable', 'job ' || j.request_id
+                         || ' is a CREDIT job: no v2 work loader exists yet');
   end if;
   if v_now >= j.deadline_at then
     perform infrx.refuse('not_claimable', 'job ' || j.request_id

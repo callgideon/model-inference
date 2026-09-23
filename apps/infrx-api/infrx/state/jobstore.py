@@ -336,7 +336,9 @@ class PgJobStore:
 
     async def load_work(self, lease: Lease) -> PreparedWork:
         """R46: fenced like a mutation. A CREDIT job's work is a `WorkV2` this v1 port cannot
-        carry (no price snapshot), so it is refused rather than invented."""
+        carry (no price snapshot), so it is refused rather than invented. Interim until
+        WorkV2: SQL `claim` never leases a CREDIT job (MY-3), so only a preparation lease
+        reaches this refusal."""
         doc = await self._fenced("load_work", lease)
         admission = doc["admission"]
         if admission["accounting_regime"] != "legacy_usd":
