@@ -725,12 +725,7 @@ def test_i3b_bk03_a_postgres_sigkill_keeps_what_committed_and_nothing_else(recor
         doomed = psycopg.connect(harness.pg_dsn(database))       # not autocommit
         doomed.execute(f"insert into public.credit_ledger (org_id, delta_usd, kind, reason) "
                        f"values ('{d.ORG_A}', 7.00000000, 'grant', 'i3b uncommitted')")
-        with harness.Faults() as faults:
-            faults.kill_container("postgres")
-            killed = time.monotonic()
-        harness.wait_postgres(database=database)
-        window = time.monotonic() - killed
-        _postgrest_back()
+        window = kill_postgres(database)
         with contextlib.suppress(Exception):
             doomed.close()
         after = fingerprint(database)
@@ -741,6 +736,27 @@ def test_i3b_bk03_a_postgres_sigkill_keeps_what_committed_and_nothing_else(recor
         assert reasons == ["i3b committed"], reasons
         assert drift(database) == []
         record_property("postgres_restart_to_connection_s", round(window, 2))
+
+
+def kill_postgres(database: str) -> float:
+    """SIGKILL the PostgreSQL that serves `database`, bring it back, and return the
+    kill-to-first-connection window: E2's compose service (bk03, the layer-3 gate) or, on the
+    D harness, this run's own container (rc04a) - never anything else."""
+    if ON_D:
+        d = d_harness()
+        container = d.assert_ours("kill")
+        d._docker("kill", container)
+        killed = time.monotonic()
+        d._docker("start", container)
+        d._wait_ready()
+        return time.monotonic() - killed
+    with harness.Faults() as faults:
+        faults.kill_container("postgres")
+        killed = time.monotonic()
+    harness.wait_postgres(database=database)
+    window = time.monotonic() - killed
+    _postgrest_back()
+    return window
 
 
 def _postgrest_back(timeout: float = 60.0) -> None:

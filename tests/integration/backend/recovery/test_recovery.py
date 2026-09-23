@@ -14,7 +14,7 @@ What is real in each drill, and what stands in for a component that is missing:
 | rc01 worker loss | W2 loop/runner | store: reference fake (D2/D3); the kill is a task cancellation |
 | rc02 engine loss | a separate engine **process**, SIGKILLed; E2's HTTP adapter | store (D2-D5) |
 | rc03 gateway restart | - | PENDING G2-R1 (G2's cutover that mounts the relay, held); the store half is E3B dr01 |
-| rc04 database loss | - | PENDING on the owner of whichever of admit/claim/terminalize is still a stub (D5 today); the PostgreSQL half is `test_restore.py` bk03 |
+| rc04 database loss | rc04a: PgJobStore on PostgreSQL (D harness or E2's), SIGKILLed and restarted after a claim | rc04b: settlement, PENDING on terminalize's stub owner (D5); the database's own boundary is `test_restore.py` bk03 |
 | rc05 object store | M2's preparation; an outage in front of the object store | rc05b: PENDING M1-L2 (an S3 ObjectStore) for MinIO |
 | rc06 index loss | Q2's `ValkeyScheduler` on E2's Valkey, SIGKILLed | snapshot from the fake (Q3) |
 | rc07 disk full | a 256 KiB tmpfs under M2's processing cache | store (D2-D5) |
@@ -38,6 +38,7 @@ import sys
 import tempfile
 import time
 import uuid
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -246,19 +247,96 @@ def test_i3b_rc03_a_gateway_restart_is_pending_on_the_metered_route():
                              "is held)")
 
 
-def test_i3b_rc04_a_database_loss_under_the_job_store_is_pending_on_its_adapter():
-    """OPS-RECOVER (DB interruption) with the product's store: admission, claim and settle
-    across a PostgreSQL restart, through PgJobStore. It pends while one of the functions it
-    drives is an `infrx.unimplemented` stub, on the task that stub names (E3B's per-drill
-    probe, measured on the stack), and fails the day none is. What the database itself
-    guarantees across a SIGKILL is measured now, in `test_restore.py` bk03."""
+def test_i3b_rc04a_admission_and_a_claim_survive_a_postgresql_kill_under_pgjobstore(
+        monkeypatch, record_property):
+    """OPS-RECOVER (DB interruption) through the product's store (DRL-3): D's PgJobStore on a
+    migrated PostgreSQL (the D harness, or E2's), and PostgreSQL SIGKILLed and restarted
+    after a claim. The SAME store object carries on - it opens a connection per operation:
+    the claimed job is still running with its pins and the queued one still queued, a
+    replayed admission is the same job, a second claim is fenced, a new admission is
+    accepted and prepared, the reaper requeues the claimed job after the lease TTL and the
+    next claim is generation 2, and the wallet reserves exactly the three holds and debits
+    nothing.
+    Settling across the loss is rc04b's (terminalize is still D5's stub)."""
+    import pgstate
+
+    import test_restore as bk
+    from infrx.contracts import errors
+    from infrx.contracts.conformance import builders as b
+    from infrx.contracts.records import ExecutionMode, IndexEvent
+    from infrx.state import migrations as d_migrations
+    from infrx.state import pgtesting
+    monkeypatch.setenv("PGPASSWORD", bk.pg_password())
+    started = "select pg_postmaster_start_time()"
+
+    def request(h):          # async: a 10 s interactive queue budget is not this drill's case
+        return b.request(h, mode=ExecutionMode.async_, max_output_tokens=256)
+
+    async def body(database: str, factory) -> None:
+        h = factory()
+        h.extra["grant"](b.ORG_A, kit.GRANT)
+        store = h.port
+        first_request = request(h)
+        first = await store.admit(first_request, b.idem(first_request, "rc04a-1"))
+        second_request = request(h)
+        second = await store.admit(second_request, b.idem(second_request, "rc04a-2"))
+        for admission in (first, second):
+            lease = await store.claim_preparation(admission.request_id, "prep-a")
+            await store.prepared(lease, ())
+        claimed = await store.claim(first.request_id, "worker-a")
+        with bk.connect(database) as conn:
+            before = conn.execute(started).fetchone()[0]
+
+        record_property("postgres_kill_to_connection_s", round(bk.kill_postgres(database), 2))
+
+        with bk.connect(database) as conn:
+            assert conn.execute(started).fetchone()[0] > before, "PostgreSQL was not restarted"
+        rig = factory()                 # the hooks' and the clock's own connection, anew
+        replay = await store.admit(first_request, b.idem(first_request, "rc04a-1"))
+        assert (replay.request_id, replay.job_handle) == (first.request_id, first.job_handle)
+        for admission, state in ((first, JobState.running), (second, JobState.queued)):
+            now, outcome = await store.get_owned(b.ORG_A, admission.job_handle)
+            assert (now.state, outcome) == (state, None), (admission.request_id, now.state)
+            for pin in ("price_snapshot", "maximum_hold", "deadline_at", "budgets"):
+                assert getattr(now, pin) == getattr(admission, pin), (admission.request_id, pin)
+        with pytest.raises(errors.NotClaimable):
+            await store.claim(first.request_id, "worker-b")
+        third_request = request(h)
+        third = await store.admit(third_request, b.idem(third_request, "rc04a-3"))
+        lease = await store.claim_preparation(third.request_id, "prep-b")
+        await store.prepared(lease, ())       # else the reaper fails it free, correctly
+        rig.clock.advance(DEFAULTS.lease_ttl_s + 1)
+        produced = await store.recover()
+        assert [(str(event.job_id), event.attempt) for event in produced
+                if isinstance(event, IndexEvent)] == [(first.request_id, 1)], produced
+        again = await store.claim(first.request_id, "worker-b")
+        assert again.generation == claimed.generation + 1
+        balance = rig.extra["balance"](b.ORG_A)
+        assert (balance["ledger"], balance["reserved"]) == (
+            Decimal(kit.GRANT), first.maximum_hold + second.maximum_hold + third.maximum_hold), \
+            balance
+
+    with bk.scratch("infrx_i3b_jobs") as (database,):
+        with bk.connect(database) as conn:
+            pgstate.apply_migrations(conn)
+            pgstate.install_test_clock(conn)
+            pgtesting.seed(conn)
+            conn.execute(d_migrations.SEED_MARLIN.read_text())
+        factory = pgtesting.make_jobstore_factory(lambda: database, bk.conninfo)
+        kit.run(lambda: body(database, factory))
+
+
+def test_i3b_rc04b_settlement_across_a_database_loss_is_pending_on_terminalize():
+    """The other half of rc04: a job SETTLED across the PostgreSQL kill needs
+    `infrx.terminalize`, still an `infrx.unimplemented` stub. It pends on the task the stub
+    names (E3B's per-drill probe, measured on the stack; D5 today) and fails the day
+    terminalize is implemented."""
     kit.needs_stack()
-    stubs = stack.stubbed(("admit", "claim", "terminalize"))
+    stubs = stack.stubbed(("terminalize",))
     if not stubs:
-        pytest.fail("admission, claim and settlement are implemented: drive the DB loss "
-                    "through PgJobStore now")
+        pytest.fail("terminalize is implemented: settle a job across rc04a's PostgreSQL kill now")
     kit.pending(*sorted(set(stubs.values())),
-                why=f"{sorted(stubs)} are still infrx.unimplemented stubs")
+                why=f"{sorted(stubs)} is still an infrx.unimplemented stub")
 
 
 # ------------------------------------------------------------------ media: object store, disk

@@ -356,6 +356,10 @@ MUTANTS += (
                       "restore failures", RESTORE,
            "    if not d_harness().ON_SUPABASE:\n        pytest.skip(PLAIN_IMAGE)\n", "",
            RESTORE, "bk00"),
+    Mutant("i3bm107", "DRL-3: rc04a really kills PostgreSQL under the store (the drill's loss "
+                      "is injected, not assumed)", RESTORE,
+           '        d._docker("kill", container)\n', '        d._docker("inspect", container)\n',
+           DRILLS, "rc04a", layer=2),
     Mutant("i3bm43", "the maintenance switch turns off BOTH admission flags", RESTORE,
            "\"('legacy_usd_admission', 'credit_admission')\")", "\"('credit_admission')\")",
            RESTORE, "bk04", layer=2),
