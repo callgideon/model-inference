@@ -135,6 +135,20 @@ class Ticker:
         return self.now
 
 
+class Durable:
+    """The attach record another process reads (MPILOT gap 2): `PgAttachments`' contract
+    over a dict. `tests/m/test_pilot_media.py`'s `_pg` cases run the real one."""
+
+    def __init__(self) -> None:
+        self.rows: dict = {}
+
+    async def put(self, job_id, refs):
+        self.rows[job_id] = tuple(refs)
+
+    async def get(self, job_id):
+        return self.rows.get(job_id)
+
+
 class Records:
     """A logger whose lines a case can read back, to prove what is *not* in them."""
 

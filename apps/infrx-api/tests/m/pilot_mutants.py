@@ -26,8 +26,11 @@ SUITE_FILE = "tests/m/test_pilot_media.py"
 S = "media/store.py"
 R = "media/prepare.py"
 U = "media/uploads.py"
+A = "media/attachments.py"
 
 E2E = "test_mpilot__an_upload_named_in_a_job_over_the_mounted_gateway"
+SECOND = "test_mpilot__a_second_process_resolves_the_attach_and_the_local_file"
+SECOND_PG = "test_mpilot_pg__a_second_process_resolves_the_attach_and_the_local_file"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1) -> Mutant:
@@ -68,6 +71,69 @@ MUTANTS: tuple[Mutant, ...] = (
        U, "                and await self.objects.head(media.storage_ref) != media.digest:",
        "                and False:",
        "test_mpilot__an_upload_whose_object_changed_is_refused_at_admission"),
+    # === item 2: a second process resolves the attach and the local file ===============
+    _m("attach_not_persisted",
+       "the attach is written to the durable record another process reads (gap 2)",
+       S, "            await self.attachments.put(job_id, tuple(owned))", "            pass",
+       SECOND),
+    _m("attach_not_read_back",
+       "a process that did not attach reads the job's refs from the durable record",
+       S, "            refs = await self.attachments.get(job_id)", "            refs = None",
+       SECOND),
+    _m("prepare_reads_only_this_process",
+       "preparation reads the attach wherever it is recorded, not only this process's copy",
+       R, "        sources = await self.attached(job_id)",
+       "        sources = self.by_job.get(job_id)", SECOND),
+    _m("local_uri_misses_the_disk",
+       "local_uri finds a file another process prepared (the worker's lookup)",
+       R, "self.cache.get(ref.org_id, ref.digest, ref.profile_version, ref.mime)",
+       "self.cache.get(ref.org_id, ref.digest, ref.profile_version)",
+       SECOND, "test_mpilot__a_worker_runs_a_video_job_prepared_in_another_process"),
+    _m("index_rebuilt_without_the_hash",
+       "a file found on disk is served only if its bytes are the key's content hash",
+       R, "        if digest_of(data) != digest:\n            return None\n",
+       "        pass\n", "test_mpilot__a_cache_file_that_is_not_the_hash_is_not_served"),
+    _m("stale_entry_served_after_expiry",
+       "a file found on disk lives from when it was written, not from when it was found",
+       R, "                stored_at = os.fstat(handle.fileno()).st_mtime",
+       "                stored_at = self.clock()",
+       "test_mpilot__a_cache_file_past_its_life_is_not_served_by_another_process"),
+    _m("put_leaves_the_file_time",
+       "the file's mtime is the entry's stored_at, so another process reads the same life",
+       R, "        os.utime(temporary, (stored_at, stored_at))", "        pass",
+       "test_mpilot__a_cache_file_past_its_life_is_not_served_by_another_process"),
+    _m("disk_entry_trusted_for_its_facts",
+       "an entry found on disk carries no measurement: preparation re-measures it",
+       R, "            if entry is None or entry.probed is None \\\n",
+       "            if entry is None \\\n",
+       SECOND, dies_by=("AttributeError",)),
+)
+
+# === item 2 on PostgreSQL: the attach record's SQL (Docker; `INFRX_D_TASK` picks the port) ==
+PG_MUTANTS: tuple[Mutant, ...] = (
+    _m("attach_not_persisted_pg",
+       "the attach is written to D2's staged tables another process reads",
+       S, "            await self.attachments.put(job_id, tuple(owned))", "            pass",
+       SECOND_PG),
+    _m("another_jobs_refs_returned",
+       "a job reads back its own refs, never another job's",
+       A, "where m.job_id = %s and", "where %s::text is not null and",
+       "test_mpilot_pg__each_job_reads_back_its_own_refs_in_order"),
+    _m("attach_order_lost", "a job's refs come back in the order they were attached",
+       A, "order by m.position\")", "order by m.position desc\")",
+       "test_mpilot_pg__each_job_reads_back_its_own_refs_in_order"),
+    _m("rebind_to_other_refs_accepted", "a job bound to its refs is never re-bound to others",
+       A, "            if [row[1] for row in bound] != [ref.handle for ref in refs]:",
+       "            if False:", "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound"),
+    _m("recorded_content_unchecked",
+       "a handle recorded with other content is a conflict, never bound",
+       A, "                if recorded != ref.digest:", "                if False:",
+       "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound"),
+    _m("foreign_job_not_translated",
+       "R55: a ref of another org than the job is the typed not_found, not a database error",
+       A, "        except pg.ForeignKeyViolation:", "        except pg.UniqueViolation:",
+       "test_mpilot_pg__an_attach_is_write_once_and_tenant_bound",
+       dies_by=("ForeignKeyViolation",)),
 )
 
 
@@ -78,11 +144,14 @@ def case_names() -> set[str]:
 
 #: The shared runner's default copy (package, tests, pyproject) is all these cases need.
 RUNNER = Runner(name="mpilot", targets=(SUITE_FILE,))
+#: The PostgreSQL cases: the copy inherits the D harness's task (`INFRX_D_TASK`), so it
+#: provisions that task's own container and port, never the default one.
+PG_RUNNER = Runner(name="mpilot-pg", targets=(SUITE_FILE,), env=("INFRX_D_TASK",))
 
 
 def run_mutant(mutant) -> Result:
     """Apply one mutant to a throwaway copy and run the cases it names."""
-    return shared.run_mutant(mutant, RUNNER)
+    return shared.run_mutant(mutant, PG_RUNNER if mutant in PG_MUTANTS else RUNNER)
 
 
 if __name__ == "__main__":

@@ -37,6 +37,7 @@ from ..config import RuntimeMisconfigured, runtime_mode
 from ..contracts import errors
 from ..contracts.v2.records import CredentialAudience
 from ..media import fetch
+from ..media.attachments import PgAttachments
 from ..media.prepare import ProcessingCache
 from ..media.uploads import MediaUploads
 from ..observe.metrics import Registry
@@ -194,7 +195,8 @@ def adapters_from_env(settings, **injected):
         adapters = {"catalog": PgCatalogDirectory(connect),
                     "stream": PgStreamStore(connect, limits=settings.pilot),
                     "jobs": PgJobStore(connect, limits=settings.pilot), "pool": pool,
-                    **adapters}
+                    # MPILOT gap 2: M's attach, durable where the worker reads it
+                    "attachments": PgAttachments(connect), **adapters}
     return adapters
 
 
@@ -219,7 +221,7 @@ class Lifetime:
 
 
 def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
-                       pool=None, consent_for=None) -> IngressDeps:
+                       pool=None, consent_for=None, attachments=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -247,7 +249,7 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
         objects, cache=ProcessingCache(pilot.processing_cache_dir,
                                        ttl_s=pilot.processing_cache_ttl_s),
         limits=pilot, fetcher=fetch.MediaFetcher(pilot, allowed_mime=settings.allowed_video_mime),
-        job_org=relay.job_org)
+        job_org=relay.job_org, attachments=attachments)
     rt.large_bodies = intake.LargeBodies(limit=deployment.large_body_limit,
                                          threshold=deployment.large_body_threshold_bytes)
     checks = {"price_source": Probe(price_check(catalog, settings.model_id,
