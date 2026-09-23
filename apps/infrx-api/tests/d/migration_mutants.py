@@ -1600,6 +1600,14 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "from infrx.media_objects where storage_ref = p_storage_ref);",
        "admission", "media_objects",
        "a foreign touch tells a tenant another tenant's object exists (MC-2)"),
+    _m("d2_media_touch_raises_from_another_line", MEDIA,
+       "    raise exception 'not_found: object %', p_storage_ref using errcode = 'P0002';",
+       "    if exists (select 1 from infrx.media_objects where storage_ref = p_storage_ref) "
+       "then\n      raise exception 'not_found: object %', p_storage_ref using errcode = "
+       "'P0002';\n    end if;\n"
+       "    raise exception 'not_found: object %', p_storage_ref using errcode = 'P0002';",
+       "admission", "media_objects",
+       "a foreign touch is told apart from a miss by the RAISE's line (MC-2b)"),
     _m("d2_result_ref_shape_loose", RESULTS,
        "   where p_ref ~ '^infrx-result:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-"
        "[0-9a-f]{12}$'",

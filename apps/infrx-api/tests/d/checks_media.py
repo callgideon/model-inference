@@ -84,9 +84,10 @@ def check_media_uploads(conn) -> str:
 
 
 def _touch_error(conn, ref: str, org: str) -> tuple | None:
-    """The whole error a touch answers - SQLSTATE, message, detail, hint - with the ref
-    itself replaced, so an unknown ref and another tenant's ref can be compared byte for
-    byte (review MC-2). None when the touch succeeded."""
+    """The whole error a touch answers - SQLSTATE, message, detail, hint, context (the
+    RAISE's line, review MC-2b) - with the ref itself replaced, so an unknown ref and
+    another tenant's ref can be compared byte for byte (review MC-2). None when the touch
+    succeeded."""
     try:
         with conn.transaction():
             conn.execute("select infrx.touch_media_object(%s, %s)", (ref, org))
@@ -94,7 +95,7 @@ def _touch_error(conn, ref: str, org: str) -> tuple | None:
         d = failed.diag
         return tuple(None if v is None else str(v).replace(ref, "<ref>")
                      for v in (failed.sqlstate, d.message_primary, d.message_detail,
-                               d.message_hint))
+                               d.message_hint, d.context))
     return None
 
 
