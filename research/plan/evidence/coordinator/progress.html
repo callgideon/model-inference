@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T18:01:05Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T18:14:32Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>26</b><span>done</span></div>
 <div class="tile prog"><b>3</b><span>in progress</span></div>
@@ -97,7 +97,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <section class="panel"><h2>In flight now</h2><ul>
 <li><code>E1B</code> — codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</li>
 <li><code>E3B</code> — codex-e3b / codex/e3b-backend-gate — round 4 HANDED BACK d0d523f (e2m69 re-anchored + anchor guard; counts() pinned; e3bm54–58); single verifier running → MERGE (IR2-1 ir1-r2.diff one commit; IR2-3 r31-dr04.diff) → I3B (IR2-2 r4-ir22.diff incl. KNOWN_STALE = {}) since 2026-09-22T18:46:49Z — namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges</li>
-<li><code>I3B-followup</code> — codex-i3bf / codex/i3b-followup — round-4 verifier PASS at 95b7df7; round 5 (four cheap drill witnesses) running while E3B2 finishes → light verifier → merge after E3B2 with IR2-2 since 2026-09-23T11:22:39Z — R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03→G2, rc04 stubbed, rc05b→M1-L2, rc08b→I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)</li>
+<li><code>I3B-followup</code> — codex-i3bf / codex/i3b-followup — round 5 HANDED BACK a693c6e (verifier&#x27;s four items; I3B list 109/107); light verifier running → merge after E3B2 with IR2-2 (r4-ir22.diff incl. KNOWN_STALE = {}) since 2026-09-23T11:22:39Z — R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03→G2, rc04 stubbed, rc05b→M1-L2, rc08b→I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)</li>
 <li><code>D5</code> — codex-d5 / codex/d5-terminal-transaction — running on codex-d5 @ 9d0b24b+ (items 1/3/5/10b committed; credit_grid/credit_retired mutants) → review → merge after I3B since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items</li>
 <li>review <code>W4</code> — MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z</li>
 <li>review <code>G4U</code> — MERGED 7d21fa7 after confirmation pass at 962b2b1 since 2026-09-23T10:33:10Z</li>
@@ -105,7 +105,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li>review <code>E3B2</code> — round-4 verifier at d0d523f running since 2026-09-23T18:01:05Z</li>
 <li>review <code>D4</code> — MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json) since 2026-09-23T12:47:20Z</li>
 <li>review <code>G3</code> — MERGED b560b51 (+ Makefile 31bfd05); merged-tree checks green: contracts 1014, tests/g 559, G3 list 85, G list 306 since 2026-09-23T16:04:40Z</li>
-<li>review <code>I3B-followup</code> — verifier pass at 95b7df7 (wf_db3bc305-d3b; JSON evidence/i/I3B-followup-verify-95b7df7.json); round 5 folding nonblockings since 2026-09-23T17:54:29Z</li>
+<li>review <code>I3B-followup</code> — round-5 verifier at a693c6e running since 2026-09-23T18:14:32Z</li>
 <li>review <code>F-fakes-followup</code> — MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 ×2, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445 since 2026-09-23T16:27:29Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
