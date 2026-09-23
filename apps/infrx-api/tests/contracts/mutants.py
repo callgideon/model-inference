@@ -112,6 +112,9 @@ V2_FAKE = "contracts/conformance/v2_fakes.py"
 # * `load_work_serves_a_credit_job` - a v1 `Work` cannot be built for a CREDIT job (it has
 #   no USD price), so without the guard `load_work` raises pydantic's `ValidationError` out
 #   of the port instead of the typed `not_found`: that escape is the defect.
+# * `load_work_credit_serves_a_legacy_job` - the mirror: a legacy job has no CREDIT terms,
+#   so without the guard `load_work_credit` raises `AttributeError` (on `job.credit.pins`)
+#   out of the port instead of the typed `not_found` (F2P confirmation MONEY-C1).
 #
 # The six `ValidationError` kills the review found are gone: `FakeFeedbackService._row`
 # maps a record-validation failure to `internal_error`, because the row's fields are
@@ -1832,6 +1835,12 @@ MUTANTS: tuple[Mutant, ...] = (
        "            if False:\n                pass",
        "credit_settle__at_the_admitted_card_on_the_credit_wallet_only",
        dies_by=("ValidationError",)),
+    _m("load_work_credit_serves_a_legacy_job", "a CREDIT read of a legacy lease is not_found (MONEY-C1)",
+       S, "            if job.credit is None:\n"
+          '                raise errors.NotFound(f"job {job.id} is not a CREDIT job")',
+       "            if False:\n                pass",
+       "credit_settle__at_the_admitted_card_on_the_credit_wallet_only",
+       dies_by=("AttributeError",)),
     _m("credit_free_outcome_settles", "a free CREDIT outcome has no settlement record",
        S, "        return settled, self.jobs[lease.job_id].settlement",
        "        return settled, (self.jobs[lease.job_id].settlement\n"
