@@ -150,14 +150,17 @@ def test_backend_deploy__the_cutover_keeps_the_engines_concurrency(tmp_path):
 
 
 FAKE_CURL = """#!{python}
-import pathlib, sys
+import pathlib, stat, sys
 here = pathlib.Path(__file__).resolve().parent
 args = sys.argv[1:]
 with (here / "curl.log").open("a") as log:
     log.write(repr(args) + "\\n")
     for i, arg in enumerate(args[:-1]):
         if arg == "-H" and args[i + 1].startswith("@"):
-            log.write("HEADER FILE " + pathlib.Path(args[i + 1][1:]).read_text())
+            path = pathlib.Path(args[i + 1][1:])
+            log.write("HEADER MODE " + oct(stat.S_IMODE(path.stat().st_mode)) + " " + str(path)
+                      + "\\n")
+            log.write("HEADER FILE " + path.read_text())
 if "-o" in args and args[args.index("-o") + 1] != "/dev/null":
     pathlib.Path(args[args.index("-o") + 1]).write_text('{{"ok":true}}')
 if "-D" in args:
@@ -170,22 +173,28 @@ if "-w" in args:
 def test_backend_deploy__verify_external_never_puts_a_key_on_a_command_line(tmp_path):
     """Every key the external check uses reaches curl in a header file, so none is ever an
     argument (visible in `ps` and /proc on the coordinator host) or printed; the key is
-    still what curl sends."""
+    still what curl sends. That file is 0600 while it exists, and it - like the response
+    body file - is a fresh temporary file, gone when the script exits."""
     stub = tmp_path / "bin"
     stub.mkdir()
     (stub / "curl").write_text(FAKE_CURL.format(python=sys.executable))
     (stub / "curl").chmod(0o755)
+    scratch = tmp_path / "tmp"
+    scratch.mkdir()
     keys = {name: f"{support.MARKER}-{name.lower()}"
             for name in ("INFRX_TEST_KEY", "INFRX_REVOKED_KEY", "LEGACY_KEY")}
     done = subprocess.run(["bash", str(ROLLOUT / "verify-external.sh")], capture_output=True,
-                          text=True, env={**os.environ, **keys,
+                          text=True, env={**os.environ, **keys, "TMPDIR": str(scratch),
                                           "PATH": f"{stub}{os.pathsep}{os.environ['PATH']}"})
     log = (stub / "curl.log").read_text()
-    argv = [line for line in log.splitlines() if not line.startswith("HEADER FILE ")]
+    argv = [line for line in log.splitlines() if not line.startswith("HEADER ")]
     assert argv and not [line for line in argv if support.MARKER in line]
     assert support.MARKER not in done.stdout + done.stderr
     for key in keys.values():
         assert f"HEADER FILE Authorization: Bearer {key}\n" in log, key
+    modes = [line.split(" ", 3)[2:] for line in log.splitlines() if line.startswith("HEADER MODE")]
+    assert modes and all(mode == "0o600" and path.startswith(str(scratch)) for mode, path in modes)
+    assert list(scratch.iterdir()) == [], "a temporary file outlived the script"
 
 
 BOX_BINARIES = ("hostname", "uptime", "df", "docker", "git", "systemctl", "ss", "curl")
