@@ -1,5 +1,5 @@
 {
-  "about": "The pinned Marlin-2B serving version (W3). `flags` is exactly what serve.sh passes after the image, with ${NAME} for the two settings; `engine_options_digest` is sha256 of their compact JSON with `settings` substituted. tests/w/test_serving.py keeps this file and serve.sh in agreement.",
+  "about": "The Marlin-2B serving version (W3): serve.sh's pinned default, verified by tests/w/test_serving.py (check_pinned_launch). `flags` is what serve.sh passes after the image on a launch with no extra arguments, with ${NAME} for the two settings. Flags a caller appends pass through to vLLM and are outside this record (a new serving version); a second value for either setting, or an --api-key, is refused, and the environment cannot change the image, --max-model-len or --gpu-memory-utilization. `engine_options_digest` is sha256 of the flags' compact JSON with `settings` substituted.",
   "recorded_at": "2026-09-22",
   "model": {
     "repo": "NemoStation/Marlin-2B",
@@ -23,6 +23,7 @@
     "ref": "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
     "digest": "sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42",
     "digest_source": "registry_oid",
+    "digest_kind": "manifest list (OCI index): what a pull by `ref` resolves; on linux/amd64 it resolves to linux_amd64_manifest, whose image config is linux_amd64_config",
     "resolved_from": "vllm/vllm-openai:nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b",
     "resolved_at": "2026-09-22T22:42:53Z",
     "resolved_by": "docker buildx imagetools inspect (read-only registry call); sha256 of the raw manifest list equals the digest",
@@ -30,7 +31,7 @@
     "linux_amd64_config": "sha256:38e8c0e60293aefc23edee5c074107e44b89d64f26d5399cd2f5956801b6ef24",
     "vllm_build_commit": "a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b",
     "created": "2026-09-19T05:47:54Z",
-    "pilot_box": "⚠️ TO BE VERIFIED: the box's image id begins sha256:4cbfd34aac14 (I1B, 12 hex digits) - the manifest list digest, as a containerd image store reports it; measure/inventory.sh prints the full id (either the list or the amd64 config digest), and equality makes digest_source registry_oid_confirmed"
+    "pilot_box": "⚠️ TO BE VERIFIED: I1B saw the box's local image id only as sha256:4cbfd34aac14 (12 hex digits). A local image id is the image CONFIG digest under Docker's classic (overlay2) store - here linux_amd64_config, 38e8c0e6... - and the manifest-list digest only under the containerd image store; the 12 digits prefix-match the manifest-list digest, which points at the containerd store but proves neither the store nor equality. measure/inventory.sh prints the storage driver and the full id and accepts either digest; equality makes digest_source registry_oid_confirmed. No measured row is attributed to this build until then."
   },
   "flags": [
     "--served-model-name",
@@ -55,7 +56,7 @@
     "PROCESSING_CACHE_DIR": "/opt/dlami/nvme/processing"
   },
   "settings_status": {
-    "ENGINE_MAX_NUM_SEQS": "⚠️ TO BE VERIFIED: the pilot value (contracts limits engine_max_num_seqs); the pilot box ran 32 (I1B). measure/concurrency.sh measures it and the W3 evidence's predeclared rule sets it",
+    "ENGINE_MAX_NUM_SEQS": "⚠️ TO BE VERIFIED: the pilot value (contracts limits engine_max_num_seqs); the pilot box ran 32 (I1B). measure/concurrency.sh measures it and refuses unless the engine serves --max-num-seqs 32, so the sweep runs either before the pinned unit is deployed (the box's current unit passes 32) or after `INFRX_SET=ENGINE_MAX_NUM_SEQS=32` through I2B's install.sh (the validated /etc/marlin2b-gateway.env, which the vLLM unit and the runtime both read) and a restart of marlin2b-vllm; the W3 evidence's predeclared rule then sets the value that replaces 8",
     "PROCESSING_CACHE_DIR": "proposed for I2B: on the box's NVMe (I1B: /opt/dlami/nvme, 386 G free); the same value for the gateway, the worker and serve.sh"
   },
   "engine_options_digest": "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147",

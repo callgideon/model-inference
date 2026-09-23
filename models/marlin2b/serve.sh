@@ -7,22 +7,29 @@
 # .caption()/.find() helpers are transformers-only, so callers send the canonical
 # prompt themselves — see smoke.py, which reads it from modeling_marlin.py.
 #
-# The serving version is pinned (W3, serving-version.json beside this file): the image
-# is pulled by registry digest, the engine listens on loopback only and takes no API
-# key (the gateway and the worker are its only clients), and two settings are read
-# under the names the gateway reads, so each fact has one place:
+# The serving version (W3, serving-version.json beside this file) is this script's
+# pinned default, verified by tests/w/test_serving.py (check_pinned_launch) on a launch
+# with no extra arguments: the image by registry digest (an IMAGE in the environment is
+# ignored), the engine on loopback only with no API key (the gateway and the worker are
+# its only clients), and two settings read under the names the gateway reads, so each
+# fact has one place:
 #
-#   ENGINE_MAX_NUM_SEQS    concurrent sequences (08 §5); 8 until measured. ⚠️ the pilot
-#                          box ran 32 (I1B); measure/concurrency.sh decides.
-#   PROCESSING_CACHE_DIR   prepared-media root (R61 (2)): mounted read-only at the same
-#                          path and passed as --allowed-local-media-path. Unset: no
-#                          local media, and the worker refuses every video.
+#   ENGINE_MAX_NUM_SEQS    concurrent sequences (08 §5), a positive integer; 8 until
+#                          measured. ⚠️ the pilot box ran 32 (I1B). measure/concurrency.sh
+#                          decides, and refuses to run unless the engine serves 32 (the
+#                          sweep, not the engine, must be the cap): start this script with
+#                          ENGINE_MAX_NUM_SEQS=32 for the sweep, then the measured value.
+#   PROCESSING_CACHE_DIR   prepared-media root (R61 (2)): absolute and canonical, never a
+#                          system directory; mounted read-only at the same path and
+#                          passed as --allowed-local-media-path. Unset: no local media,
+#                          and the worker refuses every video.
 #
 # Both EOS ids [248044, 248046] are re-supplied by every request (stop_token_ids).
 #
 #   ./marlin2b/serve.sh                          # foreground, 127.0.0.1:8000
 #   PORT=8001 GPU=1 ./marlin2b/serve.sh          # another GPU/port
-#   ./marlin2b/serve.sh --enable-log-requests    # other vLLM flags pass through
+#   ./marlin2b/serve.sh --enable-log-requests    # other vLLM flags pass through; they are
+#                                                # outside the record (a new serving version)
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../common/env.sh
@@ -34,7 +41,8 @@ WEIGHTS=${WEIGHTS:-$WEIGHTS_ROOT/$EXP}
 PORT=${PORT:-8000}
 GPU=${GPU:-0}
 # vllm/vllm-openai:nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b, resolved 2026-09-22
-# (Qwen3.5 needs vLLM main; the 2026-09-19 rows were measured on this build).
+# (Qwen3.5 needs vLLM main): its manifest-list (index) digest. It prefix-matches the box's
+# I1B image id (12 hex digits); full equality ⚠️ pending measure/inventory.sh.
 # The environment cannot replace the image: `unset` first, so this `${IMAGE:-…}` default
 # (the form I0's preflight reads) is the only value.
 unset IMAGE
