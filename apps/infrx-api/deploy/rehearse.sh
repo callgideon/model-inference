@@ -42,14 +42,18 @@ FAILED=0
 teardown() {
   set +e
   ids=$(/usr/bin/docker ps -aq --filter "label=$LABEL")
-  [ -z "$ids" ] || /usr/bin/docker rm -f $ids >/dev/null
+  [ -z "$ids" ] || /usr/bin/docker rm -f -v $ids >/dev/null       # -v: their anonymous volumes
   # files the containers wrote as their own uids
   [ -d "$work" ] && /usr/bin/docker run --rm --user 0 --network none -v "$work:$work" \
     --label "$LABEL" python@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 \
     sh -c "rm -rf '$work/root'" >/dev/null 2>&1
   /usr/bin/docker network rm "$NS-net" >/dev/null 2>&1
-  /usr/bin/docker volume ls -q --filter "name=$NS-" | xargs -r /usr/bin/docker volume rm >/dev/null
-  left=$(/usr/bin/docker ps -aq --filter "name=$NS-"; /usr/bin/docker volume ls -q --filter "name=$NS-")
+  # Exactly the named volumes the docker wrapper created (it records each): a name filter is
+  # a substring match and would take another namespace's volumes with it.
+  vols=$(sort -u "$work/volumes" 2>/dev/null)
+  [ -z "$vols" ] || /usr/bin/docker volume rm $vols >/dev/null
+  left=$(/usr/bin/docker ps -aq --filter "label=$LABEL"
+         for v in $vols; do /usr/bin/docker volume inspect -f '{{.Name}}' "$v" 2>/dev/null; done)
   echo "teardown: $( [ -z "$left" ] && echo "nothing $NS-* left" || echo "LEFT: $left")"
 }
 trap teardown EXIT
@@ -69,7 +73,11 @@ VALUED = {"--user", "--tmpfs", "--cap-drop", "--cap-add", "--security-opt", "--m
 path = lambda p: ROOT + p if p.startswith(HOST) else p
 def vol(spec):
     src, sep, rest = spec.partition(":")
-    return (path(src) if src.startswith("/") else P + src) + sep + rest
+    if src.startswith("/"):
+        return path(src) + sep + rest
+    with open(os.environ["REHEARSAL"] + "/volumes", "a") as made:   # teardown removes these
+        made.write(P + src + "\n")
+    return P + src + sep + rest
 args, out = sys.argv[1:], []
 sub = args[0] if args else ""
 if sub == "run":
@@ -417,7 +425,7 @@ check "maintenance survives a Caddy restart (health: $r)" "[[ '$r' == 503* ]]"
 r=$(http GET http://127.0.0.1:8080/health | tr '\n' ' ')
 check "resumed: public health up again ($r)" "[[ '$r' == '200 {\"ok\":true}'* ]]"
 
-step "7. R2 in runbook order: pause, a second deploy (MAX_ACTIVE_JOBS=4), rollback.sh to the first, resume"
+step "7. R2 in runbook order: pause, a second deploy (MAX_ACTIVE_JOBS=4), ENGINE=restart rollback.sh to the first, resume"
 "$here/drain.sh" pause
 set +e
 INFRX_MODE=dev RELEASE=$RELEASE ENV_OWNER=$(id -un) INFRX_SET=MAX_ACTIVE_JOBS=4 READY_S=60 \
@@ -426,7 +434,9 @@ check "second deploy exits 0 (got $code)" '[ "$code" = 0 ]'
 check "the second env carries MAX_ACTIVE_JOBS=4" "grep -qx MAX_ACTIVE_JOBS=4 '$env_file'"
 second_backup=$(ls -d "$INFRX_ROOT"/var/backups/infrx/* | tail -n1)
 before_start=$(started infrx-gateway)
-"$here/rollback.sh" "$second_backup" 2>&1 | tail -n 2 || true
+ENGINE=restart "$here/rollback.sh" "$second_backup" 2>&1 | tail -n 2 || true
+order=$(grep -E '^restart (marlin2b-vllm|marlin2b-gateway)$' "$work/systemctl.log" | tail -n 2 | tr '\n' ' ')
+check "90-revert's rollback restarts the engine, healthy, before the gateway ($order)" '[ "$order" = "restart marlin2b-vllm restart marlin2b-gateway " ]'
 check "the env file is the first deploy's again" "[ \"\$(sha '$env_file')\" = '$first_env' ]"
 check "the gateway restarted onto it and is ready" "[ \"\$(started infrx-gateway)\" != '$before_start' ] && curl -fsS -o /dev/null http://127.0.0.1:8001/health"
 r=$(http GET http://127.0.0.1:8080/health | tr '\n' ' ')
