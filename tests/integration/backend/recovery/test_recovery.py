@@ -460,7 +460,8 @@ async def valkey_back(world) -> None:
 
 def test_i3b_rc06_losing_the_index_mid_operation_loses_no_accepted_job(valkey_world):
     """DUR-OUTBOX / OPS-RECOVER (queue-index loss), on the real Valkey through Q2's adapter,
-    while workers are running. Six accepted jobs; two finish; Valkey is SIGKILLed; the next
+    BETWEEN worker runs (no claim is in flight at the kill instant; rc09 covers a lease held
+    across the kill). Six accepted jobs; two finish; Valkey is SIGKILLed; the next
     worker's claim fails loudly (a loop failure, and the index probe goes down) rather than
     idling as if the queue were empty; Valkey restarts empty; the index is rebuilt from the
     durable snapshot and every remaining job runs exactly once."""
