@@ -343,6 +343,11 @@ MUTANTS += (
            '"and a.attnum > 0 and not a.attisdropped',
            '"and false and a.attnum > 0 and not a.attisdropped', RESTORE,
            "bk01f and column_acls", layer=2),
+    Mutant("i3bm106", "RST-R2-2: a column grant is compared by what it grants (a grantee "
+                      "swap at the same cardinality is named)", PGRESTORE,
+           "array(select unnest(a.attacl)::text order by 1)::text from pg_attribute a",
+           "cardinality(a.attacl)::text from pg_attribute a", RESTORE, "bk01f and column_acls",
+           layer=2),
     Mutant("i3bm91", "R92/bk01h: a restore gives put_result/read_result back to service_role "
                      "only (their grants restored, not PUBLIC's default execute)", PGRESTORE,
            '        if " DEFAULT ACL " in line and not line.rstrip().endswith(f" {ROLE}"):',

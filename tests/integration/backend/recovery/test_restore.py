@@ -422,8 +422,10 @@ DAMAGE = {
             "where id = (select min(id) from public.models)",
     # RST-1: a schema grant is the tenant boundary's first gate (USAGE on infrx).
     "schemas": "grant usage on schema infrx to anon",
-    # RST-3: a column grant (the one 0001 makes), lost.
-    "column_acls": "revoke update (full_name) on public.profiles from authenticated",
+    # RST-3: a column grant (the one 0001 makes) moved to another grantee - same cardinality,
+    # so only the grant's CONTENT tells the two apart (RST-R2-2).
+    "column_acls": "revoke update (full_name) on public.profiles from authenticated; "
+                   "grant update (full_name) on public.profiles to anon",
 }
 
 
