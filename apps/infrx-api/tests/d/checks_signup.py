@@ -239,8 +239,8 @@ def check_eligibility(conn) -> str:
 # =============================================================================
 def check_binding(conn) -> str:
     """CREDIT-IDENTITY: once a personal org funds a wallet, nobody joins it and its owner
-    is neither removed, demoted nor moved - also when the membership change races the
-    claim, in either order; joining another organization or gaining and losing a provider
+    is neither removed, demoted nor moved - a join also when it races the claim, in either
+    order, and a removal or move when it runs into an uncommitted claim; joining another organization or gaining and losing a provider
     role issues no grant and changes no wallet; another individual's wallet cannot be
     spent through one's own organization or read in a session."""
     gotrue_columns(conn)
@@ -275,6 +275,19 @@ def check_binding(conn) -> str:
                    lambda b: claim(b, c2))
     assert "error" not in held and held["got"][0] == "rollout_hold" and \
         wallet_of(conn, c2) is None, f"a claim bound an org a member was joining: {held}"
+    # The owner removed, or moved to another org, while the claim binds the org (RV3-1).
+    c3, c4 = uid(2, 6), uid(2, 7)
+    individual(conn, c3, "c3b2@example.com")
+    individual(conn, c4, "c4b2@example.com")
+    for user, change in ((c3, "delete from public.org_members where org_id = %s"),
+                         (c4, f"update public.org_members set org_id = '{checks.ORG_A}' "
+                              "where org_id = %s")):
+        org = personal_org(conn, user)
+        gone = _behind(pgharness.connect, conn.info.dbname, lambda a: claim(a, user),
+                       lambda b: attempt(b, change, (org,)))
+        assert (gone.get("got") or "").startswith("23514") and one(
+            conn, "select count(*) from public.org_members where org_id = %s", (org,)) == 1, \
+            f"the owner left a personal org while the claim bound it ({change[:6]}): {gone}"
     # Joining another (non-personal) organization is allowed and changes nothing.
     conn.execute("insert into public.org_members (org_id, user_id, role) values (%s, %s, "
                  "'member')", (checks.ORG_A, b))

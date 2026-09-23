@@ -100,6 +100,11 @@ MIGRATION_MUTANTS = (
        "     for share;\n",
        "",
        "signup_binding", "a member joining while the claim binds the org shares the wallet"),
+    _m("a1_binding_guard_locks_new_only",
+       "  perform 1 from public.organizations o where o.id = any (array[old.org_id, new.org_id])\n",
+       "  perform 1 from public.organizations o where o.id = any (array[new.org_id])\n",
+       "signup_binding", "the owner leaves or moves out of a personal org while a claim binds "
+       "it: a wallet funded by an org with no owner"),
     _m("a1_claim_binding_unlocked",
        "        perform 1 from public.organizations o where o.created_by = p_user_id\n"
        "           for no key update;\n",
