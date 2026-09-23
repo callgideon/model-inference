@@ -433,6 +433,10 @@ def check_retirement(conn) -> str:
     spend = (checks_credit.credit_job(uid(6, 90), "job_a1_frozen", ot, wt) + ";\n"
              + checks_credit.hold(uid(6, 90), ot, wt))
     assert attempt(conn, spend) is None, "control: the wallet could not reserve before"
+    # A hold admitted BEFORE retirement, committed: it must still settle afterwards.
+    pre = uid(6, 92)
+    conn.execute(checks_credit.credit_job(pre, "job_a1_pre", ot, wt) + ";\n"
+                 + checks_credit.hold(pre, ot, wt))
 
     first = retire(conn, t)
     assert retire(conn, t, "retire-2") == first, "a second retirement changed the record"
@@ -452,6 +456,17 @@ def check_retirement(conn) -> str:
     assert claim(conn, t)[0] == "retired" and denial(conn, t, "retired") == 1, \
         "a retired individual's claim"
     assert conn.execute(money, (wt,)).fetchone() == before, "retirement moved money history"
+    # The acceptance half of "frozen": in-flight work settles, D5 corrections land.
+    ledger = ("insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, "
+              "operation_id, request_id, actor, reason) values ")
+    settle = (f"update infrx.credit_wallet_holds set state = 'settled' where request_id = "
+              f"'{pre}'; " + ledger + f"('{wt}', 'consumer', 'inference_debit', -9.976, "
+              f"gen_random_uuid(), '{pre}', 'svc', '')")
+    why = attempt(conn, settle)
+    assert why is None, f"a hold admitted before retirement could not settle: {why}"
+    why = attempt(conn, ledger + f"('{wt}', 'consumer', 'operator_adjustment', 5, "
+                                 "gen_random_uuid(), null, 'ops@infrx', 'goodwill')")
+    assert why is None, f"a D5 compensating entry into a frozen wallet was refused: {why}"
 
     retire(conn, n)
     assert claim(conn, n)[0] == "retired" and wallet_of(conn, n) is None, \
@@ -470,7 +485,8 @@ def check_retirement(conn) -> str:
         f"a re-created account with a granted address: {again}"
     refused(conn, "retiring nobody", f"select infrx.retire_individual('{uuid.uuid4()}', 'o', "
                                      "'r', 'k')", "P0002")
-    return ("retirement: anonymised, keys revoked, org suspended, wallet frozen, money kept, "
+    return ("retirement: anonymised, keys revoked, org suspended, wallet frozen (pre-retirement "
+            "hold settles, adjustment lands), money kept, "
             "idempotent, hard delete refused, re-created address refused")
 
 
