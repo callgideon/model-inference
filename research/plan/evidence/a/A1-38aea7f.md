@@ -358,9 +358,42 @@ Mutant lists, by import: `D total 227 A1 migration 34 A1 code 15 checks 46`. The
 
 Unchanged from round 2 (requests 1–10 with the round-2 amendments). Adding `a1_binding_guard_unlocked` to the default `ALWAYS` subset is optional (request 2).
 
+## Review round 4 (re-confirmation fix_required at `dc3cb9c`), head `7a90b92`
+
+The re-confirmation (`research/plan/evidence/a/A1-confirm-dc3cb9c.json` on `claude/backend-impl`) closed RV2-1 and RV2-2. It raised one blocking item, RV3-1 (a test gap; the code was correct), and two nonblocking items, RV3-2 and RV3-3. There is one commit per item. No SQL changed this round; the last commit touching 0015 is `7a90b92` (header comment only).
+
+| Item | Commit | Change | Killing test / mutant (plain and supabase give the same detail) |
+|---|---|---|---|
+| **RV3-1** (blocking) | `d6e1e13` | `check_binding` gains two `_behind` cases. A claims and holds; B deletes the owner's membership of the personal org, or moves it to another org → B waits, then gets `23514` frozen, and the org keeps 1 member. The docstring now says a join is raced in either order, and a removal or move into an uncommitted claim. | `test_binding__…`. Mutant `a1_binding_guard_locks_new_only` (the guard's `array[old.org_id, new.org_id]` → `array[new.org_id]`, the reviewer's `r3_guard_new_only`) is killed: `the owner left a personal org while the claim bound it (delete): {'pid': 78, 'got': None}` (supabase: `'pid': 267`) |
+| RV3-2 | `1879b3c` | Limits (round 3) bullet 2 corrected in place: two same-user claims serialise on the identity-claim unique index; the 40P01 surface is a claim racing a multi-org membership writer in the opposite order (raised, retryable, nothing minted; `order by o.id` does not remove it). The A2 fixture gains `error 40P01` = retry the same call, and R-A1 states it. **Choice: the lock on every created org is kept**, not narrowed to the personal org. The personal org is selected before the lock, and 0006 re-selects it in a later statement, so a personal-only lock can miss the org 0006 finally binds when the owner's membership changes in between. The lock on every created org has no such gap. | — (documentation; no code change) |
+| RV3-3 | `fee0804` | Recorded as an R-A1 race limit rather than a FOR UPDATE + re-check in the loop. That fix covers only the join-first order: a retire-first join still waits and lands in the suspended org. Retirement is operator-initiated, has no money effect (a side org has no wallet), and `set_suspension(org, false, …)` lifts the suspension. | — (documentation) |
+| header | `7a90b92` | 0015 line 1 now ends `(M-4, M-6, SEC-3, RM-*, RV2-1, RV2-2, RV3-1..3: tests and notes only, no SQL change); applied to no hosted or shared environment (R84).` | — |
+
+Version of 0015 tested (R84): `git rev-parse 7a90b92:apps/app/supabase/migrations/0015_signup_eligibility.sql` → `1c7e7cbba86c14ec0e8138bf34e72fc02dc2cbac`. It differs from `d653e7c`'s only in line 1.
+
+### Results
+
+UTC, 2026-09-23, in `apps/infrx-api`, at `7a90b92`. Logs are in `/tmp/claude-1000/a1-round4/`. There was no HarnessBusy wait this round (`steps.log`).
+
+| Command | Exit | Tail |
+|---|---|---|
+| `kill()` on `a1_binding_guard_locks_new_only` (plain / `INFRX_D1_IMAGE=supabase`) | 0 / 0 | `killed` on both images, with the detail in the table above |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_signup.py` (plain) | 0 | `33 passed in 43.70s` |
+| same, `INFRX_D1_IMAGE=supabase` | 0 | `33 passed in 49.13s` |
+| `INFRX_MUTANTS=all … tests/d/test_migration_mutants.py -k 'a1_ or well_formed'` (plain) | 0 | `36 passed, 194 deselected in 46.77s` |
+| same, `INFRX_D1_IMAGE=supabase` | 0 | `36 passed, 194 deselected in 48.30s` |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d` (plain, full D suite with every mutant) | 0 | `309 passed in 415.25s (0:06:55)` (04:09–04:16Z) |
+
+Mutant lists, by import: `D total 228 A1 migration 35 A1 code 15`. New this round: `a1_binding_guard_locks_new_only`. Cleanup: `docker ps -a | grep -c infrx-d1-postgres` → `0`.
+
+### integration_requests
+
+Unchanged from round 3.
+
 ## Verification log
 
 - 2026-09-22: Written by the A1 implementation session at `38aea7f`. Counts are quoted from the sweep logs.
 - 2026-09-23: Review round appended (M-1…M-6, SEC-3…SEC-6, H3, H5). In place, marked: the H5 fixture line, integration request 8 (SEC-6), and R-A1's rename and digest wording (SEC-3/SEC-4). Counts are quoted from the logs at `c4d7fa3`.
 - 2026-09-23: Review round 2 appended (RM-1 blocking; RM-2…RM-5, SEC-R1…SEC-R4). In place, marked: Limits item 3 (RM-2), integration requests 8 (SEC-R3) and 9 (R85), and R-A1's shared-org and created_by-scope lines (RM-1/RM-3). Counts and tails are quoted from `/tmp/claude-1000/a1-round2/*.log` at `ef58367`/`8a26524`.
 - 2026-09-23: Review round 3 appended (RV2-1 blocking, RV2-2). In place, marked: R-A1's retirement-scope bullet and the shared/not-created line (RV2-2). Counts and tails are quoted from `/tmp/claude-1000/a1-round3/*.log` at `d653e7c`.
+- 2026-09-23: Review round 4 appended (RV3-1 blocking; RV3-2, RV3-3). In place, marked: Limits (round 3) bullet 2 (RV3-2), the A2 fixture 40P01 row (RV3-2), and two R-A1 lines (RV3-2, RV3-3). Counts and tails are quoted from `/tmp/claude-1000/a1-round4/*.log` at `7a90b92`.
