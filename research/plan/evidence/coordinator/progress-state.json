@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T09:40:51Z",
+  "updated": "2026-09-23T10:02:48Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,9 +23,9 @@
     },
     "G2": {
       "lane": "codex-g2 / codex/g2-chat-relay",
-      "phase": "implementing (acceptor, sync wait, SSE relay, pilot composition; wire-in settings as parameters until it merges)",
+      "phase": "HANDED BACK 2d742aa (impl e5e7d3a; fakes, not integrated); Opus review running; cutover diff HELD until D4/D5/M adapters + W-new",
       "since": "2026-09-23T05:12:27Z",
-      "note": "base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md | told (06:47Z): cancel-cause port merged; fallback rule on UnsupportedParameter(param=\"cause\")"
+      "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) \u2192 fix lane codex/w-consumed-parameters"
     },
     "G4U": {
       "lane": "codex-g4u / codex/g4u-upload-adapter",
@@ -38,6 +38,12 @@
       "phase": "phase A review fix_required at db12a5a (6 blocking: BS-1 BS-2 D1 D2 D3 HON-1; 21 nonblocking) \u2192 fix round running; then confirmation workflow",
       "since": "2026-09-23T05:40:38Z",
       "note": "protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge"
+    },
+    "W-new": {
+      "lane": "codex-wnew / codex/w-consumed-parameters",
+      "phase": "implementing (Opus): CONSUMED_PARAMETERS in VllmEngine.check_parameters per G2 request 2",
+      "since": "2026-09-23T10:02:48Z",
+      "note": "blocks the pilot's validated SSE/capped requests (platform_error today); diff inline in evidence/g/G2-e5e7d3a.md"
     }
   },
   "reviews": {
