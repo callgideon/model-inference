@@ -1,11 +1,11 @@
 {
-  "updated": "2026-09-23T04:30:08Z",
+  "updated": "2026-09-23T04:33:41Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
     "F2P": {
       "lane": "codex-f2p",
-      "phase": "wire-in fix round IN PROGRESS when the session ended (agent killed; worktree WIP-snapshotted); re-dispatch from evidence/f/F2P-wirein-review-e307084.json",
+      "phase": "wire-in confirmation (Opus) of fix round at ced6751; then merge",
       "since": "2026-09-22T16:00:21Z",
       "note": "v2 CREDIT/USD units, audiences, admission pins, grant, provider grants \u2014 fixtures + map"
     },
