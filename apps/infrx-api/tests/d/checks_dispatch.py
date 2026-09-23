@@ -301,9 +301,12 @@ def check_outbox_gc(conn) -> str:
 
     def body():
         # start from a collected outbox, so the counts below are this check's rows only
-        conn.execute("select infrx.gc_outbox('{\"retention_s\": 0, \"limit\": 10000}')")
+        # (tombstone 0 too: terminal jobs committed by other checks must go now, not at
+        # the tombstone_s=0 call below - found by the full-suite order, not by -k)
+        clean = '{"retention_s": 0, "tombstone_s": 0, "limit": 10000}'
+        conn.execute("select infrx.gc_outbox(%s)", (clean,))
         advance(conn, 1)
-        conn.execute("select infrx.gc_outbox('{\"retention_s\": 0, \"limit\": 10000}')")
+        conn.execute("select infrx.gc_outbox(%s)", (clean,))
         live = _admitted(conn, world)
         waiting = _admitted(conn, world)       # live, its prepare_dispatch NOT acknowledged
         dead = _admitted(conn, world)
