@@ -915,9 +915,10 @@ def check_settle_races(connect, database: str) -> str:
     the job row and REPLAYS the committed outcome (one debit); a cancel behind a settlement
     waits and answers it; a settlement never waits on the admission scope lock (an
     admission holding it cannot stall a terminalization); a stale generation's completion
-    behind a requeue waits and is `stale_lease`. And `grant_credit` (review N5): the same
-    operation id on two wallets concurrently is the typed `idempotency_conflict`, never an
-    untyped unique violation."""
+    behind a requeue waits and is `stale_lease`. And `grant_credit` (review B2/N5): one
+    operation id twice on ONE wallet - the second waits on the wallet row, then replays the
+    first entry (one ledger row); the same id on ANOTHER wallet concurrently is the typed
+    `idempotency_conflict`, never an untyped unique violation."""
     owner = connect(database)
     world = ca.World(owner)
     first_job, lease = cl.running(owner, world)
@@ -958,8 +959,17 @@ def check_settle_races(connect, database: str) -> str:
             c, "terminalize", terminalize_args(lost_lease, propose(
                 lost.request_id, "engine_error", "failed")))))
     assert two[0] == "stale_lease", f"a superseded generation settled: {two}"
-    # grant_credit: one operation id on two wallets at once is the typed conflict
+    # grant_credit: one operation id, one wallet - the wallet row serializes the replay
     wallet = cc.wallet_of(owner, cc.CONSUMER_1)
+    op = str(uuid.uuid4())
+    one, two = cl.lockstep(owner, (service(connect, database), lambda c: cl.rpc(
+        c, "grant_credit", grant_args(wallet, op))), (service(connect, database), lambda c:
+            cl.rpc(c, "grant_credit", grant_args(wallet, op))))
+    assert one[0] is None and two[0] is None, f"a racing replay was refused: {two[0]}"
+    assert (two[1]["replayed"], two[1]["entry"]) == (True, one[1]["entry"]), \
+        f"a racing replay did not answer the first entry: {two[1]}"
+    assert operation_rows(owner, op) == 1, "one operation moved the money twice"
+    # ... and the same id on ANOTHER wallet, concurrently: the typed conflict
     op = str(uuid.uuid4())
     one, two = cl.lockstep(owner, (service(connect, database), lambda c: cl.rpc(
         c, "grant_credit", grant_args(wallet, op))), (service(connect, database), lambda c:
@@ -969,7 +979,7 @@ def check_settle_races(connect, database: str) -> str:
     assert operation_rows(owner, op) == 1
     assert_no_drift(owner, "races")
     return ("duplicates replay, cancel answers the settlement, no scope lock, stale refused, "
-            "a racing reuse on another wallet conflicts")
+            "a racing grant replays, a racing reuse on another wallet conflicts")
 
 
 # --------------------------------------------------------------------- R91 lookup

@@ -2564,7 +2564,12 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "  v_proposal := jsonb_build_object('cause', v_cause, 'usage',",
        "admission", "settle_races",
        "every settlement queues behind admission's global lock (0011's order inverted)"),
-    # review N5: grant_credit under real transactions
+    # review B2 / N5: grant_credit under real transactions
+    _m("d5_grant_without_wallet_lock", SETTLE,
+       "   where wallet_id = (p_args->>'wallet_id')::uuid for update;",
+       "   where wallet_id = (p_args->>'wallet_id')::uuid;", "admission", "settle_races",
+       "an operator's racing retry of one operation is refused instead of replayed "
+       "(the reviewer's rv_grant_without_wallet_lock)"),
     _m("d5_grant_concurrent_reuse_untyped", SETTLE,
        "  exception when unique_violation then\n    -- The wallet lock serializes",
        "  exception when division_by_zero then\n    -- The wallet lock serializes",
