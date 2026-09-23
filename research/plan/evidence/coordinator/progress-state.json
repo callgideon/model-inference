@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T10:43:20Z",
+  "updated": "2026-09-23T10:59:19Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -27,12 +27,6 @@
       "since": "2026-09-23T05:12:27Z",
       "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) \u2192 fix lane codex/w-consumed-parameters"
     },
-    "G4U": {
-      "lane": "codex-g4u / codex/g4u-upload-adapter",
-      "phase": "confirmation PASS at 962b2b1 (0 blocking, 8 nonblocking test-hardening) \u2192 tiny fold-in \u2192 MERGE next (Makefile += tests/g/uploads/test_uploads_mutants.py; mount at the cutover)",
-      "since": "2026-09-23T05:12:27Z",
-      "note": "routes POST/PUT/complete under /v1/uploads over M3 MediaUploads, not mounted; tests at tests/g/uploads/ (28 mutants); requests: app.py mount + rt.media_store/large_bodies (coordinator at G2 merge), Makefile += tests/g/uploads/test_uploads_mutants.py, bench.py upload body (E), vkharness INFRX_Q_VALKEY_CONTAINER (Q)"
-    },
     "W4": {
       "lane": "codex-w4 / codex/w4-measured-tuning",
       "phase": "phase A fix round HANDED BACK b0a44a0 (round-2 code 086a127; 6 blocking closed, 40 new mutants, list 92); confirmation workflow running; phase B = coordinator box re-measurement",
@@ -52,7 +46,7 @@
       "since": "2026-09-23T10:20:48Z"
     },
     "G4U": {
-      "phase": "confirmation pass at 962b2b1 (wf_5bcf8d99-63e; JSON evidence/g/G4U-confirm-962b2b1.json)",
+      "phase": "MERGED 7d21fa7 after confirmation pass at 962b2b1",
       "since": "2026-09-23T10:33:10Z"
     }
   },
@@ -309,6 +303,11 @@
       "merged": "W-new @ 483d763 merged --no-ff (a15fa4b)",
       "at": "2026-09-23T10:40:50Z",
       "note": "CONSUMED_PARAMETERS; cap reaches vLLM via the typed max_output_tokens ceiling; W lists 320, tests/w 157 on the merged tree, 3 mutants killed"
+    },
+    "G4U": {
+      "merged": "G4U @ d1827d5 merged --no-ff (7d21fa7) + Makefile list",
+      "at": "2026-09-23T10:59:19Z",
+      "note": "review fix_required f3c8055 \u2192 round 2 962b2b1 \u2192 confirmation PASS \u2192 fold-ins 73dfaaf; 39 mutants; merged tree tests/g+m 703, uploads+G lists 241; mount + rt.media_store/rt.large_bodies at the cutover; M request check_open; E bench.py upload names; Q harness container override"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"
