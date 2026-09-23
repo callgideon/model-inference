@@ -1,0 +1,648 @@
+{
+  "verdict": "fix_required",
+  "head": "a4598b0",
+  "reviews": [
+    {
+      "lens": "journal",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every result quoted above comes from commands run in this session in /tmp/claude-1000/review-d4-journal-1951866 on port 55481, and the log tails are copied verbatim. I did not re-measure the implementer's full-sweep totals (788/29/1, 469 migration mutants): I ran only the targeted suites listed. The first run of the units+code-mutants command printed 'no tests ran' while a Supabase mutant run was starting; the immediate rerun passed 15. Line numbers are from `git show a4598b0:` of the worktree files.",
+      "cleanup": "Removed: docker ps -a shows no 'review-d4-journal' container (atexit removed each one; the explicit check found 0). Also removed the lock file /tmp/infrx-review-d4-journal.lock and the whole scratch directory /tmp/claude-1000/review-d4-journal-1951866, which held the reviewer probe, race and mutant files and the fake_delta script. Every mutation to 0017 was made in the scratch copy only and restored with cmp after each use. Untouched: no edit or commit in any worktree (codex-d4 `git status --short` is empty), no Valkey container started, and no network, AWS or hosted project used.",
+      "mutants": [
+        {
+          "name": "my_trigger_refires_on_same_value",
+          "edit": "trigger WHEN: drop `old.settled_at is null and`",
+          "result": "SURVIVED all D4 PG suites; the probe raised UniqueViolation (setup_error, not a kill)",
+          "killed_by": ""
+        },
+        {
+          "name": "my_empty_journal_terminal_ttl_30s",
+          "edit": "v_ttl := interval '3600 seconds' -> '30 seconds'",
+          "result": "SURVIVED all D4 PG suites; killed by reviewer probe terminal_no_chunks",
+          "killed_by": "reviewer probe only"
+        },
+        {
+          "name": "my_gap_at_the_watermark",
+          "edit": "replay_gap comparison < -> <=",
+          "result": "killed",
+          "killed_by": "read_typed, expire_prefix"
+        },
+        {
+          "name": "my_head_is_past_the_head",
+          "edit": "past-head comparison > -> >=",
+          "result": "killed",
+          "killed_by": "read_replay, read_typed"
+        },
+        {
+          "name": "my_expire_ignores_skip_locked",
+          "edit": "drop `if not found then continue` after FOR UPDATE SKIP LOCKED",
+          "result": "killed",
+          "killed_by": "journal_races (the call waited 5.0s)"
+        },
+        {
+          "name": "my_expire_empty_inner_resets_watermark",
+          "edit": "drop `if not found then continue` after the inner newest-expired select",
+          "result": "SURVIVED all D4 PG suites; killed by the reviewer's deterministic two-pruner race (watermark (None, None))",
+          "killed_by": "reviewer race test only"
+        },
+        {
+          "name": "my_ceiling_per_batch",
+          "edit": "`if j.journal_stored_bytes + v_bytes` -> `if v_bytes`",
+          "result": "killed",
+          "killed_by": "append_job_ceiling, global_charge"
+        },
+        {
+          "name": "my_widest_106",
+          "edit": "v_widest 107 -> 106",
+          "result": "killed",
+          "killed_by": "append_job_ceiling (reservation 213)"
+        },
+        {
+          "name": "my_cursor_compare_split",
+          "edit": "row comparison -> generation >= g and sequence > s",
+          "result": "killed",
+          "killed_by": "read_replay"
+        },
+        {
+          "name": "my_expire_candidate_strict",
+          "edit": "candidate expires_at <= v_bound -> <",
+          "result": "killed",
+          "killed_by": "global_charge, expire_clock"
+        },
+        {
+          "name": "my_terminal_ttl_constant",
+          "edit": "newest chunk's TTL -> constant 3600 s",
+          "result": "killed",
+          "killed_by": "expire_bytes"
+        },
+        {
+          "name": "my_expired_only_when_settled",
+          "edit": "journal_expired only when settled_at is not null",
+          "result": "killed",
+          "killed_by": "read_typed, expire_prefix"
+        },
+        {
+          "name": "my_append_agg_unordered",
+          "edit": "jsonb_agg(doc order by sequence) -> order by sequence desc",
+          "result": "killed",
+          "killed_by": "append, read_replay"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-d4 archive a4598b0 | tar -x -C /tmp/claude-1000/review-d4-journal-1951866; patch pgharness (container infrx-review-d4-journal-postgres, port 55481, db infrx_rvjournal, lock /tmp/infrx-review-d4-journal.lock, decoy 55482); UV_OFFLINE=1 make api-env",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d4 uv run --frozen pytest -q tests/d/test_journal.py tests/d/test_journal_races.py tests/d/test_streamstore_conformance.py (plain)",
+          "exit": 0,
+          "tail": "39 passed, 5 xfailed in 18.65s"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d4 INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py -k d4_ (plain)",
+          "exit": 0,
+          "tail": "44 passed, 428 deselected in 74.90s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase ... test_journal.py test_journal_races.py test_streamstore_conformance.py",
+          "exit": 0,
+          "tail": "39 passed, 5 xfailed in 70.43s"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py -k d4_",
+          "exit": 0,
+          "tail": "44 passed, 428 deselected in 87.15s"
+        },
+        {
+          "cmd": "pytest -q -s tests/d/test_review_probes.py (11 reviewer probes, plain)",
+          "exit": 0,
+          "tail": "11 passed in 6.97s; NOTE room=107 cancel->None; room=106 cancel->journal_capacity_exhausted settled_at=None state=running; two-statement refused: CheckViolation jobs_terminal_is_one_fact; stale_reclaim never-issued (1,5) -> [(2,1),(2,2),(2,3)]"
+        },
+        {
+          "cmd": "pytest -q -s tests/d/test_review_races.py (expire vs cancel both orders, two pruners, 4-round barrier stress)",
+          "exit": 0,
+          "tail": "4 passed in 11.56s; rows [(1, 4, 'terminal')] stored 87"
+        },
+        {
+          "cmd": "python -m tests.d.review_mutants (13 own mutants x {rv_suite, rv_probes})",
+          "exit": 0,
+          "tail": "survived rv_suite: my_trigger_refires_on_same_value, my_empty_journal_terminal_ttl_30s, my_expire_empty_inner_resets_watermark; 10 others killed"
+        },
+        {
+          "cmd": "wide.sh: each of the 3 survivors applied to 0017 in scratch, then test_streamstore_conformance + test_journal_races + test_e3b_drills + test_journal",
+          "exit": 0,
+          "tail": "48 passed, 5 xfailed (x3: all three survive); restored"
+        },
+        {
+          "cmd": "pytest -k second_pruner tests/d/test_review_races.py (unmutated / with my_expire_empty_inner_resets_watermark)",
+          "exit": 1,
+          "tail": "unmutated: job2 watermark (1, 2), read None -> replay_gap, 1 passed; mutant: job2 watermark (None, None) ... AssertionError: (None, None), 1 failed"
+        },
+        {
+          "cmd": "PYTHONPATH=. python fake_delta.py (fake StreamStore, TTL 30)",
+          "exit": 0,
+          "tail": "expire 2 / before JournalExpired JournalExpired / new chunk [(1, 1)] / after JournalExpired JournalExpired JournalExpired"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/d/test_journal_units.py tests/d/test_code_mutants_d4.py",
+          "exit": 0,
+          "tail": "15 passed in 23.36s"
+        }
+      ]
+    },
+    {
+      "lens": "money",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every number above comes from a command output in this session. The two exit=1 runs failed only on my own probe's last print line; every assertion before it passed. M4 comes from reading code only (fakes/state.py 176-185 against 0017:149-150); I did not execute a retune scenario. Answers to the lens questions, all measured on both images: (1) The global budget without a lock holds. After a 3000-byte append the job's reservation is not reduced (8192 before and after). Stored is counted beside it and the charge is max(8192, 3000) = 8192, so nothing is counted twice or missed. Six concurrent appends near the ceiling left journal_bytes_charged unchanged (100663296). After cancel the charge became stored = 7255 = 7168 + 87 (terminal) <= 8192. (2) Expire frees bytes exactly once: sequential passes returned 3 then 0, and three concurrent passes removed 6 in total with stored at 0. (3) The terminal event counts its written 87 bytes, not the widest 107 (rv_terminal_counts_widest killed). (4) The CREDIT and legacy terminal payloads are identical {state, cause, settlement_state}. Neither carries debit or CREDIT fields, so R87 holds trivially. (5) Privileges hold as claimed: browser roles are refused at schema usage, and service_role cannot call chunk_doc or journal_terminal_event. (6) Foreign and unknown handles give the same SQLSTATE, message template and hint; a limit of 0 on a foreign handle still answers not_found. I did not re-run the implementer's full 16-minute sweeps.",
+      "cleanup": "Containers infrx-review-d4-money-postgres and -postgres-supabase were removed by the harness at exit (docker ps -a finds 0 'review-d4-money' names afterwards). No Valkey or decoy container was started. I removed /tmp/infrx-review-d4-money.lock and the scratch copy /tmp/claude-1000/review-d4-money-1951811 (confirmed absent). I edited or committed nothing in any worktree and used no port other than 55482.",
+      "mutants": [
+        {
+          "name": "rv_holdback_107",
+          "edit": "0017 append ceiling least(1024, reserved/2) -> least(107, reserved/2)",
+          "result": "killed",
+          "killed_by": "append_job_ceiling"
+        },
+        {
+          "name": "rv_ceiling_ge",
+          "edit": "append ceiling '>' -> '>=' (exactly-at-ceiling refused)",
+          "result": "killed",
+          "killed_by": "global_charge"
+        },
+        {
+          "name": "rv_read_granted_authenticated",
+          "edit": "grant execute read_journal to service_role, authenticated",
+          "result": "killed",
+          "killed_by": "journal_privileges"
+        },
+        {
+          "name": "rv_terminal_counts_widest",
+          "edit": "terminal trigger adds v_widest (107) instead of the written v_bytes to journal_stored_bytes",
+          "result": "killed",
+          "killed_by": "expire_bytes"
+        },
+        {
+          "name": "rv_forbidden_foreign",
+          "edit": "read_journal raises 'forbidden' when the handle exists under another org (a tenant oracle)",
+          "result": "killed",
+          "killed_by": "read_tenant"
+        },
+        {
+          "name": "rv_terminal_room_ge",
+          "edit": "trigger room check stored+107 '>' -> '>=' reserved",
+          "result": "killed",
+          "killed_by": "append_job_ceiling"
+        },
+        {
+          "name": "rv_widest_106",
+          "edit": "v_widest constant 107 -> 106",
+          "result": "killed",
+          "killed_by": "append_job_ceiling"
+        },
+        {
+          "name": "rv_when_no_reservation_guard",
+          "edit": "drop 'and new.journal_reserved_bytes > 0' from the trigger WHEN",
+          "result": "survived (admission/terminal_every_path); SETUP_ERROR under volume/index_plans, not a named-check kill (finding M3)",
+          "killed_by": ""
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-d4 archive a4598b0 | tar -x -C /tmp/claude-1000/review-d4-money-1951811; patch pgharness (container infrx-review-d4-money-postgres, port 55482, db infrx_review_d4_money, lock /tmp/infrx-review-d4-money.lock) and test_pgharness decoy (infrx-review-d4-money-dharness-postgres, 55442 = 55482-40; 55522 would sit in E's block); make api-env",
+          "exit": 0,
+          "tail": "+ zstandard==0.25.0 (offline, uv cache)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all INFRX_D2_VALKEY_PORT=55495 INFRX_D2_VALKEY_CONTAINER=infrx-review-d4-money-valkey pytest -q tests/d -k \"(journal and (credit or privilege or usage or budget or expire)) or d4_append_granted or d4_journal_usage_granted or d4_chunk_doc_callable or d4_terminal_event_legacy or d4_terminal_event_bytes_uncounted or d4_stored_counted_beside or d4_job_ceiling or d4_prune_frees_twice or d4_prune_keeps_bytes or d4_usage_misreports or d4_read_any_tenant or d4_terminal_reserve or d4_stored_bytes_not_counted or d4_terminal_event_waved or test_credit_schema or code_mutants_d4\"  (plain image)",
+          "exit": 0,
+          "tail": "60 passed, 757 deselected, 1 xfailed in 102.05s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_journal.py tests/d/test_journal_races.py tests/d/test_code_mutants_d4.py tests/d/test_migration_mutants.py -k \"not rv_ and (d4_ or test_journal or code_mutants_d4 or race)\"  (plain; all 44 d4 migration mutants + 9 code mutants + journal/race checks)",
+          "exit": 0,
+          "tail": "83 passed, 433 deselected in 140.98s"
+        },
+        {
+          "cmd": "pytest -q -s tests/d/test_review_money.py  (own probes, plain image)",
+          "exit": 1,
+          "tail": "admitted (8192,0,8192,True) charged 8192 | after 3000 (8192,3000,8192,True) charged 8192 | after +4168=7168 charged 8192 | +1 byte ('{}' = 2 B): journal_capacity_exhausted | after cancel (8192,7255,8192,False) charged 7255, terminal 87 B | expire1 (None,3) stored 0 charged 0 | expire2 (None,0) | read -> journal_expired; CREDIT and LEGACY terminal payload {cause,state,settlement_state} 87 B, no money fields, widest 107; foreign/unknown ('P0001','not_found: no job <handle> owned by org <org>','',None) identical modulo the echoed handle; anon/authenticated: 42501 'permission denied for schema infrx' on all 6 functions, jobs.new_cols, stream_chunks and the watermark update; service_role: append/read/expire/usage allowed, chunk_doc and journal_terminal_event 42501; 6 parallel appends near the ceiling: charged 100663296 before == after, each stored <= reserved-1024; 3 parallel expires (1,4,1)=6 chunks, stored 0 once; measure deltas as in M2; NUL 22P05, NaN/Inf 22P02 untyped. 1 failed: my own final print (KeyError on a refusal answer after the lease expired), probe scaffolding, not the implementation"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest -q tests/d/test_migration_mutants.py -k rv_  (8 own mutants)",
+          "exit": 1,
+          "tail": "1 failed, 7 passed, 472 deselected in 35.81s -- rv_when_no_reservation_guard SURVIVED; re-declared under volume/index_plans: SETUP_ERROR 'journal_capacity_exhausted: job 51000000-... has no journal room for its terminal event'"
+        },
+        {
+          "cmd": "PYTHONPATH=. python fakeprobe.py  (FakeStreamStore via streamstore_factory + conformance _running)",
+          "exit": 0,
+          "tail": "fake big float payload accepted: 1 bytes 1048572 | NUL fake accepted, bytes 22 | NaN fake accepted, bytes 9 | Inf fake accepted, bytes 14"
+        },
+        {
+          "cmd": "PYTHONPATH=. python usageprobe.py  (1,000,000 chunks, journal_usage as service_role)",
+          "exit": 0,
+          "tail": "{'chunks': 1000000, ...} 68 ms / 51 ms / 54 ms -- count(*) is linear but cheap at the 1M scale; the ponytail note stands"
+        },
+        {
+          "cmd": "INFRX_D1_IMAGE=supabase INFRX_MUTANTS=all pytest -q -s tests/d -k \"<lens selection> or test_review_money\"",
+          "exit": 1,
+          "tail": "1 failed (same own-probe KeyError), 65 passed, 765 deselected, 1 xfailed in 123.26s; supabase numbers match the plain image (NUL 22P05, NaN/Inf 22P02, big float compact 1048572 / pg 45387892 -> journal_write_failed, 3 parallel expires (2,2,2)=6)"
+        }
+      ]
+    },
+    {
+      "lens": "honesty",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "I reproduced every number cited here in my own namespace (port 55483, decoy 55484, Valkey 55496) against the a4598b0 archive. The full-sweep counts, the 469/44/9 mutant counts, the kill texts, the runxfail exception types, the 20 RACY runs and the variant outcomes are copied from logs archived at scratchpad/review-d4-honesty/ (full.log, runxfail.log, listed.out, variants.out, baseline.out). The implementer's claims all reproduce: 788/29/1 with no skips; 44 plus 9 mutants killed by assertion in the named check; StreamStore 17 cases = 12/5 and JobStore 70 = 45/23/1/1, every xfail dying for its stated owner; the 3 former stream skips gone with no other skip; the d1 decoy byte-identical and derived per task (d4 = 55435 + 40 = 55475, outside reserved ports); both commit-message miscounts (9, not 10); drills verbatim; no contract/port/fake/config/Makefile/integration change. Not reproduced: the supabase-image sweep (outside this lens's brief) and make check. The shared runner (test_migration_mutants) printed its kill lines to captured stdout, and I read them there.",
+      "cleanup": "This review created and removed the containers infrx-review-d4-honesty-postgres and the decoy infrx-review-d4-honesty-dharness-postgres, each removed at harness exit; `docker ps -a | grep review-d4-honesty` counts 0. Valkey was not left running. I removed the lock files /tmp/infrx-review-d4-honesty-postgres-55483.lock and /tmp/infrx-review-d4-honesty-valkey-55496.lock, the scratch copy /tmp/claude-1000/review-d4-honesty-1951713 (including my review-only tests/d/review_hand.py and review_probe.py) and the 92 /tmp/review-hand-* temp dirs. I kept the logs in the session scratchpad at review-d4-honesty/. I made no edit, commit, or port use in any worktree, and did not touch 55432\u201355436, 55465, 55475 or the other lanes' ports.",
+      "mutants": [
+        {
+          "name": "d4_* x44 (listed, applied independently by the review driver: own copy, own str.replace, fresh DB, seed_admission, named check called directly)",
+          "edit": "the old/new pairs in D4_MUTANTS",
+          "result": "44/44 die with AssertionError raised in checks_journal.py inside the named check. The frame and message match the evidence's quoted kill lines exactly. Three have no message (terminal_trigger_on_any_update :479, past_head :677, prune_without_a_watermark :736). The first of those is a 23505 crash surfaced by a fixture step (H4). No APPLY or SETUP error. The baseline of all 20 checks passes on the unmutated tree.",
+          "killed_by": "the named check (see listed.out)"
+        },
+        {
+          "name": "V1_expire_unbounded_per_pass",
+          "edit": "expire_journal: drop `limit v_limit` from the candidate query",
+          "result": "SURVIVED expire_prefix, expire_bytes, journal_races (H1)",
+          "killed_by": ""
+        },
+        {
+          "name": "V2_widest_106",
+          "edit": "v_widest 107 -> 106",
+          "result": "killed",
+          "killed_by": "append_job_ceiling :301 'reservation 213: a terminal event past the reservation: None'"
+        },
+        {
+          "name": "V3_trigger_without_reservation_guard",
+          "edit": "drop `and new.journal_reserved_bytes > 0` from the trigger WHEN",
+          "result": "SURVIVED terminal_every_path (H3b)",
+          "killed_by": ""
+        },
+        {
+          "name": "V4_empty_batch_sets_published",
+          "edit": "`if v_count = 0 then` + `update \u2026 published = true`",
+          "result": "killed",
+          "killed_by": "append_empty :333 'an empty batch wrote or published'"
+        },
+        {
+          "name": "V5_read_journal_volatile",
+          "edit": "drop `stable` from read_journal",
+          "result": "SURVIVED read_typed (H3d)",
+          "killed_by": ""
+        },
+        {
+          "name": "V6_gap_at_the_watermark",
+          "edit": "replay_gap `<` -> `<=`",
+          "result": "killed",
+          "killed_by": "read_typed :689"
+        },
+        {
+          "name": "V7_terminal_default_ttl_7200",
+          "edit": "'3600 seconds' -> '7200 seconds'",
+          "result": "SURVIVED terminal_every_path, expire_prefix (H3c)",
+          "killed_by": ""
+        },
+        {
+          "name": "V8b_terminal_first_generation_without_chunks",
+          "edit": "max(a.generation) -> min(a.generation)",
+          "result": "SURVIVED terminal_every_path, expire_prefix, append_past_the_instant (H3a)",
+          "killed_by": ""
+        },
+        {
+          "name": "V9_room_ge",
+          "edit": "trigger room `>` -> `>=`",
+          "result": "killed",
+          "killed_by": "append_job_ceiling :298 'reservation 214: the widest fit, yet journal_capacity_exhausted'"
+        },
+        {
+          "name": "V10_ceiling_ge",
+          "edit": "append ceiling `>` -> `>=`",
+          "result": "killed",
+          "killed_by": "append_job_ceiling :279"
+        },
+        {
+          "name": "V11_ceiling_per_batch",
+          "edit": "`j.journal_stored_bytes + v_bytes` -> `v_bytes`",
+          "result": "killed",
+          "killed_by": "append_job_ceiling :282"
+        },
+        {
+          "name": "V12/V13 grants",
+          "edit": "read_journal to authenticated; expire_journal to anon",
+          "result": "killed",
+          "killed_by": "journal_privileges :877"
+        },
+        {
+          "name": "V14_read_page_999",
+          "edit": "least(v_limit, 1000) -> 999",
+          "result": "killed",
+          "killed_by": "read_bounded :656 'a page of 999 chunks'"
+        },
+        {
+          "name": "V16_expire_strictly_before",
+          "edit": "candidate `expires_at <= v_bound` -> `<`",
+          "result": "killed",
+          "killed_by": "expire_clock :715 'a chunk outlived its expires_at'"
+        },
+        {
+          "name": "V17_watermark_one_below",
+          "edit": "journal_pruned_sequence = greatest(v_sequence - 1, 1)",
+          "result": "killed",
+          "killed_by": "expire_prefix :736"
+        },
+        {
+          "name": "V18/V19 R30 type check",
+          "edit": "allow 'terminal'; drop the object-payload test",
+          "result": "killed",
+          "killed_by": "append_terminal_refused :244 / :248"
+        },
+        {
+          "name": "V20_usage_stored_is_reserved",
+          "edit": "stored_bytes sums journal_reserved_bytes",
+          "result": "killed",
+          "killed_by": "usage :832"
+        },
+        {
+          "name": "V21_fence_after_the_insert (brief's d4_fence_after_the_insert, absent from the list)",
+          "edit": "move the fence block after the INSERT + stored-bytes/published UPDATE",
+          "result": "killed",
+          "killed_by": "append_past_the_instant :405 (the late batch published the job, so settlement is held_unknown instead of released) and append_fenced :361"
+        },
+        {
+          "name": "code mutants d4 x9 (runner)",
+          "edit": "code_mutants_d4.MUTANTS",
+          "result": "9/9 killed ('1 failed, 4 deselected' each); the runner accepts only assertion-shaped deaths",
+          "killed_by": "the named test_journal_units cases"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-d4 archive a4598b0 | tar -x -C /tmp/claude-1000/review-d4-honesty-1951713; patch tests/d/pgharness.py SERVICE=LocalService('infrx-review-d4-honesty-postgres',55483,'infrx_review_d4_honesty'), lock /tmp/infrx-review-d4-honesty-postgres-55483.lock; test_pgharness DECOY=('infrx-review-d4-honesty-dharness-postgres', 55483+1); UV_OFFLINE=1 make api-env",
+          "exit": 0,
+          "tail": "+ zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -rA tests/d/test_pgharness.py",
+          "exit": 0,
+          "tail": "7 passed in 6.11s (incl. test_the_decoy_is_the_tasks_own_and_d1s_is_unchanged and the three real-docker decoy drills on 55484)"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d4 INFRX_MUTANTS=all INFRX_D2_VALKEY_PORT=55496 INFRX_D2_VALKEY_CONTAINER=infrx-review-d4-honesty-valkey uv run --frozen pytest -q -rA tests/d (plain image, detached)",
+          "exit": 0,
+          "tail": "788 passed, 29 xfailed, 1 xpassed in 1232.40s (0:20:32); 0 SKIPPED/FAILED/ERROR lines; 469 test_mutant_is_killed PASSED (44 d4_); 10 test_code_mutants_d4 PASSED; XFAIL: 24 jobstore + 5 streamstore; XPASS dur_settle__cancel_and_complete_race_has_a_single_winner; the 44 d4 kill lines match the evidence's quoted block"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.d.code_mutants_d4",
+          "exit": 0,
+          "tail": "9/9 killed"
+        },
+        {
+          "cmd": "uv run --frozen python -m tests.d.review_hand baseline.json / listed.json / variants.json / v8b.json (review-only driver, scratch copy)",
+          "exit": 0,
+          "tail": "baseline 20/20 checks PASSED; listed 44/44 AssertionError in the named check; variants: V1, V3, V5, V7, V8b SURVIVED, the rest killed"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q --runxfail --tb=short tests/d/test_streamstore_conformance.py tests/d/test_jobstore_conformance.py",
+          "exit": 1,
+          "tail": "29 failed, 60 passed in 49.00s: 28 x 'NotImplementedError: JobStore.complete: the fence held; the settlement is D5's', 1 x 'InvalidApiKey \u2026 revoked or unknown' (F2)"
+        },
+        {
+          "cmd": "20x uv run --frozen pytest -q -rxX tests/d/test_jobstore_conformance.py -k cancel_and_complete_race",
+          "exit": 0,
+          "tail": "20/20 'XPASS 1 xpassed'"
+        },
+        {
+          "cmd": "git -C codex-d4 diff --stat 740bebf..a4598b0 -- tests/d/pgharness.py infrx/contracts Makefile tests/integration pyproject.toml uv.lock",
+          "exit": 0,
+          "tail": "(empty) - no contract, port, fake, config, Makefile or tests/integration change; changed paths limited to tests/d, infrx/state/{journal,pgtesting,credit_schema}.py, 0017, the evidence"
+        },
+        {
+          "cmd": "python ast diff of dr05/06/08/10 bodies: tests/d/test_e3b_drills.py vs tests/integration/backend/test_drills.py @a4598b0",
+          "exit": 0,
+          "tail": "only the signature (backend param), rig(backend, \u2026) -> rig(\u2026), run(body) -> asyncio.run(body()) and the dropped docstrings differ; the bodies are verbatim"
+        },
+        {
+          "cmd": "git show --stat per commit + grep of added d4_ names in migration_mutants.py",
+          "exit": 0,
+          "tail": "543c18b 15, 648db8d 2, 627edf8 4, 751c8a8 7, a5d39b4 9 (subject says 10), 865e0c7 2, 7028ed2 4, ce7659b 1 = 44; 3f8a70b adds 9 code mutants (subject says 10); 746349f (9d) is first, before 7f4aa40"
+        }
+      ]
+    }
+  ],
+  "confirmed_blocking": [
+    {
+      "id": "J1",
+      "severity": "blocking",
+      "file": "apps/app/supabase/migrations/0017_stream_journal.sql",
+      "line": "311",
+      "claim_broken": "The claim is that pruning always removes a prefix behind a watermark that only grows, and that a replay never hides a gap. This is a durability invariant with no killable test for its race path.",
+      "evidence": "In expire_journal, the `if not found then continue; end if;` after the inner newest-expired select (lines 310-313) is the only thing stopping the watermark from being reset to NULL. That happens when a second pruner finds a job that another pruner already pruned after the candidate list was built. The mutant that removes it (my_expire_empty_inner_resets_watermark) SURVIVED every D4 check on real PostgreSQL: rv_suite (all 20 checks_journal checks, including journal_races), my probes, and a full run of test_streamstore_conformance + test_journal_races + test_e3b_drills + test_journal ('48 passed, 5 xfailed in 27.11s'). My own deterministic race kills it. Setup: pruner B blocks on job1's chunk rows (a FOR UPDATE held by a third connection); pruner A prunes job2 and commits; the blocker is released and B reaches job2. On the unmutated code: 'A (None, 2) / B {(None, 1)} / job2 watermark (1, 2) rows [(1, 3, delta)] / read None -> replay_gap / 1 passed'. On the mutant: 'job2 watermark (None, None) rows [(1, 3, delta)] ... AssertionError: (None, None)'. So a cursor-less replay returns (1,3) as if nothing were missing: a silent prefix loss. The shipped code is correct; the guard has no test.",
+      "minimal_fix": "Add a race check to test_journal_races.py (and to check_journal_races so the migration mutant is armed). Hold job1's stream_chunks rows FOR UPDATE on a third connection, start expire B in a thread, run expire A (it skips job1 and prunes job2), release the blocker, then assert job2's watermark is unchanged, read(None) is replay_gap and stored bytes equal the rows' sum. Declare mutant d4_expire_resets_the_watermark_on_an_already_pruned_job with that check.",
+      "lens": "journal",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed at a4598b0 by reading the code. In expire_journal (0017_stream_journal.sql:296-327) the candidate FOR query is grouped and sorted, so its job list is fixed when the loop opens. Each statement inside the loop takes a fresh READ COMMITTED snapshot. If another pruner commits a prune of job2 after B built its list and before B reaches job2, B's `for update skip locked` on job2 succeeds and the newest-expired select finds nothing. The `if not found then continue; end if;` at lines 310-313 is the only thing that stops the next part. Without it, SELECT INTO sets v_generation and v_sequence to NULL. The delete then matches nothing, because `<= (NULL,NULL)` is null, and the UPDATE writes journal_pruned_generation/sequence = NULL. read_journal's gap check `(pos) < (NULL,NULL)` is then null, so a cursor-less read returns the surviving suffix with no replay_gap: a silent prefix loss. Only this cross-transaction race reaches the guard. A single session cannot, because nothing else in one transaction removes a candidate's expired chunks, and a GC'd job fails the jobs FOR UPDATE check first. No test runs two pruners with a stale candidate list. test_journal_races.py:145 and check_journal_races (checks_journal.py:905) only cover pruner-vs-append/holder. migration_mutants.py has no mutant on this guard: the d4_ list at lines 2085-2255 covers the prefix, watermark, bytes and skip-locked guards but not this one. So the reviewer's mutant has to survive every existing check, which matches the reported full-suite survival. The race can happen in production: any gateway replica can call JournalStore.expire through infrx/state/journal.py:91. The shipped code is correct, so this is not a live defect. It is a durability/no-silent-gap invariant whose only guard has no test that can kill it, and the stated criteria count that as blocking. The reviewer's proposed fix is small and fits: a third connection holds job1's stream_chunks FOR UPDATE, pruner B runs in a thread, pruner A prunes job2, then assert job2's watermark is unchanged, read(None) returns replay_gap, and the stored bytes match. Add it to check_journal_races and declare it as mutant d4_expire_resets_the_watermark_on_an_already_pruned_job.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed from the code at a4598b0 (no live run needed). In expire_journal, the candidate FOR loop runs its query once, under the snapshot taken when the loop starts. A second pruner can then take the job row lock (SKIP LOCKED only skips rows that are locked right now) on a job that another pruner has already pruned and committed. At that point the inner newest-expired SELECT INTO finds no rows. If the `if not found then continue; end if;` at lines 311-313 is removed, PL/pgSQL sets v_generation and v_sequence to NULL. The DELETE with (generation,sequence) <= (NULL,NULL) removes nothing, v_bytes is 0, and the UPDATE writes journal_pruned_generation/sequence = NULL. read_journal defaults a missing cursor to (0,0) (lines 236-237). The replay_gap test `(0,0) < (NULL,NULL)` yields NULL, not true, and the rows that are left make the journal_expired branch unreachable. So a cursor-less replay returns the leftover suffix with no error: a silent prefix loss. The code expects concurrent pruners (SKIP LOCKED plus the 'never waits on a job row' comment), so this path is real. The shipped code is correct. But the D4 migration mutant list (migration_mutants.py lines 2213-2246: d4_expire_on_the_callers_clock, d4_prune_without_a_watermark, d4_prune_not_a_prefix, d4_sequence_reissues_a_pruned_cursor, d4_prune_keeps_bytes_charged, d4_prune_frees_twice, d4_expire_waits_on_a_locked_job) has no mutant for this guard. The only expire race checks (test_journal_races.py:145 and checks_journal.py:933) cover skipping a locked job, not a job pruned by another pruner after the candidate list was built. Both are consistent with the reviewer's report that the mutant survived. The watermark-only-grows / no-silent-gap durability invariant therefore has no killable test on its concurrent path. By the rubric that makes it blocking. The fix is test-only: a two-pruner race check plus a declared mutant.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "J2",
+      "severity": "blocking",
+      "file": "apps/app/supabase/migrations/0017_stream_journal.sql",
+      "line": "211",
+      "claim_broken": "A claimed invariant with no killable test. Evidence item 1 and Limits 2 say a terminal event on a journal with no chunks gets the frozen default TTL of 3600 s.",
+      "evidence": "The mutant my_empty_journal_terminal_ttl_30s (`v_ttl := interval '3600 seconds'` -> `'30 seconds'`) SURVIVED all 20 checks_journal checks and the full test_streamstore_conformance + test_journal_races + test_e3b_drills + test_journal run ('48 passed, 5 xfailed in 25.98s'). one_terminal_last (checks_journal.py:133) never checks expires_at, and no path sets a TTL on the no-chunk case. My probe measured the shipped behaviour as correct: a cancel of an unpublished running job gives [(1,1,'terminal')] with expires_at - persisted_at == 3600 s. The probe killed the mutant: 'AssertionError: terminal_no_chunks'. In production the mutant would make an early-cancelled or preparation-failed stream answer journal_expired (410) to a client that reconnects after 30 s.",
+      "minimal_fix": "In check_terminal_every_path, for the paths with no output (0012 preparation failure, cancel before publication, queue_wait_expired, preparation_failed), assert terminal['expires_at'] - terminal['persisted_at'] == timedelta(seconds=3600). Then declare a d4_ migration mutant on that literal.",
+      "lens": "journal",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "The finding holds at a4598b0. In 0017_stream_journal.sql:211, `v_ttl := interval '3600 seconds'` is the only thing that sets the TTL of a terminal event on a journal with no chunks. The evidence file D4-ce7659b.md claims this 3600 s default twice, in item 1 (line 36) and in Limits 2 (line 283). No test checks it. `one_terminal_last` in checks_journal.py:133 never reads expires_at, and no d4_ migration mutant touches this literal.\n\nI reproduced the reviewer's result in a scratch copy of a4598b0. I changed the literal to '30 seconds' and pointed pgharness at my own container, infrx-review-d4-verify-1-0, on port 55602 with its own lock and database. I then ran a wider set than the reviewer did: test_jobstore_conformance, test_streamstore_conformance, test_journal, test_journal_races, test_e3b_drills, test_journal_units, test_leases, test_admission and test_store_requests, with INFRX_D_TASK=d4. The result was 129 passed, 29 xfailed, 1 xpassed. The mutant survived everything, including the JobStore conformance suite the reviewer had not run. I confirmed that migrations.DIR resolved to the mutated scratch copy, so the mutant was really applied.\n\nThe conformance cases that advance time only move past journal_chunk_ttl_s + 1, and both the 3600 s and 30 s versions have expired by then. No case reads a chunk-free terminal event between 30 s and 3600 s.\n\nThis is a claimed invariant with no killable test, and it matters in production. A stream that was cancelled early, expired in the queue or failed preparation would answer journal_expired (410) to a client that reconnects after the shorter TTL.\n\nThe scratch copy and lock file are removed, and the harness removed its container at exit.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed this from the code at a4598b0 without running a PostgreSQL check. In 0017_stream_journal.sql:211, journal_terminal_event sets `v_ttl := interval '3600 seconds'` on the `if not found` branch, the case where the job has no chunks. Evidence D4-ce7659b.md item 1 and Limits 2 both state that this default is 3600 s, so it is a claimed invariant.\n\nNo test checks that value:\n- one_terminal_last (checks_journal.py:133) asserts count, position, payload, bytes, persisted_at == settled_at and journal_stored_bytes. It never reads expires_at.\n- check_terminal_every_path runs the no-output paths (0012 preparation_claim, cancel_unpublished, queue_wait_expired, preparation_reaped) only through one_terminal_last.\n- The only expires_at assertions in checks_journal are on appended delta chunks: check_append at lines 176 and 190, and check_expire_clock.\n- The conformance cases that advance by journal_chunk_ttl_s+1 all have chunks, or only need expiry to have happened by then. A shorter TTL passes them all.\n- migration_mutants.py has no d4_ mutant on that literal. The nearest one, d4_terminal_event_in_generation_one_always, changes the generation, not the TTL.\n\nSo a 30 s mutant survives. That matches the reviewer's run, and their probe killed it. The shipped behaviour is correct. By the task's own definition, a claimed invariant with no killable test is blocking. It has real consequences: under the mutant, a client that reconnects more than 30 s after an early cancel or a preparation failure would get journal_expired (410). The fix is small: assert `expires_at - persisted_at == 3600 s` on the no-output paths and add a d4_ migration mutant on the literal.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "M1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/state/journal.py",
+      "line": "47 (append -> PgJobStore._call -> jobstore.py:69-91 domain_error)",
+      "claim_broken": "The append accepts or refuses with a typed error, and Pg matches the fake: 'one recorded delta from the fake' and 'every size measured here'. A payload that jsonb cannot store makes PgStreamStore.append raise a raw psycopg error, while the fake accepts and stores the same payload. This delta is not recorded, not typed and not tested.",
+      "evidence": "On both images, with a running job and the adapter's _append_args: {\"content\": \"a\\x00b\"} -> 'untyped 22P05' (jsonb rejects \\u0000); {\"x\": NaN} -> 'untyped 22P02'; {\"x\": inf} -> 'untyped 22P02'. The fake (streamstore_factory, same lease flow) accepts all three and stores them at 22, 9 and 14 compact bytes. domain_error maps only P0001/23514/55000/P0002/22023, so the raw exception leaves the port. A model can emit a NUL byte token in delta text (byte-level BPE). The worker then cannot store the chunk or classify the error, retries the same batch until the lease expires, and the stream ends by R29 with the output lost. The fake-driven W engine never sees this.",
+      "minimal_fix": "Pick one rule and apply it on both sides. Either (a) refuse the payload as typed: in infrx.append, or in PgStreamStore.append before the call, map 22P05/22P02 on the payload to errors.JournalWriteFailed (or InvalidRequest), and make the fake refuse NUL/NaN/Inf the same way; or (b) sanitize the payload (escape NUL, reject non-finite numbers) in the one place both stores share. Add one StreamStore conformance case pinning the result, and record the delta in the evidence Limits.",
+      "lens": "money",
+      "votes": [
+        {
+          "refuted": false,
+          "severity_if_real": "nonblocking",
+          "reason": "The mechanism is real at a4598b0, but the failure scenario is wrong, so this is nonblocking. What holds: PgStreamStore.append (journal.py:47) calls PgJobStore._call (jobstore.py:138-149). That sends the args as Jsonb(args), serialized with the default json.dumps, which allows NaN. Postgres then refuses \\u0000 in jsonb (22P05) and NaN/Infinity tokens (22P02). domain_error (jobstore.py:69-91) maps only P0001/23514/55000/P0002/22023, so a raw psycopg DataError leaves the port. The fake has no such check, so the two stores differ on this input class. No conformance case covers it, and the D4 evidence Limits do not record it. What is refuted: the damage the reviewer describes. worker/attempt.py:_flush (about lines 343-356) catches `except Exception` around stream.append and raises _JournalFailed. The attempt handler (about line 246) settles TerminalCause.journal_write_failed right away. So there is no retry of the same batch until the lease expires, and no R29 loss path. The outcome is a typed, deterministic settlement, and nothing uncommitted is relayed. NaN and Inf cannot be reached from the worker: _delta_payload builds delta payloads from strings only (raw/visible pieces). The only reachable case is a model emitting a literal NUL character in its output text, which is rare. That job fails with journal_write_failed on Postgres but would complete on the fake. It is a conformance gap and a small behavior difference, not a money, capacity or durability hole. Two follow-ups are still worth a note, both nonblocking: (1) the psycopg message text, which may carry some of the JSON context, lands in result.detail; (2) either map 22P05/22P02 to JournalWriteFailed in _call/append and make the fake refuse NUL/NaN the same way, or escape NUL in the engine. Add one conformance case, and record the difference in Limits."
+        },
+        {
+          "refuted": false,
+          "reason": "The defect is real at a4598b0, but the damage the reviewer describes is overstated, so it is nonblocking.\n\nConfirmed:\n- `PgJobStore._call` (jobstore.py:138-149) sends the args as `Jsonb(args)`, and psycopg serializes them with the default `json.dumps`. I checked the output bytes: `{\"content\": \"a\\u0000b\", \"x\": NaN, \"y\": Infinity}`.\n- I ran a throwaway postgres:16 container, infrx-review-d4-verify-2-1 on port 55605, and removed it after. Casting those values to jsonb fails with 22P05 UntranslatableCharacter for NUL and 22P02 InvalidTextRepresentation for NaN and for inf.\n- `domain_error` does not map 22P05 or 22P02, so a raw psycopg error leaves `PgStreamStore.append`.\n- `EngineEvent.payload` is a plain `dict[str, Any]` on a Record with no inf/nan or NUL check. The fake's `append` (fakes/state.py:1080) stores these payloads without complaint.\n- NUL can reach the store: engine.py:1023 `json.loads` the vLLM SSE, and `_delta_events` puts that text into the delta payloads unchanged.\nSo the fake and Pg differ, this difference is not recorded, and no test covers it.\n\nRefuted, the claimed consequence (\"the worker cannot classify the error, retries the same batch until the lease expires, and the stream ends by R29 with the output lost\"):\n- attempt.py:350-355 `_flush` catches both `errors.DomainError` and plain `Exception` and turns each into `_JournalFailed`.\n- attempt.py:246-249 then settles the job right away with `TerminalCause.journal_write_failed`.\n- There is no retry loop and no wait for the lease to expire. A raw error ends exactly as a typed refusal would. Fix (a), typing the error, would change nothing the worker does.\n- Nothing is relayed, because relay only ever sees committed chunks. So nothing is corrupted, no ledger or capacity hole opens, and no committed output is lost.\n\nWhat remains:\n- A fake/Pg conformance gap: on Pg, a job whose model output contains a NUL fails cleanly as journal_write_failed; on the fake it succeeds.\n- The port lets an untyped error out.\n- The D4 evidence overclaims (\"one recorded delta from the fake\").\nThese are worth fixing: sanitize or refuse NUL and non-finite numbers in the one place both stores share, add one conformance case, and record the delta in Limits. None of them is a durability, money or capacity hole, so this is nonblocking.",
+          "severity_if_real": "nonblocking"
+        }
+      ]
+    },
+    {
+      "id": "M2",
+      "severity": "blocking",
+      "file": "research/plan/evidence/d/D4-ce7659b.md",
+      "line": "286 (Limit 5), 308 (handover 9)",
+      "claim_broken": "'The stored byte measure = compact_bytes + one byte per separator.' The handover tells W to size deltas against it. The claim is false for JSON numbers: jsonb normalizes an exponent-form float to fixed-point text, so the stored measure can exceed compact by hundreds of bytes per number.",
+      "evidence": "octet_length(%s::jsonb::text) against len(compact_bytes(p)), on both images: {\"logprob\":1e300} compact 18 / pg 314 (delta 296, 1 separator); {\"logprob\":-1.2e-300} 21/317; {\"x\":1e16} 11/24; {\"logprob\":-3.2e-07} (a vLLM-style logprob) 20/24; [1e300]*10 77/3037. Boundary: {\"x\":[1e300]*n} is 1048572 compact bytes, under the 1048576 limit, and the fake accepts it (FakeStreamStore.append returned 1 chunk, bytes=1048572). The same payload is 45387892 bytes stored, and infrx.append answers journal_write_failed. So the fake accepts and Pg refuses (W request 9), at up to 43x. This is not a capacity hole: Pg measures its own stored text. The recorded delta is wrong, though, and no test pins a numeric payload.",
+      "minimal_fix": "Correct Limit 5 and handover 9: the stored measure is octet_length(jsonb::text), which adds one byte per separator AND re-renders numbers in fixed-point, so W must emit numbers in fixed-point or measure with the stored rule. Add one assertion (check_append_oversize or a unit) that pins a float payload's two measures. Optionally have the fake measure numbers the jsonb way.",
+      "lens": "money",
+      "votes": [
+        {
+          "refuted": true,
+          "reason": "The factual part is right, but it is not a blocking defect at a4598b0. Postgres jsonb stores numbers as numeric, and numeric_out never uses exponent form. So the stored text of 1e300 is 301 digits, while Python's compact_bytes writes \"1e+300\". Limit 5 and handover 9 in D4-ce7659b.md are therefore incomplete: they say the stored measure is compact plus one byte per separator, which only holds for payloads without floats. That is a documentation imprecision with no reachable consequence.\n\nFour points, from code I read and no live Postgres run:\n1. Capacity is safe. 0017 limits on octet_length(payload::text), the measure it stores (0003's CHECK binds bytes to it), so nothing oversized is stored. The reviewer concedes this.\n2. W (the handover-9 reader) never emits a JSON number in a journal event. In infrx/worker/engine.py:\n   - _delta_payload returns only {\"visible\": str, \"raw\": str}.\n   - progress is {\"phase\": \"running\"}.\n   - usage_event's payload is {} or {\"reason\", \"certainty\": \"unknown\"}, with usage carried outside the payload.\n   - attempt.py emits {\"visible\": str}.\n   - logprobs and top_logprobs are in REFUSED_PARAMETERS, so a vLLM-style logprob float never reaches a payload.\n   The fake-accepts/Pg-refuses case at 1048572 compact bytes is unreachable from any producer at this head. For the strings and ints actually emitted, the doc's separator-only delta holds, and check_append_oversize pins it (size == compact + 1).\n3. Limit 4 already records this fake-versus-Pg gap as \"not in conformance\", so a wider gap for a payload shape no one produces is not an untested money or durability invariant.\n4. The fix is a doc correction plus an optional float-payload assertion. That is worth doing, but it is nonblocking.",
+          "severity_if_real": "nonblocking"
+        },
+        {
+          "refuted": false,
+          "reason": "The documentation defect is real, but it is not blocking. At a4598b0, Limit 5 (D4-ce7659b.md:286) says the stored measure is compact_bytes plus one byte per separator. That is not true for JSON numbers. jsonb stores numbers as PostgreSQL numeric, and numeric's text output never uses an exponent, so octet_length(payload::jsonb::text) re-renders a Python float like 1e-07 or 1e300 in fixed-point and grows. check_append_oversize (tests/d/checks_journal.py:199-230) pins the gap only for a one-key string payload (size == compact + 1), and no test uses a float payload. So the reviewer's point that the fake accepts and Pg refuses a float payload just under the limit holds as a fake/Pg divergence.\n\nWhy it is not blocking:\n(1) Pg limits and stores on its own octet_length of the stored text, and 0003's CHECK binds bytes to that measure. There is no money, capacity or durability hole; the reviewer says so too.\n(2) Nothing that writes to the journal emits floats. W's engine refuses logprobs and top_logprobs (REFUSED_PARAMETERS, engine.py:93). Its event payloads are delta strings ({raw, visible}), {\"phase\":\"running\"}, and usage {reason, certainty} or ints. attempt.py sends {\"visible\": str}, and the conformance builders use strings and ints. The engine's sizing budget (PAYLOAD_OVERHEAD_BYTES=64 plus string-only splitting) never meets a number whose fixed-point form grows.\n(3) Handover 9 already tells W to size against the stored measure, not compact_bytes. Only the description of how the two differ is incomplete.\n\nThis belongs in a nonblocking note:\n- Reword Limit 5 to say numbers are also re-rendered in fixed-point.\n- Optionally pin one float payload's two measures.\n- Optionally note the fake's divergence next to Limit 4.\n\nI did not run the experiment. The fixed-point behavior is standard numeric_out behavior, and the refutation turns on reachability, not on the measurement.",
+          "severity_if_real": "nonblocking"
+        }
+      ]
+    },
+    {
+      "id": "H1",
+      "severity": "blocking",
+      "file": "apps/app/supabase/migrations/0017_stream_journal.sql",
+      "line": "288-300",
+      "claim_broken": "Claimed: 'expire skips a locked job and is bounded per pass by jobs'. The brief (item 5) also requires 'bounded per pass'. No test can kill a mutant that removes the bound.",
+      "evidence": "Hand mutant V1 removes `limit v_limit` from the expire_journal candidate query (a single edit that deletes the per-pass bound). All three pruning checks still pass: expire_prefix -> 'PASSED: a prefix per pass, the watermark only grows\u2026'; expire_bytes -> PASSED; journal_races -> PASSED. `PgStreamStore.expire` never sends `limit`, so the 1000 default is never exercised, and no check ever calls expire_journal with {limit}.",
+      "minimal_fix": "Add an assertion to check_expire_prefix (or check_expire_bytes): expire two jobs' chunks, call infrx.expire_journal({'now': null, 'limit': 1}) and assert only one job is pruned in that pass and the other in the next. Add D4 mutant `d4_expire_unbounded_per_pass` (drop `limit v_limit`) killed there. The alternative is to withdraw the claim.",
+      "lens": "honesty",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this at a4598b0 by reading the code. I did not run PostgreSQL, because no code path could observe the mutant. In 0017_stream_journal.sql, the only per-pass bound in expire_journal is the candidate query's `limit v_limit`, where v_limit = clamp(coalesce(args.limit, 1000), 1, 10000). Nothing ever sends `limit`: PgStreamStore.expire in infrx/state/journal.py:91-95 sends only `now`, the checks_journal.expire helper (line 61) sends only `now`, and the direct calls in checks_journal.py:933-935 and test_journal_races.py:158-162 also pass only {now: None}. The only fixture of more than 1000 is 1001 chunks in a single job (checks_journal.py:652). No test creates more than 1000 jobs with expired chunks, so the 1000 default never binds. Dropping `limit v_limit` therefore changes no observable result in any check. migration_mutants.py also has no D4 mutant for the bound: the d4_expire_* and d4_prune_* mutants cover the caller's clock, the watermark, the prefix, bytes and the locked job, but not the limit. The evidence (D4-ce7659b.md item 6, and the ponytail comment in the SQL) states 'bounded per pass by jobs (1000)' as a property of the implementation. That is an invariant with no killable test. Without the bound, one sweep transaction locks and deletes across every job with expired chunks, including settled jobs that the active-job cap does not limit. This fits the rubric's 'invariant with no killable test' (a capacity/latency hole), so it is blocking. The fix is small: call expire_journal with {now: null, limit: 1} over two expired jobs, assert that one job is pruned per pass, and add a mutant d4_expire_unbounded_per_pass that this assertion kills.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "The coverage gap is real at a4598b0, but it is nonblocking. I checked it by reading the code; I did not need to run the mutant. The bound itself exists and is correct: 0017_stream_journal.sql lines 288-300 compute v_limit (default 1000, clamped to 1..10000) and put `limit v_limit` on the candidate-job query. Nothing ever exercises it. PgStreamStore.expire (infrx/state/journal.py:94) sends only {now}. Every test call of expire_journal (checks_journal.py:62 and :933/935, test_journal_races.py:158-162) passes only {now}. No expire check creates more than 1000 expired jobs, and no D4 mutant in code_mutants_d4.py targets the bound. So removing `limit v_limit` survives every check, as the reviewer says.\n\nThe blocking part does not hold. The reviewer says brief item 5 requires 'bounded per pass'. It does not: item 5 in the coordinator brief (wave3-briefs-D4-G2-G4U-E3B2.json) asks only for R7 clock bounding, a persisted watermark, bytes freed exactly once, and usage/readiness reporting. The D-durable-state D4 acceptance does not mention it either. The quoted claim 'expire skips a locked job and is bounded per pass by jobs' merges two sources: the SKIP LOCKED race check (checks_journal.py:936, which is tested) and the evidence doc's \u00a7287 ponytail known-limitation note. That note describes a pruning-throughput shortcut, not an acceptance invariant.\n\nRemoving the bound would cost nothing in money, capacity accounting or durability. Each job's prefix delete and watermark update stay correct, and bytes are still freed exactly once. The only effect would be a longer single sweep transaction when many jobs have expired. The fix is a worthwhile hardening, and cheap: one limit:1 assertion plus a d4_expire_unbounded_per_pass mutant. It should not gate D4.",
+          "severity_if_real": "nonblocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "unverified_blocking": [],
+  "nonblocking": [
+    {
+      "id": "J3",
+      "severity": "nonblocking",
+      "file": "apps/app/supabase/migrations/0017_stream_journal.sql",
+      "line": "222",
+      "claim_broken": "Exactly one terminal event per terminalization. The `old.settled_at is null` clause of the trigger's WHEN has no killing test.",
+      "evidence": "The mutant my_trigger_refires_on_same_value (WHEN reduced to `new.settled_at is not null and reserved > 0`) SURVIVED all D4 PostgreSQL suites ('48 passed, 5 xfailed in 26.30s'). My probe, which rewrites settled_at to the same value on a terminal job (allowed by jobs_guard), got 'UniqueViolation: duplicate key value violates unique constraint stream_chunks_one_terminal_idx'. 0003's one-terminal index still blocks a doubled event, so the effect is a failed transaction, not a double event. A D5 idempotent write such as `settled_at = coalesce(settled_at, now())` would start failing, though, and nothing pins the clause. Separately, measured: D5 cannot split the outcome and settled_at across two statements, because the first UPDATE is refused by 0003's jobs_terminal_is_one_fact ('CheckViolation ... jobs_terminal_is_one_fact'). So the 'double event or none' question cannot arise.",
+      "minimal_fix": "In check_terminal_every_path, after a cancel, run `update infrx.jobs set settled_at = settled_at` as the owner. Assert it succeeds and that one_terminal_last still holds. Then declare the WHEN-clause mutant.",
+      "lens": "journal"
+    },
+    {
+      "id": "J4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/contracts/fakes/state.py",
+      "line": "1235",
+      "claim_broken": "The recorded delta from the fake (a fully pruned journal of a job that is still running)",
+      "evidence": "Measured on both sides with a 30 s TTL, appending a and b, advancing 31 s, then expire. PG: reads with None and with (1,2) both give journal_expired. An append then lands at (1,3); after that, None and (1,1) give replay_gap, and (1,2) returns [(1,3,'delta')]. So no silent loss, only a transient 410 on a live job. Fake: expire returns 2 and both reads give JournalExpired. The next append is REISSUED at (1,1), below the fake's own watermark (1,2), and every read afterwards is JournalExpired forever. The fake reuses a pruned cursor; D4's behaviour is the safer one. Unreachable at the default limits (generation_timeout_s 300 < journal_chunk_ttl_s 3600).",
+      "minimal_fix": "None for D4. Record it for F: the fake's append should continue past pruned_to (or refuse), never restart at 1. A conformance case for this state, if one is ever added, should require PG's behaviour.",
+      "lens": "journal"
+    },
+    {
+      "id": "J5",
+      "severity": "nonblocking",
+      "file": "apps/app/supabase/migrations/0017_stream_journal.sql",
+      "line": "245",
+      "claim_broken": "A cursor the journal never issued is invalid_cursor",
+      "evidence": "The past-head check compares against the head only. After a requeue, a job whose generation 2 holds (2,1..3) answers the never-issued cursor (1,5) with [(2,1),(2,2),(2,3)] and no error (measured). The order is still correct and nothing is skipped, so this is not a silent reorder or a gap, but it is inconsistent with the invalid_cursor rule for cursors past the head.",
+      "minimal_fix": "Optional: document it as accepted, or refuse a cursor whose (generation, sequence) is not \u2264 that generation's max issued sequence.",
+      "lens": "journal"
+    },
+    {
+      "id": "M3",
+      "severity": "nonblocking",
+      "file": "apps/app/supabase/migrations/0017_stream_journal.sql",
+      "line": "223",
+      "claim_broken": "'The trigger fires only when journal_reserved_bytes > 0' is a claimed invariant, but no named check kills its removal.",
+      "evidence": "My mutant rv_when_no_reservation_guard drops 'and new.journal_reserved_bytes > 0' from the WHEN clause. Under admission/terminal_every_path it SURVIVED. Under volume/index_plans it is SETUP_ERROR ('journal_capacity_exhausted: job 51000000-\u2026 has no journal room for its terminal event'), which R40 does not count as a kill. Production impact is nil (every admitted job reserves > 0). The guard exists for D1's raw fixture rows.",
+      "minimal_fix": "Add a named check (for example in check_terminal_every_path) that settles a job row with journal_reserved_bytes = 0 and asserts it terminalizes with no chunk. Or record the guard as fixture-only, with no invariant claimed.",
+      "lens": "money"
+    },
+    {
+      "id": "M4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/contracts/fakes/state.py",
+      "line": "176-185 (_Journal.store)",
+      "claim_broken": "'One recorded delta from the fake.' The fake re-checks the per-job ceiling and the global total on every append using the CURRENT limits. Pg uses the job's admitted journal_reserved_bytes and has no global check on append. After a retune the two disagree.",
+      "evidence": "Read in code, not run: fake ceiling = self.limits.journal_job_reserve_bytes - min(1024, \u2026//2), plus total() - before + after > self.limits.journal_total_bytes. 0017:149-150 uses j.journal_reserved_bytes (fixed at admission) and no global term. Lowering JOURNAL_TOTAL_BYTES or JOURNAL_JOB_RESERVE_BYTES mid-flight makes the fake refuse appends that Pg accepts. Pg's behavior is the safe one (the charge cannot rise), so this is a record gap, not a hole.",
+      "minimal_fix": "List it as a second delta under Limits 4, or make the fake use the admitted reservation.",
+      "lens": "money"
+    },
+    {
+      "id": "H2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/test_streamstore_conformance.py",
+      "line": "46-49 (also test_jobstore_conformance.py _param/RACY)",
+      "claim_broken": "The partition is 'strict' and names its owner, but no xfail pins its expected exception. A D4 regression in the half of a case that runs before `complete` would be absorbed as an xfail. The RACY entry is non-strict and would hide any failure.",
+      "evidence": "Using --runxfail, 28 of the 29 xfails die with `NotImplementedError: JobStore.complete: the fence held; the settlement is D5's` and the F2 case with `InvalidApiKey`. That matches every stated reason, so the partition is honest today. But `pytest.mark.xfail(strict=True, reason=...)` has no `raises=`. dur_output__a_worker_cannot_forge_a_terminal_event, for example, runs D4's forged-append refusal, an empty read and a real append before it reaches `complete`, and none of those is protected. The RACY case XPASSed 20 of 20 in isolation and in the full sweep, so on this rig it is effectively deterministic.",
+      "minimal_fix": "Add `raises=NotImplementedError` to the _D5 xfails and `raises=errors.InvalidApiKey` to the F2 one. Give RACY `raises=NotImplementedError` as well, or promote it to must-pass once D5 lands.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H3",
+      "severity": "nonblocking",
+      "file": "apps/app/supabase/migrations/0017_stream_journal.sql",
+      "line": "205-212, 221-223, 233",
+      "claim_broken": "Four design-note claims can be removed by a single edit without any test failing: (a) with no chunks, the terminal event lands at the job's LAST inference generation; (b) the trigger fires only when journal_reserved_bytes > 0; (c) the terminal-event TTL without chunks is the frozen default of 3600 s; (d) read_journal is STABLE, so its head, gap and page reads share one snapshot.",
+      "evidence": "V8b `max(a.generation)` -> `min(a.generation)`: terminal_every_path, expire_prefix and append_past_the_instant all PASSED. V3 (drop `and new.journal_reserved_bytes > 0` from WHEN): terminal_every_path PASSED. V7 ('3600 seconds' -> '7200 seconds'): terminal_every_path and expire_prefix PASSED. V5 (drop `stable`): read_typed PASSED. None of these is in the implementer's headline claim list; they appear in the evidence's 'Design decisions' and 'Limits' sections.",
+      "minimal_fix": "(a) In check_terminal_every_path, requeue a job to generation 2 with no output, cancel it, and assert the terminal event is at (2,1). (c) Assert expires_at - committed_at = 3600 s on a chunkless terminal event. (b) and (d): either add checks (for b, a raw zero-reservation row terminalizes with no event) or mark them untested in the evidence.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/checks_journal.py",
+      "line": "479",
+      "claim_broken": "R83 kill shape: `d4_terminal_trigger_on_any_update` is killed by a unique-index crash that the check's fixture step reports as a wrong code. No assertion about the invariant fires, and the invariant is that a running job's journal never shows a terminal event.",
+      "evidence": "Probe under the mutant: `claim past instant: ('untyped 23505', None)`, so the nested UPDATE re-fires the trigger and 0003's one-terminal index refuses the second insert. The kill is the bare `assert claim(...)[0] == \"already_terminal\"` at checks_journal.py:479. The evidence discloses this accurately. Because of 0003's index, every 'extra terminal event' mutant crashes the same way, so no check asserts the invariant for D4's own trigger guard. d4_sequence_restarts_per_batch dies the same way through the PK (`untyped 23505` at :186), which is acceptable.",
+      "minimal_fix": "Keep the mutant, but add a direct assertion (for example in check_append) that after claim, heartbeat and append on a running job the journal holds no terminal row and settled_at is null. Alternatively record the kill as 'via 0003 one-terminal index' in the mutant's `why`.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/test_e3b_drills.py",
+      "line": "6-8",
+      "claim_broken": "The module docstring still says dr05 'is not here', yet D4 adds test_e3b_dr05 below it.",
+      "evidence": "The docstring reads '\u2026dr05 (stale append) also needs D4's StreamStore (`append`/`read_owned`), so it is not here\u2026', followed by D4's new paragraph and `def test_e3b_dr05_a_stale_generation_cannot_append`.",
+      "minimal_fix": "Delete the stale sentence.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H6",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/d/D4-ce7659b.md",
+      "line": "19",
+      "claim_broken": "The per-item commit table assigns commits imprecisely. The 107-byte widest-payload room check in the trigger (item 3's R39 recheck) and the sequence-above-watermark logic (item 5) arrived in 543c18b ('D4 item 1'), which edits 0017 by 29 lines. Item 3's row cites only 7f4aa40 and 627edf8.",
+      "evidence": "`git show --stat 543c18b` shows `0017_stream_journal.sql | 29 +-`. Its message says: 'the sequence is read under the fence's row lock and never at or below the prune watermark; the terminal trigger's room check uses the widest terminal payload (107 bytes\u2026)'.",
+      "minimal_fix": "Add 543c18b to item 3's and item 5's commit cells.",
+      "lens": "honesty"
+    }
+  ]
+}

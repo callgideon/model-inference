@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T11:22:39Z",
+  "updated": "2026-09-23T11:42:37Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -17,7 +17,7 @@
     },
     "D4": {
       "lane": "codex-d4 / codex/d4-stream-journal",
-      "phase": "HANDED BACK a4598b0 (impl ce7659b); Opus review running (3 lenses + refuters); D5 dispatch at the CONFIRMED head",
+      "phase": "review fix_required at a4598b0 (5 blocking: two-pruner watermark race unkilled, empty-journal terminal TTL unkilled, unstorable jsonb payloads untyped vs the fake, stored byte measure claim false for floats, expire per-pass bound unkilled; 10 nonblocking) \u2192 fix round running; confirmation next; D5 at the confirmed head",
       "since": "2026-09-23T05:12:27Z",
       "note": "0017 stream journal: fenced append, global budget without a global lock, terminal event via AFTER UPDATE OF settled_at trigger, read_owned replay (typed gaps/expiry/cursor), pruning + usage, races, E3B drills dr05/06/08/10, CREDIT journal + privileges; sweeps 788 both images; 44 migration + 9 code mutants; requests: harness 0017 line, Makefile += tests/d/test_code_mutants_d4.py, G2 compose PgStreamStore, W3 expire() in reap_once, I3B gauge, pgstate additions, E3B2 rig hook"
     },
@@ -29,7 +29,7 @@
     },
     "W4": {
       "lane": "codex-w4 / codex/w4-measured-tuning",
-      "phase": "phase A confirmation at b0a44a0: box-safety PASS, decision fix_required on 2 test-coverage gaps (D2 reconciliation clauses; bench retries clauses) + 8 nonblocking \u2192 round 3 running; re-confirmation next",
+      "phase": "round 3 HANDED BACK ba95e42 (both coverage gaps + all 8 nonblocking closed; W4 list 106 = 104 mutants); re-confirmation (decision lens) running \u2192 merge",
       "since": "2026-09-23T05:40:38Z",
       "note": "protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge"
     },
@@ -48,8 +48,8 @@
   },
   "reviews": {
     "W4": {
-      "phase": "confirmation fix_required at b0a44a0 (wf_6fb50020-bf6; JSON evidence/w/W4-confirm-b0a44a0.json) \u2192 round 3",
-      "since": "2026-09-23T11:09:23Z"
+      "phase": "re-confirmation at ba95e42 running (round 2 fix_required at b0a44a0)",
+      "since": "2026-09-23T11:42:37Z"
     },
     "G4U": {
       "phase": "MERGED 7d21fa7 after confirmation pass at 962b2b1",
@@ -62,6 +62,10 @@
     "E3B2": {
       "phase": "fix_required at 80cef22 (wf_345bc3f0-8ec; 13 agents; JSON evidence/e/E3B2-review-80cef22.json) \u2192 fix round; confirmation next",
       "since": "2026-09-23T11:20:35Z"
+    },
+    "D4": {
+      "phase": "fix_required at a4598b0 (wf_db54ab74-d3f; 13 agents; JSON evidence/d/D4-review-a4598b0.json) \u2192 fix round",
+      "since": "2026-09-23T11:42:37Z"
     }
   },
   "gates": {
