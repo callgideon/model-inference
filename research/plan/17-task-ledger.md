@@ -2,7 +2,7 @@
 
 Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/validate_plan.py --write-ledger`. Update the manifest only after evidence, then regenerate this file. Task status is separate from current dispatch priority.
 
-**119 records; 113 active; 6 retired; 86 planned; 22 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
+**119 records; 113 active; 6 retired; 85 planned; 23 implemented; 5 integrated.** Original v1 statuses are preserved and do not establish product-v2 readiness. See [the audit](10-wave2-platform-audit.md).
 
 **Current scope:** complete the robust and measured Marlin endpoint backend first. The E4B dependency closure is the immediate implementation set; App/browser work follows backend acceptance and Lab follows App. See [backend-first handoffs](18-marlin-backend-first.md), [the full plan](12-complete-build-plan.md), [pending inputs](15-pending-inputs.md) and [fresh-session prompt](16-fresh-session-handoff.md).
 
@@ -44,7 +44,7 @@ Generated from [manifest v4](tasks.json) by `python3 research/plan/scripts/valid
 | I2B | planned / I | [Reproducible Marlin endpoint deployment independent of frontends](18-marlin-backend-first.md) | I1, F2P | E3B, I0, W3, G6B |
 | I3B | planned / I | [Backend recovery, observability, restore and rollback proof](18-marlin-backend-first.md) | I2B, F2P | E3B |
 | E1B | planned / E | [Measure the end-to-end Marlin baseline and operating envelope](18-marlin-backend-first.md) | E1, S2M, F2P | E3B, I2B, W3 |
-| M4 | planned / M | [Optimize bounded video retrieval, decoding and preparation](18-marlin-backend-first.md) | M2, M3, F2P | E1B, W2 |
+| M4 | implemented / M | [Optimize bounded video retrieval, decoding and preparation](18-marlin-backend-first.md) | M2, M3, F2P | E1B, W2 |
 | W4 | planned / W | [Tune Marlin GPU serving and scheduler admission from measured evidence](18-marlin-backend-first.md) | W3, F2P | E1B, M4, Q3 |
 | E4B | planned / E | [Certify the robust and measured Marlin endpoint release candidate](18-marlin-backend-first.md) | E3B, F2P | I3B, E1B, M4, W4 |
 

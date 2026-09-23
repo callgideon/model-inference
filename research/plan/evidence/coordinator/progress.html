@@ -27,19 +27,19 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T02:58:04Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T03:03:16Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
-<div class="tile done"><b>12</b><span>done</span></div>
-<div class="tile prog"><b>11</b><span>in progress</span></div>
+<div class="tile done"><b>13</b><span>done</span></div>
+<div class="tile prog"><b>10</b><span>in progress</span></div>
 <div class="tile rem"><b>7</b><span>remaining</span></div>
-<div class="tile blk"><b>6</b><span>GPU-gated</span></div>
-<div class="tile"><b>40%</b><span>of 30 backend packages</span></div>
+<div class="tile blk"><b>5</b><span>GPU-gated</span></div>
+<div class="tile"><b>43%</b><span>of 30 backend packages</span></div>
 </section>
 <section class="panel"><h2>Bands (E4B dependency closure)</h2>
 <div class="band"><div class="n">B0 · Baseline &amp; contracts</div><div class="bar"><i class="d" style="width:83.3%"></i><i class="p" style="width:16.7%"></i><i class="r" style="width:0.0%"></i></div><div class="c">5 done · 1 in progress · 0 left</div></div>
 <div class="band"><div class="n">B1 · Durable endpoint</div><div class="bar"><i class="d" style="width:41.2%"></i><i class="p" style="width:29.4%"></i><i class="r" style="width:29.4%"></i></div><div class="c">7 done · 5 in progress · 5 left</div></div>
 <div class="band"><div class="n">B2 · Integrate &amp; deploy</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:100.0%"></i><i class="r" style="width:0.0%"></i></div><div class="c">0 done · 4 in progress · 0 left</div></div>
-<div class="band"><div class="n">B3 · Measured tuning</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:50.0%"></i><i class="r" style="width:50.0%"></i></div><div class="c">0 done · 1 in progress · 1 left</div></div>
+<div class="band"><div class="n">B3 · Measured tuning</div><div class="bar"><i class="d" style="width:50.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:50.0%"></i></div><div class="c">1 done · 0 in progress · 1 left</div></div>
 <div class="band"><div class="n">B4 · Endpoint gate</div><div class="bar"><i class="d" style="width:0.0%"></i><i class="p" style="width:0.0%"></i><i class="r" style="width:100.0%"></i></div><div class="c">0 done · 0 in progress · 1 left</div></div>
 <p class="note">Foundations and wave-2 modules already merged and reused by the closure: E1, F1, F2, I1, M1, Q1, W1.</p></section>
 <section class="panel"><h2>Packages</h2><div class="scroll"><table><thead><tr><th>Band</th><th>Task</th><th>Title</th><th>Status</th><th>Note</th></tr></thead><tbody>
@@ -70,14 +70,14 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <tr><td>B2</td><td><code>I2B</code></td><td>Reproducible Marlin endpoint deployment independent of frontends</td><td><span class="pill prog">in-progress</span> <span class="pill gpu">needs GPU target</span></td><td class="note">packaging, scripts, local rehearsal; box rollout coordinator-run</td></tr>
 <tr><td>B2</td><td><code>I3B</code></td><td>Backend recovery, observability, restore and rollback proof</td><td><span class="pill prog">in-progress</span> <span class="pill gpu">needs GPU target</span></td><td class="note">metrics/alerts, local recovery drills, runbooks; early start</td></tr>
 <tr><td>B2</td><td><code>E1B</code></td><td>Measure the end-to-end Marlin baseline and operating envelope</td><td><span class="pill prog">in-progress</span> <span class="pill gpu">needs GPU target</span></td><td class="note">sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart</td></tr>
-<tr><td>B3</td><td><code>M4</code></td><td>Optimize bounded video retrieval, decoding and preparation</td><td><span class="pill prog">in-progress</span> <span class="pill gpu">needs GPU target</span></td><td class="note">measurement harness + parity oracle first</td></tr>
+<tr><td>B3</td><td><code>M4</code></td><td>Optimize bounded video retrieval, decoding and preparation</td><td><span class="pill done">done</span></td><td class="note"></td></tr>
 <tr><td>B3</td><td><code>W4</code></td><td>Tune Marlin GPU serving and scheduler admission from measured evidence</td><td><span class="pill rem">remaining</span> <span class="pill gpu">needs GPU target</span></td><td class="note"></td></tr>
 <tr><td>B4</td><td><code>E4B</code></td><td>Certify the robust and measured Marlin endpoint release candidate</td><td><span class="pill rem">remaining</span> <span class="pill gpu">needs GPU target</span></td><td class="note"></td></tr>
 </tbody></table></div></section>
 <section class="panel eta"><h2>ETA — provisional, cadence-based</h2>
 <p class="big">Local software (through E3B and the software half of the rest, 12 packages): ~17 h at the observed cadence, ~1.4 days at half of it.</p>
 <p>Observed cadence: 11 tasks integrated in 15.7 h (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds, two rate-limit interruptions included). Wave-3 packages are larger and the D lane is serial, hence the range; the serial critical path D1R→D2→D3→D4→D5→E3B alone is at least ~22 h.</p>
-<p><b>GPU-gated packages (I2B, I3B, E1B, M4, W4, E4B): no ETA until P-04 is allocated.</b> Their harnesses, scripts and runbooks are built inside the local estimate; measurements wait for the target.</p>
+<p><b>GPU-gated packages (I2B, I3B, E1B, W4, E4B): no ETA until P-04 is allocated.</b> Their harnesses, scripts and runbooks are built inside the local estimate; measurements wait for the target.</p>
 <p class="note">Assumes continuous coordination. Interruptions extend wall clock, not work. This is a projection, not a commitment; it is regenerated at every checkpoint.</p>
 </section>
 <section class="panel"><h2>Gates and blocking inputs</h2><ul>
@@ -102,7 +102,6 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li><code>Q3</code> — codex-q3 / codex/q3-outbox-reconciler — fix round (DUR-1 reconcile failure starves the drain) after review of 152de7e since 2026-09-22T22:37:58Z — outbox drain/ack, PG reconciler, index-loss recovery</li>
 <li><code>D3</code> — codex-d3 / codex/d3-fenced-leases — review rerun at b4b1ec7 (sofia run died) since 2026-09-22T22:40:37Z — stacked on D2&#x27;s head; leases, reaper, cancellation</li>
 <li><code>I3B</code> — codex-i3b / codex/i3b-recovery-observe — confirmation PASS at 58d5b4f; nonblocking fold-in then merge (after W3/I2B) since 2026-09-22T22:40:37Z — metrics/alerts, local recovery drills, runbooks; early start</li>
-<li><code>M4</code> — codex-m4 / codex/m4-media-optimize — fold-in re-dispatched (nothing landed before the switch) since 2026-09-22T22:40:37Z — measurement harness + parity oracle first</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>
