@@ -678,7 +678,8 @@ FUNCTIONS = {
     "infrx.acknowledge_dispatch(jsonb)": SERVICE,
     "infrx.active_holds(uuid)": SERVICE,
     "infrx.admission_checks(jsonb,jsonb,jsonb,text,timestamp with time zone)": NOBODY,
-    "infrx.admission_insert_job(jsonb,jsonb,jsonb,jsonb,timestamp with time zone,timestamp with time zone,text,text,text,jsonb,jsonb,numeric)": NOBODY,
+    ("infrx.admission_insert_job(jsonb,jsonb,jsonb,jsonb,timestamp with time zone,"
+     "timestamp with time zone,text,text,text,jsonb,jsonb,numeric)"): NOBODY,
     "infrx.admission_replay(jsonb,double precision,timestamp with time zone,text)": NOBODY,
     "infrx.admission_rows(jsonb,jsonb,jsonb,text,timestamp with time zone)": NOBODY,
     "infrx.admit_credit(jsonb)": NOBODY,

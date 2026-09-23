@@ -210,7 +210,8 @@ def preflight(report: Report, *, want_services: bool) -> bool:
         if busy:
             report.add("preflight", FAIL,
                        f"these task-local ports are already in use: {busy} - stop whatever holds "
-                       f"them (a previous `--keep` run, or `docker compose -p {harness.PROJECT} down -v`)")
+                       f"them (a previous `--keep` run, or "
+                       f"`docker compose -p {harness.PROJECT} down -v`)")
             return False
     except harness.HarnessError as exc:
         report.add("preflight", FAIL, str(exc))
