@@ -53,6 +53,11 @@ OPERATOR = "test_dur_rls__an_operator_key_owns_no_job"
 RESULT = "test_api_modes__the_result_is_served_only_after_the_terminal_commit"
 FAILURES = "test_api_modes__a_failed_cancelled_or_expired_job_is_a_result_not_an_error"
 STORE_CLOCK = "test_api_modes__result_expiry_is_judged_on_the_store_clock"
+EVENTS = "test_api_modes__events_replay_the_committed_journal_from_the_cursor"
+CURSOR = "test_api_modes__a_malformed_or_forged_cursor_is_400_before_any_read"
+GAP = "test_api_modes__a_replay_gap_or_an_expired_journal_is_an_explicit_410"
+OBSERVER = "test_api_modes__an_observer_that_leaves_never_cancels_the_job"
+UNSTARTED = "test_api_modes__an_unstarted_job_streams_its_identity_then_waits"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -158,6 +163,42 @@ MUTANTS: tuple[Mutant, ...] = (
           "admission)\n\n    @app.get(RESULT_PATH)",
        "        return _answer(jobs.status_of(admission, outcome, relay._now()), "
        "admission)\n\n    @app.get(RESULT_PATH)", STORE_CLOCK),
+    # === item 4: events replay (API-MODES, DUR-OUTPUT read side) =======================
+    _m("cursor_ignored", "replay resumes after Last-Event-ID",
+       J, "            await self.relay.pump(self.job, emit, gone, cursor=self.cursor,",
+       "            await self.relay.pump(self.job, emit, gone, cursor=None,", EVENTS, GAP),
+    _m("cursor_guessed", "a malformed cursor is 400 invalid_cursor, never a guess (R36)",
+       J, "        cursor = Cursor.parse(last) if last is not None else None",
+       "        cursor = None", CURSOR),
+    _m("journal_checked_after_headers", "a forged cursor, a gap or an expired journal is a "
+       "status, asked before any SSE header",
+       J, "        await relay.stream.read_owned(org, handle, cursor, 1)\n", "", CURSOR, GAP),
+    _m("gap_silent", "a pruned cursor is 410 replay_gap, never an empty page (the store's)",
+       ST, '            raise errors.ReplayGap(f"events up to {pruned_to} are no longer retained")',
+       "            pass", GAP),
+    _m("expired_journal_silent", "an expired journal is 410 journal_expired (the store's)",
+       ST, '            raise errors.JournalExpired(f"journal for {job_handle} has expired")',
+       "            pass", GAP),
+    _m("identity_frame_dropped", "the first frame names the job (identity, no id)",
+       J, "            await emit(wire.SseFrame(event=PROGRESS_EVENT,\n"
+          "                                     data=_identity(self.job, self.state.value)).render())\n",
+       "", EVENTS, UNSTARTED),
+    _m("identity_phase_invented", "the identity frame's phase is the committed state",
+       J, "                                     data=_identity(self.job, self.state.value)).render())",
+       '                                     data=_identity(self.job, "running")).render())',
+       EVENTS, UNSTARTED),
+    _m("terminal_frame_dropped", "the replay ends with [DONE] at the terminal event",
+       R, "        await emit(wire.SseFrame(id=token, data=wire.DONE).render())", "        pass",
+       EVENTS, UNSTARTED),
+    _m("raw_journal_relayed", "only visible text reaches the wire (R58/R80)",
+       R, '        visible = chunk.payload.get("visible")',
+       '        visible = chunk.payload.get("raw")', EVENTS),
+    _m("observer_disconnect_cancels", "an observer that leaves detaches, never cancels",
+       J, "                                  cancel_on_gone=False)",
+       "                                  cancel_on_gone=True)", OBSERVER),
+    _m("detach_check_removed", "the pump returns without a cancel for an observer",
+       R, "            if gone.done() and not cancel_on_gone:\n                return\n", "",
+       OBSERVER),
 )
 
 

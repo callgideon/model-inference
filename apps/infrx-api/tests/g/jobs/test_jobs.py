@@ -20,8 +20,9 @@ from datetime import timedelta
 import pytest
 
 from infrx.contracts import fixtures, wire
-from infrx.contracts.records import (ExecutionMode, HoldState, JobState, OutboxKind,
-                                     SettlementState, TerminalCause, TerminalOutcome)
+from infrx.contracts.records import (ChunkEventType, EngineEvent, ExecutionMode, HoldState,
+                                     JobState, OutboxKind, SettlementState, TerminalCause,
+                                     TerminalOutcome)
 from infrx.gateway.routes import jobs as jobs_router
 from infrx.gateway.routes.relay import CREDIT
 from infrx.observe.metrics import Registry
@@ -43,8 +44,10 @@ def get(world, path, **kw):
 
 
 def refusal(reply):
-    """(status, error code) of a reply, read so that a reply that is not an error fails the
-    comparison rather than raising."""
+    """(status, error code) of a reply, read so that a reply that is not an error - a 202, a
+    stream - fails the comparison rather than raising."""
+    if not reply.headers.get("content-type", "").startswith("application/json"):
+        return reply.status, None
     return reply.status, (reply.json().get("error") or {}).get("code")
 
 
@@ -447,3 +450,130 @@ def test_api_modes__result_expiry_is_judged_on_the_store_clock():
     assert status(world).json()["result_available"] is False
     assert job.outcome.state is JobState.succeeded and world.jobs.holds[job.id].state \
         is HoldState.settled
+
+
+# --- item 4: events replay -------------------------------------------------------------
+def events(world, handle=None, cursor=None, **kw):
+    headers = {wire.HEADER_LAST_EVENT_ID: cursor} if cursor is not None else {}
+    return get(world, job_path(handle or world.handle(), "/events"), headers=headers, **kw)
+
+
+def ids_of(reply) -> list:
+    return [line[len("id: "):] for frame in reply.frames for line in frame.split("\n")
+            if line.startswith("id: ")]
+
+
+def test_api_modes__events_replay_the_committed_journal_from_the_cursor():
+    """A job already terminal replays its committed journal and ends: the identity frame (no
+    id), `visible` text only (never the reasoning in `raw`), the settled usage, `[DONE]` at
+    the terminal event's cursor. From a `Last-Event-ID` only what follows it is sent. Reading
+    changes nothing in the store."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    lease = rs.run(world.lease())
+    rs.run(world.stream.append(lease, (EngineEvent(type=ChunkEventType.delta, payload={
+        "visible": "Two people", "raw": "<think>the secret plan</think>Two people"}),)))
+    rs.run(world.commit(lease, " unload boxes."))
+    rs.run(world.complete(lease))
+    whole = events(world)
+    assert whole.status == 200 and whole.headers.get(wire.HEADER_INFERENCE_ID) == job.id
+    assert whole.headers["content-type"].startswith("text/event-stream")
+    assert whole.events()[0] == "infrx.progress" and not whole.frames[0].startswith("id:")
+    assert whole.data()[0] == {"job_handle": world.handle(), "request_id": job.id,
+                               "phase": "succeeded"}
+    assert whole.text() == "Two people unload boxes." and b"secret" not in whole.body
+    usage = whole.data()[-2].get("usage")
+    assert usage == wire.ChatUsage.of(job.outcome.usage).model_dump()
+    (terminal,) = [c for c in world.journal(job.id) if c.event_type is ChunkEventType.terminal]
+    assert whole.frames[-1] == f"id: {terminal.cursor.token}\ndata: [DONE]"
+    first_delta = [c for c in world.journal(job.id) if c.event_type is ChunkEventType.delta][0]
+    resumed = events(world, cursor=first_delta.cursor.token)
+    assert resumed.status == 200 and resumed.text() == " unload boxes."
+    assert first_delta.cursor.token not in ids_of(resumed)
+    assert resumed.frames[-1] == whole.frames[-1]
+    assert job.outcome.state is JobState.succeeded and job.outcome.cause.value == "completed"
+
+
+def test_api_modes__a_malformed_or_forged_cursor_is_400_before_any_read():
+    """R36: cursors are opaque. A malformed `Last-Event-ID` is 400 `invalid_cursor` before any
+    store read; one the journal never issued is the store's 400, answered before any SSE
+    header. The running job is untouched."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    lease = rs.run(world.lease())
+    rs.run(world.commit(lease, "Two people"))
+    world.during.append(lambda: world.complete(lease))       # a stream that started would end
+    reads = world.failures.count("get_owned"), world.failures.count("read_owned")
+    malformed = events(world, cursor="abc")
+    assert refusal(malformed) == (400, "invalid_cursor")
+    assert (world.failures.count("get_owned"), world.failures.count("read_owned")) == reads
+    forged = events(world, cursor="7-99")
+    assert refusal(forged) == (400, "invalid_cursor")
+    assert forged.headers["content-type"] == "application/json"
+    job = world.only_job()
+    assert job.state is JobState.running and not job.terminal
+
+
+def test_api_modes__a_replay_gap_or_an_expired_journal_is_an_explicit_410():
+    """Never silent: replay from before what the journal still holds is 410 `replay_gap`
+    (from a retained cursor it replays), and once the journal expired it is 410
+    `journal_expired`. Both before any SSE header; the job is untouched."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    lease = rs.run(world.lease())
+    rs.run(world.commit(lease, "Two", " people", " unload boxes."))
+    rs.run(world.complete(lease))
+    kept = world.journal(job.id)[2:]                 # what `expire` leaves after a partial prune
+    world.stream.chunks[job.id] = kept
+    world.stream.pruned_to[job.id] = (1, 2)
+    gap = events(world)
+    assert refusal(gap) == (410, "replay_gap")
+    assert gap.headers["content-type"] == "application/json"
+    resumed = events(world, cursor="1-2")
+    assert resumed.status == 200 and resumed.text() == " unload boxes."
+    world.clock.advance(world.limits.journal_chunk_ttl_s)
+    assert rs.run(world.stream.expire()) == len(kept)
+    assert refusal(events(world, cursor="1-2")) == (410, "journal_expired")
+    assert job.outcome.state is JobState.succeeded
+    assert world.jobs.holds[job.id].state is HoldState.settled
+
+
+def test_api_modes__an_observer_that_leaves_never_cancels_the_job():
+    """01: an async event-observer disconnect detaches only. The observer leaves mid-stream;
+    the job is still running afterwards and its worker completes it - settled once."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    lease = rs.run(world.lease())
+    rs.run(world.commit(lease, "Two people"))
+    leave = asyncio.Event()
+    world.during.append(leave.set)
+    reply = events(world, leave=leave)
+    assert reply.status == 200 and reply.text() == "Two people"
+    job = world.only_job()
+    assert job.state is JobState.running and not job.terminal
+    rs.run(world.commit(lease, " unload boxes."))
+    rs.run(world.complete(lease))
+    assert job.outcome.state is JobState.succeeded
+    assert world.jobs.holds[job.id].state is HoldState.settled
+
+
+def test_api_modes__an_unstarted_job_streams_its_identity_then_waits():
+    """A job with nothing committed yet: the identity frame (its admitted phase) first, then
+    keepalive comments while it waits, then the committed output as the worker produces it,
+    ended by `[DONE]` at the terminal commit."""
+    world = JobsWorld()
+    assert post(world).status == 202
+    job = world.only_job()
+    world.during += [lambda: world.clock.advance(world.limits.sse_keepalive_s + 1), world.work]
+    reply = events(world)
+    assert reply.status == 200
+    assert reply.data()[0] == {"job_handle": world.handle(), "request_id": job.id,
+                               "phase": "preparing"}
+    kinds = reply.events()
+    assert kinds[0] == "infrx.progress" and "comment" in kinds
+    assert kinds.index("comment") < [i for i, f in enumerate(reply.frames)
+                                     if "chat.completion.chunk" in f][0]
+    assert reply.text() == world.results[job.id] and reply.data()[-1] == "[DONE]"
+    assert job.outcome.state is JobState.succeeded
