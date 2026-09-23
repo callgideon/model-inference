@@ -3,7 +3,8 @@
 # exactly the edge; the engine, the gateway, the index and the admin API are unreachable;
 # health is sanitized; operator paths are hidden; credentials and bounds are enforced on
 # the deployed path. Read-only against the service. Key material comes from the
-# environment (names only here) and is never printed:
+# environment (names only here), is never printed, and reaches curl through a 0600
+# header file (`-H @file`), never its argv (`ps`, /proc/*/cmdline, `set -x`):
 #   INFRX_TEST_KEY      a scoped key G6B issued for the check (pending G6B/A1)
 #   INFRX_REVOKED_KEY   a key G6B issued and then revoked (pending G6B/A1)
 #   LEGACY_KEY          the pre-cutover shared key (/model-inference/marlin2b_api_key), if any
@@ -12,6 +13,8 @@ HOST=${HOST:-marlin2b.callbill.ai}
 IP=${IP:-100.57.145.167}
 base=https://$HOST
 fails=0
+hdr=$(mktemp)                      # 0600
+trap 'rm -f "$hdr"' EXIT
 ok()  { echo "PASS $*"; }
 bad() { echo "FAIL $*"; fails=$((fails + 1)); }
 expect() {  # expect NAME WANT-STATUS CURL-ARGS...
@@ -19,7 +22,8 @@ expect() {  # expect NAME WANT-STATUS CURL-ARGS...
   local got; got=$(curl -s -o /tmp/infrx-verify.body -w '%{http_code}' --max-time 30 "$@")
   if [ "$got" = "$want" ]; then ok "$name ($got)"; else bad "$name: got $got, want $want"; fi
 }
-auth() { printf 'Authorization: Bearer %s' "$1"; }
+# printf is a builtin: the key is written to the file without becoming anyone's argument.
+auth() { printf 'Authorization: Bearer %s\n' "$1" > "$hdr"; echo "@$hdr"; }
 
 expect "public health" 200 "$base/health"
 [ "$(cat /tmp/infrx-verify.body)" = '{"ok":true}' ] && ok "health body is exactly {\"ok\":true}" || bad "health body leaks detail"
