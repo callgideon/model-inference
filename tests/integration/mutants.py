@@ -917,6 +917,12 @@ MUTANTS: tuple[Mutant, ...] = (
            "    report.add(\"suites\", FAIL if (failed or silent or unexpected) else PASS,\n",
            "tests/integration/test_run.py", "unexpected_skip",
            cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
+    Mutant("e3bm51", "E3B2 round 3 (G-B4): dr11 pends on the held cutover, never passes empty",
+           "tests/integration/backend/test_drills.py",
+           '    stack.pending("G2-R1", why="the sync/SSE relay that sees the disconnect',
+           '    (lambda *a, **k: None)("G2-R1", why="the sync/SSE relay that sees the disconnect',
+           "tests/integration/backend/test_stage.py", "held_cutover",
+           cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
 )
 
 
