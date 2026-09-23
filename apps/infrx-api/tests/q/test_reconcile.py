@@ -162,6 +162,52 @@ def test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed(adapter):
     run(body)
 
 
+class AfterEnqueue:
+    """An index that runs `action` once, right after the first `enqueue` lands."""
+
+    def __init__(self, inner, action) -> None:
+        self.inner, self.action = inner, action
+
+    async def enqueue(self, event):
+        taken = await self.inner.enqueue(event)
+        if self.action is not None:
+            action, self.action = self.action, None
+            await action()
+        return taken
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+
+def test_q3_drain__an_acknowledgment_behind_another_relays_rebuild_fence_is_refused(adapter):
+    """D2's `OutboxRelay` in a second process (OB-1/OB-1b): it reads its fence and a
+    snapshot, then - after this drain indexed a job admitted since, before its
+    acknowledgment - rebuilds from that snapshot and reopens. The rebuild wiped the
+    candidate and the reopen took this relay's claim, so the late acknowledgment is
+    refused and the row is sent again: Q3's drain honours D2's fence."""
+    w = rig.world(adapter)
+
+    async def body():
+        since = await w.outbox.db_now()
+        stale = await w.outbox.dispatch_snapshot()              # before the job exists
+        job = await rig.admit(w)
+
+        async def the_other_relays_rebuild():
+            await w.index.rebuild(stale)                        # wipes the new candidate
+            assert await w.outbox.reopen_dispatch(since) == 1
+
+        w.rec.index = AfterEnqueue(w.index, the_other_relays_rebuild)
+        assert await w.rec.drain() == {"read": 1, "indexed": 1}     # the ack: refused
+        assert await rig.members(w) == {}
+        assert len(w.outbox.unacknowledged()) == 1
+        w.rec.index = w.index
+        assert await w.rec.drain() == {"read": 1, "indexed": 1, "acknowledged": 1}
+        assert list((await rig.members(w)).values()) == [job]
+        await rig.finish(w)
+        rig.settled(w)
+    run(body)
+
+
 def test_q3_drain__one_call_reads_a_bounded_number_of_rows_and_the_next_continues(adapter):
     w = rig.world(adapter)
     w.rec.batch, w.rec.max_batches = 2, 2

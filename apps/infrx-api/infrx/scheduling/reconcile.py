@@ -7,12 +7,13 @@ reconciler plus the relay that feeds it. It talks to two collaborators only:
 
 * `store` - D2's dispatch outbox (`0012_dispatch_outbox.sql`, `PgJobStore`):
   `dispatch_pending(limit=, worker_id=, redelivery_s=)` hands out unacknowledged dispatch
-  rows whose job still wants them and stamps them claimed (a claimed row comes back after
-  `redelivery_s` without an acknowledgment, and a row whose job moved on is acknowledged
-  there as superseded); `acknowledge_dispatch(event_ids)` records delivery;
+  rows whose job still wants them and stamps them claimed by `worker_id` (a claimed row
+  comes back after `redelivery_s` without an acknowledgment, and a row whose job moved on
+  is acknowledged there as superseded); `acknowledge_dispatch(event_ids, worker_id=)`
+  records delivery, and lands only while this relay still holds the claim (D2 OB-1b);
   `dispatch_snapshot()` is every job that wants a dispatch now, with its latest dispatch
-  event. Until D2 merges, the tests drive `tests/q/outboxfake.py`, which is those three
-  SQL functions row for row over the contract `FakeJobStore`.
+  event. Until D2 merges, the tests drive `tests/q/outboxfake.py`, D2's dispatch
+  functions row for row over the contract `FakeJobStore`.
 * `index` - a `ports.Scheduler` (`MemoryScheduler` or `ValkeyScheduler`) plus its
   `members()` read.
 
@@ -125,7 +126,8 @@ class Reconciler:
                     indexed.append(event.event_id)
             finally:
                 if indexed:
-                    report["acknowledged"] += await self.store.acknowledge_dispatch(indexed)
+                    report["acknowledged"] += await self.store.acknowledge_dispatch(
+                        indexed, worker_id=self.worker_id)
             if len(events) < self.batch:
                 break
         return dict(+report)                   # counts that happened, no zeros

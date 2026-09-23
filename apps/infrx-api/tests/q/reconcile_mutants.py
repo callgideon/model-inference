@@ -20,6 +20,7 @@ import sys
 
 API_DIR = pathlib.Path(__file__).resolve().parents[2]
 RECONCILE = "scheduling/reconcile.py"
+OUTBOX_FAKE = "../tests/q/outboxfake.py"      # a test double, relative to the package
 
 if str(API_DIR) not in sys.path:        # `python tests/q/reconcile_mutants.py`
     sys.path.insert(0, str(API_DIR))
@@ -42,16 +43,22 @@ MUTANTS: tuple[Mutant, ...] = (
        "index first, acknowledge second: a row is never acknowledged for a candidate "
        "the index does not hold",
        '                        report["indexed"] += await self.index.enqueue(event)',
-       "                        await self.store.acknowledge_dispatch([event.event_id])\n"
+       "                        await self.store.acknowledge_dispatch([event.event_id], "
+       "worker_id=self.worker_id)\n"
        '                        report["indexed"] += await self.index.enqueue(event)',
        "test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed"),
     _m("every_row_read_is_acknowledged",
        "only rows the index took are acknowledged (a deferred or failed one is redelivered)",
-       "report[\"acknowledged\"] += await self.store.acknowledge_dispatch(indexed)",
-       "report[\"acknowledged\"] += await self.store.acknowledge_dispatch("
-       "[e.event_id for e in events])",
+       "await self.store.acknowledge_dispatch(\n                        indexed, ",
+       "await self.store.acknowledge_dispatch(\n                        "
+       "[e.event_id for e in events], ",
        "test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed",
        "test_q3_drain__a_full_index_defers_the_row_and_the_redelivery_retries_it"),
+    _m("the_ack_names_another_worker",
+       "D2 OB-1b: the drain acknowledges as the worker that claimed the rows",
+       "                        indexed, worker_id=self.worker_id)",
+       "                        indexed, worker_id=\"relay\")",
+       "test_q3_drain__every_dispatch_row_is_indexed_once_and_acknowledged"),
     _m("a_deferred_row_is_acknowledged",
        "a row refused by a full index stays unacknowledged, so its redelivery retries it",
        '                        report["deferred"] += 1\n                        continue',
@@ -252,15 +259,26 @@ MUTANTS: tuple[Mutant, ...] = (
        '_ITEMS_FIELD, _BYTES_FIELD = "max_items", "max_index_bytes"',
        "test_q3_caps__both_adapters_take_the_caps_from_the_settings",
        file="scheduling/valkey.py"),
-    # --- DUR-FENCE: the case notices a store that stops fencing ------------------
-    # The fence is the store's (`JobStore.claim`), not Q's; this mutant exists to prove
-    # the fence case can see a second lease when a stale candidate is handed one.
+    # --- test-double checks (review HON-5): NOT product mutants -----------------
+    # Each edits a test double - the contract fake store or D2's outbox fake - to prove
+    # the named case can see the store rule it leans on; Q3's code fences nothing here.
+    # DUR-FENCE: the fence is the store's (`JobStore.claim`); the fence case must see a
+    # second lease when a stale candidate is handed one.
     _m("the_store_hands_a_running_job_a_second_lease",
        "a stale candidate never acquires a second lease",
        "            if job.state is not JobState.queued:",
        "            if job.state not in (JobState.queued, JobState.running):",
        "test_q3_fence__a_stale_candidate_never_acquires_a_second_lease",
        file="contracts/fakes/state.py"),
+    # D2 OB-1b: only the claim holder's acknowledgment lands, so D2's rebuild fence can
+    # refuse a Q3 drain's late acknowledgment.
+    _m("the_store_acknowledges_a_row_it_reopened",
+       "a reopened row's late acknowledgment is refused (D2's fence holds against Q3's drain)",
+       "                 if event_id in self.claimed_at\n"
+       "                 and self.claimed_by.get(event_id) == worker_id]",
+       "                 ]",
+       "test_q3_drain__an_acknowledgment_behind_another_relays_rebuild_fence_is_refused",
+       file=OUTBOX_FAKE),
 )
 
 
