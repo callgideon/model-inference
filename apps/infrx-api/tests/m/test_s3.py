@@ -644,6 +644,30 @@ def test_the_cleanup_empties_only_one_cases_own_prefix():
             remove_prefix(S3ObjectStore(Untouchable(), "infrx-m1l2", prefix))
 
 
+def test_no_bucket_is_created_without_local_credentials(monkeypatch):
+    """On the box the bucket is the project's: without INFRX_M_S3_LOCAL_CREDS the harness
+    sends no CreateBucket (a Stubber with nothing queued refuses any call); with it, exactly
+    one (verifier V3)."""
+    from botocore.exceptions import UnStubbedResponseError
+    module = sys.modules[__name__]
+    for flag in ("", "1"):
+        objects, stub = stubbed()
+        monkeypatch.setattr(S3ObjectStore, "connect", classmethod(
+            lambda cls, bucket, prefix, endpoint_url="": S3ObjectStore(objects.client, bucket,
+                                                                      prefix)))
+        monkeypatch.setattr(module, "_READY", set())
+        monkeypatch.setenv(LOCAL_FLAG, flag)
+        if flag:
+            stub.add_response("create_bucket", {}, {"Bucket": BUCKET})
+        try:
+            s3_store(monkeypatch)
+        except UnStubbedResponseError:
+            pytest.fail("a CreateBucket was sent without INFRX_M_S3_LOCAL_CREDS")
+        finally:
+            _WRITTEN[:] = [kept for kept in _WRITTEN if kept.client is not objects.client]
+        stub.assert_no_pending_responses()
+
+
 @needs_s3
 def test_what_a_case_writes_is_removed_after_it(monkeypatch):
     """Every store `s3_store` makes is registered for the teardown, and the teardown (run

@@ -56,6 +56,7 @@ NO_BOTOCORE = "test_the_pilot_runtime_probe_refuses_an_image_without_botocore"
 CREDENTIALS = "test_the_s3_cases_keep_the_environments_credentials_unless_told_to_use_local_ones"
 CLEANUP = "test_what_a_case_writes_is_removed_after_it"
 CLEANUP_GUARD = "test_the_cleanup_empties_only_one_cases_own_prefix"
+NO_CREATE = "test_no_bucket_is_created_without_local_credentials"
 STUBBED = "test_a_conflict_or_a_broken_body_is_an_error_and_a_404_is_absent"
 NO_BUCKET = "test_a_store_on_a_missing_bucket_reads_writes_and_lists_nothing"
 WRITE_404 = "test_a_404_on_a_write_or_a_listing_is_an_error_not_absence"
@@ -156,6 +157,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("own_v_cleanup_guard_dropped", "a cleanup empties only one case's test/m1l2/<uuid>/",
        H, "    if not CASE_PREFIX_RE.fullmatch(objects.prefix):\n        raise ValueError(",
        "    if False:\n        raise ValueError(", CLEANUP_GUARD),
+    _m("own_v_bucket_created_without_flag", "no CreateBucket without INFRX_M_S3_LOCAL_CREDS",
+       H, '    if BUCKET not in _READY and secret is None and os.environ.get(LOCAL_FLAG) == "1":',
+       "    if BUCKET not in _READY and secret is None:", NO_CREATE),
     # === review A2: every arm of the error-vs-absent rule ================================
     _m("own_nosuchbucket_is_absent", "a missing bucket is an error wherever S3 says so",
        S3, 'MISSING = ("404", "NoSuchKey")', 'MISSING = ("404", "NoSuchKey", "NoSuchBucket")',
