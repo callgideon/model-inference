@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T04:45:36Z",
+  "updated": "2026-09-23T04:47:12Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -20,12 +20,6 @@
       "phase": "phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes",
       "since": "2026-09-22T18:46:49Z",
       "note": "gate not passable until G/D/W/Q lanes merge"
-    },
-    "A1-followup": {
-      "lane": "codex-a1 / codex/a1-signup-grant",
-      "phase": "round 5: public.claim_signup_grant trips D1R's cross-unit scan on the merged tree (Supabase run of the D2 merged sweep); fix as an A1 follow-up merge",
-      "since": "2026-09-23T04:38:47Z",
-      "note": "A1 is merged (2d9d9c5); this is a post-merge follow-up"
     }
   },
   "reviews": {},
@@ -236,7 +230,7 @@
     "A1": {
       "merged": "A1 @ fb3a5a1 merged --no-ff (2d9d9c5) + follow-up (harness 0015, api-mutants += tests/d/test_signup.py, R85)",
       "at": "2026-09-23T04:18:26Z",
-      "note": "four review rounds (abbf066 review; 47b0382, d8a3e84, dc3cb9c confirmations; round 4 tests/notes only); D list 228 = 193 + 35; merged-tree tests/d verification pending on the D2 sweep's port"
+      "note": "four review rounds (abbf066 review; 47b0382, d8a3e84, dc3cb9c confirmations; round 4 tests/notes only); D list 228 = 193 + 35; merged-tree tests/d verification pending on the D2 sweep's port | follow-up e366ae8 (round 5): infrx.individual_usd_hold; the unit scan passes on the merged tree (42 passed incl. test_credit_schema + test_signup)"
     },
     "D3": {
       "merged": "D3 @ 92687f8 merged --no-ff (f237237) + follow-up d57e04e (harness 0016, TASK_PORTS d3)",

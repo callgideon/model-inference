@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T04:45:36Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T04:47:12Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 20 done · 3 in progress · 7 remaining (of 30).**
 
@@ -66,7 +66,6 @@ Generated 2026-09-23T04:45:36Z from `tasks.json` (manifest v4) and `progress-sta
 - F2P: codex-f2p — wire-in confirmation (Opus) of fix round at ced6751; then merge since 2026-09-22T16:00:21Z — v2 CREDIT/USD units, audiences, admission pins, grant, provider grants — fixtures + map
 - E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - E3B: codex-e3b / codex/e3b-backend-gate — phase 1 MERGED (c7d715f); gate exit 3 with 22 pending; phase 2 after G/D/W/Q lanes since 2026-09-22T18:46:49Z — gate not passable until G/D/W/Q lanes merge
-- A1-followup: codex-a1 / codex/a1-signup-grant — round 5: public.claim_signup_grant trips D1R's cross-unit scan on the merged tree (Supabase run of the D2 merged sweep); fix as an A1 follow-up merge since 2026-09-23T04:38:47Z — A1 is merged (2d9d9c5); this is a post-merge follow-up
 
 ## Checkpoints
 
