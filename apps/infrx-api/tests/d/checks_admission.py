@@ -38,6 +38,12 @@ C2_KEY = "c7000000-0000-4000-8000-000000000002"
 UNGRANTED_KEY = "c7000000-0000-4000-8000-000000000003"
 OPERATOR_KEY = "c7000000-0000-4000-8000-000000000004"
 STRAY_KEY = "c7000000-0000-4000-8000-000000000005"
+NAMED_KEY = "c7000000-0000-4000-8000-000000000006"     # created by C2, names C1 (M6)
+PROVIDER_KEY = "c7000000-0000-4000-8000-000000000007"  # a provider_dev key in ORG_A (M4)
+# MC-1: a provider_dev key CREATED BY CONSUMER_1 and filed in C1's personal org - the shape
+# whose `coalesce(user_id, created_by)` resolves to C1's consumer wallet if the CREDIT
+# body's audience rule is lost.
+PROVIDER_C1_KEY = "c7000000-0000-4000-8000-000000000008"
 ALIAS = "nemostation/marlin-2b"
 PIN = "nemostation/marlin-2b@2026-09-01"
 
@@ -130,6 +136,14 @@ def _in_rollback(conn, body):
         return result
 
 
+def gateway_skewed(request, db_now, *, created_s: float, deadline_s: float):
+    """The same request as a gateway whose clock is `created_s` off the store's would send
+    it: `created_at = db_now + created_s`, `deadline_at = db_now + deadline_s`."""
+    return request.model_copy(update={
+        "created_at": db_now + timedelta(seconds=created_s),
+        "deadline_at": db_now + timedelta(seconds=deadline_s)})
+
+
 def credit_request(world, key: str, org: str, model: str = PIN, **kw):
     return b.request(world, org_id=org, key_id=key, model_revision=model, **kw)
 
@@ -191,6 +205,15 @@ def check_admission_accepts(conn) -> str:
         kept, = conn.execute("select deadline_at from infrx.jobs where request_id = %s",
                              (far.request_id,)).fetchone()
         assert kept == now + timedelta(seconds=horizon), f"not clamped: {kept}"
+        # ...and measured on the STORE clock, never the gateway's: a request whose own
+        # clock runs an hour ahead (created_at = db_now + 1 h, deadline 2 h after that)
+        # keeps db_now + horizon, not created_at + horizon (R29/R79, audit R-3).
+        skewed = gateway_skewed(b.request(world), now, created_s=3600, deadline_s=3600 + 7200)
+        admit(conn, skewed, b.idem(skewed, "accept-skewed"))
+        kept, = conn.execute("select deadline_at from infrx.jobs where request_id = %s",
+                             (skewed.request_id,)).fetchone()
+        assert kept == now + timedelta(seconds=horizon), \
+            f"the clamp used the gateway clock: {kept} != db_now + {horizon}s"
         # the hold rounds UP (ceiling_8) on a rate whose exact cost has more digits
         conn.execute("insert into infrx.price_versions (price_version, model_revision, "
                      "input_rate_per_million, output_rate_per_million, token_rules_version, "
@@ -225,6 +248,43 @@ def check_admission_accepts(conn) -> str:
         assert after[7] - before[7] == want_hold and after[6] == before[6], (before, after)
         assert cdoc["pins"]["rate_card_version"] == pins["rate_card_version"], 'failed: cdoc["pins"]["rate_card_version"] == pins["rate_card_version"]'
         assert cdoc["rate_card"]["input_rate_per_million"] == "400.00000000", 'failed: cdoc["rate_card"]["input_rate_per_million"] == "400.00000000"'
+        # Review M6: the wallet is the key's INDIVIDUAL (`api_keys.user_id`), not whoever
+        # created the key row: CONSUMER_2 files a key that names CONSUMER_1.
+        conn.execute("insert into public.api_keys (id, org_id, created_by, user_id, name, "
+                     "prefix, key_hash) values (%s, %s, %s, %s, 'k', 'sk-infrx-named000', "
+                     "'hash-named')", (NAMED_KEY, org, cc.CONSUMER_2, cc.CONSUMER_1))
+        named = credit_request(world, NAMED_KEY, org)
+        got = refusal(conn, named, b.idem(named, "accept-named"), regime="credit")
+        assert got is None, f"a key naming CONSUMER_1 could not spend CONSUMER_1's wallet: {got}"
+        spent, = conn.execute("select wallet_id::text from infrx.jobs where request_id = %s",
+                              (named.request_id,)).fetchone()
+        assert spent == cc.wallet_of(conn, cc.CONSUMER_1), \
+            f"the key's creator's wallet was spent, not its individual's: {spent}"
+        # MC-3 (DUR-CAP boundary): a hold EXACTLY equal to what is available is admitted,
+        # in both bodies
+        with conn.transaction():
+            usd = b.request(world, org_id=b.ORG_B, key_id=b.KEY_B)
+            available, = conn.execute("select available from infrx.wallets where org_id = %s",
+                                      (b.ORG_B,)).fetchone()
+            conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, reason) "
+                         "values (%s, %s, 'adjustment', 'mc3')",
+                         (b.ORG_B, b.hold_for(usd) - available))
+            got = refusal(conn, usd, b.idem(usd, "mc3-usd"))
+            assert got is None, f"a USD hold equal to the available balance was refused: {got}"
+            raise_rollback()
+        with conn.transaction():
+            c2_org = cc.personal_org(conn, cc.CONSUMER_2)
+            exact = credit_request(world, C2_KEY, c2_org)
+            w2 = cc.wallet_of(conn, cc.CONSUMER_2)
+            available, = conn.execute("select available from infrx.credit_wallets where "
+                                      "wallet_id = %s", (w2,)).fetchone()
+            conn.execute("insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, "
+                         "operation_id, actor, reason) values (%s, 'consumer', "
+                         "'operator_adjustment', %s, gen_random_uuid(), 'ops', 'mc3')",
+                         (w2, pgtesting_hold(exact, "400", "1200") - available))
+            got = refusal(conn, exact, b.idem(exact, "mc3-credit"), regime="credit")
+            assert got is None, f"a CREDIT hold equal to the available balance was refused: {got}"
+            raise_rollback()
         return f"one USD admission owns job/hold/3 reservations/dispatch/mapping; one CREDIT " \
                f"admission owns the pins and a {want_hold} CREDIT hold"
     return _in_rollback(conn, body)
@@ -261,6 +321,20 @@ def check_admission_refusals(conn) -> str:
                       "where name = 'legacy_usd_admission'",
         "expensive listing": _listing(2, "rc_expensive", "100000000", "100000000"),
         "zero listing": _listing(3, "rc_free", "0", "0"),
+        "zero price": "insert into infrx.price_versions (price_version, model_revision, "
+                      "input_rate_per_million, output_rate_per_million, token_rules_version, "
+                      "effective_from) values ('pv_free', 'free/model@1', 0, 0, 'tr_v1', "
+                      "'2026-01-01T00:00:00Z')",
+        "provider key": f"insert into public.api_keys (id, org_id, name, prefix, key_hash, "
+                        f"audience, provider_org_id, endpoint_id) values ('{PROVIDER_KEY}', "
+                        f"'{b.ORG_A}', 'p', 'sk-infrx-prov0000', 'hash-prov', 'provider_dev', "
+                        f"'{cc.NEMO}', '{cc.DEV_ENDPOINT}')",
+        "provider key in c1's org": f"insert into public.api_keys (id, org_id, created_by, "
+                                    f"name, prefix, key_hash, audience, provider_org_id, "
+                                    f"endpoint_id) values ('{PROVIDER_C1_KEY}', '{c1_org}', "
+                                    f"'{cc.CONSUMER_1}', 'p', 'sk-infrx-provc100', "
+                                    f"'hash-prov-c1', 'provider_dev', '{cc.NEMO}', "
+                                    f"'{cc.DEV_ENDPOINT}')",
         "withdrawn price": "alter table infrx.price_versions disable trigger "
                            "price_versions_immutable; update infrx.price_versions set "
                            "effective_to = infrx.now() where price_version = 'pv_test'; "
@@ -273,6 +347,11 @@ def check_admission_refusals(conn) -> str:
          "invalid_request"),
         ("a deadline equal to the store clock", lambda: req(deadline_s=0), None,
          "legacy_usd", None, "invalid_request"),
+        # R29 on the STORE clock: a gateway an hour behind sends a deadline that is still
+        # in ITS future but already past on the store's - refused.
+        ("a deadline elapsed on the store clock, not the gateway's",
+         lambda: gateway_skewed(req(), world.clock.now(), created_s=-3600, deadline_s=-1),
+         None, "legacy_usd", None, "invalid_request"),
         ("a revoked key", req, None, "legacy_usd", "revoked", "invalid_api_key"),
         ("another organization's key", lambda: req(key_id=b.KEY_B), None, "legacy_usd",
          None, "invalid_api_key"),
@@ -293,6 +372,24 @@ def check_admission_refusals(conn) -> str:
         ("a hold past the available USD", lambda: req(org_id=b.ORG_B, key_id=b.KEY_B,
                                                       max_input_tokens=30_000), None,
          "legacy_usd", "drain org b", "insufficient_credit"),
+        # Review M2: the gate is AVAILABLE, not the ledger: org B holds 0.01 USD and one
+        # 0.0072288 hold; the next hold fits the ledger but not what is available.
+        ("a hold past the available USD but within the ledger",
+         lambda: req(org_id=b.ORG_B, key_id=b.KEY_B), None, "legacy_usd", "one hold in org b",
+         "insufficient_credit"),
+        # Review MC-3b: the other side of the boundary - one unit (0.00000001 USD) short
+        # of the hold is refused (the equal side is admitted in check_admission_accepts).
+        ("a USD hold one unit past the available balance",
+         lambda: req(org_id=b.ORG_B, key_id=b.KEY_B), None, "legacy_usd",
+         "org b one unit short", "insufficient_credit"),
+        # Review M3: never a zero hold in the USD regime either.
+        ("a zero USD hold", lambda: req(model_revision="free/model@1"), None, "legacy_usd",
+         "zero price", "invalid_request"),
+        # Review M4: the CREDIT body's audience rule, in the USD body.
+        ("an operator key in the USD regime", lambda: req(org_id=c2_org, key_id=OPERATOR_KEY),
+         None, "legacy_usd", None, "forbidden"),
+        ("a provider_dev key in the USD regime", lambda: req(key_id=PROVIDER_KEY), None,
+         "legacy_usd", "provider key", "not_found"),
         ("another organization's idempotency scope", req, "foreign idem", "legacy_usd", None,
          "forbidden"),
         ("another organization's media", lambda: req(refs=(b.media(b.ORG_B),)), None,
@@ -323,6 +420,11 @@ def check_admission_refusals(conn) -> str:
         ("ceilings past the deployment's limits", lambda: credit_request(
             world, C1_KEY, c1_org, max_input_tokens=30_721, max_output_tokens=1), None,
          "credit", None, "context_length_exceeded"),
+        # MC-1: a provider_dev credential reaches no public listing through the CREDIT
+        # body either - even one whose creator owns a funded consumer wallet in that org.
+        ("a provider_dev key in the CREDIT regime", lambda: credit_request(
+            world, PROVIDER_C1_KEY, c1_org, ALIAS), None, "credit", "provider key in c1's org",
+         "not_found"),
     )
 
     def body():
@@ -334,6 +436,24 @@ def check_admission_refusals(conn) -> str:
                     conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, "
                                  "reason) values (%s, -24.999, 'adjustment', 'drain')",
                                  (b.ORG_B,))
+                elif setup == "one hold in org b":
+                    conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, "
+                                 "reason) values (%s, -24.99, 'adjustment', 'drain')",
+                                 (b.ORG_B,))
+                    first = req(org_id=b.ORG_B, key_id=b.KEY_B)
+                    admit(conn, first, b.idem(first, str(uuid.uuid4())))
+                    left = conn.execute("select ledger_total, available from infrx.wallets "
+                                        "where org_id = %s", (b.ORG_B,)).fetchone()
+                    assert left[1] < b.hold_for(first) <= left[0], \
+                        f"the case needs a hold between available and the ledger: {left}"
+                elif setup == "org b one unit short":
+                    short = req(org_id=b.ORG_B, key_id=b.KEY_B)
+                    available, = conn.execute("select available from infrx.wallets where "
+                                              "org_id = %s", (b.ORG_B,)).fetchone()
+                    conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, "
+                                 "reason) values (%s, %s, 'adjustment', 'mc3b')",
+                                 (b.ORG_B, b.hold_for(short) - available
+                                  - Decimal("0.00000001")))
                 elif setup:
                     conn.execute(staged[setup])
                 request = make()
@@ -347,6 +467,13 @@ def check_admission_refusals(conn) -> str:
                 raise_rollback()
             seen.append(label)
         assert footprint(conn) == before, 'failed: footprint(conn) == before'
+        # the control: a gateway an hour AHEAD sends a deadline 300 s out on the store's
+        # clock (already "past" on its own) - admitted, because only the store clock counts
+        with conn.transaction():
+            ahead = gateway_skewed(req(), world.clock.now(), created_s=3600, deadline_s=300)
+            got = refusal(conn, ahead, b.idem(ahead, "ahead"))
+            assert got is None, f"a deadline 300 s out on the store clock was refused: {got}"
+            raise_rollback()
         return f"{len(seen)} refusals typed, each leaving no job/hold/reservation/dispatch"
     return _in_rollback(conn, body)
 
@@ -432,6 +559,16 @@ def check_admission_idempotency(conn) -> str:
         assert refusal(conn, request, b.idem(request, None)) == "state_conflict", 'failed: refusal(conn, request, b.idem(request, None)) == "state_conflict"'
         assert refusal(conn, request, b.idem(request, "a-late-key")) == "state_conflict", 'failed: refusal(conn, request, b.idem(request, "a-late-key")) == "state_conflict"'
         assert footprint(conn) == mark, 'failed: footprint(conn) == mark'
+        # Review M7: one key never answers across regimes - a CREDIT caller replaying a
+        # USD admission's key (same org, same payload) is a state_conflict, not its job.
+        c1 = cc.personal_org(conn, cc.CONSUMER_1)
+        conn.execute("insert into public.credit_ledger (org_id, delta_usd, kind, reason) "
+                     "values (%s, 25, 'grant', 'm7')", (c1,))
+        usd = credit_request(world, C1_KEY, c1)
+        crossed = b.idem(usd, "crossed")
+        admit(conn, usd, crossed)                             # a USD job in C1's org
+        got = refusal(conn, usd, crossed, regime="credit")
+        assert got == "state_conflict", f"a CREDIT replay answered a USD admission: {got}"
         # the tombstone runs from the TERMINAL state (D5's settlement stands in as a row),
         # which here is an hour after admission
         ttl = DEFAULTS.idempotency_ttl_s
@@ -530,3 +667,53 @@ def _end_everything(conn) -> None:
                  "released_at = infrx.now() where active")
     conn.execute("update infrx.credit_holds set state = 'released' where state = 'held'")
     conn.execute("update infrx.wallets set reserved_total = 0")
+
+
+#: Review SEC-3: D2's internal helpers - only a SECURITY DEFINER body calls them, so NOBODY
+#: holds EXECUTE, service_role included - and the platform operations service_role calls.
+D2_HELPERS = (
+    "infrx.refuse(text,text,integer)", "infrx.refuse_json(text,text)",
+    "infrx.admission_lock_key()", "infrx.hold_for(integer,integer,numeric,numeric)",
+    "infrx.journal_bytes_charged()", "infrx.is_entitled(uuid,text)",
+    "infrx.admission_replay(jsonb,double precision,timestamp with time zone,text)",
+    "infrx.admission_checks(jsonb,jsonb,jsonb,text,timestamp with time zone)",
+    "infrx.admission_rows(jsonb,jsonb,jsonb,text,timestamp with time zone)",
+    "infrx.admission_insert_job(jsonb,jsonb,jsonb,jsonb,timestamp with time zone,"
+    "timestamp with time zone,text,text,text,jsonb,jsonb,numeric)",
+    "infrx.admit_legacy_usd(jsonb)", "infrx.admit_credit(jsonb)",
+    "infrx.jobs_admission_record_guard()", "infrx.release_hold_legacy_usd(uuid)",
+    "infrx.release_hold_credit(uuid)", "infrx.terminalize_unstarted(uuid,text)",
+    "infrx.lease_doc(infrx.attempts)", "infrx.index_event(infrx.outbox,infrx.jobs)",
+    "infrx.dispatch_wanted(text,text)", "infrx.jobs_credit_admission_guard(infrx.jobs)",
+    "infrx.media_uploads_guard()")
+D2_OPERATIONS = (
+    "infrx.admit(jsonb)", "infrx.prepare(jsonb)", "infrx.claim_preparation(jsonb)",
+    "infrx.dispatch_pending(jsonb)", "infrx.acknowledge_dispatch(jsonb)",
+    "infrx.dispatch_snapshot()", "infrx.reopen_dispatch(jsonb)",
+    "infrx.release_dispatch(jsonb)", "infrx.fail_dispatch(jsonb)", "infrx.gc_outbox(jsonb)",
+    "infrx.job_admission(uuid)", "infrx.put_result(jsonb)", "infrx.read_result(uuid,text)",
+    "infrx.touch_media_object(text,uuid)",
+    "infrx.delete_media_object_if_idle(text,timestamp with time zone)")
+
+
+def check_d2_function_privileges(conn) -> str:
+    """SEC-3 as a named invariant: no role executes a D2 helper (service_role included);
+    every D2 operation is executable by service_role and by no browser role; none is
+    executable by PUBLIC."""
+    problems = []
+    for signature in D2_HELPERS + D2_OPERATIONS:
+        roles = {role: conn.execute("select has_function_privilege(%s, %s::regprocedure, "
+                                    "'execute')", (role, signature)).fetchone()[0]
+                 for role in ("anon", "authenticated", "service_role")}
+        public = conn.execute("select exists (select 1 from aclexplode((select proacl from "
+                              "pg_proc where oid = %s::regprocedure)) a where a.grantee = 0)",
+                              (signature,)).fetchone()[0]
+        want_service = signature in D2_OPERATIONS
+        if roles["anon"] or roles["authenticated"] or public:
+            problems.append(f"{signature}: browser/PUBLIC execute {roles} public={public}")
+        if roles["service_role"] != want_service:
+            problems.append(f"{signature}: service_role execute={roles['service_role']}, "
+                            f"expected {want_service}")
+    assert not problems, "D2 function privileges:\n  " + "\n  ".join(problems)
+    return (f"{len(D2_HELPERS)} helpers executable by nobody, {len(D2_OPERATIONS)} "
+            f"operations by service_role only")

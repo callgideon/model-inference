@@ -178,14 +178,26 @@ def _event(n: int) -> IndexEvent:
 
 class _Store:
     def __init__(self, events) -> None:
-        self.events, self.acked = events, []
+        self.events, self.acked, self.released, self.errors = events, [], [], []
+        self.claimed_by = None
 
-    async def dispatch_pending(self, **_):
+    async def dispatch_pending(self, *, worker_id, **_):
+        self.claimed_by = worker_id
         return tuple(self.events)
 
-    async def acknowledge_dispatch(self, ids):
+    async def acknowledge_dispatch(self, ids, *, worker_id):
+        assert worker_id == self.claimed_by, \
+            f"the ack did not carry the relay's claim: {worker_id} != {self.claimed_by}"
         self.acked.append(list(ids))
         return len(ids)
+
+    async def release_dispatch(self, ids):
+        self.released.append(list(ids))
+        return len(ids)
+
+    async def record_dispatch_error(self, event_id, error):
+        self.errors.append(event_id)
+        return 1
 
 
 class _Index:
@@ -201,21 +213,37 @@ class _Index:
         return True
 
 
-def test_relay__acknowledges_exactly_what_the_index_took() -> None:
+def test_relay__a_full_index_stops_and_hands_the_rest_back() -> None:
+    """OB-4: the first capacity refusal stops the pump; that row and every later one are
+    released for the next pump, only what the index took is acknowledged."""
     events = [_event(1), _event(2), _event(3)]
     store, index = _Store(events), _Index(refuse={events[1].event_id})
     report = asyncio.run(OutboxRelay(store, index).pump())
-    assert store.acked == [[events[0].event_id, events[2].event_id]], store.acked
-    assert report == {"read": 3, "indexed": 2, "acknowledged": 2, "deferred": 1}
+    assert index.seen == [events[0].event_id], f"the pump went on past a full index: {index.seen}"
+    assert store.acked == [[events[0].event_id]], store.acked
+    assert store.released == [[events[1].event_id, events[2].event_id]], store.released
+    assert report == {"read": 3, "indexed": 1, "acknowledged": 1, "deferred": 2}, report
 
 
-def test_relay__a_failing_index_acknowledges_nothing() -> None:
-    """Enqueue before acknowledge: an index that dies leaves every row pending."""
-    events = [_event(1), _event(2)]
+def test_relay__two_default_relays_carry_different_worker_ids() -> None:
+    """Review OB-1b residual: `claimed_by = worker_id` separates two relay processes only
+    if their ids differ, so the default id is unique per relay, never a shared constant."""
+    one, two = OutboxRelay(_Store([]), _Index()), OutboxRelay(_Store([]), _Index())
+    assert one.worker_id != two.worker_id, \
+        f"two default relays share the worker id {one.worker_id!r}"
+
+
+def test_relay__a_failing_row_is_recorded_and_the_batch_goes_on() -> None:
+    """OB-7 and enqueue-before-acknowledge: a row the index refuses for another reason is
+    recorded, never acknowledged; the rows around it are indexed and acknowledged; the
+    failure is raised after."""
+    events = [_event(1), _event(2), _event(3)]
     store = _Store(events)
     with pytest.raises(RuntimeError):
         asyncio.run(OutboxRelay(store, _Index(crash={events[1].event_id})).pump())
-    assert store.acked == [], "a row was acknowledged although the index never took it"
+    assert store.acked == [[events[0].event_id, events[2].event_id]], store.acked
+    assert store.errors == [events[1].event_id], store.errors
+    assert store.released == [], "a failed row was handed back as if the index were full"
     empty = _Store([])
     asyncio.run(OutboxRelay(empty, _Index()).pump())
     assert empty.acked == [], "an empty pump wrote an acknowledgment"
@@ -236,3 +264,59 @@ def test_crash_after_commit_commits_then_loses_the_answer() -> None:
         asyncio.run(port.admit())
     assert calls == ["committed"], "the crash happened before the commit"
     assert asyncio.run(port.admit()) == "admission"
+
+
+def test_relay__a_rebuild_fences_the_acknowledgments_it_may_have_erased() -> None:
+    """OB-1: the store clock is read BEFORE the snapshot, the rows acknowledged since then
+    are reopened AFTER the index is replaced, and a pump re-sends them."""
+    calls = []
+
+    class _Fenced(_Store):
+        async def db_now(self):
+            calls.append("since")
+            return "t0"
+
+        async def dispatch_snapshot(self):
+            calls.append("snapshot")
+            return ()
+
+        async def reopen_dispatch(self, since):
+            calls.append(f"reopen:{since}")
+            return 0
+
+        async def dispatch_pending(self, **_):
+            calls.append("pump")
+            return ()
+
+    class _Rebuilding(_Index):
+        async def rebuild(self, snapshot):
+            calls.append("rebuild")
+            return 0
+
+    asyncio.run(OutboxRelay(_Fenced([]), _Rebuilding()).rebuild())
+    assert calls == ["since", "snapshot", "rebuild", "reopen:t0", "pump"], calls
+
+
+def test_the_harness_never_steps_around_a_guard_outside_a_test_database() -> None:
+    """SEC-1: `unrevoke_key` and `set_price` refuse before any ALTER unless the database is
+    a task-local infrx_<task> one."""
+    from infrx.state import pgtesting
+
+    class _Prod:
+        def __init__(self):
+            self.sent = []
+
+        def execute(self, sql, params=()):
+            self.sent.append(sql)
+            return SimpleNamespace(fetchone=lambda: (False, "postgres"))
+
+        def transaction(self):
+            raise AssertionError("a transaction was opened before the gate")
+
+    conn = _Prod()
+    extra = pgtesting.hooks(conn, None)
+    for call in (lambda: extra["unrevoke_key"](b.KEY_A),
+                 lambda: extra["set_price"](b.MODEL, None)):
+        with pytest.raises(RuntimeError):
+            call()
+    assert not [sql for sql in conn.sent if "alter table" in sql.lower()], conn.sent

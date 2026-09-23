@@ -18,7 +18,7 @@
 -- with CREDIT admission and the signup grant OFF. Until an operator enables them the
 -- CREDIT paths refuse with SQLSTATE 55000 ("maintenance") - never an unmetered success.
 --
--- D2 amendment (in place: 0006-0009 are applied to no hosted project; D1R review
+-- D2 amendment 2026-09-22 (in place: 0006-0009 are applied to no hosted project; D1R review
 -- follow-up (a)): `jobs_admission_guard` makes R70 a database invariant - a consumer
 -- wallet spends only on a deployment that is public AND active - and checks a provider_dev
 -- job's organization and key against the deployment's provider. Its CREDIT half is its own

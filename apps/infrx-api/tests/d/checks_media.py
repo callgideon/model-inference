@@ -83,30 +83,62 @@ def check_media_uploads(conn) -> str:
     return ca._in_rollback(conn, body)
 
 
+def _touch_error(conn, ref: str, org: str) -> tuple | None:
+    """The whole error a touch answers - SQLSTATE, message, detail, hint, context (the
+    RAISE's line, review MC-2b) - with the ref itself replaced, so an unknown ref and
+    another tenant's ref can be compared byte for byte (review MC-2). None when the touch
+    succeeded."""
+    try:
+        with conn.transaction():
+            conn.execute("select infrx.touch_media_object(%s, %s)", (ref, org))
+    except psycopg.Error as failed:
+        d = failed.diag
+        return tuple(None if v is None else str(v).replace(ref, "<ref>")
+                     for v in (failed.sqlstate, d.message_primary, d.message_detail,
+                               d.message_hint, d.context))
+    return None
+
+
 def check_media_objects(conn) -> str:
     """M3 request 1 / limit 2: `touch_media_object` stamps a use for its own organization
     only; `delete_media_object_if_idle` deletes only while `last_used_at` is still the
     observed value, so a re-use between the collector's read and its delete wins."""
     def body():
         ref = "media/a/v1/source"
-        first, = conn.execute("select infrx.touch_media_object(%s, %s)",
-                              (ref, b.ORG_A)).fetchone()
+        # an unknown ref: not_found, and nothing is created (update-only, SEC-4)
+        why = cc.attempt(conn, "select infrx.touch_media_object(%s, %s)", (ref, b.ORG_A))
+        assert why is not None and why.startswith("P0002"), f"an unknown object was touched: {why}"
+        assert conn.execute("select count(*) from infrx.media_objects where storage_ref = %s",
+                            (ref,)).fetchone()[0] == 0, "a touch created an object row"
+        conn.execute("insert into infrx.media_objects (storage_ref, org_id) values (%s, %s)",
+                     (ref, b.ORG_A))
+        first, = conn.execute("select last_used_at from infrx.media_objects where "
+                              "storage_ref = %s", (ref,)).fetchone()
+        conn.execute("select infrx_test.advance(30)")
         why = cc.attempt(conn, "select infrx.touch_media_object(%s, %s)", (ref, b.ORG_B))
         assert why is not None and why.startswith("P0002"), \
             f"another organization stamped the object: {why!r}"
-        conn.execute("select infrx_test.advance(60)")
+        # MC-2: another tenant's EXISTING object answers exactly what a missing one does
+        unknown = _touch_error(conn, "media/zz/v1/never-stored", b.ORG_B)
+        foreign = _touch_error(conn, ref, b.ORG_B)
+        assert unknown is not None and unknown == foreign, \
+            f"a foreign touch is distinguishable from a miss: {unknown} != {foreign}"
+        unchanged, = conn.execute("select last_used_at from infrx.media_objects where "
+                                  "storage_ref = %s", (ref,)).fetchone()
+        assert unchanged == first, "another organization's touch moved last_used_at"
+        conn.execute("select infrx_test.advance(30)")
         second, = conn.execute("select infrx.touch_media_object(%s, %s)",
                                (ref, b.ORG_A)).fetchone()
-        assert second > first, 'failed: second > first'
+        assert second > first, "the owner's touch did not move last_used_at"
         stale, = conn.execute("select infrx.delete_media_object_if_idle(%s, %s)",
                               (ref, first)).fetchone()
         assert stale is False, "an object used after the collector looked was deleted"
         idle, = conn.execute("select infrx.delete_media_object_if_idle(%s, %s)",
                              (ref, second)).fetchone()
-        assert idle is True, 'failed: idle is True'
+        assert idle is True, "an idle object was not deleted"
         assert conn.execute("select count(*) from infrx.media_objects where storage_ref = %s",
-                            (ref,)).fetchone()[0] == 0, 'failed: conn.execute("select count(*) from infrx.media_objects where storage_ref = %s", (ref,)).fetchone()[0] == 0'
-        return "tenant-checked touch; conditional delete loses to a re-use"
+                            (ref,)).fetchone()[0] == 0, "the idle object row survived"
+        return "update-only, tenant-checked touch; conditional delete loses to a re-use"
     return ca._in_rollback(conn, body)
 
 

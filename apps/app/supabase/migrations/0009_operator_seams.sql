@@ -14,6 +14,10 @@
 -- Everything here is service_role only; browser roles gain nothing. The deployed
 -- console's key creation (org_id, created_by, name, prefix, key_hash) keeps working:
 -- the audience defaults to consumer and the individual is its `created_by`.
+--
+-- D2 amendment 2026-09-22 (in place: 0006-0009 are applied to no hosted project; D1R
+-- review (e), R84): a comment only, on the `usage_records` keyset ("both or neither").
+-- No object changes.
 
 -- ================================================================ AuditAction ===
 do $$

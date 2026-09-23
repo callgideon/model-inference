@@ -107,6 +107,11 @@ def test_the_mutant_list_is_well_formed() -> None:
         assert mutant.scenario in ("fresh", "upgrade", "volume", "prodlike", "credit",
                                    "upgrade05", "credit_volume", "admission"), mutant.name
         assert mutant.check in mutation_list._CHECKS, f"{mutant.name}: unknown check"
+    # R83 / review H4: every anchor appears exactly as often as its mutant declares,
+    # checked statically, so a stale list fails here rather than one mutant at a time.
+    stale = [f"{m.name}: {mutation_list.anchor_count(m)} != {m.occurrences}" for m in ALL
+             if mutation_list.anchor_count(m) != m.occurrences]
+    assert not stale, "misdeclared anchors:\n  " + "\n  ".join(stale)
     covered = {m.check for m in ALL}
     uncovered = sorted(set(mutation_list._CHECKS) - covered)
     assert not uncovered, f"checks no mutant can break: {uncovered}"
@@ -131,6 +136,16 @@ def test_mutant_is_killed(mutant) -> None:
         f"mutant {mutant.name} was {outcome} but for the wrong reason: expected the "
         f"detail to name `{mutant.expects_detail}`, got {detail!r}")
     print(f"{mutant.name}: {outcome} by {mutant.check} -> {detail}")
+
+
+def test_the_runner_reports_a_stale_anchor_as_misdeclared() -> None:
+    """Review H4: a mutant whose anchor is gone is `misdeclared`, never a crash or a kill."""
+    import dataclasses
+    stale = dataclasses.replace(mutation_list.SELF_TEST, name="self_test_stale_anchor",
+                                old="create table infrx.no_such_relation (")
+    outcome, detail = mutation_list.kill(stale)
+    assert outcome == mutation_list.MISDECLARED, f"a stale anchor was {outcome}: {detail}"
+    print(f"runner self-test: stale anchor classified as {outcome} -> {detail}")
 
 
 def test_the_runner_cannot_report_a_broken_migration_as_a_kill() -> None:

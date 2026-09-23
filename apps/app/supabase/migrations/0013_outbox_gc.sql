@@ -7,10 +7,13 @@
 --   expire   a DISPATCH row of a terminal job that nobody acknowledged is acknowledged as
 --            `expired: job terminal` - there is nothing left to dispatch (the relay would
 --            also ack it as superseded when it next read it; this does not wait for that).
---   delete   an ACKNOWLEDGED row older than `retention_s` whose aggregate is not a live job.
---            Never an unacknowledged row (a projection consumer may still need it), never a
---            live job's row (its latest dispatch event is the rebuild's stable id), never a
---            `callback_delivery` row (its deliveries reference it).
+--   delete   an ACKNOWLEDGED row older than `retention_s` whose aggregate is not a live job
+--            and not a job still inside its idempotency tombstone (`tombstone_s` after
+--            `settled_at`, review OB-3: a replay answers the admission document, outbox
+--            events included, until the tombstone expires). Never an unacknowledged row (a
+--            projection consumer may still need it), never a live job's row (its latest
+--            dispatch event is the rebuild's stable id), never a `callback_delivery` row
+--            (its deliveries reference it).
 --
 -- Bounded: at most `limit` rows per call, oldest first, `skip locked` so a relay in flight
 -- is never blocked. Additive and re-runnable.
@@ -18,18 +21,20 @@
 create index if not exists outbox_acknowledged_idx on infrx.outbox (acknowledged_at)
   where acknowledged_at is not null;
 
--- Args `{retention_s, limit}`; answers `{"expired": n, "deleted": n}`.
+-- Args `{retention_s, tombstone_s, limit}`; answers `{"expired": n, "deleted": n}`.
 create or replace function infrx.gc_outbox(p_args jsonb) returns jsonb
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 declare
   v_now timestamptz := infrx.now();
   v_retention float8 := (p_args->>'retention_s')::float8;
+  v_tombstone float8 := coalesce((p_args->>'tombstone_s')::float8, 86400);
   v_limit int := greatest(1, least(coalesce((p_args->>'limit')::int, 1000), 10000));
   v_expired int;
   v_deleted int;
 begin
-  if v_retention is null or v_retention < 0 then
-    perform infrx.refuse('invalid_request', 'gc_outbox takes a nonnegative retention_s');
+  if v_retention is null or v_retention < 0 or v_tombstone < 0 then
+    perform infrx.refuse('invalid_request',
+                         'gc_outbox takes a nonnegative retention_s and tombstone_s');
   end if;
   with stale as (
     select o.event_id from infrx.outbox o
@@ -51,7 +56,8 @@ begin
        and o.acknowledged_at < v_now - make_interval(secs => v_retention)
        and o.kind <> 'callback_delivery'
        and not exists (select 1 from infrx.jobs j where j.request_id = o.aggregate_id
-                       and j.settled_at is null)
+                       and (j.settled_at is null
+                            or j.settled_at > v_now - make_interval(secs => v_tombstone)))
      order by o.acknowledged_at, o.event_id
      limit v_limit
      for update of o skip locked),

@@ -1147,7 +1147,13 @@ PDEV_KEY = "c6000000-0000-4000-8000-000000000001"
 
 
 def _provider_dev_key(org: str, audience: str = "provider_dev") -> str:
-    """NEMO's provider_dev key on its dev endpoint, filed in `org` (inside the case)."""
+    """NEMO's provider_dev key on its dev endpoint, filed in `org` (inside the case).
+    `audience="other_provider"`: a provider_dev key of ANOTHER provider (review M5)."""
+    if audience == "other_provider":
+        return (f"insert into public.api_keys (id, org_id, name, prefix, key_hash, audience, "
+                f"provider_org_id, endpoint_id) values ('{PDEV_KEY}', '{org}', 'k', "
+                f"'sk-infrx-pdev0000', 'hash-pdev', 'provider_dev', '{OTHER_PROVIDER}', "
+                f"'{OTHER_ENDPOINT}')")
     if audience == "consumer":
         return (f"insert into public.api_keys (id, org_id, created_by, name, prefix, key_hash) "
                 f"values ('{PDEV_KEY}', '{org}', '{PROVIDER_DEV_USER}', 'k', 'sk-infrx-pdev0000', "
@@ -1204,6 +1210,10 @@ def _admission_cases(conn) -> tuple[tuple, tuple]:
         ("a provider dev job admitted without a key",
          credit_job(j + "0e", "job_c_0e", op, PROVIDER_WALLET, card=DEV_CARD,
                     deployment=DEV_DEPLOYMENT)),
+        ("a provider dev job admitted through another provider's provider_dev key",
+         _provider_dev_key(op, "other_provider") + "; "
+         + credit_job(j + "0e", "job_c_0e", op, PROVIDER_WALLET, card=DEV_CARD,
+                      deployment=DEV_DEPLOYMENT, key=PDEV_KEY)),
         ("a provider dev job admitted through a consumer key",
          _provider_dev_key(op, "consumer") + "; "
          + credit_job(j + "0e", "job_c_0e", op, PROVIDER_WALLET, card=DEV_CARD,

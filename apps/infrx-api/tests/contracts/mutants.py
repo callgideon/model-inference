@@ -1789,7 +1789,10 @@ def assertion_kill(check, *args, dies_by: tuple[type[BaseException], ...] = ()) 
 
 
 def _first_line(error: BaseException) -> str:
-    return f"{type(error).__name__}: {str(error).strip().splitlines()[0][:160]}"
+    # An `AssertionError()` with no message is still a failure to report, not a crash of
+    # the runner reading it (D2 review H3).
+    lines = str(error).strip().splitlines()
+    return f"{type(error).__name__}: {(lines[0] if lines else '(no message)')[:160]}"
 
 
 if __name__ == "__main__":

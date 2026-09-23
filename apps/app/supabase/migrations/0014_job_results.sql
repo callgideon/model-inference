@@ -71,7 +71,7 @@ declare
   v_body text;
 begin
   select r.body into v_body from infrx.job_results r
-   where p_ref ~ '^infrx-result:[0-9a-f-]{36}$'
+   where p_ref ~ '^infrx-result:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
      and r.request_id = substr(p_ref, 14)::uuid and r.org_id = p_org;
   if not found then
     perform infrx.refuse('not_found', 'no result ' || coalesce(p_ref, ''));

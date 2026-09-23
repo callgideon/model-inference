@@ -100,3 +100,22 @@ def test_media__uploads_finalize_once_and_objects_delete_only_when_idle() -> Non
     print(checks_media.check_media_uploads(_db()))
     print(checks_media.check_media_objects(_db()))
     print(checks_media.check_media_privileges(_db()))
+
+
+def test_outbox__the_relays_small_print() -> None:
+    """Review OB-4..OB-6: limit, order, availability, release, fail, dispatch-only ack,
+    latest event, phase attempt counter, either lease kind."""
+    from . import checks_dispatch
+    print(checks_dispatch.check_dispatch_details(_db()))
+
+
+def test_privileges__d2_helpers_by_nobody_operations_by_service_role_only() -> None:
+    """Review SEC-3: the privilege boundary of every D2 function, as one named invariant."""
+    print(checks_admission.check_d2_function_privileges(_db()))
+
+
+def test_prepare__two_concurrent_claims_make_one_lease() -> None:
+    """Review OB-6b: the job row lock serializes concurrent preparation claims."""
+    from . import checks_dispatch
+    _db()
+    print(checks_dispatch.check_preparation_claim_race(pgharness.connect, DB))

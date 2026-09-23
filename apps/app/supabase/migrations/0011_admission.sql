@@ -199,13 +199,16 @@ $$;
 -- Steps 1-2: the capacity scope lock, then the idempotency scope. Answers the original
 -- admission for a matching replay, raises 409/410 for a changed payload or an expired
 -- tombstone, NULL when there is nothing to replay. The tombstone clock starts at the
--- terminal state (01), so an active job's mapping never expires.
+-- terminal state (01), so an active job's mapping never expires. A key that names a job of
+-- the OTHER accounting regime is a state_conflict (review M7): a USD admission is never
+-- answered to a CREDIT caller, or the reverse.
 create or replace function infrx.admission_replay(p_idem jsonb, p_ttl_s double precision,
-                                                  p_now timestamptz)
+                                                  p_now timestamptz, p_regime text)
 returns jsonb language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 declare
   i infrx.idempotency%rowtype;
   v_expires timestamptz;
+  v_regime text;
 begin
   perform pg_advisory_xact_lock(infrx.admission_lock_key());
   if p_idem->>'key' is null then
@@ -218,8 +221,13 @@ begin
   if not found then
     return null;
   end if;
-  select coalesce(i.expires_at, j.settled_at + make_interval(secs => p_ttl_s))
-    into v_expires from infrx.jobs j where j.request_id = i.request_id;
+  select coalesce(i.expires_at, j.settled_at + make_interval(secs => p_ttl_s)),
+         j.accounting_regime
+    into v_expires, v_regime from infrx.jobs j where j.request_id = i.request_id;
+  if v_regime is distinct from p_regime then
+    perform infrx.refuse('state_conflict', 'this idempotency key names a job of another '
+                         'accounting regime');
+  end if;
   if v_expires is not null and p_now >= v_expires then
     perform infrx.refuse('idempotency_expired',
                          'idempotency key expired at ' || v_expires::text);
@@ -405,10 +413,12 @@ declare
   p infrx.price_versions%rowtype;
   v_hold numeric(20,8);
   v_available numeric(20,8);
+  v_audience text;
   j infrx.jobs;
 begin
   perform infrx.require_feature('legacy_usd_admission');
-  v_replay := infrx.admission_replay(v_idem, (v_limits->>'idempotency_ttl_s')::float8, v_now);
+  v_replay := infrx.admission_replay(v_idem, (v_limits->>'idempotency_ttl_s')::float8, v_now,
+                                     'legacy_usd');
   if v_replay is not null then
     return v_replay;
   end if;
@@ -417,6 +427,15 @@ begin
                          || ' is already an admitted job');
   end if;
   v_deadline := infrx.admission_checks(r, v_limits, v_budgets, r->>'model_revision', v_now);
+  -- Review M4: the audience rule of the CREDIT body. An operator credential spends
+  -- nothing; a provider_dev credential reaches no public listing.
+  select a.audience into v_audience from public.api_keys a where a.id = (r->>'key_id')::uuid;
+  if v_audience = 'operator' then
+    perform infrx.refuse('forbidden', 'an operator credential does not spend a wallet');
+  end if;
+  if v_audience <> 'consumer' then
+    perform infrx.refuse('not_found', 'model');
+  end if;
   -- R45: the price source is the store's; the request's parameters are never read.
   select * into p from infrx.price_versions pv
    where pv.model_revision = r->>'model_revision' and pv.effective_from <= v_now
@@ -428,6 +447,10 @@ begin
   -- R53: the hold is derived from the snapshot taken in THIS transaction.
   v_hold := infrx.hold_for((r->>'max_input_tokens')::int, (r->>'max_output_tokens')::int,
                            p.input_rate_per_million, p.output_rate_per_million);
+  -- Review M3: never a zero hold, in either regime (a zero hold meters nothing).
+  if v_hold <= 0 then
+    perform infrx.refuse('invalid_request', 'a zero USD hold would meter nothing');
+  end if;
   select w.available into v_available from infrx.wallets w
    where w.org_id = (r->>'org_id')::uuid for update;
   if v_hold > coalesce(v_available, 0) then
@@ -474,7 +497,8 @@ declare
   v_hold numeric(20,8);
   j infrx.jobs;
 begin
-  v_replay := infrx.admission_replay(v_idem, (v_limits->>'idempotency_ttl_s')::float8, v_now);
+  v_replay := infrx.admission_replay(v_idem, (v_limits->>'idempotency_ttl_s')::float8, v_now,
+                                     'credit');
   if v_replay is not null then
     return v_replay;
   end if;
@@ -579,7 +603,7 @@ begin
       'infrx.refuse(text, text, integer)', 'infrx.refuse_json(text, text)',
       'infrx.admission_lock_key()', 'infrx.hold_for(integer, integer, numeric, numeric)',
       'infrx.journal_bytes_charged()', 'infrx.is_entitled(uuid, text)',
-      'infrx.admission_replay(jsonb, double precision, timestamptz)',
+      'infrx.admission_replay(jsonb, double precision, timestamptz, text)',
       'infrx.admission_checks(jsonb, jsonb, jsonb, text, timestamptz)',
       'infrx.admission_rows(jsonb, jsonb, jsonb, text, timestamptz)',
       'infrx.admission_insert_job(jsonb, jsonb, jsonb, jsonb, timestamptz, timestamptz, '

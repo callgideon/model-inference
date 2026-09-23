@@ -107,7 +107,8 @@ def test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate(back
         store = h.extra["store"]
         [a] = await admitted(h)
         # the relay reads and indexes, then dies before `acknowledge_dispatch`
-        [event] = await store.dispatch_pending(redelivery_s=REDELIVERY_S)
+        [event] = await store.dispatch_pending(worker_id="relay-dead",
+                                               redelivery_s=REDELIVERY_S)
         assert await q.enqueue(event) is True
         relay = OutboxRelay(store, q, redelivery_s=REDELIVERY_S)     # a restarted relay
         assert (await relay.pump())["read"] == 0, "redelivered inside the window"
@@ -195,10 +196,113 @@ def test_outbox__a_full_index_defers_rows_and_never_drops_them(backend) -> None:
         first = await relay.pump()
         assert (first["indexed"], first["deferred"]) == (1, 2), first
         seen = set()
-        for _ in range(3):
+        for _ in range(3):                  # no clock movement: deferred rows are released
             seen |= {e.job_id for e in await drain(q)}
-            h.clock.advance(REDELIVERY_S)
             await relay.pump()
         seen |= {e.job_id for e in await drain(q)}
         assert seen == {j.request_id for j in jobs}, "a deferred row was lost"
+    run(body)
+
+
+class _SnapshotThenRace:
+    """The store as a rebuilding relay sees it, with the race of review OB-1 injected
+    between its snapshot and the index rebuild: another relay pumps (indexes AND
+    acknowledges) a job admitted after the snapshot began."""
+
+    def __init__(self, store, interleave) -> None:
+        self._store, self._interleave = store, interleave
+
+    def __getattr__(self, name):
+        return getattr(self._store, name)
+
+    async def dispatch_snapshot(self):
+        snapshot = await self._store.dispatch_snapshot()
+        await self._interleave()
+        return snapshot
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job(backend) -> None:
+    """OB-1: a acknowledged; the rebuild snapshots; c is admitted; a second relay pumps
+    (indexes + acknowledges) c; the rebuild lands on the snapshot, which lacks c. Without
+    the reopen fence c sat queued with its row "delivered" until its queue deadline."""
+    h = pgstore.factory()
+    h.extra["grant"](b.ORG_A, "25.00")
+
+    async def body():
+        q = index(backend, h)
+        store = h.extra["store"]
+        [a] = await admitted(h)
+        await OutboxRelay(store, q).pump()                    # a indexed and acknowledged
+        late = {}
+
+        async def race():
+            [late["c"]] = await admitted(h)
+            report = await OutboxRelay(store, q, worker_id="relay-b").pump()
+            assert report["acknowledged"] == 1, report        # c delivered and acked
+            # OB-1c: the store clock moves on after B's ack, so a fence read AFTER the
+            # snapshot (a later `since`) would miss that ack and measurably strand c
+            h.clock.advance(1)
+
+        await OutboxRelay(_SnapshotThenRace(store, race), q).rebuild()
+        got = {e.job_id for e in await drain(q, OutboxKind.prepare_dispatch)}
+        assert got == {a.request_id, late["c"].request_id}, \
+            f"the rebuild stranded a pumped job: dispatchable {got}"
+    run(body)
+
+
+class _AckAfterReopen:
+    """Review OB-1b's schedule: relay B reads and indexes c between A's snapshot and A's
+    index rebuild, and B's acknowledgment lands only AFTER A's reopen."""
+
+    def __init__(self, store, before_rebuild, after_reopen) -> None:
+        self._store, self._before, self._after = store, before_rebuild, after_reopen
+
+    def __getattr__(self, name):
+        return getattr(self._store, name)
+
+    async def dispatch_snapshot(self):
+        snapshot = await self._store.dispatch_snapshot()
+        await self._before()
+        return snapshot
+
+    async def reopen_dispatch(self, since):
+        reopened = await self._store.reopen_dispatch(since)
+        await self._after()
+        return reopened
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_outbox__a_late_acknowledgment_after_the_reopen_strands_no_job(backend) -> None:
+    """OB-1b: B's index write is wiped by A's rebuild; B's ack arrives after A reopened the
+    row. The ack must be refused (the reopen cleared B's claim), so A's pump re-sends c."""
+    h = pgstore.factory()
+    h.extra["grant"](b.ORG_A, "25.00")
+
+    async def body():
+        q = index(backend, h)
+        store = h.extra["store"]
+        [a] = await admitted(h)
+        await OutboxRelay(store, q).pump()                    # a indexed and acknowledged
+        seen: dict = {}
+
+        async def relay_b_reads_and_indexes():
+            [seen["c"]] = await admitted(h)
+            events = await store.dispatch_pending(worker_id="relay-b",
+                                                  redelivery_s=REDELIVERY_S)
+            for event in events:
+                await q.enqueue(event)
+            seen["ids"] = [event.event_id for event in events]
+
+        async def relay_b_acknowledges_late():
+            seen["late_ack"] = await store.acknowledge_dispatch(seen["ids"],
+                                                                worker_id="relay-b")
+
+        await OutboxRelay(_AckAfterReopen(store, relay_b_reads_and_indexes,
+                                          relay_b_acknowledges_late), q).rebuild()
+        assert seen["late_ack"] == 0, \
+            f"relay B's late acknowledgment landed after the reopen: {seen['late_ack']}"
+        got = {e.job_id for e in await drain(q, OutboxKind.prepare_dispatch)}
+        assert got == {a.request_id, seen["c"].request_id}, \
+            f"the late acknowledgment stranded a job: dispatchable {got}"
     run(body)

@@ -242,17 +242,37 @@ class PgJobStore:
             else admission_v2_of(doc)
 
     # --- the dispatch outbox (D2 item 2) -------------------------------------------
-    async def dispatch_pending(self, *, limit: int = 100, worker_id: str = "relay",
+    async def dispatch_pending(self, *, worker_id: str, limit: int = 100,
                                redelivery_s: float = 30.0) -> tuple[IndexEvent, ...]:
-        """Unacknowledged dispatch rows whose job still wants them, as index events."""
+        """Unacknowledged dispatch rows whose job still wants them, as index events, claimed
+        for `worker_id` (required, unique per relay: only it may acknowledge them)."""
         docs = await self._call("dispatch_pending", {"limit": limit, "worker_id": worker_id,
                                                      "redelivery_s": redelivery_s})
         return tuple(IndexEvent.model_validate(doc) for doc in docs)
 
-    async def acknowledge_dispatch(self, event_ids) -> int:
-        """Delivery acknowledgment: the index now holds these candidates."""
-        return await self._call("acknowledge_dispatch",
+    async def acknowledge_dispatch(self, event_ids, *, worker_id: str) -> int:
+        """Delivery acknowledgment: the index now holds these candidates. Only the claim
+        holder's acknowledgment lands (OB-1b); a reopened or released row answers 0."""
+        return await self._call("acknowledge_dispatch", {
+            "event_ids": [str(event_id) for event_id in event_ids], "worker_id": worker_id})
+
+    async def db_now(self):
+        """The store clock (`infrx.now()`), e.g. the lower bound of a rebuild fence."""
+        return (await self._query("select infrx.now()", ()))[0][0]
+
+    async def reopen_dispatch(self, since) -> int:
+        """The rebuild fence (0012): dispatch rows acknowledged/claimed at or after
+        `since` whose job still wants them become pending again."""
+        return await self._call("reopen_dispatch", {"since": since.isoformat()})
+
+    async def release_dispatch(self, event_ids) -> int:
+        """Hand read-but-unindexed rows back for the next pump now (OB-4)."""
+        return await self._call("release_dispatch",
                                 {"event_ids": [str(event_id) for event_id in event_ids]})
+
+    async def record_dispatch_error(self, event_id, error: str) -> int:
+        """The index refused a row for a reason other than capacity (OB-7)."""
+        return await self._call("fail_dispatch", {"event_id": str(event_id), "error": error})
 
     async def dispatch_snapshot(self) -> tuple[IndexEvent, ...]:
         """PostgreSQL truth for `Scheduler.rebuild`."""
@@ -262,8 +282,11 @@ class PgJobStore:
     async def gc_outbox(self, *, retention_s: float = OUTBOX_RETENTION_S,
                         limit: int = 1000) -> dict[str, int]:
         """Expire dispatch rows of terminal jobs; delete acknowledged rows past
-        `retention_s` that no live job or consumer can still need (0013). Bounded."""
-        return await self._call("gc_outbox", {"retention_s": retention_s, "limit": limit})
+        `retention_s` that no live job, tombstone or consumer can still need (0013).
+        The tombstone is the store's own idempotency TTL. Bounded."""
+        return await self._call("gc_outbox", {
+            "retention_s": retention_s, "tombstone_s": self.limits.idempotency_ttl_s,
+            "limit": limit})
 
     # --- W2 / M3 requests (D2 item 4) --------------------------------------------
     async def is_live(self, job_id: str) -> bool:

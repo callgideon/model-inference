@@ -73,19 +73,61 @@ MUTANTS: tuple[Mutant, ...] = (
        "        if prompt_tokens is not None and (False",
        "test_prepared__a_prompt_count_must_be_an_integer"),
     _m("everything_read_is_acknowledged", "only what the index took is acknowledged", O,
-       "acknowledged = await self.store.acknowledge_dispatch(taken) if taken else 0",
-       "acknowledged = await self.store.acknowledge_dispatch("
-       "[e.event_id for e in events]) if events else 0",
-       "test_relay__acknowledges_exactly_what_the_index_took"),
-    _m("a_full_index_stops_the_pump", "a full index defers a row, it does not fail the pump", O,
+       "acknowledged = (await self.store.acknowledge_dispatch(taken, worker_id=self.worker_id)",
+       "acknowledged = (await self.store.acknowledge_dispatch("
+       "[e.event_id for e in events], worker_id=self.worker_id)",
+       "test_relay__a_full_index_stops_and_hands_the_rest_back"),
+    _m("a_full_index_is_a_failure", "a full index defers, it is not a row failure", O,
        "            except errors.CapacityExhausted:", "            except errors.RateLimited:",
-       "test_relay__acknowledges_exactly_what_the_index_took"),
-    _m("a_failing_index_is_acknowledged", "enqueue before acknowledge", O,
-       "            except errors.CapacityExhausted:", "            except Exception:",
-       "test_relay__a_failing_index_acknowledges_nothing"),
+       "test_relay__a_full_index_stops_and_hands_the_rest_back"),
+    _m("a_full_index_does_not_stop_the_pump", "OB-4: the pump stops at a full index", O,
+       "                deferred = [e.event_id for e in events[position:]]\n                break",
+       "                deferred = [event.event_id]\n                continue",
+       "test_relay__a_full_index_stops_and_hands_the_rest_back"),
+    _m("deferred_rows_are_not_released", "OB-4: deferred rows are handed back now", O,
+       "        if deferred:\n            await self.store.release_dispatch(deferred)\n", "",
+       "test_relay__a_full_index_stops_and_hands_the_rest_back"),
+    _m("a_failing_row_is_acknowledged", "enqueue before acknowledge", O,
+       "                continue\n            taken.append(event.event_id)",
+       "            taken.append(event.event_id)",
+       "test_relay__a_failing_row_is_recorded_and_the_batch_goes_on"),
+    _m("a_failing_row_is_not_recorded", "OB-7: the refused row is recorded", O,
+       "                await self.store.record_dispatch_error(event.event_id, "
+       "repr(failed)[:500])\n", "",
+       "test_relay__a_failing_row_is_recorded_and_the_batch_goes_on"),
+    _m("a_failing_row_aborts_the_batch", "OB-7: one bad row does not strand the batch", O,
+       "                failures.append(failed)\n", "                raise\n",
+       "test_relay__a_failing_row_is_recorded_and_the_batch_goes_on"),
+    _m("a_failure_is_swallowed", "OB-7: the failure is raised after the batch", O,
+       "        if failures:\n            raise failures[0]\n", "",
+       "test_relay__a_failing_row_is_recorded_and_the_batch_goes_on"),
     _m("an_empty_pump_acknowledges", "no acknowledgment without an indexed row", O,
-       "if taken else 0", "if True else 0",
-       "test_relay__a_failing_index_acknowledges_nothing"),
+       "                        if taken else 0)", "                        if True else 0)",
+       "test_relay__a_failing_row_is_recorded_and_the_batch_goes_on"),
+    _m("the_ack_carries_another_workers_claim", "OB-1b: the relay acknowledges as the claim "
+       "holder", O, "acknowledge_dispatch(taken, worker_id=self.worker_id)",
+       'acknowledge_dispatch(taken, worker_id="any")',
+       "test_relay__a_full_index_stops_and_hands_the_rest_back"),
+    _m("relays_share_a_worker_id", "OB-1b residual: each relay acknowledges under its own "
+       "id", O,
+       '    worker_id: str = field(default_factory=lambda: f"relay-{uuid.uuid4().hex[:8]}")',
+       '    worker_id: str = field(default_factory=lambda: "relay")',
+       "test_relay__two_default_relays_carry_different_worker_ids"),
+    _m("a_rebuild_does_not_reopen", "OB-1: a rebuild reopens the acknowledgments it may "
+       "have erased", O, "        await self.store.reopen_dispatch(since)\n", "",
+       "test_relay__a_rebuild_fences_the_acknowledgments_it_may_have_erased"),
+    _m("the_fence_is_read_after_the_snapshot", "OB-1: the fence's lower bound predates the "
+       "snapshot", O,
+       "        since = await self.store.db_now()                 # BEFORE the snapshot (the fence)\n"
+       "        indexed = await self.scheduler.rebuild(await self.store.dispatch_snapshot())\n",
+       "        snapshot = await self.store.dispatch_snapshot()\n"
+       "        since = await self.store.db_now()\n"
+       "        indexed = await self.scheduler.rebuild(snapshot)\n",
+       "test_relay__a_rebuild_fences_the_acknowledgments_it_may_have_erased"),
+    _m("the_harness_alters_production", "SEC-1: guards are stepped around only in a test "
+       "database", T, "    if not ok:\n        raise RuntimeError(", "    if False:\n"
+       "        raise RuntimeError(",
+       "test_the_harness_never_steps_around_a_guard_outside_a_test_database"),
     _m("the_crash_happens_before_the_commit", "crash_after_commit loses the answer, not "
        "the commit", T,
        "            result = await target(*args, **kw)\n            self.plan.after_commit(name)",

@@ -16,11 +16,14 @@
 -- Timestamps are taken from `infrx.now()` (R7: the database clock, movable only in a
 -- task-local test database - see infrx/state/test_clock.sql).
 --
--- D2 amendment (in place; 0003 is applied to no hosted project - hosted carries 0001-0002
+-- D2 amendment 2026-09-22 (in place; 0003 is applied to no hosted project - hosted carries 0001-0002
 -- only, D1R evidence Limits 1): `infrx.now()` also honours a test-only FROZEN instant
 -- (`infrx_test.clock.frozen_at`), behind the same two barriers as the offset. The
 -- conformance cases compare instants exactly (R29's clamp is `min(caller, db_now +
 -- budgets)`), which a clock that keeps moving between two statements cannot satisfy.
+--
+-- D3 amendment 2026-09-23 (R84, in place; unapplied anywhere hosted): jobs_guard permits
+-- exactly held_unknown -> released_platform_absorbed (the 24 h window exit, 02/R21).
 
 create schema if not exists infrx;
 

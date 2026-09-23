@@ -50,7 +50,9 @@ from pathlib import Path
 
 from infrx.contracts.tasklocal import local_services
 
-SERVICE = local_services("d1")["postgres"]
+# `INFRX_D_TASK=d2` runs the same harness on D2's own port (55433, `infrx-d2-postgres`,
+# database `infrx_d2`) when another checkout holds D1's shared one (08 §8 / R48).
+SERVICE = local_services(os.environ.get("INFRX_D_TASK", "d1"))["postgres"]
 PORT = SERVICE.host_port                           # 55432
 DATABASE = SERVICE.database                        # infrx_d1
 PASSWORD = "infrx-d1-local"

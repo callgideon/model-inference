@@ -256,7 +256,9 @@ $$;
 
 -- Args `{limit, worker_id, redelivery_s}`. At-least-once: a row stays pending until
 -- `acknowledge_dispatch`; a claimed row is handed out again once `redelivery_s` passed
--- without an acknowledgment (the relay died between the index write and the ack).
+-- without an acknowledgment (the relay died between the index write and the ack). A worker
+-- id is required (review OB-8): a row claimed by nobody could never be acknowledged
+-- (`claimed_by = worker_id`) and would be redelivered for ever.
 create or replace function infrx.dispatch_pending(p_args jsonb) returns jsonb
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 declare
@@ -264,6 +266,9 @@ declare
   v_out jsonb := '[]';
   r record;
 begin
+  if p_args->>'worker_id' is null or length(btrim(p_args->>'worker_id')) = 0 then
+    perform infrx.refuse('invalid_request', 'a worker id is required');
+  end if;
   for r in
     select o as ev, j as job from infrx.outbox o
       join infrx.jobs j on j.request_id = o.aggregate_id
@@ -289,7 +294,10 @@ begin
   return v_out;
 end $$;
 
--- Args `{event_ids: [...]}`; returns how many were newly acknowledged. Idempotent.
+-- Args `{event_ids, worker_id}`. Only the relay that holds the claim may acknowledge
+-- (review OB-1b): `reopen_dispatch` and `release_dispatch` clear the claim, so a relay whose
+-- index write was wiped by a concurrent rebuild and whose acknowledgment arrives after the
+-- reopen is refused (0) and the row stays pending for the rebuilding relay's pump.
 create or replace function infrx.acknowledge_dispatch(p_args jsonb) returns int
 language sql security definer set search_path = infrx, public, pg_temp as $$
   with acked as (
@@ -298,13 +306,16 @@ language sql security definer set search_path = infrx, public, pg_temp as $$
                         from jsonb_array_elements(coalesce(p_args->'event_ids', '[]')))
        and kind in ('prepare_dispatch', 'inference_dispatch')
        and acknowledged_at is null
+       and claimed_at is not null
+       and claimed_by = p_args->>'worker_id'
     returning 1)
   select count(*)::int from acked;
 $$;
 
 -- The rebuild source: every job that wants a dispatch now, with its LATEST dispatch
--- event (stable ids, so a rebuild followed by a redelivery indexes one candidate). A
--- preparing job whose preparation lease is live is being worked, so it is not a candidate.
+-- event (stable ids, so a rebuild followed by a redelivery indexes one candidate). A job
+-- under a live lease of either kind is being worked, so it is not a candidate (D3: `claim`
+-- must move queued -> running in the lease's own transaction).
 create or replace function infrx.dispatch_snapshot() returns jsonb
 language sql stable security definer set search_path = infrx, public, pg_temp as $$
   select coalesce(jsonb_agg(infrx.index_event(o, j) order by o.available_at, o.event_id),
@@ -315,9 +326,63 @@ language sql stable security definer set search_path = infrx, public, pg_temp as
                    and infrx.dispatch_wanted(x.kind, j.state)
                  order by x.created_at desc, x.event_id desc limit 1) o on true
   where j.state in ('preparing', 'queued')
-    and not exists (select 1 from infrx.attempts a
-                     where a.job_id = j.request_id and a.kind = 'preparation'
+    and not exists (select 1 from infrx.attempts a      -- review OB-5: either kind
+                     where a.job_id = j.request_id
                        and a.released_at is null and a.expires_at > infrx.now());
+$$;
+
+-- Args `{event_ids}`: hand rows back for the next pump now, not after the redelivery window
+-- (review OB-4: the index was full, so the relay stopped and returns what it read).
+create or replace function infrx.release_dispatch(p_args jsonb) returns int
+language sql security definer set search_path = infrx, public, pg_temp as $$
+  with released as (
+    update infrx.outbox set claimed_at = null, claimed_by = null
+     where event_id in (select (value #>> '{}')::uuid
+                        from jsonb_array_elements(coalesce(p_args->'event_ids', '[]')))
+       and kind in ('prepare_dispatch', 'inference_dispatch')
+       and acknowledged_at is null
+    returning 1)
+  select count(*)::int from released;
+$$;
+
+-- Args `{event_id, error}`: the index refused this row for a reason other than capacity
+-- (review OB-7). Recorded for operators; the row stays pending and is re-sent after the
+-- redelivery window.
+create or replace function infrx.fail_dispatch(p_args jsonb) returns int
+language sql security definer set search_path = infrx, public, pg_temp as $$
+  with failed as (
+    update infrx.outbox set last_error = left(coalesce(p_args->>'error', 'unknown'), 500)
+     where event_id = (p_args->>'event_id')::uuid
+       and kind in ('prepare_dispatch', 'inference_dispatch')
+       and acknowledged_at is null
+    returning 1)
+  select count(*)::int from failed;
+$$;
+
+-- Args `{since}`; answers how many rows were reopened. The rebuild fence (review OB-1):
+-- a `Scheduler.rebuild` REPLACES the index with a snapshot, so a job admitted after the
+-- snapshot began, and pumped + acknowledged by another relay before the rebuild landed,
+-- would be wiped from the index while its row says "delivered" - stranded until its queue
+-- deadline. `OutboxRelay.rebuild` therefore reads `since = infrx.now()` BEFORE the
+-- snapshot, rebuilds, then calls this: every dispatch row acknowledged or claimed at/after
+-- `since` whose job still wants it is pending again, and the next pump re-sends it
+-- (`enqueue` is replay-safe on the stable event id). Any such ack started after the
+-- snapshot's statement began, so `since` (taken earlier) is a safe lower bound.
+create or replace function infrx.reopen_dispatch(p_args jsonb) returns int
+language sql security definer set search_path = infrx, public, pg_temp as $$
+  with reopened as (
+    update infrx.outbox o set acknowledged_at = null, claimed_at = null, claimed_by = null
+      from infrx.jobs j
+     where j.request_id = o.aggregate_id
+       and o.kind in ('prepare_dispatch', 'inference_dispatch')
+       and infrx.dispatch_wanted(o.kind, j.state)
+       and (o.acknowledged_at >= (p_args->>'since')::timestamptz
+            or o.claimed_at >= (p_args->>'since')::timestamptz)
+       -- a job under a live lease is being worked: not a candidate (as the snapshot)
+       and not exists (select 1 from infrx.attempts a where a.job_id = j.request_id
+                       and a.released_at is null and a.expires_at > infrx.now())
+    returning 1)
+  select count(*)::int from reopened;
 $$;
 
 -- ================================================================ privileges ===
@@ -337,7 +402,9 @@ begin
   -- The platform's operations: service_role only.
   foreach f in array array[
       'infrx.claim_preparation(jsonb)', 'infrx.dispatch_pending(jsonb)',
-      'infrx.acknowledge_dispatch(jsonb)', 'infrx.dispatch_snapshot()']
+      'infrx.acknowledge_dispatch(jsonb)', 'infrx.dispatch_snapshot()',
+      'infrx.reopen_dispatch(jsonb)', 'infrx.release_dispatch(jsonb)',
+      'infrx.fail_dispatch(jsonb)']
   loop
     execute format('revoke all on function %s from public, anon, authenticated', f);
     execute format('grant execute on function %s to service_role', f);

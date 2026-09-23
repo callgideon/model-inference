@@ -232,8 +232,8 @@ def check_dispatch_relay(conn) -> str:
         assert {a.request_id, c.request_id} <= ids(again), "a lost acknowledgment lost the job"
         event_a = next(e for e in again if e["job_id"] == a.request_id)
         assert event_a["kind"] == "prepare_dispatch" and event_a["attempt"] == 0, 'failed: event_a["kind"] == "prepare_dispatch" and event_a["attempt"] == 0'
-        assert call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 1, 'failed: call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 1'
-        assert call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 0, 'failed: call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]]}) == 0'
+        assert call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]], "worker_id": "relay"}) == 1, 'failed: call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]], "worker_id": "relay"}) == 1'
+        assert call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]], "worker_id": "relay"}) == 0, 'failed: call(conn, "acknowledge_dispatch", {"event_ids": [event_a["event_id"]], "worker_id": "relay"}) == 0'
         advance(conn, 30)
         assert a.request_id not in ids(call(conn, "dispatch_pending", pending)), \
             "an acknowledged row was delivered again"
@@ -263,7 +263,56 @@ def check_dispatch_relay(conn) -> str:
                      (a.request_id,))
         snap = conn.execute("select infrx.dispatch_snapshot()").fetchone()[0]
         assert a.request_id not in {e["job_id"] for e in snap}, "a terminal job was indexed"
-        return "at-least-once with a redelivery window, superseded rows acked, snapshot exact"
+        # the rebuild fence (OB-1): rows acknowledged at/after `since` whose job still
+        # wants them are pending again; older acks, superseded and terminal rows are not
+        def deliver(job_):
+            ev = next(e for e in call(conn, "dispatch_pending", pending)
+                      if e["job_id"] == job_.request_id)
+            call(conn, "acknowledge_dispatch", {"event_ids": [ev["event_id"]],
+                                                "worker_id": "relay"})
+
+        early = _admitted(conn, world)
+        deliver(early)
+        advance(conn, 5)
+        since = conn.execute("select infrx.now()").fetchone()[0]
+        late = _admitted(conn, world)
+        deliver(late)
+        racing = _admitted(conn, world)       # relay B claims it; its ack arrives after reopen
+        call(conn, "dispatch_pending", dict(pending, worker_id="relay-b"))
+        moved = _admitted(conn, world)                # queued since: its row superseded
+        _, lease = claim(conn, moved.request_id)
+        prepare(conn, lease["lease"])
+        call(conn, "dispatch_pending", pending)
+        call(conn, "reopen_dispatch", {"since": since.isoformat()})
+        state = dict(conn.execute(
+            "select aggregate_id::text, acknowledged_at is null from infrx.outbox where "
+            "kind = 'prepare_dispatch' and aggregate_id in (%s, %s, %s)",
+            (early.request_id, late.request_id, moved.request_id)).fetchall())
+        assert state == {early.request_id: False, late.request_id: True,
+                         moved.request_id: False}, f"reopen fenced the wrong rows: {state}"
+        # OB-6b: the reopen clears the claim itself, not only the acknowledgment
+        racing_ev, claimed_at, claimed_by = conn.execute(
+            "select event_id::text, claimed_at, claimed_by from infrx.outbox where "
+            "aggregate_id = %s and kind = 'prepare_dispatch'", (racing.request_id,)).fetchone()
+        assert (claimed_at, claimed_by) == (None, None), \
+            f"reopen left relay B's claim on the row: {(claimed_at, claimed_by)}"
+        # OB-1b: relay B's LATE acknowledgment (its index write was wiped by the rebuild)
+        # is refused, so the row stays pending for the rebuilding relay's pump
+        late_ack = call(conn, "acknowledge_dispatch", {"event_ids": [racing_ev],
+                                                       "worker_id": "relay-b"})
+        assert late_ack == 0, "a late acknowledgment landed after the reopen: job stranded"
+        assert racing.request_id in {e["job_id"] for e in
+                                     call(conn, "dispatch_pending", pending)}, \
+            "the reopened row was not handed to the next pump"
+        # ...and only the relay now holding the claim may acknowledge it
+        assert call(conn, "acknowledge_dispatch", {"event_ids": [racing_ev],
+                                                   "worker_id": "relay-b"}) == 0, \
+            "a relay acknowledged a row another relay holds"
+        assert call(conn, "acknowledge_dispatch", {"event_ids": [racing_ev],
+                                                   "worker_id": "relay"}) == 1, \
+            "the claim holder could not acknowledge"
+        return ("at-least-once with a redelivery window, superseded rows acked, snapshot "
+                "exact, rebuild fence reopens only rows acked since")
     return ca._in_rollback(conn, body)
 
 
@@ -276,10 +325,14 @@ def check_outbox_gc(conn) -> str:
 
     def body():
         # start from a collected outbox, so the counts below are this check's rows only
-        conn.execute("select infrx.gc_outbox('{\"retention_s\": 0, \"limit\": 10000}')")
+        # (tombstone 0 too: terminal jobs committed by other checks must go now, not at
+        # the tombstone_s=0 call below - found by the full-suite order, not by -k)
+        clean = '{"retention_s": 0, "tombstone_s": 0, "limit": 10000}'
+        conn.execute("select infrx.gc_outbox(%s)", (clean,))
         advance(conn, 1)
-        conn.execute("select infrx.gc_outbox('{\"retention_s\": 0, \"limit\": 10000}')")
+        conn.execute("select infrx.gc_outbox(%s)", (clean,))
         live = _admitted(conn, world)
+        waiting = _admitted(conn, world)       # live, its prepare_dispatch NOT acknowledged
         dead = _admitted(conn, world)
         conn.execute("select infrx.terminalize_unstarted(%s, 'preparation_failed')",
                      (dead.request_id,))
@@ -296,17 +349,23 @@ def check_outbox_gc(conn) -> str:
                 "select kind, acknowledged_at is not null, coalesce(last_error, '') from "
                 "infrx.outbox where aggregate_id = %s", (request_id,)).fetchall())
 
-        first = call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1000})
+        gc = {"retention_s": 3600, "tombstone_s": 7200, "limit": 1000}
+        first = call(conn, "gc_outbox", gc)
         assert first == {"expired": 1, "deleted": 0}, first
         assert rows(dead.request_id) == [
             ("callback_delivery", True, ""), ("prepare_dispatch", True, "expired: job terminal"),
             ("trace_projection", False, ""), ("usage_projection", False, "")], \
             rows(dead.request_id)
         advance(conn, 3600)
-        assert call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1000}) == \
+        # exactly at the retention instant (no tombstone in the way): kept
+        assert call(conn, "gc_outbox", dict(gc, tombstone_s=0)) == \
             {"expired": 0, "deleted": 0}, "a row inside its retention was deleted"
         advance(conn, 1)
-        second = call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1000})
+        # past the retention, but the job is still inside its tombstone (OB-3)
+        assert call(conn, "gc_outbox", gc) == {"expired": 0, "deleted": 0}, \
+            "a terminal job's rows were deleted inside its idempotency tombstone"
+        advance(conn, 3600)
+        second = call(conn, "gc_outbox", gc)
         assert second == {"expired": 0, "deleted": 1}, second
         assert rows(dead.request_id) == [
             ("callback_delivery", True, ""), ("trace_projection", False, ""),
@@ -318,9 +377,15 @@ def check_outbox_gc(conn) -> str:
         for m in more:
             conn.execute("select infrx.terminalize_unstarted(%s, 'preparation_failed')",
                          (m.request_id,))
-        counts = [call(conn, "gc_outbox", {"retention_s": 3600, "limit": 1})["expired"]
-                  for _ in range(4)]
+        counts = [call(conn, "gc_outbox", dict(gc, limit=1))["expired"] for _ in range(4)]
         assert counts == [1, 1, 1, 0], counts
+        # and the delete step is bounded the same way, once they are past both windows
+        advance(conn, 7201)
+        deleted = [call(conn, "gc_outbox", dict(gc, limit=1))["deleted"] for _ in range(4)]
+        assert deleted == [1, 1, 1, 0], f"the delete step is not bounded: {deleted}"
+        # OB-2: a LIVE job's undelivered dispatch row survived every call above
+        assert rows(waiting.request_id) == [("prepare_dispatch", False, "")], \
+            f"GC expired or deleted a live job's pending dispatch: {rows(waiting.request_id)}"
         return "terminal dispatch rows expired; acknowledged rows past retention deleted, bounded"
     return ca._in_rollback(conn, body)
 
@@ -345,7 +410,8 @@ def check_results_and_prompt_tokens(conn) -> str:
         body_, = conn.execute("select infrx.read_result(%s, %s)", (b.ORG_A, ref)).fetchone()
         assert body_ == "a clip of a cat", 'failed: body_ == "a clip of a cat"'
         for org, bad in ((b.ORG_B, ref), (b.ORG_A, "infrx-result:../../etc"),
-                         (b.ORG_A, f"infrx-result:{b.ORG_A}")):
+                         (b.ORG_A, f"infrx-result:{b.ORG_A}"),
+                         (b.ORG_A, "infrx-result:" + "-" * 36)):
             try:
                 with conn.transaction():
                     conn.execute("select infrx.read_result(%s, %s)", (org, bad))
@@ -368,3 +434,124 @@ def check_results_and_prompt_tokens(conn) -> str:
         assert got == 1234, got
         return "result write-once, owner-only read; prompt count stored within the ceiling"
     return ca._in_rollback(conn, body)
+
+
+def check_dispatch_details(conn) -> str:
+    """The relay's small print (review OB-4..OB-6), one assertion each: `limit` bounds a
+    read; rows come out oldest first; a row not yet available is not handed out;
+    acknowledgment touches dispatch rows only; `release_dispatch` hands a claimed row back
+    at once; `fail_dispatch` records without acknowledging; the snapshot names a job's
+    LATEST event, carries the phase's own attempt counter, and skips a job under a live
+    lease of EITHER kind."""
+    world = ca.World(conn)
+    pending = {"limit": 1000, "worker_id": "relay", "redelivery_s": 30}
+
+    def body():
+        call(conn, "dispatch_pending", pending)            # claim everything older
+        advance(conn, 60)
+        first = _admitted(conn, world)
+        # OB-8: a read with no worker id is refused - its claim could never be acknowledged
+        nobody = {k: v for k, v in pending.items() if k != "worker_id"}
+        for bad in (nobody, dict(pending, worker_id=None), dict(pending, worker_id="  ")):
+            assert outcome(conn, "dispatch_pending", bad)[0] == "invalid_request", \
+                f"dispatch_pending claimed rows for no worker: {bad}"
+        second = _admitted(conn, world)
+        # a row inserted LAST but available EARLIEST, and one available only in an hour
+        conn.execute("insert into infrx.outbox (event_id, aggregate_id, org_id, kind, "
+                     "available_at) values (gen_random_uuid(), %s, %s, 'prepare_dispatch', "
+                     "infrx.now() - interval '1 hour')", (second.request_id, b.ORG_A))
+        future = _admitted(conn, world)
+        conn.execute("update infrx.outbox set available_at = infrx.now() + interval '1 hour' "
+                     "where aggregate_id = %s", (future.request_id,))
+        # the order must come from ORDER BY, not from whichever plan happens to run: with
+        # index scans off the heap returns rows in insertion order (the earliest last)
+        conn.execute("set local enable_indexscan = off")
+        conn.execute("set local enable_bitmapscan = off")
+        one = call(conn, "dispatch_pending", dict(pending, limit=1))
+        conn.execute("set local enable_indexscan = on")
+        conn.execute("set local enable_bitmapscan = on")
+        assert len(one) == 1, f"limit 1 handed out {len(one)} rows"
+        oldest = conn.execute("select event_id::text from infrx.outbox where aggregate_id = %s "
+                              "and available_at < infrx.now()", (second.request_id,)).fetchone()
+        assert oldest and one[0]["event_id"] == oldest[0], \
+            f"not oldest first: got {one[0]['job_id']}"
+        rest = call(conn, "dispatch_pending", pending)
+        assert future.request_id not in {e["job_id"] for e in rest}, \
+            "a row not yet available was handed out"
+        # release: a claimed row is pending again at once; fail: recorded, not acknowledged
+        ev = next(e for e in rest if e["job_id"] == first.request_id)
+        assert call(conn, "release_dispatch", {"event_ids": [ev["event_id"]]}) == 1, \
+            "release_dispatch released nothing"
+        again = call(conn, "dispatch_pending", pending)
+        assert first.request_id in {e["job_id"] for e in again}, \
+            "a released row waited for the redelivery window"
+        assert call(conn, "fail_dispatch", {"event_id": ev["event_id"], "error": "boom"}) == 1
+        row = conn.execute("select acknowledged_at is null, last_error from infrx.outbox "
+                           "where event_id = %s", (ev["event_id"],)).fetchone()
+        assert row == (True, "boom"), f"fail_dispatch acknowledged or lost the error: {row}"
+        # acknowledgment is for dispatch rows only
+        # (claimed by this relay, so only the kind predicate can refuse it)
+        proj = conn.execute("insert into infrx.outbox (event_id, aggregate_id, org_id, kind, "
+                            "available_at, claimed_at, claimed_by) values (gen_random_uuid(), "
+                            "%s, %s, 'usage_projection', infrx.now(), infrx.now(), 'relay') "
+                            "returning event_id::text", (first.request_id, b.ORG_A)).fetchone()[0]
+        assert call(conn, "acknowledge_dispatch", {"event_ids": [proj],
+                                                   "worker_id": "relay"}) == 0, \
+            "the dispatch ack acknowledged a projection row"
+        # the snapshot: the latest event, the phase's own attempt counter
+        advance(conn, 1)
+        later = conn.execute("insert into infrx.outbox (event_id, aggregate_id, org_id, kind, "
+                             "available_at) values (gen_random_uuid(), %s, %s, "
+                             "'prepare_dispatch', infrx.now()) returning event_id::text",
+                             (first.request_id, b.ORG_A)).fetchone()[0]
+        _, lease = claim(conn, first.request_id)          # preparation_attempts = 1
+        advance(conn, DEFAULTS.preparation_lease_ttl_s)
+        snap = {e["job_id"]: e for e in
+                conn.execute("select infrx.dispatch_snapshot()").fetchone()[0]}
+        assert snap[first.request_id]["event_id"] == later, "the snapshot kept an older event"
+        assert snap[first.request_id]["attempt"] == 1, \
+            f"the prepare event carries attempt {snap[first.request_id]['attempt']}, not the " \
+            "preparation counter"
+        # a queued job under a live INFERENCE lease is being worked (OB-5)
+        queued = _admitted(conn, world)
+        _, lease = claim(conn, queued.request_id)
+        prepare(conn, lease["lease"])
+        conn.execute("""insert into infrx.attempts (job_id, kind, generation, worker_id,
+            acquired_at, expires_at, generation_deadline_at, first_token_deadline_at)
+            values (%s, 'inference', 1, 'w', infrx.now(), infrx.now() + interval '2 min',
+                    infrx.now() + interval '5 min', infrx.now() + interval '1 min')""",
+                     (queued.request_id,))
+        snap = {e["job_id"] for e in conn.execute("select infrx.dispatch_snapshot()").fetchone()[0]}
+        assert queued.request_id not in snap, "a job under a live inference lease was indexed"
+        return "limit, order, availability, release, fail, dispatch-only ack, latest event, " \
+               "phase attempt, either lease kind"
+    return ca._in_rollback(conn, body)
+
+
+def check_preparation_claim_race(connect, database: str, rounds: int = 10) -> str:
+    """Review OB-6b: two workers claim the same preparing job at the same instant from two
+    connections - exactly one lease and one `not_claimable`, every round (the job row lock
+    in `claim_preparation` is what serializes them)."""
+    import threading
+    for n in range(rounds):
+        with connect(database) as setup:
+            request = _admitted(setup, ca.World(setup))
+        results: list = []
+        barrier = threading.Barrier(2)
+
+        def attempt(worker: str) -> None:
+            with connect(database) as conn:
+                barrier.wait()
+                results.append(claim(conn, request.request_id, worker)[0])
+
+        workers = [threading.Thread(target=attempt, args=(f"prep-{w}",)) for w in "ab"]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join()
+        with connect(database) as cleanup:
+            cleanup.execute("select infrx.terminalize_unstarted(%s, 'preparation_failed')",
+                            (request.request_id,))
+        assert sorted(results, key=str) == sorted([None, "not_claimable"], key=str), \
+            f"round {n}: two concurrent preparation claims answered {results}"
+    return f"{rounds} rounds of two concurrent claims: one lease, one not_claimable each"
