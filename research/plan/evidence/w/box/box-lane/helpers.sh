@@ -30,3 +30,15 @@ run() {   # $1 = purpose, $2 = command line: send, log id, wait (<= $3 s, defaul
   out "$id"
   local e; e=$(err "$id"); [ -z "$e" ] || { echo "--- stderr"; echo "$e"; }
 }
+waitlog() {  # $1 = remote log, $2 = regex that ends the wait, $3 = max minutes; polls every 2 min
+  local i id o
+  for i in $(seq 1 $(( $3 / 2 ))); do
+    sleep 120
+    id=$(ssm "tail -c 4000 $1") || continue
+    printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$id" "poll $1 (waitlog)" >> "$LOG"
+    sleep 5
+    o=$(out "$id" 2>/dev/null)
+    if printf '%s' "$o" | grep -Eq "$2"; then echo "matched after poll $i ($id)"; printf '%s\n' "$o" | tail -40; return 0; fi
+  done
+  echo "no match after $3 min"; printf '%s\n' "$o" | tail -20; return 1
+}

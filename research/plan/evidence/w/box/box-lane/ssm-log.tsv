@@ -7,3 +7,6 @@
 2026-09-23T19:44:33Z	588864fb-33b1-423f-b9da-ee0ce9200240	step6-prep read-only: modeling_marlin.py caption()/find() source (vendor file) + synth poll
 2026-09-23T19:47:05Z	c997b7c2-a474-4566-aaa6-fec91edf6b56	step4 open maintenance window: save live Caddyfile, validate + write maintenance in place, reload via localhost:2019
 2026-09-23T19:47:48Z	2c299ba4-0014-4955-8764-bb7c3dfb5e5a	step5 launch E0: candidate.sh CANDIDATE=e0 W4_ENGINE_RESTART_OK=1 (nohup, w4-logs/e0.log) - W4 command block verbatim
+2026-09-23T19:48:10Z	5edbdf04-f94a-429b-a3ca-26defebd841f	step5 poll e0.log
+2026-09-23T19:49:47Z	3db6f720-cf22-4225-a3a1-18ca137977f7	step5 poll e0.log
+2026-09-23T19:51:43Z	231afdd9-9b8a-424d-aad5-3af8ab919f30	poll /opt/dlami/nvme/w4-logs/e0.log (watch)
