@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T21:58:02Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T22:02:17Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
@@ -65,12 +65,11 @@ Generated 2026-09-23T21:58:02Z from `tasks.json` (manifest v4) and `progress-sta
 
 ## In flight
 
-- E1B: codex-e1b — software slices MERGED (164e43e); GPU measurement slices pending W3 → I2B since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
+- E1B: codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - D5: codex-d5 / codex/d5-terminal-transaction — review fix_required at c67e4f5 (8 blocking test gaps + merge readiness; money confirmed correct) → ONE fix round running → single verifier → MERGE together with E3B phase 3 since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
 - E4B: codex-e4b / codex/e4b-certify — fix round HANDED BACK 7b5dbd7 (F1–F9 + N1/N2 closed; 126 mutants); single verifier running → merge after M pilot-media; box half after the rollout (needs infrx_build_info from the gateway — cutover lane) since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
 - CUTOVER: codex-cutover / codex/cutover-mount — milestone 43fe900 (mount + adapters from settings + gateway.py retired; tests/g 568) forwarded to phase 3; items 3–5 (edge proxying, preflight, evidence) in progress at 6cb8ebe+ since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
 - E3B-phase3: codex-e3b3 / codex/e3b-phase3-bodies — cutover 6cb8ebe merged (058e43b), dr17 rewritten (858cb0e); journeys/dataset resume/dr11/rc03 in progress; video_upload + cross-process cells pend on M3-U1/M3-U2 until the M pilot-media lane lands since 2026-09-23T19:29:02Z — namespace e3b2 / 56732
-- BOX: codex-box / codex/box-measure — dispatched (Opus) 19:4xZ: logged box op on i-0e8449a4ffca29bab — W4 phase B (candidate.sh E0/E1[/E3] → decide.py → P-20), E1B L0/L1/L8 in the same maintenance window; L2–L7 + E4B real runs after the rollout (phase 2) since 2026-09-23T19:35:52Z — SSM only; Caddy maintenance swap with saved live Caddyfile; engine restored by candidate.sh
 - M1-L2: codex-objstore / codex/m1l2-object-store — fix round HANDED BACK 0b9fc50 (A1–A7 closed; 42 mutants); single verifier running → merge after D5 + cutover since 2026-09-23T19:57:28Z — compose S3 in namespace e2 if free; else stub
 - M-pilot-media: codex-mpilot / codex/m-pilot-media — dispatched (Opus) from 6cb8ebe: upload-ref resolution in the real staging (M3-U1); durable attach + rebuildable cache index for a separate worker process (M3-U2) since 2026-09-23T20:11:55Z — d4 ports, Q 55494; merges on top of the cutover head
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
@@ -85,6 +84,7 @@ Generated 2026-09-23T21:58:02Z from `tasks.json` (manifest v4) and `progress-sta
 - review D5: fix_required at c67e4f5 (wf_1c8eb6c1-062; 23 agents; JSON evidence/d/D5-review-c67e4f5.json) → fix round since 2026-09-23T20:43:27Z
 - review M1-L2: verifier at 0b9fc50 running since 2026-09-23T21:49:26Z
 - review E4B: verifier at 7b5dbd7 running since 2026-09-23T21:58:02Z
+- review W4-phaseB: MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md since 2026-09-23T22:02:17Z
 
 ## Checkpoints
 
