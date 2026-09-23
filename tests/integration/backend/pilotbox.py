@@ -10,8 +10,8 @@ five mounted routers and the stores built from settings (`pilot.adapters_from_en
 PgCatalogDirectory, D4's PgStreamStore, D2's PgJobStore on one pool). What no setting can
 compose yet is INJECTED, each named here and in the evidence:
 
-* `objects`: M1's InMemoryObjectStore. `S3_MEDIA_BUCKET` composes nothing (M1-L2: no S3
-  adapter, so the cutover refuses to start); staged bytes live as long as this process.
+* (the object store is NOT injected: M1-L2's S3ObjectStore from `S3_MEDIA_BUCKET`, on E2's
+  MinIO under a prefix of the box's own; before M1-L2 merged it was the in-memory store)
 * `sb`: the Supabase REST transport, pointed at this stack's PostgREST ROOT. Hosted Supabase
   serves the same API under `/rest/v1` behind its gateway; PostgREST itself serves `/`.
 * `index`: Q2's ValkeyScheduler on this namespace's Valkey, in a namespace of its own under
@@ -137,7 +137,6 @@ async def gateway() -> None:
     from infrx.contracts.records import OutboxKind
     from infrx.gateway.app import create_app
     from infrx.media import fetch
-    from infrx.media.store import InMemoryObjectStore
     from infrx.worker import WorkerLoop
     settings = from_env()
     token = settings.supabase_key
@@ -145,7 +144,7 @@ async def gateway() -> None:
                            headers={"apikey": token, "Authorization": f"Bearer {token}",
                                     "Content-Type": "application/json"})
     queue = index(settings.pilot)
-    app = create_app(settings, sb=sb, objects=InMemoryObjectStore(), index=queue)
+    app = create_app(settings, sb=sb, index=queue)
     rt = app.state.runtime
     body = clip()
 
@@ -251,7 +250,10 @@ class PilotBox:
 
     def __init__(self, env: dict[str, str], engine_url: str, workdir: Path,
                  port: int, namespace: str) -> None:
-        self.env = {**os.environ, **env, PORT_ENV: str(port), INDEX_ENV: namespace,
+        import stack
+        inherited = {name: value for name, value in os.environ.items()
+                     if name not in stack.AWS_UNSET}
+        self.env = {**inherited, **env, PORT_ENV: str(port), INDEX_ENV: namespace,
                     ENGINE_ENV: engine_url, "PYTHONUNBUFFERED": "1"}
         self.workdir, self.port, self.namespace = workdir, port, namespace
         self.processes: dict[str, subprocess.Popen] = {}
@@ -317,6 +319,10 @@ class PilotBox:
         leftovers = list(client.scan_iter(f"{self.namespace}*"))
         if leftovers:
             client.delete(*leftovers)
+        s3, prefix = harness.s3_client(), self.env["S3_MEDIA_PREFIX"]
+        for item in s3.list_objects_v2(Bucket=harness.S3_BUCKET,
+                                       Prefix=prefix).get("Contents", []):
+            s3.delete_object(Bucket=harness.S3_BUCKET, Key=item["Key"])
 
 
 @contextlib.contextmanager

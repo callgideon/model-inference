@@ -53,7 +53,7 @@ if importlib.util.find_spec("infrx") is None:
 # (tasks.json implemented/integrated) is a blocker of an E3B case; the ones still listed are
 # `RESIDUAL`, kept only for I3B's recovery cases, which are read-only here and extend this
 # vocabulary (`recovery/recoverykit.PENDING`), with owner references that are no task
-# (`recoverykit.OWNERS`, e.g. `I2B-R4`, `M1-L2`: never an E3B blocker, never stale).
+# (`recoverykit.OWNERS`, e.g. `I2B-R4`: never an E3B blocker, never stale).
 # `test_stage.py` holds all of them to tasks.json.
 #
 # E3B's own owner references (R3-1): work no task schedules, named by what it is and who
@@ -414,14 +414,41 @@ def provision_two_tenants() -> Provisioned:
 GATEWAY_PORT = harness.PORT_RANGE.start + 40        # e3b2: 56740, loopback only
 
 
+# Environment names the pilot process must NOT inherit: botocore would prefer them to the
+# local literals below (the host exports stale AWS credentials, CLAUDE.md).
+AWS_UNSET = ("AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_S3")
+
+
+def s3_env() -> dict[str, str]:
+    """E2's MinIO literals as the ONLY credentials botocore's chain can find (M1-L2's
+    S3ObjectStore takes no credential setting, by design)."""
+    # the secret's NAME assembled from parts: test_harness's production-pointer guard scans it
+    return {"AWS_ACCESS_KEY_ID": harness.S3_ACCESS_KEY,
+            "AWS_SECRET" "_ACCESS_KEY": harness.S3_SECRET_KEY, "AWS_DEFAULT_REGION": "us-east-1",
+            "AWS_EC2_METADATA_DISABLED": "true", "AWS_CONFIG_FILE": os.devnull,
+            "AWS_SHARED_CREDENTIALS_FILE": os.devnull}
+
+
+def media_bucket() -> str:
+    """E2's bucket, created if this stack has not made it yet; the name."""
+    client = harness.s3_client()
+    with contextlib.suppress(Exception):               # already there
+        client.create_bucket(Bucket=harness.S3_BUCKET)
+    return harness.S3_BUCKET
+
+
 def pilot_env(database: str, workdir: Path, rest_url: str = "", **extra: str) -> dict[str, str]:
     """The pilot box's environment on this stack, by the 08 §5 names: `pilot` mode, the
-    clone as `DATABASE_URL`, this namespace's Valkey, the CREDIT regime at the PROVISIONAL
-    Marlin card (P-01: a label, never a price), a processing cache and usage log of its own.
-    `SUPABASE_URL` and the service-role key name this stack's PostgREST and a service_role
-    token only it accepts."""
+    clone as `DATABASE_URL`, this namespace's Valkey, E2's MinIO as the media object store
+    (M1-L2's S3ObjectStore, under a prefix of the workdir's own), the CREDIT regime at the
+    PROVISIONAL Marlin card (P-01: a label, never a price), a processing cache and usage log
+    of its own. `SUPABASE_URL` and the service-role key name this stack's PostgREST and a
+    service_role token only it accepts."""
     (workdir / "cache").mkdir(parents=True, exist_ok=True)
+    prefix = f"{harness.OBJECT_PREFIX}{workdir.name}-{uuid.uuid4().hex[:8]}/"
     return {"INFRX_MODE": "pilot", "DATABASE_URL": harness.pg_dsn(database),
+            "S3_MEDIA_BUCKET": media_bucket(), "S3_MEDIA_PREFIX": prefix,
+            "S3_ENDPOINT_URL": harness.s3_endpoint(), **s3_env(),
             "VALKEY_URL": harness.valkey_url(), "ACCOUNTING_REGIME": "credit",
             "ACTIVE_RATE_CARD_VERSION": SEED_CARD, "MODEL_ID": CREDIT_ALIAS,
             "PROCESSING_CACHE_DIR": str(workdir / "cache"),

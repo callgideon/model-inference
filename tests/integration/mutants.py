@@ -1019,6 +1019,14 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/backend/recovery/test_recovery.py", "rc03", layer=2,
            cases=("test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_"
                   "its_identity",)),
+    Mutant("e3bm68", "E3B3 rc05b: an S3 partition is the store DOWN (dependency_unavailable), "
+                     "never a missing object",
+           "apps/infrx-api/infrx/media/s3.py",
+           "        except BotoCoreError as failure:\n            raise errors.DependencyUnavailable(",
+           "        except BotoCoreError as failure:\n            return None\n"
+           "            raise errors.DependencyUnavailable(",
+           "tests/integration/backend/recovery/test_recovery.py", "rc05b", layer=2,
+           cases=("test_i3b_rc05b_an_object_store_outage_on_minio_through_the_s3_adapter",)),
 )
 
 

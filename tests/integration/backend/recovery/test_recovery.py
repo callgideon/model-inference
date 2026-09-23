@@ -15,7 +15,7 @@ What is real in each drill, and what stands in for a component that is missing:
 | rc02 engine loss | a separate engine **process**, SIGKILLed; E2's HTTP adapter | store (D2-D5) |
 | rc03 gateway restart | the mounted gateway PROCESS (E3B's `pilotbox`), SIGKILLed mid-answer and restarted, beside a worker process that survives it | text only: a worker process cannot resolve media another process prepared (M3-U2); the store half is E3B dr01 |
 | rc04 database loss | rc04a: PgJobStore on PostgreSQL (D harness or E2's), SIGKILLed and restarted after a claim; rc04b: settlement across the kill (D5's terminalize, E3B phase 3) | the database's own boundary is `test_restore.py` bk03 |
-| rc05 object store | M2's preparation; an outage in front of the object store | rc05b: PENDING M1-L2 (an S3 ObjectStore) for MinIO |
+| rc05 object store | M2's preparation; an outage in front of the object store; rc05b: M1-L2's S3ObjectStore on E2's MinIO, partitioned from the stack's network | - |
 | rc06 index loss | Q2's `ValkeyScheduler` on E2's Valkey, SIGKILLed | snapshot from the fake (Q3) |
 | rc07 disk full | a 256 KiB tmpfs under M2's processing cache | store (D2-D5) |
 | rc08 drain | W2's drain over real Valkey | rc08b: PENDING I2B-R4 (the worker's `__main__`) for the process's SIGTERM path |
@@ -539,28 +539,34 @@ def test_i3b_rc05_an_object_store_outage_during_preparation_is_retried_or_releas
     and the job completes once the store is back. Job 2's outage outlasts the budget: the
     reaper fails it `preparation_failed`, free, hold released. The probe shows the store
     down while it is."""
-    world = kit.World()
     objects = Outage()
+    outage_drill(tmp_path, objects, down=lambda: setattr(objects, "down", True),
+                 up=lambda: setattr(objects, "down", False))
+
+
+def outage_drill(tmp_path, objects, *, down, up) -> None:
+    """rc05's drill on any object store with an outage switch (`down`/`up`)."""
+    world = kit.World()
     with_media(world, objects, str(tmp_path / "cache"))
     clip = kit.m_support().mp4(seconds=10.0)
 
     async def body():
         short, long = await video_job(world, 0, clip), await video_job(world, 1, clip)
         before = world.scrape()
-        objects.down = True                          # a short outage
+        down()                                       # a short outage
         assert not await probe(world, "object_store", lambda: objects.head("probe"))
         assert not await world.prepare(short.request_id, "prep-a")
         assert "ComponentDown" in kit.fired(world, before)
         world.clock.advance(DEFAULTS.preparation_lease_ttl_s + 1)
         await world.reap()
-        objects.down = False
+        up()
         assert await probe(world, "object_store", lambda: objects.head("probe"))
         assert await world.prepare(short.request_id, "prep-b")
         await world.dispatch(short.request_id)
         await world.finish(world.loop())
-        objects.down = True                          # an outage longer than the budget
+        down()                                       # an outage longer than the budget
         assert not await prepare_until_settled(world, long.request_id)
-        objects.down = False
+        up()
         summary = await world.reconcile()
         assert summary["terminal"] == {"succeeded/completed": 1,
                                        "failed/preparation_failed": 1}, summary
@@ -568,41 +574,39 @@ def test_i3b_rc05_an_object_store_outage_during_preparation_is_retried_or_releas
     kit.run(body)
 
 
-def _object_store_adapters() -> list[str]:
-    """D3: structural, not a name heuristic - every class defined anywhere under
-    `infrx.media`, subpackages included (`infrx/media/s3/adapter.py` counts), that has the
-    port's core operations, other than the Protocol and the in-memory double. A class
-    re-exported by a second module is counted once, under the module that defines it.
-    ponytail: a module that fails to import (a missing optional dependency) is not seen,
-    nor an adapter defined outside `infrx.media`."""
-    import inspect
-    import pkgutil
+def test_i3b_rc05b_an_object_store_outage_on_minio_through_the_s3_adapter(tmp_path,
+                                                                            monkeypatch):
+    """rc05's drill against E2's MinIO through M1-L2's `S3ObjectStore` (E3B phase 3: the
+    adapter merged, so this runs), the outage a real network partition: MinIO leaves the
+    stack's network (`harness.disconnect_container`) and rejoins it. The store's own answer
+    during the partition is `dependency_unavailable`, so the probe reads it down, the short
+    outage is retried and completes, the long one is released `preparation_failed`, free.
+    MinIO's local literals are botocore's only credentials; the objects live under a prefix
+    of this run's own in E2's bucket, removed afterwards."""
+    import uuid
 
-    import infrx.media
-    core = ("head", "get", "put_if_absent")
-    found = set()
-    for info in pkgutil.walk_packages(infrx.media.__path__, "infrx.media.",
-                                      onerror=lambda name: None):
-        try:
-            module = importlib.import_module(info.name)
-        except ImportError:
-            continue
-        for _, cls in inspect.getmembers(module, inspect.isclass):
-            if cls.__module__.startswith("infrx.media") \
-                    and cls not in (store.ObjectStore, store.InMemoryObjectStore) \
-                    and all(callable(getattr(cls, op, None)) for op in core):
-                found.add(f"{cls.__module__}.{cls.__qualname__}")
-    return sorted(found)
-
-
-def test_i3b_rc05b_an_object_store_outage_on_minio_is_pending_on_the_s3_adapter():
-    """The same drill against E2's MinIO needs an S3-backed `ObjectStore`; `media.store`
-    has only the in-memory one. Fails the day any class in `infrx.media` implements the
-    port (whatever its name) other than the in-memory double."""
-    names = _object_store_adapters()
-    if names:
-        pytest.fail(f"an S3 object store exists ({names}): pause MinIO under it now")
-    kit.pending("M1-L2", why="no S3-backed ObjectStore in infrx.media (InMemoryObjectStore only)")
+    from infrx.media.s3 import S3ObjectStore
+    kit.needs_stack()
+    for name in ("AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_S3"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in stack.s3_env().items():
+        monkeypatch.setenv(name, value)
+    client = harness.s3_client()
+    with contextlib.suppress(Exception):                     # already there
+        client.create_bucket(Bucket=harness.S3_BUCKET)
+    prefix = f"{harness.OBJECT_PREFIX}rc05b-{uuid.uuid4().hex}/"
+    objects = S3ObjectStore.connect(harness.S3_BUCKET, prefix, harness.s3_endpoint())
+    partition = []
+    try:
+        outage_drill(tmp_path, objects,
+                     down=lambda: partition.append(harness.disconnect_container("s3")),
+                     up=lambda: partition.pop().revert())
+    finally:
+        while partition:
+            partition.pop().revert()
+        listed = client.list_objects_v2(Bucket=harness.S3_BUCKET, Prefix=prefix)
+        for item in listed.get("Contents", []):
+            client.delete_object(Bucket=harness.S3_BUCKET, Key=item["Key"])
 
 
 @contextlib.contextmanager
@@ -816,9 +820,7 @@ def test_i3b_rc00_each_pending_drill_names_its_pinned_owner_and_an_unknown_id_is
     the cutover mounted the ingress, and rc04b since D5: E3B phase 3.)"""
     assert _outcome(lambda: kit.pending("NOPE", why="x")).startswith("refused: "), "NOPE"
     assert _outcome(lambda: kit.pending(why="x")).startswith("refused: "), "no id"
-    pinned = {test_i3b_rc05b_an_object_store_outage_on_minio_is_pending_on_the_s3_adapter:
-                  "M1-L2",
-              test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3: "I2B-R4"}
+    pinned = {test_i3b_rc08b_a_sigterm_drain_of_the_worker_process_is_pending_on_w3: "I2B-R4"}
     for case, owner in pinned.items():
         assert _outcome(case).startswith(f"PENDING[{owner}] "), (case.__name__, _outcome(case))
 
