@@ -918,6 +918,30 @@ def test_the_mutation_stage_runs_every_list_through_one_runner(monkeypatch):
     assert scripts and [path for path in scripts if not path.startswith(copied)] == []
 
 
+# Anchors known stale on THIS tree, each with its owner. Strict: an entry that is no longer
+# stale fails the guard too, so it is removed the day its owner's fix merges.
+KNOWN_STALE = {"i3bm57": "I3B's (W3 moved its anchor); re-anchored on codex/i3b-followup "
+                         "(585238b) - remove this entry at the I3B merge (IR2-2)"}
+
+
+def test_every_mutant_anchor_occurs_as_declared_on_the_checkout():
+    """Verification GATE-B1: a shared-line edit (e3eefac widened the suites status line) left
+    E2's e2m69 anchored on text that no longer existed - `stale` in the mutation stage and
+    invisible at layer 0. Every mutant of every list the stage runs (E2's, E3B's, I3B's) must
+    find its `before` exactly `occurrences` times in the checkout, known exceptions aside."""
+    import mutants
+    recovery = str(harness.HERE / "backend" / "recovery")
+    if recovery not in sys.path:
+        sys.path.insert(0, recovery)
+    import mutants_i3b
+    checked = mutants.all_mutants()
+    stale = {m.id: (harness.REPO_ROOT / m.path).read_text().count(m.before)
+             for m in checked
+             if (harness.REPO_ROOT / m.path).read_text().count(m.before) != m.occurrences}
+    assert {m.id for m in (*mutants.MUTANTS, *mutants_i3b.MUTANTS)} <= {m.id for m in checked}
+    assert set(stale) == set(KNOWN_STALE), f"stale anchors (id: occurrences found): {stale}"
+
+
 def test_a_suite_that_outlives_its_budget_is_a_failed_run_not_a_traceback():
     """E3B phase 2 (measured: `make api-test` past 1800 s crashed the gate and lost its
     report): a timed-out run comes back as exit 124 with its output, which the suites stage

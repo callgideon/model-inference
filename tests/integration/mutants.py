@@ -177,8 +177,9 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_an_undetected_canary_fails_the_run",)),
     Mutant("e2m69", "E2R item 4: a suite that reported no tests at all fails the run",
            "tests/integration/run.py",
-           '    report.add("suites", FAIL if (failed or silent or unexpected) else PASS,',
-           '    report.add("suites", FAIL if (failed or unexpected) else PASS,',
+           # re-anchored at E3B2 round 4 (verification GATE-B1): e3eefac widened this line
+           '    report.add("suites", FAIL if (failed or silent or unexpected or unread) else',
+           '    report.add("suites", FAIL if (failed or unexpected or unread) else',
            "tests/integration/test_run.py", "reports_no_tests",
            cases=("test_a_suite_that_reports_no_tests_at_all_fails_the_run",)),
     Mutant("e2m35", "r1 B2: a failing suite fails the run",
@@ -934,6 +935,11 @@ MUTANTS: tuple[Mutant, ...] = (
            'SUITE_ADDOPTS = "-rfEs"\n', 'SUITE_ADDOPTS = "-rs"\n',
            "tests/integration/test_run.py", "names_its_failures",
            cases=("test_a_red_make_target_names_its_failures_and_its_skips",)),
+    Mutant("e3bm56", "E3B2 round 4 (GATE-B1): the anchor guard covers EVERY list the stage runs",
+           "tests/integration/test_run.py",
+           "    checked = mutants.all_mutants()\n", "    checked = mutants.MUTANTS\n",
+           "tests/integration/test_run.py", "anchor_occurs_as_declared",
+           cases=("test_every_mutant_anchor_occurs_as_declared_on_the_checkout",)),
 )
 
 
