@@ -414,6 +414,17 @@ async def parity(clip: dict, url: str, inline: str, transport, scratch) -> dict:
     return facts
 
 
+def disagrees(row: dict) -> bool:
+    """Review P4: a clip whose preparations differ or whose facts disagree with its manifest
+    (the same 1 ms duration tolerance as test_parity), which fails the `measure` run."""
+    facts = row.get("parity", {})
+    manifest = facts.get("manifest", {"sha256": True, "budget_equal": True,
+                                      "duration_delta_s": 0.0})
+    return bool(facts.get("differs")) or not (
+        manifest["sha256"] and manifest["budget_equal"]
+        and abs(manifest["duration_delta_s"]) < 1e-3)
+
+
 # --- the run ------------------------------------------------------------------
 def free_port() -> int:
     with socket.socket() as sock:
@@ -421,7 +432,8 @@ def free_port() -> int:
         return sock.getsockname()[1]
 
 
-async def run(args) -> None:
+async def run(args) -> list[str]:
+    """Measure every clip into `args.out`; the ids of the clips that `disagrees`."""
     corpus = pathlib.Path(args.corpus) if args.corpus else default_corpus()
     work = pathlib.Path(args.work)
     work.mkdir(parents=True, exist_ok=True)
@@ -429,6 +441,7 @@ async def run(args) -> None:
     if args.only:
         clips = [clip for clip in clips if any(key in clip["id"] for key in args.only)]
     port = free_port()
+    bad = []
     server = subprocess.Popen([sys.executable, "-m", "http.server", str(port), "--bind",
                                "127.0.0.1", "--directory", str(work)],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -449,12 +462,15 @@ async def run(args) -> None:
                                          scratch)
                 out.write(json.dumps(row, sort_keys=True) + "\n")
                 out.flush()
+                if disagrees(row):
+                    bad.append(clip["id"])
                 print(f"{clip['id']:<58} {row['outcome']:<34} "
                       f"mat {row['materialize_url_ms']['p50']:>9} ms", flush=True)
         shutil.rmtree(scratch, ignore_errors=True)
     finally:
         server.terminate()
         server.wait()
+    return bad
 
 
 # --- the report -----------------------------------------------------------------
@@ -547,7 +563,10 @@ def main(argv=None) -> int:
     if args.command == "report":
         report(args.paths, args.clips)
     else:
-        asyncio.run(run(args))
+        bad = asyncio.run(run(args))
+        if bad:
+            print(f"MEDIA-PARITY disagreement: {bad}", file=sys.stderr)
+            return 1
     return 0
 
 

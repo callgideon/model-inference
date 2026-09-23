@@ -25,3 +25,16 @@ def test_the_harness_measures_one_clip_end_to_end(tmp_path):
     assert row["parity"]["v1_identity"] is True
     assert row["prepare_warm_ms"]["n"] == 2 and set(row["peak_mib"]) == {
         "materialize_url", "materialize_inline", "prepare_cold"}
+
+
+def test_a_parity_or_manifest_disagreement_fails_the_run():
+    """Review P4: `measure` exits 1 on any row `disagrees` flags, so exit 0 is a verdict."""
+    good = {"parity": {"differs": [], "manifest": {"sha256": True, "budget_equal": True,
+                                                   "duration_delta_s": 0.0004}}}
+    assert not harness.disagrees(good) and not harness.disagrees({"outcome": "unsupported"})
+    for broken in ({"differs": ["fs"]}, {"manifest": {"sha256": False}},
+                   {"manifest": {"budget_equal": False}}, {"manifest": {"duration_delta_s": -0.002}}):
+        row = {"parity": {**good["parity"], **broken}}
+        if "manifest" in broken:
+            row["parity"]["manifest"] = {**good["parity"]["manifest"], **broken["manifest"]}
+        assert harness.disagrees(row), broken
