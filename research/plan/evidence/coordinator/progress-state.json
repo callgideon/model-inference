@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T12:58:13Z",
+  "updated": "2026-09-23T13:01:25Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,7 +29,7 @@
     },
     "G3": {
       "lane": "codex-g3 / codex/g3-jobs",
-      "phase": "review fix_required at a100aee (4 blocking: a mode switch under one key attaches a cancelling sync wait to an async job \u2192 R94; events observer error/cancel paths unpinned; DELETE with a failing cancel must be non-200 retryable; 15 nonblocking) \u2192 fix round on the merged head (G2 a786af7) running",
+      "phase": "round 2 HANDED BACK cb096fb (impl 7dcc669; merged G2 a786af7; R94 in the ingress digest; 68 mutants); confirmation running; merges G2's round-3 head when it lands",
       "since": "2026-09-23T10:09:50Z",
       "note": "routes/jobs.py (POST /v1/jobs, status, result, events, DELETE) + additive Relay.admit/on_async/pump(cursor, cancel_on_gone) + route table + client example; 57 mutants over 33 cases; tests/g 422; G list 264; finding: a crash between the admission commit and the 202 leaves a replayed job's media never attached (G2 request b)"
     },
@@ -74,8 +74,8 @@
       "since": "2026-09-23T12:47:20Z"
     },
     "G3": {
-      "phase": "fix_required at a100aee (wf_bc7d6d9f-ded; 12 agents; JSON evidence/g/G3-review-a100aee.json) \u2192 fix round; confirmation next",
-      "since": "2026-09-23T12:25:20Z"
+      "phase": "confirmation at cb096fb running (round 1 fix_required at a100aee)",
+      "since": "2026-09-23T13:01:25Z"
     },
     "I3B-followup": {
       "phase": "review at d99da09 running (2 lenses on the d3 harness over a scratch merge with E3B2's head)",
