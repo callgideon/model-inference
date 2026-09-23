@@ -254,6 +254,13 @@ MUTANTS += (
                       "upper bound too)", "apps/infrx-api/deploy/lib.sh",
            "  local deadline=$((SECONDS + $2))", "  local deadline=$((SECONDS + 5))",
            DRILLS, "rc10b"),
+    Mutant("i3bm113", "rc10b (DRL-R4-2): wait_http polls every POLL_S, not every READY_S/2",
+           "apps/infrx-api/deploy/lib.sh", '    sleep "${POLL_S:-2}"\n',
+           "    sleep $(( $2 / 2 ))\n", DRILLS, "rc10b"),
+    Mutant("i3bm114", "rc10b (DRL-R4-2): wait_http sleeps between probes (no busy loop "
+                      "next to the restoring gateway)", "apps/infrx-api/deploy/lib.sh",
+           '    [ "$SECONDS" -lt "$deadline" ] || return 1\n    sleep "${POLL_S:-2}"\n',
+           '    [ "$SECONDS" -lt "$deadline" ] || return 1\n', DRILLS, "rc10b"),
     Mutant("i3bm92", "rc10: the rollback's index rebuild (rollback.md step 5) reads the durable "
                      "snapshot of queued jobs, so the drained job and the queue come back once",
            KIT, "if job.state is JobState.queued)", "if job.state is JobState.running)",
