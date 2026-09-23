@@ -15,6 +15,7 @@ import time
 import uuid
 from datetime import timedelta
 
+from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
 
 from infrx.contracts.codec import compact_bytes
@@ -225,6 +226,20 @@ def check_append_oversize(conn) -> str:
         job = cl.row(conn, request.request_id)
         assert journal(conn, request.request_id) == [] and not job["published"] and \
             job["journal_stored_bytes"] == 0, "a refused batch stored or published a prefix"
+        # confirmation A3: the limit is on OCTETS of the stored text, per EVENT. 'é' is two
+        # octets: 25 of them are 40 characters but 65 octets - refused; 24 and an 'x' are
+        # exactly 64 octets - accepted; two 40-octet events (80 together) - accepted.
+        wide, exact_wide = {"content": "\u00e9" * 25}, {"content": "\u00e9" * 24 + "x"}
+        assert conn.execute("select octet_length(%s::jsonb::text), length(%s::jsonb::text)",
+                            (Jsonb(wide), Jsonb(wide))).fetchone() == (65, 40)
+        code, _ = append(conn, lease, (event(wide),), limits=small)
+        assert code == "journal_write_failed", f"65 octets in 40 characters, 64-octet limit: {code}"
+        assert size(conn, exact_wide) == 64
+        code, _ = append(conn, lease, (event(exact_wide),), limits=small)
+        assert code is None, f"exactly 64 multibyte octets were refused: {code}"
+        code, _ = append(conn, lease, (event(sized(conn, 40)), event(sized(conn, 40))),
+                         limits=small)
+        assert code is None, f"two events under the limit, over it together, were refused: {code}"
         limit = DEFAULTS.journal_event_max_bytes
         exact = sized(conn, limit)
         code, _ = append(conn, lease, (event(sized(conn, limit + 1)),))
@@ -571,8 +586,11 @@ def check_terminal_every_path(conn) -> str:
     def never_while_live():
         """Review H4: no terminal event on a job that is not terminal, after each of the
         operations a live job goes through (admission, preparation, claim, heartbeat,
-        append) - asserted directly, so a trigger that fires on another update dies for
-        this reason and not by 0003's one-terminal index."""
+        append), asserted directly: a trigger that fires on a state transition dies here
+        for this reason (`d4_terminal_event_on_every_transition`). A trigger on EVERY
+        update still dies by 0003's one-terminal index first (its own nested update re-fires
+        it inside claim_preparation), and the heartbeat step is a guard no current mutant
+        exercises - 0016's heartbeat updates only `infrx.attempts`."""
         request = admitted()
 
         def clean(step: str) -> None:
@@ -632,7 +650,7 @@ def check_terminal_every_path(conn) -> str:
             with conn.transaction():
                 conn.execute("update infrx.jobs set settled_at = settled_at "
                              "where request_id = %s", (request.request_id,))
-        except Exception as failed:                  # psycopg.Error, reported as the defect
+        except UniqueViolation as failed:            # a second terminal event, and only that
             raise AssertionError(f"rewriting settled_at to itself failed: {failed}") from None
         one_terminal_last(conn, request.request_id, "settled_at rewritten to itself")
     ca._in_rollback(conn, rewritten_to_itself)

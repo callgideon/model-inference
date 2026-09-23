@@ -104,6 +104,10 @@ def test_expire__passes_the_callers_bound_and_counts() -> None:
 UNJOURNALABLE = ({"content": "a\x00b"}, {"a\x00b": "key"}, {"logprob": float("nan")},
                  {"logprob": float("inf")}, {"top": [{"logprob": float("-inf")}]},
                  {"top": [["\x00"]]})
+#: Confirmation A2: jsonb refuses a lone UTF-16 surrogate in a string or key (22P02). The
+#: fake cannot even measure one (`compact_bytes` raises UnicodeEncodeError), so it is not in
+#: the pinned fake delta below.
+SURROGATES = ({"content": "x\ud800"}, {"\udc00": 1}, {"top": ["\udfff"]})
 
 
 def test_append__refuses_what_jsonb_cannot_store_before_sending_it() -> None:
@@ -113,13 +117,18 @@ def test_append__refuses_what_jsonb_cannot_store_before_sending_it() -> None:
     journalable. The FAKE stores all six today (pinned below): when F makes it refuse them
     too (coordinator request) this assertion is the one to flip."""
     store, conn = _stream({"chunks": [ROW]})
-    for payload in UNJOURNALABLE:
-        _refused(errors.JournalWriteFailed,
-                 store.append(LEASE, (*b.events("fine"), EngineEvent(type="delta",
-                                                                     payload=payload))))
+    for payload in (*UNJOURNALABLE, *SURROGATES):
+        bad = EngineEvent(type="delta", payload=payload)
+        # confirmation A1: wherever the bad event sits - last, first, in the middle
+        for batch in ((*b.events("fine"), bad), (bad, *b.events("fine")),
+                      (*b.events("a"), bad, *b.events("b"))):
+            _refused(errors.JournalWriteFailed, store.append(LEASE, batch))
     assert conn.sent == [], "an unjournalable batch reached the database"
+    # confirmation A4: every other JSON value is journalable - str, float, int, bool, null,
+    # list, object, and the literal text of an escape
     asyncio.run(store.append(LEASE, (EngineEvent(type="delta", payload={
-        "content": "\\u0000", "logprob": -3.2e-07}),)))
+        "content": "\\u0000 caf\u00e9", "logprob": -3.2e-07, "n": 1, "b": True, "z": None,
+        "l": [0, "x", [1.5]], "o": {"k": False}}),)))
     assert len(conn.sent) == 1, "a journalable payload was refused"
 
     async def fake_stores_them():

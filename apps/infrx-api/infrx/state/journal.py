@@ -28,10 +28,13 @@ _CHUNK_FIELDS = ("job_id", "generation", "sequence", "event_type", "payload", "b
 
 
 def _journalable(value: Any) -> bool:
-    """What jsonb can store (review M1): no NUL character in any string, key or value
-    (22P05), and no NaN or infinity (22P02). Anything else JSON can say, it can."""
+    """What jsonb can store (review M1, confirmation A2): a string or key holding a NUL
+    character (22P05) or a lone UTF-16 surrogate (22P02), and a NaN or infinity (22P02), are
+    the JSON values it refuses; every other str/int/float/bool/None/dict/list is stored.
+    Non-JSON Python values (bytes, Decimal, set) are not checked here: an `EngineEvent`
+    payload is a JSON object."""
     if isinstance(value, str):
-        return "\x00" not in value
+        return "\x00" not in value and not any("\ud800" <= char <= "\udfff" for char in value)
     if isinstance(value, float):
         return math.isfinite(value)
     if isinstance(value, dict):
