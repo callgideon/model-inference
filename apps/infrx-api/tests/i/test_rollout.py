@@ -21,7 +21,10 @@ ROLLOUT = support.REPO / "infra" / "rollout"
 STEPS = sorted((ROLLOUT / "steps").glob("*.sh"))
 SECRET_SHAPES = (r"postgres(?:ql)?://[^:@\s/]+:[^@\s]+@", r"eyJ[A-Za-z0-9_-]{16,}",
                  r"AKIA[0-9A-Z]{16}", r"--value\s+(?!file://)\S",
-                 r"-e\s+[A-Z_]+=\S")         # docker -e passes names; a value there is inline
+                 r"-e\s+[A-Z_]+=\S",         # docker -e passes names; a value there is inline
+                 # a credential-named variable assigned a literal: the runbook reads those
+                 # with `read -rs` or `$(aws ssm ...)`, never writes the value
+                 r"""\b[A-Z_]*(?:KEY|SECRET|TOKEN|PASSWORD|DSN)=[^$\s"'<`…]""")
 
 FAKE_AWS = '''#!{python}
 import json, pathlib, sys
