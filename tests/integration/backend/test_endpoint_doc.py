@@ -174,3 +174,23 @@ def test_e4b_every_success_status_the_prose_cites_is_the_one_its_route_answers()
                 f"# {jobs_ok} JobAccepted", f"# {upload} UploadCreated", f"# {put} curl"]
     assert [snippet for snippet in expected if snippet not in doc] == []
     assert len(re.findall(r"\b2\d\d\b", doc)) == len(expected)
+
+
+def test_e4b_the_model_table_says_whether_the_published_release_is_the_measured_pin(
+        monkeypatch):
+    """Review V6: the Model table's notes are read from the published release against W3's
+    serving record - a placeholder or a moving tag is flagged, the measured pin is named -
+    so the fixture fix cannot leave a false note behind."""
+    import certify
+    record = certify.serving_record()
+    pinned = {"requested_model": "m", "rate_card_version": "rc",
+              "engine_options_digest": record["engine_options_digest"],
+              "runtime_image_ref": record["runtime_image"]["ref"]}
+    for published, flagged in ((pinned, 0),
+                               ({**pinned, "engine_options_digest": "sha256:" + "44" * 32,
+                                 "runtime_image_ref": "vllm/vllm-openai:nightly"}, 2)):
+        monkeypatch.setattr(certify, "published_release", lambda published=published: published)
+        model = endpoint_doc.render().split("## Model")[1].split("## Routes")[0]
+        assert model.count("⚠️ not W3's measured pin") == flagged, model
+        assert model.count("W3's measured pin (`models/marlin2b/serving-version.json`)") \
+            == 2 - flagged, model

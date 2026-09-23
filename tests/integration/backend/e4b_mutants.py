@@ -128,6 +128,7 @@ LINKS = "test_e4b_the_release_decision_links_resolve_to_files_and_sections"
 STATUSES = "test_e4b_every_status_the_prose_cites_is_the_one_the_code_answers"
 CAUSE_AUTH = "test_e4b_the_prose_names_the_cause_the_auth_and_the_headers_the_modules_implement"
 SUCCESS = "test_e4b_every_success_status_the_prose_cites_is_the_one_its_route_answers"
+MODEL = "test_e4b_the_model_table_says_whether_the_published_release_is_the_measured_pin"
 D = "tests/integration/backend/endpoint_doc.py"
 
 
@@ -512,6 +513,10 @@ MUTANTS: tuple[Mutant, ...] = (
        SUCCESS, file=D),
     _m("success_read_as_the_default", "the status is read from the route's own answer",
        "    (status,) = codes or {200}", "    status = 200", SUCCESS, GENERATED, file=D),
+    _m("model_note_always_the_pin", "a published placeholder or tag is flagged in the Model table",
+       "    if published == measured:\n", "    if True:\n", MODEL, file=D),
+    _m("model_note_always_flagged", "the measured pin is named, not flagged",
+       "    if published == measured:\n", "    if False:\n", MODEL, file=D),
     _m("regeneration_drops_the_log", "a regeneration keeps the verification log",
        "DOC.write_text(body + committed_log())", "DOC.write_text(body + LOG)", KEEPS_LOG, file=D),
     _m("committed_doc_edited_by_hand", "the committed document is the generator's output",

@@ -12,8 +12,8 @@ is a measured limit or an SLO: measured limits are the box's (E4B-release-decisi
 |---|---|---|
 | requested model (pinned) | `nemostation/marlin-2b@2026-09-01` | G6B `marlin_release` / contracts v2 fixtures |
 | rate card | `rc_marlin2b_20260901T000000Z_provisional_p01` | provisional until P-01 decides the rates |
-| serving revision's engine-options digest | `sha256:4444444444444444444444444444444444444444444444444444444444444444` | ⚠️ the fixture placeholder, not W3's measured pin (E4B config-pin finding) |
-| runtime image | `vllm/vllm-openai:nightly` | ⚠️ a moving tag in the published record (same finding) |
+| serving revision's engine-options digest | `sha256:4444444444444444444444444444444444444444444444444444444444444444` | ⚠️ not W3's measured pin `sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147` (E4B config-pin finding) |
+| runtime image | `vllm/vllm-openai:nightly` | ⚠️ not W3's measured pin `vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42` (E4B config-pin finding) |
 
 ## Routes
 
@@ -213,3 +213,7 @@ curl -sS -H @.auth -H 'Content-Type: application/json' -H 'Idempotency-Key: sop1
   from the catalogue (and checked in the examples too), the DELETE cause from the jobs
   module's call, the routes needing no key from the modules' own sources; the Headers list
   gains the 202's `Location`, and the POST /v1/jobs streaming refusal is documented.
+- 2026-09-23 (E4B verifier V1/V6): regenerated. The 2xx statuses are read from the function
+  that builds each route's answer; the Model table's notes are read from the published release
+  against W3's serving record (at this commit they still flag B1; the cutover lane's fixture
+  fix turns them into the measured pin on the next regeneration).

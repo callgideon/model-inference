@@ -242,8 +242,15 @@ def examples(model: str) -> list[str]:
     ]
 
 
+def pin_note(published: str, measured: str) -> str:
+    """Review V6: whether the published release carries W3's measured pin - read, not typed."""
+    if published == measured:
+        return "W3's measured pin (`models/marlin2b/serving-version.json`)"
+    return f"⚠️ not W3's measured pin `{measured}` (E4B config-pin finding)"
+
+
 def render() -> str:
-    release = certify.published_release()
+    release, record = certify.published_release(), certify.serving_record()
     retry = errors.RETRY_AFTER_CODES
     lines = [
         "# E4B — Marlin endpoint capability document and headless examples",
@@ -262,9 +269,9 @@ def render() -> str:
             ("rate card", f"`{release['rate_card_version']}`",
              "provisional until P-01 decides the rates"),
             ("serving revision's engine-options digest", f"`{release['engine_options_digest']}`",
-             "⚠️ the fixture placeholder, not W3's measured pin (E4B config-pin finding)"),
+             pin_note(release["engine_options_digest"], record["engine_options_digest"])),
             ("runtime image", f"`{release['runtime_image_ref']}`",
-             "⚠️ a moving tag in the published record (same finding)"))),
+             pin_note(release["runtime_image_ref"], record["runtime_image"]["ref"])))),
         "",
         "## Routes",
         "",
