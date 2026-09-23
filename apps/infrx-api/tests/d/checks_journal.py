@@ -568,6 +568,34 @@ def check_terminal_every_path(conn) -> str:
         assert cancel(conn, request)[0] is None
         return request, "client_cancelled"
 
+    def never_while_live():
+        """Review H4: no terminal event on a job that is not terminal, after each of the
+        operations a live job goes through (admission, preparation, claim, heartbeat,
+        append) - asserted directly, so a trigger that fires on another update dies for
+        this reason and not by 0003's one-terminal index."""
+        request = admitted()
+
+        def clean(step: str) -> None:
+            job = cl.row(conn, request.request_id)
+            assert job["settled_at"] is None and not [
+                r for r in journal(conn, request.request_id) if r["event_type"] == "terminal"], \
+                f"after {step} the {job['state']} job's journal shows a terminal event"
+        clean("admission")
+        code, prep = claim(conn, request.request_id)
+        assert code is None, code
+        clean("claim_preparation")
+        assert prepare(conn, prep["lease"])[0] is None
+        clean("prepare")
+        code, answer = cl.d3(conn, "claim", job_id=request.request_id, worker_id="w1")
+        assert code is None, code
+        clean("claim")
+        lease = cl.lease_of(answer)
+        assert cl.d3(conn, "heartbeat", lease=lease.model_dump(mode="json"))[0] is None
+        clean("heartbeat")
+        assert append(conn, lease, b.events("a"))[0] is None
+        clean("append")
+    ca._in_rollback(conn, never_while_live)
+
     paths = {"0012 preparation failure": preparation_claim,
              "cancel before publication": cancel_unpublished,
              "cancel after publication": cancel_published,
@@ -595,6 +623,31 @@ def check_terminal_every_path(conn) -> str:
                     timedelta(seconds=3600), f"{what}: a chunkless terminal event lives " \
                     f"{terminal['expires_at'] - terminal['persisted_at']}"
         ca._in_rollback(conn, run)
+
+    def rewritten_to_itself():
+        """Review J3: the event is written on the NULL -> value transition only. Rewriting
+        settled_at to its own value (which jobs_guard allows) writes nothing and succeeds."""
+        request, _ = cancel_unpublished()
+        try:
+            with conn.transaction():
+                conn.execute("update infrx.jobs set settled_at = settled_at "
+                             "where request_id = %s", (request.request_id,))
+        except Exception as failed:                  # psycopg.Error, reported as the defect
+            raise AssertionError(f"rewriting settled_at to itself failed: {failed}") from None
+        one_terminal_last(conn, request.request_id, "settled_at rewritten to itself")
+    ca._in_rollback(conn, rewritten_to_itself)
+
+    def without_a_reservation():
+        """Review M3: a job row with NO journal reservation (none is admitted so - D1's raw
+        fixture rows are) has no journal: it terminalizes and nothing is written."""
+        request, _ = running(conn, world)
+        conn.execute("update infrx.jobs set journal_reserved_bytes = 0 where request_id = %s",
+                     (request.request_id,))
+        code, done = cancel(conn, request)
+        assert code is None and done["state"] == "cancelled", \
+            f"a job without a journal reservation could not terminalize: {code}"
+        assert journal(conn, request.request_id) == [], "a journal appeared with no reservation"
+    ca._in_rollback(conn, without_a_reservation)
 
     def released():
         request, cause = cancel_published()
