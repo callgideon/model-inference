@@ -112,7 +112,8 @@ PIN_MUTANTS: tuple[Mutant, ...] = (
     _m("record_setting_is_not_the_contract", "the recorded max-num-seqs is the pilot setting",
        J, '"ENGINE_MAX_NUM_SEQS": "8"', '"ENGINE_MAX_NUM_SEQS": "32"', RECORD),
     _m("record_digest_source_invented", "R76: provenance is one of the recorded sources",
-       J, '"digest_source": "registry_oid"', '"digest_source": "registry"', RECORD),
+       J, '"digest_source": "registry_oid_confirmed"', '"digest_source": "registry_confirmed"',
+       RECORD),
 )
 
 

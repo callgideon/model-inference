@@ -41,8 +41,9 @@ WEIGHTS=${WEIGHTS:-$WEIGHTS_ROOT/$EXP}
 PORT=${PORT:-8000}
 GPU=${GPU:-0}
 # vllm/vllm-openai:nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b, resolved 2026-09-22
-# (Qwen3.5 needs vLLM main): its manifest-list (index) digest. It prefix-matches the box's
-# I1B image id (12 hex digits); full equality ⚠️ pending measure/inventory.sh.
+# (Qwen3.5 needs vLLM main): its manifest-list (index) digest. The pilot box runs exactly
+# this image (measure/inventory.sh, 2026-09-23: image_equals_pin=yes, /version
+# 0.29.1rc1.dev397+ga8d1aa9c9).
 # The environment cannot replace the image: `unset` first, so this `${IMAGE:-…}` default
 # (the form I0's preflight reads) is the only value.
 unset IMAGE
