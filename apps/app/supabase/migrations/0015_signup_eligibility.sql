@@ -179,6 +179,9 @@ begin
   -- Scope: EVERY organization this individual created (the personal one and any later
   -- one), not only the one the wallet would bind; a shared org's billing owner is 02's
   -- transition. Fail closed: the account waits for the P-02 runbook either way.
+  -- `created_by` is the boundary: an organization with a NULL `created_by` is outside it
+  -- (its USD still reads rollout_hold on its own statement). No product path creates one:
+  -- 0001's `handle_new_user` is the only insert and always sets it.
   if exists (select 1 from public.organizations o
              where o.created_by = p_user_id and infrx.legacy_usd_rollout_hold(o.id)) then
     v_status := 'rollout_hold';
