@@ -69,6 +69,17 @@ async def admit(w: World, org: str = ORG_A) -> str:
     return admission.request_id
 
 
+async def admit_in_order(w: World, n: int) -> list[str]:
+    """`n` admissions 1 us apart. PostgreSQL breaks an `available_at` tie on a random
+    uuid (the fake's ids are monotonic), so a case that relies on delivery order must
+    not tie (review FID-2)."""
+    jobs = []
+    for _ in range(n):
+        jobs.append(await admit(w))
+        w.h.clock.advance(1e-6)
+    return jobs
+
+
 async def prepare_one(w: World, worker: str = "prep"):
     """One preparation worker step; the candidate, or None if the index had none."""
     candidate = await w.index.claim_candidate(worker, kind=PREP)

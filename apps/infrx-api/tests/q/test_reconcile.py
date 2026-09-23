@@ -129,7 +129,7 @@ def test_q3_drain__a_full_index_defers_the_row_and_the_redelivery_retries_it(ada
     w = rig.world(adapter, max_items=2)
 
     async def body():
-        jobs = [await rig.admit(w) for _ in range(3)]
+        jobs = await rig.admit_in_order(w, 3)
         assert await w.rec.drain() == {"read": 3, "indexed": 2, "deferred": 1,
                                        "acknowledged": 2}
         (deferred,) = w.outbox.unacknowledged()
@@ -151,7 +151,7 @@ def test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed(adapter):
     w.rec.index = FlakyIndex(w.index, fail_on=2)
 
     async def body():
-        jobs = [await rig.admit(w) for _ in range(3)]
+        jobs = await rig.admit_in_order(w, 3)
         with pytest.raises(ConnectionError):
             await w.rec.drain()
         assert list((await rig.members(w)).values()) == jobs[:1]
