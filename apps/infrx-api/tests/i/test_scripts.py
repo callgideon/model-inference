@@ -451,7 +451,8 @@ def test_ops_recover__r2_restores_the_engine_before_the_gateway_that_asks_it(tmp
     monolith's /health asks the engine: a gateway restarted first never becomes ready. So
     R2 has rollback.sh restart the engine onto its restored unit and wait for it, then the
     gateway, then the edge. An engine that does not come up stops the revert there - exit
-    4, the gateway untouched, the edge in maintenance, and the message says what next."""
+    4, the gateway untouched, the edge in maintenance, and the message says what next; a
+    gateway that does not come up after the engine did stops it the same way."""
     pause, revert = _runbook()
     host = Host(tmp_path, monkeypatch)
     host.monolith()
@@ -469,6 +470,14 @@ def test_ops_recover__r2_restores_the_engine_before_the_gateway_that_asks_it(tmp
     assert active.read_bytes() == (DEPLOY / "Caddyfile.maintenance").read_bytes()
     assert not [e for e in host.events
                 if e.startswith("systemctl restart marlin2b-gateway") or "caddy reload" in e]
+
+    # the engine comes up but the restored gateway does not: exit 4, the edge untouched
+    host.behave(caddy_image="running", curl_fails=["http://127.0.0.1:8001/health"])
+    host.clear()
+    done = host.shell(revert, BACKUP=str(backup), **R2)
+    assert done.returncode == 4 and "the restored runtime is not ready" in done.stderr
+    assert active.read_bytes() == (DEPLOY / "Caddyfile.maintenance").read_bytes()
+    assert not [e for e in host.events if "caddy reload" in e]
 
     host.behave(caddy_image="running", health_needs_engine=True)
     host.clear()
