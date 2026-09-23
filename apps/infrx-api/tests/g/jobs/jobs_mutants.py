@@ -158,6 +158,13 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("mode_left_out_of_the_digest", "R94: a key reused across sync and async is 409",
        N, "    if request.execution_mode is not ExecutionMode.async_:\n        return request.payload_digest",
        "    if True:\n        return request.payload_digest", MODES_409),
+    _m("lookup_conflict_swallowed", "R91/R94: a key conflict is 409 at the lookup, before "
+       "anything is fetched, staged or admitted (review ADM-R2-B2)",
+       R, "            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
+          "        except errors.UnsupportedParameter as refused:",
+       "            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
+       "        except errors.IdempotencyConflict:\n            return None\n"
+       "        except errors.UnsupportedParameter as refused:", MODES_409, CHANGED),
     _m("replay_readmits", "a key the lookup missed is still one job: admission replays it",
        ST, "            replay = self._replay(idem, now, credit=credit)",
        "            replay = None", TWICE),

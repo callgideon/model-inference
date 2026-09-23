@@ -171,6 +171,19 @@ def staged_payloads(world) -> list[str]:
     return [key for key in world.objects.objects if key.startswith("payloads/")]
 
 
+def untouched(world) -> tuple:
+    """What a key conflict must leave as it was, and the lookup that answered it: (lookups,
+    admissions, staged payloads, bound refs). R91: the 409 comes from the lookup, before
+    anything is fetched, staged or admitted (review ADM-R2-B2)."""
+    return (world.failures.count("lookup"), world.failures.count("admit"),
+            staged_payloads(world), {job: list(refs) for job, refs in world.media.by_job.items()})
+
+
+def looked_up(before: tuple) -> tuple:
+    """`untouched` after one lookup and nothing else."""
+    return (before[0] + 1, *before[1:])
+
+
 def test_dur_admit__a_terminal_async_replay_is_answered_by_lookup_without_fetching():
     """R91 on the 202 path: a video job settled, its 202 long lost; by the retry the media host
     refuses the URL. The retry is answered from the store's lookup - 202, replayed, the
@@ -296,8 +309,10 @@ def test_dur_admit__a_changed_payload_under_the_key_is_409_and_admits_nothing():
     world = JobsWorld()
     first = post(world, key="order-8")
     assert first.status == 202
+    before = untouched(world)
     changed = post(world, payload=rs.body(temperature=0.5), key="order-8")
     assert refusal(changed) == (409, "idempotency_conflict")
+    assert untouched(world) == looked_up(before)
     job = world.only_job()
     assert list(world.jobs.holds) == [job.id]
     assert world.jobs.wallet(world.org).reserved_total == world.jobs.holds[job.id].amount
@@ -433,8 +448,10 @@ def test_dur_admit__a_key_reused_across_modes_is_409_and_the_job_runs_on():
     lease = rs.run(world.lease())
     leave = asyncio.Event()
     world.during.append(leave.set)            # were a wait attached, its client would leave
+    before = untouched(world)
     sync_retry = post(world, CHAT, key="k-async", leave=leave)
     assert refusal(sync_retry) == (409, "idempotency_conflict")
+    assert untouched(world) == looked_up(before)      # before any store write
     assert job.state is JobState.running and not job.terminal
     assert list(world.jobs.jobs) == [job.id] and list(world.jobs.holds) == [job.id]
     same_mode = post(world, CHAT, key="k-async", headers=PREFER)
@@ -446,8 +463,10 @@ def test_dur_admit__a_key_reused_across_modes_is_409_and_the_job_runs_on():
     synchronous = JobsWorld()
     synchronous.during.append(synchronous.work)
     assert post(synchronous, CHAT, key="k-sync").status == 200
+    before = untouched(synchronous)
     async_replay = post(synchronous, key="k-sync")
     assert refusal(async_replay) == (409, "idempotency_conflict")
+    assert untouched(synchronous) == looked_up(before)
     assert len(synchronous.jobs.jobs) == 1
 
 # --- item 2: status --------------------------------------------------------------------
