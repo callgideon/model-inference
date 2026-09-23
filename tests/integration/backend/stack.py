@@ -502,6 +502,9 @@ def pilot_env(database: str, workdir: Path, rest_url: str = "", **extra: str) ->
             "ACTIVE_RATE_CARD_VERSION": SEED_CARD, "MODEL_ID": CREDIT_ALIAS,
             "PROCESSING_CACHE_DIR": str(workdir / "cache"),
             "USAGE_LOG": str(workdir / "usage.jsonl"),
+            # The cutover's build labels (a pilot refuses to start without them): no release
+            # is installed and no image built here, so both are labels of this suite's own.
+            "INFRX_RELEASE_SHA": "e3b3" + "0" * 36, "INFRX_IMAGE": "sha256:" + "e3b3" * 16,
             "SUPABASE_URL": rest_url or postgrest_url(),
             # the name assembled from parts: test_harness's production-pointer guard scans it
             "SUPABASE_SERVICE" "_ROLE_KEY": jwt("service_role", ttl_s=6 * 3600), **extra}
