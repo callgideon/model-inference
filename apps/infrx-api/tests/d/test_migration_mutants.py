@@ -116,7 +116,11 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           "d5_adjust_below_reserved", "d5_reconcile_on_callers_clock", "d5_reconcile_debits",
           "d5_reconcile_any_tenant", "d5_settle_without_the_row_lock",
           "d5_takes_the_scope_lock", "d5_grant_credit_granted_to_authenticated",
-          "d5_lookup_any_org_scope", "d5_lookup_any_payload")
+          "d5_lookup_any_org_scope", "d5_lookup_any_payload",
+          # D5 review round: the operator money path and exact arithmetic
+          "d5_grant_replay_ignores_wallet", "d5_grant_without_wallet_lock",
+          "d5_grant_concurrent_reuse_untyped", "d5_reconcile_replay_any_request",
+          "d5_credit_debit_in_float", "d5_legacy_debit_in_float")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 
@@ -128,6 +132,10 @@ pytestmark = pytest.mark.skipif(_reason is not None,
 def test_the_mutant_list_is_well_formed() -> None:
     """Distinct names, a known scenario and a known check for each."""
     assert len({m.name for m in ALL}) == len(ALL), "two mutants share a name"
+    # review H-N5: a typo in ALWAYS would silently drop a money-path mutant from the
+    # default subset (`make api-test`)
+    missing = sorted(set(ALWAYS) - {m.name for m in ALL})
+    assert not missing, f"ALWAYS names mutants the list does not declare: {missing}"
     for mutant in ALL:
         assert mutant.scenario in ("fresh", "upgrade", "volume", "prodlike", "credit",
                                    "upgrade05", "credit_volume", "admission"), mutant.name
