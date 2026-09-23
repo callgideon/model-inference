@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T22:25:11Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T22:37:04Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
@@ -67,7 +67,7 @@ Generated 2026-09-23T22:25:11Z from `tasks.json` (manifest v4) and `progress-sta
 
 - E1B: codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - D5: codex-d5 / codex/d5-terminal-transaction — review fix_required at c67e4f5 (8 blocking test gaps + merge readiness; money confirmed correct) → ONE fix round running → single verifier → MERGE together with E3B phase 3 since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
-- E4B: codex-e4b / codex/e4b-certify — verifier PASS at 7b5dbd7 (V1/V2/V5/V6 being folded in) → MERGE at step 6 after the D5/phase-3/cutover/M1-L2 unit and M pilot-media; box half after the rollout since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
+- E4B: codex-e4b / codex/e4b-certify — software half FINAL 4d9360c (verifier pass + V1–V6 folded; 138 mutants) → merge at step 6; box half after the rollout since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
 - CUTOVER: codex-cutover / codex/cutover-mount — milestone 43fe900 (mount + adapters from settings + gateway.py retired; tests/g 568) forwarded to phase 3; items 3–5 (edge proxying, preflight, evidence) in progress at 6cb8ebe+ since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
 - E3B-phase3: codex-e3b3 / codex/e3b-phase3-bodies — HANDED BACK 4ac1419 (all bodies; gate exit 3 = pending only M3-U1 ×3 + I2B-R4; api-test 3497 on the merged tree); one-round review running → merge with D5 (after cutover + objstore); M pilot-media merge closes M3-U1/U2 since 2026-09-23T19:29:02Z — namespace e3b2 / 56732
 - M1-L2: codex-objstore / codex/m1l2-object-store — FINAL ba26ca4 (verifier pass + V1–V4 folded; 46 mutants; cutover f7d9b03 re-merged) → merge at step 4 of the unit since 2026-09-23T19:57:28Z — compose S3 in namespace e2 if free; else stub
