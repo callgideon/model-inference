@@ -2663,6 +2663,12 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "admission", "lookup",
        "a key reused under another operation answers that operation's job, or a false "
        "idempotency_conflict (review N2, the reviewer's rv_lookup_ignores_operation)"),
+    _m("d5_lookup_not_stable", SETTLE,
+       "create or replace function infrx.idempotency_lookup(p_args jsonb) returns jsonb\n"
+       "language plpgsql stable security definer",
+       "create or replace function infrx.idempotency_lookup(p_args jsonb) returns jsonb\n"
+       "language plpgsql volatile security definer", "admission", "d5_privileges",
+       "the read-only lookup may write (nothing but the footprint check stops it; review N3)"),
     _m("d5_lookup_expired_answers", SETTLE,
        "  if v_expires is not null and infrx.now() >= v_expires then\n    return null;",
        "  if false then\n    return null;", "admission", "lookup",

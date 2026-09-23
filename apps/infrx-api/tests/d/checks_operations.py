@@ -246,7 +246,8 @@ D5_INTERNAL = ("infrx.settle_legacy_usd(uuid,numeric)", "infrx.settle_credit(uui
 def check_d5_privileges(conn) -> str:
     """R59: every function 0018 defines or redefines is executable by `service_role` only
     (never PUBLIC, anon or authenticated), and its helpers by nobody - SECURITY DEFINER
-    bodies and a trigger call them."""
+    bodies and a trigger call them. The R91 lookup is STABLE (a write statement in its body
+    is refused by PostgreSQL itself)."""
     def may(role: str, fn: str) -> bool:
         return conn.execute("select has_function_privilege(%s, %s, 'execute')",
                             (role, fn)).fetchone()[0]
@@ -261,4 +262,11 @@ def check_d5_privileges(conn) -> str:
     for fn in D5_INTERNAL:
         for role in ("service_role", "anon", "authenticated"):
             assert not may(role, fn), f"{role} may execute the internal {fn}"
-    return f"{len(D5_SERVICE)} service operations, {len(D5_INTERNAL)} internal functions"
+    # review N3: the R91 lookup is declared STABLE - PostgreSQL itself then refuses a write
+    # statement in its body ("... is not allowed in a non-volatile function"), beside the
+    # footprint check_lookup compares
+    assert conn.execute("select provolatile from pg_proc where oid = "
+                        "'infrx.idempotency_lookup(jsonb)'::regprocedure").fetchone()[0] == "s", \
+        "infrx.idempotency_lookup is not STABLE: nothing stops a write inside it"
+    return (f"{len(D5_SERVICE)} service operations, {len(D5_INTERNAL)} internal functions, "
+            "the lookup STABLE")
