@@ -1723,6 +1723,12 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "admission", "claim_generation", "a dispatcher cannot tell a finished job"),
     _m("d3_claim_any_state", LEASES, "  if j.state <> 'queued' then", "  if false then",
        "admission", "claim_generation", "a running job is claimed twice"),
+    _m("d3_claim_beside_a_live_attempt", LEASES,
+       "  if exists (select 1 from infrx.attempts where job_id = j.request_id\n"
+       "                and released_at is null) then",
+       "  if false then",
+       "admission", "claim_generation",
+       "a job ends with two live attempts of different kinds (FE-4)"),
     _m("d3_claim_leases_a_credit_job", LEASES,
        "  if j.accounting_regime = 'credit' then\n    perform infrx.refuse('not_claimable'",
        "  if false then\n    perform infrx.refuse('not_claimable'",

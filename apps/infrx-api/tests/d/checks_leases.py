@@ -167,7 +167,8 @@ def check_claim_generation(conn) -> str:
     clock with the R20 instants (generation = min(now + budget, deadline_at), first token
     = min(now + budget, generation)); the queued interval is charged to the queue budget
     (R38); a second claimer, a job past its queue or absolute deadline, a terminal job and
-    an unknown job are refused, typed; a requeue's claim is the NEXT generation. Interim
+    an unknown job are refused, typed; a requeue's claim is the NEXT generation; a job with
+    a live attempt of either kind is refused whatever its state (FE-4). Interim
     until WorkV2 (MY-3): a CREDIT job is `not_claimable`, leaves no attempt and expires at
     its queue instant, released free."""
     world = ca.World(conn)
@@ -230,6 +231,17 @@ def check_claim_generation(conn) -> str:
         d3(conn, "cancel", org_id=late.org_id, job_handle=row(conn, late.request_id)["job_handle"])
         assert d3(conn, "claim", job_id=late.request_id, worker_id="w1")[0] == \
             "already_terminal", "a terminal job was not already_terminal"
+        # FE-4: a queued row that still carries a live preparation attempt (no boundary
+        # writes that; a direct UPDATE does) is not claimable - the attempts table decides too
+        torn = gateway_request(world)
+        ca.admit(conn, torn, b.idem(torn, torn.request_id))
+        claim(conn, torn.request_id, "prep-t")
+        conn.execute("update infrx.jobs set state = 'queued' where request_id = %s",
+                     (torn.request_id,))
+        assert d3(conn, "claim", job_id=torn.request_id, worker_id="w1")[0] == \
+            "not_claimable", "a job with a live preparation lease was claimed as well"
+        assert [k for k, _, _ in live_attempts(conn, torn.request_id)] == ["preparation"], \
+            "a job ended with two live attempts of different kinds"
         # MY-3: a queued CREDIT job is never leased (its work has no v1 loader)
         org = cc.personal_org(conn, cc.CONSUMER_1)
         credit = ca.credit_request(world, ca.C1_KEY, org)

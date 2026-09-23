@@ -225,6 +225,12 @@ begin
     perform infrx.refuse('not_claimable', 'job ' || j.request_id || ' is ' || j.state
                          || ', not queued');
   end if;
+  -- Either-kind exclusion from the attempts table as well as the state (review FE-4): a job
+  -- anyone still holds a lease on is not claimable, whatever its state column says.
+  if exists (select 1 from infrx.attempts where job_id = j.request_id
+                and released_at is null) then
+    perform infrx.refuse('not_claimable', 'job ' || j.request_id || ' has a live attempt');
+  end if;
   -- Interim fail-fast until WorkV2 (review MY-3): the v1 `load_work` cannot carry a CREDIT
   -- job's work, so it is never leased; it expires at its queue instant `queue_wait_expired`
   -- (released_free) instead of cycling leases through the reaper with its hold reserved.
