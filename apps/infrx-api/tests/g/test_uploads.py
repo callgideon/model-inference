@@ -559,3 +559,33 @@ def test_dur_rls__a_completed_upload_is_usable_only_by_its_org():
         with pytest.raises(errors.NotFound):
             asyncio.run(store.resolve_owned(org, unusable))
 
+
+# --- item 6: the handshake a client can write from the frozen contract ---------------
+def test_media_sec__the_upload_handshake_uses_only_the_frozen_names():
+    """E1B limit 5 / G1R limit 6, the server side: a client knowing only the frozen names
+    (`upload_handle`, `destination_ref`, `media`) and paths creates, PUTs the clip to
+    `/v1/uploads/{upload_handle}` with its bearer and type, completes with no body, and
+    names the upload in a chat body the ingress's shape checks accept."""
+    app, _, _, _ = mounted()
+    video = {"content-type": "video/mp4"}
+
+    async def script(client):
+        ticket = await client.post("/v1/uploads", headers=bearer(), json={
+            "bytes": len(CLIP), "digest": DIGEST, "accepted_mime": ["video/mp4"]})
+        assert ticket.status_code == 201, ticket.text
+        handle = ticket.json()["upload_handle"]
+        stored = await client.put(f"/v1/uploads/{handle}", content=CLIP,
+                                  headers=bearer(**video))
+        return ticket.json(), stored, await client.post(f"/v1/uploads/{handle}/complete",
+                                                        headers=bearer())
+
+    ticket, stored, done = run(app, script)
+    assert stored.status_code == 204 and done.status_code == 200, (stored.text, done.text)
+    assert set(done.json()) == {"upload_handle", "state", "media"}
+    assert done.json()["media"]["digest"] == DIGEST
+    chat = {"model": support.PUBLIC_MODEL, "messages": [{"role": "user", "content": [
+        {"type": "text", "text": "What happens in this clip?"},
+        {"type": "video_url", "video_url": {"url": ticket["destination_ref"]}}]}]}
+    messages, inline = validate.check_messages(chat, fetch.ALLOWED_MIME)
+    assert inline == {}
+    assert messages[0]["content"][1]["video_url"]["url"] == "infrx-upload:" + ticket["upload_handle"]

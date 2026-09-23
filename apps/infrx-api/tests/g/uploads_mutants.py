@@ -130,6 +130,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "        ref = await store.finalize_upload(context.key_id, handle)",
        "test_dur_rls__another_orgs_upload_is_the_unknown_handles_404",
        "test_dur_rls__a_completed_upload_is_usable_only_by_its_org"),
+    # --- item 6: the declared paths --------------------------------------------------
+    _m("undeclared_path", "the routes are at the frozen contract's paths",
+       U, 'UPLOADS_PATH = "/v1/uploads"', 'UPLOADS_PATH = "/v1/upload"',
+       "test_media_sec__the_upload_handshake_uses_only_the_frozen_names"),
 )
 
 
