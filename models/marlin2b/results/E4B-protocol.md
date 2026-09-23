@@ -113,3 +113,10 @@ run closed, and the coordinator's decision recorded in
   field, which `corpus-synth/manifest.json` does not carry, so bench.py cannot schedule
   `sop-synth-v1` items. `sop-synth-v1` stays in the certification through W4's parity set.
   The `tiny` scale reads `--subset fast`, the `box` scale `--subset full`.
+- 2026-09-23 (E4B), **amendment 2**, before any certification run was recorded (only the
+  runner's own unit cases and two unrecorded smoke calls against the fake engine had run):
+  (a) a client run (bench.py) that does not exit 0 fails its cell, and on the envelope it
+  ends the climb like a failed rung - a crashed client is never an unjudged cell;
+  (b) the dataset ledger is re-read for up to 300 s after the resumed run, because a debit
+  may land after the answer; (c) a check the local target (an engine) can never judge pends
+  on `BOX`, not on a task id. None of the §5 numbers moved.
