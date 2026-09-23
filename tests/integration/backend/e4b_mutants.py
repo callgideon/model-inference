@@ -114,6 +114,7 @@ NOGIT = "test_e4b_a_host_without_git_writes_a_report_that_fails_its_identity"
 SERVED = "test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves"
 UNANSWERED = "test_e4b_an_unanswered_attempt_is_a_failure_whatever_its_cause"
 LABELS = "test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement"
+RECORD = "test_e4b_the_declared_settings_are_the_serving_record_read_never_typed"
 RUN = "tests/integration/run.py"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
@@ -209,8 +210,8 @@ MUTANTS: tuple[Mutant, ...] = (
        '"dataset": {"items": 12, "interrupt_after": 6, "rate": 4.0}},', PROTOCOL),
     # --- E4B.b: the config pin ---------------------------------------------------------
     _m("moved_setting_accepted", "a setting that moved past its evidence fails the pin",
-       "for name, (value, source) in declared.items() if current.get(name) != value]",
-       "for name, (value, source) in declared.items() if False]", PIN),
+       "for name, (value, source) in pinned.items() if current.get(name) != value]",
+       "for name, (value, source) in pinned.items() if False]", PIN),
     _m("published_digest_read_from_the_record", "the published release is read from G6B's record",
        '"published_engine_options_digest": published["engine_options_digest"],',
        '"published_engine_options_digest": record["engine_options_digest"],', PIN),
@@ -368,6 +369,30 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("label_never_decided", "the run labels its numbers after its preconditions",
        '            report.target["label"] = target["label"] = target_label(target, args.box, ready)\n',
        "", LABELS),
+    # --- review F6: the declared settings are the record's -----------------------------
+    _m("published_digest_declared_as_the_placeholder", "the published digest is the record's",
+       '        "published_engine_options_digest": (digest, "R76/R78: the serving revision every "',
+       '        "published_engine_options_digest": ("sha256:" + "44" * 32, "R76/R78: the serving revision every "',
+       RECORD),
+    _m("published_image_declared_as_the_tag", "the published image is the record's",
+       '        "published_runtime_image": (image, "R76/R78, as above"),',
+       '        "published_runtime_image": ("vllm/vllm-openai:nightly", "R76/R78, as above"),', RECORD),
+    _m("seqs_declared_as_a_literal", "the declared engine concurrency is the record's",
+       '        "engine_max_num_seqs": (seqs, "W3 serving-version.json settings"),',
+       '        "engine_max_num_seqs": ("32", "W3 serving-version.json settings"),', RECORD),
+    _m("digest_declared_as_a_literal", "the declared digest follows the record",
+       '        "engine_options_digest": (digest, "W3 serving-version.json (W4-ecacd50 phase A adopted "',
+       '        "engine_options_digest": ("sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147", "W3 serving-version.json (W4-ecacd50 phase A adopted "',
+       RECORD),
+    _m("encoder_budget_declared_as_a_literal", "the declared encoder budget is the record's flags'",
+       "        \"encoder_budget_tokens\": (encoder_budget(served_flags(record)),",
+       "        \"encoder_budget_tokens\": (16384,", RECORD),
+    _m("image_read_from_the_record_not_serve_sh", "serve.sh is held against the record",
+       '            "runtime_image": pins["image"],', '            "runtime_image": record["runtime_image"]["ref"],',
+       RECORD),
+    _m("seqs_read_from_the_record_not_serve_sh", "serve.sh's concurrency is held against the record",
+       '            "engine_max_num_seqs": pins["seqs"],',
+       '            "engine_max_num_seqs": record["settings"]["ENGINE_MAX_NUM_SEQS"],', RECORD),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',

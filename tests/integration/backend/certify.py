@@ -18,7 +18,7 @@ The protocol - checks, cells, criteria, shapes - is predeclared in
   e4b.a.dataset-resume  E1B's bench.py interrupted by SIGINT, then `--resume`; the client's
                         invariants, and the tenant's ledger reconciled through G6B's Operations
   e4b.b.preconditions   App/Lab stopped; box: window consent, engine idle, parity clips
-  e4b.b.config-pin      the tree against W3/W4/M4's declared settings (`DECLARED`), the published
+  e4b.b.config-pin      the tree against W3/W4/M4's declared settings (`declared()`), the published
                         release record, and on the box the deployed engine (`--inventory`)
   e4b.b.envelope        bench.py open loop per rate of the ladder: failures, refusals, tails,
                         and the P-20 duration cap at admission
@@ -221,13 +221,17 @@ def options_digest(flags: list[str]) -> str:
     return "sha256:" + hashlib.sha256(compact.encode()).hexdigest()
 
 
-def engine_ceiling_s(record: dict) -> int:
-    """W4's P-20 arithmetic on the pinned flags: the encoder cache holds max(16384,
-    --max-num-batched-tokens) tokens, and `decide.ceiling_s` is the longest clip that fits."""
-    flags = served_flags(record)
+def encoder_budget(flags: list[str]) -> int:
+    """W4's P-20 finding: the encoder cache holds max(16384, --max-num-batched-tokens)."""
     batched = [int(flags[i + 1]) for i, flag in enumerate(flags[:-1])
                if flag == "--max-num-batched-tokens"]
-    return decide.ceiling_s(max([16384, *batched]))
+    return max([16384, *batched])
+
+
+def engine_ceiling_s(record: dict) -> int:
+    """W4's P-20 arithmetic on the pinned flags: `decide.ceiling_s` of the encoder budget is
+    the longest clip that fits."""
+    return decide.ceiling_s(encoder_budget(served_flags(record)))
 
 
 def published_release() -> dict:
@@ -565,38 +569,51 @@ def dataset_check(report: Report, target: dict, workdir: Path, ledger=None,
 # The settings the earlier evidence was measured under. A tree (or a box) that differs has
 # moved past that evidence: the check fails, naming it, until it is re-measured and
 # re-declared here ("reject any optimization that invalidates earlier evidence").
-PINNED_DIGEST = "sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147"
-PINNED_IMAGE = ("vllm/vllm-openai@sha256:"
-                "4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42")
-DECLARED = {
-    "engine_options_digest": (PINNED_DIGEST, "W3 serving-version.json; W4-ecacd50 phase A "
-                                             "adopted no candidate, so E0 (the W3 pin) stands"),
-    "runtime_image": (PINNED_IMAGE, "W3 serving-version.json runtime_image; W4's sweep image"),
-    "engine_max_num_seqs": ("8", "W3 settings; no c* measured (W4-ecacd50 request 3)"),
-    "contract_engine_max_num_seqs": (8, "contracts limits, equal to the W3 setting"),
-    "encoder_budget_tokens": (16384, "W4 P-20 record: no --max-num-batched-tokens pinned"),
-    "profile_version": ("v1", "S2M profile v1; M4-8179144's MEDIA-PARITY oracle"),
-    "preparation_concurrency": (2, "M4-8179144 'Measured, not taken': stays 2"),
-    "max_preparing_jobs": (8, "contracts limits, untouched by M4"),
-    "max_video_seconds": (120.0, "contracts limits (profile v1); P-20 applies 72 as config"),
-    "published_engine_options_digest": (PINNED_DIGEST, "R76/R78: the serving revision every "
-                                                       "admission pins is the measured one"),
-    "published_runtime_image": (PINNED_IMAGE, "R76/R78, as above"),
-}
+def declared() -> dict:
+    """What the earlier evidence was measured under - read, never typed (review F6): W3's
+    serving record, which W4 phase B re-declares by changing it, and the settings M4 and the
+    contract fixed. The published release must be that record."""
+    record = serving_record()
+    digest, image = record["engine_options_digest"], record["runtime_image"]["ref"]
+    seqs = record["settings"]["ENGINE_MAX_NUM_SEQS"]
+    return {
+        "engine_options_digest": (digest, "W3 serving-version.json (W4-ecacd50 phase A adopted "
+                                          "no candidate, so E0 - the W3 pin - stands)"),
+        "runtime_image": (image, "W3 serving-version.json runtime_image.ref"),
+        "engine_max_num_seqs": (seqs, "W3 serving-version.json settings"),
+        "contract_engine_max_num_seqs": (int(seqs), "contracts limits = the W3 setting"),
+        "encoder_budget_tokens": (encoder_budget(served_flags(record)),
+                                  "W4 P-20: max(16384, --max-num-batched-tokens) of the record"),
+        "profile_version": ("v1", "S2M profile v1; M4-8179144's MEDIA-PARITY oracle"),
+        "preparation_concurrency": (2, "M4-8179144 'Measured, not taken': stays 2"),
+        "max_preparing_jobs": (8, "contracts limits, untouched by M4"),
+        "max_video_seconds": (120.0, "contracts limits (profile v1); P-20 applies 72 as config"),
+        "published_engine_options_digest": (digest, "R76/R78: the serving revision every "
+                                                    "admission pins is the measured one"),
+        "published_runtime_image": (image, "R76/R78, as above"),
+    }
+
+
+def serve_sh_pins() -> dict:
+    """The launch script's own pins - the second source the record is held against."""
+    text = (MARLIN / "serve.sh").read_text()
+    image = re.search(r"^IMAGE=\$\{IMAGE:-(\S+)\}$", text, re.M)
+    seqs = re.search(r"^ENGINE_MAX_NUM_SEQS=\$\{ENGINE_MAX_NUM_SEQS:-(\d+)\}$", text, re.M)
+    batched = re.findall(r"--max-num-batched-tokens[ =]+\"?(\d+)", text)
+    return {"image": image and image.group(1), "seqs": seqs and seqs.group(1),
+            "encoder_budget": max([16384, *map(int, batched)])}
 
 
 def current_config() -> dict:
-    """The same settings, read from the tree (and the release G6B publishes)."""
+    """The same settings, read from the tree's other sources: the flags the record's digest
+    is recomputed from, serve.sh, the contract limits and the release G6B publishes."""
     from infrx.contracts.limits import DEFAULTS
-    record, published = serving_record(), published_release()
-    flags = served_flags(record)
-    batched = [int(flags[i + 1]) for i, flag in enumerate(flags[:-1])
-               if flag == "--max-num-batched-tokens"]
-    return {"engine_options_digest": options_digest(flags),
-            "runtime_image": record["runtime_image"]["ref"],
-            "engine_max_num_seqs": record["settings"]["ENGINE_MAX_NUM_SEQS"],
+    record, published, pins = serving_record(), published_release(), serve_sh_pins()
+    return {"engine_options_digest": options_digest(served_flags(record)),
+            "runtime_image": pins["image"],
+            "engine_max_num_seqs": pins["seqs"],
             "contract_engine_max_num_seqs": DEFAULTS.engine_max_num_seqs,
-            "encoder_budget_tokens": max([16384, *batched]),
+            "encoder_budget_tokens": pins["encoder_budget"],
             "profile_version": record["profile_version"],
             "preparation_concurrency": DEFAULTS.preparation_concurrency,
             "max_preparing_jobs": DEFAULTS.max_preparing_jobs,
@@ -605,10 +622,11 @@ def current_config() -> dict:
             "published_runtime_image": published["runtime_image_ref"]}
 
 
-def config_problems(current: dict, declared: dict = DECLARED) -> list[str]:
+def config_problems(current: dict, pinned: dict | None = None) -> list[str]:
+    pinned = declared() if pinned is None else pinned
     return [f"{name}: {current.get(name)!r} is not the declared {value!r} ({source}) - "
             f"re-measure and re-declare, or restore it"
-            for name, (value, source) in declared.items() if current.get(name) != value]
+            for name, (value, source) in pinned.items() if current.get(name) != value]
 
 
 def _pairs(flags: list[str]) -> set[tuple[str, str | None]]:

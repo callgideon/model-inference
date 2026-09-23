@@ -415,14 +415,14 @@ def test_e4b_the_config_pin_names_every_setting_that_moved_past_its_evidence(mon
     read from its own source, and one that moved fails the check naming the evidence."""
     from infrx.contracts.limits import DEFAULTS
     current, record = certify.current_config(), certify.serving_record()
-    assert set(current) == set(certify.DECLARED)
+    assert set(current) == set(certify.declared())
     assert current["engine_options_digest"] == certify.options_digest(certify.served_flags(record))
     assert current["published_engine_options_digest"] == \
         certify.published_release()["engine_options_digest"]
     assert current["published_runtime_image"] == certify.published_release()["runtime_image_ref"]
     assert (current["preparation_concurrency"], current["max_video_seconds"]) == (
         DEFAULTS.preparation_concurrency, DEFAULTS.max_video_seconds)
-    declared = {name: value for name, (value, _) in certify.DECLARED.items()}
+    declared = {name: value for name, (value, _) in certify.declared().items()}
     assert certify.config_problems(declared) == []
     moved = certify.config_problems({**declared, "encoder_budget_tokens": 32768})
     assert len(moved) == 1 and "encoder_budget_tokens: 32768" in moved[0] and "W4" in moved[0]
@@ -434,6 +434,44 @@ def test_e4b_the_config_pin_names_every_setting_that_moved_past_its_evidence(mon
     monkeypatch.setattr(certify, "current_config", lambda: {**declared, "profile_version": "v2"})
     certify.config_pin_check(report, None)
     assert report.stages[-1]["status"] == certify.FAIL
+
+
+def test_e4b_the_declared_settings_are_the_serving_record_read_never_typed(tmp_path, monkeypatch):
+    """Review F6: the pin's W3/W4 values are serving-version.json's, read from it - so W4
+    phase B's re-declaration moves them with the record - and the published release must be
+    that record. The tree's second source is serve.sh: a launch script that drifted from the
+    record fails the pin by name."""
+    record = certify.serving_record()
+    pinned = {name: value for name, (value, _) in certify.declared().items()}
+    assert (pinned["engine_options_digest"], pinned["runtime_image"],
+            pinned["engine_max_num_seqs"], pinned["contract_engine_max_num_seqs"]) == (
+        record["engine_options_digest"], record["runtime_image"]["ref"],
+        record["settings"]["ENGINE_MAX_NUM_SEQS"], int(record["settings"]["ENGINE_MAX_NUM_SEQS"]))
+    assert pinned["encoder_budget_tokens"] == certify.encoder_budget(certify.served_flags(record))
+    assert (pinned["published_engine_options_digest"], pinned["published_runtime_image"]) == (
+        record["engine_options_digest"], record["runtime_image"]["ref"])
+    tonight = {**record, "engine_options_digest": "sha256:" + "5" * 64,
+               "flags": [*record["flags"], "--max-num-batched-tokens", "32768"]}
+    monkeypatch.setattr(certify, "serving_record", lambda: tonight)
+    moved = {name: value for name, (value, _) in certify.declared().items()}
+    assert (moved["engine_options_digest"], moved["published_engine_options_digest"],
+            moved["encoder_budget_tokens"]) == ("sha256:" + "5" * 64,) * 2 + (32768,)
+    monkeypatch.undo()
+    pins = certify.serve_sh_pins()
+    assert (pins["image"], pins["seqs"]) == (record["runtime_image"]["ref"],
+                                             record["settings"]["ENGINE_MAX_NUM_SEQS"])
+    marlin = tmp_path / "marlin2b"
+    marlin.mkdir()
+    (marlin / "serve.sh").write_text(
+        (certify.MARLIN / "serve.sh").read_text()
+        .replace(record["runtime_image"]["ref"], "vllm/vllm-openai:nightly")
+        .replace("ENGINE_MAX_NUM_SEQS=${ENGINE_MAX_NUM_SEQS:-8}", "ENGINE_MAX_NUM_SEQS=${ENGINE_MAX_NUM_SEQS:-32}"))
+    monkeypatch.setattr(certify, "MARLIN", marlin)
+    monkeypatch.setattr(certify, "serving_record", lambda: record)
+    drifted = certify.serve_sh_pins()
+    assert (drifted["image"], drifted["seqs"]) == ("vllm/vllm-openai:nightly", "32")
+    names = [problem.split(":")[0] for problem in certify.config_problems(certify.current_config())]
+    assert {"runtime_image", "engine_max_num_seqs"} <= set(names), names
 
 
 def test_e4b_the_deployed_engine_is_judged_from_the_box_inventory(tmp_path, monkeypatch):
@@ -452,7 +490,7 @@ def test_e4b_the_deployed_engine_is_judged_from_the_box_inventory(tmp_path, monk
         "image_equals_pin=no"]
     assert certify.inventory_problems("image_equals_pin=yes\n", record) == [
         "no readable args= line"]
-    declared = {name: value for name, (value, _) in certify.DECLARED.items()}
+    declared = {name: value for name, (value, _) in certify.declared().items()}
     monkeypatch.setattr(certify, "current_config", lambda: dict(declared))
     inventory = tmp_path / "inventory.txt"
     inventory.write_text(good)
