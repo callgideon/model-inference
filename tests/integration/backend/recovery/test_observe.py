@@ -469,3 +469,25 @@ def test_i3b_ob14_a_scrape_gap_then_recovery_fires_nothing_new(tmp_path, capsys)
     assert run(first) == (1, ["ScrapeFailed"])            # the very first run fails
     away.rename(source)
     assert run(first) == (0, [])                          # ... so this one judges nothing
+
+
+def test_i3b_ob15_a_stale_or_empty_source_is_scrape_failed_not_silence(tmp_path, capsys):
+    """M5: a readable file the worker stopped rewriting (older than `--max-age`) and an
+    exposition with no sample are `ScrapeFailed`, like an unreadable one; a fresh healthy
+    file with the same bound is silent."""
+    import os
+    rules = str(kit.ROOT / "infra" / "alerts" / "alerts.json")
+    worker = tmp_path / "worker.prom"
+    worker.write_text(_healthy(time.time()).render())
+
+    def fired(*extra):
+        code = alerts.main(["--rules", rules, "--source", str(worker), *extra])
+        return code, [json.loads(line)["alert"] for line in capsys.readouterr().out.splitlines()]
+
+    assert fired("--max-age", "60") == (0, [])
+    old = time.time() - 600
+    os.utime(worker, (old, old))
+    assert fired("--max-age", "60") == (1, ["ScrapeFailed"])
+    assert fired() == (0, [])                             # no bound given: not judged on age
+    worker.write_text("\n")                               # what an empty Registry renders
+    assert fired() == (1, ["ScrapeFailed"])

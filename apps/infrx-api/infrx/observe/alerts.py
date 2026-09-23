@@ -2,12 +2,14 @@
 
     python -m infrx.observe.alerts --rules infra/alerts/alerts.json \\
         --source http://127.0.0.1:8001/metrics --source /var/lib/infrx/metrics/worker.prom \\
-        --state /var/lib/infrx/metrics/alert-state.json
+        --state /var/lib/infrx/metrics/alert-state.json --max-age 180
 
 Prints one JSON line per firing alert and exits 1 when anything fires, 0 when nothing
 does - so a systemd timer (`OnFailure=`) or an SSM command is the whole delivery path, and
 no alerting service has to exist on a single-GPU pilot. A source that cannot be read is
-itself an alert (`ScrapeFailed`): silence must never mean "healthy".
+itself an alert (`ScrapeFailed`): silence must never mean "healthy". So is an exposition
+with no sample at all, and - with `--max-age` - a file source not rewritten within that
+many seconds (a dead worker leaves its last `.prom` behind).
 
 A rule is data, not PromQL, so it can be checked here and in tests without a Prometheus:
 
@@ -118,11 +120,14 @@ def evaluate(rules: list[dict], samples: dict[Key, float],
     return firing
 
 
-def _read(source: str) -> str:
+def _read(source: str, max_age: float | None = None) -> str:
     if source.startswith(("http://", "https://")):
         with urllib.request.urlopen(source, timeout=10) as answer:   # noqa: S310 - operator input
             return answer.read().decode()
-    return Path(source).read_text()
+    path = Path(source)
+    if max_age is not None and time.time() - path.stat().st_mtime > max_age:
+        raise TimeoutError(f"not rewritten within {max_age} s")
+    return path.read_text()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -132,13 +137,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source", action="append", required=True,
                         help="a /metrics URL or an exposition file; repeatable")
     parser.add_argument("--state", type=Path, help="previous samples, for `increase` rules")
+    parser.add_argument("--max-age", type=float,
+                        help="seconds: an older file source is ScrapeFailed (a stale textfile)")
     args = parser.parse_args(argv)
     rules = json.loads(args.rules.read_text())["rules"]
     samples: dict[Key, float] = {}
     firing = []
     for source in args.source:
         try:
-            samples.update(parse(_read(source)))
+            parsed = parse(_read(source, args.max_age))
+            if not parsed:
+                raise ValueError("the exposition has no sample")
+            samples.update(parsed)
         except Exception as failure:                # noqa: BLE001 - reported, never silent
             firing.append({"alert": "ScrapeFailed", "severity": "page", "value": 1,
                            "labels": {"source": source},
