@@ -335,7 +335,13 @@ drill "a tunable the runtime cannot read" 2 INFRX_MODE=dev INFRX_SET=MAX_ACTIVE_
 params "{\"/model-inference/supabase_url\": {\"value\": \"https://example.supabase.co\"},
  \"/model-inference/supabase_service_role_key\": {\"value\": \"local-literal-service-role-0123456789\"},
  \"/model-inference/pg_journal_url\": {\"value\": \"postgresql://infrx@127.0.0.1:5432/infrx\"}}"
-drill "the repository's pilot today (probe in the real image)" 2 INFRX_MODE=pilot
+drill "the repository's pilot today (refused before the probe: engine pin, W3 record, disk)" 2 INFRX_MODE=pilot
+# ... and the probe itself, in the real image, on a pilot-shaped file (the runbook's gate G3)
+v=$(printf 'INFRX_MODE=pilot\nSUPABASE_URL=https://gate.supabase.co\nSUPABASE_SERVICE_ROLE_KEY=gate-placeholder-0123456789\nDATABASE_URL=postgresql://gate@127.0.0.1/gate\nPROCESSING_CACHE_DIR=/opt/dlami/nvme/processing\nVALKEY_URL=valkey://127.0.0.1:6379/0\n' \
+  | /usr/bin/docker run --rm -i --network none --label "$LABEL" "$REHEARSAL_IMAGE" python /app/deploy/preflight.py probe --mode pilot --env-file /dev/stdin || true)
+echo "pilot probe in the image: $v"
+check "the in-image pilot probe refuses: ROUTERS not composed (G2), worker entry absent (W3)" \
+  "[[ '$v' == *'\"ok\": false'*ROUTERS*'PENDING(W3): infrx.worker.__main__'* ]]"
 drill "no mode" 2 INFRX_MODE=
 params "{\"/model-inference/marlin2b_api_key\": {\"value\": \"$KEY\"}}"
 
