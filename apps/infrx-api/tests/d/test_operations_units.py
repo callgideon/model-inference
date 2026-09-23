@@ -112,6 +112,20 @@ def test_ledger__asks_for_an_operator_adjustment_and_answers_the_entry() -> None
     assert conn.sent[1][1][0].obj["org_id"] == b.ORG_A
 
 
+def test_registry__the_alias_moves_at_the_deployments_newest_effective_card() -> None:
+    """Review CF-1: the listing's card - what every new admission pins and pays - is the
+    deployment's NEWEST card effective at the database clock (`test_catalog_pg`'s alias
+    move proves it on PostgreSQL with two cards); the alias without its `@label`."""
+    registry, conn = _with(ops.PgRegistry, [(1,)])
+    _ok(registry.move_alias(f"{v2fix.PUBLIC_MODEL_ID}@2026-09-01", v2fix.IDS.prod_deployment))
+    sql, params = conn.sent[0]
+    card = sql[sql.index("select c.rate_card_version"):sql.index("as card")]
+    assert "c.effective_at <= infrx.now()" in card and \
+        "order by c.effective_at desc, c.created_at desc limit 1" in card, card
+    assert params == {"alias": v2fix.PUBLIC_MODEL_ID,
+                      "deployment": v2fix.IDS.prod_deployment}, params
+
+
 DEV = (v2fix.IDS.dev_deployment, v2fix.IDS.dev_endpoint, v2fix.IDS.provider_org,
        v2fix.IDS.serving_version, "dev", "private", "ready_private", 30720, 2048, v2fix.T0)
 

@@ -28,6 +28,7 @@ REVOKE = "test_tenant_store__revocation_keeps_the_first_instant_and_suspension_s
 AUDIT = "test_audit_log__looks_up_by_its_own_key"
 ACCOUNT = "test_account_view__each_row_keeps_its_unit_and_holds_are_credit_only"
 LEDGER = "test_ledger__asks_for_an_operator_adjustment_and_answers_the_entry"
+REGISTRY = "test_registry__the_alias_moves_at_the_deployments_newest_effective_card"
 CATALOG = "test_catalog__a_private_deployment_only_for_its_provider_and_errors_raised"
 SENDS = "test_complete__sends_the_proposal_the_regime_and_the_stores_ttls"
 REFUSAL = "test_complete__a_committed_refusal_is_raised_as_its_type"
@@ -137,6 +138,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("adjust_allocates", "an adjustment is an operator_adjustment",
        '"wallet_id": wallet.wallet_id, "kind": "operator_adjustment",',
        '"wallet_id": wallet.wallet_id, "kind": "operator_allocation",', LEDGER, file=O),
+    _m("alias_moves_at_the_oldest_card", "review CF-1: the alias moves at the newest card",
+       "                     order by c.effective_at desc, c.created_at desc limit 1) as card",
+       "                     order by c.effective_at asc, c.created_at asc limit 1) as card",
+       REGISTRY, file=O),
     # --- item 8: the catalog -----------------------------------------------------------
     _m("private_visible_to_consumer", "a private deployment only for its provider_dev key",
        "        if row is None and audience is CredentialAudience.provider_dev and endpoint_id:",

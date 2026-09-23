@@ -158,6 +158,7 @@ def test_credit_rate__alias_move_changes_resolve_not_an_admitted_job() -> None:
     after the alias moves to a new public deployment with its own card - while `resolve`
     and a new admission follow the move."""
     database = f"{pgharness.DATABASE}_cat_admit"
+    pgharness.ensure()                           # runnable alone (`-k`), not only in order
     pgharness.recreate(database)
     pgharness.apply(database, migrations.sql_for(shim=pgharness.NEEDS_SHIM))
     owner = pgharness.connect(database)
@@ -174,12 +175,19 @@ def test_credit_rate__alias_move_changes_resolve_not_an_admitted_job() -> None:
                   "max_input_tokens, max_output_tokens, created_by) values (%s, %s, %s, 'prod', "
                   "%s, 'public', 'active', 30720, 2048, 'ops')",
                   (moved, IDS.prod_endpoint, IDS.provider_org, IDS.serving_version))
-    owner.execute("insert into infrx.rate_card_versions (rate_card_version, model_id, "
-                  "deployment_revision_id, serving_version_id, input_rate_per_million, "
-                  "output_rate_per_million, effective_at, approved_by, provisional) values "
-                  "('rc_d5_moved', %s, %s, %s, 500, 1500, infrx.now(), 'ops', false)",
-                  (IDS.model, moved, IDS.serving_version))
+    # review CF-1: two cards on the moved deployment - the alias moves at the NEWEST
+    # effective one (the listing's card is what every new admission pins and pays)
+    for card, effective in (("rc_d5_moved_old", "infrx.now() - interval '1 hour'"),
+                            ("rc_d5_moved", "infrx.now()")):
+        owner.execute("insert into infrx.rate_card_versions (rate_card_version, model_id, "
+                      "deployment_revision_id, serving_version_id, input_rate_per_million, "
+                      "output_rate_per_million, effective_at, approved_by, provisional) "
+                      f"values (%s, %s, %s, %s, 500, 1500, {effective}, 'ops', false)",
+                      (card, IDS.model, moved, IDS.serving_version))
     catalog.move_alias(v2fix.REQUESTED_MODEL, moved)
+    assert owner.execute("select deployment_revision_id::text, rate_card_version from "
+                         "infrx.resolve_admission_pins(%s)", (v2fix.REQUESTED_MODEL,)
+                         ).fetchone() == (moved, "rc_d5_moved"), "the alias moved at an old card"
     found = run(catalog.resolve(v2fix.REQUESTED_MODEL, audience=CredentialAudience.consumer,
                                 endpoint_id=None))
     assert found.deployment_revision_id == moved, found
