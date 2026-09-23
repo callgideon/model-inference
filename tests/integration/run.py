@@ -157,18 +157,27 @@ def shell(argv: list[str], *, cwd: Path, env: dict | None = None, timeout: float
     detail long before its summary block, so a tail-only search reported "detected but not
     named" for a failure that was named perfectly well."""
     started = time.monotonic()
+    # Its own process group (review H5): a run past its budget takes make, uv and pytest -
+    # and whatever lock or container they hold - down with it, not only the direct child.
+    process = subprocess.Popen(argv, cwd=str(cwd), stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, text=True, start_new_session=True,
+                               env={**os.environ, **(env or {})})
     try:
-        result = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True,
-                                timeout=timeout, env={**os.environ, **(env or {})})
-        code, output = result.returncode, result.stdout + result.stderr
-    except subprocess.TimeoutExpired as late:
+        stdout, stderr = process.communicate(timeout=timeout)
+        code = process.returncode
+    except subprocess.TimeoutExpired:
         # E3B phase 2, measured: `make api-test` outlived 1800 s on a loaded host and the
         # traceback lost the whole report. A run past its budget is a FAILED run (exit 124,
         # the `timeout` convention) with what it printed, never a crash of the gate.
-        code = 124
-        output = "".join(part.decode(errors="replace") if isinstance(part, bytes) else
-                         (part or "") for part in (late.stdout, late.stderr)) \
-            + f"\ntimed out after {timeout:.0f} s"
+        os.killpg(process.pid, signal.SIGKILL)
+        stdout, stderr = process.communicate()
+        code, stderr = 124, stderr + f"\ntimed out after {timeout:.0f} s"
+    except BaseException:
+        # SIGINT/SIGTERM to run.py (`Interrupted`) no longer reaches a separate group.
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait()
+        raise
+    output = stdout + stderr
     return {"argv": " ".join(argv), "cwd": str(cwd.relative_to(harness.REPO_ROOT) or "."),
             "exit": code, "seconds": round(time.monotonic() - started, 1),
             "counts": counts(output),

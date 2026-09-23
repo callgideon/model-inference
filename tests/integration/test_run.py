@@ -237,8 +237,9 @@ def test_the_needle_is_searched_in_the_whole_output_not_the_tail():
     """The bug this replaced: node --test prints a failure's detail long before its summary
     block, so a tail-only search reported a perfectly named canary as unnamed."""
     long_output = "E2 canary: intentional\n" + "\n".join(f"filler {i}" for i in range(60))
-    with patched(runner.subprocess, run=lambda *a, **k: _Completed(1, long_output)):
-        result = runner.shell(["true"], cwd=harness.REPO_ROOT, needle="E2 canary")
+    # A real process (shell() runs its own process group since E3B phase 2, review H5).
+    result = runner.shell([sys.executable, "-c", f"print({long_output!r}); raise SystemExit(1)"],
+                          cwd=harness.REPO_ROOT, needle="E2 canary")
     assert result["named"] is True
     assert "E2 canary" not in result["tail"], "the needle really was outside the tail"
 
@@ -917,13 +918,21 @@ def test_a_suite_that_outlives_its_budget_is_a_failed_run_not_a_traceback():
     report): a timed-out run comes back as exit 124 with its output, which the suites stage
     reports as a failure."""
     import subprocess
-    try:
-        result = runner.shell([sys.executable, "-c", "import time; print('started', "
-                               "flush=True); time.sleep(30)"], cwd=harness.REPO_ROOT,
-                              timeout=1.0)
-    except subprocess.TimeoutExpired:
-        pytest.fail("a timed-out suite raised out of shell(): the gate loses its report")
-    assert result["exit"] == 124 and "timed out after 1 s" in result["tail"], result
+    import tempfile
+    import time
+    with tempfile.TemporaryDirectory(prefix="e3b2-h5-") as scope:
+        alive = Path(scope) / "grandchild-alive"
+        # Review H5: a grandchild (make -> uv -> pytest) must die with the run, not outlive it.
+        script = ("import subprocess, time; print('started', flush=True); "
+                  f"subprocess.Popen(['sh', '-c', 'sleep 2; touch {alive}']); time.sleep(30)")
+        try:
+            result = runner.shell([sys.executable, "-c", script], cwd=harness.REPO_ROOT,
+                                  timeout=1.0)
+        except subprocess.TimeoutExpired:
+            pytest.fail("a timed-out suite raised out of shell(): the gate loses its report")
+        assert result["exit"] == 124 and "timed out after 1 s" in result["tail"], result
+        time.sleep(2.5)
+        assert not alive.exists(), "a grandchild of the timed-out run outlived it"
 
 
 def test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red(monkeypatch):
