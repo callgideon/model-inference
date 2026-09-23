@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T14:10:54Z",
+  "updated": "2026-09-23T14:18:55Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,51 +11,51 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "agent DIED at the session limit during its fix-round gate run; coordinator WIP commit c587ddc over its merge of the integration head (5e9bbf1) + private-TMPDIR commit; stack containers infrx-e3b2-* left up; re-dispatch",
+      "phase": "re-dispatched (Opus) 14:16Z on codex-e3b2 @ c587ddc (WIP) to finish the fix round; harvests/tears down its gate containers",
       "since": "2026-09-22T18:46:49Z",
       "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
     },
     "G2": {
       "lane": "codex-g2 / codex/g2-chat-relay",
-      "phase": "agent DIED at the session limit mid round 3 (7 of 9 round-3 commits landed, head 35ac886, pushed); re-dispatch to finish round 3 (evidence section + runs), then confirmation, then MERGE",
+      "phase": "re-dispatched (Opus) 14:16Z to finish round 3 on codex-g2 @ 35ac886 \u2192 confirmation \u2192 MERGE",
       "since": "2026-09-23T05:12:27Z",
       "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) \u2192 fix lane codex/w-consumed-parameters"
     },
     "W4": {
       "lane": "codex-w4 / codex/w4-measured-tuning",
-      "phase": "round 4 b1eee7c; its single-verifier workflow DIED (429, null); rerun wf_bfa72784-488 then MERGE",
+      "phase": "round 4 b1eee7c; verifier RERUN wf_09c50070-a9c running \u2192 MERGE",
       "since": "2026-09-23T05:40:38Z",
       "note": "protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge"
     },
     "G3": {
       "lane": "codex-g3 / codex/g3-jobs",
-      "phase": "round 2 cb096fb; its confirmation workflow DIED (429, empty result \u2014 not a pass); rerun wf_254a006d-cb3; merges G2's round-3 head when it lands",
+      "phase": "round 2 cb096fb; confirmation RERUN wf_e024f4f2-8dc running; merges G2's round-3 head when it lands",
       "since": "2026-09-23T10:09:50Z",
       "note": "routes/jobs.py (POST /v1/jobs, status, result, events, DELETE) + additive Relay.admit/on_async/pump(cursor, cancel_on_gone) + route table + client example; 57 mutants over 33 cases; tests/g 422; G list 264; finding: a crash between the admission commit and the 202 leaves a replayed job's media never attached (G2 request b)"
     },
     "I3B-followup": {
       "lane": "codex-i3bf / codex/i3b-followup",
-      "phase": "review PARTIAL: restore lens fix_required (RST-1 schemas family unkillable, RST-4 sequences family empty \u2014 unverified; RST-2/3/5 nonblocking), drill lens + refuters DIED; rerun wf_cb972a2c-da6; merge after E3B2",
+      "phase": "review drill lens + RST-1/RST-4 refuters RERUN wf_28258566-66d running; merge after E3B2",
       "since": "2026-09-23T11:22:39Z",
       "note": "R92 acldefault comparison (bk01_a + 8 bk01f green on Supabase; plain image unsupported by the fixture: 17.6 client vs 16.14 server); i3bm57 re-anchored; rc10 = runbook composition with PATH stubs for systemctl/docker/curl; pending honesty (rc03\u2192G2, rc04 stubbed, rc05b\u2192M1-L2, rc08b\u2192I2B-R4); 3 crash-kills fixed; I3B list 86: 84 killed, 1 control, i3bm33 no-cases (needs E2 Valkey)"
     },
     "D5": {
       "lane": "codex-d5 / codex/d5-terminal-transaction",
-      "phase": "agent DIED at the session limit (Opus 429, resets 14:00 UTC) after its first commit 1d5c66e (D4 N1/N2 wording); re-dispatch on codex-d5",
+      "phase": "re-dispatched (Opus) 14:16Z on codex-d5 @ 1d5c66e",
       "since": "2026-09-23T12:56:22Z",
       "note": "ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1\u20135; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items"
     },
     "F-fakes-followup": {
       "lane": "codex-ffakes / codex/f-fakes-followup",
-      "phase": "agent DIED at the session limit before its first commit (branch = base ae0f2a2, pushed); re-dispatch with the same prompt",
+      "phase": "re-dispatched (Opus) 14:16Z on codex-ffakes @ ae0f2a2",
       "since": "2026-09-23T12:58:13Z",
       "note": "from the integration head \u2265 ae0f2a2; minimal edits in infrx/contracts/fakes/state.py away from G2's lookup/_replay; flips D4's pinned fake-delta assertion"
     }
   },
   "reviews": {
     "W4": {
-      "phase": "verifier at b1eee7c DIED (429) \u2192 rerun",
-      "since": "2026-09-23T14:10:54Z"
+      "phase": "verifier rerun at b1eee7c running",
+      "since": "2026-09-23T14:18:55Z"
     },
     "G4U": {
       "phase": "MERGED 7d21fa7 after confirmation pass at 962b2b1",
@@ -74,12 +74,12 @@
       "since": "2026-09-23T12:47:20Z"
     },
     "G3": {
-      "phase": "confirmation at cb096fb DIED (429, empty) \u2192 rerun",
-      "since": "2026-09-23T14:10:54Z"
+      "phase": "confirmation rerun at cb096fb running",
+      "since": "2026-09-23T14:18:55Z"
     },
     "I3B-followup": {
-      "phase": "review at d99da09 PARTIAL (restore lens only; JSON evidence/i/I3B-followup-review-d99da09.json) \u2192 rerun the drill lens + refuters",
-      "since": "2026-09-23T14:10:54Z"
+      "phase": "drill lens + refuters rerun at d99da09 running",
+      "since": "2026-09-23T14:18:55Z"
     }
   },
   "gates": {
