@@ -148,16 +148,35 @@ def backup_and_restore(source: str, target: str, backup: Path, **restore_kw) -> 
 
 # ------------------------------------------------------------------ bk01 backup/restore
 
-def test_i3b_bk01_a_backup_restores_every_row_privilege_and_policy(tmp_path, record_property):
+def _watched_connect(seen: list):
+    """`pg.connect`, observed from outside: after each use, what the session itself says
+    about `transaction_read_only` (RS-7's witness - not the tool's own self-check)."""
+    real = pg.connect
+
+    @contextlib.contextmanager
+    def watched(conninfo: str):
+        with real(conninfo) as conn:
+            yield conn
+            seen.append(conn.execute("show transaction_read_only").fetchone()[0])
+    return watched
+
+
+def test_i3b_bk01_a_backup_restores_every_row_privilege_and_policy(tmp_path, record_property,
+                                                                   monkeypatch):
     """OPS-RECOVER (backup restore): the populated, fully migrated database is dumped as the
     non-superuser role, restored into a fresh database and CHECKED - not merely listed:
     rows, RLS/policies/ACLs/functions/triggers/constraints/indexes/default privileges
-    identical, detectors zero drift on both. The pinned client image is the runbook's."""
+    identical, detectors zero drift on both. The pinned client image is the runbook's. The
+    check's sessions are read-only, observed from outside (A6 fingerprints LIVE hosted)."""
     kit.needs_stack()
     assert pg.IMAGE == harness.compose_images()["postgres"]
     with scratch("infrx_i3b_restored") as (target,):
         timings = backup_and_restore(harness.PG_DATABASE, target, tmp_path / "backup")
-        before, after = fingerprint(harness.PG_DATABASE), fingerprint(target)
+        seen: list = []
+        with monkeypatch.context() as patched:
+            patched.setattr(pg, "connect", _watched_connect(seen))
+            before, after = fingerprint(harness.PG_DATABASE), fingerprint(target)
+        assert seen == ["on", "on"], seen
         assert pg.compare(before, after) == []
         assert pg.main(["check", "--source", conninfo(harness.PG_DATABASE),
                         "--target", conninfo(target)]) == 0      # the runbook's own check

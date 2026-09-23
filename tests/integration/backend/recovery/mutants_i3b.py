@@ -240,6 +240,13 @@ MUTANTS += (
     Mutant("i3bm48", "RS-7: the check's session is read-only (A6 reads LIVE hosted)", PGRESTORE,
            '        conn.execute("set default_transaction_read_only = on")\n', "",
            RESTORE, "bk01_a", layer=2),
+    Mutant("i3bm49", "RS-7 witness: the check's sessions are read-only, observed from outside "
+                     "(the reviewer's rvB: the SET and the self-check both deleted)", PGRESTORE,
+           '        conn.execute("set default_transaction_read_only = on")\n'
+           "        # A6 points this at LIVE hosted: prove the session is read-only before reading.\n"
+           '        if conn.execute("show transaction_read_only").fetchone()[0] != "on":\n'
+           '            raise RuntimeError("refusing to fingerprint: the session is not read-only")\n',
+           "", RESTORE, "bk01_a", layer=2),
     # RS-2: each catalog family is compared - one mutant per family drops it from CATALOG,
     # and only that family's bk01f parameter can kill it.
     Mutant("i3bm60", "RS-2: the check compares policies", PGRESTORE,
