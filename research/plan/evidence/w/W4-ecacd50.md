@@ -612,3 +612,18 @@ All twelve new mutants were pre-checked before the full run with `python -m test
 ### Round-3 verification log
 
 - 2026-09-23: confirmation round for `W4-confirm-b0a44a0.json` at `9490e7c`. Status unchanged: implemented, measurement pending the coordinator's box run.
+
+## Round 4 — re-confirmation `W4-reconfirm-ba95e42.json` (one blocking gap, tests only)
+
+Commit `ec652e8` (tests and mutants only). **DEC-R3-1:** the passing case's `level_missing` variant (candidate c = 1 relabelled 3) also asserts `usage_drift` `unknown` with "not all six levels". New mutant `paired_levels_candidate_unchecked` drops `missing or`; `baseline_levels_unchecked` stays as the baseline-half mutant. Nonblocking, folded in:
+- DEC-R3-N1: the adopted report prints `setting=16` with no suffix. Mutant: `setting_always_printed_not_taken`.
+- DEC-R3-N2: the stub docker's `stats` branch records its fds; each stub level waits, bounded, for the first sample; the case asserts fd 9 is absent. Mutant: `sampler_holds_the_lock`.
+- DEC-R3-N3: new `attempts_over_requests` variant (one extra rejected raw row, bench `attempts` + 1 and `rejected` = 1) must fail overload masking.
+- DEC-R3-N4: `READY_S=00` is refused.
+
+A pre-check of the new and related mutants printed `8/8 killed`. Runs at `ec652e8`:
+
+| Command | Exit | Tail |
+|---|---|---|
+| `uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w4.py` (12:21:03Z) | 0 | `15 passed in 126.44s (0:02:06)` |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w4_mutants.py` (12:21:03Z) | 0 | `109 passed in 1337.98s (0:22:17)`: 107 mutants plus the 2 list checks. `--list` prints `107 mutants over 15 named cases` |
