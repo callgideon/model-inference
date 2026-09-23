@@ -40,16 +40,7 @@ def _rendered(namespace: str) -> str:
     return re.sub(r"\$\{(\w+)(?::\?[^}]*)?\}", lambda match: env[match.group(1)], COMPOSE_TEXT)
 
 
-# E3B phase 2, integration request #1: tasklocal records `e3b2` as a single postgres port and
-# cannot express a compose block yet, so the e3b2 row is an expected failure until the
-# coordinator adds the block. `strict`: the day it lands this XPASSes and fails, and the mark
-# goes. The block's freedom from every other reservation is checked unconditionally below.
-_TASKLOCAL_BLOCK = {"e3b2": pytest.mark.xfail(
-    strict=True, reason="integration request #1: tasklocal has no e3b2 compose block")}
-
-
-@pytest.mark.parametrize("namespace", [pytest.param(ns, marks=_TASKLOCAL_BLOCK.get(ns, ()))
-                                       for ns in sorted(harness.NAMESPACES)])
+@pytest.mark.parametrize("namespace", sorted(harness.NAMESPACES))
 def test_every_port_is_inside_the_range_tasklocal_grants_this_task(namespace):
     """08 §8 / R48: each namespace's compose range is its tasklocal block and nothing else (E2:
     55500-55599). A port outside it is a collision with another session's worktree waiting to
