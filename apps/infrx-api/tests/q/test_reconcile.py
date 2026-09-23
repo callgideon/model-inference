@@ -333,6 +333,18 @@ def test_q3_reconcile__a_queued_job_missing_from_the_index_is_indexed_again(adap
     run(body)
 
 
+def test_q3_reconcile__a_full_index_defers_the_rest_of_the_repair(adapter):
+    """Review DUR-7: the index has room for one of the two wanted jobs it does not hold.
+    The pass repairs one, defers the other to the next pass, and does not fail."""
+    w = rig.world(adapter, max_items=1)
+
+    async def body():
+        await rig.admit_in_order(w, 2)                    # never drained: both missing
+        assert await w.rec.reconcile() == {"missing": 2, "repaired": 1, "deferred": 1}
+        assert len(await rig.members(w)) == 1
+    run(body)
+
+
 def test_q3_reconcile__a_dead_candidate_is_removed(adapter):
     """Cancelled while indexed, and running while its candidate is still in flight: both
     candidates are dead; the live job's candidate stays."""
