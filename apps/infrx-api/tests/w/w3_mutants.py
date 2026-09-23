@@ -155,10 +155,17 @@ SIGTERM = "test_ops_recover__sigterm_drains_within_the_bound_and_exits_cleanly"
 READY = "test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_draining"
 PUBLIC = "test_ops_recover__readiness_is_never_public_and_leaks_nothing"
 DEAD = "test_ops_recover__one_dead_runner_makes_the_worker_not_live_and_ends_serve"
+REAPER_DEAD = ("test_ops_recover__a_garbage_recover_does_not_kill_the_reaper_and_a_dead_one_"
+               "is_not_live")
 REAL_RELEASE = ("test_ops_recover__on_the_integration_engine_a_released_attempt_completes_"
                 "after_requeue")
 REAL_LOSS = "test_ops_recover__engine_process_loss_is_a_typed_failure_and_readiness_follows_it"
 TIMED = "test_perf_pilot__an_attempt_times_its_phases_in_the_bench_vocabulary"
+
+# reap_once's guard, as the mutant that moves the answer's parsing back out of it sees it
+_GUARD = ("        except Exception as failure:              # the store is down (or answered "
+          'garbage)\n            self.reap_errors += 1\n            log.warning("recover '
+          'failed: %s", type(failure).__name__)\n            return 0\n')
 
 PY_MUTANTS: tuple[Mutant, ...] = (
     # --- (2) one media root -----------------------------------------------------------
@@ -185,6 +192,28 @@ PY_MUTANTS: tuple[Mutant, ...] = (
        V, "            except Exception as failure:          # the outbox row is durable",
        "            except LookupError as failure:          # the outbox row is durable",
        RESTART, dies_by=("ConnectionError",)),
+    _m("pool_starts_before_the_reap", "the start-up reap finishes before anything is claimed",
+       V, "        await self.reap_once()                    # a restart requeues what died with "
+          "us\n        self._pool = asyncio.create_task(\n            self.loop.run("
+          'concurrency=self.concurrency, stop_when_idle=False), name="pool")\n',
+       "        self._pool = asyncio.create_task(\n            self.loop.run("
+       'concurrency=self.concurrency, stop_when_idle=False), name="pool")\n'
+       "        await self.reap_once()                    # a restart requeues what died with "
+       "us\n", RESTART),
+    _m("reap_errors_hidden", "readiness reports failed reaps",
+       V, '                "reap_errors": self.reap_errors,', '                "reap_errors": 0,',
+       RESTART),
+    _m("reap_body_unguarded", "a recover that answers garbage is counted, not fatal",
+       V, "            events = [item for item in produced if isinstance(item, IndexEvent)]\n"
+          f"{_GUARD}",
+       f"{_GUARD}        events = [item for item in produced if isinstance(item, IndexEvent)]\n",
+       REAPER_DEAD),
+    _m("reaper_death_unreported", "a dead reaper is reported and is not live",
+       V, "        return [task for task in (*self.loop._tasks, self._reaper)",
+       "        return [task for task in (*self.loop._tasks,)", REAPER_DEAD),
+    _m("serve_ignores_a_dead_reaper", "a dead reaper ends serve (the unit restarts)",
+       V, "{waiting, self._pool, self._reaper, *self.loop._tasks}",
+       "{waiting, self._pool, *self.loop._tasks}", REAPER_DEAD),
     _m("start_does_not_reap", "a restart requeues what died with its predecessor first",
        V, "        await self.reap_once()                    # a restart requeues",
        "        pass                    # a restart requeues", RESTART),
@@ -213,22 +242,30 @@ PY_MUTANTS: tuple[Mutant, ...] = (
     _m("run_undoes_an_early_drain", "a stop straight after start still stops the pool",
        L, "        self._tasks = [asyncio.create_task(",
        "        self.draining = False\n        self._tasks = [asyncio.create_task(", ENDED),
+    _m("sigint_not_handled", "SIGINT drains like SIGTERM",
+       V, "        signals = (signal.SIGTERM, signal.SIGINT)",
+       "        signals = (signal.SIGTERM,)", SIGTERM),
+    _m("live_drops_the_draining_clause", "a worker stopped on request is still live",
+       V, '        live = (state != "stopped" or self.loop.draining) and not died',
+       '        live = state != "stopped" and not died', READY),
     _m("sigterm_not_handled", "SIGTERM drains; it does not kill the process mid-attempt",
        V, "            running.add_signal_handler(sig, stop.set)",
        "            pass", SIGTERM),
     _m("serve_waits_only_for_a_signal", "a pool that died ends serve by itself",
-       V, "            await asyncio.wait({waiting, self._pool, *self.loop._tasks},\n"
+       V, "            await asyncio.wait({waiting, self._pool, self._reaper, "
+          "*self.loop._tasks},\n"
           "                               return_when=asyncio.FIRST_COMPLETED)",
        "            await waiting", READY, DEAD),
     # --- review S1: a pool one runner short ---------------------------------------------
     _m("serve_waits_for_the_whole_pool", "one dead runner ends serve (the unit restarts)",
-       V, "{waiting, self._pool, *self.loop._tasks}", "{waiting, self._pool}", DEAD),
+       V, "{waiting, self._pool, self._reaper, *self.loop._tasks}",
+       "{waiting, self._pool, self._reaper}", DEAD),
     _m("serve_skips_the_drain", "serve drains what still runs before it returns",
        V, "            return await self.stop()", "            return DrainReport()",
        SIGTERM, DEAD),
     _m("dead_runner_uncounted", "readiness counts the runners that died",
-       V, "        return [task for task in (*self.loop._tasks,)",
-       "        return [task for task in ()", DEAD, READY),
+       V, "        return [task for task in (*self.loop._tasks, self._reaper)",
+       "        return [task for task in (self._reaper,)", DEAD, READY),
     _m("partly_dead_pool_stays_live", "a pool one runner short is not live",
        V, '        live = (state != "stopped" or self.loop.draining) and not died',
        '        live = state != "stopped" or self.loop.draining', DEAD),

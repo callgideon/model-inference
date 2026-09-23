@@ -20,11 +20,11 @@ What it adds to the loop, each for a stated reason:
   gateway, and a non-loopback bind is refused). `GET /readyz` is 200 only when the engine
   answers ready and the pool is running and not draining; its body says which of
   `engine` (`up`/`down`) and `loop` (`idle`/`busy`/`draining`/`stopped`) is the reason.
-  `GET /livez` is 503 once anything died unasked: the whole pool, or **one** runner of it
-  (`runners_dead`). Counts only - no job id, no content.
-* **Crash-only.** A runner ends only when drained or by dying, so `serve()` returns on the
-  first one that ends: it drains what still runs, and the service manager restarts the
-  process at full strength instead of it running short, live, for ever.
+  `GET /livez` is 503 once anything died unasked: the whole pool, **one** runner of it
+  (`runners_dead`), or the reaper (`reaper: dead`). Counts only - no job id, no content.
+* **Crash-only.** A runner or the reaper ends only when drained or by dying, so `serve()`
+  returns on the first one that ends: it drains what still runs, and the service manager
+  restarts the process at full strength instead of it running short, live, for ever.
 """
 from __future__ import annotations
 
@@ -82,11 +82,11 @@ class WorkerService:
         """One `recover`, and every index event it produced enqueued. Returns how many."""
         try:
             produced = await self.jobs.recover()
-        except Exception as failure:              # the store is down: try again next tick
+            events = [item for item in produced if isinstance(item, IndexEvent)]
+        except Exception as failure:              # the store is down (or answered garbage)
             self.reap_errors += 1
             log.warning("recover failed: %s", type(failure).__name__)
             return 0
-        events = [item for item in produced if isinstance(item, IndexEvent)]
         for event in events:
             try:
                 await self.loop.scheduler.enqueue(event)
@@ -130,9 +130,9 @@ class WorkerService:
         return report
 
     async def serve(self, stop: asyncio.Event | None = None) -> DrainReport:
-        """Run until SIGTERM/SIGINT (or `stop`), or until a runner dies; then drain. A
-        process manager's stop timeout must exceed the drain bound, and it must restart
-        the process when this returns (`Restart=always`)."""
+        """Run until SIGTERM/SIGINT (or `stop`), or until a runner or the reaper dies; then
+        drain. A process manager's stop timeout must exceed the drain bound, and it must
+        restart the process when this returns (`Restart=always`)."""
         stop = stop or asyncio.Event()
         running = asyncio.get_running_loop()
         signals = (signal.SIGTERM, signal.SIGINT)
@@ -146,7 +146,7 @@ class WorkerService:
             # ponytail: crash-only - a transient store error costs a drain and a restart; a
             # runner that retries in place (backoff plus its own liveness signal) is the
             # upgrade if measured blips make that matter.
-            await asyncio.wait({waiting, self._pool, *self.loop._tasks},
+            await asyncio.wait({waiting, self._pool, self._reaper, *self.loop._tasks},
                                return_when=asyncio.FIRST_COMPLETED)
             waiting.cancel()
             if not stop.is_set():
@@ -166,8 +166,8 @@ class WorkerService:
         return "busy" if self.loop.in_flight else "idle"
 
     def _died(self) -> list[asyncio.Task]:
-        """Runner tasks that ended by raising: the pool is that many short."""
-        return [task for task in (*self.loop._tasks,)
+        """Tasks that ended by raising: a runner (the pool is one short) or the reaper."""
+        return [task for task in (*self.loop._tasks, self._reaper)
                 if task is not None and task.done() and not task.cancelled()
                 and task.exception() is not None]
 
@@ -183,7 +183,10 @@ class WorkerService:
         return {"ready": live and engine_up and state in ("idle", "busy"),
                 "live": live,
                 "engine": "up" if engine_up else "down", "loop": state,
-                "runners_dead": len(died),
+                "runners_dead": sum(task is not self._reaper for task in died),
+                "reaper": "dead" if self._reaper in died else
+                          "running" if self._reaper is not None and not self._reaper.done()
+                          else "stopped",
                 "in_flight": len(self.loop.in_flight), "claimed": self.loop.claimed,
                 "failures": len(self.loop.failures), "reaped": self.reaped,
                 "reap_errors": self.reap_errors,

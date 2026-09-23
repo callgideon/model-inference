@@ -168,20 +168,35 @@ def test_ops_recover__a_restart_reaps_before_it_claims_and_survives_a_failing_st
         request, _ = await queued(world)
         await world.jobs.claim(request.request_id, "worker-dead")
         world.clock.advance(world.limits.lease_ttl_s + 1)
+        other, _ = await queued(world)                # a candidate already in the index
+        await world.scheduler.enqueue(candidate(world, other))
         service = service_for(world, Answering(), reap_interval_s=3600)
+        recover, claimed_at_reap = world.jobs.recover, []
+
+        async def a_round_trip():
+            await asyncio.sleep(0.05)                 # long enough for a running pool to claim
+            claimed_at_reap.append(service.loop.claimed)
+            return await recover()
+        world.jobs.recover = a_round_trip
         await service.start()
         assert service.reaped == 1                    # before the first tick of any timer
-        assert await eventually(lambda: world.outcome(request.request_id) is not None)
+        assert claimed_at_reap == [0], "the pool claimed before the start-up reap finished"
+        assert await eventually(lambda: world.outcome(request.request_id) is not None
+                                and world.outcome(other.request_id) is not None)
         await service.stop()
         assert world.outcome(request.request_id).cause is TerminalCause.completed
 
         broken = World()
-        service = service_for(broken, Answering(), reap_interval_s=3600)
+        service = service_for(broken, Answering(), reap_interval_s=3600, health_port=0)
 
         async def refuses():
             raise ConnectionError("the database is gone")
         broken.jobs.recover = refuses
         assert await service.reap_once() == 0 and service.reap_errors == 1
+        await service.start()                         # its own start-up reap fails too
+        status, body = await http_get(service._server.sockets[0].getsockname()[1], "/readyz")
+        assert (status, body["reap_errors"]) == (200, 2), body
+        await service.stop()
 
         again = World()
         request, _ = await queued(again)
@@ -323,13 +338,14 @@ asyncio.run(main())
 """
 
 
-def serve_and_terminate(answer_after_s: float, drain_s: float) -> tuple[int, dict]:
+def serve_and_terminate(answer_after_s: float, drain_s: float,
+                        sig: int = signal.SIGTERM) -> tuple[int, dict]:
     child = subprocess.Popen([sys.executable, "-c", CHILD, str(answer_after_s), str(drain_s)],
                              cwd=API, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                              env={**os.environ, "PYTHONPATH": str(API)})
     try:
         assert child.stdout.readline().strip() == "busy"
-        child.send_signal(signal.SIGTERM)
+        child.send_signal(sig)
         out, _ = child.communicate(timeout=20)
     finally:
         if child.poll() is None:
@@ -340,13 +356,14 @@ def serve_and_terminate(answer_after_s: float, drain_s: float) -> tuple[int, dic
 
 
 def test_ops_recover__sigterm_drains_within_the_bound_and_exits_cleanly():
-    """What a service manager does on stop: SIGTERM. The process stops claiming, lets the
-    attempt that fits the bound finish, releases the one that does not, reports both, and
-    exits 0 - it is not killed mid-write by its own signal."""
+    """What a service manager does on stop: SIGTERM (and an operator's Ctrl-C: SIGINT).
+    The process stops claiming, lets the attempt that fits the bound finish, releases the
+    one that does not, reports both, and exits 0 - it is not killed mid-write by its own
+    signal."""
     status, report = serve_and_terminate(answer_after_s=0.3, drain_s=10.0)
     assert status == 0 and report["state"] == "succeeded", report
     assert [cause for _, cause in report["ended"]] == ["completed"] and report["released"] == []
-    status, report = serve_and_terminate(answer_after_s=60.0, drain_s=0.2)
+    status, report = serve_and_terminate(answer_after_s=60.0, drain_s=0.2, sig=signal.SIGINT)
     assert status == 0 and report["state"] == "running", report
     assert len(report["released"]) == 1 and report["ended"] == []
 
@@ -410,7 +427,9 @@ def test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_drain
         status, body = await http_get(port, "/livez")
         assert status == 200
         await stopping
-        assert (await service.readiness())["loop"] == "stopped"
+        state = await service.readiness()
+        # stopped because it was asked to: still live, nothing died
+        assert (state["loop"], state["live"], state["reaper"]) == ("stopped", True, "stopped")
 
         # a pool whose every runner died is not live, and says so
         dead = World()
@@ -476,6 +495,48 @@ def test_ops_recover__one_dead_runner_makes_the_worker_not_live_and_ends_serve()
         # it drained the survivor on the way out rather than walking away from it
         assert serving.result() is service.last_drain and service.loop.draining
         assert len(service.loop.failures) == 1
+    run(case())
+
+
+def test_ops_recover__a_garbage_recover_does_not_kill_the_reaper_and_a_dead_one_is_not_live():
+    """`recover` answering garbage (not a list) is counted like a store that is down, and
+    the timer goes on. A reaper that dies anyway - a defect outside that guard - would
+    leave every lost lease unreaped for good, so it is reported (`reaper: dead`), makes
+    the worker not live, and ends `serve()` for a restart, as a dead runner does."""
+    async def case():
+        world = World()
+        service = service_for(world, Answering(), reap_interval_s=0.02)
+        await service.start()
+
+        async def garbage():
+            return None
+        world.jobs.recover = garbage
+        assert await eventually(lambda: service.reap_errors >= 2)
+        state = await service.readiness()
+        assert (state["reaper"], state["live"]) == ("running", True), state
+
+        async def broken():
+            raise RuntimeError("the reaper broke")
+        service.reap_once = broken
+        assert await eventually(lambda: service._reaper.done())
+        state = await service.readiness()
+        assert (state["reaper"], state["live"], state["ready"]) == ("dead", False, False), state
+        await service.stop()
+
+        again = World()
+        service = service_for(again, Answering(), reap_interval_s=0.02)
+        reap, calls = service.reap_once, []
+
+        async def breaks_on_its_timer():
+            calls.append(True)
+            if len(calls) > 1:
+                raise RuntimeError("the reaper broke")
+            return await reap()
+        service.reap_once = breaks_on_its_timer
+        serving = asyncio.create_task(service.serve())
+        done, _ = await asyncio.wait({serving}, timeout=5)
+        assert done, "serve() outlived its reaper"
+        assert serving.result() is service.last_drain
     run(case())
 
 
