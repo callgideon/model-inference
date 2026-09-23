@@ -55,6 +55,12 @@ CHAT_OPERATION = "chat.completions"
 # rejects admission) and the journal must be reachable, because an unjournalled
 # pilot cannot honour the output guarantees it makes.
 REQUIRED_CHECKS = ("price_source", "journal")
+# G3: the jobs router's routes, as (method, path). They are mounted only with a relay
+# (M-FAILCLOSED), so none may be absent unless all are.
+JOBS_ROUTES = (("POST", "/v1/jobs"), ("GET", "/v1/jobs/{handle}"),
+               ("DELETE", "/v1/jobs/{handle}"), ("GET", "/v1/jobs/{handle}/result"),
+               ("GET", "/v1/jobs/{handle}/events"))
+JOBS_MODULE = __name__.rpartition(".")[0] + ".jobs"
 OK = "ok"
 UNAVAILABLE = "unavailable"
 
@@ -201,6 +207,15 @@ def assert_route_table(app) -> None:
         mode = getattr(getattr(app.state, "runtime", None), "mode", "")
         raise RuntimeMisconfigured(mode, detail=f"{CHAT_PATH} must have exactly one handler, "
                                                 f"the metered ingress")
+    # G3: the jobs routes, all or none, each with exactly one handler - the jobs router's.
+    jobs = [[route.endpoint.__module__ for route in app.routes
+             if getattr(route, "path", None) == path
+             and method in (getattr(route, "methods", None) or ())]
+            for method, path in JOBS_ROUTES]
+    if any(jobs) and any(found != [JOBS_MODULE] for found in jobs):
+        mode = getattr(getattr(app.state, "runtime", None), "mode", "")
+        raise RuntimeMisconfigured(mode, detail="each /v1/jobs route must have exactly one "
+                                                "handler, the jobs router's")
 
 
 def register(app, rt, deps: IngressDeps | None = None):
