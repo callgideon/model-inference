@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T18:41:37Z",
+  "updated": "2026-09-23T18:41:52Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -48,6 +48,10 @@
     "F-fakes-followup": {
       "phase": "MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 \u00d72, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445",
       "since": "2026-09-23T16:27:29Z"
+    },
+    "checkpoint-2-interim": {
+      "phase": "whole-tree gate running on 602b1e0 (all merges so far, D5 out): api-test, layer 0, bench, console \u00d74, api-mutants on d4/Q 55489 (.claude-logs/gate-interim-602b1e0.log)",
+      "since": "2026-09-23T18:41:52Z"
     }
   },
   "gates": {
@@ -62,13 +66,6 @@
       "blocked_by": [
         "P-18 workload targets (provisional criteria allowed)"
       ]
-    },
-    "interim-602b1e0": {
-      "requires": [],
-      "state": "not started",
-      "blocked_by": [],
-      "phase": "whole-tree gate running on 602b1e0 (api-test, layer 0, bench, console \u00d74, api-mutants) on d4/Q 55489",
-      "since": "2026-09-23T18:41:37Z"
     }
   },
   "inputs": [

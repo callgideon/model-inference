@@ -27,7 +27,7 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 @media (max-width:600px){.band{grid-template-columns:1fr;gap:6px}}
 </style>
 <div class="wrap">
-<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T18:25:08Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
+<header><h1>Marlin backend — progress tracker</h1><p class="meta">generated 2026-09-23T18:41:52Z · branch claude/backend-impl · base ec6c548 · manifest v4</p></header>
 <section class="tiles">
 <div class="tile done"><b>27</b><span>done</span></div>
 <div class="tile prog"><b>2</b><span>in progress</span></div>
@@ -103,8 +103,9 @@ ul{margin:0;padding-left:18px}li{margin:4px 0}
 <li>review <code>E3B2</code> — MERGED d1d4a68 (+ d588c3e IR2-1, 0a642ad IR2-3); merged-tree checks: test_run+test_stage 61, layer 0 146 passed with only I3B&#x27;s two reds (closed by the I3B merge), test_harness+contracts 1036, dr03/dr04 fake 2 since 2026-09-23T18:16:49Z</li>
 <li>review <code>D4</code> — MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json) since 2026-09-23T12:47:20Z</li>
 <li>review <code>G3</code> — MERGED b560b51 (+ Makefile 31bfd05); merged-tree checks green: contracts 1014, tests/g 559, G3 list 85, G list 306 since 2026-09-23T16:04:40Z</li>
-<li>review <code>I3B-followup</code> — MERGED 90b81c7 (+ 08725c0 IR2-2) after the round-5 verifier pass at a693c6e; merged-tree checks running (i3bf-merged-08725c0.log) since 2026-09-23T18:25:08Z</li>
+<li>review <code>I3B-followup</code> — MERGED 90b81c7 (+ 08725c0 IR2-2); merged-tree checks green: layer 0 exit 0, recovery 62/9, I3B list 109/107, tests/i 143 since 2026-09-23T18:25:08Z</li>
 <li>review <code>F-fakes-followup</code> — MERGED a2779d1 (+ G3 seam fix 51f6c6e); merged-tree checks green on both images: contracts 1056, D conformance 69/31/1 ×2, code_mutants_d4 17/17, tests/g 500 + G3 list 85, tests/w 180, contracts list 445 since 2026-09-23T16:27:29Z</li>
+<li>review <code>checkpoint-2-interim</code> — whole-tree gate running on 602b1e0 (all merges so far, D5 out): api-test, layer 0, bench, console ×4, api-mutants on d4/Q 55489 (.claude-logs/gate-interim-602b1e0.log) since 2026-09-23T18:41:52Z</li>
 </ul></section><section class="panel"><h2>Checkpoints</h2><ul>
 <li><span class="meta">2026-09-21T22:44Z</span> — Wave 2 complete: 11 tasks merged, S2 pass, make check exit 0; main fast-forwarded to 271add9</li>
 <li><span class="meta">2026-09-22T15:51:21Z</span> — Wave 3 (backend-first) started from ec6c548; B0 lanes F2R/I0/E2R/S2M dispatched; audit-code review launched</li>
