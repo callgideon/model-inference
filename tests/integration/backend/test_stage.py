@@ -145,6 +145,12 @@ def test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual(monkeyp
     # ... which are no task, and which the stage's PENDING[..] parser reads whole.
     assert owners.isdisjoint(tasks) and all(run.PENDING_MARK.fullmatch(f"PENDING[{o}]")
                                             for o in owners)
+    # Review H-N2: ... and each is still named by a case (a `pending("<id>"` call in a case
+    # module of this tree), or it is dead vocabulary that lets a retired reference linger.
+    here = Path(__file__).resolve()
+    cases = "".join(path.read_text() for path in here.parent.rglob("test_*.py") if path != here)
+    unnamed = sorted(o for o in owners if f'pending("{o}"' not in cases)
+    assert unnamed == [], f"owner references no case names: {unnamed}"
     assert set(vocabulary) - owners <= set(tasks), set(vocabulary) - owners - set(tasks)
     merged = {task for task in vocabulary if tasks.get(task) in ("implemented", "integrated")}
     assert merged <= set(stack.RESIDUAL), (merged, set(stack.RESIDUAL))

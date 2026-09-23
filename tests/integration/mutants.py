@@ -1071,6 +1071,12 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/backend/test_journey.py",
            "backend_journey and video_upload and sync", layer=2,
            cases=("test_backend_journey[video_upload-sync]",)),
+    Mutant("e3bm76", "E3B3 review H-N2: every owner reference is still named by a case",
+           "tests/integration/backend/stack.py",
+           "OWNERS: dict[str, str] = {}\n",
+           "OWNERS: dict[str, str] = {\"X9\": \"a reference no case names\"}\n",
+           "tests/integration/backend/test_stage.py", "named_residual",
+           cases=("test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual",)),
 )
 
 
