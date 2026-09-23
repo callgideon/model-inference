@@ -575,7 +575,7 @@ def role_matrix(fixtures: Fixtures) -> list[Check]:
               ("value", beta_keys),
               "auth.uid() is read from request.jwt.claim.sub, so whoever sets that claim IS "
               "the tenant: it must only ever be set from a verified JWT, never from input"),
-    ] + access_rows() + write_rows() + journal_rows()
+    ] + access_rows() + write_rows() + journal_rows() + settlement_rows()
 
 
 # --------------------------------------------------------------------- access completeness
@@ -701,6 +701,7 @@ FUNCTIONS = {
     "infrx.delete_media_object_if_idle(text,timestamp with time zone)": SERVICE,
     "infrx.deployment_revisions_guard()": SERVICE,
     "infrx.dispatch_pending(jsonb)": SERVICE,
+    "infrx.debit_credit(text,integer,integer)": NOBODY,           # 0018 (D5)
     "infrx.dispatch_snapshot()": SERVICE,
     "infrx.ensure_wallet()": NOBODY,
     "infrx.expire_journal(jsonb)": SERVICE,                       # 0017 (D4)
@@ -713,6 +714,7 @@ FUNCTIONS = {
     "infrx.grant_credit(jsonb)": SERVICE,
     "infrx.grant_signup_credit(uuid,text,text,uuid)": SERVICE,
     "infrx.heartbeat(jsonb)": SERVICE,
+    "infrx.idempotency_lookup(jsonb)": SERVICE,                   # 0018 (D5)
     "infrx.individual_usd_hold(uuid)": NOBODY,
     "infrx.is_entitled(uuid,text)": NOBODY,
     "infrx.job_admission(uuid)": SERVICE,
@@ -722,6 +724,7 @@ FUNCTIONS = {
     "infrx.jobs_guard()": NOBODY,
     "infrx.jobs_no_delete_when_terminal()": NOBODY,
     "infrx.jobs_pins_guard()": SERVICE,
+    "infrx.jobs_settlement_record_guard()": NOBODY,               # 0018 (D5)
     "infrx.journal_terminal_event()": NOBODY,                     # 0017 (D4)
     "infrx.journal_usage()": SERVICE,                             # 0017 (D4)
     "infrx.journal_bytes_charged()": NOBODY,
@@ -729,6 +732,7 @@ FUNCTIONS = {
     "infrx.ledger_moves_wallet()": NOBODY,
     "infrx.legacy_usd_rollout_hold(uuid)": NOBODY,
     "infrx.load_work(jsonb)": SERVICE,
+    "infrx.load_work_credit(jsonb)": SERVICE,                     # 0018 (D5)
     "infrx.media_uploads_guard()": NOBODY,
     "infrx.now()": SERVICE,
     "infrx.outbox_aggregate_tenant()": NOBODY,
@@ -744,6 +748,7 @@ FUNCTIONS = {
     "infrx.record_submission(jsonb)": SERVICE,
     "infrx.recover_job(uuid,timestamp with time zone,integer,double precision)": NOBODY,
     "infrx.recover(jsonb)": SERVICE,
+    "infrx.reconcile(jsonb)": SERVICE,                            # 0018 (D5)
     "infrx.release_aged_unknown(uuid,timestamp with time zone)": NOBODY,
     "infrx.release_dispatch(jsonb)": SERVICE,
     "infrx.release_hold_credit(uuid)": NOBODY,
@@ -756,6 +761,8 @@ FUNCTIONS = {
     "infrx.retired_wallet_guard()": SERVICE,
     "infrx.revoke_key(uuid,text,text,text)": SERVICE,
     "infrx.set_suspension(uuid,boolean,text,text,text,text)": SERVICE,
+    "infrx.settle_credit(uuid,numeric)": NOBODY,                  # 0018 (D5)
+    "infrx.settle_legacy_usd(uuid,numeric)": NOBODY,              # 0018 (D5)
     "infrx.staged_media_guard()": NOBODY,
     "infrx.terminalize_no_usage(uuid,text,text,double precision)": NOBODY,
     "infrx.terminalize_unstarted(uuid,text)": NOBODY,
@@ -772,8 +779,12 @@ FUNCTIONS = {
 }
 
 # SECURITY INVOKER functions a row pins although the completeness case does not list them:
-# 0017's `chunk_doc`, callable only from the SECURITY DEFINER bodies (revoked from everyone).
-INVOKER_FUNCTIONS = {"infrx.chunk_doc(infrx.stream_chunks)": NOBODY}
+# 0017's `chunk_doc` and 0018's three pure helpers, callable only from the SECURITY DEFINER
+# bodies (revoked from everyone; D5 request 8, measured on both images).
+INVOKER_FUNCTIONS = {"infrx.chunk_doc(infrx.stream_chunks)": NOBODY,
+                     "infrx.cause_carries_state(text,text)": NOBODY,
+                     "infrx.debit_legacy_usd(jsonb,integer,integer)": NOBODY,
+                     "infrx.usage_doc(integer,integer)": NOBODY}
 
 # 0017's two watermark columns on `infrx.jobs`, as `pg_get_*def` renders them (measured at
 # the D4 merge): one cursor or none, each part >= 1; and the trigger that writes the terminal
@@ -807,6 +818,41 @@ def journal_rows() -> list[Check]:
             f"E3B-RLS-0017-watermark-columns-{role}", role, None, sql,
             ("rows", 0) if role == "service_role" else ("error", PERMISSION_DENIED),
             f"{role} {'reads' if role == 'service_role' else 'never reaches'} the watermark",
+            message_contains=None if role == "service_role"
+            else "permission denied for schema infrx"))
+    return rows
+
+
+# D5's 0018 objects on `infrx.jobs` (D5 request 8, measured on a fresh clone, both images): the
+# settled usage is one authoritative fact, and the guard freezes it and the proposal once settled.
+SETTLED_USAGE_CHECK = ("CHECK ((((usage_prompt_tokens IS NULL) = (usage_completion_tokens IS "
+                       "NULL)) AND ((usage_prompt_tokens IS NULL) OR ((usage_prompt_tokens >= 0) "
+                       "AND (usage_completion_tokens >= 0) AND (NOT (usage_certainty IS DISTINCT "
+                       "FROM 'authoritative'::text))))))")
+SETTLEMENT_GUARD = ("CREATE TRIGGER jobs_settlement_record_guard BEFORE UPDATE ON infrx.jobs FOR "
+                    "EACH ROW EXECUTE FUNCTION infrx.jobs_settlement_record_guard()")
+
+
+def settlement_rows() -> list[Check]:
+    """D5's 0018 objects on `infrx.jobs`: the settled usage/proposal columns per API role,
+    their CHECK and the guard that freezes them once settled."""
+    rows = [
+        Check("E3B-RLS-0018-settled-usage-check", "postgres", None,
+              "select pg_get_constraintdef(oid) from pg_constraint where conrelid = "
+              "'infrx.jobs'::regclass and conname = 'jobs_settled_usage_is_one_fact'",
+              ("value", SETTLED_USAGE_CHECK), "settled usage is one authoritative fact (0018)"),
+        Check("E3B-RLS-0018-settlement-guard", "postgres", None,
+              "select pg_get_triggerdef(oid) from pg_trigger where tgrelid = "
+              "'infrx.jobs'::regclass and tgname = 'jobs_settlement_record_guard' "
+              "and tgenabled = 'O'",
+              ("value", SETTLEMENT_GUARD), "the settled usage and proposal are frozen (0018)")]
+    for role in API_ROLES:
+        sql = ("select proposal, usage_prompt_tokens, usage_completion_tokens "
+               "from infrx.jobs limit 0")
+        rows.append(Check(
+            f"E3B-RLS-0018-settlement-columns-{role}", role, None, sql,
+            ("rows", 0) if role == "service_role" else ("error", PERMISSION_DENIED),
+            f"{role} {'reads' if role == 'service_role' else 'never reaches'} the settled usage",
             message_contains=None if role == "service_role"
             else "permission denied for schema infrx"))
     return rows
