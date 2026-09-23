@@ -38,6 +38,7 @@ C = "infrx/operations/cli.py"
 X = "client_example.py"
 F = "tests/g/ops/fakes.py"           # the port contract D5 must match
 V2FIX = "infrx/contracts/v2/fixtures.py"     # the release's pins (E4B certification)
+OPS_ROOT = "test_api_ops__the_operator_tool_builds_the_postgres_adapters_from_the_environment"
 MEASURED = "test_api_ops__the_published_release_pins_the_measured_image_and_engine_options"
 
 
@@ -47,6 +48,12 @@ def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
 
 
 MUTANTS: tuple[Mutant, ...] = (
+    # --- the operator tool's composition root (D5 request 4 / E4B request 4, CUTOVER item 8)
+    _m("operations_without_a_database", "the operator tool never runs without a database",
+       C, "    if not dsn:\n", "    if False:\n", OPS_ROOT),
+    _m("operations_dsn_ignored", "the adapters dial the deployment's DATABASE_URL",
+       C, "    connect = connector(dsn)\n", '    connect = connector("postgresql:///infrx")\n',
+       OPS_ROOT),
     # --- the published release's measured pins (E4B certification, CUTOVER item 6) ---------
     _m("release_image_placeholder_restored", "the release names W3's digest-pinned image",
        V2FIX, '    "vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42"',

@@ -295,13 +295,11 @@ def _operations():
         owner.execute("update auth.users set email_confirmed_at = infrx.now() where id = %s",
                       (cc.CONSUMER_1,))
         connect = connector(pgharness.dsn(SERVICE_DB))
-        built = service.Operations(
-            identities=ops.PgSignup(ops._Db(connect)), tenants=ops.PgTenantStore(connect),
-            ledger=ops.PgLedger(connect), audit=ops.PgAuditLog(connect),
-            registry=ops.PgRegistry(connect), wallets=ops.PgWalletDirectory(connect),
-            catalog=PgCatalogDirectory(connect), jobs=PgJobStore(connect),
-            accounts=ops.PgAccountView(connect),
-            clock=lambda: datetime.now(timezone.utc))
+        # the operator tool's own composition root (cutover item 8), from settings
+        from infrx.config import Settings
+        from infrx.operations import cli
+        built = cli.build_operations(Settings(pilot=DEFAULTS.replace(
+            database_url=pgharness.dsn(SERVICE_DB))))
         _state["service"] = (owner, connect, built, secret)
     return _state["service"]
 
