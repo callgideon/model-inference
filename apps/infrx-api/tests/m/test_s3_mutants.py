@@ -19,7 +19,7 @@ from . import test_s3
 ALL = mutation_list.MUTANTS
 FULL_RUN = os.environ.get("INFRX_MUTANTS", "").lower() in ("all", "1", "true")
 SUBSET = ("s3_prefix_unchecked", "s3_transport_failure_is_absence", "s3_put_not_conditional",
-          "s3_listing_ignores_its_prefix")
+          "s3_listing_ignores_its_prefix", "s3_probe_skipped", "s3_bucket_not_asked_at_install")
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in SUBSET)
 
 
@@ -27,7 +27,7 @@ def test_the_list_is_well_formed():
     names = {name for name in vars(test_s3) if name.startswith("test_")}
     assert len({m.name for m in ALL}) == len(ALL), "duplicate mutant names"
     assert set(SUBSET) <= {m.name for m in ALL} and mutation_list.NEEDS_S3 <= {m.name for m in ALL}
-    source = {m.file: (mutation_list.shared.API_DIR / "infrx" / m.file).read_text() for m in ALL}
+    source = {m.file: (mutation_list.shared.API_DIR / m.file).read_text() for m in ALL}
     for mutant in ALL:
         assert mutant.cases and mutant.invariant and mutant.new != mutant.old, mutant.name
         assert set(mutant.cases) <= names, f"{mutant.name} names an unknown case"

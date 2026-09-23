@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 import uuid
 
 import pytest
@@ -286,3 +287,114 @@ def test_an_object_stored_without_our_checksum_is_present_and_matches_no_digest(
     objects.client.put_object(Bucket=objects.bucket, Key=objects.prefix + key, Body=b"bytes")
     assert run(objects.head(key)) == NO_DIGEST != digest_of(b"bytes")
     assert run(objects.put_if_absent(key, b"bytes", "video/mp4")) is False
+
+
+# --- the composition: create_app from settings, and the installer (item 3) ---------------
+def cutover_app(config):
+    """`create_app` as the unit runs it, the object store NOT injected (the Valkey index
+    and the two HTTP clients are, so nothing else leaves the process)."""
+    from infrx.gateway.app import create_app
+    from infrx.scheduling.memory import MemoryScheduler
+
+    from ..g import support as g
+    return create_app(config, client=g.upstream(), sb=g.supabase(),
+                      index=MemoryScheduler(lambda: None))
+
+
+def settings(mode: str, bucket: str, **deployment):
+    from ..g import support as g
+    return g.settings(mode, s3_media_bucket=bucket,
+                      deployment=DEPLOYMENT_DEFAULTS.replace(**deployment))
+
+
+@needs_s3
+def test_create_app_from_settings_stages_into_the_configured_bucket(monkeypatch):
+    """With S3 configured, `create_app` composes `S3ObjectStore` on that bucket and prefix,
+    and the bytes an upload puts land there - not in process memory. `dev`, because the
+    database here is unreachable and `pilot` refuses to start without it (G2)."""
+    import psycopg
+
+    async def no_database(*args, **kw):
+        raise psycopg.OperationalError("no database in this case")
+
+    monkeypatch.setattr(psycopg.AsyncConnection, "connect", no_database)
+    s3_store(monkeypatch)                              # the bucket exists
+    prefix = unique_prefix()
+    media = cutover_app(settings("dev", BUCKET, s3_media_prefix=prefix,
+                                 s3_endpoint_url=ENDPOINT)).state.runtime.media_store
+    assert isinstance(media.objects, S3ObjectStore)
+    assert (media.objects.bucket, media.objects.prefix) == (BUCKET, prefix)
+    handle = run(media.create_upload(b.ORG_A, {}))["upload_handle"]
+    run(media.put_upload(b.ORG_A, handle, CLIP, "video/mp4"))
+    raw = media.objects.client.head_object(Bucket=BUCKET,
+                                           Key=prefix + media.upload_key(b.ORG_A, handle))
+    assert raw["ContentLength"] == len(CLIP)
+
+
+@pytest.mark.parametrize("case", ["unset", "unreachable", pytest.param("missing", marks=needs_s3)])
+def test_create_app_refuses_to_start_when_the_bucket_does_not_answer(case, monkeypatch):
+    """Fail closed, before anything is served: no bucket, an endpoint nobody answers at,
+    or a bucket that does not exist. The refusal names S3_MEDIA_BUCKET and the S3 error,
+    never the bucket or where the store is."""
+    s3_env(monkeypatch)
+    bucket, endpoint = {"unset": ("", UNREACHABLE),
+                        "unreachable": ("infrx-m1l2-pilot", UNREACHABLE),
+                        "missing": ("infrx-m1l2-no-such-bucket", ENDPOINT)}[case]
+    with pytest.raises(RuntimeMisconfigured) as refused:
+        cutover_app(settings("pilot", bucket, s3_endpoint_url=endpoint))
+    message = str(refused.value)
+    assert "S3_MEDIA_BUCKET" in message
+    assert "infrx-m1l2" not in message and "127.0.0.1" not in message
+
+
+def fake_aws(tmp_path, name: str, exit_code: int, stderr: str = ""):
+    """An `aws` that records its argv and answers with `exit_code`/`stderr`."""
+    log = tmp_path / f"{name}.log"
+    code = (f"import sys; open({str(log)!r}, 'a').write(' '.join(sys.argv[1:]) + '\\n'); "
+            f"sys.stderr.write({stderr!r}); sys.exit({exit_code})")
+    return (sys.executable, "-c", code), log
+
+
+def test_a_pilot_install_asks_the_bucket_before_replacing_the_file(tmp_path):
+    """preflight `apply` in pilot: no bucket is a refusal (nothing asked); a bucket is asked
+    HeadBucket from the host, with the endpoint when one is set; a refusal names the setting
+    and the S3 error code, never the bucket."""
+    from ..i.support import preflight
+    ok, asked = fake_aws(tmp_path, "ok", 0)
+    cfg = preflight.Config(mode="pilot", env_file=tmp_path / "gateway.env", aws=ok)
+    unset = preflight.bucket_problems(cfg, {})
+    assert len(unset) == 1 and "S3_MEDIA_BUCKET" in unset[0] and not asked.exists()
+    values = {"S3_MEDIA_BUCKET": "infrx-media-pilot"}
+    assert preflight.bucket_problems(cfg, values) == []
+    assert asked.read_text().split() == ["s3api", "head-bucket", "--bucket", "infrx-media-pilot",
+                                         "--region", "us-east-1"]
+    preflight.bucket_problems(cfg, {**values, "S3_ENDPOINT_URL": "http://127.0.0.1:55500"})
+    assert asked.read_text().splitlines()[-1].endswith("--endpoint-url http://127.0.0.1:55500")
+    denied, _ = fake_aws(tmp_path, "denied", 254,
+                         "An error occurred (403) when calling the HeadBucket operation: "
+                         "Forbidden")
+    cfg.aws = denied
+    refused = preflight.bucket_problems(cfg, values)
+    assert len(refused) == 1 and "(403)" in refused[0] and "S3_MEDIA_BUCKET" in refused[0]
+    assert "infrx-media-pilot" not in refused[0]
+
+
+def test_a_pilot_install_without_a_bucket_is_refused(tmp_path, monkeypatch, capsys):
+    from ..i import support as installer
+    installer.stubs(tmp_path, monkeypatch)
+    cfg = installer.config(tmp_path, mode="pilot")
+    before = cfg.env_file.read_bytes()
+    assert installer.preflight.apply(cfg) == installer.preflight.REFUSED
+    assert "S3_MEDIA_BUCKET: not set" in capsys.readouterr().err
+    assert cfg.env_file.read_bytes() == before
+
+
+def test_the_pilot_runtime_probe_refuses_an_image_without_botocore(tmp_path, monkeypatch):
+    from ..i.support import preflight
+    staged = tmp_path / "staged.env"
+    staged.write_text("INFRX_MODE=pilot\n")
+    monkeypatch.setattr(preflight, "_importable", lambda module: module != "botocore")
+    assert any("botocore" in problem for problem in preflight.probe(staged, "pilot")["problems"])
+    monkeypatch.setattr(preflight, "_importable", lambda module: True)
+    assert not any("botocore" in problem
+                   for problem in preflight.probe(staged, "pilot")["problems"])

@@ -12,13 +12,18 @@ runner passes through (`Runner.env`) and nothing else of the caller's environmen
 """
 from __future__ import annotations
 
+import pathlib
+import shutil
 import sys
 
 from ..contracts import mutants as shared
 from ..contracts.mutants import Mutant, Runner
 
-S3 = "media/s3.py"
-C = "config.py"
+# Relative to apps/infrx-api: item 3 mutates the installer too (`deploy/`).
+S3 = "infrx/media/s3.py"
+C = "infrx/config.py"
+P = "infrx/gateway/pilot.py"
+D = "deploy/preflight.py"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=(), occurrences=1, s3=False):
@@ -42,6 +47,11 @@ SIZE_BOUND = "test_an_upload_at_its_byte_cap_finalizes_and_one_byte_over_is_refu
 COLLECTOR = "test_the_collector_keeps_a_live_jobs_media_and_collects_the_rest"
 DENIED = "test_a_denied_store_is_an_error_never_absence"
 NO_CHECKSUM = "test_an_object_stored_without_our_checksum_is_present_and_matches_no_digest"
+STARTS = "test_create_app_from_settings_stages_into_the_configured_bucket"
+REFUSES = "test_create_app_refuses_to_start_when_the_bucket_does_not_answer"
+INSTALL_ASKS = "test_a_pilot_install_asks_the_bucket_before_replacing_the_file"
+INSTALL_REFUSES = "test_a_pilot_install_without_a_bucket_is_refused"
+NO_BOTOCORE = "test_the_pilot_runtime_probe_refuses_an_image_without_botocore"
 
 MUTANTS: tuple[Mutant, ...] = (
     # === item 1: the settings that place the store, and a store that cannot answer =======
@@ -97,9 +107,44 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("s3_listing_keeps_the_store_prefix", "a listing names keys the store takes",
        S3, 'item["Key"][len(self.prefix):]', 'item["Key"]',
        LISTING, COLLECTOR, ISOLATION, DELETE, s3=True),
+    # === item 3: the composition and the installer ========================================
+    _m("s3_probe_skipped", "a bucket that does not answer HeadBucket refuses startup",
+       P, "        objects.probe()\n", "", REFUSES),
+    _m("s3_refusal_echoes_the_failure", "the refusal names the S3 error, never the endpoint "
+       "or the bucket", P, "({reason(failure)})", "({failure})", REFUSES),
+    _m("s3_prefix_not_composed", "the composed store uses S3_MEDIA_PREFIX",
+       P, "deployment.s3_media_prefix, deployment.s3_endpoint_url)",
+       '"infrx/", deployment.s3_endpoint_url)', STARTS, s3=True),
+    _m("s3_bucket_not_asked_at_install", "a pilot install asks the bucket before replacing "
+       "the file", D, "        problems += bucket_problems(cfg, values)\n", "",
+       INSTALL_REFUSES),
+    _m("s3_install_bucket_optional", "a pilot install without S3_MEDIA_BUCKET is refused",
+       D, "    if not bucket:\n        return [", "    if not bucket:\n        return []\n        return [",
+       INSTALL_ASKS, INSTALL_REFUSES),
+    _m("s3_install_refusal_ignored", "a HeadBucket the host is refused is an install refusal",
+       D, "    if done.returncode == 0:\n        return []", "    if True:\n        return []",
+       INSTALL_ASKS),
+    _m("s3_install_endpoint_dropped", "the install asks the endpoint the gateway will use",
+       D, '*(["--endpoint-url", endpoint] if endpoint else [])', "", INSTALL_ASKS),
+    _m("s3_install_refusal_echoes_the_bucket", "the install refusal never names the bucket",
+       D, "code.group(1) if code else f'exit {done.returncode}'", "bucket", INSTALL_ASKS),
+    _m("s3_image_without_botocore", "the pilot probe refuses an image without botocore",
+       D, '        if not _importable("botocore"):', "        if False:", NO_BOTOCORE),
 )
 
-RUNNER = Runner(name="m1l2", targets=("tests/m/test_s3.py",),
+
+
+def _layout(root: pathlib.Path) -> pathlib.Path:
+    """The package, the tests and the installer (item 3's cases load `deploy/preflight.py`
+    by path, as tests/i does); `openrouter` because create_app reads its model map."""
+    ignore = shutil.ignore_patterns("__pycache__", ".venv")
+    for name in ("infrx", "tests", "deploy", "openrouter"):
+        shutil.copytree(shared.API_DIR / name, root / name, ignore=ignore)
+    shutil.copy2(shared.API_DIR / "pyproject.toml", root / "pyproject.toml")
+    return root
+
+
+RUNNER = Runner(name="m1l2", package="", layout=_layout, targets=("tests/m/test_s3.py",),
                 env=("INFRX_M_S3_ENDPOINT", "INFRX_M_S3_BUCKET"))
 
 
