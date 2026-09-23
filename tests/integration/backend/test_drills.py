@@ -728,6 +728,26 @@ def _credit_hold_on_the_usd_books():
         "v_now, v_now);")))
 
 
+def _credit_hold_also_on_the_usd_books():
+    """`infrx.admit_credit` keeping its CREDIT hold AND writing a legacy USD hold beside it."""
+    source = stack.function_source("infrx.admit_credit", "jsonb")
+    hold = re.search(r"insert into infrx\.credit_wallet_holds .*?v_now\);", source, re.S)
+    assert hold, "the CREDIT hold insert moved: the drill no longer describes 0011"
+    stack.defect(source.replace(hold.group(0), hold.group(0) + (
+        " insert into infrx.credit_holds (request_id, org_id, key_id, amount, state, "
+        "created_at, updated_at) values (j.request_id, j.org_id, j.key_id, v_hold, 'held', "
+        "v_now, v_now);")))
+
+
+def test_e3b_db08b_detects_a_usd_hold_beside_the_credit_one(monkeypatch):
+    """Review F5: the USD half of dr01c is load-bearing on its own - the CREDIT hold is
+    right, and a second, legacy USD hold for the same request must still be reported."""
+    monkeypatch.setattr(sys.modules[__name__], "DEFECT", _credit_hold_also_on_the_usd_books)
+    with pytest.raises(AssertionError, match="'usd': 1"):
+        test_e3b_dr01c_a_credit_admission_replays_to_one_identity_and_one_credit_hold(
+            "postgres")
+
+
 def test_e3b_db08_detects_a_credit_hold_on_the_usd_books(monkeypatch):
     """Intentional defect on the REAL store (CREDIT-SPEND, R64/R73): a CREDIT admission whose
     hold lands on the legacy USD books. dr01c's own assertion must report it."""

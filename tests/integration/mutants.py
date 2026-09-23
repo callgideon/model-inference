@@ -767,6 +767,12 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/backend/test_drills.py", "dr01c and fake",
            cases=("test_e3b_dr01c_a_credit_admission_replays_to_one_identity_and_one_credit_"
                   "hold[fake]",)),
+    Mutant("e3bm29", "E3B2 review F5: dr01c's 'no USD hold' half is load-bearing (db08b)",
+           "tests/integration/backend/test_drills.py",
+           'from infrx.credit_holds where request_id = %s",',
+           'from infrx.credit_holds where request_id <> %s",',
+           "tests/integration/backend/test_drills.py", "db08b", layer=2,
+           cases=("test_e3b_db08b_detects_a_usd_hold_beside_the_credit_one",)),
     Mutant("e3bm25", "E3B2: advance() is measured as returning the moved clock (D2's)",
            "tests/integration/pgstate.py",
            "    lag = (read_back - returned).total_seconds()\n",
