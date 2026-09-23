@@ -101,11 +101,16 @@ def remove_prefix(objects: S3ObjectStore) -> None:
                                           Delete={"Objects": batch, "Quiet": True})
 
 
+def empty_what_was_written() -> None:
+    """The autouse fixture's teardown: every registered store's prefix, emptied."""
+    while _WRITTEN:
+        remove_prefix(_WRITTEN.pop())
+
+
 @pytest.fixture(autouse=True)
 def _remove_what_the_case_wrote():
     yield
-    while _WRITTEN:
-        remove_prefix(_WRITTEN.pop())
+    empty_what_was_written()
 
 
 def s3_store(monkeypatch, prefix: str | None = None, secret: str | None = None) -> S3ObjectStore:
@@ -618,7 +623,10 @@ def test_the_s3_cases_keep_the_environments_credentials_unless_told_to_use_local
 
 @needs_s3
 def test_what_a_case_writes_is_removed_after_it(monkeypatch):
+    """Every store `s3_store` makes is registered for the teardown, and the teardown (run
+    here as the fixture runs it) leaves nothing under its prefix (verifier V1)."""
     objects = s3_store(monkeypatch)
+    assert objects in _WRITTEN
     run(objects.put_if_absent(SOURCE, b"x", "video/mp4"))
-    remove_prefix(objects)
-    assert run(objects.keys("")) == []
+    empty_what_was_written()
+    assert _WRITTEN == [] and run(objects.keys("")) == []

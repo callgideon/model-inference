@@ -150,6 +150,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("s3_cleanup_skipped", "what a case writes under its test prefix is deleted after it",
        H, "            objects.client.delete_objects(", "            (lambda **kw: None)(",
        CLEANUP, s3=True),
+    _m("own_v_cleanup_unregistered", "every store a case makes is registered for the teardown",
+       H, "    if secret is None:\n        _WRITTEN.append(objects)\n", "", CLEANUP, s3=True),
     # === review A2: every arm of the error-vs-absent rule ================================
     _m("own_nosuchbucket_is_absent", "a missing bucket is an error wherever S3 says so",
        S3, 'MISSING = ("404", "NoSuchKey")', 'MISSING = ("404", "NoSuchKey", "NoSuchBucket")',
