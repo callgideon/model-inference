@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T12:41:52Z",
+  "updated": "2026-09-23T12:44:00Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "G2": {
       "lane": "codex-g2 / codex/g2-chat-relay",
-      "phase": "round 2 HANDED BACK a786af7 (impl 367acc3; all 11 blocking + most nonblocking closed; R91 lookup on the ports + fakes + conformance; shim deleted; Relay.admit with G3's triple; G list 298 = 291 mutants); confirmation workflow running",
+      "phase": "confirmation at a786af7 fix_required (5 blocking: an in-flight mapped job still re-prepares media; an in-flight replay re-runs the rechecks and can cancel a running CREDIT job; drain-before-close unpinned; identity-send half of the named rule unpinned; 9 nonblocking) \u2192 round 3 running",
       "since": "2026-09-23T05:12:27Z",
       "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) \u2192 fix lane codex/w-consumed-parameters"
     },
@@ -56,8 +56,8 @@
       "since": "2026-09-23T10:33:10Z"
     },
     "G2": {
-      "phase": "confirmation at a786af7 running (round 1 fix_required at 2d742aa)",
-      "since": "2026-09-23T12:10:26Z"
+      "phase": "confirmation fix_required at a786af7 (wf_575b11a2-ce2; 13 agents; JSON evidence/g/G2-confirm-a786af7.json) \u2192 round 3",
+      "since": "2026-09-23T12:44:00Z"
     },
     "E3B2": {
       "phase": "fix_required at 80cef22 (wf_345bc3f0-8ec; 13 agents; JSON evidence/e/E3B2-review-80cef22.json) \u2192 fix round; confirmation next",
@@ -70,6 +70,10 @@
     "G3": {
       "phase": "fix_required at a100aee (wf_bc7d6d9f-ded; 12 agents; JSON evidence/g/G3-review-a100aee.json) \u2192 fix round; confirmation next",
       "since": "2026-09-23T12:25:20Z"
+    },
+    "I3B-followup": {
+      "phase": "review at d99da09 running (2 lenses on the d3 harness over a scratch merge with E3B2's head)",
+      "since": "2026-09-23T12:44:00Z"
     }
   },
   "gates": {
