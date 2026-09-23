@@ -2239,6 +2239,11 @@ D4_MUTANTS: tuple[Mutant, ...] = (
        "    'charged_bytes', infrx.journal_bytes_charged(),", "    'charged_bytes', 0,",
        "admission", "usage", "the readiness probe reports a free journal that is full"),
     # --- item 6 ---------------------------------------------------------------------------
+    _m("d4_expire_empty_inner_resets_watermark", JOURNAL,
+       "    if not found then\n      continue;\n    end if;\n    -- A prefix",
+       "    -- A prefix",
+       "admission", "journal_races",
+       "a pruner with a stale candidate list resets a pruned job's watermark (review J1)"),
     _m("d4_expire_waits_on_a_locked_job", JOURNAL,
        "    perform 1 from infrx.jobs where request_id = v_job for update skip locked;",
        "    perform 1 from infrx.jobs where request_id = v_job for update;",

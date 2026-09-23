@@ -164,3 +164,11 @@ def test_race__expire_never_waits_on_an_append_and_an_append_waits_for_a_prune()
     assert [c["sequence"] for c in second[1]["chunks"]] == [3], \
         f"an append behind a prune reissued a pruned cursor: {second}"
     assert journal(rig, lease.job_id) == [(1, 3, "delta")]
+
+
+def test_race__a_stale_pruner_never_resets_a_pruned_jobs_watermark() -> None:
+    """DUR-OUTPUT (review J1): pruner B blocks inside job 1 while pruner A prunes job 2; when
+    B reaches job 2 with its older candidate list it finds nothing to prune and leaves the
+    watermark, the bytes and the rows alone - a cursor-less replay is still `replay_gap`."""
+    rig = Rig()
+    print(cj.stale_pruner_race(rig.owner, rig.service, pgharness.connect(rig.db), rig.world))

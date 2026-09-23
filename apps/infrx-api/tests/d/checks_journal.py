@@ -902,11 +902,56 @@ def returns_without_waiting(holder, conn, call, within_s: float = 5.0):
     return out["answer"]
 
 
+def stale_pruner_race(owner, service, blocker, world) -> str:
+    """Review J1: two pruners whose candidate lists overlap. Pruner B blocks inside job 1 (a
+    third connection holds job 1's chunk rows), pruner A skips job 1 and prunes job 2, then B
+    reaches job 2 with a candidate list older than A's commit: it must find nothing left to
+    prune and leave job 2 alone - never reset its watermark (a NULL watermark turns the
+    pruned prefix into a silent gap), never touch its bytes."""
+    one, early = running(owner, world, worker="stale-1")
+    assert cl.rpc(service(), "append", args(early, b.events("1a"), SHORT))[0] is None
+    advance(owner, 1)                          # job 1 expires first: B reaches it first
+    two, late = running(owner, world, worker="stale-2")
+    assert cl.rpc(service(), "append", args(late, b.events("2a", "2b"), SHORT))[0] is None
+    assert cl.rpc(service(), "append", args(late, b.events("2c")))[0] is None   # lives on
+    advance(owner, SHORT.journal_chunk_ttl_s + 1)
+    blocker.execute("begin")
+    blocker.execute("select 1 from infrx.stream_chunks where job_id = %s for update",
+                    (one.request_id,))
+    pruner_b, out = service(), {}
+    thread = threading.Thread(target=lambda: out.setdefault("b", cl.rpc(
+        pruner_b, "expire_journal", {"now": None})))
+    thread.start()
+    try:
+        cl.waiting_on_a_lock(owner, pruner_b.info.backend_pid)
+        code, removed = cl.rpc(service(), "expire_journal", {"now": None})
+        assert code is None and removed >= 2, (code, removed)
+        pruned = cl.row(owner, two.request_id)
+        assert (pruned["journal_pruned_generation"], pruned["journal_pruned_sequence"]) == \
+            (1, 2), f"pruner A did not prune job 2: {pruned['journal_pruned_sequence']}"
+    finally:
+        blocker.execute("commit")
+        thread.join(10)
+    assert not thread.is_alive() and out["b"][0] is None, out
+    job = cl.row(owner, two.request_id)
+    assert (job["journal_pruned_generation"], job["journal_pruned_sequence"]) == (1, 2), \
+        f"a stale pruner reset job 2's watermark to {job['journal_pruned_generation']}-" \
+        f"{job['journal_pruned_sequence']}"
+    rows = journal(owner, two.request_id)
+    assert cursors(rows) == [(1, 3, "delta")] and \
+        job["journal_stored_bytes"] == sum(r["bytes"] for r in rows), (cursors(rows), job)
+    code, _ = cl.rpc(service(), "read_journal", {"org_id": two.org_id, "cursor": None,
+                                                  "limit": 10, "job_handle": job["job_handle"]})
+    assert code == "replay_gap", f"a cursor-less replay of a pruned prefix answered {code}"
+    return "a stale pruner leaves an already pruned job alone"
+
+
 def check_journal_races(connect, database: str) -> str:
     """DUR-FENCE / DUR-OUTPUT under real transactions (the mutants' concurrency check; the
     full set is tests/d/test_journal_races.py): two appends on one lease serialize on the job
     row - the second waits, then continues the sequence, no duplicate - and `expire` never
-    waits on a job row an append holds (SKIP LOCKED): it prunes that job on the next pass."""
+    waits on a job row an append holds (SKIP LOCKED): it prunes that job on the next pass; a
+    pruner whose candidate list went stale never resets a pruned job's watermark (J1)."""
     owner = connect(database)
 
     def service():
@@ -933,4 +978,5 @@ def check_journal_races(connect, database: str) -> str:
         holder, service(), lambda c: cl.rpc(c, "expire_journal", {"now": None}))
     assert (code, removed) == (None, 0), (code, removed)
     assert cl.rpc(service(), "expire_journal", {"now": None}) == (None, 1)
-    return "appends serialize on the job row; expire skips a locked job"
+    stale_pruner_race(owner, service, connect(database), world)
+    return "appends serialize on the job row; expire skips a locked job; a stale pruner is inert"
