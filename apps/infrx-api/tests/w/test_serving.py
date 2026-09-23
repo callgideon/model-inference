@@ -196,6 +196,22 @@ def check_the_sweep_survives_a_failed_scrape(models: pathlib.Path, tmp: pathlib.
     assert "1" in sampled and "2" in sampled, f"a level went unsampled: {sampled}"
 
 
+def check_inventory_refuses_a_missing_container(models: pathlib.Path, tmp: pathlib.Path) -> None:
+    """measure/inventory.sh (review PIN-5): no container is a failed precondition - exit 2
+    and a `precondition=` line - not an `image_equals_pin=no` that reads like an answer.
+    With the container there it inventories as before."""
+    quiet = {"curl": "exit 7\n", "nvidia-smi": "exit 9\n"}
+    done = run_script(models, tmp, "inventory.sh", {
+        **quiet, "docker": 'echo "Error: No such object: marlin2b-8000" >&2; exit 1\n'},
+        WEIGHTS=str(tmp))
+    assert done.returncode == 2, (done.returncode, done.stdout[-400:])
+    assert "precondition=failed" in done.stdout and "image_equals_pin" not in done.stdout
+    pin = record_of(models)["runtime_image"]["digest"]
+    done = run_script(models, tmp, "inventory.sh", {**quiet, "docker": f'echo "{pin}"\n'},
+                      WEIGHTS=str(tmp))
+    assert done.returncode == 0 and "image_equals_pin=yes" in done.stdout, done.stdout[-400:]
+
+
 # --------------------------------------------------------------------------
 # the cases
 # --------------------------------------------------------------------------
@@ -213,4 +229,8 @@ def test_perf_pilot__the_serving_record_matches_the_code_it_pins(tmp_path):
 
 def test_perf_pilot__the_concurrency_sweep_survives_a_failed_metrics_scrape(tmp_path):
     check_the_sweep_survives_a_failed_scrape(MODELS, tmp_path)
+
+
+def test_perf_pilot__the_inventory_refuses_a_missing_container(tmp_path):
+    check_inventory_refuses_a_missing_container(MODELS, tmp_path)
 

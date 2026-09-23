@@ -15,7 +15,8 @@
 # Runs as root or as a docker-group user. Base64-wrappable for `aws ssm send-command`:
 #   CONTAINER=marlin2b-8000 ENGINE=http://127.0.0.1:8000 WEIGHTS=/opt/dlami/nvme/marlin2b \
 #     bash inventory.sh
-set -uo pipefail    # not -e: one failing probe must not hide the others
+set -uo pipefail    # not -e: one failing probe must not hide the others; the one
+                    # precondition (the container exists) exits 2 with a `precondition=` line
 
 CONTAINER=${CONTAINER:-marlin2b-8000}
 ENGINE=${ENGINE:-http://127.0.0.1:8000}
@@ -34,6 +35,10 @@ echo "docker=$(docker version --format '{{.Server.Version}}' 2>&1) storage=$(doc
 section image
 image=$(docker inspect --format '{{.Image}}' "$CONTAINER" 2>&1)
 echo "container=$CONTAINER container_image=$image"
+case "$image" in
+  sha256:*) ;;
+  *) echo "precondition=failed: no container $CONTAINER to inventory (see container_image)"; exit 2 ;;
+esac
 docker image inspect --format 'image_id={{.Id}} repo_digests={{.RepoDigests}} repo_tags={{.RepoTags}} created={{.Created}}' "$image" 2>&1
 echo "vllm_build_commit=$(docker image inspect --format '{{index .Config.Labels "ai.vllm.build.commit"}}' "$image" 2>&1)"
 echo "pin_index=$PIN_INDEX pin_amd64_config=$PIN_CONFIG"
