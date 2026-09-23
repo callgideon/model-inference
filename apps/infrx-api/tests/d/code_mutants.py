@@ -108,6 +108,11 @@ MUTANTS: tuple[Mutant, ...] = (
        "holder", O, "acknowledge_dispatch(taken, worker_id=self.worker_id)",
        'acknowledge_dispatch(taken, worker_id="any")',
        "test_relay__a_full_index_stops_and_hands_the_rest_back"),
+    _m("relays_share_a_worker_id", "OB-1b residual: each relay acknowledges under its own "
+       "id", O,
+       '    worker_id: str = field(default_factory=lambda: f"relay-{uuid.uuid4().hex[:8]}")',
+       '    worker_id: str = field(default_factory=lambda: "relay")',
+       "test_relay__two_default_relays_carry_different_worker_ids"),
     _m("a_rebuild_does_not_reopen", "OB-1: a rebuild reopens the acknowledgments it may "
        "have erased", O, "        await self.store.reopen_dispatch(since)\n", "",
        "test_relay__a_rebuild_fences_the_acknowledgments_it_may_have_erased"),

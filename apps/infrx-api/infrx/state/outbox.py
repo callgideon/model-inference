@@ -28,7 +28,8 @@ on; the first such failure is raised after the rest were acknowledged.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 
 from ..contracts import errors
 from .jobstore import PgJobStore
@@ -38,7 +39,9 @@ from .jobstore import PgJobStore
 class OutboxRelay:
     store: PgJobStore
     scheduler: object                      # `ports.Scheduler`
-    worker_id: str = "relay"
+    # Unique per relay (review OB-1b residual): the ack predicate `claimed_by = worker_id`
+    # separates two relay processes only if their ids differ.
+    worker_id: str = field(default_factory=lambda: f"relay-{uuid.uuid4().hex[:8]}")
     batch: int = 100
     redelivery_s: float = 30.0
 

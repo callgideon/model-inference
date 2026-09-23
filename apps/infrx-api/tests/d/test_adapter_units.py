@@ -179,12 +179,15 @@ def _event(n: int) -> IndexEvent:
 class _Store:
     def __init__(self, events) -> None:
         self.events, self.acked, self.released, self.errors = events, [], [], []
+        self.claimed_by = None
 
-    async def dispatch_pending(self, **_):
+    async def dispatch_pending(self, *, worker_id, **_):
+        self.claimed_by = worker_id
         return tuple(self.events)
 
     async def acknowledge_dispatch(self, ids, *, worker_id):
-        assert worker_id == "relay", f"the ack did not carry the relay's claim: {worker_id}"
+        assert worker_id == self.claimed_by, \
+            f"the ack did not carry the relay's claim: {worker_id} != {self.claimed_by}"
         self.acked.append(list(ids))
         return len(ids)
 
@@ -220,6 +223,14 @@ def test_relay__a_full_index_stops_and_hands_the_rest_back() -> None:
     assert store.acked == [[events[0].event_id]], store.acked
     assert store.released == [[events[1].event_id, events[2].event_id]], store.released
     assert report == {"read": 3, "indexed": 1, "acknowledged": 1, "deferred": 2}, report
+
+
+def test_relay__two_default_relays_carry_different_worker_ids() -> None:
+    """Review OB-1b residual: `claimed_by = worker_id` separates two relay processes only
+    if their ids differ, so the default id is unique per relay, never a shared constant."""
+    one, two = OutboxRelay(_Store([]), _Index()), OutboxRelay(_Store([]), _Index())
+    assert one.worker_id != two.worker_id, \
+        f"two default relays share the worker id {one.worker_id!r}"
 
 
 def test_relay__a_failing_row_is_recorded_and_the_batch_goes_on() -> None:
