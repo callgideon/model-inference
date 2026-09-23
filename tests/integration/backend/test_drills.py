@@ -111,6 +111,35 @@ async def assert_conserved(h, org, handles):
     assert balance["available"] >= 0, balance
 
 
+async def reap(h):
+    """The reaper as the worker process runs it (W3, item 5): `WorkerService.reap_once()`
+    over the drill's store, embedded (`health_port=None`), with W's engine double. Returns
+    the service and the index events it enqueued, read back from the loop's own index. The
+    attempt runner is built but never runs: a reap claims nothing."""
+    from infrx.contracts.fakes.scheduling import FakeScheduler
+    from infrx.worker.attempt import AttemptRunner
+    from infrx.worker.fakes import engine_factory
+    from infrx.worker.loop import WorkerLoop
+    from infrx.worker.service import WorkerService
+    engine, index = engine_factory().port, FakeScheduler(h.clock)
+    runner = AttemptRunner(jobs=h.port, stream=h.extra["stream"], engine=engine,
+                           clock=h.clock, worker_id="e3b2-worker",
+                           count_prompt_tokens=lambda work: 0,
+                           put_result=lambda job_id, text: None)
+    service = WorkerService(loop=WorkerLoop(scheduler=index, runner=runner,
+                                            worker_id="e3b2-worker"),
+                            jobs=h.port, engine=engine)
+    await service.reap_once()
+    enqueued = []
+    while (event := await index.claim_candidate("e3b2-probe")) is not None:
+        enqueued.append(event)
+    return service, enqueued
+
+
+def dispatch_ids(h, job_id, kind):
+    return [event.event_id for event in h.extra["outbox"](job_id) if event.kind is kind]
+
+
 def usage_projections(h, job_id):
     return h.extra["outbox_kinds"](job_id).count(OutboxKind.usage_projection)
 
@@ -176,17 +205,21 @@ def test_e3b_dr02_a_refused_admission_leaves_nothing_behind(backend):
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_e3b_dr03_a_lost_preparation_worker_is_redispatched_and_fenced(backend):
     """DUR-FENCE (preparation): the preparing worker dies; after its short lease the reaper
-    re-dispatches preparation, the dead worker's late `prepared` is refused, and the new
-    worker queues the job exactly once."""
+    - W3's `WorkerService.reap_once`, as the worker process runs it - re-dispatches
+    preparation as a new dispatch row, the dead worker's late `prepared` is refused, and the
+    new worker queues the job exactly once."""
     h = rig(backend, *PREPARE, "recover")
 
     async def body():
         _, admission = await admit(h)
         dead = await h.port.claim_preparation(admission.request_id, "w1")
         h.clock.advance(DEFAULTS.preparation_lease_ttl_s + 1)
-        await h.port.recover()
+        service, events = await reap(h)
         kinds = h.extra["outbox_kinds"](admission.request_id)
         assert kinds == [OutboxKind.prepare_dispatch] * 2, kinds
+        # Preparation's redispatch is an outbox row the relay delivers (Q3), not an index
+        # event the reaper returns: the reaper ran, cleanly, and enqueued nothing itself.
+        assert (service.reaped, service.reap_errors, events) == (0, 0, [])
         live = await h.port.claim_preparation(admission.request_id, "w2")
         with pytest.raises(errors.StaleLease):
             await h.port.prepared(dead, ())
@@ -201,8 +234,9 @@ def test_e3b_dr03_a_lost_preparation_worker_is_redispatched_and_fenced(backend):
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_e3b_dr04_a_claim_whose_answer_was_lost_is_requeued_once(backend):
     """DUR-FENCE / DUR-OUTBOX (dispatch): the claim committed but the worker never got the
-    lease. After lease expiry the job is requeued as a prepublication retry with ONE new
-    inference dispatch, and the next claim is a new generation."""
+    lease. After lease expiry the reaper (`WorkerService.reap_once`) requeues it as a
+    prepublication retry with ONE new inference dispatch row, enqueued in the worker's
+    index, and the next claim is a new generation."""
     h = rig(backend, *RUN, "recover")
 
     async def body():
@@ -213,9 +247,14 @@ def test_e3b_dr04_a_claim_whose_answer_was_lost_is_requeued_once(backend):
         with pytest.raises(CrashAfterCommit):
             await h.port.claim(admission.request_id, "w1")
         h.clock.advance(DEFAULTS.lease_ttl_s + 1)
-        produced = await h.port.recover()
-        events = [item for item in produced if isinstance(item, IndexEvent)]
+        service, events = await reap(h)
+        assert service.reaped == 1
         assert [(e.job_id, e.attempt) for e in events] == [(admission.request_id, 1)]
+        # D2 delta / Q3 FID-5: the requeue is a NEW dispatch row, never the acknowledged one.
+        # The real store only: the contract fake mints the event's id apart from its row's
+        # (integration request #3).
+        first, again = dispatch_ids(h, admission.request_id, OutboxKind.inference_dispatch)
+        assert backend == "fake" or events[0].event_id == again != first
         second = await h.port.claim(admission.request_id, "w2")
         assert second.generation == 2
         assert h.extra["outbox_kinds"](admission.request_id).count(

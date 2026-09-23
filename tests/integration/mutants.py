@@ -716,6 +716,12 @@ MUTANTS: tuple[Mutant, ...] = (
            "        assert await relay.rebuild() == 3\n", "        await port.rebuild(early)\n",
            "tests/integration/backend/test_drills.py", "dr13", layer=2,
            cases=("test_e3b_dr13_losing_the_queue_index_loses_no_accepted_job",)),
+    Mutant("e3bm20", "E3B2 item 5: the worker's reaper enqueues what recover requeued",
+           "apps/infrx-api/infrx/worker/service.py",
+           "                await self.loop.scheduler.enqueue(event)\n",
+           "                pass\n",
+           "tests/integration/backend/test_drills.py", "dr04 and postgres", layer=2,
+           cases=("test_e3b_dr04_a_claim_whose_answer_was_lost_is_requeued_once[postgres]",)),
 )
 
 
