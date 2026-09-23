@@ -90,7 +90,40 @@ Logs (local, not committed), sha256: `base-contracts.log` 197432933a7a562aaabcc4
 - **D:** Limit 4(a) J4 and 4(c) M1 fake deltas are closed; D4's evidence text may drop them. Limit 4(b) M4 and Limit 5 stand (item 4).
 - **W:** request 9's note "the fake still stores it" is obsolete: the fake now refuses NUL / lone surrogate / NaN / ±Inf like `PgStreamStore`.
 
+## Round 2 — the review (`F-fakes-followup-review-4209aee.json`, fix_required)
+
+Base `4209aee`; round-2 head `f6da113`. Commits `3298e6a` P1, `2676a27` P2, `a71c608` P3, `f6da113` H1 (`git log --oneline 4209aee..f6da113`).
+
+| Finding | Commit | Case (exported) | Mutant → kill text (hand-run on a scratch copy, `/tmp/claude-1000/ffakes/handrun.sh`) |
+|---|---|---|---|
+| **P1** (blocking) refuse-before-fence unpinned | `3298e6a` | `dur_output__an_unjournalable_event_refuses_the_whole_batch`: after the cancel, a NUL append on the cancelled job's lease AND on a superseded lease (generation + 1) must answer `journal_write_failed` (PgStreamStore refuses before sending, whatever the lease). | `refuse_after_fence` (the fence runs before the check) → `AssertionError: an unjournalable batch was fenced first: already_terminal` |
+| **P2** (blocking) "no chunk left" vs an empty list | `2676a27` | `dur_output__a_journal_pruned_to_nothing_continues_past_its_watermark`: after the full prune, `append(lease, ())` answers `()` and `read_owned(None)` stays `journal_expired` (0017: an empty batch writes nothing; `read_journal` refuses `journal_expired` with a watermark and no row). | `expired_by_key_presence` (`job_id not in self.chunks`) → `AssertionError: an empty batch revived a journal pruned to nothing: replay_gap` |
+| **P3** (nonblocking, fixed) terminal TTL | `a71c608` | Same case: the chunkless terminal event lives exactly 3600 s under a 30 s store; a second job with one chunk, then `retune(journal_chunk_ttl_s=600)`, then cancel: chunk and terminal both 30 s. `write_terminal` now takes the newest stored chunk's `expires_at - persisted_at`, else `TERMINAL_TTL_WITHOUT_CHUNKS_S = 3600` (0017, D4 Limit 2). | `chunkless_terminal_ttl_from_the_store` → `AssertionError: a chunkless terminal event lives 0:00:30`; `terminal_ttl_ignores_the_newest_chunk` → `AssertionError: the terminal event did not take the newest chunk's TTL` |
+| **H1** (nonblocking, fixed) catch-all kill | `f6da113` | The unjournalable case's `except Exception` → AssertionError conversion is removed (it supersedes round 1's sentence "An untyped answer ... is reported as an assertion naming it"). | `surrogates_are_journalable` now dies by `UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 13: surrogates not allowed`, raised out of the port by the fake's own measure - declared `dies_by=("UnicodeEncodeError",)`, rationale added to the list's `dies_by` header (which now says seven, the true count; it said five while six were declared). The other seven item-2 mutants still die by the case's assertions or a typed error (`8/8 killed`). |
+
+Not changed, as the review allows:
+- **P4** (note): both stores accept `-0.0` and `1e308`, but PostgreSQL does not return the same values - jsonb `numeric` normalises `-0` to `0` (`'{"z": -0.0}'::jsonb::text` = `{"z": 0.0}`) and returns exponent-form floats as integers (`1e308` → `10**308`, `1e20` → an int), with the byte counts of Limit 5 (e.g. 12 vs 316 for `1e308`). The case compares the `content` text only. This joins the item-4 (a) / D4 Limit 5 delta.
+- **P5** (note): `_last_sequence`'s "the watermark counts only for its own generation" has no killable test by construction: any append sets `published`, so a lapsed lease after output is terminalized `lost_after_publication` on both stores and a generation-1 watermark followed by generation 2 is unreachable. The guard mirrors 0017.
+- **P6**: not this lane's (the PostgreSQL partition's `dur_settle__cancel_records_its_cause_and_settles_by_r21` raises `UnsupportedParameter` under `xfail(raises=NotImplementedError)`, red at `ae0f2a2` too); `tests/d` not touched for it.
+- **H2** (optional, not done): `the_escape_text_is_refused`, `the_terminal_event_restarts_below_the_watermark` and `a_pruned_journal_expires_for_ever` still die by a typed `DomainError` (R83-honest) rather than the case's own message.
+- **H3**: D's `PgStreamStore.append` docstring sentence "(The fake stores such payloads ...)" and R93's wording (preparation vs inference requeue) are the coordinator's / D's to change at the merge.
+
+**PostgreSQL (not run here, no Docker).** The new assertions are expected to hold on the real store from the code: P1 - `PgStreamStore.append` refuses before `_call`; P2 - `check_append_empty` (an empty batch is accepted and writes nothing) and 0017 `read_journal`'s `journal_expired`; P3 - 0017's terminal trigger (`c.expires_at - c.committed_at` of the newest chunk, else `interval '3600 seconds'`; the review's own probe: `pg=('terminal',1,4,'1:00:00')`).
+
+| Command (from `apps/infrx-api`, tree `f6da113`) | UTC | Exit | Tail (quoted) |
+|---|---|---|---|
+| `uv run --frozen pytest -q -p no:cacheprovider tests/contracts --ignore=tests/contracts/v2/test_v1_projection_pg.py` | 15:41:04Z–15:43:09Z | 0 | `1051 passed in 124.12s (0:02:04)` (unchanged count: round 2 added assertions, not cases) |
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/contracts/test_mutants.py` (detached, `/tmp/claude-1000/ffakes/r2-mutants-all.log`) | R2_UTC | R2_EXIT | R2_TAIL |
+| `uv run --frozen pytest -q -p no:cacheprovider tests/d/test_journal_units.py` - runs without Docker, fake path included (no skip) | 15:43:09Z–15:43:10Z | 0 | `6 passed in 0.36s` |
+| `uv run --frozen python -m tests.d.code_mutants_d4` | after the units, ended 15:44:06Z | 0 | `17/17 killed` |
+| `uv run --frozen pytest -q -p no:cacheprovider tests/g` | 15:44:12Z–15:46:23Z | 0 | `405 passed, 2 warnings in 130.03s (0:02:10)` |
+| `uv run --frozen pytest -q -p no:cacheprovider tests/w -x` | 15:46:23Z–15:49:22Z | 0 | `157 passed in 178.42s (0:02:58)` |
+| targeted before each commit: `uv run --frozen python -m tests.contracts.mutants <names>` | before 15:37:16Z / 15:38:02Z / 15:39:34Z / 15:40:46Z | 0 | P1 `1/1 killed`; P2 (+3 item-3 mutants) `4/4 killed`; P3 (+2 terminal mutants) `4/4 killed`; H1 (all 8 item-2 mutants) `8/8 killed` |
+
+Mutant list: `python -m tests.contracts.mutants --list` → `422 mutants over 214 named cases` (418 + `refuse_after_fence`, `expired_by_key_presence`, `chunkless_terminal_ttl_from_the_store`, `terminal_ttl_ignores_the_newest_chunk`). Trial merges at `f6da113` (`git merge-tree --write-tree`): `codex/g2-chat-relay` rc=0, `codex/e3b-phase2-gate` rc=0, `origin/codex/e3b-phase2-gate` rc=0, no conflicts. G2: round 2 additionally changed `FakeStreamStore.write_terminal` (TTL) and added the module constant `TERMINAL_TTL_WITHOUT_CHUNKS_S`.
+
 ## Verification log
 
 - 2026-09-23: Items 1–3 implemented at `b6e8354` on `ae0f2a2`; item 4 assessed and declined with a probe; commands above run on the committed tree; no Docker, hosted or shared environment touched.
 - 2026-09-23: Full contracts mutant list finished (15:01:43Z, exit 0, 438 passed); evidence completed.
+- 2026-09-23: Round 2 (review fix_required): P1, P2 pinned; P3 fixed; H1 declared; P4/P5 recorded; runs on `f6da113`.
