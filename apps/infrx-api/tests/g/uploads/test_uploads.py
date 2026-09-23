@@ -473,8 +473,10 @@ def test_media_sec__a_hung_store_is_cut_at_the_deadline():
 
 def test_media_sec__large_uploads_hold_a_shared_slot_until_stored():
     """The per-process large-body bound (`LargeBodies`): with every slot taken a large PUT
-    is 429 with retry guidance before its body is read; otherwise it holds one slot until
-    the store has the bytes, and every exit gives it back."""
+    is 429 with retry guidance - before its body is read when it declares its length, and
+    after at most the threshold plus one chunk when it is chunked (a chunked body is
+    known to be large only by its running total). Otherwise it holds one slot until the
+    store has the bytes, and every exit gives it back."""
     app, _, store, slots = mounted()
     during = []
     stored = store.put_upload
@@ -487,13 +489,18 @@ def test_media_sec__large_uploads_hold_a_shared_slot_until_stored():
     held = slots.slot()
     held.account(slots.threshold + 1)
 
+    chunked = clips.Chunks([b"x" * 30] * 10)
+
     async def refused(client):
         handle = created_handle(await create(client))
-        return handle, await put(client, handle)
+        return handle, [await put(client, handle), await client.put(
+            put_path(handle), content=chunked, headers=bearer(**{"content-type": "video/mp4"}))]
 
-    handle, response = run(app, refused)
-    assert response.status_code == 429 and code_of(response) == "capacity_exhausted"
-    assert response.headers.get("retry-after")
+    handle, answers = run(app, refused)
+    for response in answers:
+        assert response.status_code == 429 and code_of(response) == "capacity_exhausted"
+        assert response.headers.get("retry-after")
+    assert chunked.read <= slots.threshold + 30, chunked.read
     assert during == []
     held.release()
     response = run(app, lambda client: put(client, handle))
