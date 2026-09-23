@@ -779,6 +779,12 @@ MUTANTS: tuple[Mutant, ...] = (
            "    if False:\n",
            "tests/integration/backend/test_stage.py", "refused_outside",
            cases=("test_a_live_defect_is_refused_outside_this_processs_clones",)),
+    Mutant("e3bm31", "E3B2 review H4: a leaked fake-vLLM log is swept in every namespace",
+           "tests/integration/mutants.py",
+           '                              *root.glob("infrx-e2-fake-vllm-*"))\n',
+           "                              )\n",
+           "tests/integration/test_run.py", "leaked_server_log",
+           cases=("test_a_leaked_server_log_is_litter_in_every_namespace",)),
     Mutant("e3bm25", "E3B2: advance() is measured as returning the moved clock (D2's)",
            "tests/integration/pgstate.py",
            "    lag = (read_back - returned).total_seconds()\n",
@@ -807,7 +813,11 @@ def _copy_trees(destination: Path) -> None:
 def _temp_litter() -> set:
     """Files in the temp directory carrying our prefix, minus the state file, which is ours."""
     root = Path(tempfile.gettempdir())
-    return {path for path in root.glob(f"{harness.PROJECT}-*") if path != harness.STATE_FILE}
+    # Review H4: fake_vllm's log keeps E2's literal prefix in every namespace (it cannot import
+    # the harness: W3's runner copies it alone), so it is swept by that name as well.
+    return {path for path in (*root.glob(f"{harness.PROJECT}-*"),
+                              *root.glob("infrx-e2-fake-vllm-*"))
+            if path != harness.STATE_FILE}
 
 
 def run_one(mutant: Mutant, *, stack_available: bool) -> dict:

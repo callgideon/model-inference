@@ -954,3 +954,19 @@ def test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red(monkeypatch):
                                                          (1, "F\n1 failed in 0.1s\n")]))
     assert mutants.run_one(mutant, stack_available=False)["status"] == "killed"
     assert calls == [mutant.occurrences, 0], "baseline unmutated, then the mutated run"
+
+
+def test_a_leaked_server_log_is_litter_in_every_namespace(monkeypatch, tmp_path):
+    """Review H4: `fake_vllm` names its log `infrx-e2-fake-vllm-*` whatever the namespace, so
+    the mutant runner's sweep must find it by that name too, not only by `harness.PROJECT`."""
+    import tempfile
+
+    import mutants
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    monkeypatch.setattr(harness, "PROJECT", "infrx-e3b2")       # a non-default namespace
+    log = tmp_path / "infrx-e2-fake-vllm-abc.log"
+    ours = tmp_path / f"{harness.PROJECT}-e2m54-xyz"
+    log.write_text("x")
+    ours.mkdir()
+    assert {log, ours} <= mutants._temp_litter()
+    assert (tmp_path / "someone-else.log") not in mutants._temp_litter()
