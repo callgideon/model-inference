@@ -15,8 +15,9 @@ What a hook does to the database, and why some of them step around a guard:
 
 * `grant`, `balance`, `active_jobs`, `outbox`, `outbox_kinds`, `journal_bytes`,
   `suspend_org`, `revoke_key`, `unentitle`/`entitle`, `retune` are ordinary writes/reads.
-* `publish` (D3) is the fence plus the publication marker in one transaction, standing for
-  D4's first committed chunk until the journal exists.
+* `publish` is one committed chunk through D4's real `append` (the fence, the chunk and the
+  publication marker in one transaction), as the fakes' hook is; `stream` is the
+  `PgStreamStore` on the same database (`make_streamstore_factory` makes it the port).
 * `unrevoke_key` and `set_price` UNDO things production can never undo (0009 makes a
   revocation one-way; `price_versions` is immutable). They disable exactly that one
   trigger for one statement, as the table owner, in the test database only - they model
@@ -39,8 +40,10 @@ from ..contracts.conformance import builders as b
 from ..contracts.fakes.support import (DEFAULT_START, CrashAfterCommit, FailurePlan,
                                        SequentialIds)
 from ..contracts.limits import DEFAULTS, PilotSettings
-from ..contracts.records import NormalizedRequest, OutboxEvent, OutboxKind, PriceSnapshot
-from .jobstore import PgJobStore, connector, domain_error
+from ..contracts.records import (ChunkEventType, EngineEvent, NormalizedRequest, OutboxEvent,
+                                 OutboxKind, PriceSnapshot)
+from .jobstore import PgJobStore, connector
+from .journal import PgStreamStore
 
 USERS = {b.ORG_A: "1a1a1a1a-0000-4000-8000-0000000000a1",
          b.ORG_B: "2b2b2b2b-0000-4000-8000-0000000000b2"}
@@ -134,7 +137,7 @@ def _without_trigger(conn, table: str, trigger: str, sql: str, params: tuple) ->
         conn.execute(f"alter table {table} enable trigger {trigger}")
 
 
-def hooks(conn, store: PgJobStore) -> dict[str, Callable]:
+def hooks(conn, store: PgJobStore, stream: PgStreamStore | None = None) -> dict[str, Callable]:
     def grant(org_id: str, amount) -> Decimal:
         value = money.parse(amount) if not isinstance(amount, Decimal) else amount
         if value < 0:
@@ -241,28 +244,15 @@ def hooks(conn, store: PgJobStore) -> dict[str, Callable]:
             conn.execute("alter table infrx.price_versions enable trigger "
                          "price_versions_immutable")
 
-    async def publish(lease) -> None:
-        """D3's stand-in for D4's first committed chunk (the `publish` hook), until D4's
-        `append` exists: `infrx.fence_lease` and then the publication marker, in ONE
-        transaction - the protocol D4's append must follow. It proves nothing about the
-        journal; it lets the reaper's and cancellation's after-publication paths run."""
-        import psycopg
-        from psycopg.types.json import Jsonb
-        try:
-            with conn.transaction():
-                refusal, = conn.execute(
-                    "select infrx.fence_lease(%s, array['inference'], %s)",
-                    (Jsonb(lease.model_dump(mode="json")),
-                     store.limits.unknown_usage_reconcile_s)).fetchone()
-                if refusal is None:
-                    conn.execute("update infrx.jobs set published = true "
-                                 "where request_id = %s", (lease.job_id,))
-        except psycopg.Error as failed:
-            raise domain_error(failed) from None
-        PgJobStore._answer({"refusal": refusal})
+    async def publish(lease):
+        """One committed chunk through the real `append` (the fakes' hook, same payload)."""
+        return await stream.append(lease, (EngineEvent(type=ChunkEventType.delta,
+                                                       payload={"content": "x"}),))
 
     def retune(**changes) -> PilotSettings:
         store.limits = store.limits.replace(**changes)
+        if stream is not None:
+            stream.limits = store.limits
         return store.limits
 
     return {"grant": grant, "balance": balance, "active_jobs": active_jobs, "outbox": outbox,
@@ -288,14 +278,30 @@ def make_jobstore_factory(fresh_database: Callable[[], str], dsn_for: Callable[[
             opened.popleft().close()
         clock = PgClock(conn)
         store = PgJobStore(connector(dsn_for(name)), limits=limits or DEFAULTS)
+        stream = PgStreamStore(connector(dsn_for(name)), limits=limits or DEFAULTS)
         plan = FailurePlan()
-        extra = hooks(conn, store)
+        extra = hooks(conn, store, stream)
         extra["store"] = store
+        extra["stream"] = FailingJobStore(stream, plan)
         return Harness(port=FailingJobStore(store, plan), clock=clock, ids=SequentialIds(),
                        failures=plan, extra=extra)
 
     return factory
 
 
+def make_streamstore_factory(fresh_database: Callable[[], str], dsn_for: Callable[[str], str],
+                             **kw: Any) -> Callable[..., Harness]:
+    """The same rig with the `PgStreamStore` as the port and the JobStore as `jobs`, one
+    `FailurePlan` for both (`crash_after_commit("append")` commits, then raises)."""
+    jobs_factory = make_jobstore_factory(fresh_database, dsn_for, **kw)
+
+    def factory(limits: PilotSettings | None = None, **_: object) -> Harness:
+        harness = jobs_factory(limits)
+        return Harness(port=harness.extra["stream"], clock=harness.clock, ids=harness.ids,
+                       failures=harness.failures, extra={**harness.extra, "jobs": harness.port})
+
+    return factory
+
+
 __all__ = ["CrashAfterCommit", "FailingJobStore", "PgClock", "hooks", "make_jobstore_factory",
-           "seed"]
+           "make_streamstore_factory", "seed"]
