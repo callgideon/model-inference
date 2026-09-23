@@ -126,6 +126,7 @@ def test_api_modes__post_jobs_is_always_async_and_applies_no_preference():
         ExecutionMode.async_}
     refused = post(world, payload=rs.body(stream=True))
     assert refusal(refused) == (400, "invalid_request")
+    assert refused.json()["error"].get("param") == "stream"        # what this client sent
     assert len(world.jobs.jobs) == 3
 
 

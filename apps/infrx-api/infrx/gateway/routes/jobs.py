@@ -260,8 +260,15 @@ def register(app, rt):
     @guarded
     async def create_job(request: Request, request_id: str):
         """The chat body, always async. A `Prefer` header here is ignored - the route is the
-        preference - so none is reported applied."""
-        auth, normalized, idem = await jobs.ingress.validated(_as_async(request), request_id)
+        preference - so none is reported applied. A streaming body is refused as what the
+        client sent (`param="stream"`), never as a `Prefer` it did not send (review N3)."""
+        try:
+            auth, normalized, idem = await jobs.ingress.validated(_as_async(request), request_id)
+        except errors.InvalidRequest as refused:
+            if refused.param != "Prefer":       # the route's own respond-async vs `stream`
+                raise
+            raise errors.InvalidRequest("POST /v1/jobs is always async: stream is not served",
+                                        param="stream") from None
         answer = await relay.accept(auth, normalized, idem)
         del answer.headers[wire.HEADER_PREFERENCE_APPLIED]
         answer.headers.setdefault(wire.HEADER_INFERENCE_ID, request_id)

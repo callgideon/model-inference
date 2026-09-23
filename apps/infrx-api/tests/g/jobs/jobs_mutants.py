@@ -126,6 +126,9 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("jobs_route_follows_prefer", "POST /v1/jobs is async whatever Prefer says",
        J, "await jobs.ingress.validated(_as_async(request), request_id)",
        "await jobs.ingress.validated(request, request_id)", POST_JOBS),
+    _m("stream_refused_as_prefer", "POST /v1/jobs refuses a streaming body as `stream` "
+       "(review ADM-R2-N3)",
+       J, '            if refused.param != "Prefer":', "            if True:", POST_JOBS),
     _m("preference_applied_always", "POST /v1/jobs reports no preference applied",
        J, "        del answer.headers[wire.HEADER_PREFERENCE_APPLIED]\n", "", POST_JOBS),
     _m("detach_cancels", "the 202 path never cancels the job it accepted (the sync path does)",
