@@ -27,3 +27,21 @@
 2026-09-23T20:21:29Z	344a5a8d-f039-4a4e-86c0-b5584af19131	poll /opt/dlami/nvme/w4-logs/e0.log
 2026-09-23T20:24:02Z	102afb43-a9c6-4cd5-8f09-f7d37de228c6	poll /opt/dlami/nvme/w4-logs/e0.log
 2026-09-23T20:24:17Z	95e7c8c3-3a0c-4d6a-ae2f-223856076459	step5 fetch E0: tar w4-e0-20260923T194748Z + e0.log to s3 w4/
+2026-09-23T20:24:45Z	d7f9df92-f6d6-44b9-ad50-c0d97573294d	step5 launch E1: candidate.sh CANDIDATE=e1 W4_ENGINE_RESTART_OK=1 (nohup, w4-logs/e1.log)
+2026-09-23T20:26:58Z	2e2d11fc-7ea0-48ea-848c-c5c41760022e	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:29:31Z	f5575c33-41cf-47df-ada4-d4f5e1005f09	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:32:04Z	1ee86c7b-0c59-4ff9-a7e5-257cf2e6e377	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:34:18Z	c18bc554-926b-4793-8c33-d3b74a6a41a0	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:36:51Z	dbe9d165-aee9-49d5-8021-c1c7040bd7a9	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:39:24Z	6690bd64-2525-411b-be75-6cb35b50ff41	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:41:39Z	4533b240-ff6c-4646-b98a-e2ecd05ee8f9	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:44:12Z	7e50ff3d-ceee-44f0-96c4-726a593aa76f	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:46:45Z	2f54ffdc-ad59-49f0-9289-0da4ae46e112	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:49:47Z	64e10b1f-3c2f-4e66-9cc3-900be61d85ac	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:52:20Z	6bd2e197-11fb-49f0-9bf6-36dd749fbc91	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:54:52Z	3b6677df-f05b-403c-a92c-0ca95d512531	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T20:57:36Z	8ffea336-50ff-4d98-860e-b6878edbcfa1	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T21:00:09Z	18a173ec-b9fa-4853-bc9b-5c2d6fbd034c	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T21:02:41Z	778e22d6-c4e1-45f4-8986-a05376626968	poll /opt/dlami/nvme/w4-logs/e1.log
+2026-09-23T21:02:55Z	b0e9fa3b-c7ec-4d75-918d-b2b8973f4be1	step5 fetch E1: tar w4-e1-20260923T202445Z + e1.log to s3 w4/
+2026-09-23T21:03:37Z	35af1521-5839-4ef4-bb45-d9ee5f230e8a	step5 launch E3 (e3_trigger=yes c=[8,16,32] on E0): candidate.sh CANDIDATE=e3 W4_ENGINE_RESTART_OK=1 (nohup, w4-logs/e3.log)

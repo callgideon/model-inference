@@ -1,0 +1,68 @@
+### python3 models/marlin2b/measure/decide.py research/plan/evidence/w/box/w4-e0-20260923T194748Z   @ 2026-09-23T20:25:02Z (head a1f67a6, decide.py sha256 b68ec54345dee9aa…)
+run=research/plan/evidence/w/box/w4-e0-20260923T194748Z baseline=None set_aside=none X=80.7 start_to_ready_s=[169.0, 168.0, 169.0, 169.0, 169.0, 168.0, 169.0]
+level c=1 state=restarted attempts=64 accepted=60 T=0.322 F=4 {'stream_error_event': 4} failed_clips=c012-bbb1080p30-1024x768-4x3,c025-tos720p-2560x1080-ultrawide-rot180,c038-sintel1080p-480x854-portrait,c051-tos720p-360p-16x9 W=0.0 peak_running=1.0 peak_kv=0.00573436921938586 peak_gpu_mib=44061.0 util_median=6.0 ttft_p95=3.3018 latency_p95=6.7583 repeats=0
+level c=2 state=restarted attempts=64 accepted=60 T=0.509 F=4 {'stream_error_event': 4} failed_clips=c012-bbb1080p30-1024x768-4x3,c025-tos720p-2560x1080-ultrawide-rot180,c038-sintel1080p-480x854-portrait,c051-tos720p-360p-16x9 W=0.0 peak_running=2.0 peak_kv=0.009618941916389234 peak_gpu_mib=44245.0 util_median=99.0 ttft_p95=4.3885 latency_p95=7.734 repeats=0
+level c=4 state=restarted attempts=64 accepted=60 T=0.711 F=4 {'stream_error_event': 4} failed_clips=c012-bbb1080p30-1024x768-4x3,c025-tos720p-2560x1080-ultrawide-rot180,c038-sintel1080p-480x854-portrait,c051-tos720p-360p-16x9 W=0.0 peak_running=4.0 peak_kv=0.013318534961154316 peak_gpu_mib=44245.0 util_median=99.0 ttft_p95=7.0032 latency_p95=11.7634 repeats=0
+level c=8 state=restarted attempts=64 accepted=60 T=0.888 F=4 {'stream_error_event': 4} failed_clips=c012-bbb1080p30-1024x768-4x3,c025-tos720p-2560x1080-ultrawide-rot180,c038-sintel1080p-480x854-portrait,c051-tos720p-360p-16x9 W=1.0 peak_running=6.0 peak_kv=0.017018128005919397 peak_gpu_mib=44301.0 util_median=79.0 ttft_p95=18.9023 latency_p95=20.7091 repeats=0
+level c=16 state=restarted attempts=64 accepted=60 T=0.865 F=4 {'stream_error_event': 4} failed_clips=c012-bbb1080p30-1024x768-4x3,c025-tos720p-2560x1080-ultrawide-rot180,c038-sintel1080p-480x854-portrait,c051-tos720p-360p-16x9 W=0.0 peak_running=8.0 peak_kv=0.01572327044025157 peak_gpu_mib=44773.0 util_median=74.0 ttft_p95=27.1266 latency_p95=28.2622 repeats=0
+level c=32 state=restarted attempts=128 accepted=120 T=1.267 F=8 {'stream_error_event': 8} failed_clips=c012-bbb1080p30-1024x768-4x3,c025-tos720p-2560x1080-ultrawide-rot180,c038-sintel1080p-480x854-portrait,c051-tos720p-360p-16x9 W=8.0 peak_running=29.0 peak_kv=0.06344802071772104 peak_gpu_mib=44017.0 util_median=67.0 ttft_p95=37.1843 latency_p95=40.1487 repeats=64
+w3_rule c*=None threshold=1.1403 setting=None (not taken)
+criterion w3_rule=fail (no level has F=0, W=0 and T>=1.1403)
+criterion error_rate=fail (28/448 = 0.0625)
+criterion overload_masking=pass (--retries 0, every attempt accounted)
+criterion severe_tail=unknown (no c*)
+criterion oom=pass (no exit, no out-of-memory line)
+criterion memory_growth=fail (c=32 second pass over first: gpu +884.0 MiB, host +2355.2 MiB)
+criterion cancellation=pass (result=pass)
+criterion short_job_starvation=unknown (no paired baseline)
+criterion usage_drift=unknown (no paired baseline)
+criterion output_drift=unknown (no paired baseline)
+e3_trigger=yes c=[8, 16, 32]
+verdict: no setting adopted - failed: ['w3_rule', 'error_rate', 'memory_growth']; unknown: ['severe_tail', 'short_job_starvation', 'usage_drift', 'output_drift']
+exit=0
+
+### python3 models/marlin2b/measure/decide.py research/plan/evidence/w/box/w4-e1-20260923T202445Z --baseline research/plan/evidence/w/box/w4-e0-20260923T194748Z   @ 2026-09-23T21:03:15Z (head a1f67a6)
+run=research/plan/evidence/w/box/w4-e1-20260923T202445Z baseline=research/plan/evidence/w/box/w4-e0-20260923T194748Z set_aside=none X=76.34 start_to_ready_s=[173.0, 173.0, 172.0, 173.0, 173.0, 173.0, 173.0]
+level c=1 state=restarted attempts=64 accepted=64 T=0.321 F=0 {} failed_clips=- W=0.0 peak_running=1.0 peak_kv=0.00899491591709034 peak_gpu_mib=43949.0 util_median=100.0 ttft_p95=3.8887 latency_p95=7.0454 repeats=0
+level c=2 state=restarted attempts=64 accepted=64 T=0.512 F=0 {} failed_clips=- W=0.0 peak_running=2.0 peak_kv=0.01368791552600701 peak_gpu_mib=44431.0 util_median=100.0 ttft_p95=5.2833 latency_p95=12.09 repeats=0
+level c=4 state=restarted attempts=64 accepted=64 T=0.723 F=0 {} failed_clips=- W=0.0 peak_running=4.0 peak_kv=0.016229956980836957 peak_gpu_mib=44431.0 util_median=100.0 ttft_p95=16.7169 latency_p95=17.9954 repeats=0
+level c=8 state=restarted attempts=64 accepted=64 T=0.902 F=0 {} failed_clips=- W=0.0 peak_running=8.0 peak_kv=0.022878373093468962 peak_gpu_mib=44355.0 util_median=95.5 ttft_p95=19.4236 latency_p95=21.4387 repeats=0
+level c=16 state=restarted attempts=64 accepted=64 T=0.92 F=0 {} failed_clips=- W=0.0 peak_running=10.0 peak_kv=0.029722330856472468 peak_gpu_mib=44639.0 util_median=90.0 ttft_p95=30.3345 latency_p95=36.0087 repeats=0
+level c=32 state=restarted attempts=128 accepted=128 T=1.314 F=0 {} failed_clips=- W=9.0 peak_running=29.0 peak_kv=0.09542432538130619 peak_gpu_mib=43267.0 util_median=94.0 ttft_p95=40.9274 latency_p95=44.8879 repeats=64
+w3_rule c*=None threshold=1.1826 setting=None (not taken)
+criterion w3_rule=fail (no level has F=0, W=0 and T>=1.1826)
+criterion error_rate=pass (0/448 = 0.0)
+criterion overload_masking=pass (--retries 0, every attempt accounted)
+criterion severe_tail=unknown (no c*)
+criterion oom=pass (no exit, no out-of-memory line)
+criterion memory_growth=fail (c=32 second pass over first: gpu +0.0 MiB, host +2979.8 MiB)
+criterion cancellation=pass (result=pass)
+criterion short_job_starvation=pass (24.9546 s against a bound of 40.7886 s)
+criterion usage_drift=pass (60 clips)
+criterion output_drift=pass (9 clips)
+e3_trigger=no
+verdict: no setting adopted - failed: ['w3_rule', 'memory_growth']; unknown: ['severe_tail']
+exit=0
+
+### python3 models/marlin2b/measure/decide.py research/plan/evidence/w/box/w4-e1-20260923T202445Z   @ 2026-09-23T21:03:15Z
+run=research/plan/evidence/w/box/w4-e1-20260923T202445Z baseline=None set_aside=none X=76.34 start_to_ready_s=[173.0, 173.0, 172.0, 173.0, 173.0, 173.0, 173.0]
+level c=1 state=restarted attempts=64 accepted=64 T=0.321 F=0 {} failed_clips=- W=0.0 peak_running=1.0 peak_kv=0.00899491591709034 peak_gpu_mib=43949.0 util_median=100.0 ttft_p95=3.8887 latency_p95=7.0454 repeats=0
+level c=2 state=restarted attempts=64 accepted=64 T=0.512 F=0 {} failed_clips=- W=0.0 peak_running=2.0 peak_kv=0.01368791552600701 peak_gpu_mib=44431.0 util_median=100.0 ttft_p95=5.2833 latency_p95=12.09 repeats=0
+level c=4 state=restarted attempts=64 accepted=64 T=0.723 F=0 {} failed_clips=- W=0.0 peak_running=4.0 peak_kv=0.016229956980836957 peak_gpu_mib=44431.0 util_median=100.0 ttft_p95=16.7169 latency_p95=17.9954 repeats=0
+level c=8 state=restarted attempts=64 accepted=64 T=0.902 F=0 {} failed_clips=- W=0.0 peak_running=8.0 peak_kv=0.022878373093468962 peak_gpu_mib=44355.0 util_median=95.5 ttft_p95=19.4236 latency_p95=21.4387 repeats=0
+level c=16 state=restarted attempts=64 accepted=64 T=0.92 F=0 {} failed_clips=- W=0.0 peak_running=10.0 peak_kv=0.029722330856472468 peak_gpu_mib=44639.0 util_median=90.0 ttft_p95=30.3345 latency_p95=36.0087 repeats=0
+level c=32 state=restarted attempts=128 accepted=128 T=1.314 F=0 {} failed_clips=- W=9.0 peak_running=29.0 peak_kv=0.09542432538130619 peak_gpu_mib=43267.0 util_median=94.0 ttft_p95=40.9274 latency_p95=44.8879 repeats=64
+w3_rule c*=None threshold=1.1826 setting=None (not taken)
+criterion w3_rule=fail (no level has F=0, W=0 and T>=1.1826)
+criterion error_rate=pass (0/448 = 0.0)
+criterion overload_masking=pass (--retries 0, every attempt accounted)
+criterion severe_tail=unknown (no c*)
+criterion oom=pass (no exit, no out-of-memory line)
+criterion memory_growth=fail (c=32 second pass over first: gpu +0.0 MiB, host +2979.8 MiB)
+criterion cancellation=pass (result=pass)
+criterion short_job_starvation=unknown (no paired baseline)
+criterion usage_drift=unknown (no paired baseline)
+criterion output_drift=unknown (no paired baseline)
+e3_trigger=no
+verdict: no setting adopted - failed: ['w3_rule', 'memory_growth']; unknown: ['severe_tail', 'short_job_starvation', 'usage_drift', 'output_drift']
+exit=0
