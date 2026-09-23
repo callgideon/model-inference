@@ -1,0 +1,442 @@
+{
+ "verdict": "pass",
+ "lenses_returned": 2,
+ "head": "9133efe",
+ "reviews": [
+  {
+   "lens": "admission",
+   "verdict_hint": "pass",
+   "fabrication_check": "Reproduced the lane's claims at 9133efe on a fresh archive: tests/g/jobs 52; --list 79 mutants over 46 cases; G3 list INFRX_MUTANTS=all 85 passed; tests/g whole 559; tests/g quick 500. Each round-3 admission claim matches the code and tests. ca2435e: two 202-path in-flight cases whose assertions are as described. e011752: untouched() is (lookups, admits, staged payloads, by_job) and must change by exactly lookup +1. 35eb1fb: a recorder replaces Relay.admit; sync and stream payload_hash == payload_digest; async is folded and identical on chat+Prefer and POST /v1/jobs. 72aaf84: x-no-respond-async gives sync. 894374c: the jobs.py code change gives param=stream. The shared-anchor claim is true: each anchor occurs exactly once in relay.py, the same edit is declared in both lists, and both runners kill it on their own cases. The kills are for the 202-path reasons: 400 media_fetch_failed or an extra staged payload for prepares, the rotated-card 400 for rechecked. The R3-1 re-anchor 'elif found[1] is None:' occurs once and dies on CRASH_REPLAY. The G2 r3 merge adds only the stated G3 seams to relay.py. The contracts runs (1011 plus 3 HarnessBusy, and lookup 3/3) were not re-run: they are outside this lens and need Docker/PG. No figure in this report is unverified.",
+   "cleanup": "Removed both scratch copies (/tmp/claude-1000/confirm-g3r3-admission-2590984 and /tmp/claude-1000/confirm-g3r3-admission-probe-2618487), including the probe test file that lived only there. The codex-g3 worktree was never written: status clean, HEAD 9133efe. The only scratch helper scripts are in the session scratchpad (hand.py, declared.py, own*.py, logs).",
+   "mutants": [
+    {
+     "name": "inflight_async_replay_prepares (declared, shared anchor with G2 inflight_replay_prepares; anchor occurs once)",
+     "edit": "relay.py 'if found is None:\\n # Media is fetched...' -> 'if found is None or found[1] is None:'",
+     "result": "killed",
+     "killed_by": "INFLIGHT_403: 400 media_fetch_failed != 202. INFLIGHT_CREDIT: staged payloads +1. G2's own inflight_replay_prepares is also killed through the G runner (1 failed)."
+    },
+    {
+     "name": "inflight_async_replay_rechecked (declared, shared with G2 inflight_replay_rechecked_after_attach; anchor once)",
+     "edit": "relay.py 'if job.request_id in self.media.by_job:' -> 'if False:'",
+     "result": "killed",
+     "killed_by": "INFLIGHT_CREDIT: 400 invalid_request (rotated-card recheck) != 202. G2's case is killed through the G runner (1 failed, 1 passed)."
+    },
+    {
+     "name": "inflight_replay_not_completed (R3-1 re-anchor; anchor 'elif found[1] is None:' once, same edit as G2 inflight_replay_skips_completion)",
+     "edit": "'elif found[1] is None:' -> 'elif False:'",
+     "result": "killed",
+     "killed_by": "CRASH_REPLAY: len(by_job)=0 != 1. G2's twin is killed too (6 failed)."
+    },
+    {
+     "name": "lookup_conflict_swallowed (declared)",
+     "edit": "_lookup catches IdempotencyConflict -> return None",
+     "result": "killed",
+     "killed_by": "MODES_409 and CHANGED: untouched() at index 1 is admits 2 != 1 (the second admit, the intended reason)"
+    },
+    {
+     "name": "mode_folded_for_stream (declared)",
+     "edit": "'is not ExecutionMode.async_' -> 'is ExecutionMode.sync'",
+     "result": "killed",
+     "killed_by": "DIGEST: 'a stream key's identity is its payload digest'"
+    },
+    {
+     "name": "mode_left_out_of_the_digest (declared)",
+     "edit": "'if request.execution_mode is not async_' -> 'if True'",
+     "result": "killed",
+     "killed_by": "MODES_409: the sync retry attached (None,None) instead of 409. DIGEST: folded == payload digest."
+    },
+    {
+     "name": "mode_read_from_prefer (declared)",
+     "edit": "digest from a raw Prefer substring",
+     "result": "killed",
+     "killed_by": "DIGEST: 'the digest follows the validated mode, not the raw Prefer'"
+    },
+    {
+     "name": "stream_refused_as_prefer (declared)",
+     "edit": "jobs.py 'if refused.param != \"Prefer\":' -> 'if True:'",
+     "result": "killed",
+     "killed_by": "POST_JOBS: 'Prefer' != 'stream'"
+    },
+    {
+     "name": "own_replay_before_mode_check",
+     "edit": "fakes/state.py _replay 'if record.payload_hash != idem.payload_hash:' -> 'if False:'",
+     "result": "killed",
+     "killed_by": "MODES_409 (the sync retry replayed) and CHANGED (202 != 409)"
+    },
+    {
+     "name": "own_conflict_after_stage",
+     "edit": "relay.admit: prepare_request+stage moved before _lookup",
+     "result": "killed",
+     "killed_by": "MODES_409 and CHANGED: untouched() at index 2 differs (one extra staged payload)"
+    },
+    {
+     "name": "own_jobs_stream_accepted",
+     "edit": "validate.py execution_mode 'if stream:' -> 'if False:' (stream+respond-async accepted as async)",
+     "result": "killed",
+     "killed_by": "POST_JOBS: (202,None) != (400, invalid_request)"
+    },
+    {
+     "name": "own_credit_only_recheck",
+     "edit": "_resume gate '... in self.media.by_job and self.regime != CREDIT:'",
+     "result": "killed",
+     "killed_by": "INFLIGHT_CREDIT: 400 != 202"
+    },
+    {
+     "name": "own_folded_for_sync",
+     "edit": "identity_digest folds '\\nasync' for every mode (the folded digest reused for sync)",
+     "result": "killed",
+     "killed_by": "MODES_409 (the sync retry of the async key replayed) and DIGEST ('a sync key's identity is its payload digest')"
+    },
+    {
+     "name": "own_async_path_drops_key",
+     "edit": "_accept async branch: admit(..., idem.model_copy(update={'key': None}))",
+     "result": "killed",
+     "killed_by": "11 cases incl. LOST_202, INFLIGHT_403, INFLIGHT_CREDIT, MODES_409, CHANGED, EXPIRED_KEY, TWICE"
+    },
+    {
+     "name": "own_replay_not_reread",
+     "edit": "jobs.accepted 'if replayed:' -> 'if False:'",
+     "result": "killed",
+     "killed_by": "REPLAY_OUTAGE (202 != 503) and CREDIT_202 ('preparing' != 'cancelled')"
+    },
+    {
+     "name": "own_async_replay_readmits",
+     "edit": "admit: 'if found is None or request.execution_mode is async_:' before the admission",
+     "result": "killed",
+     "killed_by": "8 cases incl. LOST_202, INFLIGHT_403, INFLIGHT_CREDIT, MODES_409"
+    },
+    {
+     "name": "own_legacy_only_resume",
+     "edit": "_resume gate '... in self.media.by_job and self.regime == CREDIT:' (legacy bound in-flight replay re-attaches)",
+     "result": "SURVIVED tests/g/jobs (52) and tests/g quick (500). Killed only by the reviewer probe (attach would fail -> 404 and a cancel on a running job). See ADM-R3-N1.",
+     "killed_by": "none in the lane's suites"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git -C codex-g3 archive 9133efe | tar -x -C /tmp/claude-1000/confirm-g3r3-admission-2590984 && make api-env",
+     "exit": 0,
+     "tail": "+ zstandard==0.25.0 (offline, frozen)"
+    },
+    {
+     "cmd": "git diff 76ba3bb 9133efe -- apps/infrx-api/infrx/gateway/routes/relay.py",
+     "exit": 0,
+     "tail": "The only hunks are on_async (field), the _accept async branch -> on_async(*await self.admit(...)), and pump(cursor=, cancel_on_gone=). tests/g/mutants.py is identical to 76ba3bb. Outside tests/g/jobs, the only test file differing from G2 r3 is test_client_smoke.py (+5/-?)."
+    },
+    {
+     "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g/jobs/test_jobs.py",
+     "exit": 0,
+     "tail": "52 passed in 2.55s"
+    },
+    {
+     "cmd": "uv run --frozen python -m tests.g.jobs.jobs_mutants --list",
+     "exit": 0,
+     "tail": "79 mutants over 46 named cases"
+    },
+    {
+     "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/g/jobs/test_jobs_mutants.py",
+     "exit": 0,
+     "tail": "85 passed in 281.46s (0:04:41)"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g",
+     "exit": 0,
+     "tail": "559 passed, 2 warnings in 190.72s"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q tests/g --ignore=<4 mutant runners> -k 'not mutants'  (tests/g quick)",
+     "exit": 0,
+     "tail": "500 passed, 2 warnings in 6.59s"
+    },
+    {
+     "cmd": "reviewer probes tests/g/jobs/test_probe_adm.py (scratch copy only): in-flight replay x {preparing,prepared,running,committed} x {legacy,CREDIT} x {jobs->jobs, chat+Prefer->jobs, jobs->chat+Prefer} with host 403 + rotated card; conflict counts x 6 directions x 2 regimes; Prefer variants; stream refusals",
+     "exit": 0,
+     "tail": "38 passed. Every in-flight replay: 202 replayed, same handle, lookups +1, and admit/cancel/prepare/stage/attach/fetch/staged payloads/by_job unchanged; the job then settles. Every 409: lookups +1 and nothing else. MODE_FOR_SEMICOLON [sync]."
+    },
+    {
+     "cmd": "hand mutants (declared 8 + own 10) via scratchpad/hand.py on the probe copy",
+     "exit": 1,
+     "tail": "17 killed. own_legacy_only_resume: exit 0 over tests/g quick, '500 passed'."
+    },
+    {
+     "cmd": "G runner run_mutant for inflight_replay_prepares / inflight_replay_rechecked_after_attach / inflight_replay_skips_completion / terminal_replay_prepares / terminal_replay_rechecked / resume_attaches_other_refs / replay_of_another_process_refused; G3 runner for the 8 declared admission mutants",
+     "exit": 0,
+     "tail": "All killed=True (e.g. 'G inflight_replay_prepares True killed 1 failed', 'G3 lookup_conflict_swallowed True killed 2 failed')"
+    },
+    {
+     "cmd": "probe: legacy running job, media.refs cleared, same-key POST /v1/jobs (head vs own_legacy_only_resume)",
+     "exit": 1,
+     "tail": "head: 1 passed (202, 0 cancels, settles). mutant: 'assert 404 == 202', not_found"
+    },
+    {
+     "cmd": "probe: expired mapping reused across modes",
+     "exit": 0,
+     "tail": "EXPIRED_ACROSS_MODES (410, 'idempotency_expired') 1 2  (staged +1, admit attempted)"
+    },
+    {
+     "cmd": "rm -rf /tmp/claude-1000/confirm-g3r3-admission-2590984 /tmp/claude-1000/confirm-g3r3-admission-probe-2618487",
+     "exit": 0,
+     "tail": "no scratch left. codex-g3 worktree clean, HEAD 9133efe"
+    }
+   ]
+  },
+  {
+   "lens": "stream",
+   "verdict_hint": "pass",
+   "fabrication_check": "These claims reproduced exactly at 9133efe: relay files 72, tests/g/jobs 52, --list '79 mutants over 46 named cases', tests/g whole 559, and G3 CLI 79/79. The G2 R3 merge left no jobs.py code change for C1, matching the evidence note 'Cases only; the code was already wrapped'. The only round-3 production edits in scope are jobs.py create_job (N3) and a pilot.py docstring. The kill texts quoted in G3-9e3bc71.md for now_outage_is_a_500 ('db_now','GET',''), result_object_outage_is_a_500 ('read_result','GET','/result'), already_terminal_read_swallowed (200, None), jobs_route_shadow_checked_partially (DID NOT RAISE) and start_failure_cancels ([start] assert 1 == 0) match the hand runs. My first hand pass gave misleading kill lines for two mutants: a stale same-size .pyc was reused within one second. I reran with PYTHONDONTWRITEBYTECODE=1 and cleared __pycache__, and only the clean-run results are reported. Not reproduced here: the G list 306 full run (only its 6 route-table mutants), INFRX_MUTANTS=all 85, and contracts 1011.",
+   "cleanup": "I removed the scratch /tmp/claude-1000/confirm-g3r3-stream-2591087, including the second hand-mutation copy and its probe test file. Every hand-mutated file was restored before removal (cmp against 9133efe showed them clean). The codex-g3 worktree was not modified: git status is empty and HEAD is 9133efe. No Docker, no network, no secrets.",
+   "mutants": [
+    {
+     "name": "now_outage_is_a_500 (declared, by hand)",
+     "edit": "jobs.py Jobs.now: return await self.relay.jobs.db_now() (unwrapped)",
+     "result": "killed",
+     "killed_by": "READ_OUTAGE test_jobs.py:668 AssertionError: ('db_now', 'GET', '')"
+    },
+    {
+     "name": "result_object_outage_is_a_500 (declared, by hand)",
+     "edit": "jobs.py job_result: text = await relay.results.read_result(...) (unwrapped)",
+     "result": "killed",
+     "killed_by": "READ_OUTAGE test_jobs.py:668 AssertionError: ('read_result', 'GET', '/result')"
+    },
+    {
+     "name": "owned_read_outage_is_a_500 (declared, by hand)",
+     "edit": "jobs.py Jobs.owned unwrapped",
+     "result": "killed",
+     "killed_by": "READ_OUTAGE test_jobs.py:647 AssertionError: ('get_owned', 'GET', '')"
+    },
+    {
+     "name": "probe_outage_is_a_500 (declared, by hand)",
+     "edit": "jobs.py job_events: journal probe unwrapped",
+     "result": "killed",
+     "killed_by": "READ_OUTAGE test_jobs.py:647 AssertionError: ('read_owned', 'GET', '/events')"
+    },
+    {
+     "name": "already_terminal_read_swallowed (declared, by hand)",
+     "edit": "relay.py _cancel AlreadyTerminal branch: re-read wrapped in try/except Exception: return None",
+     "result": "killed",
+     "killed_by": "TERMINAL_READ_OUTAGE test_jobs.py:1117 assert (200, None) == (503, 'dependency_unavailable')"
+    },
+    {
+     "name": "jobs_route_shadow_checked_partially (declared, by hand)",
+     "edit": "ingress.py picked over JOBS_ROUTES[:2]",
+     "result": "killed",
+     "killed_by": "TABLE test_jobs.py:1306 Failed: DID NOT RAISE RuntimeMisconfigured (DELETE-only catch-all iteration)"
+    },
+    {
+     "name": "start_failure_cancels (declared, by hand)",
+     "edit": "jobs.py _Events: headers send wrapped in cancel-and-reraise",
+     "result": "killed",
+     "killed_by": "OBSERVER_FAILS[start] test_jobs.py:928 assert 1 == 0 (store cancel count). Via the runner: 1 failed, 2 passed, so only [start] dies, for the invariant's reason"
+    },
+    {
+     "name": "events_error_cancels (declared, by hand)",
+     "edit": "jobs.py _Events except: relay.cancel(..., quiet=True) first",
+     "result": "killed",
+     "killed_by": "OBSERVER_FAILS[identity] test_jobs.py:928 assert 1 == 0. Via the runner: all 3 parametrizations fail"
+    },
+    {
+     "name": "delete_quiet (declared, by hand)",
+     "edit": "jobs.py cancel_job: relay.cancel(..., quiet=True)",
+     "result": "killed",
+     "killed_by": "DELETE_OUTAGE test_jobs.py:1091 assert (200, None) == (503, 'dependency_unavailable')"
+    },
+    {
+     "name": "OWN_delete_now_unwrapped",
+     "edit": "jobs.py cancel_job only: await relay.jobs.db_now() instead of jobs.now()",
+     "result": "killed",
+     "killed_by": "READ_OUTAGE test_jobs.py:668 AssertionError: ('db_now', 'DELETE', '')"
+    },
+    {
+     "name": "OWN_result_now_unwrapped",
+     "edit": "jobs.py job_result only: if await relay.jobs.db_now() >= expires",
+     "result": "killed",
+     "killed_by": "READ_OUTAGE test_jobs.py:668 AssertionError: ('db_now', 'GET', '/result')"
+    },
+    {
+     "name": "OWN_delete_owned_unwrapped",
+     "edit": "jobs.py cancel_job only: admission, _ = await relay._owned(org, handle)",
+     "result": "killed",
+     "killed_by": "READ_OUTAGE test_jobs.py:647 AssertionError: ('get_owned', 'DELETE', '')"
+    },
+    {
+     "name": "OWN_events_owned_unwrapped",
+     "edit": "jobs.py job_events only: relay._owned unwrapped",
+     "result": "killed",
+     "killed_by": "READ_OUTAGE test_jobs.py:647 AssertionError: ('get_owned', 'GET', '/events')"
+    },
+    {
+     "name": "OWN_already_terminal_not_read",
+     "edit": "relay.py _cancel AlreadyTerminal branch: return None (no re-read)",
+     "result": "killed",
+     "killed_by": "TERMINAL_READ_OUTAGE test_jobs.py:1117 assert (200, None) == (503, 'dependency_unavailable')"
+    },
+    {
+     "name": "OWN_already_terminal_reraised",
+     "edit": "relay.py _cancel AlreadyTerminal branch: raise",
+     "result": "killed",
+     "killed_by": "TERMINAL_READ_OUTAGE test_jobs.py:1117 assert (500, 'internal_error') == (503, 'dependency_unavailable')"
+    },
+    {
+     "name": "OWN_picked_skips_delete",
+     "edit": "ingress.py picked over JOBS_ROUTES if method != 'DELETE'",
+     "result": "killed",
+     "killed_by": "TABLE test_jobs.py:1306 Failed: DID NOT RAISE RuntimeMisconfigured"
+    },
+    {
+     "name": "OWN_picked_ignores_method",
+     "edit": "ingress.py _picked scope method fixed to 'GET'",
+     "result": "killed",
+     "killed_by": "TABLE test_jobs.py:1276 RuntimeMisconfigured on the healthy table (POST /v1/jobs resolves PARTIAL). Killed, but by the typed refusal, not by the shadow iteration"
+    },
+    {
+     "name": "OWN_observer_identity_failure_cancels",
+     "edit": "jobs.py _Events: identity emit wrapped in cancel-and-reraise",
+     "result": "killed",
+     "killed_by": "OBSERVER_FAILS[identity] test_jobs.py:928 assert 1 == 0"
+    },
+    {
+     "name": "OWN_cancel_unshielded",
+     "edit": "relay.py cancel: return await task (no asyncio.shield)",
+     "result": "killed",
+     "killed_by": "MIDWAY test_jobs.py:1077 assert JobState.preparing is JobState.cancelled"
+    },
+    {
+     "name": "OWN_owner_accepts_operator",
+     "edit": "jobs.py owner: drop the audience-in-OWNERS check",
+     "result": "killed",
+     "killed_by": "OPERATOR test_jobs.py:687 AssertionError: ('GET', '', b'{...state: preparing...}')"
+    },
+    {
+     "name": "OWN_dependency_leaks_driver_text",
+     "edit": "relay.py _dependency: raise DependencyUnavailable(str(exc))",
+     "result": "survived (equivalent)",
+     "killed_by": "None. The envelope's message is errors.MESSAGES[code] (intake.py:292), so the driver text never reaches the body; the edit only removes the log line"
+    },
+    {
+     "name": "regression set via runner (G3 list)",
+     "edit": "events_outside_cancel_cancels, expired_job_served_as_running, provider_dev_owns_none, jobs_route_shadow_tolerated, second_jobs_route_tolerated, partial_jobs_mount_tolerated, jobs_routes_unnamed, observer_disconnect_cancels, detach_check_removed, journal_checked_after_headers, cancel_resettles_a_completed_job, delete_unshielded, status_leaks_foreign, operator_owns_jobs, handle_grammar_unchecked",
+     "result": "15/15 killed",
+     "killed_by": "named cases (runner)"
+    },
+    {
+     "name": "G list route-table mutants via runner",
+     "edit": "second_chat_route_tolerated, pattern_route_shadows_the_ingress, chat_route_names_intake, pilot_serves_the_legacy_route, legacy_route_beside_the_ingress, no_metered_ingress_accepted",
+     "result": "6/6 killed",
+     "killed_by": "test_f_base__exactly_one_chat_route_and_it_is_the_ingress / test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "git -C <codex-g3> archive 9133efe | tar -x -C /tmp/claude-1000/confirm-g3r3-stream-2591087 && UV_OFFLINE=1 make api-env",
+     "exit": 0,
+     "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g/test_relay_sync.py tests/g/test_relay_sse.py tests/g/test_relay_matrix.py tests/g/test_relay_recovery.py",
+     "exit": 0,
+     "tail": "72 passed in 1.81s"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g/jobs --ignore=tests/g/jobs/test_jobs_mutants.py",
+     "exit": 0,
+     "tail": "52 passed in 1.26s"
+    },
+    {
+     "cmd": "uv run --frozen python -m tests.g.jobs.jobs_mutants --list | tail -1",
+     "exit": 0,
+     "tail": "79 mutants over 46 named cases"
+    },
+    {
+     "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g   (whole, mutant subsets included)",
+     "exit": 0,
+     "tail": "559 passed, 2 warnings in 152.70s (0:02:32)"
+    },
+    {
+     "cmd": "uv run --frozen python -m tests.g.jobs.jobs_mutants now_outage_is_a_500 result_object_outage_is_a_500 already_terminal_read_swallowed jobs_route_shadow_checked_partially start_failure_cancels events_error_cancels delete_quiet owned_read_outage_is_a_500 probe_outage_is_a_500",
+     "exit": 0,
+     "tail": "start_failure_cancels: 1 failed, 2 passed; events_error_cancels: 3 failed; 9/9 killed"
+    },
+    {
+     "cmd": "uv run --frozen python -m tests.g.jobs.jobs_mutants <15 round-2 regression mutants>",
+     "exit": 0,
+     "tail": "15/15 killed"
+    },
+    {
+     "cmd": "uv run --frozen python -m tests.g.mutants second_chat_route_tolerated pattern_route_shadows_the_ingress chat_route_names_intake pilot_serves_the_legacy_route legacy_route_beside_the_ingress no_metered_ingress_accepted",
+     "exit": 0,
+     "tail": "6/6 killed"
+    },
+    {
+     "cmd": "uv run --frozen python -m tests.g.jobs.jobs_mutants   (full G3 list)",
+     "exit": 0,
+     "tail": "79/79 killed"
+    },
+    {
+     "cmd": "PYTHONDONTWRITEBYTECODE=1 python tools/mut.py spec.json   (hand-applied declared + own mutants in a second scratch copy, R83 shape: anchor count 1, named case, restore)",
+     "exit": 0,
+     "tail": "9 declared killed for the stated reasons; 11 own: 10 killed, 1 equivalent (OWN_dependency_leaks_driver_text)"
+    },
+    {
+     "cmd": "pytest -q tests/g/jobs/test_probe_confirm.py   (scratch probes: read_result KeyError/ConnectionError/OSError -> 503; observer failing on a later delta; DELETE of a running job with db_now down then retry; AlreadyTerminal on a cancelled job; route-table variants (POST /v1/{rest:path}, GET /v1/jobs/{rest:path}, /v1/jobs/{h}/{t} before -> refused; catch-alls after the router -> allowed; no jobs router -> allowed); foreign provider_dev -> 404 byte-identical to unknown on all four routes)",
+     "exit": 0,
+     "tail": "8 passed in 0.99s"
+    }
+   ]
+  }
+ ],
+ "confirmed_blocking": [],
+ "refuted_blocking": [],
+ "unverified_blocking": [],
+ "nonblocking": [
+  {
+   "id": "ADM-R3-N1",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/tests/g/jobs/test_jobs.py",
+   "line": "217",
+   "claim_broken": "The rule that a bound in-flight job is answered as it stands, with no attach and never a cancel (the _resume docstring, and the cancel half of ADM-R2-B1), is pinned only for CREDIT. The legacy half has no killable test in tests/g quick (500) or in the G3 list.",
+   "evidence": "Hand mutant relay.py:230 'if job.request_id in self.media.by_job:' -> '... and self.regime == CREDIT:' makes a legacy replay of a bound in-flight job run _admitted again (re-attach). It SURVIVES tests/g/jobs (52 passed) and tests/g quick (500 passed). A probe of a legacy running job with M's staged index cleared (world.media.refs.clear()) and a same-key POST /v1/jobs retry: head answers 202, 0 cancels, and the job settles; under the mutant the retry answers 404 not_found and _admitted's cancel path runs on a running job. Head code is correct. Only the test is missing.",
+   "minimal_fix": "In test_dur_admit__an_in_flight_async_replay_prepares_nothing_when_the_host_fails, also make attach fail before the retry (clear world.media.refs or fail 'attach'). Assert 202 with 0 cancels, then add INFLIGHT_403 to inflight_async_replay_rechecked's cases (the 'if False:' edit then dies on the legacy path too).",
+   "lens": "admission"
+  },
+  {
+   "id": "ADM-R3-N2",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/contracts/fakes/state.py",
+   "line": "495",
+   "claim_broken": "This is outside the lens and predates G3 (G2/D behaviour). On an expired mapping, lookup returns None, so the retry fetches, prepares and stages the media and attempts an admission before answering 410. With an expired media URL it would answer 400 media_fetch_failed instead of 410.",
+   "evidence": "Probe: async job settled, clock advanced by idempotency_ttl_s, then a sync same-key retry. Result: (410, idempotency_expired), staged payloads +1, admit calls 2. EXPIRED_KEY asserts only jobs, holds and ledger, not staged payloads or fetches.",
+   "minimal_fix": "Have lookup raise IdempotencyExpired (or return a tombstone marker) so the relay answers 410 before prepare and stage. This is a G2/D5 lookup-contract question, so record it as a Limit if it is deferred.",
+   "lens": "admission"
+  },
+  {
+   "id": "ADM-R3-N3",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/gateway/routes/validate.py",
+   "line": "351",
+   "claim_broken": "This is outside the lens (G1's parser). RFC 7240 allows parameters after ';', but a Prefer of 'respond-async; x=1' is parsed as sync. The identity digest is still consistent with the mode actually answered.",
+   "evidence": "Probe with a recorder on Relay.admit: Prefer 'respond-async; x=1' gives ExecutionMode.sync. 'foo, respond-async' and 'RESPOND-ASYNC, wait=5' give async, with the same folded digest as POST /v1/jobs.",
+   "minimal_fix": "Split each preference on ';' before '=' in execution_mode (token.split(';')[0].split('=')[0]), or record the limitation.",
+   "lens": "admission"
+  },
+  {
+   "id": "stream-R3-N1",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/gateway/routes/jobs.py",
+   "line": "324-328",
+   "claim_broken": "The cancel_job comment says an outage is a retryable 503 and 'the job is untouched'. On a job that is not terminal, a db_now outage after relay.cancel has committed gives a 503 even though the job is already cancelled. The retry then answers 'cancelled' with one usage_projection (checked with a scratch probe). No named case covers this, because the C1 db_now/DELETE row uses a succeeded job only.",
+   "evidence": "Scratch probe test_delete_running_db_now_down_then_retry: DELETE with world.jobs.db_now raising ConnectionError(DSN) returned 503 dependency_unavailable with no secret in the body. job.state was already JobState.cancelled. The retried DELETE returned 200 'cancelled', and outbox usage_projection count was 1. Behaviour is acceptable because the retry answers the committed outcome, but the comment overstates 'untouched'.",
+   "minimal_fix": "Change the comment to say the retry answers what is committed, not that the job is untouched. Optionally add a running-job db_now row to DELETE_OUTAGE.",
+   "lens": "stream"
+  },
+  {
+   "id": "stream-R3-N2",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/gateway/routes/jobs.py",
+   "line": "295",
+   "claim_broken": "The brief asks whether KeyError from read_result is a 500. It is a 503: _dependency maps every non-DomainError to dependency_unavailable. If the result object is permanently missing for a succeeded job, the client is told to retry until result_ttl_s passes, and after that the route answers result_expired without reading. On PgJobStore, an empty row set gives IndexError at rows[0][0], which is also a 503.",
+   "evidence": "Scratch probe test_result_object_errors_are_503 parametrized over KeyError, ConnectionError and OSError: each gives 503, dependency_unavailable, Retry-After present, no 'secret' in the body, the job stays succeeded, and the result is served once the fault is removed. The retry loop is bounded by the TTL check at jobs.py:293.",
+   "minimal_fix": "None required. If a missing object should be a 500 integrity error, map KeyError/IndexError from read_result before _dependency, or have D5's read_result raise a typed error. Otherwise state the TTL-bounded 503 as the intended behaviour.",
+   "lens": "stream"
+  }
+ ]
+}
