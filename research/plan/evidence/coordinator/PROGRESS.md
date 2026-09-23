@@ -2,7 +2,7 @@
 
 Generated 2026-09-23T10:59:19Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
-**Backend packages: 21 done · 6 in progress · 3 remaining (of 30).**
+**Backend packages: 22 done · 6 in progress · 2 remaining (of 30).**
 
 | Band | Task | Title | Status | Manifest | Note |
 |---|---|---|---|---|---|
@@ -27,7 +27,7 @@ Generated 2026-09-23T10:59:19Z from `tasks.json` (manifest v4) and `progress-sta
 | B1 Durable endpoint | G1R | Revise ingress for consumer and provider endpoint audiences | **done** | implemented |  |
 | B1 Durable endpoint | G2 | Synchronous chat and persistent SSE relay | **in-progress** | planned | relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) → fix lane codex/w-consumed-parameters |
 | B1 Durable endpoint | G3 | Explicit jobs, status, cancellation and replay | **in-progress** | planned | POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/ |
-| B1 Durable endpoint | G4U | Owned upload HTTP adapter | **remaining** | planned |  |
+| B1 Durable endpoint | G4U | Owned upload HTTP adapter | **done** | implemented |  |
 | B1 Durable endpoint | G6B | Headless endpoint provisioning and operations | **done** | implemented |  |
 | B2 Integrate & deploy | E3B | Backend-only durability, security and protocol integration gate | **in-progress** | planned | namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges |
 | B2 Integrate & deploy | I2B | Reproducible Marlin endpoint deployment independent of frontends | **done** | implemented | needs allocated GPU/staging (P-04) |
@@ -58,7 +58,7 @@ Generated 2026-09-23T10:59:19Z from `tasks.json` (manifest v4) and `progress-sta
 ## ETA (provisional, cadence-based — not a commitment)
 
 - Observed cadence: 11 tasks integrated in 15.7 h of wall clock (0.70 tasks/h at 4–6 concurrent lanes, each task 2–4 review rounds), incl. two rate-limit interruptions.
-- Local software to BACKEND-LOCAL/E3B and the software half of the rest (6 packages): ~9 h at observed cadence, ~17 h if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
+- Local software to BACKEND-LOCAL/E3B and the software half of the rest (5 packages): ~7 h at observed cadence, ~14 h if wave-3 packages run at half that rate (they are larger and the D lane is serial); the serial critical path alone (D1R→D2→D3→D4→D5→E3B) is at least ~22 h.
 - GPU-gated packages (E1B, W4, E4B): **no ETA until P-04 is allocated**; their software (harnesses, scripts, runbooks) proceeds inside the local estimate.
 - Continuous coordinator time is assumed; interruptions (rate limits, restarts) extend wall clock, not work.
 
