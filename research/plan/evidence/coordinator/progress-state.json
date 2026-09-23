@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T17:54:29Z",
+  "updated": "2026-09-23T18:01:05Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,7 +11,7 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "final verification at 0924cf2 fix_required (e2m69 anchor stale after round 3; counts() skipped pattern unpinned) \u2192 round 4 running \u2192 single verifier \u2192 MERGE (IR2-1, IR2-3) \u2192 I3B (IR2-2)",
+      "phase": "round 4 HANDED BACK d0d523f (e2m69 re-anchored + anchor guard; counts() pinned; e3bm54\u201358); single verifier running \u2192 MERGE (IR2-1 ir1-r2.diff one commit; IR2-3 r31-dr04.diff) \u2192 I3B (IR2-2 r4-ir22.diff incl. KNOWN_STALE = {})",
       "since": "2026-09-22T18:46:49Z",
       "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
     },
@@ -42,8 +42,8 @@
       "since": "2026-09-23T15:38:21Z"
     },
     "E3B2": {
-      "phase": "fix_required at 0924cf2 (wf_b2062feb-5f8; gate reran green except e2m69; JSON evidence/e/E3B2-verify-0924cf2.json) \u2192 round 4",
-      "since": "2026-09-23T17:53:48Z"
+      "phase": "round-4 verifier at d0d523f running",
+      "since": "2026-09-23T18:01:05Z"
     },
     "D4": {
       "phase": "MERGED 93ba108 after the round-3 verifier pass (evidence/d/D4-verify-90efcb0.json)",
