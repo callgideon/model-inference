@@ -81,8 +81,10 @@ def client(backup: Path) -> list[str]:
 
 def run(backup: Path, *argv: str) -> str:
     try:
+        # errors="replace": a client reading a damaged archive can print non-UTF-8 bytes,
+        # which must end in the RuntimeError below, not in a UnicodeDecodeError.
         result = subprocess.run([*client(backup), *argv], capture_output=True, text=True,
-                                timeout=1800)
+                                errors="replace", timeout=1800)
     except subprocess.TimeoutExpired:
         # Its text is the whole argv, conninfo included: names only, and not chained.
         raise RuntimeError(f"{argv[0]} timed out after 1800 s") from None
