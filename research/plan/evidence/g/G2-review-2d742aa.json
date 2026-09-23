@@ -1,0 +1,1103 @@
+{
+  "verdict": "fix_required",
+  "head": "2d742aa",
+  "reviews": [
+    {
+      "lens": "money",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every number above was copied from command output in this session: the 385 and 420 pass counts at 2d742aa, each attack case's printed status, code and store state, and each mutant's exit and failing case names. The implementer's 385 focused count reproduces at head. The G mutant list (264 cases / 257 mutants) was not re-run, because it takes about 11 min and my lens mutants cover the money paths instead. Checked and not a defect: concurrent same-key admission (exactly one job and one hold in both regimes), a same-key different body (409 idempotency_conflict, nothing admitted), an operator key (403 before accept in both regimes), a foreign handle (not_found, identical to unknown), the regime (read once from settings at build time, and the settings are immutable), and a CREDIT card other than ACTIVE_RATE_CARD_VERSION (refused, hold released). An async request is refused before staging (no objects, no job), but after the body is read and parsed, because the mode comes from the validator. The W-new diff was reviewed as text: the engine still sends the record's ceiling as max_tokens (its test asserts 256), so no uncapped generation. The cutover diff was not applied. Not verified: PgJobStore, the real catalog, D4's journal (fakes only, per the brief).",
+      "cleanup": "Scratch /tmp/claude-1000/review-g2-money-971997 (archive of 2d742aa plus .venv, my attack files and the mutant driver) was removed with rm -rf, and its absence was confirmed. Nothing was edited or committed in any worktree. `git -C codex-g2 status --short` printed nothing and HEAD is still 2d742aa. No Docker, no network, no AWS, no Valkey.",
+      "mutants": [
+        {
+          "name": "m01_regime_swapped_at_admit",
+          "edit": "relay.py _accept: `if self.regime == CREDIT` -> `!= CREDIT` in admit dispatch",
+          "result": "KILLED (exit 124/many F: legacy and credit cases)",
+          "killed_by": "test_relay_* matrix/sync cases, test_f_base__the_composed_pilot_admits_in_the_configured_regime"
+        },
+        {
+          "name": "m02_bound_without_grace",
+          "edit": "bound=deadline + timedelta(seconds=self.grace_s) -> bound=deadline",
+          "result": "SURVIVED (385 passed)"
+        },
+        {
+          "name": "m03_bound_from_request_in_legacy",
+          "edit": "deadline = request.deadline_at if CREDIT else admission.deadline_at -> request.deadline_at",
+          "result": "SURVIVED (385 passed)"
+        },
+        {
+          "name": "m04_card_check_inverted",
+          "edit": "pins.rate_card_version != active -> ==",
+          "result": "KILLED",
+          "killed_by": "test_api_modes__a_card_this_deployment_did_not_approve_is_refused_and_released (+3)"
+        },
+        {
+          "name": "m05_missing_serving_not_refused",
+          "edit": "if serving is None: raise NotFound -> if False:",
+          "result": "SURVIVED (385 passed)"
+        },
+        {
+          "name": "m06_cause_fallback_unguarded",
+          "edit": "refused.param != 'cause' or cause is client_cancelled -> refused.param != 'cause'",
+          "result": "SURVIVED (385 passed; only reachable if a store refuses client_cancelled with param=cause - no such store)"
+        },
+        {
+          "name": "m07_non_success_answered_200",
+          "edit": "answer: state is not succeeded -> state is failed",
+          "result": "KILLED",
+          "killed_by": "test_api_modes__a_replay_of_a_cancelled_job_is_rendered_cancelled_never_failed, test_api_modes__a_credit_job_that_expires_unclaimed_is_rendered_expired"
+        },
+        {
+          "name": "m08_at_bound_cancel_client_cause",
+          "edit": "_at_bound cause=sync_deadline -> client_disconnected (billable)",
+          "result": "KILLED",
+          "killed_by": "test_api_modes__a_sync_timeout_cancels_and_answers_the_deadline"
+        },
+        {
+          "name": "m09_status_read_domain_error_swallowed",
+          "edit": "_outcome except DomainError: raise -> return None",
+          "result": "SURVIVED (385 passed; near-equivalent: get_owned raises no DomainError for an owned job)"
+        },
+        {
+          "name": "m10_idempotency_digest_constant",
+          "edit": "ingress.py idempotency(..., normalized.payload_digest, ...) -> constant digest",
+          "result": "KILLED",
+          "killed_by": "test_f_base__the_derived_ceilings_and_mode_reach_the_acceptor"
+        },
+        {
+          "name": "m11_inference_id_overwritten_on_replay",
+          "edit": "ingress.py headers.setdefault(Inference-Id) -> headers[...] = request_id",
+          "result": "KILLED",
+          "killed_by": "test_dur_output__a_lost_answer_is_replayed_by_key_with_one_settlement"
+        },
+        {
+          "name": "m12_refusal_cancel_quiet_false",
+          "edit": "_admitted except: cancel(quiet=True) -> cancel(quiet=False)",
+          "result": "SURVIVED (385 passed)"
+        },
+        {
+          "name": "m13_credit_bound_from_admission",
+          "edit": "request.deadline_at if CREDIT -> admission.deadline_at if CREDIT",
+          "result": "KILLED (AdmissionV2 has no deadline_at)",
+          "killed_by": "test_api_modes__a_card_this_deployment_did_not_approve_is_refused_and_released (+3)"
+        },
+        {
+          "name": "m14_expired_not_deadline",
+          "edit": "_refusal: state is expired or cause in DEADLINE_CAUSES -> cause in DEADLINE_CAUSES",
+          "result": "SURVIVED (equivalent: expired always carries queue_wait_expired, which is in DEADLINE_CAUSES)"
+        },
+        {
+          "name": "m15_wait_outcome_errors_not_retried",
+          "edit": "_outcome except Exception: log; return None -> raise",
+          "result": "SURVIVED (385 passed)"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-g2 archive 2d742aa | tar -x -C /tmp/claude-1000/review-g2-money-971997 && make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g   (pristine, includes default mutant subset)",
+          "exit": 0,
+          "tail": "420 passed, 2 warnings in 121.16s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g --ignore=tests/g/test_mutants.py --ignore=tests/g/ops/test_mutants.py   (pristine, head 2d742aa)",
+          "exit": 0,
+          "tail": "385 passed, 2 warnings in 6.30s"
+        },
+        {
+          "cmd": "pytest tests/g/test_zz_money_attack.py -k a_concurrent and legacy (gather x2 same key)",
+          "exit": 0,
+          "tail": "1 job, both 200 identical, one Idempotency-Replayed; OBJECTS: 2 payload objects for 1 job"
+        },
+        {
+          "cmd": "pytest ... -k a2_concurrent (CREDIT gather x2 same key)",
+          "exit": 0,
+          "tail": "CREDIT CONC 504 504 cancelled released_platform_absorbed released True; RESERVED 10.01440000 SEED 10.01440000 (one hold, released)"
+        },
+        {
+          "cmd": "pytest ... -k b_same (same key, different body)",
+          "exit": 0,
+          "tail": "CONFLICT 409 idempotency_conflict; 1 job, ledger unchanged; NEW OBJECTS AFTER CONFLICT ['payloads/<org>/f782d405-....json']"
+        },
+        {
+          "cmd": "pytest ... -k c_replay (legacy attach failure after admit, then same-key retry)",
+          "exit": 1,
+          "tail": "FIRST 503 retry-after 5; JOB AFTER 503 cancelled client_cancelled released_free; RETRY 409 state_conflict {state: cancelled}"
+        },
+        {
+          "cmd": "pytest attack_c2 (CREDIT catalog.serving_revision fails after admit_credit, then same-key retry)",
+          "exit": 1,
+          "tail": "FIRST 503 dependency_unavailable 5 | job cancelled client_cancelled released_free; RETRY 409 state_conflict true"
+        },
+        {
+          "cmd": "pytest ... -k d_card (unapproved card + cancel raising)",
+          "exit": 1,
+          "tail": "REFUSED 400 invalid_request; JOB preparing False released False; log: cancel of job ... failed; its stored deadline still ends it"
+        },
+        {
+          "cmd": "pytest ... -k e_card (unapproved card, same key twice)",
+          "exit": 1,
+          "tail": "FIRST 400 invalid_request AGAIN 409 state_conflict"
+        },
+        {
+          "cmd": "pytest ... -k f_admit (admit raising ConnectionError, video)",
+          "exit": 1,
+          "tail": "503; ORPHAN OBJECTS ['media/<org>/v1/2664eb15d36e358b/source', 'payloads/<org>/<rid>.json']"
+        },
+        {
+          "cmd": "pytest ... -k g_insuff (grant=0, video)",
+          "exit": 1,
+          "tail": "NOCREDIT 402 insufficient_credit; OBJECTS [media source + payload]"
+        },
+        {
+          "cmd": "pytest ... -k h_replay (video 200 with key v1, media host then 403, replay v1)",
+          "exit": 1,
+          "tail": "REPLAY 400 {code: media_fetch_failed}; expected the committed 200"
+        },
+        {
+          "cmd": "pytest ... -k i_succ (succeeded completed usage=None after publication, sync)",
+          "exit": 1,
+          "tail": "OUTCOME succeeded held_unknown REPLY 500 internal_error; AttributeError: 'NoneType' object has no attribute 'completion_tokens'"
+        },
+        {
+          "cmd": "pytest ... -k j_foreign (read_owned foreign handle vs unknown)",
+          "exit": 0,
+          "tail": "1 passed (NotFound identical modulo handle)"
+        },
+        {
+          "cmd": "pytest test_zz_op.py (operator-audience key row, legacy and credit)",
+          "exit": 0,
+          "tail": "OPERATOR legacy_usd 403 forbidden; OPERATOR credit 403 forbidden; no job, no object"
+        },
+        {
+          "cmd": "python3 mut.py (15 single-edit mutants, each: apply, focused G suite, restore)",
+          "exit": 0,
+          "tail": "KILLED: m01 m04 m07 m08 m10 m11 m13; SURVIVED: m02 m03 m05 m06 m09 m12 m14 m15"
+        },
+        {
+          "cmd": "rm -rf /tmp/claude-1000/review-g2-money-971997",
+          "exit": 0,
+          "tail": "scratch removed"
+        }
+      ]
+    },
+    {
+      "lens": "stream",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every count, mutant result and probe output quoted here comes from a command run in this session on a scratch archive of 2d742aa. Checked and confirmed: all eight DUR-OUTPUT drills assert store state, but the journal-read drill's check is vacuous (S5) and the upstream-error drill has no inflight assertion (S8). How the relay handles ReplayGap, JournalExpired and InvalidCursor was measured on the fake: gap and expired each render their own code, cancel the job with client_cancelled, then send [DONE]. InvalidCursor never arises on the live relay, because the relay's cursor comes from the store. That the relay relays nothing uncommitted is structural: its only source is read_owned, and the fake's append commits atomically, so no uncommitted state could be injected. The uvicorn shutdown order and the send-after-disconnect behaviour were read from the installed uvicorn 0.53 source. The about 430 s sync deadline comes from the fixture budgets (120+10+300). The cutover and W-new diffs were reviewed as text only and not applied. The full 257-mutant G list was not rerun; only an 18-mutant subset was. No Docker, Valkey, network or AWS was used.",
+      "cleanup": "The scratch tree /tmp/claude-1000/review-g2-stream-972025 (with its .venv, probe file and mutant runner) and its env log have been removed. The ls glob finds nothing. relay.py was restored after every mutant and diffed clean against 2d742aa before removal. Nothing was edited or committed in any worktree: codex-g2 status is clean at 2d742aa. No containers or ports were used.",
+      "mutants": [
+        {
+          "name": "stream_bound_never_checked",
+          "edit": "relay.py:342 `if ending is None and self._now() >= job.bound:` -> `if False:`",
+          "result": "survived (52 relay cases pass)",
+          "killed_by": "reviewer probe test_probe_stream_bound_is_sync_deadline (timeout)"
+        },
+        {
+          "name": "unnamed_stream_cancel_dropped",
+          "edit": "relay.py:510 `if not named:` -> `if False:`",
+          "result": "survived",
+          "killed_by": "reviewer probe test_probe_unnamed_stream_cancelled_from_outside_cancels"
+        },
+        {
+          "name": "named_before_identity",
+          "edit": "relay.py:497 `named = False` -> `named = True`",
+          "result": "survived",
+          "killed_by": "reviewer probe test_probe_unnamed_stream_cancelled_from_outside_cancels"
+        },
+        {
+          "name": "delta_relays_content_alias",
+          "edit": "relay.py:426 `.get(\"visible\")` -> `.get(\"visible\", chunk.payload.get(\"content\"))`",
+          "result": "survived",
+          "killed_by": "reviewer probe test_probe_nonvisible_events_never_data"
+        },
+        {
+          "name": "usage_event_relayed_as_data",
+          "edit": "relay.py:433 final `return None` -> `return wire.SseFrame(data=chunk.payload).render()`",
+          "result": "survived",
+          "killed_by": "reviewer probe test_probe_nonvisible_events_never_data"
+        },
+        {
+          "name": "send_failure_only_oserror_subclass_conn",
+          "edit": "relay.py:516 `isinstance(failure, OSError)` -> `isinstance(failure, ConnectionResetError)`",
+          "result": "killed",
+          "killed_by": "test_api_stream__a_client_gone_before_the_first_byte_still_cancels"
+        },
+        {
+          "name": "fallback_log_dropped",
+          "edit": "relay.py:230-231 delete the log.warning in the cause fallback",
+          "result": "survived (also by probes)",
+          "killed_by": ""
+        },
+        {
+          "name": "fallback_on_any_param",
+          "edit": "relay.py:224 drop `refused.param != \"cause\" or`",
+          "result": "survived (also by probes)",
+          "killed_by": ""
+        },
+        {
+          "name": "ended_on_failed_read_after_outcome",
+          "edit": "relay.py:336 `if chunks is not None and ending is not None:` -> `if ending is not None:`",
+          "result": "survived (also by probes)",
+          "killed_by": ""
+        },
+        {
+          "name": "stream_bound_cause_client_cancelled",
+          "edit": "relay.py:256 cause=sync_deadline -> client_disconnected",
+          "result": "killed",
+          "killed_by": "test_api_modes__a_sync_timeout_cancels_and_answers_the_deadline"
+        },
+        {
+          "name": "left_client_gets_error_frame",
+          "edit": "relay.py:519-520 delete `if left: return`",
+          "result": "killed",
+          "killed_by": "test_api_stream__a_client_gone_before_the_first_byte_still_cancels"
+        },
+        {
+          "name": "gone_checked_after_read",
+          "edit": "relay.py:308-311 disconnect branch -> `if gone.done() and False: return`",
+          "result": "killed (timeout)",
+          "killed_by": "test_api_stream__a_disconnect_mid_stream_cancels_durably (hang)"
+        },
+        {
+          "name": "terminal_outcome_from_ending",
+          "edit": "relay.py:326 `outcome = ending or (await self._owned(...))[1]`",
+          "result": "survived: equivalent (both are the committed terminal outcome)",
+          "killed_by": ""
+        },
+        {
+          "name": "cancel_strong_ref_dropped",
+          "edit": "relay.py:208 `self._cancels.add(task)` -> `pass`",
+          "result": "survived: not deterministically testable (GC)",
+          "killed_by": ""
+        },
+        {
+          "name": "progress_phase_from_payload_raw",
+          "edit": "relay.py:419 `phase = payload.get(\"phase\") or payload.get(\"raw\")`",
+          "result": "survived (low value; phase string relayed verbatim)",
+          "killed_by": ""
+        },
+        {
+          "name": "implementer list subset (18 stream/cancel mutants)",
+          "edit": "restart_cancels_a_named_stream, stream_disconnect_cause_dropped, send_failure_cause_dropped, cause_fallback_missing, unstarted_stream_leaks, cancel_unshielded, journal_outage_ends_the_stream, done_without_its_cursor, relay_reads_raw, keepalive_as_data, stream_ends_on_an_empty_page, disconnect_cause_dropped, deadline_cause_dropped, stream_disconnect_not_cancelled, gap_reported_as_unknown, no_done_after_an_ended_job, outcome_fallback_ignored, sync_wait_orphans_on_cancellation",
+          "result": "all 18 killed",
+          "killed_by": "tests/g/test_mutants.py (INFRX_MUTANTS=all -k subset)"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C <codex-g2> archive 2d742aa | tar -x -C /tmp/claude-1000/review-g2-stream-972025 && make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 / + valkey==6.1.1 / + zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g --ignore=tests/g/test_mutants.py --ignore=tests/g/ops/test_mutants.py",
+          "exit": 0,
+          "tail": "385 passed, 2 warnings in 6.40s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g/test_review_stream.py -s  (13 reviewer probes, scratch only)",
+          "exit": 0,
+          "tail": "CAUSE_NON_OSERROR cancelled client_cancelled; CALLS disconnect [client_disconnected, client_cancelled]; CALLS deadline [sync_deadline, client_cancelled, client_cancelled]; FOREIGN_CANCEL_RENDER [('state_conflict','cancelled')] [DONE]; EXPIRED ['journal_expired'] ... 'data: [DONE]' cancelled client_cancelled; RESTART_AFTER_LEAVE running; LOST_CANCEL [1] preparing; LIFESPAN_LOST_CANCEL started=[1] done=[] state=preparing; 12 passed + 1 passed"
+        },
+        {
+          "cmd": "python mut.py (15 single-edit mutants on relay.py; each vs tests/g/test_relay_{sse,sync,matrix}.py + test_composition.py, then vs probes; timeout 90s; relay.py restored and diffed against 2d742aa)",
+          "exit": 0,
+          "tail": "8 survived theirs (stream_bound_never_checked, unnamed_stream_cancel_dropped, named_before_identity, delta_relays_content_alias, usage_event_relayed_as_data, fallback_log_dropped, fallback_on_any_param, ended_on_failed_read_after_outcome) + 3 equivalent/untestable; RELAY_RESTORED"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/g/test_mutants.py -k '<18 stream/cancel mutant names>'",
+          "exit": 0,
+          "tail": "18 passed, 246 deselected in 86.10s"
+        },
+        {
+          "cmd": "rm -rf /tmp/claude-1000/review-g2-stream-972025; git -C <codex-g2> status --short; rev-parse HEAD",
+          "exit": 0,
+          "tail": "(clean) 2d742aa663d58c61e8aecd31639bb589aebd6de3"
+        }
+      ]
+    },
+    {
+      "lens": "composition",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every result above was measured in the scratch copy of 2d742aa. No Docker, Valkey, PostgreSQL, network or AWS was used. The cutover and W-new diffs were reviewed as text only, not applied. The implementer's counts were not fully re-derived. The G suite here ran 397 passed with test_mutants deselected (23), against the claimed 385; `--list` printed 259 lines, against the claimed 264/257. Only the 14 composition and readiness mutants from their list were re-run, all killed. The full 257-mutant G list was not run under this lens. Verified directly, with no finding: build_ingress_deps refuses a None catalog/stream/objects with RuntimeMisconfigured and has no in-memory fallback (jobs/index default to PgJobStore/ValkeyScheduler, and a missing VALKEY_URL is a typed refusal). There is exactly one LargeBodies: deps.large_bodies is rt.large_bodies, the relay holds none, and G4U's router is not on this head. Reconciler.run catches step failures and keeps serving, retrying by design. Starlette runs the lifespan before serving and it stops the tasks on shutdown. The /readyz non-loopback answer is byte-identical to the unknown-path 404. validate_runtime refuses a legacy chat route in ROUTERS under pilot (R86), pinned by test_api_auth__a_pilot_never_serves_chat_through_the_legacy_route.",
+      "cleanup": "Removed /tmp/claude-1000/review-g2-composition-972059 (the scratch tree and its .venv) and the helper files /tmp/claude-1000/g2comp-mut, g2comp-env.log and g2comp_path. ls confirms none remain. No worktree was edited or committed: `git status --short` in codex-g2 printed nothing.",
+      "mutants": [
+        {
+          "name": "pool_configure_dropped",
+          "edit": "pilot.py connection_pool: `configure=configure_connection(...))` -> `)`",
+          "result": "SURVIVED (397 passed)"
+        },
+        {
+          "name": "pool_statement_timeout_zero",
+          "edit": "pilot.py: configure_connection(deployment.database_pool_statement_timeout_ms) -> configure_connection(0)",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "lifespan_pool_never_opened",
+          "edit": "pilot.py lifespan: `await lifetime.pool.open()` -> `pass`",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "lifespan_pool_never_closed",
+          "edit": "pilot.py lifespan: `await lifetime.pool.close()` -> `pass`",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "refresh_loop_runs_once",
+          "edit": "pilot.py _refresh: `while not stop.is_set():` -> `if not stop.is_set():`",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "first_probe_timeout_reads_ready",
+          "edit": "pilot.py Probe.__call__ except branch: `self.value = False` -> `self.value = True`",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "first_probe_unbounded",
+          "edit": "pilot.py Probe.__call__: `.result(self.timeout_s)` -> `.result()`",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "price_probe_ignores_active_card",
+          "edit": "pilot.py price_check: `(regime != CREDIT` -> `(True`",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "journal_probe_skips_usage",
+          "edit": "pilot.py journal_check: drop `await stream.usage()`",
+          "result": "KILLED",
+          "killed_by": "test_f_base__readiness_probes_are_cached_answers_the_lifetime_refreshes"
+        },
+        {
+          "name": "ingress_own_large_bodies",
+          "edit": "ingress.py Ingress.__init__: `self.deps.large_bodies or intake.LargeBodies()` -> `intake.LargeBodies()`",
+          "result": "KILLED",
+          "killed_by": "test_media_sec__at_most_two_large_bodies_are_in_flight"
+        },
+        {
+          "name": "silence_transport_logs_dropped",
+          "edit": "pilot.py: remove `fetch.silence_transport_logs()`",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "pool_connect_timeout_dropped",
+          "edit": "pilot.py: remove `timeout=deployment.database_pool_connect_timeout_s,`",
+          "result": "SURVIVED"
+        },
+        {
+          "name": "unix_socket_peer_is_loopback",
+          "edit": "observe/route.py: client-less peer defaults to \"127.0.0.1\" instead of \"\"",
+          "result": "SURVIVED (low impact: uvicorn binds TCP 127.0.0.1)"
+        },
+        {
+          "name": "route_table_counts_only_module",
+          "edit": "ingress.py assert_route_table: `len(served) != 1 or served[0]...` -> `served[-1]...`",
+          "result": "KILLED",
+          "killed_by": "test_f_base__exactly_one_chat_route_and_it_is_the_ingress"
+        },
+        {
+          "name": "implementer list (14 composition/readiness mutants)",
+          "edit": "pilot_built_without_{catalog,stream,objects}, two_large_body_bounds, media_store_not_shared, probe_never_refreshed, probe_asked_on_every_read, service_role_not_set, reconciler_not_run, relay_worker_id_shared, readyz_open_behind_proxy, second_chat_route_tolerated, chat_route_names_intake, readiness_is_public",
+          "result": "14/14 KILLED via python -m tests.g.mutants <name>"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-g2 archive 2d742aa | tar -x -C /tmp/claude-1000/review-g2-composition-972059 && make api-env",
+          "exit": 0,
+          "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0 EXIT=0"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q -p no:cacheprovider tests/g --deselect tests/g/test_mutants.py -x",
+          "exit": 0,
+          "tail": "397 passed, 23 deselected, 2 warnings in 35.32s"
+        },
+        {
+          "cmd": "for m in <14 composition mutants>; do python -m tests.g.mutants $m; done",
+          "exit": 0,
+          "tail": "1/1 killed (x14)"
+        },
+        {
+          "cmd": "python run.py (14 own single-edit mutants, each vs full tests/g, applied to scratch copy and restored)",
+          "exit": 0,
+          "tail": "10 SURVIVED, 4 KILLED (table above)"
+        },
+        {
+          "cmd": "python hang_exit.py (Probe over a never-answering check, timeout_s=1, then sys.exit(3)) under timeout 20",
+          "exit": 124,
+          "tail": "first answer False after 1.0 s; process never exited, elapsed=20s"
+        },
+        {
+          "cmd": "python stale.py (_refresh over a check that starts hanging)",
+          "exit": 0,
+          "tail": "after 2s of a hung check: {'price_source': 'ok', 'journal': 'ok'}"
+        },
+        {
+          "cmd": "python probe404.py (/readyz with forged peers/headers on cutover_app)",
+          "exit": 0,
+          "tail": "remote/XFF/Forwarded/v4-mapped/127.0.0.2 -> 404 byte-identical to unknown path; 127.0.0.1 and ::1 with no proxy header -> 200; X-Client-IP/CF-Connecting-IP not in PROXY_HEADERS -> 200 (Caddy always sets X-Forwarded-For, and the edge 404s /readyz)"
+        },
+        {
+          "cmd": "python shadow.py (POST /v1/{rest:path} registered before ingress)",
+          "exit": 0,
+          "tail": "assert_route_table passed; 200 {\"served_by\":\"shadow\",\"rest\":\"chat/completions\"}"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q tests/g/test_mutants.py",
+          "exit": 0,
+          "tail": "23 passed in 79.54s"
+        },
+        {
+          "cmd": "python -m tests.g.mutants --list | wc -l",
+          "exit": 0,
+          "tail": "259"
+        }
+      ]
+    },
+    {
+      "lens": "honesty",
+      "verdict_hint": "fix_required",
+      "fabrication_check": "Every quoted count I could reach reproduced exactly. G suite: 385. G list: 264 = 257 mutants + well-formedness + coverage + 5 runner self-tests. 65 new names, 192 at base. The W-new inline diff's sha256 matches (4e91aac7), and the numbers with it applied match (tests/w 117, relay files 52). The 37 = 36 I-mutant broken_runner + 1 I schema case, and with bc382ac's preflight.py fix tests/i goes to 143 passed. Both orderings close arithmetically: 2487+1 locally without q and projection, plus 192 + 3, gives 2683 = 2646+37. With the I fix, neither ordering has a failure. Cutover results: 384 / 2 / config 233. The W-new claim holds. At the head, check_parameters refuses the frozen fixture's parameters (max_tokens first), and the relay tests without the shim fail 11 of 52 with 500 state=failed. I also ran the full W lists with W-new applied (the evidence ran only the quick W suite and one mutant): 318 passed. CONSUMED_PARAMETERS is the right semantics, and the cap is not dropped. The validator derives max_output_tokens from max_tokens/max_completion_tokens within the deployment ceiling (validate.py ceilings), the engine's output_ceiling range-checks it, upstream_body sends max_tokens=prepared.max_output_tokens with the consumed keys skipped so `**forwarded` cannot override it, and the stream enforces EngineProtocolViolation above it. Not reproducible here, because they need Docker, the D harness or node_modules: the make -k check table (api-test 313 / api-mutants 618 / console reds), tests/q, tests/d, and the cutover's quoted sha256 465b425f (the inline text hashes to bae34495). The api-test attribution closes arithmetically: tests/d collects 391, plus 3 projection cases gives 394 = the dretry total 276+92+26, so 276 HarnessBusy + 37 I = 313. The implementer's 'all 65 killed' is literally true of the runner. By hand, 2 of those kills are crash deaths the runner cannot see, 1 named case does not notice its mutant, and 9 of my own single edits on claimed or promised invariants survive; 5 of those are claimed invariants, so fix_required.",
+      "cleanup": "I removed my scratch tree /tmp/claude-1000/review-g2-honesty-972033: the head export, the W-new copy, the I-fix copy, the cutover copy, the probe copies, logs and venvs. The hand runner's copies were Python TemporaryDirectory instances and were deleted automatically. I left the /tmp/g1-mutant-* directories alone: most predate this review, and the one timestamped 10:50 cannot be verified as mine, so it may belong to another lane's run. I made no edits or commits in any worktree; `git status --short` in codex-g2 is empty. I used no Docker, container, network, AWS or secrets.",
+      "mutants": [
+        {
+          "name": "hand-run: all 65 new G2 mutants, each named case separately (79 pairs)",
+          "edit": "each list edit applied to a fresh _layout copy, then `pytest --tb=short <file> -k <case>`",
+          "result": "78/79 pairs failed with assertion-shaped text for the stated invariant. 1 pair passed (replay_names_a_new_job on success_is_answered_only_after_the_terminal_commit, see H-N2). By tracing, 2 of the kills are crash deaths hidden by the relay's catch-all (see H-N1)",
+          "killed_by": "see hand log (summarised in H-N1/H-N2)"
+        },
+        {
+          "name": "done_after_an_unconfirmed_cancel",
+          "edit": "relay.py:525 `if ended is not None:` -> `if True:`",
+          "result": "SURVIVED (374 passed)"
+        },
+        {
+          "name": "stream_bound_ignored",
+          "edit": "relay.py:342 `if ending is None and self._now() >= job.bound:` -> `if False:`",
+          "result": "SURVIVED (374 passed)"
+        },
+        {
+          "name": "unnamed_stream_left_running",
+          "edit": "relay.py:510 `if not named:` -> `if False:`",
+          "result": "SURVIVED (374 passed)"
+        },
+        {
+          "name": "credit_readiness_ignores_active_card",
+          "edit": "pilot.py:112 `(regime != CREDIT` -> `(True`",
+          "result": "SURVIVED (374 passed)"
+        },
+        {
+          "name": "first_probe_timeout_is_ready",
+          "edit": "pilot.py:81 `self.value = False` -> `self.value = True`",
+          "result": "SURVIVED (374 passed)"
+        },
+        {
+          "name": "legacy_bound_from_request",
+          "edit": "relay.py:142 -> `deadline = request.deadline_at`",
+          "result": "SURVIVED (374 passed)"
+        },
+        {
+          "name": "cancel_during_attach_orphans",
+          "edit": "relay.py:186 `except BaseException:` -> `except Exception:`",
+          "result": "SURVIVED (374 passed)"
+        },
+        {
+          "name": "status_read_failure_ends_wait",
+          "edit": "relay.py:250-251 warning+`return None` -> `raise`",
+          "result": "SURVIVED (374 passed)"
+        },
+        {
+          "name": "invalid_media_rendered_failed",
+          "edit": "relay.py:392 `if outcome.cause is TerminalCause.invalid_media:` -> `if False:`",
+          "result": "SURVIVED (374 passed)"
+        },
+        {
+          "name": "honest_unconfirmed_cancel_claims_state",
+          "edit": "relay.py _at_bound unconfirmed DeadlineExceeded gains `infrx={\"state\": \"cancelled\"}`",
+          "result": "KILLED",
+          "killed_by": "test_api_modes__a_timeout_whose_cancel_fails_claims_no_state: `assert ('state' not in (({'state': 'cancelled'})))`"
+        },
+        {
+          "name": "journal_probe_skips_usage",
+          "edit": "pilot.py `await stream.usage()` -> `pass`",
+          "result": "KILLED (1 failed, 373 passed)"
+        },
+        {
+          "name": "probe_failure_is_ready",
+          "edit": "pilot.py Probe._answer `return False` -> `return True`",
+          "result": "KILLED (1 failed, 373 passed)"
+        },
+        {
+          "name": "consumed_parameters_refused (W, with W-new applied)",
+          "edit": "engine.py `if name in INTERNAL_PARAMETERS or name in CONSUMED_PARAMETERS:` -> `if name in INTERNAL_PARAMETERS:`",
+          "result": "KILLED (1 failed, 42 deselected)",
+          "killed_by": "tests/w/test_engine.py::test_api_stream__unsupported_options_are_refused_explicitly"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "make api-env (scratch export of 2d742aa)",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1 / + zstandard==0.25.0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/g --ignore=tests/g/test_mutants.py --ignore=tests/g/ops/test_mutants.py",
+          "exit": 0,
+          "tail": "385 passed, 2 warnings in 6.30s"
+        },
+        {
+          "cmd": "python -c 'len(tests.g.mutants.MUTANTS)'; comm of mutant names at 1c42822 vs 2d742aa",
+          "exit": 0,
+          "tail": "257 total; 192 at base; 65 new; none removed; all 65 names in the evidence's per-item table present"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/g/test_mutants.py",
+          "exit": 0,
+          "tail": "264 passed in 1009.87s (0:16:49)"
+        },
+        {
+          "cmd": "hand.py: each of 65 new mutants x each named case, pytest --tb=short -k <case>",
+          "exit": 0,
+          "tail": "79 pairs; 78 failed; replay_names_a_new_job :: success_is_answered_only_after_the_terminal_commit -> 1 passed"
+        },
+        {
+          "cmd": "stream_ends_on_an_empty_page / unconfirmed_cancel_claims_a_state with traceback.print_exc in the relay's catch-all",
+          "exit": 1,
+          "tail": "AttributeError: 'NoneType' object has no attribute 'state' (relay.py _finish via pump:339; _at_bound:260)"
+        },
+        {
+          "cmd": "probe_mut.sh x 11 own mutants over tests/g (minus mutant lists and client-example files)",
+          "exit": 0,
+          "tail": "pristine 374 passed; 9 survivors at 374 passed; journal_probe_skips_usage and probe_failure_is_ready 1 failed, 373 passed"
+        },
+        {
+          "cmd": "VllmEngine.check_parameters(None, fixture v1 normalized_request.parameters) at 2d742aa",
+          "exit": 0,
+          "tail": "{'max_tokens': 256, 'n': 1, 'stream': True, 'temperature': 0.2} -> REFUSED UnsupportedParameter max_tokens; {'stream': False} -> REFUSED stream; {'max_completion_tokens': 256} -> REFUSED; {'temperature': 0.2, 'n': 1} -> {'temperature': 0.2}"
+        },
+        {
+          "cmd": "relay tests without the RecordKeysDropped shim, no W-new (4 relay files)",
+          "exit": 1,
+          "tail": "11 failed, 41 passed in 1.92s (e.g. 500 internal_error infrx.state=failed)"
+        },
+        {
+          "cmd": "git apply W-new (sha256 4e91aac7 of inline text) + shim removed: relay files / tests/g / tests/w quick",
+          "exit": 0,
+          "tail": "52 passed, 2 warnings / 385 passed, 2 warnings / 117 passed in 28.61s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all pytest tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py (W-new applied, shim removed)",
+          "exit": 0,
+          "tail": "318 passed in 1225.31s (0:20:25)  [162 + 69 + 87]"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/i (2d742aa, no I fix)",
+          "exit": 1,
+          "tail": "37 failed, 106 passed in 127.09s: 36 tests/i/test_mutants.py + test_backend_deploy__the_config_schema_is_every_name_the_runtime_reads"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/i (2d742aa + preflight.py diff 554975d..bc382ac)",
+          "exit": 0,
+          "tail": "143 passed in 268.22s"
+        },
+        {
+          "cmd": "legacy-first ordering (legacy files + contracts g i j m t w; minus tests/q and test_v1_projection_pg.py, both Docker) on 2d742aa + I fix",
+          "exit": 0,
+          "tail": "2487 passed, 1 skipped, 2 warnings in 850.74s"
+        },
+        {
+          "cmd": "track-first ordering, same set",
+          "exit": 0,
+          "tail": "2487 passed, 1 skipped, 2 warnings in 699.81s  (2488 + tests/q 192 + projection 3 = 2683 = evidence 2646+37)"
+        },
+        {
+          "cmd": "cutover inline diff + 6 git rm applied to 2d742aa copy: tests/g; test_mutants -k well_formed or every_case; tests/contracts/test_config_and_imports.py",
+          "exit": 0,
+          "tail": "384 passed, 2 warnings / 2 passed, 21 deselected / 233 passed"
+        },
+        {
+          "cmd": "git show --stat of 13 lane commits; `+ _m(` names per commit",
+          "exit": 0,
+          "tail": "mutants per item match the table; code for items 1-4 is in WIP 1babe5e; 2b7a26f not listed"
+        },
+        {
+          "cmd": "git -C codex-g2 status --short",
+          "exit": 0,
+          "tail": "(empty) - worktree untouched"
+        }
+      ]
+    }
+  ],
+  "confirmed_blocking": [
+    {
+      "id": "G2-money-B1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "140-145",
+      "claim_broken": "A replay by idempotency key answers the same job, and a lost answer is recovered by retrying with the same key (DUR-OUTPUT 'lost terminal ack + retry with the same key'). Evidence Limit 10 says replays re-prepare but are 'idempotent'.",
+      "evidence": "`_accept` runs `media.prepare_request` (which re-fetches remote media) and `stage` BEFORE `admit`/`admit_credit`, and only admission detects the replay. Attack: a video_url sync request completes with 200 under key v1. The media host then answers 403, as an expired presigned URL would. The same body is resent with key v1. Measured: `REPLAY 400 {\"code\":\"media_fetch_failed\"}`, not the committed 200. The customer has already been charged for a result they cannot get back by key, and a sync caller has no job handle to use instead. The existing replay test (`test_dur_output__a_lost_answer_is_replayed_by_key_with_one_settlement`) uses TEXT only, so nothing covers media. Each replay also re-downloads the media and writes a new `payloads/<org>/<new request_id>.json`: 2 payload objects for 1 job in the concurrent same-key case.",
+      "minimal_fix": "When `idem.key` is set, find out whether the scope already maps to a job before calling `prepare_request`. That needs a read-only `JobStore` replay lookup, the fake's `_replay` exposed on the port (a D request). If it maps, answer that job without preparing. Otherwise, a preparation failure on a keyed request must still check the store's scope before refusing. Add a media replay case where the media host fails after the first success.",
+      "lens": "money",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "The defect is real at 2d742aa. In relay.py `_accept`, the calls run in this order: `media.prepare_request`, then `media.stage`, then `admit`/`admit_credit`. Only admission reports `replayed`, so a keyed retry re-fetches the customer's media before the store can say the key already maps to a job.\n\nI reproduced it in a scratch copy (git archive of HEAD, the fakes-based `relay_support.World`, no network or Docker):\n- A VIDEO sync request with key v1 returned 200. The worker settled it, and the ledger was debited.\n- I then swapped `world.media.fetcher` to a transport that answers 403, as an expired presigned URL would, and resent the same body with key v1.\n- Result: `REPLAY 400 {\"code\":\"media_fetch_failed\",...}`. There is still exactly one job, and the ledger is unchanged, so the customer was charged.\n- Even when the host stays up, a replay writes a second `payloads/<org>/<new uuid>.json` for the same job. Two payload objects were observed in the sequential case too.\n\nThis breaks the DUR-OUTPUT oracle in 04-verification.md: \"lose terminal ack \u2192 same durable replay\". A sync caller whose answer was lost has no job handle (the X-Inference-Id header was lost with the response), so the key is its only way to recover the result. For any remote-media request whose URL expires or whose host becomes unavailable, that path now fails.\n\nEvidence Limit 10 calls replays \"idempotent (write-once, content-addressed) but wasteful\". That holds only while the media host still answers identically, which is exactly the lost-ack case where it may not. The existing replay test (`test_dur_output__a_lost_answer_is_replayed_by_key_with_one_settlement`) uses text only, so no test covers this.\n\nIt is a durability hole: the charge is committed but the result cannot be recovered by key, and no test kills it. That makes it blocking.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "Confirmed from the code at 2d742aa. In apps/infrx-api/infrx/gateway/routes/relay.py `_accept`, `self.media.prepare_request(...)` and `self.media.stage(...)` run unconditionally before `jobs.admit` / `admit_credit`. The only replay detection is inside the store's admission: in the fake, `_admit` calls `self._replay(idem, ...)` under the lock, and nothing on the port lets the relay look the key up earlier. In infrx/media/prepare.py, `prepare_request` materializes every video source with `_materialize_all` and says it refuses the whole request when a source cannot be fetched (\"All or nothing\"). There is no URL-keyed cache that would skip the fetch: the processing cache is keyed by a content digest, which needs the bytes first. So a same-key retry of a committed video_url job, sent after the source URL stops answering (for example an expired presigned URL), raises `media_fetch_failed` before admission ever reports `replayed`. The committed, charged result cannot be recovered by key, and a sync caller has no job handle to use instead. This breaks the DUR-OUTPUT row in 04-verification.md (\"lose terminal ack ... same durable replay\"). It also contradicts Evidence Limit 10, which calls re-preparation \"idempotent but wasteful\": it is not idempotent when the upstream fetch has become unavailable. Even when the fetch succeeds, each replay stages a new payload under a new request_id that is never attached, leaving orphan staged objects. The only replay test in tests/g/test_relay_matrix.py is text-only, so no test covers the media case. I did not re-run the reviewer's experiment because the control flow is unambiguous from the code. The finding is a durability hole on a charged job's recovery path, and no test can currently catch it. That makes it blocking.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "G2-money-B2",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "166-188",
+      "claim_broken": "'A store/object-store outage at acceptance is a typed 503 with nothing admitted' and the 503 is retryable (Retry-After). The same-key retry the 503 invites should succeed.",
+      "evidence": "In the CREDIT regime, if `catalog.serving_revision` fails after `admit_credit` commits (a pool timeout), `_admitted` cancels the job as `client_cancelled` and answers 503 with `retry-after: 5`. Measured: `FIRST 503 dependency_unavailable 5 | job cancelled client_cancelled released_free`. The retry with the same key then gets `RETRY 409 state_conflict (Idempotency-Replayed: true)`, and it keeps getting that until the key expires. The same happens after an attach failure in the legacy regime (`FIRST 503 ... JOB AFTER 503 cancelled client_cancelled; RETRY 409 state_conflict`). A card refusal first answers 400 `invalid_request`, and its same-key replay answers 409 `state_conflict`. The customer never cancelled, yet the recorded cause is the billable `client_cancelled`. The outage test (`test_dur_admit__an_outage_at_acceptance_is_a_retryable_503_with_no_side_effects`) injects failures only before admission (admit failing, or the object store failing during staging), so no test covers the post-admission window.",
+      "minimal_fix": "On a replay of a non-terminal job, re-run `_admitted` (the pin/card recheck and `attach`, both idempotent) instead of skipping it. On a post-admission `DependencyUnavailable`, leave the job for that retry instead of cancelling it (its stored deadline ends it otherwise). A definitive refusal (card or capability) must answer its replay with the same refusal. Add a case: post-admission catalog failure, then a same-key retry gets 200.",
+      "lens": "money",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this at 2d742aa from the code and a scratch experiment with the fakes-based app. I copied the tree with git archive into the scratchpad and did not touch the worktree.\n\nCode path in apps/infrx-api/infrx/gateway/routes/relay.py:\n- `_accept` calls `_admitted` only when `admission.replayed` is false (lines ~153-160). A replay skips the pin/card recheck and `attach`, and waits on the existing job.\n- `_admitted` catches any exception, including the `DependencyUnavailable` that `_dependency` raises for a catalog or attach failure, and calls `self.cancel(..., quiet=True)`. The default cause there is `TerminalCause.client_cancelled`. It then re-raises, and the client gets a 503 with Retry-After.\n- On the same-key replay, `_Answer` reads the cancelled outcome, and `_refusal` maps `JobState.cancelled` to `StateConflict` (409).\n\nMeasured in the scratch copy (tests/g/test_zz_probe.py). The catalog stub failed only on the relay's own `serving_revision` call. The ingress `resolve` call and the store's `_credit_terms` call both succeeded.\n- `FIRST 503 dependency_unavailable 5`\n- `JOB cancelled client_cancelled released_free 0E-8`\n- `RETRY 409 true state_conflict`\n\nThe legacy regime behaves the same when `media.attach` fails once: first 503, then 409 on the same-key retry. The existing outage test (test_relay_matrix.py:173) injects only an `admit` failure or an object store that is down during staging. Both happen before admission, so nothing tests the post-admission window.\n\nSeverity: this is not a money hole. The debit is 0 and the hold is released. It is still a real defect in the durable-acceptance contract, for two reasons:\n- A typed, retryable 503 whose same-key retry is permanently refused with 409 until the key expires breaks the idempotent-retry guarantee the 503 invites. It also contradicts the stated invariant \"503 with nothing admitted\", because a job was admitted.\n- The recorded cause is `client_cancelled` although the client never cancelled.\n\nNothing tests this path, so it meets the 'real defect / invariant with no killable test' bar.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "The defect is real at 2d742aa. I confirmed it from the code and reproduced it in a scratch copy using only fakes.\n\nHow it happens, in apps/infrx-api/infrx/gateway/routes/relay.py:\n- `_accept` commits the admission first (`admit` / `admit_credit`) and only then runs `_admitted` (the CREDIT card and pin recheck, `catalog.serving_revision`, then `media.attach`).\n- If any step inside `_admitted` fails, its `except BaseException` calls `self.cancel(...)` with the default cause `TerminalCause.client_cancelled`, then re-raises.\n- `_dependency` turns a transient failure into `DependencyUnavailable`, a 503 with `retry_after_s=5`.\n- On a same-key retry, `admission.replayed` is true, so `_admitted` is skipped and the answer attaches to the job, which is already cancelled. `_refusal` maps a cancelled outcome to `StateConflict` (409), so every retry gets 409 until the key expires.\n\nReproduced with a probe test added under tests/g in a scratch copy of HEAD:\n- Legacy regime, first `media.attach` raises OSError: `FIRST 503 dependency_unavailable 5 cancelled client_cancelled` / `RETRY 409 state_conflict` with `Idempotency-Replayed: true`.\n- CREDIT regime, only the relay's catalog proxy raises TimeoutError on the first `serving_revision` call: `FIRST 503 dependency_unavailable Retry-After 5` / `RETRY 409 state_conflict` with `Idempotency-Replayed: true`.\n\n`test_dur_admit__an_outage_at_acceptance_is_a_retryable_503_with_no_side_effects` injects failures only before the commit (`admit` failing, or the object store failing during `stage`). No test covers the window between commit and ack.\n\nWhy I rate it blocking:\n- The oracle in research/plan/04-verification.md reads: \"DUR-ADMIT: kill after stage, before/after commit, before ack; retry idem -> same accepted identity\". Our case is a failure after commit and before ack, followed by an idempotent retry.\n- The 503 tells the client to retry, but a retry with that key can never succeed.\n- The terminal cause records a customer cancel that never happened (`client_cancelled`).\n- Replaying a refused card or capability check also turns a 400 into a 409.\n\nIt fails closed: the job is released and nothing is billed, so there is no money or tenant hole. The client can still recover by switching to a new key. But it breaks the acceptance and retry contract on G2's core item 1, and no test covers that window. By the rubric (a real defect, an invariant with no killable test), that makes it blocking.\n\nThe probe file is at /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/g2v/apps/infrx-api/tests/g/test_zz_probe.py. The worktree was not modified.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "S1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/pilot.py",
+      "line": "240-246 (lifespan finally); relay.py:207-218 (Relay.cancel/_cancels)",
+      "claim_broken": "Limit 11 and the relay docstring say a sync wait cancelled by the process stopping has its job cancelled, and that every cancel is durable. The cancel is shielded against the handler being cancelled, but nothing drains it before the process exits. pilot.lifespan stops the reconciler and probes and closes the pool without awaiting Relay._cancels. After lifespan shutdown, asyncio.run cancels every task still pending, including the store cancel that is still in flight.",
+      "evidence": "This is the uvicorn --timeout-graceful-shutdown 110 sequence. The sync deadline is about 430 s (120+10+300), so waits outlive the window. Scratch probe: a World store whose cancel takes 50 ms, the real pilot.lifespan with a fake reconciler, the sync handler cancelled once inside the lifespan, then the lifespan exits. Output: `LIFESPAN_LOST_CANCEL started=[1] done=[] state=preparing`, so the job was never cancelled and stays claimable. A worker then runs and bills it for a caller who can never receive the answer. The existing case test_api_modes__a_sync_wait_cancelled_from_outside_still_cancels_the_job passes only because the test itself does `await asyncio.gather(*world.relay._cancels)`, the drain production lacks. The store deadline (R29) eventually ends the job, but only after the full sync budget.",
+      "minimal_fix": "Add a Relay.drain(timeout) that runs `await asyncio.wait(self._cancels, timeout=...)`. Call it in pilot.lifespan's finally, using rt.relay, before pool.close(). Add a case that drives pilot.lifespan with a slow store cancel and asserts the job is cancelled after the lifespan exits.",
+      "lens": "stream",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed at 2d742aa. relay.py:199-218 (the file is infrx/gateway/routes/relay.py) runs the durable cancel as a shielded task. The only thing that holds that task is `_cancels`, and nothing in production awaits it. pilot.lifespan's finally (pilot.py:240-246) sets stop, gathers the reconciler and probe tasks, and closes the pool. It never drains relay._cancels.\n\nuvicorn 0.53.0's Server.shutdown (the pinned venv) does three things in order. When the graceful timeout expires, it calls `t.cancel()` on the remaining request tasks. It then awaits `lifespan.shutdown()` straight away without awaiting those tasks. Once serve() returns, asyncio.run cancels every task still pending, and that includes the in-flight store cancel. The deploy unit sets `--timeout-graceful-shutdown 110`, so a sync wait still open after 110 s hits this path.\n\nI reproduced it in a scratch script with the fakes World, the real pilot.lifespan and Lifetime, a fake reconciler that waits on stop, and a pool whose close takes 5 ms. The request task is cancelled inside the lifespan, and then the lifespan exits under asyncio.run:\n- store cancel delay 50 ms: `started=1 done=0 state=preparing`. The cancel is lost and the job is still claimable.\n- delay 1 ms or 0: `state=cancelled`.\n\nSo the outcome is a race between store latency and how long lifespan teardown takes. With a real PgJobStore it is a network round trip, and once psycopg_pool.close() has set `_closed`, any later getconn fails with PoolClosed. That makes a lost cancel realistic.\n\nThe case test_api_modes__a_sync_wait_cancelled_from_outside_still_cancels_the_job passes only because it runs `await asyncio.gather(*world.relay._cancels)` itself. The drain the invariant depends on is therefore never exercised in the composed lifespan, so no test would fail if it went missing.\n\nWhy this is blocking: Limit 11 and the relay docstring both promise that a sync wait cancelled by the process stopping has its job cancelled. As composed, that guarantee does not hold. A job whose caller can never receive the answer can be claimed, executed and settled as a charge until the stored deadline (R29) ends it, and nothing kills this path in the tests. The fix the reviewer proposes is small and correct: add a Relay.drain(timeout) that runs asyncio.wait over _cancels, call it in lifespan's finally before pool.close(), and add a lifespan-level case with a slow store cancel.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "The defect is real at 2d742aa. relay.py:199-218 keeps the shielded cancel task only in Relay._cancels. Nothing in production awaits that set: grep finds no drain, and _cancels is only read by a test. pilot.lifespan's finally (pilot.py:243-246) sets stop, gathers the reconciler and probe tasks, then closes the pool.\n\nI checked the installed uvicorn 0.53.0, Server.shutdown lines 296-311. When --timeout-graceful-shutdown runs out (110 s in deploy/marlin2b-gateway.service), it calls t.cancel() on each request task and goes straight into lifespan.shutdown() without awaiting them. After serve() returns, asyncio.run cancels whatever is still pending.\n\nScratch probe (outside the worktree): the real pilot.lifespan and Relay, a fake store cancel that takes 50 ms, a no-op pool, and a handler shaped like Relay.wait (on BaseException it awaits relay.cancel). I cancelled the handler inside the lifespan the way uvicorn does, then let the lifespan exit. Output: `lifespan exited; pending cancels: 1` / `started ['h1'] done []`. The durable cancel never completed.\n\nWith the real psycopg pool it gets worse. A cancel that has not yet acquired a connection fails with PoolClosed, and quiet=True only logs it. The job stays claimable until the store deadline (R29), and a separate worker process can run it and bill it for a sync caller who holds no handle. That breaks evidence Limit 11 (\"a sync wait's job is cancelled\") and the module docstring (\"no execution is left running for nobody\").\n\ntest_api_modes__a_sync_wait_cancelled_from_outside_still_cancels_the_job passes only because it does the drain itself (`await asyncio.gather(*world.relay._cancels)`). No test or mutant covers the lifespan composition, so this invariant has no killable test.\n\nThis counts as blocking: it is a durability/orphan-execution hole with money exposure, and a composition invariant with no test that could catch it. The fix is small: a Relay drain with a bounded asyncio.wait, awaited in pilot.lifespan's finally before pool.close(), plus one case that drives the lifespan.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "S2",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "509-511",
+      "claim_broken": "The restart rule has two halves. A stream cancelled from outside after the identity frame is left to its worker; one cancelled before any identity reached the client is cancelled, because it is an orphan. The item-3 claim also says an unstarted stream leaks nothing. Only the first half is pinned (restart_cancels_a_named_stream). The unnamed half has no test that kills it.",
+      "evidence": "Two single-edit mutants pass all 52 relay cases (test_relay_sse/sync/matrix, test_composition): `if not named:` -> `if False:` (unnamed_stream_cancel_dropped), and `named = False` -> `named = True` (named_before_identity). Under either mutant, a process stop while the headers or identity frame are still in flight leaves the admitted job running for nobody. The existing case a_client_gone_before_the_first_byte_still_cancels covers only the OSError path, not CancelledError. A scratch probe (send blocks on http.response.start, the task is cancelled, the pending cancels are awaited) asserts JobState.cancelled; it passes on head and kills both mutants.",
+      "minimal_fix": "Add a test_relay_sse case in which send blocks at http.response.start and the task is cancelled from outside, asserting the job is cancelled (and its hold released). Add unnamed_stream_cancel_dropped to tests/g/mutants.py.",
+      "lens": "stream",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "Confirmed at 2d742aa. The code at relay.py:509-511 is correct: a CancelledError before `named = True` cancels the job. The problem is that no test checks it. I copied the tree into scratch with `git archive` and confirmed the scratch copy's relay.py is the module that gets imported. Head passes all 52 cases in test_relay_sse/sync/matrix/test_composition. Both mutants also pass all 52: `if not named:` -> `if False:` and `named = False` -> `named = True`. Running tests/g (excluding the mutant runner) under the second mutant showed no relay or composition failure. The only failures were environment-bound ops-mutant and client-smoke tests. mutants.py has only restart_cancels_a_named_stream (`if not named` -> `if True`, the named half). a_client_gone_before_the_first_byte_still_cancels raises OSError, so it goes through the `except Exception` branch, never the CancelledError branch. My probe in a private scratch copy (tests/g/test_vprobe_unnamed.py): the ASGI send blocks forever on http.response.start, the app task is cancelled from outside, then the test awaits it. On head the job is cancelled and reserved_total == 0. Under both mutants it fails with the job still in JobState.preparing: the admitted job keeps its hold for nobody, which is the leak the item-3 claim rules out. The defect is not in behavior. It is an invariant with no test that fails when it breaks, and it protects money and durability (an orphaned hold). The rubric counts that as blocking. The fix is small: add a test_relay_sse case like the probe, and add an unnamed_stream_cancel_dropped entry to tests/g/mutants.py.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed this at 2d742aa using an isolated scratch copy built with git archive; the shared g2v scratch was being changed by other agents, so I didn't use it. The production code is correct. The unnamed-orphan half of the restart rule simply has no test that kills a mutant of it. Findings: (1) At head, relay.py:509-511 cancels the job on CancelledError only when `not named`. The named half is pinned by restart_cancels_a_named_stream (`if not named:` -> `if True:`), but tests/g/mutants.py has no mutant for the unnamed half. (2) Mutant M1 (`if not named:` -> `if False:`) passes all 52 relay cases (test_relay_sse, sync, matrix and test_composition). It also passes all 374 tests in tests/g, excluding only the mutant runners and the two client files that depend on repo paths. (3) Mutant M2 (`named = False` -> `named = True`) also passes all 52 relay cases. (4) I wrote a small probe in which send raises CancelledError at http.response.start. It passes at head (the job is cancelled) and fails under both M1 and M2 (the job is left in `preparing`, running for nobody). So the invariant is real, can be killed, and is currently unpinned. The existing case a_client_gone_before_the_first_byte_still_cancels covers only the OSError/Exception branch, not the CancelledError branch. The sync twin (sync_wait_orphans_on_cancellation) is pinned, which shows the project's standard is to pin this. This is not a live runtime bug at head. It counts as blocking under the stated criteria: an invariant with no killable test, and a regression would leave an admitted job and its hold running with no client. Fix: add the test_relay_sse case (send cancelled at http.response.start, then assert JobState.cancelled and the hold released) and register unnamed_stream_cancel_dropped in tests/g/mutants.py.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "S3",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "426-433",
+      "claim_broken": "R58/R80 and the _frame comment say that `raw` and its `content` alias carry the reasoning block, and that a delta without `visible` is relayed as nothing rather than as raw. Non-visible journal events (usage, error) carry nothing of the customer's. Neither rule has a test that kills it.",
+      "evidence": "Mutant delta_relays_content_alias (`chunk.payload.get(\"visible\")` -> `chunk.payload.get(\"visible\", chunk.payload.get(\"content\"))`) survives all 52 relay cases: every delta the suite writes carries a `visible` key, including the split-think case where it is \"\". Mutant usage_event_relayed_as_data (the final `return None` -> `return wire.SseFrame(data=chunk.payload).render()`) also survives. A scratch probe journals a delta with only raw/content, a usage event, an error event and a delta with non-str visible, all carrying SECRET markers, then asserts `\"SECRET\" not in body` and text == \"ok\". It passes on head and kills both mutants.",
+      "minimal_fix": "Add that probe to test_relay_sse.py (a delta with raw+content and no visible, a usage event, an error event with a message) asserting none of their bytes reach the wire. Register the two mutants.",
+      "lens": "stream",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "The claim holds at 2d742aa. The code in relay.py `_frame` (lines 413-433) is correct: a delta is relayed only when `visible` is a str, and every other non-progress event returns None. The finding is that nothing tests this, and I confirmed the gap. I ran the two named mutants on a clean scratch copy (git archive 2d742aa) against all of tests/g, leaving out the two files that need the missing `bench` module. Unmutated head fails 24 tests, all in the mutant-runner files tests/g/test_mutants.py and tests/g/ops/test_mutants.py, because the runner cannot work in a scratch copy. Mutant delta_relays_content_alias (`get(\"visible\")` -> `get(\"visible\", get(\"content\"))`) and mutant usage_event_relayed_as_data (final `return None` -> `return wire.SseFrame(data=chunk.payload).render()`) fail exactly the same 24 tests. So neither mutant is killed; every relay/sse/sync/matrix test passes under both. The reason: every delta the suite journals carries a `visible` key (relay_support.py:200, test_relay_sse.py:84), and no relay test journals a usage or error event. The second rule is not only defense in depth. In production, worker/attempt.py `_journal_event` (lines 297-309) returns non-delta events unchanged, so the real journal the relay reads does contain usage events, and error events if the engine sends them. With the mutant, those would reach the SSE wire as raw `data:` frames that are not ChatCompletionChunks, which breaks the stream contract and leaks engine payloads. The `content`-alias rule is backed up by the worker, which journals only `{visible}`. Even so, it is a written R58/R80 relay rule with no test that can kill it. Under the stated bar (\"an invariant with no killable test\"), this is blocking. The fix is small: add a test_relay_sse.py case that journals a delta with only raw/content, a usage event and an error event, asserts none of their bytes reach the wire, and registers the two mutants.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "The finding holds at 2d742aa. The code itself is correct: `_frame` (relay.py:413-433) relays only a delta's `visible` string and returns None for usage and error events. The gap is that nothing tests those two rules. I copied the head into a scratch dir (git archive) and ran tests/g plus tests/w with each mutant applied. Unmutated, the run gives 17 failed, 511 passed; the 17 failures come from the scratch environment. Both mutants give the same 17 failed, 511 passed, so both survive: (1) `chunk.payload.get(\"visible\")` changed to `.get(\"visible\", chunk.payload.get(\"content\"))`, and (2) the final `return None` changed to `return wire.SseFrame(data=chunk.payload).render()`. Every delta the SSE suite writes has a `visible` key (relay_support.py:200, and the split case at test_relay_sse.py:84 where it is \"\"), and no case checks that a journaled usage or error event produces no bytes on the wire. The only related mutant registered in tests/g/mutants.py is `relay_reads_raw` (~line 999). It covers `raw` but not the `content` alias or the drop of non-delta, non-progress events. Mitigation: W's attempt._journal_event (worker/attempt.py:296-309) already strips deltas down to `{\"visible\": ...}` and refuses a delta that has no visible text, so mutant 1 is defense in depth in today's pipeline. Mutant 2 cannot be waved away the same way. W journals every usage event as-is (attempt.py:299-300; engine.py:1184-1188 creates one per stream, with payload {} or {reason, certainty}). A regression there would put a non-chunk `data:` frame on every production stream, and no test would catch it. That matches the rubric's \"an invariant with no killable test\" (the rule is stated in the `_frame` docstring). The fix is small: add a probe that journals a delta with raw+content and no visible, a usage event and an error event, assert none of their bytes reach the wire, and register the two mutants.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "S4",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "342-343",
+      "claim_broken": "The claim is that the sync or stream bound cancels with cause sync_deadline and renders deadline_exceeded. The stream half has no case: no SSE test reaches job.bound while the job is still running.",
+      "evidence": "Mutant stream_bound_never_checked (`if ending is None and self._now() >= job.bound:` -> `if False:`) survives all 52 relay cases. Under it, an SSE stream past its bound polls until the store's own expiry and never records sync_deadline. In the fake world it hangs forever: the scratch probe timed out at 90 s. The mutant deadline_cause_dropped is killed only through the shared _at_bound by the sync case. A scratch probe (publish, advance the clock 3600 s, stream) asserts cause sync_deadline, error (deadline_exceeded, cancelled), [DONE] and the committed prefix. It passes on head.",
+      "minimal_fix": "Add test_api_stream__a_stream_past_its_bound_cancels_with_sync_deadline (the probe above), run under a pytest timeout, and register stream_bound_never_checked.",
+      "lens": "stream",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this at 2d742aa. I worked in a private scratch copy made by git archive (sbound-<pid>); the first scratch dir, g2v, got clobbered by a concurrent run, so I discarded it.\n\nThe production code is correct on head. pump() in relay.py:342-343 calls _at_bound, which cancels with TerminalCause.sync_deadline. The reviewer's probe passes on head in 0.99 s. It publishes \"Two people\", advances the clock 3600 s and streams. It asserts that the job is cancelled with cause sync_deadline, that the text is \"Two people\", that the one error is (deadline_exceeded, cancelled), and that the stream ends with [DONE].\n\nThe gap is in the tests.\n- No SSE test reaches the bound while the job is still running. test_relay_sse.py and test_relay_matrix.py do advance the clock 3600 s, but only as a safety net after the job has already ended (cancelled elsewhere, or recovered as lost_after_publication).\n- mutants.py has no mutant for the stream bound check. deadline_cause_dropped is killed only by the sync case (test_api_modes__a_sync_timeout_cancels_and_answers_the_deadline) through the shared _at_bound.\n- I applied the mutant `if ending is None and self._now() >= job.bound:` -> `if False:`. All 343 tests in tests/g still pass, excluding the probe, test_mutants.py, ops/ and test_client_smoke.py; the last two do not collect offline. The 42 relay sync/SSE/matrix cases also pass.\n- Under the same mutant the probe hangs until it is killed (`timeout 60`, exit 124). The fakes have no expiry sweep, so the stream never ends.\n\nIn production the stream would not end at the bound. It would keep polling and sending keepalives until the store's own expiry, if a sweeper runs. The job would stay leased and running past the sync bound, and the R21 cause would be expired instead of sync_deadline.\n\nThis is a stated invariant: the module docstring says every cancel names its cause, with `sync_deadline` past the bound. No test can kill a violation of it, which the rubric treats as blocking. The fix the reviewer proposes is small and sound. Add the probe as a test, running it under a timeout (for example asyncio.wait_for or a pytest timeout) so the mutant fails instead of hanging, and register stream_bound_never_checked in tests/g/mutants.py.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed this at 2d742aa using scratch copies only. The worktree is clean, though I briefly created and deleted one file in it by mistake.\n\n1. **The stream bound is unguarded.** In a scratch copy I changed the stream deadline check in `pump` (relay.py:342, `if ending is None and self._now() >= job.bound:`) to `if False:`. All 52 cases in `test_relay_sse.py`, `test_relay_matrix.py`, `test_relay_sync.py` and `test_composition.py` still passed in 1.5 s.\n   - The SSE tests that advance the clock by 3600 s only do so after the job has already ended some other way: cancelled elsewhere, lost after publication with `recover()`, or a replay gap. None of them reaches `job.bound` while the job is still running.\n   - `tests/g/mutants.py` has no stream-bound mutant in its G2 SSE section. `deadline_cause_dropped` is killed only through the shared `_at_bound`, by the sync case.\n\n2. **The reviewer's probe checks the right thing.** The probe publishes \"Two people\", advances the clock 3600 s and streams. It asserts cause `sync_deadline`, one error `(deadline_exceeded, cancelled)`, text \"Two people\" and `[DONE]` last.\n   - On head it passes in 0.85 s.\n   - Under the mutant it hangs until my `asyncio.wait_for` of 20 s cancels it, so the probe kills the mutant.\n\n**Severity.** In production this is not a money hole: `sync_deadline` and the store's own deadline expiry are both platform-absorbed and free under R21. The harm is that a stream past its bound keeps the job and the connection alive until the store expires it. It is recorded with the wrong cause and is not ended by the relay as the code intends.\n\nThe explicit branch encodes a real invariant, and a mutant that removes it survives the whole relay suite. That is an invariant with no killable test, which the rubric counts as blocking. The fix is small: add the probe as `test_api_stream__a_stream_past_its_bound_cancels_with_sync_deadline` behind a timeout guard, and register the `stream_bound_never_checked` mutant.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "C1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/pilot.py",
+      "line": "144-148",
+      "claim_broken": "DUR-RLS / D2 request 7: the claim is that the pool sets role service_role on every connection, pinned by test_f_base__the_pool_sets_the_service_role_on_every_connection and the mutant service_role_not_set. That case calls configure_connection() on a fake connection and then reads only pool.min_size and pool.max_size. It never checks that the AsyncConnectionPool it builds actually carries that configure hook. So the wiring the invariant depends on can be deleted and the case still passes.",
+      "evidence": "Single-edit mutant pool_configure_dropped (the `configure=configure_connection(deployment.database_pool_statement_timeout_ms))` line replaced by `)`, so the pool gets no configure hook) SURVIVED the whole tests/g suite: '397 passed, 23 deselected'. Mutant pool_statement_timeout_zero (configure_connection(0)) also SURVIVED. With either edit, every PgJobStore query would run as the login role, or with no statement bound. The implementer's own service_role_not_set is killed only because it edits the body of the configure function, not the pool's wiring.",
+      "minimal_fix": "In the same case, drive the built pool's hook: `pool, _ = pilot.connection_pool(settings); executed.clear(); rs.run(pool._configure(Connection())); assert executed == ['set role service_role', f'set statement_timeout = {deployment.database_pool_statement_timeout_ms}']`. Then add pool_configure_dropped as a G mutant.",
+      "lens": "composition",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "The finding holds. The production code at 2d742aa is correct: pilot.py:144-148 does pass configure=configure_connection(deployment.database_pool_statement_timeout_ms) to AsyncConnectionPool. What is missing is a test that pins that wiring. test_f_base__the_pool_sets_the_service_role_on_every_connection (tests/g/test_composition.py:154-168) calls pilot.configure_connection(15_000) directly on a fake connection. For the pool that connection_pool() builds, it asserts only min_size and max_size. It never checks the pool's configure hook or the deployment's timeout value. A grep of apps/infrx-api/tests finds no other reference to connection_pool or configure_connection outside mutants.py, so no Docker or real-DB test covers it either. I ran an experiment on a scratch git-archive copy of HEAD using the codex-g2 venv. I removed the `configure=...` argument, which gives the single-edit pool_configure_dropped mutant. tests/g, excluding test_mutants.py, the ops tests and client_smoke (which fail at collection for an unrelated reason: no `bench` module in the scratch copy), then gave '343 passed' with the mutant applied. So the mutant survives. For the same reason, configure_connection(0) at the call site would survive too, because the test hardcodes 15_000. Without the hook, every PgJobStore connection would run as the login role, which lacks the BYPASSRLS that 0004's service_role has, and with no statement timeout. The DUR-RLS / D2 request 7 invariant is claimed as pinned but has no test that can kill the mutant. Under the rubric that makes this blocking, even though the behavior is correct today. The fix is a few lines: assert that the built pool's _configure hook runs `set role service_role` plus the deployment's timeout, and register pool_configure_dropped as a G mutant.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "The defect is real at 2d742aa. test_f_base__the_pool_sets_the_service_role_on_every_connection (tests/g/test_composition.py:154-168) calls pilot.configure_connection(15_000) on a fake connection. For the pool built by connection_pool(), it checks only min_size and max_size. It never checks the pool's configure hook. No other test in the repo touches connection_pool or the configure wiring; a grep for \"_configure\", \"configure=\", \"connection_pool\" and \"statement_timeout\" finds only this case. I made a scratch copy from git archive HEAD and removed the `configure=configure_connection(...)` argument from AsyncConnectionPool in pilot.py:144-148. The targeted case still passed, and the full tests/g suite passed with 397 passed, 23 deselected. So the mutant survives, as the reviewer said. Without that hook, pooled PgJobStore connections run as the login role. That role has no service_role/BYPASSRLS, because 0004's BYPASSRLS is not inherited (see the docstring). The connections would also run with no statement_timeout. The invariant D2 request 7 declares (DUR-RLS) therefore has no killable test on its wiring. The listed mutant service_role_not_set is killed only because it edits the configure function's body. This is an invariant with no killable test on the durability and RLS path, so it is blocking by the stated criteria. The fix is small: in the same test, run the built pool's _configure hook on the fake connection and assert the two SQL statements. Then add pool_configure_dropped to the G mutant list. The claimed survival of pool_statement_timeout_zero also follows from the same gap, though I did not run it separately.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "H-B1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "525",
+      "claim_broken": "SSE: after an error following the headers, `[DONE]` is sent only once a terminal commit is known (evidence 'What built' item _Stream, and E3B2 request 8). No test can kill a `[DONE]` sent after an unconfirmed cancel.",
+      "evidence": "Single edit `                if ended is not None:` -> `                if True:` in _Stream.__call__. On a copy of 2d742aa it survives the whole G suite: `374 passed, 2 warnings` (tests/g without the mutant lists and the two client-example files, which need the models/ link). No case makes the relay's own cancel fail after a stream error (for example a ReplayGap together with jobs.cancel raising ConnectionError), so a stream can end with `data: [DONE]` for a job that is still running. The existing `no_done_after_an_ended_job` only covers the opposite direction: DONE must be sent when the cancel committed.",
+      "minimal_fix": "Add a case to test_relay_sse.py: read_owned raises ReplayGap and world.jobs.cancel raises ConnectionError. Assert the last frame is the infrx.error envelope with no `state`, that no `[DONE]` frame is sent, and that the DSN is not echoed. Add a mutant `done_after_an_unconfirmed_cancel` (`if ended is not None:` -> `if True:`) that names that case.",
+      "lens": "honesty",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this at 2d742aa. The shipped code is correct: at relay.py:525, `[DONE]` is sent only when `ended is not None`. `Relay.cancel(quiet=True)` returns None when the store cannot answer the cancel, because it logs the failure and relies on the stored deadline. What is missing is a test. I made a scratch copy of 2d742aa and changed `if ended is not None:` to `if True:`. The G suite still passed: 374 passed, 2 warnings. That run excluded test_mutants.py, test_client_smoke.py, ops/test_client_example.py and ops/test_mutants.py. The two runner files are the mutant runners. ops/test_client_example.py needs the `bench`/models link. No test outside tests/g references the relay. mutants.py covers only the opposite direction: `no_done_after_an_ended_job` (`if False:`) and the mutant that forces `ended = None`. No SSE case makes the relay's own cancel fail after a stream error, for example a ReplayGap together with jobs.cancel raising ConnectionError. The sync path has this case in test_api_modes__a_timeout_whose_cancel_fails_claims_no_state, but the SSE path does not. So the stated guarantee, that `[DONE]` is sent only once a terminal commit is known (the _Stream item and E3B2 request 8), is an invariant with no killable test. If it regressed, a client could receive `[DONE]` for a job that is still running. The rubric counts an untested invariant as blocking. The fix is the one proposed: an SSE case where the cancel fails, plus a `done_after_an_unconfirmed_cancel` mutant.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "The finding is confirmed as a missing test, not a code bug. At 2d742aa the code in `_Stream.__call__` (relay.py:525) is correct: `relay.cancel(..., quiet=True)` returns None when `jobs.cancel` raises (relay.py:214-218), and only then is `[DONE]` skipped. But no test protects this. I tested it in a fresh scratch copy of 2d742aa (my first scratch directory was being overwritten by another process, so I used a separate one). I applied the single edit `if ended is not None:` -> `if True:` and ran tests/g, leaving out the two mutant runners and the two client-example files. The result was `374 passed, 1 deselected`, so the mutant survives. The only mutant on that line is `no_done_after_an_ended_job` (`-> if False:`), which covers the opposite direction. No other test directory uses routes.relay (only tests/contracts/mutants.py mentions replay_gap). I then added the proposed case: the replay-gap scenario from `test_api_stream__a_replay_gap_ends_the_stream_honestly_and_cancels` plus `world.failures.fail(\"cancel\", error=ConnectionError(\"postgresql://infrx:secret@db/infrx reset\"))`. On the original code it passes: the job is `running`, the last frame is the replay_gap infrx.error, there is no `[DONE]`, and the DSN is not echoed. On the mutant it fails: the job is still `running` and the last frame is `[DONE]`. So the evidence's claim that `[DONE]` comes only once a terminal commit is known (G2-e5e7d3a.md:71) has no test that can kill a mutant breaking it, and a mutant that sends DONE for a job that is still running survives. The sync path does have the matching test (`test_api_modes__a_timeout_whose_cancel_fails_claims_no_state`); SSE does not. Under the given rubric (an invariant with no killable test) this is blocking. The fix is the proposed test case plus a `done_after_an_unconfirmed_cancel` entry in tests/g/mutants.py.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "H-B2",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "342",
+      "claim_broken": "The implementer claims 'causes: ... the sync/stream bound -> sync_deadline'. The stream half of the bound has no killing test.",
+      "evidence": "Single edit `            if ending is None and self._now() >= job.bound:` -> `            if False:` in Relay.pump survives the whole G suite (`374 passed`). No SSE case advances the clock past the bound. `deadline_cause_dropped` and `timeout_leaves_job_running` kill only the sync path, via `wait`/_at_bound. Under this mutant a stream whose job never ends sends keepalives until the store's own deadline and never records sync_deadline.",
+      "minimal_fix": "Add an SSE case: the clock advances past deadline + grace while the job is running. Assert the job is cancelled with cause sync_deadline, and that the stream ends with a deadline_exceeded infrx.error followed by [DONE]. Add a mutant `stream_bound_ignored` that names it.",
+      "lens": "honesty",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed the finding at 2d742aa using a scratch copy of the repo; the worktree was not changed. I checked that the import resolved to the scratch relay.py. With line 342 of relay.py changed to `if False:` (the stream-side bound check in Relay.pump), `pytest tests/g` still passed completely: 385 passed, with the mutant-runner files excluded. The only sync_deadline mutants in tests/g/mutants.py (deadline_cause_dropped and one near line 960) change the cancel call inside `_at_bound`. No mutant targets the pump bound check. No SSE test moves the clock past job.bound while the job is still running. The 3_600 s clock advances in test_relay_sse.py and test_relay_matrix.py happen after the job has already ended. I then wrote a small probe: SSE request, job leased but never finished, clock advanced 3_600 s. On the original code it passed: the job was cancelled with cause sync_deadline, and the stream ended with `infrx.error` deadline_exceeded {state: cancelled} and then `[DONE]`. Under the mutant the same probe hung until my 120 s timeout killed it. The stream kept sending keepalives and never cancelled the job or recorded sync_deadline. So the invariant 'the stream half of the sync/stream bound -> sync_deadline' can be broken without any test failing. The review rubric counts an invariant with no killable test as blocking. It also changes the terminal cause that settlement reads (the platform absorbs sync_deadline), and it leaves streams, and jobs in production, running past their bound. The fix the reviewer proposes (an SSE past-bound case plus a named mutant `stream_bound_ignored`) matches what my probe checks.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed the finding at 2d742aa. The G2 evidence (research/plan/evidence/g/G2-e5e7d3a.md:83) says \"the sync or stream bound is `sync_deadline`\". The only place the stream path does this is relay.py:342-343 in Relay.pump, which calls _at_bound(job) when the clock passes job.bound. To test it, I made a scratch copy from git archive and changed line 342 to `if False:`. The relay, SSE, matrix and composition tests then all passed: 343 passed in tests/g. I left out test_mutants.py and ops/, which fail on a broken baseline in the scratch copy, and test_client_smoke.py, which cannot import `bench` there. So no test fails when the stream bound is removed. The SSE tests that call clock.advance(3_600) (without_a_terminal_event..., dur_output stream mode) only move the clock after the job is already terminal, so the bound branch never decides anything. The mutants deadline_cause_dropped and timeout_leaves_job_running (mutants.py:959, 1079) change the shared _at_bound body and are killed by sync cases. Nothing checks that pump calls _at_bound at all. In the mutated code, a stream whose job never finishes gets keepalives until the store's own expiry, if that ever runs. The job is never cancelled with sync_deadline, so the cause the evidence claims is never recorded. The code at 2d742aa is correct, but a claimed invariant has no test that fails without it. That fits the rubric's blocking category, \"an invariant with no killable test\". The fix is small: add one SSE case where the clock moves past deadline + grace while the job is still running, and add a named mutant stream_bound_ignored.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "H-B3",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "510",
+      "claim_broken": "The implementer claims 'an unstarted stream leaks nothing; a gateway restart mid-stream cancels a named stream only per the rule'. The rule's other half, that a stream cancelled from outside before its identity frame cancels its job, has no killing test.",
+      "evidence": "Single edit `            if not named:` -> `            if False:` survives the whole G suite (`374 passed`). `restart_cancels_a_named_stream` (`if True:`) kills only the named half. `unstarted_stream_leaks` kills the Exception path (a send that fails), not the CancelledError path. A process stop during `http.response.start` or the identity emit would orphan the job, and no test would notice.",
+      "minimal_fix": "Add a case: cancel the relay task from outside while `send` of http.response.start (or of the identity frame) is pending, then assert the job is cancelled. Add a mutant `unnamed_stream_left_running` (`if not named:` -> `if False:`).",
+      "lens": "honesty",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed this at 2d742aa. The code at relay.py:509-512 is correct: a CancelledError before `named = True` calls `relay.cancel(..., quiet=True)`. What's missing is a test that fails when that guard is broken. I ran the reviewer's mutant in a scratch copy (`if not named:` changed to `if False:`, with PYTHONPATH pointing at the copy; I checked that the copy is the module that gets imported). The G suite passed: 368 passed with tests/g/ops excluded, because that directory needs the repo's `bench` module. The mutant also survived tests/test_inflight.py, the only non-G test that sends stream=True, and it uses the legacy path, not this relay.\n\nIn mutants.py, `restart_cancels_a_named_stream` (`if True:`) kills only the named half, through test_api_stream__a_gateway_restart_mid_stream_leaves_the_job_to_its_worker. `unstarted_stream_leaks` changes the `except Exception` branch (a send that fails), not the CancelledError branch. No test in tests/g cancels the task while http.response.start or the identity frame is still being sent.\n\nSo the rule's other half has no killing test: an accepted stream cancelled before its identity reaches the client must cancel its job. If that half regressed, the job would be left running. Without an Idempotency-Key the client could never find it, yet it would still run and be debited. The implementer claims the rule in full, so this is an invariant with no test that can fail, which the rubric counts as blocking. The fix is small: a test that cancels during start/identity send and asserts the job is cancelled, plus the mutant `unnamed_stream_left_running`. The code itself needs no change.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I could not refute this finding. At 2d742aa, relay.py:509-512 handles the unnamed CancelledError branch correctly: if not named, it calls relay.cancel(..., quiet=True) and then re-raises. So the code is right today, but no test kills that branch.\n\nThe experiment: in a scratch copy made with git archive, I replaced the one line `            if not named:` with `            if False:`. The G relay/API suite still passed (343 passed; test_mutants, ops and test_client_smoke were excluded because they need bench/Docker imports).\n\nWhy the named tests miss it:\n- `restart_cancels_a_named_stream` (`if not named:` -> `if True:`) is killed only by `test_api_stream__a_gateway_restart_mid_stream_leaves_the_job_to_its_worker`. That test cancels the task after the identity frame has been sent, so it covers only the named half.\n- `unstarted_stream_leaks` changes the `except Exception` path, which a failed send exercises. It never reaches the CancelledError path.\n\nThe sync twin shows the intended standard. The sync path has both `\u2026__a_sync_wait_cancelled_from_outside_still_cancels_the_job` and the mutant `sync_wait_orphans_on_cancellation`. The SSE path has no counterpart for a stream cancelled before its identity frame is sent. The G2 evidence claims \"so no \u2026 execution is orphaned\".\n\nIf this branch regressed, a process stop or task cancel during http.response.start or the identity emit would leave a running job and its reserved credit with no client holding its handle. That is an orphaned job, a money and durability hole. It is an invariant the evidence claims with no killable test, so it counts as blocking under the stated bar, even though the current code is correct.\n\nFix:\n- Add a test that cancels the relay task while `send` is pending on http.response.start or on the identity frame, then asserts the job is cancelled.\n- Add the mutant `unnamed_stream_left_running` (`if not named:` -> `if False:`).\n\nScratch copy: /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/g2/apps/infrx-api/infrx/gateway/routes/relay.py",
+          "severity_if_real": "blocking"
+        }
+      ]
+    },
+    {
+      "id": "H-B4",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/gateway/pilot.py",
+      "line": "112",
+      "claim_broken": "The evidence says 'price_source = the served model's approved card, which in the CREDIT regime must be the active one', and that the probes fail closed (M-FAILCLOSED). Both invariants have single-edit survivors.",
+      "evidence": "(a) pilot.py:112 `        return card is not None and (regime != CREDIT` -> `        return card is not None and (True`: `374 passed`. A CREDIT pilot reports price_source ok while serving an unapproved card. (b) pilot.py:81 `                self.value = False` -> `                self.value = True` (a first probe that times out or raises counts as ready): `374 passed`. For contrast, `journal_probe_skips_usage` and `probe_failure_is_ready` were each killed (1 failed).",
+      "minimal_fix": "In test_composition.py, build a CREDIT pilot whose served deployment's card differs from ACTIVE_RATE_CARD_VERSION and assert components['price_source'] is not ok. Also add a probe whose check hangs past timeout_s, or raises in the first thread answer, and assert Probe() is False. Add the two mutants.",
+      "lens": "honesty",
+      "votes": [
+        {
+          "refuted": false,
+          "reason": "I confirmed the finding at 2d742aa. I ran it in a private scratch copy made with git archive and used the codex-g2 venv. tests/g was run without test_mutants.py and without the two tests that need the bench module. Baseline: 8 failed, 378 passed. All 8 failures are tests/g/ops/test_mutants.py runner cases that also fail in this scratch environment.\n\n(a) I changed pilot.py:112 from `(regime != CREDIT` to `(True`. The result was the same 8 failed, 378 passed, so the mutant survives. test_composition only builds a CREDIT pilot whose served card equals ACTIVE_RATE_CARD_VERSION. No test checks that a CREDIT pilot serving a different card reports price_source unavailable, even though G2-e5e7d3a.md:109 claims this. It is not a money hole: Relay._admitted (relay.py:172) still refuses and cancels a mismatched card. It is a startup check the evidence claims but no test can catch.\n\n(b) I changed pilot.py:81 from `self.value = False` to `True`. The result was again 8 failed, 378 passed, so it survives. This line is only reached when the first answer times out or its thread raises, because _answer already catches a check's own exceptions. No test has a check that hangs past timeout_s. With this mutant, a first probe that hangs (for example a stalled database) would count as ready, and the pilot would start and pass /readyz. That breaks the fail-closed startup rule (M-FAILCLOSED).\n\nBoth are single-line survivors of claimed invariants, and (b) makes startup fail open. By the rubric that is blocking. The fix is small: two tests and two mutants.",
+          "severity_if_real": "blocking"
+        },
+        {
+          "refuted": false,
+          "reason": "I confirmed both survivors at 2d742aa in a scratch copy of apps/infrx-api, models and research/plan, using the codex-g2 venv. The baseline `pytest tests/g --ignore=tests/g/test_mutants.py` gives 397 passed. I then applied each mutant on its own.\n(a) pilot.py:112, `(regime != CREDIT` changed to `(True`: still 397 passed.\n(b) pilot.py:81, `self.value = False` changed to `self.value = True`: still 397 passed.\n\nWhy nothing kills them:\n- Every `composed(...)` pilot in test_composition.py uses the served deployment's own card. `test_f_base__readiness_probes_are_cached_answers_the_lifetime_refreshes` also runs only in legacy_usd, and it covers the journal going down only through `refresh()`. No test builds a CREDIT pilot whose `ACTIVE_RATE_CARD_VERSION` differs from the served card, so the CREDIT arm of `price_check` is never exercised.\n- `Probe._answer` already catches exceptions from `check`. The `except` in `Probe.__call__` is therefore reached only when the first answer passes `timeout_s` (or when `asyncio.run` fails), and no test has a check that hangs or uses a tiny `timeout_s`.\n- The mutant list in mutants.py has `probe_never_refreshed` and `probe_asked_on_every_read`, but no mutant for either branch.\n\nImpact:\n- (a) is not a direct money hole. The relay still refuses an unapproved pinned card (`unapproved_card_admitted` and test_relay_sync). But a CREDIT pilot configured with the wrong card would pass `assert_startup` and report `price_source` ok, then refuse every request. That breaks the M-FAILCLOSED invariant the code and docstring claim.\n- (b) is a fail-open startup. A price source or journal that hangs on its first answer counts as ready, so `pilot` starts, which is what M-FAILCLOSED forbids.\n\nBoth are claimed fail-closed invariants with no killable test. That meets the blocking criterion. The production code at head is correct; the missing tests and mutants are the defect.",
+          "severity_if_real": "blocking"
+        }
+      ]
+    }
+  ],
+  "refuted_blocking": [],
+  "unverified_blocking": [],
+  "nonblocking": [
+    {
+      "id": "G2-money-N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "186-188",
+      "claim_broken": "A refusal after admission cancels the job it admitted (nothing ran, nothing is billed) before the refusal is answered.",
+      "evidence": "CREDIT with an unapproved card and a cancel that raises ConnectionError: the client gets `REFUSED 400 invalid_request`, but the job stays `preparing` with its hold still on the wallet (`released False`). Only the log says 'its stored deadline still ends it'. Money is safe in practice only because `attach` never ran, so M's `prepare` raises `no staged media for job` and the job cannot execute. My mutant m12 (`quiet=True` changed to `quiet=False`) survives: no test fails the cancel on the refusal path.",
+      "minimal_fix": "If the post-admission cancel is unconfirmed, answer 503 without a state rather than a definitive 400, or retry the cancel in the shielded `_cancels` set until it commits. Add a case where the refusal path's cancel fails.",
+      "lens": "money"
+    },
+    {
+      "id": "G2-money-N2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "297-307, 402-403",
+      "claim_broken": "held_unknown is rendered as its settlement, and a committed success is answered.",
+      "evidence": "A `succeeded`/`completed` outcome with `usage=None` after publication, which the store accepts and settles `held_unknown`, makes the sync `answer` raise `AttributeError: 'NoneType' object has no attribute 'completion_tokens'` in `_finish_reason` and `ChatUsage.of`. Measured: `OUTCOME succeeded held_unknown REPLY 500 internal_error`. The SSE `_finish` already guards `usage is not None`. W's runner currently turns unknown usage into `engine_incomplete`, so this is only reachable through the store contract (D5 or reconciliation).",
+      "minimal_fix": "In `answer`, leave out `usage` and use finish_reason 'stop' when `outcome.usage is None`, as `_finish` does. Add a case for a held_unknown success.",
+      "lens": "money"
+    },
+    {
+      "id": "G2-money-N3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "140-141",
+      "claim_broken": "An outage at acceptance leaves 'no side effects' (test name). A refused admission leaves nothing behind.",
+      "evidence": "With admit failing (DB down), a video request leaves `media/<org>/v1/<digest>/source` and `payloads/<org>/<rid>.json` in the object store. An org with a zero balance (402 `insufficient_credit`) still makes the gateway fetch and store the remote clip plus a payload. A same-key conflicting body (409 `idempotency_conflict`, correctly refused, nothing admitted) still writes a payload object. The outage test asserts only jobs, journal and wallet. `MediaCollector` is not in the lifespan (carried, #6).",
+      "minimal_fix": "Either wire the collector with a stray-payload sweep before the cutover, or delete the staged payload when admission refuses. Also narrow the test name or assert on the objects.",
+      "lens": "money"
+    },
+    {
+      "id": "G2-money-N4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "241-251",
+      "claim_broken": "`_outcome`: 'A read that failed for want of the database is retried at the next poll, not reported as the job's end.'",
+      "evidence": "Mutant m15 (`except Exception: raise` instead of `return None`) survives the focused G suite (385 passed). Under it, one transient DB error during a sync wait cancels the job through `wait`'s BaseException handler and answers 500. The SSE analog (`journal_outage_ends_the_stream`) is covered, but the sync status read is not.",
+      "minimal_fix": "Add a sync case where `get_owned` raises ConnectionError once mid-wait and the result is still answered with 200.",
+      "lens": "money"
+    },
+    {
+      "id": "G2-money-N5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "146-151, 176-179",
+      "claim_broken": "The bound is 'the stored deadline plus the grace', and the pinned serving revision must be in the catalog.",
+      "evidence": "These mutants survive (385 passed): m02 `bound=deadline` (no grace), m03 legacy bound from `request.deadline_at` instead of `admission.deadline_at`, and m05 `if serving is None` changed to `if False` (the missing-revision branch; it then crashes into a 500 but the job is still cancelled). Every timeout case advances the clock 3600 s, so the grace is never exercised.",
+      "minimal_fix": "Add a case that advances the clock to deadline + grace/2 and asserts no cancel, and one where `serving_revision` returns None and the answer is 404 with the job cancelled.",
+      "lens": "money"
+    },
+    {
+      "id": "S5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "336",
+      "claim_broken": "The claim is that a failed journal read is never taken for an empty journal, which could end the stream. That holds only while `ending` is None. The DUR-OUTPUT drill injects the failure before the outcome is known, and after the job is already terminal, so its store-state assertion (`succeeded`) holds whatever the relay does.",
+      "evidence": "Mutant ended_on_failed_read_after_outcome (`if chunks is not None and ending is not None:` -> `if ending is not None:`) survives. On D3 today (no terminal event), a read that fails right after the committed outcome is known would then end the stream with [DONE] before the remaining committed chunks are drained. In test_api_stream__a_journal_read_that_fails_is_retried_not_the_end, world.work completes the job in the first nap, before read_owned call 2 fails.",
+      "minimal_fix": "Add a drill with jobs.stream=None: commit, terminalize, fail read_owned once after the outcome is read, and assert the full committed text precedes [DONE]. Also make the existing drill fail the read while the job is still running, and assert the job is not cancelled.",
+      "lens": "stream"
+    },
+    {
+      "id": "S6",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "226-232",
+      "claim_broken": "The PostgreSQL cause fallback is said to be 'recorded' and to fire only for param='cause'. The warning log that records it is asserted nowhere. The param guard is not pinned either.",
+      "evidence": "Mutant fallback_log_dropped (delete the log.warning) survives. So does fallback_on_any_param (`refused.param != \"cause\" or ...` -> `cause is TerminalCause.client_cancelled`). The fallback itself works on both paths. Probe store calls: disconnect `[client_disconnected, client_cancelled]`; stream deadline `[sync_deadline, client_cancelled, client_cancelled]`. The third call is _Stream's redundant re-cancel after _at_bound raised; it is harmless because the store answers the committed outcome. No 400 or refusal text reaches the client.",
+      "minimal_fix": "In test_api_modes__a_store_that_cannot_record_the_cause_still_cancels, assert with caplog that the warning names the cause, and add an UnsupportedParameter(param='other') case that must not fall back. Optionally, skip the handler's second cancel when _at_bound already confirmed an outcome.",
+      "lens": "stream"
+    },
+    {
+      "id": "S7",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "509-512 and 516",
+      "claim_broken": "The claim is that a client that leaves is recorded as client_disconnected. There are two edges. (a) A client that has already disconnected (the watcher is done) when the process cancels the named stream, before pump's next gone check (up to poll_max_s = 1 s), is left to the worker rather than cancelled. (b) A send that fails with something other than OSError is recorded as client_cancelled.",
+      "evidence": "Probe (a): leave.set() then task.cancel() inside the same nap gives `RESTART_AFTER_LEAVE running`. Probe (b): on_send raising RuntimeError after a delta gives `cancelled client_cancelled`. Under the pinned uvicorn 0.53, a send after disconnect returns silently and ClientDisconnected subclasses OSError, so (b) needs another server or a middleware. No money moves: a cancel settles with debit 0 or held_unknown.",
+      "minimal_fix": "In the CancelledError branch use `if not named or gone.done(): await relay.cancel(..., cause=client_disconnected if gone.done() else client_cancelled)`. For (b), document the narrowing or treat any send exception after http.response.start as a departure.",
+      "lens": "stream"
+    },
+    {
+      "id": "S8",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/test_relay_matrix.py",
+      "line": "test_api_stream__an_upstream_error_is_an_honest_terminal_error",
+      "claim_broken": "The coverage table claims the upstream-error drill shows 'no inflight leak'. The case asserts job.state, debit, the wire and the committed prefix, but no reservation or capacity state.",
+      "evidence": "The matrix case asserts `not any(r.active for r in job.reservations.values())`; the upstream-error case has no such line. All other drills assert store state: kill before (generation, journal generations, outbox), kill after (cause, debit, hold, generations), lost ack (same job, ledger, outbox), outage (no job, journal 0, reserved 0), restart (running, then succeeded). The journal-read drill's store check is vacuous (S5).",
+      "minimal_fix": "Add `assert not any(r.active for r in job.reservations.values())` and a check that the hold is released to the upstream-error drill.",
+      "lens": "stream"
+    },
+    {
+      "id": "C2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/pilot.py",
+      "line": "86-94,218-223",
+      "claim_broken": "The readiness probes are described as cached answers the lifetime task refreshes. The refresh has no per-probe bound, and the probes are refreshed one after another. If a check hangs, the cached True is never replaced, so /readyz reports ok for as long as the dependency hangs. deploy/drain.sh relies on wait_ready before it takes the edge out of maintenance. The same hang also blocks lifespan shutdown, because gather waits on the stuck _refresh task. The refresh loop itself is also untested: the case calls probe.refresh() by hand.",
+      "evidence": "Script: two Probes over a check that starts hanging 0.2 s after _refresh begins (PROBE_EVERY_S=0.05). After 2 s, component_state printed {'price_source': 'ok', 'journal': 'ok'}. Mutant refresh_loop_runs_once (`while not stop.is_set()` changed to `if`) SURVIVED all of tests/g (397 passed).",
+      "minimal_fix": "In Probe._answer, bound the call with `return bool(await asyncio.wait_for(self.check(), self.timeout_s))`, so a timeout reads False. Add one case that runs pilot._refresh with a check that hangs after its first answer and asserts 'unavailable' within the bound.",
+      "lens": "composition"
+    },
+    {
+      "id": "C3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/pilot.py",
+      "line": "74-84",
+      "claim_broken": "M-FAILCLOSED at startup is kept: a probe that hangs on its first answer reads False and pilot refuses to start. But the refusal can never finish. The first answer runs in a non-daemon ThreadPoolExecutor worker via asyncio.run, and shutdown(wait=False) leaves that worker stuck. At interpreter exit, concurrent.futures' atexit hook joins it, so the process that should crash with RuntimeMisconfigured hangs until docker SIGKILLs it. The timeout branch is also unpinned: mutating it to `self.value = True` makes a hung first probe read as ready.",
+      "evidence": "Script: Probe(hang, timeout_s=1.0)() returned False after 1.0 s, then sys.exit(3). The process did not exit and was killed by `timeout 20` (exit 124, 20 s elapsed). Mutants first_probe_timeout_reads_ready (value=True on timeout) and first_probe_unbounded (.result() with no timeout) both SURVIVED all of tests/g.",
+      "minimal_fix": "Take C2's wait_for inside _answer, so the thread's asyncio.run ends within timeout_s. Alternatively, move the startup assertion into lifespan after pool.open(), which also removes the thread and the D5 fresh-loop constraint. Add a case in which a check that never answers leaves the Probe False and all threads done.",
+      "lens": "composition"
+    },
+    {
+      "id": "C4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/pilot.py",
+      "line": "105-114",
+      "claim_broken": "The docstring and the evidence say that in the CREDIT regime the price_source probe requires the served model's card to be ACTIVE_RATE_CARD_VERSION. No case covers a CREDIT deployment whose card differs.",
+      "evidence": "Mutant price_probe_ignores_active_card (`(regime != CREDIT` changed to `(True`) SURVIVED all of tests/g (397 passed). Admission still re-checks the pin, so no money is at risk. Only readiness and the pilot startup refusal are unpinned.",
+      "minimal_fix": "Add one composed('credit', card='other') case: asserting that deps.checks['price_source']() is False, or that cutover_app refuses in pilot, kills the mutant.",
+      "lens": "composition"
+    },
+    {
+      "id": "C5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/pilot.py",
+      "line": "236-246",
+      "claim_broken": "The lifespan's pool open and close are claimed but not pinned. Every lifespan test injects jobs, so pool is None. Also, the job-store pool is outside REQUIRED_CHECKS: with it unopened or unreachable, /readyz still answers ok, and every admission becomes a typed 500.",
+      "evidence": "Mutants lifespan_pool_never_opened and lifespan_pool_never_closed both SURVIVED all of tests/g. pool_connect_timeout_dropped and silence_transport_logs_dropped (I0 request 3) also SURVIVED.",
+      "minimal_fix": "Add a lifespan case with a stub pool object (open/close recorders) set on rt.lifetime.pool, asserting that open() runs before the tasks start and close() runs after they finish.",
+      "lens": "composition"
+    },
+    {
+      "id": "C6",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/ingress.py",
+      "line": "191-203",
+      "claim_broken": "R86 / G1R C4 says exactly one handler serves the metered path. assert_route_table compares route.path to CHAT_PATH exactly. A pattern route registered earlier, such as a Mount or a POST /v1/{rest:path}, is not counted, yet Starlette matches it first and serves /v1/chat/completions.",
+      "evidence": "Script: FastAPI app with `@app.post('/v1/{rest:path}')`, then ingress.register. assert_route_table passed, and POST /v1/chat/completions returned 200 {\"served_by\":\"shadow\"}. No router in the cutover's ROUTERS (health: /health, models: /v1/models) does this today, so this is a latent gap, not a live hole.",
+      "minimal_fix": "Resolve the path the way Starlette does: take the first route whose `route.matches({'type':'http','path':CHAT_PATH,'method':'POST'})[0]` is Match.FULL and assert that it is the ingress endpoint (keep the count check as well).",
+      "lens": "composition"
+    },
+    {
+      "id": "C7",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/g/G2-e5e7d3a.md",
+      "line": "cutover diff, app.py hunk",
+      "claim_broken": "The cutover changes the service unit to `uvicorn --factory infrx.gateway.app:create_app`, which calls create_app() with no adapters. build_ingress_deps then refuses in every mode (catalog/stream/objects None). Nothing in the diff builds those adapters from settings, and I0's preflight (validate_runtime plus the ROUTERS gate) cannot see this. So preflight passes and the install fails only at wait_ready. This is fail-closed, as limit 2 says, but it means the cutover cannot be applied on its own even after D4/D5/M land. The pre-existing I-owned red remains: ACCOUNTING_REGIME and ACTIVE_RATE_CARD_VERSION are absent from preflight's Key/TUNABLE partition, and the cutover is what first makes ACCOUNTING_REGIME drive admission. The cutover itself adds no new from_env name. The retired gateway.py shim is referenced only by the Dockerfile, the service unit, the dockerignore (all updated in the diff), the four retired legacy tests and conftest, and docs.",
+      "evidence": "The deploy/preflight.py grep finds no ACCOUNTING_REGIME or ACTIVE_RATE_CARD_VERSION. The preflight probe (l.543-569) never calls create_app. Grep for gateway:app / import gateway outside research/: README.md, tests/i/test_scripts.py (a string fixture only), models/marlin2b/README.md (docs).",
+      "minimal_fix": "Carry an explicit integration request: create_app builds catalog/stream/objects from settings (or a pilot.adapters_from_env) in the same change that applies the cutover. Add the two regime names to preflight's manifest (owner I). Update README.md's gateway.py references in the retirement change.",
+      "lens": "composition"
+    },
+    {
+      "id": "H-N1",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/mutants.py",
+      "line": "1003",
+      "claim_broken": "R83 shape requires a named case to fail for the invariant's reason, with no undeclared exception death. Two mutants are counted killed although they die by a crash inside the package, which _Stream/_Answer swallow, so the runner cannot see the crash. A third models a different defect from the one it names.",
+      "evidence": "stream_ends_on_an_empty_page (mutants.py:1003): I traced it with traceback.print_exc in _Stream's `except Exception`. The failure is `AttributeError: 'NoneType' object has no attribute 'state'` at relay.py _finish, called from pump:339. The relay then cancels the job, and the case fails with `[cancelled] == [succeeded]`. No early [DONE] is ever produced. unconfirmed_cancel_claims_a_state (mutants.py:964): the same thing at _at_bound:260 (`AttributeError`), which _Answer turns into `(500,'internal_error') == (504,'deadline_exceeded')`. No state is ever claimed. The honest single edit (add `infrx={\"state\":\"cancelled\"}` to the unconfirmed DeadlineExceeded) is killed by the same case with `assert ('state' not in ...)`, so the invariant is testable but the listed mutant is the wrong one. success_before_terminal_commit (mutants.py:936) returns None immediately. _Answer takes that as 'client left' and sends nothing, so the case fails because no response was sent (`[] == [succeeded]`), not because a 200 was sent early.",
+      "minimal_fix": "Replace unconfirmed_cancel_claims_a_state with the honest edit above. For stream_ends_on_an_empty_page and success_before_terminal_commit, either find a single edit that produces the named defect without crashing, or declare them structural as was done for `relays_uncommitted_chunk`. Consider having the G runner scan the captured log for tracebacks raised inside the package so that swallowed crashes are not counted as kills.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H-N2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/g/mutants.py",
+      "line": "927",
+      "claim_broken": "Every named case must notice the mutant (R83). replay_names_a_new_job names a case that passes under it.",
+      "evidence": "Run by hand with each named case separately: `replay_names_a_new_job :: test_api_modes__success_is_answered_only_after_the_terminal_commit -> 1 passed`. The other named case is killed. The G runner has `require_every_case=False` (tests/contracts/mutants.py:2202), so the list still reports killed. Of the 79 (mutant, case) pairs across the 65 new mutants, this is the only non-noticing pair, and the coverage rule still holds without it: that case is also killed alone by success_before_terminal_commit and result_not_read.",
+      "minimal_fix": "Drop test_api_modes__success_is_answered_only_after_the_terminal_commit from replay_names_a_new_job's cases, or set require_every_case=True for the G runner.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H-N3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "142",
+      "claim_broken": "The evidence says 'The wait is bounded by the stored deadline plus a grace (R29/R79)'. For CREDIT the bound comes from the request, and for legacy the choice of the stored deadline is untested.",
+      "evidence": "`deadline = request.deadline_at if self.regime == CREDIT else admission.deadline_at`. In CREDIT this is the caller's unclamped bound; on a replay it is the new request's deadline, not the stored one. Mutant `deadline = request.deadline_at` (both regimes) survives the whole G suite (`374 passed`). No money moves, because the store enforces its own deadline, but the claim as written is inaccurate for CREDIT and unproven for legacy.",
+      "minimal_fix": "State the CREDIT exception in the evidence, or read the stored deadline through get_owned_credit. Add a legacy case where admission clamps deadline_at below the request's and the gateway cancels at the stored bound.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H-N4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+      "line": "186",
+      "claim_broken": "Untested defensive paths that the docstrings promise. These are not in the evidence's claim table.",
+      "evidence": "Each of these single edits survives the whole G suite (`374 passed`): (a) relay.py:186 `except BaseException:` -> `except Exception:` in _admitted. A CancelledError during the pin recheck or attach then leaves an admitted job running for nobody. (b) relay.py:250 status-read retry -> `raise`. A transient database error during a sync wait then cancels the job and answers 500. (c) relay.py:392 `if outcome.cause is TerminalCause.invalid_media:` -> `if False:`. invalid_media is then rendered as internal_error or stream_interrupted.",
+      "minimal_fix": "Add one case and one mutant for each: a task cancelled during attach leaves the job cancelled; a get_owned that fails once during a sync wait still yields 200; an invalid_media outcome renders unsupported_media.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H-N5",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/g/G2-e5e7d3a.md",
+      "line": "126",
+      "claim_broken": "The per-item commit table does not fully match git show.",
+      "evidence": "All relay.py code for items 1-4 first lands in WIP 1babe5e. 8736ffa and d7461f6 change relay.py by only +4/-2 and +22/-9 lines. 2ba5ec1 adds mutants only. The sync and SSE cases were written in 2b7a26f, which appears in no row. Every mutant listed per item matches the `+ _m(` names in that item's commit (checked for all 65), and the re-anchors listed for e5e7d3a match its diff.",
+      "minimal_fix": "List 1babe5e and 2b7a26f under items 2-4, or add a note that the code of items 1-4 landed in the WIP commits.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H-N6",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/g/G2-e5e7d3a.md",
+      "line": "966",
+      "claim_broken": "The quoted cutover SHA-256 cannot be reproduced from the evidence.",
+      "evidence": "The inline cutover diff, extracted from the evidence, hashes to sha256 bae34495\u2026, not the quoted 465b425f\u2026. The evidence says the inline text is the modified files only, and the logs are not durable. For contrast, the W-new inline diff reproduces its quoted sha256 exactly (4e91aac7\u2026). The cutover's results do reproduce: applied to 2d742aa with the six retirements, tests/g gives `384 passed`, well_formed/every_case gives `2 passed`, and test_config_and_imports gives `233 passed`.",
+      "minimal_fix": "Quote the hash of the inline text, or embed the full diff including the deletions.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H-N7",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/worker/engine.py",
+      "line": "518",
+      "claim_broken": "W-new proposes, but does not include, the W mutant for CONSUMED_PARAMETERS. W's list would carry no entry for the new skip.",
+      "evidence": "With W-new applied, reverting `or name in CONSUMED_PARAMETERS` gives `1 failed, 42 deselected` for test_api_stream__unsupported_options_are_refused_explicitly, and the failure is the typed UnsupportedParameter. So the mutant is killable, but it is not in tests/w/mutants.py in the handed-over diff. The W-new semantics themselves are correct: the cap is not dropped (see fabrication_check).",
+      "minimal_fix": "Add `consumed_parameters_refused` to tests/w/mutants.py as part of W-new.",
+      "lens": "honesty"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T06:50:14Z",
+  "updated": "2026-09-23T11:05:53Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -11,9 +11,9 @@
     },
     "E3B": {
       "lane": "codex-e3b / codex/e3b-backend-gate",
-      "phase": "phase 2 implementing on codex-e3b2 / codex/e3b-phase2-gate (real-store gate; namespace e3b2 56700-56799)",
+      "phase": "phase 2 HANDED BACK 80cef22 (impl e57b820); Opus review running; gate exit 1 = I3B's recovery tree (rc10, i3bm57, bk01 restore ACL finding) + a D-port HarnessBusy run",
       "since": "2026-09-22T18:46:49Z",
-      "note": "phase 1 merged c7d715f; phase 2 base 9c1c6ed; brief E3B.md (phase 1 kept as E3B-phase1.md)"
+      "note": "namespace e3b2; real JobStore/CREDIT admission/queue rebuild/reaper/tenants/RLS completeness (490 cases) on real stores; 25 e3bm mutants killed; backend 87 pass / 23 pending / 11 fail (all I3B); requests: tasklocal TASK_BLOCKS, I3B fixes, fake requeue event id, host reserved ports, PENDING/RESIDUAL updates at D4/G2/G4U merges"
     },
     "D4": {
       "lane": "codex-d4 / codex/d4-stream-journal",
@@ -23,24 +23,37 @@
     },
     "G2": {
       "lane": "codex-g2 / codex/g2-chat-relay",
-      "phase": "implementing (acceptor, sync wait, SSE relay, pilot composition; wire-in settings as parameters until it merges)",
+      "phase": "review fix_required at 2d742aa (11 blocking: replay before preparation (R91 lookup port), post-admission 503 retry, cancel drain at shutdown, unnamed-stream cancel, raw/content relay guard, stream bound, pool configure hook, [DONE] after unconfirmed cancel, CREDIT price_source probe; 22 nonblocking) \u2192 fix round running",
       "since": "2026-09-23T05:12:27Z",
-      "note": "base 9c1c6ed; fakes; Valkey 55466 if needed; brief G2.md | told (06:47Z): cancel-cause port merged; fallback rule on UnsupportedParameter(param=\"cause\")"
-    },
-    "G4U": {
-      "lane": "codex-g4u / codex/g4u-upload-adapter",
-      "phase": "implementing (upload routes over M3's MediaUploads; new files only)",
-      "since": "2026-09-23T05:12:27Z",
-      "note": "base 9c1c6ed; fakes only; brief G4U.md"
+      "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) \u2192 fix lane codex/w-consumed-parameters"
     },
     "W4": {
       "lane": "codex-w4 / codex/w4-measured-tuning",
-      "phase": "phase A implementing (protocol, decide.py on the committed sweep, candidate.sh, parity.py, flag table, P-20 decision record); phase B after a coordinator-run re-measurement",
+      "phase": "phase A fix round HANDED BACK b0a44a0 (round-2 code 086a127; 6 blocking closed, 40 new mutants, list 92); confirmation workflow running; phase B = coordinator box re-measurement",
       "since": "2026-09-23T05:40:38Z",
-      "note": "base a237d6f; fakes only; brief W4.md; box runs are coordinator operations after a logged maintenance window"
+      "note": "protocol + candidate.sh + decide.py + parity.py + P-20 record; 52 mutants killed; interim ceiling 82 s (72 also safe); Makefile += tests/w/test_w4_mutants.py at merge"
+    },
+    "G3": {
+      "lane": "codex-g3 / codex/g3-jobs",
+      "phase": "implementing per .claude/handoff/wave3/G3.md (stacked on G2 2d742aa; fakes only)",
+      "since": "2026-09-23T10:09:50Z",
+      "note": "POST /v1/jobs + Prefer: respond-async 202, status/result/events/DELETE, client example async flow; own list tests/g/jobs/"
     }
   },
-  "reviews": {},
+  "reviews": {
+    "W4": {
+      "phase": "confirmation at b0a44a0 running (round 1 fix_required at db12a5a)",
+      "since": "2026-09-23T10:20:48Z"
+    },
+    "G4U": {
+      "phase": "MERGED 7d21fa7 after confirmation pass at 962b2b1",
+      "since": "2026-09-23T10:33:10Z"
+    },
+    "G2": {
+      "phase": "fix_required at 2d742aa (wf_cc07f35b-21f; 26 agents; JSON evidence/g/G2-review-2d742aa.json) \u2192 fix round; confirmation next",
+      "since": "2026-09-23T11:05:53Z"
+    }
+  },
   "gates": {
     "BACKEND-LOCAL": {
       "requires": "E3B",
@@ -201,6 +214,10 @@
     {
       "at": "2026-09-23T00:46:03Z",
       "what": "Resumed on sofia; ten lanes resumed from pushed heads (transcripts intact)"
+    },
+    {
+      "at": "2026-09-23T10:43:20Z",
+      "what": "Checkpoint at 90aadcf (code) / 01a7dfc (docs-only tail): api-test 2993 green on private ports; api-mutants 2349/2350 (the one red is the load-sensitive W3 sigint_not_handled runner timeout, killed in isolation); console 289 + typecheck + lint + 104 console mutants; bench 67 \u2192 main fast-forwarded f9ba5d2 \u2192 01a7dfc"
     }
   ],
   "cadence_windows": [
@@ -280,6 +297,21 @@
       "merged": "F cancel-cause @ 0fe8fdd merged --no-ff (6803d2f) + PENDING line 0024da2",
       "at": "2026-09-23T06:50:14Z",
       "note": "review pass at b691add (wf_fc480c08-828); M1 folded (second cancel keeps the first cause; 2 mutants killed); Pg refuses non-default causes until D5's 0018; G2 falls back to the default cancel on UnsupportedParameter"
+    },
+    "I-schema": {
+      "merged": "I schema fix @ 4c7de56 merged --no-ff",
+      "at": "2026-09-23T08:22:54Z",
+      "note": "wire-in names ACCOUNTING_REGIME/ACTIVE_RATE_CARD_VERSION/PROVIDER_DEV_ALLOCATION_CEILING_CREDIT in TUNABLE; MAX_INDEX_* moved to \u00a75; tests/i 143, config 233 on the lane; gate rerun at the new head pending"
+    },
+    "W-new": {
+      "merged": "W-new @ 483d763 merged --no-ff (a15fa4b)",
+      "at": "2026-09-23T10:40:50Z",
+      "note": "CONSUMED_PARAMETERS; cap reaches vLLM via the typed max_output_tokens ceiling; W lists 320, tests/w 157 on the merged tree, 3 mutants killed"
+    },
+    "G4U": {
+      "merged": "G4U @ d1827d5 merged --no-ff (7d21fa7) + Makefile list",
+      "at": "2026-09-23T10:59:19Z",
+      "note": "review fix_required f3c8055 \u2192 round 2 962b2b1 \u2192 confirmation PASS \u2192 fold-ins 73dfaaf; 39 mutants; merged tree tests/g+m 703, uploads+G lists 241; mount + rt.media_store/rt.large_bodies at the cutover; M request check_open; E bench.py upload names; Q harness container override"
     }
   },
   "tracker_url": "https://claude.ai/artifact/VuAxJjrT2DDgmZ3RpUEYRa"
