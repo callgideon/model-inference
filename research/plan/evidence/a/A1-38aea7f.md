@@ -150,6 +150,8 @@ One behaviour change touches a 0001 table. `public.org_members` gains the trigge
 >
 > An organization the user created but shares with another member is neither renamed nor suspended, and neither is one they solely own but did not create *(RV2-2, round 3)*. *(Added in review round 2, RM-1/RM-3.)* The signup-time R72 scope is every organization the individual created (`organizations.created_by`). An organization with a NULL `created_by` is outside that scope, and no product path creates one: 0001's `handle_new_user` is the only insert and always sets it.
 >
+> *(RV3-2, round 4.)* The claim locks every organization the individual created (FOR NO KEY UPDATE) before binding. A concurrent transaction that writes memberships in two or more of those organizations in the opposite order can make the claim raise `40P01`; the caller retries the same idempotent call, and nothing is minted by the failed attempt.
+>
 > The ledger, entitlement and identity claim are retained as money history. Eligibility is one grant per individual UUID **and** per verified address: sha256 of the lower-cased, trimmed email, stored as a digest only. The digest is retained after retirement, so delete + re-create with the same address is `identity_reused`, never a second grant.
 >
 > The digest is an unsalted, unkeyed sha256 of an email address, which a dictionary of addresses can reverse. It is therefore **pseudonymous personal data**, kept for abuse control (one grant per human), and its retention must be bounded by the legally approved period (**P-05**). Erasing it re-opens eligibility for that address, so erasure requires deleting the `infrx.signup_identity_claims` row. That is an UPDATE/DELETE the immutability trigger refuses today, so it has to be a new, audited D operation plus a ruling.
@@ -174,6 +176,7 @@ const { data, error } = await createAdminClient()
 | `identity_reused` / `rollout_hold` / `retired` | grant columns null | one neutral "not eligible / under review" message; do not distinguish them to the user |
 | error `55000` | — | signup grant not enabled yet (flag): "credits pending", retry later |
 | error `22023` | — | programming error (no user) |
+| error `40P01` | — | deadlock with a concurrent membership change in the individual's organizations: retry the same call (idempotent; nothing was minted) *(RV3-2, round 4)* |
 
 Example `granted` row: `{"status":"granted","user_id":"<uuid>","wallet_id":"<uuid>","ledger_operation_id":"<uuid>","amount":"10000.00000000","granted_at":"2026-09-22T23:04:31.123456+00:00"}`. Amounts are text (R59-9). Persist-before-display holds, because the RPC returns after commit.
 
@@ -345,7 +348,7 @@ Mutant lists, by import: `D total 227 A1 migration 34 A1 code 15 checks 46`. The
 ### Limits (round 3)
 
 - The claim now takes, in order, the profile KEY SHARE (RM-2) and then FOR NO KEY UPDATE on every organization the individual created (RV2-1). `retire_individual` takes the profile FOR UPDATE and then the org FOR UPDATE (through `set_suspension`). Both take the profile first, so a claim and a retirement cannot deadlock.
-- Two claims for the same individual lock that individual's created orgs in the same statement's scan order. There is no `order by`, as in the reviewer's verified fix. With several created orgs, an order difference between two concurrent claims could deadlock (40P01, raised rather than answered). The 10×8 race has one created org per individual and never hit it.
+- *(Corrected in review round 4, RV3-2.)* Two claims for the same individual cannot deadlock: the second waits on the `signup_identity_claims` unique index before it reaches any org lock (re-confirmation P4: 20/20 `(granted, replayed)`, no 40P01, both images). The real 40P01 surface is a claim racing a transaction that writes memberships in two or more of the claimant's created orgs in the opposite order: the claim then raises `40P01` (retryable; nothing minted, no wallet or ledger row; P4b 5/5). `order by o.id` does not remove it, because the writer's order is its own. Only platform-role membership writers reach it; the backfill counts `error:40P01` and continues.
 - The guard's FOR SHARE is taken on every `org_members` write, including 0001's `handle_new_user` owner insert. That lock waits only on a claim holding the same org.
 - The earlier limits are unchanged.
 
