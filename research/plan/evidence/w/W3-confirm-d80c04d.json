@@ -1,0 +1,345 @@
+{
+  "verdict": "pass",
+  "confirmed_blocking": [],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "SC-1",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/w/W3-d8a7878.md",
+      "line": "455-458 (Limit 13) and the S4 row (line 25)",
+      "claim_broken": "\"R7 (stop() not awaiting the pool) is not killed: ... unobservable under asyncio's wake-up order, by reading\". It is observable: a stop() issued before the pool task's first step (the exact schedule ENDED's second half already runs) returns with the pool task still pending, and readiness then reads loop 'draining' instead of 'stopped'.",
+      "evidence": "Probe P6 on a d80c04d copy, subclass whose stop() drops the `gather(self._pool)`: r7/stop_before_pool_ran -> {pool_done_after_stop: False, loop: 'draining'} vs original {True, 'stopped'}; the other three schedules (idle, mid-attempt, after a runner died) are indeed equivalent. Own mutant r7_stop_does_not_await_pool: ENDED rc 0, READY rc 0 (survives the committed cases), killed by an added case asserting `service._pool.done()` and readiness()['loop'] == 'stopped' after start();stop() with no tick between (AssertionError, 1 failed in 0.31s).",
+      "minimal_fix": "In ENDED's `start_then_stop` add `assert default._pool.done() and (await default.readiness())['loop'] == 'stopped'`, add the R7 edit (`stop_does_not_await_the_pool`, remove the two gather lines) to w3_mutants.py anchored on ENDED, and reword Limit 13 (drop the R7 half).",
+      "lens": "service"
+    },
+    {
+      "id": "SC-2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/worker/service.py",
+      "line": "153-154 (serve log), 168-172 (_died), 119-120 (stop gather)",
+      "claim_broken": "Docstring/evidence: serve() 'drains ... and the service manager restarts the process' on a death - but the cause of the death is never recorded anywhere: the log carries task names only, `_died()` calls task.exception() (so asyncio's 'exception was never retrieved' fallback never prints), gather(return_exceptions=True) swallows the rest, and loop.failures is never logged. A pool task that itself raises (concurrency < 1) is not in `_died()` at all: the log says `died unasked: []`, serve() returns a DrainReport, exit 0, Restart=always loops every 5 s with no traceback ever.",
+      "evidence": "Probe P1 (concurrency=2, one runner ConnectionError): captured infrx.worker records = ['ERROR died unasked: [\\'worker-w3-1\\']; draining for a restart', 'WARNING drained: 1 finished, 1 released [...]'] - no 'ConnectionError' anywhere. Probe P5 (concurrency=0): pool_exc ValueError('concurrency must be at least 1'), logs ['ERROR died unasked: []; ...'], serve returned DrainReport, live True afterwards. Probe P3 (runner cancelled, not raised): serve returns with 'died unasked: []'.",
+      "minimal_fix": "Log the reasons: `log.error(\"died unasked: %s; draining for a restart\", [(t.get_name(), repr(t.exception())) for t in self._died()] or [(\"pool\", repr(self._pool.exception()))] if self._pool.done() and not self._pool.cancelled() and self._pool.exception() else ...)`; or simply `for t in died: log.error(\"%s died\", t.get_name(), exc_info=t.exception())`.",
+      "lens": "service"
+    },
+    {
+      "id": "SC-3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/w/test_service.py",
+      "line": "501-540 (REAPER_DEAD), 543-575 (PUBLIC)",
+      "claim_broken": "Two body/ordering clauses have no killing case: (a) `runners_dead` counts runners only (readiness line 186) - no case asserts runners_dead == 0 with a dead reaper; (b) `_check_loopback()` runs before the bind (start line 106-109) - the `moved` case cannot tell, so a variant that binds 0.0.0.0 first and raises afterwards passes.",
+      "evidence": "Own mutants: runners_dead_counts_the_reaper (`sum(task is not self._reaper ...)` -> `len(died)`) SURVIVED DEAD, REAPER_DEAD, READY; loopback_checked_after_bind (check moved below the start_server block) SURVIVED PUBLIC. Neither is claimed as a tested invariant in the evidence, and (b) still ends the process (serve() raises), so nonblocking.",
+      "minimal_fix": "REAPER_DEAD: add `state['runners_dead'] == 0` to the dead-reaper assertion. PUBLIC `moved` case: add `assert moved._server is None` after the raise (and list both edits in w3_mutants.py).",
+      "lens": "service"
+    },
+    {
+      "id": "PINC-1",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/concurrency.sh",
+      "line": "31, 72",
+      "claim_broken": "Evidence PIN-4 row / header: the sweep 'survives a failed scrape' and 'preconditions it checks and refuses on' print a `refused:` line. Two aborts remain under `set -euo pipefail`: (a) line 72 `\"$PY\" \"$bench\" --report \"$out/bench.jsonl\"` - when every level's bench run failed (engine down mid-sweep) `--out` is never appended, the real bench.py exits 1 on a missing file (`FileNotFoundError` at bench.py:1533) and on an empty one (`no summaries in \u2026`), so the script exits 1 before the `### kv capacity` block and the `artifacts=` line; (b) line 31 `args=$(docker inspect \u2026)` on a missing container exits 1 with docker's own stderr, not the `refused:`/exit-2 form the header promises for its preconditions. Neither alters the box; both are unlabelled partial runs of a 15-25 min coordinator step. The PIN-4 fix itself (set +e in sample, kill || true, log grep || true) is confirmed: stub curl always 28, curl 5xx body, nvidia-smi failing, docker logs failing, bench failing per level all exit 0 with both levels, the report and artifacts=.",
+      "evidence": "Stub matrix in scratch (docker/curl/nvidia-smi/bench stubs, LEVELS='1 2'): control rc=0 both levels/report/artifacts, 0 files outside $OUT; `bench --report fails` -> rc=1, report=1 (header printed), artifacts=0; `docker inspect Args fails` -> rc=1 stderr 'Error: No such object', no `refused:` line, 0 run dirs. Real bench.py: `--report <missing>` -> 'bench failed: FileNotFoundError \u2026 bench.py:1533:report', rc=1; `--report <empty>` -> 'no summaries in \u2026', rc=1.",
+      "minimal_fix": "Line 72: `\"$PY\" \"$bench\" --report \"$out/bench.jsonl\" || echo \"report_exit=$? (no summary rows: every level failed)\"`; line 31: `args=$(docker inspect --format '{{json .Args}}' \"$CONTAINER\") || { echo \"refused: no container $CONTAINER\" >&2; exit 2; }`. Optional killing case: stub bench exiting 3 at every level and `--report` exiting 1 -> expect rc 0 and `artifacts=`.",
+      "lens": "pin"
+    },
+    {
+      "id": "PINC-2",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/serve.sh",
+      "line": "72-80",
+      "claim_broken": "Header line 22-23 and the record's `about`: PROCESSING_CACHE_DIR is 'never a system directory'. The canonical check is `realpath -m -s` (symlinks kept, as the evidence PIN-3 row states precisely), so a root that is a symlink to /etc (or any refused directory) is canonical, not in the case list, exists, and is mounted `-v <link>:<link>:ro` with `--allowed-local-media-path <link>`; mount(2) resolves the source, so the engine can serve the real /etc via file://. Operator-controlled value, so a misconfiguration class rather than a box hazard; every spelled form the lens asked for is otherwise refused.",
+      "evidence": "Stub-docker matrix: `PROCESSING_CACHE_DIR=$T/link-etc` (link-etc -> /etc) rc=0, mounts `[$T/link-etc:$T/link-etc:ro]`, allowed=$T/link-etc. Refused as claimed: trailing `/` rc=2, `/opt/dlami/nvme/../../etc` rc=2, relative rc=2, `/etc/` rc=2, `/home/` rc=2, `/model` rc=2, `$T/root/./x` rc=2; `/home2`, `/model-x`, `/etc2`, `/homer`, `/opt/dlami/nvme` pass the case (no prefix false positive) and stop at the existence check (rc=1); a path with spaces is one argv word for -v and --allowed-local-media-path (rc=0); nonexistent canonical path rc=1.",
+      "minimal_fix": "Run the case on the resolved path as well: `resolved=$(realpath -m -- \"$PROCESSING_CACHE_DIR\"); case \"$resolved\" in /|/etc|/etc/*|/home|/home/*|/model|/model/*) \u2026 exit 2;; esac` (keep the -s equality for the spelling); one ONE_SOURCE line with a symlink to /etc, mutant `symlinked_system_root_accepted`.",
+      "lens": "pin"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "service",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "W3 list, INFRX_MUTANTS=all (73 mutants incl. the 5 new S1 ones, health_check_unbounded, start_trusts_the_constructed_host, listener_binds_every_interface, listener_bound_after_the_pool, sigint_not_handled, pool_starts_before_the_reap, reap_errors_hidden, live_drops_the_draining_clause, reap_body_unguarded, reaper_death_unreported, serve_ignores_a_dead_reaper)",
+          "edit": "as committed in tests/w/w3_mutants.py at d80c04d",
+          "result": "all killed: 75 passed in 255.50s (73 mutants + 2 list-shape tests)",
+          "killed_by": "the cases named in the list"
+        },
+        {
+          "name": "r7_stop_does_not_await_pool (review R7)",
+          "edit": "service.py stop(): remove `if self._pool is not None: await asyncio.gather(self._pool, return_exceptions=True)`",
+          "result": "SURVIVED the committed cases (ENDED rc 0, READY rc 0); killed by an added case (start();stop() with no tick; assert _pool.done() and readiness loop == 'stopped') - finding SC-1",
+          "killed_by": "test_confirm__a_stop_before_the_pool_ran_leaves_the_pool_stopped (own)"
+        },
+        {
+          "name": "cancelled_runner_counts_as_dead",
+          "edit": "_died: `not task.cancelled() and task.exception() is not None` -> `(task.cancelled() or task.exception() is not None)`",
+          "result": "killed",
+          "killed_by": "test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_draining (line 432: live True after a drain that released/cancelled the runner)"
+        },
+        {
+          "name": "serve_no_busy_wait_for_runners",
+          "edit": "serve: remove the `while not self.loop._tasks and not self._pool.done(): await asyncio.sleep(0)` loop",
+          "result": "killed",
+          "killed_by": "test_ops_recover__one_dead_runner_makes_the_worker_not_live_and_ends_serve (line 494: serve() waited for a pool that runs one runner short)"
+        },
+        {
+          "name": "runners_dead_counts_the_reaper",
+          "edit": "readiness: `\"runners_dead\": sum(task is not self._reaper for task in died)` -> `len(died)`",
+          "result": "SURVIVED (DEAD, REAPER_DEAD, READY all rc 0) - finding SC-3a"
+        },
+        {
+          "name": "loopback_checked_after_bind",
+          "edit": "start: move `self._check_loopback()` below the start_server block",
+          "result": "SURVIVED (PUBLIC rc 0) - finding SC-3b"
+        },
+        {
+          "name": "reap_before_bind",
+          "edit": "start: reap_once() before the start_server block",
+          "result": "SURVIVED (PUBLIC, RESTART rc 0) - equivalent for the claimed invariant ('a busy port claims nothing'); a reap on a busy-port restart loop is idempotent"
+        },
+        {
+          "name": "live_while_draining_ignores_the_dead",
+          "edit": "`live = (state != \"stopped\" or self.loop.draining) and not died` -> `(state != \"stopped\" and not died) or self.loop.draining`",
+          "result": "SURVIVED (DEAD, READY, REAPER_DEAD rc 0) - only differs during the crash-only drain itself, when the process is already exiting; not a claimed invariant"
+        },
+        {
+          "name": "livez_answers_ready",
+          "edit": "_probe: `body[\"ready\" if path == READY_PATH else \"live\"]` -> `body[\"ready\"]`",
+          "result": "killed",
+          "killed_by": "test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_draining (line 404: 503 == 200)"
+        },
+        {
+          "name": "serve_no_drain_log_ignores_stop_set",
+          "edit": "serve: `if not stop.is_set():` -> `if False:`",
+          "result": "SURVIVED - log-only clause, not an invariant"
+        },
+        {
+          "name": "probe P1: two runners, one dies on ConnectionError from claim_candidate while the survivor is mid-attempt (Blocking engine, drain_s=0.3)",
+          "edit": "-",
+          "result": "livez (503, live False, runners_dead 1); readyz 503 loop 'idle'... over the socket with the survivor in flight; serve() returned in 0.305 s; the survivor's attempt was NOT completed: released (released_jobs == (job,), ended == ()), job state 'running', lease held - left to the 120 s TTL expiry for the successor's reaper (Limit 5); with the default bound (300 s) it would be waited for instead; failures == ['ConnectionError']; DrainReport.finished == 1 counts the dead runner (Limit 14, documented)"
+        },
+        {
+          "name": "probe P2: a runner that dies while DRAINING (runner.run raises RuntimeError 0.1 s into a 5 s drain)",
+          "edit": "-",
+          "result": "stop() returned in 0.091 s, report finished 1 / released 0, runners_dead 1, live False, failures ['RuntimeError'] - no hang; (in production attempt.run catches Exception at attempt.py:259, so a runner can only die in the claim path)"
+        },
+        {
+          "name": "probe P3: a runner cancelled from outside (not raised)",
+          "edit": "loop._tasks[0].cancel()",
+          "result": "serve(): returns and drains (FIRST_COMPLETED fires), runners_dead 0, live True, log 'died unasked: []' (SC-2); embedded start()/stop() only: invisible - live True, ready True, 1 of 2 runners alive. Nothing in the codebase cancels a runner outside drain(), so noted, not counted"
+        },
+        {
+          "name": "probe P4: reaper and a runner die on the same tick (gate released for both)",
+          "edit": "-",
+          "result": "serve returned (no raise); runners_dead 2, reaper 'dead', live False, ready False; log 'died unasked: ['worker-w3-0', 'worker-w3-1', 'reaper']'"
+        },
+        {
+          "name": "probe P5: the pool task itself raises (concurrency=0)",
+          "edit": "-",
+          "result": "serve returned a DrainReport in 0.001 s (exit 0 -> Restart=always loops), pool exception ValueError never logged, 'died unasked: []', live True after stop - SC-2"
+        },
+        {
+          "name": "probe P9: serve(stop) and an external stop() racing (double drain)",
+          "edit": "-",
+          "result": "both returned identical reports (released 1), job 'running'; drain is idempotent on a drained loop"
+        },
+        {
+          "name": "probe P10: health_host mutated to 0.0.0.0 AFTER start()",
+          "edit": "-",
+          "result": "listener stays bound to 127.0.0.1 (getsockname); the re-check at start() covers the before-start mutation (PUBLIC, mutant start_trusts_the_constructed_host killed in the list)"
+        },
+        {
+          "name": "probe P11: bind failure through serve()",
+          "edit": "port pre-bound",
+          "result": "serve() raises OSError (exit non-zero -> Restart=always), _pool None, _reaper None, loop._tasks empty, claimed 0 - no task objects created (S3 closed)"
+        },
+        {
+          "name": "concurrency=1, the only runner dying",
+          "edit": "-",
+          "result": "covered by READY's last block: live False, ready False, failures 1, runners_dead 1, serve() returns within 5 s (asserted); mutants serve_waits_only_for_a_signal, always_live, dead_runner_uncounted killed"
+        },
+        {
+          "name": "Restart semantics vs I2B's unit (read-only)",
+          "edit": "-",
+          "result": "serve() returns normally on a death -> asyncio.run exits 0; a bind/loopback failure raises -> non-zero. codex-i2b deploy/infrx-worker.service has Restart=always, RestartSec=5, TimeoutStopSec=360, ExecStop docker stop -t 330 - a clean return restarts (an on-failure policy would not, and none is proposed); with RestartSec=5 the default StartLimitBurst (5/10 s) cannot trip on a crash loop"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-w3 archive d80c04d | tar -x -C /tmp/claude-1000/confirm-w3-service-1968826 && make api-env",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1\n + zstandard==0.25.0\nEXIT 0"
+        },
+        {
+          "cmd": "cd <scratch>/apps/infrx-api && uv run --frozen pytest -q tests/w -p no:cacheprovider",
+          "exit": 0,
+          "tail": "........................................................................ [ 94%]\n....\n153 passed in 172.04s (0:02:52)\nEXIT 0"
+        },
+        {
+          "cmd": "cd <scratch>/apps/infrx-api && INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_w3_mutants.py -p no:cacheprovider",
+          "exit": 0,
+          "tail": "........................................................................ [ 96%]\n...                                                                      [100%]\n75 passed in 255.50s (0:04:15)\nEXIT 0"
+        },
+        {
+          "cmd": "cd <scratch>/apps/infrx-api && uv run --frozen python probe_service.py  (P1,P2,P3,P4-buggy,P5,P6,P9,P10,P11)",
+          "exit": 0,
+          "tail": "\"p6\": {\"orig/stop_before_pool_ran\": {\"pool_done_after_stop\": true, \"loop\": \"stopped\", ...}, \"r7/stop_before_pool_ran\": {\"pool_done_after_stop\": false, \"loop\": \"draining\", \"live\": true, \"failures\": 0}, \"r7/stop_while_idle\": {\"pool_done_after_stop\": true, ...}}, \"p11\": {\"raised\": \"OSError\", \"pool\": null, \"reaper\": null, \"claimed\": 0, \"tasks_created\": 0}"
+        },
+        {
+          "cmd": "cd <scratch>/apps/infrx-api && uv run --frozen python probe_p4.py",
+          "exit": 0,
+          "tail": "died unasked: ['worker-w3-0', 'worker-w3-1', 'reaper']; draining for a restart\ndrained: 2 finished, 0 released [], ended []\n{\"serve_returned\": true, \"serve_raised\": \"None\", \"runners_dead\": 2, \"reaper\": \"dead\", \"live\": false, \"ready\": false, \"failures\": [\"ConnectionError\", \"ConnectionError\"]}"
+        },
+        {
+          "cmd": "S=<scratch> <scratch>/apps/infrx-api/.venv/bin/python own_mutants.py  (9 own mutants, one throwaway tree each, named cases via the venv's pytest)",
+          "exit": 0,
+          "tail": "r7_stop_does_not_await_pool killed [extra case] (ENDED rc0, READY rc0); cancelled_runner_counts_as_dead killed [READY]; serve_no_busy_wait_for_runners killed [DEAD]; runners_dead_counts_the_reaper SURVIVED; loopback_checked_after_bind SURVIVED; reap_before_bind SURVIVED; live_while_draining_ignores_the_dead SURVIVED; livez_answers_ready killed [READY]; serve_no_drain_log_ignores_stop_set SURVIVED\nEXIT 0"
+        },
+        {
+          "cmd": "git diff a0eeaf4..d80c04d -- models/ apps/infrx-api/tests/w/test_serving.py | grep -nE '^\\+.*(docker run|ssh |aws |ssm|curl|i-0e8449|rm -rf|kill )'",
+          "exit": 0,
+          "tail": "only stub-curl lines in the test (`\"curl\": 'n=$(cat \"$CURL_CALLS\" ...'`, `quiet = {\"curl\": \"exit 7\\n\", \"nvidia-smi\": \"exit 9\\n\"}`) and concurrency.sh's `kill \"$sampler\" 2>/dev/null || true` - no box/network/container hazard in the service-relevant diff"
+        }
+      ],
+      "fabrication_check": "Every number above comes from a command run in this session on a scratch extraction of d80c04d (/tmp/claude-1000/confirm-w3-service-1968826, now deleted): tests/w 153 passed/172.04 s, the W3 list 75 passed/255.50 s, the probe JSON (P1 elapsed 0.305 s, P2 0.091 s, P5 0.001 s, P6 r7/stop_before_pool_ran pool_done False + loop 'draining'), and the own-mutant table (rc per case, AssertionError lines 432/494/404 and the extra case's line 15). The review JSON was read from claude/backend-impl via git show; I2B's units were read from the codex-i2b worktree without modification; no worktree was edited or committed (git status of codex-w3 clean after cleanup). Not verified: real systemd behaviour (ExecStop after a self-exit) - I2B's lane, outside this lens; python -m infrx.worker does not exist at d80c04d (no __main__.py; the composition root is the coordinator's per evidence request 4). S1's claim 'survivor drained on the way out' I verified beyond the committed case (survivor idle there) with a survivor mid-attempt (P1): released, lease left to expiry. R7 'unobservable' was refuted by measurement, not by reading. No pilot box, container, docker run or network was used; the fake vLLM cases in tests/w ran as part of the suite (local OS process on loopback only).",
+      "cleanup": "Removed /tmp/claude-1000/confirm-w3-service-1968826 (scratch tree, venv, probe scripts, logs), /tmp/claude-1000/own-* mutant trees and /tmp/claude-1000/confirm-w3-service-path. No file in any worktree (codex-w3, codex-i2b, infrx-impl) was created, edited or committed; codex-w3 `git status --short` is empty. No background task is still running."
+    },
+    {
+      "lens": "pin",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "image_override_forms",
+          "edit": "serve.sh launched with IMAGE=vllm/vllm-openai:nightly via `env` prefix, `export` in a wrapper, EnvironmentFile-style `set -a; . file`, BASH_ENV, and sourced with IMAGE set (no script edit)",
+          "result": "all ignored: docker argv carries vllm/vllm-openai@sha256:4cbfd34a\u2026; sourced with `readonly IMAGE` -> `unset: IMAGE: cannot unset: readonly variable`, rc=1, docker not run (fail-closed)",
+          "killed_by": "n/a (environment attacks); the script-edit form `image_env_overrides_the_pin` (drop `unset IMAGE`) is killed by LAUNCH ('serve.sh does not start the recorded image')"
+        },
+        {
+          "name": "preflight_regex_after_unset",
+          "edit": "none: I0's deploy/preflight.py (scratch d80c04d) and I2B HEAD's deploy/preflight.py run against the new serve.sh",
+          "result": "engine_problems dev [] pilot [] for both copies; `IMAGE=${IMAGE:-\u2026@sha256:\u2026}` still matches",
+          "killed_by": "check_pinned_launch asserts engine_problems(...,'pilot') == []"
+        },
+        {
+          "name": "max_num_seqs_forms",
+          "edit": "ENGINE_MAX_NUM_SEQS = '08', '8 ', ' 8', '8\\n', '2147483648', '99999999999'",
+          "result": "'08','8 ',' 8','8\\n' -> rc=2 docker not run; 2147483648 and 99999999999 -> rc=0 passed verbatim (the claim is 'positive integer', which holds; vLLM decides the range)",
+          "killed_by": "max_num_seqs_unvalidated killed by ONE_SOURCE ('0', 0)"
+        },
+        {
+          "name": "cache_dir_forms",
+          "edit": "PROCESSING_CACHE_DIR = symlink->/etc, trailing /, /opt/dlami/nvme/../../etc, relative, path with spaces, nonexistent canonical, /home2, /model-x, /etc/, /model, /etc2, /homer, /home/, /opt/dlami/nvme, <root>/./x",
+          "result": "see PINC-2: symlink survives; every other spelled form refused (rc=2) or stopped at existence (rc=1); no prefix false positives",
+          "killed_by": "system_root_accepted / non_canonical_root_accepted / missing_root_accepted killed by ONE_SOURCE; symlink case: none (PINC-2)"
+        },
+        {
+          "name": "other_flags_pass_through",
+          "edit": "serve.sh --dtype float16",
+          "result": "rc=0, argv has `--dtype` twice (pinned bfloat16 then caller's) - as the reworded `about`/header now say (PIN-1 refuted, wording kept)",
+          "killed_by": "n/a (documented pass-through)"
+        },
+        {
+          "name": "concurrency_stage_failures",
+          "edit": "stub fails at each stage in turn: docker inspect Args, docker inspect Image, curl 28 always, curl 5xx body, nvidia-smi, bench per level, bench --report, docker logs (LEVELS='1 2')",
+          "result": "Args -> rc=1 no refused: line (PINC-1b); Image/curl28/curl5xx/smi/bench-per-level/logs -> rc=0, both levels, `### report`, `artifacts=`, 0 files outside $OUT/<run>/; bench --report -> rc=1, no artifacts= (PINC-1a)",
+          "killed_by": "sampler_dies_on_a_failed_scrape, sweep_fails_on_a_rotated_log killed by SWEEP; PINC-1 cases: none"
+        },
+        {
+          "name": "inventory_no_writes_and_precondition",
+          "edit": "stub docker answering the pin for everything, curl/nvidia-smi failing, </dev/null",
+          "result": "rc=0, image_equals_pin=yes, registry `not_run=HF_TOKEN unset`, 0 files written by the script; missing-container variant is the committed case (exit 2, precondition=failed)",
+          "killed_by": "inventory_without_its_container killed by INVENTORY"
+        },
+        {
+          "name": "wrap_hf_token_leak",
+          "edit": "the evidence's wrap_hf helper with a stub `aws` printing a run-time token, run under `sh -c` (dash-compatible) with a stub curl that records argv, stdin (only for -H @-) and `ps -eo args`",
+          "result": "token hits: command text 0, stub argv log 0, stdout/stderr 0, ps argv snapshots 0, curl stdin 1 (the Authorization header); curl argv `-sS -m 30 -H @- https://huggingface.co/api/models/NemoStation/Marlin-2B/tree/main`",
+          "killed_by": "n/a (procedure text, as the evidence says)"
+        },
+        {
+          "name": "capability_stub_engine",
+          "edit": "capability.sh against a stub HTTP engine (five SSE chunks then hang; then two chunks then hang), MEDIA_ROOT/CLIP under a tmp root, stub docker",
+          "result": "five: rc=0 in 9 s, 8 probe lines, file:// URLs (`file:///etc/hostname`, `<root>/../../etc/hostname`) reach the engine only, docker calls are 4x `logs --since`, 0 files written; two: the disconnect probe blocks on readline until the 60 s socket timeout -> TimeoutError traceback, rc=1 at 68 s (bounded, fail-closed, unchanged this round)",
+          "killed_by": "n/a (no committed case for capability.sh; unchanged this round)"
+        },
+        {
+          "name": "dangerous_commands_grep",
+          "edit": "grep for docker stop/rm/restart/kill/pull/run, systemctl, rm -rf, sudo, set -x, kill in the three scripts",
+          "result": "only `kill \"$sampler\"` (the script's own background sampler) in concurrency.sh:65",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "W3 PIN_MUTANTS (24) via tests.w.w3_mutants runner",
+          "edit": "all 24 pin/record/script mutants by name",
+          "result": "24/24 killed (pristine baselines pass)",
+          "killed_by": "tests/w/test_serving.py checks"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-w3 archive d80c04d | tar -x -C /tmp/claude-1000/confirm-w3-pin-1974192 && make api-env",
+          "exit": 0,
+          "tail": " + valkey==6.1.1\n + zstandard==0.25.0\nEXIT=0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/w/test_serving.py  (scratch)",
+          "exit": 0,
+          "tail": "5 passed in 4.31s\nEXIT=0"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/w/test_w3_mutants.py -k 'pin or script or serve or sweep or inventory'",
+          "exit": 0,
+          "tail": "9 passed, 66 deselected in 69.64s (0:01:09)\nEXIT=0   (the -k matches only 9 mutant names, so the full pin list was run separately:)"
+        },
+        {
+          "cmd": ".venv/bin/python -m tests.w.w3_mutants <the 24 PIN_MUTANTS by name>",
+          "exit": 0,
+          "tail": "[killed       ] record_setting_is_not_the_contract: AssertionError: check_record_matches_the_code failed\n[killed       ] record_digest_source_invented: AssertionError: registry\n\n24/24 killed\nEXIT=0"
+        },
+        {
+          "cmd": "python: engine_problems(new serve.sh) with scratch deploy/preflight.py (I0) and codex-i2b HEAD deploy/preflight.py",
+          "exit": 0,
+          "tail": "confirm-w3-pin-1974192 dev [] pilot []\ncodex-i2b dev [] pilot []"
+        },
+        {
+          "cmd": "bash attack-serve.sh  (stub docker; IMAGE override forms, ENGINE_MAX_NUM_SEQS forms, PROCESSING_CACHE_DIR forms, --dtype pass-through)",
+          "exit": 0,
+          "tail": "sourced with readonly IMAGE  rc=1 docker-not-run stderr=\u2026unset: IMAGE: cannot unset: readonly variable\nENGINE_MAX_NUM_SEQS=$'8\\n'  rc=2 docker-not-run\nPCD=$T/link-etc rc=0 \u2026 mounts=[\u2026 $T/link-etc:$T/link-etc:ro] allowed=$T/link-etc\nPCD=/opt/dlami/nvme/../../etc  rc=2 \u2026 must be an absolute, canonical path"
+        },
+        {
+          "cmd": "bash attack-conc.sh  (concurrency.sh, a stub failing at each stage)",
+          "exit": 0,
+          "tail": "docker inspect Args    rc=1 levels=[] report=0 artifacts=0 run_dirs=0 files_outside_OUT=0\ncurl 5xx body          rc=0 levels=[level=1 \u2026 level=2 \u2026] report=1 artifacts=1 run_dirs=1 files_outside_OUT=0\nbench --report fails   rc=1 levels=[level=1 \u2026 level=2 \u2026] report=1 artifacts=0 run_dirs=1 files_outside_OUT=0"
+        },
+        {
+          "cmd": ".venv/bin/python models/marlin2b/bench.py --report <missing.jsonl>; \u2026 --report <empty.jsonl>",
+          "exit": 1,
+          "tail": "bench failed: FileNotFoundError (message withheld) at bench.py:1533:report <- bench.py:1610:_run <- bench.py:1598:main\nrc=1\nno summaries in \u2026/empty.jsonl\nrc=1"
+        },
+        {
+          "cmd": "bash attack-inv.sh  (inventory.sh with stubs </dev/null; wrap_hf with stub aws under sh -c)",
+          "exit": 0,
+          "tail": "(a) inventory rc=0 equals_pin=image_equals_pin=yes registry=not_run=HF_TOKEN unset  files_written_by_script=0\n(b) wrap_hf under sh (dash-like): rc=0\n    token in command text: 0   in stub argv log: 0   in stdout/stderr: 0   in ps argv snapshots: 0   on curl stdin: 1"
+        },
+        {
+          "cmd": "bash attack-cap.sh  (capability.sh against a stub HTTP engine, modes five/two)",
+          "exit": 0,
+          "tail": "### mode=five rc=0 elapsed=9s files_written=0\nfile urls sent to the engine: file:///etc/hostname file:///tmp/\u2026/atk-cap.6swx/\n### mode=two rc=1 elapsed=68s files_written=0 \u2026 TimeoutError: timed out"
+        },
+        {
+          "cmd": "grep -nE 'docker (stop|rm|restart|kill|pull|run)|systemctl|rm -rf|sudo|set -x|\\bkill\\b' models/marlin2b/measure/*.sh",
+          "exit": 0,
+          "tail": "concurrency.sh:65:  kill \"$sampler\" 2>/dev/null || true; wait \"$sampler\" 2>/dev/null || true"
+        },
+        {
+          "cmd": "git status --porcelain | wc -l  (codex-w3, codex-i2b, infrx-impl)",
+          "exit": 0,
+          "tail": "0\n0\n0"
+        }
+      ],
+      "fabrication_check": "Every number and exit code above comes from commands I ran in a scratch archive of d80c04d (/tmp/claude-1000/confirm-w3-pin-1974192) or from files read in the codex-w3 / codex-i2b worktrees read-only. No registry, Docker daemon, AWS, SSM, Hugging Face or pilot-box call was made; the only network-shaped activity was a stub HTTP server on 127.0.0.1. Review items re-checked: PIN-2/H4 closed (every environment form, including EnvironmentFile-style and BASH_ENV, is ignored; a readonly IMAGE fails closed; both preflight copies still match the `${IMAGE:-\u2026}` form and return []); PIN-3 closed for every spelled form asked (the symlink case, PINC-2, is outside what the fix claims and is operator-controlled); PIN-4 closed (a failed scrape, a 5xx body, a failing nvidia-smi, a rotated log all survive) with the residual all-levels-failed `--report` abort and the exit-1 missing-container abort recorded as PINC-1; PIN-5 closed (exit 2, `precondition=failed`, no writes); PIN-6/H5 closed as a procedure (wrap_hf: 0 token hits in command text, argv, ps snapshots and output; present only on curl's stdin); PIN-7/H1 wording checked against the facts I hold: `digest_kind` and `pilot_box` no longer assert the store type, I1B line 13 records only the 12-hex id and no storage driver, so 'proves neither the store nor equality' is accurate (I did not re-verify the config digest 38e8c0e6\u2026 or the registry digests this round; the previous pin lens verified the index/amd64 digests once); PIN-8 and request 12 checked against I2B HEAD 3c48066 (worktree clean apart from its untracked evidence file): marlin2b-vllm.service passes no flag and reads /etc/marlin2b-gateway.env, infra/rollout/steps/40-checkout.sh carries the do-not-restart window note and 50-install.sh defaults INFRX_SET ENGINE_MAX_NUM_SEQS=32, so W3's request 12 is already answered by I2B's fix round and the two units cannot coexist only on the box's currently installed I0 unit (scratch deploy/marlin2b-vllm.service line 12 still has `--max-num-seqs 32`). The mutant `-k` subset the task named selects only 9 of the 75 items, so I ran all 24 PIN_MUTANTS through the list's own runner (24/24 killed). Not verified by me: the Python/service half (other lens), the 306-mutant three-list total, tests/i, bench-test, and R84 (present on claude/backend-impl but about migrations, not this lens). Two of my probe runs were my own stub bugs (a stdin-reading curl stub hung the first inventory run and ate the piped script on the first wrap_hf run); both were corrected and re-run, and neither reflects a script defect.",
+      "cleanup": "Removed /tmp/claude-1000/confirm-w3-pin-1974192 (scratch archive, .venv, stub bins, logs, attack scripts) and the scratchpad path note; no /tmp/w3-pin-* runner directories remain; killed the hung stub run; no edits or commits in any worktree (codex-w3, codex-i2b and infrx-impl `git status --porcelain` all 0 lines)."
+    }
+  ]
+}

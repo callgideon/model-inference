@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T03:14:57Z",
+  "updated": "2026-09-23T03:18:54Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -35,7 +35,7 @@
     },
     "W3": {
       "lane": "codex-w3 / codex/w3-drain-pin",
-      "phase": "confirmation review of fix round at d80c04d; box measurements pending",
+      "phase": "confirmation PASS at d80c04d; fold-in (5 nonblocking) then box measurements (P-04) then merge with I2B",
       "since": "2026-09-22T22:37:58Z",
       "note": "engine pin by digest, drain, readiness; measurements coordinator-run"
     },
