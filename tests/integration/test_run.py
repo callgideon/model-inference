@@ -1161,12 +1161,16 @@ def test_the_report_records_the_tree_at_the_start_and_at_the_end(monkeypatch, tm
 def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
     """Review F6-findings: `make api-test` runs with `-rs`, and a skip reason outside the
     known, attributed set fails the stage - a skip is never a pass."""
+    real_shell = runner.shell                      # before any arm below replaces it
     # Confirmation G-B3: the SKIPPED line sits mid-output, as in a real run (re.M matters).
     parsed = runner.shell([sys.executable, "-c", "print('x\\nSKIPPED [3] tests/d/x.py:110: "
                            "missing optional hook stream\\n1 passed, 3 skipped in 1s')"],
                           cwd=harness.REPO_ROOT)
     assert parsed["skips"] == ["missing optional hook stream"], parsed
     assert parsed["counts"]["skipped"] == 3, parsed
+    # Verification GATE-B2: the COUNT comes from pytest's summary line alone - never from the
+    # `-rs` lines it is cross-checked against - and wherever `skipped` sits in that line.
+    assert runner.counts("x\n1 passed, 3 skipped, 2 xfailed in 1s").get("skipped") == 3
     named = runner.shell([sys.executable, "-c", "print('FAILED tests/a.py::t1 - boom'); "
                           "print('ERROR tests/b.py::t2')"], cwd=harness.REPO_ROOT)
     assert named["failures"] == ["tests/a.py::t1", "tests/b.py::t2"], named
@@ -1195,6 +1199,18 @@ def test_an_unexpected_skip_in_api_test_fails_the_suites_stage(monkeypatch):
     unread = stage([], skipped=1)
     assert (unread["status"], unread["detail"]["skips_without_reasons"]) == (
         runner.FAIL, ["make api-test"]), unread["detail"]
+    # ... measured through the real shell(): a summary skip count and no SKIPPED line at all.
+    def through_real_shell(argv, **kw):
+        text = "x\n3120 passed, 3 skipped, 30 xfailed in 1s" if "api-test" in argv else \
+            "1 passed in 0.1s"
+        result = real_shell([sys.executable, "-c", f"print({text!r})"], cwd=harness.REPO_ROOT)
+        return {**result, "argv": " ".join(argv)}
+    monkeypatch.setattr(runner, "shell", through_real_shell)
+    report = runner.Report()
+    runner.suites(report, own_only=False)
+    measured = report.stages[-1]
+    assert (measured["status"], measured["detail"]["skips_without_reasons"]) == (
+        runner.FAIL, ["make api-test"]), measured["detail"]
 
 
 def test_a_red_make_target_names_its_failures_and_its_skips(tmp_path):

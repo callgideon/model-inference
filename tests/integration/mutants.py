@@ -940,6 +940,16 @@ MUTANTS: tuple[Mutant, ...] = (
            "    checked = mutants.all_mutants()\n", "    checked = mutants.MUTANTS\n",
            "tests/integration/test_run.py", "anchor_occurs_as_declared",
            cases=("test_every_mutant_anchor_occurs_as_declared_on_the_checkout",)),
+    Mutant("e3bm54", "E3B2 round 4 (GATE-B2): the skip count is read from pytest's summary line",
+           "tests/integration/run.py",
+           '("skipped", r"(\\d+) skipped")', '("skipped", r"^SKIPPED \\[(\\d+)\\]")',
+           "tests/integration/test_run.py", "unexpected_skip",
+           cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
+    Mutant("e3bm55", "E3B2 round 4 (GATE-B2): the skip count is read wherever it sits in it",
+           "tests/integration/run.py",
+           '("skipped", r"(\\d+) skipped")', '("skipped", r"(\\d+) skipped in")',
+           "tests/integration/test_run.py", "unexpected_skip",
+           cases=("test_an_unexpected_skip_in_api_test_fails_the_suites_stage",)),
 )
 
 
