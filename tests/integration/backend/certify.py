@@ -72,6 +72,7 @@ import parity                                           # noqa: E402
 
 PASS, FAIL, PENDING, SKIP = run.PASS, run.FAIL, run.PENDING, run.SKIP
 FAKE, MEAS = "fake-engine, not a measurement", "meas."
+UNVERIFIED = "unverified target, not a measurement"      # review F5: off the box, or unready
 PROTOCOL = MARLIN / "results" / "E4B-protocol.md"
 SEED = 20260922
 
@@ -737,7 +738,7 @@ def served_build_check(report: Report, metrics_url: str) -> None:
                  problems or "the gateway serves the report's tree, from the release image")
 
 
-def preconditions_check(report: Report, target: dict, box: bool) -> None:
+def preconditions_check(report: Report, target: dict, box: bool) -> dict:
     """Protocol §2: App/Lab stopped everywhere; on the box also the window consent, an idle
     engine and every parity clip in the cache."""
     servers = next_servers()
@@ -755,7 +756,7 @@ def preconditions_check(report: Report, target: dict, box: bool) -> None:
                         "--cache", str(corpus_cache())])
         if clips["exit"] != 0:
             problems.append(f"parity clips missing: {clips['tail'][-200:]}")
-    report.check("e4b.b.preconditions", FAIL if problems else PASS,
+    return report.check("e4b.b.preconditions", FAIL if problems else PASS,
                  problems or "App and Lab stopped" + (", window open, engine idle, clips present"
                                                       if box else ""),
                  measured={"next_servers": servers, "roots": list(repo_roots())})
@@ -1017,7 +1018,15 @@ def remote_target(args) -> dict:
     return {"kind": "remote", "base_url": args.target.rstrip("/"), "engine_url": args.engine_url,
             "metered": True, "bench_target": "gateway",
             "model": published_release()["requested_model"], "scale": args.scale or "box",
-            "label": MEAS, "namespace": None}
+            "label": UNVERIFIED, "namespace": None}
+
+
+def target_label(target: dict, box: bool, preconditions: str) -> str:
+    """Review F5: a number is a measurement only from the box with every precondition met;
+    the local target is the fake engine, and any other target is unverified."""
+    if target["kind"] == "local":
+        return FAKE
+    return MEAS if box and preconditions == PASS else UNVERIFIED
 
 
 def stack_checks(report: Report, keep: bool) -> None:
@@ -1088,7 +1097,8 @@ def main(argv: list[str] | None = None) -> int:
     with run.signals_handled():
         try:
             report.hashes = release_hashes()
-            preconditions_check(report, target, args.box)
+            ready = preconditions_check(report, target, args.box)["status"]
+            report.target["label"] = target["label"] = target_label(target, args.box, ready)
             config_pin_check(report, args.inventory)
             if args.box:
                 served_build_check(report, args.metrics_url)

@@ -113,6 +113,7 @@ IDENTITY = "test_e4b_a_report_counts_for_one_clean_known_tree_or_it_fails"
 NOGIT = "test_e4b_a_host_without_git_writes_a_report_that_fails_its_identity"
 SERVED = "test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves"
 UNANSWERED = "test_e4b_an_unanswered_attempt_is_a_failure_whatever_its_cause"
+LABELS = "test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement"
 RUN = "tests/integration/run.py"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
@@ -354,6 +355,19 @@ MUTANTS: tuple[Mutant, ...] = (
        '              if (r.get("http_status") or 0) >= 500 or r.get("outcome") == "failed"]',
        '              if (r.get("http_status") or 0) >= 500 or bench.is_platform_failure(r)]',
        UNANSWERED),
+    # --- review F5: labels --------------------------------------------------------------
+    _m("local_run_labelled_measured", "the local target's numbers are the fake engine's",
+       '"bench_target": "direct", "model": "marlin2b", "scale": scale, "label": FAKE,',
+       '"bench_target": "direct", "model": "marlin2b", "scale": scale, "label": MEAS,', LABELS),
+    _m("remote_run_measured_by_default", "a --target run is unverified until the box proves it",
+       '            "label": UNVERIFIED, "namespace": None}', '            "label": MEAS, "namespace": None}',
+       LABELS),
+    _m("unready_box_measured", "a box run whose preconditions failed measures nothing",
+       "    return MEAS if box and preconditions == PASS else UNVERIFIED",
+       "    return MEAS if box else UNVERIFIED", LABELS),
+    _m("label_never_decided", "the run labels its numbers after its preconditions",
+       '            report.target["label"] = target["label"] = target_label(target, args.box, ready)\n',
+       "", LABELS),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',

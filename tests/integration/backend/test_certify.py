@@ -821,5 +821,38 @@ def test_e4b_the_box_report_is_tied_to_the_build_the_gateway_serves(monkeypatch)
         certify.main(["--box", "--release-sha", sha, "--target", "http://gw/v1",
                       "--engine-url", "http://engine"])
 
+
+def test_e4b_only_a_box_run_with_its_preconditions_met_is_a_measurement(tmp_path, monkeypatch,
+                                                                          clean_tree):
+    """Review F5: the local target's numbers are the fake engine's; a `--target` run is
+    unverified unless it is the box run with every precondition met - never `meas.` by
+    default."""
+    import argparse
+    assert certify.local_target("tiny", 1)["label"] == certify.FAKE
+    remote = certify.remote_target(argparse.Namespace(
+        target="http://gw/v1", engine_url="http://engine", scale=None, box=True))
+    assert remote["label"] == certify.UNVERIFIED
+    assert certify.target_label(remote, True, certify.PASS) == certify.MEAS
+    assert certify.target_label(remote, True, certify.FAIL) == certify.UNVERIFIED
+    assert certify.target_label(remote, False, certify.PASS) == certify.UNVERIFIED
+    assert certify.target_label({"kind": "local"}, True, certify.PASS) == certify.FAKE
+    seen = {}
+    monkeypatch.setattr(certify, "release_hashes", lambda: {})
+    monkeypatch.setattr(certify, "published_release", lambda: {"requested_model": "m"})
+    monkeypatch.setattr(certify, "config_pin_check", lambda *a: None)
+    monkeypatch.setattr(certify, "served_build_check", lambda *a: None)
+    monkeypatch.setattr(certify, "engine_checks",
+                        lambda report, target, workdir, args: seen.update(
+                            label=target["label"], reported=report.target["label"]))
+    box = ["--no-stack", "--box", "--release-sha", CLEAN["sha"], "--target", "http://gw/v1",
+           "--engine-url", "http://engine", "--metrics-url", "http://gw/metrics",
+           "--workdir", str(tmp_path)]
+    for ready, label in ((certify.PASS, certify.MEAS), (certify.FAIL, certify.UNVERIFIED)):
+        monkeypatch.setattr(certify, "preconditions_check",
+                            lambda report, target, box_run, ready=ready: report.check(
+                                "e4b.b.preconditions", ready, "stub"))
+        certify.main(box)
+        assert seen == {"label": label, "reported": label}, (ready, seen)
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
