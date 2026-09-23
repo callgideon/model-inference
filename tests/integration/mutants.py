@@ -757,9 +757,8 @@ MUTANTS: tuple[Mutant, ...] = (
            cases=("test_a_mutant_whose_cases_are_red_unmutated_is_baseline_red",)),
     Mutant("e3bm27", "E3B2 review H2: a pending id naming a merged task fails the stage",
            "tests/integration/run.py",
-           '                  if tasks.get(task) in ("implemented", "integrated") and task not '
-           'in residual)\n',
-           "                  if False)\n",
+           '                  if tasks.get(task) in ("implemented", "integrated")\n',
+           "                  if False\n",
            "tests/integration/backend/test_stage.py", "naming_a_merged_task_fails",
            cases=("test_a_pending_id_naming_a_merged_task_fails_the_stage",)),
     Mutant("e3bm28", "E3B2 review F3: the fake CREDIT admission holds on the CREDIT wallet",
@@ -847,6 +846,18 @@ MUTANTS: tuple[Mutant, ...] = (
            "tests/integration/test_run.py", "litter_private",
            cases=("test_a_mutant_run_keeps_its_litter_private_and_never_touches_foreign_temp_"
                   "files",)),
+    Mutant("e3bm40", "E3B2 R3-1: E3B's cutover pendings are keyed on G2-R1, never on merged G2",
+           "tests/integration/backend/test_journey.py",
+           'BY_MODE = {"sync": ("G2-R1",),', 'BY_MODE = {"sync": ("G2",),',
+           "tests/integration/backend/test_stage.py", "held_cutover",
+           cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
+    Mutant("e3bm41", "E3B2 R3-1: RESIDUAL excuses a merged id only in I3B's recovery cases",
+           "tests/integration/run.py",
+           "                  and not (task in residual and all(_is_recovery(name) for name in "
+           "names)))\n",
+           "                  and task not in residual)\n",
+           "tests/integration/backend/test_stage.py", "held_cutover",
+           cases=("test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task",)),
 )
 
 

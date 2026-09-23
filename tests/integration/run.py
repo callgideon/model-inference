@@ -540,14 +540,25 @@ def backend_verdict(cases: dict, exit_code: int) -> str:
 
 
 def stale_pending(cases: dict) -> list[str]:
-    """Pending ids that name a task tasks.json marks implemented/integrated and that is not a
-    named `stack.RESIDUAL` (E3B phase 2, review H2): a merged task blocks nothing, whichever
-    vocabulary the skip came through - `stack.pending`, I3B's kit, or a hand-written skip."""
+    """Pending ids that name a task tasks.json marks implemented/integrated (E3B phase 2,
+    review H2): a merged task blocks nothing, whichever vocabulary the skip came through -
+    `stack.pending`, I3B's kit, or a hand-written skip.
+
+    R3-1: that holds while the merged task's cutover is HELD, too. The owner of held work is
+    the cutover request - an owner reference such as `G2-R1`, which is no task and so never
+    stale - not the merged task. A `stack.RESIDUAL` id is excused only where every case naming
+    it is one of I3B's read-only recovery cases; in any other case it is stale."""
     tasks = {task["id"]: task["status"] for task in json.loads(
         (harness.REPO_ROOT / "research" / "plan" / "tasks.json").read_text())["tasks"]}
     residual = _backend_stack().RESIDUAL
-    return sorted(task for task in cases["pending"]
-                  if tasks.get(task) in ("implemented", "integrated") and task not in residual)
+    return sorted(task for task, names in cases["pending"].items()
+                  if tasks.get(task) in ("implemented", "integrated")
+                  and not (task in residual and all(_is_recovery(name) for name in names)))
+
+
+def _is_recovery(case: str) -> bool:
+    """`classname::name` of one of I3B's cases (`tests/integration/backend/recovery/`)."""
+    return "recovery" in case.split("::")[0].split(".")
 
 
 def backend_summary(cases: dict, exit_code: int) -> tuple[str, dict]:

@@ -159,6 +159,42 @@ def test_a_pending_id_naming_a_merged_task_fails_the_stage():
     assert run.backend_summary(run.classify(XML % ""), 0)[1]["stale_pending"] is None
 
 
+def test_e3b_cases_pend_on_the_held_cutover_never_on_a_merged_task(monkeypatch):
+    """R3-1: a merged task whose cutover is held (G2, G3) is no pending owner; the cutover
+    request is (`G2-R1`). Every E3B case that waits on the cutover - 9 journeys, the dataset
+    resume, dr11 - is run here and its skip read back: each names G2-R1 and none names a
+    merged task (`stack.pending` refuses a RESIDUAL id outright). `stale_pending` states the
+    rule for any skip: RESIDUAL excuses a merged id only in I3B's recovery cases."""
+    import functools
+
+    import pytest
+    import test_drills
+    import test_journey
+    runs = [functools.partial(test_journey.test_backend_journey, kind, mode)
+            for kind in test_journey.BY_INPUT for mode in test_journey.BY_MODE]
+    runs += [test_journey.test_backend_journey__dataset_client_resume,
+             test_drills.test_e3b_dr11_client_disconnect_mid_stream_is_pending]
+    pended, refused = {}, []
+    for number, case in enumerate(runs):
+        try:
+            with pytest.raises(pytest.skip.Exception) as skipped:
+                case()
+        except AssertionError as refusal:           # stack.pending refused a merged id
+            refused.append(str(refusal))
+            continue
+        for task in run.PENDING_MARK.search(skipped.value.msg).group(1).split(","):
+            pended.setdefault(task, []).append(f"b.test_journey::cutover{number}")
+    assert refused == [], f"E3B cases keyed on a merged task: {refused}"
+    assert len(pended.get("G2-R1", ())) == len(runs) == 11, pended
+    assert run.stale_pending({"pending": pended}) == [], pended
+    # The rule itself, on an id merged on every tree (G1R), made RESIDUAL for the check.
+    monkeypatch.setitem(stack.RESIDUAL, "G1R", "a merged task I3B still names")
+    e3b = "b.test_journey::test_backend_journey[sync-text]"
+    i3b = "tests.integration.backend.recovery.test_recovery::test_i3b_rc03"
+    assert run.stale_pending({"pending": {"G1R": [e3b, i3b]}}) == ["G1R"]
+    assert run.stale_pending({"pending": {"G1R": [i3b], "G2-R1": [e3b]}}) == []
+
+
 def test_a_live_defect_is_refused_outside_this_processs_clones(monkeypatch):
     """Review F6: `stack.defect` edits only a clone this process made - never the template,
     E2's database or another process's clone - and refuses before it connects anywhere."""
