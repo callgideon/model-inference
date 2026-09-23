@@ -66,3 +66,26 @@ criterion output_drift=unknown (no paired baseline)
 e3_trigger=no
 verdict: no setting adopted - failed: ['w3_rule', 'memory_growth']; unknown: ['severe_tail', 'short_job_starvation', 'usage_drift', 'output_drift']
 exit=0
+
+### python3 models/marlin2b/measure/decide.py research/plan/evidence/w/box/w4-e3-20260923T210337Z --baseline research/plan/evidence/w/box/w4-e1-20260923T202445Z   @ 2026-09-23T21:45:14Z (head c9535fc)
+run=research/plan/evidence/w/box/w4-e3-20260923T210337Z baseline=research/plan/evidence/w/box/w4-e1-20260923T202445Z set_aside=none X=76.34 start_to_ready_s=[181.0, 181.0, 181.0, 179.0, 181.0, 179.0, 179.0]
+level c=1 state=restarted attempts=64 accepted=64 T=0.295 F=0 {} failed_clips=- W=unknown peak_running=1.0 peak_kv=0.00899491591709034 peak_gpu_mib=43949.0 util_median=100.0 ttft_p95=4.6706 latency_p95=10.6261 repeats=0
+level c=2 state=restarted attempts=64 accepted=64 T=0.473 F=0 {} failed_clips=- W=unknown peak_running=2.0 peak_kv=0.012710207274149399 peak_gpu_mib=44133.0 util_median=100.0 ttft_p95=10.6512 latency_p95=12.9269 repeats=0
+level c=4 state=restarted attempts=64 accepted=64 T=0.744 F=0 {} failed_clips=- W=unknown peak_running=4.0 peak_kv=0.019945248337896015 peak_gpu_mib=44431.0 util_median=100.0 ttft_p95=16.5847 latency_p95=17.8731 repeats=0
+level c=8 state=restarted attempts=64 accepted=64 T=0.961 F=0 {} failed_clips=- W=unknown peak_running=6.0 peak_kv=0.024051622995698074 peak_gpu_mib=44311.0 util_median=93.0 ttft_p95=20.2548 latency_p95=22.5525 repeats=0
+level c=16 state=restarted attempts=64 accepted=64 T=1.075 F=0 {} failed_clips=- W=unknown peak_running=15.0 peak_kv=0.03871724677356281 peak_gpu_mib=45169.0 util_median=73.0 ttft_p95=27.3295 latency_p95=33.0329 repeats=0
+level c=32 state=restarted attempts=128 accepted=128 T=1.398 F=0 {} failed_clips=- W=unknown peak_running=28.0 peak_kv=0.07899882675009773 peak_gpu_mib=44647.0 util_median=66.0 ttft_p95=36.7951 latency_p95=40.2371 repeats=64
+w3_rule c*=None threshold=1.2582 setting=None (not taken)
+criterion w3_rule=fail (no level has F=0, W=0 and T>=1.2582)
+criterion error_rate=pass (0/448 = 0.0)
+criterion overload_masking=pass (--retries 0, every attempt accounted)
+criterion severe_tail=unknown (no c*)
+criterion oom=pass (no exit, no out-of-memory line)
+criterion memory_growth=fail (c=32 second pass over first: gpu +1384.0 MiB, host +6225.9 MiB)
+criterion cancellation=pass (result=pass)
+criterion short_job_starvation=pass (26.1945 s against a bound of 38.4319 s)
+criterion usage_drift=pass (64 clips)
+criterion output_drift=pass (9 clips)
+e3_trigger=yes c=[16, 32]
+verdict: no setting adopted - failed: ['w3_rule', 'memory_growth']; unknown: ['severe_tail']
+exit=0

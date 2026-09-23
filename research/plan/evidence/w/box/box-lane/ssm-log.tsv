@@ -45,3 +45,21 @@
 2026-09-23T21:02:41Z	778e22d6-c4e1-45f4-8986-a05376626968	poll /opt/dlami/nvme/w4-logs/e1.log
 2026-09-23T21:02:55Z	b0e9fa3b-c7ec-4d75-918d-b2b8973f4be1	step5 fetch E1: tar w4-e1-20260923T202445Z + e1.log to s3 w4/
 2026-09-23T21:03:37Z	35af1521-5839-4ef4-bb45-d9ee5f230e8a	step5 launch E3 (e3_trigger=yes c=[8,16,32] on E0): candidate.sh CANDIDATE=e3 W4_ENGINE_RESTART_OK=1 (nohup, w4-logs/e3.log)
+2026-09-23T21:04:46Z	e3dabf48-0456-41c2-8086-2b9dc2e51536	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:08:28Z	5b44e65b-63c1-48df-8bf1-ff557fa9de72	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:11:00Z	65e3e05d-ca3c-4be5-a73c-8df5524d94a3	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:13:33Z	a72f2049-d6b3-4bdc-80cb-6a566391ea27	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:17:11Z	992a0b33-f2b5-4d8b-a033-035666cb5fd9	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:19:44Z	db92c678-3074-4adb-b86f-9cf3d672bd02	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:22:17Z	f02f9f69-fb37-4c18-84c3-4c7a2348a1df	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:26:04Z	c0898fce-915e-4603-9a86-d28ae2c6febb	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:28:37Z	eb5867aa-94c2-4494-b03c-d5a2281a7314	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:31:09Z	167409d0-64ed-4bb5-b5e7-892569ab4651	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:35:24Z	878b2b65-ad83-4329-b176-900765809d18	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:37:56Z	e188abff-e69b-4b9a-9223-78f9c47dc10b	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:40:29Z	ec07e699-4096-4853-ba8f-5f1fb0142643	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:42:26Z	e9061d88-649c-46df-9ea2-177c583c325b	poll /opt/dlami/nvme/w4-logs/e3.log
+2026-09-23T21:42:45Z	011fb930-1ef7-4489-b5a4-1f5a0c8369be	step6 L0 launch: l0.sh (bench -c 1 -n 12 --subset full, restarted engine from E3's restore, nvsampler hook; nohup, e1b-logs/L0-20260923T214244Z.log)
+2026-09-23T21:44:27Z	73e1b1b6-2108-4a18-830d-0f0dc252684d	step6 L0 poll
+2026-09-23T21:44:40Z	b4c8fc57-3d9f-424b-bfe6-a8ced48dd3da	step5 fetch E3: tar w4-e3-20260923T210337Z + e3.log to s3 w4/
+2026-09-23T21:44:52Z	678eeeaf-e876-4625-82e0-5b9429442ab1	step6 L8 reference launch: l8ref.sh (holds w4-candidate.lock; stops marlin2b-vllm, reference.py x5, restarts unit on EXIT; nohup)

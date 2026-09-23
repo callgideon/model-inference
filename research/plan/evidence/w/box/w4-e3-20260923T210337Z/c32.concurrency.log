@@ -1,0 +1,23 @@
+run=w3-L1-20260923T213613Z utc=2026-09-23T21:36:15Z repo_sha=37a0d8ae
+corpus=verified 72 file(s), 0 missing, 0 error(s)
+image=sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42 args=["serve","/model","--served-model-name","marlin2b","--hf-overrides","{\"architectures\":[\"Qwen3_5ForConditionalGeneration\"]}","--max-model-len","32768","--max-num-seqs","32","--gpu-memory-utilization","0.90","--limit-mm-per-prompt","{\"video\":1,\"image\":4}","--dtype","bfloat16","--max-num-batched-tokens","32768","--api-server-count","2"]
+level=32 peak_running=28 peak_waiting=2 peak_kv_usage=0.07899882675009773 peak_gpu_mem_mib=44647
+### report
+# Marlin-2B sweep report — bench.jsonl
+
+1 cell(s); 1 distinct workload profile(s)
+
+| label | mode | rate/conc | acc | rej | fail | canc | video-s/s | req/s | TTFT p50 | TTFT p95 | latency p50 | latency p95 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| w3-l1-20260923t213613z-c32 | closed-loop | 32 | 128 | 0 | 0 | 0 | 37.428 | 1.398 | 14.8273 | 36.7951 | 19.2117 | 40.2371 |
+
+`—` is a percentile the sample count cannot support; it is never replaced by a smaller quantile or by the maximum.
+
+## Per-cell limits
+
+- **w3-l1-20260923t213613z-c32** (2026-09-23T21:37:47Z): request_latency_s p99 needs >= 300 samples, have 128; tpot_s p99 needs >= 300 samples, have 128; ttft_s p99 needs >= 300 samples, have 128; phases not published by the target: retrieval,decode,prepare,queue,prefill,generate,journal,persist,settle
+
+Provisional criteria (marlin-sop.md §5.2, P-18) are **provisional**: quoting a row of this report without its label promotes it to a target, which it is not.
+### kv capacity at start-up (engine log)
+(EngineCore pid=148) INFO 09-23 21:36:01 [kv_cache_utils.py:2404] GPU KV cache size: 2,501,616 tokens, Maximum concurrency for 32,768 tokens per request: 76.34x
+artifacts=/opt/dlami/nvme/w4-e3-20260923T210337Z/sweep/w3-L1-20260923T213613Z
