@@ -502,34 +502,44 @@ def test_e4b_the_deployed_engine_is_judged_from_the_box_inventory(tmp_path, monk
     assert report.stages[-1]["detail"][0].startswith("deployed: pinned flags")
 
 
-def _proc(root: Path, pid: int, argv: list[str], cwd: Path) -> None:
+def _proc(root: Path, pid: int, argv: list[str], cwd: Path | None) -> None:
     entry = root / str(pid)
     entry.mkdir()
     (entry / "cmdline").write_bytes(b"\0".join(part.encode() for part in argv) + b"\0")
-    (entry / "cwd").symlink_to(cwd)
+    if cwd is not None:
+        (entry / "cwd").symlink_to(cwd)
 
 
 def test_e4b_app_and_lab_servers_of_this_repository_fail_the_preconditions(tmp_path,
                                                                            monkeypatch):
-    """Protocol §2: a Next.js server whose working directory is in this repository (the
-    main checkout or a worktree under it) is a running App or Lab. A shell that merely
-    names one, and a Next.js server of another project, are not."""
+    """Protocol §2 as review F7 corrected it: a Next.js server in an `apps/app` or `apps/lab`
+    package - of any checkout, found by its working directory or its command line - is a
+    running App or Lab, and one whose working directory cannot be read counts too (unknown
+    is not stopped). A shell that merely names one, a Node server that is not Next.js, and
+    a Next.js server of another project, are not."""
     repo, other, proc = tmp_path / "repo", tmp_path / "elsewhere", tmp_path / "proc"
-    for path in (repo / "apps/app", repo / ".claude/worktrees/x/apps/lab", other, proc):
+    clone = tmp_path / "srv" / "clone"
+    for path in (repo / "apps/app", repo / ".claude/worktrees/x/apps/lab", other, proc,
+                 clone / "apps/app"):
         path.mkdir(parents=True)
     _proc(proc, 11, ["next-server (v16.3.5)"], repo / "apps/app")
     _proc(proc, 12, ["node", "/r/node_modules/.bin/../next/dist/bin/next", "dev"],
           repo / ".claude/worktrees/x/apps/lab")
     _proc(proc, 13, ["next-server (v16.3.5)"], other)
-    _proc(proc, 14, ["bash", "-c", "pgrep -af next-server"], repo)
-    _proc(proc, 15, ["node", "server.js", "start"], repo)
-    found = certify.next_servers(proc, (str(repo),))
-    assert [server["pid"] for server in found] == [11, 12]
+    _proc(proc, 14, ["bash", "-c", "pgrep -af next-server"], repo / "apps/app")
+    _proc(proc, 15, ["node", "server.js", "start"], repo / "apps/app")
+    _proc(proc, 16, ["next-server (v16.3.5)"], None)
+    _proc(proc, 17, ["node", "/opt/checkout/apps/lab/node_modules/.bin/next", "start"], other)
+    _proc(proc, 18, ["next-server (v16.3.5)"], clone / "apps/app")
+    found = certify.next_servers(proc)
+    assert [server["pid"] for server in found] == [11, 12, 16, 17, 18]
+    assert found[2]["cwd"] is None
     report = certify.Report(TARGET)
     monkeypatch.setattr(certify, "next_servers", lambda: found)
     certify.preconditions_check(report, TARGET, box=False)
     assert report.stages[-1]["status"] == certify.FAIL
     assert "pid 11" in report.stages[-1]["detail"][0]
+    assert "unknown is not stopped" in report.stages[-1]["detail"][2]
     monkeypatch.setattr(certify, "next_servers", lambda: [])
     certify.preconditions_check(report, TARGET, box=False)
     assert report.stages[-1]["status"] == certify.PASS

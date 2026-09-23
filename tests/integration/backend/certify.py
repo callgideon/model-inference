@@ -672,15 +672,15 @@ def config_pin_check(report: Report, inventory: Path | None) -> None:
         report.check("e4b.b.config-pin", PASS, "tree and deployed engine match", measured=measured)
 
 
-def repo_roots() -> tuple[str, ...]:
-    """This checkout and the main checkout its worktrees hang off."""
-    main = bench.shared_repo_root(str(harness.REPO_ROOT))
-    return tuple(sorted({str(harness.REPO_ROOT), *([main] if main else [])}))
+# An App or Lab package directory of any checkout (review F7: not only this checkout's).
+APP_OR_LAB = re.compile(r"(?:^|/)apps/(?:app|lab)(?:/|$)")
 
 
-def next_servers(proc: Path = Path("/proc"), roots: tuple[str, ...] | None = None) -> list[dict]:
-    """Next.js servers (the App or the Lab) of this repository running on this host."""
-    roots = roots if roots is not None else repo_roots()
+def next_servers(proc: Path = Path("/proc")) -> list[dict]:
+    """Next.js servers of the App or the Lab on this host, whichever checkout they run from:
+    a Next.js process whose working directory or command line lies in an `apps/app` or
+    `apps/lab` package. One whose working directory cannot be read is counted too - an
+    unknown is not a stopped App (review F7; inside a container that is the usual case)."""
     found = []
     for entry in proc.iterdir():
         if not entry.name.isdigit() or int(entry.name) == os.getpid():
@@ -688,14 +688,19 @@ def next_servers(proc: Path = Path("/proc"), roots: tuple[str, ...] | None = Non
         try:
             argv = [part.decode(errors="replace")
                     for part in (entry / "cmdline").read_bytes().split(b"\0") if part]
-            cwd = os.readlink(entry / "cwd")
         except OSError:
-            continue
+            continue                    # gone, or no command line to tell what it runs
         head = os.path.basename(argv[0]).split()[0] if argv else ""
         is_next = head == "next-server" or (
             head in ("node", "next") and {"start", "dev"} & set(argv[1:])
             and any("next" in part for part in argv[:3]))
-        if is_next and any(cwd == root or cwd.startswith(root + os.sep) for root in roots):
+        if not is_next:
+            continue
+        try:
+            cwd = os.readlink(entry / "cwd")
+        except OSError:
+            cwd = None
+        if cwd is None or APP_OR_LAB.search(cwd) or any(APP_OR_LAB.search(part) for part in argv):
             found.append({"pid": int(entry.name), "cwd": cwd, "command": " ".join(argv)[:80]})
     return sorted(found, key=lambda server: server["pid"])
 
@@ -760,7 +765,8 @@ def preconditions_check(report: Report, target: dict, box: bool) -> dict:
     """Protocol §2: App/Lab stopped everywhere; on the box also the window consent, an idle
     engine and every parity clip in the cache."""
     servers = next_servers()
-    problems = [f"App/Lab running: pid {s['pid']} in {s['cwd']} ({s['command']})"
+    problems = [f"App/Lab running: pid {s['pid']} in "
+                f"{s['cwd'] or 'an unreadable directory (unknown is not stopped)'} ({s['command']})"
                 for s in servers]
     if box:
         if os.environ.get("E4B_WINDOW_OK") != "1":
@@ -777,7 +783,7 @@ def preconditions_check(report: Report, target: dict, box: bool) -> dict:
     return report.check("e4b.b.preconditions", FAIL if problems else PASS,
                  problems or "App and Lab stopped" + (", window open, engine idle, clips present"
                                                       if box else ""),
-                 measured={"next_servers": servers, "roots": list(repo_roots())})
+                 measured={"next_servers": servers})
 
 
 # --- the bench cells -------------------------------------------------------------------
