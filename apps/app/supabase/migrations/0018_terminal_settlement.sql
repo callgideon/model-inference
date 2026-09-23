@@ -14,6 +14,9 @@
 --                        client_disconnected or sync_deadline; anything else invalid_request.
 --   release_aged_unknown 0016's body; it answers `[{"released": outcome}]` (I3B request 5)
 --                        so a 24 h release is never read as a new terminalization.
+--   claim                0016's body without the MY-3 refusal: a CREDIT job is claimable,
+--   load_work_credit     because this fenced read carries its WorkV2 (the admitted pins,
+--                        card and data-access policy).
 --
 -- Settlement is the fake's `_terminalize`, case for case: published with no usage ->
 -- held_unknown (hold quarantined for the window); no usage or a cause R21 does not bill ->
@@ -30,10 +33,13 @@
 -- lock first. Admission takes idempotency (2) before a wallet (5) too, so no cycle exists.
 --
 -- ROLLBACK (0018 alone; nothing before it is edited): restore 0016's bodies of
--- `infrx.terminalize` (the fenced prefix and the `infrx.unimplemented` line), `infrx.cancel`
--- and `infrx.release_aged_unknown`, and 0011's `infrx.job_admission` (re-run those
+-- `infrx.terminalize` (the fenced prefix and the `infrx.unimplemented` line), `infrx.cancel`,
+-- `infrx.claim` (with MY-3's CREDIT refusal - stop CREDIT admission first, or a claimed
+-- CREDIT job has no worker path) and `infrx.release_aged_unknown`, and 0011's
+-- `infrx.job_admission` (re-run those
 -- `create or replace` statements; grants are kept); drop the functions this file adds
--- (`infrx.usage_doc`, `infrx.cause_carries_state`, `infrx.debit_legacy_usd`,
+-- (`infrx.load_work_credit`, `infrx.usage_doc`, `infrx.cause_carries_state`,
+-- `infrx.debit_legacy_usd`,
 -- `infrx.debit_credit`, `infrx.settle_legacy_usd`, `infrx.settle_credit`,
 -- `infrx.jobs_settlement_record_guard` with its trigger); `alter table infrx.jobs drop
 -- constraint jobs_settled_usage_is_one_fact, drop column proposal, drop column
@@ -502,9 +508,105 @@ begin
                                               infrx.job_admission(p_id)->'outcome'));
 end $$;
 
+-- ================================================================== claim ===
+-- 0016's body; the one change is WorkV2 (D5 item 2): the MY-3 refusal of a CREDIT job is
+-- gone, because `load_work_credit` now carries its work. Args `{job_id, worker_id, limits}`;
+-- answers `{"lease": …}`.
+create or replace function infrx.claim(p_args jsonb) returns jsonb
+language plpgsql security definer set search_path = infrx, public, pg_temp as $$
+declare
+  v_now timestamptz := infrx.now();
+  v_worker text := p_args->>'worker_id';
+  v_ttl float8;
+  v_generation_deadline timestamptz;
+  j infrx.jobs%rowtype;
+  a infrx.attempts%rowtype;
+begin
+  if p_args->>'job_id' is null or v_worker is null or length(btrim(v_worker)) = 0 then
+    perform infrx.refuse('invalid_request', 'claim takes {job_id, worker_id, limits}');
+  end if;
+  v_ttl := infrx.lease_limit(p_args, 'lease_ttl_s');
+  select * into j from infrx.jobs where request_id = (p_args->>'job_id')::uuid for update;
+  if not found then
+    perform infrx.refuse('not_found', 'no job ' || (p_args->>'job_id'));
+  end if;
+  if j.settled_at is not null then
+    perform infrx.refuse('already_terminal', 'job ' || j.request_id || ' is ' || j.state);
+  end if;
+  if j.state <> 'queued' then
+    perform infrx.refuse('not_claimable', 'job ' || j.request_id || ' is ' || j.state
+                         || ', not queued');
+  end if;
+  -- Either-kind exclusion from the attempts table as well as the state (review FE-4): a job
+  -- anyone still holds a lease on is not claimable, whatever its state column says.
+  if exists (select 1 from infrx.attempts where job_id = j.request_id
+                and released_at is null) then
+    perform infrx.refuse('not_claimable', 'job ' || j.request_id || ' has a live attempt');
+  end if;
+  if v_now >= j.deadline_at then
+    perform infrx.refuse('not_claimable', 'job ' || j.request_id
+                         || ' is past its absolute deadline');
+  end if;
+  -- R20: the persisted instant. `recover` terminalizes the job meanwhile.
+  if v_now >= j.queue_deadline_at then
+    perform infrx.refuse('not_claimable', 'job ' || j.request_id
+                         || ' is past its queue deadline');
+  end if;
+  -- R38: the queued interval that ends here is charged to the queue budget.
+  update infrx.jobs set state = 'running', queued_at = null,
+                        queue_wait_used_s = queue_wait_used_s
+                          + coalesce(extract(epoch from v_now - j.queued_at)::float8, 0)
+   where request_id = j.request_id;
+  -- R20: the generation phase starts at the claim; both instants never pass deadline_at.
+  v_generation_deadline := least(v_now + make_interval(secs => j.budget_generation_s),
+                                 j.deadline_at);
+  insert into infrx.attempts (job_id, kind, generation, worker_id, retry_ordinal,
+                              acquired_at, expires_at, generation_deadline_at,
+                              first_token_deadline_at)
+  values (j.request_id, 'inference',
+          (select coalesce(max(generation), 0) + 1 from infrx.attempts
+            where job_id = j.request_id and kind = 'inference'),
+          v_worker, j.attempts, v_now, v_now + make_interval(secs => v_ttl),
+          v_generation_deadline,
+          least(v_now + make_interval(secs => j.budget_first_token_s), v_generation_deadline))
+  returning * into a;
+  return jsonb_build_object('lease', infrx.lease_doc(a));
+end $$;
+
+-- ============================================================ WorkV2 (D) ===
+-- Args `{lease, limits}`; answers `{request, prepared_refs, admission, policy}` or a refusal:
+-- `load_work`'s fence and document plus the job's PINNED data-access policy. Everything is
+-- the admitted job's (pins, card, policy - R68/R78), never what the catalog serves now.
+create or replace function infrx.load_work_credit(p_args jsonb) returns jsonb
+language plpgsql security definer set search_path = infrx, public, pg_temp as $$
+declare
+  v_refusal jsonb;
+  j infrx.jobs%rowtype;
+begin
+  if jsonb_typeof(p_args->'lease') is distinct from 'object' then
+    perform infrx.refuse('invalid_request', 'load_work_credit takes {lease, limits}');
+  end if;
+  v_refusal := infrx.fence_lease(p_args->'lease', array['preparation', 'inference'],
+                                 infrx.lease_limit(p_args, 'unknown_usage_reconcile_s'));
+  if v_refusal is not null then
+    return jsonb_build_object('refusal', v_refusal);
+  end if;
+  select * into j from infrx.jobs where request_id = (p_args->'lease'->>'job_id')::uuid;
+  return jsonb_build_object(
+    'request', j.request_record || jsonb_build_object('deadline_at', j.deadline_at),
+    'prepared_refs', coalesce(j.prepared_refs, '[]'),
+    'admission', infrx.job_admission(j.request_id),
+    'policy', (select jsonb_build_object('policy_version', p.policy_version,
+                                         'consent_version', j.consent_version,
+                                         'trace_mode', j.trace_mode,
+                                         'effective_at', p.effective_at)
+                 from infrx.data_access_policies p where p.policy_version = j.policy_version));
+end $$;
+
 -- ================================================================ privileges ===
--- `terminalize`, `cancel` keep 0004's grant and `job_admission` 0011's (service_role
--- only), `release_aged_unknown` 0016's (nobody): `create or replace` preserves them.
+-- `terminalize`, `cancel`, `claim` keep 0004's grant and `job_admission` 0011's
+-- (service_role only), `release_aged_unknown` 0016's (nobody): `create or replace` preserves
+-- them. `load_work_credit` is a platform operation: service_role only.
 -- Everything new here is internal: only a SECURITY DEFINER body or a trigger calls it.
 do $$
 declare
@@ -519,6 +621,11 @@ begin
   loop
     execute format('revoke all on function %s from public, anon, authenticated, service_role',
                    f);
+  end loop;
+  foreach f in array array['infrx.load_work_credit(jsonb)']
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
   end loop;
 end $$;
 comment on function infrx.terminalize(jsonb) is

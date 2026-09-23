@@ -82,3 +82,28 @@ def test_dur_settle__an_unknown_cause_is_refused_and_changes_nothing() -> None:
 # --- item 5b: the released record --------------------------------------------------------
 def test_dur_settle__a_24h_release_is_reported_as_released_not_as_a_new_terminal() -> None:
     print(checks_settle.check_settle_released(_db()))
+
+
+# --- item 2: the CREDIT settlement and WorkV2 (D half) ------------------------------------
+def test_credit_spend__settles_on_the_credit_wallet_at_the_admitted_card() -> None:
+    print(checks_settle.check_credit_settle(_db()))
+
+
+def test_credit_spend__sql_settle_equals_v2_settle_on_the_grid() -> None:
+    print(checks_settle.check_credit_grid(_db()))
+
+
+def test_credit_spend__usd_wallet_untouched() -> None:
+    print(checks_settle.check_credit_usd_untouched(_db()))
+
+
+def test_credit_spend__regimes_never_cross() -> None:
+    print(checks_settle.check_credit_regimes(_db()))
+
+
+def test_credit_rate__a_card_published_after_admission_is_ignored() -> None:
+    print(checks_settle.check_credit_rate(_db()))
+
+
+def test_credit_rate__retired_wallet_still_settles() -> None:
+    print(checks_settle.check_credit_retired(_db()))

@@ -1726,59 +1726,56 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "  select * into j from infrx.jobs where request_id = (p_lease->>'job_id')::uuid;",
        "admission", "lease_races", "a fenced mutation does not serialize with the reaper"),
     # --- claim -------------------------------------------------------------------------
-    _m("d3_claim_without_the_row_lock", LEASES,
+    _m("d3_claim_without_the_row_lock", SETTLE,
        "  select * into j from infrx.jobs where request_id = (p_args->>'job_id')::uuid "
        "for update;",
        "  select * into j from infrx.jobs where request_id = (p_args->>'job_id')::uuid;",
        "admission", "lease_races", "two claimers race to a unique violation"),
-    _m("d3_claim_serves_a_terminal_job", LEASES,
+    _m("d3_claim_serves_a_terminal_job", SETTLE,
        "  if j.settled_at is not null then\n    perform infrx.refuse('already_terminal', 'job ' "
        "|| j.request_id || ' is ' || j.state);",
        "  if false then\n    perform infrx.refuse('already_terminal', 'job ' "
        "|| j.request_id || ' is ' || j.state);",
        "admission", "claim_generation", "a dispatcher cannot tell a finished job"),
-    _m("d3_claim_any_state", LEASES, "  if j.state <> 'queued' then", "  if false then",
+    _m("d3_claim_any_state", SETTLE, "  if j.state <> 'queued' then", "  if false then",
        "admission", "claim_generation", "a running job is claimed twice"),
-    _m("d3_claim_beside_a_live_attempt", LEASES,
+    _m("d3_claim_beside_a_live_attempt", SETTLE,
        "  if exists (select 1 from infrx.attempts where job_id = j.request_id\n"
        "                and released_at is null) then",
        "  if false then",
        "admission", "claim_generation",
        "a job ends with two live attempts of different kinds (FE-4)"),
-    _m("d3_claim_beside_a_live_preparation_only", LEASES,
+    _m("d3_claim_beside_a_live_preparation_only", SETTLE,
        "  if exists (select 1 from infrx.attempts where job_id = j.request_id\n"
        "                and released_at is null) then",
        "  if exists (select 1 from infrx.attempts where job_id = j.request_id\n"
        "                and released_at is null and kind = 'preparation') then",
        "admission", "claim_generation",
        "a claim beside a live inference attempt dies on the unique index, untyped (FC-3)"),
-    _m("d3_claim_leases_a_credit_job", LEASES,
-       "  if j.accounting_regime = 'credit' then\n    perform infrx.refuse('not_claimable'",
-       "  if false then\n    perform infrx.refuse('not_claimable'",
-       "admission", "claim_generation",
-       "a CREDIT job cycles leases it cannot load, platform-absorbed, hold reserved (MY-3)"),
-    _m("d3_claim_past_the_absolute_deadline", LEASES,
+    # D5 item 2 retired `d3_claim_leases_a_credit_job` with the MY-3 refusal it guarded:
+    # 0018's `claim` leases a CREDIT job (`d5_claim_refuses_credit_again` is the control).
+    _m("d3_claim_past_the_absolute_deadline", SETTLE,
        "  if v_now >= j.deadline_at then\n    perform infrx.refuse('not_claimable'",
        "  if false then\n    perform infrx.refuse('not_claimable'",
        "admission", "claim_generation", "a job nobody waits for starts running"),
-    _m("d3_claim_past_the_queue_deadline", LEASES,
+    _m("d3_claim_past_the_queue_deadline", SETTLE,
        "  if v_now >= j.queue_deadline_at then\n    perform infrx.refuse('not_claimable'",
        "  if false then\n    perform infrx.refuse('not_claimable'",
        "admission", "claim_generation", "a job told to give up starts running (R20)"),
-    _m("d3_claim_queue_time_not_charged", LEASES,
+    _m("d3_claim_queue_time_not_charged", SETTLE,
        "                          + coalesce(extract(epoch from v_now - j.queued_at)::float8, 0)",
        "                          + 0",
        "admission", "claim_generation", "a requeue buys back queue time (R38)"),
-    _m("d3_claim_generation_not_incremented", LEASES,
+    _m("d3_claim_generation_not_incremented", SETTLE,
        "          (select coalesce(max(generation), 0) + 1 from infrx.attempts",
        "          (select coalesce(max(generation), 0) + 2 from infrx.attempts",
        "admission", "claim_generation", "the generation is not the next one"),
-    _m("d3_claim_generation_past_the_deadline", LEASES,
+    _m("d3_claim_generation_past_the_deadline", SETTLE,
        "  v_generation_deadline := least(v_now + make_interval(secs => j.budget_generation_s),\n"
        "                                 j.deadline_at);",
        "  v_generation_deadline := v_now + make_interval(secs => j.budget_generation_s);",
        "admission", "claim_generation", "a phase outlives the accepted deadline (R20)"),
-    _m("d3_claim_first_token_past_the_generation", LEASES,
+    _m("d3_claim_first_token_past_the_generation", SETTLE,
        "          least(v_now + make_interval(secs => j.budget_first_token_s), "
        "v_generation_deadline))",
        "          v_now + make_interval(secs => j.budget_first_token_s))",
@@ -1786,16 +1783,16 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "a job with less time left than the first-token budget is unclaimable: the attempts "
        "CHECK (first token <= generation, R20) refuses the unclamped instant",
        expects_detail="attempts_check1"),
-    _m("d3_claim_leases_without_running", LEASES,
+    _m("d3_claim_leases_without_running", SETTLE,
        "  update infrx.jobs set state = 'running', queued_at = null,",
        "  update infrx.jobs set queued_at = null,",
        "admission", "lease_races", "a leased job stays queued: a rebuild re-dispatches it"),
-    _m("d3_claim_instants_from_created_at", LEASES,
+    _m("d3_claim_instants_from_created_at", SETTLE,
        "  v_generation_deadline := least(v_now + make_interval(secs => j.budget_generation_s),",
        "  v_generation_deadline := least((j.request_record->>'created_at')::timestamptz"
        " + make_interval(secs => j.budget_generation_s),",
        "admission", "claim_generation", "the phase instant comes from the gateway's clock (R29)"),
-    _m("d3_claim_lease_ttl_ignored", LEASES,
+    _m("d3_claim_lease_ttl_ignored", SETTLE,
        "v_now + make_interval(secs => v_ttl),", "v_now + interval '1 day',",
        "admission", "claim_generation", "a lost worker is not reaped for a day"),
     # --- heartbeat / load_work ------------------------------------------------------------
@@ -2354,6 +2351,18 @@ _S_CANCEL_LOOKUP = (
     "    perform infrx.refuse('not_found', 'no job ' || (p_args->>'job_handle') || ' owned by org '\n"
     "                         || (p_args->>'org_id'));\n"
     "  end if;\n")
+_S_CREDIT_HOLD = (
+    "    update infrx.credit_wallet_holds set state = 'settled'\n"
+    "     where request_id = p_id and state = 'held';\n"
+    "    if not found then\n"
+    "      raise exception 'job %: its CREDIT hold is not held', p_id using errcode = '23514';\n"
+    "    end if;\n")
+_S_CREDIT_DEBIT = (
+    "    insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, operation_id,\n"
+    "                                     request_id, actor, reason, created_at)\n"
+    "    select j.wallet_id, w.kind, 'inference_debit', -p_charged, p_id, p_id, 'platform',\n"
+    "           'inference', j.settled_at\n"
+    "      from infrx.credit_wallets w where w.wallet_id = j.wallet_id;\n")
 D5_MUTANTS: tuple[Mutant, ...] = (
     # --- item 1: the legacy USD settling transaction --------------------------------------
     _m("d5_replay_after_the_fence", SETTLE, _S_REPLAY + _S_FENCE, _S_FENCE + _S_REPLAY,
@@ -2487,6 +2496,61 @@ D5_MUTANTS: tuple[Mutant, ...] = (
        "                    'client_cancelled', 'client_disconnected') then",
        "                    'client_cancelled', 'client_disconnected', 'sync_deadline') then",
        "admission", "cancel_cause", "our own synchronous timeout is booked as never charged"),
+    # --- item 2: the CREDIT settlement and WorkV2 (D half) -----------------------------
+    _m("d5_credit_debit_before_hold", SETTLE, _S_CREDIT_HOLD + _S_CREDIT_DEBIT,
+       _S_CREDIT_DEBIT + _S_CREDIT_HOLD, "admission", "credit_settle",
+       "the last affordable request fails its own settlement (D2's hard rule, D1R request 4)"),
+    _m("d5_credit_settles_at_the_active_card", SETTLE,
+       "  from infrx.rate_card_versions c where c.rate_card_version = p_card;",
+       "  from infrx.rate_card_versions c where c.deployment_revision_id = (select\n"
+       "    x.deployment_revision_id from infrx.rate_card_versions x where x.rate_card_version\n"
+       "    = p_card) order by c.effective_at desc, c.created_at desc limit 1;",
+       "admission", "credit_rate", "a job is charged a card published while it ran (R68)"),
+    _m("d5_credit_debits_the_usd_wallet", SETTLE, _S_CREDIT_DEBIT,
+       "    insert into public.credit_ledger (org_id, delta_usd, kind, request_id, created_at)\n"
+       "    values (j.org_id, -p_charged, 'usage', p_id, j.settled_at);\n",
+       "admission", "credit_usd_untouched",
+       "a CREDIT charge lands on the organization's USD ledger (R64/R65)"),
+    _m("d5_credit_debit_rounds_down", SETTLE,
+       "  select round((p_prompt::numeric * c.input_rate_per_million",
+       "  select trunc((p_prompt::numeric * c.input_rate_per_million",
+       "admission", "credit_grid", "every half-unit CREDIT tie is lost (02-credits half_up_8)"),
+    _m("d5_frozen_wallet_refuses_its_own_debit", "0015_signup_eligibility.sql",
+       "  for each row when (new.kind = 'signup_grant')",
+       "  for each row when (new.kind in ('signup_grant', 'inference_debit'))",
+       "admission", "credit_retired",
+       "a retired individual's in-flight job can never settle (A1 request 7, R85)"),
+    _m("d5_charged_credits_not_recorded", SETTLE,
+       "    j.execution_mode, j.trace_mode, 'credit', p_charged, j.rate_card_version,",
+       "    j.execution_mode, j.trace_mode, 'credit', 0, j.rate_card_version,",
+       "admission", "credit_settle", "the usage page shows a free request the ledger charged"),
+    _m("d5_credit_v1_debit_nonzero", SETTLE,
+       "         debit = case when j.accounting_regime = 'credit' then 0 else v_charge end,",
+       "         debit = v_charge,", "admission", "credit_settle",
+       "a CREDIT charge is read from the USD debit field (R64)"),
+    _m("d5_regimes_cross", SETTLE,
+       "    if j.accounting_regime <> v_regime then", "    if false then",
+       "admission", "credit_regimes",
+       "a v1 caller settles a CREDIT job and reads a zero USD debit (R64)"),
+    _m("d5_load_work_credit_reads_current_pins", SETTLE,
+       "    'admission', infrx.job_admission(j.request_id),\n    'policy',",
+       "    'admission', infrx.job_admission(j.request_id) || jsonb_build_object('rate_card',\n"
+       "      (select to_jsonb(c) from infrx.rate_card_versions c\n"
+       "        where c.deployment_revision_id = j.deployment_revision_id\n"
+       "        order by c.effective_at desc, c.created_at desc limit 1)),\n    'policy',",
+       "admission", "credit_rate", "the worker is handed the card published now (R68/R78)"),
+    _m("d5_load_work_credit_current_policy", SETTLE,
+       "                 from infrx.data_access_policies p where p.policy_version = "
+       "j.policy_version));",
+       "                 from infrx.data_access_policies p order by p.effective_at desc "
+       "limit 1));", "admission", "credit_rate",
+       "a later policy widens what an accepted request allowed"),
+    _m("d5_claim_refuses_credit_again", SETTLE,
+       "  if j.state <> 'queued' then\n",
+       "  if j.accounting_regime = 'credit' then\n"
+       "    perform infrx.refuse('not_claimable', 'no v2 work loader');\n  end if;\n"
+       "  if j.state <> 'queued' then\n",
+       "admission", "credit_settle", "the lift's control: a CREDIT job is never leased (MY-3)"),
     # --- item 5b: the released record -----------------------------------------------------
     _m("d5_release_reported_as_outcome", SETTLE,
        "  return jsonb_build_array(jsonb_build_object('released',",
@@ -2668,6 +2732,12 @@ _CHECKS = {
     "cancel_cause": checks_settle.check_cancel_cause,
     "cancel_refuses_a_cause": checks_settle.check_cancel_refuses_a_cause,
     "settle_released": checks_settle.check_settle_released,
+    "credit_settle": checks_settle.check_credit_settle,
+    "credit_grid": checks_settle.check_credit_grid,
+    "credit_usd_untouched": checks_settle.check_credit_usd_untouched,
+    "credit_regimes": checks_settle.check_credit_regimes,
+    "credit_rate": checks_settle.check_credit_rate,
+    "credit_retired": checks_settle.check_credit_retired,
 }
 
 

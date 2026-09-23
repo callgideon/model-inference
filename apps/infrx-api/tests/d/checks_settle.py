@@ -578,3 +578,304 @@ def check_settle_released(conn) -> str:
         assert_no_drift(conn, "the 24 h release")
         return "the 24 h release is `released`; a terminalization is an `outcome`"
     return ca._in_rollback(conn, body)
+
+
+# --------------------------------------------------------------------- item 2 (CREDIT)
+def credit(conn, request_id) -> tuple[Decimal, Decimal]:
+    """(ledger_total, reserved_total) of the CREDIT wallet a job was admitted against."""
+    reserved, total = cl.credit_wallet(conn, request_id)
+    return total, reserved
+
+
+def credit_ledger(conn, request_id) -> list[tuple]:
+    return conn.execute("select amount, kind, created_at from infrx.credit_ledger "
+                        "where request_id = %s", (request_id,)).fetchall()
+
+
+def credit_hold(conn, request_id) -> str:
+    return cl.credit_hold(conn, request_id)[0]
+
+
+def adjust_to_zero_available(conn, request_id) -> None:
+    """Fixture (owner): an operator adjustment leaving the job's wallet exactly zero
+    available, so a debit landing before its hold is settled trips
+    `credit_wallets_reserved_within_total` (D2's hard rule made observable)."""
+    conn.execute("insert into infrx.credit_ledger (wallet_id, wallet_kind, kind, amount, "
+                 "operation_id, actor, reason) select w.wallet_id, w.kind, "
+                 "'operator_adjustment', -(w.ledger_total - w.reserved_total), "
+                 "gen_random_uuid(), 'ops@test', 'zero available' from infrx.credit_wallets w "
+                 "join infrx.jobs j on j.wallet_id = w.wallet_id where j.request_id = %s",
+                 (request_id,))
+
+
+def publish_card(conn, version: str, rates: tuple[str, str], *, listing: bool = True) -> str:
+    """An operator publishing a new approved card for the public Marlin deployment and (by
+    default) a new catalog listing version pointing new admissions at it."""
+    conn.execute("insert into infrx.rate_card_versions (rate_card_version, model_id, "
+                 "deployment_revision_id, serving_version_id, input_rate_per_million, "
+                 "output_rate_per_million, effective_at, approved_by, provisional) values "
+                 "(%s, %s, %s, %s, %s, %s, infrx.now(), 'ops@test', false)",
+                 (version, cc.MODEL, cc.PUBLIC_DEPLOYMENT, cc.SERVING, *rates))
+    if listing:
+        conn.execute("insert into infrx.catalog_listings (public_model_id, version, model_id, "
+                     "deployment_revision_id, serving_version_id, rate_card_version, "
+                     "effective_at, approved_by) select 'nemostation/marlin-2b', "
+                     "max(version) + 1, %s, %s, %s, %s, infrx.now(), 'ops@test' "
+                     "from infrx.catalog_listings where public_model_id = "
+                     "'nemostation/marlin-2b'", (cc.MODEL, cc.PUBLIC_DEPLOYMENT, cc.SERVING,
+                                                 version))
+    return version
+
+
+def _admission_v2(conn, request_id):
+    from infrx.state.jobstore import admission_v2_of
+    return admission_v2_of(conn.execute("select infrx.job_admission(%s)",
+                                        (request_id,)).fetchone()[0])
+
+
+def check_credit_settle(conn) -> str:
+    """CREDIT-SPEND on PostgreSQL: a CREDIT job is claimable (MY-3 lifted, WorkV2) and
+    settles on ITS CREDIT wallet at the ADMITTED card: one `inference_debit` of `-charged`
+    with the request id, dated `settled_at`; the hold `settled` and its reservation
+    released BEFORE the debit (a wallet with exactly zero available still settles); the v1
+    debit 0; one pilot usage row with `accounting_regime = credit`, `charged_credits` =
+    -(the ledger amount), `cost_usd` 0, no price version and the job's card/serving/
+    deployment pins."""
+    world = ca.World(conn)
+
+    def body():
+        request, lease = cl.credit_running(conn, world)       # the real claim
+        before = credit(conn, request.request_id)
+        job = cl.row(conn, request.request_id)
+        code, doc = settle(conn, lease, propose(lease.job_id, usage=(1200, 340),
+                                                ref=stored(conn, lease.job_id)), "credit")
+        assert code is None, code
+        assert_no_drift(conn, "a CREDIT settlement")
+        card = _admission_v2(conn, request.request_id).rate_card
+        charged = card.debit(1200, 340).raw("CREDIT")
+        out = doc["outcome"]
+        assert (out["settlement_state"], out["debit"]) == ("settled", "0.00000000"), out
+        assert Decimal(doc["charged_credits"]) == charged > 0, (doc["charged_credits"], charged)
+        entries = credit_ledger(conn, request.request_id)
+        settled_at = cl.row(conn, request.request_id)["settled_at"]
+        assert entries == [(-charged, "inference_debit", settled_at)], entries
+        assert credit(conn, request.request_id) == (before[0] - charged,
+                                                    before[1] - job["maximum_hold"]), \
+            (before, credit(conn, request.request_id))
+        assert credit_hold(conn, request.request_id) == "settled"
+        row = usage_row(conn, request.request_id)
+        got = {k: row[k] for k in ("accounting_regime", "charged_credits", "cost_usd",
+                                   "price_version", "rate_card_version", "settlement_regime",
+                                   "prompt_tokens", "completion_tokens")}
+        assert got == {"accounting_regime": "credit", "charged_credits": charged,
+                       "cost_usd": 0, "price_version": None,
+                       "rate_card_version": job["rate_card_version"],
+                       "settlement_regime": "pilot", "prompt_tokens": 1200,
+                       "completion_tokens": 340}, got
+        assert (row["serving_version_id"], row["deployment_revision_id"]) == \
+            (job["serving_version_id"], job["deployment_revision_id"]), row
+        assert row["charged_credits"] == -entries[0][0], "usage and ledger disagree"
+        # the hold settles BEFORE the debit: a wallet with nothing available still settles
+        tight, tight_lease = cl.credit_running(conn, world, worker="wt")
+        adjust_to_zero_available(conn, tight.request_id)
+        code, doc = settle(conn, tight_lease, propose(tight.request_id, usage=(1, 1),
+                                                      ref=stored(conn, tight.request_id)),
+                           "credit")
+        assert (code, doc and doc["outcome"]["settlement_state"]) == (None, "settled"), \
+            f"a settlement on a wallet with zero available failed: {code}"
+        assert_no_drift(conn, "a zero-available CREDIT settlement")
+        return "CREDIT claimed, settled at the admitted card on its own wallet, hold first"
+    return ca._in_rollback(conn, body)
+
+
+def check_credit_grid(conn) -> str:
+    """CREDIT-SPEND: the SQL charge equals Python `v2.records.settle` - on a grid of token
+    counts (0, 1, each ceiling and ceiling +-1) for the seeded card and for a card whose
+    rates make half-unit ties (0.005 / 0.015 per million), through `infrx.debit_credit`;
+    and end to end through `terminalize` for 0/0 (free, no settlement), 1/0, 0/1, both
+    ceilings and a tie, where the `SettlementV2` the adapter builds from the store's rows
+    equals `settle(admission, usage, settled_at)` field for field."""
+    from infrx.contracts.records import TerminalOutcome
+    from infrx.contracts.v2.records import RateCardSnapshot, settle as v2_settle
+    from infrx.state.jobstore import _settlement
+    world = ca.World(conn)
+
+    def body():
+        tie = publish_card(conn, "rc_d5_tie", ("0.00500000", "0.01500000"), listing=False)
+        points = [(p, c) for p in (0, 1, 30719, 30720, 30721) for c in (0, 1, 2047, 2048, 2049)]
+        for version in (cc.CARD, tie):
+            card = RateCardSnapshot.model_validate(conn.execute(
+                "select jsonb_build_object('rate_card_version', rate_card_version, "
+                "'model_id', model_id, 'deployment_revision_id', deployment_revision_id, "
+                "'serving_version_id', serving_version_id, 'input_rate_per_million', "
+                "input_rate_per_million::text, 'output_rate_per_million', "
+                "output_rate_per_million::text, 'effective_at', effective_at, 'approved_by', "
+                "approved_by) from infrx.rate_card_versions where rate_card_version = %s",
+                (version,)).fetchone()[0])
+            for p, c in points:
+                sql, = conn.execute("select infrx.debit_credit(%s, %s, %s)",
+                                    (version, p, c)).fetchone()
+                assert sql == card.debit(p, c).raw("CREDIT"), (version, p, c, sql)
+        settled = 0
+        for tokens, listing in (((0, 0), None), ((1, 0), None), ((0, 1), None),
+                                ((30720, 2048), None), ((1, 1), "rc_d5_tie_listed")):
+            if listing:
+                publish_card(conn, listing, ("0.00500000", "0.01500000"))
+            request, lease = cl.credit_running(conn, world, worker=f"g{tokens}")
+            admission = _admission_v2(conn, request.request_id)
+            code, doc = settle(conn, lease, propose(lease.job_id, usage=tokens,
+                                                    ref=stored(conn, lease.job_id)), "credit")
+            assert code is None, (tokens, code)
+            outcome = TerminalOutcome.model_validate(doc["outcome"])
+            mine = _settlement(doc, outcome)
+            if tokens == (0, 0):
+                assert (outcome.settlement_state.value, mine) == ("released_free", None), doc
+                continue
+            want = v2_settle(admission, Usage.of(*tokens), outcome.settled_at)
+            assert mine == want, (tokens, mine, want)
+            settled += 1
+        assert_no_drift(conn, "the CREDIT grid")
+        return f"{2 * len(points)} grid points and {settled} settlements equal v2.settle"
+    return ca._in_rollback(conn, body)
+
+
+def check_credit_usd_untouched(conn) -> str:
+    """R64/R65: no CREDIT path moves the organization's USD wallet or ledger - a settlement,
+    a free outcome, a published job's quarantine and its 24 h release, a cancel - and no
+    legacy path moves a CREDIT wallet."""
+    world = ca.World(conn)
+
+    def body():
+        org = cc.personal_org(conn, cc.CONSUMER_1)
+        usd_before = usd(conn, org)
+        usd_ledger = conn.execute("select count(*) from public.credit_ledger where org_id = %s",
+                                  (org,)).fetchone()[0]
+        paid, paid_lease = cl.credit_running(conn, world, worker="u1")
+        settle(conn, paid_lease, propose(paid.request_id, usage=(10, 1),
+                                         ref=stored(conn, paid.request_id)), "credit")
+        free, free_lease = cl.credit_running(conn, world, worker="u2")
+        settle(conn, free_lease, propose(free.request_id, "invalid_media", "failed"), "credit")
+        shown, shown_lease = cl.credit_running(conn, world, worker="u3")
+        cl.publish(conn, shown_lease)
+        code, doc = settle(conn, shown_lease, propose(shown.request_id, "client_disconnected",
+                                                      "failed"), "credit")
+        assert (code, doc["outcome"]["settlement_state"]) == (None, "held_unknown"), doc
+        assert credit_hold(conn, shown.request_id) == "unknown"
+        gone, _gone_lease = cl.credit_running(conn, world, worker="u4")
+        _cancel(conn, gone, "client_disconnected")
+        advance(conn, DEFAULTS.unknown_usage_reconcile_s)
+        call(conn, "recover", {"limits": LIMITS})
+        assert credit_hold(conn, shown.request_id) == "released"
+        assert usd(conn, org) == usd_before, "a CREDIT path moved the USD wallet"
+        assert conn.execute("select count(*) from public.credit_ledger where org_id = %s",
+                            (org,)).fetchone()[0] == usd_ledger, "a CREDIT path wrote USD"
+        credit_totals = conn.execute("select sum(ledger_total), sum(reserved_total) from "
+                                     "infrx.credit_wallets").fetchone()
+        legacy, legacy_lease = cl.running(conn, world)
+        settle(conn, legacy_lease, propose(legacy.request_id, usage=(1200, 340),
+                                           ref=stored(conn, legacy.request_id)))
+        assert conn.execute("select sum(ledger_total), sum(reserved_total) from "
+                            "infrx.credit_wallets").fetchone() == credit_totals, \
+            "a legacy settlement moved a CREDIT wallet"
+        assert_no_drift(conn, "both regimes")
+        return "CREDIT settles, frees, quarantines, releases and cancels without USD"
+    return ca._in_rollback(conn, body)
+
+
+def check_credit_regimes(conn) -> str:
+    """R64: the two doors never cross. `terminalize` for the legacy regime of a CREDIT
+    lease, and for the CREDIT regime of a legacy lease, is `not_found` - before and after
+    the job is terminal, nothing moved; `load_work_credit` of a legacy job answers its
+    legacy admission (the adapter refuses it)."""
+    world = ca.World(conn)
+
+    def body():
+        request, lease = cl.credit_running(conn, world)
+        legacy, legacy_lease = cl.running(conn, world)
+        mine, theirs = footprint(conn, legacy.request_id), credit(conn, request.request_id)
+        for job, token, regime in ((request, lease, "legacy_usd"),
+                                   (legacy, legacy_lease, "credit")):
+            code, _ = settle(conn, token, propose(job.request_id, usage=(1, 1),
+                                                  ref=stored(conn, job.request_id)), regime)
+            assert code == "not_found", f"{regime} settled the other regime's job: {code}"
+        assert footprint(conn, legacy.request_id) == mine and \
+            credit(conn, request.request_id) == theirs, "a crossed settlement moved money"
+        ref = f"infrx-result:{request.request_id}"
+        assert settle(conn, lease, propose(request.request_id, usage=(1, 1), ref=ref),
+                      "credit")[0] is None
+        code, _ = settle(conn, lease, propose(request.request_id, usage=(1, 1), ref=ref))
+        assert code == "not_found", f"a v1 replay of a settled CREDIT job: {code}"
+        code, doc = cl.d3(conn, "load_work_credit", lease=legacy_lease.model_dump(mode="json"))
+        assert code is None and doc["admission"]["accounting_regime"] == "legacy_usd", doc
+        return "each door refuses the other regime's job, before and after terminal"
+    return ca._in_rollback(conn, body)
+
+
+def check_credit_rate(conn) -> str:
+    """CREDIT-RATE / R68 / R78: a card (and a data-access policy) published after admission
+    never reaches the admitted job - `load_work_credit` hands the worker the ADMITTED pins,
+    card and policy, and the settlement charges the admitted card - while a job admitted
+    after the publication pins and pays the new card."""
+    world = ca.World(conn)
+
+    def body():
+        request, lease = cl.credit_running(conn, world)
+        admitted = _admission_v2(conn, request.request_id)
+        dear = publish_card(conn, "rc_d5_dear", ("4000.00000000", "12000.00000000"))
+        conn.execute("insert into infrx.data_access_policies (policy_version, effective_at, "
+                     "created_by) values ('dap_d5_later', infrx.now(), 'ops@test')")
+        code, work = cl.d3(conn, "load_work_credit", lease=lease.model_dump(mode="json"))
+        assert code is None, code
+        assert work["admission"]["rate_card"]["rate_card_version"] == \
+            admitted.rate_card.rate_card_version == cc.CARD, work["admission"]["rate_card"]
+        assert type(admitted.pins).model_validate(work["admission"]["pins"]) == admitted.pins, \
+            work["admission"]["pins"]
+        assert work["policy"]["policy_version"] == admitted.pins.policy_version == cc.POLICY, \
+            work["policy"]
+        code, doc = settle(conn, lease, propose(lease.job_id, usage=(1200, 340),
+                                                ref=stored(conn, lease.job_id)), "credit")
+        assert Decimal(doc["charged_credits"]) == \
+            admitted.rate_card.debit(1200, 340).raw("CREDIT"), \
+            f"settled at another card: {doc['charged_credits']}"
+        later, later_lease = cl.credit_running(conn, world, worker="w-later")
+        assert cl.row(conn, later.request_id)["rate_card_version"] == dear
+        code, doc = settle(conn, later_lease, propose(later.request_id, usage=(10, 1),
+                                                      ref=stored(conn, later.request_id)),
+                           "credit")
+        assert Decimal(doc["charged_credits"]) == \
+            _admission_v2(conn, later.request_id).rate_card.debit(10, 1).raw("CREDIT"), doc
+        assert_no_drift(conn, "a card published mid-flight")
+        return "the admitted card, pins and policy settle the job; the new card the next one"
+    return ca._in_rollback(conn, body)
+
+
+def check_credit_retired(conn) -> str:
+    """A1 request 7 / R85: once the individual is retired their wallet is frozen - a new
+    CREDIT admission is refused - yet a job admitted before still settles its debit on it,
+    and a published one's unknown hold is still released at the window."""
+    world = ca.World(conn)
+
+    def body():
+        paid, paid_lease = cl.credit_running(conn, world, worker="r1")
+        shown, shown_lease = cl.credit_running(conn, world, worker="r2")
+        cl.publish(conn, shown_lease)
+        conn.execute("select infrx.retire_individual(%s, 'ops@test', 'account deletion', "
+                     "'retire-d5')", (cc.CONSUMER_1,))
+        org = cc.personal_org(conn, cc.CONSUMER_1)
+        fresh = ca.credit_request(world, ca.C1_KEY, org)
+        assert ca.refusal(conn, fresh, b.idem(fresh, fresh.request_id), regime="credit"), \
+            "a retired individual's wallet took a new hold"
+        before = credit(conn, paid.request_id)
+        code, doc = settle(conn, paid_lease, propose(paid.request_id, usage=(10, 1),
+                                                     ref=stored(conn, paid.request_id)),
+                           "credit")
+        assert (code, doc and doc["outcome"]["settlement_state"]) == (None, "settled"), code
+        assert credit(conn, paid.request_id)[0] == before[0] - Decimal(doc["charged_credits"])
+        assert settle(conn, shown_lease, propose(shown.request_id, "client_disconnected",
+                                                 "failed"), "credit")[0] is None
+        advance(conn, DEFAULTS.unknown_usage_reconcile_s)
+        call(conn, "recover", {"limits": LIMITS})
+        assert credit_hold(conn, shown.request_id) == "released", "the frozen hold is stuck"
+        assert_no_drift(conn, "a frozen wallet")
+        return "a frozen wallet refuses new holds and still settles and releases the old ones"
+    return ca._in_rollback(conn, body)

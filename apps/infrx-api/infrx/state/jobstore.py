@@ -22,7 +22,8 @@ from ..contracts.limits import DEFAULTS, PilotSettings
 from ..contracts.records import (Admission, Budgets, IdempotencyRef, IndexEvent, Lease,
                                  MediaRef, NormalizedRequest, ReservationKind,
                                  SettlementState, TerminalCause, TerminalOutcome, Work)
-from ..contracts.v2.records import AdmissionV2, SettlementV2
+from ..contracts.v2.records import (AdmissionPins, AdmissionV2, DataAccessPolicyRef,
+                                    NormalizedRequestV2, RateCardSnapshot, SettlementV2, WorkV2)
 
 #: `async () -> psycopg.AsyncConnection` in autocommit, acting as `service_role`.
 Connect = Callable[[], Awaitable[Any]]
@@ -369,6 +370,25 @@ class PgJobStore:
                             price_snapshot=admission["price_snapshot"],
                             budgets=admission["budgets"],
                             prompt_tokens=admission["prepared_prompt_tokens"])
+
+    async def load_work_credit(self, lease: Lease) -> WorkV2:
+        """R46, the CREDIT door (WorkV2, D half): fenced like `load_work`; the ADMITTED pins,
+        card and data-access policy (R68/R78), never what the catalog serves now, and
+        preparation's prompt count. A legacy job is `not_found` here."""
+        doc = await self._fenced("load_work_credit", lease)
+        admission = doc["admission"]
+        if admission["accounting_regime"] != "credit":
+            raise errors.NotFound(f"job {lease.job_id} is not a CREDIT job: use load_work")
+        request = NormalizedRequest.model_validate(doc["request"])
+        return WorkV2(
+            request=NormalizedRequestV2(
+                request=request, pins=AdmissionPins.model_validate(admission["pins"]),
+                wallet_id=admission["wallet_id"],
+                policy=DataAccessPolicyRef.model_validate(doc["policy"])),
+            media_refs=request.media,
+            prepared_refs=tuple(MediaRef.model_validate(r) for r in doc["prepared_refs"]),
+            rate_card=RateCardSnapshot.model_validate(admission["rate_card"]),
+            budgets=admission["budgets"], prompt_tokens=admission["prepared_prompt_tokens"])
 
     async def cancel(self, org_id: str, job_handle: str, *,
                      cause: TerminalCause = TerminalCause.client_cancelled) -> TerminalOutcome:

@@ -83,26 +83,16 @@ def running(conn, world, worker: str = "w1", **kw):
 
 
 def credit_running(conn, world, worker: str = "wc"):
-    """A leased CREDIT job (CONSUMER_1's personal org, C1_KEY), prepared and running. `claim`
-    refuses CREDIT until WorkV2 (MY-3), so the fixture writes what claim's body writes -
-    queued -> running and generation 1 with claim's instants, on the database clock - to
-    reach the paths D3 already serves for both regimes (publication, loss, cancel)."""
+    """A leased CREDIT job (CONSUMER_1's personal org, C1_KEY), prepared and claimed through
+    the real `claim` (D5 lifted MY-3: `load_work_credit` carries its WorkV2)."""
     org = cc.personal_org(conn, cc.CONSUMER_1)
     request = gateway_request(world, org_id=org, key_id=ca.C1_KEY, model_revision=ca.PIN)
     ca.admit(conn, request, b.idem(request, request.request_id), regime="credit")
     _, prep = claim(conn, request.request_id)
     assert prepare(conn, prep["lease"])[0] is None, "the CREDIT fixture did not queue"
-    conn.execute("update infrx.jobs set state = 'running', queued_at = null "
-                 "where request_id = %s", (request.request_id,))
-    doc = conn.execute(
-        "insert into infrx.attempts (job_id, kind, generation, worker_id, acquired_at, "
-        "expires_at, generation_deadline_at, first_token_deadline_at) "
-        "select request_id, 'inference', 1, %s, infrx.now(), "
-        "infrx.now() + make_interval(secs => %s), g, g from (select request_id, least("
-        "infrx.now() + make_interval(secs => budget_generation_s), deadline_at) g "
-        "from infrx.jobs where request_id = %s) j returning infrx.lease_doc(attempts)",
-        (worker, TTL, request.request_id)).fetchone()[0]
-    return request, Lease.model_validate(doc)
+    code, answer = d3(conn, "claim", job_id=request.request_id, worker_id=worker)
+    assert code is None, f"a CREDIT job was not claimable: {code}"
+    return request, lease_of(answer)
 
 
 def credit_wallet(conn, request_id: str) -> tuple[Decimal, Decimal]:
@@ -275,22 +265,8 @@ def check_claim_generation(conn) -> str:
         assert code == "not_claimable", f"a job with a live inference lease was claimed: {code}"
         assert live_attempts(conn, torn.request_id) == [("inference", 1, "w-torn")], \
             f"the live inference attempt changed: {live_attempts(conn, torn.request_id)}"
-        # MY-3: a queued CREDIT job is never leased (its work has no v1 loader)
-        org = cc.personal_org(conn, cc.CONSUMER_1)
-        credit = ca.credit_request(world, ca.C1_KEY, org)
-        ca.admit(conn, credit, b.idem(credit, credit.request_id), regime="credit")
-        _, prep = claim(conn, credit.request_id)
-        assert prepare(conn, prep["lease"])[0] is None, "the CREDIT fixture did not queue"
-        assert d3(conn, "claim", job_id=credit.request_id, worker_id="w1")[0] == \
-            "not_claimable", "a CREDIT job was leased with no v2 work loader"
-        assert live_attempts(conn, credit.request_id) == [], "a refused CREDIT claim left a lease"
-        advance(conn, DEFAULTS.queue_wait_interactive_s)
-        expired = [(i["outcome"]["cause"], i["outcome"]["settlement_state"])
-                   for i in _recover(conn)
-                   if i.get("outcome", {}).get("job_id") == credit.request_id]
-        assert expired == [("queue_wait_expired", "released_free")] and credit_hold(
-            conn, credit.request_id)[0] == "released", \
-            f"the unclaimable CREDIT job did not expire free: {expired}"
+        # D5 retired MY-3 (a CREDIT job not_claimable until WorkV2): `load_work_credit` now
+        # carries its work, and checks_settle.check_credit_settle claims one.
         return "generation minted under the job lock, R20 instants, R38 charge, typed refusals"
     return ca._in_rollback(conn, body)
 
