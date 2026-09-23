@@ -454,7 +454,8 @@ def test_i3b_ob13_the_evaluator_cli_reports_an_unreadable_source_as_an_alert(tmp
 def test_i3b_ob14_a_scrape_gap_then_recovery_fires_nothing_new(tmp_path, capsys):
     """M1: a failed scrape keeps that source's previous samples in the state, so when it is
     back with nothing new, no `increase` rule judges a counter's lifetime total as new - and
-    a failure on the very first run leaves the next run a first run."""
+    a failure on the very first run leaves the next run a first run. With two sources, what
+    the healthy one reported during the other's gap is paged once, not again on recovery."""
     reg = _healthy(time.time())
     reg.inc("infrx_lease_lost_total", 3, kind="inference", detected_by="reaper")
     reg.inc("infrx_requests_rejected_total", 500, code="rate_limited", tenant=ORG)
@@ -479,6 +480,29 @@ def test_i3b_ob14_a_scrape_gap_then_recovery_fires_nothing_new(tmp_path, capsys)
     assert run(first) == (1, ["ScrapeFailed"])            # the very first run fails
     away.rename(source)
     assert run(first) == (0, [])                          # ... so this one judges nothing
+
+    # Two sources: the worker's goes away while the gateway's gains 60 refusals. The run
+    # during the gap pages them (and the gap); the run after the worker is back must not
+    # page the same 60 again - the state written during the gap carries both.
+    worker = Registry("worker")
+    worker.inc("infrx_lease_lost_total", 3, kind="inference", detected_by="reaper")
+    worker_file, worker_away = tmp_path / "worker.prom", tmp_path / "worker.gone"
+    worker_file.write_text(worker.render())
+    both = tmp_path / "both.json"
+
+    def run_both():
+        code = alerts.main(["--rules", rules, "--source", str(source), "--source",
+                            str(worker_file), "--state", str(both)])
+        return code, sorted(json.loads(line)["alert"]
+                            for line in capsys.readouterr().out.splitlines())
+
+    assert run_both() == (0, []) and run_both() == (0, [])
+    worker_file.rename(worker_away)
+    reg.inc("infrx_requests_rejected_total", 60, code="rate_limited", tenant=ORG)
+    source.write_text(reg.render())
+    assert run_both() == (1, ["RejectionsHigh", "ScrapeFailed"])
+    worker_away.rename(worker_file)
+    assert run_both() == (0, [])                          # nothing new: nothing paged twice
 
 
 def test_i3b_ob15_a_stale_or_empty_source_is_scrape_failed_not_silence(tmp_path, capsys):

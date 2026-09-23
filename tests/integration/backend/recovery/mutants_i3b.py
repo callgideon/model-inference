@@ -144,6 +144,10 @@ MUTANTS: tuple[Mutant, ...] = (
     Mutant("i3bm27", "M1: a failure on the first run leaves the next run a first run", ALERTS,
            "    if args.state and not (failed and previous is None):",
            "    if args.state:", OBSERVE, "ob14"),
+    Mutant("i3bm84", "OB-2: a failed run still writes the state (the healthy source's samples), "
+                     "so its events are not paged twice (the reviewer's rvo04)", ALERTS,
+           "    if args.state and not (failed and previous is None):",
+           "    if args.state and not failed:", OBSERVE, "ob14"),
     Mutant("i3bm28", "M5: a file source older than --max-age is ScrapeFailed", ALERTS,
            "    if max_age is not None and time.time() - path.stat().st_mtime > max_age:",
            "    if False:", OBSERVE, "ob15"),
