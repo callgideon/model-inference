@@ -281,3 +281,179 @@ def test_media_sec__no_store_field_outside_the_frozen_ticket_leaves():
     response = run(app, create)
     assert response.status_code == 500 and code_of(response) == "internal_error"
     assert ORG_A not in response.text and "uploads/" not in response.text
+
+
+# --- item 3: PUT /v1/uploads/{handle}, the constrained destination -------------------
+def created_handle(client_answer) -> str:
+    assert client_answer.status_code == 201, client_answer.text
+    return client_answer.json()["upload_handle"]
+
+
+def test_media_sec__a_chunked_upload_over_the_cap_stops_reading():
+    """M3 limit 10: the running total stops at MAX_MEDIA_BYTES - at most one chunk past
+    it is read, whatever the body declares (a chunked one declares nothing) - and nothing
+    is stored."""
+    app, _, store, slots = mounted(max_media_bytes=4096)
+    body = clips.Chunks([b"x" * 1024] * 16)
+
+    async def script(client):
+        handle = created_handle(await create(client))
+        return handle, await client.put(put_path(handle), content=body,
+                                        headers=bearer(**{"content-type": "video/mp4"}))
+
+    handle, response = run(app, script)
+    assert body.read <= 4096 + 1024, f"{body.read} bytes read past a 4096-byte cap"
+    assert response.status_code == 413 and code_of(response) == "request_too_large"
+    assert store.upload_key(ORG_A, handle) not in store.objects.objects
+    assert slots.in_flight == 0
+
+
+def test_media_sec__a_slow_upload_is_cut_at_the_deadline():
+    """The intake deadline bounds the destination too: a body that keeps arriving, too
+    slowly, is `deadline_exceeded` on the app's clock (moved, never slept), and nothing is
+    stored."""
+    app, rt, store, slots = mounted()
+    body = clips.Chunks([b"x" * 100] * 4, on_chunk=lambda: setattr(rt.clock, "now",
+                                                                  rt.clock.now + 20))
+
+    async def script(client):
+        handle = created_handle(await create(client))
+        return handle, await client.put(put_path(handle), content=body,
+                                        headers=bearer(**{"content-type": "video/mp4"}))
+
+    handle, response = run(app, script)
+    assert response.status_code == 504 and code_of(response) == "deadline_exceeded"
+    assert store.upload_key(ORG_A, handle) not in store.objects.objects
+    assert slots.in_flight == 0
+
+
+def test_media_sec__large_uploads_hold_a_shared_slot_until_stored():
+    """The per-process large-body bound (`LargeBodies`): with every slot taken a large PUT
+    is 429 with retry guidance before its body is read; otherwise it holds one slot until
+    the store has the bytes, and every exit gives it back."""
+    app, _, store, slots = mounted()
+    during = []
+    stored = store.put_upload
+
+    async def spy(*args):
+        during.append(slots.in_flight)
+        return await stored(*args)
+
+    store.put_upload = spy
+    held = slots.slot()
+    held.account(slots.threshold + 1)
+
+    async def refused(client):
+        handle = created_handle(await create(client))
+        return handle, await put(client, handle)
+
+    handle, response = run(app, refused)
+    assert response.status_code == 429 and code_of(response) == "capacity_exhausted"
+    assert response.headers.get("retry-after")
+    assert during == []
+    held.release()
+    response = run(app, lambda client: put(client, handle))
+    assert response.status_code == 204, response.text
+    assert during == [1], "the slot was not held while the store took the bytes"
+    assert slots.in_flight == 0
+
+
+def test_media_sec__a_malformed_handle_is_not_found_before_any_byte():
+    """The handle is `upl_` + 22..64 url-safe characters or it is not one: an org-qualified
+    reference, a traversal, an encoded slash or a short handle is the same `not_found` as
+    an unknown handle - never echoed - and costs no body read."""
+    app, _, store, _ = mounted()
+    forms = ("upl_short", "infrx-upload:" + UNKNOWN_HANDLE, f"{ORG_A}:{UNKNOWN_HANDLE}",
+             "upl_" + "." * 22, UNKNOWN_HANDLE + "%2F..", "..%2F" + UNKNOWN_HANDLE)
+
+    async def script(client):
+        unknown = await put(client, UNKNOWN_HANDLE)
+        answers = []
+        for form in forms:
+            for path in (put_path(form), complete_path(form)):
+                body = clips.Chunks([b"x" * 1024] * 2)
+                answers.append((path, body, await client.request(
+                    "PUT" if path == put_path(form) else "POST", path, content=body,
+                    headers=bearer(**{"content-type": "video/mp4"}))))
+        return unknown, answers
+
+    unknown, answers = run(app, script)
+    assert unknown.status_code == 404
+    for path, body, response in answers:
+        assert body.read == 0, f"{path} read the body"
+        assert response.status_code == 404 and refusal(response) == refusal(unknown), path
+        assert "Q" * 22 not in response.text
+    assert store.uploads == {}
+
+
+def test_media_sec__the_destination_takes_only_media_types():
+    """The destination stores only an allowed media type (the container probe at
+    completion stays authoritative): JSON, text, a lookalike or no type at all is
+    `unsupported_media` before a byte is read."""
+    app, _, store, _ = mounted()
+
+    async def script(client):
+        handle = created_handle(await create(client))
+        answers = []
+        for mime in ("application/json", "text/plain", "video/mp4x", None):
+            body = clips.Chunks([CLIP])
+            headers = bearer(**({"content-type": mime} if mime else {}))
+            answers.append((body, await client.put(put_path(handle), content=body,
+                                                   headers=headers)))
+        return handle, answers
+
+    handle, answers = run(app, script)
+    for body, response in answers:
+        assert body.read == 0
+        assert response.status_code == 400 and code_of(response) == "unsupported_media"
+    assert store.upload_key(ORG_A, handle) not in store.objects.objects
+
+
+def test_media_sec__the_destination_is_write_once_over_http():
+    """M3's answers in the contract's envelope: the same bytes again is 204, other bytes
+    409, a finalized upload takes no bytes (409), and an upload whose window closed is
+    410 `upload_expired` (R22)."""
+    app, _, store, _ = mounted()
+
+    async def script(client):
+        handle = created_handle(await create(client))
+        first, again = await put(client, handle), await put(client, handle)
+        other = await put(client, handle, data=CLIP + b"\x00")
+        done = await complete(client, handle)
+        after = await put(client, handle)
+        late = created_handle(await create(client))
+        store.clock.advance(store.limits.processing_cache_ttl_s + 1)
+        return first, again, other, done, after, await put(client, late)
+
+    first, again, other, done, after, expired = run(app, script)
+    assert (first.status_code, again.status_code) == (204, 204), (first.text, again.text)
+    assert first.headers.get("inference-id") and first.content == b""
+    assert other.status_code == 409 and code_of(other) == "state_conflict"
+    assert done.status_code == 200, done.text
+    assert after.status_code == 409 and code_of(after) == "state_conflict"
+    assert expired.status_code == 410 and code_of(expired) == "upload_expired"
+    assert expired.json()["error"]["type"] == "gone_error"
+
+
+def test_dur_rls__another_orgs_upload_is_the_unknown_handles_404():
+    """Tenant scope over HTTP: another org's key writing to or completing an upload gets
+    the envelope an unknown handle gets (modulo request id) - never `forbidden`, which
+    would confirm the handle exists - and the owner's upload is untouched and usable."""
+    app, _, store, _ = mounted()
+
+    async def script(client):
+        handle = created_handle(await create(client))
+        foreign = [await put(client, handle, token=TOKEN_B),
+                   await complete(client, handle, token=TOKEN_B)]
+        unknown = [await put(client, UNKNOWN_HANDLE, token=TOKEN_B),
+                   await complete(client, UNKNOWN_HANDLE, token=TOKEN_B)]
+        untouched = (store.uploads[handle].state,
+                     store.upload_key(ORG_A, handle) in store.objects.objects)
+        return foreign, unknown, untouched, [await put(client, handle),
+                                             await complete(client, handle)]
+
+    foreign, unknown, untouched, owner = run(app, script)
+    for theirs, nobodys in zip(foreign, unknown):
+        assert theirs.status_code == 404 and refusal(theirs) == refusal(nobodys)
+    assert untouched == ("created", False)
+    assert [response.status_code for response in owner] == [204, 200]
