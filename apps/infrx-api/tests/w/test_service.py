@@ -28,6 +28,7 @@ from infrx.contracts import errors
 from infrx.contracts.limits import DEFAULTS
 from infrx.contracts.records import JobState, OutboxKind, TerminalCause, Usage
 from infrx.worker import VllmEngine, WorkerLoop, WorkerService, prepared_request, server_timing
+from infrx.worker import service as service_module
 from infrx.worker.attempt import TIMED_PHASES
 from infrx.worker.fakes import SERVED_MODEL, FakeUpstream, m2_local_uri
 from tests.w.test_engine import Box, video_work
@@ -353,10 +354,12 @@ def test_ops_recover__sigterm_drains_within_the_bound_and_exits_cleanly():
 # --------------------------------------------------------------------------
 # (4) readiness and liveness, protected
 # --------------------------------------------------------------------------
-def test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_draining():
+def test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_draining(
+        monkeypatch):
     """`/readyz` is 200 only for an engine that answers ready and a pool that is running
     and not draining; the body names the reason. `/livez` stays 200 through a drain and
-    turns 503 when the pool has died unasked."""
+    turns 503 when the pool has died unasked. An engine that does not answer within
+    `HEALTH_TIMEOUT_S` is down, not a hung probe."""
     async def case():
         world = World()
         request, _ = await queued(world)
@@ -387,6 +390,15 @@ def test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_drain
             raise RuntimeError("the engine client is broken")
         engine.health = raises
         assert (await service.readiness())["engine"] == "down"
+
+        async def hangs():
+            await asyncio.Event().wait()
+        engine.health = hangs
+        monkeypatch.setattr(service_module, "HEALTH_TIMEOUT_S", 0.1)
+        checking = asyncio.create_task(service.readiness())
+        done, _ = await asyncio.wait({checking}, timeout=2.0)
+        assert done, "a hung engine health check hung the readiness probe"
+        assert checking.result()["engine"] == "down"
 
         async def up():
             return {"ready": True}
@@ -468,8 +480,9 @@ def test_ops_recover__one_dead_runner_makes_the_worker_not_live_and_ends_serve()
 
 
 def test_ops_recover__readiness_is_never_public_and_leaks_nothing():
-    """Loopback only: any other bind is refused at construction. Only the two probe
-    paths answer, only to GET, and the body carries counts - never a job id."""
+    """Loopback only: any other bind is refused at construction, and again at start (the
+    field is mutable), and the listener is bound to that address and no other. Only the
+    two probe paths answer, only to GET, and the body carries counts - never a job id."""
     world = World()
     for host in ("0.0.0.0", "10.0.0.5", "::", "localhost", ""):
         with pytest.raises(ValueError):
@@ -479,10 +492,19 @@ def test_ops_recover__readiness_is_never_public_and_leaks_nothing():
     async def case():
         request, _ = await queued(world)
         await world.scheduler.enqueue(candidate(world, request))
+        # changed after construction: start refuses before it reaps, claims or binds
+        moved = service_for(world, Blocking(), reap_interval_s=3600)
+        moved.health_host = "0.0.0.0"
+        with pytest.raises(ValueError):
+            await moved.start()
+        await asyncio.sleep(0.05)
+        assert moved.loop.claimed == 0 and moved._pool is None
+
         service = service_for(world, Blocking(), drain_s=0.01, reap_interval_s=3600,
                               health_port=0)
         await service.start()
-        port = service._server.sockets[0].getsockname()[1]
+        host, port = service._server.sockets[0].getsockname()[:2]
+        assert host == "127.0.0.1", host
         assert await eventually(lambda: service.loop.in_flight)
         for method, path in (("GET", "/"), ("GET", "/metrics"), ("POST", "/readyz"),
                              ("GET", "/readyz/../v1")):

@@ -67,6 +67,9 @@ class WorkerService:
     _server: asyncio.AbstractServer | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
+        self._check_loopback()
+
+    def _check_loopback(self) -> None:
         try:
             loopback = ipaddress.ip_address(self.health_host).is_loopback
         except ValueError:
@@ -100,6 +103,7 @@ class WorkerService:
 
     # --- lifecycle ------------------------------------------------------------
     async def start(self) -> None:
+        self._check_loopback()                    # again: the field is mutable after init
         await self.reap_once()                    # a restart requeues what died with us
         self._pool = asyncio.create_task(
             self.loop.run(concurrency=self.concurrency, stop_when_idle=False), name="pool")
