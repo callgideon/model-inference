@@ -3088,6 +3088,47 @@ async def dur_output__an_oversize_event_is_refused(factory):
     assert page == ()
 
 
+async def dur_output__an_unjournalable_event_refuses_the_whole_batch(factory):
+    """DUR-OUTPUT / D4 review M1: what jsonb cannot store - a NUL character in a string or a
+    key at any depth, a lone UTF-16 surrogate, NaN or an infinity - is `journal_write_failed`
+    for the WHOLE batch wherever the bad event sits, and nothing is stored or charged (the
+    job's stored bytes after terminalization are its terminal event's alone). The literal
+    text `\\u0000`, -0.0 and 1e308 are ordinary JSON and are stored."""
+    from ..records import EngineEvent
+    harness = factory()
+    jobs = hook(harness, "jobs")
+    journal_bytes = hook(harness, "journal_bytes")
+    request, admission, lease = await _stream_job(harness)
+    for payload in ({"content": "a\x00b"}, {"a\x00b": "key"}, {"top": [["\x00"]]},
+                    {"content": "x\ud800"}, {"\udc00": 1}, {"top": ["\udfff"]},
+                    {"logprob": float("nan")}, {"logprob": float("inf")},
+                    {"top": [{"logprob": float("-inf")}]}):
+        bad = EngineEvent(type=ChunkEventType.delta, payload=payload)
+        for batch in ((*b.events("a"), bad), (bad, *b.events("b")),
+                      (*b.events("a"), bad, *b.events("b"))):
+            try:
+                await harness.port.append(lease, batch)
+            except errors.JournalWriteFailed:
+                pass
+            except Exception as untyped:          # noqa: BLE001 - jsonb's raw 22P05/22P02
+                raise AssertionError(f"{payload!r} was answered {type(untyped).__name__}, "
+                                     f"not journal_write_failed") from untyped
+            else:
+                raise AssertionError(f"the journal stored an unjournalable payload {payload!r}")
+    page, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    assert page == (), "a refused batch committed part of itself"
+    await jobs.cancel(request.org_id, admission.job_handle)
+    page, _ = await harness.port.read_owned(request.org_id, admission.job_handle, None, 10)
+    assert journal_bytes() == sum(chunk.bytes for chunk in page), \
+        "a refused batch charged journal bytes"
+    _other, _admitted, lease = await _stream_job(harness, key="journalable")
+    # (jsonb re-renders 1e308 in fixed point, so only the text is compared on the way back)
+    stored = await harness.port.append(lease, (EngineEvent(type=ChunkEventType.delta, payload={
+        "content": "\\u0000", "zero": -0.0, "big": 1e308}),))
+    assert [chunk.payload["content"] for chunk in stored] == ["\\u0000"], \
+        "a journalable event was refused"
+
+
 async def dur_cap__a_job_cannot_store_past_its_journal_reservation(factory):
     """DUR-CAP: 02 requires per-job *and* global byte limits, so one job's journal
     cannot grow into the global budget past the bytes reserved for it."""
@@ -3174,6 +3215,7 @@ def streamstore_cases():
         dur_cap__a_job_cannot_store_past_its_journal_reservation,
         dur_fence__a_stale_worker_cannot_append,
         dur_output__an_oversize_event_is_refused,
+        dur_output__an_unjournalable_event_refuses_the_whole_batch,
         dur_output__the_terminal_event_is_written_once_with_the_settlement,
         dur_settle__the_terminal_event_belongs_to_the_settling_transaction,
     ]

@@ -17,6 +17,7 @@ keeps concurrency cases deterministic.
 from __future__ import annotations
 
 import asyncio
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -59,6 +60,22 @@ def _phase_deadline(now: datetime, budget_s: float, deadline_at: datetime) -> da
     """r1 R20: a phase instant is the database clock plus that phase's budget,
     clamped by the absolute accepted deadline. No phase outlives the job."""
     return min(now + timedelta(seconds=budget_s), deadline_at)
+
+
+def _journalable(value: object) -> bool:
+    """What jsonb can store: no NUL character and no lone UTF-16 surrogate in a string or
+    key, no NaN or infinity; every other JSON value is stored. A COPY of D4's rule
+    (`infrx.state.journal._journalable`, the source): contracts never import `infrx.state`.
+    `tests/d/test_journal_units.py` holds the two stores to one table of payloads."""
+    if isinstance(value, str):
+        return "\x00" not in value and not any("\ud800" <= char <= "\udfff" for char in value)
+    if isinstance(value, float):
+        return math.isfinite(value)
+    if isinstance(value, dict):
+        return all(_journalable(key) and _journalable(item) for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return all(_journalable(item) for item in value)
+    return True
 
 
 @dataclass
@@ -1282,6 +1299,12 @@ class FakeStreamStore:
 
     async def append(self, lease: Lease, events: tuple[EngineEvent, ...]) -> tuple[Chunk, ...]:
         self.failures.before("append")
+        if not all(_journalable(event.payload) for event in events):
+            # D4 review M1: refused typed, the whole batch, before anything is fenced, stored
+            # or charged - where `PgStreamStore.append` refuses it (jsonb would raise untyped).
+            raise errors.JournalWriteFailed("an event carries a NUL character, a lone surrogate "
+                                            "or a non-finite number, which the journal cannot "
+                                            "store")
         async with self.jobs._lock:
             job = self.jobs._fence(lease)
             now = self.clock.now()

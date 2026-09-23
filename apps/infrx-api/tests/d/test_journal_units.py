@@ -104,18 +104,19 @@ def test_expire__passes_the_callers_bound_and_counts() -> None:
 UNJOURNALABLE = ({"content": "a\x00b"}, {"a\x00b": "key"}, {"logprob": float("nan")},
                  {"logprob": float("inf")}, {"top": [{"logprob": float("-inf")}]},
                  {"top": [["\x00"]]})
-#: Confirmation A2: jsonb refuses a lone UTF-16 surrogate in a string or key (22P02). The
-#: fake cannot even measure one (`compact_bytes` raises UnicodeEncodeError), so it is not in
-#: the pinned fake delta below.
+#: Confirmation A2: jsonb refuses a lone UTF-16 surrogate in a string or key (22P02).
 SURROGATES = ({"content": "x\ud800"}, {"\udc00": 1}, {"top": ["\udfff"]})
+#: F fakes follow-up: ordinary JSON the fake and the adapter both store.
+JOURNALABLE = ({"content": "\\u0000"}, {"zero": -0.0, "big": 1e308}, {"n": 1, "b": True, "z": None})
 
 
 def test_append__refuses_what_jsonb_cannot_store_before_sending_it() -> None:
     """Review M1: a NUL character (in a key or a value, at any depth) or a non-finite number
     is `journal_write_failed` for the whole batch and nothing reaches the database (jsonb
     would raise an untyped 22P05/22P02); the literal text `\\u0000` and finite floats are
-    journalable. The FAKE stores all six today (pinned below): when F makes it refuse them
-    too (coordinator request) this assertion is the one to flip."""
+    journalable. The FAKE refuses exactly the same payloads (F fakes follow-up, D4 request
+    10a - it used to store the six UNJOURNALABLE ones): the last assertion holds the two to
+    one table."""
     store, conn = _stream({"chunks": [ROW]})
     for payload in (*UNJOURNALABLE, *SURROGATES):
         bad = EngineEvent(type="delta", payload=payload)
@@ -131,14 +132,27 @@ def test_append__refuses_what_jsonb_cannot_store_before_sending_it() -> None:
         "l": [0, "x", [1.5]], "o": {"k": False}}),)))
     assert len(conn.sent) == 1, "a journalable payload was refused"
 
-    async def fake_stores_them():
+    async def fake_refuses(payload) -> bool:
         from infrx.contracts.conformance.jobs import _stream_job
         from infrx.contracts.fakes.factories import streamstore_factory
         harness = streamstore_factory()
         harness.extra["grant"](b.ORG_A, "25")
         _, _, lease = await _stream_job(harness)
-        return [len(await harness.port.append(lease, (EngineEvent(type="delta",
-                                                                  payload=payload),)))
-                for payload in UNJOURNALABLE]
-    assert asyncio.run(fake_stores_them()) == [1] * len(UNJOURNALABLE), \
-        "the fake now refuses unjournalable payloads: drop this delta and its request"
+        try:
+            await harness.port.append(lease, (EngineEvent(type="delta", payload=payload),))
+        except errors.JournalWriteFailed:
+            return True
+        return False
+
+    def adapter_refuses(payload) -> bool:
+        adapter, _ = _stream({"chunks": [ROW]})
+        try:
+            asyncio.run(adapter.append(LEASE, (EngineEvent(type="delta", payload=payload),)))
+        except errors.JournalWriteFailed:
+            return True
+        return False
+    table = (*UNJOURNALABLE, *SURROGATES, *JOURNALABLE)
+    expected = [True] * (len(UNJOURNALABLE) + len(SURROGATES)) + [False] * len(JOURNALABLE)
+    assert [adapter_refuses(payload) for payload in table] == expected
+    assert [asyncio.run(fake_refuses(payload)) for payload in table] == expected, \
+        "the fake and PgStreamStore disagree on what the journal can store"
