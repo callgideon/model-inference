@@ -1,8 +1,8 @@
 """Gateway configuration: one mutable dataclass, and the only os.environ read.
 
 Field names mirror the original gateway module's globals (UPSTREAM -> upstream,
-MAX_VIDEO_MB -> max_video_mb, ...) so the legacy shim in gateway.py forwards
-assignments straight here, and so a config change is one place, not two.
+MAX_VIDEO_MB -> max_video_mb, ...), which the legacy `gateway.py` shim forwarded here
+until the cutover retired it, so a config change is one place, not two.
 
 `Settings`/`from_env` are the F1 gateway's own configuration and keep their exact
 defaults. The pilot settings of contracts v1 (08 §5) are a separate object:
@@ -12,7 +12,6 @@ environment. Nothing in the F1 path reads them, so adding them changes no
 existing behaviour.
 """
 import dataclasses
-import logging
 import math
 import os
 from dataclasses import dataclass, field
@@ -224,10 +223,8 @@ def runtime_mode(settings) -> str:
 def validate_runtime(settings):
     """r1 R44: the one hook `create_app` calls. Returns the mode it validated.
 
-    * unset (`INFRX_MODE` absent) - **legacy F1 behaviour, exactly as before**, logged
-      once as `legacy`. F1 preserved behaviour by rule, so the legacy `gateway:app`
-      entry point must keep working untouched; G1 replaces this branch with a refusal at
-      cutover, in the same change in which I2's installer writes `INFRX_MODE=pilot`.
+    * unset (`INFRX_MODE` absent) - refuses to start (R44, F2.2 carryover 14): the G2
+      cutover retired the legacy F1 entry point, and I2's installer always writes a mode.
     * `dev` / `test` - explicit, and no further requirement.
     * `pilot` - requires authentication **and** metering configuration, and refuses the
       shared `GATEWAY_API_KEY` (R51), or a typed `RuntimeMisconfigured` naming the setting
@@ -264,9 +261,7 @@ def validate_runtime(settings):
         raise RuntimeMisconfigured(
             mode, detail="ACTIVE_RATE_CARD_VERSION must not carry surrounding whitespace")
     if mode == MODE_UNSET:
-        logging.getLogger("infrx").info(
-            "INFRX_MODE is unset: serving legacy F1 behaviour (mode=legacy)")
-        return "legacy"
+        raise RuntimeMisconfigured(mode, ("INFRX_MODE",))
     if mode not in MODES:
         raise RuntimeMisconfigured(mode, detail="must be one of " + ", ".join(MODES))
     if mode == "pilot":

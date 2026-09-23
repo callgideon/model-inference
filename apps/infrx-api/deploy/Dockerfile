@@ -29,10 +29,9 @@ COPY pyproject.toml uv.lock ./
 # and judge stay out until their services are deployed. uv itself does not ship.
 RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
     uv sync --frozen --no-dev --extra state --extra scheduling
-COPY gateway.py ./
 COPY openrouter ./openrouter
 COPY infrx ./infrx
 COPY deploy/preflight.py deploy/migrate.py ./deploy/
-RUN python -m compileall -q infrx gateway.py deploy
+RUN python -m compileall -q infrx deploy
 
 USER infrx-gateway:infrx

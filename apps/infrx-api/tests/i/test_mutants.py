@@ -25,7 +25,7 @@ SUBSET = ("denied_read_tolerated", "unknown_error_is_not_found", "validation_ski
           "value_printed_on_refusal", "value_passed_as_an_argument",
           "staged_file_is_world_readable", "stale_staged_file_kept",
           "python_pin_dropped", "transport_check_dropped", "engine_digest_unchecked",
-          "transport_logs_not_silenced", "manifest_modes_drift", "unset_mode_refuses",
+          "transport_logs_not_silenced", "manifest_modes_drift", "unset_mode_starts_legacy",
           # I2B: one per file it added, and every one that decides a refusal or the edge
           "probe_on_host_despite_image", "unknown_setting_accepted", "worker_killed_before_drain",
           "gateway_public_bind", "engine_second_setting_source", "valkey_public_bind",

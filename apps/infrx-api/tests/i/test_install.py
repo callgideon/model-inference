@@ -189,22 +189,33 @@ def test_deploy_failclosed__an_unset_or_unknown_mode_installs_nothing(
     assert made.argv == "", "a parameter was read for an unusable mode"
 
 
-def test_deploy_failclosed__pilot_is_refused_while_the_runtime_is_not_composed(
+def test_deploy_failclosed__pilot_passes_the_composition_gate_once_the_ingress_is_composed(
         tmp_path, monkeypatch, capsys):
-    """Item 3 of the brief: pilot mode is only written when the pilot routers are
-    composed. `infrx/gateway/app.py` still mounts `(health, models, chat)`, so a
-    correct pilot configuration with every parameter present is *still* refused - and
-    that is the current, intended state until the G2 cutover. The engine image is
-    pinned here so the *other* pilot prerequisite is not what refuses the install."""
+    """Item 3 of the brief, inverted at the G2 cutover (I0 request 3): `ROUTERS` composes
+    the metered ingress, so the installer's composition gate no longer refuses a correct
+    pilot configuration. What still refuses it here is named and is not the composition
+    (this host's interpreter, W3's worker entry); the engine image is pinned so the other
+    pilot prerequisite is not what refuses the install either."""
     made = support.stubs(tmp_path, monkeypatch)
     cfg = support.config(tmp_path, mode="pilot",
                          serve_script=support.serve_script(tmp_path, image=support.PINNED))
     before = cfg.env_file.read_bytes()
-    assert preflight.apply(cfg) == preflight.REFUSED
-    unchanged(cfg, before, made.systemctl_calls)
+    verdict = preflight.apply(cfg)
     message = capsys.readouterr().err
-    assert "pilot routers to be composed" in message  # preflight's own phrase (G1R review C2)
+    assert "pilot routers to be composed" not in message  # preflight's own phrase (C2)
+    if verdict == preflight.REFUSED:
+        unchanged(cfg, before, made.systemctl_calls)
     assert MARKER not in message
+    # The gate itself still stands: a runtime that lost the ingress is refused by name.
+    from unittest import mock
+
+    from infrx.gateway import app as composition
+    from infrx.gateway.routes import chat, health, models
+    staged = tmp_path / "pilot.env"
+    staged.write_text(cfg.env_file.read_text() if cfg.env_file.exists() else "INFRX_MODE=pilot\n")
+    with mock.patch.object(composition, "ROUTERS", (health, models, chat)):
+        verdict = preflight.probe(staged, "pilot")
+    assert any("pilot routers to be composed" in problem for problem in verdict["problems"])
 
 
 def test_deploy_failclosed__the_staged_bytes_are_what_the_runtime_validates(tmp_path,

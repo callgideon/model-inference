@@ -76,6 +76,32 @@ def test_backend_deploy__every_image_is_pinned_by_digest():
     assert not preflight.SHAPES[image_key.shape]("infrx-runtime:latest")
 
 
+def test_backend_deploy__the_gateway_runs_the_factory_from_what_the_image_copies():
+    """The cutover (G2 request 1, R48): the gateway unit runs `uvicorn --factory
+    infrx.gateway.app:create_app`, a callable of the code the image copies; the retired
+    `gateway.py` shim is gone, and every path the Dockerfile copies or compiles exists and
+    is let into the build context by `Dockerfile.dockerignore`."""
+    import importlib
+
+    argv = docker_run("marlin2b-gateway.service")
+    command = argv[argv.index("${INFRX_IMAGE}") + 1:]
+    assert command[:3] == ["uvicorn", "--factory", "infrx.gateway.app:create_app"], command
+    module, _, name = command[2].partition(":")
+    assert callable(getattr(importlib.import_module(module), name))
+    assert not (support.API_DIR / "gateway.py").exists()
+    docker = (DEPLOY / "Dockerfile").read_text()
+    copied = [source for line in re.findall(r"^COPY (?!--)(.+)$", docker, re.M)
+              for source in line.split()[:-1]]
+    compiled = re.search(r"^RUN python -m compileall -q (.+)$", docker, re.M).group(1).split()
+    allowed = {line[1:].rstrip("/") for line
+               in (DEPLOY / "Dockerfile.dockerignore").read_text().splitlines()
+               if line.startswith("!")}
+    for source in copied:
+        assert (support.API_DIR / source).exists() and source in allowed, source
+    for path in compiled:
+        assert any(path == source or source.startswith(path + "/") for source in copied), path
+
+
 def test_backend_deploy__the_image_runs_nothing_as_root():
     """The Dockerfile's last word is an unprivileged user, and the pilot probe refuses an
     image whose interpreter runs as uid 0 - checked where it runs, not where it is built."""
@@ -437,6 +463,63 @@ def test_backend_deploy__the_edge_hides_operator_paths_and_sanitizes_health():
     assert "@health path /health" in down and _responses(down) == [('{"ok":false}', 503)]
     envelopes = {status: json.loads(body) for body, status in bodies if body.startswith('{"error"')}
     assert envelopes == {404: _envelope("not_found"), 413: _envelope("request_too_large")}
+
+
+#: G3 request (e) / G2 E3B2: what must cross the edge untouched, each way.
+PASSTHROUGH = ("Location", "Retry-After", "Preference-Applied", "Idempotency-Replayed",
+               "Inference-Id", "Last-Event-ID", "Prefer", "Idempotency-Key")
+
+
+def _edge_block(text: str, path: str) -> str:
+    """The handler a public request for `path` reaches at the edge: the private 404, the
+    sanitised /health, or the catch-all proxy's own block (Caddy's `handle` blocks are
+    exclusive; the matcherless one is last)."""
+    import fnmatch
+
+    private = re.search(r"@private path (.+)", text).group(1).split()
+    if any(fnmatch.fnmatchcase(path, pattern) for pattern in private):
+        return "private"
+    if path == "/health":
+        return "health"
+    start = text.index("\thandle {\n")
+    depth, end = 0, start
+    for end, char in enumerate(text[start:], start):
+        depth += {"{": 1, "}": -1}.get(char, 0)
+        if depth == 0 and char == "}":
+            break
+    return text[start:end + 1]
+
+
+def test_backend_deploy__the_edge_proxies_jobs_and_uploads_untouched_and_unbuffered():
+    """G3 request (e) and G4U: every route the cutover mounts - chat, the five jobs routes,
+    the three upload routes - reaches the gateway through the catch-all proxy, which streams
+    (`flush_interval -1`, no buffering or encoding: `/v1/jobs/{h}/events` is SSE), outlasts a
+    quiet stream's keepalive, admits an upload's bytes, and rewrites no header: the contract
+    headers pass through both ways."""
+    from infrx.contracts.limits import DEFAULTS
+    from infrx.gateway.routes import ingress, uploads
+
+    text = (DEPLOY / "Caddyfile").read_text()
+    routes = [("POST", ingress.CHAT_PATH), *ingress.JOBS_ROUTES,
+              ("POST", uploads.UPLOADS_PATH), ("PUT", uploads.DESTINATION_PATH),
+              ("POST", uploads.COMPLETE_PATH)]
+    reached = {path: _edge_block(text, path.replace("{handle}", ingress.SAMPLE_JOB_HANDLE))
+               for _, path in routes}
+    assert {path for path, where in reached.items() if where in ("private", "health")} == set()
+    block = reached[ingress.CHAT_PATH]
+    assert set(reached.values()) == {block}
+    assert re.search(r"^\t\treverse_proxy 127\.0\.0\.1:8001 \{$", block, re.M), block
+    assert re.search(r"^\s*flush_interval -1$", block, re.M), "a stream would be buffered"
+    for directive in ("header_up", "header_down", "encode", "request_buffers",
+                      "response_buffers", "buffer_requests", "buffer_responses"):
+        assert not re.search(rf"^\s*{directive}\b", block, re.M), directive
+    for name in PASSTHROUGH:                      # comments aside, nowhere in the site
+        code = "\n".join(line.split("#")[0] for line in text.splitlines())
+        assert name.lower() not in code.lower(), name
+    read = int(re.search(r"read_timeout (\d+)s", block).group(1))
+    assert read > DEFAULTS.sse_keepalive_s
+    size = int(re.search(r"max_size (\d+)MiB", text).group(1)) * 2**20
+    assert size >= DEFAULTS.max_media_bytes
 
 
 def test_backend_deploy__maintenance_answers_every_request_with_the_retry_envelope():

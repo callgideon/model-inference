@@ -22,7 +22,6 @@ from datetime import timedelta
 
 import httpx
 import pytest
-from fastapi import FastAPI
 
 from infrx.config import RuntimeMisconfigured
 from infrx.contracts import errors, fixtures, wire
@@ -32,7 +31,7 @@ from infrx.contracts.fakes.state import FakeStreamStore
 from infrx.contracts.records import (ChunkEventType, EngineEvent, ExecutionMode, HoldState,
                                      JobState, OutboxKind, SettlementState, TerminalCause,
                                      TerminalOutcome, Usage)
-from infrx.gateway import pilot
+from infrx.gateway import app as composition
 from infrx.gateway.routes import ingress, jobs as jobs_router
 from infrx.gateway.routes.relay import CREDIT
 from infrx.media.store import InMemoryObjectStore
@@ -1317,24 +1316,19 @@ class Journal(FakeStreamStore):
 
 
 def test_f_base__the_pilot_composition_carries_the_relay_the_jobs_router_needs():
-    """The cutover's order over G2's `pilot.build_ingress_deps` (the fakes standing in for
-    D4/D5/M): the composition puts its relay on `rt.relay`, so registering the ingress then the
-    jobs router over `rt.ingress` mounts the jobs routes on the pilot's own relay, with its 202
-    hook installed, and the route table holds. Integration request: `ROUTERS` gains `jobs`."""
+    """The cutover's `create_app` over G2's `pilot.build_ingress_deps` (the fakes standing in
+    for D4/D5/M): the composition puts its relay on `rt.relay`, so `ROUTERS` - the ingress,
+    then the jobs router over `rt.ingress` - mounts the jobs routes on the pilot's own relay,
+    with its 202 hook installed, and the route table holds (G3 request (a), mounted)."""
     harness = credit_jobstore_factory()
     store, clock = harness.port, harness.clock
     store.catalog = catalog = rs.support.catalog()
-    rt = rs.support.runtime(rs.support.settings(),
-                            sb=rs.support.supabase(rows=(rs.CONSUMER_ROW,)),
-                            clock=lambda: clock.now().timestamp())
-    rt.ingress = pilot.build_ingress_deps(rt, catalog=catalog, stream=Journal(store),
-                                          objects=InMemoryObjectStore(), jobs=store,
-                                          index=MemoryScheduler(clock.now))
-    app = FastAPI()
-    app.state.runtime, rt.app = rt, app
-    for module in (ingress, jobs_router):                          # ROUTERS' order
-        module.register(app, rt)
-    ingress.assert_route_table(app)
+    app = composition.create_app(
+        rs.support.settings(), client=rs.support.upstream(),
+        sb=rs.support.supabase(rows=(rs.CONSUMER_ROW,)), clock=lambda: clock.now().timestamp(),
+        catalog=catalog, stream=Journal(store), objects=InMemoryObjectStore(), jobs=store,
+        index=MemoryScheduler(clock.now))
+    rt = app.state.runtime
     assert rt.relay.on_async is not None and rt.relay.on_async.__self__.relay is rt.relay
     assert {(m, r.path) for r in app.routes if r.path.startswith(JOBS) for m in r.methods} \
         == set(ingress.JOBS_ROUTES)

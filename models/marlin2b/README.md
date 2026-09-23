@@ -39,7 +39,7 @@ python models/marlin2b/bench.py video.mp4 -c 8 -n 32           # load test -> re
 `https://marlin2b.callbill.ai` — OpenAI-compatible, TLS by Caddy (Let's
 Encrypt), Elastic IP 100.57.145.167 (`eipalloc-037e19cc644820961`), Route 53
 zone callbill.ai, security group `marlin2b-gateway` (80/443). Stack on the
-box: `marlin2b-vllm.service` (docker, localhost:8000) → `apps/infrx-api/gateway.py`
+box: `marlin2b-vllm.service` (docker, localhost:8000) → `infrx.gateway.app:create_app`
 (`marlin2b-gateway.service`, localhost:8001) → Caddy (docker, :443).
 Install or refresh with `sudo ./apps/infrx-api/deploy/install.sh`.
 

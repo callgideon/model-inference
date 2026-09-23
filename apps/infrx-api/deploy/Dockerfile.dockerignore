@@ -2,7 +2,6 @@
 *
 !pyproject.toml
 !uv.lock
-!gateway.py
 !openrouter/
 !infrx/
 !deploy/preflight.py

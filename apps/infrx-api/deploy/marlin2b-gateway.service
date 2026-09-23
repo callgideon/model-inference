@@ -27,7 +27,8 @@ ExecStart=/usr/bin/docker run --rm --init --name infrx-gateway --network host \
   --env-file /etc/marlin2b-gateway.env \
   -v /var/lib/infrx/usage:/var/lib/infrx/usage \
   -v ${PROCESSING_CACHE_DIR}:${PROCESSING_CACHE_DIR} \
-  ${INFRX_IMAGE} uvicorn gateway:app --host 127.0.0.1 --port 8001 --workers 1 \
+  ${INFRX_IMAGE} uvicorn --factory infrx.gateway.app:create_app --host 127.0.0.1 --port 8001 \
+  --workers 1 \
   --timeout-graceful-shutdown 110
 # Drain: uvicorn stops accepting and finishes in-flight requests for up to 110 s, docker
 # waits 120 s before SIGKILL, and systemd waits longer than docker, because a systemd
