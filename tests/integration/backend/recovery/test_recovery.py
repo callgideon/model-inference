@@ -346,26 +346,30 @@ def test_i3b_rc05_an_object_store_outage_during_preparation_is_retried_or_releas
 
 
 def _object_store_adapters() -> list[str]:
-    """D3: structural, not a name heuristic - every class defined in an `infrx.media` module
-    that has the port's core operations, other than the Protocol and the in-memory double.
-    ponytail: a module that fails to import (a missing optional dependency) is not seen."""
+    """D3: structural, not a name heuristic - every class defined anywhere under
+    `infrx.media`, subpackages included (`infrx/media/s3/adapter.py` counts), that has the
+    port's core operations, other than the Protocol and the in-memory double. A class
+    re-exported by a second module is counted once, under the module that defines it.
+    ponytail: a module that fails to import (a missing optional dependency) is not seen,
+    nor an adapter defined outside `infrx.media`."""
     import inspect
     import pkgutil
 
     import infrx.media
     core = ("head", "get", "put_if_absent")
-    found = []
-    for info in pkgutil.iter_modules(infrx.media.__path__, "infrx.media."):
+    found = set()
+    for info in pkgutil.walk_packages(infrx.media.__path__, "infrx.media.",
+                                      onerror=lambda name: None):
         try:
             module = importlib.import_module(info.name)
         except ImportError:
             continue
-        for name, cls in inspect.getmembers(module, inspect.isclass):
-            if cls.__module__ == module.__name__ \
+        for _, cls in inspect.getmembers(module, inspect.isclass):
+            if cls.__module__.startswith("infrx.media") \
                     and cls not in (store.ObjectStore, store.InMemoryObjectStore) \
                     and all(callable(getattr(cls, op, None)) for op in core):
-                found.append(f"{module.__name__}.{name}")
-    return found
+                found.add(f"{cls.__module__}.{cls.__qualname__}")
+    return sorted(found)
 
 
 def test_i3b_rc05b_an_object_store_outage_on_minio_is_pending_on_the_s3_adapter():
