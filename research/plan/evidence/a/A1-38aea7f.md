@@ -145,10 +145,12 @@ One behaviour change touches a 0001 table. `public.org_members` gains the trigge
 >
 > - anonymises the profile to `retired+<uuid>@invalid`, with name and avatar null;
 > - revokes every key whose individual is the user (`coalesce(user_id, created_by)`);
-> - suspends each personal org the user alone owns (audited `admin_set_suspension`, code `operator_request`);
+> - renames each personal org the user alone owns to `retired` and suspends it (audited `admin_set_suspension`, code `operator_request`);
 > - freezes the wallet: no new CREDIT hold and no signup grant. In-flight settlement and D5 compensating entries still land.
 >
 > The ledger, entitlement and identity claim are retained as money history. Eligibility is one grant per individual UUID **and** per verified address: sha256 of the lower-cased, trimmed email, stored as a digest only. The digest is retained after retirement, so delete + re-create with the same address is `identity_reused`, never a second grant.
+>
+> The digest is an unsalted, unkeyed sha256 of an email address, which a dictionary of addresses can reverse. It is therefore **pseudonymous personal data**, kept for abuse control (one grant per human), and its retention must be bounded by the legally approved period (**P-05**). Erasing it re-opens eligibility for that address, so erasure requires deleting the `infrx.signup_identity_claims` row. That is an UPDATE/DELETE the immutability trigger refuses today, so it has to be a new, audited D operation plus a ruling.
 >
 > Open for the coordinator/legal (**P-05** abuse bounds; **P-09**-adjacent retention commitments): whether the digest's retention is bounded, and whether provider-specific address folding (dots, `+tags`) is required. Neither is implemented; the code comment marks the exact-match ceiling.
 
@@ -159,7 +161,7 @@ The console calls this server-side only (route handler or server action), after 
 ```ts
 const { data, error } = await createAdminClient()
   .rpc("claim_signup_grant", { p_user_id: user.id, p_campaign_version: "launch_2026_09" });
-// data: exactly one row
+// data: an array holding exactly one row - read data[0]
 ```
 
 | `status` | Row | Console meaning |
@@ -197,12 +199,65 @@ Next unblocked: **A2** (onboarding action above), **G6B** composition root, **D5
 5. **G6B** (`infrx/operations/cli.py` `build_operations`): `pool = AsyncConnectionPool(<service-role DSN>)`, then `signup = PgSignup(pool)`; `identities=signup`; `ledger` = an object with `grant_initial = signup.grant_initial` and D5's `adjust`/`reconcile`. Add CLI commands `backfill-signup-grants` (sync connection → `infrx.state.signup.backfill(conn, campaign)`, printing the per-status counts) and `retire-user` (`select infrx.retire_individual(user, principal, reason, idempotency_key)`).
 6. **A2**: use the fixture above. The flag `signup_grant` is enabled only by an operator (`infrx.feature_flags`); until then the RPC answers 55000.
 7. **D5**: a frozen (retired) wallet still accepts `operator_adjustment` and debits of pre-retirement holds; settlement needs nothing new.
-8. **D2**: a hold refused with `23514 … frozen` means the account was retired. Its personal org is also suspended, so the gateway's existing suspension refusal answers first.
+8. **D2**: a hold refused with `23514 … frozen` means the account was retired. *(Corrected in the review round, SEC-6.)* Refusing a suspended org before admission is **D2's** ordering and does not exist at this base. The legacy gateway (`infrx/auth/keys.py`) reads only `id, org_id, revoked_at`: it never reads suspension, and it honours a revocation only after `key_ttl` (60 s default), or later while Supabase is unreachable and a cached row is served.
 9. **Coordinator / 08 §10**: record R-A1 (above) or rule otherwise. Also record that the migration numbers 0010–0014 belong to D2 and 0015 to A1.
 10. **Docs** (`apps/app/supabase/README.md`, not owned): add a 0015 paragraph.
 
 Nothing was applied to any hosted project.
 
+## Review round (coordinator fix_required at `abbf066`), head `c4d7fa3`
+
+One commit per item. The implementation head is `c4d7fa3`; the evidence commit follows it.
+
+| Item | Commit | Change | Killing test / mutant |
+|---|---|---|---|
+| M-1 | `ab45f6f` | Adds an individual whose personal org holds a single negative legacy row (usage −0.000001); the claim answers `rollout_hold` and no wallet is created. | `test_eligibility__…`; mutant `a1_usd_hold_only_on_credit_balances` (`<> 0` → `> 0`) |
+| M-2 | `787b4e4` | Seeds and commits a hold before retirement. After `retire(t)`, its settlement lands (hold → `settled` plus `inference_debit` −9.976), and so does an `operator_adjustment` of +5 (both rolled back by `attempt`). | `test_retirement__…`; mutants `a1_frozen_holds_refuse_settlement` (`before insert or update`) and `a1_frozen_ledger_refuses_every_kind` (drops `when (new.kind = 'signup_grant')`) |
+| M-3/H4 | `8d3b4bc` | `PgSignup.grant_initial` answers `granted`/`replayed` inside the transaction, so a foreign binding still rolls back. A denial is answered after the commit, so its `signup_denials` row persists on the G6B path. | `test_grant_initial__a_denial_commits_its_recorded_reason` (pure; code mutant `denial_answered_inside_the_transaction`); DB: `test_port__…` asserts that the unverified y's denial count is 1 after a port NotFound |
+| M-4 | `c09afaa` | **Decision: R72 scope = every organization the individual created** (`organizations.created_by`), not only the org the wallet would bind. Fails closed; recorded in the migration comment. | Case: USD +1 in a second org the individual created → `rollout_hold`; mutant `a1_usd_hold_personal_org_only` |
+| M-5 | `41f611f` | The backfill keyset starts at `UUID(int=0)` and raises `RuntimeError` if a page does not advance. The fake parses the `>`/`>=` comparison out of `signup.PAGE` itself and caps page calls. | `test_backfill__pages…` (pages 1, 2, 500) and `test_backfill__a_keyset_that_does_not_advance_stops_loudly`; code mutants `backfill_page_inclusive` (declared `dies_by=RuntimeError`: the guard is the detection) and `backfill_unguarded_keyset` |
+| M-6 | `587bd5b` | A `campaign_version` over 100 characters is answered with 22023 before any write; exactly 100 is granted. | Case in `test_eligibility__…`; mutant `a1_campaign_length_unchecked` |
+| SEC-3 | `351a249` | `retire_individual` renames each personal org it suspends to `retired`. | `test_retirement__…`; mutant `a1_retired_org_keeps_the_name` |
+| SEC-4 | this commit | Adds the R-A1 wording above: pseudonymous personal data, retention bounded by the legal period (P-05), and what erasure requires. | — |
+| SEC-5 | `c4d7fa3` | The backfill re-raises 42501, because a role that cannot grant stops the run. | `test_backfill__a_role_without_execute_stops_the_run`; code mutant `backfill_counts_a_missing_privilege` |
+| SEC-6 | this commit | Corrects integration request 8: suspension-first ordering is D2's, and the legacy gateway honours a revocation only after `key_ttl`. | — |
+| H3 | this commit | The drill below. | — |
+| H5 | this commit | The A2 fixture now reads "an array holding exactly one row (`data[0]`)". | — |
+
+### Results at `c4d7fa3`
+
+UTC, 2026-09-23. The host was under load (load average about 41), so these runs are about 2.5 times slower than the first sweep.
+
+| Command (in `apps/infrx-api`) | Exit | Tail |
+|---|---|---|
+| `INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d` (plain) | 0 | `299 passed in 1134.09s (0:18:54)` (00:53–01:12Z) |
+| `INFRX_D1_IMAGE=supabase INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d` | 0 | `299 passed in 1181.55s (0:19:41)` (01:24–01:43Z) |
+| `INFRX_MUTANTS=all … pytest -q -s tests/d/test_signup.py -k code_mutant` | 0 | `15 passed, 17 deselected in 83.68s`: all 15 code mutants `killed` |
+| quick A1 slice (plain): `pytest tests/d/test_signup.py tests/d/test_migration_mutants.py -k 'not code_mutant and (a1_ or …)'` | 0 | `43 passed, 210 deselected in 90.37s` |
+
+Mutant lists:
+
+- **D list:** 219 = 193 D + 26 A1. The 6 A1 mutants added since `abbf066` are `a1_usd_hold_only_on_credit_balances`, `a1_usd_hold_personal_org_only`, `a1_campaign_length_unchecked`, `a1_frozen_holds_refuse_settlement`, `a1_frozen_ledger_refuses_every_kind` and `a1_retired_org_keeps_the_name`. All are killed on both images inside the two full runs above.
+- **Code list:** 15, adding `denial_answered_inside_the_transaction`, `backfill_counts_a_missing_privilege`, `backfill_page_inclusive` and `backfill_unguarded_keyset`.
+
+The earlier HarnessBusy refusals (the port was held by `codex-d3`) were retried. The harness containers this run created were removed.
+
+### H3: the removed mutant `a1_claim_keeps_default_acl`, as a drill
+
+Script: `a1r/h3_drill.py` in the session scratchpad. It builds the pristine and the mutated migration sets on each image, then runs the D runner's `kill()`:
+
+```
+plain pristine: ('{postgres=X/postgres,service_role=X/postgres}', False, False)
+plain mutated:  ('{postgres=X/postgres,service_role=X/postgres}', False, False)
+plain kill():   ('survived', '')
+supabase pristine: ('{postgres=X/postgres,service_role=X/postgres}', False, False)
+supabase mutated:  ('{postgres=X/postgres,service_role=X/postgres}', False, False)
+supabase kill():   ('survived', '')
+```
+
+Columns: `proacl` of `public.claim_signup_grant(uuid,text,uuid)`, then whether anon and authenticated may execute it. The ACL is byte-identical with and without 0015's revoke on both images, so the mutant is an equivalent mutant: D1's default privileges already produce this ACL, and its survival is not a missing test. The browser-EXECUTE invariant stays killed by `a1_claim_callable_by_browsers`.
+
 ## Verification log
 
 - 2026-09-22: Written by the A1 implementation session at `38aea7f`. Counts are quoted from the sweep logs.
+- 2026-09-23: Review round appended (M-1…M-6, SEC-3…SEC-6, H3, H5). In place, marked: the H5 fixture line, integration request 8 (SEC-6), and R-A1's rename and digest wording (SEC-3/SEC-4). Counts are quoted from the logs at `c4d7fa3`.
