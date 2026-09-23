@@ -781,11 +781,20 @@ class Deferred:
 
 def conformance_factory(tmp_path):
     def factory(limits=None, **_kw):
-        adapter = preparation(tmp_path / str(len(os.listdir(tmp_path))),
-                              limits=limits or DEFAULTS)
+        root = tmp_path / str(len(os.listdir(tmp_path)))
+        adapter = preparation(root, limits=limits or DEFAULTS)
+        adapter.attachments = support.Durable()
+
+        def reopened():
+            """MPILOT: the same object store, cache root and attach record, nothing in
+            memory - the worker's (or a restarted gateway's) view."""
+            other = preparation(root, limits=limits or DEFAULTS, objects=adapter.objects)
+            other.attachments = adapter.attachments
+            return Deferred(other)
+
         return Harness(port=Deferred(adapter), clock=FakeClock(), ids=SequentialIds(),
                        extra={"admitted": adapter.jobs.__setitem__,
-                              "materialized": materialized(adapter)})
+                              "materialized": materialized(adapter), "reopened": reopened})
     return factory
 
 
@@ -805,12 +814,15 @@ M3_CASES = {"media_sec__an_upload_is_owned_verified_and_immutable": "create_uplo
             "media_sec__oversize_and_unsupported_uploads_are_refused": "create_upload",
             "media_sec__staging_never_replaces_an_existing_object": "create_upload",
             "media_sec__a_refused_upload_stays_refused": "create_upload",
-            "media_sec__an_expired_upload_window_says_so": "create_upload"}
+            "media_sec__an_expired_upload_window_says_so": "create_upload",
+            "media_sec__an_upload_is_usable_only_within_its_window": "create_upload"}
 M1_CASES = ("media_sec__a_foreign_media_reference_is_not_staged",
             "media_sec__a_partial_request_stages_nothing")
 # F2R item 4 made this case runnable here: `stage` takes only store-produced refs, seeded
 # through the `materialized` hook above.
 PARITY = "media_parity__staging_is_content_addressed_and_tenant_namespaced"
+# MPILOT: the durable attach, read back by a reopened adapter.
+ATTACH = "media_parity__an_attach_outlives_the_process_that_made_it"
 
 
 def test_the_exported_conformance_suite_runs_against_the_real_adapter(tmp_path, capsys):
@@ -831,11 +843,12 @@ def test_the_exported_conformance_suite_runs_against_the_real_adapter(tmp_path, 
     print("\nmediastore conformance against infrx.media.prepare.MediaPreparation:")
     for name, outcome in sorted(outcomes.items()):
         print(f"  {outcome:<34} {name}")
-    assert {name for name, out in outcomes.items() if out == "pass"} == {*M1_CASES, PARITY}
+    assert {name for name, out in outcomes.items() if out == "pass"} == \
+        {*M1_CASES, PARITY, ATTACH}
     assert {name: out.split("needs ")[1].split(" ")[0]
             for name, out in outcomes.items() if out.startswith("skip")} == M3_CASES
     assert not [name for name, out in outcomes.items() if out.startswith("blocked")], outcomes
-    assert len(outcomes) == len(cases()) == 9
+    assert len(outcomes) == len(cases()) == 11
 
 
 def test_the_invariants_of_the_blocked_case_hold_on_materialized_media(tmp_path):
