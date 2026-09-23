@@ -272,17 +272,24 @@ def test_api_stream__a_read_that_fails_after_the_outcome_is_known_still_drains()
     assert reply.text() == "Two people" and reply.data()[-1] == "[DONE]"
 
 
-def test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job():
-    """Review stream-S2 / honesty-H-B3. The process stops while the headers are still
-    being sent: no identity reached the client, so nobody can resume the job - it is
-    cancelled (an orphan otherwise) and its hold released."""
+@pytest.mark.parametrize("blocked", ["headers", "identity_frame"])
+def test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job(blocked):
+    """Review stream-S2 / honesty-H-B3, r2 stream-C2-2. The process stops while the headers,
+    or the identity frame itself, are still being sent: no identity reached the client, so
+    nobody can resume the job - it is cancelled (an orphan otherwise), its hold released
+    and nothing left reserved."""
     world = rs.World()
+
+    def holds_the_send(message) -> bool:
+        if blocked == "headers":
+            return message["type"] == "http.response.start"
+        return b"job_handle" in message.get("body", b"")
 
     async def body():
         started = asyncio.Event()
 
         def on_send(message):
-            if message["type"] == "http.response.start":
+            if holds_the_send(message):
                 started.set()
                 return asyncio.Event().wait()   # a peer that never reads
 
@@ -300,6 +307,7 @@ def test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_jo
     assert job.state is JobState.cancelled, job.state
     assert job.outcome.cause is TerminalCause.client_cancelled
     assert world.jobs.wallet(world.org).reserved_total == 0
+    assert not any(r.active for r in job.reservations.values())
 
 
 def test_api_stream__a_process_stop_after_the_client_left_cancels_as_disconnected():

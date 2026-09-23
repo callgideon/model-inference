@@ -1135,6 +1135,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("named_before_identity", "a stream is named only once its identity frame was sent",
        R, "        named = False\n", "        named = True\n",
        "test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job"),
+    _m("named_before_identity_send_completes", "a stream is named only once its identity "
+       "frame's send completed (r2 stream-C2-2)",
+       R, "            await emit(wire.SseFrame(event=PROGRESS_EVENT,\n"
+          "                                     data=_identity(job, \"accepted\")).render())\n"
+          "            named = True\n",
+       "            named = True\n"
+       "            await emit(wire.SseFrame(event=PROGRESS_EVENT,\n"
+       "                                     data=_identity(job, \"accepted\")).render())\n",
+       "test_api_stream__a_stream_cancelled_before_its_identity_frame_cancels_the_job"),
     _m("left_client_on_restart", "a process stop after the client left still cancels",
        R, "            if not named or gone.done():", "            if not named:",
        "test_api_stream__a_process_stop_after_the_client_left_cancels_as_disconnected"),
