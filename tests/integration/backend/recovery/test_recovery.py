@@ -20,7 +20,7 @@ What is real in each drill, and what stands in for a component that is missing:
 | rc07 disk full | a 256 KiB tmpfs under M2's processing cache | store (D2-D5) |
 | rc08 drain | W2's drain over real Valkey | rc08b: PENDING I2B-R4 (the worker's `__main__`) for the process's SIGTERM path |
 | rc09 host loss | engine process + Valkey + worker, all at once | store survives (hosted, D2-D5) |
-| rc10 rollback | I2B's `rollback.sh` (bash, unmodified) on a sandbox root; W2 drain; the reaper; bk04's maintenance on PostgreSQL | systemctl/docker/curl stubs; the restored runtime is an in-process WorkerLoop; store (D2-D5) |
+| rc10/rc10b rollback | I2B's `rollback.sh` (bash, unmodified) on a sandbox root; W2 drain; the reaper; bk04's maintenance on PostgreSQL | systemctl/docker/curl stubs; the restored runtime is an in-process WorkerLoop; store (D2-D5) |
 
 The emulated glue (dispatcher, preparation worker, reaper tick) is `recoverykit.World`.
 A drill that passes on a stand-in is *implemented*, never *integrated*.
