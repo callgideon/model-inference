@@ -50,8 +50,9 @@ class Reconciler:
     max_batches: int = 10
     redelivery_s: float = 30.0
     # Gauges from the last drain/pass, plus the rebuild count. `outbox_lag_s`: age of the
-    # oldest dispatch row the last drain found waiting (0 when none waited). `missing_index` / `missing_lag_s`: jobs
-    # PostgreSQL wants dispatched that the index did not hold, and the oldest one's age.
+    # oldest dispatch row the last drain found waiting (0 when none waited).
+    # `missing_index` / `missing_lag_s`: jobs PostgreSQL wants dispatched that the index
+    # did not hold, and the oldest one's age.
     # `dead_candidates`: candidates removed because their job no longer wants dispatch.
     metrics: dict[str, float] = field(default_factory=lambda: {
         "outbox_lag_s": 0.0, "missing_index": 0, "missing_lag_s": 0.0,
@@ -99,9 +100,12 @@ class Reconciler:
         Index first, acknowledgment second: a relay that dies in between leaves the rows
         unacknowledged, the store hands them out again, and `enqueue` is replay safe on
         the event id (a lost acknowledgment costs one redelivery, never a candidate). A
-        full index (`capacity_exhausted`) leaves its row unacknowledged, so the retry is
-        the redelivery. Any other index failure stops the batch; what was indexed before
-        it is still acknowledged, the rest is redelivered.
+        full index (`capacity_exhausted`) stops the drain and hands the refused row and
+        the rest back (`release_dispatch`, D2 OB-4), so the next tick retries them, not a
+        whole `redelivery_s` later. Any other index failure stops the batch too: what was
+        indexed before it is still acknowledged, the rows after it are handed back, and
+        the failing row keeps its claim - a row the index keeps rejecting waits for its
+        redelivery instead of blocking the rows behind it at every tick (review DUR-6).
         """
         report: Counter[str] = Counter()
         self.metrics["outbox_lag_s"] = 0.0          # nothing waiting is no lag (DUR-3)
@@ -116,19 +120,24 @@ class Reconciler:
                     self.metrics["outbox_lag_s"],
                     *((self.now() - event.available_at).total_seconds() for event in events))
             indexed: list[str] = []
+            rest: tuple = ()                   # read, not indexed: handed back at once
             try:
-                for event in events:
+                for position, event in enumerate(events):
+                    rest = events[position + 1:]           # this one fails: it keeps its claim
                     try:
                         report["indexed"] += await self.index.enqueue(event)
                     except errors.CapacityExhausted:
-                        report["deferred"] += 1
-                        continue
+                        rest = events[position:]           # full: this row goes back too
+                        break
                     indexed.append(event.event_id)
             finally:
                 if indexed:
                     report["acknowledged"] += await self.store.acknowledge_dispatch(
                         indexed, worker_id=self.worker_id)
-            if len(events) < self.batch:
+                if rest:
+                    await self.store.release_dispatch([event.event_id for event in rest])
+            report["deferred"] += len(rest)
+            if rest or len(events) < self.batch:
                 break
         return dict(+report)                   # counts that happened, no zeros
 

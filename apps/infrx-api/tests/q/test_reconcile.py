@@ -125,21 +125,23 @@ def test_q3_drain__a_duplicate_delivery_indexes_one_candidate(adapter):
     run(body)
 
 
-def test_q3_drain__a_full_index_defers_the_row_and_the_redelivery_retries_it(adapter):
+def test_q3_drain__a_full_index_hands_the_row_back_and_the_next_drain_retries_it(adapter):
+    """A full index stops the drain and hands the refused row back (D2's
+    `release_dispatch`, review DUR-6): the next drain retries it at once, not after
+    `redelivery_s`, and it takes the first slot that frees."""
     w = rig.world(adapter, max_items=2)
+    w.rec.batch = 3                     # a full batch: only the refusal stops the scan
 
     async def body():
         jobs = await rig.admit_in_order(w, 3)
         assert await w.rec.drain() == {"read": 3, "indexed": 2, "deferred": 1,
                                        "acknowledged": 2}
         (deferred,) = w.outbox.unacknowledged()
+        assert await w.rec.drain() == {"read": 1, "deferred": 1}     # still full
         await rig.prepare_one(w)                          # frees one slot
-        assert await w.rec.drain() == {"read": 1, "indexed": 1, "acknowledged": 1}
-        assert w.outbox.unacknowledged() == [deferred]    # its redelivery is not due yet
-        await rig.prepare_one(w)
-        w.h.clock.advance(w.rec.redelivery_s)
-        await w.rec.drain()
-        assert deferred not in w.outbox.unacknowledged()  # redelivered and indexed
+        assert await w.rec.drain() == {"read": 2, "indexed": 1, "acknowledged": 1,
+                                       "deferred": 1}
+        assert deferred not in w.outbox.unacknowledged()  # it took the slot
         await rig.finish(w)
         assert sorted(w.leases) == sorted(jobs)
         rig.settled(w)
@@ -147,6 +149,10 @@ def test_q3_drain__a_full_index_defers_the_row_and_the_redelivery_retries_it(ada
 
 
 def test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed(adapter):
+    """The index dies on the 2nd enqueue: the 1st is acknowledged, the 3rd - never
+    tried - is handed back and indexed by the next drain, and the 2nd keeps its claim
+    until `redelivery_s`, so a row the index keeps rejecting cannot block the rows
+    behind it (review DUR-6)."""
     w = rig.world(adapter)
     w.rec.index = FlakyIndex(w.index, fail_on=2)
 
@@ -156,8 +162,10 @@ def test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed(adapter):
             await w.rec.drain()
         assert list((await rig.members(w)).values()) == jobs[:1]
         assert len(w.outbox.unacknowledged()) == 2
+        assert await w.rec.drain() == {"read": 1, "indexed": 1, "acknowledged": 1}
+        assert sorted((await rig.members(w)).values()) == sorted([jobs[0], jobs[2]])
         w.h.clock.advance(w.rec.redelivery_s)
-        assert await w.rec.drain() == {"read": 2, "indexed": 2, "acknowledged": 2}
+        assert await w.rec.drain() == {"read": 1, "indexed": 1, "acknowledged": 1}
         assert sorted((await rig.members(w)).values()) == sorted(jobs)
     run(body)
 

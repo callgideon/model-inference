@@ -151,8 +151,8 @@ class FakeDispatchOutbox:
             if (row.kind not in DISPATCH_KINDS or job is None
                     or not wanted(row.kind, job.state) or leased(job, now)):
                 continue
-            acked, claimed = self.acknowledged.get(row.event_id), self.claimed_at.get(row.event_id)
-            if (acked is not None and acked >= since) or (claimed is not None and claimed >= since):
+            stamps = (self.acknowledged.get(row.event_id), self.claimed_at.get(row.event_id))
+            if any(at is not None and at >= since for at in stamps):
                 for column in (self.acknowledged, self.claimed_at, self.claimed_by):
                     column.pop(row.event_id, None)
                 reopened += 1
