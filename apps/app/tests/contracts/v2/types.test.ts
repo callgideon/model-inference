@@ -189,7 +189,8 @@ test("grant and membership checks compare instants, never mixed spellings", () =
   assert.equal(instantKey("2026-09-22T12:00:00Z"), "2026-09-22T12:00:00.000000Z");
   assert.equal(instantKey("2026-09-22T12:00:00.5Z"), "2026-09-22T12:00:00.500000Z");
   for (const bad of ["2026-09-22T12:00:00+00:00", "2026-09-22T12:00:00z", "2026-09-22T12:00:00",
-                     "2026-09-22T12:00:00.1234567Z", "2026-09-22 12:00:00Z"]) {
+                     "2026-09-22T12:00:00.1234567Z", "2026-09-22 12:00:00Z",
+                     "x2026-09-22T12:00:00Z"]) {
     assert.throws(() => instantKey(bad), TypeError, bad);
   }
   const grant = fixture<AccessGrant>("access_grant.json");

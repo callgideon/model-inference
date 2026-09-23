@@ -2006,6 +2006,17 @@
       ]
     },
     {
+      "id": "V2-INSTANT-05",
+      "entry": "v2",
+      "note": "a prefixed instant is keyed by its tail (the pattern is not anchored at the start; F2P review CFG-5)",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "const CONTRACT_INSTANT = /^(\\d{4}",
+      "replace": "const CONTRACT_INSTANT = /(\\d{4}",
+      "cases": [
+        "grant and membership checks compare instants, never mixed spellings"
+      ]
+    },
+    {
       "id": "AUDIT-ACTION-01",
       "note": "an operator grant is audited under the console's old spelling, not D1's `admin_grant` (F2P wire-in, AuditAction alignment)",
       "file": "lib/contracts/fake-services.ts",
