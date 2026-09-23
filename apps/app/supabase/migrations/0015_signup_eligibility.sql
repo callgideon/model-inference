@@ -1,4 +1,4 @@
--- 0015 · A1 · 2026-09-22; amended 2026-09-23 in the A1 review rounds (M-4, M-6, SEC-3, RM-*, RV2-1, RV2-2); applied to no hosted or shared environment (R84).
+-- 0015 · A1 · 2026-09-22; amended 2026-09-23 in the A1 review rounds (M-4, M-6, SEC-3, RM-*, RV2-1, RV2-2, RV3-1..3: tests and notes only, no SQL change); applied to no hosted or shared environment (R84).
 -- A1: verified individual signup eligibility, the frozen personal-org binding, and the
 -- retention policy for an individual who owns a wallet (research/plan/09 §A1;
 -- platforms/02-credits; rulings R59, R64-R66, R71, R72).
