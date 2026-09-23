@@ -52,8 +52,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "await self.store.acknowledge_dispatch(\n                        indexed, ",
        "await self.store.acknowledge_dispatch(\n                        "
        "[e.event_id for e in events], ",
-       "test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed",
-       "test_q3_drain__a_full_index_hands_the_row_back_and_the_next_drain_retries_it"),
+       # Not the full-index case since DUR-9: the refused rows are released first, and
+       # the store refuses an acknowledgment of a row nobody claims (OB-1b).
+       "test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed"),
     _m("the_ack_names_another_worker",
        "D2 OB-1b: the drain acknowledges as the worker that claimed the rows",
        "                        indexed, worker_id=self.worker_id)",
@@ -72,9 +73,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "test_q3_drain__a_full_index_hands_the_row_back_and_the_next_drain_retries_it"),
     _m("a_failed_batch_acknowledges_nothing",
        "what the index took before an outage is still acknowledged",
-       "            finally:\n                if indexed:",
+       "            finally:\n                # Hand back first",
        "            except BaseException:\n                raise\n"
-       "            else:\n                if indexed:",
+       "            else:\n                # Hand back first",
        "test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed"),
     _m("the_scan_is_unbounded",
        "one drain reads at most batch x max_batches rows",
@@ -92,6 +93,19 @@ MUTANTS: tuple[Mutant, ...] = (
        "                    pass",
        "test_q3_drain__a_full_index_hands_the_row_back_and_the_next_drain_retries_it",
        "test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed"),
+    _m("the_rest_waits_for_the_acknowledgment",
+       "review DUR-9: the rest is handed back even when the acknowledgment fails",
+       "                if rest:\n"
+       "                    await self.store.release_dispatch([event.event_id for event in rest])\n"
+       "                if indexed:\n"
+       '                    report["acknowledged"] += await self.store.acknowledge_dispatch(\n'
+       "                        indexed, worker_id=self.worker_id)\n",
+       "                if indexed:\n"
+       '                    report["acknowledged"] += await self.store.acknowledge_dispatch(\n'
+       "                        indexed, worker_id=self.worker_id)\n"
+       "                if rest:\n"
+       "                    await self.store.release_dispatch([event.event_id for event in rest])\n",
+       "test_q3_drain__a_lost_acknowledgment_after_an_index_outage_still_hands_the_rest_back"),
     _m("the_failing_row_is_handed_back_too",
        "review DUR-6: the row the index failed on keeps its claim, so a row it keeps "
        "rejecting cannot block the rows behind it",

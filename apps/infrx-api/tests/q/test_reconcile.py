@@ -170,6 +170,24 @@ def test_q3_drain__an_index_outage_acknowledges_only_what_was_indexed(adapter):
     run(body)
 
 
+def test_q3_drain__a_lost_acknowledgment_after_an_index_outage_still_hands_the_rest_back(
+        adapter):
+    """Review DUR-9: the index dies on the 2nd enqueue and the acknowledgment of the 1st
+    is then lost too. The untried 3rd row is still handed back: the next drain indexes
+    it without waiting `redelivery_s`."""
+    w = rig.world(adapter)
+    w.rec.index = FlakyIndex(w.index, fail_on=2)
+
+    async def body():
+        jobs = await rig.admit_in_order(w, 3)
+        w.outbox.ack_faults.append("before")
+        with pytest.raises(ConnectionError):
+            await w.rec.drain()
+        assert await w.rec.drain() == {"read": 1, "indexed": 1, "acknowledged": 1}
+        assert sorted((await rig.members(w)).values()) == sorted([jobs[0], jobs[2]])
+    run(body)
+
+
 def test_q3_drain__a_superseded_row_is_acknowledged_by_the_store_and_uses_its_slot(
         adapter):
     """A job prepared before its `prepare_dispatch` row was drained: the row names work

@@ -132,11 +132,13 @@ class Reconciler:
                         break
                     indexed.append(event.event_id)
             finally:
+                # Hand back first: an acknowledgment that fails must not keep the rest
+                # claimed for a whole redelivery window (review DUR-9).
+                if rest:
+                    await self.store.release_dispatch([event.event_id for event in rest])
                 if indexed:
                     report["acknowledged"] += await self.store.acknowledge_dispatch(
                         indexed, worker_id=self.worker_id)
-                if rest:
-                    await self.store.release_dispatch([event.event_id for event in rest])
             report["deferred"] += len(rest)
             if rest or len(events) < self.batch:
                 break
