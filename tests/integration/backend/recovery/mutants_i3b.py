@@ -172,6 +172,9 @@ MUTANTS += (
     Mutant("i3bm45", "the check compares catalog facts, not only rows", PGRESTORE,
            "    for name, rows in source[\"catalog\"].items():",
            "    for name, rows in {}.items():", RESTORE, "bk01c", layer=2),
+    Mutant("i3bm48", "RS-7: the check's session is read-only (A6 reads LIVE hosted)", PGRESTORE,
+           '        conn.execute("set default_transaction_read_only = on")\n', "",
+           RESTORE, "bk01_a", layer=2),
     # RS-2: each catalog family is compared - one mutant per family drops it from CATALOG,
     # and only that family's bk01f parameter can kill it.
     Mutant("i3bm60", "RS-2: the check compares policies", PGRESTORE,

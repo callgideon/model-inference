@@ -256,6 +256,9 @@ def fingerprint(conninfo: str) -> dict:
     rows, and the catalog facts the tenant boundary rests on. Read-only."""
     with connect(conninfo) as conn:
         conn.execute("set default_transaction_read_only = on")
+        # A6 points this at LIVE hosted: prove the session is read-only before reading.
+        if conn.execute("show transaction_read_only").fetchone()[0] != "on":
+            raise RuntimeError("refusing to fingerprint: the session is not read-only")
         tables = [row[0] for row in conn.execute(
             "select quote_ident(n.nspname) || '.' || quote_ident(c.relname) from pg_class c "
             "join pg_namespace n on n.oid = c.relnamespace "
