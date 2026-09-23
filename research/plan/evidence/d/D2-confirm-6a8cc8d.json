@@ -1,0 +1,299 @@
+{
+  "verdict": "pass",
+  "confirmed_blocking": [],
+  "refuted_blocking": [],
+  "nonblocking": [
+    {
+      "id": "MC-3b",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/checks_admission.py",
+      "line": "263-287 (MC-3 accepts cases) / apps/app/supabase/migrations/0011_admission.sql l.456 and l.544",
+      "claim_broken": "MC-3 is closed as claimed (hold == available admitted, both bodies, `>` -> `>=` killed in both). The boundary is pinned only from the equal side: the refusal side (hold == available + 1 unit refused) holds in the code (verified directly, both bodies answer insufficient_credit at available = hold - 0.00000001) but no case sits one unit from it, so a one-unit loosening of the USD check survives. Not a round-2 claim and not a defect in the shipped code; test strength.",
+      "evidence": "My mutants through the real kill(): rv_usd_loosened_unit_refusals (`> coalesce(v_available, 0)` -> `> coalesce(v_available, 0) + 0.00000001`, check admission_refusals) SURVIVED; rv_usd_loosened_1usd_refusals (`+ 1`) KILLED by 'a hold past the available USD' (drain leaves 0.001). The USD refusal cases sit at available 0.001 / 0.01, far from the hold. For the CREDIT body every loosening and even `if false` survives 0011 alone because 0006's CHECK `credit_wallets_reserved_within_total` refuses first (probe: 23514 from credit_wallet_holds_moves_wallet, mapped to insufficient_credit), so the CREDIT rule is structurally enforced by 0006 and 0011's `>` is killable only at the `>=` boundary - which is exactly what round 2 registered.",
+      "minimal_fix": "Optional: one USD refusal case with available = hold - 0.00000001 (mirror of the MC-3 accepts case with delta one unit) expecting insufficient_credit, plus a mutant `d2_usd_hold_loosened_one_unit` (`> coalesce(v_available, 0)` -> `> coalesce(v_available, 0) + 0.00000001`, check admission_refusals). For CREDIT no 0011-only mutant can pin it; note in the evidence that 0006's reserved_within_total is the enforcing layer.",
+      "lens": "money"
+    },
+    {
+      "id": "MC-2b",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/d/checks_media.py",
+      "line": "86-98 (_touch_error tuple)",
+      "claim_broken": "MC-2 is closed as claimed: the tuple (SQLSTATE, message_primary, detail, hint) of an unknown and a foreign-existing touch is compared with the ref substituted, and their mutant plus three of mine (owner org in detail, SQLSTATE by existence, one trailing space in the message) are killed. One server-sent field is not in the tuple: `diag.context` ('PL/pgSQL function touch_media_object(text,uuid) line N at RAISE'), so a body with two byte-identical RAISE statements on different lines (one reached only when the object exists) survives. No caller in infrx/ invokes touch_media_object yet (only the privilege matrix names it), so no exposure today; test strength.",
+      "evidence": "rv_media_two_raise_lines (wraps the RAISE in `if exists (select 1 from infrx.media_objects where storage_ref = p_storage_ref) then raise ...; end if; raise ...;`, same message/errcode, check media_objects) SURVIVED on my container. Shipped code: unknown and foreign touches answered identical raw tuples including context ('line 10 at RAISE'), no org id in any of sqlstate/message/detail/hint/context/schema/table/column/constraint.",
+      "minimal_fix": "Add `d.context` to the tuple in `_touch_error` (it is identical on the shipped body) and, if wanted, register the two-RAISE mutant.",
+      "lens": "money"
+    },
+    {
+      "id": "OB-1b",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/state/outbox.py",
+      "line": "41 (`worker_id: str = \"relay\"`) with apps/app/supabase/migrations/0012_dispatch_outbox.sql acknowledge_dispatch l.304-305",
+      "claim_broken": "Round-1 OB-1b is CLOSED as specified (ack refused after reopen/release; only the claim holder's ack lands; killable on real PostgreSQL). Residual, new and narrow: the `claimed_by = worker_id` predicate is vacuous between two relay PROCESSES that both use the default id \"relay\" (nothing in D2 wires a per-process id; the round-2 drills use distinct ids 'relay'/'relay-b' that no code enforces). With the same id, B's late ack can land after A's pump re-claimed c and before A's enqueue; if A's enqueue then fails (capacity or any exception), `release_dispatch`/`fail_dispatch` are no-ops on an acknowledged row and c is delivered-but-unindexed until a rebuild.",
+      "evidence": "Scratch drill test_r2_same_default_worker_id_late_ack_then_failed_enqueue (kept at the scratchpad path below), real PostgreSQL, plain AND Supabase images: B claims c as 'relay'; reopen(since); A re-claims c as 'relay'; B's ack -> 1 (landed); A's enqueue -> CapacityExhausted; release_dispatch -> 0; row (claimed, 'relay', acknowledged=True); after +30 s a fresh relay pump reads 0 rows for c; c in no index; printed 'STRANDED: c acknowledged, in no index, until a rebuild'. The same schedule with distinct ids (test_r2_exact_schedule_ack_after_reopen[relay-b]) refuses the ack (0). Also confirmed: with the DEFAULT id on both relays the exact round-1 schedule still passes (claimed_at predicate alone does that work) - the strand needs the failed enqueue in the instant after the late ack.",
+      "minimal_fix": "One line: `worker_id: str = field(default_factory=lambda: f\"relay-{uuid.uuid4().hex[:8]}\")` in OutboxRelay (unique per instance/process), and add to the Q3 delta that the Reconciler's relay id must be unique per process. Optionally a unit case asserting two default relays carry different ids.",
+      "lens": "outbox"
+    },
+    {
+      "id": "OB-8",
+      "severity": "nonblocking",
+      "file": "apps/app/supabase/migrations/0012_dispatch_outbox.sql",
+      "line": "260-294 (dispatch_pending: `claimed_by = p_args->>'worker_id'` with no guard)",
+      "claim_broken": "New, SQL-surface only: `dispatch_pending` accepts a missing/NULL/blank worker_id (claim_preparation refuses one), so a row can be claimed with claimed_by NULL; under the new ack predicate NULL never equals anything, so nobody can ever acknowledge that row and it is redelivered every window forever (liveness churn, not a strand: the row stays pending). The shipped Python relay always passes a string, so no D2 path reaches it.",
+      "evidence": "Scratch drill test_r2_sql_dispatch_pending_accepts_a_null_worker (plain + Supabase): dispatch_pending({limit, redelivery_s}) without worker_id claims c with (claimed_at set, claimed_by NULL); acknowledge_dispatch with worker_id NULL and with the key absent -> 0 and 0; +30 s -> the same row is handed out again, still (True, None, False).",
+      "minimal_fix": "Mirror claim_preparation in dispatch_pending: `if p_args->>'worker_id' is null or length(btrim(p_args->>'worker_id')) = 0 then perform infrx.refuse('invalid_request', 'a worker id is required'); end if;`, one assertion in check_dispatch_details, one mutant (`if false then`).",
+      "lens": "outbox"
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "money",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "d2_credit_provider_key_admitted (official, MC-1)",
+          "edit": "0011 `  if k.audience <> 'consumer' then` -> `  if false then`; check admission_refusals",
+          "result": "killed on plain and supabase images (runner) and by direct kill(): 'a provider_dev key in the CREDIT regime: expected not_found, got None'. Under the mutant the PROVIDER_C1_KEY request (created_by=CONSUMER_1, org=c1 personal org, provider_org=NEMO, endpoint=DEV_ENDPOINT, model=ALIAS) is ADMITTED: footprint delta (jobs +1, credit_wallet_holds +1, reservations +3, outbox +1, idempotency +1, credit_wallets.reserved_total +14.7456), job (preparing, credit, wallet = CONSUMER_1's consumer wallet, maximum_hold 14.7456), hold (14.7456, held). Unmutated: not_found, footprint delta all zero. The old PROVIDER_KEY seed (no created_by, ORG_A) answers not_found under the mutant too, so it alone would not kill; the kill is by the new case, which is the only case named in the detail (all earlier cases passed under the mutant). Anchor count 1.",
+          "killed_by": "check_admission_refusals case 'a provider_dev key in the CREDIT regime'"
+        },
+        {
+          "name": "rv_both_audience_rules_dropped",
+          "edit": "0011 admit_credit: remove both the operator `forbidden` and the `<> 'consumer'` `not_found` blocks (one edit)",
+          "result": "killed: 'an operator key: expected forbidden, got None' (OPERATOR_KEY is created_by=CONSUMER_2 in c2's personal org, the shape that would resolve a wallet)",
+          "killed_by": "check_admission_refusals 'an operator key'"
+        },
+        {
+          "name": "d2_usd_hold_equal_to_available_refused (official, MC-3)",
+          "edit": "0011 `  if v_hold > coalesce(v_available, 0) then` -> `>=`; check admission_accepts",
+          "result": "killed on both images (runner). Direct: USD hold 0.00737280 == available 0.00737280 -> admitted; available 0.00737279 -> insufficient_credit",
+          "killed_by": "check_admission_accepts MC-3 USD case"
+        },
+        {
+          "name": "d2_credit_hold_equal_to_available_refused (official, MC-3)",
+          "edit": "0011 `  if v_hold > w.available then` -> `>=`; check admission_accepts",
+          "result": "killed on both images (runner). Direct: CREDIT hold 14.7456 == available 14.7456 -> admitted; available 14.74559999 -> insufficient_credit",
+          "killed_by": "check_admission_accepts MC-3 CREDIT case"
+        },
+        {
+          "name": "rv_credit_hold_flipped / rv_usd_hold_flipped",
+          "edit": "`>` -> `<` in each body; check admission_accepts",
+          "result": "setup_error (the accepts body calls admit() directly, so the refusal surfaces as psycopg.Error, classified broken_runner per R83, not a kill; the suite still fails on it). Not a code defect.",
+          "killed_by": "n/a (suite fails as non-killed outcome)"
+        },
+        {
+          "name": "rv_usd_loosened_unit_refusals",
+          "edit": "`> coalesce(v_available, 0)` -> `> coalesce(v_available, 0) + 0.00000001`; check admission_refusals",
+          "result": "survived (finding MC-3b)",
+          "killed_by": ""
+        },
+        {
+          "name": "rv_usd_loosened_1usd_refusals",
+          "edit": "`> coalesce(v_available, 0)` -> `... + 1`; check admission_refusals",
+          "result": "killed: 'a hold past the available USD: expected insufficient_credit, got None'",
+          "killed_by": "check_admission_refusals"
+        },
+        {
+          "name": "rv_credit_loosened_unit_refusals / _accepts / rv_credit_loosened_1credit_refusals / rv_credit_balance_unchecked",
+          "edit": "`> w.available` -> `+ 0.00000001`, `+ 1`, and `if false`; checks admission_refusals / admission_accepts",
+          "result": "all survived 0011-only: probe shows 0006's CHECK credit_wallets_reserved_within_total (23514 from credit_wallet_holds_moves_wallet) refuses in their place and maps to insufficient_credit; direct: with 0011's check dropped, hold 14.7456 vs available 13.7456 -> insufficient_credit. Equivalent by redundancy with 0006 (finding MC-3b, informational).",
+          "killed_by": ""
+        },
+        {
+          "name": "d2_media_touch_reveals_existence (official, MC-2)",
+          "edit": "0010 RAISE gains `hint = (select case when count(*) > 0 then 'stored' else '' end ...)`; check media_objects",
+          "result": "killed on both images (runner); anchor count 1",
+          "killed_by": "check_media_objects MC-2 tuple compare"
+        },
+        {
+          "name": "rv_media_leaks_owner_org",
+          "edit": "0010 RAISE gains `detail = coalesce((select org_id::text from infrx.media_objects where storage_ref = p_storage_ref), 'none')`",
+          "result": "killed: tuple ('P0002','not_found: object <ref>','none',None) != (...,'1a1a1a1a-...',None)",
+          "killed_by": "check_media_objects"
+        },
+        {
+          "name": "rv_media_sqlstate_by_existence",
+          "edit": "errcode P0003 when the object exists, P0002 otherwise",
+          "result": "killed: 'another organization stamped the object: P0003 ...'",
+          "killed_by": "check_media_objects (pre-existing startswith P0002 assert)"
+        },
+        {
+          "name": "rv_media_message_by_existence",
+          "edit": "message gains one trailing space when the object exists",
+          "result": "killed by the tuple compare",
+          "killed_by": "check_media_objects"
+        },
+        {
+          "name": "rv_media_two_raise_lines",
+          "edit": "two byte-identical RAISE statements, the first reached only when the object exists (context line differs)",
+          "result": "survived (finding MC-2b)",
+          "killed_by": ""
+        },
+        {
+          "name": "d2_operator_key_spends_a_wallet, d2_usd_provider_key_admitted, d2_media_touch_any_tenant, d2_media_touch_answers_like_a_miss (official, in the -k selection)",
+          "edit": "as registered",
+          "result": "killed on both images (runner)",
+          "killed_by": "registered checks"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-d2 archive 6a8cc8d | tar -x -C /tmp/claude-1000/reconfirm-d2-money-1530107; patch tests/d/pgharness.py (PORT=55491, CONTAINER=infrx-review-d2r2-money-postgres[-supabase], lock /tmp/infrx-review-d2r2-money.lock); make api-env",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1\n + zstandard==0.25.0\nexit 0"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d2 uv run --frozen pytest -q -p no:cacheprovider -rs tests/d/test_admission.py  (plain image, 02:43:54Z-02:44:07Z)",
+          "exit": 0,
+          "tail": "14 passed in 10.80s"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d2 INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider -rs tests/d/test_migration_mutants.py -k 'd2_credit_provider_key_admitted or d2_media_touch or d2_usd_hold_equal or d2_credit_hold_equal or d2_operator or d2_usd_provider'  (plain; collected: d2_usd_provider_key_admitted, d2_usd_hold_equal_to_available_refused, d2_credit_hold_equal_to_available_refused, d2_credit_provider_key_admitted, d2_operator_key_spends_a_wallet, d2_media_touch_any_tenant, d2_media_touch_answers_like_a_miss, d2_media_touch_reveals_existence)",
+          "exit": 0,
+          "tail": "8 passed, 295 deselected in 34.39s"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d2 uv run --frozen python mymutants.py  (14 mutants via mm.kill + direct experiments on the leftover db)",
+          "exit": 0,
+          "tail": "d2_credit_provider_key_admitted: killed | AssertionError: a provider_dev key in the CREDIT regime: expected not_found, got None\n  MC-1 PROVIDER_C1_KEY via credit -> None | footprint delta: (1, 0, 1, 3, 1, 1, Decimal('0E-8'), Decimal('14.74560000'))\n   jobs: ('preparing', 'credit', True, Decimal('14.74560000'))\n  MC-1 old PROVIDER_KEY (no created_by, ORG_A) via credit -> not_found\n  MC-2 unknown ref  : ('P0002', 'not_found: object media/zz/v1/never-stored', None, None, 'PL/pgSQL function touch_media_object(text,uuid) line 10 at RAISE', None, None, None, None)"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d2 uv run --frozen python mymutants2.py  (rv_media_two_raise_lines, rv_credit_balance_unchecked + probe)",
+          "exit": 0,
+          "tail": "rv_media_two_raise_lines: survived |\nrv_credit_balance_unchecked: survived |\n  under `if false` ... expensive listing refused by: 23514 new row for relation \"credit_wallets\" violates check constraint \"credit_wallets_reserved_within_total\"\n  under `if false`: CREDIT hold=14.74560000 available=13.74560000 -> insufficient_credit"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d2 INFRX_D1_IMAGE=supabase uv run --frozen pytest -q -p no:cacheprovider -rs tests/d/test_admission.py  (02:49:03Z)",
+          "exit": 0,
+          "tail": "14 passed in 16.72s"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d2 INFRX_D1_IMAGE=supabase INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider -rs tests/d/test_migration_mutants.py -k '<same selection>'  (02:49:39Z)",
+          "exit": 0,
+          "tail": "8 passed, 295 deselected in 16.72s"
+        },
+        {
+          "cmd": "anchor_count for the seven money mutants (0011/0010 at 6a8cc8d)",
+          "exit": 0,
+          "tail": "all anchors= 1 occ= 1"
+        }
+      ],
+      "fabrication_check": "Every kill/survive above was executed on my own container (infrx-review-d2r2-money-postgres[-supabase], 127.0.0.1:55491, lock /tmp/infrx-review-d2r2-money.lock), local images postgres@sha256:33f923b0... and supabase/postgres@sha256:7768d0d1..., no other network, no hosted project; logs kept under the session scratchpad (run1.log, run2.log, mymutants.log, mymutants2.log). Scratch tree = `git archive 6a8cc8d`; digests of the reviewed files at 6a8cc8d: 0011_admission.sql 1ff73c7750350b7c, 0010_media_uploads.sql 02030e1149f0369e, checks_admission.py 543cfd3f2435d39c, migration_mutants.py 21d40b143e9485c1. Round-2 head verified: 6a8cc8d753a921a34af59bd149ec6c9ea8d209f8, last code 30d614d0a9f4a3b930f8e87e2825e0f00cbc9171. Every round-2 table claim for MC-1/MC-2/MC-3 (killing case names and mutant names) matches the code and was reproduced. Not verified by me: the full-suite tails quoted for MC-4 (I ran only test_admission.py and the -k selection, both images); OB-* items are outside this lens. 'R84' named in the task is not a ruling row in 08 \u00a710 at 6a8cc8d (the table ends at R83; 'R84' appears only in comments in 0008/0009), so I read R29, R32, R40, R55, R64-R78, R83. The codex-d2 worktree was never edited (git status clean before and after); no commits made anywhere.",
+      "cleanup": "Containers infrx-review-d2r2-money-postgres and -supabase: removed (harness removed them at interpreter exit; docker rm -f confirmed none left, `docker ps -a | grep review-d2r2-money` = 0). Lock /tmp/infrx-review-d2r2-money.lock: removed. Scratch /tmp/claude-1000/reconfirm-d2-money-1530107: removed. No other container touched; ports 55432/55433 unused. Driver scripts and logs remain only in the session scratchpad."
+    },
+    {
+      "lens": "outbox",
+      "verdict_hint": "pass",
+      "mutants": [
+        {
+          "name": "d2_ack_after_reopen_lands (shipped)",
+          "edit": "0012 acknowledge_dispatch: drop `and claimed_at is not null` + `and claimed_by = worker_id`",
+          "result": "killed",
+          "killed_by": "check_dispatch_relay: 'a late acknowledgment landed after the reopen: job stranded' (mm.kill detail quoted)"
+        },
+        {
+          "name": "d2_ack_by_another_relay (shipped)",
+          "edit": "0012 acknowledge_dispatch: drop `and claimed_by = p_args->>'worker_id'`",
+          "result": "killed",
+          "killed_by": "check_dispatch_relay: 'a relay acknowledged a row another relay holds'"
+        },
+        {
+          "name": "d2_reopen_keeps_claimed_at, d2_reopen_ignores_since, d2_reopen_revives_superseded_rows, d2_acknowledgment_not_recorded, d2r_ack_any_kind (shipped)",
+          "edit": "as registered in tests/d/migration_mutants.py",
+          "result": "killed (plain and Supabase images)",
+          "killed_by": "test_mutant_is_killed[...] in the -k selection, 9/9 passed both images"
+        },
+        {
+          "name": "d2_claim_preparation_unlocked (shipped)",
+          "edit": "claim_preparation: drop `for update` on the job row select",
+          "result": "killed",
+          "killed_by": "check_preparation_claim_race: \"round 0: two concurrent preparation claims answered [None, 'untyped 23505']\" (mm.kill detail); on the unmutated SQL my 20-round run: '20 rounds of two concurrent claims: one lease, one not_claimable each'"
+        },
+        {
+          "name": "the_fence_is_read_after_the_snapshot (shipped code mutant, OB-1c) applied to scratch outbox.py, round-2 test file",
+          "edit": "rebuild(): snapshot first, then since = db_now()",
+          "result": "killed on real PostgreSQL: `3 failed, 3 passed, 14 deselected` (racing drill fails on fake/memory/valkey: 'the rebuild stranded a pumped job: dispatchable {a}'; late-ack drill still passes)",
+          "killed_by": "test_outbox__a_rebuild_racing_another_relays_pump_strands_no_job[*] via the h.clock.advance(1) in the race hook"
+        },
+        {
+          "name": "the_fence_is_read_after_the_snapshot with the round-2 `h.clock.advance(1)` line removed (round-1 state)",
+          "edit": "same code edit, test file without the advance",
+          "result": "SURVIVED: `3 passed, 17 deselected` - confirms OB-1c was genuinely open at round 1 and is closed only by the clock advance",
+          "killed_by": "nothing (control)"
+        },
+        {
+          "name": "the_ack_carries_another_workers_claim + all 29 D2 code mutants (shipped)",
+          "edit": "outbox.py acks as worker_id=\"any\"",
+          "result": "killed; `29 passed in 78.88s`",
+          "killed_by": "test_relay__a_full_index_stops_and_hands_the_rest_back (unit fake asserts worker_id == 'relay')"
+        },
+        {
+          "name": "reviewer schedule: exact round-1 (A since/snapshot; c admitted; B dispatch_pending+enqueue; A rebuild; A reopen; B ack) x {relay-b, relay} x {fake, memory, valkey}",
+          "edit": "none (attack)",
+          "result": "ack == 0 in all 6; c pumped and acked by A; dispatchable {a, c}",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "reviewer: release_dispatch instead of reopen (3 backends)",
+          "edit": "none",
+          "result": "release -> 1, B's ack -> 0, row (unclaimed, unacked), next pump read 1/acked 1, index has c",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "reviewer: right worker_id after re-claim by another relay / worker_id NULL, '', 'null', absent / self-fence after own reopen / same id claims twice across redelivery",
+          "edit": "none",
+          "result": "0 / 0,0,0,0 / 0 (row cleared) / second claim's ack 1 then 0 (idempotent)",
+          "killed_by": "n/a"
+        },
+        {
+          "name": "reviewer: D3 delta simulated (lease lapses; snapshot has job, pump has nothing; reaper releases lease + inserts fresh prepare_dispatch in one txn; rebuild-in-window plus fresh row)",
+          "edit": "none",
+          "result": "consistent: fresh row pumped {read 1, indexed 1, acknowledged 1}; snapshot picks the fresh event id; two candidates for one job after a rebuild in the window, claim_preparation arbitrates (1 NotClaimable). No window where the job is in neither the snapshot nor a pump EXCEPT the known OB-5b window (lease lapsed, reaper not yet run: snapshot-eligible, pump reads 0) which the delta closes",
+          "killed_by": "n/a"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C <codex-d2> archive 6a8cc8d | tar -x -C /tmp/claude-1000/reconfirm-d2-outbox-1518718 && make api-env",
+          "exit": 0,
+          "tail": " + valkey==6.1.1\n + zstandard==0.25.0"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d2 INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider -rs tests/d/test_outbox_relay.py tests/d/test_migration_mutants.py -k 'test_outbox or d2_ack or d2_reopen or d2_claim_preparation or d2r_ack or well_formed'  (plain image, container infrx-review-d2r2-outbox-postgres:55492, valkey infrx-review-d2r2-outbox-valkey:55493)",
+          "exit": 0,
+          "tail": "29 passed, 294 deselected in 30.90s"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/d/test_code_mutants.py",
+          "exit": 0,
+          "tail": "29 passed in 78.88s (0:01:18)"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d2 uv run --frozen pytest -q -p no:cacheprovider -rs -s tests/d/test_r2_outbox_attacks.py (reviewer drills, plain image)",
+          "exit": 0,
+          "tail": "20 rounds of two concurrent claims: one lease, one not_claimable each\nSTRANDED: c acknowledged, in no index, until a rebuild\nD3-delta drill consistent\n15 passed (13 + 2 d3_delta)"
+        },
+        {
+          "cmd": "OB-1c mutant applied to scratch outbox.py; pytest tests/d/test_outbox_relay.py -k 'racing or late_ack'",
+          "exit": 1,
+          "tail": "AssertionError: the rebuild stranded a pumped job: dispatchable {'00000001-0000-4000-8000-000000000001'}\n3 failed, 3 passed, 14 deselected in 5.43s"
+        },
+        {
+          "cmd": "same mutant, test file with `h.clock.advance(1)` removed; pytest -k racing",
+          "exit": 0,
+          "tail": "3 passed, 17 deselected in 5.17s  (mutant survives without the round-2 advance)"
+        },
+        {
+          "cmd": "uv run --frozen python -c 'mm.kill(d2_claim_preparation_unlocked / d2_ack_after_reopen_lands / d2_ack_by_another_relay)'",
+          "exit": 0,
+          "tail": "('killed', \"AssertionError: round 0: two concurrent preparation claims answered [None, 'untyped 23505']\")\n('killed', 'AssertionError: a late acknowledgment landed after the reopen: job stranded')\n('killed', 'AssertionError: a relay acknowledged a row another relay holds')"
+        },
+        {
+          "cmd": "INFRX_D_TASK=d2 INFRX_D1_IMAGE=supabase INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider -rs tests/d/test_outbox_relay.py tests/d/test_r2_outbox_attacks.py tests/d/test_migration_mutants.py -k 'test_outbox or test_r2 or d2_ack or d2_reopen or d2_claim_preparation or d2r_ack or well_formed'",
+          "exit": 0,
+          "tail": "44 passed, 294 deselected in 92.00s (0:01:32)"
+        }
+      ],
+      "fabrication_check": "Every claim above was executed in this session on a private container (infrx-review-d2r2-outbox-postgres / -supabase on 127.0.0.1:55492, valkey on 55493, locks /tmp/infrx-review-d2r2-outbox*.lock); no other container, port 55432/55433 or worktree was touched; the codex-d2 worktree is clean (git status empty) and outbox.py/test_outbox_relay.py in scratch were restored from 6a8cc8d after the mutant experiments (diff clean). The addendum's sweep tails were checked against /tmp/claude-1000/d2-round2/r6_plain.log ('460 passed, 7 skipped, 44 xfailed in 638.60s') and r6_supabase.log ('460 passed, 7 skipped, 44 xfailed in 798.74s') - they match the quoted text. The full 460-case sweeps were NOT re-run here (only the outbox-lens selection plus code mutants, both images); the round-1 items MC-*/OB-5b are outside this lens and were not re-verified. The two findings are both reviewer-demonstrated (drills in the scratchpad file), not inferred. Diff reviewed in full: 0012 (+3 predicates/comment), jobstore.py, outbox.py, checks_dispatch.py, migration_mutants.py, code_mutants.py, test_adapter_units.py, test_outbox_relay.py, D2-8728aec.md; the ack predicate, reopen, release, snapshot, dispatch_pending and claim_preparation bodies were read as changed.",
+      "cleanup": "Removed: containers infrx-review-d2r2-outbox-postgres, -postgres-supabase and -valkey (0 left), locks /tmp/infrx-review-d2r2-outbox.lock and -valkey.lock, scratch /tmp/claude-1000/reconfirm-d2-outbox-1518718 (including its .venv). Kept for the coordinator: reviewer drill /tmp/claude-1000/-home-rey-workspace-rey-code-model-inference--claude-worktrees-infrx-impl/7aae6bdd-47a8-4788-aef9-0b8e137e1f2b/scratchpad/test_r2_outbox_attacks.py and run logs relay_and_mig.log, code_mutants.log, supabase.log in the same scratchpad directory. No worktree edited or committed."
+    }
+  ]
+}
