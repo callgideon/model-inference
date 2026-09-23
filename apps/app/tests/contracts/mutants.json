@@ -2017,6 +2017,17 @@
       ]
     },
     {
+      "id": "V2-INSTANT-06",
+      "entry": "v2",
+      "note": "a suffixed instant is keyed by its head (the pattern is not anchored at the end; F2P confirmation CONF-N4)",
+      "file": "lib/contracts/v2/types.ts",
+      "find": "(?:\\.(\\d{1,6}))?Z$/;",
+      "replace": "(?:\\.(\\d{1,6}))?Z/;",
+      "cases": [
+        "grant and membership checks compare instants, never mixed spellings"
+      ]
+    },
+    {
       "id": "AUDIT-ACTION-02",
       "entry": "fixtures",
       "note": "a read-only audit action drifts from 0009's constraint (F2P review HON-1)",
