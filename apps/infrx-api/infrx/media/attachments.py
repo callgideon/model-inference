@@ -50,7 +50,8 @@ class PgAttachments:
         try:
             await conn.execute("begin")
             for position, ref in enumerate(refs):
-                await conn.execute(_STAGE, tuple(getattr(ref, c) for c in _COLUMNS))
+                row = ref.model_dump(mode="json")
+                await conn.execute(_STAGE, tuple(row[c] for c in _COLUMNS))
                 (recorded,) = await (await conn.execute(
                     _RECORDED, (ref.org_id, ref.handle))).fetchone()
                 if recorded != ref.digest:
