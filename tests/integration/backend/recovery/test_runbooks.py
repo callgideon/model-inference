@@ -3,7 +3,8 @@
 * every alert rule names a runbook section that exists;
 * restore.md drives `pgrestore.py` (the tool bk01/bk02 drill) through subcommands it has,
   with the pinned client image E2's stack runs;
-* rollback.md's maintenance statement is bk04's, character for character;
+* rollback.md's maintenance statement is bk04's, character for character, and its step 4
+  runs I2B's rollback.sh as the script documents it (rc10 drills the procedure);
 * every `bash` step block parses (a step that cannot run over SSM is not a step);
 * every relative link and anchor between runbooks resolves;
 * a failed restore client never re-raises row data (RS-4), and a timed-out one never
@@ -58,6 +59,18 @@ def test_i3b_rb03_the_maintenance_statement_is_the_one_bk04_runs():
     # as bk04 runs it: under service_role (0006's policy), not as the pooler's postgres
     assert text.index("set role service_role;") < text.index(test_restore.MAINTENANCE % "false")
     assert "reset role;" in text
+
+
+def test_i3b_rb08_rollback_step_4_runs_the_script_rc10_drives():
+    """rollback.md step 4 is I2B's `rollback.sh` with the argument its own usage line gives
+    (the one rc10 drives); the step is no longer a pending placeholder."""
+    script, argument = re.search(r"^#   sudo (\./apps/infrx-api/deploy/rollback\.sh) (\S+)$",
+                                 (harness.REPO_ROOT / "apps" / "infrx-api" / "deploy" /
+                                  "rollback.sh").read_text(), re.M).groups()
+    text = (RUNBOOKS / "rollback.md").read_text()
+    step = re.search(r"^4\. .*?^5\. ", text, re.S | re.M).group(0)
+    assert f'sudo {script} "$BACKUP"\n' in step and f"`{argument}`" in step, step
+    assert "PENDING" not in step, step
 
 
 def test_i3b_rb04_every_bash_step_parses():

@@ -72,16 +72,16 @@ def _password(monkeypatch):
 # ------------------------------------------------------------------ database plumbing
 
 ON_D = os.environ.get("INFRX_I3B_PG") == "d"
-_d_harness = None
 _d_source = None
 
 
 def d_harness():
-    """D's `tests/d/pgharness.py`, loaded once (its lock and container are per process)."""
-    global _d_harness
-    if _d_harness is None:
-        _d_harness = _load("i3b_pgharness", harness.API_ROOT / "tests" / "d" / "pgharness.py")
-    return _d_harness
+    """D's `tests/d/pgharness.py`, loaded once per process - also when rc10 imports this
+    module under another name - because its port lock and container are per process."""
+    if "i3b_pgharness" not in sys.modules:
+        sys.modules["i3b_pgharness"] = _load("i3b_pgharness",
+                                             harness.API_ROOT / "tests" / "d" / "pgharness.py")
+    return sys.modules["i3b_pgharness"]
 
 
 def pg_port() -> int:

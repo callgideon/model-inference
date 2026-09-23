@@ -212,6 +212,10 @@ MUTANTS += (
     Mutant("i3bm33", "the index is rebuilt from the durable snapshot of queued jobs", KIT,
            "if job.state is JobState.queued)", "if job.state is JobState.running)",
            DRILLS, "rc06", layer=2),
+    Mutant("i3bm92", "rc10: the rollback's index rebuild (rollback.md step 5) reads the durable "
+                     "snapshot of queued jobs, so the drained job and the queue come back once",
+           KIT, "if job.state is JobState.queued)", "if job.state is JobState.running)",
+           DRILLS, "rc10", layer=2),
     # ---------------- the restore procedure (the runbook's tool), on the real PostgreSQL
     Mutant("i3bm40", "a restore empties the template's default privileges first (else anon "
                      "gets ALL on the tenant tables)", PGRESTORE,
@@ -334,6 +338,9 @@ MUTANTS += (
     Mutant("i3bm56", "RS-6: rollback.md runs the maintenance switch as service_role, as bk04",
            "infra/runbooks/rollback.md", "set role service_role;\n", "\n",
            RUNBOOK_CASES, "rb03"),
+    Mutant("i3bm93", "rc10: rollback.md step 4 runs I2B's rollback.sh as its usage line says",
+           "infra/runbooks/rollback.md", 'sudo ./apps/infrx-api/deploy/rollback.sh "$BACKUP"',
+           'sudo ./apps/infrx-api/deploy/rollback.sh --backup "$BACKUP"', RUNBOOK_CASES, "rb08"),
     Mutant("i3bm54", "links between runbooks resolve", "infra/runbooks/rollback.md",
            "[restart.md](restart.md#drain)", "[restart.md](restart.md#draining)",
            RUNBOOK_CASES, "rb05"),
@@ -350,11 +357,11 @@ def _copy_with_infra(destination: Path, _copy=mutants._copy_trees) -> None:
 def run(selected, *, stack_available: bool) -> dict:
     mutants._copy_trees = _copy_with_infra
     results = []
-    # INFRX_I3B_PG=d: test_restore runs on the D harness, so its layer-2 mutants can run too.
+    # INFRX_I3B_PG=d: the PostgreSQL cases (test_restore, rc10) run on the D harness, so a
+    # layer-2 mutant naming one of them can run without E2's stack (the others: no-cases).
     on_d = os.environ.get("INFRX_I3B_PG") == "d"
     for mutant in selected:
-        result = mutants.run_one(mutant, stack_available=stack_available
-                                 or (on_d and mutant.suite == RESTORE))
+        result = mutants.run_one(mutant, stack_available=stack_available or on_d)
         print(f"[{result['status']:>13}] {result['id']}  {result['invariant']}", flush=True)
         results.append(result)
     return mutants.summarise(results)

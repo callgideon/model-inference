@@ -20,7 +20,7 @@ What is real in each drill, and what stands in for a component that is missing:
 | rc07 disk full | a 256 KiB tmpfs under M2's processing cache | store (D2-D5) |
 | rc08 drain | W2's drain over real Valkey | PENDING W3 for the process's SIGTERM path |
 | rc09 host loss | engine process + Valkey + worker, all at once | store survives (hosted, D2-D5) |
-| rc10 rollback | - | PENDING I2B (its rollback script) |
+| rc10 rollback | I2B's `rollback.sh` (bash, unmodified) on a sandbox root; W2 drain; the reaper; bk04's maintenance on PostgreSQL | systemctl/docker/curl stubs; the restored runtime is an in-process WorkerLoop; store (D2-D5) |
 
 The emulated glue (dispatcher, preparation worker, reaper tick) is `recoverykit.World`.
 A drill that passes on a stand-in is *implemented*, never *integrated*.
@@ -621,12 +621,162 @@ def test_i3b_rc09_a_host_loss_takes_engine_index_and_worker_and_loses_no_accepte
 
 # ------------------------------------------------------------------ rollout
 
-def test_i3b_rc10_a_rollout_rollback_is_pending_on_the_deploy_scripts():
-    """OPS-RECOVER (rollout rollback): roll the runtime back with admission paused and jobs
-    drained/fenced, never onto the unmetered legacy runtime once CREDIT is enabled
-    (maintenance 503 instead). The scripts are I2B's; this fails the day they exist."""
-    deploy = harness.REPO_ROOT / "apps" / "infrx-api" / "deploy"
-    scripts = sorted(path.name for path in deploy.glob("rollback*"))
-    if scripts:
-        pytest.fail(f"I2B's rollback exists ({scripts}): drive it through a rollback drill now")
-    kit.pending("I2B", why="no rollback script in apps/infrx-api/deploy")
+DEPLOY = harness.REPO_ROOT / "apps" / "infrx-api" / "deploy"
+ENV_FILE = "etc/marlin2b-gateway.env"
+UNITS = ("marlin2b-vllm.service", "marlin2b-gateway.service", "infrx-worker.service",
+         "infrx-valkey.service")
+# What install.sh step 3 backs up (and rollback.sh restores): the env file, the edge, the units.
+BACKED_UP = (ENV_FILE, "etc/caddy/Caddyfile", "etc/caddy/infrx/Caddyfile",
+             "etc/caddy/infrx/Caddyfile.maintenance", *(f"etc/systemd/system/{u}" for u in UNITS))
+# The host's binaries rollback.sh calls, stubbed: each records its argv and succeeds.
+STUB = '#!/usr/bin/env bash\necho "$(basename "$0") $*" >> "$INFRX_I3B_EVENTS"\n'
+IMAGE = {"previous": "sha256:" + "a" * 64, "current": "sha256:" + "b" * 64}
+
+
+def release(image: str | None) -> dict[str, str]:
+    """A host's backed-up files at one release: the pilot env file pinning `image` (None: the
+    pre-I2B monolith's, no mode) and I2B's units and edge, marked with the release."""
+    files = {ENV_FILE: f"INFRX_MODE=pilot\nINFRX_IMAGE={image}\n" if image
+             else "MODEL_ID=nemostation/marlin-2b\n"}
+    for unit in UNITS:
+        files[f"etc/systemd/system/{unit}"] = (DEPLOY / unit).read_text() + f"# {image}\n"
+    for site in ("Caddyfile", "Caddyfile.maintenance"):
+        files[f"etc/caddy/infrx/{site}"] = (DEPLOY / site).read_text()
+    files["etc/caddy/Caddyfile"] = files["etc/caddy/infrx/Caddyfile"]
+    return files
+
+
+def install(root: Path, files: dict[str, str]) -> None:
+    for relative, text in files.items():
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (root / relative).write_text(text)
+
+
+def backup(root: Path, into: Path) -> Path:
+    """install.sh step 3, as it runs it: the present files in files.tar, the rest in absent."""
+    into.mkdir(parents=True)
+    present = [path for path in BACKED_UP if (root / path).exists()]
+    subprocess.run(["tar", "-C", str(root), "-cpf", str(into / "files.tar"), *present],
+                   check=True)
+    (into / "absent").write_text("".join(f"{path}\n" for path in BACKED_UP
+                                         if path not in present))
+    return into
+
+
+def on_host(root: Path) -> dict[str, str]:
+    return {path: (root / path).read_text() for path in BACKED_UP if (root / path).exists()}
+
+
+def rollback_sh(tmp_path: Path, root: Path, target: Path) -> tuple[subprocess.CompletedProcess,
+                                                                    list[str]]:
+    """I2B's `deploy/rollback.sh <backup>`, unmodified, against the sandbox root, with the
+    stubs first on PATH. Returns its result and the commands it issued, in order."""
+    stubs, events = tmp_path / "stub-bin", tmp_path / "events.log"
+    if not stubs.exists():
+        stubs.mkdir()
+        for name in ("systemctl", "docker", "curl"):
+            (stubs / name).write_text(STUB)
+            (stubs / name).chmod(0o755)
+    events.unlink(missing_ok=True)
+    done = subprocess.run(["bash", str(DEPLOY / "rollback.sh"), str(target)],
+                          capture_output=True, text=True, timeout=60,
+                          env={**os.environ, "INFRX_ROOT": str(root),
+                               "PATH": f"{stubs}:{os.environ['PATH']}",
+                               "INFRX_I3B_EVENTS": str(events), "POLL_S": "0.01",
+                               "READY_S": "1"})
+    return done, (events.read_text().splitlines() if events.exists() else [])
+
+
+# The commands rollback.sh issues for a pilot -> pilot rollback, in order: stop the runtime
+# (the worker drains), restore the files (tar, real), reload the units, restart the restored
+# runtime, wait for BOTH readiness probes, and only then reload the edge.
+ROLLBACK_COMMANDS = [
+    "systemctl stop infrx-worker marlin2b-gateway",
+    "systemctl daemon-reload",
+    "systemctl restart infrx-worker marlin2b-gateway",
+    "curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8001/readyz",
+    "curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8002/readyz",
+    "docker inspect caddy",
+    "docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile "
+    "--address unix//config/admin.sock",
+]
+
+
+def test_i3b_rc10_a_rollout_rollback_loses_no_job_and_restores_the_previous_runtime(
+        tmp_path, monkeypatch):
+    """OPS-RECOVER (rollout rollback), rollback.md's procedure end to end. A host serves
+    pilot at the current release with accepted work (one done, one mid-attempt, two queued);
+    the previous release is a pilot (metered) runtime, backed up by install.sh step 3.
+
+    2. maintenance: bk04's statement, as service_role, on PostgreSQL - admission refuses
+       with 55000; 3. drain and fence: W2's drain releases the attempt, settles nothing;
+    4. I2B's rollback.sh: to the pre-pilot backup it is REFUSED (exit 2, nothing run or
+       written: a pilot host is never handed to an unmetered runtime); to the previous
+       release it issues exactly `ROLLBACK_COMMANDS` and the env file (the image pin) and
+       every unit and edge file are the previous release's, byte for byte;
+    5. the restored runtime's reaper requeues the released job after the lease TTL and the
+       index is rebuilt from the durable snapshot; 6. maintenance off: admission accepted;
+    7. the restored worker finishes everything and `reconcile()` holds: no accepted job
+       lost, one settlement each.
+
+    Stubbed: systemctl, docker and curl (argv recorded, exit 0) and the host root (a
+    sandbox, `INFRX_ROOT`). The worker's stop is W2's drain run in process, and the
+    restored runtime is a new WorkerLoop started after rollback.sh restarted its unit."""
+    import psycopg
+
+    import test_restore as bk
+    monkeypatch.setenv("PGPASSWORD", bk.pg_password())
+    world = kit.World()
+    root = tmp_path / "root"
+    install(root, release(IMAGE["previous"]))
+    previous = backup(root, tmp_path / "backups" / "previous")
+    install(root, release(IMAGE["current"]))              # the rollout being rolled back
+    install(tmp_path / "monolith", release(None))
+    monolith = backup(tmp_path / "monolith", tmp_path / "backups" / "monolith")
+    admission = "select infrx.require_feature('credit_admission')"
+
+    async def body(conn):
+        jobs = [await world.queued(n % 2) for n in range(4)]
+        await world.dispatch(*(job.request_id for job in jobs))
+        await world.loop(worker_id="worker-current").run(concurrency=1, stop_when_idle=True,
+                                                         max_claims=1)
+        engine = Hanging(world.clock, publish=False)
+        current = world.loop(engine, "worker-current")
+        running = asyncio.create_task(current.run(concurrency=1, stop_when_idle=False))
+        await until(lambda: len(engine.running) == 1)
+
+        with conn.transaction():                                            # 2. maintenance
+            bk.as_role(conn, "service_role", bk.MAINTENANCE, (False,))
+        with pytest.raises(psycopg.Error) as refused:
+            with conn.transaction():
+                bk.as_role(conn, "service_role", admission)
+        assert refused.value.sqlstate == "55000", refused.value
+
+        report = await asyncio.wait_for(current.drain(within_s=0.05), 5)    # 3. drain, fence
+        await asyncio.wait_for(running, 5)
+        assert (report.released, world.jobs.jobs[engine.running[0]].outcome) == (1, None)
+
+        written = on_host(root)                                             # 4. rollback.sh
+        done, issued = rollback_sh(tmp_path, root, monolith)
+        assert done.returncode == 2 and "drain.sh pause" in done.stderr, done.stderr
+        assert (issued, on_host(root)) == ([], written), "a refused rollback changed the host"
+        done, issued = rollback_sh(tmp_path, root, previous)
+        assert done.returncode == 0, done.stderr
+        assert issued == ROLLBACK_COMMANDS, issued
+        assert on_host(root) == release(IMAGE["previous"])
+
+        world.clock.advance(DEFAULTS.lease_ttl_s + 1)                       # 5. reap, rebuild
+        assert len(await world.reap()) == 1
+        assert await world.scheduler.rebuild(world.snapshot()) == 3
+        with conn.transaction():                                            # 6. resume
+            bk.as_role(conn, "service_role", bk.MAINTENANCE, (True,))
+        with conn.transaction():
+            bk.as_role(conn, "service_role", admission)
+        await world.finish(world.loop(worker_id="worker-restored"))         # 7. reconcile
+        summary = await world.reconcile()
+        assert summary["terminal"] == {"succeeded/completed": 4}, summary
+
+    with bk.scratch("infrx_i3b_rollback") as (database,):
+        bk.apply(database, bk.migrations(1, 9999))
+        with bk.connect(database) as conn:
+            kit.run(lambda: body(conn))
