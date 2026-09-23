@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T23:26:57Z",
+  "updated": "2026-09-23T23:43:44Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -44,6 +44,12 @@
       "phase": "review workflow died (429, incomplete); rerun dispatched 23:1xZ",
       "since": "2026-09-23T20:11:55Z",
       "note": "d4 ports, Q 55494; merges on top of the cutover head"
+    },
+    "I2B-R4-worker": {
+      "lane": "codex-worker / codex/i2b-r4-worker",
+      "phase": "dispatched (Opus) from 08ed293 (phase-3 1fa825b + cutover a1e88dc): python -m infrx.worker composition root, unit/installer alignment, rehearse.sh sandbox deps, pilotbox real entry point",
+      "since": "2026-09-23T23:43:44Z",
+      "note": "d4 ports, Q 55494, MinIO 55781"
     }
   },
   "reviews": {
@@ -114,6 +120,10 @@
     "CUTOVER": {
       "phase": "review at a1e88dc running (composition/deploy/edge + honesty lenses + refuters)",
       "since": "2026-09-23T23:21:08Z"
+    },
+    "ROLLOUT-PREP": {
+      "phase": "DONE f0a1a82: hosted 0001/0002 only \u2192 release applies 0003\u20130018; backups + restore equal; rehearsal PASS on branch, FAIL on the merge tree (dev mode needs S3/DB/Valkey \u2192 worker lane item 2); M1-L2 proven on the real bucket (40 passed); missing SSM pg_journal_url; infrx.worker.__main__ missing \u2192 worker lane",
+      "since": "2026-09-23T23:43:44Z"
     }
   },
   "gates": {
