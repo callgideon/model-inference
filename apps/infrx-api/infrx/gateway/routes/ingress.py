@@ -31,6 +31,7 @@ carries the legacy chat route leaves that route in charge of its path.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -43,6 +44,7 @@ from starlette.routing import Match
 from ...auth.context import AuthResolver
 from ...config import RuntimeMisconfigured
 from ...contracts import errors, ids, wire
+from ...contracts.records import ExecutionMode
 from ...observe.route import is_direct_loopback
 from . import intake
 from .validate import MAX_OPENERS, MAX_SEPARATORS, Validator, idempotency
@@ -56,6 +58,14 @@ CHAT_OPERATION = "chat.completions"
 # rejects admission) and the journal must be reachable, because an unjournalled
 # pilot cannot honour the output guarantees it makes.
 REQUIRED_CHECKS = ("price_source", "journal")
+# G3: the jobs router's routes, as (method, path). They are mounted only with a relay
+# (M-FAILCLOSED), so none may be absent unless all are.
+JOBS_ROUTES = (("POST", "/v1/jobs"), ("GET", "/v1/jobs/{handle}"),
+               ("DELETE", "/v1/jobs/{handle}"), ("GET", "/v1/jobs/{handle}/result"),
+               ("GET", "/v1/jobs/{handle}/events"))
+JOBS_MODULE = __name__.rpartition(".")[0] + ".jobs"
+# A well-formed handle the route table resolves the jobs paths with (review N2).
+SAMPLE_JOB_HANDLE = ids.JOB_PREFIX + "A" * 43
 OK = "ok"
 UNAVAILABLE = "unavailable"
 
@@ -147,7 +157,7 @@ class Ingress:
             body = intake.parse_object(text)
             normalized = await self.validator.normalize(body, auth, request_id,
                                                         request.headers)
-            idem = idempotency(auth, request.headers, normalized.payload_digest, CHAT_OPERATION)
+            idem = idempotency(auth, request.headers, identity_digest(normalized), CHAT_OPERATION)
             return auth, normalized, idem
         finally:
             # Every exit path, refusals included: a slot that is not released is a slot
@@ -160,6 +170,19 @@ class Ingress:
             # with nothing accounting for it. Stage the payload and drop the reference
             # (M's job) before waiting, or carry the slot through staging.
             large.release()
+
+
+def identity_digest(request) -> str:
+    """R94: what an idempotency key names - the canonical payload AND the execution mode.
+    `stream` is a body field, so the payload digest already tells sync from stream; an async
+    request (`Prefer: respond-async`, `POST /v1/jobs`) folds its mode in. Reusing a key across
+    sync and async is then `idempotency_conflict` at `lookup`/`admit`, before any store write,
+    and a replay always answers in the job's own mode. Sync and stream keep the payload digest
+    itself (their identity is unchanged)."""
+    if request.execution_mode is not ExecutionMode.async_:
+        return request.payload_digest
+    folded = f"{request.payload_digest}\n{request.execution_mode.value}".encode()
+    return "sha256:" + hashlib.sha256(folded).hexdigest()
 
 
 def install_error_handlers(app, mint_request_id=ids.new_request_id) -> None:
@@ -208,6 +231,29 @@ def assert_route_table(app) -> None:
         mode = getattr(getattr(app.state, "runtime", None), "mode", "")
         raise RuntimeMisconfigured(mode, detail=f"{CHAT_PATH} must have exactly one handler, "
                                                 f"the metered ingress")
+    # G3: the jobs routes, all or none. Each has exactly one declared handler, the jobs
+    # router's, and it is also the route Starlette picks for a concrete handle (review N2, as
+    # for the chat path: a pattern route registered earlier serves without being "at" it).
+    declared = [[route.endpoint.__module__ for route in app.routes
+                 if getattr(route, "path", None) == path
+                 and method in (getattr(route, "methods", None) or ())]
+                for method, path in JOBS_ROUTES]
+    picked = [_picked(app, method, path.replace("{handle}", SAMPLE_JOB_HANDLE))
+              for method, path in JOBS_ROUTES]
+    if any(declared) and (any(found != [JOBS_MODULE] for found in declared)
+                          or any(module != JOBS_MODULE for module in picked)):
+        mode = getattr(getattr(app.state, "runtime", None), "mode", "")
+        raise RuntimeMisconfigured(mode, detail="each /v1/jobs route must have exactly one "
+                                                "handler, the jobs router's")
+
+
+def _picked(app, method: str, path: str) -> str | None:
+    """The module of the handler Starlette would serve `method path` with: the first route
+    that matches fully."""
+    scope = {"type": "http", "path": path, "root_path": "", "method": method}
+    first = next((route for route in app.routes if route.matches(scope)[0] is Match.FULL),
+                 None)
+    return getattr(getattr(first, "endpoint", None), "__module__", None)
 
 
 def register(app, rt, deps: IngressDeps | None = None):

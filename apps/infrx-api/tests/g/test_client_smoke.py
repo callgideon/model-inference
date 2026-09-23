@@ -4,8 +4,9 @@ ingress, in process (httpx.ASGITransport), using only what is served.
 
 `client_example.py` is G6B's quickstart and dataset recipe; it sends exactly the declared
 surface (marlin-sop §2.2-2.3): `model`, `max_tokens`, `temperature`, one text and one
-`video_url` part, over the `https` and `data:` forms. The `infrx-upload:` form and
-`Prefer: respond-async` are specified, not served (G4U/M3, G3), so they are not smoked.
+`video_url` part, over the `https` and `data:` forms. The `infrx-upload:` form is specified,
+not served (G4U/M3), so it is not smoked; `--respond-async` is smoked against G3's jobs routes
+in `tests/g/jobs`.
 The acceptor is `credit.CreditStore` answering a sync completion the way G2 will.
 """
 from __future__ import annotations

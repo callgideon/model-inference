@@ -170,8 +170,9 @@ from the item, so re-running the same command resumes: finished items are skippe
 the rest are re-sent with the same key and payload (the server replays, never double
 charges). At most 8 requests in flight per key; 429/5xx honour `Retry-After`; 400/409
 are quarantined, 410 asks for a re-run, 401/402/403 stop the sweep. Served today: sync
-JSON with `http(s)` or `data:` media. `--form upload` and `--respond-async` are
-**specified, not served** until G3/G4U mount `/v1/uploads` and `/v1/jobs`.
+JSON with `http(s)` or `data:` media. `--respond-async` (202, then the job's status at its
+`Retry-After`, then its result) runs on G3's `/v1/jobs` routes, served once the cutover
+mounts them. `--form upload` is **specified, not served** until G4U mounts `/v1/uploads`.
 Research: `research/workloads/marlin-sop.md` §3.
 
 ## Deploy
