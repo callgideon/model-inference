@@ -256,7 +256,9 @@ $$;
 
 -- Args `{limit, worker_id, redelivery_s}`. At-least-once: a row stays pending until
 -- `acknowledge_dispatch`; a claimed row is handed out again once `redelivery_s` passed
--- without an acknowledgment (the relay died between the index write and the ack).
+-- without an acknowledgment (the relay died between the index write and the ack). A worker
+-- id is required (review OB-8): a row claimed by nobody could never be acknowledged
+-- (`claimed_by = worker_id`) and would be redelivered for ever.
 create or replace function infrx.dispatch_pending(p_args jsonb) returns jsonb
 language plpgsql security definer set search_path = infrx, public, pg_temp as $$
 declare
@@ -264,6 +266,9 @@ declare
   v_out jsonb := '[]';
   r record;
 begin
+  if p_args->>'worker_id' is null or length(btrim(p_args->>'worker_id')) = 0 then
+    perform infrx.refuse('invalid_request', 'a worker id is required');
+  end if;
   for r in
     select o as ev, j as job from infrx.outbox o
       join infrx.jobs j on j.request_id = o.aggregate_id

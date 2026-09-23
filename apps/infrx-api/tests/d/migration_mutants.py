@@ -1449,6 +1449,15 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "    update infrx.outbox set acknowledged_at = infrx.now()\n     where event_id in",
        "    update infrx.outbox set acknowledged_at = null\n     where event_id in",
        "admission", "dispatch_relay", "an acknowledged row is delivered for ever"),
+    _m("d2_pending_for_no_worker", DISPATCH,
+       "  if p_args->>'worker_id' is null or length(btrim(p_args->>'worker_id')) = 0 then\n"
+       "    perform infrx.refuse('invalid_request', 'a worker id is required');\n"
+       "  end if;\n  for r in",
+       "  if false then\n"
+       "    perform infrx.refuse('invalid_request', 'a worker id is required');\n"
+       "  end if;\n  for r in",
+       "admission", "dispatch_details",
+       "a row claimed by no worker is never acknowledged and redelivered for ever (OB-8)"),
     _m("d2_ack_after_reopen_lands", DISPATCH,
        "       and claimed_at is not null\n       and claimed_by = p_args->>'worker_id'\n", "",
        "admission", "dispatch_relay",

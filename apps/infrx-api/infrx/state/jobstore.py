@@ -232,9 +232,10 @@ class PgJobStore:
             else admission_v2_of(doc)
 
     # --- the dispatch outbox (D2 item 2) -------------------------------------------
-    async def dispatch_pending(self, *, limit: int = 100, worker_id: str = "relay",
+    async def dispatch_pending(self, *, worker_id: str, limit: int = 100,
                                redelivery_s: float = 30.0) -> tuple[IndexEvent, ...]:
-        """Unacknowledged dispatch rows whose job still wants them, as index events."""
+        """Unacknowledged dispatch rows whose job still wants them, as index events, claimed
+        for `worker_id` (required, unique per relay: only it may acknowledge them)."""
         docs = await self._call("dispatch_pending", {"limit": limit, "worker_id": worker_id,
                                                      "redelivery_s": redelivery_s})
         return tuple(IndexEvent.model_validate(doc) for doc in docs)

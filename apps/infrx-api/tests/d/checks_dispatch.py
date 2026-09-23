@@ -450,6 +450,11 @@ def check_dispatch_details(conn) -> str:
         call(conn, "dispatch_pending", pending)            # claim everything older
         advance(conn, 60)
         first = _admitted(conn, world)
+        # OB-8: a read with no worker id is refused - its claim could never be acknowledged
+        nobody = {k: v for k, v in pending.items() if k != "worker_id"}
+        for bad in (nobody, dict(pending, worker_id=None), dict(pending, worker_id="  ")):
+            assert outcome(conn, "dispatch_pending", bad)[0] == "invalid_request", \
+                f"dispatch_pending claimed rows for no worker: {bad}"
         second = _admitted(conn, world)
         # a row inserted LAST but available EARLIEST, and one available only in an hour
         conn.execute("insert into infrx.outbox (event_id, aggregate_id, org_id, kind, "

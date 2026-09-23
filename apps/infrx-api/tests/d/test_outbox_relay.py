@@ -107,7 +107,8 @@ def test_outbox__a_lost_acknowledgment_redelivers_the_same_single_candidate(back
         store = h.extra["store"]
         [a] = await admitted(h)
         # the relay reads and indexes, then dies before `acknowledge_dispatch`
-        [event] = await store.dispatch_pending(redelivery_s=REDELIVERY_S)
+        [event] = await store.dispatch_pending(worker_id="relay-dead",
+                                               redelivery_s=REDELIVERY_S)
         assert await q.enqueue(event) is True
         relay = OutboxRelay(store, q, redelivery_s=REDELIVERY_S)     # a restarted relay
         assert (await relay.pump())["read"] == 0, "redelivered inside the window"
