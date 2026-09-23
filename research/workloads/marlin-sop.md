@@ -313,7 +313,7 @@ here because the deployed host runs the first and the launch target is the secon
 | `POST /v1/chat/completions` | OpenAI-style chat; sync JSON or SSE | **mounted** (legacy `chat.py:17`); pilot version pending G2 |
 | `GET /v1/models` | model list | **mounted** (`models.py:7`) |
 | `GET /health` | readiness | **mounted** (`health.py`) |
-| `POST /v1/jobs`, job status/result/events | explicit async extension; also reached by `Prefer: respond-async` | **not implemented.** `validate.execution_mode` already classifies the header (`validate.py:335-354`) and `ExecutionMode.async_` exists, but no route emits the 202. Owner G3 |
+| `POST /v1/jobs`, job status/result/events | explicit async extension; also reached by `Prefer: respond-async` | **implemented, not mounted** (G3, on fakes): `routes/jobs.py` serves the 202 (`Relay.on_async`), status, result, events and `DELETE`; `ROUTERS` gains `jobs` at the cutover. Owner G3 |
 | `POST /v1/uploads`, PUT destination, `POST /v1/uploads/{handle}/complete` | owned bounded upload | **not implemented.** Contract records (`UploadCreated`/`UploadState`) and the `infrx-upload:` reference form exist; routes are G4U, store operations are M3 (`media/store.py:287-291` raise `NotImplementedError`) |
 | `POST /v1/feedback` | feedback | out of scope for this profile |
 
@@ -385,7 +385,7 @@ The engine's own tolerance is not the platform's contract.
 |---|---|---|
 | Sync JSON | supported | `chat.py`; fixture `contracts/fixtures/v1/chat_success_nonstream.json` |
 | Output SSE stream | supported; `stream_options.include_usage` forced on; cursor/`id` = `<generation>-<sequence>`; `Last-Event-ID` resume | 08 §3; `engine.py:564-565`; `chat.py:53` |
-| Explicit async | `Prefer: respond-async` → job handle; `Preference-Applied: respond-async` | classified today, 202 pending G3 (§2.1) |
+| Explicit async | `Prefer: respond-async` → job handle; `Preference-Applied: respond-async` | implemented by G3 (fakes); served once the cutover mounts the jobs router (§2.1) |
 | Output modalities | **text only** | `PreparedRequest` has no other output; caption/find return text (§1.4) |
 | Tools / function calling | **no** | refused by name in both halves |
 | Structured output / JSON schema | **no** | idem |
@@ -502,7 +502,8 @@ primitives above. There is no batch API, no server-side dataset object and no ne
 
 **Specified versus served, stated up front.** Two things this recipe uses are contracts that
 do not answer yet in this tree: the `infrx-upload:` media form (§3.3) and
-`Prefer: respond-async` with the job status/result routes it implies (§3.5). `ROUTERS =
+`Prefer: respond-async` with the job status/result routes it implies (§3.5; implemented by
+G3 on fakes, not mounted until the cutover). `ROUTERS =
 (health, models, chat)` today (§2.1, discrepancy D12), so a sweep run against this tree must
 use the `data:` or `http(s)` media form on sync or SSE, and those two rows become executable
 when G3 and G4U/M3 land. Everything else below — item keys, idempotency scope, segmentation,
@@ -845,3 +846,4 @@ plainly, because a reader who knows the word "VLA" will otherwise assume otherwi
   of this, and still no measurement, GPU run, cloud operation or code change.
 - 2026-09-22 (coordinator): corrected the digest method — the gated repository returns `*`×64 oids to unauthenticated tree calls (verified from the pilot box too; no local filter was involved); recorded the served-bytes sha256 of the three files from a read-only `sha256sum` on the pilot box and the chat-template match; registry equality stays ⚠️ until W3 runs the authenticated call. ⚠️ set now: registry oid equality, runtime image digest, engine decoder, measured hardware, `shortest_edge` 4096-vs-65,536.
 - 2026-09-22 (coordinator, at the E1B merge): §3.8 amended — `drawtext` absent from the pinned ffmpeg build (colour + tally instead); resolution case is 0.4 s < one 0.5 s frame period; 11 clips at 3–7 steps plus the one 2-step clip.
+- 2026-09-23 (G3, lane `codex/g3-jobs`): the explicit-async rows only — §2.1 (`/v1/jobs` row), §2.4 (explicit async row) and the §3 preamble now say *implemented by G3 on fakes, not mounted until the cutover* instead of *not implemented / pending G3*. The upload rows, D12 and every other statement are unchanged; no measurement, GPU run or cloud operation.

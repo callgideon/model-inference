@@ -13,9 +13,11 @@ else is the public API.
         --manifest items.jsonl --state sweep-state.jsonl --concurrency 8
 
 Served today: sync JSON `POST /v1/chat/completions` with the `http(s)` or `data:`
-media form. **Specified, not served** until G3 and G4U/M3 mount their routes:
-`--form upload` (the `infrx-upload:` handshake) and `--respond-async` (202 + job
-polling). Against today's endpoint those answer 404 and are recorded as quarantined.
+media form. `--respond-async` sends `Prefer: respond-async`: the 202 names a job, which is
+polled (`GET /v1/jobs/{handle}`) at the 202's `Retry-After` until terminal, then its result
+is read (`GET /v1/jobs/{handle}/result`) - G3's routes, served once the cutover mounts them.
+`--form upload` (the `infrx-upload:` handshake) is **specified, not served** until G4U/M3
+mount their routes; against today's endpoint it answers 404 and is recorded as quarantined.
 
 A manifest line is one item (§3.1-3.2): `dataset_version, source_id, episode_id,
 segment_index, start_s, end_s, prompt, prompt_version, profile_version, video`, where
@@ -128,8 +130,9 @@ def _completion(row, body):
     row["status"] = "done"
 
 
-async def poll(client, cfg, row):
-    """Explicit async (specified, not served): status until terminal, then the result."""
+async def poll(client, cfg, row, wait=None):
+    """Explicit async: status until terminal, at the 202's `Retry-After` (`wait`), then the
+    result. A result past its TTL (410) asks for a re-run."""
     headers = cfg["headers"]
     for _ in range(cfg["poll_limit"]):
         r = await client.get(f"{cfg['base']}/jobs/{row['job_handle']}", headers=headers)
@@ -146,7 +149,7 @@ async def poll(client, cfg, row):
                 return
             _completion(row, (res.json() or {}).get("response"))
             return
-        await SLEEP(cfg["poll_s"])
+        await SLEEP(min(wait, MAX_RETRY_AFTER_S) if wait is not None else cfg["poll_s"])
     # still running: stays "accepted"; a resume re-sends the same key and replays it
 
 
@@ -188,7 +191,7 @@ async def process(client, cfg, item, prior, record):
             row["status"] = "accepted" if row["job_handle"] else "failed"
             record(dict(row))             # persist the handle before polling (§3.5 step 2)
             if row["job_handle"]:
-                await poll(client, cfg, row)
+                await poll(client, cfg, row, bench.as_float(resp.headers.get("retry-after")))
             break
         row["error_code"] = _error_code(resp, cfg["key"])
         if resp.status_code in STOP:
@@ -257,7 +260,8 @@ def parser():
         c.add_argument("--concurrency", type=int, default=1 if name == "quickstart" else MAX_PER_KEY)
         c.add_argument("--max-attempts", type=int, default=5)
         c.add_argument("--respond-async", action="store_true",
-                       help="specified, not served until G3 mounts /v1/jobs")
+                       help="Prefer: respond-async - poll the job at its Retry-After, "
+                            "then read its result")
     q = sub.choices["quickstart"]
     q.add_argument("--video", required=True, help="http(s) URL, or a local file with --form data")
     q.add_argument("--prompt", default=CAPTION_PROMPT)

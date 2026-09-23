@@ -64,6 +64,7 @@ MIDWAY = "test_dur_fence__a_delete_cancelled_midway_still_cancels_the_job"
 BODY = "test_api_modes__a_delete_with_a_body_is_refused_and_cancels_nothing"
 MATRIX = "test_api_modes__the_async_matrix_end_to_end"
 EXPIRED_Q = "test_api_modes__a_job_that_expires_in_the_queue_is_an_expired_result"
+CLIENT = "test_api_modes__the_client_examples_async_flow_is_served"
 
 
 def _m(name, invariant, file, old, new, *cases, dies_by=()) -> Mutant:
@@ -228,6 +229,10 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("expired_job_served_as_running", "a terminal job reports its committed state (CREDIT)",
        J, "        if outcome is not None:\n            return outcome.state",
        "        if False:\n            return outcome.state", EXPIRED_Q),
+    # === item 7: the client example's async flow ========================================
+    _m("poll_ignores_retry_after", "the client polls at the 202's Retry-After",
+       X, '        await SLEEP(min(wait, MAX_RETRY_AFTER_S) if wait is not None else cfg["poll_s"])',
+       '        await SLEEP(cfg["poll_s"])', CLIENT),
 )
 
 

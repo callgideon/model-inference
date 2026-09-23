@@ -15,8 +15,12 @@ Implemented on fakes: D2's `PgJobStore` and D4's `PgStreamStore` are the integra
 from __future__ import annotations
 
 import asyncio
+import importlib.util
+import json
+import pathlib
 from datetime import timedelta
 
+import httpx
 import pytest
 
 from infrx.contracts import errors, fixtures, wire
@@ -26,6 +30,7 @@ from infrx.contracts.records import (ChunkEventType, EngineEvent, ExecutionMode,
 from infrx.gateway.routes import jobs as jobs_router
 from infrx.gateway.routes.relay import CREDIT
 from infrx.observe.metrics import Registry
+from infrx.operations import service
 
 from .. import relay_support as rs
 from .world import FIXED_ID, OTHER_ROW, JobsWorld, job_path, send
@@ -760,3 +765,39 @@ def test_api_modes__a_job_that_expires_in_the_queue_is_an_expired_result():
     assert answer.status == 200 and "response" not in answer.json()
     assert (answer.json()["state"], answer.json()["cause"]) == ("expired", "queue_wait_expired")
     assert world.released(job) and job.settlement is None
+
+
+# --- item 7: the client example's explicit-async flow ----------------------------------
+_spec = importlib.util.spec_from_file_location(
+    "client_example", pathlib.Path(__file__).resolve().parents[3] / "client_example.py")
+client = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(client)
+
+
+def test_api_modes__the_client_examples_async_flow_is_served(monkeypatch, capsys):
+    """`client_example.py quickstart --respond-async` against the jobs routes, in process: the
+    202, one wait of the 202's `Retry-After` (the worker runs meanwhile), the status, then the
+    result - `done`, with the committed text and usage. The key comes from the environment
+    and appears in no output."""
+    world = JobsWorld()
+    slept = []
+
+    async def wait(seconds):
+        slept.append(seconds)
+        await world.work()
+
+    monkeypatch.setattr(client, "SLEEP", wait)
+    secret = service.new_secret()
+    monkeypatch.setenv("INFRX_API_KEY", secret)
+    monkeypatch.delenv("MARLIN_API_KEY", raising=False)
+    code = client.main(["quickstart", "--base", "http://gateway.test/v1", "--video", rs.CLIP_URL,
+                        "--respond-async"], transport=httpx.ASGITransport(app=world.app))
+    out = capsys.readouterr().out
+    row = json.loads(out)
+    job = world.only_job()
+    assert (code, row["status"], row["http_status"]) == (0, "done", 202), out
+    assert slept == [float(jobs_router.POLL_AFTER_S)]
+    assert row["content"] == world.results[job.id] and row["inference_id"] == job.id
+    assert row["completion_tokens"] == job.outcome.usage.completion_tokens
+    assert job.request.execution_mode is ExecutionMode.async_ and len(job.request.media) == 1
+    assert job.outcome.settlement_state is SettlementState.settled and secret not in out
