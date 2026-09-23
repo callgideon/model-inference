@@ -194,9 +194,10 @@ def adapters_from_env(settings, **injected):
         pool, connect = connection_pool(settings)
         adapters = {"catalog": PgCatalogDirectory(connect),
                     "stream": PgStreamStore(connect, limits=settings.pilot),
-                    "jobs": PgJobStore(connect, limits=settings.pilot), "pool": pool,
                     # MPILOT gap 2: M's attach, durable where the worker reads it
-                    "attachments": PgAttachments(connect), **adapters}
+                    "attachments": PgAttachments(connect),
+                    "jobs": PgJobStore(connect, limits=settings.pilot), "pool": pool,
+                    **adapters}
     return adapters
 
 

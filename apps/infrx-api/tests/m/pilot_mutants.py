@@ -108,6 +108,11 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "            if entry is None or entry.probed is None \\\n",
        "            if entry is None \\\n",
        SECOND, dies_by=("AttributeError",)),
+    _m("attach_record_not_composed",
+       "create_app from settings gives M's store the durable attach record on D's pool",
+       "gateway/pilot.py", "        job_org=relay.job_org, attachments=attachments)",
+       "        job_org=relay.job_org)",
+       "test_mpilot__the_pilot_composition_records_the_attach_on_its_pool"),
 )
 
 # === item 2 on PostgreSQL: the attach record's SQL (Docker; `INFRX_D_TASK` picks the port) ==

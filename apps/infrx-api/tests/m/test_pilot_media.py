@@ -361,6 +361,26 @@ def test_mpilot__a_worker_runs_a_video_job_prepared_in_another_process(tmp_path)
     assert list(worker.cache.entries) == [(ref.org_id, ref.digest, "v1")]   # found on disk
 
 
+def test_mpilot__the_pilot_composition_records_the_attach_on_its_pool(monkeypatch):
+    """`create_app` from settings hands M's store the durable attach record on the SAME
+    pool as D's stores (so the worker's `load_work` and M's attach read one database); with
+    the stores injected (every test world) there is no record and the attach stays in
+    process, as before."""
+    import psycopg
+
+    async def unreachable(*args, **kw):
+        raise psycopg.OperationalError("postgresql://infrx:secret@db/infrx is unreachable")
+
+    monkeypatch.setattr(psycopg.AsyncConnection, "connect", unreachable)
+    built = create_app(gs.settings("dev"), client=gs.upstream(), sb=gs.supabase(),
+                       objects=InMemoryObjectStore(), index=MemoryScheduler(lambda: None))
+    rt = built.state.runtime
+    assert isinstance(rt.media_store.attachments, PgAttachments)
+    assert rt.media_store.attachments._connect is rt.relay.jobs._connect
+    given, _ = mounted()
+    assert given.state.runtime.media_store.attachments is None
+
+
 # --- gap 2 on PostgreSQL: the real attach record ------------------------------------------
 def postgres():
     """A fresh migrated, seeded database (tests/d's rig, `INFRX_D_TASK`), its JobStore
