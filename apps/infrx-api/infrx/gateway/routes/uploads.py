@@ -100,6 +100,8 @@ def register(app, rt, store=None, large_bodies=None, new_request_id=ids.new_requ
                                           param="Content-Type")
         slot = slots.slot()
         try:
+            # ponytail: cut at MAX_MEDIA_BYTES, not the upload's own max_bytes (put_upload
+            # refuses after the read); a public cap read on MediaUploads is the upgrade.
             data = await intake.read_body(request, max_bytes=limits.max_media_bytes,
                                           timeout_s=limits.intake_timeout_s, clock=rt.clock,
                                           large=slot)
