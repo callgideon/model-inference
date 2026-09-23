@@ -469,6 +469,32 @@ def test_dur_admit__a_key_reused_across_modes_is_409_and_the_job_runs_on():
     assert untouched(synchronous) == looked_up(before)
     assert len(synchronous.jobs.jobs) == 1
 
+def test_dur_admit__the_key_names_the_payload_for_sync_and_stream_and_folds_only_async():
+    """R94's identity, byte for byte (review ADM-R2-B3): the idempotency hash the acceptor
+    receives is the payload digest itself for sync and for stream - their identity is
+    unchanged, so a mapping stored before R94 still replays after it - and the folded digest
+    for async, the same one on chat with `Prefer` and on `POST /v1/jobs`."""
+    world = JobsWorld()
+    seen = []
+
+    async def captured(auth, request, idem):
+        seen.append((request.execution_mode, request.payload_digest, idem.payload_hash))
+        raise errors.InvalidRequest("captured")          # nothing durable: the digest only
+
+    world.relay.admit = captured
+    for path, payload, headers in ((CHAT, rs.body(), {}), (CHAT, rs.body(stream=True), {}),
+                                   (CHAT, rs.body(), PREFER), (JOBS, rs.body(), {})):
+        assert refusal(post(world, path, payload, key="k", headers=headers)) == (
+            400, "invalid_request")
+    sync, stream, prefer, jobs = seen
+    assert [mode for mode, *_ in seen] == [ExecutionMode.sync, ExecutionMode.stream,
+                                           ExecutionMode.async_, ExecutionMode.async_]
+    assert sync[2] == sync[1], "a sync key's identity is its payload digest"
+    assert stream[2] == stream[1] != sync[1], "a stream key's identity is its payload digest"
+    assert sync[1] == prefer[1] == jobs[1] and prefer[2] == jobs[2] != prefer[1]
+    assert not world.jobs.jobs and not staged_payloads(world)
+
+
 # --- item 2: status --------------------------------------------------------------------
 def status(world, handle=None, **kw):
     return get(world, job_path(handle or world.handle()), **kw)

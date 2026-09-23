@@ -52,6 +52,7 @@ CRASH_REPLAY = "test_dur_admit__a_crash_after_the_admission_commit_is_completed_
 INFLIGHT_403 = "test_dur_admit__an_in_flight_async_replay_prepares_nothing_when_the_host_fails"
 INFLIGHT_CREDIT = "test_dur_admit__an_in_flight_credit_replay_is_never_rechecked_or_cancelled"
 MODES_409 = "test_dur_admit__a_key_reused_across_modes_is_409_and_the_job_runs_on"
+DIGEST = "test_dur_admit__the_key_names_the_payload_for_sync_and_stream_and_folds_only_async"
 STATUS = "test_api_modes__status_reports_the_committed_row_and_result_availability"
 OUTLIVES = "test_api_modes__status_outlives_the_result_and_the_journal"
 NO_USAGE = "test_api_modes__a_success_without_usage_reports_none_and_no_result"
@@ -157,7 +158,7 @@ MUTANTS: tuple[Mutant, ...] = (
        R, "        if job.request_id in self.media.by_job:", "        if False:", INFLIGHT_CREDIT),
     _m("mode_left_out_of_the_digest", "R94: a key reused across sync and async is 409",
        N, "    if request.execution_mode is not ExecutionMode.async_:\n        return request.payload_digest",
-       "    if True:\n        return request.payload_digest", MODES_409),
+       "    if True:\n        return request.payload_digest", MODES_409, DIGEST),
     _m("lookup_conflict_swallowed", "R91/R94: a key conflict is 409 at the lookup, before "
        "anything is fetched, staged or admitted (review ADM-R2-B2)",
        R, "            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
@@ -165,6 +166,10 @@ MUTANTS: tuple[Mutant, ...] = (
        "            found = await _dependency(self.jobs.lookup(org_id, idem))\n"
        "        except errors.IdempotencyConflict:\n            return None\n"
        "        except errors.UnsupportedParameter as refused:", MODES_409, CHANGED),
+    _m("mode_folded_for_stream", "R94: stream keeps the payload digest as its key's identity "
+       "(review ADM-R2-B3)",
+       N, "    if request.execution_mode is not ExecutionMode.async_:",
+       "    if request.execution_mode is ExecutionMode.sync:", DIGEST),
     _m("replay_readmits", "a key the lookup missed is still one job: admission replays it",
        ST, "            replay = self._replay(idem, now, credit=credit)",
        "            replay = None", TWICE),
