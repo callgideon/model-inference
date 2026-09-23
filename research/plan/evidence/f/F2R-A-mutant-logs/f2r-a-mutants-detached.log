@@ -1,0 +1,129 @@
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 22%]
+........................................................................ [ 30%]
+........................................................................ [ 37%]
+........................................................................ [ 45%]
+........................................................................ [ 52%]
+........................................................................ [ 60%]
+...........F............................F............................... [ 67%]
+........................................................................ [ 75%]
+......FF..................................F.........F.F................. [ 82%]
+........................................................................ [ 90%]
+........................................................................ [ 97%]
+........................                                                 [100%]
+=================================== FAILURES ===================================
+______________ test_mutant_is_killed[event_bytes_sized_for_ascii] ______________
+
+mutant = Mutant(name='event_bytes_sized_for_ascii', invariant='an event is sized in bytes, not code points (R58)', file='worker...OAD_COPIES = 1', cases=('test_api_stream__an_event_always_fits_the_journal_in_any_script',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: event_bytes_sized_for_ascii is misdeclared (an event is sized in bytes, not code points (R58)): anchor appears 0 times in worker/engine.py, expected 1: 'PAYLOAD_COPIES = 3               # `visible`, `raw`, and the'. The cases ['test_api_stream__an_event_always_fits_the_journal_in_any_script'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.misdeclared: 'misdeclared'>, detail="anchor appears 0 times in worker/engine.py, expected 1: 'PAYLOAD_COPIES = 3               # `visible`, `raw`, and the'").killed
+
+tests/w/test_mutants.py:74: AssertionError
+_______________ test_mutant_is_killed[visible_and_raw_collapsed] _______________
+
+mutant = Mutant(name='visible_and_raw_collapsed', invariant='visible is filtered, raw is not (R58)', file='worker/engine.py', o...d_raw_text', 'test_api_stream__every_chunk_split_reaches_the_customer_through_the_adapter'), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: visible_and_raw_collapsed is misdeclared (visible is filtered, raw is not (R58)): anchor appears 0 times in worker/engine.py, expected 1: '    return {"visible": visible, "raw": raw, "content": raw}'. The cases ['test_api_stream__deltas_carry_the_visible_and_raw_text', 'test_api_stream__every_chunk_split_reaches_the_customer_through_the_adapter'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.misdeclared: 'misdeclared'>, detail='anchor appears 0 times in worker/engine.py, expected 1: \'    return {"visible": visible, "raw": raw, "content": raw}\'').killed
+
+tests/w/test_mutants.py:74: AssertionError
+____________ test_mutant_is_killed[unsynced_bytes_survive_a_crash] _____________
+
+mutant = Mutant(name='unsynced_bytes_survive_a_crash', invariant='only fsynced records recover', file='traces/spool.py', old=' ...if False:', cases=('test_recovery_replays_only_fsynced_records_and_tolerates_a_torn_tail',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: unsynced_bytes_survive_a_crash is misdeclared (only fsynced records recover): anchor appears 0 times in traces/spool.py, expected 1: '            if segment.written > segment.synced:'. The cases ['test_recovery_replays_only_fsynced_records_and_tolerates_a_torn_tail'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.misdeclared: 'misdeclared'>, detail="anchor appears 0 times in traces/spool.py, expected 1: '            if segment.written > segment.synced:'").killed
+
+tests/t/test_trace_mutants.py:49: AssertionError
+____________ test_mutant_is_killed[a_crash_keeps_its_promise_count] ____________
+
+mutant = Mutant(name='a_crash_keeps_its_promise_count', invariant='a crash reports what it lost', file='traces/spool.py', old='...d_records', cases=('test_recovery_replays_only_fsynced_records_and_tolerates_a_torn_tail',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: a_crash_keeps_its_promise_count is misdeclared (a crash reports what it lost): anchor appears 0 times in traces/spool.py, expected 1: '        self.appended_records = self.fsynced_records'. The cases ['test_recovery_replays_only_fsynced_records_and_tolerates_a_torn_tail'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.misdeclared: 'misdeclared'>, detail="anchor appears 0 times in traces/spool.py, expected 1: '        self.appended_records = self.fsynced_records'").killed
+
+tests/t/test_trace_mutants.py:49: AssertionError
+_____________ test_mutant_is_killed[crash_keeps_the_record_count] ______________
+
+mutant = Mutant(name='crash_keeps_the_record_count', invariant="a crash's bookkeeping follows its truncation (R40)", file='trac...nted = []', cases=('test_recovery_replays_only_fsynced_records_and_tolerates_a_torn_tail',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: crash_keeps_the_record_count is misdeclared (a crash's bookkeeping follows its truncation (R40)): anchor appears 0 times in traces/spool.py, expected 1: '                segment.records = segment.synced_records\n   '. The cases ['test_recovery_replays_only_fsynced_records_and_tolerates_a_torn_tail'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.misdeclared: 'misdeclared'>, detail="anchor appears 0 times in traces/spool.py, expected 1: '                segment.records = segment.synced_records\\n   '").killed
+
+tests/t/test_trace_mutants.py:49: AssertionError
+______________ test_mutant_is_killed[the_queue_counts_only_rows] _______________
+
+mutant = Mutant(name='the_queue_counts_only_rows', invariant='the queue is bounded in bytes too (ruling 5)', file='traces/spool...             elif False:', cases=('test_the_queue_is_bounded_in_bytes_as_well_as_in_rows',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: the_queue_counts_only_rows is misdeclared (the queue is bounded in bytes too (ruling 5)): anchor appears 0 times in traces/spool.py, expected 1: '                elif (self.queued_payload_bytes + len(payloa'. The cases ['test_the_queue_is_bounded_in_bytes_as_well_as_in_rows'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.misdeclared: 'misdeclared'>, detail="anchor appears 0 times in traces/spool.py, expected 1: '                elif (self.queued_payload_bytes + len(payloa'").killed
+
+tests/t/test_trace_mutants.py:49: AssertionError
+_______________ test_mutant_is_killed[a_clockless_sink_is_built] _______________
+
+mutant = Mutant(name='a_clockless_sink_is_built', invariant='a durable sink needs a real clock (ruling 7)', file='traces/spool....not one")', new='            pass', cases=('test_a_sink_without_a_clock_refuses_to_exist',), dies_by=(), occurrences=1)
+
+    @pytest.mark.parametrize("mutant", SELECTED, ids=[m.name for m in SELECTED])
+    def test_mutant_is_killed(mutant):
+        result = mutation_list.run_mutant(mutant)
+>       assert result.killed, (f"{mutant.name} is {result.outcome} ({mutant.invariant}): "
+                               f"{result.detail}. The cases {list(mutant.cases)} do not prove "
+                               f"what they claim.")
+E       AssertionError: a_clockless_sink_is_built is misdeclared (a durable sink needs a real clock (ruling 7)): anchor appears 0 times in traces/spool.py, expected 1: '            raise ValueError("a spool sink needs the clock i'. The cases ['test_a_sink_without_a_clock_refuses_to_exist'] do not prove what they claim.
+E       assert False
+E        +  where False = Result(outcome=<Outcome.misdeclared: 'misdeclared'>, detail='anchor appears 0 times in traces/spool.py, expected 1: \'            raise ValueError("a spool sink needs the clock i\'').killed
+
+tests/t/test_trace_mutants.py:49: AssertionError
+=========================== short test summary info ============================
+FAILED tests/w/test_mutants.py::test_mutant_is_killed[event_bytes_sized_for_ascii]
+FAILED tests/w/test_mutants.py::test_mutant_is_killed[visible_and_raw_collapsed]
+FAILED tests/t/test_trace_mutants.py::test_mutant_is_killed[unsynced_bytes_survive_a_crash]
+FAILED tests/t/test_trace_mutants.py::test_mutant_is_killed[a_crash_keeps_its_promise_count]
+FAILED tests/t/test_trace_mutants.py::test_mutant_is_killed[crash_keeps_the_record_count]
+FAILED tests/t/test_trace_mutants.py::test_mutant_is_killed[the_queue_counts_only_rows]
+FAILED tests/t/test_trace_mutants.py::test_mutant_is_killed[a_clockless_sink_is_built]
+7 failed, 953 passed in 2211.08s (0:36:51)
