@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T11:44:36Z",
+  "updated": "2026-09-23T12:10:26Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "G2": {
       "lane": "codex-g2 / codex/g2-chat-relay",
-      "phase": "review fix_required at 2d742aa (11 blocking: replay before preparation (R91 lookup port), post-admission 503 retry, cancel drain at shutdown, unnamed-stream cancel, raw/content relay guard, stream bound, pool configure hook, [DONE] after unconfirmed cancel, CREDIT price_source probe; 22 nonblocking) \u2192 fix round running",
+      "phase": "round 2 HANDED BACK a786af7 (impl 367acc3; all 11 blocking + most nonblocking closed; R91 lookup on the ports + fakes + conformance; shim deleted; Relay.admit with G3's triple; G list 298 = 291 mutants); confirmation workflow running",
       "since": "2026-09-23T05:12:27Z",
       "note": "relay.py (accept/sync/SSE/cancel causes), pilot.py (fail-closed build_ingress_deps, lifespan), ingress readyz/route table; G suite 385, G list 264 (257 mutants); W-new blocking defect (engine refuses stream/max_tokens in parameters) \u2192 fix lane codex/w-consumed-parameters"
     },
@@ -56,8 +56,8 @@
       "since": "2026-09-23T10:33:10Z"
     },
     "G2": {
-      "phase": "fix_required at 2d742aa (wf_cc07f35b-21f; 26 agents; JSON evidence/g/G2-review-2d742aa.json) \u2192 fix round; confirmation next",
-      "since": "2026-09-23T11:05:53Z"
+      "phase": "confirmation at a786af7 running (round 1 fix_required at 2d742aa)",
+      "since": "2026-09-23T12:10:26Z"
     },
     "E3B2": {
       "phase": "fix_required at 80cef22 (wf_345bc3f0-8ec; 13 agents; JSON evidence/e/E3B2-review-80cef22.json) \u2192 fix round; confirmation next",
