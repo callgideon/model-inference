@@ -73,14 +73,14 @@ def m_support():
 
 
 # Two drills wait on work no task in tasks.json schedules; their ids name the document that
-# defines it and its owner. Everything else, and the refusal of an unknown id, is E's
-# `stack.PENDING`.
-PENDING = {**stack.PENDING,
-           "I2B-R4": "the worker composition root `python -m infrx.worker` "
-                     "(infrx/worker/__main__.py) that I2B's infrx-worker.service starts: I2B "
-                     "integration request 4, owned by the coordinator (G2 brief)",
-           "M1-L2": "an S3-backed ObjectStore in infrx.media: M1 limit 2, track M's; not "
-                    "scheduled in backend-first (the pilot's media root is local)"}
+# defines it and its owner, and are the only ids here that are not tasks. Everything else,
+# and the refusal of an unknown id, is E's `stack.PENDING`.
+OWNERS = {"I2B-R4": "the worker composition root `python -m infrx.worker` "
+                    "(infrx/worker/__main__.py) that I2B's infrx-worker.service starts: I2B "
+                    "integration request 4, owned by the coordinator (G2 brief)",
+          "M1-L2": "an S3-backed ObjectStore in infrx.media: M1 limit 2, track M's; not "
+                   "scheduled in backend-first (the pilot's media root is local)"}
+PENDING = {**stack.PENDING, **OWNERS}
 
 
 def pending(*ids: str, why: str):
