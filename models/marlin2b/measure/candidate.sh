@@ -6,18 +6,23 @@
 # measurement half"). The candidate is a NAME from the closed table below, never free-form
 # flags. The protocol it executes is measure/W4-protocol.md §4:
 #
-#   1. refuse (exit 2, a `refused:` line, nothing touched) without the restart consent
-#      W4_ENGINE_RESTART_OK=1, an unlisted CANDIDATE or any argument, an OUT outside
-#      $NVME/w4-*, no running engine container, a REPO that is the unit's installed tree
-#      (the installed unit passes --max-num-seqs 32, which a checked-out serve.sh refuses:
-#      W3 request 12(b)), no checkout, requests in flight, or a corpus that does not verify;
+#   1. refuse (exit 2, a `refused:` line, nothing stopped, nothing written but the lock)
+#      without the restart consent W4_ENGINE_RESTART_OK=1, an unlisted CANDIDATE or any
+#      argument, an OUT outside $NVME/w4-* or not canonical, a READY_S that is not a whole
+#      number of seconds, another run holding $NVME/w4-candidate.lock, a unit that is not
+#      active, no running engine container, a unit whose ExecStart cannot be read, a REPO
+#      that is the unit's installed tree (the installed unit passes --max-num-seqs 32, which
+#      a checked-out serve.sh refuses: W3 request 12(b)), no checkout, a corpus that does not
+#      verify, a parity clip missing from the cache, or requests running or waiting;
 #   2. record the engine it found (container args and image, unit state, the units that are
 #      PartOf it), then `systemctl stop marlin2b-vllm`;
-#   3. gate: one fresh candidate engine (the checkout's serve.sh, ENGINE_MAX_NUM_SEQS=32, the
-#      candidate's flags appended), capability.sh (cancellation), parity.py;
+#   3. gate: one fresh candidate engine (the checkout's serve.sh with PORT, GPU, WEIGHTS,
+#      the log level, no media root and ENGINE_MAX_NUM_SEQS=32 pinned here, the candidate's
+#      flags appended), capability.sh (cancellation), parity.py;
 #   4. for c = 1 2 4 8 16 32: a fresh engine, then concurrency.sh at that one level with
 #      ENGINE_STATE=restarted, the engine container's memory sampled every 2 s alongside;
-#   5. per engine start: start-to-ready seconds and the start-up KV/encoder lines; per cell:
+#   5. per engine start: start-to-ready seconds, the container's own args and the start-up
+#      KV/encoder lines; per cell:
 #      the engine's own error lines (`docker logs --since` the cell start) and whether it is
 #      still running;
 #   6. on EXIT, whatever happened: stop the candidate, start the unit (and its PartOf units
@@ -53,6 +58,13 @@ esac
 [ "${W4_ENGINE_RESTART_OK:-}" = 1 ] || refuse "W4_ENGINE_RESTART_OK=1 (a logged maintenance window) is required: this restarts the engine"
 case "$OUT" in "$NVME"/w4-*) ;; *) refuse "OUT must be under $NVME/w4-* (got $OUT)" ;; esac
 [ "$(realpath -m -s -- "$OUT")" = "$OUT" ] || refuse "OUT must be absolute and canonical"
+[[ $READY_S =~ ^[1-9][0-9]*$ ]] || refuse "READY_S must be a whole number of seconds (got '$READY_S')"
+# One run at a time: a second one would take the first one's candidate for the engine to
+# restore, and its restore would start the unit under the first run.
+exec 9>"$NVME/w4-candidate.lock" || refuse "cannot open $NVME/w4-candidate.lock"
+flock -n 9 || refuse "another candidate.sh holds $NVME/w4-candidate.lock"
+[ "$(systemctl is-active "$UNIT" 2>/dev/null || true)" = active ] \
+  || refuse "$UNIT is not active: no installed engine to restore (another candidate run?)"
 pre_args=$(docker inspect --format '{{json .Args}}' "$CONTAINER" 2>/dev/null) \
   || refuse "no container $CONTAINER: there is no engine to measure against or restore"
 pre_image=$(docker inspect --format '{{.Image}}' "$CONTAINER")
@@ -62,23 +74,32 @@ unit_script=$(printf '%s\n' "$unit_exec" | sed -n 's/.*path=\([^ ;]*\).*/\1/p' |
 serve=$REPO/models/marlin2b/serve.sh
 [ "$(realpath -m -- "$serve")" != "$(realpath -m -- "$unit_script")" ] \
   || refuse "REPO is the unit's installed tree ($unit_script); use the measurement checkout"
-for f in serve.sh bench.py corpus/manifest.json corpus/build.py measure/capability.sh \
-         measure/concurrency.sh measure/parity.py; do
+for f in serve.sh bench.py corpus/manifest.json corpus/build.py corpus-synth/manifest.json \
+         corpus-synth/synth.py measure/capability.sh measure/concurrency.sh measure/parity.py; do
   test -f "$REPO/models/marlin2b/$f" || refuse "no checkout: $REPO has no models/marlin2b/$f"
 done
-inflight=$(curl -sS -m 5 "$ENGINE/metrics" 2>/dev/null \
-  | awk '/^vllm:num_requests_(running|waiting)[{ ]/{n+=$NF; seen=1} END{if (seen) print n+0}') || true
-[ -n "$inflight" ] || refuse "the engine's metrics are unreadable: requests in flight unknown"
-[ "$inflight" = 0 ] || refuse "the engine has $inflight request(s) in flight"
-export CORPUS_CACHE
+export CORPUS_CACHE PYTHONDONTWRITEBYTECODE=1  # no __pycache__ in the checkout
 verified=$("$PY" "$REPO/models/marlin2b/corpus/build.py" verify 2>&1) || {
   printf '%s\n' "$verified" | tail -5 >&2
   refuse "the corpus does not verify (corpus/build.py verify)"; }
+# The parity set must be answerable (its 120 s clips are sop-synth-v1's). Their pinned bytes
+# are recorded, not required: a clip that derives differently on this CPU still pairs by
+# its own sha256, candidate against baseline.
+parity_ready=$("$PY" "$REPO/models/marlin2b/measure/parity.py" --check --cache "$CORPUS_CACHE" 2>&1) || {
+  printf '%s\n' "$parity_ready" | tail -5 >&2
+  refuse "the parity set is not in the cache (parity.py --check)"; }
+synth=$("$PY" "$REPO/models/marlin2b/corpus-synth/synth.py" verify 2>&1 | grep -m1 '^verified') || true
+# last before anything is written or stopped
+inflight=$(curl -sS -m 5 "$ENGINE/metrics" 2>/dev/null \
+  | awk '/^vllm:num_requests_(running|waiting)[{ ]/{n+=$NF; seen=1} END{if (seen) print n+0}') || true
+[ -n "$inflight" ] || refuse "the engine's metrics are unreadable: requests in flight unknown"
+[ "$inflight" = 0 ] || refuse "the engine has $inflight request(s) running or waiting"
 
 mkdir -p "$OUT"
 exec > >(tee -a "$OUT/candidate.log") 2>&1
 echo "candidate=$CANDIDATE flags=${flags[*]:-none} out=$OUT utc=$(date -u +%Y-%m-%dT%H:%M:%SZ) repo_sha=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 echo "corpus=$(printf '%s\n' "$verified" | tail -1)"
+echo "parity_set=$(printf '%s\n' "$parity_ready" | tail -1) synth=${synth:-unverified}"
 echo "pre_image=$pre_image"
 echo "pre_args=$pre_args"
 active=()
@@ -86,8 +107,6 @@ for unit in $(systemctl show -p ConsistsOf --value "$UNIT" 2>/dev/null || true);
   [ "$(systemctl is-active "$unit" 2>/dev/null || true)" = active ] && active+=("$unit")
 done
 echo "unit=$UNIT state=$(systemctl is-active "$UNIT" 2>/dev/null || true) exec_path=$unit_script partof_active=${active[*]:-none}"
-export WEIGHTS_ROOT=${WEIGHTS_ROOT:-$NVME}
-unset PROCESSING_CACHE_DIR        # media goes inline (video_b64): no mount, no allowed path
 
 wait_ready() {                    # sets ready_s; fails after READY_S
   local t0=$SECONDS
@@ -106,14 +125,18 @@ stop_candidate() {                # whatever holds the name, gone before the nex
 
 start_candidate() {               # $1 = label: a fresh candidate engine, ready and recorded
   stop_candidate
-  ENGINE_MAX_NUM_SEQS=32 nohup bash "$serve" "${flags[@]}" > "$OUT/engine-$1.log" 2>&1 &
+  # every serve.sh input pinned here, none from the operator's environment; media goes
+  # inline (video_b64), so no media root is mounted
+  PORT=8000 GPU=0 WEIGHTS=$NVME/marlin2b VLLM_LOGGING_LEVEL=INFO PROCESSING_CACHE_DIR= \
+    ENGINE_MAX_NUM_SEQS=32 nohup bash "$serve" "${flags[@]}" > "$OUT/engine-$1.log" 2>&1 9>&- &
   if ! wait_ready; then
     echo "start=$1 ready=no after ${READY_S}s"
     tail -20 "$OUT/engine-$1.log"
     return 1
   fi
   echo "start=$1 start_to_ready_s=$ready_s"
-  { grep -E -i 'KV cache size|Maximum concurrency|Encoder cache|max_num_batched_tokens' \
+  { echo "args=$(docker inspect --format '{{json .Args}}' "$CONTAINER" 2>/dev/null)"
+    grep -E -i 'KV cache size|Maximum concurrency|Encoder cache|max_num_batched_tokens' \
       "$OUT/engine-$1.log" || true
     curl -sS -m 5 "$ENGINE/metrics" 2>/dev/null | grep '^vllm:cache_config_info' || true
   } > "$OUT/startup-$1.log"
@@ -140,7 +163,7 @@ host_sampler() {                  # the engine container's memory, every 2 s unt
 restore() {
   local status=$?
   trap - EXIT
-  set +e
+  set +e                          # load-bearing: a failed step must not skip the report
   echo "restore: stopping the candidate, starting $UNIT ${active[*]:-}"
   stop_candidate
   systemctl start "$UNIT" "${active[@]}"
@@ -180,7 +203,7 @@ capture parity "$since" gate
 for c in $LEVELS; do
   start_candidate "c$c"
   since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  host_sampler > "$OUT/host-mem-c$c.tsv" &
+  host_sampler > "$OUT/host-mem-c$c.tsv" 9>&- &
   sampler=$!
   rc=0
   LEVELS=$c ENGINE_STATE=restarted REPO=$REPO CORPUS_CACHE=$CORPUS_CACHE PY=$PY OUT=$OUT/sweep \

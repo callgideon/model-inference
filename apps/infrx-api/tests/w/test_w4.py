@@ -40,7 +40,7 @@ SWEEP = pathlib.Path("research/plan/evidence/w/box/sweep-20260923T050411Z")
 SWEEP_LOG = "w3-L1-20260923T050411Z.concurrency.log"
 SWEEP_RUN = "w3-L1-20260923T050411Z"
 FOUR = ("c012", "c025", "c038", "c051")
-PROFILE_CONSTANTS = {"FPS", "MIN_FRAMES", "MAX_FRAMES", "PX_PER_FRAME"}
+PROFILE_CONSTANTS = {"FPS", "MIN_FRAMES", "MAX_FRAMES", "PX_PER_FRAME", "LEVELS"}
 
 
 def module(repo: pathlib.Path, name: str):
@@ -87,17 +87,24 @@ def check_protocol_matches(repo: pathlib.Path) -> None:
                if re.fullmatch(r"[A-Z][A-Z0-9_]+", name) and isinstance(value, (int, float, tuple))}
     assert numeric - PROFILE_CONSTANTS == {name for name, _ in rows}, (
         numeric - PROFILE_CONSTANTS ^ {name for name, _ in rows})
+    levels = ", ".join(map(str, decide.LEVELS))
+    assert f"closed loop at c = {levels} " in text, decide.LEVELS
     listed = re.findall(r"`((?:c\d{3}|sop\d\d)-[^`]+)`", text.split("**Parity set**")[1]
                         .split("## 5.")[0])
     assert tuple(listed) == parity.PARITY_SET, listed
     assert f"`max_tokens` {parity.MAX_TOKENS}" in text
     script = (repo / MEASURE / "candidate.sh").read_text()
+    assert f'LEVELS="{" ".join(map(str, decide.LEVELS))}"' in script
     table = dict(re.findall(r"^  (e\d)\) flags=\(([^)]*)\) ;;$", script, re.M))
     for name, flags in table.items():
         stated = re.search(rf"^\| \*\*{name.upper()}\*\* \| ([^|]+) \|", text, re.M).group(1)
-        assert (flags or "none") in stated.replace("`", "").replace(" — today's pinned flags", ""), (
-            name, flags, stated)
+        stated = stated.replace("`", "").replace(" — today's pinned flags", "").strip()
+        assert (flags or "none") == stated, (name, flags, stated)
     assert sorted(table) == ["e0", "e1", "e3"], table
+    assert {pair for pair in decide.PAIRS} == {("e1", "e0"), ("e3", "e1")}
+    for candidate, baseline in decide.PAIRS:
+        assert re.search(rf"^\| \*\*{candidate.upper()}\*\* \| [^|]+ \| {baseline.upper()} \|",
+                         text, re.M), (candidate, baseline)
 
 
 def test_engine_opt__the_protocol_states_the_criteria_decide_applies():
@@ -107,10 +114,31 @@ def test_engine_opt__the_protocol_states_the_criteria_decide_applies():
 # --------------------------------------------------------------------------
 # item 4: decide.py on the committed W3 sweep
 # --------------------------------------------------------------------------
+def edit_bench(run: pathlib.Path, change) -> None:
+    """Apply `change(row)` to every bench.jsonl row of a copied sweep."""
+    path = run / SWEEP_RUN / "bench.jsonl"
+    rows = lines(path)
+    for row in rows:
+        change(row)
+    write_lines(path, rows)
+
+
+def restarted(run: pathlib.Path, name: str | None = None) -> pathlib.Path:
+    """Label every level of a copied sweep as run on a freshly started engine (what
+    candidate.sh produces), and give it the candidate name candidate.sh logs."""
+    edit_bench(run, lambda row: row["profile"].update(engine_state="restarted"))
+    if name:
+        log = run / "candidate.log"
+        previous = log.read_text() if log.exists() else ""
+        log.write_text(f"candidate={name} flags=- out={run}\n" + previous)
+    return run
+
+
 def test_engine_opt__the_050411Z_sweep_has_no_qualifying_level():
     """F(c) is never 0: the same four 112 s clips fail at every level (4 per level, 8 at
     c = 32). W(32) was scraped by the sampler before 82a7dbf, which also summed the
-    by-reason series, so its nonzero peak is unknown - never 2, never 0."""
+    by-reason series, so its nonzero peak is unknown - never 2, never 0. Every level of that
+    sweep ran warm, so the rule is not even taken (protocol §7)."""
     decide = module(REPO, "decide")
     run = decide.load(REPO / SWEEP)
     assert sorted(run.levels) == [1, 2, 4, 8, 16, 32]
@@ -118,13 +146,16 @@ def test_engine_opt__the_050411Z_sweep_has_no_qualifying_level():
         assert level.F == (8 if c == 32 else 4), (c, level.F)
         assert {clip.split("-")[0] for clip in level.failed_clips} == set(FOUR), level.failed_clips
         assert dict(level.failures) == {"stream_error_event": level.F}
+        assert level.reconciled and level.retries_known, c
     assert run.levels[16].W == 0 and run.levels[32].W is None
     assert run.X == 80.7
     assert decide.c_star(run.levels)[0] is None
     rep = decide.report(run)
     assert rep["setting"] is None and rep["verdict"].startswith("no setting adopted")
-    assert rep["criteria"]["w3_rule"]["state"] == "fail"
+    assert rep["criteria"]["w3_rule"]["state"] == "unknown"
+    assert "not restarted [1, 2, 4, 8, 16, 32]" in rep["criteria"]["w3_rule"]["detail"]
     assert rep["criteria"]["error_rate"]["state"] == "fail"
+    assert rep["criteria"]["overload_masking"]["state"] == "pass"
 
 
 def check_set_aside(repo: pathlib.Path, tmp: pathlib.Path) -> None:
@@ -147,12 +178,12 @@ def check_set_aside(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     with redirect_stdout(printed):
         decide.main([str(repo / SWEEP)])
     assert "set_aside=none" in printed.getvalue() and "setting=None" in printed.getvalue()
-    # floor(X) binds when the engine's capacity is below c*
+    # floor(X) binds when the engine's capacity is below c*, and floors (12.6 -> 12)
     copy = tmp / "low-x"
     shutil.copytree(repo / SWEEP, copy)
     log = copy / SWEEP_LOG
-    log.write_text(log.read_text().replace(": 80.70x", ": 10.40x"))
-    assert decide.report(decide.load(copy, FOUR))["setting"] == 10
+    log.write_text(log.read_text().replace(": 80.70x", ": 12.60x"))
+    assert decide.report(decide.load(copy, FOUR))["setting"] == 12
 
 
 def test_engine_opt__the_set_aside_reproduces_the_recorded_c16_only_when_named(tmp_path):
@@ -174,8 +205,7 @@ def test_perf_envelope__an_unsupported_tail_or_blank_sample_is_unknown(tmp_path)
     run = decide.load(blank, FOUR)
     assert run.levels[16].W is None, run.levels[16].W
     assert decide.c_star(run.levels)[0] is None     # c=16 no longer proves W = 0
-    short = tmp_path / "short"
-    shutil.copytree(REPO / SWEEP, short)
+    short = restarted(pathlib.Path(shutil.copytree(REPO / SWEEP, tmp_path / "short")))
     kept = [0]
 
     def drop_one(row):
@@ -183,26 +213,38 @@ def test_perf_envelope__an_unsupported_tail_or_blank_sample_is_unknown(tmp_path)
             kept[0] = 1
             row["outcome"] = "cancelled"            # 59 accepted remain at c = 1
     edit_raw(short, 1, drop_one)
+    edit_bench(short, lambda row: row.update(accepted=59, cancelled=1)
+               if row["concurrency"] == 1 else None)
     run = decide.load(short, FOUR)
     assert run.levels[1].ttft_p95 is None and run.levels[2].ttft_p95 is not None
-    assert decide.criteria(run, None)[0]["severe_tail"][0] == "unknown"
+    tail = decide.criteria(run, None)[0]["severe_tail"]
+    assert tail[0] == "unknown" and "p95 needs" in tail[1], tail
 
 
 def test_perf_envelope__cells_at_different_cache_states_are_not_compared(tmp_path):
+    """Protocol §4/§7: every compared cell ran on a freshly started engine. A candidate and a
+    baseline at different states are not compared; nor is a warm level inside one run, for
+    the rule or against a baseline."""
     decide = module(REPO, "decide")
-    restarted = tmp_path / "restarted"
-    shutil.copytree(REPO / SWEEP, restarted)
-    bench = restarted / SWEEP_RUN / "bench.jsonl"
-    rows = lines(bench)
-    for row in rows:
-        row["profile"]["engine_state"] = "restarted"
-    write_lines(bench, rows)
-    base = decide.load(REPO / SWEEP, FOUR)
-    verdicts = decide.criteria(decide.load(restarted, FOUR), base)[0]
+    fresh = restarted(pathlib.Path(shutil.copytree(REPO / SWEEP, tmp_path / "fresh")), "e1")
+    warm = pathlib.Path(shutil.copytree(REPO / SWEEP, tmp_path / "warm"))
+    (warm / "candidate.log").write_text("candidate=e0 flags=none\n")
+    verdicts = decide.criteria(decide.load(fresh, FOUR), decide.load(warm, FOUR))[0]
     for name in ("usage_drift", "short_job_starvation", "output_drift"):
         assert verdicts[name][0] == "unknown" and "different states" in verdicts[name][1], verdicts
-    same = decide.criteria(decide.load(REPO / SWEEP, FOUR), base)[0]
+    base = restarted(pathlib.Path(shutil.copytree(REPO / SWEEP, tmp_path / "base")), "e0")
+    same = decide.criteria(decide.load(fresh, FOUR), decide.load(base, FOUR))[0]
     assert same["usage_drift"][0] == "pass" and same["short_job_starvation"][0] == "pass"
+    assert same["w3_rule"] == ("pass", "c*=16"), same["w3_rule"]
+    # one warm level on both sides: the profiles still match, but that level is not compared
+    for side in (fresh, base):
+        edit_bench(side, lambda row: row["profile"].update(engine_state="warm")
+                   if row["concurrency"] == 4 else None)
+    mixed = decide.criteria(decide.load(fresh, FOUR), decide.load(base, FOUR))[0]
+    assert mixed["w3_rule"][0] == "unknown" and "not restarted [4]" in mixed["w3_rule"][1]
+    assert mixed["severe_tail"][0] == "unknown"
+    for name in ("usage_drift", "short_job_starvation", "output_drift"):
+        assert mixed[name][0] == "unknown" and "freshly started" in mixed[name][1], mixed[name]
 
 
 # --------------------------------------------------------------------------
@@ -214,8 +256,9 @@ PARITY_ROW = {"clip_id": "c039-bbb1080p30-1080-square", "sha256": "bytes", "dura
 
 
 def passing_pair(tmp: pathlib.Path):
-    """The W3 sweep with the four clips set aside, as a candidate run with clean logs and a
-    baseline that is the same run: every criterion passes and c* = 16."""
+    """The W3 sweep with the four clips set aside, relabelled as candidate.sh's cells
+    (every level restarted), as E1 with clean logs against an E0 with the same cells:
+    every criterion passes and c* = 16."""
     cand, base = tmp / "cand", tmp / "base"
     shutil.copytree(REPO / SWEEP, cand)
     shutil.copytree(REPO / SWEEP, base)
@@ -227,8 +270,9 @@ def passing_pair(tmp: pathlib.Path):
     (cand / "capability.txt").write_text("probe=cancellation result=pass chunks_read=5\n")
     (cand / "host-mem-c32.tsv").write_text("".join(f"{1790139852 + 2 * i}\t1.5GiB / 62GiB\n"
                                                   for i in range(26)))
-    for side in (cand, base):
+    for side, name in ((cand, "e1"), (base, "e0")):
         write_lines(side / "parity.jsonl", [PARITY_ROW])
+        restarted(side, name)
     return cand, base
 
 
@@ -243,41 +287,77 @@ def test_engine_opt__a_passing_candidate_is_adopted_and_each_disqualifier_blocks
     assert rep["verdict"] == "adopt ENGINE_MAX_NUM_SEQS=16 (WORKER_CONCURRENCY=16)", rep
     assert rep["start_to_ready_s"] == [95.0] * 6
 
-    def breaks(name, damage):
+    def blocks(name, damage, state="fail", criterion=None):
         cand, base = passing_pair(tmp_path / name)
-        damage(cand)
+        damage(cand, base)
         rep = verdict_of(decide, cand, base)
-        assert rep["criteria"][name]["state"] == "fail", (name, rep["criteria"][name])
-        assert rep["verdict"].startswith("no setting adopted"), rep["verdict"]
+        got = rep["criteria"][criterion or name]
+        assert got["state"] == state, (name, got)
+        assert rep["verdict"].startswith("no setting adopted"), (name, rep["verdict"])
+        return rep
 
-    breaks("oom", lambda c: (c / "candidate.log").write_text(
-        (c / "candidate.log").read_text() + "cell=c16 engine_running=no error_lines=3\n"))
-    breaks("memory_growth", lambda c: (c / "host-mem-c32.tsv").write_text("".join(
+    def append(path, text):
+        path.write_text((path.read_text() if path.exists() else "") + text)
+
+    blocks("oom", lambda c, b: append(c / "candidate.log",
+                                      "cell=c16 engine_running=no error_lines=3\n"))
+    blocks("oom_line", lambda c, b: append(c / "engine-errors-c16.log",
+                                           "ERROR torch.OutOfMemoryError: CUDA out of memory.\n"),
+           criterion="oom")
+    blocks("memory_growth", lambda c, b: (c / "host-mem-c32.tsv").write_text("".join(
         f"{i}\t{'1.5' if i < 13 else '2.5'}GiB / 62GiB\n" for i in range(26))))
-    breaks("cancellation", lambda c: (c / "capability.txt").write_text(
+
+    def gpu_grows_at_32(c, b):
+        samples = c / SWEEP_RUN / "samples.tsv"
+        rows = samples.read_text().splitlines()
+        at32 = [i for i, line in enumerate(rows) if line.split("\t")[0] == "32"]
+        for i in at32[len(at32) // 2:]:
+            cols = rows[i].split("\t")
+            cols[5] = str(int(float(cols[5])) + 300)
+            rows[i] = "\t".join(cols)
+        samples.write_text("\n".join(rows) + "\n")
+    blocks("gpu_growth", gpu_grows_at_32, criterion="memory_growth")
+    blocks("cancellation", lambda c, b: (c / "capability.txt").write_text(
         "probe=cancellation result=fail\n"))
-    breaks("output_drift", lambda c: write_lines(c / "parity.jsonl", [
+    blocks("output_drift", lambda c, b: write_lines(c / "parity.jsonl", [
         {**PARITY_ROW, "content_sha256": "other", "events": [["0.0", "9.5"]]}]))
 
-    def slower_short_jobs(c):
+    def slower_short_jobs(c, b):
         for level in (8, 16, 32):
             edit_raw(c, level, lambda row: row.update(ttft_s=row["ttft_s"] + 10)
                      if row["outcome"] == "accepted" and row["duration_s"] <= 9 else None)
-    breaks("short_job_starvation", slower_short_jobs)
+    blocks("short_job_starvation", slower_short_jobs)
 
-    def one_more_prompt_token(c):
+    def one_more_prompt_token(c, b):
         done = [0]
 
         def change(row):
             if row["outcome"] == "accepted" and not done[0]:
                 done[0], row["prompt_tokens"] = 1, row["prompt_tokens"] + 1
         edit_raw(c, 4, change)
-    breaks("usage_drift", one_more_prompt_token)
-    breaks("severe_tail", lambda c: edit_raw(
-        c, 1, lambda row: row.update(ttft_s=40.0) if row["outcome"] == "accepted" else None))
-    breaks("overload_masking", lambda c: edit_raw(c, 2, lambda row: row.update(retries=1)))
+    blocks("usage_drift", one_more_prompt_token)
 
-    def six_failures_at_32(c):
+    def no_usage_anywhere(c, b):                    # D4: None on both sides is not equal
+        for side in (c, b):
+            edit_raw(side, 4, lambda row: row.update(prompt_tokens=None))
+    blocks("usage_blank", no_usage_anywhere, "unknown", "usage_drift")
+    blocks("severe_tail", lambda c, b: edit_raw(
+        c, 1, lambda row: row.update(ttft_s=40.0) if row["outcome"] == "accepted" else None))
+    blocks("overload_masking", lambda c, b: edit_raw(c, 2, lambda row: row.update(retries=1)))
+    blocks("retries_unrecorded", lambda c, b: edit_raw(c, 2, lambda row: row.pop("retries")),
+           "unknown", "overload_masking")
+
+    def six_rows_lost_at_32(c, b):                  # D2: rows missing are not a smaller count
+        path = c / SWEEP_RUN / "raw" / "c32.jsonl"
+        rows, dropped = lines(path), [0]
+        for row in rows:
+            if row.get("outcome") == "accepted" and dropped[0] < 6:
+                dropped[0], row["drop"] = dropped[0] + 1, True
+        write_lines(path, [row for row in rows if not row.get("drop")])
+    rep = blocks("rows_lost", six_rows_lost_at_32, criterion="overload_masking")
+    assert rep["criteria"]["error_rate"]["state"] == "unknown", rep["criteria"]["error_rate"]
+
+    def six_failures_at_32(c, b):
         count = [0]
 
         def change(row):
@@ -285,7 +365,60 @@ def test_engine_opt__a_passing_candidate_is_adopted_and_each_disqualifier_blocks
                 count[0] += 1
                 row.update(outcome="failed", error_class="stream_error_event")
         edit_raw(c, 32, change)
-    breaks("error_rate", six_failures_at_32)
+        edit_bench(c, lambda row: row.update(accepted=row["accepted"] - 6,
+                                             failed=row["failed"] + 6)
+                   if row["concurrency"] == 32 else None)
+    blocks("error_rate", six_failures_at_32)
+    # D7: the rule is taken over the six predeclared levels
+    blocks("level_missing", lambda c, b: edit_bench(c, lambda row: row.update(concurrency=3)
+                                                    if row["concurrency"] == 1 else None),
+           "unknown", "w3_rule")
+    # D6: the baseline is the predeclared one - not the candidate itself, not another pair
+    blocks("pair", lambda c, b: (b / "candidate.log").write_text("candidate=e3 flags=-\n"),
+           "unknown", "usage_drift")
+    rep = decide.report(decide.load(cand, FOUR), decide.load(cand, FOUR))
+    assert rep["criteria"]["output_drift"]["state"] == "unknown", rep["criteria"]["output_drift"]
+    assert "own run" in rep["criteria"]["output_drift"]["detail"]
+    # D5: an engine whose capacity floors below one sequence adopts nothing
+    low = passing_pair(tmp_path / "x-below-one")
+    log = low[0] / SWEEP_LOG
+    log.write_text(log.read_text().replace(": 80.70x", ": 0.70x"))
+    rep = verdict_of(decide, *low)
+    assert rep["setting"] == 0 and "floor(X) < 1" in rep["verdict"], rep["verdict"]
+    assert not rep["verdict"].startswith("adopt")
+
+
+def test_engine_opt__the_rule_holds_at_its_boundaries(tmp_path):
+    """The operators at the edges: the smallest qualifying c, T exactly at 0.9 x max, a
+    failure rate of exactly 1 %, a tail breach at c* itself, the smallest X of two start-ups,
+    a set-aside that names a whole clip id, the starvation slack, and parity pairing by the
+    clip's bytes."""
+    decide = module(REPO, "decide")
+    level = types.SimpleNamespace
+
+    def ok(t):
+        return level(T=t, F=0, W=0)
+    # two qualifying levels (8 and 32) plus 16: the smallest is taken; 1.8 = 0.9 x 2.0 counts
+    assert decide.c_star({1: ok(1.0), 8: ok(1.8), 16: ok(2.0), 32: ok(1.9)}) == (8, 1.8)
+    assert decide.c_star({1: ok(1.0), 8: ok(1.799), 16: ok(2.0)}) == (16, 1.8)
+    run = level(levels={1: level(rows=[{}] * 100, F=1, reconciled=True)})
+    assert decide.error_verdict(run)[0] == "fail"          # 1/100 is not < 1 %
+    run = level(levels={8: level(ttft_p95=1.0, latency_p95=1.0),
+                        16: level(ttft_p95=decide.MAX_TTFT_P95_S + 1, latency_p95=1.0)})
+    assert decide.tail_verdict(run, 16)[0] == "fail"
+    two = pathlib.Path(shutil.copytree(REPO / SWEEP, tmp_path / "two-x"))
+    (two / "startup-c1.log").write_text(
+        "GPU KV cache size: 1,970,000 tokens, Maximum concurrency for 32,768 tokens per "
+        "request: 60.10x\n")
+    assert decide.load(two).X == 60.1
+    assert not decide.aside("c012-bbb1080p30-1024x768-4x3", ("c01",))
+    assert decide.aside("c012-bbb1080p30-1024x768-4x3", ("c012",))
+    short = [{"ttft_s": 2.0, "duration_s": 2.0}] * 60
+    base = level(levels={8: level(accepted=short)})
+    slow = level(levels={8: level(accepted=[{"ttft_s": 3.5, "duration_s": 2.0}] * 60)})
+    assert decide.starvation_verdict(slow, base, [8])[0] == "pass"   # 3.5 <= 1.5 x 2 + 1
+    other_bytes = [{**PARITY_ROW, "sha256": "other"}]
+    assert decide.parity_verdict(other_bytes, [PARITY_ROW])[0] == "unknown"
 
 
 # --------------------------------------------------------------------------
@@ -312,6 +445,8 @@ def test_media_parity__token_or_content_drift_disqualifies():
     assert verdict([row("c039", content_sha256="b", events=[])],
                    [row("c039", content_sha256="a", events=[])])[0] == "fail"
     assert verdict([row("c039", prompt_tokens=432)], same)[0] == "fail"
+    blank = [row("c039", prompt_tokens=None)]
+    assert verdict(blank, blank)[0] == "unknown"                    # no usage is not equal
     # a clip only the candidate answers: the baseline's own refusal count must be the pinned
     # processor's, and the candidate's prompt that count plus the text of its 112 groups
     long = dict(duration_s=112.0, width=1024, height=768)
@@ -343,7 +478,8 @@ def test_media_parity__token_or_content_drift_disqualifies():
 
 class _Engine(http.server.BaseHTTPRequestHandler):
     """A scripted vLLM: a 224-frame item is refused after the headers (the box's
-    presentation), the 72 s clip's stream ends without [DONE], the rest answer."""
+    presentation), the 72 s clip's stream ends without [DONE], the 120 s one finishes with
+    [DONE] but no usage, the rest answer."""
     bodies: list = []
 
     def log_message(self, *args):
@@ -366,7 +502,9 @@ class _Engine(http.server.BaseHTTPRequestHandler):
             return
         send({"choices": [{"index": 0, "delta": {"content": "<0.0-1.5> a door opens"}}]})
         send({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
-        send({"choices": [], "usage": {"prompt_tokens": 431 + frames, "completion_tokens": 6}})
+        if frames != 240:
+            send({"choices": [], "usage": {"prompt_tokens": 431 + frames,
+                                           "completion_tokens": 6}})
         if frames != 144:
             send(b"[DONE]")
 
@@ -377,11 +515,17 @@ def test_media_parity__the_parity_client_records_usage_content_and_the_engines_r
     for duration in (2.0, 2.3, 71.7, 112.0, 130.0):
         assert parity.budget_kwargs(duration) == worker.budget_kwargs(duration), duration
     known = parity.clips()
+    cache = tmp_path / "cache"
     for clip in ("c039-bbb1080p30-1080-square", "c024-bbb1080p30-512-square",
-                 "c012-bbb1080p30-1024x768-4x3"):
-        path = tmp_path / "cache" / known[clip]["file"]
+                 "c012-bbb1080p30-1024x768-4x3", "sop09-120s-640x360"):
+        path = cache / known[clip]["file"]
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(clip.encode())
+    # --check: candidate.sh refuses before the stop unless every parity clip is there
+    printed = io.StringIO()
+    with redirect_stdout(printed):
+        assert parity.main(["--check", "--cache", str(cache)]) == 1
+    assert "present=4 " in printed.getvalue() and "sop11-120s-1280x720" in printed.getvalue()
     _Engine.bodies = []
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Engine)
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -402,7 +546,14 @@ def test_media_parity__the_parity_client_records_usage_content_and_the_engines_r
     refused = rows["c012-bbb1080p30-1024x768-4x3"]
     assert refused["outcome"] == "failed" and "21504 embedding tokens" in refused["error_message"]
     assert rows["c024-bbb1080p30-512-square"]["outcome"] == "failed", "no [DONE] is not accepted"
-    assert rows["sop09-120s-640x360"]["outcome"] == "missing"
+    assert rows["sop09-120s-640x360"]["outcome"] == "failed", "no usage is not accepted"
+    assert rows["sop10-120s-854x480-step_spans_segment_boundary"]["outcome"] == "missing"
+    for clip in parity.PARITY_SET:
+        path = cache / known[clip]["file"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(clip.encode())
+    with redirect_stdout(io.StringIO()):
+        assert parity.main(["--check", "--cache", str(cache)]) == 0
     body = _Engine.bodies[0]
     assert body["temperature"] == 0 and body["max_tokens"] == parity.MAX_TOKENS
     assert body["stop_token_ids"] == [248044, 248046] and body["stream"] is True
@@ -468,18 +619,23 @@ UNIT_ARGS = json.dumps(["serve", "/model", "--served-model-name", "marlin2b",
 PY_HEAD = f"#!{sys.executable}\nimport json, os, pathlib, sys\n" \
           "st = pathlib.Path(os.environ['STATE']); a = sys.argv[1:]\n" \
           "open(st / 'calls', 'a').write(pathlib.Path(sys.argv[0]).name + ' ' + ' '.join(a) + '\\n')\n"
+# docker: one container name, like the real daemon - a second `run` on a name in use fails
 DOCKER = PY_HEAD + r'''
 running = st / "running"
 if a[0] == "inspect":
     if not running.exists():
         print("Error: No such object", file=sys.stderr); sys.exit(1)
     fmt = a[a.index("--format") + 1] if "--format" in a else ""
-    print((st / "args").read_text() if ".Args" in fmt else "sha256:4cbf" if ".Image" in fmt
-          else "true" if ".State.Running" in fmt else "[{}]")
+    print((st / "args").read_text() if ".Args" in fmt else (st / "image").read_text()
+          if ".Image" in fmt else "true" if ".State.Running" in fmt else "[{}]")
 elif a[0] == "run":
+    if running.exists():
+        print("docker: Error response from daemon: Conflict. The container name is already "
+              "in use", file=sys.stderr); sys.exit(125)
     at = next(i for i, x in enumerate(a) if x.startswith("vllm/vllm-openai@"))
     (st / "args").write_text(json.dumps(a[at + 1:]))
-    open(st / "runs", "a").write(json.dumps(a[at + 1:]) + "\n")
+    (st / "image").write_text("sha256:4cbf")
+    open(st / "runs", "a").write(json.dumps(a) + "\n")
     running.touch()
     print("INFO GPU KV cache size: 2,400,000 tokens")
     print("INFO Maximum concurrency for 32,768 tokens per request: 73.24x")
@@ -494,12 +650,15 @@ elif a[0] in ("stop", "rm"):
 elif a[0] == "stats":
     print("1.50GiB / 62.0GiB")
 '''
+# systemctl: the unit, its PartOf worker, and how the restore may go wrong
 SYSTEMCTL = PY_HEAD + r'''
 script = os.environ.get("UNIT_SCRIPT", "/home/ubuntu/model-inference/models/marlin2b/serve.sh")
 if a[0] == "show":
     prop = a[a.index("-p") + 1]
-    if prop == "ExecStart":
+    if prop == "ExecStart" and not os.environ.get("UNIT_EXEC_EMPTY"):
         print("{ path=%s ; argv[]=%s --max-num-seqs 32 ; ignore_errors=no }" % (script, script))
+    elif prop == "ExecStart":
+        print("")                              # what `show` prints for a unit that is not there
     elif prop == "ConsistsOf":
         print("infrx-worker.service")
 elif a[0] == "is-active":
@@ -512,19 +671,26 @@ elif a[0] == "stop":
             (st / "running").unlink(missing_ok=True)
             (st / "active-infrx-worker.service").unlink(missing_ok=True)
 elif a[0] == "start":
+    if os.environ.get("RESTORE_FAILS"):
+        print("Job for marlin2b-vllm.service failed.", file=sys.stderr); sys.exit(1)
     for unit in a[1:]:
         (st / ("active-" + unit)).touch()
         if unit == "marlin2b-vllm":
             (st / "args").write_text(os.environ.get("RESTORE_ARGS") or (st / "unit-args").read_text())
+            (st / "image").write_text(os.environ.get("RESTORE_IMAGE") or "sha256:4cbf")
             (st / "running").touch()
+            if os.environ.get("RESTORE_UNHEALTHY"):
+                (st / "unhealthy").touch()
 '''
 CURL = PY_HEAD + r'''
 url = next(x for x in a if x.startswith("http"))
 if not (st / "running").exists() or (url.endswith("/metrics") and os.environ.get("METRICS_DOWN")):
     sys.exit(7)
+if url.endswith("/health") and (st / "unhealthy").exists():
+    sys.exit(22)
 if url.endswith("/metrics"):
     print('vllm:num_requests_running{engine="0"} %s' % os.environ.get("INFLIGHT", "0.0"))
-    print('vllm:num_requests_waiting{engine="0"} 0.0')
+    print('vllm:num_requests_waiting{engine="0"} %s' % os.environ.get("WAITING", "0.0"))
     print('vllm:num_requests_waiting_by_reason{engine="0",reason="capacity"} 0.0')
     print('vllm:cache_config_info{block_size="544",num_gpu_blocks="5000"} 1.0')
 '''
@@ -534,26 +700,34 @@ CHECKOUT_STUBS = {
     "corpus/build.py": "import os, sys\nif os.environ.get('CORPUS_BAD'):\n"
                        "    print('verified 71 file(s), 0 missing, 1 error(s)'); sys.exit(1)\n"
                        "print('verified 72 file(s), 0 missing, 0 error(s)')\n",
+    "corpus-synth/manifest.json": "{}",
+    "corpus-synth/synth.py": "print('verified 12 file(s), 0 missing, 0 error(s)')\n",
     "measure/capability.sh": 'echo "probe=cancellation result=pass chunks_read=5"\n',
     "measure/concurrency.sh": 'echo "run=w3-L1-stub-c$LEVELS"\n'
                               'echo "levels=$LEVELS state=$ENGINE_STATE" >> "$STATE/sweeps"\n'
                               'echo "level=$LEVELS peak_running=1 peak_waiting=0"\n'
                               'exit "${SWEEP_EXIT:-0}"\n',
-    "measure/parity.py": "import sys\nout = sys.argv[sys.argv.index('--out') + 1]\n"
-                         "open(out, 'a').write('{\"clip_id\": \"stub\"}\\n')\n",
+    "measure/parity.py": "import os, sys\n"
+                         "if '--check' in sys.argv:\n"
+                         "    print('parity_check present=9 missing=[]')\n"
+                         "    sys.exit(1 if os.environ.get('PARITY_MISSING') else 0)\n"
+                         "out = sys.argv[sys.argv.index('--out') + 1]\n"
+                         "line = {'clip_id': 'stub', 'bytecode': os.environ.get('PYTHONDONTWRITEBYTECODE')}\n"
+                         "import json; open(out, 'a').write(json.dumps(line) + '\\n')\n",
 }
+LOCK = "w4-candidate.lock"
 
 
 def candidate_box(repo: pathlib.Path, tmp: pathlib.Path, *args: str, damage=None, **env: str):
     """A pilot box in a directory: the engine it found (running, the unit and its PartOf
-    worker active), stub docker/systemctl/curl, a measurement checkout at $NVME/w3-checkout
-    (serve.sh real, the measurement scripts stubbed), and candidate.sh with NVME there.
-    `damage(tmp)` changes the box before the run."""
+    worker active), stub docker/systemctl/curl, the weights at $NVME/marlin2b, a measurement
+    checkout at $NVME/w3-checkout (serve.sh real, the measurement scripts stubbed), and
+    candidate.sh with NVME there. `damage(tmp)` changes the box before the run."""
     tmp.mkdir(parents=True, exist_ok=True)
     nvme, state, bin_dir = tmp / "nvme", tmp / "state", tmp / "bin"
-    for directory in (state, bin_dir, tmp / "weights"):
-        directory.mkdir(exist_ok=True)
-    (tmp / "weights" / "config.json").write_text("{}")
+    for directory in (state, bin_dir, nvme / "marlin2b"):
+        directory.mkdir(parents=True, exist_ok=True)
+    (nvme / "marlin2b" / "config.json").write_text("{}")
     models = nvme / "w3-checkout" / "models"
     for name in ("common/env.sh", "marlin2b/model.env", "marlin2b/serve.sh"):
         (models / name).parent.mkdir(parents=True, exist_ok=True)
@@ -568,6 +742,7 @@ def candidate_box(repo: pathlib.Path, tmp: pathlib.Path, *args: str, damage=None
         (state / name).touch()
     (state / "args").write_text(UNIT_ARGS)
     (state / "unit-args").write_text(UNIT_ARGS)
+    (state / "image").write_text("sha256:4cbf")
     source = (repo / MEASURE / "candidate.sh").read_text()
     assert source.count("NVME=/opt/dlami/nvme\n") == 1
     script = tmp / "candidate.sh"
@@ -577,25 +752,36 @@ def candidate_box(repo: pathlib.Path, tmp: pathlib.Path, *args: str, damage=None
     done = subprocess.run(
         ["bash", str(script), *args], capture_output=True, text=True, timeout=180,
         env={"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp), "STATE": str(state),
-             "WEIGHTS": str(tmp / "weights"), "PY": sys.executable, "READY_S": "10",
-             "CANDIDATE": "e1", "W4_ENGINE_RESTART_OK": "1", **env})
+             "PY": sys.executable, "READY_S": "10", "CANDIDATE": "e1",
+             "W4_ENGINE_RESTART_OK": "1", **env})
     calls = (state / "calls").read_text().splitlines() if (state / "calls").exists() else []
     return done, state, nvme, calls
 
 
 def check_candidate_restores(repo: pathlib.Path, tmp: pathlib.Path) -> None:
-    done, state, nvme, calls = candidate_box(repo, tmp / "ok")
+    # the operator's environment cannot move the engine: port, GPU, weights, log level, media
+    elsewhere = tmp / "elsewhere-media"
+    elsewhere.mkdir(parents=True)
+    done, state, nvme, calls = candidate_box(
+        repo, tmp / "ok", PORT="8001", GPU="1", WEIGHTS=str(tmp / "other-weights"),
+        VLLM_LOGGING_LEVEL="DEBUG", PROCESSING_CACHE_DIR=str(elsewhere))
     assert done.returncode == 0, (done.returncode, done.stdout[-800:], done.stderr[-400:])
     assert "restored=yes" in done.stdout, done.stdout[-800:]
     stop = calls.index("systemctl stop marlin2b-vllm")
-    starts = [i for i, call in enumerate(calls) if call.startswith("docker run")]
-    assert len(starts) == 7 and min(starts) > stop, "an engine per level plus the gate"
-    assert "systemctl start marlin2b-vllm infrx-worker.service" in calls[max(starts):], calls[-6:]
-    assert (state / "args").read_text() == UNIT_ARGS and (state / "active-infrx-worker.service").exists()
+    attempts = [i for i, call in enumerate(calls) if call.startswith("docker run")]
+    assert min(attempts) > stop
     runs = [json.loads(line) for line in (state / "runs").read_text().splitlines()]
+    assert len(runs) == 7 == len(attempts), "a fresh engine per level plus the gate, each started"
+    assert "systemctl start marlin2b-vllm infrx-worker.service" in calls[max(attempts):], calls[-6:]
+    assert (state / "args").read_text() == UNIT_ARGS and (state / "active-infrx-worker.service").exists()
     for argv in runs:
-        assert argv[argv.index("--max-num-seqs") + 1] == "32"
-        assert argv[-2:] == ["--max-num-batched-tokens", "32768"], argv
+        after = argv[argv.index(next(x for x in argv if x.startswith("vllm/vllm-openai@"))) + 1:]
+        assert after[after.index("--max-num-seqs") + 1] == "32"
+        assert after[-2:] == ["--max-num-batched-tokens", "32768"], after
+        assert argv[argv.index("-p") + 1] == "127.0.0.1:8000:8000", argv
+        assert argv[argv.index("--gpus") + 1] == '"device=0"', argv
+        assert f"{nvme}/marlin2b:/model:ro" in argv and "VLLM_LOGGING_LEVEL=INFO" in argv, argv
+        assert "--allowed-local-media-path" not in argv, argv
     sweeps = (state / "sweeps").read_text().splitlines()
     assert sweeps == [f"levels={c} state=restarted" for c in (1, 2, 4, 8, 16, 32)], sweeps
     # a failing sweep still restores the engine it found, and says the run failed
@@ -603,11 +789,17 @@ def check_candidate_restores(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     assert done.returncode == 3 and "level=1 sweep_exit=1" in done.stdout, done.stdout[-800:]
     assert "restored=yes" in done.stdout and (state / "args").read_text() == UNIT_ARGS
     assert "systemctl start marlin2b-vllm infrx-worker.service" in calls
-    # an engine that comes back different is not "restored"
-    done, state, nvme, calls = candidate_box(repo, tmp / "different",
-                                             RESTORE_ARGS=json.dumps(["serve", "/other"]))
-    assert done.returncode == 4 and "restored=no" in done.stdout, done.stdout[-600:]
-    assert "args_diff: before=" in done.stdout
+    # restored means the same args, the same image and a healthy engine - each checked
+    for name, env, diff in (("args", {"RESTORE_ARGS": json.dumps(["serve", "/other"])},
+                             "args_diff: before="),
+                            ("image", {"RESTORE_IMAGE": "sha256:other"}, "image_diff: before="),
+                            ("unhealthy", {"RESTORE_UNHEALTHY": "1", "READY_S": "3"},
+                             "restored=no healthy=no"),
+                            ("start-fails", {"RESTORE_FAILS": "1", "READY_S": "3"},
+                             "restored=no healthy=no")):
+        done, state, nvme, calls = candidate_box(repo, tmp / name, **env)
+        assert done.returncode == 4 and "restored=no" in done.stdout, (name, done.stdout[-600:])
+        assert diff in done.stdout, (name, done.stdout[-600:])
 
 
 def test_ops_recover__the_candidate_run_restores_the_engine_it_found(tmp_path):
@@ -616,32 +808,50 @@ def test_ops_recover__the_candidate_run_restores_the_engine_it_found(tmp_path):
 
 def check_candidate_refuses(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     checkout = tmp / "unit-tree" / "nvme" / "w3-checkout" / "models" / "marlin2b" / "serve.sh"
+    held = []
+
+    def hold_the_lock(box):                             # a first run still going
+        import fcntl
+        handle = open(box / "nvme" / LOCK, "w")
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        held.append(handle)
+
+    def unlink(*parts):
+        return lambda box: box.joinpath(*parts).unlink()
     cases = {
-        "unlisted": ((), {"CANDIDATE": "e9"}),
-        "free-form": (("--max-num-seqs", "64"), {}),
-        "no-consent": ((), {"W4_ENGINE_RESTART_OK": ""}),
-        "in-flight": ((), {"INFLIGHT": "2.0"}),
-        "metrics-down": ((), {"METRICS_DOWN": "1"}),
-        "unit-tree": ((), {"UNIT_SCRIPT": str(checkout)}),
-        "outside": ((), {"OUT": str(tmp / "elsewhere" / "w4-e1")}),
-        "unverified": ((), {"CORPUS_BAD": "1"}),
+        "unlisted": ((), {"CANDIDATE": "e9"}, None),
+        "free-form": (("--max-num-seqs", "64"), {}, None),
+        "no-consent": ((), {"W4_ENGINE_RESTART_OK": ""}, None),
+        "outside": ((), {"OUT": str(tmp / "elsewhere" / "w4-e1")}, None),
+        "not-canonical": ((), {"OUT": str(tmp / "not-canonical" / "nvme" / "w4-x" / ".." / ".."
+                                         / "escape")}, None),
+        "ready-s": ((), {"READY_S": "15m"}, None),
+        "second-run": ((), {}, hold_the_lock),
+        "unit-inactive": ((), {}, unlink("state", "active-marlin2b-vllm")),
+        "no-container": ((), {}, unlink("state", "running")),
+        "no-execstart": ((), {"UNIT_EXEC_EMPTY": "1"}, None),
+        "unit-tree": ((), {"UNIT_SCRIPT": str(checkout)}, None),
+        "no-checkout": ((), {}, unlink("nvme", "w3-checkout", "models", "marlin2b", "measure",
+                                       "parity.py")),
+        "unverified": ((), {"CORPUS_BAD": "1"}, None),
+        "parity-missing": ((), {"PARITY_MISSING": "1"}, None),
+        "in-flight": ((), {"INFLIGHT": "2.0"}, None),
+        "waiting": ((), {"WAITING": "3.0"}, None),
+        "metrics-down": ((), {"METRICS_DOWN": "1"}, None),
     }
-    for name, (args, env) in cases.items():
-        done, state, nvme, calls = candidate_box(repo, tmp / name, *args, **env)
+    for name, (args, env, damage) in cases.items():
+        done, state, nvme, calls = candidate_box(repo, tmp / name, *args, damage=damage, **env)
         assert done.returncode == 2 and "refused:" in done.stderr, (name, done.returncode,
                                                                     done.stderr[-300:])
-        assert not any(call.startswith(("systemctl stop", "docker run")) for call in calls), (
-            name, calls)
-        assert not list(nvme.glob("w4-*")) and not (tmp / "elsewhere").exists(), name
-    # no engine container, or no checkout: nothing to restore or nothing to run
-    for name, damage in (("no-container", lambda box: (box / "state" / "running").unlink()),
-                         ("no-checkout", lambda box: (box / "nvme" / "w3-checkout" / "models" /
-                                                      "marlin2b" / "measure" / "parity.py").unlink())):
-        done, state, nvme, calls = candidate_box(repo, tmp / name, damage=damage)
-        assert done.returncode == 2 and "refused:" in done.stderr, (name, done.returncode,
-                                                                    done.stderr[-300:])
-        assert not any(call.startswith(("systemctl stop", "docker run")) for call in calls), (
-            name, calls)
+        touched = [call for call in calls
+                   if call.startswith(("systemctl stop", "systemctl start", "docker run",
+                                       "docker stop", "docker rm"))]
+        assert not touched, (name, touched)
+        written = [p.name for p in nvme.glob("w4-*") if p.name != LOCK]
+        assert not written and not (tmp / name / "escape").exists(), (name, written)
+        assert not (tmp / "elsewhere").exists(), name
+    for handle in held:
+        handle.close()
 
 
 def test_ops_recover__the_candidate_run_refuses_in_flight_work_and_unlisted_flags(tmp_path):
@@ -657,6 +867,7 @@ def check_candidate_records(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     assert labels == ["gate"] + [f"c{c}" for c in (1, 2, 4, 8, 16, 32)], labels
     assert f"pre_args={UNIT_ARGS}" in log and "pre_image=sha256:4cbf" in log
     assert "partof_active=infrx-worker.service" in log
+    assert "parity_set=parity_check present=9 missing=[] synth=verified 12 file(s)" in log, log[:600]
     for cell in ("capability", "parity", "c1", "c32"):
         assert re.search(rf"^cell={cell} engine_running=yes error_lines=1$", log, re.M), cell
         errors = (out / f"engine-errors-{cell}.log").read_text()
@@ -664,9 +875,14 @@ def check_candidate_records(repo: pathlib.Path, tmp: pathlib.Path) -> None:
     startup = (out / "startup-c1.log").read_text()
     assert "Maximum concurrency for 32,768 tokens per request: 73.24x" in startup
     assert "Encoder cache will be initialized" in startup and "vllm:cache_config_info" in startup
-    assert (out / "host-mem-c1.tsv").exists() and (out / "parity.jsonl").exists()
+    served = json.loads(re.search(r"^args=(.*)$", startup, re.M).group(1))
+    assert served[0] == "/model" and served[-2:] == ["--max-num-batched-tokens", "32768"], served
+    assert (out / "host-mem-c1.tsv").exists()
+    assert [json.loads(line)["bytecode"] for line in (out / "parity.jsonl").read_text()
+            .splitlines()] == ["1"], "parity ran without PYTHONDONTWRITEBYTECODE"
     assert "probe=cancellation result=pass" in (out / "capability.txt").read_text()
-    assert (out / "c16.concurrency.log").read_text().startswith("run=w3-L1-stub-c16")
+    sixteen = (out / "c16.concurrency.log").read_text()
+    assert sixteen.startswith("run=w3-L1-stub-c16"), sixteen[:300]
 
 
 def test_ops_recover__the_candidate_run_records_start_to_ready_and_engine_errors(tmp_path):

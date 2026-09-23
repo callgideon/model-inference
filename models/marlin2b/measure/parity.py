@@ -10,6 +10,7 @@ refusal is evidence rather than an error code. `decide.py` pairs a candidate's l
 the baseline's on the same clip bytes (`sha256`).
 
     python3 parity.py --engine http://127.0.0.1:8000 --out parity.jsonl   # CORPUS_CACHE set
+    python3 parity.py --check        # every parity clip in the cache? exit 1 if not
 
 Stdlib only. A clip absent from the cache is a `missing` line, never skipped silently.
 """
@@ -118,11 +119,19 @@ def main(argv=None) -> int:
     ap.add_argument("--engine", default=os.environ.get("ENGINE", "http://127.0.0.1:8000"))
     ap.add_argument("--cache", default=os.environ.get("CORPUS_CACHE"),
                     help="the corpus cache (CORPUS_CACHE): clips/ and sop-synth-v1/")
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out")
+    ap.add_argument("--check", action="store_true",
+                    help="only report whether every parity clip is in the cache (exit 1 if not)")
     a = ap.parse_args(argv)
     if not a.cache:
         ap.error("--cache or CORPUS_CACHE is required")
     known = clips()
+    if a.check:
+        missing = [c for c in PARITY_SET if not (pathlib.Path(a.cache) / known[c]["file"]).is_file()]
+        print(f"parity_check present={len(PARITY_SET) - len(missing)} missing={missing}")
+        return 1 if missing else 0
+    if not a.out:
+        ap.error("--out is required")
     with open(a.out, "a") as out:
         for clip_id in PARITY_SET:
             clip = known[clip_id]

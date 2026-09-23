@@ -42,6 +42,10 @@ OVERHEAD_PER_GROUP_MAX = 12
 E3_MIN_LEVEL = 8
 E3_MAX_GPU_UTIL = 90
 
+# the protocol's identity (§1, §4): the six levels, and the predeclared pairs (§2)
+LEVELS = (1, 2, 4, 8, 16, 32)
+PAIRS = {("e1", "e0"), ("e3", "e1")}
+
 # profile v1 (marlin-sop.md §1.5) and the engine's refusal text (input_processor.py:512-519)
 FPS, MIN_FRAMES, MAX_FRAMES, PX_PER_FRAME = 2.0, 4, 240, 200_704
 REFUSAL = re.compile(r"item with (\d+) embedding tokens")
@@ -59,7 +63,8 @@ def frames(duration_s: float) -> int:
 
 
 def smart_resize(n, height, width, max_pixels, min_pixels=4096, factor=32, temporal=2):
-    """transformers' Qwen3-VL video `smart_resize` (vLLM imports it, qwen3_vl.py:46-47).
+    """transformers' Qwen3-VL video `smart_resize` (vLLM imports it, qwen3_vl.py:46-47), for
+    frames whose sides are both >= 32 px: the port has no branch for a side under 32 px.
     Reproduced here, not read from the pinned image: checked against the box instead (the
     engine's refusal counts and the accepted clips' prompt_tokens, tests/w/test_w4.py)."""
     h_bar, w_bar = round(height / factor) * factor, round(width / factor) * factor
@@ -85,8 +90,10 @@ def video_tokens(duration_s: float, width: int, height: int, sampled: int | None
 
 
 def worst_tokens(duration_s: float) -> int:
-    """Upper bound over every geometry: per-frame pixels are at most the clip budget over
-    the frames the processor samples, allowed up to two fewer than the budget's count."""
+    """Upper bound over every geometry with both sides >= 32 px and an aspect ratio the
+    processor accepts: per-frame pixels are at most the clip budget over the frames the
+    processor samples, which may be up to two fewer than the budget's count - so it holds
+    only for a source with at least F - 2 frames (about 2 fps or more)."""
     budget = frames(duration_s)
     worst = 0
     for sampled in range(max(MIN_FRAMES, budget - 2), budget + 1):
@@ -151,6 +158,15 @@ class Level:
         self.c, self.profile = c, row.get("profile") or {}
         rows = [r for r in jsonl(run_dir / "raw" / f"c{c}.jsonl") if "outcome" in r]
         self.rows = [r for r in rows if not aside(r.get("clip_id"), set_aside)]
+        # the raw rows must be the bench row's attempts, every one: a missing row is not a
+        # smaller denominator (protocol §5: accepted + rejected + failed + cancelled = scheduled)
+        counted = {k: sum(r["outcome"] == k for r in rows) for k in ("accepted", "failed")}
+        tally = sum(row.get(k) or 0 for k in ("accepted", "rejected", "failed", "cancelled"))
+        self.reconciled = (len(rows) == row.get("attempts") and tally == row.get("requests")
+                           and counted["accepted"] == row.get("accepted")
+                           and counted["failed"] == row.get("failed"))
+        self.retries_known = all("retries" in r for r in rows) and \
+            (row.get("denominators") or {}).get("retried_requests") is not None
         self.accepted = [r for r in self.rows if r["outcome"] == "accepted"]
         self.failures = collections.Counter(
             r.get("error_class") or "unclassified" for r in self.rows if r["outcome"] == "failed")
@@ -158,7 +174,8 @@ class Level:
         self.failed_clips = sorted({r["clip_id"] for r in self.rows if r["outcome"] == "failed"})
         self.T = (round(row["req_per_s"] * len(self.accepted) / row["accepted"], 3)
                   if row.get("accepted") else 0.0)
-        self.retried = sum(r.get("retries") or 0 for r in self.rows)
+        self.retried = sum(r.get("retries") or 0 for r in rows) + \
+            ((row.get("denominators") or {}).get("retried_requests") or 0)
         self.accounted = all(r["outcome"] in ("accepted", "rejected", "failed", "cancelled")
                              for r in self.rows)
         self.repeats = len(self.rows) - len({r.get("clip_id") for r in self.rows})
@@ -255,7 +272,9 @@ def parity_verdict(candidate: list[dict], baseline: list[dict]):
         if other is None or "missing" in (row["outcome"], other["outcome"]):
             unknown.append(f"{clip}: no paired row on the same bytes")
         elif row["outcome"] == "accepted" and other["outcome"] == "accepted":
-            if row.get("prompt_tokens") != other.get("prompt_tokens"):
+            if row.get("prompt_tokens") is None or other.get("prompt_tokens") is None:
+                unknown.append(f"{clip}: accepted without usage")
+            elif row.get("prompt_tokens") != other.get("prompt_tokens"):
                 problems.append(f"{clip}: prompt_tokens {row.get('prompt_tokens')} != "
                                 f"{other.get('prompt_tokens')}")
             elif row.get("content_sha256") != other.get("content_sha256") and not (
@@ -294,6 +313,9 @@ def usage_verdict(run: Run, base: Run, levels):
     common = sorted(set(mine) & set(theirs))
     if not common:
         return UNKNOWN, "no clip accepted by both"
+    blank = [clip for clip in common if None in mine[clip] | theirs[clip]]
+    if blank:
+        return UNKNOWN, f"accepted without usage: {blank[:5]}"
     drift = [clip for clip in common if len(mine[clip] | theirs[clip]) != 1]
     return (FAIL, f"prompt_tokens differ for {drift}") if drift else (PASS, f"{len(common)} clips")
 
@@ -353,6 +375,9 @@ def cancellation_verdict(run: Run):
 
 
 def error_verdict(run: Run):
+    loose = [c for c, level in sorted(run.levels.items()) if not level.reconciled]
+    if loose:
+        return UNKNOWN, f"raw rows do not reconcile with bench.jsonl at c={loose}"
     scheduled = sum(len(level.rows) for level in run.levels.values())
     failed = sum(level.F for level in run.levels.values())
     if not scheduled:
@@ -363,17 +388,36 @@ def error_verdict(run: Run):
 
 def masking_verdict(run: Run):
     bad = [c for c, level in sorted(run.levels.items())
-           if level.retried or not level.accounted]
-    return (FAIL, f"retries or unaccounted attempts at c={bad}") if bad else (PASS, "--retries 0")
+           if level.retried or not level.accounted or not level.reconciled]
+    if bad:
+        return FAIL, f"retries, or attempts the raw rows do not account for, at c={bad}"
+    blind = [c for c, level in sorted(run.levels.items()) if not level.retries_known]
+    if blind:
+        return UNKNOWN, f"retries not recorded at c={blind}"
+    return PASS, "--retries 0, every attempt accounted"
+
+
+def candidate_name(run: Run):
+    found = re.search(r"^candidate=(\S+)", run.log or "", re.M)
+    return found.group(1) if found else None
 
 
 def criteria(run: Run, base: Run | None):
     cstar, threshold = c_star(run.levels)
-    v = {"w3_rule": (PASS, f"c*={cstar}") if cstar else
-         (FAIL, f"no level has F=0, W=0 and T>={threshold}")}
+    # protocol §4/§7: every compared cell ran on a freshly started engine, and c* is taken
+    # over the six predeclared levels - a warm or missing level is not compared
+    stale = [c for c, level in sorted(run.levels.items())
+             if level.profile.get("engine_state") != "restarted"]
+    missing = [c for c in LEVELS if c not in run.levels]
+    if missing or stale:
+        v = {"w3_rule": (UNKNOWN, f"c*={cstar} is not taken: levels missing {missing}, "
+                                  f"not restarted {stale}")}
+    else:
+        v = {"w3_rule": (PASS, f"c*={cstar}") if cstar else
+             (FAIL, f"no level has F=0, W=0 and T>={threshold}")}
     v["error_rate"] = error_verdict(run)
     v["overload_masking"] = masking_verdict(run)
-    v["severe_tail"] = tail_verdict(run, cstar)
+    v["severe_tail"] = (UNKNOWN, f"not restarted at c={stale}") if stale else tail_verdict(run, cstar)
     v["oom"] = oom_verdict(run)
     v["memory_growth"] = memory_verdict(run)
     v["cancellation"] = cancellation_verdict(run)
@@ -383,10 +427,20 @@ def criteria(run: Run, base: Run | None):
         return v, cstar, threshold
     common = sorted(set(run.levels) & set(base.levels))
     comparable = [c for c in common if run.levels[c].profile == base.levels[c].profile]
-    if not common or comparable != common:
-        stray = [c for c in common if c not in comparable]
+    pair = (candidate_name(run), candidate_name(base))
+    why = None
+    if base.root.resolve() == run.root.resolve():
+        why = "the baseline is the candidate's own run"
+    elif pair not in PAIRS:
+        why = f"not a predeclared (candidate, baseline) pair: {pair}"
+    elif not common or comparable != common:
+        why = (f"cells at different states or profiles, not compared: "
+               f"c={[c for c in common if c not in comparable]}")
+    elif stale:                       # equal profiles, so the baseline's are stale too
+        why = f"cells not on a freshly started engine: c={stale}"
+    if why:
         for name in ("short_job_starvation", "usage_drift", "output_drift"):
-            v[name] = (UNKNOWN, f"cells at different states or profiles, not compared: c={stray}")
+            v[name] = (UNKNOWN, why)
         return v, cstar, threshold
     v["short_job_starvation"] = starvation_verdict(run, base, comparable)
     v["usage_drift"] = usage_verdict(run, base, comparable)
@@ -405,11 +459,12 @@ def report(run: Run, base: Run | None = None) -> dict:
     chosen = setting(cstar, run.X)
     failed = [name for name, (state, _) in verdicts.items() if state == FAIL]
     unknown = [name for name, (state, _) in verdicts.items() if state == UNKNOWN]
-    if not failed and not unknown and chosen is not None:
+    if not failed and not unknown and chosen is not None and chosen >= 1:
         verdict = f"adopt ENGINE_MAX_NUM_SEQS={chosen} (WORKER_CONCURRENCY={chosen})"
     else:
         verdict = (f"no setting adopted - failed: {failed}; unknown: {unknown}"
-                   + ("; X unknown" if run.X is None else ""))
+                   + ("; X unknown" if run.X is None else "")
+                   + ("; floor(X) < 1" if chosen is not None and chosen < 1 else ""))
     return {"run": str(run.root), "baseline": str(base.root) if base else None,
             "set_aside": list(run.set_aside), "X": run.X, "c_star": cstar,
             "threshold": threshold, "setting": chosen, "e3_trigger": e3_trigger(run),
