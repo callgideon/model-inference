@@ -1007,12 +1007,18 @@ def test_a_settled_header_is_not_looked_at_again(tmp_path):
 
 def test_the_head_is_looked_at_when_it_doubles_not_on_every_chunk():
     """At most seven looks up to the 64 MiB cap: an 8 MiB body in 64 KiB chunks is looked
-    at four times, at 1, 2, 4 and 8 MiB."""
-    body = FTYP + support.box(b"mdat", bytes((8 << 20) - len(FTYP) - 8))
-    looks = []
-    fetcher = fetch.MediaFetcher(DEFAULTS, resolve=support.resolver([support.PUBLIC]),
-                                 transport=support.Transport(
-                                     support.response(stream=_streamed(body))).transport,
-                                 monotonic=support.Ticker(), log=support.Records())
-    run(fetcher.fetch(URL, early=lambda head: looks.append(len(head))))
-    assert looks == [1 << 20, 2 << 20, 4 << 20, 8 << 20]
+    at four times, at 1, 2, 4 and 8 MiB; a 32 MiB one in 1 MiB chunks six times, the last
+    at 32 MiB (review S3: a moov completing past 16 MiB is still looked at)."""
+    mib = 1 << 20
+    for size, stream, expected in (
+            (8 * mib, _streamed, [1, 2, 4, 8]),
+            (32 * mib, lambda body: support.Chunks(
+                [body[at:at + mib] for at in range(0, len(body), mib)]), [1, 2, 4, 8, 16, 32])):
+        body = FTYP + support.box(b"mdat", bytes(size - len(FTYP) - 8))
+        looks = []
+        fetcher = fetch.MediaFetcher(DEFAULTS, resolve=support.resolver([support.PUBLIC]),
+                                     transport=support.Transport(
+                                         support.response(stream=stream(body))).transport,
+                                     monotonic=support.Ticker(), log=support.Records())
+        run(fetcher.fetch(URL, early=lambda head: looks.append(len(head))))
+        assert looks == [n * mib for n in expected]

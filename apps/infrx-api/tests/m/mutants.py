@@ -1159,6 +1159,11 @@ MUTANTS: tuple[Mutant, ...] = (
        "S2: a look is shown the live buffer, so the body is still held at most about twice",
        F, "                            if early(body):", "                            if early(bytes(body)):",
        "test_a_fetched_body_is_held_at_most_about_twice"),
+    _m("early_looks_stop_before_the_cap",
+       "S3: the head is looked at at every doubling up to the cap, not only the first few",
+       F, "                        if early is not None and len(body) >= look:",
+       "                        if early is not None and len(body) >= look and len(body) <= (16 << 20):",
+       "test_the_head_is_looked_at_when_it_doubles_not_on_every_chunk"),
     # === M4: MEDIA-PARITY (tests/m/test_parity.py) ============================================
     _m("prepared_bytes_are_not_the_source",
        "profile v1 prepares the source bytes: the durable and local artifacts hash to the ref",
