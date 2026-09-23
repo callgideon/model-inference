@@ -253,6 +253,15 @@ class PgJobStore:
         `since` whose job still wants them become pending again."""
         return await self._call("reopen_dispatch", {"since": since.isoformat()})
 
+    async def release_dispatch(self, event_ids) -> int:
+        """Hand read-but-unindexed rows back for the next pump now (OB-4)."""
+        return await self._call("release_dispatch",
+                                {"event_ids": [str(event_id) for event_id in event_ids]})
+
+    async def record_dispatch_error(self, event_id, error: str) -> int:
+        """The index refused a row for a reason other than capacity (OB-7)."""
+        return await self._call("fail_dispatch", {"event_id": str(event_id), "error": error})
+
     async def dispatch_snapshot(self) -> tuple[IndexEvent, ...]:
         """PostgreSQL truth for `Scheduler.rebuild`."""
         rows = await self._query("select infrx.dispatch_snapshot()", ())

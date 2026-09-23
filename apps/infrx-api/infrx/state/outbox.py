@@ -18,8 +18,10 @@ do). So the relay's only duty is that no accepted job is ever missing from the i
   again), then pump. Two relays in two processes require this reopen; `enqueue` is
   replay-safe on the stable event id, so re-sending costs nothing.
 
-A full index (`capacity_exhausted`) leaves the row pending for the next pump: the index
-is a cache with a bound, never a place a job can be dropped.
+A full index (`capacity_exhausted`) stops the pump and hands the unindexed rows back
+(`release_dispatch`) for the next pump: the index is a cache with a bound, never a place a
+job can be dropped. Any other enqueue failure is recorded on its row and the batch goes
+on; the first such failure is raised after the rest were acknowledged.
 """
 from __future__ import annotations
 
@@ -40,17 +42,29 @@ class OutboxRelay:
     async def pump(self) -> dict[str, int]:
         events = await self.store.dispatch_pending(limit=self.batch, worker_id=self.worker_id,
                                                    redelivery_s=self.redelivery_s)
-        taken, deferred = [], 0
-        for event in events:
+        taken, deferred, failures = [], [], []
+        for position, event in enumerate(events):
             try:
                 await self.scheduler.enqueue(event)     # True new, False already indexed
             except errors.CapacityExhausted:
-                deferred += 1                            # stays pending; retried later
+                # The index is full: stop, and hand this row and the rest back now rather
+                # than leaving them stamped claimed for a whole redelivery window (OB-4).
+                deferred = [e.event_id for e in events[position:]]
+                break
+            except Exception as failed:
+                # One bad row must not strand the batch behind it (OB-7): record it, go on,
+                # and raise once the others are safely indexed and acknowledged.
+                failures.append(failed)
+                await self.store.record_dispatch_error(event.event_id, repr(failed)[:500])
                 continue
             taken.append(event.event_id)
         acknowledged = await self.store.acknowledge_dispatch(taken) if taken else 0
+        if deferred:
+            await self.store.release_dispatch(deferred)
+        if failures:
+            raise failures[0]
         return {"read": len(events), "indexed": len(taken), "acknowledged": acknowledged,
-                "deferred": deferred}
+                "deferred": len(deferred)}
 
     async def rebuild(self) -> int:
         since = await self.store.db_now()                 # BEFORE the snapshot (the fence)

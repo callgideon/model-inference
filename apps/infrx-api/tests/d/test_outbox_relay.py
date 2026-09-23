@@ -195,9 +195,8 @@ def test_outbox__a_full_index_defers_rows_and_never_drops_them(backend) -> None:
         first = await relay.pump()
         assert (first["indexed"], first["deferred"]) == (1, 2), first
         seen = set()
-        for _ in range(3):
+        for _ in range(3):                  # no clock movement: deferred rows are released
             seen |= {e.job_id for e in await drain(q)}
-            h.clock.advance(REDELIVERY_S)
             await relay.pump()
         seen |= {e.job_id for e in await drain(q)}
         assert seen == {j.request_id for j in jobs}, "a deferred row was lost"

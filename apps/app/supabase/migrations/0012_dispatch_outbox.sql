@@ -303,8 +303,9 @@ language sql security definer set search_path = infrx, public, pg_temp as $$
 $$;
 
 -- The rebuild source: every job that wants a dispatch now, with its LATEST dispatch
--- event (stable ids, so a rebuild followed by a redelivery indexes one candidate). A
--- preparing job whose preparation lease is live is being worked, so it is not a candidate.
+-- event (stable ids, so a rebuild followed by a redelivery indexes one candidate). A job
+-- under a live lease of either kind is being worked, so it is not a candidate (D3: `claim`
+-- must move queued -> running in the lease's own transaction).
 create or replace function infrx.dispatch_snapshot() returns jsonb
 language sql stable security definer set search_path = infrx, public, pg_temp as $$
   select coalesce(jsonb_agg(infrx.index_event(o, j) order by o.available_at, o.event_id),
@@ -315,9 +316,37 @@ language sql stable security definer set search_path = infrx, public, pg_temp as
                    and infrx.dispatch_wanted(x.kind, j.state)
                  order by x.created_at desc, x.event_id desc limit 1) o on true
   where j.state in ('preparing', 'queued')
-    and not exists (select 1 from infrx.attempts a
-                     where a.job_id = j.request_id and a.kind = 'preparation'
+    and not exists (select 1 from infrx.attempts a      -- review OB-5: either kind
+                     where a.job_id = j.request_id
                        and a.released_at is null and a.expires_at > infrx.now());
+$$;
+
+-- Args `{event_ids}`: hand rows back for the next pump now, not after the redelivery window
+-- (review OB-4: the index was full, so the relay stopped and returns what it read).
+create or replace function infrx.release_dispatch(p_args jsonb) returns int
+language sql security definer set search_path = infrx, public, pg_temp as $$
+  with released as (
+    update infrx.outbox set claimed_at = null, claimed_by = null
+     where event_id in (select (value #>> '{}')::uuid
+                        from jsonb_array_elements(coalesce(p_args->'event_ids', '[]')))
+       and kind in ('prepare_dispatch', 'inference_dispatch')
+       and acknowledged_at is null
+    returning 1)
+  select count(*)::int from released;
+$$;
+
+-- Args `{event_id, error}`: the index refused this row for a reason other than capacity
+-- (review OB-7). Recorded for operators; the row stays pending and is re-sent after the
+-- redelivery window.
+create or replace function infrx.fail_dispatch(p_args jsonb) returns int
+language sql security definer set search_path = infrx, public, pg_temp as $$
+  with failed as (
+    update infrx.outbox set last_error = left(coalesce(p_args->>'error', 'unknown'), 500)
+     where event_id = (p_args->>'event_id')::uuid
+       and kind in ('prepare_dispatch', 'inference_dispatch')
+       and acknowledged_at is null
+    returning 1)
+  select count(*)::int from failed;
 $$;
 
 -- Args `{since}`; answers how many rows were reopened. The rebuild fence (review OB-1):
@@ -364,7 +393,8 @@ begin
   foreach f in array array[
       'infrx.claim_preparation(jsonb)', 'infrx.dispatch_pending(jsonb)',
       'infrx.acknowledge_dispatch(jsonb)', 'infrx.dispatch_snapshot()',
-      'infrx.reopen_dispatch(jsonb)']
+      'infrx.reopen_dispatch(jsonb)', 'infrx.release_dispatch(jsonb)',
+      'infrx.fail_dispatch(jsonb)']
   loop
     execute format('revoke all on function %s from public, anon, authenticated', f);
     execute format('grant execute on function %s to service_role', f);

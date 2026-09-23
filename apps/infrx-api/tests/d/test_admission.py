@@ -100,3 +100,10 @@ def test_media__uploads_finalize_once_and_objects_delete_only_when_idle() -> Non
     print(checks_media.check_media_uploads(_db()))
     print(checks_media.check_media_objects(_db()))
     print(checks_media.check_media_privileges(_db()))
+
+
+def test_outbox__the_relays_small_print() -> None:
+    """Review OB-4..OB-6: limit, order, availability, release, fail, dispatch-only ack,
+    latest event, phase attempt counter, either lease kind."""
+    from . import checks_dispatch
+    print(checks_dispatch.check_dispatch_details(_db()))
