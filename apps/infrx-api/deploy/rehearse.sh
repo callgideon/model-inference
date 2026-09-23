@@ -464,6 +464,10 @@ migrate() {  # migrate DIR ARGS...
 }
 export MIGRATE_DATABASE_URL=postgresql://postgres:infrx-i2b-local@$NS-postgres:5432/postgres
 mig=$repo/apps/app/supabase/migrations
+# The repository's versions and the next free one, from the directory: a literal (0001..0009,
+# 0010_broken) went stale the day D added 0010 - the injected file then collided with it.
+all=$(ls "$mig" | sed -n 's/^\([0-9]\{4\}\)_.*\.sql$/\1/p' | paste -sd, -)
+next=$(printf '%04d' $((10#${all##*,} + 1)))
 first2=$work/first2; mkdir -p "$first2"; cp "$mig"/0001_*.sql "$mig"/0002_*.sql "$first2/"
 d=$(migrate "$first2" plan | sed -n 's/^plan digest: //p')
 migrate "$first2" apply --expect "$d"
@@ -474,25 +478,25 @@ set +e
 migrate "$mig" apply --expect "$(printf '0%.0s' $(seq 64))"; code=$?
 check "apply with an unreviewed digest refuses: exit 2 (got $code), history 0001,0002" "[ $code = 2 ] && [ \"\$(applied_versions)\" = 0001,0002 ]"
 broken=$work/broken; mkdir -p "$broken"; cp "$mig"/*.sql "$broken/"
-printf 'create table infrx_i2b_never (x int);\nthis is not sql;\n' > "$broken/0010_broken.sql"
+printf 'create table infrx_i2b_never (x int);\nthis is not sql;\n' > "$broken/${next}_broken.sql"
 bd=$(migrate "$broken" plan | sed -n 's/^plan digest: //p')
 migrate "$broken" apply --expect "$bd"; code=$?
 check "a failing migration rolls the whole plan back: exit 3 (got $code), history 0001,0002" "[ $code = 3 ] && [ \"\$(applied_versions)\" = 0001,0002 ]"
 t=$(/usr/bin/docker exec -e PGPASSWORD=infrx-i2b-local "$NS-postgres" psql -At -h 127.0.0.1 -U postgres -c "select to_regclass('infrx.jobs') is null and to_regclass('public.infrx_i2b_never') is null")
-check "no table from 0003-0010 survived the rollback (got $t)" '[ "$t" = t ]'
+check "no table from 0003-$next survived the rollback (got $t)" '[ "$t" = t ]'
 gap=$work/gap; mkdir -p "$gap"; cp "$mig"/0001_*.sql "$mig"/0003_*.sql "$gap/"
 migrate "$gap" plan; code=$?
 check "a history the files cannot explain (0002 missing) refuses: exit 2 (got $code)" '[ $code = 2 ]'
 migrate "$mig" apply --expect "$digest"; code=$?
 set -e
-check "the reviewed plan applies: exit 0 (got $code), history 0001..0009" "[ $code = 0 ] && [ \"\$(applied_versions)\" = 0001,0002,0003,0004,0005,0006,0007,0008,0009 ]"
+check "the reviewed plan applies: exit 0 (got $code), history $all" "[ $code = 0 ] && [ \"\$(applied_versions)\" = $all ]"
 out=$(migrate "$mig" plan | tail -1)
 check "a second plan has nothing pending ($out)" '[ "$out" = "nothing pending" ]'
 partial=$work/partial; mkdir -p "$partial"; cp "$mig"/*.sql "$partial/"
-printf 'create table infrx_i2b_partial (x int);\ncommit;\n' > "$partial/0010_commits.sql"
+printf 'create table infrx_i2b_partial (x int);\ncommit;\n' > "$partial/${next}_commits.sql"
 pd=$(migrate "$partial" plan | sed -n 's/^plan digest: //p')
 set +e; migrate "$partial" apply --expect "$pd"; code=$?; set -e
-check "a migration with its own COMMIT stops the plan: exit 4 (got $code), history still 0001..0009" "[ $code = 4 ] && [ \"\$(applied_versions)\" = 0001,0002,0003,0004,0005,0006,0007,0008,0009 ]"
+check "a migration with its own COMMIT stops the plan: exit 4 (got $code), history still $all" "[ $code = 4 ] && [ \"\$(applied_versions)\" = $all ]"
 
 step "result"
 [ "$FAILED" = 0 ] && echo "REHEARSAL PASSED" || echo "REHEARSAL FAILED"
