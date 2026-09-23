@@ -426,7 +426,12 @@ DAMAGE = {
     # so only the grant's CONTENT tells the two apart (RST-R2-2).
     "column_acls": "revoke update (full_name) on public.profiles from authenticated; "
                    "grant update (full_name) on public.profiles to anon",
+    # RST-R3-1: the same grantee, another privilege - only the privilege tells them apart.
+    "column_acls_privilege": "revoke update (full_name) on public.profiles from authenticated; "
+                             "grant select (full_name) on public.profiles to authenticated",
 }
+# A DAMAGE id that is not its family's name (a second witness of the same family).
+FAMILY = {"functions_config": "functions", "column_acls_privilege": "column_acls"}
 
 
 def _family(problem: str) -> str:
@@ -463,7 +468,7 @@ def test_i3b_bk01f_the_check_names_each_damaged_family(good_restore, family):
                 "from pg_policies where schemaname = 'public' order by 1 limit 1").fetchone()[0]
             conn.execute(DAMAGE[family].format(policy=policy))
         problems = pg.compare(source, fingerprint(damaged))
-        assert {_family(problem) for problem in problems} == {family.split("_config")[0]}, \
+        assert {_family(problem) for problem in problems} == {FAMILY.get(family, family)}, \
             problems
     finally:
         _admin(f"drop database if exists {damaged} with (force)")
