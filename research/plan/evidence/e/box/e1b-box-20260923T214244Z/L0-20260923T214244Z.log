@@ -1,0 +1,314 @@
+0705ee5b6b978bf9ca975c686aca3f58609b1b119e9c8a1d19e66dd1c59669e7  /opt/dlami/nvme/e1b-logs/nvsampler.py
+label=e1b-L0-20260923T214244Z utc=2026-09-23T21:42:45Z repo_sha=37a0d8ae
+engine_started=2026-09-23T21:37:51.281777168Z image=sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42
+engine_args=["serve","/model","--served-model-name","marlin2b","--hf-overrides","{\"architectures\":[\"Qwen3_5ForConditionalGeneration\"]}","--max-model-len","32768","--gpu-memory-utilization","0.90","--limit-mm-per-prompt","{\"video\":1,\"image\":4}","--dtype","bfloat16","--max-num-seqs","32"]
+### engine counters before (a fresh engine has served nothing)
+vllm:prefix_cache_queries_total{engine="0",model_name="marlin2b"} 0.0
+vllm:prefix_cache_queries_created{engine="0",model_name="marlin2b"} 1.790199637279677e+09
+vllm:prefix_cache_hits_total{engine="0",model_name="marlin2b"} 0.0
+vllm:prefix_cache_hits_created{engine="0",model_name="marlin2b"} 1.7901996372796926e+09
+vllm:mm_cache_queries_total{engine="0",model_name="marlin2b"} 0.0
+vllm:mm_cache_queries_created{engine="0",model_name="marlin2b"} 1.7901996372797363e+09
+vllm:mm_cache_hits_total{engine="0",model_name="marlin2b"} 0.0
+vllm:mm_cache_hits_created{engine="0",model_name="marlin2b"} 1.7901996372797496e+09
+vllm:request_success_total{engine="0",finished_reason="stop",model_name="marlin2b"} 0.0
+vllm:request_success_total{engine="0",finished_reason="length",model_name="marlin2b"} 0.0
+vllm:request_success_total{engine="0",finished_reason="abort",model_name="marlin2b"} 0.0
+vllm:request_success_total{engine="0",finished_reason="error",model_name="marlin2b"} 0.0
+vllm:request_success_total{engine="0",finished_reason="repetition",model_name="marlin2b"} 0.0
+vllm:request_success_created{engine="0",finished_reason="stop",model_name="marlin2b"} 1.7901996372798643e+09
+vllm:request_success_created{engine="0",finished_reason="length",model_name="marlin2b"} 1.7901996372798724e+09
+vllm:request_success_created{engine="0",finished_reason="abort",model_name="marlin2b"} 1.7901996372798793e+09
+vllm:request_success_created{engine="0",finished_reason="error",model_name="marlin2b"} 1.790199637279886e+09
+vllm:request_success_created{engine="0",finished_reason="repetition",model_name="marlin2b"} 1.790199637279893e+09
+suppressed (sample count too small): request_latency_s p90 needs >= 30 samples, have 11; request_latency_s p95 needs >= 60 samples, have 11; request_latency_s p99 needs >= 300 samples, have 11; tpot_s p90 needs >= 30 samples, have 11; tpot_s p95 needs >= 60 samples, have 11; tpot_s p99 needs >= 300 samples, have 11; ttft_s p90 needs >= 30 samples, have 11; ttft_s p95 needs >= 60 samples, have 11; ttft_s p99 needs >= 300 samples, have 11
+{
+  "label": "e1b-l0-20260923t214244z",
+  "target": "direct",
+  "model": "marlin2b",
+  "mode": "closed-loop",
+  "mm_kwargs": "per-clip auto",
+  "video": "corpus:full",
+  "corpus": "e1-2026-09-20",
+  "subset": "full",
+  "forms": [
+    "video_b64"
+  ],
+  "seed": 20260922,
+  "rate_per_s": null,
+  "concurrency": 1,
+  "requests": 12,
+  "attempts": 12,
+  "max_tokens": 128,
+  "profile": {
+    "dataset_version": "e1b-2026-09-22",
+    "profile_version": "v1",
+    "seed": 20260922,
+    "forms": [
+      "video_b64"
+    ],
+    "tenants": 1,
+    "engine_state": "restarted",
+    "max_tokens_mix": [
+      128,
+      512,
+      1024
+    ],
+    "arrival": {
+      "mode": "closed-loop",
+      "rate_per_s": null,
+      "burst": 1,
+      "concurrency": 1
+    },
+    "clips_scheduled": 12,
+    "clip_duration_s": {
+      "distinct": 9,
+      "min": 3.0,
+      "max": 112.0
+    },
+    "clip_frames_profile_v1": {
+      "distinct": 9,
+      "min": 6,
+      "max": 224
+    },
+    "clip_resolutions": [
+      "1280x720",
+      "1920x1080",
+      "2560x1080",
+      "426x240",
+      "480x1920",
+      "640x360",
+      "640x480",
+      "720x1280",
+      "854x480"
+    ],
+    "clip_codecs": [
+      "h264"
+    ],
+    "clip_source_fps": {
+      "distinct": 4,
+      "min": 15.0,
+      "max": 60.0
+    },
+    "cancellation": {
+      "fraction": 0.0,
+      "after_s": null
+    }
+  },
+  "accepted": 11,
+  "rejected": 0,
+  "failed": 1,
+  "cancelled": 0,
+  "accepted_without_usage": 0,
+  "denominators": {
+    "latency_samples": 11,
+    "rejected_excluded": 0,
+    "failed_excluded": 1,
+    "cancelled_excluded": 0,
+    "scheduled": 12,
+    "skipped_terminal_on_resume": 0,
+    "attempts": 12,
+    "rejected_attempts": 0,
+    "failed_attempts": 1,
+    "platform_failed_attempts": 1,
+    "unattributed_failed_attempts": 0,
+    "cancelled_attempts": 0,
+    "retried_requests": 0
+  },
+  "idempotency": {
+    "distinct_item_keys": 12,
+    "accepted_distinct_keys": 11,
+    "replayed": 0,
+    "conflicts": 0,
+    "resumed_from": null
+  },
+  "status_counts": {
+    "200": 12
+  },
+  "error_classes": {
+    "stream_error_event": 1
+  },
+  "error_codes": {
+    "unrecognized": 1
+  },
+  "attempt_status_counts": {
+    "200": 12
+  },
+  "attempt_outcomes": {
+    "accepted": 11,
+    "failed": 1
+  },
+  "distinct_clips": 12,
+  "distinct_clips_scheduled": 12,
+  "cold_requests": 11,
+  "warm_requests": 0,
+  "cold_ttft_s": {
+    "samples": 11,
+    "p50": 0.464,
+    "p90": null,
+    "p95": null,
+    "p99": null
+  },
+  "warm_ttft_s": {
+    "samples": 0,
+    "p50": null,
+    "p90": null,
+    "p95": null,
+    "p99": null
+  },
+  "prompt_tokens": 4935,
+  "prompt_tokens_median": 2851,
+  "interrupted": false,
+  "wall_s": 51.56,
+  "req_per_s": 0.213,
+  "out_tok_per_s": 47.7,
+  "video_seconds_accepted": 265.0,
+  "video_s_per_s": 5.139,
+  "phases": {
+    "unit": "ms",
+    "source": "Server-Timing response header",
+    "observed": {},
+    "declared_missing": [
+      "retrieval",
+      "decode",
+      "prepare",
+      "queue",
+      "prefill",
+      "generate",
+      "journal",
+      "persist",
+      "settle"
+    ],
+    "undeclared_observed": []
+  },
+  "resources": {
+    "samples": 27,
+    "series": {
+      "gpu_mem_mib": {
+        "first": 39621.0,
+        "last": 42313.0,
+        "min": 39621.0,
+        "max": 42313.0,
+        "growth": 2692.0
+      },
+      "gpu_util_pct": {
+        "first": 0.0,
+        "last": 100.0,
+        "min": 0.0,
+        "max": 100.0,
+        "growth": 100.0
+      },
+      "load1": {
+        "first": 0.32,
+        "last": 1.54,
+        "min": 0.32,
+        "max": 1.67,
+        "growth": 1.22
+      }
+    }
+  },
+  "percentiles": {
+    "ttft_s": {
+      "samples": 11,
+      "p50": 0.464,
+      "p90": null,
+      "p95": null,
+      "p99": null
+    },
+    "latency_s": {
+      "samples": 11,
+      "p50": 2.1773,
+      "p90": null,
+      "p95": null,
+      "p99": null
+    },
+    "tpot_ms": {
+      "samples": 11,
+      "p50": 6.158,
+      "p90": null,
+      "p95": null,
+      "p99": null
+    },
+    "latency_from_scheduled_s": {
+      "samples": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "p99": null
+    }
+  },
+  "schedule_lag_s": {
+    "samples": 0,
+    "p50": null,
+    "p90": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "suppressed_percentiles": [
+    "request_latency_s p90 needs >= 30 samples, have 11",
+    "request_latency_s p95 needs >= 60 samples, have 11",
+    "request_latency_s p99 needs >= 300 samples, have 11",
+    "tpot_s p90 needs >= 30 samples, have 11",
+    "tpot_s p95 needs >= 60 samples, have 11",
+    "tpot_s p99 needs >= 300 samples, have 11",
+    "ttft_s p90 needs >= 30 samples, have 11",
+    "ttft_s p95 needs >= 60 samples, have 11",
+    "ttft_s p99 needs >= 300 samples, have 11"
+  ],
+  "percentile_rule": "a reported pN needs >= 3 accepted samples beyond it (p50>=6, p95>=60, p99>=300)",
+  "ts": "2026-09-23T21:43:37Z",
+  "ttft_p50": 0.464,
+  "ttft_p95": null,
+  "latency_p50": 2.1773,
+  "latency_p95": null,
+  "tpot_p50_ms": 6.158,
+  "tpot_p95_ms": null,
+  "raw": "raw/e1b-L0-20260923T214244Z.jsonl"
+}
+bench_exit=0
+### report
+# Marlin-2B sweep report — bench.jsonl
+
+1 cell(s); 1 distinct workload profile(s)
+
+| label | mode | rate/conc | acc | rej | fail | canc | video-s/s | req/s | TTFT p50 | TTFT p95 | latency p50 | latency p95 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| e1b-l0-20260923t214244z | closed-loop | 1 | 11 | 0 | 1 | 0 | 5.139 | 0.213 | 0.464 | — | 2.1773 | — |
+
+`—` is a percentile the sample count cannot support; it is never replaced by a smaller quantile or by the maximum.
+
+## Per-cell limits
+
+- **e1b-l0-20260923t214244z** (2026-09-23T21:43:37Z): request_latency_s p90 needs >= 30 samples, have 11; request_latency_s p95 needs >= 60 samples, have 11; request_latency_s p99 needs >= 300 samples, have 11; tpot_s p90 needs >= 30 samples, have 11; tpot_s p95 needs >= 60 samples, have 11; tpot_s p99 needs >= 300 samples, have 11; ttft_s p90 needs >= 30 samples, have 11; ttft_s p95 needs >= 60 samples, have 11; ttft_s p99 needs >= 300 samples, have 11; platform-attributed failures 1/12 exceed the provisional 1 % criterion (P-18, provisional); phases not published by the target: retrieval,decode,prepare,queue,prefill,generate,journal,persist,settle
+
+## 4 pre-E1B row(s), listed apart
+
+Written before this schema: no denominators, no profile block, no rejected/failed split, so they are NOT comparable with the cells above and cannot be read as an envelope. What they carry:
+
+- **L40S vllm-nightly training-budget** (2026-09-19T23:13:09Z): conc 1, 5 requests, TTFT p50 0.767 s, latency p50 1.998 s, 0.501 req/s — p50-grade, no tail
+- **L40S vllm-nightly training-budget** (2026-09-19T23:13:33Z): conc 8, 32 requests, TTFT p50 3.352 s, latency p50 4.99 s, 1.569 req/s — p50-grade, no tail
+- **L40S vllm-nightly processor-default** (2026-09-19T23:13:46Z): conc 8, 16 requests, TTFT p50 3.7 s, latency p50 5.275 s, 1.472 req/s — p50-grade, no tail
+- **L40S vllm-nightly training-budget bunny** (2026-09-19T23:15:49Z): conc 8, 32 requests, TTFT p50 0.662 s, latency p50 2.231 s, 3.577 req/s — p50-grade, no tail
+
+Provisional criteria (marlin-sop.md §5.2, P-18) are **provisional**: quoting a row of this report without its label promotes it to a target, which it is not.
+### engine counters after
+vllm:prefix_cache_queries_total{engine="0",model_name="marlin2b"} 47701.0
+vllm:prefix_cache_queries_created{engine="0",model_name="marlin2b"} 1.790199637279677e+09
+vllm:prefix_cache_hits_total{engine="0",model_name="marlin2b"} 0.0
+vllm:prefix_cache_hits_created{engine="0",model_name="marlin2b"} 1.7901996372796926e+09
+vllm:mm_cache_queries_total{engine="0",model_name="marlin2b"} 12.0
+vllm:mm_cache_queries_created{engine="0",model_name="marlin2b"} 1.7901996372797363e+09
+vllm:mm_cache_hits_total{engine="0",model_name="marlin2b"} 0.0
+vllm:mm_cache_hits_created{engine="0",model_name="marlin2b"} 1.7901996372797496e+09
+vllm:request_success_total{engine="0",finished_reason="stop",model_name="marlin2b"} 8.0
+vllm:request_success_total{engine="0",finished_reason="length",model_name="marlin2b"} 3.0
+vllm:request_success_total{engine="0",finished_reason="abort",model_name="marlin2b"} 0.0
+vllm:request_success_total{engine="0",finished_reason="error",model_name="marlin2b"} 0.0
+vllm:request_success_total{engine="0",finished_reason="repetition",model_name="marlin2b"} 0.0
+vllm:request_success_created{engine="0",finished_reason="stop",model_name="marlin2b"} 1.7901996372798643e+09
+vllm:request_success_created{engine="0",finished_reason="length",model_name="marlin2b"} 1.7901996372798724e+09
+vllm:request_success_created{engine="0",finished_reason="abort",model_name="marlin2b"} 1.7901996372798793e+09
+vllm:request_success_created{engine="0",finished_reason="error",model_name="marlin2b"} 1.790199637279886e+09
+vllm:request_success_created{engine="0",finished_reason="repetition",model_name="marlin2b"} 1.790199637279893e+09
+done utc=2026-09-23T21:43:37Z

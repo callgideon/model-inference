@@ -63,3 +63,10 @@
 2026-09-23T21:44:27Z	73e1b1b6-2108-4a18-830d-0f0dc252684d	step6 L0 poll
 2026-09-23T21:44:40Z	b4c8fc57-3d9f-424b-bfe6-a8ced48dd3da	step5 fetch E3: tar w4-e3-20260923T210337Z + e3.log to s3 w4/
 2026-09-23T21:44:52Z	678eeeaf-e876-4625-82e0-5b9429442ab1	step6 L8 reference launch: l8ref.sh (holds w4-candidate.lock; stops marlin2b-vllm, reference.py x5, restarts unit on EXIT; nohup)
+2026-09-23T21:46:43Z	41b07adc-2d0a-429c-b8f8-ce6500f8c786	step6 L8 reference poll
+2026-09-23T21:49:24Z	fbb2a05e-9e8d-4ecf-a69f-7d4ad292c15f	poll /opt/dlami/nvme/e1b-logs/L8ref-20260923T214244Z.log
+2026-09-23T21:51:57Z	ce16af24-6ee7-4183-ae51-5add05d216bf	poll /opt/dlami/nvme/e1b-logs/L8ref-20260923T214244Z.log
+2026-09-23T21:52:13Z	18464594-410c-47d5-a98d-b4939ba3524b	step6 L8 served launch: l8served.sh (smoke.py x5 clips x {processor default, v1}; nohup)
+2026-09-23T21:54:19Z	e1258e30-87f6-4869-be83-6c57f71f6684	poll /opt/dlami/nvme/e1b-logs/L8served-20260923T214244Z.log
+2026-09-23T21:54:39Z	173fad85-09a1-49c6-a53b-7f34d2c02569	step6 fetch E1B outputs (e1b-logs + checkout results rows) to s3 w4/
+2026-09-23T21:54:51Z	da2eee0c-abab-4866-bae9-b3b15e8300a8	step7 close window: close.sh WUTC=20260923T194704Z (engine checks, restore live Caddyfile ff47f706, reload via unix//config/admin.sock)

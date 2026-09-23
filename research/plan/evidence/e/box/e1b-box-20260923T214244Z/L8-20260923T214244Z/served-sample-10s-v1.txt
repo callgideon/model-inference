@@ -1,0 +1,4 @@
+Scene: A lush, sun-drenched park setting is captured from a static, slightly elevated perspective. The foreground is dominated by large, dark-barked trees with thick branches that cast intricate shadows across a well-maintained green lawn. In the mid-ground, a row of smaller, leafy trees creates a canopy, with sunlight filtering through the leaves to create bright patches on the grass. A low, light-colored fence or hedge runs horizontally across the background, separating the park from a paved area or road. Beyond this barrier, a white bus is visible, traveling from right to left across the frame. The overall atmosphere is peaceful and natural, with the vibrant green of the foliage contrasting against the bright sky visible through the gaps in the trees.
+
+Events:
+<0.0 - 10.1> A white bus travels from right to left in the background.

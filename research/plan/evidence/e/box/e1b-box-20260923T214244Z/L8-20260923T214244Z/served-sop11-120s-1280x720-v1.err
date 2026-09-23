@@ -1,0 +1,14 @@
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Traceback (most recent call last):
+  File "/opt/dlami/nvme/w3-checkout/models/marlin2b/smoke.py", line 102, in <module>
+    for chunk in stream:
+                 ^^^^^^
+  File "/opt/pytorch/lib/python3.13/site-packages/openai/_streaming.py", line 51, in __iter__
+    for item in self._iterator:
+                ^^^^^^^^^^^^^^
+  File "/opt/pytorch/lib/python3.13/site-packages/openai/_streaming.py", line 102, in __stream__
+    raise APIError(
+    ...<3 lines>...
+    )
+openai.APIError: The decoder prompt contains a(n) video item with 21600 embedding tokens, which exceeds the pre-allocated encoder cache size 16384. Please reduce the input size or increase the encoder cache size by setting --limit-mm-per-prompt at startup.

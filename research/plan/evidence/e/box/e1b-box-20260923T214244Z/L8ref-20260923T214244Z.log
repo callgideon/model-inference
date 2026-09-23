@@ -1,0 +1,22 @@
+utc=2026-09-23T21:44:52Z repo_sha=37a0d8ae
+pre_image=sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42
+pre_args=["serve","/model","--served-model-name","marlin2b","--hf-overrides","{\"architectures\":[\"Qwen3_5ForConditionalGeneration\"]}","--max-model-len","32768","--gpu-memory-utilization","0.90","--limit-mm-per-prompt","{\"video\":1,\"image\":4}","--dtype","bfloat16","--max-num-seqs","32"]
+/opt/pytorch/lib/python3.13/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+transformers 5.17.0 torch 2.12.1+cu130
+stopping marlin2b-vllm at 2026-09-23T21:44:55Z
+engine_container=
+0 MiB, 46068 MiB
+clip=sop09-120s-640x360 sha256=8aa8aa3467b6aa9283ed5637ab958e1308971bf0a912da1cf12cbf640e30f46c start=21:44:57Z
+clip=sop09-120s-640x360 exit=0 end=21:45:27Z loaded in 1.4s; 4.12 GiB allocated wall 23.27s; peak 6.16 GiB 
+clip=sop10-120s-854x480-step_spans_segment_boundary sha256=734872fb6b78c6009338a307eaab7ab4065a347b9eb8b7496f47bb78967b722f start=21:45:27Z
+clip=sop10-120s-854x480-step_spans_segment_boundary exit=0 end=21:45:48Z loaded in 1.3s; 4.12 GiB allocated wall 14.57s; peak 6.16 GiB 
+clip=sop11-120s-1280x720 sha256=919c696de50eed6c6fb9a9283b07636801ba50e104e7aa363b7bd1d038176312 start=21:45:48Z
+clip=sop11-120s-1280x720 exit=0 end=21:46:11Z loaded in 1.2s; 4.12 GiB allocated wall 16.23s; peak 6.16 GiB 
+clip=sample-10s sha256=be998e5fed5a9065bbccdb097884794ebd2492cb261ec40948e7a846af5724b8 start=21:46:11Z
+clip=sample-10s exit=0 end=21:46:29Z loaded in 1.2s; 4.12 GiB allocated wall 10.24s; peak 6.35 GiB 
+clip=Big_Buck_Bunny_360_10s_1MB sha256=77145c94c11f3754207499158df22406e1fe7635553c1c86dc5e881dfeb32016 start=21:46:29Z
+clip=Big_Buck_Bunny_360_10s_1MB exit=0 end=21:46:44Z loaded in 1.2s; 4.12 GiB allocated wall 8.85s; peak 5.55 GiB 
+reference done utc=2026-09-23T21:46:44Z
+restore: starting marlin2b-vllm
+restored=yes ready_s=169
