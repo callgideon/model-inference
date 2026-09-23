@@ -1836,6 +1836,27 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "  update infrx.credit_holds set state = 'unknown', reconcile_after = p_reconcile_after,",
        "  update infrx.credit_holds set state = 'released', reconcile_after = null,",
        "admission", "cancel", "the hold says released while the wallet stays reserved"),
+    # FE-1/MY-1: the CREDIT regime's unknown-usage path (a published CREDIT job)
+    _m("d3_quarantine_releases_the_credit_hold", LEASES,
+       "  update infrx.credit_wallet_holds set state = 'unknown', reconcile_after = "
+       "p_reconcile_after",
+       "  update infrx.credit_wallet_holds set state = 'released', reconcile_after = null",
+       "admission", "cancel",
+       "a published CREDIT job's reservation is released while the job says held_unknown"),
+    _m("d3_published_credit_released_not_quarantined", LEASES,
+       "    perform infrx.quarantine_hold_credit(p_request_id, v_reconcile);",
+       "    perform infrx.release_hold_credit(p_request_id);",
+       "admission", "cancel", "uncounted CREDIT output drops out of reconciliation (02)"),
+    _m("d3_published_credit_quarantined_as_legacy", LEASES,
+       "  if v_settlement = 'held_unknown' and j.accounting_regime = 'credit' then",
+       "  if false then",
+       "admission", "cancel",
+       "a published CREDIT job's hold stays 'held' with no window: never reconciled"),
+    _m("d3_unknown_release_keeps_the_credit_hold", LEASES,
+       "  if j.accounting_regime = 'credit' then\n    perform infrx.release_hold_credit(p_id);",
+       "  if j.accounting_regime = 'credit' then\n    null;",
+       "admission", "recover_unknown_release",
+       "a consumer's CREDIT stays reserved for ever after the 24 h window"),
     # --- the reaper ---------------------------------------------------------------------
     _m("d3_requeue_after_publication", LEASES,
        "  if j.published then\n    return jsonb_build_array(",
@@ -1934,9 +1955,8 @@ D3_MUTANTS: tuple[Mutant, ...] = (
        "   where request_id = p_id\n   for update skip locked;",
        "admission", "recover_unknown_release", "a second sweep releases the hold again"),
     _m("d3_unknown_release_keeps_the_hold", LEASES,
-       "  if j.accounting_regime = 'credit' then\n    perform infrx.release_hold_credit(p_id);\n"
        "  else\n    perform infrx.release_hold_legacy_usd(p_id);\n  end if;",
-       "  null;",
+       "  else\n    null;\n  end if;",
        "admission", "recover_unknown_release", "platform-absorbed, and still reserved"),
     _m("d3_one_stuck_job_stops_the_sweep", LEASES,
        "      v_out := v_out || infrx.recover_job(v_id, v_now, v_retries, v_reconcile);\n"

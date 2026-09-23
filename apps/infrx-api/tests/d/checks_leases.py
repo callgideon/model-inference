@@ -70,6 +70,36 @@ def running(conn, world, worker: str = "w1", **kw):
     return request, lease_of(answer)
 
 
+def credit_running(conn, world, worker: str = "wc"):
+    """A leased CREDIT job (CONSUMER_1's personal org, C1_KEY), prepared and running. `claim`
+    refuses CREDIT until WorkV2 (MY-3), so the fixture writes what claim's body writes -
+    queued -> running and generation 1 with claim's instants, on the database clock - to
+    reach the paths D3 already serves for both regimes (publication, loss, cancel)."""
+    org = cc.personal_org(conn, cc.CONSUMER_1)
+    request = gateway_request(world, org_id=org, key_id=ca.C1_KEY, model_revision=ca.PIN)
+    ca.admit(conn, request, b.idem(request, request.request_id), regime="credit")
+    _, prep = claim(conn, request.request_id)
+    assert prepare(conn, prep["lease"])[0] is None, "the CREDIT fixture did not queue"
+    conn.execute("update infrx.jobs set state = 'running', queued_at = null "
+                 "where request_id = %s", (request.request_id,))
+    doc = conn.execute(
+        "insert into infrx.attempts (job_id, kind, generation, worker_id, acquired_at, "
+        "expires_at, generation_deadline_at, first_token_deadline_at) "
+        "select request_id, 'inference', 1, %s, infrx.now(), "
+        "infrx.now() + make_interval(secs => %s), g, g from (select request_id, least("
+        "infrx.now() + make_interval(secs => budget_generation_s), deadline_at) g "
+        "from infrx.jobs where request_id = %s) j returning infrx.lease_doc(attempts)",
+        (worker, TTL, request.request_id)).fetchone()[0]
+    return request, Lease.model_validate(doc)
+
+
+def credit_wallet(conn, request_id: str) -> tuple[Decimal, Decimal]:
+    """(reserved_total, ledger_total) of the CREDIT wallet a job was admitted against."""
+    return conn.execute("select w.reserved_total, w.ledger_total from infrx.credit_wallets w "
+                        "join infrx.jobs j on j.wallet_id = w.wallet_id "
+                        "where j.request_id = %s", (request_id,)).fetchone()
+
+
 def row(conn, request_id: str) -> dict:
     cur = conn.execute("select * from infrx.jobs where request_id = %s", (request_id,))
     names = [c.name for c in cur.description]
@@ -106,6 +136,12 @@ def publish(conn, lease: Lease) -> None:
         "the fixture publish was fenced out"
     conn.execute("update infrx.jobs set published = true where request_id = %s",
                  (lease.job_id,))
+
+
+def outcomes(produced: list) -> dict:
+    """A sweep's outcomes by job id, as an assertion (every item must be one)."""
+    assert all("outcome" in item for item in produced), f"not only outcomes: {produced}"
+    return {item["outcome"]["job_id"]: item["outcome"] for item in produced}
 
 
 def reaped(produced: list, key: str = "outcome") -> dict:
@@ -355,7 +391,8 @@ def check_cancel(conn) -> str:
     are written once, and the worker's next fenced call is `already_terminal`. After
     publication the hold stays reserved `held_unknown` with the 24 h window. A terminal
     job answers its committed outcome and writes nothing; another tenant's handle is
-    `not_found`; a CREDIT job releases its CREDIT hold."""
+    `not_found`; a CREDIT job releases its CREDIT hold, and after publication quarantines
+    it (`unknown`, the same window) with the wallet still reserved (review FE-1/MY-1)."""
     world = ca.World(conn)
 
     def handle(request) -> str:
@@ -409,6 +446,16 @@ def check_cancel(conn) -> str:
                              (credit.request_id,)).fetchone()[0]
         assert (code, out["settlement_state"], state) == (None, "released_free", "released"), \
             (code, out, state)
+        # CREDIT after publication: its own hold quarantined for the window, still reserved
+        shown, shown_lease = credit_running(conn, world)
+        publish(conn, shown_lease)
+        before = credit_wallet(conn, shown.request_id)
+        code, out = d3(conn, "cancel", org_id=shown.org_id, job_handle=handle(shown))
+        assert code is None and (out["settlement_state"], out["debit"]) == \
+            ("held_unknown", "0.00000000"), (code, out)
+        assert credit_hold(conn, shown.request_id) == ("unknown", window) and \
+            credit_wallet(conn, shown.request_id) == before, \
+            f"published CREDIT output was not quarantined: {credit_hold(conn, shown.request_id)}"
         return "every nonterminal state cancels and releases; published reconciles; tenant-safe"
     return ca._in_rollback(conn, body)
 
@@ -570,7 +617,9 @@ def check_recover_unknown_release(conn) -> str:
     """02/R21: an unknown-usage hold is released platform-absorbed by the reaper only at
     `reconcile_after` on the database clock (not a second before), once, with its usage
     projection; the ledger never moves; the terminal settlement changes only along
-    held_unknown -> released_platform_absorbed (the 0003 guard amendment)."""
+    held_unknown -> released_platform_absorbed (the 0003 guard amendment). A CREDIT job
+    lost after publication beside it: its CREDIT hold is `unknown` and reserved through the
+    window, released once at it, the CREDIT ledger unchanged (review FE-1/MY-1)."""
     world = ca.World(conn)
 
     def refused(request_id: str, to: str) -> bool:
@@ -586,24 +635,41 @@ def check_recover_unknown_release(conn) -> str:
     def body():
         request, lease = running(conn, world)
         publish(conn, lease)
+        credit, credit_lease = credit_running(conn, world)
+        publish(conn, credit_lease)
         ledger = conn.execute("select ledger_total from infrx.wallets where org_id = %s",
                               (b.ORG_A,)).fetchone()[0]
+        credit_before = credit_wallet(conn, credit.request_id)
+        amount = conn.execute("select amount from infrx.credit_wallet_holds where "
+                              "request_id = %s", (credit.request_id,)).fetchone()[0]
         advance(conn, TTL)
-        assert reaped(_recover(conn))["settlement_state"] == "held_unknown", 'failed: held_unknown'
+        lost = {job: o["settlement_state"] for job, o in outcomes(_recover(conn)).items()}
+        assert lost == {request.request_id: "held_unknown", credit.request_id: "held_unknown"}, \
+            f"a publication lost at its lease expiry is not held_unknown: {lost}"
+        assert credit_hold(conn, credit.request_id)[0] == "unknown" and \
+            credit_wallet(conn, credit.request_id) == credit_before, \
+            "a lost CREDIT publication was released instead of quarantined"
         held = reserved(conn)
         # (released_free, not settled: a CHECK already refuses a settled row without
         # authoritative usage, so only the guard stands between held_unknown and it)
         assert refused(request.request_id, "released_free"), \
             "a held_unknown settlement was rewritten as never charged"
         advance(conn, DEFAULTS.unknown_usage_reconcile_s - 1)
-        assert _recover(conn) == [] and reserved(conn) == held, "released before the window"
+        assert _recover(conn) == [] and reserved(conn) == held and \
+            credit_wallet(conn, credit.request_id) == credit_before, "released before the window"
         # R7: the reaper takes no caller time - a caller claiming it is later releases nothing
         assert call(conn, "recover", {"limits": LIMITS, "now": "2100-01-01T00:00:00Z"}) == [] \
             and reserved(conn) == held, "a caller's clock released the hold early"
         advance(conn, 1)
-        out = reaped(_recover(conn))
+        released = outcomes(_recover(conn))
+        assert set(released) == {request.request_id, credit.request_id}, released
+        out = released[request.request_id]
         assert (out["settlement_state"], out["reconcile_after"], out["debit"]) == \
             ("released_platform_absorbed", None, "0.00000000"), out
+        assert credit_hold(conn, credit.request_id) == ("released", None) and \
+            credit_wallet(conn, credit.request_id) == (credit_before[0] - amount,
+                                                       credit_before[1]), \
+            "the CREDIT unknown hold was not released at the window, ledger untouched"
         maximum = row(conn, request.request_id)["maximum_hold"]
         assert reserved(conn) == held - maximum, "the unknown hold was not released"
         assert conn.execute("select ledger_total from infrx.wallets where org_id = %s",
