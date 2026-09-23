@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T00:19:30Z",
+  "updated": "2026-09-23T00:46:03Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -221,6 +221,10 @@
     {
       "at": "2026-09-22T22:14:13Z",
       "what": "F2R-A follow-ups merged (5f7ca02): tree collects (2485 tests); F2R implemented; session paused at the 85% window mark"
+    },
+    {
+      "at": "2026-09-23T00:46:03Z",
+      "what": "Resumed on sofia; ten lanes resumed from pushed heads (transcripts intact)"
     }
   ],
   "cadence_windows": [
