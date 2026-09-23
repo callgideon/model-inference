@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T20:43:27Z",
+  "updated": "2026-09-23T20:58:35Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -41,7 +41,7 @@
     },
     "M1-L2": {
       "lane": "codex-objstore / codex/m1l2-object-store",
-      "phase": "dispatched (Opus) from 43fe900: S3ObjectStore + settings + preflight probe + conformance + adapters_from_env wiring; needed for the box rollout",
+      "phase": "HANDED BACK e1bb54f (S3ObjectStore on botocore; 27 mutants; MinIO conformance; startup + preflight wired); one-round review running \u2192 merge after D5 + cutover",
       "since": "2026-09-23T19:57:28Z",
       "note": "compose S3 in namespace e2 if free; else stub"
     },
@@ -92,6 +92,10 @@
     "D5": {
       "phase": "fix_required at c67e4f5 (wf_1c8eb6c1-062; 23 agents; JSON evidence/d/D5-review-c67e4f5.json) \u2192 fix round",
       "since": "2026-09-23T20:43:27Z"
+    },
+    "M1-L2": {
+      "phase": "review at e1bb54f running (Opus adapter/honesty lens + refuters)",
+      "since": "2026-09-23T20:58:35Z"
     }
   },
   "gates": {
