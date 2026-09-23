@@ -794,7 +794,8 @@ def on_host(root: Path) -> dict[str, str]:
 
 
 def rollback_sh(tmp_path: Path, root: Path, target: Path, fail: str = "",
-                fails: int | None = None) -> tuple[subprocess.CompletedProcess, list[str]]:
+                fails: int | None = None,
+                ready_s: int = 1) -> tuple[subprocess.CompletedProcess, list[str]]:
     """I2B's `deploy/rollback.sh <backup>`, unmodified, against the sandbox root, with the
     stubs first on PATH (a call naming `fail` exits 1: always, or its first `fails` times).
     Returns its result and the commands it issued, in order."""
@@ -812,7 +813,7 @@ def rollback_sh(tmp_path: Path, root: Path, target: Path, fail: str = "",
                                "INFRX_I3B_EVENTS": str(events), "INFRX_I3B_FAIL": fail,
                                "INFRX_I3B_FAILS": "" if fails is None else str(fails),
                                "POLL_S": "0.01",
-                               "READY_S": "1"})
+                               "READY_S": str(ready_s)})
     return done, (events.read_text().splitlines() if events.exists() else [])
 
 
@@ -918,8 +919,9 @@ def test_i3b_rc10_a_rollout_rollback_loses_no_job_and_restores_the_previous_runt
 def test_i3b_rc10b_a_rollback_whose_restored_runtime_is_not_ready_never_reloads_the_edge(
         tmp_path, probe):
     """rollback.md step 4, exit 4 (DR-3): the restored runtime restarts but one readiness
-    probe never answers - the gateway's (8001) or the worker's (8002). rollback.sh gives up
-    after READY_S with exit 4 and never touches the edge (no `docker` call, so the running
+    probe never answers - the gateway's (8001) or the worker's (8002). rollback.sh polls it
+    for READY_S (3 s here: at least 2 s of wall time, bash's SECONDS being whole seconds),
+    then gives up with exit 4 and never touches the edge (no `docker` call, so the running
     Caddy keeps serving what it served and the operator stays in maintenance); the probe
     after a failed one is never reached. The files are already the previous release's: the
     restore precedes the probe. Stubs and sandbox as rc10; no database."""
@@ -928,15 +930,18 @@ def test_i3b_rc10b_a_rollback_whose_restored_runtime_is_not_ready_never_reloads_
     previous = backup(root, tmp_path / "backups" / "previous")
     install(root, release(IMAGE["current"]))
     ready = f"http://127.0.0.1:{probe}/readyz"
-    done, issued = rollback_sh(tmp_path, root, previous, fail=ready)
+    started = time.monotonic()
+    done, issued = rollback_sh(tmp_path, root, previous, fail=ready, ready_s=3)
+    waited = time.monotonic() - started
     assert done.returncode == 4 and "the restored runtime is not ready" in done.stderr, \
         (done.returncode, done.stderr)
     head = ROLLBACK_COMMANDS[:3 + (probe == "8002")]      # stop, reload, restart (, 8001 ok)
     assert issued[:len(head)] == head, issued
     retries = issued[len(head):]
-    # DRL-1: polled until READY_S, not tried once (~100 calls at POLL_S=0.01, READY_S=1)
+    # DRL-1: retried, not tried once; DRL-R3-1: for the whole READY_S budget, not a fixed one
     assert len(retries) > 1 and set(retries) == {f"curl -fsS -o /dev/null --max-time 5 {ready}"}, \
         issued
+    assert waited >= 2, f"gave up after {waited:.2f} s of a 3 s READY_S ({len(retries)} probes)"
     assert on_host(root) == release(IMAGE["previous"])
 
 
