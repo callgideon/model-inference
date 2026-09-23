@@ -557,7 +557,11 @@ async def credit_rate__a_rate_published_after_acceptance_does_not_move_the_job(f
     replay = admission.model_copy(update={"replayed": True})
     assert v2.settle(replay, usage, harness.now + timedelta(seconds=31)).charged == \
         settlement.charged
-    # a freshly admitted request does see the new rate
+    # a freshly admitted request does see the new rate - and pins the card it resolved,
+    # checked on the pins before an AdmissionV2 is built from them (whose validator would
+    # otherwise be what notices a pin that disagrees with its card)
+    pins, card = await _pin(harness, _consumer_auth(), v2fix.REQUESTED_MODEL)
+    assert pins.rate_card_version == card.rate_card_version == "rc_marlin2b_2026_10"
     fresh = await _admit(harness)
     assert fresh.pins.rate_card_version == "rc_marlin2b_2026_10"
     assert fresh.maximum_hold > admission.maximum_hold
