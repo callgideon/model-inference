@@ -137,11 +137,15 @@ class Report:
 
 def git_head() -> dict:
     """The checkout's commit and whether its tree differs from it (untracked files count).
-    Either is None when git cannot answer (not a tree): an unknown tree is never recorded
-    as a clean one (E4B review F1)."""
+    Either is None when git cannot answer (not a tree, or no git at all - the runtime image
+    has none): an unknown tree is never recorded as a clean one, and never a crash that
+    loses the report (E4B review F1/F2)."""
     def git(*args: str) -> str | None:
-        done = subprocess.run(["git", "-C", str(harness.REPO_ROOT), *args], capture_output=True,
-                              text=True, timeout=60)
+        try:
+            done = subprocess.run(["git", "-C", str(harness.REPO_ROOT), *args],
+                                  capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            return None
         return done.stdout.strip() if done.returncode == 0 else None
     status = git("status", "--porcelain")
     return {"sha": git("rev-parse", "HEAD") or None,

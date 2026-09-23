@@ -718,5 +718,38 @@ def test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_writte
         ("runner-error", certify.FAIL), ("release-identity", certify.PASS)]
     assert "unreadable" in doc["stages"][0]["detail"]
 
+
+def test_e4b_a_host_without_git_writes_a_report_that_fails_its_identity(tmp_path, monkeypatch):
+    """Review F2: the runtime image has no git. The runner must still write its report, with
+    the unknown tree recorded as unknown - which fails the release identity - and a box run
+    must name the release it certifies, which the checkout's own SHA is compared with."""
+    nogit = tmp_path / "bin"
+    nogit.mkdir()
+    monkeypatch.setenv("PATH", str(nogit))
+    try:
+        head = certify.run.git_head()
+    except OSError as crashed:
+        pytest.fail(f"no git crashed git_head: {crashed!r}")
+    assert head == {"sha": None, "dirty": None}
+    monkeypatch.setattr(certify, "release_hashes", lambda: {})
+    monkeypatch.setattr(certify, "preconditions_check",
+                        lambda *a: (_ for _ in ()).throw(RuntimeError("stop before the engine")))
+    out = tmp_path / "report.json"
+    try:
+        code = certify.main(["--no-stack", "--workdir", str(tmp_path), "--report", str(out)])
+    except OSError as crashed:
+        pytest.fail(f"no git crashed the runner: {crashed!r}")
+    doc = json.loads(out.read_text())
+    assert code == doc["exit_code"] == 1 and doc["git_head"] == {"sha": None, "dirty": None}
+    assert doc["stages"][-1] == {**doc["stages"][-1], "stage": "release-identity",
+                                 "status": certify.FAIL}
+    assert "no git SHA at the start of the run" in doc["stages"][-1]["detail"]
+    assert certify.identity_problems(CLEAN, CLEAN, release_sha="e" * 40) == [
+        f"the tree is {'c' * 40}, not the release {'e' * 40}"]
+    assert certify.identity_problems(CLEAN, CLEAN, release_sha="c" * 40) == []
+    with pytest.raises(SystemExit):
+        certify.main(["--box", "--target", "http://gw/v1", "--engine-url", "http://engine",
+                      "--report", str(out)])
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

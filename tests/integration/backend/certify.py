@@ -120,9 +120,10 @@ class Report(run.Report):
     """run.py's report (stages, per-stage seconds, `git_head` at start and end), plus the
     target, the release hashes and the rule that a skip names its owner."""
 
-    def __init__(self, target: dict) -> None:
+    def __init__(self, target: dict, release_sha: str | None = None) -> None:
         super().__init__()
         self.target, self.hashes, self.head_end = target, {}, None
+        self.release_sha = release_sha
 
     def check(self, check_id: str, status: str, detail, *, owners=(), measured=None,
               label: str | None = None) -> dict:
@@ -145,7 +146,7 @@ class Report(run.Report):
         # same end sample the report records, so the exit code carries it.
         if self.head_end is None:
             self.head_end = run.git_head()
-            problems = identity_problems(self.head, self.head_end)
+            problems = identity_problems(self.head, self.head_end, self.release_sha)
             self.check("release-identity", FAIL if problems else PASS,
                        problems or f"one clean tree: {self.head['sha']}")
         doc = json.loads(super().as_json())
@@ -158,9 +159,10 @@ class Report(run.Report):
                            **doc}, indent=2, default=str, ensure_ascii=False)
 
 
-def identity_problems(start: dict, end: dict) -> list[str]:
+def identity_problems(start: dict, end: dict, release_sha: str | None = None) -> list[str]:
     """Protocol §6.3 as code: a SHA at both ends, a clean tree at both ends (an unknown state
-    is not clean), and the same SHA - or the report is evidence for no release."""
+    is not clean), the same SHA, and - on the box - the release the operator names; or the
+    report is evidence for no release."""
     problems = []
     for when, head in (("start", start), ("end", end)):
         if not head.get("sha"):
@@ -170,6 +172,8 @@ def identity_problems(start: dict, end: dict) -> list[str]:
                             f"{'dirty' if head.get('dirty') else 'of unknown state'}")
     if start.get("sha") and end.get("sha") and start["sha"] != end["sha"]:
         problems.append(f"the tree moved during the run: {start['sha']} -> {end['sha']}")
+    if release_sha is not None and start.get("sha") != release_sha:
+        problems.append(f"the tree is {start.get('sha')}, not the release {release_sha}")
     return problems
 
 
@@ -1002,6 +1006,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="measure/inventory.sh's output from the box (the deployed engine)")
     parser.add_argument("--box", action="store_true",
                         help="the maintenance-window preconditions (E4B_WINDOW_OK=1 etc.)")
+    parser.add_argument("--release-sha", help="the release under test (required with --box): "
+                                               "the checkout's own SHA must be it")
     parser.add_argument("--scale", choices=sorted(MATRIX), help="tiny (local) or box")
     parser.add_argument("--no-stack", action="store_true",
                         help="skip the E2-stack suite (a box run; the dev host runs it)")
@@ -1017,13 +1023,18 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--target needs --engine-url (parity runs against the engine itself)")
     if args.box and not args.target:
         parser.error("--box certifies a deployed endpoint: give --target and --engine-url")
+    if args.box and not args.release_sha:
+        parser.error("--box needs --release-sha: the release the box serves, compared with "
+                     "this checkout's own SHA (review F2)")
     workdir = args.workdir or Path(tempfile.mkdtemp(prefix=f"{harness.PROJECT}-e4b-"))
     workdir.mkdir(parents=True, exist_ok=True)
     target = remote_target(args) if args.target else \
         local_target(args.scale or "tiny", harness.PORTS["fake_vllm"])
     report = Report({**target, "workdir": str(workdir), "box": args.box,
+                     "release_sha": args.release_sha,
                      "inventory": args.inventory and rel(args.inventory),
-                     "parity_baseline": args.parity_baseline and rel(args.parity_baseline)})
+                     "parity_baseline": args.parity_baseline and rel(args.parity_baseline)},
+                    release_sha=args.release_sha)
     with run.signals_handled():
         try:
             report.hashes = release_hashes()

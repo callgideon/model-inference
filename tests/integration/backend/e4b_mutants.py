@@ -110,6 +110,7 @@ SCRAPE = "test_e4b_scrape_reads_the_series_the_soak_judges"
 CELLS = "test_e4b_the_load_cells_run_the_declared_shapes_and_pend_where_they_cannot_judge"
 CRASH = "test_e4b_a_runner_error_is_a_recorded_failure_and_the_report_is_still_written"
 IDENTITY = "test_e4b_a_report_counts_for_one_clean_known_tree_or_it_fails"
+NOGIT = "test_e4b_a_host_without_git_writes_a_report_that_fails_its_identity"
 RUN = "tests/integration/run.py"
 GENERATED = "test_e4b_the_endpoint_doc_is_what_the_code_generates"
 KEEPS_LOG = "test_e4b_a_regeneration_keeps_the_verification_log"
@@ -313,6 +314,15 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("unknown_tree_recorded_clean", "git that cannot answer records an unknown tree, not a clean one",
        '            "dirty": None if status is None else bool(status)}\n',
        '            "dirty": bool(status)}\n', IDENTITY, file=RUN),
+    # --- review F2: a host without git -------------------------------------------------
+    _m("missing_git_crashes", "no git binary is an unknown tree, never a lost report",
+       "        except (OSError, subprocess.SubprocessError):\n            return None\n",
+       "        except subprocess.SubprocessError:\n            return None\n", NOGIT, file=RUN),
+    _m("release_sha_unchecked", "a box report is for the release its operator names",
+       "    if release_sha is not None and start.get(\"sha\") != release_sha:\n",
+       "    if False:\n", NOGIT),
+    _m("box_without_release_sha_accepted", "a box run names the release it certifies",
+       "    if args.box and not args.release_sha:\n", "    if False:\n", NOGIT),
     # --- E4B.c: the endpoint document --------------------------------------------------
     _m("delete_routes_unread", "every method the modules mount is in the route table",
        'METHODS = ("get", "post", "put", "delete", "patch")',
