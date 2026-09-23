@@ -128,6 +128,10 @@ def check_eligibility(conn) -> str:
     individual(conn, two, "two1@example.com")
     second = one(conn, "insert into public.organizations (name, slug, created_by) values "
                        "('side', 'a1-two-side', %s) returning id", (two,))
+    pm = uid(1, 10)                                   # +3 in one created org, -3 in another
+    individual(conn, pm, "pm1@example.com")
+    pm_side = one(conn, "insert into public.organizations (name, slug, created_by) values "
+                        "('side', 'a1-pm-side', %s) returning id", (pm,))
 
     first = claim(conn, v)
     assert first[0] == "granted" and first[4] == GRANT and str(first[1]) == v, \
@@ -188,6 +192,8 @@ def check_eligibility(conn) -> str:
     conn.execute(usd, (personal_org(conn, z), "-5.000000", "usage"))
     conn.execute(usd, (personal_org(conn, neg), "-0.000001", "usage"))
     conn.execute(usd, (second, "1.000000", "grant"))
+    conn.execute(usd, (personal_org(conn, pm), "3.000000", "grant"))
+    conn.execute(usd, (pm_side, "-3.000000", "usage"))
     before = conn.execute("select org_id, delta_usd::text from public.credit_ledger "
                           "order by id").fetchall()
     hold = claim(conn, h)
@@ -200,6 +206,9 @@ def check_eligibility(conn) -> str:
     side = claim(conn, two)
     assert side[0] == "rollout_hold" and wallet_of(conn, two) is None, \
         f"USD in another organization the individual created (R72 scope): {side}"
+    split = claim(conn, pm)
+    assert split[0] == "rollout_hold" and wallet_of(conn, pm) is None, \
+        f"+3 and -3 USD in two organizations are two nonzero balances (R72): {split}"
     settled = claim(conn, z)
     assert settled[0] == "granted", f"a zero legacy USD balance is no hold: {settled}"
     after = conn.execute("select org_id, delta_usd::text from public.credit_ledger "
@@ -220,7 +229,8 @@ def check_eligibility(conn) -> str:
     assert claim(conn, long, campaign="\u00e9" * 100)[0] == "granted", \
         "a 100-character (200-byte) campaign"
     return ("eligibility: 1 grant per individual, 3 replays, unverified/soft-deleted/unknown "
-            "alike, identity reuse, 4 rollout holds (+, -, 2nd org), USD untouched, flag and null "
+            "alike, identity reuse, 5 rollout holds (+, -, 2nd org, +3/-3 across 2 orgs), USD "
+            "untouched, flag and null "
             "refused")
 
 
