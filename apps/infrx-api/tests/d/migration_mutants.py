@@ -1573,6 +1573,13 @@ D2_MUTANTS: tuple[Mutant, ...] = (
        "  if v_at is null then\n    raise exception 'not_found: object %'",
        "  if false then\n    raise exception 'not_found: object %'",
        "admission", "media_objects", "a touch of a missing object reports success (SEC-4)"),
+    _m("d2_media_touch_reveals_existence", MEDIA,
+       "    raise exception 'not_found: object %', p_storage_ref using errcode = 'P0002';",
+       "    raise exception 'not_found: object %', p_storage_ref using errcode = 'P0002', "
+       "hint = (select case when count(*) > 0 then 'stored' else '' end "
+       "from infrx.media_objects where storage_ref = p_storage_ref);",
+       "admission", "media_objects",
+       "a foreign touch tells a tenant another tenant's object exists (MC-2)"),
     _m("d2_result_ref_shape_loose", RESULTS,
        "   where p_ref ~ '^infrx-result:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-"
        "[0-9a-f]{12}$'",

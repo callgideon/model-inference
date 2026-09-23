@@ -83,6 +83,21 @@ def check_media_uploads(conn) -> str:
     return ca._in_rollback(conn, body)
 
 
+def _touch_error(conn, ref: str, org: str) -> tuple | None:
+    """The whole error a touch answers - SQLSTATE, message, detail, hint - with the ref
+    itself replaced, so an unknown ref and another tenant's ref can be compared byte for
+    byte (review MC-2). None when the touch succeeded."""
+    try:
+        with conn.transaction():
+            conn.execute("select infrx.touch_media_object(%s, %s)", (ref, org))
+    except psycopg.Error as failed:
+        d = failed.diag
+        return tuple(None if v is None else str(v).replace(ref, "<ref>")
+                     for v in (failed.sqlstate, d.message_primary, d.message_detail,
+                               d.message_hint))
+    return None
+
+
 def check_media_objects(conn) -> str:
     """M3 request 1 / limit 2: `touch_media_object` stamps a use for its own organization
     only; `delete_media_object_if_idle` deletes only while `last_used_at` is still the
@@ -102,6 +117,11 @@ def check_media_objects(conn) -> str:
         why = cc.attempt(conn, "select infrx.touch_media_object(%s, %s)", (ref, b.ORG_B))
         assert why is not None and why.startswith("P0002"), \
             f"another organization stamped the object: {why!r}"
+        # MC-2: another tenant's EXISTING object answers exactly what a missing one does
+        unknown = _touch_error(conn, "media/zz/v1/never-stored", b.ORG_B)
+        foreign = _touch_error(conn, ref, b.ORG_B)
+        assert unknown is not None and unknown == foreign, \
+            f"a foreign touch is distinguishable from a miss: {unknown} != {foreign}"
         unchanged, = conn.execute("select last_used_at from infrx.media_objects where "
                                   "storage_ref = %s", (ref,)).fetchone()
         assert unchanged == first, "another organization's touch moved last_used_at"
