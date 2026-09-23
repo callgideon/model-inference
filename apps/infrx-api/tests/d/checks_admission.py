@@ -40,6 +40,10 @@ OPERATOR_KEY = "c7000000-0000-4000-8000-000000000004"
 STRAY_KEY = "c7000000-0000-4000-8000-000000000005"
 NAMED_KEY = "c7000000-0000-4000-8000-000000000006"     # created by C2, names C1 (M6)
 PROVIDER_KEY = "c7000000-0000-4000-8000-000000000007"  # a provider_dev key in ORG_A (M4)
+# MC-1: a provider_dev key CREATED BY CONSUMER_1 and filed in C1's personal org - the shape
+# whose `coalesce(user_id, created_by)` resolves to C1's consumer wallet if the CREDIT
+# body's audience rule is lost.
+PROVIDER_C1_KEY = "c7000000-0000-4000-8000-000000000008"
 ALIAS = "nemostation/marlin-2b"
 PIN = "nemostation/marlin-2b@2026-09-01"
 
@@ -300,6 +304,12 @@ def check_admission_refusals(conn) -> str:
                         f"audience, provider_org_id, endpoint_id) values ('{PROVIDER_KEY}', "
                         f"'{b.ORG_A}', 'p', 'sk-infrx-prov0000', 'hash-prov', 'provider_dev', "
                         f"'{cc.NEMO}', '{cc.DEV_ENDPOINT}')",
+        "provider key in c1's org": f"insert into public.api_keys (id, org_id, created_by, "
+                                    f"name, prefix, key_hash, audience, provider_org_id, "
+                                    f"endpoint_id) values ('{PROVIDER_C1_KEY}', '{c1_org}', "
+                                    f"'{cc.CONSUMER_1}', 'p', 'sk-infrx-provc100', "
+                                    f"'hash-prov-c1', 'provider_dev', '{cc.NEMO}', "
+                                    f"'{cc.DEV_ENDPOINT}')",
         "withdrawn price": "alter table infrx.price_versions disable trigger "
                            "price_versions_immutable; update infrx.price_versions set "
                            "effective_to = infrx.now() where price_version = 'pv_test'; "
@@ -380,6 +390,11 @@ def check_admission_refusals(conn) -> str:
         ("ceilings past the deployment's limits", lambda: credit_request(
             world, C1_KEY, c1_org, max_input_tokens=30_721, max_output_tokens=1), None,
          "credit", None, "context_length_exceeded"),
+        # MC-1: a provider_dev credential reaches no public listing through the CREDIT
+        # body either - even one whose creator owns a funded consumer wallet in that org.
+        ("a provider_dev key in the CREDIT regime", lambda: credit_request(
+            world, PROVIDER_C1_KEY, c1_org, ALIAS), None, "credit", "provider key in c1's org",
+         "not_found"),
     )
 
     def body():
