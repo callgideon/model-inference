@@ -151,9 +151,10 @@ class PilotSettings:
     # approved for this deployment, so a start with no approved card is a refusal.
     active_rate_card_version: str = ""
     # The most CREDIT one audited operator allocation may move into a provider's dev
-    # wallet (02-credits: "an internal capped testing budget"). Zero until an operator sets
-    # it: no allocation is permitted by default. ⚠️ TO BE VERIFIED - the product number is
-    # an operator input (P-08, Lab onboarding); the unit is a type (R64), never a suffix.
+    # wallet (02-credits: "an internal capped testing budget"). Zero by default. Not
+    # enforced until the allocation port exists (P-08): nothing reads it yet, and the fake's
+    # `credit_grant` test hook does not consult it. ⚠️ TO BE VERIFIED - the product number
+    # is an operator input (P-08, Lab onboarding); the unit is a type (R64), never a suffix.
     provider_dev_allocation_ceiling_credit: Credit = Credit("0.00000000")
 
     def replace(self, **changes: object) -> PilotSettings:
