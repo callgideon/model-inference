@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T23:12:12Z",
+  "updated": "2026-09-23T23:21:08Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,7 +23,7 @@
     },
     "CUTOVER": {
       "lane": "codex-cutover / codex/cutover-mount",
-      "phase": "runs/evidence at f7d9b03 (+ WIP 92269a6); agent killed 22:45Z \u2192 resumed 23:1xZ: finish runs + evidence \u2192 handback \u2192 one-round review",
+      "phase": "HANDED BACK a1e88dc (items 1\u20138; make api-test 3497 + the 23 pre-existing; layer-0 reds owned by phase 3/D5); one-round review running \u2192 merge at step 3",
       "since": "2026-09-23T19:29:02Z",
       "note": "d3 ports, Q 55492; merges together with E3B phase 3"
     },
@@ -110,6 +110,10 @@
     "M-pilot-media": {
       "phase": "review at 8b91648 RERUN after the 429 (wf_633c3f83-924 resumed)",
       "since": "2026-09-23T23:12:12Z"
+    },
+    "CUTOVER": {
+      "phase": "review at a1e88dc running (composition/deploy/edge + honesty lenses + refuters)",
+      "since": "2026-09-23T23:21:08Z"
     }
   },
   "gates": {

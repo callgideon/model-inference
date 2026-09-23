@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T23:12:12Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T23:21:08Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
@@ -68,7 +68,7 @@ Generated 2026-09-23T23:12:12Z from `tasks.json` (manifest v4) and `progress-sta
 - E1B: codex-e1b — engine cells L0/L1/L8 MEASURED on the box (merged 0117d48); L2–L7 after the rollout (phase 2) since 2026-09-22T16:03:43Z — sop-synth-v1 generator, bench idempotency/resume, open-loop driver, predeclared protocol | resumed from WIP after restart
 - D5: codex-d5 / codex/d5-terminal-transaction — fix round: commits in at 8554b47; agent killed at 22:45Z (session limit) → resumed 23:1xZ: battery + handback → single verifier → merge unit since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
 - E4B: codex-e4b / codex/e4b-certify — software half FINAL 4d9360c (verifier pass + V1–V6 folded; 138 mutants) → merge at step 6; box half after the rollout since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
-- CUTOVER: codex-cutover / codex/cutover-mount — runs/evidence at f7d9b03 (+ WIP 92269a6); agent killed 22:45Z → resumed 23:1xZ: finish runs + evidence → handback → one-round review since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
+- CUTOVER: codex-cutover / codex/cutover-mount — HANDED BACK a1e88dc (items 1–8; make api-test 3497 + the 23 pre-existing; layer-0 reds owned by phase 3/D5); one-round review running → merge at step 3 since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
 - E3B-phase3: codex-e3b3 / codex/e3b-phase3-bodies — fix round with M pilot-media merged (1fa825b); agent killed 22:45Z → resumed 23:1xZ: J2/J1/H-B1 + nonblockings, gate on e3b2 → handback → single verifier since 2026-09-23T19:29:02Z — namespace e3b2 / 56732
 - M1-L2: codex-objstore / codex/m1l2-object-store — FINAL ba26ca4 (verifier pass + V1–V4 folded; 46 mutants; cutover f7d9b03 re-merged) → merge at step 4 of the unit since 2026-09-23T19:57:28Z — compose S3 in namespace e2 if free; else stub
 - M-pilot-media: codex-mpilot / codex/m-pilot-media — review workflow died (429, incomplete); rerun dispatched 23:1xZ since 2026-09-23T20:11:55Z — d4 ports, Q 55494; merges on top of the cutover head
@@ -88,6 +88,7 @@ Generated 2026-09-23T23:12:12Z from `tasks.json` (manifest v4) and `progress-sta
 - review E3B-phase3: fix_required at 4ac1419 (wf_1fd8ad49-30d; JSON evidence/e/E3B3-review-4ac1419.json) → fix round since 2026-09-23T22:44:29Z
 - review merge-plan: MERGED 58e6fdb: scripts 1–9 + replay; gating unit D5→phase 3→cutover→M1-L2 on all four verdicts; then M pilot → E4B → checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) → ff main since 2026-09-23T22:22:23Z
 - review M-pilot-media: review at 8b91648 RERUN after the 429 (wf_633c3f83-924 resumed) since 2026-09-23T23:12:12Z
+- review CUTOVER: review at a1e88dc running (composition/deploy/edge + honesty lenses + refuters) since 2026-09-23T23:21:08Z
 
 ## Checkpoints
 
