@@ -39,8 +39,9 @@ else:
 
 def test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret():
     """Each script parses, stops at the first failure, refuses to run without the release
-    it acts on, and contains nothing shaped like a credential or an inline parameter
-    value - secrets are read on the box by preflight.py, from SSM, and never travel."""
+    it acts on - the cutover also without the migration digest step 6 applied - and
+    contains nothing shaped like a credential or an inline parameter value: secrets are
+    read on the box by preflight.py, from SSM, and never travel."""
     assert [p.name for p in STEPS] == ["10-inventory.sh", "20-prepull.sh", "30-pause.sh",
                                        "40-checkout.sh", "50-install.sh", "60-verify-local.sh",
                                        "90-revert.sh", "91-abort.sh", "95-maintenance.sh"]
@@ -54,6 +55,7 @@ def test_backend_deploy__every_rollout_step_is_strict_bash_that_names_no_secret(
                 assert ': "${RELEASE:?' in text, f"{path.name} runs without a release"
         for shape in SECRET_SHAPES:
             assert not re.search(shape, text), (path.name, shape)
+    assert ': "${MIGRATION_DIGEST:?' in (ROLLOUT / "steps" / "50-install.sh").read_text()
     readme = (ROLLOUT / "README.md").read_text()
     for shape in SECRET_SHAPES:
         assert not re.search(shape, readme), shape
