@@ -231,3 +231,37 @@ def test_deploy_failclosed__the_repository_engine_script_is_checked_as_it_stands
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+# --- the cutover: the regime and the card (G2 R2-1) -----------------------------------
+PILOT_ENV = ("INFRX_MODE=pilot\nDATABASE_URL=postgresql://infrx@127.0.0.1:5432/infrx\n"
+             "SUPABASE_URL=https://fake.supabase.co\nSUPABASE_SERVICE_ROLE_KEY=svc-role-secret\n")
+
+
+def test_deploy_failclosed__pilot_refuses_a_regime_or_card_it_cannot_serve(tmp_path):
+    """G2 R2-1: `ACCOUNTING_REGIME` and `ACTIVE_RATE_CARD_VERSION` are settable (TUNABLE), and
+    the probe's verdict over the staged bytes - the runtime's own `validate_runtime` - refuses,
+    in pilot, a regime the runtime does not know, a CREDIT regime with no approved card, and a
+    padded card, naming the setting and never a value; a valid CREDIT regime and card pass.
+    (The bucket is asked from the host by `apply`'s `bucket_problems`, M1-L2: the probe runs
+    with no network.)"""
+    staged = tmp_path / "staged.env"
+
+    def verdict(extra):
+        staged.write_text(PILOT_ENV + extra)
+        return preflight.probe(staged, "pilot")
+
+    refusals = {"ACCOUNTING_REGIME=usd_legacy\n": "ACCOUNTING_REGIME must be one of",
+                "ACCOUNTING_REGIME=credit\n": "requires ACTIVE_RATE_CARD_VERSION",
+                "ACCOUNTING_REGIME=credit\nACTIVE_RATE_CARD_VERSION= rc_padded\n":
+                    "ACTIVE_RATE_CARD_VERSION must not"}
+    for extra, named in refusals.items():
+        result = verdict(extra)
+        text = " ".join(result["problems"])
+        assert result["ok"] is False and named in text, (extra, result["problems"])
+        for value in ("svc-role-secret", "usd_legacy", "rc_padded"):
+            assert value not in text, value
+    valid = verdict("ACCOUNTING_REGIME=credit\n"
+                    "ACTIVE_RATE_CARD_VERSION=rc_marlin2b_2026_09_provisional\n")
+    assert valid["validated_mode"] == "pilot"                  # the runtime's check passes
+    assert not any("does not start" in problem for problem in valid["problems"]), valid

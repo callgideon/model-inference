@@ -675,8 +675,8 @@ MUTANTS: tuple[Mutant, ...] = (
     _m("cache_hit_stands_in_for_the_durable_artifact",
        "a cache hit is a hit on the local copy; the durable prepared artifact is the record, "
        "so its absence runs the whole path again",
-       R, "            if entry is None or await self.objects.head(prepared_key) is None:",
-       "            if entry is None:",
+       R, "                    or await self.objects.head(prepared_key) is None:",
+       "                    or False:",
        "test_a_prepared_artifact_that_is_gone_is_written_again"),
     _m("prepared_key_uses_the_sources_profile",
        "01: the profile version namespaces the cache, so it is the *requested* profile in "

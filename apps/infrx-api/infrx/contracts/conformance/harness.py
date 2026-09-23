@@ -52,7 +52,8 @@ OPTIONAL_HOOKS: dict[str, frozenset[str]] = {
     # job's organization from.
     # F2R item 4: `materialized(org_id, ref)` makes `ref` one the store produced, since
     # `stage` accepts nothing else.
-    "mediastore": frozenset({"put_object", "admitted", "materialized"}),
+    # MPILOT: `reopened()` is the store as another process sees it (the attach is durable).
+    "mediastore": frozenset({"put_object", "admitted", "materialized", "reopened"}),
     "scheduler": frozenset({"jobs"}),
     "engine": frozenset({"text"}),
     "tracesink": frozenset({"queued", "crash", "content_budget", "reap"}),

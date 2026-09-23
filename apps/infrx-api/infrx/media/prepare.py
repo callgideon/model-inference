@@ -112,7 +112,7 @@ EXTENSIONS = {probing.MP4_MIME: "mp4", probing.QUICKTIME_MIME: "mov", probing.WE
 @dataclass(frozen=True)
 class CacheEntry:
     local_path: str
-    probed: probing.Probed
+    probed: probing.Probed | None          # None: found on disk, not measured here (MPILOT)
     bytes: int
     stored_at: float
 
@@ -136,6 +136,12 @@ class ProcessingCache:
     * **expiring.** 7 days is a retention obligation, not a cache-eviction preference
       (01 "Privacy and retention"): an expired entry is unreadable *and* the file is
       removed, so `sweep()` on a cold cache still deletes.
+
+    MPILOT gap 2: the index is process-local, and the pilot's worker is another process
+    over the same `PROCESSING_CACHE_DIR` (read-only there). So a lookup that knows the
+    media type (`local_uri`) finds a miss on disk: the path its key builds, the file's
+    bytes checked against the key's content hash, its life counted from the file's mtime -
+    which `put` sets to the entry's `stored_at`, so the disk says what the index said.
     """
 
     def __init__(self, root: str, *, ttl_s: float = DEFAULTS.processing_cache_ttl_s,
@@ -171,10 +177,12 @@ class ProcessingCache:
             raise errors.InvalidRequest("a processing cache path must stay under its root")
         return path
 
-    def get(self, org_id: str, digest: str, profile: str) -> CacheEntry | None:
-        """The live entry, or None. An expired one is deleted rather than returned."""
+    def get(self, org_id: str, digest: str, profile: str,
+            mime: str | None = None) -> CacheEntry | None:
+        """The live entry, or None. An expired one is deleted rather than returned. With
+        `mime`, an entry another process wrote is found on disk and indexed (MPILOT)."""
         key = (org_id, digest, profile)
-        entry = self.entries.get(key)
+        entry = self.entries.get(key) or (self._load(key, mime) if mime else None)
         if entry is None:
             return None
         if self.clock() - entry.stored_at >= self.ttl_s:
@@ -197,10 +205,36 @@ class ProcessingCache:
         temporary = f"{path}.{os.getpid()}.part"
         with open(temporary, "wb") as handle:
             handle.write(data)
+        stored_at = self.clock()
+        os.utime(temporary, (stored_at, stored_at))       # the life `_load` reads back
         os.replace(temporary, path)
         entry = CacheEntry(local_path=path, probed=probed, bytes=len(data),
-                           stored_at=self.clock())
+                           stored_at=stored_at)
         self.entries[(org_id, digest, profile)] = entry
+        return entry
+
+    def _load(self, key: tuple[str, str, str], mime: str) -> CacheEntry | None:
+        """MPILOT: an entry another process `put` - the path the key builds, verified by
+        content hash, with the file's own life. None if absent or not those bytes.
+
+        ponytail: the hash is the source digest because profile `v1`'s prepared artifact is
+        the source bytes (`_prepared_bytes`); a transcoding profile needs the prepared
+        digest beside the file. One read and one hash per process per entry, then indexed.
+        """
+        if not self.enabled:
+            return None
+        org_id, digest, profile = key
+        path = self.path_for(org_id, profile, digest, mime)
+        try:
+            with open(path, "rb") as handle:
+                data = handle.read()
+                stored_at = os.fstat(handle.fileno()).st_mtime
+        except OSError:
+            return None
+        if digest_of(data) != digest:
+            return None
+        entry = CacheEntry(local_path=path, probed=None, bytes=len(data), stored_at=stored_at)
+        self.entries[key] = entry
         return entry
 
     def sweep(self) -> int:
@@ -376,7 +410,7 @@ class MediaPreparation(MediaStaging):
         than a worker failing on a file nobody can open.
         """
         version = valid_profile(profile)
-        sources = self.by_job.get(job_id)
+        sources = await self.attached(job_id)
         if sources is None:
             raise errors.NotFound(f"no staged media for job {job_id}")
         prepared = []
@@ -389,7 +423,8 @@ class MediaPreparation(MediaStaging):
             # A cache hit is a hit on the *local copy*, and the durable artifact is the
             # record. If it is gone the whole path runs again, so "persisted before the job
             # is told it is prepared" holds on the second attempt as well as the first.
-            if entry is None or await self.objects.head(prepared_key) is None:
+            if entry is None or entry.probed is None \
+                    or await self.objects.head(prepared_key) is None:
                 data = await self.objects.get(key)
                 # M4: the full-body digest runs in a worker thread, off the event loop.
                 if data is None or await asyncio.to_thread(digest_of, data) != ref.digest:
@@ -434,7 +469,9 @@ class MediaPreparation(MediaStaging):
         frozen `MediaRef` gains an optional `local_path` (integration request 1) there is
         nothing to forge, and when it does this method is what fills it.
         """
-        entry = self.cache.get(ref.org_id, ref.digest, ref.profile_version)
+        # With the ref's type, so a process that did not prepare it (the worker) finds the
+        # file another one wrote (MPILOT gap 2).
+        entry = self.cache.get(ref.org_id, ref.digest, ref.profile_version, ref.mime)
         if entry is None:
             raise errors.NotFound(f"media {ref.handle} is not in the processing cache")
         return "file://" + entry.local_path

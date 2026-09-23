@@ -370,6 +370,59 @@ async def media_sec__a_partial_request_stages_nothing(factory):
     assert await harness.port.stage(b.ORG_A, b.request(harness, refs=(mine,))) == (mine,)
 
 
+async def media_sec__an_upload_is_usable_only_within_its_window(factory):
+    """MEDIA-SEC / r1 R22 (MPILOT, proposed ruling): the upload window bounds an upload's
+    USE as well as its completion. A second before `expires_at` the finalized upload
+    resolves and stages; from it on, both are `410 upload_expired` - never a job over a
+    handle the store may already have collected."""
+    harness = factory()
+    ticket = await harness.port.create_upload(b.ORG_A, {"max_bytes": 1024})
+    handle = ticket["upload_handle"]
+    hook(harness, "put_object")(handle, b"within the window", "video/mp4")
+    ref = await harness.port.finalize_upload(b.ORG_A, handle)
+    harness.clock.advance(DEFAULTS.processing_cache_ttl_s - 1)
+    assert await harness.port.resolve_owned(b.ORG_A, handle) == ref
+    assert await harness.port.stage(b.ORG_A, b.request(harness, refs=(ref,))) == (ref,)
+    harness.clock.advance(1)
+    for use in (lambda: harness.port.resolve_owned(b.ORG_A, handle),
+                lambda: harness.port.stage(b.ORG_A, b.request(harness, refs=(ref,)))):
+        try:
+            await use()
+        except errors.UploadExpired as exc:
+            assert errors.http_status(exc.code) == 410
+        else:
+            raise AssertionError("an upload was used past its window")
+
+
+async def media_parity__an_attach_outlives_the_process_that_made_it(factory):
+    """DUR-RECOVER / MPILOT gap 2: the attach is durable. `reopened()` is the same store as
+    another process sees it - nothing in memory, the durable state shared (the fake's state
+    IS its durable state). There each job prepares its own refs, never another job's, and
+    an unknown job has none: the pilot's worker and a restarted gateway are that process."""
+    harness = factory()
+    request_a = b.request(harness, refs=(await b.materialized(harness, b.ORG_A),))
+    request_b = b.request(harness, org_id=b.ORG_B, key_id=b.KEY_B,
+                          refs=(await b.materialized(harness, b.ORG_B),))
+    staged_a = await harness.port.stage(b.ORG_A, request_a)
+    staged_b = await harness.port.stage(b.ORG_B, request_b)
+    hook(harness, "admitted")(request_a.request_id, b.ORG_A)
+    hook(harness, "admitted")(request_b.request_id, b.ORG_B)
+    await harness.port.attach(request_a.request_id, staged_a)
+    await harness.port.attach(request_b.request_id, staged_b)
+    other = hook(harness, "reopened")()
+    for request, staged, org_id in ((request_a, staged_a, b.ORG_A),
+                                    (request_b, staged_b, b.ORG_B)):
+        prepared = await other.prepare(request.request_id, "profile-2")
+        assert [(ref.org_id, ref.digest) for ref in prepared] == \
+            [(org_id, ref.digest) for ref in staged], "another process prepared other media"
+    try:
+        await other.prepare(harness.ids.uuid(), "profile-2")
+    except errors.NotFound:
+        pass
+    else:
+        raise AssertionError("another process invented media for an unknown job")
+
+
 def mediastore_cases():
     return [media_sec__an_upload_is_owned_verified_and_immutable,
             media_sec__another_org_cannot_resolve_or_finalize,
@@ -379,7 +432,9 @@ def mediastore_cases():
             media_sec__staging_never_replaces_an_existing_object,
             media_sec__a_refused_upload_stays_refused,
             media_sec__an_expired_upload_window_says_so,
-            media_sec__a_partial_request_stages_nothing]
+            media_sec__a_partial_request_stages_nothing,
+            media_sec__an_upload_is_usable_only_within_its_window,
+            media_parity__an_attach_outlives_the_process_that_made_it]
 
 
 # ==========================================================================

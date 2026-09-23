@@ -58,9 +58,10 @@ insert into infrx.serving_versions (serving_version_id, model_version_id, model_
   created_by, created_at)
 values ('d0000003-0000-4000-8000-000000000003', 'd0000002-0000-4000-8000-000000000002',
         'd0000001-0000-4000-8000-000000000001', 'b0000001-0000-4000-8000-000000000001',
-        '2026-09-01', 'marlin2b.chat.v1', 'marlin2b.video.v1', 'vllm/vllm-openai:nightly',
-        null,     -- a moving tag has no digest yet (R76); W3 pins it as a NEW serving version
-        'sha256:4444444444444444444444444444444444444444444444444444444444444444',
+        '2026-09-01', 'marlin2b.chat.v1', 'marlin2b.video.v1',
+        'vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42',
+        null,     -- runtime_image_digest: a NEW serving version records it (R76)
+        'sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147',
         'bfloat16',
         '{"api_family": "chat_completions", "billing_meter": "tokens-v1",
           "input_modalities": ["text", "video"], "input_schema_ref": "infrx.request.chat.v1",

@@ -224,9 +224,10 @@ class Relay:
         bound. M binds and prepares in this process (Limit 8), so that job cannot have been
         prepared, let alone run - its rechecks may still refuse, and cancel, it. Any other
         job in flight (bound, or staged by another process) may be running: it is answered
-        as it stands - no recheck, no attach, never a cancel. (ponytail: the witness is M's
-        in-process binding; when M persists the attach, the gate reads that instead.)"""
-        if job.request_id in self.media.by_job:
+        as it stands - no recheck, no attach, never a cancel. The bound-gate reads M's
+        attach wherever it is recorded (MPILOT: `attached` - this process's, else the durable
+        record another process wrote); the staged payload is still this process's."""
+        if await _dependency(self.media.attached(job.request_id)) is not None:
             return                              # bound: it may be preparing or running
         try:
             payload = self.media.staged_payload(job.request_id)

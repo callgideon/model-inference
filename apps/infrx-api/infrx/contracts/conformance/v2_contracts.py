@@ -179,10 +179,11 @@ async def split_contract__the_v1_model_revision_string_is_unchanged_r62(factory)
     assert serving.digest_source is v2.DigestSource.served_bytes, (
         "the registry-oid equality is still pending (W3); the record must say which "
         "kind of digest it holds rather than implying an upstream confirmation")
+    # the runtime is named by digest (W3's pin, E4B), never by a moving tag; the record's
+    # own `runtime_image_digest` is a new serving version's to fill (R76)
+    assert serving.runtime_image_ref.startswith("vllm/vllm-openai@sha256:")
     assert serving.image_is_pinned is False, (
-        "serve.sh pins the moving tag vllm/vllm-openai:nightly, so no image digest "
-        "exists yet; W3 pulls by digest and fills it")
-    assert serving.runtime_image_ref == "vllm/vllm-openai:nightly"
+        "runtime_image_digest is recorded by a new serving version (R76), not on this one")
 
 
 async def split_contract__the_surface_carries_one_reviewed_version(factory):

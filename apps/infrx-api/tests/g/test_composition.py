@@ -445,6 +445,9 @@ def test_f_base__create_app_builds_the_stores_it_is_not_given_on_one_pool(monkey
     assert rt.media_store.objects is objects and rt.lifetime.reconciler.index is index
     assert ingress.component_state(rt.ingress.checks) == {"price_source": "unavailable",
                                                           "journal": "unavailable"}
+    # a store built from settings needs a database named: an empty DSN is libpq's defaults
+    with pytest.raises(RuntimeMisconfigured, match="requires DATABASE_URL"):
+        cutover_app(support.settings("dev", database_url=""), objects=objects, index=index)
     # and a given store is used as given, with no pool of ours
     rt, _ = composed()
     given = cutover_app(support.settings("dev"), catalog=rt.relay.catalog,

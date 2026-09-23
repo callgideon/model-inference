@@ -77,6 +77,7 @@ _TENANT = re.compile(r"t_[0-9a-f]{12}")
 _DEVICE = re.compile(r"[0-9]{1,2}")
 _MOUNT = re.compile(r"[a-z][a-z_]{0,23}")
 _REVISION = re.compile(r"[0-9a-f]{7,40}")
+_IMAGE = re.compile(r"sha256:[0-9a-f]{64}")
 _PROCESS = re.compile(r"[a-z][a-z_]{0,15}")
 
 
@@ -150,8 +151,8 @@ FAMILIES: dict[str, Spec] = {
     "infrx_gpu_memory_bytes": Spec("gauge", "GPU memory.",
                                    (("gpu", _DEVICE), ("state", frozenset({"used", "total"})))),
     "infrx_gpu_utilization_ratio": Spec("gauge", "GPU utilization, 0-1.", (("gpu", _DEVICE),)),
-    "infrx_build_info": Spec("gauge", "1, labelled with the deployed git revision.",
-                             (("revision", _REVISION),)),
+    "infrx_build_info": Spec("gauge", "1, labelled with the deployed git revision and image.",
+                             (("revision", _REVISION), ("image", _IMAGE))),
 }
 FAMILIES["infrx_metrics_label_rejected_total"] = Spec(
     "counter", "Label values or observations refused by the sanitizer.",

@@ -346,6 +346,12 @@ class DeploymentSettings:
     # reads them (the instance role on the box).
     s3_media_prefix: str = "infrx/"
     s3_endpoint_url: str = ""
+    # E4B's served-build check: the commit install.sh deployed (`RELEASE`, "the checkout is
+    # exactly a commit") and the runtime image id it built, written by preflight `apply`.
+    # Exposed as `infrx_build_info{revision, image} 1`; a pilot refuses to start without
+    # them (`pilot.build_info`). Never read from git or docker at runtime.
+    infrx_release_sha: str = ""
+    infrx_image: str = ""
 
     def replace(self, **changes):
         return dataclasses.replace(self, **changes)
@@ -356,6 +362,9 @@ DEPLOYMENT_DEFAULTS = DeploymentSettings()
 # Set, it must be at least this long. Not a password: a signing key.
 MIN_CONSOLE_CURSOR_SECRET_CHARS = 16
 
+# A full git commit id, and an image id as `docker image inspect` prints it.
+RELEASE_SHA_RE = re.compile(r"[0-9a-f]{40}")
+IMAGE_ID_RE = re.compile(r"sha256:[0-9a-f]{64}")
 # One or more path segments, each ending in `/`: never the bucket root, never `//`.
 S3_PREFIX_RE = re.compile(r"(?:[A-Za-z0-9._-]+/)+")
 # A scheme and an authority only: no path, no query, no `user:password@`.
@@ -427,6 +436,10 @@ def validate_deployment(deployment, mode=MODE_UNSET):
     if deployment.s3_endpoint_url and not S3_ENDPOINT_RE.fullmatch(deployment.s3_endpoint_url):
         raise RuntimeMisconfigured(
             mode, detail="S3_ENDPOINT_URL must be http(s)://host[:port], no path or credentials")
+    if deployment.infrx_release_sha and not RELEASE_SHA_RE.fullmatch(deployment.infrx_release_sha):
+        raise RuntimeMisconfigured(mode, detail="INFRX_RELEASE_SHA must be a 40-hex commit id")
+    if deployment.infrx_image and not IMAGE_ID_RE.fullmatch(deployment.infrx_image):
+        raise RuntimeMisconfigured(mode, detail="INFRX_IMAGE must be sha256:<64 hex>")
     return deployment
 
 

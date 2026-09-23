@@ -35,8 +35,10 @@ from typing import Any
 
 from ..config import RuntimeMisconfigured, runtime_mode
 from ..contracts import errors
+from ..contracts.limits import env_name
 from ..contracts.v2.records import CredentialAudience
 from ..media import fetch
+from ..media.attachments import PgAttachments
 from ..media.prepare import ProcessingCache
 from ..media.uploads import MediaUploads
 from ..observe.metrics import Registry
@@ -199,9 +201,15 @@ def adapters_from_env(settings, **injected):
     if "objects" not in adapters:
         adapters["objects"] = object_store(settings)
     if not {"catalog", "stream", "jobs"} <= adapters.keys():
+        if not settings.pilot.database_url.strip():
+            # Required in pilot by `validate_runtime`; in dev/test too once a store is built
+            # from it - an empty DSN is libpq's defaults, some other database.
+            raise RuntimeMisconfigured(runtime_mode(settings), ("DATABASE_URL",))
         pool, connect = connection_pool(settings)
         adapters = {"catalog": PgCatalogDirectory(connect),
                     "stream": PgStreamStore(connect, limits=settings.pilot),
+                    # MPILOT gap 2: M's attach, durable where the worker reads it
+                    "attachments": PgAttachments(connect),
                     "jobs": PgJobStore(connect, limits=settings.pilot), "pool": pool,
                     **adapters}
     return adapters
@@ -227,8 +235,25 @@ class Lifetime:
     tasks: list = field(default_factory=list)
 
 
+def build_info(rt) -> None:
+    """E4B's served-build check: `infrx_build_info{revision, image} 1` on /metrics, from the
+    settings the installer wrote (`INFRX_RELEASE_SHA`, `INFRX_IMAGE`). A pilot refuses to
+    start without them; dev/test set the gauge only when both are given."""
+    deployment = rt.settings.deployment
+    missing = [env_name(name) for name in ("infrx_release_sha", "infrx_image")
+               if not getattr(deployment, name)]
+    if missing:
+        if rt.mode == "pilot":
+            raise RuntimeMisconfigured(rt.mode, missing)
+        return
+    if getattr(rt, "metrics", None) is None:
+        rt.metrics = Registry("gateway")
+    rt.metrics.set("infrx_build_info", 1, revision=deployment.infrx_release_sha,
+                   image=deployment.infrx_image)
+
+
 def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None, index=None,
-                       pool=None, consent_for=None) -> IngressDeps:
+                       pool=None, consent_for=None, attachments=None) -> IngressDeps:
     """The `IngressDeps` G1R request 1 asks for, built from `rt.settings`, with the pieces
     other routers share put on `rt` (`media_store`, `large_bodies`, `metrics`, `lifetime`).
     The adapters come from `adapters_from_env` (or a test); `pool` is theirs, if any, for
@@ -256,7 +281,7 @@ def build_ingress_deps(rt, *, catalog=None, stream=None, objects=None, jobs=None
         objects, cache=ProcessingCache(pilot.processing_cache_dir,
                                        ttl_s=pilot.processing_cache_ttl_s),
         limits=pilot, fetcher=fetch.MediaFetcher(pilot, allowed_mime=settings.allowed_video_mime),
-        job_org=relay.job_org)
+        job_org=relay.job_org, attachments=attachments)
     rt.large_bodies = intake.LargeBodies(limit=deployment.large_body_limit,
                                          threshold=deployment.large_body_threshold_bytes)
     checks = {"price_source": Probe(price_check(catalog, settings.model_id,
