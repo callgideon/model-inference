@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T22:37:04Z",
+  "updated": "2026-09-23T22:44:29Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -29,7 +29,7 @@
     },
     "E3B-phase3": {
       "lane": "codex-e3b3 / codex/e3b-phase3-bodies",
-      "phase": "HANDED BACK 4ac1419 (all bodies; gate exit 3 = pending only M3-U1 \u00d73 + I2B-R4; api-test 3497 on the merged tree); one-round review running \u2192 merge with D5 (after cutover + objstore); M pilot-media merge closes M3-U1/U2",
+      "phase": "review fix_required at 4ac1419 (J2 embedded-worker cells must pend on M3-U2; J1 footprint; H-B1 canonical gate) \u2192 ONE fix round running \u2192 single verifier \u2192 merge in the D5 unit",
       "since": "2026-09-23T19:29:02Z",
       "note": "namespace e3b2 / 56732"
     },
@@ -100,8 +100,8 @@
       "since": "2026-09-23T22:02:17Z"
     },
     "E3B-phase3": {
-      "phase": "review at 4ac1419 running (journey/money + honesty lenses + refuters)",
-      "since": "2026-09-23T22:05:47Z"
+      "phase": "fix_required at 4ac1419 (wf_1fd8ad49-30d; JSON evidence/e/E3B3-review-4ac1419.json) \u2192 fix round",
+      "since": "2026-09-23T22:44:29Z"
     },
     "merge-plan": {
       "phase": "MERGED 58e6fdb: scripts 1\u20139 + replay; gating unit D5\u2192phase 3\u2192cutover\u2192M1-L2 on all four verdicts; then M pilot \u2192 E4B \u2192 checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) \u2192 ff main",

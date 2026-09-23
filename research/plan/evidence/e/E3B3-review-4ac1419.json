@@ -1,0 +1,589 @@
+{
+ "verdict": "fix_required",
+ "lenses_returned": 2,
+ "head": "4ac1419",
+ "reviews": [
+  {
+   "lens": "journey",
+   "verdict_hint": "fix_required",
+   "fabrication_check": "Every count and tail above is quoted from this session's command output. I checked the lane's claims against the reproduced gate: exit 3, git_head == git_head_end at 4ac1419 (clean), backend {139, 4, 0} with pending exactly M3-U1 x3 + I2B-R4, suites 248/7, and mutants 245/241/4/0/null. All match the evidence's a4facba gate. Also confirmed: dr17 builds create_app(from_env(env)) with no adapter injected (grep shows no objects=/catalog=/stream= on that path). The journey box injects only sb= (PostgREST root; the product appends /rest/v1), index= (a Valkey namespace) and the media fetcher's resolve/transport, as the evidence lists. The M3-U1 400 and the M3-U2 failed/platform_error both reproduced. Stated limits of this review: I did not re-run make api-test/console-test/bench-test (the lens is the stack), and I did not re-run the lane's e3bm59-68 individually (the gate's mutant stage ran them: 241 killed). Mutant O died with a ValidationError rather than an AssertionError. Mutant D was measured only against the resume case. That the journeys would kill D is an inference from K, not a run.",
+   "cleanup": "The e3b2 stack is torn down: harness.down() removed the 4 infrx-e3b2-* containers, `docker ps -a | grep -c e3b2` = 0, and no e3b2 networks or volumes remain. The journey PostgREST containers and pilot boxes closed with their fixtures, and each box removed its MinIO prefix and Valkey namespace in close(). The scratch clone /tmp/claude-1000/review-e3b3-journey-2254766 and its side directory .rv are deleted. The probe sources and mut.py are kept in the session scratchpad (…/scratchpad/test_probe_*.py, mut.py). No product mutation remains: each was reverted with git checkout and porcelain was empty after each, before the clone was deleted. The reviewed worktree codex-e3b3 was never written: HEAD 4ac1419, porcelain empty. I never used port 55432 and never touched another lane's containers.",
+   "mutants": [
+    {
+     "name": "A_lookup_disabled",
+     "edit": "relay.py _lookup: `if idem.key is None:` -> `if True:` (R91 lookup never consulted)",
+     "result": "SURVIVED lane journeys (text,video_url x 3 modes: `6 passed, 10 deselected`)",
+     "killed_by": "reviewer probe p1 only ('a same-key replay staged {payloads/...json}')"
+    },
+    {
+     "name": "M_conflict_swallowed",
+     "edit": "relay.py _lookup: add `except errors.IdempotencyConflict: return None` (conflict deferred to admit, after staging)",
+     "result": "SURVIVED lane journeys (`6 passed`)",
+     "killed_by": "reviewer probe p1 only ('a conflict staged {...}')"
+    },
+    {
+     "name": "B_async_not_folded",
+     "edit": "ingress.identity_digest: `if request.execution_mode is not ExecutionMode.async_:` -> `if True:`",
+     "result": "killed",
+     "killed_by": "test_backend_journey[text-sync], [text-async]: 'R94: sync key reused in async: 202' / 'async key reused in sync: 200'"
+    },
+    {
+     "name": "C_events_from_start",
+     "edit": "jobs.py job_events: `_Events(relay, ..., cursor, ...)` -> `_Events(relay, ..., None, ...)`",
+     "result": "killed",
+     "killed_by": "test_backend_journey[text-sse]: byte-equal replay assert ('1-1', ...)"
+    },
+    {
+     "name": "P_stream_out_of_digest",
+     "edit": "validate.payload_digest (no media): canonical_bytes(body) -> canonical_bytes(body minus 'stream')",
+     "result": "killed",
+     "killed_by": "test_backend_journey[text-sync],[text-sse]: 'R94: sync key reused in sse: 200'"
+    },
+    {
+     "name": "K_usage_off_by_one",
+     "edit": "relay.answer: ChatUsage.of(outcome.usage) -> completion_tokens + 1",
+     "result": "killed",
+     "killed_by": "test_backend_journey[text-sync] settled_once: 'not ONE debit at the card'"
+    },
+    {
+     "name": "T_debit_trunc (live SQL on journey clone)",
+     "edit": "infrx.debit_credit `select round(` -> `select trunc(`",
+     "result": "SURVIVED text-sync cell (integer rates; D5 unit grid covers)",
+     "killed_by": ""
+    },
+    {
+     "name": "D_double_charge (live SQL on journey clone)",
+     "edit": "infrx.debit_credit `* 0.000001, 8)` -> `* 0.000002, 8)`",
+     "result": "SURVIVED test_backend_journey__dataset_client_resume (charged 0.972 vs card 0.486)",
+     "killed_by": ""
+    },
+    {
+     "name": "O_terminalize_order (live DEFECT in dr07c's rig)",
+     "edit": "terminalize: move `perform infrx.settle_credit/settle_legacy_usd` block before the one `update infrx.jobs`",
+     "result": "killed (as an error, not an assertion)",
+     "killed_by": "dr07c: pydantic ValidationError SettlementV2.charged None at jobstore.py:115"
+    },
+    {
+     "name": "X_hold_in_second_transaction (live DEFECT + adapter wrap)",
+     "edit": "db12's _hold_left_held plus a separate-connection `update credit_wallet_holds set state='settled'` after each complete_credit (the end state identical, only xmin differs)",
+     "result": "killed",
+     "killed_by": "dr07c: 'the hold was not released in the settling transaction' (hold xmin 1477 vs job/debit 1476; moved=[1,0,0])"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "docker ps -a | grep e3b2 (before starting)",
+     "exit": 1,
+     "tail": "(empty: namespace free)"
+    },
+    {
+     "cmd": "git clone --shared -q <infrx-impl> /tmp/claude-1000/review-e3b3-journey-2254766 && git fetch -q origin && git checkout -q 4ac1419 && make api-env",
+     "exit": 0,
+     "tail": "4ac1419 evidence: E3B phase 3 ... ; + uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+    },
+    {
+     "cmd": "(first launch, scratch dir inside the tree -> would report dirty; stopped with SIGTERM to run.py pid 2259510, then relaunched)",
+     "exit": 143,
+     "tail": "exit 1 (see the stages above) / EXIT=143; teardown removed every infrx-e3b2-* container"
+    },
+    {
+     "cmd": "INFRX_E2_NAMESPACE=e3b2 INFRX_Q_VALKEY_PORT=56761 CORPUS_CACHE=<main>/.claude/corpus-cache TMPDIR=<scratch>/tmp run.py --layer 3 --canary --only-suites --report l3.json (detached setsid nohup, 22:07Z->22:29Z, Monitor until-loop)",
+     "exit": 3,
+     "tail": "git_head = git_head_end = 4ac141959cfc, dirty False both; rls 731; [PEND] backend passed 139 pending 4 failed 0, pending_by_id {'I2B-R4': 1, 'M3-U1': 3}, stale_pending null; engine 8 cases; suites 248 passed 7 skipped; mutants {\"mutants\": 245, \"killed\": 241, \"controls_survived\": 4, \"not_killed\": 0, \"pending\": 0, \"problems\": null}; canary ok; teardown removed 4; 1306.1 s; l3.json sha256 7ce9c5be67b9696f"
+    },
+    {
+     "cmd": "INFRX_E2_NAMESPACE=e3b2 run.py --layer 2 --keep",
+     "exit": 0,
+     "tail": "preflight/services/migrate ok; rls 731 cases; [skip] teardown: --keep"
+    },
+    {
+     "cmd": "pytest -s test_probe_journey.py (p0,p1,p2,p4,p6,p9) on the unmutated tree",
+     "exit": 0,
+     "tail": "rounding_trunc survived true; r91 text 2/2/2, video_url 5/5/5, codes sse 409 async 409, back 200 replayed; stream_false explicit 200 then omitted 409 idempotency_conflict (and the reverse); rotation first -0.50160000 at the seeded card, second 400; upload foreign complete 404, chat 400; 7 passed in 10.42s"
+    },
+    {
+     "cmd": "pytest -s test_probe_rotation.py (integer and fractional newer card)",
+     "exit": 0,
+     "tail": "sync/async 400 invalid_request, job ('cancelled','client_cancelled','released_free','rc_probe_newer','147.45600000'), hold released, ledger []; 2 passed"
+    },
+    {
+     "cmd": "pytest -s test_probe_drills.py (p3 in-flight restart, p8a order, p8b xmin, p10 M3-U2)",
+     "exit": 1,
+     "tail": "inflight: worker pid 3015791 unchanged, gateway 3015792->3017905, sse and sync 200 same_id replayed full, debits [(1,)], open_attempts [(0,)]; xmin_mutant died 'hold was not released in the settling transaction' hold xmin 1477 vs 1476; m3u2 status 500 internal_error job failed/platform_error; p8a raised ValidationError (SettlementV2.charged None), not AssertionError -> 1 failed, 3 passed"
+    },
+    {
+     "cmd": "mut.py A_lookup_disabled; pytest test_journey.py -k 'backend_journey and (text or video_url) and not resume and not upload'; then probe p1",
+     "exit": 1,
+     "tail": "lane: 6 passed, 10 deselected; probe: text 2->3->5 new payloads/...json, video_url 10->11->13; 2 failed (probe)"
+    },
+    {
+     "cmd": "mut.py M_conflict_swallowed; same",
+     "exit": 1,
+     "tail": "lane: 6 passed, 10 deselected; probe: text 1->1->3, video_url 6->6->8; 2 failed (probe)"
+    },
+    {
+     "cmd": "mut.py B/C/P/K each; pytest test_journey.py -k 'backend_journey and text and not resume'",
+     "exit": 1,
+     "tail": "B: 2 failed 1 passed (R94 202/200 vs 409); C: 1 failed (text-sse replay); P: 2 failed (R94 sync/sse 200); K: 1 failed ('not ONE debit at the card'); each reverted with git checkout, porcelain empty"
+    },
+    {
+     "cmd": "pytest -s test_probe_journey.py -k 'p11 or p6 or p9' then -k p11 alone",
+     "exit": 0,
+     "tail": "resume_changed jobs [0,4,8], 2x rejected idempotency_conflict, 4 accepted; double_charge_resume survived true, sample ('1200','5','0.97200000')"
+    },
+    {
+     "cmd": "pytest -s test_probe_journey.py -k p12",
+     "exit": 0,
+     "tail": "delete terminal 200 succeeded repeat-equal true; with body 400 invalid_request; in-flight 200 cancelled client_cancelled row held_unknown hold unknown; Prefer on chat 202 preference-applied respond-async; /v1/jobs no Preference-Applied, Server-Timing prepare;dur=10.2"
+    },
+    {
+     "cmd": "git merge-tree --write-tree --name-only origin/claude/backend-impl 4ac1419",
+     "exit": 0,
+     "tail": "35a8786991840069d1d68478ae9ec260f636333f (no conflicts against the current integration head 86a839e)"
+    },
+    {
+     "cmd": "harness.down() for e3b2; docker ps -a | grep -c e3b2; docker network/volume ls | grep e3b2",
+     "exit": 0,
+     "tail": "removed ['infrx-e3b2-clickhouse','infrx-e3b2-postgres','infrx-e3b2-s3','infrx-e3b2-valkey']; 0; none"
+    }
+   ]
+  },
+  {
+   "lens": "honesty",
+   "verdict_hint": "fix_required",
+   "fabrication_check": "Re-derived myself:\n- Layer 0 is 153/102 and I2B-R4 is the only PENDING, both at 4ac1419 and on the merged tree.\n- test_run + test_stage + the I3B list: 63.\n- tests/i: 145 (151 on the merged tree).\n- Mutant list: 245 with 4 controls, so 241 killed. At eb08901 it was 246, which fits the i3bm39/i3bm100 retirement plus e3bm68.\n- Collection: 255 = 153+102 = 248+7. test_recovery 17 = 16+1. test_journey's 10 passed / 6 skipped decomposes correctly.\n- Backend stage totals are consistent across P3-3/P3-12/gate: 129+14 = 138+5 = 139+4 = 143.\n- stale_pending with the D5/E3B/E4B/M lanes flipped is [].\n- D5 IR2: byte-equal (extracted diff sha256 a8e75c3f… at both D5 heads; after git apply both files cmp-equal to 8c00bb4). IR1 has no byte-specified text in D5's evidence ('+= tests/d/test_code_mutants_d5.py'), so 'identical text' can only mean the same content; the merge simulation is clean.\n- IR3-1's 'only conflict was the Makefile' reproduced. IR3-1…7 are all present (IR3-6 is listed after IR3-7).\n- G2-R1 and M1-L2 are gone from both OWNERS dicts. The only remaining mentions are comments. Nothing references e3bm40/51, i3bm39/100/101/105, ingress_is_mounted or _object_store_adapters.\n- M3-U1's OWNERS text matches the coordinator's decision in coordinator/2026-09-22-session-02.md:707 ('upload-ref resolution in the real staging'). A verbatim coordinator text is not in the repo, so exact wording cannot be verified.\n- Findings attribution:\n  - M3-U1/M3-U2 → M (the coordinator's ruling).\n  - Frozen clone clock → the test rig.\n  - stream_options and the upload-handshake mismatch → E1B. Correct, but G6B reported stream_options first (H-N7).\n  - i3bm107 → I3B's mutant.\n  - stream:false identity → R94 by design.\n  - SSE role re-add → G2's 'role on the first' contract.\n\nNot re-derived (quoted only, need a stack or a 30-min D run outside this lens): backend {139, 4}, rls 731, suites 248/7, api-test 3497/14/5, console 289, bench 67, the S3 28+28, and the layer-2 mutant kills. Their death lines were checked statically against the head; e3bm61's line is stale (H-N3). The claimed gate outcome holds only for --only-suites (H-B1).",
+   "cleanup": "Removed the scratch clone /tmp/claude-1000/review-e3b3-honesty-2251417 and its worktrees (rvh-merge, applyd5, eb08901 checkout, remerge; the remerge merge was aborted first). Also removed /tmp/claude-1000/rvh-out (logs, reports, private TMPDIRs, the infrx-d71-postgres-55711.lock) and the api-env log. The D harness removed its own infrx-d71-postgres-supabase container (`docker ps -a | grep -c d71` → 0). The tasks.json flip and the tasklocal d71 patch existed only in scratch, and both were restored or deleted. Neither the codex-e3b3 nor the infrx-impl worktree was written to; both report a clean status. I did not use 55432 and did not touch any other lane's containers. The infrx-e3b2-* containers visible at 22:07Z belong to review-e3b3-journey-2254766 and were left alone. No hosted project, AWS, box or secret was used.",
+   "mutants": [
+    {
+     "name": "e3bm15 (lane)",
+     "edit": "test_drills rig: `if stubs: stack.pending(` → `if False:`",
+     "result": "killed",
+     "killed_by": "test_stage.py test_a_drill_driving_a_stub_pends_on_its_owner_before_building_a_store: runner tail `test_stage.py:122: AssertionError`; reproduced by hand as 'E   AssertionError: a drill driving a stub built its store' (the declared reason)"
+    },
+    {
+     "name": "e3bm41 (lane, re-pointed)",
+     "edit": "run.stale_pending: RESIDUAL excused regardless of module",
+     "result": "killed",
+     "killed_by": "test_stage.py:231 `assert run.stale_pending({\"pending\": {\"G1R\": [e3b, i3b]}}) == [\"G1R\"]`"
+    },
+    {
+     "name": "e3bm58 (lane, re-pointed)",
+     "edit": "_is_recovery: `\"recovery\" in case`",
+     "result": "killed",
+     "killed_by": "test_stage.py:235 (the recovery-like E3B name stays stale)"
+    },
+    {
+     "name": "e3bm63 (lane)",
+     "edit": "test_journey pending id M3-U1 → G4U",
+     "result": "killed",
+     "killed_by": "test_stage.py:221 `assert refused == [], f\"E3B cases keyed on an unknown or merged id…\"` (stack.pending refuses G4U)"
+    },
+    {
+     "name": "e3bm59-62, e3bm64-68, i3bm107 (lane, layer 2)",
+     "edit": "as declared in mutants.py / mutants_i3b.py",
+     "result": "not run (lens forbids a stack; runner reports layer-2 pending without one). Anchors: test_every_mutant_anchor_occurs_as_declared_on_the_checkout passed at 4ac1419 and on the merged tree. i3bm107's two mode anchors occur once each in test_restore.py (`d._docker(\"kill\", container)` at 757, `faults.kill_container(\"postgres\")` at 763), and the ON_D/INFRX_I3B_PG condition is identical. The quoted death lines map to the stated assertions at head, except e3bm61 (H-N3)",
+     "killed_by": "n/a"
+    },
+    {
+     "name": "MY1",
+     "edit": "stack.OWNERS emptied (M3-U1 removed)",
+     "result": "killed",
+     "killed_by": "test_stage owner_reference: 'assert {} == {'M3-U1': [… video_upload-async]}'"
+    },
+    {
+     "name": "MY2",
+     "edit": "journey pends for both video kinds",
+     "result": "killed",
+     "killed_by": "test_stage owner_reference: pended dict has 6 cells, expected 3"
+    },
+    {
+     "name": "MY3",
+     "edit": "recoverykit.OWNERS re-adds retired 'G2-R1'",
+     "result": "SURVIVED (101 passed, 48 skipped over test_stage, recovery/, test_journey, test_run). The first -x run died on an unrelated 'OSError: [Errno 98] Address already in use' (P-21 port collision with another lane's stack), so it was re-run without -x",
+     "killed_by": "none (H-N2)"
+    },
+    {
+     "name": "MY4",
+     "edit": "stack.OWNERS gains I2B-R4 with different text",
+     "result": "killed",
+     "killed_by": "test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual: 'assert False where False = all(<genexpr>)' (owner-text equality)"
+    },
+    {
+     "name": "MY5",
+     "edit": "journey `stack.pending(\"M3-U1\"` → no-op",
+     "result": "killed",
+     "killed_by": "test_stage owner_reference: 'assert {} == {M3-U1: …}'"
+    },
+    {
+     "name": "MY6",
+     "edit": "journey also pends every async cell",
+     "result": "killed",
+     "killed_by": "test_stage owner_reference: pended includes text-async/video_url-async"
+    },
+    {
+     "name": "MY7",
+     "edit": "pilotbox.PilotBox inherits the AWS_UNSET names",
+     "result": "survived layer 0 (153 passed, 102 skipped): pilotbox has no layer-0/1 guard; killable only at layer 2 (not run)",
+     "killed_by": "none at layer 0"
+    },
+    {
+     "name": "MY8",
+     "edit": "pilot_box does not unfreeze the clone clock",
+     "result": "survived layer 0 (153/102); at layer 2 expected killed (P3-8: 504 deadline_exceeded), not run",
+     "killed_by": "none at layer 0"
+    },
+    {
+     "name": "MY9",
+     "edit": "CreditWork.complete calls v1 complete instead of complete_credit",
+     "result": "survived layer 0 (153/102); at layer 2 expected killed by settled_once, not run",
+     "killed_by": "none at layer 0"
+    }
+   ],
+   "commands": [
+    {
+     "cmd": "make api-env (scratch clone at 4ac1419)",
+     "exit": 0,
+     "tail": "+ uvicorn==0.53.0 + valkey==6.1.1 + zstandard==0.25.0"
+    },
+    {
+     "cmd": "INFRX_E2_NAMESPACE=e3b2 pytest -q -rfEs tests/integration (layer 0, 4ac1419, no stack)",
+     "exit": 0,
+     "tail": "SKIPPED [1] …recoverykit.py:92: PENDING[I2B-R4] no worker process entry point (python -m infrx.worker) to SIGTERM | 153 passed, 102 skipped, 2 warnings in 27.17s"
+    },
+    {
+     "cmd": "pytest -q tests/integration/test_run.py tests/integration/backend/test_stage.py tests/integration/backend/recovery/test_mutant_list_i3b.py (4ac1419)",
+     "exit": 0,
+     "tail": "63 passed in 11.62s"
+    },
+    {
+     "cmd": "cd apps/infrx-api && pytest -q -rfEs tests/i (4ac1419)",
+     "exit": 0,
+     "tail": "145 passed in 154.33s (0:02:34)"
+    },
+    {
+     "cmd": "TMPDIR=<private> mutants.py --layer all --only e3bm15|e3bm41|e3bm58|e3bm63",
+     "exit": 0,
+     "tail": "each: {\"mutants\": 1, \"killed\": 1, … \"problems\": null}; tails test_stage.py:122 / :231 / :235 / :221 AssertionError"
+    },
+    {
+     "cmd": "mutants.all_mutants() count at 4ac1419 and eb08901",
+     "exit": 0,
+     "tail": "all 245 must_survive 4 | eb08901 all 246 must_survive 4 (so 241 killed + 4 controls matches the gate)"
+    },
+    {
+     "cmd": "pytest --collect-only tests/integration; recovery/test_recovery.py",
+     "exit": 0,
+     "tail": "255 tests collected (=153+102 = 248+7); test_recovery 17 (=16+1)"
+    },
+    {
+     "cmd": "stale_pending on tasks.json with D5/E3B/E4B/M* flipped to implemented (restored after)",
+     "exit": 0,
+     "tail": "stale [] ; control {'D5': [...]} -> ['D5']"
+    },
+    {
+     "cmd": "extract D5's contracts-retire-0016-refusal.diff from D5-4bcac3b.md at c67e4f5 and at 8554b47; git apply on 8c00bb4^; cmp against 8c00bb4",
+     "exit": 0,
+     "tail": "sha256 a8e75c3fbabc4c1c… (both heads); byte-equal apps/infrx-api/tests/contracts/mutants.py; byte-equal …/test_cancel_cause.py"
+    },
+    {
+     "cmd": "re-create 14ea556 merge (14ea556^1 + e1bb54f)",
+     "exit": 1,
+     "tail": "CONFLICT (content): Merge conflict in Makefile (only file) - matches IR3-1"
+    },
+    {
+     "cmd": "merge sim: origin/claude/backend-impl 86a839e + origin/codex/d5-terminal-transaction 8554b47 + origin/codex/cutover-mount 351d084 + origin/codex/m1l2-object-store 0b9fc50 + 4ac1419",
+     "exit": 0,
+     "tail": "no textual conflicts (Makefile, tests/d, stack.py, harness list, Dockerfile all auto-merged); api-mutants line carries both tests/d/test_code_mutants_d5.py and tests/m/test_s3_mutants.py; 0018 = D5 fix-round blob 7d1a216 (grant_credit/reconcile bodies only; settle_credit/terminalize, CHECK and guard that pgstate/db12/db13 pin unchanged)"
+    },
+    {
+     "cmd": "merged: make api-env",
+     "exit": 0,
+     "tail": "+ valkey==6.1.1 + zstandard==0.25.0"
+    },
+    {
+     "cmd": "merged: INFRX_E2_NAMESPACE=e3b2 pytest -q -rfEs tests/integration",
+     "exit": 0,
+     "tail": "PENDING[I2B-R4] only | 153 passed, 102 skipped, 2 warnings in 29.40s"
+    },
+    {
+     "cmd": "merged: test_run + test_stage + test_mutant_list_i3b",
+     "exit": 0,
+     "tail": "63 passed in 12.02s"
+    },
+    {
+     "cmd": "merged: cd apps/infrx-api && pytest -q -rfEs tests/i",
+     "exit": 0,
+     "tail": "151 passed in 225.04s (0:03:45)"
+    },
+    {
+     "cmd": "merged: pytest -q -rfEs tests/g (mutant lists excluded)",
+     "exit": 0,
+     "tail": "510 passed, 2 warnings in 13.90s"
+    },
+    {
+     "cmd": "merged, private task d71 patched into scratch tasklocal (55711): TMPDIR=<private> INFRX_D_TASK=d71 INFRX_D1_IMAGE=supabase pytest -q -rfEs tests/d/test_credit_jobstore_conformance.py tests/d/test_jobstore_conformance.py",
+     "exit": 0,
+     "tail": "80 passed, 4 xfailed in 451.93s (0:07:31)"
+    },
+    {
+     "cmd": "merged: pytest -rs tests/m/test_s3.py tests/m/test_s3_mutants.py (no INFRX_M_S3_ENDPOINT)",
+     "exit": 0,
+     "tail": "SKIPPED [2] tests/m/test_s3_mutants.py:38: M1-L2 (owner: M): no S3-compatible endpoint - … export INFRX_M_S3_ENDPOINT … | 28 passed, 17 skipped in 26.31s"
+    },
+    {
+     "cmd": "own mutants MY1-MY6 (mut.py: single-anchor replace, pytest -x, restore)",
+     "exit": 1,
+     "tail": "MY1/2/4/5/6 exit=1 killed (quoted in the mutants table); MY3 first run died on OSError Errno 98 (unrelated), rerun without -x: '101 passed, 48 skipped' = survived"
+    },
+    {
+     "cmd": "own mutants MY7-MY9 over tests/integration layer 0",
+     "exit": 0,
+     "tail": "153 passed, 102 skipped each = survived at layer 0"
+    }
+   ]
+  }
+ ],
+ "confirmed_blocking": [
+  {
+   "id": "J2",
+   "severity": "blocking",
+   "file": "tests/integration/backend/test_journey.py",
+   "line": "244-250 (pilotbox.py pilot_box embedded=True for journeys)",
+   "claim_broken": "The gate counts the three video_url cells (sync/SSE/async) as PASS on 'the mounted gateway'. They pass only because the worker is emulated inside the gateway process (pilotbox EMBED=1). In the target composition (the worker as its own process, which I2B-R4's `python -m infrx.worker` composes) the same request fails. This is M3-U2, a product defect the lane found and reported. No case fails or pends on it, so the gate's pending count (M3-U1 x3, I2B-R4) hides it.",
+   "evidence": "Probe p10: pilotbox.journey(embedded=False), then video_url sync with key probe-m3u2-sync. Result: `status 500 internal_error {\"infrx\":{\"state\":\"failed\"}}`, job `[('failed','platform_error','released_platform_absorbed')]`. The same request with the embedded worker passes (the lane's cells, and my P1 video_url run: 200). Evidence Limit 2 says 'M3-U2 is not keyed on any case'. The coordinator ruled only on M3-U1.",
+   "minimal_fix": "Add a video_url cell on pilot_box(embedded=False) that calls stack.pending on a new owner reference 'M3-U2' (stack.OWNERS, text naming M's process-local attach and cache index). The gate then reports it as PENDING rather than PASS. It retires with the M lane (IR3-3). Alternatively, get a coordinator ruling recorded in the evidence.",
+   "lens": "journey",
+   "votes": [
+    {
+     "refuted": true,
+     "reason": "The failure is real, but it is neither hidden nor a case passing without its invariant, so it does not block. I did not re-run p10: the journey needs the full stack, which I was told not to bring up. I don't dispute the probe, because the lane records the same failure itself.\n\n1. The lane discloses the fact in several places:\n   - The pilotbox.py docstring (lines 34-40) says the worker \"serves text only\" when it is its own process, because the ProcessingCache index and MediaUploads.by_job are process memory.\n   - The evidence doc (research/plan/evidence/e/E3B-e57b820.md) records it five more times: P3-9 (\"found ... M3-U2 (a worker process: the video_url job failed/platform_error, the cache index is process memory); both sent to the coordinator\"), emulation item 7 (\"The worker runs inside the gateway process for the journeys and dr11 (M3-U2 ...)\"), Limits 1-2, IR3-3 and the Handback \"Left\" line (\"rc03's cross-process video form (M3-U2)\").\n   - The test_recovery.py rc03 table row says \"text only: a worker process cannot resolve media another process prepared (M3-U2)\".\n\n2. The defect was already on the coordinator's record before E3B. research/plan/evidence/coordinator/2026-09-22-session-02.md lists W3's integration request \"M2 ProcessingCache in-memory index breaks a separate worker process\". It is a tracked, owned defect, not one this gate is hiding.\n\n3. The cells keep their invariant. test_backend_journey's docstring asserts gateway contracts: mode contract, replay, R94 409, cross-tenant 404, one debit, hold settled, USD unmoved, conservation. It makes no claim about where the worker runs, and those invariants are exercised and mutant-killed.\n\n4. The \"target composition\" named in the claim does not exist. There is no `python -m infrx.worker` (I2B-R4), and product code runs no preparation worker. The pilot box emulates both. So embedded=False is just a different emulation, not the target state, and it cannot show that the in-gateway emulation is the less faithful one.\n\n5. The proposed fix adds a case whose body is only stack.pending(\"M3-U2\"). That adds a gate line and tests nothing. A coordinator ruling on M3-U2 is a fair tracking request, but it is a nonblocking evidence or gate-hygiene item.\n\nIf treated as real, the most it amounts to: the machine gate's pending_by_id does not list M3-U2. That is nonblocking.",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "reason": "I could not refute it. I did not run the stack: the brief forbids compose, and pilot_box needs Valkey, MinIO and PostgREST as well as PostgreSQL. The defect is confirmed from the code and from records already on file.\n\n(1) The product code keeps the index in process memory. `apps/infrx-api/infrx/media/store.py:176`: `self.by_job: dict[str, tuple[MediaRef, ...]] = {}`. `pilotbox.py:34-40` says so itself: \"both live in the process that prepared it. So `INFRX_E3B_EMBED_WORKER=1` (the journeys) runs the worker INSIDE the gateway process... without it... serves text only.\"\n\n(2) The lane reproduced the failure itself. Evidence P3-9: \"M3-U2 (a worker process: the video_url job failed/platform_error, the cache index is process memory)\". That matches the reviewer's p10 probe.\n\n(3) The deciding point is that the evidence misstates the ruling. It says \"the coordinator ... ruled M3-U1 an owner reference\" and, in Limit 2, \"M3-U2 is not keyed on any case\". The coordinator's own record, `research/plan/evidence/coordinator/2026-09-22-session-02.md:707`, reads: \"Decision: owner references **M3-U1** ... and **M3-U2** (durable attach + rebuildable cache index) added by the phase-3 lane as pendings\". At head 4ac1419, `grep -rn M3-U2 tests/` finds only a docstring in `test_recovery.py:16`. There is no `stack.OWNERS` entry and no `stack.pending` call. The coordinator also allowed \"the single-process composition meanwhile with every injection stated\", so the embedded journeys are allowed. What is missing is the M3-U2 pending the ruling asked for.\n\nConsequence: the gate's `pending_by_id` is `{M3-U1: 3, I2B-R4: 1}`. Once the M lane fixes upload refs and I2B-R4 lands, the gate can PASS with no case ever running video across processes. The only guard is a written promise in IR3-3.\n\nSeverity: blocking. It is a known product defect, and the gate does not record it. That defeats the owner-reference and stale_pending mechanism. The fix is small. Add a cross-process video_url case (rc03's video form, or a journey cell with embedded=False) that calls `stack.pending(\"M3-U2\", ...)`, with `stack.OWNERS[\"M3-U2\"]` naming M's process-local attach and cache index. The case retires when the M lane lands. The reviewer's framing that the embedded cells are \"false PASSes\" goes too far, because the worker composition is a declared emulation either way.",
+     "severity_if_real": "blocking"
+    }
+   ]
+  }
+ ],
+ "downgraded_to_nonblocking": [
+  {
+   "id": "J1",
+   "severity": "blocking",
+   "file": "tests/integration/backend/test_journey.py",
+   "line": "230-234 (footprint in pilotbox.py Journey.footprint)",
+   "claim_broken": "Every cell claims that the same key reused in another mode is 409 and 'writes nothing' (R94). R91 adds that a keyed replay or conflict is answered 'without preparing or staging anything'. The footprint only counts DB rows (jobs, both hold tables, outbox, idempotency). It never counts the object store, which is where staging writes (`payloads/<org>/<request_id>.json`), and it never counts media fetches. It is not checked across the same-mode replay at all.",
+   "evidence": "On the e3b2 stack I ran two single-edit mutants of relay._lookup. A_lookup_disabled (`if idem.key is None:` -> `if True:`): the lane's 6 running cells (text and video_url x sync/sse/async) gave `6 passed, 10 deselected`. M_conflict_swallowed (`except errors.IdempotencyConflict: return None` added): also `6 passed`. My probe counted MinIO objects under the box's S3_MEDIA_PREFIX. Under A, text went base 2 -> after_replay 3 -> after_conflicts 5, with new keys `payloads/8a4ddc78-.../12b8a009-...json` and two more; video_url went 10 -> 11 -> 13. Under M, text went 1 -> 1 -> 3 and video_url 6 -> 6 -> 8. On the unmutated tree the counts stay flat: text 2/2/2, video_url 5/5/5. Every conflict still answered 409 from admit and every DB count stayed unchanged, so no assertion fires. G3's own evidence says that before D5 the conflict was raised 'only after prepare_request and stage', and D5's lookup is what moves it earlier. That regression is exactly what this cell cannot see. The media host stand-in (MockTransport) always serves, which also hides a re-fetch on replay.",
+   "minimal_fix": "In Journey.footprint, also list objects under box.env['S3_MEDIA_PREFIX'] and count the stand-in transport's requests (for example through /_control or a counter file). Assert the footprint unchanged across the same-mode replay as well as across each cross-mode conflict. Add a mutant (relay._lookup returning None) killed by text-sync.",
+   "lens": "journey",
+   "votes": [
+    {
+     "reason": "The gap is real, but it is not blocking. `Journey.footprint` (pilotbox.py:394-400) counts only DB rows: jobs, both hold tables, outbox and idempotency. Yet its docstring says it covers \"Everything an admission may write\", and the journey docstring says the R94 conflict \"writes nothing\". Staged objects under S3_MEDIA_PREFIX and media re-fetches are invisible to it, and the same-mode replay is not footprint-checked, so the integration cell's claim is broader than what it asserts.\n\nIt still fails every blocking test:\n\n(1) The invariant has killable tests, and they are in `make api-mutants`. Makefile line 19 includes tests/g/test_mutants.py and tests/g/jobs/test_jobs_mutants.py. Those lists declare `lookup_skipped` (the same effect as the reviewer's A mutant), `terminal_replay_prepares`, `inflight_replay_prepares` and `lookup_conflict_swallowed`. The last is character-for-character the reviewer's M mutant; see jobs_mutants.py:166 (\"R91/R94: a key conflict is 409 at the lookup, before anything is fetched, staged or admitted\").\n\n(2) I ran both mutants in a scratch shared clone at 4ac1419 against the G unit cases, using -k over the relevant cases in tests/g/jobs/test_jobs.py and tests/g/test_relay_recovery.py.\n- Base: `6 passed, 67 deselected in 0.96s`.\n- A_lookup_disabled (`if idem.key is None:` changed to `if True:`): `6 failed, 67 deselected in 0.68s`. The failures include test_dur_admit__a_key_reused_across_modes_is_409_and_the_job_runs_on and test_dur_output__an_in_flight_replay_prepares_nothing_and_answers_when_the_host_fails.\n- M_conflict_swallowed (`except errors.IdempotencyConflict: return None` added): `2 failed, 4 passed, 67 deselected in 0.56s`. The two failures are test_dur_admit__a_changed_payload_under_the_key_is_409_and_admits_nothing and test_dur_admit__a_key_reused_across_modes_is_409_and_the_job_runs_on.\n\n(3) There is no hidden product defect. The reviewer's own unmutated run is flat (text 2/2/2, video_url 5/5/5). PgJobStore.lookup is covered on real PostgreSQL by the D5 conformance case, per test_jobstore_conformance.py's R91 `infrx.idempotency_lookup` note.\n\n(4) It is not a hidden runnable case and not a merge-time breakage.\n\nWhat remains is an integration-layer oracle weaker than its docstring. At that layer it could miss a composition-only regression, for example the pilot wiring falling back to a store that refuses lookup. Worth fixing as the reviewer suggests: count objects under S3_MEDIA_PREFIX plus the stand-in transport's requests, and check the footprint across the same-mode replay too. Failing that, narrow the docstrings to \"no DB rows\". Either way it is nonblocking.",
+     "refuted": false,
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": true,
+     "severity_if_real": "nonblocking",
+     "reason": "The observation is accurate but the finding is not blocking. Journey.footprint (pilotbox.py:394-400) counts only DB rows, so the integration cell cannot see staging or re-fetches. On the unmutated tree the reviewer's own probe shows flat MinIO counts, so no product defect is hidden.\n\nIt also does not leave the invariant without a killable test. I applied both of the reviewer's mutants to a scratch shared clone at 4ac1419 and ran the G track: `cd apps/infrx-api && .venv/bin/python -m pytest -q -p no:cacheprovider tests/g`.\n- A_lookup_disabled (`if idem.key is None:` -> `if True:`) fails directly on:\n  - `test_relay_recovery.py::test_dur_output__a_lost_answer_is_recovered_by_key_after_the_media_url_expired`\n  - `test_dur_output__an_in_flight_replay_prepares_nothing_and_answers_when_the_host_fails`\n  - `test_dur_admit__an_outage_after_admission_leaves_the_job_for_the_same_key_retry`\n  - Tail: `35 failed, 533 passed ... in 104.04s`.\n- M_conflict_swallowed (`except errors.IdempotencyConflict: return None`) fails directly on:\n  - `tests/g/jobs/test_jobs.py::test_dur_admit__a_changed_payload_under_the_key_is_409_and_admits_nothing`\n  - `test_dur_admit__a_key_reused_across_modes_is_409_and_the_job_runs_on`\n  - Tail: `11 failed, 557 passed ... in 163.77s`.\n- The remaining failures in both runs are the mutant-runner self-tests, which fail because the base is mutated.\n- G's mutant lists already register these edits: `lookup_skipped`, `terminal_replay_prepares` and `inflight_replay_prepares` in tests/g/mutants.py:996-1008, and `lookup_conflict_swallowed` in tests/g/jobs/jobs_mutants.py:166.\n- On the PostgreSQL side, the store's lookup raising a conflict is covered by the D5 conformance cases `dur_admit__lookup_reads_the_mapped_job_and_writes_nothing` and `credit_admit__lookup_answers_the_pinned_admission`.\n\nR91 (prepare and stage nothing on a replay or conflict) is G2's invariant and is killable there. The E3B evidence (E3B-e57b820.md:884) states the footprint's scope openly: \"jobs, holds of both units, outbox, mappings\". So the cell does not claim more than it checks. The one overreach is the docstring phrase \"writes nothing\".\n\nAdding object-store and fetch counts, and checking the footprint across the same-mode replay as well, would give the invariant end-to-end cover on the real stack. That is a useful strengthening but nonblocking: no body passes without its stated invariant, no product defect or runnable case is hidden, the invariant does have killable tests, and nothing breaks at merge.\n\nI ran nothing on the compose stack and started no PostgreSQL. The scratch clone has been removed."
+    }
+   ]
+  },
+  {
+   "id": "H-B1",
+   "severity": "blocking",
+   "file": "tests/integration/run.py",
+   "line": "416 (KNOWN_API_SKIPS = ()), 423-460 (suites)",
+   "claim_broken": "Handback: 'Gate: exit 3 = PENDING only … no failure'. IR3-1 says to merge cutover, then objstore, then this branch. That gate result only holds with --only-suites. After the merge, the canonical layer-3 gate (make integration --layer 3, which runs make api-test inside the suites stage) cannot pass. M1-L2's S3 cases skip because run.py never passes INFRX_M_S3_ENDPOINT, and KNOWN_API_SKIPS is empty, so every one of those skips is 'unexpected', which fails the stage.",
+   "evidence": "Merged tree (backend-impl 86a839e + D5 8554b47 + cutover 351d084 + m1l2 0b9fc50 + 4ac1419). `git grep INFRX_M_S3 tests/integration` finds only a Makefile comment. `pytest -rs tests/m/test_s3.py tests/m/test_s3_mutants.py` without the endpoint gives '28 passed, 17 skipped', each reason 'M1-L2 (owner: M): no S3-compatible endpoint - … export INFRX_M_S3_ENDPOINT …'. At a4facba it was 14; M1-L2's fix round added 3. run.py:447-454 counts any api-test skip reason outside KNOWN_API_SKIPS as unexpected, and the stage then FAILs. The lane knows this (IR3-7, 'Not changed here'), and run.py is E3B's own runner.",
+   "minimal_fix": "In run.suites(), while the stack is up, give `make api-test` the env INFRX_M_S3_ENDPOINT=harness.s3_endpoint() and INFRX_M_S3_LOCAL_CREDS=1, with AWS_SESSION_TOKEN/AWS_PROFILE/AWS_ENDPOINT_URL* unset (the stack.AWS_UNSET set). Add one test_run case that asserts it. Otherwise add the M1-L2 reason to KNOWN_API_SKIPS with its owner. Then state in the evidence that the full gate, not only --only-suites, passes.",
+   "lens": "honesty",
+   "votes": [
+    {
+     "refuted": false,
+     "reason": "The mechanism is real, but the claim that it hides a broken gate result or is a merge-time breakage does not hold. I rate it nonblocking.\n\nConfirmed from code:\n- In run.py:416, `KNOWN_API_SKIPS = ()`.\n- In `suites()`, `make api-test` gets only `PYTEST_ADDOPTS=-rfEs`. There is no `INFRX_M_S3_*` anywhere in tests/integration, and `shell()` passes the host environment, which has none of these variables.\n- Lines 447-454 treat any api-test skip reason as `unexpected`, and the stage is then FAIL.\n\nExperiment 1: I made a scratch `--shared` clone and merged 86a839e + 8554b47 + 351d084 + 0b9fc50 + 4ac1419 (no conflicts, 666dcef). Then I ran `env -u INFRX_M_S3_ENDPOINT PYTEST_ADDOPTS=-rfEs uv run --frozen pytest -q tests/m/test_s3.py tests/m/test_s3_mutants.py`. Tail: `28 passed, 17 skipped in 20.85s`. Every `SKIPPED` line reads 'M1-L2 (owner: M): no S3-compatible endpoint - ... export INFRX_M_S3_ENDPOINT'. pytest --collect-only from apps/infrx-api (testpaths=[\"tests\"]) collects 45 test_s3 items, so `make api-test` includes them.\n\nExperiment 2: I called the real `run.suites(report, own_only=False)`. `shell` was patched to return that pytest output as 'make api-test', and every other target was green. It printed `[FAIL] suites: ...`. So the full gate (no `--only-suites`) fails this stage.\n\nWhy it is nonblocking and partly refuted:\n1. This is not a merge-time breakage. The branch already merged M1-L2 e1bb54f (`git merge-base --is-ancestor e1bb54f 4ac1419` succeeds). At 4ac1419 alone, the same pytest command gives `21 passed, 14 skipped`, so the full gate already fails before any merge. The 0b9fc50 fix round only adds 3 more skips.\n2. Nothing is hidden, and no case goes unrun:\n   - The evidence names the gate as `run.py --layer 3 --canary --only-suites` (E3B-e57b820.md:940).\n   - The handback's Gate line goes on: 'the make targets green after the teardown'.\n   - The make-targets table quotes `3497 passed, 14 skipped` and names all 14 as M1-L2 S3 skips.\n   - It then runs those cases against the namespace MinIO with `INFRX_M_S3_ENDPOINT`: `28 passed` for test_s3.py and `28 passed` for test_s3_mutants.py with `INFRX_MUTANTS=all`.\n   - IR3-7 hands exactly this fix to the gate runner/coordinator.\n3. IR3-7 also records a separate blocker: the D harness needs its own port in the block before the make targets can run inside the gate at all. So the reviewer's one-line env fix alone would not make the full in-gate run pass.\n\nThis is a real, disclosed gap in E3B's runner. It is the right fix to carry with IR3-7 (pass `INFRX_M_S3_ENDPOINT=harness.s3_endpoint()` and `INFRX_M_S3_LOCAL_CREDS=1` with `stack.AWS_UNSET` unset while the stack is up, plus one test_run case), and the handback's Gate line could say '(--only-suites)'. It is not a body passing without its invariant, not a hidden product defect, and not an unrun case. It also does not appear only at merge.",
+     "severity_if_real": "nonblocking"
+    },
+    {
+     "refuted": false,
+     "reason": "The mechanism is real, but it was disclosed and it is not blocking.\n\nWhat I confirmed:\n- At 4ac1419, run.py:416 has `KNOWN_API_SKIPS = ()`. Lines 447-449 count every api-test skip reason as unexpected, because `any(known in reason for known in ())` is always False.\n- `suites()` (lines 431-434) passes `make api-test` only `PYTEST_ADDOPTS`, and `shell()` merges that into os.environ. Nothing in tests/integration sets INFRX_M_S3_ENDPOINT. The only mention is a Makefile comment.\n- Smallest experiment, on the E3B head itself with no merge: in apps/infrx-api, `env -u INFRX_M_S3_ENDPOINT .venv/bin/python -m pytest -q -rs -p no:cacheprovider tests/m/test_s3.py tests/m/test_s3_mutants.py`. Tail: `SKIPPED [2] tests/m/test_s3_mutants.py:38: M1-L2 (owner: M): no S3-compatible endpoint - start the E2 stack's s3 service and export INFRX_M_S3_ENDPOINT` / `21 passed, 14 skipped in 32.84s`.\n- So `make integration INTEGRATION_ARGS=\"--layer 3\"` without `--only-suites` would mark the suites stage FAIL with unexpected_skips set. The claim holds.\n\nWhy it is not blocking:\n1. It is not hidden. The evidence (research/plan/evidence/e/E3B-e57b820.md, section \"The layer-3 gate at a4facba\") gives the exact gate command with `--only-suites`. The suites row says \"(--only-suites: the make targets below)\". The make targets then ran after teardown: `3497 passed, 14 skipped`, with the 14 skips named as M1-L2's S3 cases. IR3-7 states this exact failure mode and the reviewer's fix (\"hand the make targets INFRX_M_S3_ENDPOINT … Not changed here\"). The handback's \"Gate: exit 3 = PENDING only\" is qualified by \"the make targets green after the teardown\".\n2. No test was left unrun. All 28 S3 cases in each file ran against the namespace's MinIO (`28 passed in 10.21s`; mutants `28 passed in 102.08s`).\n3. This branch did not cause it, so it is not a merge-time breakage from this branch. M1-L2 (e1bb54f) is already in 4ac1419. Under IR3-1's order, backend-impl's full gate would fail the same way once objstore merges, whether or not E3B merges.\n4. The proposed minimal fix does not make the full gate pass. Limit 7 / round-4 GATE-N5 records that the D harness (INFRX_D_TASK=e3b2) collides with E2's PostgreSQL while the stack is up, and that 55432 is off-limits. `make api-test` could not run inside the gate even with the S3 env passed.\n\nThis is a real, disclosed gate-runner gap already tracked as IR3-7. It is nonblocking.",
+     "severity_if_real": "nonblocking"
+    }
+   ]
+  }
+ ],
+ "refuted_blocking": [],
+ "nonblocking": [
+  {
+   "id": "J3",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_journey.py",
+   "line": "185-210 (settled_once); test_drills.py dr07c",
+   "claim_broken": "The journeys and dr07c claim 'the admitted card x usage (half up)'. The seeded card and dr07c's newer card both have integer rates (400/1200 and 4000/12000 per million), so every charge has at most 6 decimals and the rounding mode is never exercised on the stack.",
+   "evidence": "Live mutant T: infrx.debit_credit `round(` -> `trunc(` on the journey clone, then tj.test_backend_journey(trip,'text','sync'), gave `PROBE rounding_trunc {\"survived\": true}`. D5's unit grid (tests/d checks_settle credit_grid ties) covers rounding, so the gate as a whole is not blind to it.",
+   "minimal_fix": "Give the journey clone's card (or dr07c's admitted card) a fractional rate such as 400.00000125. Assert the ledger against RateCardSnapshot.debit, and add a round->trunc live defect to the db list.",
+   "lens": "journey"
+  },
+  {
+   "id": "J4",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_journey.py",
+   "line": "320-338 (dataset resume)",
+   "claim_broken": "The docstring says 'the wallet's total = the sum of the per-item debits'. That compares the ledger total with the ledger's own rows. conserved() compares it with usage_events.charged_credits, which is written from the same p_charged. Neither checks an item's debit against card x usage.",
+   "evidence": "Live mutant D: debit_credit `* 0.000001, 8)` -> `* 0.000002, 8)`. tj.test_backend_journey__dataset_client_resume passed (`survived: true`) while the charges were doubled (`('1200','5','0.97200000')`, card x usage = 0.486). settled_once catches the same class in the matrix cells (mutant K was killed there).",
+   "minimal_fix": "Per succeeded item, assert ledger amount == -admission.rate_card.debit(usage_prompt_tokens, usage_completion_tokens) from infrx.job_admission.",
+   "lens": "journey"
+  },
+  {
+   "id": "J5",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/gateway/routes/validate.py",
+   "line": "391-410 (payload_digest); ingress.identity_digest",
+   "claim_broken": "Finding 5 (Limit 4). R94 names 'one canonical payload AND one execution mode'. A sync request with an explicit `\"stream\": false` and the same request with `stream` omitted are the same payload in the same mode, yet they are different identities. My call: this is a minor PRODUCT defect (G3/G1), not E3B's. The lane's test pins today's behaviour correctly.",
+   "evidence": "Probe p2: explicit first, then omitted: `[409, 'idempotency_conflict']`. Omitted first, then explicit: `409 idempotency_conflict`. The naive fix is unsafe: mutant P (drop `stream` from the no-media digest) is killed by the lane's journeys ('R94: sync key reused in sse: 200'). So the fix must fold the execution mode into the digest for every mode, not only async, before it canonicalises the default `stream`.",
+   "minimal_fix": "G3: identity_digest folds the execution mode for sync and stream too. The payload digest then drops a default-valued `stream: false`. Record it as a §10 ruling, then flip Limit 4's assertion.",
+   "lens": "journey"
+  },
+  {
+   "id": "J6",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+   "line": "408, 533 (pump `first`, _frame role)",
+   "claim_broken": "Finding 4 is a product quirk that the test codifies. `first` is local to each pump call, so a resumed events response re-sends the next journal event under its ORIGINAL id (`id: g-s`) with different data (`role` added). The same event id then carries different bytes, and the test (resumed()) asserts that deviation as the expected replay.",
+   "evidence": "relay.pump sets `ending, first = None, True` per call. _frame adds `{\"role\":\"assistant\"}` when first. The lane's P3 runs and my in-flight probe (`roles: 1` on a resumed SSE) agree. Mutant C (the events route ignores the cursor) is killed by the byte-equal check, so the replay check itself is live.",
+   "minimal_fix": "G2/G3: `first = cursor is None` in pump. Then drop resumed() and assert strict byte equality from every cursor.",
+   "lens": "journey"
+  },
+  {
+   "id": "J7",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_drills.py",
+   "line": "dr11 (held_unknown then reaper)",
+   "claim_broken": "Finding 6. The outcome is within R21's letter: a disconnect after published output with no usage is held_unknown, then released_platform_absorbed at unknown_usage_reconcile_s = 86,400 s, released by the reaper. That is not a leak. But the mounted composition can NEVER bill client_disconnected or client_cancelled, although R21 names them billable with authoritative usage: the relay cancels through terminalize_no_usage, so delivered output is free and the maximum hold is locked for 24 h.",
+   "evidence": "dr11 asserts this exactly (gate green). Probe p12, a DELETE of an in-flight published async job: `200 cancelled client_cancelled`, row `('cancelled','client_cancelled','held_unknown')`, hold `unknown`.",
+   "minimal_fix": "Coordinator/D/G2 ruling: either the cancel path records the worker's partial usage, or 02/R21 states that disconnects are free and the 24 h hold is accepted. No E3B test change is needed.",
+   "lens": "journey"
+  },
+  {
+   "id": "J8",
+   "severity": "nonblocking",
+   "file": "apps/infrx-api/infrx/gateway/routes/relay.py",
+   "line": "249-275 (_admitted active-card recheck)",
+   "claim_broken": "Rotation on the mounted path. A job admitted before a rotation settles at its admitted card, which is correct. After an ordinary rotation (a new card plus a listing effective now, dr07c's R68 scenario), every new request is admitted, its hold reserved, then cancelled. The cause is recorded as client_cancelled although the platform refused it. No E3B case covers rotation on the mounted gateway.",
+   "evidence": "Probe: the pre-rotation async job settled `-0.50160000` at rc_marlin2b_2026_09_provisional (1200x400 + 18x1200). Post-rotation, sync and async both answered `400 invalid_request`, job `('cancelled','client_cancelled','released_free','rc_probe_newer','147.45600000')`, hold `released`, no debit. Integer and fractional rates behave the same. The refusal is by design (ACTIVE_RATE_CARD_VERSION, R69).",
+   "minimal_fix": "G2: cancel a refused admission with a platform cause (not client_cancelled). E3B: add a rotation cell on the box that asserts both halves.",
+   "lens": "journey"
+  },
+  {
+   "id": "J9",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/recovery/test_recovery.py",
+   "line": "rc03 (lines ~238-285)",
+   "claim_broken": "rc03 restarts the gateway only after the worker has finished the job. So the 'replays the same accepted identity' half never exercises replay of an IN-FLIGHT job across a restart (R91's in-flight wait/stream, relay._resume 'staged by another process'). It also asserts no open attempt.",
+   "evidence": "My probe p3 (embedded=False): worker pid 3015791 unchanged, gateway pid 3015792 -> 3017905. The retry was sent while the job was `running`. SSE: 200, same id, replayed true, full text, 1 job, 1 debit, 0 open attempts. Sync: the same. So the product holds, but the case does not pin it.",
+   "minimal_fix": "Restart the gateway before the job is terminal in rc03 (or a variant). Assert `attempts.released_at is not null` and that the worker pid is unchanged.",
+   "lens": "journey"
+  },
+  {
+   "id": "J10",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_journey.py",
+   "line": "219-221 (M3-U1 pending)",
+   "claim_broken": "The pending skips the whole video_upload cell, including a half that runs today: G4U's handshake on the mounted gateway and a foreign tenant's use of the upload handle.",
+   "evidence": "Probe p9: create/PUT/complete 201/204/200. Beta's `POST /v1/uploads/<h>/complete` -> 404. The chat naming the finalized ref -> `400 invalid_request` (M3-U1 reproduced).",
+   "minimal_fix": "Run the upload handshake and the foreign-tenant 404 as a separate case. Pend only the chat half on M3-U1.",
+   "lens": "journey"
+  },
+  {
+   "id": "J11",
+   "severity": "nonblocking",
+   "file": "models/marlin2b/bench.py",
+   "line": "642 (FINGERPRINT_FIELDS)",
+   "claim_broken": "A resume across a changed --prompt is not refused, although the prompt is part of the payload. The re-sent items get 409 and are quarantined as terminal. The product's 409 is correct.",
+   "evidence": "Probe p6: resume with `--prompt 'Describe the TRUCK.'`. The 2 re-sent in-flight items were `rejected idempotency_conflict` and 4 fresh items were accepted. Jobs went 0 -> 4 -> 8. Exit 0 and no refusal.",
+   "minimal_fix": "E1B (IR3-5): add prompt (and max_tokens) to FINGERPRINT_FIELDS.",
+   "lens": "journey"
+  },
+  {
+   "id": "J12",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_journey.py",
+   "line": "79-82 (run_sync replay)",
+   "claim_broken": "The sync same-key replay compares only `usage`, not the answer content or id, so a replay that answers different text passes the journey. rc03 (e3bm67) covers the restart path only.",
+   "evidence": "Assertion: `again.json()[\"usage\"] == body[\"usage\"]`.",
+   "minimal_fix": "Assert `again.json() == body`, or at least the content and id.",
+   "lens": "journey"
+  },
+  {
+   "id": "H-N1",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_journey.py",
+   "line": "219-221",
+   "claim_broken": "R3-1 standard: a pending must fail the day its blocker is gone. G2-R1 had ingress_is_mounted plus e3bm51/i3bm101, and M1-L2 had a structural probe plus i3bm39. M3-U1 has no tripwire. The cells pend while `\"M3-U1\" in stack.OWNERS`, and stale_pending can never flag an owner reference because it is not a task.",
+   "evidence": "origin/codex/m-pilot-media already has 409c459 'MPILOT item 1: an infrx-upload: source resolves to the finalized upload at admission'. Once that merges, the three video_upload cells keep pending silently until someone removes the OWNERS entry by hand (IR3-3). The stage case asserts `\"M3-U1\" in stack.OWNERS`, which is a constant.",
+   "minimal_fix": "Before the pending, probe in-process: try MediaUploads/MediaStaging with a finalized infrx-upload ref. If it is no longer refused with 'a media source must be an http(s) or data: URL', pytest.fail('M3-U1 is fixed: delete stack.OWNERS[\"M3-U1\"] and run the cells'). Add a layer-1 mutant for the probe, as i3bm101 was for the old one.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N2",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_stage.py",
+   "line": "128-150 (test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual)",
+   "claim_broken": "The vocabulary is supposed to be closed and honest. Nothing checks that each owner reference is still named by some case, and the owner-text equality check now passes vacuously because stack.OWNERS and recoverykit.OWNERS share no id.",
+   "evidence": "My mutant MY3 re-adds 'G2-R1' to recoverykit.OWNERS. It SURVIVES test_stage, the whole recovery/ directory, test_journey and test_run: '101 passed, 48 skipped'. MY4 (I2B-R4 put in stack.OWNERS with other text) is killed, so the equality check still bites once an id is shared.",
+   "minimal_fix": "In test_stage, assert that every id in stack.OWNERS and recoverykit.OWNERS appears in some `pending(\"<id>\"` call in tests/integration/backend (source grep).",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N3",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/e/E3B-e57b820.md",
+   "line": "Phase 3 item-1 table, rc04b row; P3-14",
+   "claim_broken": "P3-14 says 'all killed; the death lines are in the tables' for e3bm59-68 re-run at the head. e3bm61's quoted death line `test_recovery.py:388` is from 39f839d.",
+   "evidence": "At 39f839d, line 388 is rc04b's `assert (outcome.settlement_state, outcome.debit, outcome.usage) == (`. At a4facba/4ac1419 that assertion is at 455-456, and line 388 is inside rc04a (`drifts = conn.execute(...)`). rc03's body moved it by 67 lines in 3037a83. The other quoted lines map to the stated assertion at the head: test_drills 719/333/952/1191, test_journey 80/334, test_recovery 284/557/363.",
+   "minimal_fix": "Quote e3bm61's head line (:456), or label the item-1 table as measured at 39f839d/934b8d8.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N4",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/e/E3B-e57b820.md",
+   "line": "'What the pilot box injects' item 1",
+   "claim_broken": "'every journey cell that runs …, dr11, rc03 and dr17 run on the real object store'.",
+   "evidence": "In rc03 (embedded=False) the worker is its own process, and pilotbox.worker() builds `MediaPreparation(InMemoryObjectStore(), …)`. Only the gateway process uses S3ObjectStore. rc03 is text-only, so no object is ever read, but the separate worker's object store is an unlisted injection.",
+   "minimal_fix": "List it among the injections: 'rc03's worker process: an InMemoryObjectStore (text only, M3-U2)'.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N5",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_journey.py",
+   "line": "225-233",
+   "claim_broken": "The docstring and evidence say every cell's cross-mode reuse is a 409 'writes nothing (R94)', as if mode identity were proved for every pair.",
+   "evidence": "The SSE body carries \"stream\": true, and the digest includes stream (evidence Limit 4). So sync↔sse and sse↔async differ in payload and would 409 without R94. Only sync↔async (identical body, /v1/chat/completions vs /v1/jobs) isolates the mode. No E3B mutant drops the mode from Ingress.validated's digest to show the journeys kill it.",
+   "minimal_fix": "Add a layer-2 mutant that removes the mode from the ingress digest (selector: the text-sync journey), and word the claim as 'the mode alone, isolated by sync↔async'.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N6",
+   "severity": "nonblocking",
+   "file": "tests/integration/backend/test_journey.py",
+   "line": "run_async / run_sse",
+   "claim_broken": "G3 request (g) lists the mounted behaviours for the async journey and drill bodies. Some are not exercised at the mounted gateway. The evidence does not claim them, so this is a coverage gap and not a misstatement.",
+   "evidence": "Not exercised: chat with `Prefer: respond-async` → 202 + `Preference-Applied`; events-route disconnect 'never cancels'; the owner's DELETE → client_cancelled; result 409 result_pending before terminal; the replay's identity frame (the replay is compared from `[1:]`).",
+   "minimal_fix": "Add the Prefer: respond-async path and an events-route disconnect to the async/SSE cells, or record them in Limits as covered only by G3's unit suites.",
+   "lens": "honesty"
+  },
+  {
+   "id": "H-N7",
+   "severity": "nonblocking",
+   "file": "research/plan/evidence/e/E3B-e57b820.md",
+   "line": "P3-10, IR3-5",
+   "claim_broken": "Finding attribution: P3-10 presents the bench client's `stream_options` 400 as newly found.",
+   "evidence": "G6B-db03f0b.md item 12 already recorded it: '`_send` sends `mm_processor_kwargs` and `stream_options`; the pilot ingress refuses both (`validate.SUPPORTED`, marlin-sop §2.2) — gate them to `--target engine`'. Attributing it to E1B is right. The evidence should name the prior report, and note that `mm_processor_kwargs` is still ungated for video forms.",
+   "minimal_fix": "Cite G6B's item 12 in P3-10/IR3-5, and name mm_processor_kwargs in IR3-5.",
+   "lens": "honesty"
+  }
+ ]
+}

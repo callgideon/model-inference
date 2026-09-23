@@ -1,6 +1,6 @@
 # Backend-first progress tracker
 
-Generated 2026-09-23T22:37:04Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
+Generated 2026-09-23T22:44:29Z from `tasks.json` (manifest v4) and `progress-state.json`. Integration branch `claude/backend-impl`, base `ec6c548`. Scope: the E4B backend closure (37 tasks, of which 7 foundations and wave-2 modules are already merged and reused: E1, F1, F2, I1, M1, Q1, W1).
 
 **Backend packages: 27 done · 3 in progress · 0 remaining (of 30).**
 
@@ -69,7 +69,7 @@ Generated 2026-09-23T22:37:04Z from `tasks.json` (manifest v4) and `progress-sta
 - D5: codex-d5 / codex/d5-terminal-transaction — review fix_required at c67e4f5 (8 blocking test gaps + merge readiness; money confirmed correct) → ONE fix round running → single verifier → MERGE together with E3B phase 3 since 2026-09-23T12:56:22Z — ports 55436/55467, Q 55498; brief .claude/handoff/wave3/D5.md addenda 1–5; owns 0018 (settlement, cancel cause, lookup SQL when G2 merges), CatalogDirectory, G6B adapters, conformance promotion, the two D4 wording items
 - E4B: codex-e4b / codex/e4b-certify — software half FINAL 4d9360c (verifier pass + V1–V6 folded; 138 mutants) → merge at step 6; box half after the rollout since 2026-09-23T19:29:02Z — namespace e2, d2/55466, Q 55493
 - CUTOVER: codex-cutover / codex/cutover-mount — milestone 43fe900 (mount + adapters from settings + gateway.py retired; tests/g 568) forwarded to phase 3; items 3–5 (edge proxying, preflight, evidence) in progress at 6cb8ebe+ since 2026-09-23T19:29:02Z — d3 ports, Q 55492; merges together with E3B phase 3
-- E3B-phase3: codex-e3b3 / codex/e3b-phase3-bodies — HANDED BACK 4ac1419 (all bodies; gate exit 3 = pending only M3-U1 ×3 + I2B-R4; api-test 3497 on the merged tree); one-round review running → merge with D5 (after cutover + objstore); M pilot-media merge closes M3-U1/U2 since 2026-09-23T19:29:02Z — namespace e3b2 / 56732
+- E3B-phase3: codex-e3b3 / codex/e3b-phase3-bodies — review fix_required at 4ac1419 (J2 embedded-worker cells must pend on M3-U2; J1 footprint; H-B1 canonical gate) → ONE fix round running → single verifier → merge in the D5 unit since 2026-09-23T19:29:02Z — namespace e3b2 / 56732
 - M1-L2: codex-objstore / codex/m1l2-object-store — FINAL ba26ca4 (verifier pass + V1–V4 folded; 46 mutants; cutover f7d9b03 re-merged) → merge at step 4 of the unit since 2026-09-23T19:57:28Z — compose S3 in namespace e2 if free; else stub
 - M-pilot-media: codex-mpilot / codex/m-pilot-media — dispatched (Opus) from 6cb8ebe: upload-ref resolution in the real staging (M3-U1); durable attach + rebuildable cache index for a separate worker process (M3-U2) since 2026-09-23T20:11:55Z — d4 ports, Q 55494; merges on top of the cutover head
 - review W4: MERGED f36c17c after the round-4 verifier pass; merged-tree tests/w 180 passed (w4-merged-f36c17c.log) since 2026-09-23T14:18:55Z
@@ -85,7 +85,7 @@ Generated 2026-09-23T22:37:04Z from `tasks.json` (manifest v4) and `progress-sta
 - review M1-L2: verifier pass at 0b9fc50 (wf_78054834-1a2; JSON evidence/m/M1L2-verify-0b9fc50.json) since 2026-09-23T22:09:07Z
 - review E4B: verifier pass at 7b5dbd7 (wf_8b6977e0-584; JSON evidence/e/E4B-verify-7b5dbd7.json) since 2026-09-23T22:24:46Z
 - review W4-phaseB: MEASURED on the box: E0/E1/E3 run and restored; decide.py: no setting adopted → B at 82 s; P-20 decided; evidence/w/W4-phaseB-20260923T2155Z.md since 2026-09-23T22:02:17Z
-- review E3B-phase3: review at 4ac1419 running (journey/money + honesty lenses + refuters) since 2026-09-23T22:05:47Z
+- review E3B-phase3: fix_required at 4ac1419 (wf_1fd8ad49-30d; JSON evidence/e/E3B3-review-4ac1419.json) → fix round since 2026-09-23T22:44:29Z
 - review merge-plan: MERGED 58e6fdb: scripts 1–9 + replay; gating unit D5→phase 3→cutover→M1-L2 on all four verdicts; then M pilot → E4B → checkpoint 2 (api-test whole, layer 0, bench, affected lists, one layer-3 run) → ff main since 2026-09-23T22:22:23Z
 
 ## Checkpoints
