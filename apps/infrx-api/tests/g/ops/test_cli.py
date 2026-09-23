@@ -40,9 +40,11 @@ def test_api_ops__the_cli_writes_the_secret_once_and_never_prints_it(tmp_path, c
 
 def test_api_ops__the_cli_refuses_a_key_on_argv_and_an_existing_secret_file(tmp_path, capsys):
     w = fakes.world()
+    prompted = []
     with pytest.raises(SystemExit):
         cli.main(["grant", "--user", USER_A, "--idempotency-key", w.operator_secret, *R],
-                 ops=w.ops, environ={})
+                 ops=w.ops, environ={}, prompt=lambda text: prompted.append(text) or "x")
+    assert prompted == []                              # refused before any prompt
     taken = tmp_path / "taken.key"
     taken.write_text("keep me\n")
     env = {cli.OPERATOR_KEY_ENV: w.operator_secret}

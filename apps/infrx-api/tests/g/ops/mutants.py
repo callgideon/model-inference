@@ -228,14 +228,10 @@ MUTANTS: tuple[Mutant, ...] = (
        X, "            await SLEEP(min(wait if wait is not None else 2 ** attempt, MAX_RETRY_AFTER_S))",
        "            await SLEEP(min(2 ** attempt, MAX_RETRY_AFTER_S))",
        "test_api_ops__failures_are_explicit_and_never_retried_blindly"),
-    _m("client_errors_retried",
-       "a 400/409 is quarantined, never retried unchanged (declared: the extra request "
-       "exhausts the case's scripted replies, so the defect surfaces as the transport's "
-       "RuntimeError from the spent iterator)",
+    _m("client_errors_retried", "a 400/409 is quarantined, never retried unchanged",
        X, "RETRYABLE = frozenset({429, 500, 502, 503, 504})",
        "RETRYABLE = frozenset({400, 409, 429, 500, 502, 503, 504})",
-       "test_api_ops__failures_are_explicit_and_never_retried_blindly",
-       dies_by=("RuntimeError",)),
+       "test_api_ops__failures_are_explicit_and_never_retried_blindly"),
     _m("expired_key_quarantined", "a 410 asks for a re-derived re-run",
        X, "        if resp.status_code == 410:", "        if False:",
        "test_api_ops__failures_are_explicit_and_never_retried_blindly"),
@@ -283,12 +279,9 @@ MUTANTS: tuple[Mutant, ...] = (
        "    return err.get(\"code\") if isinstance(err, dict) else None",
        "test_api_auth__the_client_key_never_reaches_argv_or_state"),
     # --- the CLI ---------------------------------------------------------------
-    _m("cli_accepts_a_key_on_argv",
-       "a key on argv is refused (declared: unrefused, the CLI goes on to prompt for the "
-       "operator secret, which pytest's captured stdin answers with OSError)",
+    _m("cli_accepts_a_key_on_argv", "a key on argv is refused before any prompt",
        C, "        if token.startswith(\"sk-\") or service.KEY_PREFIX in token:", "        if False:",
-       "test_api_ops__the_cli_refuses_a_key_on_argv_and_an_existing_secret_file",
-       dies_by=("OSError",)),
+       "test_api_ops__the_cli_refuses_a_key_on_argv_and_an_existing_secret_file"),
     _m("cli_overwrites_a_secret_file",
        "an existing secret file is refused before a key exists (declared: without the "
        "check the key is issued first and O_EXCL then raises FileExistsError - the late "
