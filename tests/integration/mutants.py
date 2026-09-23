@@ -1077,6 +1077,16 @@ MUTANTS: tuple[Mutant, ...] = (
            "OWNERS: dict[str, str] = {\"X9\": \"a reference no case names\"}\n",
            "tests/integration/backend/test_stage.py", "named_residual",
            cases=("test_no_pending_id_names_a_merged_task_unless_it_is_a_named_residual",)),
+    Mutant("e3bm77", "E3B3 review J9: a same-key retry reaching a restarted gateway while the "
+                     "job is IN FLIGHT is answered as it stands (R91), never refused because "
+                     "the new process did not stage it",
+           "apps/infrx-api/infrx/gateway/routes/relay.py",
+           "            return                              # staged by another process: as it "
+           "stands\n",
+           "            raise\n",
+           "tests/integration/backend/recovery/test_recovery.py", "rc03", layer=2,
+           cases=("test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_"
+                  "its_identity",)),
 )
 
 

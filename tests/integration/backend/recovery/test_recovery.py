@@ -240,10 +240,13 @@ def test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_its
     """OPS-RECOVER (gateway restart), on the mounted gateway process (E3B phase 3: the cutover
     mounted G2's relay; `pilotbox` runs it, with the worker in a process of its own). The
     gateway is SIGKILLed while an SSE answer streams (after the identity frame and a chunk)
-    and while a sync client waits on a running job: each job is left to the worker, which
-    finishes it. After the restart the SAME key replays the SAME accepted identity - the sync
-    retry answers the committed result, the SSE retry replays the journal from the start to
-    `[DONE]` - with `Idempotency-Replayed: true`, one job per key and one debit each."""
+    and while a sync client waits on a running job, and restarted at once. The SAME key is
+    retried WHILE the job is still in flight (review J9: R91's in-flight replay across the
+    restart - the new process never staged it) and replays the SAME accepted identity - the
+    sync retry waits for and answers the committed result, the SSE retry streams the journal
+    from the start to `[DONE]` - with `Idempotency-Replayed: true`; the worker that survived
+    the kill (the same pid) finishes each job, one job per key, one debit each, no attempt
+    left unreleased."""
     import signal
 
     import pilotbox
@@ -251,7 +254,8 @@ def test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_its
     with pilotbox.journey(tmp_path) as trip:
         alpha = trip.world.alpha
         before = trip.wallet(alpha)
-        text = "Two people unload boxes from a van onto a trolley. " * 6
+        worker = trip.box.processes["worker"].pid
+        text = "Two people unload boxes from a van onto a trolley. " * 12
         trip.engine.control(text=text, delta_gap_s=0.1)
         messages = [{"role": "user", "content": "Describe the van."}]
         for mode in ("sse", "sync"):
@@ -264,12 +268,10 @@ def test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_its
                 assert b"infrx.progress" in sock.recv(65536), "no identity frame before the kill"
             trip.box.stop("gateway", signal.SIGKILL)            # the gateway dies mid-answer
             sock.close()
-            assert _until(lambda: trip.db("select state, outcome_cause from infrx.jobs where "
-                                          "request_id = %s and settled_at is not null",
-                                          request_id)) == [("succeeded", "completed")], \
-                "the worker did not finish the job its gateway left"
             trip.box.start("gateway")                           # the restart
-            again = trip.send(alpha, mode, messages, key)
+            assert trip.db("select settled_at from infrx.jobs where request_id = %s",
+                           request_id) == [(None,)], "the job ended before the retry"
+            again = trip.send(alpha, mode, messages, key)       # while it is in flight
             assert (again.status_code, again.headers["inference-id"],
                     again.headers.get("idempotency-replayed")) == (200, request_id, "true"), \
                 again.text
@@ -282,10 +284,16 @@ def test_i3b_rc03_a_gateway_restart_leaves_the_job_to_the_worker_and_replays_its
             else:
                 content = again.json()["choices"][0]["message"]["content"]
             assert content == text.strip() or content == text, content[-80:]
+            assert _until(lambda: trip.db("select state, outcome_cause from infrx.jobs where "
+                                          "request_id = %s and settled_at is not null",
+                                          request_id)) == [("succeeded", "completed")]
             assert trip.db("select count(*) from infrx.jobs where idempotency_key = %s",
                            key) == [(1,)]
             assert trip.db("select count(*) from infrx.credit_ledger where request_id = %s",
                            request_id) == [(1,)], "not ONE debit for the job"
+            assert trip.db("select count(*) from infrx.attempts where job_id = %s and "
+                           "released_at is null", request_id) == [(0,)]
+        assert trip.box.processes["worker"].pid == worker, "the worker did not survive"
         trip.conserved(alpha)
         assert trip.wallet(alpha)[0] < before[0]
 
