@@ -91,7 +91,11 @@ ALWAYS = ("ledger_precision_rounds_history", "usage_cost_precision_rounds_histor
           "d3_published_output_released", "d3_terminalization_keeps_the_hold",
           "d3_requeue_after_publication", "d3_retries_unbounded",
           "d3_held_unknown_may_be_rewritten", "d3_one_stuck_job_stops_the_sweep",
-          "d3_service_operations_callable_by_browsers", "d3_prep_retries_unbounded")
+          "d3_service_operations_callable_by_browsers", "d3_prep_retries_unbounded",
+          # D3 review fix round: the CREDIT unknown-usage path and the guard's source side.
+          "d3_quarantine_releases_the_credit_hold",
+          "d3_published_credit_released_not_quarantined",
+          "d3_unknown_release_keeps_the_credit_hold", "d3_settled_usage_may_become_absorbed")
 
 SELECTED = ALL if FULL_RUN else tuple(m for m in ALL if m.name in ALWAYS)
 
