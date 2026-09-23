@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-23T01:55:31Z",
+  "updated": "2026-09-23T02:06:42Z",
   "integration_branch": "claude/backend-impl",
   "base": "ec6c548",
   "in_progress": {
@@ -23,55 +23,55 @@
     },
     "D2": {
       "lane": "codex-d2 / codex/d2-admission-outbox",
-      "phase": "fix round 2 (MC-1, OB-1b confirmed blocking) after confirmation review of 0ce4ce6",
+      "phase": "round 2: 5 fix commits landed (30d614d); tails/addendum/sweep pending; lane re-dispatched",
       "since": "2026-09-22T20:55:35Z",
       "note": "real JobStore over PostgreSQL"
     },
     "A1": {
       "lane": "codex-a1 / codex/a1-signup-grant",
-      "phase": "closure review (2-lens workflow) of fix round at 47b0382",
+      "phase": "closure review rerun at 47b0382 (sofia run died)",
       "since": "2026-09-22T22:35:57Z",
       "note": "new files only; migrations 0015+; D2 in flight"
     },
     "W3": {
       "lane": "codex-w3 / codex/w3-drain-pin",
-      "phase": "independent review (3-lens workflow) at a0eeaf4; box measurements pending",
+      "phase": "review at a0eeaf4: honesty pass; PIN-1/S1 blocking awaiting refuters (sofia died)",
       "since": "2026-09-22T22:37:58Z",
       "note": "engine pin by digest, drain, readiness; measurements coordinator-run"
     },
     "I2B": {
       "lane": "codex-i2b / codex/i2b-deployment",
-      "phase": "independent review (3-lens workflow) at 5d68e50",
+      "phase": "review at 5d68e50: migrate lens M1 blocking awaiting refuters; failclosed/secrets lenses rerunning",
       "since": "2026-09-22T22:37:58Z",
       "note": "packaging, scripts, local rehearsal; box rollout coordinator-run"
     },
     "Q3": {
       "lane": "codex-q3 / codex/q3-outbox-reconciler",
-      "phase": "independent review (3-lens workflow) at 152de7e",
+      "phase": "review at 152de7e: DUR-1 blocking awaiting refuters; honesty lens rerunning",
       "since": "2026-09-22T22:37:58Z",
       "note": "outbox drain/ack, PG reconciler, index-loss recovery"
     },
     "G1R": {
       "lane": "codex-g1r / codex/g1r-audience-ingress",
-      "phase": "review PASS at d50afa5 (0 blocking, 17 nonblocking); fold-in round then merge",
+      "phase": "fold-in: 10 commits landed (6905d13); verification runs pending; lane re-dispatched",
       "since": "2026-09-22T22:40:37Z",
       "note": "audience ingress on accepted v2 contracts; rebase at wire-in merge"
     },
     "D3": {
       "lane": "codex-d3 / codex/d3-fenced-leases",
-      "phase": "independent review (3-lens workflow) at b4b1ec7 (stacked on D2 8728aec)",
+      "phase": "review rerun at b4b1ec7 (sofia run died)",
       "since": "2026-09-22T22:40:37Z",
       "note": "stacked on D2's head; leases, reaper, cancellation"
     },
     "I3B": {
       "lane": "codex-i3b / codex/i3b-recovery-observe",
-      "phase": "fix round (RS-1 restore target guard, RS-2 per-family killable checks) after review of 48d3bb2",
+      "phase": "fix round re-dispatched (nothing landed before the switch)",
       "since": "2026-09-22T22:40:37Z",
       "note": "metrics/alerts, local recovery drills, runbooks; early start"
     },
     "M4": {
       "lane": "codex-m4 / codex/m4-media-optimize",
-      "phase": "review PASS at 2e323be (0 blocking, 13 nonblocking); fold-in round then merge",
+      "phase": "fold-in re-dispatched (nothing landed before the switch)",
       "since": "2026-09-22T22:40:37Z",
       "note": "measurement harness + parity oracle first"
     }

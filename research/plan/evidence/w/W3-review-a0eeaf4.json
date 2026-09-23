@@ -1,0 +1,734 @@
+{
+  "_note": "sofia session hit its limit mid-workflow; lenses that died are absent; blocking findings were NOT refuted (refuters died) \u2014 see _unverified_blocking",
+  "_failed": "",
+  "lenses": {
+    "pin": {
+      "lens": "pin",
+      "verdict_hint": "fix_required",
+      "findings": [
+        {
+          "id": "PIN-1",
+          "severity": "blocking",
+          "file": "models/marlin2b/serve.sh",
+          "line": "48-54, 79",
+          "claim_broken": "serve.sh header: 'A pinned setting has one source: the caller cannot pass a second, conflicting value'; serving-version.json `about`: '`flags` is exactly what serve.sh passes after the image'; handback: 'refuses caller overrides of pinned flags (exit 2)'. Only --max-num-seqs, --allowed-local-media-path and --api-key are refused; the other six recorded flags pass through as a trailing duplicate that vLLM's argparse takes last-wins, so the engine_options_digest stops identifying what is served.",
+          "evidence": "Stub-docker runs of serve.sh (a0eeaf4 copy): `--dtype float16`, `--hf-overrides {}`, `--served-model-name x`, `--max-model-len 4096`, `--gpu-memory-utilization 0.5`, `--limit-mm-per-prompt {}`, `--port 9000`, `--host 0.0.0.0`, `--model /other` all exit 0 and docker runs; argv tail ends `... --dtype bfloat16 --dtype float16` (last wins in vLLM). No case in tests/w/test_serving.py launches with any of these, so nothing can die (own-mutant table). Only `--max-num-seqs 32`, `--max-num-seqs=32`, `--api-key k`, `--allowed-local-media-path /` exit 2.",
+          "minimal_fix": "Extend the case pattern to every recorded flag plus the two bind flags: `--max-num-seqs*|--allowed-local-media-path*|--api-key*|--served-model-name*|--hf-overrides*|--max-model-len*|--gpu-memory-utilization*|--limit-mm-per-prompt*|--dtype*|--host*|--port*)` and add those tuples to `check_one_source_per_setting`'s refused list (one loop, one extra `_m` anchor already exists: `caller_overrides_a_pinned_flag`). Narrow the `about` wording if pass-through of non-recorded flags is meant to stay."
+        },
+        {
+          "id": "PIN-2",
+          "severity": "nonblocking",
+          "file": "models/marlin2b/serve.sh",
+          "line": "38, 42, 76",
+          "claim_broken": "'pins image by digest' \u2014 the default is a digest and there is no tag fallback, but `IMAGE`, `MAX_MODEL_LEN` and `GPU_MEM` are environment overrides that silently change the served version under the same record and pass I0's preflight gate (it only regexes the `IMAGE=${IMAGE:-...}` default).",
+          "evidence": "`IMAGE=vllm/vllm-openai:nightly bash serve.sh` \u2192 exit 0, docker argv contains `vllm/vllm-openai:nightly`; `MAX_MODEL_LEN=99 GPU_MEM=0.5` \u2192 `--max-model-len 99 --gpu-memory-utilization 0.5`. deploy/preflight.py:333 `re.search(r\"IMAGE=\\$\\{IMAGE:-([^}]*)\\}\")` reads the script default only. The vLLM unit sources /etc/marlin2b-gateway.env (I2B), which preflight validates and today carries no IMAGE, so it is a config-trust gap, not a live defect.",
+          "minimal_fix": "Drop the three `${VAR:-}` escapes (hardcode `IMAGE=`, `MAX_MODEL_LEN=`, `GPU_MEM` in the exec line) or state in the record that they are dev-only overrides; add `launch(..., IMAGE=\"vllm/vllm-openai:nightly\")` expecting the digest in argv."
+        },
+        {
+          "id": "PIN-3",
+          "severity": "nonblocking",
+          "file": "models/marlin2b/serve.sh",
+          "line": "43, 57-65",
+          "claim_broken": "Lens item: ENGINE_MAX_NUM_SEQS/PROCESSING_CACHE_DIR validated. ENGINE_MAX_NUM_SEQS is not validated at all; PROCESSING_CACHE_DIR is only checked for absolute + existing (any directory, including `/`, `/etc`, `/home`, is mounted and whitelisted).",
+          "evidence": "`ENGINE_MAX_NUM_SEQS=abc|0|-1` \u2192 exit 0, `--max-num-seqs abc|0|-1` passed to docker (vLLM's argparse then fails the container inside a Restart=always/900 s TimeoutStartSec loop). `PROCESSING_CACHE_DIR=/` \u2192 `-v /:/:ro --allowed-local-media-path /` (docker refuses a `/` destination, fail-closed by accident); `/etc` \u2192 `-v /etc:/etc:ro`; `/home` \u2192 the engine may open any file under /home via file://. Injection through the value (`'8 --api-key k'`) stays one argv word, so no flag smuggling.",
+          "minimal_fix": "`[[ $ENGINE_MAX_NUM_SEQS =~ ^[1-9][0-9]*$ ]] || { echo ...; exit 2; }` and `case $PROCESSING_CACHE_DIR in /|/etc|/etc/*|/home|/home/*|/model|/model/*) exit 2;; esac` (or require a prefix of $WEIGHTS_ROOT); one case each in check_one_source_per_setting."
+        },
+        {
+          "id": "PIN-4",
+          "severity": "nonblocking",
+          "file": "models/marlin2b/measure/concurrency.sh",
+          "line": "43-52, 57, 64",
+          "claim_broken": "Evidence: the sweep runs c = 1..32 and prints `bench.py --report`. Under `set -euo pipefail` the background `sample` subshell inherits -e/pipefail, so ONE `/metrics` scrape that times out (`curl -m 2`) or one nvidia-smi hiccup kills the sampler; the later `kill \"$sampler\" 2>/dev/null;` then fails (ESRCH) and -e aborts the whole sweep after the current level \u2014 no further levels, no report, no per-level peak line.",
+          "evidence": "Scratch run with stub docker/curl/nvidia-smi/PY and a stub curl that fails exactly once during level 1 (LEVELS='1 2'): exit=1, only one bench invocation in the trace, no `level=1 peak_...` line, no `### report`. Control run (no failure): exit 0, both levels, report, artifacts under $OUT/<run>/ only. `bash -c 'set -e; (exit 0) & p=$!; sleep .3; kill $p 2>/dev/null; echo survived'` prints nothing, rc=1. At c=32 a 2 s metrics timeout is plausible (the engine's HTTP loop is busy).",
+          "minimal_fix": "First line of `sample()`: `set +e`; and `kill \"$sampler\" 2>/dev/null || true`. Box-safe either way (nothing altered), but the failure wastes a 15-25 min coordinator run and yields an unlabelled partial cell."
+        },
+        {
+          "id": "PIN-5",
+          "severity": "nonblocking",
+          "file": "models/marlin2b/measure/inventory.sh",
+          "line": "18, 35-44",
+          "claim_broken": "Lens: 'each script exits non-zero on precondition failure rather than proceeding'. inventory.sh exits 0 when the container does not exist and prints `image_equals_pin=no`, which reads like a negative equality result rather than a missing precondition.",
+          "evidence": "Scratch run with a stub docker that answers `Error: No such object: marlin2b-8000` for everything: exit=0; stdout line 11 `image_equals_pin=no`, lines 4/7/8/14 carry the docker error text. Deliberate per the `set -uo pipefail` comment ('one failing probe must not hide the others'); the coordinator must read the `### image` block, not the exit code.",
+          "minimal_fix": "After `image=$(docker inspect ...)`: `case $image in sha256:*) ;; *) echo \"precondition: container $CONTAINER not found\" >&2; exit 2;; esac` (keep the rest non-fatal)."
+        },
+        {
+          "id": "PIN-6",
+          "severity": "nonblocking",
+          "file": "research/plan/evidence/w/W3-2785101.md",
+          "line": "236-247, 264",
+          "claim_broken": "HF_TOKEN handling in the SSM wrapper: inventory.sh itself never prints or writes the token (sent on curl's stdin via `-H @-`), but the documented `wrap()` puts the env prefix into the SSM `commands` parameter; a coordinator who follows 'registry oids only when HF_TOKEN is exported' by adding `HF_TOKEN=...` to that prefix would record the token in the SSM command history/CloudTrail.",
+          "evidence": "Evidence lines 236-247: `wrap() { printf 'echo %s | base64 -d | %s bash' \"$(base64 -w0 \"$1\")\" \"$2\"; }` and `ssm \"$(wrap models/marlin2b/measure/inventory.sh 'CONTAINER=... ENGINE=... WEIGHTS=...')\"` \u2014 the second argument is the env prefix, logged by SSM. The wrapper correctly uses `env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws` for both send-command and get-command-invocation. Stub run with HF_TOKEN=hf_SECRET_TOKEN_123: zero occurrences in stdout/stderr/argv trace; only the stub curl's stdin carried `Authorization: Bearer ...`.",
+          "minimal_fix": "One sentence in the evidence's measurement section: 'never pass HF_TOKEN in the SSM env prefix; leave the registry-oid block `not_run` under SSM (or read the token on the box from a 0600 file: `HF_TOKEN=$(cat /path) bash`)'."
+        },
+        {
+          "id": "PIN-7",
+          "severity": "nonblocking",
+          "file": "models/marlin2b/serving-version.json",
+          "line": "29-33",
+          "claim_broken": "Lens (b): index digest, amd64 manifest and config; prefix-match reasoning. Verified by me: index sha256:4cbfd34a\u202620b42 and amd64 manifest sha256:a1da81e8\u2026072b match the registry (one read-only `docker buildx imagetools inspect`). NOT re-verified by me (the lens allowed one call): `linux_amd64_config` 38e8c0e6\u2026, `created`, `vllm_build_commit`, and that tag `nightly-a8d1aa9c\u2026` still resolves to this index \u2014 taken from the implementer's transcript. The prefix reasoning does not conflate the two digests: it says the 12-hex id is the manifest-list digest 'as a containerd image store reports it', hedges with \u26a0\ufe0f, and inventory.sh accepts either PIN_INDEX or PIN_CONFIG and prints `docker info --format '{{.Driver}}'` so the store type is settled by the run. A 48-bit prefix collision against the index digest is not a plausible coincidence, so the inference (box = containerd store or equivalent) is sound; no field is untested except the informational manifest/config digests (my mutant on `linux_amd64_manifest` survives \u2014 documentation only).",
+          "evidence": "`docker buildx imagetools inspect vllm/vllm-openai@sha256:4cbfd34a\u2026` \u2192 MediaType manifest.list.v2, Digest sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42, linux/amd64 sha256:a1da81e8784aacd6e9efa0e8667575f4551c8492e103fc10e3ecc034d212072b, linux/arm64 sha256:de1e3637\u2026ed1e72. engine_options_digest recomputed independently: sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147 == recorded. All five \u26a0\ufe0f/pending items carry a method (inventory.sh / capability.sh / concurrency.sh / HF_TOKEN).",
+          "minimal_fix": "None required; if the coordinator wants the config digest first-hand, one `docker buildx imagetools inspect --raw vllm/vllm-openai@sha256:a1da81e8\u2026072b | jq .config.digest` closes it."
+        },
+        {
+          "id": "PIN-8",
+          "severity": "nonblocking",
+          "file": "models/marlin2b/measure/concurrency.sh",
+          "line": "31-35",
+          "claim_broken": "Ordering constraint not stated in serve.sh/record: the sweep refuses unless the engine runs `--max-num-seqs 32`, while I2B's vLLM unit + this serve.sh start it at ENGINE_MAX_NUM_SEQS=8. The sweep must run before the I2B deploy (engine as it is today) or with ENGINE_MAX_NUM_SEQS=32 in /etc/marlin2b-gateway.env; otherwise it exits 2 and the \u26a0\ufe0f never closes.",
+          "evidence": "Stub docker answering `[\"/model\",\"--max-num-seqs\",\"8\"]` \u2192 `refused: the engine is not running with --max-num-seqs 32`, exit 2. I2B unit (codex-i2b/deploy/marlin2b-vllm.service) passes no flags and reads ENGINE_MAX_NUM_SEQS from the env file; the evidence's request 3 says `Environment=ENGINE_MAX_NUM_SEQS=8`.",
+          "minimal_fix": "One line in the evidence's step 3: 'run before the pinned unit is deployed, or set ENGINE_MAX_NUM_SEQS=32 for the sweep'."
+        }
+      ],
+      "mutants": [
+        {
+          "name": "caller_passes_dtype",
+          "edit": "serve.sh invoked with `--dtype float16` (also --hf-overrides, --max-model-len, --served-model-name, --gpu-memory-utilization, --limit-mm-per-prompt, --host, --port, --model)",
+          "result": "survived \u2014 exit 0, docker argv `... --dtype bfloat16 --dtype float16`; no tests/w case launches with these",
+          "killed_by": ""
+        },
+        {
+          "name": "image_env_override_to_tag",
+          "edit": "`IMAGE=vllm/vllm-openai:nightly` in the environment (no script edit)",
+          "result": "survived \u2014 argv contains the tag; check_pinned_launch never sets IMAGE; preflight regex reads the script default",
+          "killed_by": ""
+        },
+        {
+          "name": "max_num_seqs_zero_or_nonint",
+          "edit": "`ENGINE_MAX_NUM_SEQS=0` / `=-1` / `=abc`",
+          "result": "survived \u2014 passed verbatim to docker, exit 0",
+          "killed_by": ""
+        },
+        {
+          "name": "media_root_is_slash_or_etc",
+          "edit": "`PROCESSING_CACHE_DIR=/` and `/etc`",
+          "result": "survived \u2014 `-v /:/:ro` / `-v /etc:/etc:ro` emitted (docker itself refuses `/` at run time)",
+          "killed_by": ""
+        },
+        {
+          "name": "metrics_scrape_fails_once",
+          "edit": "stub curl returns 28 for one /metrics scrape during concurrency.sh level 1 (LEVELS='1 2')",
+          "result": "defect reproduced \u2014 script exits 1 after level 1; no level 2, no report (control run: exit 0)",
+          "killed_by": "none (shell scripts have no automated cases)"
+        },
+        {
+          "name": "container_missing_inventory",
+          "edit": "stub docker answers 'No such object' to every call",
+          "result": "inventory.sh exits 0 with image_equals_pin=no",
+          "killed_by": "none"
+        },
+        {
+          "name": "engine_unreachable_capability",
+          "edit": "ENGINE points at a closed port",
+          "result": "capability.sh exits 1 (ConnectionRefusedError) \u2014 bounded, fail-closed",
+          "killed_by": "n/a (expected)"
+        },
+        {
+          "name": "record_amd64_manifest_altered",
+          "edit": "serving-version.json `linux_amd64_manifest` last hex digit changed (reasoned; documentation field)",
+          "result": "survives \u2014 no case reads it; informational only, acceptable",
+          "killed_by": ""
+        },
+        {
+          "name": "W3 committed pin list (16) + Python list (33)",
+          "edit": "tests/w/w3_mutants.py as committed, INFRX_MUTANTS=all",
+          "result": "51 passed (every mutant killed/declared; pristine baselines pass)",
+          "killed_by": "tests/w/test_w3_mutants.py"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-w3 archive a0eeaf4 | tar -x -C /tmp/claude-1000/review-w3-pin-4068054 && make api-env",
+          "exit": 0,
+          "tail": " + uvicorn==0.53.0\n + valkey==6.1.1\n + zstandard==0.25.0"
+        },
+        {
+          "cmd": "docker buildx imagetools inspect vllm/vllm-openai@sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42  (the one allowed registry call)",
+          "exit": 0,
+          "tail": "Digest:    sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42\n  linux/arm64 sha256:de1e36375b876789fabf60e28941b3eaee1da05831a0e43830cfe7f11ced1e72\n  linux/amd64 sha256:a1da81e8784aacd6e9efa0e8667575f4551c8492e103fc10e3ecc034d212072b"
+        },
+        {
+          "cmd": "python3 recompute engine_options_digest from serving-version.json (test recipe: compact JSON of flags with settings substituted)",
+          "exit": 0,
+          "tail": "recomputed sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147\nmatch True\nimage ref==digest: True"
+        },
+        {
+          "cmd": "serve.sh with stub docker: 13 caller-flag variants + IMAGE/MAX_MODEL_LEN/GPU_MEM/ENGINE_MAX_NUM_SEQS/PROCESSING_CACHE_DIR/PORT env variants",
+          "exit": 0,
+          "tail": "--max-num-seqs 32 / --max-num-seqs=32 / --api-key k / --allowed-local-media-path / \u2192 exit=2, docker not run\n--dtype --hf-overrides --served-model-name --max-model-len --gpu-memory-utilization --limit-mm-per-prompt --host --port --model \u2192 exit=0, docker run\nIMAGE=tag \u2192 [vllm/vllm-openai:nightly]; ENGINE_MAX_NUM_SEQS=abc|0|-1 \u2192 passed verbatim; PROCESSING_CACHE_DIR=/ \u2192 [-v] [/:/:ro]"
+        },
+        {
+          "cmd": "inventory.sh with stub docker/curl/nvidia-smi/python3, HF_TOKEN=hf_SECRET_TOKEN_123, </dev/null",
+          "exit": 0,
+          "tail": "18 commands: docker version/info/inspect x5/image inspect x3/logs, curl -m 5 x4 (/version /health /v1/models /metrics), nvidia-smi --query-gpu, curl -m 30 -H @- huggingface tree, python3 -c\nsecret leak count: out.txt:0 trace.txt:0 err.txt:0 (token only on curl stdin)\nmissing-container variant: exit=0, image_equals_pin=no"
+        },
+        {
+          "cmd": "concurrency.sh with stubs: happy path LEVELS='1 2'; engine at --max-num-seqs 8; no CORPUS_CACHE; REPO missing; one curl -m 2 failure",
+          "exit": 0,
+          "tail": "happy: exit=0, cmds = docker inspect x2, docker logs, curl -m 2 /metrics x4, nvidia-smi x4, PY bench.py -c 1 -n 64 / -c 2 -n 64 / --report; files only under $OUT/<run>/\nrefusals: exit=2 (max-num-seqs 8), exit=1 (CORPUS_CACHE unset), exit=2 (REPO)\none scrape failure: exit=1 after level 1, 1 bench invocation"
+        },
+        {
+          "cmd": "capability.sh against a stub HTTP engine on 127.0.0.1:18777 + stub docker; then against a closed port",
+          "exit": 0,
+          "tail": "13 POST /v1/chat/completions (max_tokens 256/8/8/32/32/16x7/2048-stream), 2 GET /metrics; docker: `logs --since <ts> marlin2b-8000` x4; no files written; 8 probe lines printed\nunreachable engine: ConnectionRefusedError, exit=1"
+        },
+        {
+          "cmd": "bash -c 'set -euo pipefail; (exit 0) & p=$!; sleep 0.3; kill \"$p\" 2>/dev/null; echo survived_kill'",
+          "exit": 1,
+          "tail": "(no output) rc=1 \u2014 kill of a reaped child aborts under set -e"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/w -p no:cacheprovider  (scratch, detached)",
+          "exit": 0,
+          "tail": "148 passed in 279.76s (0:04:39)\nEXIT=0"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_w3_mutants.py -p no:cacheprovider  (scratch, detached)",
+          "exit": 0,
+          "tail": "51 passed in 322.30s (0:05:22)\nEXIT=0"
+        },
+        {
+          "cmd": "git -C .../codex-w3 status --porcelain | wc -l",
+          "exit": 0,
+          "tail": "worktree-status-lines=0"
+        }
+      ],
+      "fabrication_check": "Every number above comes from a command I ran in the scratch copy of a0eeaf4 or from files read in the codex-w3/codex-i2b worktrees (read-only). The registry index digest and amd64 manifest digest were verified with my single allowed imagetools call; the amd64 config digest 38e8c0e6\u2026, the image `created` time, the build-commit label and the tag\u2192digest resolution are the implementer's transcript and are NOT independently re-verified by me. I did not contact the pilot box, AWS, SSM or Hugging Face; the only network call was the one docker.io lookup. tests/w 148 passed and the 49-mutant W3 list (51 pytest items) passed as claimed; I did not run the other W lists, tests/i, bench-test, docker-backed suites or the both-orderings run, so those claims (281, 82, 67, 20 failed/2357 passed) are unverified here. The I1B 12-hex image id is quoted from research/plan/evidence/i/I1B-inventory-2026-09-22.md line 13; the I1B raw docker command that produced it is not shown there. Box-safety verdict on the three scripts is from a line-by-line read plus stub traces: no docker stop/rm/restart/pull, no systemctl, no sudo, no rm -rf, no set -x/env dump, writes only under $OUT/<run>/ (concurrency.sh) or none; the file:// probes target /etc/hostname inside the engine container and are sent to the engine, not read locally. Nothing blocking on box safety; the one blocking finding is a claimed pin invariant (all recorded flags refused on the command line) that six flags violate with no killable test.",
+      "cleanup": "Removed /tmp/claude-1000/review-w3-pin-4068054 (scratch archive, .venv, stub bins, traces, test logs) and the path note file; confirmed `ls /tmp/claude-1000/review-w3-pin-*` finds nothing. No file in any worktree was created, edited or committed (codex-w3 `git status --porcelain` is empty; codex-i2b was only read). No background process of mine remains (the stub HTTP server was killed in its own command; the detached pytest runs exited). The pilot box, AWS and SSM were never contacted."
+    },
+    "service": {
+      "lens": "service",
+      "verdict_hint": "fix_required",
+      "findings": [
+        {
+          "id": "S1",
+          "severity": "blocking",
+          "file": "apps/infrx-api/infrx/worker/service.py",
+          "line": "144-166 (_loop_state/readiness); evidence W3-2785101.md Limits item 7",
+          "claim_broken": "Evidence Limit 7: 'one runner of several dying shows as failures, not as 503'. Measured: it shows as nothing. loop.failures is only populated when WorkerLoop.run's gather returns (loop.py:113-116), i.e. after the LAST runner ends, so a partly dead pool reports readyz 200 / failures 0 / livez 200 for its whole life. A runner dies permanently on any non-DomainError from claim_candidate, jobs.claim or load_work (a transient Valkey/PostgreSQL blip; _runner has no try), the process never exits, the unit's Restart=always never fires, and the pilot's single worker silently runs at reduced concurrency until the last runner dies.",
+          "evidence": "Probe P6 (concurrency=2, first claim_candidate raises ConnectionError once): {dead_runners: 1, readyz: [200, failures=0, ready=True], livez: [200, True], surviving_runner_completed: True, failures_after_stop: 1}. No case in tests/w/test_service.py exercises a partly dead pool; my mutants R14/R16 (drain/serve behaviour on a dead pool) survived.",
+          "minimal_fix": "In readiness(): dead = sum(1 for t in self.loop._tasks if t.done() and not t.cancelled() and t.exception() is not None); report it as 'runners_dead' and make 'live' false when dead > 0 (or end serve() when any runner task completes: asyncio.wait({waiting, *self.loop._tasks}, FIRST_COMPLETED)), so the unit restarts to full concurrency; add a case that kills one of two runners and asserts 503 on /livez. Root cause is W2's _runner not surviving a transient claim error; note it as a W follow-up and correct Limit 7."
+        },
+        {
+          "id": "S2",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/infrx/worker/service.py",
+          "line": "153 (HEALTH_TIMEOUT_S) and 66-72/104-106 (bind)",
+          "claim_broken": "Two stated readiness invariants have no killable test: (a) 'an engine slower than 2 s to say ready is not ready' - mutant R4 (asyncio.timeout(None)) survived; no case has a hanging health(). (b) 'never public' is proven only at construction: mutant R13 (start_server bound to 0.0.0.0 regardless of health_host) survived because every case connects via 127.0.0.1, which a 0.0.0.0 listener also answers; and health_host is a plain mutable dataclass field, so `service.health_host = '0.0.0.0'` after construction binds publicly (probe P8b: getsockname() == ('0.0.0.0', 41611)).",
+          "evidence": "review_mutants: R4 survived (2 passed), R13 survived (2 passed); probe P14 shows the timeout itself works (hung health -> 503 'down' in 2.0 s); probe P8: ::ffff:127.0.0.1 refused, 127.0.0.2 and ::1 accepted (loopback, fine), 0.0.0.0/:: refused.",
+          "minimal_fix": "(a) add to the READY case an engine.health that sleeps > HEALTH_TIMEOUT_S and assert engine == 'down' with elapsed < 3 s. (b) move the loopback check into a helper called from both __post_init__ and start(), and in the PUBLIC case assert service._server.sockets[0].getsockname()[0] == '127.0.0.1'."
+        },
+        {
+          "id": "S3",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/infrx/worker/service.py",
+          "line": "99-106 (start)",
+          "claim_broken": "start() creates the pool task before binding the readiness listener, so a bind failure (port in use) raises out of serve() with a job already claimed and an attempt in flight; the orphaned pool is cancelled by asyncio.run at exit and the job's lease is left for the 120 s expiry, and Restart=always then repeats the same claim/orphan cycle every RestartSec while the port stays busy.",
+          "evidence": "Probe P13 (port pre-bound): {raised: OSError, job_state_after_failed_start: 'running', engine_started: 1, pool_alive_after_raise: True}.",
+          "minimal_fix": "Bind the listener first (or before reap_once), then create the pool and reaper tasks; a case that pre-binds the port and asserts no candidate was claimed."
+        },
+        {
+          "id": "S4",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/infrx/worker/service.py",
+          "line": "75-96 (reap_once/_reap_forever), 125-141 (serve), 151-166 (readiness)",
+          "claim_broken": "Untested clauses (each a survived single-edit mutant, none a measured misbehaviour): SIGINT mapped to drain (R11; evidence line 29 claims SIGTERM/SIGINT, only SIGTERM is sent); 'reaps before it claims' ordering (R6: pool created before reap_once survives because the fake recover never yields); stop() awaiting the pool task (R7); the `or self.loop.draining` clause of `live` (R5); reap_errors in the body (R10, cases read the attribute); serve() draining after a pool death (R16). Also the reaper timer task dies silently and readiness stays 200 with reap_errors 0 if reap_once raises outside its two try blocks (only a store that returns a non-iterable from recover() does this - a contract violation, so noted, not counted).",
+          "evidence": "review_mutants: R5, R6, R7, R10, R11, R16 survived (1-2 passed each). Probe P7b: reaper_done True, exc TypeError, readyz (200, ready True, live True, reap_errors 0), a lease that expired afterwards stayed 'running'.",
+          "minimal_fix": "Send SIGINT in the child drill's second run; in the RESTART case make recover() await asyncio.sleep(0) and assert loop.claimed == 0 at the moment recover runs; assert body['reap_errors'] over the socket; guard reap_once's whole body with the same except and expose _reaper.done() as 'reaper': 'dead' in readiness."
+        }
+      ],
+      "mutants": [
+        {
+          "name": "R1_pool_done_ignored",
+          "edit": "service.py _loop_state: `if self._pool is None or self._pool.done()` -> `if self._pool is None`",
+          "result": "killed",
+          "killed_by": "test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_draining"
+        },
+        {
+          "name": "R2_reaper_not_cancelled_on_stop",
+          "edit": "service.py stop: remove `self._reaper.cancel()`",
+          "result": "broken_runner (cases hang > 300 s: the leaked reaper keeps the loop alive; R83 says a hang is not a proof, but it shows the cancel is load-bearing)",
+          "killed_by": "-"
+        },
+        {
+          "name": "R3_in_flight_leaks_job_ids_while_busy",
+          "edit": "readiness: `\"in_flight\": len(self.loop.in_flight)` -> `list(self.loop.in_flight.values())`",
+          "result": "killed",
+          "killed_by": "test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_draining (in_flight == 1 comparison)"
+        },
+        {
+          "name": "R4_health_timeout_dropped",
+          "edit": "readiness: `asyncio.timeout(HEALTH_TIMEOUT_S)` -> `asyncio.timeout(None)`",
+          "result": "SURVIVED (2 passed) - finding S2a"
+        },
+        {
+          "name": "R5_live_drops_draining_clause",
+          "edit": "readiness: `\"live\": state != \"stopped\" or self.loop.draining` -> `state != \"stopped\"`",
+          "result": "SURVIVED - finding S4"
+        },
+        {
+          "name": "R6_pool_starts_before_reap",
+          "edit": "start: create the pool task before `await self.reap_once()`",
+          "result": "SURVIVED - finding S4"
+        },
+        {
+          "name": "R7_stop_does_not_await_pool",
+          "edit": "stop: remove the gather on self._pool",
+          "result": "SURVIVED - finding S4"
+        },
+        {
+          "name": "R8_probe_always_200",
+          "edit": "_probe: `status = 200 if body[...] else 503` -> `status = 200`",
+          "result": "killed",
+          "killed_by": "test_ops_recover__readiness_tells_engine_down_from_idle_from_busy_from_draining"
+        },
+        {
+          "name": "R9_loopback_is_private",
+          "edit": "__post_init__: `.is_loopback` -> `.is_private`",
+          "result": "killed",
+          "killed_by": "test_ops_recover__readiness_is_never_public_and_leaks_nothing (10.0.0.5, 0.0.0.0)"
+        },
+        {
+          "name": "R10_reap_errors_hidden_in_body",
+          "edit": "readiness: `\"reap_errors\": self.reap_errors` -> `0`",
+          "result": "SURVIVED - finding S4"
+        },
+        {
+          "name": "R11_sigint_unhandled",
+          "edit": "serve: `signals = (SIGTERM, SIGINT)` -> `(SIGTERM,)`",
+          "result": "SURVIVED - finding S4"
+        },
+        {
+          "name": "R12_probe_path_prefix",
+          "edit": "_probe: exact path match -> `path.startswith((READY_PATH, LIVE_PATH))`",
+          "result": "killed",
+          "killed_by": "test_ops_recover__readiness_is_never_public_and_leaks_nothing (/readyz/../v1 -> 404)"
+        },
+        {
+          "name": "R13_bind_not_revalidated_at_start",
+          "edit": "start: start_server on \"0.0.0.0\" instead of self.health_host",
+          "result": "SURVIVED (2 passed) - finding S2b"
+        },
+        {
+          "name": "R14_drain_bound_zero_when_pool_dead",
+          "edit": "stop: drain bound 10**6 when the pool already died",
+          "result": "SURVIVED (drain has nothing pending on a dead pool; equivalent-ish) - noted under S1"
+        },
+        {
+          "name": "R15_generate_timed_from_request_start_on_timeout",
+          "edit": "attempt.py: `_time(result, \"generate\", state.first_delta_at)` -> `started`",
+          "result": "killed",
+          "killed_by": "test_perf_pilot__an_attempt_times_its_phases_in_the_bench_vocabulary"
+        },
+        {
+          "name": "R16_serve_returns_before_stop_on_pool_death",
+          "edit": "serve: return DrainReport() without stop() when the pool died",
+          "result": "SURVIVED - finding S4"
+        },
+        {
+          "name": "probe P2/P2b second SIGTERM during drain (child process)",
+          "edit": "two SIGTERMs 0.1 s apart, attempt fits (0.5 s / bound 10 s) and does not fit (60 s / bound 1 s)",
+          "result": "rc 0 both; fits: ended [(job,'completed')], state succeeded, 0.58 s; not: released [job], ended [], state running, 1.07 s (second signal is idempotent; no test claims this)"
+        },
+        {
+          "name": "probe P3 drain with a hung real fake_vllm (prefill_stall, stall_real_s=30, drain_s=0.2) x5",
+          "edit": "-",
+          "result": "stop() took 0.201 s in all 5 runs; released == (job,), state running, outcome None"
+        },
+        {
+          "name": "probe P4/P5 reaper edges",
+          "edit": "lease expiring exactly at the tick; two ticks; reaper candidate arriving after another worker completed the job",
+          "result": "exact tick reaps (1), second tick 0 and one pending candidate; stale candidate -> refusal already_terminal, not re-run, outcome stays completed"
+        },
+        {
+          "name": "probe P10/P10b released job whose budget passed meanwhile",
+          "edit": "9.5 s of a 10 s stream queue budget used, released, TTL+1, successor 1 s late; and release then 301 s",
+          "result": "P10: requeued with 0.5 s left, successor's start-up reap terminalizes queue_wait_expired (expired, debit 0), claim refused already_terminal - not re-run; P10b: deadline_exceeded, failed, released_platform_absorbed, debit 0"
+        },
+        {
+          "name": "probe P12 release semantics",
+          "edit": "-",
+          "result": "engine.cancel never called (stream aclose only), lease left with 120 s to expiry, no result recorded, candidate acknowledged; matches loop.py docstring and RELEASE case"
+        },
+        {
+          "name": "probe P9 bodies",
+          "edit": "/readyz while busy and after a drain that released a job",
+          "result": "no job id in either body; counts only"
+        },
+        {
+          "name": "probe P15 server_timing",
+          "edit": "{prefill: 0.04, generate: 1234.5678, settle: 0.0}",
+          "result": "'prefill;dur=0.0, generate;dur=1234.6, settle;dur=0.0' - milliseconds, 1 decimal (not 3); absent phases absent (TIMED case, and bench.py reports them as declared_missing); no 'total' phase exists; 'generate' includes the journal appends by design (asserted 200.0 + journal)"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C .../codex-w3 archive a0eeaf4 | tar -x -C /tmp/claude-1000/review-w3-service-4027636 && make api-env",
+          "exit": 0,
+          "tail": " + valkey==6.1.1\n + zstandard==0.25.0\nEXIT=0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q tests/w",
+          "exit": 0,
+          "tail": "148 passed in 352.47s (0:05:52)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q tests/w/test_w3_mutants.py -p no:cacheprovider",
+          "exit": 0,
+          "tail": "...................................................                      [100%]\n51 passed in 369.85s (0:06:09)\nEXIT=0"
+        },
+        {
+          "cmd": "uv run --frozen python review_probe.py (P2-P16)",
+          "exit": 0,
+          "tail": "[P6_partly_dead_pool] {\"dead_runners\": 1, \"readyz\": [200, 0, true], \"livez\": [200, true], \"surviving_runner_completed\": true, \"failures_after_stop\": 1}\n[P13_bind_failure_orphans_pool] {\"raised\": \"OSError\", \"job_state_after_failed_start\": \"running\", \"engine_started\": 1, \"pool_alive_after_raise\": true}\n[P14_hung_health] {\"status\": 503, \"engine\": \"down\", \"took_s\": 2.0}"
+        },
+        {
+          "cmd": "uv run --frozen python review_probe2.py (reaper timer dies on a non-iterable recover)",
+          "exit": 0,
+          "tail": "{\"reaper_done\": true, \"exc\": \"TypeError\", \"readyz\": [200, true, true, 0], \"calls\": 2, \"lost_job_state\": \"running\"}"
+        },
+        {
+          "cmd": "for i in 1..5: uv run --frozen pytest -q tests/w/test_service.py -k 'integration_engine or process_loss' (load average 36-41)",
+          "exit": 0,
+          "tail": "2 passed, 10 deselected in 13.11s / 12.76s / 12.70s / 12.64s / 12.42s"
+        },
+        {
+          "cmd": "for i in 1..5: uv run --frozen pytest -q tests/w/test_service.py -k 'integration_engine or sigterm'",
+          "exit": 0,
+          "tail": "2 passed, 10 deselected in 12.70s / 13.38s / 14.11s / 13.11s / 13.30s"
+        },
+        {
+          "cmd": "uv run --frozen python review_mutants.py (16 reviewer mutants through tests.contracts.mutants.run_mutant / w3 Runner)",
+          "exit": 0,
+          "tail": "6/16 killed; not killed: ['R2_reaper_not_cancelled_on_stop', 'R4_health_timeout_dropped', 'R5_live_drops_draining_clause', 'R6_pool_starts_before_reap', 'R7_stop_does_not_await_pool', 'R10_reap_errors_hidden_in_body', 'R11_sigint_unhandled', 'R13_bind_not_revalidated_at_start', 'R14_drain_bound_zero_when_pool_dead', 'R16_serve_returns_before_stop_on_pool_death']"
+        }
+      ],
+      "fabrication_check": "Every number above is copied from command output in this session (tests/w 148 passed; W3 list 51 passed = 49 mutants + 2 structural cases; probe JSON lines; mutant runner lines). Implementer claims I could confirm: tests/w 148, the W3 list all killed, both integration-engine drills pass (10 runs under load), SIGTERM drill exits 0 both ways, drain past the bound releases and generation 2 completes after the TTL, readiness bodies carry no job id, timings in bench vocabulary. Claims I did not verify (outside this lens): image digest/registry, serve.sh pin cases, bench-test 67, the legacy/track orderings. Not confirmed: evidence Limit 7's 'shows as failures' (measured false, S1). No pilot box, GPU, docker or network was used; I2B deploy units were read only.",
+      "cleanup": "Scratch copy /tmp/claude-1000/review-w3-service-4027636 (venv, logs, review_probe.py, review_probe2.py, review_mutants.py, review_probe.json) and /tmp/claude-1000/review-w3-service-path removed; `ls /tmp/claude-1000/review-w3-service-*` finds nothing. No worktree was edited or committed (codex-w3 `git status --short` empty); fake_vllm child processes were stopped by their fixtures/probes."
+    },
+    "honesty": {
+      "lens": "honesty",
+      "verdict_hint": "pass",
+      "findings": [
+        {
+          "id": "H1",
+          "severity": "nonblocking",
+          "file": "models/marlin2b/serve.sh",
+          "line": "37",
+          "claim_broken": "R76 / the evidence's own 'Not claimed: full equality with the box'. The code comment states as fact that 'the 2026-09-19 rows were measured on this build', while serving-version.json marks pilot_box '\u26a0\ufe0f TO BE VERIFIED' and the evidence says the match rests on a 48-bit prefix plus dates, not a full comparison.",
+          "evidence": "serve.sh:36-37 reads '# vllm/vllm-openai:nightly-a8d1aa9c\u2026, resolved 2026-09-22 (Qwen3.5 needs vLLM main; the 2026-09-19 rows were measured on this build)'. I1B recorded only 'sha256:4cbfd34aac14\u2026' with no RepoDigest; my read-only `docker buildx imagetools inspect` (2026-09-23T01:27:19Z) confirms the tag resolves to sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42, so the prefix match is real, but equality is still pending inventory.sh.",
+          "minimal_fix": "Change the comment to '(prefix-matches the box's I1B image id; full equality \u26a0\ufe0f pending measure/inventory.sh)'."
+        },
+        {
+          "id": "H2",
+          "severity": "nonblocking",
+          "file": "research/plan/evidence/w/W3-2785101.md",
+          "line": "179-182, 371-386",
+          "claim_broken": "Integration request 1 is presented as what makes track I green ('with exactly that edit applied \u2026 tests/i 82 passed'). tests/i does pass 82, but the I0 mutation list with that edit is not green: 3 mutants are broken_runner, and they are already broken at base d18177e, so the evidence should say the I list stays red after request 1 for a reason outside W3, and that I2B's copy of the same case already diverges from the requested text.",
+          "evidence": "Scratch copy with request 1 applied: `pytest -q tests/i` \u2192 82 passed (EXIT=0); `INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py` \u2192 3 failed, 52 passed: newline_injection_accepted, padding_accepted, shape_unchecked, each 'undeclared exception deaths [TypeError@test_prereqs.py]'. Same three at base d18177e (unedited): 3 failed, 1 passed (composition_gate_removed killed). By hand: test_prereqs.py:78 `assert \"whitespace\" in preflight.shape_problem(key, \" \" + good)` raises TypeError on a None refusal. I2B's worktree (codex-i2b) already rewrites those asserts with `(\u2026 or \"\")` and its real-script case expects len(pilot)==2 with a 'PENDING(W3)' serving-version check, so request 1's exact text will conflict at merge.",
+          "minimal_fix": "In request 1, add: 'tests/i's mutation list is not green after this edit alone: newline_injection_accepted, padding_accepted and shape_unchecked are broken_runner at base (test_prereqs.py:72-79 raises TypeError on a None refusal); I2B's lane carries the `or \"\"` fix and a two-item pilot expectation - coordinator merges the case, not this text.'"
+        },
+        {
+          "id": "H3",
+          "severity": "nonblocking",
+          "file": "research/plan/evidence/w/W3-2785101.md",
+          "line": "195-205",
+          "claim_broken": "'All three W lists: every mutant killed' is inferred (W1+W3 passed in the 00:49 run, W2 alone at 2785101), not one run; and the three-list total is 282, not 281.",
+          "evidence": "`INFRX_MUTANTS=all pytest -q tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py` at a0eeaf4 \u2192 '282 passed in 1755.31s (0:29:15)' EXIT=0 (150+66+49 mutants + 17 list checks). The inference was sound; the number quoted upstream ('281 passed after the re-anchor') is the pre-fix '1 failed, 281 passed' count.",
+          "minimal_fix": "Add one line: 'three lists together at 2785101: 282 passed' (or run it once and quote the tail)."
+        },
+        {
+          "id": "H4",
+          "severity": "nonblocking",
+          "file": "models/marlin2b/serve.sh",
+          "line": "38",
+          "claim_broken": "'serve.sh pins image by digest' is a default, not a pin: `IMAGE=${IMAGE:-\u2026@sha256:\u2026}` lets any `IMAGE` in the environment replace the digest, and I0's gate (preflight.engine_problems) only regexes the default. No case asserts an `IMAGE=` in the environment is ignored.",
+          "evidence": "preflight.py:333-338 checks `re.search(r\"IMAGE=\\$\\{IMAGE:-([^}]*)\\}\")` only. check_pinned_launch runs serve.sh with a controlled env and never sets IMAGE. In I2B's units the only EnvironmentFile is preflight-written (undeclared_key_rendered mutant guards it) and Environment= carries WEIGHTS_ROOT/HOME only, so the deployed path is safe today; the claim is wider than the test.",
+          "minimal_fix": "Either `IMAGE=vllm/vllm-openai@sha256:\u2026` (no override; the pin is a new serving version, R76) or add to check_one_source_per_setting: `launch(models, tmp, IMAGE=\"vllm/vllm-openai:nightly\")` must still start the recorded digest, and a matching mutant."
+        },
+        {
+          "id": "H5",
+          "severity": "nonblocking",
+          "file": "research/plan/evidence/w/W3-2785101.md",
+          "line": "236-254, 265",
+          "claim_broken": "'the token is sent on stdin, never argv' (inventory.sh:12, 70-71) holds on the box, but the evidence's `wrap`/`ssm` helper passes every setting as inline text in the send-command parameters; an `HF_TOKEN=\u2026` used the same way lands in SSM command history/CloudTrail.",
+          "evidence": "Evidence lines 237-248: `wrap file 'CONTAINER=\u2026 ENGINE=\u2026'` becomes the `commands` parameter of `aws ssm send-command`; inventory.sh reads `${HF_TOKEN:-}` from the environment it is started in.",
+          "minimal_fix": "One sentence under step 1: 'HF_TOKEN: export it on the box from an SSM SecureString (`aws ssm get-parameter --with-decryption` inside the command), never in the send-command text.'"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "pin half (16): how the shell-script mutants are applied",
+          "edit": "Read tests/w/w3_mutants.py run_pin_mutant + tests/w/test_serving.py launch(): the four files (common/env.sh, marlin2b/model.env, serve.sh, serving-version.json) are copied, the pristine copy is checked, then `source.replace(mutant.old, mutant.new, 1)` is written into the COPY OF THE REAL serve.sh/JSON and `bash <copy>/marlin2b/serve.sh` is executed with a stub `docker` that records argv. It is string substitution on the real script, executed by bash - NOT a Python model of serve.sh.",
+          "result": "Confirmed by hand for all 16: each pristine-ok then killed. image_is_a_moving_tag \u2192 test_serving.py:94 'serve.sh does not start the recorded image'; published_beyond_loopback \u2192 :99; media_mount_writable/media_mounted_elsewhere \u2192 :101 (mounts list shows ':rw'/':/media:ro'); media_root_not_allowed, max_num_seqs_default_32, record_flag_drift \u2192 :97 'the flags served are not the flags recorded'; max_num_seqs_ignores_its_setting \u2192 :116; caller_overrides_a_pinned_flag \u2192 :114 (('--max-num-seqs','32'), 0); api_key_passes_through \u2192 :114 (('--api-key','k'), 0); relative_root_accepted \u2192 :122; missing_root_accepted \u2192 :124; record_digest_stale \u2192 :104 (digest recomputed); record_names_one_eos_id \u2192 :131; record_setting_is_not_the_contract \u2192 :135; record_digest_source_invented \u2192 :137 'registry'. Direct run of serve.sh with a stub docker: argv carries the @sha256 ref, -p 127.0.0.1:8000:8000, --max-num-seqs 8; `serve.sh --max-num-seqs 32` exits 2 before docker.",
+          "killed_by": "the named case's own assert (line numbers above)"
+        },
+        {
+          "name": "python half (33) applied by hand in a layout copy, pytest -k <named cases>",
+          "edit": "Each Mutant.old/new applied once (anchors=1 for all 33) to infrx/worker/{engine,service,loop,attempt}.py in a fresh _layout() copy; pytest run on tests/w/test_service.py -k the mutant's cases.",
+          "result": "33/33 exit=1 with only named cases failing. Assertion read for each: reaper_enqueues_outcomes 'assert 3 == 2'; reaper_uncounted 'reaped 0 == 2'; start_does_not_reap 'reaped 0 == 1'; timer_never_reaps eventually(outcome) False; stop_ignores_its_bound ended () and SIGTERM child state 'running'; default_bound_is_not_the_budget '30.0 != 300.0'; released_jobs_not_recorded/ in_flight_never_recorded released_jobs () ; ended_jobs_not_recorded ended (); in_flight_never_cleared not in_flight False; run_undoes_an_early_drain start+stop task never done; sigterm_not_handled child status -15; serve_waits_only_for_a_signal serve never returns; ready_ignores_the_engine 200 vs 503 with engine down; ready_while_draining/always_live readiness before start; readiness_is_public DID NOT RAISE ValueError; probe_answers_any_method POST /readyz 200; readiness_leaks_job_ids job id in body ('released_jobs'); prefill_runs_to_the_end prefill 420\u2260200; generate_from_the_request generate 420\u2260220; first_delta_is_the_last prefill 310/generate 110; journal_keeps_one_append journal 10\u226020; persist_untimed/settle_untimed key missing; server_timing_in_seconds 0.2\u2260200.0; absent_phase_is_zero zeros present; unset_root_is_guessed and root_is_not_the_setting die by errors.NotFound (a DomainError, permitted by R83; the case's pytest.raises(DependencyUnavailable) is the invariant).",
+          "killed_by": "named cases only; 3 declared deaths are the invariant's own: recover_failure_is_fatal 'ConnectionError: the database is gone', enqueue_failure_is_fatal 'ConnectionError: the index is gone', health_failure_escapes 'RuntimeError: the engine client is broken'"
+        },
+        {
+          "name": "result_never_stored (W2 list, re-anchored in 2785101)",
+          "edit": "anchor now includes `began = self.clock.now()`; still turns `if cause is TerminalCause.completed:` into `if False:` around put_result - the same W2 invariant (r1 R30: a success the customer cannot fetch is not a success)",
+          "result": "killed in the three-list run (282 passed); HAPPY case test_loop.py:235 asserts outcome.result_ref == 'infrx-result:<id>'",
+          "killed_by": "test_dur_output__the_answer_is_journalled_visible_only_then_relayed_and_settled"
+        },
+        {
+          "name": "I0 list with request 1 applied (does any fail-closed mutant weaken?)",
+          "edit": "tests/i/test_prereqs.py real-script case \u2192 `engine_problems(REAL_SERVE_SCRIPT, \"pilot\") == []` exactly as request 1",
+          "result": "composition_gate_removed killed; engine_digest_unchecked killed (its other case uses a generated unpinned script); 52 passed; 3 broken_runner (newline_injection_accepted, padding_accepted, shape_unchecked) identical at base d18177e - pre-existing, not caused by W3 or the edit (finding H2)",
+          "killed_by": "n/a"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C codex-w3 archive a0eeaf4 | tar -x -C /tmp/claude-1000/review-w3-honesty-4027770 && make api-env",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1 / + zstandard==0.25.0 / EXIT=0"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider tests/w  (docker stubbed on PATH)",
+          "exit": 0,
+          "tail": "148 passed in 329.34s (0:05:29)"
+        },
+        {
+          "cmd": "INFRX_MUTANTS=all uv run --frozen pytest -q -p no:cacheprovider tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py",
+          "exit": 0,
+          "tail": "282 passed in 1755.31s (0:29:15)   [150+66+49 mutants + 17 list checks; the evidence's '281' is the pre-re-anchor '1 failed, 281 passed']"
+        },
+        {
+          "cmd": "make bench-test",
+          "exit": 0,
+          "tail": "67 passed in 24.69s"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider --ignore=tests/d   (legacy-first; docker stubbed so tests/q's Valkey harness skips instead of starting a container)",
+          "exit": 1,
+          "tail": "20 failed, 2305 passed, 52 skipped, 2 warnings in 1577.83s (0:26:17)   \u2014 2305+52 = the evidence's 2357; the 52 skips are exactly tests/q/test_valkey_scheduler.py + test_valkey_mutants.py (52 collected); all 20 FAILED are tests/i: the real-script case ('AssertionError: [] / assert 0 == 1'), the no-op self-test, and 18 test_mutant_is_killed[...] each 'pristine baseline: the unmutated tree fails the list's own cases \u2026 the_repository_engine_script_is_checked_as_it_stands'"
+        },
+        {
+          "cmd": "uv run --frozen pytest -q -p no:cacheprovider --ignore=tests/d tests/w tests/contracts tests/g tests/i tests/j tests/m tests/q tests/t tests/test_*.py   (track-first)",
+          "exit": 1,
+          "tail": "20 failed, 2305 passed, 52 skipped, 2 warnings in 1491.92s (0:24:51)   \u2014 FAILED set byte-identical to legacy-first (diff \u2192 IDENTICAL)"
+        },
+        {
+          "cmd": "[scratch copy + request 1 edit] .venv/bin/python -m pytest -q -p no:cacheprovider tests/i",
+          "exit": 0,
+          "tail": "82 passed in 258.36s (0:04:18)"
+        },
+        {
+          "cmd": "[scratch copy + request 1 edit] INFRX_MUTANTS=all python -m pytest -q -p no:cacheprovider tests/i/test_mutants.py",
+          "exit": 1,
+          "tail": "3 failed, 52 passed in 365.05s \u2014 FAILED newline_injection_accepted, padding_accepted, shape_unchecked: 'undeclared exception deaths [TypeError@test_prereqs.py]'"
+        },
+        {
+          "cmd": "[base d18177e, unedited] INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py -k 'newline_injection_accepted or padding_accepted or shape_unchecked or composition_gate_removed'",
+          "exit": 1,
+          "tail": "3 failed, 1 passed, 51 deselected in 57.18s   (same three; composition_gate_removed killed) \u2014 identical on the edited copy in isolation: 3 failed, 1 passed in 55.54s"
+        },
+        {
+          "cmd": "hand_apply.py: all 49 W3 mutants applied by string substitution and run (pin: in-process check on a copy of the real serve.sh executed by bash; python: pytest -k named cases)",
+          "exit": 0,
+          "tail": "16/16 pin killed at the listed test_serving.py asserts; 33/33 python: exit=1, only named cases fail, assertion text read for each (see mutants table)"
+        },
+        {
+          "cmd": "python: recompute sha256 of compact JSON of record flags with settings substituted",
+          "exit": 0,
+          "tail": "recomputed sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147 == recorded \u2192 MATCH"
+        },
+        {
+          "cmd": "docker buildx imagetools inspect vllm/vllm-openai:nightly-a8d1aa9c99b8698a2a78b611b7a10c30e6b3995b   (read-only registry lookup, 2026-09-23T01:27:19Z)",
+          "exit": 0,
+          "tail": "Digest: sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42; linux/amd64 @sha256:a1da81e8784aacd6e9efa0e8667575f4551c8492e103fc10e3ecc034d212072b \u2014 matches serving-version.json"
+        },
+        {
+          "cmd": "uv run python -m tests.w.w3_mutants --list",
+          "exit": 0,
+          "tail": "49 mutants over 15 named cases"
+        },
+        {
+          "cmd": "git diff --stat d18177e..a0eeaf4 -- . ':!infrx/worker' ':!tests/w' ':!serve.sh' ':!serving-version.json' ':!measure' ':!evidence/w'",
+          "exit": 0,
+          "tail": "(empty) \u2014 owned paths only, as claimed"
+        }
+      ],
+      "fabrication_check": "Numbers in the evidence checked against my reproduction: tests/w 148 \u2713; bench-test 67 \u2713; both orderings 20 failed / 2357 (mine: 2305 passed + 52 Valkey skips because I refused to start docker; 2305+52=2357) \u2713 and all 20 are tests/i's request-1 case, its no-op self-test and 18 broken_runner pristine-baseline failures \u2713, identical in both orderings \u2713; tests/i with request 1: 82 passed \u2713; three W lists: 282 passed (evidence's per-list inference correct; the '281' figure is the pre-fix count, H3); 49 mutants / 15 cases / 3 declared deaths \u2713 (each declared death is the invariant's exception: ConnectionError, ConnectionError, RuntimeError); engine_options_digest recomputes \u2713; tag\u2192digest resolution reproduced from the registry \u2713 (digest, amd64 manifest); the bb7d67e '33 Python mutants' miscount is disclosed in the evidence ('Correction to a commit message') \u2713 and the commit indeed says 33 while the list then had 25. 'A greedy run stopped on its 3rd token' appears only as the description of what capability.sh checks, under 'Measured values: none yet - pending P-04' \u2014 not presented as measured \u2713. serving-version.json: every unmeasured-on-box value carries \u26a0\ufe0f (pilot_box, registry_oid_equality, ENGINE_MAX_NUM_SEQS, kv_capacity/engine_version 'pending'); served-bytes digests and the model commit trace to marlin-sop.md rows labelled meas. 2026-09-22 (S2M, box/HF API), EOS ids to I1B's generation_config; the only unhedged over-claim is the serve.sh:37 comment (H1). Pin mutants: string substitution on a copy of the real serve.sh, executed by bash with a stub docker - they do test serve.sh; not a Python model. R83: every mutant's anchor appears exactly once, every death is an assert in a named case, a DomainError, or declared. The pilot host was not contacted; no aws/ssm/ssh was run; no container was started (docker stubbed for all runs; `docker ps` shows nothing of mine); the only network call was one read-only registry inspect. Deviation from the implementer's environment: tests/q's Valkey cases skipped (52) rather than starting a container.",
+      "cleanup": "Removed /tmp/claude-1000/review-w3-honesty-4027770 (head scratch + .venv), \u2026-req1 (request-1 copy), \u2026-base (d18177e copy), the scratchdir pointer file and every /tmp/hand-* temp tree; log copies kept only in the session scratchpad. No worktree was edited or committed (codex-w3 `git status` clean; codex-i2b read only); no container created; the Monitor exited on completion; no process of mine remains (the pytest processes still visible belong to other reviewer lanes: review-q3, codex-f2p-wirein, codex-d2 - untouched)."
+    }
+  },
+  "_unverified_blocking": [
+    {
+      "id": "PIN-1",
+      "severity": "blocking",
+      "file": "models/marlin2b/serve.sh",
+      "line": "48-54, 79",
+      "claim_broken": "serve.sh header: 'A pinned setting has one source: the caller cannot pass a second, conflicting value'; serving-version.json `about`: '`flags` is exactly what serve.sh passes after the image'; handback: 'refuses caller overrides of pinned flags (exit 2)'. Only --max-num-seqs, --allowed-local-media-path and --api-key are refused; the other six recorded flags pass through as a trailing duplicate that vLLM's argparse takes last-wins, so the engine_options_digest stops identifying what is served.",
+      "evidence": "Stub-docker runs of serve.sh (a0eeaf4 copy): `--dtype float16`, `--hf-overrides {}`, `--served-model-name x`, `--max-model-len 4096`, `--gpu-memory-utilization 0.5`, `--limit-mm-per-prompt {}`, `--port 9000`, `--host 0.0.0.0`, `--model /other` all exit 0 and docker runs; argv tail ends `... --dtype bfloat16 --dtype float16` (last wins in vLLM). No case in tests/w/test_serving.py launches with any of these, so nothing can die (own-mutant table). Only `--max-num-seqs 32`, `--max-num-seqs=32`, `--api-key k`, `--allowed-local-media-path /` exit 2.",
+      "minimal_fix": "Extend the case pattern to every recorded flag plus the two bind flags: `--max-num-seqs*|--allowed-local-media-path*|--api-key*|--served-model-name*|--hf-overrides*|--max-model-len*|--gpu-memory-utilization*|--limit-mm-per-prompt*|--dtype*|--host*|--port*)` and add those tuples to `check_one_source_per_setting`'s refused list (one loop, one extra `_m` anchor already exists: `caller_overrides_a_pinned_flag`). Narrow the `about` wording if pass-through of non-recorded flags is meant to stay.",
+      "lens": "pin"
+    },
+    {
+      "id": "S1",
+      "severity": "blocking",
+      "file": "apps/infrx-api/infrx/worker/service.py",
+      "line": "144-166 (_loop_state/readiness); evidence W3-2785101.md Limits item 7",
+      "claim_broken": "Evidence Limit 7: 'one runner of several dying shows as failures, not as 503'. Measured: it shows as nothing. loop.failures is only populated when WorkerLoop.run's gather returns (loop.py:113-116), i.e. after the LAST runner ends, so a partly dead pool reports readyz 200 / failures 0 / livez 200 for its whole life. A runner dies permanently on any non-DomainError from claim_candidate, jobs.claim or load_work (a transient Valkey/PostgreSQL blip; _runner has no try), the process never exits, the unit's Restart=always never fires, and the pilot's single worker silently runs at reduced concurrency until the last runner dies.",
+      "evidence": "Probe P6 (concurrency=2, first claim_candidate raises ConnectionError once): {dead_runners: 1, readyz: [200, failures=0, ready=True], livez: [200, True], surviving_runner_completed: True, failures_after_stop: 1}. No case in tests/w/test_service.py exercises a partly dead pool; my mutants R14/R16 (drain/serve behaviour on a dead pool) survived.",
+      "minimal_fix": "In readiness(): dead = sum(1 for t in self.loop._tasks if t.done() and not t.cancelled() and t.exception() is not None); report it as 'runners_dead' and make 'live' false when dead > 0 (or end serve() when any runner task completes: asyncio.wait({waiting, *self.loop._tasks}, FIRST_COMPLETED)), so the unit restarts to full concurrency; add a case that kills one of two runners and asserts 503 on /livez. Root cause is W2's _runner not surviving a transient claim error; note it as a W follow-up and correct Limit 7.",
+      "lens": "service"
+    }
+  ],
+  "nonblocking": [
+    {
+      "id": "PIN-2",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/serve.sh",
+      "line": "38, 42, 76",
+      "claim_broken": "'pins image by digest' \u2014 the default is a digest and there is no tag fallback, but `IMAGE`, `MAX_MODEL_LEN` and `GPU_MEM` are environment overrides that silently change the served version under the same record and pass I0's preflight gate (it only regexes the `IMAGE=${IMAGE:-...}` default).",
+      "evidence": "`IMAGE=vllm/vllm-openai:nightly bash serve.sh` \u2192 exit 0, docker argv contains `vllm/vllm-openai:nightly`; `MAX_MODEL_LEN=99 GPU_MEM=0.5` \u2192 `--max-model-len 99 --gpu-memory-utilization 0.5`. deploy/preflight.py:333 `re.search(r\"IMAGE=\\$\\{IMAGE:-([^}]*)\\}\")` reads the script default only. The vLLM unit sources /etc/marlin2b-gateway.env (I2B), which preflight validates and today carries no IMAGE, so it is a config-trust gap, not a live defect.",
+      "minimal_fix": "Drop the three `${VAR:-}` escapes (hardcode `IMAGE=`, `MAX_MODEL_LEN=`, `GPU_MEM` in the exec line) or state in the record that they are dev-only overrides; add `launch(..., IMAGE=\"vllm/vllm-openai:nightly\")` expecting the digest in argv.",
+      "lens": "pin"
+    },
+    {
+      "id": "PIN-3",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/serve.sh",
+      "line": "43, 57-65",
+      "claim_broken": "Lens item: ENGINE_MAX_NUM_SEQS/PROCESSING_CACHE_DIR validated. ENGINE_MAX_NUM_SEQS is not validated at all; PROCESSING_CACHE_DIR is only checked for absolute + existing (any directory, including `/`, `/etc`, `/home`, is mounted and whitelisted).",
+      "evidence": "`ENGINE_MAX_NUM_SEQS=abc|0|-1` \u2192 exit 0, `--max-num-seqs abc|0|-1` passed to docker (vLLM's argparse then fails the container inside a Restart=always/900 s TimeoutStartSec loop). `PROCESSING_CACHE_DIR=/` \u2192 `-v /:/:ro --allowed-local-media-path /` (docker refuses a `/` destination, fail-closed by accident); `/etc` \u2192 `-v /etc:/etc:ro`; `/home` \u2192 the engine may open any file under /home via file://. Injection through the value (`'8 --api-key k'`) stays one argv word, so no flag smuggling.",
+      "minimal_fix": "`[[ $ENGINE_MAX_NUM_SEQS =~ ^[1-9][0-9]*$ ]] || { echo ...; exit 2; }` and `case $PROCESSING_CACHE_DIR in /|/etc|/etc/*|/home|/home/*|/model|/model/*) exit 2;; esac` (or require a prefix of $WEIGHTS_ROOT); one case each in check_one_source_per_setting.",
+      "lens": "pin"
+    },
+    {
+      "id": "PIN-4",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/concurrency.sh",
+      "line": "43-52, 57, 64",
+      "claim_broken": "Evidence: the sweep runs c = 1..32 and prints `bench.py --report`. Under `set -euo pipefail` the background `sample` subshell inherits -e/pipefail, so ONE `/metrics` scrape that times out (`curl -m 2`) or one nvidia-smi hiccup kills the sampler; the later `kill \"$sampler\" 2>/dev/null;` then fails (ESRCH) and -e aborts the whole sweep after the current level \u2014 no further levels, no report, no per-level peak line.",
+      "evidence": "Scratch run with stub docker/curl/nvidia-smi/PY and a stub curl that fails exactly once during level 1 (LEVELS='1 2'): exit=1, only one bench invocation in the trace, no `level=1 peak_...` line, no `### report`. Control run (no failure): exit 0, both levels, report, artifacts under $OUT/<run>/ only. `bash -c 'set -e; (exit 0) & p=$!; sleep .3; kill $p 2>/dev/null; echo survived'` prints nothing, rc=1. At c=32 a 2 s metrics timeout is plausible (the engine's HTTP loop is busy).",
+      "minimal_fix": "First line of `sample()`: `set +e`; and `kill \"$sampler\" 2>/dev/null || true`. Box-safe either way (nothing altered), but the failure wastes a 15-25 min coordinator run and yields an unlabelled partial cell.",
+      "lens": "pin"
+    },
+    {
+      "id": "PIN-5",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/inventory.sh",
+      "line": "18, 35-44",
+      "claim_broken": "Lens: 'each script exits non-zero on precondition failure rather than proceeding'. inventory.sh exits 0 when the container does not exist and prints `image_equals_pin=no`, which reads like a negative equality result rather than a missing precondition.",
+      "evidence": "Scratch run with a stub docker that answers `Error: No such object: marlin2b-8000` for everything: exit=0; stdout line 11 `image_equals_pin=no`, lines 4/7/8/14 carry the docker error text. Deliberate per the `set -uo pipefail` comment ('one failing probe must not hide the others'); the coordinator must read the `### image` block, not the exit code.",
+      "minimal_fix": "After `image=$(docker inspect ...)`: `case $image in sha256:*) ;; *) echo \"precondition: container $CONTAINER not found\" >&2; exit 2;; esac` (keep the rest non-fatal).",
+      "lens": "pin"
+    },
+    {
+      "id": "PIN-6",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/w/W3-2785101.md",
+      "line": "236-247, 264",
+      "claim_broken": "HF_TOKEN handling in the SSM wrapper: inventory.sh itself never prints or writes the token (sent on curl's stdin via `-H @-`), but the documented `wrap()` puts the env prefix into the SSM `commands` parameter; a coordinator who follows 'registry oids only when HF_TOKEN is exported' by adding `HF_TOKEN=...` to that prefix would record the token in the SSM command history/CloudTrail.",
+      "evidence": "Evidence lines 236-247: `wrap() { printf 'echo %s | base64 -d | %s bash' \"$(base64 -w0 \"$1\")\" \"$2\"; }` and `ssm \"$(wrap models/marlin2b/measure/inventory.sh 'CONTAINER=... ENGINE=... WEIGHTS=...')\"` \u2014 the second argument is the env prefix, logged by SSM. The wrapper correctly uses `env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN aws` for both send-command and get-command-invocation. Stub run with HF_TOKEN=hf_SECRET_TOKEN_123: zero occurrences in stdout/stderr/argv trace; only the stub curl's stdin carried `Authorization: Bearer ...`.",
+      "minimal_fix": "One sentence in the evidence's measurement section: 'never pass HF_TOKEN in the SSM env prefix; leave the registry-oid block `not_run` under SSM (or read the token on the box from a 0600 file: `HF_TOKEN=$(cat /path) bash`)'.",
+      "lens": "pin"
+    },
+    {
+      "id": "PIN-7",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/serving-version.json",
+      "line": "29-33",
+      "claim_broken": "Lens (b): index digest, amd64 manifest and config; prefix-match reasoning. Verified by me: index sha256:4cbfd34a\u202620b42 and amd64 manifest sha256:a1da81e8\u2026072b match the registry (one read-only `docker buildx imagetools inspect`). NOT re-verified by me (the lens allowed one call): `linux_amd64_config` 38e8c0e6\u2026, `created`, `vllm_build_commit`, and that tag `nightly-a8d1aa9c\u2026` still resolves to this index \u2014 taken from the implementer's transcript. The prefix reasoning does not conflate the two digests: it says the 12-hex id is the manifest-list digest 'as a containerd image store reports it', hedges with \u26a0\ufe0f, and inventory.sh accepts either PIN_INDEX or PIN_CONFIG and prints `docker info --format '{{.Driver}}'` so the store type is settled by the run. A 48-bit prefix collision against the index digest is not a plausible coincidence, so the inference (box = containerd store or equivalent) is sound; no field is untested except the informational manifest/config digests (my mutant on `linux_amd64_manifest` survives \u2014 documentation only).",
+      "evidence": "`docker buildx imagetools inspect vllm/vllm-openai@sha256:4cbfd34a\u2026` \u2192 MediaType manifest.list.v2, Digest sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42, linux/amd64 sha256:a1da81e8784aacd6e9efa0e8667575f4551c8492e103fc10e3ecc034d212072b, linux/arm64 sha256:de1e3637\u2026ed1e72. engine_options_digest recomputed independently: sha256:3c4bbface108e019b55a71121e1f3aaa23268bc1d1bd100257b0e2c68c036147 == recorded. All five \u26a0\ufe0f/pending items carry a method (inventory.sh / capability.sh / concurrency.sh / HF_TOKEN).",
+      "minimal_fix": "None required; if the coordinator wants the config digest first-hand, one `docker buildx imagetools inspect --raw vllm/vllm-openai@sha256:a1da81e8\u2026072b | jq .config.digest` closes it.",
+      "lens": "pin"
+    },
+    {
+      "id": "PIN-8",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/measure/concurrency.sh",
+      "line": "31-35",
+      "claim_broken": "Ordering constraint not stated in serve.sh/record: the sweep refuses unless the engine runs `--max-num-seqs 32`, while I2B's vLLM unit + this serve.sh start it at ENGINE_MAX_NUM_SEQS=8. The sweep must run before the I2B deploy (engine as it is today) or with ENGINE_MAX_NUM_SEQS=32 in /etc/marlin2b-gateway.env; otherwise it exits 2 and the \u26a0\ufe0f never closes.",
+      "evidence": "Stub docker answering `[\"/model\",\"--max-num-seqs\",\"8\"]` \u2192 `refused: the engine is not running with --max-num-seqs 32`, exit 2. I2B unit (codex-i2b/deploy/marlin2b-vllm.service) passes no flags and reads ENGINE_MAX_NUM_SEQS from the env file; the evidence's request 3 says `Environment=ENGINE_MAX_NUM_SEQS=8`.",
+      "minimal_fix": "One line in the evidence's step 3: 'run before the pinned unit is deployed, or set ENGINE_MAX_NUM_SEQS=32 for the sweep'.",
+      "lens": "pin"
+    },
+    {
+      "id": "S2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/worker/service.py",
+      "line": "153 (HEALTH_TIMEOUT_S) and 66-72/104-106 (bind)",
+      "claim_broken": "Two stated readiness invariants have no killable test: (a) 'an engine slower than 2 s to say ready is not ready' - mutant R4 (asyncio.timeout(None)) survived; no case has a hanging health(). (b) 'never public' is proven only at construction: mutant R13 (start_server bound to 0.0.0.0 regardless of health_host) survived because every case connects via 127.0.0.1, which a 0.0.0.0 listener also answers; and health_host is a plain mutable dataclass field, so `service.health_host = '0.0.0.0'` after construction binds publicly (probe P8b: getsockname() == ('0.0.0.0', 41611)).",
+      "evidence": "review_mutants: R4 survived (2 passed), R13 survived (2 passed); probe P14 shows the timeout itself works (hung health -> 503 'down' in 2.0 s); probe P8: ::ffff:127.0.0.1 refused, 127.0.0.2 and ::1 accepted (loopback, fine), 0.0.0.0/:: refused.",
+      "minimal_fix": "(a) add to the READY case an engine.health that sleeps > HEALTH_TIMEOUT_S and assert engine == 'down' with elapsed < 3 s. (b) move the loopback check into a helper called from both __post_init__ and start(), and in the PUBLIC case assert service._server.sockets[0].getsockname()[0] == '127.0.0.1'.",
+      "lens": "service"
+    },
+    {
+      "id": "S3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/worker/service.py",
+      "line": "99-106 (start)",
+      "claim_broken": "start() creates the pool task before binding the readiness listener, so a bind failure (port in use) raises out of serve() with a job already claimed and an attempt in flight; the orphaned pool is cancelled by asyncio.run at exit and the job's lease is left for the 120 s expiry, and Restart=always then repeats the same claim/orphan cycle every RestartSec while the port stays busy.",
+      "evidence": "Probe P13 (port pre-bound): {raised: OSError, job_state_after_failed_start: 'running', engine_started: 1, pool_alive_after_raise: True}.",
+      "minimal_fix": "Bind the listener first (or before reap_once), then create the pool and reaper tasks; a case that pre-binds the port and asserts no candidate was claimed.",
+      "lens": "service"
+    },
+    {
+      "id": "S4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/infrx/worker/service.py",
+      "line": "75-96 (reap_once/_reap_forever), 125-141 (serve), 151-166 (readiness)",
+      "claim_broken": "Untested clauses (each a survived single-edit mutant, none a measured misbehaviour): SIGINT mapped to drain (R11; evidence line 29 claims SIGTERM/SIGINT, only SIGTERM is sent); 'reaps before it claims' ordering (R6: pool created before reap_once survives because the fake recover never yields); stop() awaiting the pool task (R7); the `or self.loop.draining` clause of `live` (R5); reap_errors in the body (R10, cases read the attribute); serve() draining after a pool death (R16). Also the reaper timer task dies silently and readiness stays 200 with reap_errors 0 if reap_once raises outside its two try blocks (only a store that returns a non-iterable from recover() does this - a contract violation, so noted, not counted).",
+      "evidence": "review_mutants: R5, R6, R7, R10, R11, R16 survived (1-2 passed each). Probe P7b: reaper_done True, exc TypeError, readyz (200, ready True, live True, reap_errors 0), a lease that expired afterwards stayed 'running'.",
+      "minimal_fix": "Send SIGINT in the child drill's second run; in the RESTART case make recover() await asyncio.sleep(0) and assert loop.claimed == 0 at the moment recover runs; assert body['reap_errors'] over the socket; guard reap_once's whole body with the same except and expose _reaper.done() as 'reaper': 'dead' in readiness.",
+      "lens": "service"
+    },
+    {
+      "id": "H1",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/serve.sh",
+      "line": "37",
+      "claim_broken": "R76 / the evidence's own 'Not claimed: full equality with the box'. The code comment states as fact that 'the 2026-09-19 rows were measured on this build', while serving-version.json marks pilot_box '\u26a0\ufe0f TO BE VERIFIED' and the evidence says the match rests on a 48-bit prefix plus dates, not a full comparison.",
+      "evidence": "serve.sh:36-37 reads '# vllm/vllm-openai:nightly-a8d1aa9c\u2026, resolved 2026-09-22 (Qwen3.5 needs vLLM main; the 2026-09-19 rows were measured on this build)'. I1B recorded only 'sha256:4cbfd34aac14\u2026' with no RepoDigest; my read-only `docker buildx imagetools inspect` (2026-09-23T01:27:19Z) confirms the tag resolves to sha256:4cbfd34aac145fd1870381c030131c7f868fcad45448f401ecdb5fd4ed020b42, so the prefix match is real, but equality is still pending inventory.sh.",
+      "minimal_fix": "Change the comment to '(prefix-matches the box's I1B image id; full equality \u26a0\ufe0f pending measure/inventory.sh)'.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H2",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/w/W3-2785101.md",
+      "line": "179-182, 371-386",
+      "claim_broken": "Integration request 1 is presented as what makes track I green ('with exactly that edit applied \u2026 tests/i 82 passed'). tests/i does pass 82, but the I0 mutation list with that edit is not green: 3 mutants are broken_runner, and they are already broken at base d18177e, so the evidence should say the I list stays red after request 1 for a reason outside W3, and that I2B's copy of the same case already diverges from the requested text.",
+      "evidence": "Scratch copy with request 1 applied: `pytest -q tests/i` \u2192 82 passed (EXIT=0); `INFRX_MUTANTS=all pytest -q tests/i/test_mutants.py` \u2192 3 failed, 52 passed: newline_injection_accepted, padding_accepted, shape_unchecked, each 'undeclared exception deaths [TypeError@test_prereqs.py]'. Same three at base d18177e (unedited): 3 failed, 1 passed (composition_gate_removed killed). By hand: test_prereqs.py:78 `assert \"whitespace\" in preflight.shape_problem(key, \" \" + good)` raises TypeError on a None refusal. I2B's worktree (codex-i2b) already rewrites those asserts with `(\u2026 or \"\")` and its real-script case expects len(pilot)==2 with a 'PENDING(W3)' serving-version check, so request 1's exact text will conflict at merge.",
+      "minimal_fix": "In request 1, add: 'tests/i's mutation list is not green after this edit alone: newline_injection_accepted, padding_accepted and shape_unchecked are broken_runner at base (test_prereqs.py:72-79 raises TypeError on a None refusal); I2B's lane carries the `or \"\"` fix and a two-item pilot expectation - coordinator merges the case, not this text.'",
+      "lens": "honesty"
+    },
+    {
+      "id": "H3",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/w/W3-2785101.md",
+      "line": "195-205",
+      "claim_broken": "'All three W lists: every mutant killed' is inferred (W1+W3 passed in the 00:49 run, W2 alone at 2785101), not one run; and the three-list total is 282, not 281.",
+      "evidence": "`INFRX_MUTANTS=all pytest -q tests/w/test_mutants.py tests/w/test_loop_mutants.py tests/w/test_w3_mutants.py` at a0eeaf4 \u2192 '282 passed in 1755.31s (0:29:15)' EXIT=0 (150+66+49 mutants + 17 list checks). The inference was sound; the number quoted upstream ('281 passed after the re-anchor') is the pre-fix '1 failed, 281 passed' count.",
+      "minimal_fix": "Add one line: 'three lists together at 2785101: 282 passed' (or run it once and quote the tail).",
+      "lens": "honesty"
+    },
+    {
+      "id": "H4",
+      "severity": "nonblocking",
+      "file": "models/marlin2b/serve.sh",
+      "line": "38",
+      "claim_broken": "'serve.sh pins image by digest' is a default, not a pin: `IMAGE=${IMAGE:-\u2026@sha256:\u2026}` lets any `IMAGE` in the environment replace the digest, and I0's gate (preflight.engine_problems) only regexes the default. No case asserts an `IMAGE=` in the environment is ignored.",
+      "evidence": "preflight.py:333-338 checks `re.search(r\"IMAGE=\\$\\{IMAGE:-([^}]*)\\}\")` only. check_pinned_launch runs serve.sh with a controlled env and never sets IMAGE. In I2B's units the only EnvironmentFile is preflight-written (undeclared_key_rendered mutant guards it) and Environment= carries WEIGHTS_ROOT/HOME only, so the deployed path is safe today; the claim is wider than the test.",
+      "minimal_fix": "Either `IMAGE=vllm/vllm-openai@sha256:\u2026` (no override; the pin is a new serving version, R76) or add to check_one_source_per_setting: `launch(models, tmp, IMAGE=\"vllm/vllm-openai:nightly\")` must still start the recorded digest, and a matching mutant.",
+      "lens": "honesty"
+    },
+    {
+      "id": "H5",
+      "severity": "nonblocking",
+      "file": "research/plan/evidence/w/W3-2785101.md",
+      "line": "236-254, 265",
+      "claim_broken": "'the token is sent on stdin, never argv' (inventory.sh:12, 70-71) holds on the box, but the evidence's `wrap`/`ssm` helper passes every setting as inline text in the send-command parameters; an `HF_TOKEN=\u2026` used the same way lands in SSM command history/CloudTrail.",
+      "evidence": "Evidence lines 237-248: `wrap file 'CONTAINER=\u2026 ENGINE=\u2026'` becomes the `commands` parameter of `aws ssm send-command`; inventory.sh reads `${HF_TOKEN:-}` from the environment it is started in.",
+      "minimal_fix": "One sentence under step 1: 'HF_TOKEN: export it on the box from an SSM SecureString (`aws ssm get-parameter --with-decryption` inside the command), never in the send-command text.'",
+      "lens": "honesty"
+    }
+  ]
+}

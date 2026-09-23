@@ -1,0 +1,262 @@
+{
+  "_note": "sofia session hit its limit mid-workflow; lenses that died are absent; blocking findings were NOT refuted (refuters died) \u2014 see _unverified_blocking",
+  "_failed": "",
+  "lenses": {
+    "migrate": {
+      "lens": "migrate",
+      "verdict_hint": "fix_required",
+      "findings": [
+        {
+          "id": "M1",
+          "severity": "blocking",
+          "file": "infra/rollout/steps/90-revert.sh",
+          "line": "14-16 (and infra/rollout/README.md \u00a72 row R2)",
+          "claim_broken": "R2 'previous checkout, the backed-up env/unit/Caddy files, previous gateway' restores service. It does not: the backup rollback.sh restores was taken at step 8, AFTER step 5 (30-pause) made the maintenance site the active /etc/caddy/Caddyfile, so rollback.sh restores the maintenance Caddyfile and reloads Caddy onto it. After R2 the public endpoint answers 503 for every request and no runbook step says to run `drain.sh resume`. The `pre-$RELEASE.Caddyfile` that 30-pause saves is consumed by nothing.",
+          "evidence": "Reproduced with the suite's own Host harness (scratch test test_review__r2_revert_puts_the_edge_back_into_maintenance): monolith host -> edge_install + `drain.sh pause` -> `install.sh` pilot (backup taken) -> `rollback.sh <backup> ROLLBACK_TO_UNMETERED=no-pilot-request-was-accepted` exit 0, env file == monolith bytes, then `ACTIVE SITE AFTER R2 == maintenance`, `LAST EVENT: docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`. By reading: install.sh backs up etc/caddy/Caddyfile when present (line ~50), rollback.sh `tar -xpf` + `caddy reload` (lines 36-49). Fail-closed (503), but a documented revert that leaves the endpoint down is a real OPS-RECOVER defect.",
+          "minimal_fix": "Append `\"$d/drain.sh\" resume` as the last line of 90-revert.sh (after `systemctl restart marlin2b-vllm`; with the restored no-mode env it starts the dev units, waits /health and puts the release's normal site back), and say so in README R2. Delete the unused `pre-$RELEASE.Caddyfile` save in 30-pause.sh or make the revert use it."
+        },
+        {
+          "id": "M2",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/deploy/migrate.py",
+          "line": "134-147",
+          "claim_broken": "'Every pending file and its history row are applied in one transaction; a failure anywhere rolls all of them back.' A migration file that contains its own `commit;` ends the transaction mid-plan; everything before it (earlier files + their history rows + the first half of that file) is committed, the later failure rolls back only the tail, the message still prints 'every pending migration was rolled back', and the next apply is stuck (DuplicateTable). D's nine files contain no transaction control today (grep: only a plpgsql `end;`), so the guarantee holds for the current plan but is not enforced.",
+          "evidence": "Drill D10b against pinned supabase/postgres: files 0010 `create table review_a` and 0011 `create table review_b; commit; insert \u2026 'not-an-int'` -> `0011_review_b.sql failed (InvalidTextRepresentation); every pending migration was rolled back`, exit 3, but history tail `0009 0010`, review_a_absent=f, review_b_absent=f; re-apply -> `0011_review_b.sql failed (DuplicateTable)`, exit 3. D10c: `conn.info.transaction_status` is INTRANS after a plain file and IDLE after a file containing COMMIT.",
+          "minimal_fix": "After each `conn.execute(body.decode())`: `if conn.info.transaction_status != psycopg.pq.TransactionStatus.INTRANS: conn.rollback(); print(f'{version}_{name}.sql ended the transaction (COMMIT/ROLLBACK inside a migration)'); return FAILED` \u2014 plus a test_migrate case whose fake Conn flips a status attribute."
+        },
+        {
+          "id": "M3",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/deploy/migrate.py",
+          "line": "112 (docstring line 14)",
+          "claim_broken": "'`plan` is read-only (`default_transaction_read_only`)'. psycopg opens the transaction before the first statement, and `SET default_transaction_read_only` only affects transactions started afterwards, so the plan's own transaction is not read-only; the mutant `plan_not_read_only` is killed by a string comparison (`conn.log[0] == \u2026`), not by behaviour. Harmless today (plan issues only SELECTs) but the invariant as claimed is not delivered.",
+          "evidence": "Drill D11 with psycopg 3.3.6 against the pinned image: after `set default_transaction_read_only = on` in the same connection, `create table \u2026 ; commit` -> `WRITE SUCCEEDED`; with `set transaction_read_only = on` instead -> `ReadOnlySqlTransaction: cannot execute CREATE TABLE in a read-only transaction`.",
+          "minimal_fix": "Change the statement to `set transaction_read_only = on` (and the mutant/test string accordingly)."
+        },
+        {
+          "id": "M4",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/tests/i/test_scripts.py",
+          "line": "325-344 (rollback.sh line 29)",
+          "claim_broken": "'rollback attestation cannot be bypassed by a flag typo' is true in the script (exact string compare) but has no killable test: the suite only tries the exact value and no value, so a regression to 'any non-empty value counts' survives.",
+          "evidence": "Own mutant `attestation_any_nonempty` (`[ \"${ROLLBACK_TO_UNMETERED:-}\" != \"no-pilot-request-was-accepted\" ]` -> `[ -z \"${ROLLBACK_TO_UNMETERED:-}\" ]`): `1 passed`, SURVIVED. Scratch test with values `no-pilot-request-accepted`, `yes`, `1`, mixed case, leading space: all exit 2 with no events on the unmutated script (behaviour correct).",
+          "minimal_fix": "Add one loop to the existing test asserting exit 2 and `host.events == []` for a typo value (e.g. `no-pilot-request-accepted`), and list the mutant."
+        },
+        {
+          "id": "M5",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/deploy/rollback.sh",
+          "line": "26-33",
+          "claim_broken": "'rollback to the unmetered runtime is refused when any pilot request was accepted' \u2014 the script checks no evidence at all; it checks only INFRX_MODE of the current env file plus the operator's typed string. Nothing on the host or in the DB (journal/ledger rows, gateway admissions) corroborates the statement.",
+          "evidence": "By reading: `current=$(env_mode \u2026)`, `restored=$(tar -xOf \u2026)`, then the string compare; no other read before `systemctl stop`. The usage spill (`USAGE_LOG`, legacy jsonl) is not a pilot admission record.",
+          "minimal_fix": "Accept as an operator-attested step (already recorded in the lock record per README R2) or, if corroboration is wanted, have the coordinator's R2 procedure read the hosted `infrx` journal/ledger counts before stating it; note the choice in infra/README.md \u00a78."
+        },
+        {
+          "id": "M6",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/deploy/migrate.py",
+          "line": "134 (and plan_command)",
+          "claim_broken": "A migration whose statements cannot run inside a transaction block (CREATE INDEX CONCURRENTLY, VACUUM, ALTER SYSTEM) is not refused at `plan`; it fails mid-`apply` (exit 3, fully rolled back). Safe direction, but 'dry-runnable' does not tell the operator up front.",
+          "evidence": "Drill D9: `0010_review_cic.sql` (`create index concurrently \u2026`): `plan` exit 0 listing it as pending with a digest; `apply` -> `0010_review_cic.sql failed (ActiveSqlTransaction); every pending migration was rolled back`, exit 3, history unchanged at 0009, index absent.",
+          "minimal_fix": "Optional: in `local_migrations`, refuse a body matching `(?i)\\bconcurrently\\b|^\\s*(vacuum|alter system)\\b` with a named reason; otherwise document exit 3 as the expected outcome."
+        },
+        {
+          "id": "M7",
+          "severity": "nonblocking",
+          "file": "infra/rollout/README.md",
+          "line": "\u00a70 G6, \u00a71 step 6",
+          "claim_broken": "'the hosted migrate step depends on I3B's rehearsal gate and cannot be skipped' \u2014 the dependency is prose only (G6 'recorded', step 6 parenthetical). Nothing mechanical prevents running step 8 without step 6: the in-image probe runs with `--network none` and cannot see hosted history, so a skipped migration surfaces only as the runtime failing readiness (exit 4 -> R2/R3). Also the README's step order is not covered by any test (own mutant moving the snapshot row after the pause survived), and step 6 names no revert row (R4 says hosted migrations are not reverted, implicitly).",
+          "evidence": "Own mutant `runbook_snapshot_after_pause` (README row '| 1 | coordinator | **Snapshot' -> '| 5b |'): `3 passed`, SURVIVED. test_rollout.py checks scripts, not the README.",
+          "minimal_fix": "Add to step 8's Record column 'step 6 apply output digest' and have 50-install.sh refuse when `MIGRATION_DIGEST` is not exported (one `: \"${MIGRATION_DIGEST:?\u2026}\"` line), or state explicitly that the gate is procedural."
+        },
+        {
+          "id": "M8",
+          "severity": "nonblocking",
+          "file": "apps/infrx-api/deploy/migrate.py",
+          "line": "75-84",
+          "claim_broken": "'versions = file prefixes' is the only thing compared: an applied history row whose `name` differs from the file's name passes silently (same as the Supabase CLI), so a renamed-but-same-version file is not detected on the applied side.",
+          "evidence": "Drill D5: `update \u2026 set name='something_else' where version='0002'` -> `plan` exit 0, `applied: 0001, 0002, \u2026`. Hosted-shaped rows are otherwise refused: a timestamp version `20250901120000` -> exit 2 'versions this repository does not'; a gap row 0009 without 0008 -> exit 2 'a gap'.",
+          "minimal_fix": "None required (matches CLI semantics); optionally print applied rows as `version name` in `describe` so the reviewer sees the mismatch."
+        }
+      ],
+      "mutants": [
+        {
+          "name": "digest_check_removed",
+          "edit": "migrate.py: `if digest(plan) != expect:` -> `if False:`",
+          "result": "KILLED",
+          "killed_by": "test_deploy_failclosed__migrate_applies_only_the_reviewed_plan, test_deploy_failclosed__migrate_refuses_a_history_it_cannot_explain"
+        },
+        {
+          "name": "transaction_dropped_autocommit",
+          "edit": "migrate.py: `psycopg.connect(dsn, autocommit=False)` -> `autocommit=True`",
+          "result": "SURVIVED tests/i (4 passed; `connect` is monkeypatched) \u2014 but refused by PostgreSQL itself: `LOCK TABLE can only be used in transaction blocks` (NoActiveSqlTransaction, exit 1, nothing applied, history unchanged). The one-transaction property is structurally protected by the lock statement, not by a tests/i case.",
+          "killed_by": "PostgreSQL (drill), not tests/i"
+        },
+        {
+          "name": "gap_check_removed",
+          "edit": "migrate.py: `if versions[:len(applied)] != sorted(applied):` -> `if False:`",
+          "result": "KILLED",
+          "killed_by": "test_deploy_failclosed__migrate_refuses_a_history_it_cannot_explain"
+        },
+        {
+          "name": "attestation_ignored",
+          "edit": "rollback.sh: `&& [ \"${ROLLBACK_TO_UNMETERED:-}\" != \"no-pilot-request-was-accepted\" ]; then` -> `&& false; then`",
+          "result": "KILLED",
+          "killed_by": "test_deploy_failclosed__rollback_never_returns_a_pilot_to_an_unmetered_runtime"
+        },
+        {
+          "name": "attestation_any_nonempty",
+          "edit": "rollback.sh: exact-string compare -> `[ -z \"${ROLLBACK_TO_UNMETERED:-}\" ]`",
+          "result": "SURVIVED (1 passed) \u2014 finding M4",
+          "killed_by": "none in the suite (my scratch typo test kills it)"
+        },
+        {
+          "name": "runbook_revert_reordered",
+          "edit": "90-revert.sh: rollback.sh before the checkout",
+          "result": "KILLED",
+          "killed_by": "test_ops_recover__the_revert_restores_the_tree_before_the_runtime"
+        },
+        {
+          "name": "runbook_snapshot_after_pause",
+          "edit": "infra/rollout/README.md: snapshot row moved after the pause (`| 1 |` -> `| 5b |`)",
+          "result": "SURVIVED (3 passed) \u2014 README order is untested; finding M7",
+          "killed_by": "none"
+        },
+        {
+          "name": "history_insert_skipped",
+          "edit": "migrate.py: `conn.execute(f\"insert into {HISTORY} \u2026\"` -> `if False: conn.execute(\u2026`",
+          "result": "KILLED",
+          "killed_by": "test_deploy_failclosed__migrate_applies_only_the_reviewed_plan"
+        }
+      ],
+      "commands": [
+        {
+          "cmd": "git -C \u2026/codex-i2b archive 5d68e50 | tar -x -C /tmp/claude-1000/review-i2b-migrate-3654730 && make api-env (in the scratch)",
+          "exit": 0,
+          "tail": "+ valkey==6.1.1 / + zstandard==0.25.0 / exit=0"
+        },
+        {
+          "cmd": "docker run -d --name infrx-review-i2b-migrate-postgres -p 127.0.0.1:55743:5432 supabase/postgres@sha256:7768d0d1\u2026; then drill.sh (migrate.py from the scratch .venv, psycopg 3.3.6, history table created as the rehearsal does)",
+          "exit": 0,
+          "tail": "D1 unreviewed digest: exit=2 hist=0001,0002 | D2 second-of-two fails (0008 + broken 0009): exit=3 hist \u2026 0007, objs before=710/3442/14 after=710/3442/14, marker absent | D3 gap (0009 without 0008): exit=2 'a gap' | D4 hosted-shaped version 20250901120000: exit=2 'versions this repository does not' | D5 renamed applied row: exit=0 (not detected) | D6 stale reviewed digest after 0008 applied: exit=2 | D7 two concurrent applies: c1 'applied: 0009' exit=0, c2 'nothing pending' exit=0, history 0001..0009 once | D8 second apply/plan: 'nothing pending' exit=0 | D9 CREATE INDEX CONCURRENTLY: plan exit 0, apply exit=3 ActiveSqlTransaction, rolled back | D11: WRITE SUCCEEDED after set default_transaction_read_only=on; ReadOnlySqlTransaction with set transaction_read_only=on"
+        },
+        {
+          "cmd": "drill D2b/D10b/D10c (runtime errors instead of syntax errors, COMMIT inside a file)",
+          "exit": 0,
+          "tail": "D2b: exit=3 hist_tail=0009 a_absent=t b_absent=t | D10b: exit=3 hist_tail='0009 0010' a_absent=f b_absent=f; re-apply exit=3 DuplicateTable | D10c: INTRANS after a plain file, IDLE after a file containing COMMIT"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q tests/i -p no:cacheprovider (scratch, default mutant subset)",
+          "exit": 0,
+          "tail": "135 passed in 319.43s (0:05:19)"
+        },
+        {
+          "cmd": ".venv/bin/python -m pytest -q tests/i/test_review_lens.py -s (reviewer scratch proofs via the suite's Host harness)",
+          "exit": 1,
+          "tail": "ACTIVE SITE AFTER R2 == maintenance; LAST EVENT: docker exec caddy caddy reload \u2026; typo attestations all exit 2 with no events; ENV_FILE=/nonexistent override -> exit 2 (refused by `set -e` on the failing `tar -xOf` substitution, no message) \u2014 my bypass hypothesis was wrong, test failed on its own assertion; 1 failed, 2 passed"
+        },
+        {
+          "cmd": "mutants.sh (8 own mutants, edit/run/restore)",
+          "exit": 0,
+          "tail": "digest_check_removed KILLED; transaction_dropped_autocommit SURVIVED tests/i (PG refuses: NoActiveSqlTransaction); gap_check_removed KILLED; attestation_ignored KILLED; attestation_any_nonempty SURVIVED; runbook_revert_reordered KILLED; runbook_snapshot_after_pause SURVIVED; history_insert_skipped KILLED"
+        },
+        {
+          "cmd": "PATH=ssmfake:$PATH bash infra/rollout/ssm.sh step.sh RELEASE=abc123 'BACKUP=/var/backups/infrx/20260923T000000Z-abc def'; then the recorded remote line executed under /bin/dash",
+          "exit": 0,
+          "tail": "RELEASE=[abc123] BACKUP=[/var/backups/infrx/20260923T000000Z-abc def]; dash exit=0; /root/infrx-step.sh removed (dash-safe, %q-quoted exports survive)"
+        },
+        {
+          "cmd": "git -C \u2026/codex-i2b status --porcelain | wc -l",
+          "exit": 0,
+          "tail": "0 (worktree untouched before and after)"
+        }
+      ],
+      "fabrication_check": "Verified against the implementer's claims: unreviewed digest refused (exit 2, nothing changed); a failing second file rolls back the first, including a runtime (not just syntax) failure and partial execution inside the failing file; a history gap and an unknown/hosted-shaped version refused before anything runs; 0001\u20130009 apply, then 'nothing pending' on plan and on a second apply; concurrent applies serialize on pg_advisory_xact_lock (one applies, the other reports nothing pending; PK+lock leave one row per version); digest covers version, name and sha256 of content (mutant list has digest_blind_to_content; my digest_check_removed killed). Worker drain 330 s < TimeoutStopSec 360 s > GENERATION_TIMEOUT_S 300 s; gateway 120/150; engine 30/60; valkey 10/30 (units + test_packaging). rollback.sh refuses before any stop/write; exact-string attestation; typo values refused; ENV_FILE override refused (silently, exit 2). ssm.sh base64 round trip and dash execution verified locally. Not verified: nothing was run against the box, AWS or hosted Supabase; the runtime image was not built (would need PyPI) \u2014 migrate.py ran from the scratch .venv with the same pinned psycopg 3.3.6 against the pinned supabase/postgres digest, not inside infrx-runtime. The '235 passed' figure is INFRX_MUTANTS=all; the default run is 135, consistent with the evidence's own breakdown. Rehearsal step 8's 'failing migration' uses a syntax error, which PostgreSQL rejects at parse time for the whole file \u2014 it still proves the prior file's rollback (D2), and D2b proves the runtime-error case. The rehearsal (rehearse.sh) itself was not re-run under this lens; the D2/D10 drills reproduce its step 8 on the same image. Unverified claim in the evidence: '`plan` is read-only' (M3 shows the statement is inert in the plan's transaction).",
+      "cleanup": "Removed: container infrx-review-i2b-migrate-postgres (docker ps -a/network ls/volume ls show 0 infrx-review-i2b-migrate-* entries; no network or volume was created), the scratch tree /tmp/claude-1000/review-i2b-migrate-3654730 including its .venv, drill dirs, logs, the fake aws, and the reviewer test file tests/i/test_review_lens.py (existed only in the scratch). No file in any worktree was edited or committed (git status --porcelain empty in codex-i2b). Untouched: other sessions' infrx-* containers, pytest's rotating /tmp/pytest-of-rey basetemp."
+    }
+  },
+  "_unverified_blocking": [
+    {
+      "id": "M1",
+      "severity": "blocking",
+      "file": "infra/rollout/steps/90-revert.sh",
+      "line": "14-16 (and infra/rollout/README.md \u00a72 row R2)",
+      "claim_broken": "R2 'previous checkout, the backed-up env/unit/Caddy files, previous gateway' restores service. It does not: the backup rollback.sh restores was taken at step 8, AFTER step 5 (30-pause) made the maintenance site the active /etc/caddy/Caddyfile, so rollback.sh restores the maintenance Caddyfile and reloads Caddy onto it. After R2 the public endpoint answers 503 for every request and no runbook step says to run `drain.sh resume`. The `pre-$RELEASE.Caddyfile` that 30-pause saves is consumed by nothing.",
+      "evidence": "Reproduced with the suite's own Host harness (scratch test test_review__r2_revert_puts_the_edge_back_into_maintenance): monolith host -> edge_install + `drain.sh pause` -> `install.sh` pilot (backup taken) -> `rollback.sh <backup> ROLLBACK_TO_UNMETERED=no-pilot-request-was-accepted` exit 0, env file == monolith bytes, then `ACTIVE SITE AFTER R2 == maintenance`, `LAST EVENT: docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`. By reading: install.sh backs up etc/caddy/Caddyfile when present (line ~50), rollback.sh `tar -xpf` + `caddy reload` (lines 36-49). Fail-closed (503), but a documented revert that leaves the endpoint down is a real OPS-RECOVER defect.",
+      "minimal_fix": "Append `\"$d/drain.sh\" resume` as the last line of 90-revert.sh (after `systemctl restart marlin2b-vllm`; with the restored no-mode env it starts the dev units, waits /health and puts the release's normal site back), and say so in README R2. Delete the unused `pre-$RELEASE.Caddyfile` save in 30-pause.sh or make the revert use it.",
+      "lens": "migrate"
+    }
+  ],
+  "nonblocking": [
+    {
+      "id": "M2",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/migrate.py",
+      "line": "134-147",
+      "claim_broken": "'Every pending file and its history row are applied in one transaction; a failure anywhere rolls all of them back.' A migration file that contains its own `commit;` ends the transaction mid-plan; everything before it (earlier files + their history rows + the first half of that file) is committed, the later failure rolls back only the tail, the message still prints 'every pending migration was rolled back', and the next apply is stuck (DuplicateTable). D's nine files contain no transaction control today (grep: only a plpgsql `end;`), so the guarantee holds for the current plan but is not enforced.",
+      "evidence": "Drill D10b against pinned supabase/postgres: files 0010 `create table review_a` and 0011 `create table review_b; commit; insert \u2026 'not-an-int'` -> `0011_review_b.sql failed (InvalidTextRepresentation); every pending migration was rolled back`, exit 3, but history tail `0009 0010`, review_a_absent=f, review_b_absent=f; re-apply -> `0011_review_b.sql failed (DuplicateTable)`, exit 3. D10c: `conn.info.transaction_status` is INTRANS after a plain file and IDLE after a file containing COMMIT.",
+      "minimal_fix": "After each `conn.execute(body.decode())`: `if conn.info.transaction_status != psycopg.pq.TransactionStatus.INTRANS: conn.rollback(); print(f'{version}_{name}.sql ended the transaction (COMMIT/ROLLBACK inside a migration)'); return FAILED` \u2014 plus a test_migrate case whose fake Conn flips a status attribute.",
+      "lens": "migrate"
+    },
+    {
+      "id": "M3",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/migrate.py",
+      "line": "112 (docstring line 14)",
+      "claim_broken": "'`plan` is read-only (`default_transaction_read_only`)'. psycopg opens the transaction before the first statement, and `SET default_transaction_read_only` only affects transactions started afterwards, so the plan's own transaction is not read-only; the mutant `plan_not_read_only` is killed by a string comparison (`conn.log[0] == \u2026`), not by behaviour. Harmless today (plan issues only SELECTs) but the invariant as claimed is not delivered.",
+      "evidence": "Drill D11 with psycopg 3.3.6 against the pinned image: after `set default_transaction_read_only = on` in the same connection, `create table \u2026 ; commit` -> `WRITE SUCCEEDED`; with `set transaction_read_only = on` instead -> `ReadOnlySqlTransaction: cannot execute CREATE TABLE in a read-only transaction`.",
+      "minimal_fix": "Change the statement to `set transaction_read_only = on` (and the mutant/test string accordingly).",
+      "lens": "migrate"
+    },
+    {
+      "id": "M4",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/tests/i/test_scripts.py",
+      "line": "325-344 (rollback.sh line 29)",
+      "claim_broken": "'rollback attestation cannot be bypassed by a flag typo' is true in the script (exact string compare) but has no killable test: the suite only tries the exact value and no value, so a regression to 'any non-empty value counts' survives.",
+      "evidence": "Own mutant `attestation_any_nonempty` (`[ \"${ROLLBACK_TO_UNMETERED:-}\" != \"no-pilot-request-was-accepted\" ]` -> `[ -z \"${ROLLBACK_TO_UNMETERED:-}\" ]`): `1 passed`, SURVIVED. Scratch test with values `no-pilot-request-accepted`, `yes`, `1`, mixed case, leading space: all exit 2 with no events on the unmutated script (behaviour correct).",
+      "minimal_fix": "Add one loop to the existing test asserting exit 2 and `host.events == []` for a typo value (e.g. `no-pilot-request-accepted`), and list the mutant.",
+      "lens": "migrate"
+    },
+    {
+      "id": "M5",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/rollback.sh",
+      "line": "26-33",
+      "claim_broken": "'rollback to the unmetered runtime is refused when any pilot request was accepted' \u2014 the script checks no evidence at all; it checks only INFRX_MODE of the current env file plus the operator's typed string. Nothing on the host or in the DB (journal/ledger rows, gateway admissions) corroborates the statement.",
+      "evidence": "By reading: `current=$(env_mode \u2026)`, `restored=$(tar -xOf \u2026)`, then the string compare; no other read before `systemctl stop`. The usage spill (`USAGE_LOG`, legacy jsonl) is not a pilot admission record.",
+      "minimal_fix": "Accept as an operator-attested step (already recorded in the lock record per README R2) or, if corroboration is wanted, have the coordinator's R2 procedure read the hosted `infrx` journal/ledger counts before stating it; note the choice in infra/README.md \u00a78.",
+      "lens": "migrate"
+    },
+    {
+      "id": "M6",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/migrate.py",
+      "line": "134 (and plan_command)",
+      "claim_broken": "A migration whose statements cannot run inside a transaction block (CREATE INDEX CONCURRENTLY, VACUUM, ALTER SYSTEM) is not refused at `plan`; it fails mid-`apply` (exit 3, fully rolled back). Safe direction, but 'dry-runnable' does not tell the operator up front.",
+      "evidence": "Drill D9: `0010_review_cic.sql` (`create index concurrently \u2026`): `plan` exit 0 listing it as pending with a digest; `apply` -> `0010_review_cic.sql failed (ActiveSqlTransaction); every pending migration was rolled back`, exit 3, history unchanged at 0009, index absent.",
+      "minimal_fix": "Optional: in `local_migrations`, refuse a body matching `(?i)\\bconcurrently\\b|^\\s*(vacuum|alter system)\\b` with a named reason; otherwise document exit 3 as the expected outcome.",
+      "lens": "migrate"
+    },
+    {
+      "id": "M7",
+      "severity": "nonblocking",
+      "file": "infra/rollout/README.md",
+      "line": "\u00a70 G6, \u00a71 step 6",
+      "claim_broken": "'the hosted migrate step depends on I3B's rehearsal gate and cannot be skipped' \u2014 the dependency is prose only (G6 'recorded', step 6 parenthetical). Nothing mechanical prevents running step 8 without step 6: the in-image probe runs with `--network none` and cannot see hosted history, so a skipped migration surfaces only as the runtime failing readiness (exit 4 -> R2/R3). Also the README's step order is not covered by any test (own mutant moving the snapshot row after the pause survived), and step 6 names no revert row (R4 says hosted migrations are not reverted, implicitly).",
+      "evidence": "Own mutant `runbook_snapshot_after_pause` (README row '| 1 | coordinator | **Snapshot' -> '| 5b |'): `3 passed`, SURVIVED. test_rollout.py checks scripts, not the README.",
+      "minimal_fix": "Add to step 8's Record column 'step 6 apply output digest' and have 50-install.sh refuse when `MIGRATION_DIGEST` is not exported (one `: \"${MIGRATION_DIGEST:?\u2026}\"` line), or state explicitly that the gate is procedural.",
+      "lens": "migrate"
+    },
+    {
+      "id": "M8",
+      "severity": "nonblocking",
+      "file": "apps/infrx-api/deploy/migrate.py",
+      "line": "75-84",
+      "claim_broken": "'versions = file prefixes' is the only thing compared: an applied history row whose `name` differs from the file's name passes silently (same as the Supabase CLI), so a renamed-but-same-version file is not detected on the applied side.",
+      "evidence": "Drill D5: `update \u2026 set name='something_else' where version='0002'` -> `plan` exit 0, `applied: 0001, 0002, \u2026`. Hosted-shaped rows are otherwise refused: a timestamp version `20250901120000` -> exit 2 'versions this repository does not'; a gap row 0009 without 0008 -> exit 2 'a gap'.",
+      "minimal_fix": "None required (matches CLI semantics); optionally print applied rows as `version name` in `describe` so the reviewer sees the mismatch.",
+      "lens": "migrate"
+    }
+  ]
+}
